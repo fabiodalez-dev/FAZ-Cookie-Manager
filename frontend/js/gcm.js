@@ -89,7 +89,7 @@ if (setDefaultSetting) {
 function parseConsentCookie() {
     var raw = getCookieValues("fazcookie-consent")[0];
     if (!raw || typeof raw !== "string") return null;
-    return raw.split(",").reduce(function (acc, curr) {
+    var parsed = raw.split(",").reduce(function (acc, curr) {
         var kv = curr.trim().split(":");
         if (kv.length !== 2) return acc;
         var key = kv[0].trim();
@@ -97,6 +97,13 @@ function parseConsentCookie() {
         acc[key] = getConsentStateForCategory(kv[1].trim());
         return acc;
     }, {});
+    var required = ["advertisement", "analytics", "functional", "necessary"];
+    for (var i = 0; i < required.length; i++) {
+        if (parsed[required[i]] !== "granted" && parsed[required[i]] !== "denied") {
+            return null;
+        }
+    }
+    return parsed;
 }
 
 function buildConsentState(cookieObj) {

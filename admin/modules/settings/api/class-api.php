@@ -649,16 +649,18 @@ class Api extends Rest_Controller {
 	 */
 	public function update_geolite2( $request ) {
 		$license_key = $request->get_param( 'license_key' );
-		if ( empty( $license_key ) ) {
+		$license_key = is_scalar( $license_key ) ? trim( sanitize_text_field( (string) $license_key ) ) : '';
+		if ( '' === $license_key ) {
 			// Try from saved settings.
 			$settings    = new Settings();
-			$license_key = $settings->get( 'geolocation', 'maxmind_license_key' );
+			$saved_key   = $settings->get( 'geolocation', 'maxmind_license_key' );
+			$license_key = is_scalar( $saved_key ) ? trim( sanitize_text_field( (string) $saved_key ) ) : '';
 		}
-		if ( empty( $license_key ) ) {
+		if ( '' === $license_key ) {
 			return new \WP_Error( 'missing_license_key', __( 'A MaxMind license key is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 
-		$result = \FazCookie\Includes\Geolocation::download_database( sanitize_text_field( $license_key ) );
+		$result = \FazCookie\Includes\Geolocation::download_database( $license_key );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}

@@ -212,7 +212,7 @@ class Categories_API extends API_Controller {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				error_log( sprintf( 'FazCookie bulk error: %s (code: %d)', $e->getMessage(), $code ) );
 			}
-			return new WP_Error( 'fazcookie_bulk_error', $e->getMessage(), array( 'status' => $http ) );
+			return new WP_Error( 'fazcookie_bulk_error', __( 'Bulk operation failed.', 'faz-cookie-manager' ), array( 'status' => $http ) );
 		}
 	}
 	/**

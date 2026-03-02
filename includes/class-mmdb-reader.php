@@ -246,18 +246,22 @@ class Mmdb_Reader {
 
 		// Extended type.
 		if ( 0 === $type ) {
+			$this->assert_bytes_available( $offset, 1 );
 			$type = ord( $this->data[ $offset ] ) + 7;
 			$offset++;
 		}
 
 		// Resolve multi-byte size.
 		if ( 29 === $size ) {
+			$this->assert_bytes_available( $offset, 1 );
 			$size   = 29 + ord( $this->data[ $offset ] );
 			$offset++;
 		} elseif ( 30 === $size ) {
+			$this->assert_bytes_available( $offset, 2 );
 			$size   = 285 + ( ord( $this->data[ $offset ] ) << 8 ) + ord( $this->data[ $offset + 1 ] );
 			$offset += 2;
 		} elseif ( 31 === $size ) {
+			$this->assert_bytes_available( $offset, 3 );
 			$size   = 65821 + ( ord( $this->data[ $offset ] ) << 16 ) + ( ord( $this->data[ $offset + 1 ] ) << 8 ) + ord( $this->data[ $offset + 2 ] );
 			$offset += 3;
 		}
