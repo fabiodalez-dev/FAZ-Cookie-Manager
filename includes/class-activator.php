@@ -97,12 +97,7 @@ class Activator {
 	 * This check is done on all requests and runs if the versions do not match.
 	 */
 	public static function check_version() {
-		$current = get_option( 'faz_version', false );
-		if ( false === $current ) {
-			// Fallback: detect legacy CookieYes version key from pre-fork installs.
-			$current = get_option( 'wt_cli_version', '2.1.3' );
-		}
-		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( $current, FAZ_VERSION, '<' ) ) {
+		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '0.0.0' ), FAZ_VERSION, '<' ) ) {
 			self::install();
 		}
 	}
@@ -119,7 +114,6 @@ class Activator {
 		self::install_all_tables();
 		self::maybe_update_db();
 		update_option( 'faz_version', FAZ_VERSION );
-		delete_option( 'wt_cli_version' );
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
 	}
