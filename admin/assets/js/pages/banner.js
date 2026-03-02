@@ -597,9 +597,15 @@
 		tempDiv.innerHTML = html; // Trusted admin-only content from our own API
 		var container = tempDiv.querySelector('.faz-consent-container');
 		while (host.firstChild) host.removeChild(host.firstChild);
-		if (container) {
-			host.appendChild(container);
+		if (!container) {
+			var fallback = document.createElement('div');
+			fallback.className = 'faz-consent-fallback';
+			fallback.style.cssText = 'padding:24px;color:#94a3b8;text-align:center;';
+			fallback.textContent = 'Preview unavailable';
+			host.appendChild(fallback);
+			return;
 		}
+		host.appendChild(container);
 
 		// Add position class to .faz-consent-container
 		if (container) {
