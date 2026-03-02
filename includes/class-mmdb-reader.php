@@ -125,8 +125,27 @@ class Mmdb_Reader {
 			throw new \RuntimeException( 'Unsupported MMDB record size: ' . $this->record_size );
 		}
 		$this->ip_version       = (int) $meta['ip_version'];
+		if ( ! in_array( $this->ip_version, array( 4, 6 ), true ) ) {
+			throw new \RuntimeException( 'Unsupported MMDB ip_version: ' . $this->ip_version );
+		}
 		$this->node_byte_size   = (int) ( $this->record_size * 2 / 8 );
 		$this->search_tree_size = $this->node_count * $this->node_byte_size;
+		if ( $this->search_tree_size + self::SEPARATOR_SIZE > strlen( $this->data ) ) {
+			throw new \RuntimeException( 'MMDB file is truncated: search tree exceeds file size.' );
+		}
+	}
+
+	/**
+	 * Assert that enough bytes are available at the given offset.
+	 *
+	 * @param int $offset Current byte offset.
+	 * @param int $needed Number of bytes required.
+	 * @throws \RuntimeException If the file is truncated.
+	 */
+	private function assert_bytes_available( $offset, $needed ) {
+		if ( $offset + $needed > strlen( $this->data ) ) {
+			throw new \RuntimeException( 'MMDB file is truncated at offset ' . $offset . ' (need ' . $needed . ' bytes).' );
+		}
 	}
 
 	/**
@@ -168,6 +187,7 @@ class Mmdb_Reader {
 	 */
 	private function read_node( $node_num, $bit ) {
 		$off = $node_num * $this->node_byte_size;
+		$this->assert_bytes_available( $off, $this->node_byte_size );
 		$d   = $this->data;
 
 		if ( 24 === $this->record_size ) {
@@ -211,9 +231,7 @@ class Mmdb_Reader {
 	 * @return mixed Decoded value.
 	 */
 	private function decode( &$offset ) {
-		if ( $offset >= strlen( $this->data ) ) {
-			return null;
-		}
+		$this->assert_bytes_available( $offset, 1 );
 		$ctrl = ord( $this->data[ $offset ] );
 		$offset++;
 
@@ -259,6 +277,8 @@ class Mmdb_Reader {
 		$value    = $ctrl & 7;
 		$d        = $this->data;
 		$pointer  = 0;
+		$ptr_bytes = $ptr_size + 1; // 0→1, 1→2, 2→3, 3→4 bytes to read.
+		$this->assert_bytes_available( $offset, $ptr_bytes );
 
 		switch ( $ptr_size ) {
 			case 0:

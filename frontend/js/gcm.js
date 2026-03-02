@@ -6,7 +6,7 @@ if (!data) {
     return;
 }
 var setDefaultSetting = true;
-var regionSettings = data.default_settings || [];
+var regionSettings = Array.isArray(data.default_settings) ? data.default_settings : [];
 var waitForTime = data.wait_for_update || 0;
 
 function getCookieValues(cookieName) {

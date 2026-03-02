@@ -85,7 +85,8 @@
 		});
 	}
 
-	function updateGeoDb() {
+	function updateGeoDb(event) {
+		if (event) event.preventDefault();
 		var btn = document.getElementById('faz-geodb-update');
 		var keyInput = form.querySelector('[data-path="geolocation.maxmind_license_key"]');
 		var licenseKey = keyInput ? keyInput.value.trim() : '';
