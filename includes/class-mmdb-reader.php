@@ -121,6 +121,9 @@ class Mmdb_Reader {
 		}
 		$this->node_count       = (int) $meta['node_count'];
 		$this->record_size      = (int) $meta['record_size'];
+		if ( ! in_array( $this->record_size, array( 24, 28, 32 ), true ) ) {
+			throw new \RuntimeException( 'Unsupported MMDB record size: ' . $this->record_size );
+		}
 		$this->ip_version       = (int) $meta['ip_version'];
 		$this->node_byte_size   = (int) ( $this->record_size * 2 / 8 );
 		$this->search_tree_size = $this->node_count * $this->node_byte_size;

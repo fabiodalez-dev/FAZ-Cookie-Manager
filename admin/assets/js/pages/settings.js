@@ -80,7 +80,9 @@
 				el.textContent = 'No GeoIP database installed. Enter your license key and click "Update Database".';
 			}
 			el.style.display = 'block';
-		}).catch(function () {});
+		}).catch(function (err) {
+		console.warn('Failed to load GeoIP status', err);
+	});
 	}
 
 	function updateGeoDb() {
@@ -99,6 +101,9 @@
 			if (data.success) {
 				FAZ.notify('GeoIP database updated successfully');
 				loadGeoDbStatus();
+			}
+			else {
+				FAZ.notify(data.message || 'Failed to update database', 'error');
 			}
 		}).catch(function (err) {
 			FAZ.btnLoading(btn, false);

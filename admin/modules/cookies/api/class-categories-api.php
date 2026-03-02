@@ -207,7 +207,9 @@ class Categories_API extends API_Controller {
 			do_action( 'faz_after_update_cookie_category' );
 			return rest_ensure_response( $objects );
 		} catch ( Exception $e ) {
-			return new WP_Error( $e->getCode(), $e->getMessage(), array( 'status' => $e->getCode() ) );
+			$code = (int) $e->getCode();
+			$http = ( $code >= 400 && $code < 600 ) ? $code : 500;
+			return new WP_Error( 'fazcookie_bulk_error', $e->getMessage(), array( 'status' => $http ) );
 		}
 	}
 	/**

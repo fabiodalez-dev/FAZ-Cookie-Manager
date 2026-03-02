@@ -654,6 +654,9 @@ class Api extends Rest_Controller {
 			$settings    = new Settings();
 			$license_key = $settings->get( 'geolocation', 'maxmind_license_key' );
 		}
+		if ( empty( $license_key ) ) {
+			return new \WP_Error( 'missing_license_key', __( 'A MaxMind license key is required.', 'cookie-law-info' ), array( 'status' => 400 ) );
+		}
 
 		$result = \FazCookie\Includes\Geolocation::download_database( sanitize_text_field( $license_key ) );
 		if ( is_wp_error( $result ) ) {

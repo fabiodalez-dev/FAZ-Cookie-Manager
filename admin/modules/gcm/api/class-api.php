@@ -105,7 +105,10 @@ class Api extends Rest_Controller {
 			);
 			$boolean_keys = array( 'status', 'ads_data_redaction', 'url_passthrough', 'gacm_enabled' );
 			foreach ( $properties_keys as $key ) {
-				$value = isset( $request[ $key ] ) ? $request[ $key ] : '';
+				if ( ! $request->has_param( $key ) ) {
+					continue;
+				}
+				$value = $request[ $key ];
 				if ( in_array( $key, $boolean_keys, true ) ) {
 					$data[ $key ] = faz_sanitize_bool( $value );
 				} elseif ( 'wait_for_update' === $key ) {

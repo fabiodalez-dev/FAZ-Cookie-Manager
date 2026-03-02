@@ -12,16 +12,20 @@ var waitForTime = data.wait_for_update || 0;
 function getCookieValues(cookieName) {
     var values = [];
     var name = cookieName + "=";
-    var decodedCookie = decodeURIComponent(document.cookie);
-    var cookieArray = decodedCookie.split(';');
+    var parts = document.cookie.split(';');
 
-    for (var i = 0; i < cookieArray.length; i++) {
-        var cookie = cookieArray[i];
+    for (var i = 0; i < parts.length; i++) {
+        var cookie = parts[i];
         while (cookie.charAt(0) === ' ') {
             cookie = cookie.substring(1);
         }
         if (cookie.indexOf(name) === 0) {
-            values.push(cookie.substring(name.length, cookie.length));
+            var raw = cookie.substring(name.length, cookie.length);
+            try {
+                values.push(decodeURIComponent(raw));
+            } catch (e) {
+                values.push(raw);
+            }
         }
     }
     return values;
