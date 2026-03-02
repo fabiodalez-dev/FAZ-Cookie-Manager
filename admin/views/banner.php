@@ -307,6 +307,21 @@ defined( 'ABSPATH' ) || exit;
 				</div>
 			</div>
 		</div>
+
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php echo esc_html__( 'Revisit Widget', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label><?php echo esc_html__( 'Background', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-revisit-bg">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-bg-hex" style="width:90px;">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
 	</div>
 
 	<!-- ─── Buttons ─────────────────────────────────────── -->
@@ -437,13 +452,6 @@ defined( 'ABSPATH' ) || exit;
 						<option value="bottom-left">Bottom Left</option>
 						<option value="bottom-right">Bottom Right</option>
 					</select>
-				</div>
-				<div class="faz-form-group">
-					<label><?php echo esc_html__( 'Widget Colour', 'faz-cookie-manager' ); ?></label>
-					<div class="faz-input-color-wrap">
-						<input type="color" id="faz-b-revisit-bg">
-						<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-bg-hex" style="width:90px;">
-					</div>
 				</div>
 				<div class="faz-form-group">
 					<label><?php echo esc_html__( 'Widget Label', 'faz-cookie-manager' ); ?></label>
