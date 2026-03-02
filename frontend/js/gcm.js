@@ -146,7 +146,8 @@ document.addEventListener("fazcookie_consent_update", function () {
 // Version 1 + tilde + dot-separated ATP IDs the user consented to.
 function setAdditionalConsent(consentObj) {
     if (!data.gacm_enabled) return;
-    var providerStr = (data.gacm_provider_ids || "").trim();
+    var providerRaw = data.gacm_provider_ids;
+    var providerStr = typeof providerRaw === "string" ? providerRaw.trim() : "";
     if (!providerStr) return;
 
     // Only include provider IDs when advertisement consent is granted.

@@ -317,54 +317,52 @@ class Activator {
 
 	/**
 	 * Ensure the "uncategorized" cookie category exists.
-	 * Called from install() on every version check.
 	 */
 	public static function ensure_uncategorized_category() {
-		$category_controller = Category_Controller::get_instance();
-		$categories          = $category_controller->get_items();
-		foreach ( $categories as $cat ) {
-			if ( 'uncategorized' === $cat->slug ) {
-				return; // Already exists.
-			}
-		}
-		$lang         = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
-		$defaults     = Category_Controller::get_defaults();
-		$uncat_data   = isset( $defaults['uncategorized'] ) ? $defaults['uncategorized'] : array(
+		self::ensure_category_by_slug( 'uncategorized', array(
 			'name'        => 'Uncategorized',
 			'description' => 'Cookies that have not yet been categorized.',
-		);
-		$object = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories();
-		$object->set_name( array( $lang => $uncat_data['name'] ) );
-		$object->set_description( array( $lang => $uncat_data['description'] ) );
-		$object->set_slug( 'uncategorized' );
-		$object->set_prior_consent( false );
-		$object->save();
+		) );
 	}
 
 	/**
 	 * Ensure the "wordpress-internal" cookie category exists.
-	 * Hidden from frontend (visibility=0), no prior consent required.
 	 */
 	public static function ensure_wordpress_internal_category() {
+		self::ensure_category_by_slug( 'wordpress-internal', array(
+			'name'        => 'WordPress Internal',
+			'description' => 'Cookies set by WordPress core for logged-in administrators. Not shown to site visitors.',
+		), false, false );
+	}
+
+	/**
+	 * Create a cookie category if it does not already exist.
+	 *
+	 * @param string $slug          Category slug.
+	 * @param array  $fallback_data Default name/description if not in Category_Controller defaults.
+	 * @param bool   $prior_consent Whether prior consent is required. Default false.
+	 * @param bool   $visibility    Whether visible on frontend. Default true.
+	 */
+	private static function ensure_category_by_slug( $slug, $fallback_data, $prior_consent = false, $visibility = true ) {
 		$category_controller = Category_Controller::get_instance();
 		$categories          = $category_controller->get_items();
 		foreach ( $categories as $cat ) {
-			if ( 'wordpress-internal' === $cat->slug ) {
+			if ( $slug === $cat->slug ) {
 				return; // Already exists.
 			}
 		}
-		$lang         = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
-		$defaults     = Category_Controller::get_defaults();
-		$wp_int_data  = isset( $defaults['wordpress-internal'] ) ? $defaults['wordpress-internal'] : array(
-			'name'        => 'WordPress Internal',
-			'description' => 'Cookies set by WordPress core for logged-in administrators. Not shown to site visitors.',
-		);
+		$lang     = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		$defaults = Category_Controller::get_defaults();
+		$data     = isset( $defaults[ $slug ] ) && is_array( $defaults[ $slug ] )
+			? array_merge( $fallback_data, $defaults[ $slug ] )
+			: $fallback_data;
+
 		$object = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories();
-		$object->set_name( array( $lang => $wp_int_data['name'] ) );
-		$object->set_description( array( $lang => $wp_int_data['description'] ) );
-		$object->set_slug( 'wordpress-internal' );
-		$object->set_prior_consent( false );
-		$object->set_visibility( false );
+		$object->set_name( array( $lang => $data['name'] ) );
+		$object->set_description( array( $lang => $data['description'] ) );
+		$object->set_slug( $slug );
+		$object->set_prior_consent( $prior_consent );
+		$object->set_visibility( $visibility );
 		$object->save();
 	}
 }
