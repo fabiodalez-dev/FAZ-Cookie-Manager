@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Static database of known cookies and their metadata.
  *
  * @class       Cookie_Database
- * @version     3.0.0
+ * @version     3.1.0
  * @package     FazCookie
  */
 class Cookie_Database {
