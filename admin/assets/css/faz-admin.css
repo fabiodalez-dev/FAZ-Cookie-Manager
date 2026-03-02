@@ -1222,10 +1222,7 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 }
 #faz-b-preview-panel.hidden { display: none; }
 #faz-b-preview-host {
-	pointer-events: none;
-}
-#faz-b-preview-host .faz-consent-container {
-	pointer-events: auto;
+	overflow: hidden;
 }
 .faz-save-status {
 	font-size: 13px;

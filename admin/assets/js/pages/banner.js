@@ -557,13 +557,11 @@
 		var bannerType = type;
 
 		// Override CSS: render preview inline in the fixed-bottom panel.
+		// Only the .faz-consent-container is injected (see above), so CSS
+		// overrides are minimal — just position it inline in the panel.
 		var overrideCSS =
 			'#faz-b-preview-host{' +
 			'position:relative;overflow:hidden;min-height:60px;background:none;}' +
-			'.faz-hide{display:block!important;}' +
-			'.faz-overlay{display:none!important;}' +
-			'.faz-modal{display:none!important;}' +
-			'.faz-btn-revisit-wrapper{display:none!important;}' +
 			'#faz-b-preview-host .faz-consent-container{' +
 			'position:relative!important;' +
 			'top:auto!important;bottom:auto!important;left:auto!important;right:auto!important;' +
@@ -592,11 +590,18 @@
 				'<style id="faz-preview-overrides">' + overrideCSS + '</style>';
 		}
 
-		// Inject HTML
-		host.innerHTML = html;
+		// Parse the server-rendered banner template and extract only the consent
+		// bar (.faz-consent-container). The full template includes overlay, revisit
+		// widget, preference center, and opt-out popup — none needed for preview.
+		var tempDiv = document.createElement('div');
+		tempDiv.innerHTML = html; // Trusted admin-only content from our own API
+		var container = tempDiv.querySelector('.faz-consent-container');
+		while (host.firstChild) host.removeChild(host.firstChild);
+		if (container) {
+			host.appendChild(container);
+		}
 
 		// Add position class to .faz-consent-container
-		var container = host.querySelector('.faz-consent-container');
 		if (container) {
 			container.classList.add(positionClass);
 			// Remove hide classes
