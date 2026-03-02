@@ -143,7 +143,7 @@ class Mmdb_Reader {
 	 * @throws \RuntimeException If the file is truncated.
 	 */
 	private function assert_bytes_available( $offset, $needed ) {
-		if ( $offset + $needed > strlen( $this->data ) ) {
+		if ( $offset < 0 || $needed < 0 || $offset + $needed > strlen( $this->data ) ) {
 			throw new \RuntimeException( 'MMDB file is truncated at offset ' . $offset . ' (need ' . $needed . ' bytes).' );
 		}
 	}
@@ -319,12 +319,14 @@ class Mmdb_Reader {
 	private function decode_by_type( $type, $size, &$offset ) {
 		switch ( $type ) {
 			case 2: // UTF-8 string.
+				$this->assert_bytes_available( $offset, $size );
 				$str     = substr( $this->data, $offset, $size );
 				$offset += $size;
 				return $str;
 
 			case 5: // uint16.
 			case 6: // uint32.
+				$this->assert_bytes_available( $offset, $size );
 				$val = 0;
 				for ( $i = 0; $i < $size; $i++ ) {
 					$val = ( $val << 8 ) | ord( $this->data[ $offset + $i ] );
@@ -344,6 +346,7 @@ class Mmdb_Reader {
 				return $map;
 
 			case 8: // int32.
+				$this->assert_bytes_available( $offset, $size );
 				$val = 0;
 				for ( $i = 0; $i < $size; $i++ ) {
 					$val = ( $val << 8 ) | ord( $this->data[ $offset + $i ] );
@@ -355,6 +358,7 @@ class Mmdb_Reader {
 				if ( PHP_INT_SIZE < 8 ) {
 					throw new \RuntimeException( 'MMDB uint64 requires 64-bit PHP.' );
 				}
+				$this->assert_bytes_available( $offset, $size );
 				$val = 0;
 				for ( $i = 0; $i < $size; $i++ ) {
 					$val = ( $val << 8 ) | ord( $this->data[ $offset + $i ] );
@@ -373,17 +377,20 @@ class Mmdb_Reader {
 				return 0 !== $size;
 
 			case 3: // double (8 bytes, big-endian).
+				$this->assert_bytes_available( $offset, 8 );
 				$raw     = substr( $this->data, $offset, 8 );
 				$offset += 8;
 				$unpacked = unpack( 'E', $raw ); // PHP 7.2+ big-endian double.
 				return false !== $unpacked ? $unpacked[1] : 0.0;
 
 			case 4: // bytes.
+				$this->assert_bytes_available( $offset, $size );
 				$raw     = substr( $this->data, $offset, $size );
 				$offset += $size;
 				return $raw;
 
 			case 15: // float (4 bytes, big-endian).
+				$this->assert_bytes_available( $offset, 4 );
 				$raw     = substr( $this->data, $offset, 4 );
 				$offset += 4;
 				$unpacked = unpack( 'G', $raw ); // PHP 7.2+ big-endian float.

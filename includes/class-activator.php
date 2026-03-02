@@ -78,6 +78,7 @@ class Activator {
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'check_version' ), 5 );
 		add_action( 'admin_init', array( __CLASS__, 'ensure_uncategorized_category' ) );
+		add_action( 'admin_init', array( __CLASS__, 'ensure_wordpress_internal_category' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
 	}
 
@@ -337,6 +338,33 @@ class Activator {
 		$object->set_description( array( $lang => $uncat_data['description'] ) );
 		$object->set_slug( 'uncategorized' );
 		$object->set_prior_consent( false );
+		$object->save();
+	}
+
+	/**
+	 * Ensure the "wordpress-internal" cookie category exists.
+	 * Hidden from frontend (visibility=0), no prior consent required.
+	 */
+	public static function ensure_wordpress_internal_category() {
+		$category_controller = Category_Controller::get_instance();
+		$categories          = $category_controller->get_items();
+		foreach ( $categories as $cat ) {
+			if ( 'wordpress-internal' === $cat->slug ) {
+				return; // Already exists.
+			}
+		}
+		$lang         = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		$defaults     = Category_Controller::get_defaults();
+		$wp_int_data  = isset( $defaults['wordpress-internal'] ) ? $defaults['wordpress-internal'] : array(
+			'name'        => 'WordPress Internal',
+			'description' => 'Cookies set by WordPress core for logged-in administrators. Not shown to site visitors.',
+		);
+		$object = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories();
+		$object->set_name( array( $lang => $wp_int_data['name'] ) );
+		$object->set_description( array( $lang => $wp_int_data['description'] ) );
+		$object->set_slug( 'wordpress-internal' );
+		$object->set_prior_consent( false );
+		$object->set_visibility( false );
 		$object->save();
 	}
 }

@@ -100,11 +100,17 @@ class Cookie_Table_Shortcode {
 			$columns = array( 'name', 'domain', 'duration', 'description' );
 		}
 
-		// Fetch categories and build lookup.
+		// Fetch categories and build lookup, excluding hidden categories.
 		$cat_controller = Category_Controller::get_instance();
 		$categories     = $cat_controller->get_item_from_db();
+		$hidden_cat_ids = array();
 		$cat_map        = array(); // category_id => localized name
 		foreach ( $categories as $cat ) {
+			$cat_obj = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat );
+			if ( false === $cat_obj->get_visibility() ) {
+				$hidden_cat_ids[] = $cat->category_id;
+				continue;
+			}
 			$cat_map[ $cat->category_id ] = $this->localize( $cat->name, $lang, $default );
 		}
 
@@ -126,6 +132,14 @@ class Cookie_Table_Shortcode {
 			$cookies = $target_cat_id ? $cookie_controller->get_items_by_category( $target_cat_id ) : array();
 		} else {
 			$cookies = $cookie_controller->get_item_from_db();
+		}
+
+		// Exclude cookies belonging to hidden categories.
+		if ( ! empty( $hidden_cat_ids ) ) {
+			$cookies = array_filter( $cookies, function( $cookie ) use ( $hidden_cat_ids ) {
+				$cat_id = isset( $cookie->category ) ? absint( $cookie->category ) : 0;
+				return ! in_array( $cat_id, $hidden_cat_ids, true );
+			} );
 		}
 
 		if ( empty( $cookies ) ) {

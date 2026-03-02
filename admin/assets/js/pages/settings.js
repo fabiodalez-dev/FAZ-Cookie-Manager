@@ -69,7 +69,8 @@
 			if (!el) return;
 			el.textContent = '';
 			if (data.installed && data.database) {
-				var sizeKB = Math.round(data.database.size / 1024);
+				var rawSize = parseInt(data.database.size, 10);
+			var sizeKB = isFinite(rawSize) ? Math.round(rawSize / 1024) : 0;
 				var b = document.createElement('strong');
 				b.textContent = 'Database: ';
 				el.appendChild(b);
