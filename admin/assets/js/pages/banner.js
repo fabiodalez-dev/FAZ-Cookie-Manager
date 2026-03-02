@@ -191,6 +191,7 @@
 		setVal('faz-b-revisit-position', revisit.position || 'bottom-left');
 		var revisitStyles = revisit.styles || {};
 		setColor('faz-b-revisit-bg', revisitStyles['background-color'] || '#0056A7');
+		setColor('faz-b-revisit-icon', revisitStyles['color'] || '#FFFFFF');
 
 		// Behaviours
 		setChecked('faz-b-reload-toggle', b.reloadBannerOnAccept && b.reloadBannerOnAccept.status);
@@ -449,6 +450,7 @@
 		props.config.revisitConsent.position = getVal('faz-b-revisit-position');
 		if (!props.config.revisitConsent.styles) props.config.revisitConsent.styles = {};
 		props.config.revisitConsent.styles['background-color'] = getColor('faz-b-revisit-bg');
+		props.config.revisitConsent.styles['color'] = getColor('faz-b-revisit-icon');
 
 		// Behaviours
 		if (!props.behaviours) props.behaviours = {};

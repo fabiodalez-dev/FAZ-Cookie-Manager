@@ -468,7 +468,8 @@
                 "url": "#"
             },
             "styles": {
-                "background-color": "#0056A7"
+                "background-color": "#0056A7",
+                "color": "#FFFFFF"
             },
             "elements": {
                 "title": {
