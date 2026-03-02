@@ -1,17 +1,22 @@
-const data = window._fazGcm;
-if (!data) { console.warn('FAZ GCM: _fazGcm not available'); }
-let setDefaultSetting = true;
-const regionSettings = (data && data.default_settings) || [];
-const waitForTime = data ? data.wait_for_update : 0;
+(function () {
+"use strict";
+
+var data = window._fazGcm;
+if (!data) {
+    return;
+}
+var setDefaultSetting = true;
+var regionSettings = data.default_settings || [];
+var waitForTime = data.wait_for_update || 0;
 
 function getCookieValues(cookieName) {
-    const values = [];
-    const name = cookieName + "=";
-    const decodedCookie = decodeURIComponent(document.cookie);
-    const cookieArray = decodedCookie.split(';');
-    
-    for (let i = 0; i < cookieArray.length; i++) {
-        let cookie = cookieArray[i];
+    var values = [];
+    var name = cookieName + "=";
+    var decodedCookie = decodeURIComponent(document.cookie);
+    var cookieArray = decodedCookie.split(';');
+
+    for (var i = 0; i < cookieArray.length; i++) {
+        var cookie = cookieArray[i];
         while (cookie.charAt(0) === ' ') {
             cookie = cookie.substring(1);
         }
@@ -26,26 +31,26 @@ function getConsentStateForCategory(categoryConsent) {
     return categoryConsent === "yes" ? "granted" : "denied";
 }
 
-const dataLayerName =
+var dataLayerName =
   window.fazSettings && window.fazSettings.dataLayerName
     ? window.fazSettings.dataLayerName
     : "dataLayer";
- window[dataLayerName] = window[dataLayerName] || [];
- function gtag() {
-  window[dataLayerName].push(arguments);
+window[dataLayerName] = window[dataLayerName] || [];
+function gtag() {
+    window[dataLayerName].push(arguments);
 }
 
 function setConsentInitStates(consentData) {
     if (waitForTime > 0) consentData.wait_for_update = waitForTime;
-    gtag("consent", "default", consentData );
+    gtag("consent", "default", consentData);
 }
 
-gtag("set", "ads_data_redaction", !!(data && data.ads_data_redaction));
-gtag("set", "url_passthrough", !!(data && data.url_passthrough));
+gtag("set", "ads_data_redaction", !!data.ads_data_redaction);
+gtag("set", "url_passthrough", !!data.url_passthrough);
 
-for (let index = 0; index < regionSettings.length; index++) {
-    const regionSetting = regionSettings[index];
-    const consentRegionData = {
+for (var index = 0; index < regionSettings.length; index++) {
+    var regionSetting = regionSettings[index];
+    var consentRegionData = {
         ad_storage: regionSetting.advertisement,
         analytics_storage: regionSetting.analytics,
         functionality_storage: regionSetting.functional,
@@ -54,10 +59,10 @@ for (let index = 0; index < regionSettings.length; index++) {
         ad_user_data: regionSetting.ad_user_data,
         ad_personalization: regionSetting.ad_personalization
     };
-    const regionsToSetFor = regionSetting.regions
+    var regionsToSetFor = regionSetting.regions
         .split(",")
-        .map((region) => region.trim())
-        .filter((region) => region);
+        .map(function (region) { return region.trim(); })
+        .filter(function (region) { return region; });
     if (regionsToSetFor.length > 0 && regionsToSetFor[0].toLowerCase() !== "all")
         consentRegionData.region = regionsToSetFor;
     else setDefaultSetting = false;
@@ -77,10 +82,10 @@ if (setDefaultSetting) {
 }
 
 function parseConsentCookie() {
-    const raw = getCookieValues("fazcookie-consent")[0];
+    var raw = getCookieValues("fazcookie-consent")[0];
     if (!raw || typeof raw !== "string") return null;
     return raw.split(",").reduce(function (acc, curr) {
-        const kv = curr.trim().split(":");
+        var kv = curr.trim().split(":");
         acc[kv[0]] = getConsentStateForCategory(kv[1]);
         return acc;
     }, {});
@@ -103,14 +108,14 @@ function updateConsentState(consentState) {
 }
 
 // Apply consent from cookie on page load.
-const cookieObj = parseConsentCookie();
+var cookieObj = parseConsentCookie();
 if (cookieObj) {
     updateConsentState(buildConsentState(cookieObj));
 }
 
 // Re-apply on consent changes (banner interaction).
 document.addEventListener("fazcookie_consent_update", function () {
-    const updated = parseConsentCookie();
+    var updated = parseConsentCookie();
     if (updated) {
         updateConsentState(buildConsentState(updated));
     }
@@ -146,3 +151,5 @@ function setAdditionalConsent(consentObj) {
 if (data.gacm_enabled && data.gacm_provider_ids) {
     setAdditionalConsent(cookieObj);
 }
+
+})();

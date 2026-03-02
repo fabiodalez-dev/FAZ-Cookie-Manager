@@ -302,14 +302,17 @@
 	}
 
 	// Save queued commands before overwriting the stub.
-	var pendingQueue = (window.__tcfapi && window.__tcfapi.a) ? window.__tcfapi.a.slice() : [];
+	var rawQueue = (window.__tcfapi && window.__tcfapi.a) ? window.__tcfapi.a : [];
+	var pendingQueue = Array.isArray(rawQueue) ? rawQueue.slice() : [];
 
 	// Install the __tcfapi function
 	window.__tcfapi = tcfapi;
 
 	// Process the command queue if any scripts called __tcfapi before we loaded
 	for (var q = 0; q < pendingQueue.length; q++) {
-		tcfapi.apply(null, pendingQueue[q]);
+		if (Array.isArray(pendingQueue[q])) {
+			tcfapi.apply(null, pendingQueue[q]);
+		}
 	}
 
 	// Create the __tcfapiLocator iframe (required by TCF spec for cross-frame communication)

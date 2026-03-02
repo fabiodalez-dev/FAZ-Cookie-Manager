@@ -130,7 +130,7 @@ class Cookies_API extends API_Controller {
 	/**
 	 * Return item object
 	 *
-	 * @param object|null $item Cookie id.
+	 * @param object|null $item Cookie item.
 	 * @return Cookie
 	 */
 	public function get_item_object( $item = null ) {

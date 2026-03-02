@@ -538,7 +538,7 @@ class Frontend {
 	 * @return array
 	 */
 	public function get_cookies( $category = null ) {
-		if ( null === $category ) {
+		if ( ! $category instanceof \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories ) {
 			return array();
 		}
 		$cookies  = array();

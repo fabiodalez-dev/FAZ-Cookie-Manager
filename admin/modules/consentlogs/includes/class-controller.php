@@ -440,7 +440,12 @@ class Controller {
 	 * @return string Sanitized value.
 	 */
 	private function sanitize_csv_cell( $value ) {
-		if ( is_string( $value ) && isset( $value[0] ) && in_array( $value[0], array( '=', '+', '-', '@', "\t", "\r" ), true ) ) {
+		if ( ! is_string( $value ) || '' === $value ) {
+			return $value;
+		}
+		// Strip leading whitespace/newlines that could bypass the prefix check.
+		$trimmed = ltrim( $value, " \t\n\r\0\x0B" );
+		if ( '' !== $trimmed && in_array( $trimmed[0], array( '=', '+', '-', '@', "\t", "\r", "\n" ), true ) ) {
 			return "'" . $value;
 		}
 		return $value;

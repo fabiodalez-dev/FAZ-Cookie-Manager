@@ -231,6 +231,28 @@ class Api extends Rest_Controller {
 			)
 		);
 		$this->register_post_route( 'payments', 'add_payments' );
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/geolite2/update',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'update_geolite2' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/geolite2/status',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'geolite2_status' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
 	}
 	/**
 	 * Get a collection of items.
@@ -617,6 +639,49 @@ class Api extends Rest_Controller {
 	 */
 	public function add_payments( $request ) {
 		return $this->call_controller_method( $request, 'add_payments' );
+	}
+
+	/**
+	 * Download/update the MaxMind GeoLite2 database.
+	 *
+	 * @param WP_REST_Request $request Request with 'license_key' param.
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_geolite2( $request ) {
+		$license_key = $request->get_param( 'license_key' );
+		if ( empty( $license_key ) ) {
+			// Try from saved settings.
+			$settings    = new Settings();
+			$license_key = $settings->get( 'geolocation', 'maxmind_license_key' );
+		}
+
+		$result = \FazCookie\Includes\Geolocation::download_database( sanitize_text_field( $license_key ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$info = \FazCookie\Includes\Geolocation::get_database_info();
+		return rest_ensure_response(
+			array(
+				'success'  => true,
+				'database' => $info,
+			)
+		);
+	}
+
+	/**
+	 * Get GeoLite2 database status.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function geolite2_status() {
+		$info = \FazCookie\Includes\Geolocation::get_database_info();
+		return rest_ensure_response(
+			array(
+				'installed' => ! empty( $info ),
+				'database'  => $info,
+			)
+		);
 	}
 
 } // End the class.

@@ -10,7 +10,10 @@
 		form = document.getElementById('faz-settings');
 		if (!form) return;
 		loadSettings();
+		loadGeoDbStatus();
 		document.getElementById('faz-settings-save').addEventListener('click', saveSettings);
+		var geoBtn = document.getElementById('faz-geodb-update');
+		if (geoBtn) geoBtn.addEventListener('click', updateGeoDb);
 	});
 
 	function loadSettings() {
@@ -57,6 +60,50 @@
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify('Failed to save settings', 'error');
+		});
+	}
+
+	function loadGeoDbStatus() {
+		FAZ.get('settings/geolite2/status').then(function (data) {
+			var el = document.getElementById('faz-geodb-status');
+			if (!el) return;
+			el.textContent = '';
+			if (data.installed && data.database) {
+				var sizeKB = Math.round(data.database.size / 1024);
+				var b = document.createElement('strong');
+				b.textContent = 'Database: ';
+				el.appendChild(b);
+				el.appendChild(document.createTextNode(
+					data.database.file + ' (' + sizeKB + ' KB) — Last updated: ' + data.database.modified
+				));
+			} else {
+				el.textContent = 'No GeoIP database installed. Enter your license key and click "Update Database".';
+			}
+			el.style.display = 'block';
+		}).catch(function () {});
+	}
+
+	function updateGeoDb() {
+		var btn = document.getElementById('faz-geodb-update');
+		var keyInput = form.querySelector('[data-path="geolocation.maxmind_license_key"]');
+		var licenseKey = keyInput ? keyInput.value.trim() : '';
+
+		if (!licenseKey) {
+			FAZ.notify('Please enter a MaxMind license key first', 'error');
+			return;
+		}
+
+		FAZ.btnLoading(btn, true);
+		FAZ.post('settings/geolite2/update', { license_key: licenseKey }).then(function (data) {
+			FAZ.btnLoading(btn, false);
+			if (data.success) {
+				FAZ.notify('GeoIP database updated successfully');
+				loadGeoDbStatus();
+			}
+		}).catch(function (err) {
+			FAZ.btnLoading(btn, false);
+			var msg = (err && err.message) ? err.message : 'Failed to update database';
+			FAZ.notify(msg, 'error');
 		});
 	}
 

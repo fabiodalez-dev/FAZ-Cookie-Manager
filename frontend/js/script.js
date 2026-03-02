@@ -69,8 +69,9 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
  * @returns {string}
  */
 ref._fazGetCookie = function (name) {
-    const value = new RegExp(`${name}=([^;]+)`).exec(document.cookie);
-    return value && Array.isArray(value) && value[1] ? decodeURIComponent(value[1]) : null;
+    const match = new RegExp(`${name}=([^;]+)`).exec(document.cookie);  // eslint-disable-line no-useless-escape
+    if (!match || !Array.isArray(match) || !match[1]) return null;
+    try { return decodeURIComponent(match[1]); } catch (_) { return match[1]; }
 }
 
 /**
@@ -604,8 +605,8 @@ function _fazTogglePreferenceCenter() {
     if (!element) return;
     const isOpen = element.classList.contains(_fazGetPreferenceClass());
     element.classList.toggle(_fazGetPreferenceClass());
-    if (_fazGetPtype() !== 'pushdown') _fazToggleOverLay();
     if (_fazGetType() === 'classic') {
+        if (_fazGetPtype() !== 'pushdown') _fazToggleOverLay();
         const preferenceCenter = element.querySelector('.faz-preference-center');
         if (preferenceCenter) {
             preferenceCenter.setAttribute('role', 'dialog');

@@ -103,13 +103,15 @@ class Api extends Rest_Controller {
 					}
 				)
 			);
-			$boolean_keys = array( 'gcm_enabled', 'ads_data_redaction', 'url_passthrough', 'gacm_enabled' );
+			$boolean_keys = array( 'status', 'ads_data_redaction', 'url_passthrough', 'gacm_enabled' );
 			foreach ( $properties_keys as $key ) {
 				$value = isset( $request[ $key ] ) ? $request[ $key ] : '';
 				if ( in_array( $key, $boolean_keys, true ) ) {
-					$data[ $key ] = (bool) $value;
+					$data[ $key ] = faz_sanitize_bool( $value );
 				} elseif ( 'wait_for_update' === $key ) {
 					$data[ $key ] = absint( $value );
+				} elseif ( 'default_settings' === $key ) {
+					$data[ $key ] = is_array( $value ) ? $value : array();
 				} else {
 					$data[ $key ] = sanitize_text_field( $value );
 				}
