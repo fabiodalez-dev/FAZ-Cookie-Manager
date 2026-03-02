@@ -233,7 +233,7 @@
 			}
 			input.dataset.field = f.path;
 			if (f.placeholder) input.placeholder = f.placeholder;
-			if (isEdit && cookie[f.path]) input.value = cookie[f.path];
+			if (isEdit && cookie[f.path]) input.value = textVal(cookie[f.path]);
 			group.appendChild(input);
 			form.appendChild(group);
 		});
