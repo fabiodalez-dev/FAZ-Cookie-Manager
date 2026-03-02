@@ -338,7 +338,7 @@ function _fazAddPositionClass() {
         svg.style.height = '30px';
         svg.style.width = '30px';
         svg.style.margin = '0';
-        revisitImg.parentNode.replaceChild(document.importNode(svg, true), revisitImg);
+        if (revisitImg.parentNode) revisitImg.parentNode.replaceChild(document.importNode(svg, true), revisitImg);
     }
 }
 

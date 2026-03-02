@@ -489,8 +489,13 @@ class Uninstall_Feedback extends Modules {
 	 * @return \WP_Error|\WP_REST_Response
 	 */
 	public function send_uninstall_reason( $request ) {
-		if ( ! isset( $request['reason_id'] ) ) {
+		$reason_id = isset( $request['reason_id'] ) ? sanitize_text_field( $request['reason_id'] ) : '';
+		if ( empty( $reason_id ) ) {
 			return new WP_Error( 'missing_reason', __( 'Reason ID is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+		$valid_ids = array( 'none', 'setup-difficult', 'not-have-that-feature', 'affecting-performance', 'found-better-plugin', 'fazcookie-connection-issues', 'use-fazcookie-webapp', 'temporary-deactivation', 'other' );
+		if ( ! in_array( $reason_id, $valid_ids, true ) ) {
+			return new WP_Error( 'invalid_reason', __( 'Invalid reason ID.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 		// External feedback endpoint disabled — data stays local.
 		return new WP_REST_Response( array( 'success' => true ), 200 );

@@ -103,7 +103,7 @@
         "notice": {
             "elements": {
                 "title": "Diamo valore alla tua privacy",
-                "description": "<p>Questo sito Web oi suoi strumenti di terze parti elaborano i dati personali. Puoi disattivare la vendita delle tue informazioni personali facendo clic sul collegamento \"Non vendere o condividere i miei dati personali\". Puoi modificare o revocare il consenso in qualsiasi momento cliccando sull'icona delle preferenze.</p>",
+                "description": "<p>Questo sito Web o i suoi strumenti di terze parti elaborano i dati personali. Puoi disattivare la vendita delle tue informazioni personali facendo clic sul collegamento \"Non vendere o condividere i miei dati personali\". Puoi modificare o revocare il consenso in qualsiasi momento cliccando sull'icona delle preferenze.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {

@@ -273,7 +273,7 @@ abstract class API_Controller extends Rest_Controller {
 			'category' => array(
 				'description'       => __( 'Cookie category', 'faz-cookie-manager' ),
 				'type'              => 'integer',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => 'absint',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 		);
