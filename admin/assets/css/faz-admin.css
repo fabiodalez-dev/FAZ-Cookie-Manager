@@ -1195,6 +1195,16 @@
 	background: none;
 	border: none;
 	box-shadow: none;
+	pointer-events: none; /* Transparent area must not block clicks on page below */
+}
+#faz-b-fixed-bottom .faz-save-bar {
+	pointer-events: auto;
+}
+#faz-b-preview-panel {
+	pointer-events: none; /* Panel itself is transparent — let clicks through */
+}
+#faz-b-preview-host .faz-consent-container {
+	pointer-events: auto; /* Only the actual banner bar captures clicks */
 }
 @media screen and (max-width: 782px) {
 	#faz-b-fixed-bottom { left: 0; }
