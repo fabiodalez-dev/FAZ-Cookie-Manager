@@ -5,7 +5,7 @@
  * Loads and defines the internationalization files for this plugin
  * so that it is ready for translation.
  *
- * @link       https://www.webtoffee.com/
+ * @link       https://fabiodalez.it/
  * @since      3.0.0
  *
  * @package    FazCookie
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
  * @since      3.0.0
  * @package    FazCookie
  * @subpackage FazCookie/includes
- * @author     WebToffee <info@webtoffee.com>
+ * @author     Fabio D'Alessandro
  */
 class I18n {
 

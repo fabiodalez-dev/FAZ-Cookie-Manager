@@ -1,4 +1,7 @@
 {
+    "name": "fabiodalez/faz-cookie-manager",
+    "description": "GDPR/CCPA cookie consent manager for WordPress",
+    "license": "GPL-3.0-or-later",
     "require-dev": {
         "php-stubs/wordpress-stubs": "^6.9",
         "szepeviktor/phpstan-wordpress": "^2.0"

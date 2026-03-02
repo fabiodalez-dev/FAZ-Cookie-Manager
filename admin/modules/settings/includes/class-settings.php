@@ -103,6 +103,9 @@ class Settings extends Store {
 			'iab'          => array(
 				'enabled' => false,
 			),
+			'geolocation'  => array(
+				'maxmind_license_key' => '',
+			),
 		);
 
 	}

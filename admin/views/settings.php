@@ -97,6 +97,25 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3>GeoIP Database (MaxMind GeoLite2)</h3>
+		</div>
+		<div class="faz-card-body">
+			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
+				Geo-targeting requires a MaxMind GeoLite2-Country database.
+				<a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">Get a free license key</a>.
+			</p>
+			<div class="faz-form-group">
+				<label>MaxMind License Key</label>
+				<input type="password" class="faz-input" data-path="geolocation.maxmind_license_key" placeholder="Enter your MaxMind license key" style="max-width:400px;">
+			</div>
+			<div id="faz-geodb-status" style="margin:12px 0;padding:10px;border-radius:6px;background:var(--faz-bg-secondary);display:none;">
+			</div>
+			<button class="faz-btn faz-btn-secondary" id="faz-geodb-update" type="button">Update Database</button>
+		</div>
+	</div>
+
 	<div style="margin-top:8px;">
 		<button class="faz-btn faz-btn-primary" id="faz-settings-save">Save Settings</button>
 	</div>

@@ -72,7 +72,7 @@
 		FAZ.get('cookies/categories').then(function (data) {
 			categories = Array.isArray(data) ? data : (data.items || []);
 			renderCategories();
-		}).catch(function () {});
+		}).catch(function (err) { console.error('FAZ: Failed to load categories', err); });
 	}
 
 	function loadCookies() {
@@ -118,8 +118,19 @@
 			btn.className = String(activeCat) === String(catId) ? 'active' : '';
 
 			var nameSpan = document.createElement('span');
-			nameSpan.textContent = textVal(cat.name) || textVal(cat.title) || cat.slug || '';
+			var catName = textVal(cat.name) || textVal(cat.title) || cat.slug || '';
+			nameSpan.textContent = catName;
 			btn.appendChild(nameSpan);
+
+			// Badge for hidden categories (visibility=0).
+			if (cat.visibility !== undefined && !cat.visibility) {
+				var badge = document.createElement('span');
+				badge.className = 'faz-badge faz-badge-muted';
+				badge.textContent = 'hidden';
+				badge.title = 'Hidden from frontend';
+				badge.style.cssText = 'font-size:10px;margin-left:6px;padding:1px 6px;border-radius:3px;background:#e2e8f0;color:#64748b;vertical-align:middle;';
+				btn.appendChild(badge);
+			}
 
 			var cookieCount = cat.cookie_list ? cat.cookie_list.length : 0;
 			var countSpan = document.createElement('span');
@@ -233,7 +244,7 @@
 			}
 			input.dataset.field = f.path;
 			if (f.placeholder) input.placeholder = f.placeholder;
-			if (isEdit && cookie[f.path]) input.value = cookie[f.path];
+			if (isEdit && cookie[f.path]) input.value = textVal(cookie[f.path]);
 			group.appendChild(input);
 			form.appendChild(group);
 		});

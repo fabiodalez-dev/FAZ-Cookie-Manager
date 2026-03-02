@@ -320,7 +320,7 @@ class Banner extends Store {
 			$defaults = $data;
 			if ( in_array( $key, $excludes, true ) ) {
 				$result[ $key ] = $function( $key, $value );
-				return $result;
+				continue;
 			}
 			if ( is_array( $value ) ) {
 				$result[ $key ] = self::sanitize_settings( $function, $value, $defaults );

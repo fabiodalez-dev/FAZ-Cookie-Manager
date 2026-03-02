@@ -333,7 +333,6 @@ class Api extends Rest_Controller {
 		$registered = $this->get_collection_params();
 		$presets    = array();
 		if ( isset( $registered['ver'], $request['ver'] ) ) {
-			/** @phpstan-ignore argument.type */
 			$template = new \FazCookie\Admin\Modules\Banners\Includes\Template( false );
 			$presets  = $template->get_presets( $request['ver'] );
 		}

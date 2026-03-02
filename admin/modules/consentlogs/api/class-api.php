@@ -26,7 +26,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Api
  * @version     3.0.0
  * @package     FazCookie
- * @extends     Rest_Controller
  */
 class Api extends Rest_Controller {
 
@@ -134,8 +133,21 @@ class Api extends Rest_Controller {
 							'default'           => 'partial',
 						),
 						'categories' => array(
-							'type'    => array( 'object', 'array' ),
-							'default' => array(),
+							'type'              => array( 'object', 'array' ),
+							'default'           => array(),
+							'sanitize_callback' => function ( $value ) {
+								if ( is_array( $value ) ) {
+									return array_map( 'sanitize_text_field', $value );
+								}
+								if ( is_object( $value ) ) {
+									$sanitized = new \stdClass();
+									foreach ( get_object_vars( $value ) as $k => $v ) {
+										$sanitized->{ sanitize_key( $k ) } = sanitize_text_field( $v );
+									}
+									return $sanitized;
+								}
+								return array();
+							},
 						),
 						'url'        => array(
 							'type'              => 'string',

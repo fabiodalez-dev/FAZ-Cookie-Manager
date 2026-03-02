@@ -30,7 +30,8 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 		if ( ! is_wp_error( $keys ) ) {
 			$transients = array_map(
 				function( $key ) {
-					return ltrim( $key['option_name'], '_transient_' );
+					$name = $key['option_name'];
+					return 0 === strpos( $name, '_transient_' ) ? substr( $name, 11 ) : $name;
 				},
 				$keys
 			);
@@ -63,6 +64,6 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 			delete_option( $option_name );
 		}
 	} catch ( Exception $e ) {
-		error_log( __( 'Failed to delete FAZ Cookie Manager plugin data!', 'faz-cookie-manager' ) ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( __( 'Failed to delete FAZ Cookie Manager plugin data!', 'faz-cookie-manager' ) . ' ' . $e->getMessage() ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 }

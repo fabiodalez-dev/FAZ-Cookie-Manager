@@ -69,8 +69,9 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
  * @returns {string}
  */
 ref._fazGetCookie = function (name) {
-    const value = new RegExp(`${name}=([^;]+)`).exec(document.cookie);
-    return value && Array.isArray(value) && value[1] ? unescape(value[1]) : null;
+    const match = new RegExp(`${name}=([^;]+)`).exec(document.cookie);  // eslint-disable-line no-useless-escape
+    if (!match || !Array.isArray(match) || !match[1]) return null;
+    try { return decodeURIComponent(match[1]); } catch (_) { return match[1]; }
 }
 
 /**
@@ -101,7 +102,7 @@ function _fazSetConsentID() {
     _fazStore._resetConsentID = true;
 }
 
-_revisitFazConsent = function () {
+var _revisitFazConsent = function () {
     _fazShowBanner();
     _fazToggleRevisit();
 };
@@ -192,7 +193,7 @@ function _fazRemoveStyles() {
  */
 ref._fazRandomString = function (length, allChars = true) {
     const chars = `${allChars ? `0123456789` : ""
-        }ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghiklmnopqrstuvwxyz`;
+        }ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz`;
     const response = [];
     for (let i = 0; i < length; i++)
         response.push(chars[Math.floor(Math.random() * chars.length)]);
@@ -511,7 +512,7 @@ function _fazToggleBanner(force = false) {    const notice = _fazGetElementByTag
 function _fazToggleRevisit(force = false) {
     const revisit = _fazGetRevisit();
     if (revisit) {
-        force === true ? _fazRevisitHide() : revisit.classList.toggle('faz-revisit-hide');
+        force === true ? _fazHideRevisit() : revisit.classList.toggle('faz-revisit-hide');
     }
 }
 function _fazGetLaw() {
@@ -602,12 +603,10 @@ function _fazShowPreferenceCenter() {
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
     if (!element) return;
-    element.classList.toggle(_fazGetPreferenceClass());
-    if (_fazGetPtype() !== 'pushdown') _fazToggleOverLay();
-
     const isOpen = element.classList.contains(_fazGetPreferenceClass());
     element.classList.toggle(_fazGetPreferenceClass());
     if (_fazGetType() === 'classic') {
+        if (_fazGetPtype() !== 'pushdown') _fazToggleOverLay();
         const preferenceCenter = element.querySelector('.faz-preference-center');
         if (preferenceCenter) {
             preferenceCenter.setAttribute('role', 'dialog');
@@ -720,11 +719,13 @@ function _fazSetFooterShadow($doc) {
  */
 function _fazRemoveDeadCookies({ cookies }) {
     const currentCookieMap = ref._fazGetCookieMap();
-    for (const { cookieID, domain } of cookies)
+    for (const { cookieID, domain } of cookies) {
+        if (cookieID === "fazcookie-consent") continue;
         if (currentCookieMap[cookieID])
             [domain, ""].map((cookieDomain) =>
                 ref._fazSetCookie(cookieID, "", 0, cookieDomain)
             );
+    }
 }
 function _fazSetPreferenceCheckBoxStates(revisit = false) {
     for (const category of _fazStore._categories) {

@@ -5,7 +5,7 @@
  * A class definition that includes attributes and functions used across both the
  * public-facing side of the site and the admin area.
  *
- * @link       https://www.webtoffee.com/
+ * @link       https://fabiodalez.it/
  * @since      3.0.0
  *
  * @package    FazCookie
@@ -34,7 +34,7 @@ use FazCookie\Admin\Modules\Settings\Includes\Settings;
  * @since      3.0.0
  * @package    FazCookie
  * @subpackage FazCookie/Includes
- * @author     WebToffee <info@webtoffee.com>
+ * @author     Fabio D'Alessandro
  */
 class CLI {
 

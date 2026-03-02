@@ -10,6 +10,8 @@
 namespace FazCookie\Admin\Modules\Languages\Api;
 
 use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Error;
 use stdClass;
 use FazCookie\Includes\Rest_Controller;
@@ -25,7 +27,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Api
  * @version     3.0.0
  * @package     FazCookie
- * @extends     Rest_Controller
  */
 class Api extends Rest_Controller {
 
@@ -95,6 +96,7 @@ class Api extends Rest_Controller {
 	}
 
 	public function get_translations ($request) {
+		$objects = array();
 		$langs = $request->get_params();
 		unset($langs['context']);
 		unset($langs['_locale']);

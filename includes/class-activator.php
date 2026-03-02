@@ -2,7 +2,7 @@
 /**
  * Fired during plugin activation
  *
- * @link       https://www.webtoffee.com/
+ * @link       https://fabiodalez.it/
  * @since      3.0.0
  *
  * @package    FazCookie
@@ -28,7 +28,7 @@ use FazCookie\Admin\Modules\Pageviews\Includes\Controller as Pageviews_Controlle
  * @since      3.0.0
  * @package    FazCookie
  * @subpackage FazCookie/includes
- * @author     WebToffee <info@webtoffee.com>
+ * @author     Fabio D'Alessandro
  */
 class Activator {
 
@@ -78,6 +78,7 @@ class Activator {
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'check_version' ), 5 );
 		add_action( 'admin_init', array( __CLASS__, 'ensure_uncategorized_category' ) );
+		add_action( 'admin_init', array( __CLASS__, 'ensure_wordpress_internal_category' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
 	}
 
@@ -97,7 +98,7 @@ class Activator {
 	 * This check is done on all requests and runs if the versions do not match.
 	 */
 	public static function check_version() {
-		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'wt_cli_version', '2.1.3' ), FAZ_VERSION, '<' ) ) {
+		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '0.0.0' ), FAZ_VERSION, '<' ) ) {
 			self::install();
 		}
 	}
@@ -113,7 +114,7 @@ class Activator {
 		}
 		self::install_all_tables();
 		self::maybe_update_db();
-		update_option( 'wt_cli_version', FAZ_VERSION );
+		update_option( 'faz_version', FAZ_VERSION );
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
 	}
@@ -337,6 +338,33 @@ class Activator {
 		$object->set_description( array( $lang => $uncat_data['description'] ) );
 		$object->set_slug( 'uncategorized' );
 		$object->set_prior_consent( false );
+		$object->save();
+	}
+
+	/**
+	 * Ensure the "wordpress-internal" cookie category exists.
+	 * Hidden from frontend (visibility=0), no prior consent required.
+	 */
+	public static function ensure_wordpress_internal_category() {
+		$category_controller = Category_Controller::get_instance();
+		$categories          = $category_controller->get_items();
+		foreach ( $categories as $cat ) {
+			if ( 'wordpress-internal' === $cat->slug ) {
+				return; // Already exists.
+			}
+		}
+		$lang         = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		$defaults     = Category_Controller::get_defaults();
+		$wp_int_data  = isset( $defaults['wordpress-internal'] ) ? $defaults['wordpress-internal'] : array(
+			'name'        => 'WordPress Internal',
+			'description' => 'Cookies set by WordPress core for logged-in administrators. Not shown to site visitors.',
+		);
+		$object = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories();
+		$object->set_name( array( $lang => $wp_int_data['name'] ) );
+		$object->set_description( array( $lang => $wp_int_data['description'] ) );
+		$object->set_slug( 'wordpress-internal' );
+		$object->set_prior_consent( false );
+		$object->set_visibility( false );
 		$object->save();
 	}
 }

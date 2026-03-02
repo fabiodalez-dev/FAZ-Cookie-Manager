@@ -31,7 +31,7 @@
  */
 
 /*
-	Copyright 2024-2025 Fabio D'Alessandro
+	Copyright 2024-2026 Fabio D'Alessandro
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -55,8 +55,6 @@ if ( ! defined( 'WPINC' ) ) {
 define( 'FAZ_VERSION', '1.0.5' );
 define( 'FAZ_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'FAZ_PLUGIN_BASEPATH', plugin_dir_path( __FILE__ ) );
-define( 'FAZ_SETTINGS_FIELD', 'CookieLawInfo-0.9' );
-define( 'FAZ_ADMIN_OPTIONS_NAME', 'CookieLawInfo-0.8.3' );
 define( 'FAZ_PLUGIN_FILENAME', __FILE__ );
 define( 'FAZ_POST_TYPE', 'cookielawinfo' );
 define( 'FAZ_DEFAULT_LANGUAGE', faz_set_default_language() );
@@ -132,18 +130,6 @@ add_filter( "wp_consent_api_registered_".FAZ_PLUGIN_BASENAME, '__return_true' );
  */
 function faz_get_consent_db_version() {
 	return get_option( 'faz_cookie_consent_db_version', get_option( 'faz_cookie_consent_lite_db_version', '2.0' ) );
-}
-
-/**
- * Check if plugin is in legacy version.
- *
- * Always returns false — legacy code has been removed from this fork.
- * Kept for backward compatibility with any code that calls this function.
- *
- * @return boolean
- */
-function faz_is_legacy() {
-	return false;
 }
 
 /**
