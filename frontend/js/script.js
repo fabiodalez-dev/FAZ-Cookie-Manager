@@ -719,11 +719,13 @@ function _fazSetFooterShadow($doc) {
  */
 function _fazRemoveDeadCookies({ cookies }) {
     const currentCookieMap = ref._fazGetCookieMap();
-    for (const { cookieID, domain } of cookies)
+    for (const { cookieID, domain } of cookies) {
+        if (cookieID === "fazcookie-consent") continue;
         if (currentCookieMap[cookieID])
             [domain, ""].map((cookieDomain) =>
                 ref._fazSetCookie(cookieID, "", 0, cookieDomain)
             );
+    }
 }
 function _fazSetPreferenceCheckBoxStates(revisit = false) {
     for (const category of _fazStore._categories) {
