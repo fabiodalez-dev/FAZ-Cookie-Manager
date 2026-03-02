@@ -209,6 +209,9 @@ class Categories_API extends API_Controller {
 		} catch ( Exception $e ) {
 			$code = (int) $e->getCode();
 			$http = ( $code >= 400 && $code < 600 ) ? $code : 500;
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( sprintf( 'FazCookie bulk error: %s (code: %d)', $e->getMessage(), $code ) );
+			}
 			return new WP_Error( 'fazcookie_bulk_error', $e->getMessage(), array( 'status' => $http ) );
 		}
 	}
