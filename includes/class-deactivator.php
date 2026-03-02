@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
  * @since      3.0.0
  * @package    FazCookie
  * @subpackage FazCookie/includes
- * @author     WebToffee <info@webtoffee.com>
+ * @author     Fabio D'Alessandro
  */
 class Deactivator {
 

@@ -82,7 +82,9 @@ abstract class Base_Controller {
 	 */
 	public function delete_cache() {
 		Cache::delete( $this->cache_group );
-		wp_cache_flush();
+		wp_cache_delete( 'faz_settings', 'options' );
+		wp_cache_delete( 'faz_banner_template', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
 	}
 
 	/**

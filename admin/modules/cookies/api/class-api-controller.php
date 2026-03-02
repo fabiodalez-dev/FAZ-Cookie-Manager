@@ -7,6 +7,8 @@
 
 namespace FazCookie\Admin\Modules\Cookies\Api;
 
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Error;
 use FazCookie\Includes\Rest_Controller;
 
@@ -20,7 +22,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       API_Controller
  * @version     3.0.0
  * @package     FazCookie
- * @extends     Rest_Controller
  */
 abstract class API_Controller extends Rest_Controller {
 
@@ -48,7 +49,7 @@ abstract class API_Controller extends Rest_Controller {
 	 * @param  int $id Object ID.
 	 * @return object Cookie object or Cookie_Categories object or WP_Error object.
 	 */
-	protected function get_item_object( $id = false ) {
+	protected function get_item_object( $id = 0 ) {
 		// translators: %s: Class method name.
 		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}

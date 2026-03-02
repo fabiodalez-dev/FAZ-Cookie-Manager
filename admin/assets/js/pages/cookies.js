@@ -72,7 +72,7 @@
 		FAZ.get('cookies/categories').then(function (data) {
 			categories = Array.isArray(data) ? data : (data.items || []);
 			renderCategories();
-		}).catch(function () {});
+		}).catch(function (err) { console.error('FAZ: Failed to load categories', err); });
 	}
 
 	function loadCookies() {

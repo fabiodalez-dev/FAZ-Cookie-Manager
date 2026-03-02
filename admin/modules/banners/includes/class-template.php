@@ -263,7 +263,7 @@ class Template {
 	 * @return array
 	 */
 	private function load_templates() {
-		return faz_read_json_file( dirname( __FILE__ ) . '/templates/' . esc_html( $this->id ) . '/template.json' );
+		return faz_read_json_file( dirname( __FILE__ ) . '/templates/' . sanitize_file_name( $this->id ) . '/template.json' );
 	}
 
 	/**
@@ -272,7 +272,7 @@ class Template {
 	 * @return array
 	 */
 	private function load_presets() {
-		return faz_read_json_file( dirname( __FILE__ ) . '/templates/' . esc_html( $this->id ) . '/theme.json' );
+		return faz_read_json_file( dirname( __FILE__ ) . '/templates/' . sanitize_file_name( $this->id ) . '/theme.json' );
 	}
 
 	/**

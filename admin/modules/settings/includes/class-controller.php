@@ -389,6 +389,8 @@ class Controller {
 	 * @return void
 	 */
 	public function delete_cache() {
-		wp_cache_flush();
+		wp_cache_delete( 'faz_settings', 'options' );
+		wp_cache_delete( 'faz_gcm_settings', 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
 	}
 }

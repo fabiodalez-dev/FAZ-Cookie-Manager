@@ -125,6 +125,7 @@ class Geolocation {
 		}
 
 		// 4. Free API fallback: ip-api.com (no key needed, 45 req/min).
+		// Note: ip-api.com free tier only supports HTTP. HTTPS requires a paid plan.
 		$response = wp_remote_get(
 			'http://ip-api.com/json/' . rawurlencode( $ip ) . '?fields=countryCode',
 			array(

@@ -11,6 +11,7 @@ namespace FazCookie\Admin\Modules\Pageviews\Api;
 
 use WP_REST_Server;
 use WP_REST_Request;
+use WP_REST_Response;
 use WP_Error;
 use FazCookie\Includes\Rest_Controller;
 use FazCookie\Admin\Modules\Pageviews\Includes\Controller;
@@ -25,7 +26,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Api
  * @version     1.0.0
  * @package     FazCookie
- * @extends     Rest_Controller
  */
 class Api extends Rest_Controller {
 

@@ -159,8 +159,13 @@
 
 		backdrop.appendChild(modal);
 
+		var escHandler = function (e) {
+			if (e.key === 'Escape') close();
+		};
+
 		function close() {
 			backdrop.classList.remove('active');
+			document.removeEventListener('keydown', escHandler);
 			setTimeout(function () {
 				if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
 			}, 200);
@@ -171,12 +176,7 @@
 		backdrop.addEventListener('click', function (e) {
 			if (e.target === backdrop) close();
 		});
-		document.addEventListener('keydown', function handler(e) {
-			if (e.key === 'Escape') {
-				close();
-				document.removeEventListener('keydown', handler);
-			}
-		});
+		document.addEventListener('keydown', escHandler);
 
 		document.body.appendChild(backdrop);
 
@@ -211,16 +211,17 @@
 			msgEl.style.cssText = 'margin:0;font-size:14px;';
 			msgEl.textContent = msg;
 
+			var resolved = false;
 			var m = FAZ.modal({
 				title: 'Confirm',
 				body: msgEl,
 				size: 'sm',
 				footer: footer,
-				onClose: function () { resolve(false); },
+				onClose: function () { if (!resolved) { resolved = true; resolve(false); } },
 			});
 
-			cancelBtn.addEventListener('click', function () { m.close(); resolve(false); });
-			confirmBtn.addEventListener('click', function () { m.close(); resolve(true); });
+			cancelBtn.addEventListener('click', function () { resolved = true; resolve(false); m.close(); });
+			confirmBtn.addEventListener('click', function () { resolved = true; resolve(true); m.close(); });
 		});
 	};
 

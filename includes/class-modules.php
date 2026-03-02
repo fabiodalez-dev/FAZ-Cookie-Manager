@@ -39,7 +39,7 @@ abstract class Modules {
 	/**
 	 * All the module translation strings.
 	 *
-	 * @var [type]
+	 * @var array
 	 */
 	public $translations = array();
 

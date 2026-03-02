@@ -2,7 +2,7 @@
 /**
  * Fired during plugin activation
  *
- * @link       https://www.webtoffee.com/
+ * @link       https://fabiodalez.it/
  * @since      3.0.0
  *
  * @package    FazCookie
@@ -28,7 +28,7 @@ use FazCookie\Admin\Modules\Pageviews\Includes\Controller as Pageviews_Controlle
  * @since      3.0.0
  * @package    FazCookie
  * @subpackage FazCookie/includes
- * @author     WebToffee <info@webtoffee.com>
+ * @author     Fabio D'Alessandro
  */
 class Activator {
 
@@ -97,7 +97,7 @@ class Activator {
 	 * This check is done on all requests and runs if the versions do not match.
 	 */
 	public static function check_version() {
-		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'wt_cli_version', '2.1.3' ), FAZ_VERSION, '<' ) ) {
+		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '2.1.3' ), FAZ_VERSION, '<' ) ) {
 			self::install();
 		}
 	}
@@ -113,7 +113,7 @@ class Activator {
 		}
 		self::install_all_tables();
 		self::maybe_update_db();
-		update_option( 'wt_cli_version', FAZ_VERSION );
+		update_option( 'faz_version', FAZ_VERSION );
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
 	}

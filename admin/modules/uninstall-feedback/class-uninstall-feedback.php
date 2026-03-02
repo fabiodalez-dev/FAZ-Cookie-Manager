@@ -7,8 +7,9 @@
 
 namespace FazCookie\Admin\Modules\Uninstall_Feedback;
 
-use WP_Error;
+use WP_REST_Request;
 use WP_REST_Response;
+use WP_Error;
 use FazCookie\Includes\Modules;
 
 if ( ! defined( 'ABSPATH' ) ) {

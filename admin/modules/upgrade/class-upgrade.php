@@ -77,7 +77,11 @@ class Upgrade extends Modules {
 	 * @return void
 	 */
 	public function start_migration() {
-		require_once FAZ_PLUGIN_BASEPATH . 'legacy/includes/class-cookie-law-info.php';
+		$legacy_main = FAZ_PLUGIN_BASEPATH . 'legacy/includes/class-cookie-law-info.php';
+		if ( ! file_exists( $legacy_main ) ) {
+			return; // Legacy directory removed from this fork.
+		}
+		require_once $legacy_main;
 		require_once FAZ_PLUGIN_BASEPATH . 'legacy/public/modules/shortcode/shortcode.php';
 		require_once FAZ_PLUGIN_BASEPATH . 'legacy/admin/modules/ccpa/ccpa.php';
 

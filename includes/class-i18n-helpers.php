@@ -235,9 +235,9 @@ if ( ! function_exists( 'faz_i18n_post_by_language' ) ) {
 	/**
 	 * Returns the current language code of the site
 	 *
-	 * @param integer $term_id Original term id.
+	 * @param integer $post_id Original post id.
 	 * @param string  $language Language code.
-	 * @return object
+	 * @return object|false
 	 */
 	function faz_i18n_post_by_language( $post_id, $language ) {
 		$post = false;

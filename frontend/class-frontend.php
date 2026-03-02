@@ -2,7 +2,7 @@
 /**
  * The public-facing functionality of the plugin.
  *
- * @link       https://www.webtoffee.com/
+ * @link       https://fabiodalez.it/
  * @since      3.0.0
  *
  * @package    FazCookie
@@ -27,7 +27,7 @@ use FazCookie\Includes\Cookie_Table_Shortcode;
  *
  * @package    FazCookie
  * @subpackage FazCookie\Frontend
- * @author     WebToffee <info@webtoffee.com>
+ * @author     Fabio D'Alessandro
  */
 class Frontend {
 
@@ -307,27 +307,16 @@ class Frontend {
 	/**
 	 * Add web app script on the header.
 	 *
+	 * Stub — is_connected() always returns false in local mode, so this
+	 * method returns immediately. Kept because it is registered via add_action
+	 * in the constructor.
+	 *
 	 * @return void
 	 */
 	public function insert_script() {
 		if ( false === $this->settings->is_connected() || true === faz_disable_banner() ) {
 			return;
 		}
-		if ( true === $this->gcm_settings->is_gcm_enabled() ) {
-			$gcm = $this->get_gcm_data();
-			$gcm_json = wp_json_encode($gcm);
-			?>
-<script id="faz-cookie-manager-gcm-var-js">
-var _fazGcm = <?php echo $gcm_json; //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-?>
-</script>
-<?php
-			$suffix = ''; // Always load non-minified JS.
-			$script_url = plugin_dir_url( __FILE__ ) . 'js/gcm' . $suffix . '.js'; 
-?>
-<script id="faz-cookie-manager-gcm-js" type="text/javascript" src="<?php echo esc_url( $script_url ); ?>"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript
-		}
-		echo '<script id="fazcookie" type="text/javascript" src="' . esc_url( $this->settings->get_script_url() ) . '"></script>'; // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript
 	}
 	/**
 	 * Load active banner.
@@ -414,21 +403,6 @@ var _fazGcm = <?php echo $gcm_json; //phpcs:ignore WordPress.Security.EscapeOutp
 		echo '<script id="fazBannerTemplate" type="text/template">';
 		echo wp_kses( $html, faz_allowed_html() );
 		echo '</script>';
-	}
-	/**
-	 * Modify tags to now show any `id` attribute.
-	 *
-	 * @param string $tag The `<script>` tag for the enqueued script.
-	 * @param string $handle The script's registered handle.
-	 */
-	public function script_loader_tag( $tag, $handle ) {
-		if ( false === $this->settings->is_connected() || true === faz_disable_banner() ) {
-			return $tag;
-		}
-		if ( $handle === $this->plugin_name ) {
-			$tag = '<script id="fazcookie" type="text/javascript" src="' . esc_attr( $this->settings->get_script_url() ) . '"></script>'; // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript
-		}
-		return $tag;
 	}
 	/**
 	 * Get gcm data
@@ -560,10 +534,13 @@ var _fazGcm = <?php echo $gcm_json; //phpcs:ignore WordPress.Security.EscapeOutp
 	/**
 	 * Get cookies by category
 	 *
-	 * @param object $category Category object.
+	 * @param object|null $category Category object.
 	 * @return array
 	 */
-	public function get_cookies( $category = '' ) {
+	public function get_cookies( $category = null ) {
+		if ( null === $category ) {
+			return array();
+		}
 		$cookies  = array();
 		$cat_slug = $category->get_slug();
 		$items    = \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_items_by_category( $category->get_id() );
@@ -609,7 +586,6 @@ var _fazGcm = <?php echo $gcm_json; //phpcs:ignore WordPress.Security.EscapeOutp
 			'hide-desc-button',
 			'faz-always-active',
 			'faz-link',
-			'accept-button',
 			'revisit-consent',
 		);
 		foreach ( $supported as $tag ) {

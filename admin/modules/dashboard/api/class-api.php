@@ -8,6 +8,8 @@
 namespace FazCookie\Admin\Modules\Dashboard\Api;
 
 use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Error;
 use stdClass;
 use FazCookie\Includes\Rest_Controller;
@@ -24,7 +26,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Api
  * @version     3.0.0
  * @package     FazCookie
- * @extends     Rest_Controller
  */
 class Api extends Rest_Controller {
 

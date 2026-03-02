@@ -1,7 +1,8 @@
 const data = window._fazGcm;
+if (!data) { console.warn('FAZ GCM: _fazGcm not available'); }
 let setDefaultSetting = true;
-const regionSettings = data.default_settings || [];
-const waitForTime = data.wait_for_update;
+const regionSettings = (data && data.default_settings) || [];
+const waitForTime = data ? data.wait_for_update : 0;
 
 function getCookieValues(cookieName) {
     const values = [];
@@ -39,9 +40,8 @@ function setConsentInitStates(consentData) {
     gtag("consent", "default", consentData );
 }
 
-gtag("set", "ads_data_redaction", !!data.ads_data_redaction);
-gtag("set", "url_passthrough", !!data.url_passthrough);
-gtag("set", "developer_id.dY2Q2ZW", true);
+gtag("set", "ads_data_redaction", !!(data && data.ads_data_redaction));
+gtag("set", "url_passthrough", !!(data && data.url_passthrough));
 
 for (let index = 0; index < regionSettings.length; index++) {
     const regionSetting = regionSettings[index];

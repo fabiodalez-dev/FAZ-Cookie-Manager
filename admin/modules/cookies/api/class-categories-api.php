@@ -8,11 +8,13 @@
 namespace FazCookie\Admin\Modules\Cookies\Api;
 
 use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
+use WP_Error;
+use Exception;
 use FazCookie\Admin\Modules\Cookies\Api\API_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
-use WP_Error;
-use Exception;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -24,7 +26,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Categories_API
  * @version     3.0.0
  * @package     FazCookie
- * @extends     API_Controller
  */
 class Categories_API extends API_Controller {
 
@@ -131,10 +132,10 @@ class Categories_API extends API_Controller {
 	/**
 	 * Return item object
 	 *
-	 * @param object $item Cookie item.
+	 * @param object|null $item Cookie item.
 	 * @return Cookie_Categories
 	 */
-	public function get_item_object( $item = false ) {
+	public function get_item_object( $item = null ) {
 		return new Cookie_Categories( $item );
 	}
 	/**

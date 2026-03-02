@@ -185,8 +185,9 @@ class Cache {
 
 		return array_map(
 			function( $key ) {
-				// Remove '_transient_' from the option name.
-				return ltrim( $key['option_name'], '_transient_' );
+				// Remove '_transient_' prefix from the option name.
+				$name = $key['option_name'];
+				return 0 === strpos( $name, '_transient_' ) ? substr( $name, 11 ) : $name;
 			},
 			$keys
 		);

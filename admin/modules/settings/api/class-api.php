@@ -8,6 +8,8 @@
 namespace FazCookie\Admin\Modules\Settings\Api;
 
 use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Error;
 use stdClass;
 use FazCookie\Includes\Rest_Controller;
@@ -25,7 +27,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Api
  * @version     3.0.0
  * @package     FazCookie
- * @extends     Rest_Controller
  */
 class Api extends Rest_Controller {
 
@@ -377,6 +378,16 @@ class Api extends Rest_Controller {
 
 		if ( empty( $filter_name ) ) {
 			return new WP_Error( 'missing_filter_name', __( 'Filter name is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+
+		// Allowlist of permitted filter names to prevent arbitrary filter invocation.
+		$allowed_filters = array(
+			'faz_before_navigate',
+			'faz_settings_update',
+			'faz_banner_preview',
+		);
+		if ( ! in_array( $filter_name, $allowed_filters, true ) ) {
+			return new WP_Error( 'invalid_filter_name', __( 'Filter name is not permitted.', 'faz-cookie-manager' ), array( 'status' => 403 ) );
 		}
 
 		// Apply the WordPress filter
