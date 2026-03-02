@@ -52,7 +52,7 @@ defined( 'ABSPATH' ) || exit;
 						<table class="faz-table" id="faz-cookies-table">
 							<thead>
 								<tr>
-									<th style="width:40px"><input type="checkbox" id="faz-select-all-cookies"></th>
+									<th style="width:40px"><input type="checkbox" id="faz-select-all-cookies" aria-label="<?php esc_attr_e( 'Select all cookies', 'faz-cookie-manager' ); ?>"></th>
 									<th>Name</th>
 									<th>Domain</th>
 									<th>Duration</th>

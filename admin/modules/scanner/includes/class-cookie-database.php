@@ -61,12 +61,6 @@ class Cookie_Database {
 			'duration'    => 'session',
 			'description' => 'Stores the selected language during login.',
 		),
-		'comment_author_'         => array(
-			'category'    => 'functional',
-			'duration'    => '1 year',
-			'description' => 'Stores the commenter name for convenience.',
-			'match'       => 'prefix',
-		),
 		'comment_author_email_'   => array(
 			'category'    => 'functional',
 			'duration'    => '1 year',
@@ -77,6 +71,12 @@ class Cookie_Database {
 			'category'    => 'functional',
 			'duration'    => '1 year',
 			'description' => 'Stores the commenter website URL for convenience.',
+			'match'       => 'prefix',
+		),
+		'comment_author_'         => array(
+			'category'    => 'functional',
+			'duration'    => '1 year',
+			'description' => 'Stores the commenter name for convenience.',
 			'match'       => 'prefix',
 		),
 		// Google Analytics.

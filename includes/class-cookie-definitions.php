@@ -287,7 +287,7 @@ class Cookie_Definitions {
 					'description' => isset( $local['description'] ) ? $local['description'] : '',
 					'duration'    => isset( $local['duration'] ) ? $local['duration'] : '',
 					'domain'      => '',
-					'vendor'      => 'WordPress',
+					'vendor'      => isset( $local['vendor'] ) ? $local['vendor'] : '',
 					'found'       => true,
 				);
 				continue;

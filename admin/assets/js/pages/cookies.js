@@ -75,7 +75,8 @@
 			FAZ.confirm('Delete ' + ids.length + ' selected cookie(s)?').then(function (ok) {
 				if (!ok) return;
 				FAZ.post('cookies/bulk-delete', { ids: ids }).then(function (res) {
-					FAZ.notify((res.deleted || ids.length) + ' cookies deleted');
+					var deletedCount = (res && typeof res.deleted === 'number') ? res.deleted : ids.length;
+					FAZ.notify(deletedCount + ' cookies deleted');
 					loadCookies();
 					loadCategories();
 				}).catch(function () {
@@ -204,6 +205,7 @@
 			cb.type = 'checkbox';
 			cb.className = 'faz-cookie-check';
 			cb.value = cookie.id || cookie.cookie_id;
+			cb.setAttribute('aria-label', 'Select cookie ' + (cookie.name || ''));
 			cb.addEventListener('change', updateBulkBar);
 			tdCheck.appendChild(cb);
 			tr.appendChild(tdCheck);
@@ -254,7 +256,13 @@
 
 	function updateBulkBar() {
 		var checked = document.querySelectorAll('.faz-cookie-check:checked');
+		var total = document.querySelectorAll('.faz-cookie-check').length;
 		var bar = document.getElementById('faz-bulk-bar');
+		var selectAll = document.getElementById('faz-select-all-cookies');
+		if (selectAll) {
+			selectAll.checked = total > 0 && checked.length === total;
+			selectAll.indeterminate = checked.length > 0 && checked.length < total;
+		}
 		if (checked.length > 0) {
 			bar.style.display = 'flex';
 			bar.querySelector('.faz-bulk-count').textContent = checked.length + ' selected';
