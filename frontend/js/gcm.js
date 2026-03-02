@@ -54,6 +54,7 @@ gtag("set", "url_passthrough", !!data.url_passthrough);
 
 for (var index = 0; index < regionSettings.length; index++) {
     var regionSetting = regionSettings[index];
+    if (!regionSetting || typeof regionSetting !== "object") continue;
     var consentRegionData = {
         ad_storage: regionSetting.advertisement,
         analytics_storage: regionSetting.analytics,

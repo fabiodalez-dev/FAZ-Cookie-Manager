@@ -516,6 +516,9 @@ class Frontend {
 
 		foreach ( $categories as $category ) {
 			$category        = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category );
+			if ( false === $category->get_visibility() ) {
+				continue;
+			}
 			$cookie_groups[] = array(
 				'name'           => $category->get_name( faz_current_language() ),
 				'slug'           => $category->get_slug(),
