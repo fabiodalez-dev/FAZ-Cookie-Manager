@@ -327,7 +327,10 @@ class Mmdb_Reader {
 				$offset += $size;
 				return ( $val >= 0x80000000 ) ? $val - 0x100000000 : $val;
 
-			case 9: // uint64 — return as int (safe on 64-bit PHP).
+			case 9: // uint64 — requires 64-bit PHP.
+				if ( PHP_INT_SIZE < 8 ) {
+					throw new \RuntimeException( 'MMDB uint64 requires 64-bit PHP.' );
+				}
 				$val = 0;
 				for ( $i = 0; $i < $size; $i++ ) {
 					$val = ( $val << 8 ) | ord( $this->data[ $offset + $i ] );
@@ -349,7 +352,7 @@ class Mmdb_Reader {
 				$raw     = substr( $this->data, $offset, 8 );
 				$offset += 8;
 				$unpacked = unpack( 'E', $raw ); // PHP 7.2+ big-endian double.
-				return $unpacked[1];
+				return false !== $unpacked ? $unpacked[1] : 0.0;
 
 			case 4: // bytes.
 				$raw     = substr( $this->data, $offset, $size );
@@ -360,7 +363,7 @@ class Mmdb_Reader {
 				$raw     = substr( $this->data, $offset, 4 );
 				$offset += 4;
 				$unpacked = unpack( 'G', $raw ); // PHP 7.2+ big-endian float.
-				return $unpacked[1];
+				return false !== $unpacked ? $unpacked[1] : 0.0;
 
 			default:
 				$offset += $size;

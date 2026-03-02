@@ -63,7 +63,8 @@ for (var index = 0; index < regionSettings.length; index++) {
         ad_user_data: regionSetting.ad_user_data,
         ad_personalization: regionSetting.ad_personalization
     };
-    var regionsToSetFor = regionSetting.regions
+    var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
+    var regionsToSetFor = regionsRaw
         .split(",")
         .map(function (region) { return region.trim(); })
         .filter(function (region) { return region; });
@@ -90,7 +91,10 @@ function parseConsentCookie() {
     if (!raw || typeof raw !== "string") return null;
     return raw.split(",").reduce(function (acc, curr) {
         var kv = curr.trim().split(":");
-        acc[kv[0]] = getConsentStateForCategory(kv[1]);
+        if (kv.length !== 2) return acc;
+        var key = kv[0].trim();
+        if (!key) return acc;
+        acc[key] = getConsentStateForCategory(kv[1].trim());
         return acc;
     }, {});
 }

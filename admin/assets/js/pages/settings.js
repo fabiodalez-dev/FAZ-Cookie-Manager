@@ -81,8 +81,8 @@
 			}
 			el.style.display = 'block';
 		}).catch(function (err) {
-		console.warn('Failed to load GeoIP status', err);
-	});
+			console.warn('Failed to load GeoIP status', err);
+		});
 	}
 
 	function updateGeoDb() {
