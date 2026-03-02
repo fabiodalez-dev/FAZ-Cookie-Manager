@@ -108,7 +108,7 @@ class Cookie_Table_Shortcode {
 		foreach ( $categories as $cat ) {
 			$cat_obj = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat );
 			if ( false === $cat_obj->get_visibility() ) {
-				$hidden_cat_ids[] = $cat->category_id;
+				$hidden_cat_ids[] = absint( $cat->category_id );
 				continue;
 			}
 			$cat_map[ $cat->category_id ] = $this->localize( $cat->name, $lang, $default );
