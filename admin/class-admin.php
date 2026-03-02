@@ -343,7 +343,7 @@ class Admin {
 			$capability,
 			$parent,
 			array( $this, 'render_page' ),
-			'dashicons-shield',
+			'dashicons-food',
 			40
 		);
 
