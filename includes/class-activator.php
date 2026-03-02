@@ -353,7 +353,9 @@ class Activator {
 		}
 		$lang     = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
 		$defaults = Category_Controller::get_defaults();
-		$data     = isset( $defaults[ $slug ] ) ? $defaults[ $slug ] : $fallback_data;
+		$data     = isset( $defaults[ $slug ] ) && is_array( $defaults[ $slug ] )
+			? array_merge( $fallback_data, $defaults[ $slug ] )
+			: $fallback_data;
 
 		$object = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories();
 		$object->set_name( array( $lang => $data['name'] ) );
