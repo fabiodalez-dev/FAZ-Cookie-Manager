@@ -502,38 +502,10 @@ class Uninstall_Feedback extends Modules {
 	 * @return void
 	 */
 	public function send_uninstall_reason( $request ) {
-		global $wpdb;
 		if ( ! isset( $request['reason_id'] ) ) {
 			wp_send_json_error();
 		}
-		$data = array(
-			'reason_slug'    => sanitize_text_field( wp_unslash( $request['reason_id'] ) ),
-			'reason_detail'  => ! empty( $request['reason_text'] ) ? sanitize_text_field( wp_unslash( $request['reason_text'] ) ) : null,
-			'date'           => gmdate( 'M d, Y h:i:s A' ),
-			'comments'       => ! empty( $request['reason_info'] ) ? sanitize_text_field( wp_unslash( $request['reason_info'] ) ) : null,
-			'server'         => ! empty( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : null,
-			'php_version'    => phpversion(),
-			'mysql_version'  => $wpdb->db_version(),
-			'wp_version'     => get_bloginfo( 'version' ),
-			'wc_version'     => defined( 'WC_VERSION' ) ? WC_VERSION : null,
-			'locale'         => get_locale(),
-			'plugin_version' => $this->current_version,
-			'is_multisite'   => is_multisite(),
-		);
-
-		$response = wp_remote_post(
-			$this->api_url,
-			array(
-				'headers'     => array( 'Content-Type' => 'application/json; charset=utf-8' ),
-				'method'      => 'POST',
-				'timeout'     => 45,
-				'redirection' => 5,
-				'httpversion' => '1.0',
-				'blocking'    => false,
-				'body'        => wp_json_encode( $data ),
-				'cookies'     => array(),
-			)
-		);
+		// External feedback endpoint disabled — data stays local.
 		wp_send_json_success();
 	}
 }

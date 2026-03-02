@@ -259,27 +259,27 @@ class Categories_API extends API_Controller {
 					'context'     => array( 'view', 'edit' ),
 				),
 				'prior_consent'      => array(
-					'description' => __( 'Cookie type.', 'faz-cookie-manager' ),
+					'description' => __( 'Whether prior consent is required.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'priority'           => array(
-					'description' => __( 'Cookie type.', 'faz-cookie-manager' ),
+					'description' => __( 'Category display priority.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'visibility'         => array(
-					'description' => __( 'Show cookies on audit table or not', 'faz-cookie-manager' ),
+					'description' => __( 'Whether category is visible in audit table.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'sell_personal_data' => array(
-					'description' => __( 'Show cookies on audit table or not', 'faz-cookie-manager' ),
+					'description' => __( 'Whether category involves selling personal data.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'cookies'            => array(
-					'description' => __( 'Cookie category description.', 'faz-cookie-manager' ),
+					'description' => __( 'List of cookies in this category.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view' ),
 				),

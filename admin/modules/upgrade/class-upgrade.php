@@ -537,7 +537,7 @@ class Upgrade extends Modules {
 	 * @return string
 	 */
 	private function get_readmore_link() {
-		if ( $this->settings['button_2_url_type'] == 'url' ) {
+		if ( $this->settings['button_2_url_type'] === 'url' ) {
 			return isset( $this->settings['button_2_url'] ) ? $this->settings['button_2_url'] : '';
 		} else {
 			$page = isset( $this->settings['button_2_page'] ) ? intval( $this->settings['button_2_page'] ) : false;
@@ -564,7 +564,7 @@ class Upgrade extends Modules {
 		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'revert' ) || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		if ( ! isset( $_GET['revert'] ) && 'true' === sanitize_text_field( wp_unslash( $_GET['revert'] ) ) ) {
+		if ( ! isset( $_GET['revert'] ) || 'true' !== sanitize_text_field( wp_unslash( $_GET['revert'] ) ) ) {
 			return;
 		}
 		$settings = new Settings();

@@ -10,7 +10,7 @@ FAZ Cookie Manager is a WordPress plugin that gives you everything you need to m
 
 No account to create. No cloud service to connect. No "premium" plan to unlock basic features like consent logging or geo-targeting. Everything runs on your own server, and you own all your data.
 
-### Why FAZ Cookie Manager?
+## Why FAZ Cookie Manager?
 
 Most cookie consent plugins follow the same pattern: a free version with crippled features, and a paid tier starting at $10-50/month that unlocks what you actually need. FAZ Cookie Manager breaks that model:
 

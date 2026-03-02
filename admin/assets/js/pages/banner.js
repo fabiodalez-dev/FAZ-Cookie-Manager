@@ -290,7 +290,8 @@
 		c.notice.elements.buttons.elements.readMore = getVal('faz-b-btn-readmore-label');
 
 		// Cookie policy link (fallback to /cookie-policy if empty)
-		c.notice.elements.privacyLink = getVal('faz-b-privacy-link') || '/cookie-policy';
+		var privacyLinkVal = (getVal('faz-b-privacy-link') || '').trim();
+		c.notice.elements.privacyLink = privacyLinkVal || '/cookie-policy';
 
 		// Preference center
 		if (!c.preferenceCenter) c.preferenceCenter = { elements: {} };
@@ -502,7 +503,7 @@
 		if (!isChecked('faz-b-reject-toggle')) hiddenTags.push('reject-button');
 		if (!isChecked('faz-b-settings-toggle')) hiddenTags.push('settings-button');
 		if (!isChecked('faz-b-close-toggle')) hiddenTags.push('close-button');
-		if (!isChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore');
+		if (!isChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore-button');
 		if (!isChecked('faz-b-revisit-toggle')) hiddenTags.push('revisit-consent');
 		if (!isChecked('faz-b-audit-toggle')) hiddenTags.push('audit-table');
 		if (!isChecked('faz-b-brandlogo-toggle')) hiddenTags.push('brand-logo');
@@ -603,6 +604,9 @@
 			});
 		});
 
+		// Inject readmore link (not in template — frontend JS adds it dynamically)
+		attachPreviewReadMore(host);
+
 		// Update brand logo src from our form field
 		var logoUrl = getVal('faz-b-brandlogo-url');
 		if (logoUrl) {
@@ -617,6 +621,49 @@
 		// Apply display state (panel-level, not host)
 		var panel = document.getElementById('faz-b-preview-panel');
 		if (panel) panel.classList.toggle('hidden', !previewVisible);
+	}
+
+	function attachPreviewReadMore(host) {
+		if (!bannerData) return;
+		var config = bannerData.properties && bannerData.properties.config || {};
+		var readMoreCfg = config.notice && config.notice.elements
+			&& config.notice.elements.buttons && config.notice.elements.buttons.elements
+			&& config.notice.elements.buttons.elements.readMore;
+		if (!readMoreCfg || readMoreCfg.status !== true) return;
+
+		// Get label text and privacy link for current language
+		var contents = bannerData.contents || {};
+		var c = contents[currentLang] || contents[Object.keys(contents)[0]] || {};
+		var noticeEl = (c.notice && c.notice.elements) || {};
+		var label = (noticeEl.buttons && noticeEl.buttons.elements && noticeEl.buttons.elements.readMore) || '';
+		var href = noticeEl.privacyLink || getVal('faz-b-privacy-link') || '/cookie-policy';
+		if (!label) return;
+
+		// Build readmore HTML (link or button)
+		var html;
+		if (readMoreCfg.type === 'link') {
+			html = '<a href="' + href + '" class="faz-policy" aria-label="' + label + '" target="_blank" rel="noopener" data-faz-tag="readmore-button">' + label + '</a>';
+		} else {
+			html = '<button class="faz-policy" aria-label="' + label + '" data-faz-tag="readmore-button">' + label + '</button>';
+		}
+
+		// Append to description element (same as frontend _fazAttachReadMore)
+		var descEl = host.querySelector('[data-faz-tag="description"]');
+		if (!descEl) return;
+		var lastP = descEl.querySelector('p:last-child');
+		if (lastP) {
+			lastP.insertAdjacentHTML('beforeend', '&nbsp;' + html);
+		} else {
+			descEl.insertAdjacentHTML('beforeend', '&nbsp;' + html);
+		}
+
+		// Apply styles from config
+		var styles = readMoreCfg.styles || {};
+		host.querySelectorAll('[data-faz-tag="readmore-button"]').forEach(function (el) {
+			for (var s in styles) {
+				if (styles[s]) el.style[s] = styles[s];
+			}
+		});
 	}
 
 	function initPreviewToggles(host) {
