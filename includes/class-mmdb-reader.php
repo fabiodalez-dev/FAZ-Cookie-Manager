@@ -67,6 +67,7 @@ class Mmdb_Reader {
 
 	const SEPARATOR_SIZE  = 16;
 	const METADATA_MARKER = "\xab\xcd\xefMaxMind.com";
+	const MAX_DECODE_DEPTH = 128;
 
 	/**
 	 * Open and parse an MMDB file.
@@ -219,8 +220,13 @@ class Mmdb_Reader {
 	 * @return mixed Decoded data (usually an associative array).
 	 */
 	private function read_record( $pointer ) {
+		$min_pointer = $this->node_count + self::SEPARATOR_SIZE;
+		if ( $pointer < $min_pointer ) {
+			throw new \RuntimeException( 'Invalid MMDB data pointer: ' . $pointer );
+		}
 		$data_offset = $pointer - $this->node_count - self::SEPARATOR_SIZE;
 		$abs_offset  = $this->data_section_start + $data_offset;
+		$this->assert_bytes_available( $abs_offset, 1 );
 		return $this->decode( $abs_offset );
 	}
 
@@ -228,9 +234,13 @@ class Mmdb_Reader {
 	 * Decode a value from the data section at the given offset.
 	 *
 	 * @param int $offset Byte offset (modified in place to point past the decoded value).
+	 * @param int $depth  Current recursion depth.
 	 * @return mixed Decoded value.
 	 */
-	private function decode( &$offset ) {
+	private function decode( &$offset, $depth = 0 ) {
+		if ( $depth > self::MAX_DECODE_DEPTH ) {
+			throw new \RuntimeException( 'MMDB decode exceeded maximum depth of ' . self::MAX_DECODE_DEPTH );
+		}
 		$this->assert_bytes_available( $offset, 1 );
 		$ctrl = ord( $this->data[ $offset ] );
 		$offset++;
@@ -239,7 +249,7 @@ class Mmdb_Reader {
 
 		// Type 1 = pointer — special handling.
 		if ( 1 === $type ) {
-			return $this->decode_pointer( $ctrl, $offset );
+			return $this->decode_pointer( $ctrl, $offset, $depth );
 		}
 
 		$size = $ctrl & 0x1F;
@@ -266,7 +276,7 @@ class Mmdb_Reader {
 			$offset += 3;
 		}
 
-		return $this->decode_by_type( $type, $size, $offset );
+		return $this->decode_by_type( $type, $size, $offset, $depth );
 	}
 
 	/**
@@ -274,9 +284,10 @@ class Mmdb_Reader {
 	 *
 	 * @param int $ctrl   Control byte.
 	 * @param int $offset Current offset (advanced past pointer bytes).
+	 * @param int $depth  Current recursion depth.
 	 * @return mixed Decoded value at the pointer target.
 	 */
-	private function decode_pointer( $ctrl, &$offset ) {
+	private function decode_pointer( $ctrl, &$offset, $depth = 0 ) {
 		$ptr_size = ( $ctrl >> 3 ) & 3;
 		$value    = $ctrl & 7;
 		$d        = $this->data;
@@ -305,7 +316,7 @@ class Mmdb_Reader {
 
 		// Resolve — pointer is an offset from the start of the data section.
 		$ptr_offset = $this->data_section_start + $pointer;
-		return $this->decode( $ptr_offset );
+		return $this->decode( $ptr_offset, $depth + 1 );
 	}
 
 	/**
@@ -314,9 +325,10 @@ class Mmdb_Reader {
 	 * @param int $type   MMDB data type.
 	 * @param int $size   Data size.
 	 * @param int $offset Current offset (advanced past data bytes).
+	 * @param int $depth  Current recursion depth.
 	 * @return mixed Decoded value.
 	 */
-	private function decode_by_type( $type, $size, &$offset ) {
+	private function decode_by_type( $type, $size, &$offset, $depth = 0 ) {
 		switch ( $type ) {
 			case 2: // UTF-8 string.
 				$this->assert_bytes_available( $offset, $size );
@@ -337,8 +349,8 @@ class Mmdb_Reader {
 			case 7: // map.
 				$map = array();
 				for ( $i = 0; $i < $size; $i++ ) {
-					$key = $this->decode( $offset );
-					$val = $this->decode( $offset );
+					$key = $this->decode( $offset, $depth + 1 );
+					$val = $this->decode( $offset, $depth + 1 );
 					if ( is_string( $key ) ) {
 						$map[ $key ] = $val;
 					}
@@ -369,7 +381,7 @@ class Mmdb_Reader {
 			case 11: // array.
 				$arr = array();
 				for ( $i = 0; $i < $size; $i++ ) {
-					$arr[] = $this->decode( $offset );
+					$arr[] = $this->decode( $offset, $depth + 1 );
 				}
 				return $arr;
 
