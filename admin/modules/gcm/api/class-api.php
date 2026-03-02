@@ -8,6 +8,8 @@
 namespace FazCookie\Admin\Modules\Gcm\Api;
 
 use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Error;
 use FazCookie\Includes\Rest_Controller;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
@@ -101,9 +103,21 @@ class Api extends Rest_Controller {
 					}
 				)
 			);
+			$boolean_keys = array( 'status', 'ads_data_redaction', 'url_passthrough', 'gacm_enabled' );
 			foreach ( $properties_keys as $key ) {
-				$value        = isset( $request[ $key ] ) ? $request[ $key ] : '';
-				$data[ $key ] = $value;
+				if ( ! $request->has_param( $key ) ) {
+					continue;
+				}
+				$value = $request[ $key ];
+				if ( in_array( $key, $boolean_keys, true ) ) {
+					$data[ $key ] = faz_sanitize_bool( $value );
+				} elseif ( 'wait_for_update' === $key ) {
+					$data[ $key ] = absint( $value );
+				} elseif ( 'default_settings' === $key ) {
+					$data[ $key ] = is_array( $value ) ? $value : array();
+				} else {
+					$data[ $key ] = sanitize_text_field( $value );
+				}
 			}
 		}
 		$object->update( $data );

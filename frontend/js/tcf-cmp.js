@@ -132,7 +132,7 @@
 		}
 
 		var now      = Math.round(Date.now() / 100); // deciseconds
-		var epoch    = Math.round(new Date(2020, 0, 1).getTime() / 100);
+		var epoch    = Math.round(Date.UTC(2020, 0, 1) / 100);
 		var created  = now - epoch;
 
 		pushBits(TCF_VERSION, 6);       // Version
@@ -301,14 +301,17 @@
 		}
 	}
 
+	// Save queued commands before overwriting the stub.
+	var rawQueue = (window.__tcfapi && window.__tcfapi.a) ? window.__tcfapi.a : [];
+	var pendingQueue = Array.isArray(rawQueue) ? rawQueue.slice() : [];
+
 	// Install the __tcfapi function
 	window.__tcfapi = tcfapi;
 
 	// Process the command queue if any scripts called __tcfapi before we loaded
-	if (window.__tcfapi && window.__tcfapi.a) {
-		var queue = window.__tcfapi.a;
-		for (var q = 0; q < queue.length; q++) {
-			tcfapi.apply(null, queue[q]);
+	for (var q = 0; q < pendingQueue.length; q++) {
+		if (Array.isArray(pendingQueue[q])) {
+			tcfapi.apply(null, pendingQueue[q]);
 		}
 	}
 

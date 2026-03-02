@@ -22,5 +22,9 @@
     "uncategorized": {
         "name": "Uncategorized",
         "description": "<p>Cookies that have not yet been categorized.</p>"
+    },
+    "wordpress-internal": {
+        "name": "WordPress Internal",
+        "description": "<p>Cookies set by WordPress core for logged-in administrators. Not shown to site visitors.</p>"
     }
 }

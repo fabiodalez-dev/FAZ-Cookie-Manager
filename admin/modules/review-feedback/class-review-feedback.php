@@ -42,7 +42,7 @@ class Review_Feedback extends Modules {
 	 *
 	 * @var string
 	 */
-	protected $review_url = 'https://wordpress.org/support/plugin/cookie-law-info/reviews/#new-post';
+	protected $review_url = 'https://wordpress.org/support/plugin/faz-cookie-manager/reviews/#new-post';
 
 	/**
 	 * Constructor.

@@ -5,7 +5,7 @@
  * @link       https://fabiodalez.it/
  * @since      3.0.0
  *
- * @author     Sarath GP <sarath.gp@mozilor.com>
+ * @author     Fabio D'Alessandro
  * @package    FazCookie\Includes
  */
 
@@ -73,7 +73,7 @@ if ( ! function_exists( 'faz_i18n_date' ) ) {
 }
 if ( ! function_exists( 'faz_is_admin_request' ) ) {
 	/**
-	 * Get localized date.
+	 * Check if the current request is an admin (non-AJAX) request.
 	 *
 	 * @return boolean
 	 */
@@ -83,17 +83,12 @@ if ( ! function_exists( 'faz_is_admin_request' ) ) {
 }
 if ( ! function_exists( 'faz_is_ajax_request' ) ) {
 	/**
-	 * Get localized date.
+	 * Check if the current request is an AJAX request.
 	 *
 	 * @return boolean
 	 */
 	function faz_is_ajax_request() {
-		if ( function_exists( 'wp_doing_ajax' ) ) {
-			return wp_doing_ajax();
-		} else {
-			return ( defined( 'DOING_AJAX' ) && DOING_AJAX );
-		}
-
+		return wp_doing_ajax();
 	}
 }
 if ( ! function_exists( 'faz_is_rest_request' ) ) {
@@ -120,7 +115,7 @@ if ( ! function_exists( 'faz_is_rest_request' ) ) {
 if ( ! function_exists( 'faz_is_cloud_request' ) ) {
 
 	/**
-	 * Check if a request is a rest request
+	 * Check if this is a cloud request (always false — cloud features removed).
 	 *
 	 * @return boolean
 	 */
@@ -208,13 +203,13 @@ if ( ! function_exists( 'faz_is_front_end_request' ) ) {
 if ( ! function_exists( 'faz_disable_banner' ) ) {
 
 	/**
-	 * Check if request coming from front-end.
+	 * Check if the banner should be disabled (page builder preview contexts).
 	 *
 	 * @return boolean
 	 */
 	function faz_disable_banner() {
 		global $wp_customize;
-		if ( isset( $_GET['et_fb'] ) || isset( $_GET['et_fb'] ) || ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['et_fb'] ) || ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		|| isset( $_GET['elementor-preview'] ) || isset( $_POST['cs_preview_state'] ) || isset( $wp_customize ) ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
 		{
 			return true;
@@ -225,7 +220,7 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 if ( ! function_exists( 'faz_missing_tables' ) ) {
 
 	/**
-	 * Check if request coming from front-end.
+	 * Get the list of missing database tables.
 	 *
 	 * @return array
 	 */

@@ -184,6 +184,9 @@ class Controller {
 		);
 
 		if ( false === $result ) {
+			if ( ! empty( $wpdb->last_error ) ) {
+				error_log( 'FAZ consent log insert failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 			return false;
 		}
 
@@ -404,15 +407,18 @@ class Controller {
 		foreach ( $items as $item ) {
 			fputcsv(
 				$output,
-				array(
-					$item['log_id'],
-					$item['consent_id'],
-					$item['status'],
-					$item['categories'], // Already JSON string from DB.
-					$item['ip_hash'],
-					$item['user_agent'],
-					$item['url'],
-					$item['created_at'],
+				array_map(
+					array( $this, 'sanitize_csv_cell' ),
+					array(
+						$item['log_id'],
+						$item['consent_id'],
+						$item['status'],
+						$item['categories'], // Already JSON string from DB.
+						$item['ip_hash'],
+						$item['user_agent'],
+						$item['url'],
+						$item['created_at'],
+					)
 				)
 			);
 		}
@@ -422,6 +428,27 @@ class Controller {
 		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 
 		return $csv;
+	}
+
+	/**
+	 * Sanitize a single CSV cell to prevent formula injection.
+	 *
+	 * Prefixes values starting with dangerous characters (=, +, -, @, \t, \r)
+	 * with a single quote so spreadsheet apps do not interpret them as formulas.
+	 *
+	 * @param string $value Cell value.
+	 * @return string Sanitized value.
+	 */
+	private function sanitize_csv_cell( $value ) {
+		if ( ! is_string( $value ) || '' === $value ) {
+			return $value;
+		}
+		// Strip leading whitespace/newlines that could bypass the prefix check.
+		$trimmed = ltrim( $value, " \t\n\r\0\x0B" );
+		if ( '' !== $trimmed && in_array( $trimmed[0], array( '=', '+', '-', '@', "\t", "\r", "\n" ), true ) ) {
+			return "'" . $value;
+		}
+		return $value;
 	}
 
 	/**

@@ -8,11 +8,13 @@
 namespace FazCookie\Admin\Modules\Cookies\Api;
 
 use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
+use WP_Error;
+use Exception;
 use FazCookie\Admin\Modules\Cookies\Api\API_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
-use WP_Error;
-use Exception;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -24,7 +26,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Categories_API
  * @version     3.0.0
  * @package     FazCookie
- * @extends     API_Controller
  */
 class Categories_API extends API_Controller {
 
@@ -131,10 +132,10 @@ class Categories_API extends API_Controller {
 	/**
 	 * Return item object
 	 *
-	 * @param object $item Cookie item.
+	 * @param object|null $item Cookie item.
 	 * @return Cookie_Categories
 	 */
-	public function get_item_object( $item = false ) {
+	public function get_item_object( $item = null ) {
 		return new Cookie_Categories( $item );
 	}
 	/**
@@ -206,7 +207,12 @@ class Categories_API extends API_Controller {
 			do_action( 'faz_after_update_cookie_category' );
 			return rest_ensure_response( $objects );
 		} catch ( Exception $e ) {
-			return new WP_Error( $e->getCode(), $e->getMessage(), array( 'status' => $e->getCode() ) );
+			$code = (int) $e->getCode();
+			$http = ( $code >= 400 && $code < 600 ) ? $code : 500;
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( sprintf( 'FazCookie bulk error: %s (code: %d)', $e->getMessage(), $code ) );
+			}
+			return new WP_Error( 'fazcookie_bulk_error', __( 'Bulk operation failed.', 'faz-cookie-manager' ), array( 'status' => $http ) );
 		}
 	}
 	/**

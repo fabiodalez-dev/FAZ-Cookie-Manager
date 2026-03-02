@@ -5,7 +5,7 @@
  * @link       https://fabiodalez.it/
  * @since      3.0.0
  *
- * @author     Sarath GP <sarath.gp@mozilor.com>
+ * @author     Fabio D'Alessandro
  * @package    FazCookie\Includes
  */
 

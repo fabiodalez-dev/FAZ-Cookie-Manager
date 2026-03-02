@@ -1,21 +1,31 @@
-const data = window._fazGcm;
-let setDefaultSetting = true;
-const regionSettings = data.default_settings || [];
-const waitForTime = data.wait_for_update;
+(function () {
+"use strict";
+
+var data = window._fazGcm;
+if (!data) {
+    return;
+}
+var setDefaultSetting = true;
+var regionSettings = Array.isArray(data.default_settings) ? data.default_settings : [];
+var waitForTime = data.wait_for_update || 0;
 
 function getCookieValues(cookieName) {
-    const values = [];
-    const name = cookieName + "=";
-    const decodedCookie = decodeURIComponent(document.cookie);
-    const cookieArray = decodedCookie.split(';');
-    
-    for (let i = 0; i < cookieArray.length; i++) {
-        let cookie = cookieArray[i];
+    var values = [];
+    var name = cookieName + "=";
+    var parts = document.cookie.split(';');
+
+    for (var i = 0; i < parts.length; i++) {
+        var cookie = parts[i];
         while (cookie.charAt(0) === ' ') {
             cookie = cookie.substring(1);
         }
         if (cookie.indexOf(name) === 0) {
-            values.push(cookie.substring(name.length, cookie.length));
+            var raw = cookie.substring(name.length, cookie.length);
+            try {
+                values.push(decodeURIComponent(raw));
+            } catch (e) {
+                values.push(raw);
+            }
         }
     }
     return values;
@@ -25,27 +35,27 @@ function getConsentStateForCategory(categoryConsent) {
     return categoryConsent === "yes" ? "granted" : "denied";
 }
 
-const dataLayerName =
+var dataLayerName =
   window.fazSettings && window.fazSettings.dataLayerName
     ? window.fazSettings.dataLayerName
     : "dataLayer";
- window[dataLayerName] = window[dataLayerName] || [];
- function gtag() {
-  window[dataLayerName].push(arguments);
+window[dataLayerName] = window[dataLayerName] || [];
+function gtag() {
+    window[dataLayerName].push(arguments);
 }
 
 function setConsentInitStates(consentData) {
     if (waitForTime > 0) consentData.wait_for_update = waitForTime;
-    gtag("consent", "default", consentData );
+    gtag("consent", "default", consentData);
 }
 
 gtag("set", "ads_data_redaction", !!data.ads_data_redaction);
 gtag("set", "url_passthrough", !!data.url_passthrough);
-gtag("set", "developer_id.dY2Q2ZW", true);
 
-for (let index = 0; index < regionSettings.length; index++) {
-    const regionSetting = regionSettings[index];
-    const consentRegionData = {
+for (var index = 0; index < regionSettings.length; index++) {
+    var regionSetting = regionSettings[index];
+    if (!regionSetting || typeof regionSetting !== "object") continue;
+    var consentRegionData = {
         ad_storage: regionSetting.advertisement,
         analytics_storage: regionSetting.analytics,
         functionality_storage: regionSetting.functional,
@@ -54,10 +64,11 @@ for (let index = 0; index < regionSettings.length; index++) {
         ad_user_data: regionSetting.ad_user_data,
         ad_personalization: regionSetting.ad_personalization
     };
-    const regionsToSetFor = regionSetting.regions
+    var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
+    var regionsToSetFor = regionsRaw
         .split(",")
-        .map((region) => region.trim())
-        .filter((region) => region);
+        .map(function (region) { return region.trim(); })
+        .filter(function (region) { return region; });
     if (regionsToSetFor.length > 0 && regionsToSetFor[0].toLowerCase() !== "all")
         consentRegionData.region = regionsToSetFor;
     else setDefaultSetting = false;
@@ -77,13 +88,23 @@ if (setDefaultSetting) {
 }
 
 function parseConsentCookie() {
-    const raw = getCookieValues("fazcookie-consent")[0];
+    var raw = getCookieValues("fazcookie-consent")[0];
     if (!raw || typeof raw !== "string") return null;
-    return raw.split(",").reduce(function (acc, curr) {
-        const kv = curr.trim().split(":");
-        acc[kv[0]] = getConsentStateForCategory(kv[1]);
+    var parsed = raw.split(",").reduce(function (acc, curr) {
+        var kv = curr.trim().split(":");
+        if (kv.length !== 2) return acc;
+        var key = kv[0].trim();
+        if (!key) return acc;
+        acc[key] = getConsentStateForCategory(kv[1].trim());
         return acc;
     }, {});
+    var required = ["advertisement", "analytics", "functional", "necessary"];
+    for (var i = 0; i < required.length; i++) {
+        if (parsed[required[i]] !== "granted" && parsed[required[i]] !== "denied") {
+            return null;
+        }
+    }
+    return parsed;
 }
 
 function buildConsentState(cookieObj) {
@@ -103,14 +124,14 @@ function updateConsentState(consentState) {
 }
 
 // Apply consent from cookie on page load.
-const cookieObj = parseConsentCookie();
+var cookieObj = parseConsentCookie();
 if (cookieObj) {
     updateConsentState(buildConsentState(cookieObj));
 }
 
 // Re-apply on consent changes (banner interaction).
 document.addEventListener("fazcookie_consent_update", function () {
-    const updated = parseConsentCookie();
+    var updated = parseConsentCookie();
     if (updated) {
         updateConsentState(buildConsentState(updated));
     }
@@ -146,3 +167,5 @@ function setAdditionalConsent(consentObj) {
 if (data.gacm_enabled && data.gacm_provider_ids) {
     setAdditionalConsent(cookieObj);
 }
+
+})();

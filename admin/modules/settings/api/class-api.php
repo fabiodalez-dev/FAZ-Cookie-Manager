@@ -8,6 +8,8 @@
 namespace FazCookie\Admin\Modules\Settings\Api;
 
 use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
 use WP_Error;
 use stdClass;
 use FazCookie\Includes\Rest_Controller;
@@ -25,7 +27,6 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @class       Api
  * @version     3.0.0
  * @package     FazCookie
- * @extends     Rest_Controller
  */
 class Api extends Rest_Controller {
 
@@ -230,6 +231,28 @@ class Api extends Rest_Controller {
 			)
 		);
 		$this->register_post_route( 'payments', 'add_payments' );
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/geolite2/update',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'update_geolite2' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/geolite2/status',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'geolite2_status' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
 	}
 	/**
 	 * Get a collection of items.
@@ -377,6 +400,16 @@ class Api extends Rest_Controller {
 
 		if ( empty( $filter_name ) ) {
 			return new WP_Error( 'missing_filter_name', __( 'Filter name is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+
+		// Allowlist of permitted filter names to prevent arbitrary filter invocation.
+		$allowed_filters = array(
+			'faz_before_navigate',
+			'faz_settings_update',
+			'faz_banner_preview',
+		);
+		if ( ! in_array( $filter_name, $allowed_filters, true ) ) {
+			return new WP_Error( 'invalid_filter_name', __( 'Filter name is not permitted.', 'faz-cookie-manager' ), array( 'status' => 403 ) );
 		}
 
 		// Apply the WordPress filter
@@ -606,6 +639,54 @@ class Api extends Rest_Controller {
 	 */
 	public function add_payments( $request ) {
 		return $this->call_controller_method( $request, 'add_payments' );
+	}
+
+	/**
+	 * Download/update the MaxMind GeoLite2 database.
+	 *
+	 * @param WP_REST_Request $request Request with 'license_key' param.
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function update_geolite2( $request ) {
+		$license_key = $request->get_param( 'license_key' );
+		$license_key = is_scalar( $license_key ) ? trim( sanitize_text_field( (string) $license_key ) ) : '';
+		if ( '' === $license_key ) {
+			// Try from saved settings.
+			$settings    = new Settings();
+			$saved_key   = $settings->get( 'geolocation', 'maxmind_license_key' );
+			$license_key = is_scalar( $saved_key ) ? trim( sanitize_text_field( (string) $saved_key ) ) : '';
+		}
+		if ( '' === $license_key ) {
+			return new \WP_Error( 'missing_license_key', __( 'A MaxMind license key is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+
+		$result = \FazCookie\Includes\Geolocation::download_database( $license_key );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$info = \FazCookie\Includes\Geolocation::get_database_info();
+		return rest_ensure_response(
+			array(
+				'success'  => true,
+				'database' => $info,
+			)
+		);
+	}
+
+	/**
+	 * Get GeoLite2 database status.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function geolite2_status() {
+		$info = \FazCookie\Includes\Geolocation::get_database_info();
+		return rest_ensure_response(
+			array(
+				'installed' => ! empty( $info ),
+				'database'  => $info,
+			)
+		);
 	}
 
 } // End the class.
