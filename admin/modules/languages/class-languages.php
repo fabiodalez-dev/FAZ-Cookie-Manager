@@ -50,13 +50,13 @@ class Languages extends Modules {
 	 */
 	public function register_menus( $menus ) {
 		$menus['languages'] = array(
-			'name'     => __( 'Languages', 'cookie-law-info' ),
+			'name'     => __( 'Languages', 'faz-cookie-manager' ),
 			'callback' => array( $this, 'menu_page_template' ),
 			'order'    => 4,
 		);
 
 		$menus['edit-content'] = array(
-			'name'     => __( 'Languages', 'cookie-law-info' ),
+			'name'     => __( 'Languages', 'faz-cookie-manager' ),
 			'callback' => array( $this, 'menu_page_template' ),
 			'order'    => 4,
 			'hidden'   => true,

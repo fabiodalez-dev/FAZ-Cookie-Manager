@@ -63,6 +63,6 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 			delete_option( $option_name );
 		}
 	} catch ( Exception $e ) {
-		error_log( __( 'Failed to delete FAZ Cookie Manager plugin data!', 'cookie-law-info' ) ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( __( 'Failed to delete FAZ Cookie Manager plugin data!', 'faz-cookie-manager' ) ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 	}
 }

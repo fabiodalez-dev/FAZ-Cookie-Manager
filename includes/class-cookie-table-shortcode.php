@@ -86,11 +86,11 @@ class Cookie_Table_Shortcode {
 
 		// Parse requested columns.
 		$allowed_columns = array(
-			'name'        => __( 'Cookie', 'cookie-law-info' ),
-			'domain'      => __( 'Domain', 'cookie-law-info' ),
-			'duration'    => __( 'Duration', 'cookie-law-info' ),
-			'description' => __( 'Description', 'cookie-law-info' ),
-			'category'    => __( 'Category', 'cookie-law-info' ),
+			'name'        => __( 'Cookie', 'faz-cookie-manager' ),
+			'domain'      => __( 'Domain', 'faz-cookie-manager' ),
+			'duration'    => __( 'Duration', 'faz-cookie-manager' ),
+			'description' => __( 'Description', 'faz-cookie-manager' ),
+			'category'    => __( 'Category', 'faz-cookie-manager' ),
 		);
 		$columns = array_map( 'trim', explode( ',', $atts['columns'] ) );
 		$columns = array_filter( $columns, function( $c ) use ( $allowed_columns ) {
@@ -129,7 +129,7 @@ class Cookie_Table_Shortcode {
 		}
 
 		if ( empty( $cookies ) ) {
-			return '<p class="faz-cookie-table-empty">' . esc_html__( 'No cookies found.', 'cookie-law-info' ) . '</p>';
+			return '<p class="faz-cookie-table-empty">' . esc_html__( 'No cookies found.', 'faz-cookie-manager' ) . '</p>';
 		}
 
 		// Group cookies by category for nicer display.
@@ -186,7 +186,7 @@ class Cookie_Table_Shortcode {
 		<?php foreach ( $ordered as $cat_id => $cat_cookies ) : ?>
 			<?php if ( $show_cats ) : ?>
 				<h4 class="faz-cookie-table-category">
-					<?php echo esc_html( isset( $cat_map[ $cat_id ] ) ? $cat_map[ $cat_id ] : __( 'Other', 'cookie-law-info' ) ); ?>
+					<?php echo esc_html( isset( $cat_map[ $cat_id ] ) ? $cat_map[ $cat_id ] : __( 'Other', 'faz-cookie-manager' ) ); ?>
 				</h4>
 			<?php endif; ?>
 			<table class="faz-cookie-table">

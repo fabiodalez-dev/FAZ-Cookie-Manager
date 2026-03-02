@@ -3,7 +3,7 @@
         "notice": {
             "elements": {
                 "title": "Nous respectons votre vie privée.",
-                "description": "<p>Nous utilisons des cookies pour améliorer votre expérience de navigation, diffuser des publicités ou des contenus personnalisés et analyser notre trafic. En cliquant sur « Tout accepter », vous consentez à notre utilisation des cookies.</p>",
+                "description": "<p>Nous utilisons des cookies pour améliorer votre expérience de navigation, diffuser des publicités ou des contenus personnalisés et analyser notre trafic. En cliquant sur « Tout accepter », vous consentez à notre utilisation des cookies. Vous pouvez modifier ou retirer votre consentement à tout moment en cliquant sur l'icône des préférences.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
@@ -103,7 +103,7 @@
         "notice": {
             "elements": {
                 "title": "Nous respectons votre vie privée.",
-                "description": "<p>Ce site Web ou ses outils tiers traitent des données personnelles. Vous pouvez refuser la vente de vos informations personnelles en cliquant sur le lien «Ne pas vendre ou partager mes informations personnelles».</p>",
+                "description": "<p>Ce site Web ou ses outils tiers traitent des données personnelles. Vous pouvez refuser la vente de vos informations personnelles en cliquant sur le lien «Ne pas vendre ou partager mes informations personnelles». Vous pouvez modifier ou retirer votre consentement à tout moment en cliquant sur l'icône des préférences.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {

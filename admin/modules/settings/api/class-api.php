@@ -156,7 +156,7 @@ class Api extends Rest_Controller {
 			array(
 				'args'   => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+						'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 						'type'        => 'integer',
 					),
 				),
@@ -266,32 +266,32 @@ class Api extends Rest_Controller {
 		$object = array(
 			array(
 				'slug'        => 'gdpr',
-				'title'       => __( 'GDPR (General Data Protection Regulation)', 'cookie-law-info' ),
-				'description' => __( 'Continue with the GDPR template if most of your targeted audience are from the EU or UK. It creates a customizable banner that allows your visitors to accept/reject cookies or adjust their consent preferences.', 'cookie-law-info' ),
+				'title'       => __( 'GDPR (General Data Protection Regulation)', 'faz-cookie-manager' ),
+				'description' => __( 'Continue with the GDPR template if most of your targeted audience are from the EU or UK. It creates a customizable banner that allows your visitors to accept/reject cookies or adjust their consent preferences.', 'faz-cookie-manager' ),
 				'tooltip'     => __(
 					'Choose GDPR if most of your targeted audience are from the EU or UK.
 					It creates a customizable banner that allows your visitors to accept/reject cookies or adjust their consent preferences.',
-					'cookie-law-info'
+					'faz-cookie-manager'
 				),
 			),
 			array(
 				'slug'        => 'ccpa',
-				'title'       => __( 'CCPA (California Consumer Privacy Act)', 'cookie-law-info' ),
-				'description' => __( 'Choose CCPA if most of your targeted audience are from California or US. This will create a customizable banner with a "Do Not Sell My Personal Information" link that allows your visitors to refuse the use of cookies.', 'cookie-law-info' ),
+				'title'       => __( 'CCPA (California Consumer Privacy Act)', 'faz-cookie-manager' ),
+				'description' => __( 'Choose CCPA if most of your targeted audience are from California or US. This will create a customizable banner with a "Do Not Sell My Personal Information" link that allows your visitors to refuse the use of cookies.', 'faz-cookie-manager' ),
 				'tooltip'     => __(
 					'Choose CCPA if most of your targeted audience are from California or US.
 					It creates a customizable banner with a "Do Not Sell My Personal Information" link that allows your visitors to refuse the use of cookies.',
-					'cookie-law-info'
+					'faz-cookie-manager'
 				),
 			),
 			array(
 				'slug'        => 'info',
-				'title'       => __( 'INFO (Information Display Banner)', 'cookie-law-info' ),
-				'description' => __( 'Choose INFO if you do not want to block any cookies on your website. This will create a dismissible banner that provides some general information to your site visitors.', 'cookie-law-info' ),
+				'title'       => __( 'INFO (Information Display Banner)', 'faz-cookie-manager' ),
+				'description' => __( 'Choose INFO if you do not want to block any cookies on your website. This will create a dismissible banner that provides some general information to your site visitors.', 'faz-cookie-manager' ),
 				'tooltip'     => __(
 					'Choose Info if you do not want to block any cookies on your website.
 						It creates a dismissible banner that provides some general info to your site visitors.',
-					'cookie-law-info'
+					'faz-cookie-manager'
 				),
 			),
 		);
@@ -376,7 +376,7 @@ class Api extends Rest_Controller {
 		$filter_data = $request->get_param( 'filter_data' );
 
 		if ( empty( $filter_name ) ) {
-			return new WP_Error( 'missing_filter_name', __( 'Filter name is required.', 'cookie-law-info' ), array( 'status' => 400 ) );
+			return new WP_Error( 'missing_filter_name', __( 'Filter name is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 
 		// Apply the WordPress filter
@@ -491,7 +491,7 @@ class Api extends Rest_Controller {
 		return array(
 			'context'  => $this->get_context_param( array( 'default' => 'view' ) ),
 			'paged'    => array(
-				'description'       => __( 'Current page of the collection.', 'cookie-law-info' ),
+				'description'       => __( 'Current page of the collection.', 'faz-cookie-manager' ),
 				'type'              => 'integer',
 				'default'           => 1,
 				'sanitize_callback' => 'absint',
@@ -499,7 +499,7 @@ class Api extends Rest_Controller {
 				'minimum'           => 1,
 			),
 			'per_page' => array(
-				'description'       => __( 'Maximum number of items to be returned in result set.', 'cookie-law-info' ),
+				'description'       => __( 'Maximum number of items to be returned in result set.', 'faz-cookie-manager' ),
 				'type'              => 'integer',
 				'default'           => 10,
 				'minimum'           => 1,
@@ -508,14 +508,14 @@ class Api extends Rest_Controller {
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 			'search'   => array(
-				'description'       => __( 'Limit results to those matching a string.', 'cookie-law-info' ),
+				'description'       => __( 'Limit results to those matching a string.', 'faz-cookie-manager' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 			'force'    => array(
 				'type'        => 'boolean',
-				'description' => __( 'Force fetch data', 'cookie-law-info' ),
+				'description' => __( 'Force fetch data', 'faz-cookie-manager' ),
 			),
 		);
 	}
@@ -532,63 +532,63 @@ class Api extends Rest_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'id'           => array(
-					'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'site'         => array(
-					'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'api'          => array(
-					'description' => __( 'Language.', 'cookie-law-info' ),
+					'description' => __( 'Language.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'account'      => array(
-					'description' => __( 'Language.', 'cookie-law-info' ),
+					'description' => __( 'Language.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'consent_logs' => array(
-					'description' => __( 'Language.', 'cookie-law-info' ),
+					'description' => __( 'Language.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'languages'    => array(
-					'description' => __( 'Language.', 'cookie-law-info' ),
+					'description' => __( 'Language.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'onboarding'   => array(
-					'description' => __( 'Language.', 'cookie-law-info' ),
+					'description' => __( 'Language.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'banner_control' => array(
-					'description' => __( 'Banner control settings.', 'cookie-law-info' ),
+					'description' => __( 'Banner control settings.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'microsoft'    => array(
-					'description' => __( 'Microsoft consent settings.', 'cookie-law-info' ),
+					'description' => __( 'Microsoft consent settings.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'scanner'      => array(
-					'description' => __( 'Scanner settings.', 'cookie-law-info' ),
+					'description' => __( 'Scanner settings.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'site_links'   => array(
-					'description' => __( 'Linked sites settings.', 'cookie-law-info' ),
+					'description' => __( 'Linked sites settings.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'iab'          => array(
-					'description' => __( 'IAB TCF settings.', 'cookie-law-info' ),
+					'description' => __( 'IAB TCF settings.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),

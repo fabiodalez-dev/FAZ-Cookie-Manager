@@ -122,37 +122,37 @@ class Api extends Rest_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'status'           => array(
-					'description' => __( 'GCM status.', 'cookie-law-info' ),
+					'description' => __( 'GCM status.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'default_settings'         => array(
-					'description' => __( 'Default settings.', 'cookie-law-info' ),
+					'description' => __( 'Default settings.', 'faz-cookie-manager' ),
 					'type'        => 'array',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'wait_for_update'          => array(
-					'description' => __( 'Wait for update.', 'cookie-law-info' ),
+					'description' => __( 'Wait for update.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'url_passthrough'      => array(
-					'description' => __( 'Pass ad click information through URLs.', 'cookie-law-info' ),
+					'description' => __( 'Pass ad click information through URLs.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'ads_data_redaction' => array(
-					'description' => __( 'Redact ads data.', 'cookie-law-info' ),
+					'description' => __( 'Redact ads data.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'gacm_enabled' => array(
-					'description' => __( 'Enable Google Additional Consent Mode.', 'cookie-law-info' ),
+					'description' => __( 'Enable Google Additional Consent Mode.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'gacm_provider_ids' => array(
-					'description' => __( 'GACM provider IDs (comma-separated).', 'cookie-law-info' ),
+					'description' => __( 'GACM provider IDs (comma-separated).', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),

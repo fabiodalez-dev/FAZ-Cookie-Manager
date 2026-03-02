@@ -118,7 +118,7 @@ class Consent_Logger {
 		if ( false === $result ) {
 			return new \WP_Error(
 				'consent_log_failed',
-				__( 'Failed to log consent.', 'cookie-law-info' ),
+				__( 'Failed to log consent.', 'faz-cookie-manager' ),
 				array( 'status' => 500 )
 			);
 		}

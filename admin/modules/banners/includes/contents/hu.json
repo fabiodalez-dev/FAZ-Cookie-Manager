@@ -3,7 +3,7 @@
         "notice": {
             "elements": {
                 "title": "Fontosnak tartjuk az adatok védelmét",
-                "description": "<p>A böngészési élmény fokozása, a személyre szabott hirdetések vagy tartalmak megjelenítése, valamint a forgalom elemzése érdekében sütiket (cookie) használunk. A \"Mindet elfogadom\" gombra kattintva hozzájárulhat a sütik használatához.</p>",
+                "description": "<p>A böngészési élmény fokozása, a személyre szabott hirdetések vagy tartalmak megjelenítése, valamint a forgalom elemzése érdekében sütiket (cookie) használunk. A \"Mindet elfogadom\" gombra kattintva hozzájárulhat a sütik használatához. Bármikor módosíthatja vagy visszavonhatja hozzájárulását a beállítások ikonra kattintva.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
@@ -103,7 +103,7 @@
         "notice": {
             "elements": {
                 "title": "Fontosnak tartjuk az adatok védelmét",
-                "description": "<p>Ez a weboldal vagy harmadik féltől származó eszközei feldolgozzák a személyes adatokat. A „Ne Értékesítse vagy Ossza Meg SZemélyes Adataimat” linkre kattintva letilthatja személyes adatainak értékesítését.</p>",
+                "description": "<p>Ez a weboldal vagy harmadik féltől származó eszközei feldolgozzák a személyes adatokat. A „Ne Értékesítse vagy Ossza Meg SZemélyes Adataimat” linkre kattintva letilthatja személyes adatainak értékesítését. Bármikor módosíthatja vagy visszavonhatja hozzájárulását a beállítások ikonra kattintva.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {

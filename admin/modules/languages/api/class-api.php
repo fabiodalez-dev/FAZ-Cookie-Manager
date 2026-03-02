@@ -156,23 +156,23 @@ class Api extends Rest_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'id'          => array(
-					'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'language'    => array(
-					'description' => __( 'Name of the language.', 'cookie-law-info' ),
+					'description' => __( 'Name of the language.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'native_name' => array(
-					'description' => __( 'Native name of the language.', 'cookie-law-info' ),
+					'description' => __( 'Native name of the language.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'lang'        => array(
-					'description' => __( 'Language code', 'cookie-law-info' ),
+					'description' => __( 'Language code', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),

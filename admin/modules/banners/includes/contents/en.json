@@ -3,13 +3,13 @@
         "notice": {
             "elements": {
                 "title": "We value your privacy",
-                "description": "<p>We use cookies to enhance your browsing experience, serve personalised ads or content, and analyse our traffic. By clicking \"Accept All\", you consent to our use of cookies.</p>",
+                "description": "<p>We use cookies to enhance your browsing experience, serve personalised ads or content, and analyse our traffic. By clicking \"Accept All\", you consent to our use of cookies. You can change or withdraw your consent at any time by clicking the consent preferences icon.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
                         "accept": "Accept All",
                         "reject": "Reject All",
-                        "settings": "Customise",
+                        "settings": "Customize",
                         "readMore": "Cookie Policy",
                         "donotSell": "Do Not Sell or Share My Personal Information"
                     }
@@ -28,7 +28,7 @@
         },
         "preferenceCenter": {
             "elements": {
-                "title": "Customise Consent Preferences",
+                "title": "Customize Consent Preferences",
                 "description": "<p>We use cookies to help you navigate efficiently and perform certain functions. You will find detailed information about all cookies under each consent category below.</p><p>The cookies that are categorised as \"Necessary\" are stored on your browser as they are essential for enabling the basic functionalities of the site. </p><p>We also use third-party cookies that help us analyse how you use this website, store your preferences, and provide the content and advertisements that are relevant to you. These cookies will only be stored in your browser with your prior consent.</p><p>You can choose to enable or disable some or all of these cookies but disabling some of them may affect your browsing experience.</p>",
                 "showMore": "Show more",
                 "showLess": "Show less",
@@ -103,13 +103,13 @@
         "notice": {
             "elements": {
                 "title": "We value your privacy",
-                "description": "<p>This website or its third-party tools process personal data. You can opt out of the sale of your personal information by clicking on the \"Do Not Sell or Share My Personal Information\" link.</p>",
+                "description": "<p>This website or its third-party tools process personal data. You can opt out of the sale of your personal information by clicking on the \"Do Not Sell or Share My Personal Information\" link. You can change or withdraw your consent at any time by clicking the consent preferences icon.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
                         "accept": "Accept All",
                         "reject": "Reject All",
-                        "settings": "Customise",
+                        "settings": "Customize",
                         "readMore": "Cookie Policy",
                         "donotSell": "Do Not Sell or Share My Personal Information"
                     }
@@ -128,7 +128,7 @@
         },
         "preferenceCenter": {
             "elements": {
-                "title": "Customise Consent Preferences",
+                "title": "Customize Consent Preferences",
                 "description": "<p>We use cookies to help you navigate efficiently and perform certain functions. You will find detailed information about all cookies under each consent category below.</p><p>The cookies that are categorised as \"Necessary\" are stored on your browser as they are essential for enabling the basic functionalities of the site. </p><p>We also use third-party cookies that help us analyse how you use this website, store your preferences, and provide the content and advertisements that are relevant to you. These cookies will only be stored in your browser with your prior consent.</p><p>You can choose to enable or disable some or all of these cookies but disabling some of them may affect your browsing experience.</p>",
                 "showMore": "Show more",
                 "showLess": "Show less",

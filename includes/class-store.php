@@ -142,7 +142,7 @@ abstract class Store {
 	 */
 	protected function remove( $object ) {
 		// translators: %s: Class method name.
-		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'cookie-law-info' ), __METHOD__ ), array( 'status' => 405 ) );
+		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}
 
 	/**
@@ -153,7 +153,7 @@ abstract class Store {
 	 */
 	protected function read( $object ) {
 		// translators: %s: Class method name.
-		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'cookie-law-info' ), __METHOD__ ), array( 'status' => 405 ) );
+		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}
 
 	/**
@@ -164,7 +164,7 @@ abstract class Store {
 	 */
 	protected function update( $object ) {
 		// translators: %s: Class method name.
-		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'cookie-law-info' ), __METHOD__ ), array( 'status' => 405 ) );
+		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}
 
 	/**
@@ -175,7 +175,7 @@ abstract class Store {
 	 */
 	protected function create( $object ) {
 		// translators: %s: Class method name.
-		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'cookie-law-info' ), __METHOD__ ), array( 'status' => 405 ) );
+		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}
 
 	/**

@@ -75,7 +75,7 @@ class Cookie_Scraper {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return new WP_Error(
 				'rest_forbidden',
-				__( 'You do not have permission to use this endpoint.', 'cookie-law-info' ),
+				__( 'You do not have permission to use this endpoint.', 'faz-cookie-manager' ),
 				array( 'status' => 403 )
 			);
 		}
@@ -114,7 +114,7 @@ class Cookie_Scraper {
 		if ( ! $result['success'] ) {
 			return new WP_Error(
 				'definitions_update_failed',
-				__( 'Failed to update cookie definitions. Check server logs for details.', 'cookie-law-info' ),
+				__( 'Failed to update cookie definitions. Check server logs for details.', 'faz-cookie-manager' ),
 				array( 'status' => 500 )
 			);
 		}

@@ -194,7 +194,7 @@ class Api extends Rest_Controller {
 		if ( null === $item ) {
 			return new WP_Error(
 				'consent_log_not_found',
-				__( 'Consent log not found.', 'cookie-law-info' ),
+				__( 'Consent log not found.', 'faz-cookie-manager' ),
 				array( 'status' => 404 )
 			);
 		}
@@ -221,7 +221,7 @@ class Api extends Rest_Controller {
 		if ( false === $result ) {
 			return new WP_Error(
 				'consent_log_failed',
-				__( 'Failed to log consent.', 'cookie-law-info' ),
+				__( 'Failed to log consent.', 'faz-cookie-manager' ),
 				array( 'status' => 500 )
 			);
 		}
@@ -259,7 +259,7 @@ class Api extends Rest_Controller {
 		return array(
 			'context'  => $this->get_context_param( array( 'default' => 'view' ) ),
 			'paged'    => array(
-				'description'       => __( 'Current page of the collection.', 'cookie-law-info' ),
+				'description'       => __( 'Current page of the collection.', 'faz-cookie-manager' ),
 				'type'              => 'integer',
 				'default'           => 1,
 				'sanitize_callback' => 'absint',
@@ -267,7 +267,7 @@ class Api extends Rest_Controller {
 				'minimum'           => 1,
 			),
 			'per_page' => array(
-				'description'       => __( 'Maximum number of items to be returned in result set.', 'cookie-law-info' ),
+				'description'       => __( 'Maximum number of items to be returned in result set.', 'faz-cookie-manager' ),
 				'type'              => 'integer',
 				'default'           => 10,
 				'minimum'           => 1,
@@ -276,13 +276,13 @@ class Api extends Rest_Controller {
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 			'search'   => array(
-				'description'       => __( 'Limit results to those matching a string.', 'cookie-law-info' ),
+				'description'       => __( 'Limit results to those matching a string.', 'faz-cookie-manager' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 			'status'   => array(
-				'description'       => __( 'Filter by consent status.', 'cookie-law-info' ),
+				'description'       => __( 'Filter by consent status.', 'faz-cookie-manager' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
@@ -302,45 +302,45 @@ class Api extends Rest_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'log_id'     => array(
-					'description' => __( 'Log ID.', 'cookie-law-info' ),
+					'description' => __( 'Log ID.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'consent_id' => array(
-					'description' => __( 'Unique consent ID.', 'cookie-law-info' ),
+					'description' => __( 'Unique consent ID.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'status'     => array(
-					'description' => __( 'Consent status.', 'cookie-law-info' ),
+					'description' => __( 'Consent status.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'categories' => array(
-					'description' => __( 'Consent categories.', 'cookie-law-info' ),
+					'description' => __( 'Consent categories.', 'faz-cookie-manager' ),
 					'type'        => array( 'object', 'array' ),
 					'context'     => array( 'view', 'edit' ),
 				),
 				'ip_hash'    => array(
-					'description' => __( 'Hashed visitor IP.', 'cookie-law-info' ),
+					'description' => __( 'Hashed visitor IP.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'user_agent' => array(
-					'description' => __( 'Visitor user agent.', 'cookie-law-info' ),
+					'description' => __( 'Visitor user agent.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'url'        => array(
-					'description' => __( 'Page URL where consent was given.', 'cookie-law-info' ),
+					'description' => __( 'Page URL where consent was given.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'created_at' => array(
-					'description' => __( 'Date the consent was logged.', 'cookie-law-info' ),
+					'description' => __( 'Date the consent was logged.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'format'      => 'date-time',
 					'context'     => array( 'view' ),

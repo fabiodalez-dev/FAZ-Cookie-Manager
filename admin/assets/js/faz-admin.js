@@ -268,6 +268,15 @@
 
 	FAZ.initColorPickers = function () {
 		document.querySelectorAll('.faz-input-color-wrap').forEach(FAZ.colorPicker);
+		// Firefox: close native color picker popover on outside click (once)
+		if (!FAZ._colorBlurBound) {
+			FAZ._colorBlurBound = true;
+			document.addEventListener('mousedown', function (e) {
+				document.querySelectorAll('input[type="color"]').forEach(function (el) {
+					if (el !== e.target) el.blur();
+				});
+			});
+		}
 	};
 
 	// ── HTML escaping ────────────────────────────────────────

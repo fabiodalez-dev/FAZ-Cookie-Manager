@@ -58,7 +58,7 @@ class ConsentLogs extends Modules {
 	 */
 	public function register_menus( $menus ) {
 		$menus['logs'] = array(
-			'name'     => __( 'Consent Log', 'cookie-law-info' ),
+			'name'     => __( 'Consent Log', 'faz-cookie-manager' ),
 			'callback' => array( $this, 'menu_page_template' ),
 			'order'    => 4,
 		);

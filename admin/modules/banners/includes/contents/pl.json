@@ -3,7 +3,7 @@
         "notice": {
             "elements": {
                 "title": "Cenimy prywatność użytkowników",
-                "description": "<p>Używamy plików cookie, aby poprawić jakość przeglądania, wyświetlać reklamy lub treści dostosowane do indywidualnych potrzeb użytkowników oraz analizować ruch na stronie. Kliknięcie przycisku „Akceptuj wszystkie” oznacza zgodę na wykorzystywanie przez nas plików cookie.</p>",
+                "description": "<p>Używamy plików cookie, aby poprawić jakość przeglądania, wyświetlać reklamy lub treści dostosowane do indywidualnych potrzeb użytkowników oraz analizować ruch na stronie. Kliknięcie przycisku „Akceptuj wszystkie” oznacza zgodę na wykorzystywanie przez nas plików cookie. Możesz zmienić lub wycofać swoją zgodę w dowolnym momencie, klikając ikonę preferencji.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
@@ -103,7 +103,7 @@
         "notice": {
             "elements": {
                 "title": "Cenimy prywatność użytkowników",
-                "description": "<p>Ta strona internetowa lub jej narzędzia stron trzecich przetwarzają dane osobowe. Możesz zrezygnować ze sprzedaży swoich danych osobowych, klikając łącze „Nie sprzedawaj i nie udostępniaj moich danych osobowych”.</p>",
+                "description": "<p>Ta strona internetowa lub jej narzędzia stron trzecich przetwarzają dane osobowe. Możesz zrezygnować ze sprzedaży swoich danych osobowych, klikając łącze „Nie sprzedawaj i nie udostępniaj moich danych osobowych”. Możesz zmienić lub wycofać swoją zgodę w dowolnym momencie, klikając ikonę preferencji.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {

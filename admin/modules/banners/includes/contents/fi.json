@@ -3,7 +3,7 @@
         "notice": {
             "elements": {
                 "title": "Arvostamme yksityisyyttäsi",
-                "description": "<p>Käytämme evästeitä selauskokemuksesi parantamiseksi, personoitujen mainosten ja sisällön tarjoamiseksi ja liikenteemme analysoimiseksi. Hyväksyt evästeidemme käytön klikkaamalla ”Hyväksy kaikki”.</p>",
+                "description": "<p>Käytämme evästeitä selauskokemuksesi parantamiseksi, personoitujen mainosten ja sisällön tarjoamiseksi ja liikenteemme analysoimiseksi. Hyväksyt evästeidemme käytön klikkaamalla ”Hyväksy kaikki”. Voit muuttaa tai peruuttaa suostumuksesi milloin tahansa napsauttamalla asetusten kuvaketta.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
@@ -103,7 +103,7 @@
         "notice": {
             "elements": {
                 "title": "Arvostamme yksityisyyttäsi",
-                "description": "<p>Tämä verkkosivusto tai sen kolmannen osapuolen työkalut käsittelevät henkilötietoja. Voit kieltäytyä henkilökohtaisten tietojesi myynnistä napsauttamalla “Henkilökohtaisia tietojani ei saa myydä tai jakaa eteenpäin” linkkiä.</p>",
+                "description": "<p>Tämä verkkosivusto tai sen kolmannen osapuolen työkalut käsittelevät henkilötietoja. Voit kieltäytyä henkilökohtaisten tietojesi myynnistä napsauttamalla “Henkilökohtaisia tietojani ei saa myydä tai jakaa eteenpäin” linkkiä. Voit muuttaa tai peruuttaa suostumuksesi milloin tahansa napsauttamalla asetusten kuvaketta.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {

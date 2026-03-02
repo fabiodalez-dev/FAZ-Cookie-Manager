@@ -178,16 +178,16 @@ if ( ! function_exists( 'faz_is_admin_page' ) ) {
 		if ( function_exists( 'get_current_screen' ) && ! empty( get_current_screen() ) ) {
 			$screen = get_current_screen();
 			$page   = isset( $screen->id ) ? $screen->id : false;
-			if ( false !== strpos( $page, 'toplevel_page_cookie-law-info' ) ) {
+			if ( false !== strpos( $page, 'toplevel_page_faz-cookie-manager' ) ) {
 				return true;
 			}
-			if ( ! empty( $screen->parent_base ) && false !== strpos( $screen->parent_base, 'cookie-law-info' ) ) {
+			if ( ! empty( $screen->parent_base ) && false !== strpos( $screen->parent_base, 'faz-cookie-manager' ) ) {
 				return true;
 			}
 		} else {
 			$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		}
-		return false !== strpos( $page, 'cookie-law-info' );
+		return false !== strpos( $page, 'faz-cookie-manager' );
 	}
 }
 
@@ -242,7 +242,7 @@ if ( ! function_exists( 'faz_verify_nonce' ) ) {
 	function faz_verify_nonce( $request ) {
 		$nonce = $request->get_header( 'X-WP-Nonce' );
 		if ( ! $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
-			return new WP_Error( 'fazcookie_rest_invalid_nonce', __( 'Invalid nonce. Please refresh the page and try again.', 'cookie-law-info' ), array( 'status' => 403 ) );
+			return new WP_Error( 'fazcookie_rest_invalid_nonce', __( 'Invalid nonce. Please refresh the page and try again.', 'faz-cookie-manager' ), array( 'status' => 403 ) );
 		}
 		return true;
 	}

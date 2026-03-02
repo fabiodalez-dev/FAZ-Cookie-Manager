@@ -166,7 +166,7 @@ class Api extends Rest_Controller {
 		$result = Controller::get_instance()->record_event( $data );
 
 		if ( false === $result ) {
-			return new WP_Error( 'faz_pageview_error', __( 'Failed to record event.', 'cookie-law-info' ), array( 'status' => 500 ) );
+			return new WP_Error( 'faz_pageview_error', __( 'Failed to record event.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 		}
 
 		return rest_ensure_response( $result );
@@ -226,7 +226,7 @@ class Api extends Rest_Controller {
 		return array(
 			'context' => $this->get_context_param( array( 'default' => 'view' ) ),
 			'days'    => array(
-				'description'       => __( 'Number of days to look back.', 'cookie-law-info' ),
+				'description'       => __( 'Number of days to look back.', 'faz-cookie-manager' ),
 				'type'              => 'integer',
 				'default'           => 7,
 				'sanitize_callback' => 'absint',

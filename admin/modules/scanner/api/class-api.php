@@ -131,7 +131,7 @@ class Api extends Rest_Controller {
 			array(
 				'args' => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+						'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 						'type'        => 'integer',
 					),
 				),
@@ -212,7 +212,7 @@ class Api extends Rest_Controller {
 			}
 		}
 
-		return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'cookie-law-info' ), array( 'status' => 404 ) );
+		return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
 	}
 
 	/**
@@ -243,7 +243,7 @@ class Api extends Rest_Controller {
 			if ( ! $is_stale ) {
 				return new WP_Error(
 					'faz_rest_scan_in_progress',
-					__( 'A scan is already in progress, please wait for it to complete.', 'cookie-law-info' ),
+					__( 'A scan is already in progress, please wait for it to complete.', 'faz-cookie-manager' ),
 					array( 'status' => 409 )
 				);
 			}
@@ -322,7 +322,7 @@ class Api extends Rest_Controller {
 		if ( empty( $raw_cookies ) && empty( $scripts ) ) {
 			return new \WP_Error(
 				'faz_rest_no_data',
-				__( 'No cookies or scripts provided.', 'cookie-law-info' ),
+				__( 'No cookies or scripts provided.', 'faz-cookie-manager' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -380,43 +380,43 @@ class Api extends Rest_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'id'            => array(
-					'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'status'        => array(
-					'description' => __( 'Scan status.', 'cookie-law-info' ),
+					'description' => __( 'Scan status.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'type'          => array(
-					'description' => __( 'Scan type.', 'cookie-law-info' ),
+					'description' => __( 'Scan type.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'date'          => array(
-					'description' => __( 'Scan date.', 'cookie-law-info' ),
+					'description' => __( 'Scan date.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'total_cookies' => array(
-					'description' => __( 'Total cookies found.', 'cookie-law-info' ),
+					'description' => __( 'Total cookies found.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'pages_scanned' => array(
-					'description' => __( 'Total pages scanned.', 'cookie-law-info' ),
+					'description' => __( 'Total pages scanned.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'max_pages'     => array(
-					'description' => __( 'Maximum pages to scan.', 'cookie-law-info' ),
+					'description' => __( 'Maximum pages to scan.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'edit' ),
 					'default'     => 20,

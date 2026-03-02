@@ -37,7 +37,7 @@ class Policies extends Modules {
 	 */
 	public function register_menus( $menus ) {
 		$menus['policies'] = array(
-			'name'     => __( 'Policy Generators', 'cookie-law-info' ),
+			'name'     => __( 'Policy Generators', 'faz-cookie-manager' ),
 			'callback' => array( $this, 'menu_page_template' ),
 			'order'    => 5,
 		);

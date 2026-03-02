@@ -85,16 +85,16 @@ class Review_Feedback extends Modules {
 				<div class="faz-admin-notice-message">
 					<div class="faz-row faz-align-center">
 						<div class="faz-col-12">
-							<h4 class="faz-admin-notice-header"><img width="100" src="<?php echo esc_url( $assets_path . 'logo.svg' ); ?>" alt="<?php esc_attr_e( 'FAZ Cookie Manager Logo', 'cookie-law-info' ); ?>"></h4> <?php //phpcs:ignore PluginCheck.CodeAnalysis.ImageFunctions.NonEnqueuedImage ?>
+							<h4 class="faz-admin-notice-header"><img width="100" src="<?php echo esc_url( $assets_path . 'logo.svg' ); ?>" alt="<?php esc_attr_e( 'FAZ Cookie Manager Logo', 'faz-cookie-manager' ); ?>"></h4> <?php //phpcs:ignore PluginCheck.CodeAnalysis.ImageFunctions.NonEnqueuedImage ?>
 							<p style="margin-top: 15px; margin-bottom:5px;"><?php 
 								/* translators: %1$s: opening bold tag, %2$s: closing bold tag */
-								echo wp_kses_post( sprintf( __( 'Hey, we at %1$s FAZ Cookie Manager %2$s would like to thank you for using our plugin. We would really appreciate if you could take a moment to drop a quick review that will inspire us to keep going.', 'cookie-law-info' ), '<b>', '</b>' ) );
+								echo wp_kses_post( sprintf( __( 'Hey, we at %1$s FAZ Cookie Manager %2$s would like to thank you for using our plugin. We would really appreciate if you could take a moment to drop a quick review that will inspire us to keep going.', 'faz-cookie-manager' ), '<b>', '</b>' ) );
 							?></p>
 						</div>
 						<div class="faz-col-12">
 							<div class="faz-flex" style="margin-top: 10px;">
-								<button class="faz-button faz-button-review"><?php echo esc_html__( 'Review now', 'cookie-law-info' ); ?></button>
-								<button class="faz-button-outline-secondary faz-button faz-button-never"><?php echo esc_html__( 'Never show again', 'cookie-law-info' ); ?></button>
+								<button class="faz-button faz-button-review"><?php echo esc_html__( 'Review now', 'faz-cookie-manager' ); ?></button>
+								<button class="faz-button-outline-secondary faz-button faz-button-never"><?php echo esc_html__( 'Never show again', 'faz-cookie-manager' ); ?></button>
 							</div>
 						</div>
 					</div>
@@ -256,8 +256,8 @@ class Review_Feedback extends Modules {
 		
 		// Check if we are on the FAZ Cookie Manager Dashboard page
 		$screen = get_current_screen();
-		if ($screen->id == 'toplevel_page_cookie-law-info') {
-			$link_text = esc_html__( 'Give us a 5-star rating!', 'cookie-law-info' );
+		if ($screen->id == 'toplevel_page_faz-cookie-manager') {
+			$link_text = esc_html__( 'Give us a 5-star rating!', 'faz-cookie-manager' );
 			$link1 = sprintf(
 				'<a class="faz-button-review" href="%1$s" target="_blank" title="%2$s">&#9733;&#9733;&#9733;&#9733;&#9733;</a>',
 				$this->review_url,
@@ -273,7 +273,7 @@ class Review_Feedback extends Modules {
 				/* translators: %1$s: FAZ Cookie Manager plugin name in bold, %2$s: star rating link, %3$s: WordPress.org link */
 				esc_html__(
 					'Please rate %1$s %2$s on %3$s to help us spread the word. Thank you from the FAZ Cookie Manager team!',
-					'cookie-law-info'
+					'faz-cookie-manager'
 				),
 				sprintf( '<strong>%1$s</strong>', 'FAZ Cookie Manager' ),
 				wp_kses_post( $link1 ),

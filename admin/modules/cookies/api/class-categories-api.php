@@ -91,7 +91,7 @@ class Categories_API extends API_Controller {
 			array(
 				'args'   => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+						'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 						'type'        => 'integer',
 					),
 				),
@@ -170,7 +170,7 @@ class Categories_API extends API_Controller {
 
 		try {
 			if ( ! isset( $request['categories'] ) ) {
-				return new WP_Error( 'fazcookie_rest_invalid_data', __( 'No data specified to create/edit categories', 'cookie-law-info' ), array( 'status' => 404 ) );
+				return new WP_Error( 'fazcookie_rest_invalid_data', __( 'No data specified to create/edit categories', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 			}
 			if ( ! defined( 'FAZ_BULK_REQUEST' ) ) {
 				define( 'FAZ_BULK_REQUEST', true );
@@ -221,65 +221,65 @@ class Categories_API extends API_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'id'                 => array(
-					'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'date_created'       => array(
-					'description' => __( 'The date the cookie was created, as GMT.', 'cookie-law-info' ),
+					'description' => __( 'The date the category was created, as GMT.', 'faz-cookie-manager' ),
 					'type'        => 'date-time',
 					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
 				),
 				'date_modified'      => array(
-					'description' => __( 'The date the cookie was last modified, as GMT.', 'cookie-law-info' ),
+					'description' => __( 'The date the category was last modified, as GMT.', 'faz-cookie-manager' ),
 					'type'        => 'date-time',
 					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
 				),
 				'name'               => array(
-					'description' => __( 'Cookie category name.', 'cookie-law-info' ),
+					'description' => __( 'Cookie category name.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'slug'               => array(
-					'description' => __( 'Cookie category unique name', 'cookie-law-info' ),
+					'description' => __( 'Cookie category unique name', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'language'           => array(
-					'description' => __( 'Cookie category language', 'cookie-law-info' ),
+					'description' => __( 'Cookie category language', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'description'        => array(
-					'description' => __( 'Cookie category description.', 'cookie-law-info' ),
+					'description' => __( 'Cookie category description.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'prior_consent'      => array(
-					'description' => __( 'Cookie type.', 'cookie-law-info' ),
+					'description' => __( 'Whether prior consent is required.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'priority'           => array(
-					'description' => __( 'Cookie type.', 'cookie-law-info' ),
+					'description' => __( 'Category display priority.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'visibility'         => array(
-					'description' => __( 'Show cookies on audit table or not', 'cookie-law-info' ),
+					'description' => __( 'Whether category is visible in audit table.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'sell_personal_data' => array(
-					'description' => __( 'Show cookies on audit table or not', 'cookie-law-info' ),
+					'description' => __( 'Whether category involves selling personal data.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
-				'cookies'            => array(
-					'description' => __( 'Cookie category description.', 'cookie-law-info' ),
+				'cookie_list'        => array(
+					'description' => __( 'List of cookies in this category.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view' ),
 				),

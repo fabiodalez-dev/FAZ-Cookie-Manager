@@ -230,7 +230,7 @@ class Controller {
 				'slug'        => 'ultimate',
 				'name'        => 'Ultimate',
 				'currency'    => 'USD',
-				'description' => __( 'Ultimate Plan (Local)', 'cookie-law-info' ),
+				'description' => __( 'Ultimate Plan (Local)', 'faz-cookie-manager' ),
 				'scan_limit'  => '10000',
 				'log_limit'   => 100000,
 				'features'    => array(
@@ -355,7 +355,7 @@ class Controller {
 		// Cloud requests are not supported in local mode.
 		return new WP_Error(
 			'faz_not_available',
-			__( 'Cloud requests are not available in local mode.', 'cookie-law-info' ),
+			__( 'Cloud requests are not available in local mode.', 'faz-cookie-manager' ),
 			array( 'status' => 400 )
 		);
 	}
@@ -378,7 +378,7 @@ class Controller {
 	public function add_payments( $data ) {
 		return new WP_Error(
 			'faz_not_available',
-			__( 'Payments are not available in local mode.', 'cookie-law-info' ),
+			__( 'Payments are not available in local mode.', 'faz-cookie-manager' ),
 			array( 'status' => 400 )
 		);
 	}

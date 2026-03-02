@@ -28,7 +28,7 @@ abstract class Modules {
 	 *
 	 * @var string
 	 */
-	protected static $menu_slug = 'cookie-law-info';
+	protected static $menu_slug = 'faz-cookie-manager';
 
 	/**
 	 * Default capability of menus

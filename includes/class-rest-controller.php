@@ -49,7 +49,7 @@ abstract class Rest_Controller extends WP_REST_Controller {
 	 */
 	public function get_items_permissions_check( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error( 'fazcookie_rest_cannot_view', __( 'Sorry, you cannot list resources.', 'cookie-law-info' ), array( 'status' => rest_authorization_required_code() ) );
+			return new WP_Error( 'fazcookie_rest_cannot_view', __( 'Sorry, you cannot list resources.', 'faz-cookie-manager' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		return true;
@@ -63,7 +63,7 @@ abstract class Rest_Controller extends WP_REST_Controller {
 	 */
 	public function create_item_permissions_check( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error( 'fazcookie_rest_cannot_create', __( 'Sorry, you are not allowed to create resources.', 'cookie-law-info' ), array( 'status' => rest_authorization_required_code() ) );
+			return new WP_Error( 'fazcookie_rest_cannot_create', __( 'Sorry, you are not allowed to create resources.', 'faz-cookie-manager' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		return faz_verify_nonce( $request );
@@ -77,7 +77,7 @@ abstract class Rest_Controller extends WP_REST_Controller {
 	 */
 	public function get_item_permissions_check( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error( 'fazcookie_rest_cannot_view', __( 'Sorry, you cannot view this resource.', 'cookie-law-info' ), array( 'status' => rest_authorization_required_code() ) );
+			return new WP_Error( 'fazcookie_rest_cannot_view', __( 'Sorry, you cannot view this resource.', 'faz-cookie-manager' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		return true;
@@ -91,7 +91,7 @@ abstract class Rest_Controller extends WP_REST_Controller {
 	 */
 	public function update_item_permissions_check( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error( 'fazcookie_rest_cannot_edit', __( 'Sorry, you are not allowed to edit this resource.', 'cookie-law-info' ), array( 'status' => rest_authorization_required_code() ) );
+			return new WP_Error( 'fazcookie_rest_cannot_edit', __( 'Sorry, you are not allowed to edit this resource.', 'faz-cookie-manager' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		return faz_verify_nonce( $request );
@@ -105,7 +105,7 @@ abstract class Rest_Controller extends WP_REST_Controller {
 	 */
 	public function delete_item_permissions_check( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error( 'fazcookie_rest_cannot_delete', __( 'Sorry, you are not allowed to delete this resource.', 'cookie-law-info' ), array( 'status' => rest_authorization_required_code() ) );
+			return new WP_Error( 'fazcookie_rest_cannot_delete', __( 'Sorry, you are not allowed to delete this resource.', 'faz-cookie-manager' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		return faz_verify_nonce( $request );

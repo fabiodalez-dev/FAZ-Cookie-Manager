@@ -189,6 +189,9 @@
 		var revisit = config.revisitConsent || {};
 		setChecked('faz-b-revisit-toggle', getStatus(revisit));
 		setVal('faz-b-revisit-position', revisit.position || 'bottom-left');
+		var revisitStyles = revisit.styles || {};
+		setColor('faz-b-revisit-bg', revisitStyles['background-color'] || '#0056A7');
+		setColor('faz-b-revisit-icon', revisitStyles['color'] || '#FFFFFF');
 
 		// Behaviours
 		setChecked('faz-b-reload-toggle', b.reloadBannerOnAccept && b.reloadBannerOnAccept.status);
@@ -256,6 +259,14 @@
 		setVal('faz-b-btn-settings-label', btnLabels.settings || '');
 		setVal('faz-b-btn-readmore-label', btnLabels.readMore || '');
 
+		// Cookie policy link
+		var privacyLink = (notice.privacyLink || '').trim();
+		setVal('faz-b-privacy-link', privacyLink || '/cookie-policy');
+
+		// Revisit consent title (tooltip / aria-label)
+		var revisitContent = (c.revisitConsent && c.revisitConsent.elements) || {};
+		setVal('faz-b-revisit-title', revisitContent.title || '');
+
 		// Preference center
 		var pref = (c.preferenceCenter && c.preferenceCenter.elements) || {};
 		setVal('faz-b-pref-title', pref.title || '');
@@ -285,7 +296,16 @@
 		c.notice.elements.buttons.elements.settings = getVal('faz-b-btn-settings-label');
 		c.notice.elements.buttons.elements.readMore = getVal('faz-b-btn-readmore-label');
 
+		// Cookie policy link (fallback to /cookie-policy if empty)
+		var privacyLinkVal = (getVal('faz-b-privacy-link') || '').trim();
+		c.notice.elements.privacyLink = privacyLinkVal || '/cookie-policy';
+
 		// Preference center
+		// Revisit consent title
+		if (!c.revisitConsent) c.revisitConsent = { elements: {} };
+		if (!c.revisitConsent.elements) c.revisitConsent.elements = {};
+		c.revisitConsent.elements.title = getVal('faz-b-revisit-title');
+
 		if (!c.preferenceCenter) c.preferenceCenter = { elements: {} };
 		if (!c.preferenceCenter.elements) c.preferenceCenter.elements = {};
 		c.preferenceCenter.elements.title = getVal('faz-b-pref-title');
@@ -428,6 +448,9 @@
 		if (!props.config.revisitConsent) props.config.revisitConsent = {};
 		props.config.revisitConsent.status = isChecked('faz-b-revisit-toggle');
 		props.config.revisitConsent.position = getVal('faz-b-revisit-position');
+		if (!props.config.revisitConsent.styles) props.config.revisitConsent.styles = {};
+		props.config.revisitConsent.styles['background-color'] = getColor('faz-b-revisit-bg');
+		props.config.revisitConsent.styles['color'] = getColor('faz-b-revisit-icon');
 
 		// Behaviours
 		if (!props.behaviours) props.behaviours = {};
@@ -495,7 +518,7 @@
 		if (!isChecked('faz-b-reject-toggle')) hiddenTags.push('reject-button');
 		if (!isChecked('faz-b-settings-toggle')) hiddenTags.push('settings-button');
 		if (!isChecked('faz-b-close-toggle')) hiddenTags.push('close-button');
-		if (!isChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore');
+		if (!isChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore-button');
 		if (!isChecked('faz-b-revisit-toggle')) hiddenTags.push('revisit-consent');
 		if (!isChecked('faz-b-audit-toggle')) hiddenTags.push('audit-table');
 		if (!isChecked('faz-b-brandlogo-toggle')) hiddenTags.push('brand-logo');
@@ -596,6 +619,9 @@
 			});
 		});
 
+		// Inject readmore link (not in template — frontend JS adds it dynamically)
+		attachPreviewReadMore(host);
+
 		// Update brand logo src from our form field
 		var logoUrl = getVal('faz-b-brandlogo-url');
 		if (logoUrl) {
@@ -610,6 +636,55 @@
 		// Apply display state (panel-level, not host)
 		var panel = document.getElementById('faz-b-preview-panel');
 		if (panel) panel.classList.toggle('hidden', !previewVisible);
+	}
+
+	function attachPreviewReadMore(host) {
+		if (!bannerData) return;
+		var config = bannerData.properties && bannerData.properties.config || {};
+		var readMoreCfg = config.notice && config.notice.elements
+			&& config.notice.elements.buttons && config.notice.elements.buttons.elements
+			&& config.notice.elements.buttons.elements.readMore;
+		if (!readMoreCfg || readMoreCfg.status !== true) return;
+
+		// Get label text and privacy link for current language
+		var contents = bannerData.contents || {};
+		var c = contents[currentLang] || contents[Object.keys(contents)[0]] || {};
+		var noticeEl = (c.notice && c.notice.elements) || {};
+		var label = (noticeEl.buttons && noticeEl.buttons.elements && noticeEl.buttons.elements.readMore) || '';
+		var href = (noticeEl.privacyLink || getVal('faz-b-privacy-link') || '').trim() || '/cookie-policy';
+		if (!label) return;
+
+		// Build readmore element via DOM API (avoids XSS from unescaped values)
+		var el;
+		if (readMoreCfg.type === 'link') {
+			el = document.createElement('a');
+			el.href = href;
+			el.target = '_blank';
+			el.rel = 'noopener';
+		} else {
+			el = document.createElement('button');
+		}
+		el.className = 'faz-policy';
+		el.setAttribute('aria-label', label);
+		el.setAttribute('data-faz-tag', 'readmore-button');
+		el.textContent = label;
+
+		// Append to description element (same as frontend _fazAttachReadMore)
+		var descEl = host.querySelector('[data-faz-tag="description"]');
+		if (!descEl) return;
+		var lastP = descEl.querySelector('p:last-child');
+		var target = lastP || descEl;
+		target.appendChild(document.createTextNode('\u00A0'));
+		target.appendChild(el);
+
+		// Apply styles from config
+		var styles = readMoreCfg.styles || {};
+		var keys = Object.keys(styles);
+		host.querySelectorAll('[data-faz-tag="readmore-button"]').forEach(function (rmEl) {
+			keys.forEach(function (s) {
+				if (styles[s]) rmEl.style[s] = styles[s];
+			});
+		});
 	}
 
 	function initPreviewToggles(host) {

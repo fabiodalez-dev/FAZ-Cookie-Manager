@@ -320,6 +320,26 @@ function _fazAddPositionClass() {
     if (!revisitConsent) return false;
     const revisitPosition = 'faz-revisit-' + _fazStore._bannerConfig.config.revisitConsent.position;
     revisitConsent.classList.add(revisitPosition);
+
+    // Replace <img> with inline SVG so icon color inherits from CSS `color` property.
+    // Buttons don't inherit `color` by default (browser uses `buttontext`), so force it.
+    const revisitBtn = revisitConsent.querySelector('.faz-btn-revisit');
+    if (revisitBtn) revisitBtn.style.color = 'inherit';
+    const revisitImg = revisitConsent.querySelector('.faz-btn-revisit img[src*="revisit"]');
+    if (revisitImg) {
+        const svgMarkup = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50" fill="currentColor" aria-hidden="true">'
+            + '<circle cx="23.5" cy="11.5" r="2.6"/><circle cx="27" cy="25" r="2.6"/>'
+            + '<circle cx="14" cy="29.8" r="2.6"/><circle cx="14" cy="18.4" r="2.6"/>'
+            + '<circle cx="20.9" cy="39" r="2.6"/><circle cx="36" cy="36.3" r="2.6"/>'
+            + '<path d="M25.2,48.9c-12.6,0-23-9.8-23.8-22.4-.4-6.9,2.2-13.6,7.1-18.5C13.5,3.1,20.3.7,27.2,1.2c2.3.2,4.5.7,6.6,1.5.4.2.6.5.7.8s-.1.7-.4,1c-.7.6-1.2,1.5-1.2,2.5s.4,1.9,1.2,2.5c.2.2.4.5.4.7s0,.6-.3.8c-.5.6-.8,1.4-.8,2.1s.5,1.9,1.3,2.6c.3.2.4.5.4.8s-.2.6-.4.8c-.8.6-1.3,1.6-1.3,2.6,0,1.8,1.4,3.2,3.2,3.2h.1c.5,0,.9.3,1,.7.4,1.4,1.7,2.3,3,2.3s1.6-.3,2.3-.9c.3-.3.7-.4,1-.3s.6.4.7.7c.4,1.3,1.5,2.3,2.9,2.4.3,0,.6.2.8.4.2.2.3.5.2.8-2,11.3-11.9,19.5-23.4,19.5ZM25.3,3.2c-5.7,0-11.2,2.3-15.2,6.3-4.6,4.5-7,10.6-6.5,16.9.7,11.4,10.3,20.4,21.7,20.4s19-7,21.2-16.8c-1.3-.4-2.4-1.2-3-2.4-.8.4-1.6.6-2.6.6-2.1,0-3.9-1.3-4.8-3.1-2.7-.3-4.7-2.5-4.7-5.2s.4-2.5,1.3-3.4c-.8-.9-1.3-2.1-1.3-3.4s.3-1.9.8-2.7c-.8-.9-1.3-2.1-1.3-3.4s.3-2,.8-2.8c-1.5-.5-3-.8-4.6-.9-.6,0-1.2-.1-1.7-.1Z"/>'
+            + '</svg>';
+        const doc = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml');
+        const svg = doc.documentElement;
+        svg.style.height = '30px';
+        svg.style.width = '30px';
+        svg.style.margin = '0';
+        if (revisitImg.parentNode) revisitImg.parentNode.replaceChild(document.importNode(svg, true), revisitImg);
+    }
 }
 
 /**

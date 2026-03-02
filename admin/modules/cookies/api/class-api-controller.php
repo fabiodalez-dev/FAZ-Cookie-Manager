@@ -40,7 +40,7 @@ abstract class API_Controller extends Rest_Controller {
 	 */
 	protected function get_item_objects( $args ) {
 		// translators: %s: Class method name.
-		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'cookie-law-info' ), __METHOD__ ), array( 'status' => 405 ) );
+		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}
 	/**
 	 * Get object.
@@ -50,7 +50,7 @@ abstract class API_Controller extends Rest_Controller {
 	 */
 	protected function get_item_object( $id = false ) {
 		// translators: %s: Class method name.
-		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'cookie-law-info' ), __METHOD__ ), array( 'status' => 405 ) );
+		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}
 
 	/**
@@ -61,7 +61,7 @@ abstract class API_Controller extends Rest_Controller {
 	 */
 	protected function get_formatted_item_data( $object ) {
 		// translators: %s: Class method name.
-		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'cookie-law-info' ), __METHOD__ ), array( 'status' => 405 ) );
+		return new WP_Error( 'invalid-method', sprintf( __( "Method '%s' not implemented. Must be overridden in subclass.", 'faz-cookie-manager' ), __METHOD__ ), array( 'status' => 405 ) );
 	}
 
 	/**
@@ -103,7 +103,7 @@ abstract class API_Controller extends Rest_Controller {
 	public function get_item( $request ) {
 		$object = $this->get_item_object( (int) $request['id'] );
 		if ( ! $object || 0 === $object->get_id() ) {
-			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'cookie-law-info' ), array( 'status' => 404 ) );
+			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
 		}
 		$data = $this->prepare_item_for_response( $object, $request );
 		return rest_ensure_response( $data );
@@ -119,7 +119,7 @@ abstract class API_Controller extends Rest_Controller {
 		if ( ! empty( $request['id'] ) ) {
 			return new WP_Error(
 				'fazcookie_rest_item_exists',
-				__( 'Cannot create existing post.', 'cookie-law-info' ),
+				__( 'Cannot create existing post.', 'faz-cookie-manager' ),
 				array( 'status' => 400 )
 			);
 		}
@@ -151,7 +151,7 @@ abstract class API_Controller extends Rest_Controller {
 		$object = $this->get_item_object();
 		$object->set_id( $id );
 		if ( ! $object || 0 === $object->get_id() ) {
-			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'cookie-law-info' ), array( 'status' => 404 ) );
+			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
 		}
 		$data = $this->prepare_item_for_response( $object, $request );
 		$object->delete();
@@ -196,7 +196,7 @@ abstract class API_Controller extends Rest_Controller {
 		$object = $this->get_item_object();
 		$object->set_id( $id );
 		if ( false === $create && ( ! $object || 0 === $object->get_id() ) ) {
-			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'cookie-law-info' ), array( 'status' => 400 ) );
+			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 
 		// For updates, load existing data so unspecified fields are preserved.
@@ -242,7 +242,7 @@ abstract class API_Controller extends Rest_Controller {
 		return array(
 			'context'  => $this->get_context_param( array( 'default' => 'view' ) ),
 			'page'     => array(
-				'description'       => __( 'Current page of the collection.', 'cookie-law-info' ),
+				'description'       => __( 'Current page of the collection.', 'faz-cookie-manager' ),
 				'type'              => 'integer',
 				'default'           => 1,
 				'sanitize_callback' => 'absint',
@@ -250,7 +250,7 @@ abstract class API_Controller extends Rest_Controller {
 				'minimum'           => 1,
 			),
 			'per_page' => array(
-				'description'       => __( 'Maximum number of items to be returned in result set.', 'cookie-law-info' ),
+				'description'       => __( 'Maximum number of items to be returned in result set.', 'faz-cookie-manager' ),
 				'type'              => 'integer',
 				'default'           => 10,
 				'minimum'           => 1,
@@ -259,21 +259,21 @@ abstract class API_Controller extends Rest_Controller {
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 			'search'   => array(
-				'description'       => __( 'Limit results to those matching a string.', 'cookie-law-info' ),
+				'description'       => __( 'Limit results to those matching a string.', 'faz-cookie-manager' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 			'lang'     => array(
-				'description'       => __( 'Language of the cookie', 'cookie-law-info' ),
+				'description'       => __( 'Language of the cookie', 'faz-cookie-manager' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 			'category' => array(
-				'description'       => __( 'Cookie category', 'cookie-law-info' ),
+				'description'       => __( 'Cookie category', 'faz-cookie-manager' ),
 				'type'              => 'integer',
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => 'absint',
 				'validate_callback' => 'rest_validate_request_arg',
 			),
 		);

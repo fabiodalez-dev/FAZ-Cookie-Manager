@@ -483,7 +483,11 @@ class Shortcodes {
 	 * @return string
 	 */
 	public function faz_privacy_link() {
-		return isset( $this->contents['notice']['elements']['privacyLink'] ) && '' !== $this->contents['notice']['elements']['privacyLink'] ? esc_url( $this->contents['notice']['elements']['privacyLink'] ) : '#';
+		$privacy_link = isset( $this->contents['notice']['elements']['privacyLink'] ) ? trim( (string) $this->contents['notice']['elements']['privacyLink'] ) : '';
+		if ( '' === $privacy_link ) {
+			$privacy_link = home_url( '/cookie-policy' );
+		}
+		return esc_url( $privacy_link );
 	}
 
 	/**

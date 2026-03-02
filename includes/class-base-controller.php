@@ -194,7 +194,7 @@ abstract class Base_Controller {
 	 * @return void
 	 */
 	public function install_tables() {
-		if ( get_option( "faz_{$this->table_option}_table_version" ) !== CLI_VERSION ) {
+		if ( get_option( "faz_{$this->table_option}_table_version" ) !== FAZ_VERSION ) {
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 			dbDelta( $this->get_schema(), true );
 			$this->validate_tables();
@@ -225,7 +225,7 @@ abstract class Base_Controller {
 			foreach ( $this->get_tables() as $table ) {
 				$this->update_missing_tables( $table, true );
 			}
-			update_option( "faz_{$this->table_option}_table_version", CLI_VERSION );
+			update_option( "faz_{$this->table_option}_table_version", FAZ_VERSION );
 		}
 	}
 

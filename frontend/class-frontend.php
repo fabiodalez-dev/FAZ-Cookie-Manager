@@ -317,7 +317,7 @@ class Frontend {
 			$gcm = $this->get_gcm_data();
 			$gcm_json = wp_json_encode($gcm);
 			?>
-<script id="cookie-law-info-gcm-var-js">
+<script id="faz-cookie-manager-gcm-var-js">
 var _fazGcm = <?php echo $gcm_json; //phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 ?>
 </script>
@@ -325,7 +325,7 @@ var _fazGcm = <?php echo $gcm_json; //phpcs:ignore WordPress.Security.EscapeOutp
 			$suffix = ''; // Always load non-minified JS.
 			$script_url = plugin_dir_url( __FILE__ ) . 'js/gcm' . $suffix . '.js'; 
 ?>
-<script id="cookie-law-info-gcm-js" type="text/javascript" src="<?php echo esc_url( $script_url ); ?>"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript
+<script id="faz-cookie-manager-gcm-js" type="text/javascript" src="<?php echo esc_url( $script_url ); ?>"></script> <?php //phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript
 		}
 		echo '<script id="fazcookie" type="text/javascript" src="' . esc_url( $this->settings->get_script_url() ) . '"></script>'; // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript
 	}

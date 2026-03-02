@@ -176,6 +176,11 @@ defined( 'ABSPATH' ) || exit;
 						<label>Read More Link</label>
 						<input type="text" class="faz-input" id="faz-b-btn-readmore-label" placeholder="Cookie Policy">
 					</div>
+					<div class="faz-form-group">
+						<label><?php echo esc_html__( 'Cookie Policy URL', 'faz-cookie-manager' ); ?></label>
+						<input type="text" class="faz-input" id="faz-b-privacy-link" placeholder="/cookie-policy">
+						<div class="faz-help"><?php echo esc_html__( 'Relative (/cookie-policy) or absolute (https://example.com/privacy). Default: /cookie-policy', 'faz-cookie-manager' ); ?></div>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -297,6 +302,28 @@ defined( 'ABSPATH' ) || exit;
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-settings-border">
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-settings-border-hex" style="width:90px;">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php echo esc_html__( 'Revisit Widget', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label><?php echo esc_html__( 'Background', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-revisit-bg">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-bg-hex" style="width:90px;">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label><?php echo esc_html__( 'Icon', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-revisit-icon">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-revisit-icon-hex" style="width:90px;">
 						</div>
 					</div>
 				</div>
@@ -432,6 +459,11 @@ defined( 'ABSPATH' ) || exit;
 						<option value="bottom-left">Bottom Left</option>
 						<option value="bottom-right">Bottom Right</option>
 					</select>
+				</div>
+				<div class="faz-form-group">
+					<label><?php echo esc_html__( 'Widget Label', 'faz-cookie-manager' ); ?></label>
+					<input type="text" class="faz-input" id="faz-b-revisit-title" placeholder="Consent Preferences" style="max-width:320px;">
+					<div class="faz-help"><?php echo esc_html__( 'Used as tooltip and screen reader label (aria-label).', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>

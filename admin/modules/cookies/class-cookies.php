@@ -63,7 +63,7 @@ class Cookies extends Modules {
 	 */
 	public function register_menus( $menus ) {
 		$menus['cookies'] = array(
-			'name'     => __( 'Cookie Manager', 'cookie-law-info' ),
+			'name'     => __( 'Cookie Manager', 'faz-cookie-manager' ),
 			'callback' => array( $this, 'menu_page_template' ),
 			'order'    => 3,
 		);

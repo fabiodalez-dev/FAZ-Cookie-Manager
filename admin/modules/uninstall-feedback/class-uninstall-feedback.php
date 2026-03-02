@@ -8,6 +8,7 @@
 namespace FazCookie\Admin\Modules\Uninstall_Feedback;
 
 use WP_Error;
+use WP_REST_Response;
 use FazCookie\Includes\Modules;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -24,25 +25,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Uninstall_Feedback extends Modules {
 
 	/**
-	 * API url.
-	 *
-	 * @var string
-	 */
-	protected $api_url = ''; // Disabled - no external feedback endpoint
-
-	/**
-	 * Plugin version.
-	 *
-	 * @var string
-	 */
-	protected $current_version = CLI_VERSION;
-
-	/**
 	 * Plugin basename.
 	 *
 	 * @var string
 	 */
-	protected $plugin_file = CLI_PLUGIN_BASENAME; // plugin main file.
+	protected $plugin_file = FAZ_PLUGIN_BASENAME; // plugin main file.
 
 	/**
 	 * Endpoint namespace.
@@ -92,7 +79,7 @@ class Uninstall_Feedback extends Modules {
 	 */
 	public function create_item_permissions_check( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error( 'fazcookie_rest_cannot_create', __( 'Sorry, you are not allowed to create resources.', 'cookie-law-info' ), array( 'status' => rest_authorization_required_code() ) );
+			return new WP_Error( 'fazcookie_rest_cannot_create', __( 'Sorry, you are not allowed to create resources.', 'faz-cookie-manager' ), array( 'status' => rest_authorization_required_code() ) );
 		}
 
 		return true;
@@ -123,66 +110,66 @@ class Uninstall_Feedback extends Modules {
 		$reasons = array(
 			array(
 				'id'     => 'setup-difficult',
-				'text'   => __( 'Setup is too difficult/ Lack of documentation', 'cookie-law-info' ),
+				'text'   => __( 'Setup is too difficult/ Lack of documentation', 'faz-cookie-manager' ),
 				'fields' => array(
 					array(
 						'type'        => 'textarea',
 						'placeholder' => __(
 							'Describe the challenges that you faced while using our plugin',
-							'cookie-law-info'
+							'faz-cookie-manager'
 						),
 					),
 				),
 			),
 			array(
 				'id'     => 'not-have-that-feature',
-				'text'   => __( 'The plugin is great, but I need specific feature that you don\'t support', 'cookie-law-info' ),
+				'text'   => __( 'The plugin is great, but I need specific feature that you don\'t support', 'faz-cookie-manager' ),
 				'fields' => array(
 					array(
 						'type'        => 'textarea',
-						'placeholder' => __( 'Could you tell us more about that feature?', 'cookie-law-info' ),
+						'placeholder' => __( 'Could you tell us more about that feature?', 'faz-cookie-manager' ),
 					),
 				),
 			),
 			array(
 				'id'   => 'affecting-performance',
-				'text' => __( 'The plugin is affecting website speed', 'cookie-law-info' ),
+				'text' => __( 'The plugin is affecting website speed', 'faz-cookie-manager' ),
 			),
 			array(
 				'id'     => 'found-better-plugin',
-				'text'   => __( 'I found a better plugin', 'cookie-law-info' ),
+				'text'   => __( 'I found a better plugin', 'faz-cookie-manager' ),
 				'fields' => array(
 					array(
 						'type'        => 'text',
-						'placeholder' => __( 'Please share which plugin', 'cookie-law-info' ),
+						'placeholder' => __( 'Please share which plugin', 'faz-cookie-manager' ),
 					),
 				),
 			),
 			array(
 				'id'     => 'fazcookie-connection-issues',
-				'text'   => __( 'I have issues while connecting to the web app', 'cookie-law-info' ),
+				'text'   => __( 'I have issues while connecting to the web app', 'faz-cookie-manager' ),
 				'fields' => array(
 					array(
 						'type'        => 'textarea',
-						'placeholder' => __( 'Please describe the issues', 'cookie-law-info' ),
+						'placeholder' => __( 'Please describe the issues', 'faz-cookie-manager' ),
 					),
 				),
 			),
 			array(
 				'id'   => 'use-fazcookie-webapp',
-				'text' => __( 'I would like to use the web app instead of the plugin', 'cookie-law-info' ),
+				'text' => __( 'I would like to use the web app instead of the plugin', 'faz-cookie-manager' ),
 			),
 			array(
 				'id'   => 'temporary-deactivation',
-				'text' => __( 'It’s a temporary deactivation', 'cookie-law-info' ),
+				'text' => __( 'It’s a temporary deactivation', 'faz-cookie-manager' ),
 			),
 			array(
 				'id'     => 'other',
-				'text'   => __( 'Other', 'cookie-law-info' ),
+				'text'   => __( 'Other', 'faz-cookie-manager' ),
 				'fields' => array(
 					array(
 						'type'        => 'textarea',
-						'placeholder' => __( 'Please share the reason', 'cookie-law-info' ),
+						'placeholder' => __( 'Please share the reason', 'faz-cookie-manager' ),
 					),
 				),
 			),
@@ -206,11 +193,11 @@ class Uninstall_Feedback extends Modules {
 		<div class="faz-modal" id="faz-modal">
 			<div class="faz-modal-wrap">
 				<div class="faz-modal-header">
-					<h3><?php echo esc_html__( 'Quick Feedback', 'cookie-law-info' ); ?></h3>
+					<h3><?php echo esc_html__( 'Quick Feedback', 'faz-cookie-manager' ); ?></h3>
 					<button type="button" class="faz-modal-close"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M0.572899 0.00327209C0.459691 0.00320032 0.349006 0.036716 0.254854 0.0995771C0.160701 0.162438 0.0873146 0.251818 0.0439819 0.356405C0.000649228 0.460992 -0.0106814 0.576084 0.0114242 0.687113C0.0335299 0.798142 0.0880779 0.900118 0.168164 0.980132L4.18928 5L0.168164 9.01987C0.0604905 9.12754 0 9.27358 0 9.42585C0 9.57812 0.0604905 9.72416 0.168164 9.83184C0.275838 9.93951 0.421875 10 0.574148 10C0.726422 10 0.872459 9.93951 0.980133 9.83184L5.00125 5.81197L9.02237 9.83184C9.13023 9.93836 9.2755 9.99844 9.4271 9.99923C9.5023 9.99958 9.57681 9.98497 9.6463 9.95623C9.71579 9.92749 9.77886 9.8852 9.83184 9.83184C9.93924 9.72402 9.99955 9.57804 9.99955 9.42585C9.99955 9.27367 9.93924 9.12768 9.83184 9.01987L5.81072 5L9.83184 0.980132C9.88515 0.926818 9.92744 0.863524 9.9563 0.793865C9.98515 0.724206 10 0.649547 10 0.574148C10 0.49875 9.98515 0.42409 9.9563 0.354431C9.92744 0.284772 9.88515 0.221479 9.83184 0.168164C9.77852 0.114849 9.71523 0.072558 9.64557 0.0437044C9.57591 0.0148507 9.50125 0 9.42585 0C9.35045 0 9.27579 0.0148507 9.20614 0.0437044C9.13648 0.072558 9.07318 0.114849 9.01987 0.168164L4.99813 4.19053L0.976385 0.170662C0.868901 0.0635642 0.723383 0.00338113 0.57165 0.00327209H0.572899Z" fill="#ffffff"/> </svg></button>
 				</div>
 				<div class="faz-modal-body">
-					<h4 class="faz-feedback-caption"><?php echo esc_html__( 'If you have a moment, please let us know why you are deactivating FAZ Cookie Manager.', 'cookie-law-info' ); ?></h4>
+					<h4 class="faz-feedback-caption"><?php echo esc_html__( 'If you have a moment, please let us know why you are deactivating FAZ Cookie Manager.', 'faz-cookie-manager' ); ?></h4>
 					<ul class="faz-feedback-reasons-list">
 						<?php
 						foreach ( $reasons as $reason ) :
@@ -250,20 +237,20 @@ class Uninstall_Feedback extends Modules {
 						<?php endforeach; ?>
 					</ul>
 					<div class="faz-uninstall-feedback-privacy-policy">
-						<?php esc_html__( "We do not collect any personal data when you submit this form. It's your feedback that we value.", 'cookie-law-info' ); ?>
-						<a href="https://fabiodalez.it/privacy-policy/" target="_blank"><?php echo esc_html__( 'Privacy Policy', 'cookie-law-info' ); ?></a>
+						<?php echo esc_html__( "We do not collect any personal data when you submit this form. It's your feedback that we value.", 'faz-cookie-manager' ); ?>
+						<a href="https://fabiodalez.it/privacy-policy/" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'Privacy Policy', 'faz-cookie-manager' ); ?></a>
 					</div>
 				</div>
 				<div class="faz-modal-footer">
 					<button class="button-primary faz-modal-submit">
-						<?php echo esc_html__( 'Submit & Deactivate', 'cookie-law-info' ); ?>
+						<?php echo esc_html__( 'Submit & Deactivate', 'faz-cookie-manager' ); ?>
 					</button>
-					<a class="faz-goto-support" href="https://fabiodalez.it/support/" target="_blank">
+					<a class="faz-goto-support" href="https://fabiodalez.it/support/" target="_blank" rel="noopener noreferrer">
 						<span class="dashicons dashicons-external"></span>
-						<?php echo esc_html__( 'Go to support', 'cookie-law-info' ); ?>
+						<?php echo esc_html__( 'Go to support', 'faz-cookie-manager' ); ?>
 					</a>
 					<button class="button-secondary faz-modal-skip">
-						<?php echo esc_html__( 'Skip & Deactivate', 'cookie-law-info' ); ?>
+						<?php echo esc_html__( 'Skip & Deactivate', 'faz-cookie-manager' ); ?>
 					</button>
 				</div>
 			</div>
@@ -498,42 +485,19 @@ class Uninstall_Feedback extends Modules {
 	/**
 	 * Send uninstall reason to server
 	 *
-	 * @param array $request request data.
-	 * @return void
+	 * @param \WP_REST_Request $request request data.
+	 * @return \WP_Error|\WP_REST_Response
 	 */
 	public function send_uninstall_reason( $request ) {
-		global $wpdb;
-		if ( ! isset( $request['reason_id'] ) ) {
-			wp_send_json_error();
+		$reason_id = isset( $request['reason_id'] ) ? sanitize_text_field( $request['reason_id'] ) : '';
+		if ( empty( $reason_id ) ) {
+			return new WP_Error( 'missing_reason', __( 'Reason ID is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
-		$data = array(
-			'reason_slug'    => sanitize_text_field( wp_unslash( $request['reason_id'] ) ),
-			'reason_detail'  => ! empty( $request['reason_text'] ) ? sanitize_text_field( wp_unslash( $request['reason_text'] ) ) : null,
-			'date'           => gmdate( 'M d, Y h:i:s A' ),
-			'comments'       => ! empty( $request['reason_info'] ) ? sanitize_text_field( wp_unslash( $request['reason_info'] ) ) : null,
-			'server'         => ! empty( $_SERVER['SERVER_SOFTWARE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['SERVER_SOFTWARE'] ) ) : null,
-			'php_version'    => phpversion(),
-			'mysql_version'  => $wpdb->db_version(),
-			'wp_version'     => get_bloginfo( 'version' ),
-			'wc_version'     => defined( 'WC_VERSION' ) ? WC_VERSION : null,
-			'locale'         => get_locale(),
-			'plugin_version' => $this->current_version,
-			'is_multisite'   => is_multisite(),
-		);
-
-		$response = wp_remote_post(
-			$this->api_url,
-			array(
-				'headers'     => array( 'Content-Type' => 'application/json; charset=utf-8' ),
-				'method'      => 'POST',
-				'timeout'     => 45,
-				'redirection' => 5,
-				'httpversion' => '1.0',
-				'blocking'    => false,
-				'body'        => wp_json_encode( $data ),
-				'cookies'     => array(),
-			)
-		);
-		wp_send_json_success();
+		$valid_ids = array( 'none', 'setup-difficult', 'not-have-that-feature', 'affecting-performance', 'found-better-plugin', 'fazcookie-connection-issues', 'use-fazcookie-webapp', 'temporary-deactivation', 'other' );
+		if ( ! in_array( $reason_id, $valid_ids, true ) ) {
+			return new WP_Error( 'invalid_reason', __( 'Invalid reason ID.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+		// External feedback endpoint disabled — data stays local.
+		return new WP_REST_Response( array( 'success' => true ), 200 );
 	}
 }

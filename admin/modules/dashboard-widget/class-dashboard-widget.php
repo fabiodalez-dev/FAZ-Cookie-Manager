@@ -99,7 +99,7 @@ class Dashboard_Widget extends Modules {
         }
         wp_add_dashboard_widget(
             'fazcookie_dashboard_widget',
-            __( 'FAZ Cookie Manager', 'cookie-law-info' ),
+            __( 'FAZ Cookie Manager', 'faz-cookie-manager' ),
             array( $this, 'render_fazcookie_dashboard_widget' )
         );
     }
@@ -140,10 +140,10 @@ class Dashboard_Widget extends Modules {
                 />
                 <div class="faz-modal-overlay">
                     <div class="faz-modal-content">
-                        <b><?php esc_html_e( 'Get cookie consent insights in your Dashboard!', 'cookie-law-info' ); ?></b>
-                        <p><?php esc_html_e( 'Track your consent rates and unlock advanced features that keep your site in check.', 'cookie-law-info' ); ?></p>
-                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=cookie-law-info' ) ); ?>" class="button button-primary">
-                            <?php esc_html_e( 'Go to FAZ Cookie Manager Settings', 'cookie-law-info' ); ?>
+                        <b><?php esc_html_e( 'Get cookie consent insights in your Dashboard!', 'faz-cookie-manager' ); ?></b>
+                        <p><?php esc_html_e( 'Track your consent rates and unlock advanced features that keep your site in check.', 'faz-cookie-manager' ); ?></p>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager' ) ); ?>" class="button button-primary">
+                            <?php esc_html_e( 'Go to FAZ Cookie Manager Settings', 'faz-cookie-manager' ); ?>
                         </a>
                     </div>
                 </div>
@@ -238,7 +238,7 @@ class Dashboard_Widget extends Modules {
                         <circle cx="55" cy="30" r="5" fill="#FFFFFF"/>
                         
                     </svg>
-                    <p style="font-size:20px;color:#656178;margin-top:20px;"><?php esc_html_e( 'Unable to load consent trends. Please try again later.', 'cookie-law-info' ); ?></p>
+                    <p style="font-size:20px;color:#656178;margin-top:20px;"><?php esc_html_e( 'Unable to load consent trends. Please try again later.', 'faz-cookie-manager' ); ?></p>
                 </div>
             </div>
             <div class="faz-consent-legend" id="faz-consent-legend" style="display:none;">

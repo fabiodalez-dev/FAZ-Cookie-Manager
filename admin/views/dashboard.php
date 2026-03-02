@@ -78,27 +78,27 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-grid faz-grid-3">
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=cookie-law-info-cookies' ) ); ?>" class="faz-quick-link">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-cookies' ) ); ?>" class="faz-quick-link">
 					<span class="dashicons dashicons-admin-generic"></span>
 					<span class="faz-quick-link-text">Manage Cookies</span>
 				</a>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=cookie-law-info-banner' ) ); ?>" class="faz-quick-link">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-banner' ) ); ?>" class="faz-quick-link">
 					<span class="dashicons dashicons-megaphone"></span>
 					<span class="faz-quick-link-text">Cookie Banner</span>
 				</a>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=cookie-law-info-gcm' ) ); ?>" class="faz-quick-link">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-gcm' ) ); ?>" class="faz-quick-link">
 					<span class="dashicons dashicons-chart-bar"></span>
 					<span class="faz-quick-link-text">Google Consent Mode</span>
 				</a>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=cookie-law-info-consent-logs' ) ); ?>" class="faz-quick-link">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-consent-logs' ) ); ?>" class="faz-quick-link">
 					<span class="dashicons dashicons-list-view"></span>
 					<span class="faz-quick-link-text">Consent Logs</span>
 				</a>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=cookie-law-info-languages' ) ); ?>" class="faz-quick-link">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-languages' ) ); ?>" class="faz-quick-link">
 					<span class="dashicons dashicons-translation"></span>
 					<span class="faz-quick-link-text">Languages</span>
 				</a>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=cookie-law-info-settings' ) ); ?>" class="faz-quick-link">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings' ) ); ?>" class="faz-quick-link">
 					<span class="dashicons dashicons-admin-settings"></span>
 					<span class="faz-quick-link-text">Settings</span>
 				</a>

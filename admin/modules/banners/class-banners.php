@@ -63,7 +63,7 @@ class Banners extends Modules {
 	 */
 	public function register_menus( $menus ) {
 		$menus['customize'] = array(
-			'name'     => __( 'Cookie Banner', 'cookie-law-info' ),
+			'name'     => __( 'Cookie Banner', 'faz-cookie-manager' ),
 			'callback' => array( $this, 'menu_page_template' ),
 			'order'    => 2,
 		);

@@ -469,7 +469,8 @@
                 "url": "#"
             },
             "styles": {
-                "background-color": "#0056A7"
+                "background-color": "#0056A7",
+                "color": "#FFFFFF"
             },
             "elements": {
                 "title": {
@@ -477,7 +478,7 @@
                     "tag": "revisit-consent-title",
                     "status": true,
                     "styles": {
-                        "color": "#0056a7"
+                        "color": "#FFFFFF"
                     }
                 }
             }

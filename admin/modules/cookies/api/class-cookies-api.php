@@ -87,7 +87,7 @@ class Cookies_API extends API_Controller {
 			array(
 				'args'   => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+						'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 						'type'        => 'integer',
 					),
 				),
@@ -157,69 +157,69 @@ class Cookies_API extends API_Controller {
 			'type'       => 'object',
 			'properties' => array(
 				'id'            => array(
-					'description' => __( 'Unique identifier for the resource.', 'cookie-law-info' ),
+					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
 				),
 				'date_created'  => array(
-					'description' => __( 'The date the cookie was created, as GMT.', 'cookie-law-info' ),
+					'description' => __( 'The date the cookie was created, as GMT.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
 				),
 				'date_modified' => array(
-					'description' => __( 'The date the cookie was last modified, as GMT.', 'cookie-law-info' ),
+					'description' => __( 'The date the cookie was last modified, as GMT.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'name'          => array(
-					'description' => __( 'Cookie name.', 'cookie-law-info' ),
+					'description' => __( 'Cookie name.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'category'      => array(
-					'description' => __( 'Cookie category name.', 'cookie-law-info' ),
+					'description' => __( 'Cookie category name.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'slug'          => array(
-					'description' => __( 'Cookie unique name', 'cookie-law-info' ),
+					'description' => __( 'Cookie unique name', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'description'   => array(
-					'description' => __( 'Cookie description.', 'cookie-law-info' ),
+					'description' => __( 'Cookie description.', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'duration'      => array(
-					'description' => __( 'Cookie duration', 'cookie-law-info' ),
+					'description' => __( 'Cookie duration', 'faz-cookie-manager' ),
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'language'      => array(
-					'description' => __( 'Cookie language.', 'cookie-law-info' ),
+					'description' => __( 'Cookie language.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'type'          => array(
-					'description' => __( 'Cookie type.', 'cookie-law-info' ),
+					'description' => __( 'Cookie type.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'domain'        => array(
-					'description' => __( 'Cookie domain.', 'cookie-law-info' ),
+					'description' => __( 'Cookie domain.', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'discovered'    => array(
-					'description' => __( 'If cookies added from the scanner or not.', 'cookie-law-info' ),
+					'description' => __( 'If cookies added from the scanner or not.', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 				'url_pattern'   => array(
-					'description' => __( 'URL patterns for blocking purposes', 'cookie-law-info' ),
+					'description' => __( 'URL patterns for blocking purposes', 'faz-cookie-manager' ),
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),

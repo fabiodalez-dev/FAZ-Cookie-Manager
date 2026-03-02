@@ -3,7 +3,7 @@
         "notice": {
             "elements": {
                 "title": "Valorizamos sua privacidade",
-                "description": "<p>Utilizamos cookies para aprimorar sua experiência de navegação, exibir anúncios ou conteúdo personalizado e analisar nosso tráfego. Ao clicar em “Aceitar todos”, você concorda com nosso uso de cookies.</p>",
+                "description": "<p>Utilizamos cookies para aprimorar sua experiência de navegação, exibir anúncios ou conteúdo personalizado e analisar nosso tráfego. Ao clicar em “Aceitar todos”, você concorda com nosso uso de cookies. Você pode alterar ou retirar seu consentimento a qualquer momento clicando no ícone de preferências.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {
@@ -103,7 +103,7 @@
         "notice": {
             "elements": {
                 "title": "Valorizamos sua privacidade",
-                "description": "<p>Este site ou suas ferramentas de terceiros processam dados pessoais. Você pode optar por não vender suas informações pessoais clicando no link \"Não venda ou compartilhe minhas informações pessoais\".</p>",
+                "description": "<p>Este site ou suas ferramentas de terceiros processam dados pessoais. Você pode optar por não vender suas informações pessoais clicando no link \"Não venda ou compartilhe minhas informações pessoais\". Você pode alterar ou retirar seu consentimento a qualquer momento clicando no ícone de preferências.</p>",
                 "privacyLink": "",
                 "buttons": {
                     "elements": {

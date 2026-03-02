@@ -20,3 +20,7 @@ debug.log
 
 # Composer vendor (install via composer install)
 vendor/
+
+# Static analysis (dev-only)
+phpstan.neon
+phpstan-bootstrap.php

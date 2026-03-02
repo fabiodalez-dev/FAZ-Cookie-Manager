@@ -97,7 +97,7 @@ class Activator {
 	 * This check is done on all requests and runs if the versions do not match.
 	 */
 	public static function check_version() {
-		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'wt_cli_version', '2.1.3' ), CLI_VERSION, '<' ) ) {
+		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'wt_cli_version', '2.1.3' ), FAZ_VERSION, '<' ) ) {
 			self::install();
 		}
 	}
@@ -113,8 +113,8 @@ class Activator {
 		}
 		self::install_all_tables();
 		self::maybe_update_db();
-		update_option( 'wt_cli_version', CLI_VERSION );
-		do_action( 'faz_after_activate', CLI_VERSION );
+		update_option( 'wt_cli_version', FAZ_VERSION );
+		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
 	}
 
@@ -168,7 +168,7 @@ class Activator {
 	 * @return void
 	 */
 	public static function update_db_version( $version = null ) {
-		update_option( 'faz_cookie_consent_db_version', is_null( $version ) ? CLI_VERSION : $version );
+		update_option( 'faz_cookie_consent_db_version', is_null( $version ) ? FAZ_VERSION : $version );
 	}
 
 	/**
