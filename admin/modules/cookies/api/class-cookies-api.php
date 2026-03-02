@@ -84,6 +84,16 @@ class Cookies_API extends API_Controller {
 
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/bulk-delete',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'bulk_delete' ),
+				'permission_callback' => array( $this, 'delete_item_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)',
 			array(
 				'args'   => array(
@@ -270,6 +280,33 @@ class Cookies_API extends API_Controller {
 			'updated' => count( $updated ),
 			'cookies' => $updated,
 		) );
+	}
+
+	/**
+	 * Bulk delete cookies by ID.
+	 *
+	 * @param \WP_REST_Request $request Request with 'ids' array.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function bulk_delete( $request ) {
+		$ids = $request->get_param( 'ids' );
+		if ( ! is_array( $ids ) || empty( $ids ) ) {
+			return new \WP_Error( 'invalid_data', 'No cookie IDs provided.', array( 'status' => 400 ) );
+		}
+		$deleted = 0;
+		foreach ( $ids as $id ) {
+			$id = absint( $id );
+			if ( ! $id ) {
+				continue;
+			}
+			$cookie = new Cookie( $id );
+			if ( $cookie->get_id() ) {
+				$cookie->delete();
+				$deleted++;
+			}
+		}
+		do_action( 'faz_after_update_cookie' );
+		return rest_ensure_response( array( 'deleted' => $deleted ) );
 	}
 
 } // End the class.

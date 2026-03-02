@@ -808,7 +808,7 @@ function _fazSetCategoryPreferenceToggle(element, category) {
     if (category.isNecessary) {
         toggleSwitch && toggleSwitch.remove();
     } else {
-        if (_fazGetType() === 'classic' && _fazStore._bannerConfig.config.categoryPreview.status || (category.cookies && category.cookies.length === 0)) {
+        if (_fazGetType() === 'classic' && _fazStore._bannerConfig.config.categoryPreview.status) {
             toggleSwitch && toggleSwitch.remove();
         }
     }

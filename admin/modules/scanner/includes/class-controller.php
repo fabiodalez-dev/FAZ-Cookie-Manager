@@ -759,7 +759,19 @@ class Controller {
 				continue; // Don't overwrite existing cookies.
 			}
 
-			$cat_slug    = isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'necessary';
+			// Try known cookies database first (handles WP admin cookies, etc.).
+			$known = Cookie_Database::lookup( $cookie_data['name'] );
+			if ( $known ) {
+				$cat_slug = $known['category'];
+				if ( ! empty( $known['description'] ) && empty( $cookie_data['description'] ) ) {
+					$cookie_data['description'] = $known['description'];
+				}
+				if ( ! empty( $known['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
+					$cookie_data['duration'] = $known['duration'];
+				}
+			} else {
+				$cat_slug = isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'necessary';
+			}
 			$category_id = isset( $category_map[ $cat_slug ] ) ? $category_map[ $cat_slug ] : $default_cat_id;
 
 			$cookie = new Cookie();

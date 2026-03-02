@@ -820,6 +820,18 @@
 	to { transform: rotate(360deg); }
 }
 
+/* ── Bulk action bar ── */
+.faz-bulk-bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	background: var(--faz-primary-light);
+	border-radius: var(--faz-radius);
+	margin-bottom: 8px;
+	font-size: 13px;
+}
+
 /* ── Empty state ── */
 .faz-empty {
 	text-align: center;
