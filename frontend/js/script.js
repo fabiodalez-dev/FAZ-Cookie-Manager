@@ -786,9 +786,15 @@ function _fazSetCheckboxes(
             revisit);
         boxElem.checked = checked;
         boxElem.disabled = disabled;
-        boxElem.style.backgroundColor = checked ? activeColor : inactiveColor;
+        if (disabled) {
+            boxElem.style.backgroundColor = '#94a3b8';
+            boxElem.style.opacity = '0.6';
+            boxElem.style.cursor = 'not-allowed';
+        } else {
+            boxElem.style.backgroundColor = checked ? activeColor : inactiveColor;
+        }
         _fazSetCheckBoxAriaLabel(boxElem, checked, formattedLabel);
-        if (revisit) return;
+        if (revisit || disabled) return;
         boxElem.addEventListener("change", ({ currentTarget: elem }) => {
             const isChecked = elem.checked;
             elem.style.backgroundColor = isChecked ? activeColor : inactiveColor;
@@ -814,12 +820,7 @@ function _fazSetCategoryToggle(element, category = {}, revisit = false) {
     }
 }
 function _fazSetCategoryPreferenceToggle(element, category) {
-    let toggleContainer = element.closest('.faz-accordion-item');
-    if (!toggleContainer) return;
-    const toggleSwitch = toggleContainer.querySelector('.faz-switch');
-    if (category.isNecessary) {
-        toggleSwitch && toggleSwitch.remove();
-    }
+    // Necessary toggles are styled gray/disabled centrally in _fazSetCheckboxes
 }
 function _fazSetPreferenceState(category) {
     if (_fazStore._bannerConfig.config.auditTable.status === false) {
@@ -836,6 +837,7 @@ function _fazSetPreferenceState(category) {
 function _fazSetCategoryPreview(element, category) {
     if ((category.cookies && category.cookies.length === 0) && !category.isNecessary)
         element.parentElement.parentElement.remove();
+    // Necessary toggles are styled gray/disabled centrally in _fazSetCheckboxes
 }
 
 function _fazSetCheckBoxAriaLabel(boxElem, isChecked, formattedLabel, isCCPA = false) {
