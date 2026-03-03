@@ -797,44 +797,33 @@
 
 		var disabledColor = '#94a3b8';
 
-		// Find all switch checkboxes in the preview
-		host.querySelectorAll('.faz-switch input[type="checkbox"]').forEach(function (cb) {
-			var isNecessary = cb.id === 'fazSwitchnecessary';
+		function applyPreviewToggleState(cb, isNecessary, onColor, offColor) {
 			cb.checked = true;
 			if (isNecessary) {
 				cb.disabled = true;
 				cb.style.backgroundColor = disabledColor;
 				cb.style.opacity = '0.6';
 				cb.style.cursor = 'not-allowed';
-			} else {
-				cb.style.backgroundColor = activeColor;
-				cb.style.pointerEvents = 'auto';
-				cb.style.cursor = 'pointer';
-				cb.addEventListener('change', function () {
-					cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
-				});
+				return;
 			}
+			cb.style.backgroundColor = onColor;
+			cb.style.pointerEvents = 'auto';
+			cb.style.cursor = 'pointer';
+			cb.addEventListener('change', function () {
+				cb.style.backgroundColor = cb.checked ? onColor : offColor;
+			});
+		}
+
+		// Preference center toggles
+		host.querySelectorAll('.faz-switch input[type="checkbox"]').forEach(function (cb) {
+			applyPreviewToggleState(cb, cb.id === 'fazSwitchnecessary', activeColor, inactiveColor);
 		});
 
-		// Category direct preview checkboxes — use category preview colours from form
+		// Inline category preview toggles
 		var catActiveColor = getColor('faz-b-catprev-toggle-active') || activeColor;
 		var catInactiveColor = getColor('faz-b-catprev-toggle-inactive') || inactiveColor;
 		host.querySelectorAll('input[id^="fazCategoryDirect"]').forEach(function (cb) {
-			var isNecessary = cb.id === 'fazCategoryDirectnecessary';
-			cb.checked = true;
-			if (isNecessary) {
-				cb.disabled = true;
-				cb.style.backgroundColor = disabledColor;
-				cb.style.opacity = '0.6';
-				cb.style.cursor = 'not-allowed';
-			} else {
-				cb.style.backgroundColor = catActiveColor;
-				cb.style.pointerEvents = 'auto';
-				cb.style.cursor = 'pointer';
-				cb.addEventListener('change', function () {
-					cb.style.backgroundColor = cb.checked ? catActiveColor : catInactiveColor;
-				});
-			}
+			applyPreviewToggleState(cb, cb.id === 'fazCategoryDirectnecessary', catActiveColor, catInactiveColor);
 		});
 	}
 

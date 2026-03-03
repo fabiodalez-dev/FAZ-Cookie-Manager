@@ -804,9 +804,7 @@ function _fazSetCheckboxes(
 }
 function _fazSetCategoryToggle(element, category = {}, revisit = false) {
     if (revisit) return;
-    if (element.parentElement.getAttribute('data-faz-tag') === 'detail-category-toggle') {
-        _fazSetCategoryPreferenceToggle(element, category);
-    } else if (element.parentElement.getAttribute('data-faz-tag') === 'detail-category-preview-toggle') {
+    if (element.parentElement.getAttribute('data-faz-tag') === 'detail-category-preview-toggle') {
         _fazSetCategoryPreview(element, category);
     }
     if (!category.isNecessary) {
@@ -818,9 +816,6 @@ function _fazSetCategoryToggle(element, category = {}, revisit = false) {
             necessaryText && necessaryText.remove();
         }
     }
-}
-function _fazSetCategoryPreferenceToggle(element, category) {
-    // Necessary toggles are styled gray/disabled centrally in _fazSetCheckboxes
 }
 function _fazSetPreferenceState(category) {
     if (_fazStore._bannerConfig.config.auditTable.status === false) {
