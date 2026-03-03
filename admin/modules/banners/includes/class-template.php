@@ -338,6 +338,12 @@ class Template {
 
 			$finder     = new DOMXPath( $dom );
 
+			// Add id="faz-consent" for CSS specificity isolation against page builders.
+			$container = $finder->query( '//div[contains(@class,"faz-consent-container")]' )->item( 0 );
+			if ( $container instanceof \DOMElement ) {
+				$container->setAttribute( 'id', 'faz-consent' );
+			}
+
 			// Banner + pushdown: strip inline category preview (only classic shows it).
 			if ( $this->banner_pushdown ) {
 				$preview_nodes = $finder->query( '//*[contains(@class, "faz-category-direct-preview-wrapper")]' );

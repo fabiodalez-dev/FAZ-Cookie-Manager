@@ -184,6 +184,31 @@ class Frontend {
 				return;
 			}
 			$css    = isset( $this->template['styles'] ) ? $this->template['styles'] : '';
+
+			// CSS specificity isolation: #faz-consent (100) beats any class-based
+			// page-builder selector (Elementor, Divi, Beaver Builder).  Resets text
+			// properties that builders commonly inject globally; font-size, color,
+			// and font-weight are left to the template CSS / inline styles.
+			$css_reset = '#faz-consent,'
+				. '#faz-consent p,'
+				. '#faz-consent a,'
+				. '#faz-consent span,'
+				. '#faz-consent li,'
+				. '#faz-consent h1,#faz-consent h2,#faz-consent h3,#faz-consent h4,'
+				. '#faz-consent button,'
+				. '#faz-consent label,'
+				. '#faz-consent input{'
+				. 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;'
+				. 'letter-spacing:normal;'
+				. 'text-transform:none;'
+				. 'font-style:normal;'
+				. 'text-decoration:none;'
+				. 'word-spacing:normal;'
+				. 'line-height:1.5;'
+				. 'box-sizing:border-box;'
+				. '}';
+			$css = $css_reset . $css;
+
 			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
 			wp_localize_script( $this->plugin_name, '_fazConfig', $this->get_store_data() );
 			wp_localize_script( $this->plugin_name, '_fazStyles', array( 'css' => $css ) );
