@@ -110,6 +110,23 @@
 		if (posEl.options[posEl.selectedIndex] && posEl.options[posEl.selectedIndex].hidden) {
 			posEl.value = (type === 'box') ? 'bottom-right' : 'bottom';
 		}
+
+		// Show category preview colours only for classic type
+		var catPrevCard = document.getElementById('faz-catprev-colors-card');
+		if (catPrevCard) {
+			catPrevCard.style.display = (type === 'classic') ? '' : 'none';
+		}
+
+		// Classic forces pushdown preference center; other types allow free choice.
+		var prefEl = document.getElementById('faz-b-pref-type');
+		if (prefEl) {
+			if (type === 'classic') {
+				prefEl.value = 'pushdown';
+				prefEl.disabled = true;
+			} else {
+				prefEl.disabled = false;
+			}
+		}
 	}
 
 	function loadBanner() {
@@ -137,8 +154,12 @@
 		var b = props.behaviours || {};
 		var config = props.config || {};
 
-		// General tab
-		setVal('faz-b-type', s.type || 'box');
+		// General tab — type is stored directly; legacy data may have banner+pushdown for classic
+		var displayType = s.type || 'box';
+		if (displayType === 'banner' && s.preferenceCenterType === 'pushdown') {
+			displayType = 'classic'; // backward compat: old data stored classic as banner+pushdown
+		}
+		setVal('faz-b-type', displayType);
 		setVal('faz-b-position', s.position || 'bottom-right');
 		setVal('faz-b-theme', s.theme || 'light');
 		setVal('faz-b-pref-type', s.preferenceCenterType || 'popup');
@@ -171,6 +192,21 @@
 		populateButtonColors('accept', buttons.accept);
 		populateButtonColors('reject', buttons.reject);
 		populateButtonColors('settings', buttons.settings);
+
+		// Category preview colours
+		var catPreview = (config.categoryPreview && config.categoryPreview.elements) || {};
+		var catTitle = (catPreview.title && catPreview.title.styles) || {};
+		setColor('faz-b-catprev-label', catTitle.color || '#212121');
+		var catToggle = catPreview.toggle || {};
+		var catToggleActive = (catToggle.states && catToggle.states.active && catToggle.states.active.styles) || {};
+		var catToggleInactive = (catToggle.states && catToggle.states.inactive && catToggle.states.inactive.styles) || {};
+		setColor('faz-b-catprev-toggle-active', catToggleActive['background-color'] || '#1863DC');
+		setColor('faz-b-catprev-toggle-inactive', catToggleInactive['background-color'] || '#D0D5D2');
+		var catSave = (catPreview.buttons && catPreview.buttons.elements && catPreview.buttons.elements.save && catPreview.buttons.elements.save.styles) || {};
+		setColor('faz-b-catprev-save-text', catSave.color || '#1863DC');
+		var catSaveBg = catSave['background-color'] || 'transparent';
+		setColor('faz-b-catprev-save-bg', catSaveBg === 'transparent' ? '#FFFFFF' : catSaveBg);
+		setColor('faz-b-catprev-save-border', catSave['border-color'] || '#1863DC');
 
 		// Button toggles
 		setChecked('faz-b-accept-toggle', getStatus(buttons.accept));
@@ -349,6 +385,21 @@
 		populateButtonColors('reject', btns.reject);
 		populateButtonColors('settings', btns.settings);
 
+		// Category preview colours from preset
+		var catPrev = (preset.categoryPreview && preset.categoryPreview.elements) || {};
+		var cpTitle = (catPrev.title && catPrev.title.styles) || {};
+		setColor('faz-b-catprev-label', cpTitle.color || '#212121');
+		var cpToggle = catPrev.toggle || {};
+		var cpActive = (cpToggle.states && cpToggle.states.active && cpToggle.states.active.styles) || {};
+		var cpInactive = (cpToggle.states && cpToggle.states.inactive && cpToggle.states.inactive.styles) || {};
+		setColor('faz-b-catprev-toggle-active', cpActive['background-color'] || '#1863DC');
+		setColor('faz-b-catprev-toggle-inactive', cpInactive['background-color'] || '#D0D5D2');
+		var cpSave = (catPrev.buttons && catPrev.buttons.elements && catPrev.buttons.elements.save && catPrev.buttons.elements.save.styles) || {};
+		setColor('faz-b-catprev-save-text', cpSave.color || '#1863DC');
+		var cpSaveBg = cpSave['background-color'] || 'transparent';
+		setColor('faz-b-catprev-save-bg', cpSaveBg === 'transparent' ? '#FFFFFF' : cpSaveBg);
+		setColor('faz-b-catprev-save-border', cpSave['border-color'] || '#1863DC');
+
 		// Re-init color pickers (update swatch display)
 		FAZ.initColorPickers();
 	}
@@ -373,13 +424,26 @@
 		if (!bannerData) return;
 		storeCurrentLangContents();
 
-		var props = bannerData.properties || {};
+		if (!bannerData.properties || typeof bannerData.properties !== 'object') bannerData.properties = {};
+		var props = bannerData.properties;
+		if (!props.settings || typeof props.settings !== 'object') props.settings = {};
+		if (!props.config || typeof props.config !== 'object') props.config = {};
+		if (!props.config.categoryPreview || typeof props.config.categoryPreview !== 'object') props.config.categoryPreview = {};
 
-		// Settings
-		props.settings.type = getVal('faz-b-type');
+		// Settings — save type directly; classic is its own type (not banner+pushdown).
+		var formType = getVal('faz-b-type');
+		props.settings.type = formType;
+		if (formType === 'classic') {
+			// Classic always uses pushdown preference center + inline toggles
+			props.settings.preferenceCenterType = 'pushdown';
+			props.config.categoryPreview.status = true;
+		} else {
+			props.settings.preferenceCenterType = getVal('faz-b-pref-type');
+			// Non-classic: disable inline category preview
+			props.config.categoryPreview.status = false;
+		}
 		props.settings.position = getVal('faz-b-position');
 		props.settings.theme = getVal('faz-b-theme');
-		props.settings.preferenceCenterType = getVal('faz-b-pref-type');
 		if (!props.settings.consentExpiry) props.settings.consentExpiry = {};
 		props.settings.consentExpiry.status = true;
 		props.settings.consentExpiry.value = getVal('faz-b-expiry');
@@ -439,6 +503,18 @@
 		if (!props.config.notice.elements.brandLogo.meta) props.config.notice.elements.brandLogo.meta = {};
 		var logoUrl = getVal('faz-b-brandlogo-url');
 		props.config.notice.elements.brandLogo.meta.url = logoUrl || '#';
+
+		// Category preview colours
+		ensureObj(props, 'config.categoryPreview.elements.title.styles');
+		props.config.categoryPreview.elements.title.styles.color = getColor('faz-b-catprev-label');
+		ensureObj(props, 'config.categoryPreview.elements.toggle.states.active.styles');
+		props.config.categoryPreview.elements.toggle.states.active.styles['background-color'] = getColor('faz-b-catprev-toggle-active');
+		ensureObj(props, 'config.categoryPreview.elements.toggle.states.inactive.styles');
+		props.config.categoryPreview.elements.toggle.states.inactive.styles['background-color'] = getColor('faz-b-catprev-toggle-inactive');
+		ensureObj(props, 'config.categoryPreview.elements.buttons.elements.save.styles');
+		props.config.categoryPreview.elements.buttons.elements.save.styles.color = getColor('faz-b-catprev-save-text');
+		props.config.categoryPreview.elements.buttons.elements.save.styles['background-color'] = getColor('faz-b-catprev-save-bg');
+		props.config.categoryPreview.elements.buttons.elements.save.styles['border-color'] = getColor('faz-b-catprev-save-border');
 
 		// Audit table
 		if (!props.config.auditTable) props.config.auditTable = {};
@@ -578,8 +654,11 @@
 				'#faz-b-preview-host{display:flex;justify-content:' + justifyVal + ';' +
 				'align-items:flex-end;padding:16px;min-height:120px;}';
 		} else {
-			// Full-width types (classic, banner): stretch to fill.
+			// Full-width types (classic, banner): use flexbox to show top/bottom position.
+			var vAlign = (positionForClass === 'top') ? 'flex-start' : 'flex-end';
 			overrideCSS +=
+				'#faz-b-preview-host{display:flex;flex-direction:column;' +
+				'justify-content:' + vAlign + ';min-height:140px;}' +
 				'#faz-b-preview-host .faz-consent-container{width:100%!important;}';
 		}
 
@@ -699,21 +778,27 @@
 	}
 
 	function initPreviewToggles(host) {
-		// Get toggle colors from banner data
+		// Get toggle colors from banner data (preference center toggles)
 		var activeColor = '#2563eb';
 		var inactiveColor = '#cbd5e1';
 		try {
-			var toggle = bannerData.settings.config.preferenceCenter.toggle;
-			activeColor = toggle.states.active.styles['background-color'] || activeColor;
-			inactiveColor = toggle.states.inactive.styles['background-color'] || inactiveColor;
+			var toggle =
+				bannerData.properties &&
+				bannerData.properties.config &&
+				bannerData.properties.config.preferenceCenter &&
+				bannerData.properties.config.preferenceCenter.toggle;
+			if (toggle && toggle.states) {
+				var active = toggle.states.active && toggle.states.active.styles;
+				var inactive = toggle.states.inactive && toggle.states.inactive.styles;
+				activeColor = (active && active['background-color']) || activeColor;
+				inactiveColor = (inactive && inactive['background-color']) || inactiveColor;
+			}
 		} catch (_unused) { /* fallback to defaults */ }
 
 		// Find all switch checkboxes in the preview
 		host.querySelectorAll('.faz-switch input[type="checkbox"]').forEach(function (cb) {
-			// Start in "on" state for preview (non-necessary categories default on)
 			cb.checked = true;
 			cb.style.backgroundColor = activeColor;
-			// Allow interaction
 			cb.style.pointerEvents = 'auto';
 			cb.style.cursor = 'pointer';
 			cb.addEventListener('change', function () {
@@ -721,14 +806,16 @@
 			});
 		});
 
-		// Also handle the "category direct" preview checkboxes (pushdown style)
+		// Category direct preview checkboxes — use category preview colours from form
+		var catActiveColor = getColor('faz-b-catprev-toggle-active') || activeColor;
+		var catInactiveColor = getColor('faz-b-catprev-toggle-inactive') || inactiveColor;
 		host.querySelectorAll('input[id^="fazCategoryDirect"]').forEach(function (cb) {
 			cb.checked = true;
-			cb.style.backgroundColor = activeColor;
+			cb.style.backgroundColor = catActiveColor;
 			cb.style.pointerEvents = 'auto';
 			cb.style.cursor = 'pointer';
 			cb.addEventListener('change', function () {
-				cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
+				cb.style.backgroundColor = cb.checked ? catActiveColor : catInactiveColor;
 			});
 		});
 	}

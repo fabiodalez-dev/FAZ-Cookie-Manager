@@ -278,6 +278,22 @@ class Cookie_Definitions {
 				continue;
 			}
 
+			// Check built-in Cookie_Database first (curated WP cookies, etc.).
+			$local = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup( $name );
+			if ( $local ) {
+				$results[] = array(
+					'name'        => $name,
+					'category'    => $local['category'],
+					'description' => isset( $local['description'] ) ? $local['description'] : '',
+					'duration'    => isset( $local['duration'] ) ? $local['duration'] : '',
+					'domain'      => '',
+					'vendor'      => isset( $local['vendor'] ) ? $local['vendor'] : '',
+					'found'       => true,
+				);
+				continue;
+			}
+
+			// Then check Open Cookie Database.
 			$def = $this->lookup( $name );
 			if ( $def ) {
 				$results[] = array(

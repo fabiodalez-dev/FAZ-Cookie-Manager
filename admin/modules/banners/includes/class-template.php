@@ -56,6 +56,13 @@ class Template {
 	protected $ptype = 'popup';
 
 	/**
+	 * Whether this is a banner+pushdown combo (uses classic template without inline toggles).
+	 *
+	 * @var bool
+	 */
+	protected $banner_pushdown = false;
+
+	/**
 	 * Theme presets to be applied on the template
 	 *
 	 * @var array
@@ -163,10 +170,21 @@ class Template {
 		$settings    = isset( $this->properties['settings'] ) ? $this->properties['settings'] : array();
 		$this->id    = isset( $settings['versionID'] ) ? $settings['versionID'] : 'default';
 		$this->type  = isset( $settings['type'] ) ? $settings['type'] : 'box';
-		if ($this->type === "classic") {
-			$this->ptype = "pushdown";
-		} else {
-			$this->ptype = isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup';
+		$this->ptype = isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup';
+		// Banner + pushdown uses the classic template (which has preference-wrapper for
+		// pushdown expansion) but without inline category toggles.
+		$this->banner_pushdown = ( $this->type === 'banner' && $this->ptype === 'pushdown' );
+		if ( $this->banner_pushdown ) {
+			$this->type = 'classic';
+			if ( isset( $this->properties['config']['categoryPreview'] ) ) {
+				$this->properties['config']['categoryPreview']['status'] = false;
+			}
+		} elseif ( $this->type === 'classic' ) {
+			$this->ptype = 'pushdown';
+			// Classic type requires inline category preview toggles
+			if ( isset( $this->properties['config']['categoryPreview'] ) ) {
+				$this->properties['config']['categoryPreview']['status'] = true;
+			}
 		}
 		$this->theme = isset( $settings['theme'] ) ? $settings['theme'] : 'light';
 
@@ -319,6 +337,15 @@ class Template {
 			$used_errors || libxml_use_internal_errors( false );
 
 			$finder     = new DOMXPath( $dom );
+
+			// Banner + pushdown: strip inline category preview (only classic shows it).
+			if ( $this->banner_pushdown ) {
+				$preview_nodes = $finder->query( '//*[contains(@class, "faz-category-direct-preview-wrapper")]' );
+				foreach ( $preview_nodes as $node ) {
+					$node->parentNode->removeChild( $node ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
+				}
+			}
+
 			$elements   = $finder->query( '//*[@data-faz-tag]' );
 			$properties = $this->properties;
 			$configs    = isset( $properties['config'] ) ? $properties['config'] : array();

@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Static database of known cookies and their metadata.
  *
  * @class       Cookie_Database
- * @version     3.0.0
+ * @version     3.1.0
  * @package     FazCookie
  */
 class Cookie_Database {
@@ -26,7 +26,7 @@ class Cookie_Database {
 	 * @var array
 	 */
 	private static $known_cookies = array(
-		// WordPress.
+		// WordPress — frontend-visible (necessary, shown in banner).
 		'wpEmojiSettingsSupports' => array(
 			'category'    => 'necessary',
 			'duration'    => 'session',
@@ -35,18 +35,48 @@ class Cookie_Database {
 		'wordpress_test_cookie'   => array(
 			'category'    => 'necessary',
 			'duration'    => 'session',
-			'description' => 'WordPress test cookie to check if cookies are enabled in the browser.',
-		),
-		'wp-settings-'            => array(
-			'category'    => 'functional',
-			'duration'    => '1 year',
-			'description' => 'WordPress cookie used to customize the admin interface.',
-			'match'       => 'prefix',
+			'description' => 'WordPress test cookie to check if cookies are enabled.',
 		),
 		'wordpress_logged_in_'    => array(
 			'category'    => 'necessary',
 			'duration'    => 'session',
-			'description' => 'WordPress cookie indicating user login status.',
+			'description' => 'Indicates logged-in status and user identity.',
+			'match'       => 'prefix',
+		),
+		// WordPress — admin-only (hidden internal category).
+		'wp-settings-'            => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '1 year',
+			'description' => 'Customizes the admin interface for each user.',
+			'match'       => 'prefix',
+		),
+		'wordpress_'              => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => 'session',
+			'description' => 'WordPress authentication cookie for the admin area.',
+			'match'       => 'prefix',
+		),
+		'wp_lang'                 => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => 'session',
+			'description' => 'Stores the selected language during login.',
+		),
+		'comment_author_email_'   => array(
+			'category'    => 'functional',
+			'duration'    => '1 year',
+			'description' => 'Stores the commenter email for convenience.',
+			'match'       => 'prefix',
+		),
+		'comment_author_url_'     => array(
+			'category'    => 'functional',
+			'duration'    => '1 year',
+			'description' => 'Stores the commenter website URL for convenience.',
+			'match'       => 'prefix',
+		),
+		'comment_author_'         => array(
+			'category'    => 'functional',
+			'duration'    => '1 year',
+			'description' => 'Stores the commenter name for convenience.',
 			'match'       => 'prefix',
 		),
 		// Google Analytics.
@@ -181,7 +211,7 @@ class Cookie_Database {
 			'description' => 'Hotjar analytics cookie.',
 			'match'       => 'prefix',
 		),
-		// WooCommerce.
+		// WooCommerce — frontend-visible (necessary, shown in banner).
 		'woocommerce_cart_hash'   => array(
 			'category'    => 'necessary',
 			'duration'    => 'session',

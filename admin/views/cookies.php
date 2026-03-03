@@ -44,10 +44,15 @@ defined( 'ABSPATH' ) || exit;
 					</div>
 				</div>
 				<div class="faz-card-body">
+					<div id="faz-bulk-bar" style="display:none" class="faz-bulk-bar">
+						<span class="faz-bulk-count">0 selected</span>
+						<button type="button" class="faz-btn faz-btn-sm" id="faz-bulk-delete-btn" style="color:var(--faz-danger)">Delete Selected</button>
+					</div>
 					<div class="faz-table-wrap">
 						<table class="faz-table" id="faz-cookies-table">
 							<thead>
 								<tr>
+									<th style="width:40px"><input type="checkbox" id="faz-select-all-cookies" aria-label="<?php esc_attr_e( 'Select all cookies', 'faz-cookie-manager' ); ?>"></th>
 									<th>Name</th>
 									<th>Domain</th>
 									<th>Duration</th>
@@ -56,7 +61,7 @@ defined( 'ABSPATH' ) || exit;
 								</tr>
 							</thead>
 							<tbody id="faz-cookies-tbody">
-								<tr><td colspan="5" class="faz-empty"><p>Loading...</p></td></tr>
+								<tr><td colspan="6" class="faz-empty"><p>Loading...</p></td></tr>
 							</tbody>
 						</table>
 					</div>

@@ -60,6 +60,31 @@
 			acDropdown.classList.remove('open');
 		});
 
+		// Select-all checkbox.
+		document.getElementById('faz-select-all-cookies').addEventListener('change', function () {
+			var checked = this.checked;
+			document.querySelectorAll('.faz-cookie-check').forEach(function (cb) { cb.checked = checked; });
+			updateBulkBar();
+		});
+
+		// Bulk delete button.
+		document.getElementById('faz-bulk-delete-btn').addEventListener('click', function () {
+			var ids = [];
+			document.querySelectorAll('.faz-cookie-check:checked').forEach(function (cb) { ids.push(parseInt(cb.value, 10)); });
+			if (!ids.length) return;
+			FAZ.confirm('Delete ' + ids.length + ' selected cookie(s)?').then(function (ok) {
+				if (!ok) return;
+				FAZ.post('cookies/bulk-delete', { ids: ids }).then(function (res) {
+					var deletedCount = (res && typeof res.deleted === 'number') ? res.deleted : ids.length;
+					FAZ.notify(deletedCount + ' cookies deleted');
+					loadCookies();
+					loadCategories();
+				}).catch(function () {
+					FAZ.notify('Bulk delete failed', 'error');
+				});
+			});
+		});
+
 		// Cookie Definitions: load status + wire Update button
 		loadDefinitionsStatus();
 		var updateDefsBtn = document.getElementById('faz-update-defs-btn');
@@ -154,10 +179,15 @@
 		var tbody = document.getElementById('faz-cookies-tbody');
 		tbody.textContent = '';
 
+		// Reset select-all and bulk bar on re-render.
+		var selectAll = document.getElementById('faz-select-all-cookies');
+		if (selectAll) selectAll.checked = false;
+		updateBulkBar();
+
 		if (!cookies.length) {
 			var tr = document.createElement('tr');
 			var td = document.createElement('td');
-			td.colSpan = 5;
+			td.colSpan = 6;
 			td.className = 'faz-empty';
 			var p = document.createElement('p');
 			p.textContent = 'No cookies found.';
@@ -169,6 +199,16 @@
 
 		cookies.forEach(function (cookie) {
 			var tr = document.createElement('tr');
+
+			var tdCheck = document.createElement('td');
+			var cb = document.createElement('input');
+			cb.type = 'checkbox';
+			cb.className = 'faz-cookie-check';
+			cb.value = cookie.id || cookie.cookie_id;
+			cb.setAttribute('aria-label', 'Select cookie ' + (cookie.name || ''));
+			cb.addEventListener('change', updateBulkBar);
+			tdCheck.appendChild(cb);
+			tr.appendChild(tdCheck);
 
 			var tdName = document.createElement('td');
 			var strong = document.createElement('strong');
@@ -212,6 +252,23 @@
 			tr.appendChild(tdActions);
 			tbody.appendChild(tr);
 		});
+	}
+
+	function updateBulkBar() {
+		var checked = document.querySelectorAll('.faz-cookie-check:checked');
+		var total = document.querySelectorAll('.faz-cookie-check').length;
+		var bar = document.getElementById('faz-bulk-bar');
+		var selectAll = document.getElementById('faz-select-all-cookies');
+		if (selectAll) {
+			selectAll.checked = total > 0 && checked.length === total;
+			selectAll.indeterminate = checked.length > 0 && checked.length < total;
+		}
+		if (checked.length > 0) {
+			bar.style.display = 'flex';
+			bar.querySelector('.faz-bulk-count').textContent = checked.length + ' selected';
+		} else {
+			bar.style.display = 'none';
+		}
 	}
 
 	function openCookieModal(cookie) {

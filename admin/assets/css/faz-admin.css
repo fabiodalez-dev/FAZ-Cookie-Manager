@@ -182,6 +182,21 @@
 .faz-card-body {
 	/* no default padding — card already has padding */
 }
+#faz-banner .faz-card-body {
+	display: flex;
+	gap: 12px 24px;
+}
+#faz-banner .faz-card-body > .faz-form-group {
+	flex: 1 1 0;
+}
+#faz-banner .faz-card-body > .faz-grid {
+	width: 100%;
+}
+@media (max-width: 600px) {
+	#faz-banner .faz-card-body {
+		flex-direction: column;
+	}
+}
 .faz-card-footer {
 	margin-top: 16px;
 	padding-top: 12px;
@@ -818,6 +833,18 @@
 }
 @keyframes fazSpin {
 	to { transform: rotate(360deg); }
+}
+
+/* ── Bulk action bar ── */
+.faz-bulk-bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	background: var(--faz-primary-light);
+	border-radius: var(--faz-radius);
+	margin-bottom: 8px;
+	font-size: 13px;
 }
 
 /* ── Empty state ── */

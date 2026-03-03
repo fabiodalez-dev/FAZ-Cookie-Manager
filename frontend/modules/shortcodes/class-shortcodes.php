@@ -355,10 +355,14 @@ class Shortcodes {
 
 		foreach ( $categories as $category ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category );
-			if ( false === $category->get_visibility() && false === $this->preview ) {
+			if ( false === $category->get_visibility() ) {
 				continue;
 			}
-			$audit_table = $this->faz_audit_table( $category->get_cookies() );
+			$cookies = $category->get_cookies();
+			if ( empty( $cookies ) ) {
+				continue;
+			}
+			$audit_table = $this->faz_audit_table( $cookies );
 			$description = $category->get_description( $this->language );
 			$name        = $category->get_name( $this->language );
 
@@ -458,10 +462,13 @@ class Shortcodes {
 		$container      = isset( $shortcode_data['content']['container'] ) ? $shortcode_data['content']['container'] : '';
 		foreach ( $categories as $category ) {
 			$object = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category );
-			$name   = $object->get_name( $this->language );
-			if ( false === $object->get_visibility() && false === $this->preview ) {
+			if ( false === $object->get_visibility() ) {
 				continue;
 			}
+			if ( empty( $object->get_cookies() ) ) {
+				continue;
+			}
+			$name = $object->get_name( $this->language );
 			$html  .= str_replace(
 				array(
 					'[faz_preview_{{category_slug}}_title]',
@@ -648,6 +655,9 @@ class Shortcodes {
 		foreach ( $categories as $category ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category );
 			if ( false === $category->get_visibility() ) {
+				continue;
+			}
+			if ( empty( $category->get_cookies() ) ) {
 				continue;
 			}
 			$audit_table = $this->faz_audit_table_by_category( $category );
