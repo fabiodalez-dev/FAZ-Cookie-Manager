@@ -424,7 +424,11 @@
 		if (!bannerData) return;
 		storeCurrentLangContents();
 
-		var props = bannerData.properties || {};
+		if (!bannerData.properties || typeof bannerData.properties !== 'object') bannerData.properties = {};
+		var props = bannerData.properties;
+		if (!props.settings || typeof props.settings !== 'object') props.settings = {};
+		if (!props.config || typeof props.config !== 'object') props.config = {};
+		if (!props.config.categoryPreview || typeof props.config.categoryPreview !== 'object') props.config.categoryPreview = {};
 
 		// Settings — save type directly; classic is its own type (not banner+pushdown).
 		var formType = getVal('faz-b-type');
@@ -432,15 +436,11 @@
 		if (formType === 'classic') {
 			// Classic always uses pushdown preference center + inline toggles
 			props.settings.preferenceCenterType = 'pushdown';
-			if (props.config && props.config.categoryPreview) {
-				props.config.categoryPreview.status = true;
-			}
+			props.config.categoryPreview.status = true;
 		} else {
 			props.settings.preferenceCenterType = getVal('faz-b-pref-type');
 			// Non-classic: disable inline category preview
-			if (props.config && props.config.categoryPreview) {
-				props.config.categoryPreview.status = false;
-			}
+			props.config.categoryPreview.status = false;
 		}
 		props.settings.position = getVal('faz-b-position');
 		props.settings.theme = getVal('faz-b-theme');
@@ -782,9 +782,17 @@
 		var activeColor = '#2563eb';
 		var inactiveColor = '#cbd5e1';
 		try {
-			var toggle = bannerData.settings.config.preferenceCenter.toggle;
-			activeColor = toggle.states.active.styles['background-color'] || activeColor;
-			inactiveColor = toggle.states.inactive.styles['background-color'] || inactiveColor;
+			var toggle =
+				bannerData.properties &&
+				bannerData.properties.config &&
+				bannerData.properties.config.preferenceCenter &&
+				bannerData.properties.config.preferenceCenter.toggle;
+			if (toggle && toggle.states) {
+				var active = toggle.states.active && toggle.states.active.styles;
+				var inactive = toggle.states.inactive && toggle.states.inactive.styles;
+				activeColor = (active && active['background-color']) || activeColor;
+				inactiveColor = (inactive && inactive['background-color']) || inactiveColor;
+			}
 		} catch (_unused) { /* fallback to defaults */ }
 
 		// Find all switch checkboxes in the preview

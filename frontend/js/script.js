@@ -772,14 +772,14 @@ function _fazSetCheckboxes(
     revisit = false
 ) {
     const prefToggle = _fazStore._bannerConfig.config.preferenceCenter.toggle;
-    const previewToggle = _fazStore._bannerConfig.config.categoryPreview.toggle;
+    const previewToggle = _fazStore._bannerConfig.config.categoryPreview?.toggle;
 
     [`fazCategoryDirect`, `fazSwitch`].map((key) => {
         const boxElem = document.getElementById(`${key}${category.slug}`);
         if (!boxElem) return;
-        const toggle = key === 'fazCategoryDirect' ? previewToggle : prefToggle;
-        const activeColor = toggle.states.active.styles['background-color'];
-        const inactiveColor = toggle.states.inactive.styles['background-color'];
+        const toggle = key === 'fazCategoryDirect' ? (previewToggle || prefToggle) : prefToggle;
+        const activeColor = toggle?.states?.active?.styles?.['background-color'] || '#1863dc';
+        const inactiveColor = toggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
         _fazSetCategoryToggle(
             boxElem,
             category,
