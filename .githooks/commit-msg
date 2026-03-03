@@ -1,0 +1,12 @@
+#!/bin/sh
+# Block commits that contain Co-Authored-By lines mentioning Claude/AI
+if grep -qi 'Co-Authored-By:.*[Cc]laude\|Co-Authored-By:.*anthropic\|Co-Authored-By:.*noreply@anthropic' "$1"; then
+    echo ""
+    echo "ERROR: Commit blocked — Co-Authored-By with Claude/Anthropic detected."
+    echo "Remove the Co-Authored-By line and try again."
+    echo ""
+    # Auto-remove the offending line and let the user know
+    sed -i '' '/Co-Authored-By:.*[Cc]laude/d;/Co-Authored-By:.*anthropic/d' "$1"
+    echo "The line has been auto-removed. Run 'git commit' again."
+    exit 1
+fi
