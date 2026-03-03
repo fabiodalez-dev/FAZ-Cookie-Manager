@@ -307,8 +307,9 @@ function _fazAddPositionClass() {
     if (bannerType === 'popup') {
         position = 'center';
     }
-    // Pushdown pref-center forces classic layout only for full-width banner
-    if (bannerType === 'banner' && _fazGetPtype() === "pushdown") {
+    // Banner + pushdown uses classic template (for pushdown expansion support).
+    // The CSS position classes are .faz-classic-*, so match the class name.
+    if (bannerType === 'banner' && _fazGetPtype() === 'pushdown') {
         bannerType = 'classic';
     }
     // Non-box types use simplified top/bottom positioning
@@ -525,11 +526,7 @@ function _fazGetLaw() {
     return _fazStore._bannerConfig.settings.applicableLaw;
 }
 function _fazGetType() {
-    const type = _fazStore._bannerConfig.settings.type;
-    if (type === 'banner' && _fazStore._bannerConfig.settings.preferenceCenterType === 'pushdown') {
-        return 'classic';
-    }
-    return type;
+    return _fazStore._bannerConfig.settings.type;
 }
 function _fazGetPtype() {
     if (_fazGetType() === 'classic') {
@@ -563,7 +560,7 @@ function _fazToggleOverLay() {
     overlay && overlay.classList.toggle('faz-hide');
 }
 function _fazGetPreferenceCenter() {
-    if (_fazGetType() === 'classic') {
+    if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') {
         return _fazGetBanner();
     }
     let element = _fazGetLaw() === 'ccpa' ? _fazGetElementByTag("optout-popup") : _fazGetElementByTag("detail");
@@ -575,8 +572,9 @@ function _fazHidePreferenceCenter() {
 
     // ARIA attributes remain always present - only aria-expanded on settings button changes
     // The modal relationship is permanent, only visibility changes
+    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
 
-    if (_fazGetType() !== 'classic') {
+    if (!isPushdown) {
         _fazHideOverLay();
         if (!ref._fazGetFromStore("action")) _fazShowBanner();
     } else {
@@ -600,8 +598,9 @@ function _fazShowPreferenceCenter() {
             preferenceCenter.setAttribute('aria-label', ariaLabel);
         }
     }
+    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
 
-    if (_fazGetType() !== 'classic') {
+    if (!isPushdown) {
         _fazShowOverLay();
         _fazHideBanner();
     } else {
@@ -613,8 +612,8 @@ function _fazTogglePreferenceCenter() {
     if (!element) return;
     const isOpen = element.classList.contains(_fazGetPreferenceClass());
     element.classList.toggle(_fazGetPreferenceClass());
-    if (_fazGetType() === 'classic') {
-        if (_fazGetPtype() !== 'pushdown') _fazToggleOverLay();
+    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
+    if (isPushdown) {
         const preferenceCenter = element.querySelector('.faz-preference-center');
         if (preferenceCenter) {
             preferenceCenter.setAttribute('role', 'dialog');
@@ -657,7 +656,8 @@ function _fazShowRevisit() {
 }
 function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;
-    if (_fazGetType() === 'classic') {
+    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
+    if (isPushdown) {
         _fazTogglePreferenceCenter();
     } else {
         _fazShowPreferenceCenter();
@@ -819,10 +819,6 @@ function _fazSetCategoryPreferenceToggle(element, category) {
     const toggleSwitch = toggleContainer.querySelector('.faz-switch');
     if (category.isNecessary) {
         toggleSwitch && toggleSwitch.remove();
-    } else {
-        if (_fazGetType() === 'classic' && _fazStore._bannerConfig.config.categoryPreview.status) {
-            toggleSwitch && toggleSwitch.remove();
-        }
     }
 }
 function _fazSetPreferenceState(category) {
@@ -868,7 +864,7 @@ function _fazRenderBanner() {
         "afterbegin",
         doc.body.innerHTML
     );
-    if (_fazGetType() === "classic") _fazToggleAriaExpandStatus("=settings-button", "false");
+    if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') _fazToggleAriaExpandStatus("=settings-button", "false");
     _fazSetPreferenceCheckBoxStates();
     _fazAttachCategoryListeners();
     _fazRegisterListeners();

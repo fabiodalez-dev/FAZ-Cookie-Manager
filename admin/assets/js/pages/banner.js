@@ -116,6 +116,17 @@
 		if (catPrevCard) {
 			catPrevCard.style.display = (type === 'classic') ? '' : 'none';
 		}
+
+		// Classic forces pushdown preference center; other types allow free choice.
+		var prefEl = document.getElementById('faz-b-pref-type');
+		if (prefEl) {
+			if (type === 'classic') {
+				prefEl.value = 'pushdown';
+				prefEl.disabled = true;
+			} else {
+				prefEl.disabled = false;
+			}
+		}
 	}
 
 	function loadBanner() {
@@ -143,10 +154,10 @@
 		var b = props.behaviours || {};
 		var config = props.config || {};
 
-		// General tab — "banner" + pushdown is the internal representation of "classic"
+		// General tab — type is stored directly; legacy data may have banner+pushdown for classic
 		var displayType = s.type || 'box';
 		if (displayType === 'banner' && s.preferenceCenterType === 'pushdown') {
-			displayType = 'classic';
+			displayType = 'classic'; // backward compat: old data stored classic as banner+pushdown
 		}
 		setVal('faz-b-type', displayType);
 		setVal('faz-b-position', s.position || 'bottom-right');
@@ -415,17 +426,16 @@
 
 		var props = bannerData.properties || {};
 
-		// Settings — "classic" is stored as type=banner + preferenceCenterType=pushdown
+		// Settings — save type directly; classic is its own type (not banner+pushdown).
 		var formType = getVal('faz-b-type');
+		props.settings.type = formType;
 		if (formType === 'classic') {
-			props.settings.type = 'banner';
+			// Classic always uses pushdown preference center + inline toggles
 			props.settings.preferenceCenterType = 'pushdown';
-			// Classic requires inline category preview toggles
 			if (props.config && props.config.categoryPreview) {
 				props.config.categoryPreview.status = true;
 			}
 		} else {
-			props.settings.type = formType;
 			props.settings.preferenceCenterType = getVal('faz-b-pref-type');
 			// Non-classic: disable inline category preview
 			if (props.config && props.config.categoryPreview) {
@@ -644,8 +654,11 @@
 				'#faz-b-preview-host{display:flex;justify-content:' + justifyVal + ';' +
 				'align-items:flex-end;padding:16px;min-height:120px;}';
 		} else {
-			// Full-width types (classic, banner): stretch to fill.
+			// Full-width types (classic, banner): use flexbox to show top/bottom position.
+			var vAlign = (positionForClass === 'top') ? 'flex-start' : 'flex-end';
 			overrideCSS +=
+				'#faz-b-preview-host{display:flex;flex-direction:column;' +
+				'justify-content:' + vAlign + ';min-height:140px;}' +
 				'#faz-b-preview-host .faz-consent-container{width:100%!important;}';
 		}
 
