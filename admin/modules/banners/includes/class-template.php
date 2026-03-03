@@ -163,10 +163,17 @@ class Template {
 		$settings    = isset( $this->properties['settings'] ) ? $this->properties['settings'] : array();
 		$this->id    = isset( $settings['versionID'] ) ? $settings['versionID'] : 'default';
 		$this->type  = isset( $settings['type'] ) ? $settings['type'] : 'box';
-		if ($this->type === "classic") {
-			$this->ptype = "pushdown";
-		} else {
-			$this->ptype = isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup';
+		$this->ptype = isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup';
+		// "banner" + "pushdown" is the internal representation of "classic"
+		if ( $this->type === 'banner' && $this->ptype === 'pushdown' ) {
+			$this->type = 'classic';
+		}
+		if ( $this->type === 'classic' ) {
+			$this->ptype = 'pushdown';
+			// Classic type requires inline category preview toggles
+			if ( isset( $this->properties['config']['categoryPreview'] ) ) {
+				$this->properties['config']['categoryPreview']['status'] = true;
+			}
 		}
 		$this->theme = isset( $settings['theme'] ) ? $settings['theme'] : 'light';
 

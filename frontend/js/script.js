@@ -357,6 +357,12 @@ function _fazAddPreferenceCenterClass() {
         const pType = _fazStore._bannerConfig.settings.preferenceCenterType;
         const modalClass = `faz-${pType}`;
         modal.classList.add(modalClass);
+        // Sidebar needs a directional class for CSS positioning (faz-sidebar-left / faz-sidebar-right)
+        if (pType === 'sidebar') {
+            const pos = _fazStore._bannerConfig.settings.position || '';
+            const dir = pos.includes('left') ? 'left' : 'right';
+            modal.classList.add(`faz-sidebar-${dir}`);
+        }
     }
 
     // Ensure ARIA attributes are always present on the preference center div
@@ -519,7 +525,11 @@ function _fazGetLaw() {
     return _fazStore._bannerConfig.settings.applicableLaw;
 }
 function _fazGetType() {
-    return _fazStore._bannerConfig.settings.type;
+    const type = _fazStore._bannerConfig.settings.type;
+    if (type === 'banner' && _fazStore._bannerConfig.settings.preferenceCenterType === 'pushdown') {
+        return 'classic';
+    }
+    return type;
 }
 function _fazGetPtype() {
     if (_fazGetType() === 'classic') {
@@ -571,7 +581,6 @@ function _fazHidePreferenceCenter() {
         if (!ref._fazGetFromStore("action")) _fazShowBanner();
     } else {
         _fazToggleAriaExpandStatus("=settings-button", "false");
-        _fazClassRemove("=notice", "faz-consent-bar-expand");
     }
     if (ref._fazGetFromStore("action")) _fazShowRevisit();
     const origin = _fazStore._preferenceOriginTag;
@@ -597,7 +606,6 @@ function _fazShowPreferenceCenter() {
         _fazHideBanner();
     } else {
         _fazToggleAriaExpandStatus("=settings-button");
-        _fazClassAdd("=notice", "faz-consent-bar-expand");
     }
 }
 function _fazTogglePreferenceCenter() {
@@ -615,7 +623,6 @@ function _fazTogglePreferenceCenter() {
             preferenceCenter.setAttribute('aria-label', ariaLabel);
         }
         _fazToggleAriaExpandStatus("=settings-button");
-        _fazClassToggle("=notice", "faz-consent-bar-expand");
     } else {
         if (!isOpen) {
             _fazShowOverLay();
@@ -630,7 +637,11 @@ function _fazTogglePreferenceCenter() {
     origin && _fazSetFocus(origin)
 }
 function _fazGetPreferenceClass() {
-    return _fazGetPtype() === 'pushdown' ? 'faz-consent-bar-expand' : 'faz-modal-open';
+    // Pushdown (expand) only works for classic/full-width; box falls back to popup modal
+    if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') {
+        return 'faz-consent-bar-expand';
+    }
+    return 'faz-modal-open';
 }
 
 function _fazGetRevisit() {
@@ -648,7 +659,6 @@ function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;
     if (_fazGetType() === 'classic') {
         _fazTogglePreferenceCenter();
-        _fazToggleAriaExpandStatus("=settings-button");
     } else {
         _fazShowPreferenceCenter();
     }
@@ -761,13 +771,15 @@ function _fazSetCheckboxes(
     formattedLabel,
     revisit = false
 ) {
-    const toggle = _fazStore._bannerConfig.config.preferenceCenter.toggle;
-    const activeColor = toggle.states.active.styles['background-color'];
-    const inactiveColor = toggle.states.inactive.styles['background-color'];
+    const prefToggle = _fazStore._bannerConfig.config.preferenceCenter.toggle;
+    const previewToggle = _fazStore._bannerConfig.config.categoryPreview.toggle;
 
     [`fazCategoryDirect`, `fazSwitch`].map((key) => {
         const boxElem = document.getElementById(`${key}${category.slug}`);
         if (!boxElem) return;
+        const toggle = key === 'fazCategoryDirect' ? previewToggle : prefToggle;
+        const activeColor = toggle.states.active.styles['background-color'];
+        const inactiveColor = toggle.states.inactive.styles['background-color'];
         _fazSetCategoryToggle(
             boxElem,
             category,

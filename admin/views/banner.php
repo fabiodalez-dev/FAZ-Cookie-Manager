@@ -308,6 +308,56 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		</div>
 
+		<div class="faz-card" id="faz-catprev-colors-card" style="display:none;">
+			<div class="faz-card-header"><h3>Category Preview Colours</h3></div>
+			<div class="faz-card-body">
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label>Label Text</label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-label">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-label-hex" style="width:90px;">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label>Toggle — Active</label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-toggle-active">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-toggle-active-hex" style="width:90px;">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label>Toggle — Inactive</label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-toggle-inactive">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-toggle-inactive-hex" style="width:90px;">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label>Save Button — Text</label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-save-text">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-save-text-hex" style="width:90px;">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label>Save Button — Background</label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-save-bg">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-save-bg-hex" style="width:90px;">
+						</div>
+					</div>
+					<div class="faz-form-group">
+						<label>Save Button — Border</label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-save-border">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-save-border-hex" style="width:90px;">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php echo esc_html__( 'Revisit Widget', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
