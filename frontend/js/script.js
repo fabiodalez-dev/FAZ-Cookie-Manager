@@ -266,7 +266,7 @@ function _fazSetInitialState() {
     const activeLaw = _fazGetLaw()
     ref._fazSetInStore("consent", "no");
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
-    const responseCategories = { accepted: [], rejected: [] };
+    const responseCategories = { accepted: [], rejected: [], action: 'init' };
     let valueToSet = "yes";
     for (const category of _fazStore._categories) {
         if (
@@ -920,7 +920,7 @@ function _fazAcceptCookies(choice = "all") {
     } else {
         ref._fazSetInStore("consent", ccpaCheckBoxValue ? "yes" : "no");
     }
-    const responseCategories = { accepted: [], rejected: [] };
+    const responseCategories = { accepted: [], rejected: [], action: choice };
     for (const category of _fazStore._categories) {
         let valueToSet = "no";
         if (activeLaw === 'gdpr') {

@@ -21,10 +21,4 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @package     FazCookie
  */
 class Api extends Rest_Controller {
-
-	/**
-	 * Constructor
-	 */
-	public function __construct() {
-	}
 }

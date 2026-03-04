@@ -188,9 +188,7 @@ class Controller {
 	 * @return array
 	 */
 	public function get_info( $args = array() ) {
-		$data = array();
-		$data = $this->get_site_info( $args );
-		return $data;
+		return $this->get_site_info( $args );
 	}
 
 	/**
@@ -317,6 +315,7 @@ class Controller {
 	 * @return void
 	 */
 	public function check_api() {
+		// No-op: cloud API calls not supported in local mode.
 	}
 
 	/**

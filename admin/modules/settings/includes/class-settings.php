@@ -212,6 +212,10 @@ class Settings extends Store {
 			case 'sites':
 				$value = is_array( $value ) ? array_map( 'sanitize_text_field', $value ) : array();
 				break;
+			case 'publisher_cc':
+				$value = strtoupper( sanitize_text_field( (string) $value ) );
+				$value = preg_match( '/^[A-Z]{2}$/', $value ) ? $value : '';
+				break;
 			default:
 				$value = faz_sanitize_text( $value );
 				break;

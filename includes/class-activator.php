@@ -98,7 +98,7 @@ class Activator {
 	 */
 	public static function run_retention_cleanup() {
 		$settings  = get_option( 'faz_settings' );
-		$retention = isset( $settings['consent_logs']['retention'] ) ? absint( $settings['consent_logs']['retention'] ) : 12;
+		$retention = isset( $settings['consent_logs']['retention'] ) ? (int) $settings['consent_logs']['retention'] : 12;
 		if ( $retention > 0 ) {
 			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
 		}

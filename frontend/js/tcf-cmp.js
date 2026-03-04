@@ -14,8 +14,9 @@
 	var CMP_ID      = 0;
 	var CMP_VERSION  = 1;
 	var TCF_VERSION  = 2;
-	var VENDOR_LIST  = 0;  // no vendor list loaded
-	var MAX_PURPOSE  = 10; // TCF v2.x has 10 standard purposes
+	var VENDOR_LIST        = 0;  // no vendor list loaded
+	var MAX_PURPOSE        = 11; // GVL v3 has 11 standard purposes
+	var TCF_POLICY_VERSION = 5;  // GVL v3 tcfPolicyVersion
 	var BASE64URL    = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 	/**
@@ -173,7 +174,7 @@
 		pushBits(bits, charTo6(consentLang.charAt(0)), 6);  // ConsentLanguage char 1
 		pushBits(bits, charTo6(consentLang.charAt(1)), 6);  // ConsentLanguage char 2
 		pushBits(bits, VENDOR_LIST, 12);      // VendorListVersion
-		pushBits(bits, 4, 6);                 // TcfPolicyVersion (GVL policy 4)
+		pushBits(bits, TCF_POLICY_VERSION, 6); // TcfPolicyVersion
 		pushBits(bits, 1, 1);                 // IsServiceSpecific = true
 		pushBits(bits, 0, 1);                 // UseNonStdTexts = false
 		pushBits(bits, 0, 12);               // SpecialFeatureOptIns
@@ -215,7 +216,7 @@
 	 */
 	function buildTCData(purposeConsent, tcString, listenerIdVal) {
 		var data = {
-			tcfPolicyVersion:  4,
+			tcfPolicyVersion:  TCF_POLICY_VERSION,
 			cmpId:             CMP_ID,
 			cmpVersion:        CMP_VERSION,
 			gdprApplies:       (window._fazTcfConfig && typeof window._fazTcfConfig.gdprApplies !== "undefined") ? !!window._fazTcfConfig.gdprApplies : true,
@@ -287,7 +288,7 @@
 					cmpVersion:        CMP_VERSION,
 					cmpId:             CMP_ID,
 					gvlVersion:        VENDOR_LIST,
-					tcfPolicyVersion:  4
+					tcfPolicyVersion:  TCF_POLICY_VERSION
 				}, true);
 				break;
 

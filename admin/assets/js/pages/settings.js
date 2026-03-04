@@ -33,7 +33,7 @@
 	function applyShowIf() {
 		form.querySelectorAll('[data-show-if]').forEach(function (el) {
 			var path = el.getAttribute('data-show-if');
-			var src = form.querySelector('[data-path="' + path + '"]');
+			var src = form.querySelector('input[type="checkbox"][data-path="' + path + '"]');
 			if (!src) return;
 			function toggle() { el.style.display = src.checked ? '' : 'none'; }
 			toggle();

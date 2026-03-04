@@ -37,11 +37,8 @@ class Deactivator {
 		delete_option( 'faz_banner_template' );
 		delete_transient( 'faz_scan_running' );
 
-		// Unschedule retention cleanup cron.
-		$timestamp = wp_next_scheduled( 'faz_daily_cleanup' );
-		if ( $timestamp ) {
-			wp_unschedule_event( $timestamp, 'faz_daily_cleanup' );
-		}
+		// Unschedule all retention cleanup cron occurrences.
+		wp_clear_scheduled_hook( 'faz_daily_cleanup' );
 	}
 
 }

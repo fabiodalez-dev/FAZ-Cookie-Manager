@@ -217,8 +217,9 @@ class Frontend {
 				"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .
 				"document.addEventListener('fazcookie_consent_update',function(e){" .
 					"var d=e.detail||{};" .
-					"if(d.accepted&&d.accepted.length>1)fazTrack('banner_accept');" .
-					"else if(d.rejected&&d.rejected.length)fazTrack('banner_reject');" .
+					"if(d.action==='init')return;" .
+					"if(d.action==='all')fazTrack('banner_accept');" .
+					"else if(d.action==='reject')fazTrack('banner_reject');" .
 					"else fazTrack('banner_settings');" .
 				"});" .
 			"})();";
@@ -804,9 +805,29 @@ class Frontend {
 			'.faz-modal',
 		);
 
+		// Classes inside .faz-modal (popup/sidebar) OR inside #faz-consent (classic).
+		// These need dual selectors to match in both template structures.
+		$modal_prefixes = array(
+			'.faz-preference',
+			'.faz-prefrence',
+			'.faz-accordion',
+			'.faz-audit',
+			'.faz-cookie-des',
+			'.faz-always-active',
+			'.faz-switch',
+			'.faz-chevron',
+			'.faz-show-desc',
+			'.faz-hide-desc',
+			'.faz-btn',
+			'.faz-category',
+			'.faz-notice',
+			'.faz-opt-out',
+			'.faz-footer',
+		);
+
 		return preg_replace_callback(
 			'/([^{}]+?)(\{)/',
-			function ( $m ) use ( $container_classes, $sibling_prefixes ) {
+			function ( $m ) use ( $container_classes, $sibling_prefixes, $modal_prefixes ) {
 				$raw = $m[1];
 				// Skip @-rules (e.g. @media).
 				if ( strpos( $raw, '@' ) !== false ) {
@@ -843,6 +864,18 @@ class Frontend {
 					foreach ( $sibling_prefixes as $pfx ) {
 						if ( strpos( $s, $pfx ) === 0 ) {
 							$out[]   = $s;
+							$matched = true;
+							break;
+						}
+					}
+					if ( $matched ) {
+						continue;
+					}
+
+					// Rule 3b: Modal descendants → dual selector for popup + classic.
+					foreach ( $modal_prefixes as $pfx ) {
+						if ( strpos( $s, $pfx ) === 0 ) {
+							$out[]   = '#faz-consent ' . $s . ',.faz-modal ' . $s;
 							$matched = true;
 							break;
 						}
