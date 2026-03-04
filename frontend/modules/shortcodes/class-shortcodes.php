@@ -358,6 +358,10 @@ class Shortcodes {
 			if ( false === $category->get_visibility() ) {
 				continue;
 			}
+			// Never show WordPress internal cookies in the frontend banner.
+			if ( 'wordpress-internal' === $category->get_slug() ) {
+				continue;
+			}
 			$cookies = $category->get_cookies();
 			if ( empty( $cookies ) ) {
 				continue;
@@ -418,6 +422,10 @@ class Shortcodes {
 			return $html;
 		}
 		foreach ( $cookies as $cookie ) {
+			// Skip WordPress-internal cookies — visitors never receive them.
+			if ( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $cookie['name'] ) ) {
+				continue;
+			}
 			$table_body  = '';
 			$section     = $container;
 			$description = $cookie['description'];
@@ -463,6 +471,10 @@ class Shortcodes {
 		foreach ( $categories as $category ) {
 			$object = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category );
 			if ( false === $object->get_visibility() ) {
+				continue;
+			}
+			// Never show WordPress internal cookies in the frontend banner.
+			if ( 'wordpress-internal' === $object->get_slug() ) {
 				continue;
 			}
 			if ( empty( $object->get_cookies() ) ) {
@@ -657,6 +669,10 @@ class Shortcodes {
 			if ( false === $category->get_visibility() ) {
 				continue;
 			}
+			// Never show WordPress internal cookies in the frontend banner.
+			if ( 'wordpress-internal' === $category->get_slug() ) {
+				continue;
+			}
 			if ( empty( $category->get_cookies() ) ) {
 				continue;
 			}
@@ -697,6 +713,10 @@ class Shortcodes {
 		</tr></thead>';
 		$table_body = '<tbody>';
 		foreach ( $cookies as $cookie ) {
+			// Skip WordPress-internal cookies — visitors never receive them.
+			if ( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $cookie['name'] ) ) {
+				continue;
+			}
 			$description = $cookie['description'];
 			$duration    = $cookie['duration'];
 			$description = isset( $description[ $this->language ] ) ? $description[ $this->language ] : '';

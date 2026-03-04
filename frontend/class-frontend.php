@@ -557,6 +557,35 @@ class Frontend {
 	 *
 	 * @return array
 	 */
+	/**
+	 * Check if a cookie name is a WordPress-internal cookie.
+	 * These are admin-only cookies that visitors never receive
+	 * and must never appear in the consent banner.
+	 *
+	 * @param string $name Cookie name.
+	 * @return bool
+	 */
+	public static function is_wp_internal_cookie( $name ) {
+		// Exact matches.
+		if ( 'wordpress_test_cookie' === $name ) {
+			return true;
+		}
+		// Prefix matches (these have dynamic suffixes like hashes or user IDs).
+		$prefixes = array(
+			'wordpress_logged_in_',
+			'wordpress_sec_',
+			'wp-settings-',
+			'wp-settings-time-',
+			'wp-postpass_',
+		);
+		foreach ( $prefixes as $prefix ) {
+			if ( 0 === strpos( $name, $prefix ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public function get_cookie_groups() {
 		$cookie_groups = array();
 		$categories    = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
@@ -599,7 +628,11 @@ class Frontend {
 		$cat_slug = $category->get_slug();
 		$items    = \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_items_by_category( $category->get_id() );
 		foreach ( $items as $item ) {
-			$cookie    = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $item->cookie_id );
+			$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $item->cookie_id );
+			// Skip WordPress-internal cookies — visitors never receive them.
+			if ( self::is_wp_internal_cookie( $cookie->get_name() ) ) {
+				continue;
+			}
 			$cookies[] = array(
 				'cookieID' => $cookie->get_name(),
 				'domain'   => $cookie->get_domain(),
