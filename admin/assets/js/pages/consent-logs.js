@@ -1,5 +1,5 @@
 /**
- * FAZ Cookie Manager — Consent Logs Page JS
+ * FAZ Cookie Manager - Consent Logs Page JS
  * Paginated table with filters, statistics, and CSV export.
  */
 (function () {

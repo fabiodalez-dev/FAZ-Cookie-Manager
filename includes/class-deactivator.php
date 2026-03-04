@@ -36,6 +36,10 @@ class Deactivator {
 		// Clear banner template cache.
 		delete_option( 'faz_banner_template' );
 		delete_transient( 'faz_scan_running' );
+
+		// Unschedule all cron jobs.
+		wp_clear_scheduled_hook( 'faz_daily_cleanup' );
+		wp_clear_scheduled_hook( 'faz_weekly_gvl_update' );
 	}
 
 }

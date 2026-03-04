@@ -157,7 +157,7 @@ function setAdditionalConsent(consentObj) {
         // Include all configured provider IDs.
         acString = "1~" + providerStr.split(/[,\s]+/).filter(Boolean).join(".");
     } else {
-        // No consent — empty provider list.
+        // No consent - empty provider list.
         acString = "1~";
     }
 

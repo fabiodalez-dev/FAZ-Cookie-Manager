@@ -38,7 +38,6 @@ class ConsentLogs extends Modules {
 	public function init() {
 		$this->load_apis();
 		$this->controller = Controller::get_instance();
-		add_filter( 'faz_registered_admin_menus', array( $this, 'register_menus' ) );
 	}
 
 	/**
@@ -48,29 +47,5 @@ class ConsentLogs extends Modules {
 	 */
 	public function load_apis() {
 		new Api();
-	}
-
-	/**
-	 * Pass menu items to be registered.
-	 *
-	 * @param array $menus Sub menu array.
-	 * @return array
-	 */
-	public function register_menus( $menus ) {
-		$menus['logs'] = array(
-			'name'     => __( 'Consent Log', 'faz-cookie-manager' ),
-			'callback' => array( $this, 'menu_page_template' ),
-			'order'    => 4,
-		);
-		return $menus;
-	}
-
-	/**
-	 * Main menu template
-	 *
-	 * @return void
-	 */
-	public function menu_page_template() {
-		echo '<div id="faz-app"></div>';
 	}
 }

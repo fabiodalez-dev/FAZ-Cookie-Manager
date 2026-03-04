@@ -77,7 +77,6 @@ class Admin {
 		$this->add_notices();
 		$this->add_review_notice();
 		$this->load_modules();
-		$this->pages = $this->get_admin_pages();
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
@@ -120,6 +119,7 @@ class Admin {
 		return array(
 			'settings',
 			'gcm',
+			'gvl',
 			'languages',
 			'dashboard',
 			'banners',
@@ -127,7 +127,6 @@ class Admin {
 			'consentlogs',
 			'scanner',
 			'pageviews',
-			'policies',
 			'cache',
 		);
 	}
@@ -198,6 +197,11 @@ class Admin {
 				'title' => __( 'Languages', 'faz-cookie-manager' ),
 				'slug'  => self::ADMIN_SLUG . '-languages',
 				'view'  => 'languages',
+			),
+			'gvl'          => array(
+				'title' => __( 'Vendor List (IAB)', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-gvl',
+				'view'  => 'gvl',
 			),
 			'settings'     => array(
 				'title' => __( 'Settings', 'faz-cookie-manager' ),
@@ -273,6 +277,9 @@ class Admin {
 		);
 
 		// Enqueue page-specific JS if it exists.
+		if ( ! isset( $this->pages ) ) {
+			$this->pages = $this->get_admin_pages();
+		}
 		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 		foreach ( $this->pages as $page ) {
 			if ( $page['slug'] === $current_page ) {
@@ -333,6 +340,9 @@ class Admin {
 	 * @return void
 	 */
 	public function admin_menu() {
+		if ( ! isset( $this->pages ) ) {
+			$this->pages = $this->get_admin_pages();
+		}
 		$capability = 'manage_options';
 		$parent     = self::ADMIN_SLUG;
 
@@ -366,6 +376,9 @@ class Admin {
 	 * @return void
 	 */
 	public function render_page() {
+		if ( ! isset( $this->pages ) ) {
+			$this->pages = $this->get_admin_pages();
+		}
 		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : self::ADMIN_SLUG; // phpcs:ignore WordPress.Security.NonceVerification
 
 		$faz_page_title = '';
@@ -380,23 +393,6 @@ class Admin {
 		}
 
 		include plugin_dir_path( __FILE__ ) . 'views/base.php';
-	}
-
-	/**
-	 * Get registered menus from each module.
-	 *
-	 * @param boolean $minify Whether to minify or not.
-	 * @return array
-	 */
-	public function get_registered_menus( $minify = false ) {
-		$menus = apply_filters( 'faz_registered_admin_menus', array() );
-		if ( true === $minify ) {
-			foreach ( $menus as $key => $menu ) {
-				unset( $menu['callback'] );
-				$menus[ $key ] = $menu;
-			}
-		}
-		return $menus;
 	}
 
 	/**

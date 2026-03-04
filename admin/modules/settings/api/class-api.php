@@ -50,47 +50,6 @@ class Api extends Rest_Controller {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ), 10 );
 	}
 	/**
-	 * Helper method to register simple POST routes.
-	 *
-	 * @param string $endpoint The endpoint path.
-	 * @param string $callback The callback method name.
-	 * @return void
-	 */
-	private function register_post_route( $endpoint, $callback ) {
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/' . $endpoint,
-			array(
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, $callback ),
-					'permission_callback' => array( $this, 'create_item_permissions_check' ),
-					'args'                => $this->get_collection_params(),
-				),
-			)
-		);
-	}
-
-	/**
-	 * Helper method for simple controller method calls with JSON data and error handling.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 * @param string $method_name The controller method name to call.
-	 * @param bool $use_json_params Whether to use JSON params (default: true).
-	 * @return WP_Error|WP_REST_Response
-	 */
-	private function call_controller_method( $request, $method_name, $use_json_params = true ) {
-		$data = $use_json_params ? $request->get_json_params() : array();
-		$response = Controller::get_instance()->{$method_name}( $data );
-
-		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		return rest_ensure_response( $response );
-	}
-
-	/**
 	 * Register the routes for cookies.
 	 *
 	 * @return void
@@ -113,73 +72,6 @@ class Api extends Rest_Controller {
 					'args'                => $this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ),
 				),
 				'schema' => array( $this, 'get_public_item_schema' ),
-			)
-		);
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/laws',
-			array(
-				array(
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => array( $this, 'get_laws' ),
-					'permission_callback' => array( $this, 'get_items_permissions_check' ),
-					'args'                => $this->get_collection_params(),
-				),
-			)
-		);
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/info',
-			array(
-				array(
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => array( $this, 'get_info' ),
-					'permission_callback' => array( $this, 'get_items_permissions_check' ),
-					'args'                => $this->get_collection_params(),
-				),
-			)
-		);
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/disconnect',
-			array(
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'disconnect' ),
-					'permission_callback' => array( $this, 'create_item_permissions_check' ),
-					'args'                => $this->get_collection_params(),
-				),
-			)
-		);
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/sync',
-			array(
-				'args'   => array(
-					'id' => array(
-						'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
-						'type'        => 'integer',
-					),
-				),
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'send_items' ),
-					'permission_callback' => array( $this, 'get_item_permissions_check' ),
-					'args'                => $this->get_endpoint_args_for_item_schema( WP_REST_Server::CREATABLE ),
-				),
-				'schema' => array( $this, 'get_public_item_schema' ),
-			)
-		);
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/cache/purge',
-			array(
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'clear_cache' ),
-					'permission_callback' => array( $this, 'create_item_permissions_check' ),
-					'args'                => $this->get_collection_params(),
-				),
 			)
 		);
 		register_rest_route(
@@ -230,7 +122,6 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
-		$this->register_post_route( 'payments', 'add_payments' );
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/geolite2/update',
@@ -277,115 +168,6 @@ class Api extends Rest_Controller {
 		$data    = $this->add_additional_fields_to_object( $data, $request );
 		$data    = $this->filter_response_by_context( $data, $context );
 		return rest_ensure_response( $data );
-	}
-
-	/**
-	 * Fetch default laws from database
-	 *
-	 * @param array $request WP_REST_Request $request Full details about the request.
-	 * @return array
-	 */
-	public function get_laws( $request = array() ) {
-		$object = array(
-			array(
-				'slug'        => 'gdpr',
-				'title'       => __( 'GDPR (General Data Protection Regulation)', 'faz-cookie-manager' ),
-				'description' => __( 'Continue with the GDPR template if most of your targeted audience are from the EU or UK. It creates a customizable banner that allows your visitors to accept/reject cookies or adjust their consent preferences.', 'faz-cookie-manager' ),
-				'tooltip'     => __(
-					'Choose GDPR if most of your targeted audience are from the EU or UK.
-					It creates a customizable banner that allows your visitors to accept/reject cookies or adjust their consent preferences.',
-					'faz-cookie-manager'
-				),
-			),
-			array(
-				'slug'        => 'ccpa',
-				'title'       => __( 'CCPA (California Consumer Privacy Act)', 'faz-cookie-manager' ),
-				'description' => __( 'Choose CCPA if most of your targeted audience are from California or US. This will create a customizable banner with a "Do Not Sell My Personal Information" link that allows your visitors to refuse the use of cookies.', 'faz-cookie-manager' ),
-				'tooltip'     => __(
-					'Choose CCPA if most of your targeted audience are from California or US.
-					It creates a customizable banner with a "Do Not Sell My Personal Information" link that allows your visitors to refuse the use of cookies.',
-					'faz-cookie-manager'
-				),
-			),
-			array(
-				'slug'        => 'info',
-				'title'       => __( 'INFO (Information Display Banner)', 'faz-cookie-manager' ),
-				'description' => __( 'Choose INFO if you do not want to block any cookies on your website. This will create a dismissible banner that provides some general information to your site visitors.', 'faz-cookie-manager' ),
-				'tooltip'     => __(
-					'Choose Info if you do not want to block any cookies on your website.
-						It creates a dismissible banner that provides some general info to your site visitors.',
-					'faz-cookie-manager'
-				),
-			),
-		);
-		$data   = $this->prepare_item_for_response( $object, $request );
-		return rest_ensure_response( $data );
-	}
-
-	/**
-	 * Get site info including the features allowed for the current plan.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function get_info( $request ) {
-		$args       = array();
-		$registered = $this->get_collection_params();
-		if ( isset( $registered['force'], $request['force'] ) ) {
-			$args['force'] = (bool) $request['force'];
-		}
-		$response = Controller::get_instance()->get_info( $args );
-		if ( empty( $response ) ) {
-			$data = array();
-		} else {
-			$data = $this->prepare_item_for_response( $response, $request );
-		}
-		$objects = $this->prepare_response_for_collection( $data );
-		return rest_ensure_response( $objects );
-	}
-
-	/**
-	 * Send data directly to the web app.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function send_items( $request ) {
-		$response = Controller::get_instance()->sync();
-		if ( empty( $response ) ) {
-			$data = array();
-		} else {
-			$data = $this->prepare_item_for_response( $response, $request );
-		}
-		$objects = $this->prepare_response_for_collection( $data );
-		return rest_ensure_response( $objects );
-	}
-
-	/**
-	 * Clear cache of all the modules
-	 *
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function clear_cache() {
-		$banner_controller   = new \FazCookie\Admin\Modules\Banners\Includes\Controller();
-		$category_controller = new \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller();
-		$cookie_controller   = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller();
-		$banner_controller->delete_cache();
-		$category_controller->delete_cache();
-		$cookie_controller->delete_cache();
-		wp_cache_flush();
-		$data = array( 'status' => true );
-		return rest_ensure_response( $data );
-	}
-
-	/**
-	 * Initiate disconnect request.
-	 *
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function disconnect() {
-		$response = Controller::get_instance()->disconnect();
-		return rest_ensure_response( $response );
 	}
 
 	/**
@@ -629,16 +411,6 @@ class Api extends Rest_Controller {
 		);
 
 		return $this->add_additional_fields_schema( $schema );
-	}
-
-	/**
-	 * Add payments/subscription.
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function add_payments( $request ) {
-		return $this->call_controller_method( $request, 'add_payments' );
 	}
 
 	/**

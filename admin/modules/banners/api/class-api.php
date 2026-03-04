@@ -258,7 +258,7 @@ class Api extends Rest_Controller {
 			);
 		}
 		$banner_id = $request['id'];
-		$data      = $this->controller->remove( $banner_id );
+		$data      = $this->controller->delete_item( $banner_id );
 		return rest_ensure_response( $data );
 	}
 

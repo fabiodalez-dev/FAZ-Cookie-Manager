@@ -1,5 +1,5 @@
 /**
- * FAZ Cookie Manager — Cookie Banner Settings Page JS
+ * FAZ Cookie Manager - Cookie Banner Settings Page JS
  * Loads and saves deeply nested banner settings + per-language contents.
  * Fixed-position live preview + WordPress media uploader for brand logo.
  */
@@ -154,7 +154,7 @@
 		var b = props.behaviours || {};
 		var config = props.config || {};
 
-		// General tab — type is stored directly; legacy data may have banner+pushdown for classic
+		// General tab - type is stored directly; legacy data may have banner+pushdown for classic
 		var displayType = s.type || 'box';
 		if (displayType === 'banner' && s.preferenceCenterType === 'pushdown') {
 			displayType = 'classic'; // backward compat: old data stored classic as banner+pushdown
@@ -170,13 +170,13 @@
 		if (lawVal === 'gdpr' && donotSellEl.status === true) lawVal = 'gdpr_ccpa';
 		setVal('faz-b-law', lawVal);
 
-		// Determine languages — prefer global config (Languages page) over banner's stale copy
+		// Determine languages - prefer global config (Languages page) over banner's stale copy
 		var globalLangs = (typeof fazConfig !== 'undefined' && fazConfig.languages) || {};
 		var langs = (globalLangs.selected && globalLangs.selected.length) ? globalLangs.selected : ((s.languages && s.languages.selected) || ['en']);
 		currentLang = globalLangs['default'] || (s.languages && s.languages['default']) || langs[0] || 'en';
 		populateLangSelects(langs, currentLang);
 
-		// Colours — notice
+		// Colours - notice
 		var noticeStyles = (config.notice && config.notice.styles) || {};
 		setColor('faz-b-notice-bg', noticeStyles['background-color'] || '#FFFFFF');
 		setColor('faz-b-notice-border', noticeStyles['border-color'] || '#F4F4F4');
@@ -187,7 +187,7 @@
 		var descStyles = (config.notice && config.notice.elements && config.notice.elements.description && config.notice.elements.description.styles) || {};
 		setColor('faz-b-desc-color', descStyles.color || '#64748b');
 
-		// Colours — buttons
+		// Colours - buttons
 		var buttons = (config.notice && config.notice.elements && config.notice.elements.buttons && config.notice.elements.buttons.elements) || {};
 		populateButtonColors('accept', buttons.accept);
 		populateButtonColors('reject', buttons.reject);
@@ -430,7 +430,7 @@
 		if (!props.config || typeof props.config !== 'object') props.config = {};
 		if (!props.config.categoryPreview || typeof props.config.categoryPreview !== 'object') props.config.categoryPreview = {};
 
-		// Settings — save type directly; classic is its own type (not banner+pushdown).
+		// Settings - save type directly; classic is its own type (not banner+pushdown).
 		var formType = getVal('faz-b-type');
 		props.settings.type = formType;
 		if (formType === 'classic') {
@@ -466,7 +466,7 @@
 		props.config.notice.elements.donotSell.tag = 'donotsell-button';
 		props.config.notice.elements.donotSell.status = (law === 'ccpa' || law === 'gdpr_ccpa');
 
-		// Colours — notice
+		// Colours - notice
 		ensureObj(props, 'config.notice.styles');
 		props.config.notice.styles['background-color'] = getColor('faz-b-notice-bg');
 		props.config.notice.styles['border-color'] = getColor('faz-b-notice-border');
@@ -476,7 +476,7 @@
 		ensureObj(props, 'config.notice.elements.description.styles');
 		props.config.notice.elements.description.styles.color = getColor('faz-b-desc-color');
 
-		// Colours + status — buttons
+		// Colours + status - buttons
 		ensureObj(props, 'config.notice.elements.buttons.elements');
 		var btns = props.config.notice.elements.buttons.elements;
 		ensureObj(btns, 'accept.styles');
@@ -634,7 +634,7 @@
 
 		// Override CSS: render preview inline in the fixed-bottom panel.
 		// Only the .faz-consent-container is injected (see above), so CSS
-		// overrides are minimal — just position it inline in the panel.
+		// overrides are minimal - just position it inline in the panel.
 		var overrideCSS =
 			'#faz-b-preview-host{' +
 			'position:relative;overflow:hidden;min-height:60px;background:none;}' +
@@ -671,7 +671,7 @@
 
 		// Parse the server-rendered banner template and extract only the consent
 		// bar (.faz-consent-container). The full template includes overlay, revisit
-		// widget, preference center, and opt-out popup — none needed for preview.
+		// widget, preference center, and opt-out popup - none needed for preview.
 		var tempDiv = document.createElement('div');
 		tempDiv.innerHTML = html; // Trusted admin-only content from our own API
 		var container = tempDiv.querySelector('.faz-consent-container');
@@ -709,7 +709,7 @@
 			});
 		});
 
-		// Inject readmore link (not in template — frontend JS adds it dynamically)
+		// Inject readmore link (not in template - frontend JS adds it dynamically)
 		attachPreviewReadMore(host);
 
 		// Update brand logo src from our form field

@@ -1,5 +1,5 @@
 /**
- * FAZ Cookie Manager — Microsoft Consent Integration
+ * FAZ Cookie Manager - Microsoft Consent Integration
  * Handles UET Consent Mode and Clarity Consent API.
  */
 (function () {

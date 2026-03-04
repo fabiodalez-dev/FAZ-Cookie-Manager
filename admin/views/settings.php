@@ -91,8 +91,32 @@ defined( 'ABSPATH' ) || exit;
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="iab.enabled">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Enable IAB TCF v2.2</span>
+					<span class="faz-toggle-label">Enable IAB TCF v2.3</span>
 				</label>
+			</div>
+			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
+				<label for="faz-iab-publisher-cc" style="display:block;margin-bottom:4px;font-weight:600;">Publisher Country Code</label>
+				<input type="text" id="faz-iab-publisher-cc" data-path="iab.publisher_cc" maxlength="2" style="width:60px;text-transform:uppercase;" placeholder="IT">
+				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);">ISO 3166-1 alpha-2 code of the publisher's country (e.g. IT, DE, FR). Used in the TCF consent string.</p>
+			</div>
+			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
+				<label for="faz-iab-cmp-id" style="display:block;margin-bottom:4px;font-weight:600;">CMP ID</label>
+				<input type="number" id="faz-iab-cmp-id" class="faz-input faz-input-sm" data-path="iab.cmp_id" min="0" style="width:120px;" placeholder="0">
+				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);">Your registered IAB CMP ID. Use 0 for unregistered / self-hosted.</p>
+			</div>
+			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="iab.purpose_one_treatment">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label">Purpose One Treatment</span>
+				</label>
+				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);">Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a country where Purpose 1 is not required).</p>
+			</div>
+			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
+				<div id="faz-gvl-status" style="padding:10px;border-radius:6px;background:var(--faz-bg-secondary);">
+					<span style="color:var(--faz-text-secondary);">Loading GVL status...</span>
+				</div>
+				<button class="faz-btn faz-btn-secondary" id="faz-gvl-update" type="button" style="margin-top:8px;">Update GVL Now</button>
 			</div>
 		</div>
 	</div>

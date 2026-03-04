@@ -98,7 +98,7 @@ class Shortcodes {
 		$contents         = $banner->get_contents();
 		$settings         = $banner->get_settings();
 		$this->preview    = defined( 'FAZ_PREVIEW_REQUEST' ) && FAZ_PREVIEW_REQUEST;
-		$this->connected  = faz_is_cloud_request();
+		$this->connected  = false;
 		$this->language   = $banner->get_language();
 		$this->template   = $template;
 		$this->properties = $settings;

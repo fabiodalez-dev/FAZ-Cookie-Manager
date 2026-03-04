@@ -1,5 +1,5 @@
 /**
- * FAZ Cookie Manager — Dashboard Page JS
+ * FAZ Cookie Manager - Dashboard Page JS
  * Stats, line chart (pageviews), donut chart (consent distribution).
  * Filter bar: presets (1D, 7D, 30D, 1Y, All) + custom date range.
  */
@@ -191,7 +191,7 @@
 	}
 
 	/**
-	 * Consent donut chart — pure Canvas 2D.
+	 * Consent donut chart - pure Canvas 2D.
 	 */
 	function drawConsentDonut(accepted, rejected) {
 		var canvas = document.getElementById('faz-chart-consent');
@@ -269,7 +269,7 @@
 	}
 
 	/**
-	 * Line chart with gradient fill — pure Canvas 2D.
+	 * Line chart with gradient fill - pure Canvas 2D.
 	 */
 	function drawLineChart(canvasId, labels, values) {
 		var canvas = document.getElementById(canvasId);

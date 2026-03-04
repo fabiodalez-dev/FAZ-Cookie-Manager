@@ -28,10 +28,6 @@ class Consent_Logger {
 	 * Constructor - register hooks.
 	 */
 	public function __construct() {
-		// AJAX handlers for both logged-in and logged-out users.
-		add_action( 'wp_ajax_faz_log_consent', array( $this, 'handle_ajax_consent' ) );
-		add_action( 'wp_ajax_nopriv_faz_log_consent', array( $this, 'handle_ajax_consent' ) );
-
 		// Public REST route.
 		add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
 	}
@@ -70,33 +66,6 @@ class Consent_Logger {
 				),
 			)
 		);
-	}
-
-	/**
-	 * Handle AJAX consent logging.
-	 *
-	 * @return void
-	 */
-	public function handle_ajax_consent() {
-		// Verify nonce.
-		if ( ! check_ajax_referer( 'faz_consent_nonce', 'nonce', false ) ) {
-			wp_send_json_error( array( 'message' => 'Invalid nonce.' ), 403 );
-		}
-
-		$data = array(
-			'consent_id' => isset( $_POST['consent_id'] ) ? sanitize_text_field( wp_unslash( $_POST['consent_id'] ) ) : '',
-			'status'     => isset( $_POST['status'] ) ? sanitize_text_field( wp_unslash( $_POST['status'] ) ) : 'partial',
-			'categories' => isset( $_POST['categories'] ) ? map_deep( wp_unslash( $_POST['categories'] ), 'sanitize_text_field' ) : array(), // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			'url'        => isset( $_POST['url'] ) ? esc_url_raw( wp_unslash( $_POST['url'] ) ) : '',
-		);
-
-		$result = Controller::get_instance()->log_consent( $data );
-
-		if ( false === $result ) {
-			wp_send_json_error( array( 'message' => 'Failed to log consent.' ), 500 );
-		}
-
-		wp_send_json_success( $result );
 	}
 
 	/**

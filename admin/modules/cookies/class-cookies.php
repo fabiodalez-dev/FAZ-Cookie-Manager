@@ -39,7 +39,6 @@ class Cookies extends Modules {
 		add_action( 'admin_init', array( Cookie_Controller::get_instance(), 'reset_cache' ) );
 		add_action( 'admin_init', array( Category_Controller::get_instance(), 'reset_cache' ) );
 		add_action( 'admin_init', array( Cookie_Controller::get_instance(), 'install_tables' ) );
-		add_filter( 'faz_registered_admin_menus', array( $this, 'register_menus' ) );
 		add_action( 'faz_reinstall_tables', array( Category_Controller::get_instance(), 'reinstall' ) );
 		add_action( 'faz_reinstall_tables', array( Cookie_Controller::get_instance(), 'reinstall' ) );
 	}
@@ -53,29 +52,5 @@ class Cookies extends Modules {
 		$cookie_cat_api = new Categories_API();
 		$cookie_api     = new Cookies_API();
 		$cookie_scraper = new Cookie_Scraper();
-	}
-
-	/**
-	 * Pass menu items to be registered.
-	 *
-	 * @param array $menus Sub menu array.
-	 * @return array
-	 */
-	public function register_menus( $menus ) {
-		$menus['cookies'] = array(
-			'name'     => __( 'Cookie Manager', 'faz-cookie-manager' ),
-			'callback' => array( $this, 'menu_page_template' ),
-			'order'    => 3,
-		);
-		return $menus;
-	}
-
-	/**
-	 * Main menu template
-	 *
-	 * @return void
-	 */
-	public function menu_page_template() {
-		echo '<div id="faz-app"></div>';
 	}
 }

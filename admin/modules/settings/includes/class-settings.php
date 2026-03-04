@@ -101,7 +101,10 @@ class Settings extends Store {
 				'sites' => array(),
 			),
 			'iab'          => array(
-				'enabled' => false,
+				'enabled'               => false,
+				'publisher_cc'          => '',
+				'cmp_id'                => 0,
+				'purpose_one_treatment' => false,
 			),
 			'geolocation'  => array(
 				'maxmind_license_key' => '',
@@ -200,16 +203,22 @@ class Settings extends Store {
 			case 'uet_consent_mode':
 			case 'clarity_consent':
 			case 'enabled':
+			case 'purpose_one_treatment':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'installed':
 			case 'step':
 			case 'max_pages':
+			case 'cmp_id':
 				$value = absint( $value );
 				break;
 			case 'excluded_pages':
 			case 'sites':
 				$value = is_array( $value ) ? array_map( 'sanitize_text_field', $value ) : array();
+				break;
+			case 'publisher_cc':
+				$value = strtoupper( sanitize_text_field( (string) $value ) );
+				$value = preg_match( '/^[A-Z]{2}$/', $value ) ? $value : '';
 				break;
 			default:
 				$value = faz_sanitize_text( $value );

@@ -266,9 +266,9 @@ function _fazSetInitialState() {
     const activeLaw = _fazGetLaw()
     ref._fazSetInStore("consent", "no");
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
-    const responseCategories = { accepted: [], rejected: [] };
-    let valueToSet = "yes";
+    const responseCategories = { accepted: [], rejected: [], action: 'init' };
     for (const category of _fazStore._categories) {
+        let valueToSet = "yes";
         if (
             (activeLaw === "gdpr" &&
                 !category.isNecessary &&
@@ -806,6 +806,21 @@ function _fazSetCheckboxes(
             const isChecked = elem.checked;
             elem.style.backgroundColor = isChecked ? activeColor : inactiveColor;
             _fazSetCheckBoxAriaLabel(boxElem, isChecked, formattedLabel);
+
+            // Sync the paired toggle (fazSwitch ↔ fazCategoryDirect).
+            const slug = category.slug;
+            const pairedId = key === 'fazCategoryDirect'
+                ? `fazSwitch${slug}`
+                : `fazCategoryDirect${slug}`;
+            const paired = document.getElementById(pairedId);
+            if (paired && paired.checked !== isChecked) {
+                paired.checked = isChecked;
+                const pairedToggle = key === 'fazCategoryDirect' ? prefToggle : (previewToggle || prefToggle);
+                const pairedActive = pairedToggle?.states?.active?.styles?.['background-color'] || '#1863dc';
+                const pairedInactive = pairedToggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
+                paired.style.backgroundColor = isChecked ? pairedActive : pairedInactive;
+                _fazSetCheckBoxAriaLabel(paired, isChecked, formattedLabel);
+            }
         });
     });
 }
@@ -870,6 +885,7 @@ function _fazRenderBanner() {
     );
     if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') _fazToggleAriaExpandStatus("=settings-button", "false");
     _fazSetPreferenceCheckBoxStates();
+    _fazRenderVendorSection();
     _fazAttachCategoryListeners();
     _fazRegisterListeners();
     _fazSetCCPAOptions();
@@ -920,7 +936,7 @@ function _fazAcceptCookies(choice = "all") {
     } else {
         ref._fazSetInStore("consent", ccpaCheckBoxValue ? "yes" : "no");
     }
-    const responseCategories = { accepted: [], rejected: [] };
+    const responseCategories = { accepted: [], rejected: [], action: choice };
     for (const category of _fazStore._categories) {
         let valueToSet = "no";
         if (activeLaw === 'gdpr') {
@@ -939,6 +955,9 @@ function _fazAcceptCookies(choice = "all") {
             _fazRemoveDeadCookies(category);
         } else responseCategories.accepted.push(category.slug);
     }
+    // Handle IAB vendor consent.
+    _fazSaveVendorConsent(choice);
+
     _fazUnblock();
     _fazFireEvent(responseCategories);
 }
@@ -1153,9 +1172,6 @@ function _fazUnblock() {
     );
 }
 
-function _fazClearListeners() {    _nodeListObserver.disconnect();
-    document.createElement = _fazCreateElementBackup;
-}
 function _fazAddProviderToList(node, cleanedHostname) {
     const nodeCategory =
         node.hasAttribute("data-fazcookie") && node.getAttribute("data-fazcookie");
@@ -1524,6 +1540,249 @@ function _fazSetCheckBoxInfo(
 }
 
 window.revisitFazConsent = () => _revisitFazConsent();
+
+/**
+ * Render IAB vendor section in preference center (if IAB enabled).
+ */
+function _fazRenderVendorSection() {
+    if (!_fazStore._iabEnabled || !_fazStore._iabVendors || !_fazStore._iabVendors.length) return;
+
+    // Insert vendor section into the scrollable body area (not the footer).
+    const scrollBody = document.querySelector('.faz-preference-body-wrapper') ||
+                       document.querySelector('.faz-preference-wrapper') ||
+                       document.querySelector('.faz-modal');
+    if (!scrollBody) return;
+
+    // Insert after the accordion wrapper (categories), inside the scrollable area.
+    const accordionWrapper = scrollBody.querySelector('.faz-accordion-wrapper') ||
+                             scrollBody.querySelector('[data-faz-tag="detail-categories"]');
+
+    const section = document.createElement('div');
+    section.className = 'faz-iab-vendors-section';
+    section.style.cssText = 'margin:16px 0;padding:0 16px;';
+
+    const heading = document.createElement('h4');
+    heading.className = 'faz-preference-title';
+    heading.style.cssText = 'margin:16px 0 8px;font-size:14px;font-weight:600;';
+    heading.textContent = 'IAB Vendor Consent';
+    section.appendChild(heading);
+
+    const count = document.createElement('p');
+    count.style.cssText = 'margin:0 0 12px;font-size:12px;color:#6b7280;';
+    count.textContent = _fazStore._iabVendors.length + ' vendor' +
+        (_fazStore._iabVendors.length !== 1 ? 's' : '') + ' use your data for advertising and measurement purposes';
+    section.appendChild(count);
+
+    // Build purpose name lookup.
+    const purposeNames = {};
+    if (_fazStore._iabPurposes) {
+        _fazStore._iabPurposes.forEach(function(p) { purposeNames[p.id] = p.name; });
+    }
+
+    // Get toggle colors from banner config (matching category toggles).
+    const prefToggle = _fazStore._bannerConfig?.config?.preferenceCenter?.toggle;
+    const activeColor = prefToggle?.states?.active?.styles?.['background-color'] || '#1863dc';
+    const inactiveColor = prefToggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
+
+    // Read existing vendor consent.
+    const existingConsent = _fazReadVendorConsent();
+
+    _fazStore._iabVendors.forEach(function(vendor) {
+        const accordion = document.createElement('div');
+        accordion.className = 'faz-accordion';
+        accordion.id = 'fazVendor' + vendor.id;
+
+        const item = document.createElement('div');
+        item.className = 'faz-accordion-item';
+
+        // Chevron (matches category accordions).
+        const chevron = document.createElement('div');
+        chevron.className = 'faz-accordion-chevron';
+        const chevronIcon = document.createElement('i');
+        chevronIcon.className = 'faz-chevron-right';
+        chevron.appendChild(chevronIcon);
+        item.appendChild(chevron);
+
+        // Header wrapper (matches category accordions).
+        const headerWrapper = document.createElement('div');
+        headerWrapper.className = 'faz-accordion-header-wrapper';
+
+        const header = document.createElement('div');
+        header.className = 'faz-accordion-header';
+
+        const nameBtn = document.createElement('button');
+        nameBtn.className = 'faz-accordion-btn';
+        nameBtn.type = 'button';
+        nameBtn.textContent = vendor.name;
+        nameBtn.setAttribute('aria-label', vendor.name);
+        nameBtn.setAttribute('aria-expanded', 'false');
+        header.appendChild(nameBtn);
+
+        // Toggle switch (same structure as category toggles).
+        const switchWrap = document.createElement('div');
+        switchWrap.className = 'faz-switch';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'fazVendorSwitch' + vendor.id;
+        cb.setAttribute('aria-label', 'Vendor consent: ' + vendor.name);
+        cb.checked = existingConsent[vendor.id] === true;
+        cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
+        cb.addEventListener('change', function() {
+            cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
+        });
+        switchWrap.appendChild(cb);
+        header.appendChild(switchWrap);
+        headerWrapper.appendChild(header);
+
+        // Short purpose summary (matches category description area).
+        const purposeLabels = (vendor.purposes || []).map(function(pid) {
+            return purposeNames[pid] || ('Purpose ' + pid);
+        });
+        const liLabels = (vendor.legIntPurposes || []).map(function(pid) {
+            return purposeNames[pid] || ('Purpose ' + pid);
+        });
+        const allPurposeCount = purposeLabels.length + liLabels.length;
+        if (allPurposeCount > 0) {
+            const desc = document.createElement('div');
+            desc.className = 'faz-accordion-header-des';
+            const descP = document.createElement('p');
+            descP.textContent = allPurposeCount + ' purpose' + (allPurposeCount !== 1 ? 's' : '') +
+                (vendor.features && vendor.features.length ? ', ' + vendor.features.length + ' feature' + (vendor.features.length !== 1 ? 's' : '') : '');
+            desc.appendChild(descP);
+            headerWrapper.appendChild(desc);
+        }
+
+        item.appendChild(headerWrapper);
+
+        // Expandable body (details on click).
+        const bodyId = 'fazVendor' + vendor.id + 'Body';
+        const body = document.createElement('div');
+        body.className = 'faz-accordion-body';
+        body.id = bodyId;
+        body.style.cssText = 'font-size:12px;color:#374151;padding:8px 0 8px 24px;';
+        nameBtn.setAttribute('aria-controls', bodyId);
+
+        let safePolicyUrl = '';
+        if (vendor.policyUrl) {
+            try {
+                const parsedUrl = new URL(vendor.policyUrl, window.location.origin);
+                if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+                    safePolicyUrl = parsedUrl.href;
+                }
+            } catch (_unused) { /* invalid URL */ }
+        }
+        if (safePolicyUrl) {
+            const pLink = document.createElement('a');
+            pLink.href = safePolicyUrl;
+            pLink.target = '_blank';
+            pLink.rel = 'noopener noreferrer';
+            pLink.textContent = 'Privacy Policy';
+            pLink.style.cssText = 'color:#1863dc;text-decoration:underline;';
+            body.appendChild(pLink);
+            body.appendChild(document.createElement('br'));
+        }
+
+        function appendDetail(parent, label, text) {
+            const p = document.createElement('p');
+            p.style.margin = '4px 0 0';
+            const b = document.createElement('strong');
+            b.textContent = label + ': ';
+            p.appendChild(b);
+            p.appendChild(document.createTextNode(text));
+            parent.appendChild(p);
+        }
+        if (purposeLabels.length) appendDetail(body, 'Consent', purposeLabels.join(', '));
+        if (liLabels.length) appendDetail(body, 'Legitimate Interest', liLabels.join(', '));
+        if (vendor.features && vendor.features.length) {
+            appendDetail(body, 'Features', vendor.features.map(function(fid) { return 'Feature ' + fid; }).join(', '));
+        }
+        if (vendor.cookieMaxAgeSeconds != null) {
+            appendDetail(body, 'Cookie retention', Math.round(vendor.cookieMaxAgeSeconds / 86400) + ' days');
+        }
+
+        accordion.appendChild(item);
+        accordion.appendChild(body);
+
+        // Toggle body on chevron/name click.
+        function toggleBody() {
+            const isOpen = body.style.display === 'block';
+            body.style.display = isOpen ? 'none' : 'block';
+            nameBtn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
+            if (isOpen) {
+                chevronIcon.classList.remove('faz-chevron-down');
+                chevronIcon.classList.add('faz-chevron-right');
+            } else {
+                chevronIcon.classList.remove('faz-chevron-right');
+                chevronIcon.classList.add('faz-chevron-down');
+            }
+        }
+        nameBtn.addEventListener('click', toggleBody);
+        chevron.addEventListener('click', toggleBody);
+
+        section.appendChild(accordion);
+    });
+
+    if (accordionWrapper) {
+        // Insert right after the category accordion list, inside the scrollable area.
+        accordionWrapper.parentNode.insertBefore(section, accordionWrapper.nextSibling);
+    } else {
+        scrollBody.appendChild(section);
+    }
+}
+
+/**
+ * Read vendor consent from cookie.
+ */
+function _fazReadVendorConsent() {
+    const result = {};
+    const match = document.cookie.match(/fazVendorConsent=([^;]+)/);
+    if (!match) return result;
+    match[1].split(',').forEach(function(pair) {
+        const kv = pair.split(':');
+        if (kv.length === 2) {
+            result[parseInt(kv[0], 10)] = kv[1].trim() === 'yes';
+        }
+    });
+    return result;
+}
+
+/**
+ * Save vendor consent based on choice.
+ * @param {string} choice 'all', 'reject', or 'custom'
+ */
+function _fazSaveVendorConsent(choice) {
+    if (!_fazStore._iabEnabled || !_fazStore._iabVendors || !_fazStore._iabVendors.length) return;
+
+    const parts = [];
+    _fazStore._iabVendors.forEach(function(vendor) {
+        let value = 'no';
+        if (choice === 'all') {
+            value = 'yes';
+        } else if (choice === 'reject') {
+            value = 'no';
+        } else {
+            // Custom: read checkbox state.
+            const cb = document.getElementById('fazVendorSwitch' + vendor.id);
+            value = (cb && cb.checked) ? 'yes' : 'no';
+        }
+        parts.push(vendor.id + ':' + value);
+    });
+
+    const expiry = _fazStore._expiry || 180;
+    const date = new Date();
+    date.setTime(date.getTime() + (expiry * 24 * 60 * 60 * 1000));
+    let domain = '';
+    if (_fazStore._rootDomain) {
+        domain = ';domain=' + _fazStore._rootDomain;
+    }
+    const payload = parts.join(',');
+    if (payload.length > 3800) {
+        console.warn('fazVendorConsent cookie too large (' + payload.length + ' bytes), vendor consent may not persist reliably.');
+        return;
+    }
+    const secure = location.protocol === 'https:' ? ';Secure' : '';
+    document.cookie = 'fazVendorConsent=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
+}
 
 window.getFazConsent = function () {
     const cookieConsent = {

@@ -1,5 +1,5 @@
 /**
- * FAZ Cookie Manager — Languages Page JS
+ * FAZ Cookie Manager - Languages Page JS
  * Searchable language selector with tag-based UI.
  */
 (function () {

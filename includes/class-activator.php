@@ -80,6 +80,32 @@ class Activator {
 		add_action( 'admin_init', array( __CLASS__, 'ensure_uncategorized_category' ) );
 		add_action( 'admin_init', array( __CLASS__, 'ensure_wordpress_internal_category' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
+		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
+		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		self::schedule_cleanup();
+	}
+
+	/**
+	 * Schedule recurring cron events: daily retention cleanup and weekly GVL update.
+	 */
+	public static function schedule_cleanup() {
+		if ( ! wp_next_scheduled( 'faz_daily_cleanup' ) ) {
+			wp_schedule_event( time(), 'daily', 'faz_daily_cleanup' );
+		}
+		if ( ! wp_next_scheduled( 'faz_weekly_gvl_update' ) ) {
+			wp_schedule_event( time(), 'weekly', 'faz_weekly_gvl_update' );
+		}
+	}
+
+	/**
+	 * Run consent log retention cleanup based on settings.
+	 */
+	public static function run_retention_cleanup() {
+		$settings  = get_option( 'faz_settings' );
+		$retention = isset( $settings['consent_logs']['retention'] ) ? (int) $settings['consent_logs']['retention'] : 12;
+		if ( $retention > 0 ) {
+			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
+		}
 	}
 
 	/**

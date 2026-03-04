@@ -112,17 +112,6 @@ if ( ! function_exists( 'faz_is_rest_request' ) ) {
 		return apply_filters( 'faz_is_rest_api_request', $is_rest_api_request );
 	}
 }
-if ( ! function_exists( 'faz_is_cloud_request' ) ) {
-
-	/**
-	 * Check if this is a cloud request (always false — cloud features removed).
-	 *
-	 * @return boolean
-	 */
-	function faz_is_cloud_request() {
-		return false;
-	}
-}
 if ( ! function_exists( 'faz_array_search' ) ) {
 
 	/**

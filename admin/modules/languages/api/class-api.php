@@ -68,68 +68,6 @@ class Api extends Rest_Controller {
 				'schema' => array( $this, 'get_public_item_schema' ),
 			)
 		);
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/available/',
-			array(
-				array(
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => array( $this, 'get_available_items' ),
-					'permission_callback' => array( $this, 'get_items_permissions_check' ),
-					'args'                => $this->get_collection_params(),
-				),
-				'schema' => array( $this, 'get_public_item_schema' ),
-			)
-		);
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base . '/translations',
-			array(
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'get_translations' ),
-					'permission_callback' => array( $this, 'create_item_permissions_check' ),
-				),
-				'schema' => array( $this, 'get_public_item_schema' ),
-			)
-		);
-	}
-
-	public function get_translations ($request) {
-		$objects = array();
-		$langs = $request->get_params();
-		unset($langs['context']);
-		unset($langs['_locale']);
-		foreach($langs as $lang) {
-			Controller::get_instance()->get_translations($lang);
-			$data      = $this->prepare_item_for_response( $lang, $request );
-			$objects[] = $this->prepare_response_for_collection( $data );
-		}
-		return rest_ensure_response( $objects );
-	}
-
-	/**
-	 * Get a collection of available languages.
-	 *
-	 * @since 3.0.0
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function get_available_items( $request ) {
-		$objects = array();
-		$items   = Controller::get_instance()->get_languages();
-		$data    = array();
-
-		foreach ( $items as $language => $code ) {
-			$data      = array(
-				'code' => $code,
-				'name' => $language,
-			);
-			$data      = $this->prepare_item_for_response( $data, $request );
-			$objects[] = $this->prepare_response_for_collection( $data );
-		}
-		return rest_ensure_response( $objects );
 	}
 
 	/**

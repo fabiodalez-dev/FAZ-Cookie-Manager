@@ -27,9 +27,6 @@ class Settings extends Modules {
 	 * Constructor.
 	 */
 	public function init() {
-		$controller = Includes\Controller::get_instance();
-		add_filter( 'faz_admin_scripts_config', array( $controller, 'load_common_settings' ) );
-		// Cloud connect action removed.
 		$this->load_default();
 		$this->load_apis();
 	}

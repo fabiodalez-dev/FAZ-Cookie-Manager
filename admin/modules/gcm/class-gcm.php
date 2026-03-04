@@ -19,8 +19,6 @@ class Gcm extends Modules {
 	 * Constructor.
 	 */
 	public function init() {
-		$controller = Includes\Controller::get_instance();
-		add_filter( 'faz_admin_scripts_gcm_config', array( $controller, 'load_common_gcm_settings' ) );
 		$this->load_apis();
 		$this->load_gcm_default();
 	}

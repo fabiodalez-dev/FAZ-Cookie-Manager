@@ -113,50 +113,6 @@ class Api extends Rest_Controller {
 			)
 		);
 
-		// POST /consent_logs - log a new consent (public, no auth required).
-		register_rest_route(
-			$this->namespace,
-			'/' . $this->rest_base,
-			array(
-				array(
-					'methods'             => WP_REST_Server::CREATABLE,
-					'callback'            => array( $this, 'create_item' ),
-					'permission_callback' => '__return_true',
-					'args'                => array(
-						'consent_id' => array(
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-						),
-						'status'     => array(
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-							'default'           => 'partial',
-						),
-						'categories' => array(
-							'type'              => array( 'object', 'array' ),
-							'default'           => array(),
-							'sanitize_callback' => function ( $value ) {
-								if ( is_array( $value ) ) {
-									return array_map( 'sanitize_text_field', $value );
-								}
-								if ( is_object( $value ) ) {
-									$sanitized = new \stdClass();
-									foreach ( get_object_vars( $value ) as $k => $v ) {
-										$sanitized->{ sanitize_key( $k ) } = sanitize_text_field( $v );
-									}
-									return $sanitized;
-								}
-								return array();
-							},
-						),
-						'url'        => array(
-							'type'              => 'string',
-							'sanitize_callback' => 'esc_url_raw',
-						),
-					),
-				),
-			)
-		);
 	}
 
 	/**
@@ -212,33 +168,6 @@ class Api extends Rest_Controller {
 		}
 
 		return rest_ensure_response( $item );
-	}
-
-	/**
-	 * Create a new consent log entry (public endpoint).
-	 *
-	 * @param WP_REST_Request $request Full details about the request.
-	 * @return WP_REST_Response|WP_Error
-	 */
-	public function create_item( $request ) {
-		$data = array(
-			'consent_id' => $request->get_param( 'consent_id' ),
-			'status'     => $request->get_param( 'status' ),
-			'categories' => $request->get_param( 'categories' ),
-			'url'        => $request->get_param( 'url' ),
-		);
-
-		$result = Controller::get_instance()->log_consent( $data );
-
-		if ( false === $result ) {
-			return new WP_Error(
-				'consent_log_failed',
-				__( 'Failed to log consent.', 'faz-cookie-manager' ),
-				array( 'status' => 500 )
-			);
-		}
-
-		return rest_ensure_response( $result );
 	}
 
 	/**

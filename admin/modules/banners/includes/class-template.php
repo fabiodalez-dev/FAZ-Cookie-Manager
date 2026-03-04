@@ -142,7 +142,6 @@ class Template {
 			$this->properties = $banner->get_settings();
 			$this->load();
 		}
-		add_action( 'faz_reset_settings', array( $this, 'reset' ) );
 		add_action( 'faz_after_update_banner', array( $this, 'clear_template' ) );
 		add_action( 'faz_after_update_cookie_category', array( $this, 'clear_template' ) );
 		add_action( 'faz_after_update_cookie', array( $this, 'clear_template' ) );

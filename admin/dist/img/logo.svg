@@ -1,8 +1,0 @@
-<svg width="188" height="30" viewBox="0 0 188 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M0 2h14v3H3v8h10v3H3v12H0V2z" fill="#1e40af"/>
-<path d="M21 2h3l10 26h-3.2L28.5 22H18.5L16.2 28H13L21 2zm6.3 17L22.5 5.5 17.7 19h9.6z" fill="#1e40af"/>
-<path d="M36 2h14l-14 23h14v3H36l14-23H36V2z" fill="#1e40af"/>
-<path d="M62 8a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v14a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4V8z" fill="none" stroke="#3b82f6" stroke-width="2"/>
-<path d="M65 12h4m-4 4h4" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
-<text x="80" y="22" font-family="system-ui,sans-serif" font-size="14" font-weight="600" fill="#334155">Cookie Manager</text>
-</svg>

@@ -1,5 +1,5 @@
 /**
- * FAZ Cookie Manager — GCM Page JS
+ * FAZ Cookie Manager - GCM Page JS
  */
 (function () {
 	'use strict';

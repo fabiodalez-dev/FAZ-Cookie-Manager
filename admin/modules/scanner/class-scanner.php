@@ -27,7 +27,6 @@ class Scanner extends Modules {
 	public function init() {
 		$controller = new \FazCookie\Admin\Modules\Scanner\Includes\Controller();
 		$this->load_apis( $controller );
-		add_filter( 'faz_admin_scripts_scanner_config', array( $controller, 'load_scanner_config' ) );
 
 		// Register async scan cron hook.
 		\FazCookie\Admin\Modules\Scanner\Includes\Controller::register_cron_hook();
