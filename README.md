@@ -20,7 +20,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 | Cookie scanner | No | Yes | **Yes** |
 | Consent logging + CSV export | No | Yes | **Yes** |
 | Google Consent Mode v2 | No | Yes | **Yes** |
-| IAB TCF v2.2 | No | Yes | **Yes** |
+| IAB TCF v2.3 + GVL | No | Yes | **Yes** |
 | Geo-targeting | No | Yes | **Yes** |
 | Multi-language (180+) | No | Yes | **Yes** |
 | Cloud dependency | No | **Yes** | **No** |
@@ -71,7 +71,7 @@ Select from 180+ available languages. The banner text adapts automatically to th
 ![Languages](assets/screenshots/screenshot-8.png)
 
 ### Settings
-Global controls: enable/disable banner, exclude pages, consent log retention, scanner limits, Microsoft UET/Clarity consent APIs, and IAB TCF v2.2 toggle.
+Global controls: enable/disable banner, exclude pages, consent log retention, scanner limits, Microsoft UET/Clarity consent APIs, and IAB TCF v2.3 toggle with CMP ID and Purpose One Treatment options.
 
 ![Settings](assets/screenshots/screenshot-9.png)
 
@@ -86,7 +86,7 @@ Global controls: enable/disable banner, exclude pages, consent log retention, sc
 | CCPA / CPRA (California) | Supported | "Do Not Sell" opt-out, GPC signal detection |
 | Garante Privacy LG 2021 (Italy) | Compliant | Equal-weight buttons, no scroll-as-consent, 6-month max expiry |
 | EDPB Guidelines | Compliant | Scroll != consent, no pre-checked categories, equal button prominence |
-| IAB TCF v2.2 | Supported | Full `__tcfapi()` CMP, TC string generation, cross-frame messaging |
+| IAB TCF v2.3 | Compliant | Full `__tcfapi()` CMP, GVL integration, real vendor consent, DisclosedVendors segment |
 | Google Consent Mode v2 | Compliant | Default-denied signals, consent update on interaction |
 | LGPD (Brazil) | Supported | Consent-based model |
 | POPIA (South Africa) | Supported | Opt-in consent |
@@ -97,14 +97,19 @@ Global controls: enable/disable banner, exclude pages, consent log retention, sc
 
 ### Automated Compliance Tests
 
-21 Playwright tests verify compliance at runtime:
+175 Playwright tests verify compliance at runtime:
 
 - TF01-TF18: Full functional test suite covering banner display, cookie blocking, consent flow, mobile, accessibility, revocation, logging, GCM signals, and cookie declarations
 - P05: No ambiguous button labels (dark pattern check)
 - G07: Non-technical toggles OFF by default
 - I08: Technical cookies non-disableable
+- T01-T03: IAB TCF `__tcfapi` CMP stub, TC String format, cross-frame messaging
+- GCM01-GCM05: Google Consent Mode default-denied, granted on accept, revocation
+- CD01-CD03: Cookie declarations, descriptions, categories
+- VIS01-VIS09: Visual integrity checks across banner types and preference centers
+- IAB01-IAB39: IAB Settings page, GVL admin page, vendor selection, TC String validation
 
-**Test suite includes 21 automated compliance checks.**
+**Test suite includes 175 automated compliance checks.**
 
 ---
 
@@ -200,15 +205,23 @@ Full GCM v2 integration with all required consent signals:
 - Configure ATP (Authorized Technology Provider) IDs
 - Generates Additional Consent string format: `1~id.id.id...`
 
-### IAB TCF v2.2 CMP
+### IAB TCF v2.3 CMP with Global Vendor List
 
-Full `__tcfapi()` implementation compliant with the IAB Transparency & Consent Framework v2.2:
+Full `__tcfapi()` implementation compliant with the IAB Transparency & Consent Framework v2.3:
 
-- **Commands**: `ping`, `getTCData`, `addEventListener`, `removeEventListener`
-- **TC String generation**: Minimal base64url core-segment with purpose consent bits
+- **Commands**: `ping`, `getTCData`, `addEventListener`, `removeEventListener`, `getVendorList`
+- **Global Vendor List (GVL)**: Server-side download and caching of the IAB GVL v3 (1,100+ vendors). Weekly auto-update via WP-Cron, manual update from admin UI
+- **GVL Admin Page**: Browse, search, and filter all IAB-registered vendors. Select which vendors your site uses. Paginated table with purpose/feature details
+- **Real Vendor Consent**: TC Strings encode actual vendor consent and legitimate interest bits based on user choices and vendor purpose declarations
+- **DisclosedVendors Segment**: Mandatory segment listing all vendors the CMP discloses to users
+- **Vendor Legitimate Interest**: Honors user's Right to Object -- LI bits are only set when the user hasn't objected to the corresponding purposes
+- **Vendor Consent UI**: Per-vendor toggles in the preference center, with vendor name, purposes, privacy policy link, and cookie retention info
+- **TC String**: Full base64url encoding with core segment + DisclosedVendors segment, `euconsent-v2` cookie
 - **Cross-frame messaging**: `__tcfapiLocator` iframe + `postMessage` bridge
 - **Command queue**: Processes pre-load `__tcfapi.a` queue
-- **Note**: The Global Vendor List (GVL) is not loaded dynamically. TC Strings contain purpose consent bits mapped from the plugin's category toggles. For full vendor-level granularity, integrate with an external GVL loader.
+- **CMP Stub**: Inline stub responds to `ping` before main script loads (`cmpStatus: 'stub'`)
+- **Dynamic config**: ConsentLanguage, publisherCC, gdprApplies, CMP ID, Purpose One Treatment -- all configured from server-side settings
+- **GVL file storage**: Cached at `wp-content/uploads/faz-cookie-manager/gvl/vendor-list.json` for frontend access
 
 ### Microsoft Consent Integration
 
@@ -327,6 +340,17 @@ All endpoints under `faz/v1`. Admin endpoints require authentication (WordPress 
 | POST | `/banners` | Create a banner |
 | GET/PUT/DELETE | `/banners/{id}` | Read/update/delete a banner |
 
+### Global Vendor List (GVL)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/gvl` | GVL status (version, vendor count, purposes) |
+| GET | `/gvl/vendors` | List vendors (paginated, searchable, filterable) |
+| GET | `/gvl/vendors/{id}` | Single vendor details |
+| POST | `/gvl/update` | Download/refresh GVL from IAB |
+| GET | `/gvl/selected` | Get selected vendor IDs |
+| POST | `/gvl/selected` | Save selected vendor IDs |
+
 ### Languages
 
 | Method | Endpoint | Description |
@@ -388,6 +412,22 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 ---
 
 ## Changelog
+
+### 1.1.0
+- **IAB TCF v2.3 with Global Vendor List**: Full GVL v3 integration -- server-side download, caching, weekly auto-update, admin page for vendor browsing and selection
+- **Real Vendor Consent**: TC Strings now encode actual vendor consent bits, legitimate interest bits (honoring Right to Object), and DisclosedVendors segment with real vendor IDs
+- **Vendor Consent UI**: Per-vendor toggles in the preference center with vendor details, privacy policy links, and purpose declarations
+- **GVL Admin Page**: Browse, search, and filter 1,100+ IAB-registered vendors. Paginated table, purpose filter, select-all, save selection
+- **IAB Settings**: CMP ID, Purpose One Treatment, publisher country code configuration
+- **Dynamic TCF Config**: ConsentLanguage, publisherCC, gdprApplies derived from server settings instead of hardcoded values
+- **CMP Stub**: Inline `__tcfapi` stub responds to `ping` before main script loads
+- **`getVendorList` Command**: Returns complete GVL structure (vendors, purposes, features, special purposes/features)
+- **`euconsent-v2` Cookie**: Standard TCF cookie written only after explicit user consent action
+- **Security Hardening**: Cookie overflow protection (abort > 3800 bytes), iframe URL origin validation in scanner, atomic GVL file writes, defensive array casts
+- **Dead Code Cleanup**: Removed ~4.3 MB of unused modules (upgrade wizard, review feedback, dashboard widget, uninstall feedback, cache services), legacy routes, and cloud stubs
+- **CodeQL**: Added GitHub code scanning workflow
+- **GeoLite2 Fix**: Ensured WordPress file API is loaded before database download (PR #9)
+- **175 automated tests**: Expanded test suite from 21 to 175 tests covering TCF, GCM, visual integrity, and IAB settings
 
 ### 1.0.5
 - Unified text domain and plugin slug to `faz-cookie-manager`

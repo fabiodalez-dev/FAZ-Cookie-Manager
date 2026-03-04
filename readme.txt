@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.0.5
+Stable tag: 1.1.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -117,6 +117,22 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 
 == Changelog ==
 
+= 1.1.0 =
+* IAB TCF v2.3 with Global Vendor List (GVL v3) -- server-side download, caching, weekly auto-update, admin page for vendor selection
+* Real vendor consent in TC Strings -- vendor consent bits, legitimate interest (honoring Right to Object), DisclosedVendors segment
+* Vendor consent UI in preference center -- per-vendor toggles with details, privacy policy, purpose declarations
+* GVL admin page -- browse, search, filter 1,100+ IAB vendors, paginated, purpose filter
+* IAB settings -- CMP ID, Purpose One Treatment, publisher country code
+* Dynamic TCF config -- ConsentLanguage, publisherCC, gdprApplies from server settings
+* CMP stub -- inline __tcfapi responds to ping before main script loads
+* getVendorList command -- returns complete GVL structure
+* euconsent-v2 cookie -- standard TCF cookie, written only after explicit consent
+* Security hardening -- cookie overflow protection, iframe URL validation, atomic file writes
+* Dead code cleanup -- removed ~4.3 MB unused modules and cloud stubs
+* CodeQL code scanning workflow
+* GeoLite2 download fix (PR #9)
+* 175 automated compliance tests (expanded from 21)
+
 = 1.0.5 =
 * Unified text domain and plugin slug to `faz-cookie-manager`
 * WordPress.com Marketplace compliance (headers, readme.txt)
@@ -148,6 +164,9 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.1.0 =
+Major update: IAB TCF v2.3 with full Global Vendor List integration. New GVL admin page for vendor management. 175 automated compliance tests. Clear caches after upgrading.
 
 = 1.0.5 =
 Admin page URLs have changed. Update any bookmarks. Clear caches after upgrading.
