@@ -307,7 +307,7 @@ class Category_Controller extends Base_Controller {
 			$object->set_name( $name );
 			$object->set_description( $description );
 			$object->set_slug( $slug );
-			if ( 'necessary' === $slug ) {
+			if ( 'necessary' === $slug || 'uncategorized' === $slug ) {
 				$object->set_prior_consent( true );
 			}
 			$object->save();

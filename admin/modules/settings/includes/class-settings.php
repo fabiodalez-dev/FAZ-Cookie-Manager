@@ -65,12 +65,9 @@ class Settings extends Store {
 				'installed' => time(),
 			),
 			'account'      => array(
-				'connected'   => true,
-				'status'      => true,
-				'plan'        => 'ultimate',
-				'email'       => '',
-				'website_id'  => '',
-				'website_key' => '',
+				'connected' => true,
+				'status'    => true,
+				'plan'      => 'ultimate',
 			),
 			'consent_logs' => array(
 				'status'    => true,
@@ -209,8 +206,13 @@ class Settings extends Store {
 			case 'installed':
 			case 'step':
 			case 'max_pages':
-			case 'cmp_id':
 				$value = absint( $value );
+				break;
+			case 'retention':
+				$value = max( 1, min( 120, absint( $value ) ) );
+				break;
+			case 'cmp_id':
+				$value = min( 4095, absint( $value ) );
 				break;
 			case 'excluded_pages':
 			case 'sites':

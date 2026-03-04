@@ -145,6 +145,7 @@ class Template {
 		add_action( 'faz_after_update_banner', array( $this, 'clear_template' ) );
 		add_action( 'faz_after_update_cookie_category', array( $this, 'clear_template' ) );
 		add_action( 'faz_after_update_cookie', array( $this, 'clear_template' ) );
+		add_action( 'faz_after_update_settings', array( $this, 'clear_template' ), 10, 1 );
 		add_action( 'faz_clear_cache', array( $this, 'clear_template' ) );
 	}
 
@@ -499,7 +500,10 @@ class Template {
 	 *
 	 * @return void
 	 */
-	public function clear_template() {
+	public function clear_template( $clear = true ) {
+		if ( false === $clear ) {
+			return;
+		}
 		update_option( 'faz_banner_template', '' );
 	}
 

@@ -20,6 +20,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Cookie_Table_Shortcode {
 
 	/**
+	 * Whether the inline CSS has already been output.
+	 *
+	 * @var bool
+	 */
+	private static $css_output = false;
+
+	/**
 	 * Initialize and register shortcodes.
 	 */
 	public function __construct() {
@@ -184,6 +191,8 @@ class Cookie_Table_Shortcode {
 
 		// Build HTML.
 		ob_start();
+		if ( ! self::$css_output ) :
+			self::$css_output = true;
 		?>
 		<style>
 		.faz-cookie-table-wrap{margin:1.5em 0;font-size:14px;line-height:1.5;}
@@ -203,6 +212,7 @@ class Cookie_Table_Shortcode {
 			.faz-cookie-table tr{border:1px solid #e2e8f0;margin-bottom:8px;border-radius:4px;}
 		}
 		</style>
+		<?php endif; ?>
 		<div class="faz-cookie-table-wrap">
 		<?php if ( ! empty( $atts['heading'] ) ) : ?>
 			<h3 class="faz-cookie-table-heading"><?php echo esc_html( $atts['heading'] ); ?></h3>

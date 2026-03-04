@@ -142,7 +142,12 @@ class Frontend {
 				. 'line-height:1.5;'
 				. 'box-sizing:border-box;'
 				. '}';
-			$css = $css_reset . $css;
+			// "Always active" label: push right, next to the toggle.
+			$css_fixes = '#faz-consent .faz-accordion-header .faz-always-active,'
+				. '.faz-modal .faz-accordion-header .faz-always-active{'
+				. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
+				. '}';
+			$css = $css_reset . $css . $css_fixes;
 
 			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
 			wp_localize_script( $this->plugin_name, '_fazConfig', $this->get_store_data() );

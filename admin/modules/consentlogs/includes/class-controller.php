@@ -136,17 +136,7 @@ class Controller {
 	 * @return string
 	 */
 	private function get_visitor_ip() {
-		$headers = array( 'HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR' );
-		foreach ( $headers as $header ) {
-			if ( ! empty( $_SERVER[ $header ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) );
-				$ip = trim( explode( ',', $ip )[0] );
-				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-					return $ip;
-				}
-			}
-		}
-		return '';
+		return faz_resolve_client_ip();
 	}
 
 	/**

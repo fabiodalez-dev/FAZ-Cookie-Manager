@@ -172,6 +172,11 @@ class Api extends Rest_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function record_event( $request ) {
+		// Rate limit: 1 request per IP per second — silently skip DB insert on duplicate.
+		if ( faz_throttle_request( 'faz_pv' ) ) {
+			return rest_ensure_response( array( 'throttled' => true ) );
+		}
+
 		$data = array(
 			'page_url'   => $request->get_param( 'page_url' ),
 			'page_title' => $request->get_param( 'page_title' ),

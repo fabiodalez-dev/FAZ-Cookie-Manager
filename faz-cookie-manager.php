@@ -18,7 +18,7 @@
  * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
  * Version:           1.1.0
  * Requires at least: 5.0
- * Tested up to:      6.7
+ * Tested up to:      6.8
  * Stable tag:        1.1.0
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro

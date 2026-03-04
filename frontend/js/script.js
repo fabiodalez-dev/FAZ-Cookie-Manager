@@ -196,8 +196,23 @@ ref._fazRandomString = function (length, allChars = true) {
     const chars = `${allChars ? `0123456789` : ""
         }ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz`;
     const response = [];
+    var rng;
+    if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+        var u32 = new Uint32Array(1);
+        var limit = Math.floor(0x100000000 / chars.length) * chars.length;
+        rng = function() {
+            var v;
+            do {
+                crypto.getRandomValues(u32);
+                v = u32[0];
+            } while (v >= limit);
+            return v % chars.length;
+        };
+    } else {
+        rng = function() { return Math.floor(Math.random() * chars.length); };
+    }
     for (let i = 0; i < length; i++)
-        response.push(chars[Math.floor(Math.random() * chars.length)]);
+        response.push(chars[rng()]);
     if (!allChars) return response.join("");
     return btoa(response.join("")).replace(/\=+$/, "");
 }
@@ -796,8 +811,9 @@ function _fazSetCheckboxes(
         boxElem.checked = checked;
         boxElem.disabled = disabled;
         if (disabled) {
-            boxElem.style.backgroundColor = '#94a3b8';
-            boxElem.style.opacity = '0.6';
+            // Necessary toggles: use active (blue) color to indicate "always on".
+            boxElem.style.backgroundColor = activeColor;
+            boxElem.style.opacity = '1';
             boxElem.style.cursor = 'not-allowed';
         } else {
             boxElem.style.backgroundColor = checked ? activeColor : inactiveColor;

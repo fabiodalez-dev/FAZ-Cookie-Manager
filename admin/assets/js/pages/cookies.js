@@ -543,10 +543,16 @@
 		}
 
 		var container = document.getElementById('faz-scan-frame');
+		if (!container) {
+			done({ cookies: [], scripts: [] });
+			return;
+		}
 		container.textContent = ''; // Remove previous iframe.
 
 		var iframe = document.createElement('iframe');
 		iframe.style.cssText = 'width:1px;height:1px;border:none;';
+		iframe.sandbox = 'allow-same-origin allow-scripts';
+		iframe.src = 'about:blank';
 		container.appendChild(iframe);
 
 		var finished = false;

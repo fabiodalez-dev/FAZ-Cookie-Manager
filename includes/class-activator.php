@@ -82,7 +82,24 @@ class Activator {
 		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		add_filter( 'cron_schedules', array( __CLASS__, 'register_cron_schedules' ) );
 		self::schedule_cleanup();
+	}
+
+	/**
+	 * Register custom cron schedules (WordPress only provides hourly, twicedaily, daily).
+	 *
+	 * @param array $schedules Existing cron schedules.
+	 * @return array
+	 */
+	public static function register_cron_schedules( $schedules ) {
+		if ( ! isset( $schedules['weekly'] ) ) {
+			$schedules['weekly'] = array(
+				'interval' => 7 * DAY_IN_SECONDS,
+				'display'  => __( 'Weekly', 'faz-cookie-manager' ),
+			);
+		}
+		return $schedules;
 	}
 
 	/**
@@ -348,7 +365,7 @@ class Activator {
 		self::ensure_category_by_slug( 'uncategorized', array(
 			'name'        => 'Uncategorized',
 			'description' => 'Cookies that have not yet been categorized.',
-		) );
+		), true );
 	}
 
 	/**

@@ -67,7 +67,7 @@
 	var CATEGORY_TO_PURPOSES = {
 		necessary:     [1],
 		functional:    [5, 6, 11],
-		analytics:     [7, 8, 9, 10],
+		analytics:     [8, 9, 10],
 		performance:   [8, 9],
 		advertisement: [2, 3, 4, 7]
 	};

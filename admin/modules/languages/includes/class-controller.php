@@ -35,8 +35,6 @@ class Controller {
 	 */
 	public $languages;
 
-	const API_BASE_PATH = FAZ_APP_URL . '/api/v2/';
-
 	public $faz_translated = array(
 		"en","de","fr","it","es","nl","bg","da","ru","ar","pl","pt","ca","hu","sv","hr","zh","uk","sk","tr","lt","cs","fi","no","pt-br","sl","ro","th","et","lv","el","eu","bs","gl","ja","ko","mt","sr","tl","cy","sr-latn"
 	);

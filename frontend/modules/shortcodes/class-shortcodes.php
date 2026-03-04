@@ -68,13 +68,6 @@ class Shortcodes {
 	protected $shortcodes;
 
 	/**
-	 * Check if connected to web app.
-	 *
-	 * @var boolean
-	 */
-	protected $connected;
-
-	/**
 	 * Check if preview mode is active.
 	 *
 	 * @var boolean
@@ -98,7 +91,6 @@ class Shortcodes {
 		$contents         = $banner->get_contents();
 		$settings         = $banner->get_settings();
 		$this->preview    = defined( 'FAZ_PREVIEW_REQUEST' ) && FAZ_PREVIEW_REQUEST;
-		$this->connected  = false;
 		$this->language   = $banner->get_language();
 		$this->template   = $template;
 		$this->properties = $settings;

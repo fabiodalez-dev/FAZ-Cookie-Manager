@@ -1,0 +1,14 @@
+{
+  "name": "faz-cookie-manager-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",
+    "test:e2e:headed": "playwright test -c tests/e2e/playwright.config.ts --headed",
+    "test:e2e:report": "playwright show-report tests/e2e/reports/html"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}

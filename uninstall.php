@@ -68,19 +68,30 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 			delete_option( $option_name );
 		}
 
-		// Remove GVL files.
+		// Remove GVL files (recursive to handle dotfiles and subdirectories).
 		$upload_dir = wp_upload_dir();
-		$gvl_dir    = $upload_dir['basedir'] . '/faz-cookie-manager/gvl';
+		$gvl_dir    = trailingslashit( $upload_dir['basedir'] ) . 'faz-cookie-manager/gvl';
 		if ( is_dir( $gvl_dir ) ) {
-			$files = glob( $gvl_dir . '/*' );
-			if ( is_array( $files ) ) {
-				foreach ( $files as $file ) {
-					if ( is_file( $file ) ) {
-						@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-					}
+			$iterator = new \RecursiveIteratorIterator(
+				new \RecursiveDirectoryIterator( $gvl_dir, \RecursiveDirectoryIterator::SKIP_DOTS ),
+				\RecursiveIteratorIterator::CHILD_FIRST
+			);
+			foreach ( $iterator as $node ) {
+				if ( $node->isDir() ) {
+					@rmdir( $node->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				} else {
+					@unlink( $node->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				}
 			}
 			@rmdir( $gvl_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			// Remove parent directory if empty.
+			$parent_dir = dirname( $gvl_dir );
+			if ( is_dir( $parent_dir ) ) {
+				$entries = @scandir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				if ( is_array( $entries ) && 2 === count( $entries ) ) {
+					@rmdir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				}
+			}
 		}
 	} catch ( Exception $e ) {
 		error_log( __( 'Failed to delete FAZ Cookie Manager plugin data!', 'faz-cookie-manager' ) . ' ' . $e->getMessage() ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log

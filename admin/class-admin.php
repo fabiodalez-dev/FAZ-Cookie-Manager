@@ -12,7 +12,6 @@ namespace FazCookie\Admin;
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-use FazCookie\Includes\Notice;
 
 /**
  * The admin-specific functionality of the plugin.
@@ -74,8 +73,6 @@ class Admin {
 		$this->version = $version;
 		self::$modules = $this->get_default_modules();
 		$this->load();
-		$this->add_notices();
-		$this->add_review_notice();
 		$this->load_modules();
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
@@ -92,22 +89,6 @@ class Admin {
 	 */
 	public function load() {
 		\FazCookie\Includes\Activator::init();
-	}
-
-	/**
-	 * Load admin notices — disabled for local mode.
-	 *
-	 * @return void
-	 */
-	public function add_notices() {
-	}
-
-	/**
-	 * Add review notice — disabled for local mode.
-	 *
-	 * @return void
-	 */
-	public function add_review_notice() {
 	}
 
 	/**
@@ -129,14 +110,6 @@ class Admin {
 			'pageviews',
 			'cache',
 		);
-	}
-
-	/**
-	 * Get the active admin modules.
-	 *
-	 * @return void
-	 */
-	public function get_active_modules() {
 	}
 
 	/**
@@ -277,9 +250,7 @@ class Admin {
 		);
 
 		// Enqueue page-specific JS if it exists.
-		if ( ! isset( $this->pages ) ) {
-			$this->pages = $this->get_admin_pages();
-		}
+		$this->ensure_pages_loaded();
 		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 		foreach ( $this->pages as $page ) {
 			if ( $page['slug'] === $current_page ) {
@@ -340,9 +311,7 @@ class Admin {
 	 * @return void
 	 */
 	public function admin_menu() {
-		if ( ! isset( $this->pages ) ) {
-			$this->pages = $this->get_admin_pages();
-		}
+		$this->ensure_pages_loaded();
 		$capability = 'manage_options';
 		$parent     = self::ADMIN_SLUG;
 
@@ -376,9 +345,7 @@ class Admin {
 	 * @return void
 	 */
 	public function render_page() {
-		if ( ! isset( $this->pages ) ) {
-			$this->pages = $this->get_admin_pages();
-		}
+		$this->ensure_pages_loaded();
 		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : self::ADMIN_SLUG; // phpcs:ignore WordPress.Security.NonceVerification
 
 		$faz_page_title = '';
@@ -393,6 +360,17 @@ class Admin {
 		}
 
 		include plugin_dir_path( __FILE__ ) . 'views/base.php';
+	}
+
+	/**
+	 * Lazy-initialize the admin pages array if not already loaded.
+	 *
+	 * @return void
+	 */
+	private function ensure_pages_loaded() {
+		if ( ! isset( $this->pages ) ) {
+			$this->pages = $this->get_admin_pages();
+		}
 	}
 
 	/**
@@ -568,16 +546,6 @@ class Admin {
 			do_action( 'faz_after_first_time_install' );
 			delete_option( 'faz_first_time_activated_plugin' );
 		}
-	}
-
-	/**
-	 * Redirect the plugin to dashboard.
-	 *
-	 * @return void
-	 */
-	public function redirect() {
-		wp_safe_redirect( admin_url( 'admin.php?page=' . self::ADMIN_SLUG ) );
-		exit;
 	}
 
 	/**

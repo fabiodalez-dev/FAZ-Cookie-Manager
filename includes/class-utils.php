@@ -217,6 +217,92 @@ if ( ! function_exists( 'faz_missing_tables' ) ) {
 		return get_option( 'faz_missing_tables', array() );
 	}
 }
+if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
+	/**
+	 * Resolve the client IP address with proxy awareness.
+	 *
+	 * Checks common proxy headers before falling back to REMOTE_ADDR.
+	 * Proxy headers (X-Forwarded-For, X-Real-IP, CF-Connecting-IP) are
+	 * client-controlled and can be spoofed. Private/reserved ranges are
+	 * rejected to mitigate trivial bypasses.
+	 *
+	 * @since 1.1.0
+	 * @return string Client IP address, or empty string if unavailable.
+	 */
+	function faz_resolve_client_ip() {
+		$remote_addr = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+
+		/**
+		 * Whether to trust proxy headers (X-Forwarded-For, X-Real-IP, CF-Connecting-IP).
+		 *
+		 * These headers are client-controlled and can be spoofed. Only enable
+		 * this filter if WordPress is behind a trusted reverse proxy.
+		 *
+		 * @since 1.1.0
+		 * @param bool   $trust       Whether to trust proxy headers. Default false.
+		 * @param string $remote_addr The REMOTE_ADDR value.
+		 */
+		if ( apply_filters( 'faz_trust_proxy_headers', false, $remote_addr ) ) {
+			$headers = array(
+				'HTTP_CF_CONNECTING_IP', // Cloudflare.
+				'HTTP_X_FORWARDED_FOR',  // Generic reverse proxy.
+				'HTTP_X_REAL_IP',        // Nginx.
+			);
+			foreach ( $headers as $header ) {
+				if ( ! empty( $_SERVER[ $header ] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+					// Header may contain comma-separated IPs (e.g. X-Forwarded-For chain) — take the first.
+					$ip = strtok( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ), ',' );
+					$ip = trim( $ip );
+					if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+						return $ip;
+					}
+				}
+			}
+		}
+
+		return $remote_addr;
+	}
+}
+
+if ( ! function_exists( 'faz_throttle_request' ) ) {
+	/**
+	 * Rate limiter — returns true if the request should be throttled.
+	 *
+	 * Uses wp_cache_add() for atomic check-and-set when a persistent object
+	 * cache (Redis, Memcached) is active. Falls back to transients (database-
+	 * backed) on standard WordPress installations without persistent cache.
+	 *
+	 * @since 1.1.0
+	 * @param string $prefix Cache key prefix (e.g. 'faz_consent', 'faz_pv').
+	 * @param int    $ttl    Throttle window in seconds. Default 1.
+	 * @return bool True if request is a duplicate and should be skipped.
+	 */
+	function faz_throttle_request( $prefix = 'faz_throttle', $ttl = 1 ) {
+		$ttl       = max( 1, absint( $ttl ) );
+		$client_ip = faz_resolve_client_ip();
+		if ( empty( $client_ip ) ) {
+			// Cannot identify the client — skip throttling rather than
+			// collapsing all unidentified callers into one bucket.
+			return false;
+		}
+
+		$ip_hash = md5( $client_ip );
+		$key     = $prefix . '_' . $ip_hash;
+
+		if ( wp_using_ext_object_cache() ) {
+			// Persistent object cache — atomic wp_cache_add().
+			return ! wp_cache_add( $key, 1, 'faz_throttle', $ttl );
+		}
+
+		// Fallback: transient-based throttle (database-backed, survives across requests).
+		if ( get_transient( $key ) ) {
+			return true;
+		}
+		set_transient( $key, 1, $ttl );
+		return false;
+	}
+}
+
 if ( ! function_exists( 'faz_verify_nonce' ) ) {
 	/**
 	 * Verify nonce.

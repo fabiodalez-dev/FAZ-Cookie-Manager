@@ -10,6 +10,7 @@ Thumbs.db
 
 # Node
 node_modules/
+.env.e2e
 
 # Logs
 *.log
@@ -24,3 +25,8 @@ vendor/
 # Static analysis (dev-only)
 phpstan.neon
 phpstan-bootstrap.php
+
+# Playwright
+tests/e2e/reports/
+test-results/
+playwright-report/
