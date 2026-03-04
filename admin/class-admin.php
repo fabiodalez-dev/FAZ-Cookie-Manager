@@ -371,6 +371,9 @@ class Admin {
 	 * @return void
 	 */
 	public function render_page() {
+		if ( ! isset( $this->pages ) ) {
+			$this->pages = $this->get_admin_pages();
+		}
 		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : self::ADMIN_SLUG; // phpcs:ignore WordPress.Security.NonceVerification
 
 		$faz_page_title = '';

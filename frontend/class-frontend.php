@@ -219,7 +219,7 @@ class Frontend {
 				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array(), $this->version, false );
 			}
 
-			// IAB TCF v2.2 CMP stub (when IAB is enabled in settings).
+			// IAB TCF v2.3 CMP stub (when IAB is enabled in settings).
 			$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' );
 			if ( $iab_enabled ) {
 				// Early command-queue stub so ad scripts can call __tcfapi before CMP loads.

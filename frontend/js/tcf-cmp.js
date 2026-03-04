@@ -15,7 +15,34 @@
 	var CMP_VERSION  = 1;
 	var TCF_VERSION  = 2;
 	var VENDOR_LIST  = 0;  // no vendor list loaded
-	var MAX_PURPOSE  = 10; // TCF v2.2 has 10 standard purposes
+	var MAX_PURPOSE  = 10; // TCF v2.x has 10 standard purposes
+	var BASE64URL    = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+	/**
+	 * Push a value as `length` bits into the bits array (MSB first).
+	 */
+	function pushBits(bits, value, length) {
+		var s = (value >>> 0).toString(2);
+		while (s.length < length) s = "0" + s;
+		s = s.substring(s.length - length);
+		for (var k = 0; k < length; k++) bits.push(s.charAt(k) === "1" ? 1 : 0);
+	}
+
+	/**
+	 * Convert a bits array to a base64url string (padded to 6-bit boundary).
+	 */
+	function bitsToBase64url(bits) {
+		while (bits.length % 6 !== 0) bits.push(0);
+		var str = "";
+		for (var i = 0; i < bits.length; i += 6) {
+			var val = 0;
+			for (var b = 0; b < 6; b++) {
+				val = (val << 1) | (bits[i + b] || 0);
+			}
+			str += BASE64URL.charAt(val);
+		}
+		return str;
+	}
 
 	// Map FAZ category slugs → TCF Purpose IDs
 	// Purpose 1: Store/access info on device
@@ -120,13 +147,6 @@
 	function encodeTcString(purposeConsent) {
 		var bits = [];
 
-		function pushBits(value, length) {
-			var s = (value >>> 0).toString(2);
-			while (s.length < length) s = "0" + s;
-			s = s.substring(s.length - length);
-			for (var k = 0; k < length; k++) bits.push(s.charAt(k) === "1" ? 1 : 0);
-		}
-
 		function charTo6(c) {
 			return c.toUpperCase().charCodeAt(0) - 65; // A=0, B=1, ...
 		}
@@ -135,93 +155,50 @@
 		var epoch    = Math.round(Date.UTC(2020, 0, 1) / 100);
 		var created  = now - epoch;
 
-		pushBits(TCF_VERSION, 6);       // Version
-		pushBits(created, 36);          // Created
-		pushBits(created, 36);          // LastUpdated
-		pushBits(CMP_ID, 12);           // CmpId
-		pushBits(CMP_VERSION, 12);      // CmpVersion
-		pushBits(1, 6);                 // ConsentScreen
-		pushBits(charTo6("E"), 6);      // ConsentLanguage char 1
-		pushBits(charTo6("N"), 6);      // ConsentLanguage char 2
-		pushBits(VENDOR_LIST, 12);      // VendorListVersion
-		pushBits(4, 6);                 // TcfPolicyVersion (v2.2 = 4)
-		pushBits(1, 1);                 // IsServiceSpecific = true
-		pushBits(0, 1);                 // UseNonStdTexts = false
-		pushBits(0, 12);               // SpecialFeatureOptIns
+		pushBits(bits, TCF_VERSION, 6);       // Version
+		pushBits(bits, created, 36);          // Created
+		pushBits(bits, created, 36);          // LastUpdated
+		pushBits(bits, CMP_ID, 12);           // CmpId
+		pushBits(bits, CMP_VERSION, 12);      // CmpVersion
+		pushBits(bits, 1, 6);                 // ConsentScreen
+		pushBits(bits, charTo6("E"), 6);      // ConsentLanguage char 1
+		pushBits(bits, charTo6("N"), 6);      // ConsentLanguage char 2
+		pushBits(bits, VENDOR_LIST, 12);      // VendorListVersion
+		pushBits(bits, 4, 6);                 // TcfPolicyVersion (GVL policy 4)
+		pushBits(bits, 1, 1);                 // IsServiceSpecific = true
+		pushBits(bits, 0, 1);                 // UseNonStdTexts = false
+		pushBits(bits, 0, 12);               // SpecialFeatureOptIns
 
 		// PurposesConsent — 24 bits (purposes 1–24, we use 1–10)
 		for (var p = 1; p <= 24; p++) {
-			pushBits(purposeConsent[String(p)] ? 1 : 0, 1);
+			pushBits(bits, purposeConsent[String(p)] ? 1 : 0, 1);
 		}
 
 		// PurposesLegitimateInterest — 24 bits (all 0)
-		pushBits(0, 24);
+		pushBits(bits, 0, 24);
 
 		// PurposeOneTreatment
-		pushBits(0, 1);
+		pushBits(bits, 0, 1);
 
 		// PublisherCC (2 chars)
-		pushBits(charTo6("I"), 6);  // IT by default
-		pushBits(charTo6("T"), 6);
+		pushBits(bits, charTo6("I"), 6);  // IT by default
+		pushBits(bits, charTo6("T"), 6);
 
 		// MaxVendorConsentId = 0, EncodingType = 0
-		pushBits(0, 16);
-		pushBits(0, 1);
+		pushBits(bits, 0, 16);
+		pushBits(bits, 0, 1);
 
-		// Pad to multiple of 6 for base64
-		while (bits.length % 6 !== 0) bits.push(0);
-
-		// Convert to base64url
-		var base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-		var str = "";
-		for (var i = 0; i < bits.length; i += 6) {
-			var val = 0;
-			for (var b = 0; b < 6; b++) {
-				val = (val << 1) | (bits[i + b] || 0);
-			}
-			str += base64Chars.charAt(val);
-		}
-
-		return str + "." + encodeDisclosedVendors();
+		return bitsToBase64url(bits) + "." + DISCLOSED_VENDORS_SEGMENT;
 	}
 
 	/**
-	 * Encode the DisclosedVendors segment (mandatory in TCF v2.3).
+	 * DisclosedVendors segment (mandatory in TCF v2.3).
 	 *
-	 * Bit layout:
-	 *   SegmentType      3 bits → 1 (DisclosedVendors)
-	 *   MaxVendorId     16 bits → 0 (no vendors disclosed)
-	 *   IsRangeEncoding  1 bit  → 0 (bitfield)
-	 *   ────────────────────────
-	 *   Total: 20 bits → padded to 24 (4 base64url chars)
+	 * With zero disclosed vendors (CMP ID 0, no GVL), this is always:
+	 *   SegmentType=1 (001) + MaxVendorId=0 (16 zeros) + IsRangeEncoding=0
+	 *   = 20 bits padded to 24 = base64url "IAAA"
 	 */
-	function encodeDisclosedVendors() {
-		var bits = [];
-		function pushBits(value, length) {
-			var s = (value >>> 0).toString(2);
-			while (s.length < length) s = "0" + s;
-			s = s.substring(s.length - length);
-			for (var k = 0; k < length; k++) bits.push(s.charAt(k) === "1" ? 1 : 0);
-		}
-
-		pushBits(1, 3);   // SegmentType = 1 (DisclosedVendors)
-		pushBits(0, 16);  // MaxVendorId = 0
-		pushBits(0, 1);   // IsRangeEncoding = 0
-
-		// Pad to multiple of 6 for base64
-		while (bits.length % 6 !== 0) bits.push(0);
-
-		var base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-		var str = "";
-		for (var i = 0; i < bits.length; i += 6) {
-			var val = 0;
-			for (var b = 0; b < 6; b++) {
-				val = (val << 1) | (bits[i + b] || 0);
-			}
-			str += base64Chars.charAt(val);
-		}
-		return str;
-	}
+	var DISCLOSED_VENDORS_SEGMENT = "IAAA";
 
 	/**
 	 * Build the TCData object returned by getTCData / addEventListener.
