@@ -86,8 +86,11 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 			@rmdir( $gvl_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			// Remove parent directory if empty.
 			$parent_dir = dirname( $gvl_dir );
-			if ( is_dir( $parent_dir ) && 2 === count( @scandir( $parent_dir ) ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				@rmdir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( is_dir( $parent_dir ) ) {
+				$entries = @scandir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				if ( is_array( $entries ) && 2 === count( $entries ) ) {
+					@rmdir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				}
 			}
 		}
 	} catch ( Exception $e ) {
