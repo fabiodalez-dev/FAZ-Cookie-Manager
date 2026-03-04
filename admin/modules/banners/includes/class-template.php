@@ -407,8 +407,9 @@ class Template {
 				$preview = $this->is_preview();
 				$enabled = isset( $config['status'] ) && false === $preview ? $config['status'] : true;
 
-				if ( false === $enabled ) {
-					$element->parentNode->removeChild( $element );  //phpcs:ignore WordPress.NamingConventions.ValidVariableName	
+				// Category toggles are required for GDPR granular consent — never remove.
+				if ( false === $enabled && 'detail-category-toggle' !== $tag ) {
+					$element->parentNode->removeChild( $element );  //phpcs:ignore WordPress.NamingConventions.ValidVariableName
 					continue;
 				}
 
@@ -419,6 +420,12 @@ class Template {
 				if ( ! empty( $styles ) ) {
 					foreach ( $styles as $property => $value ) {
 						if ( '' !== $value ) {
+							// Skip #000000 backgrounds — artifact of HTML <input type="color">
+							// which cannot represent 'transparent'. Template CSS provides
+							// correct defaults (transparent for outline buttons).
+							if ( 'background-color' === $property && '#000000' === $value ) {
+								continue;
+							}
 							$style .= $property . ':' . $value . ';';
 						}
 					}

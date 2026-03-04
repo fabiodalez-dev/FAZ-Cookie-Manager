@@ -516,6 +516,10 @@
 		props.config.categoryPreview.elements.buttons.elements.save.styles['background-color'] = getColor('faz-b-catprev-save-bg');
 		props.config.categoryPreview.elements.buttons.elements.save.styles['border-color'] = getColor('faz-b-catprev-save-border');
 
+		// Preference center toggles must always be enabled (GDPR granular consent)
+		ensureObj(props, 'config.preferenceCenter.toggle');
+		props.config.preferenceCenter.toggle.status = true;
+
 		// Audit table
 		if (!props.config.auditTable) props.config.auditTable = {};
 		props.config.auditTable.status = isChecked('faz-b-audit-toggle');
@@ -916,14 +920,15 @@
 		var picker = document.getElementById(baseId);
 		var text = document.getElementById(baseId + '-hex');
 		hex = hex || '#000000';
-		// <input type="color"> only accepts #rrggbb format
-		if (!/^#[0-9a-fA-F]{6}$/.test(hex)) hex = '#000000';
-		if (picker) picker.value = hex;
 		if (text) text.value = hex;
+		// <input type="color"> only accepts #rrggbb format
+		if (picker) {
+			picker.value = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : '#FFFFFF';
+		}
 	}
 	function getColor(baseId) {
 		var text = document.getElementById(baseId + '-hex');
-		return text ? text.value : '#000000';
+		return text ? text.value.trim() : '';
 	}
 	function isChecked(id) {
 		var el = document.getElementById(id);

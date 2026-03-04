@@ -105,6 +105,7 @@ function _fazSetConsentID() {
 var _revisitFazConsent = function () {
     _fazShowBanner();
     _fazToggleRevisit();
+    _fazUpdateVendorCheckboxStates();
 };
 /**
  * Search an element by it's data-faz-tag attribute
@@ -737,7 +738,8 @@ function _fazSetFooterShadow($doc) {
 function _fazRemoveDeadCookies({ cookies }) {
     const currentCookieMap = ref._fazGetCookieMap();
     for (const { cookieID, domain } of cookies) {
-        if (cookieID === "fazcookie-consent") continue;
+        // Never delete the plugin's own consent-mechanism cookies.
+        if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
         if (currentCookieMap[cookieID])
             [domain, ""].map((cookieDomain) =>
                 ref._fazSetCookie(cookieID, "", 0, cookieDomain)
@@ -1360,6 +1362,7 @@ function _fazAttachManualLinksStyles() {
 
 function _fazAfterConsent() {
     if (_fazGetLaw() === 'gdpr') _fazSetPreferenceCheckBoxStates(true);
+    _fazUpdateVendorCheckboxStates();
 
     if (_fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
         window.location.reload();
@@ -1744,6 +1747,24 @@ function _fazReadVendorConsent() {
         }
     });
     return result;
+}
+
+/**
+ * Sync vendor checkbox UI states from the fazVendorConsent cookie.
+ * Called after Accept All / Reject All and when reopening the preference center.
+ */
+function _fazUpdateVendorCheckboxStates() {
+    if (!_fazStore._iabEnabled || !_fazStore._iabVendors || !_fazStore._iabVendors.length) return;
+    const consent = _fazReadVendorConsent();
+    const prefToggle = _fazStore._bannerConfig?.config?.preferenceCenter?.toggle;
+    const activeColor = prefToggle?.states?.active?.styles?.['background-color'] || '#1863dc';
+    const inactiveColor = prefToggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
+    _fazStore._iabVendors.forEach(function(vendor) {
+        const cb = document.getElementById('fazVendorSwitch' + vendor.id);
+        if (!cb) return;
+        cb.checked = consent[vendor.id] === true;
+        cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
+    });
 }
 
 /**
