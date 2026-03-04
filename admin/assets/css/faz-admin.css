@@ -184,6 +184,7 @@
 }
 #faz-banner .faz-card-body {
 	display: flex;
+	flex-direction: column;
 	gap: 12px 24px;
 }
 #faz-banner .faz-card-body > .faz-form-group {
