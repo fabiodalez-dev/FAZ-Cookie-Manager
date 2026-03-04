@@ -286,8 +286,10 @@ All endpoints under `faz/v1`. Admin endpoints require authentication (WordPress 
 |--------|----------|-------------|
 | GET | `/settings` | Get all plugin settings |
 | POST | `/settings` | Update settings (merge) |
-| POST | `/settings/cache/purge` | Clear all caches |
 | POST | `/settings/reinstall` | Recreate missing DB tables |
+| POST | `/settings/apply_filter` | Apply WP Internal filter changes |
+| POST | `/settings/geolite2/update` | Download/update GeoLite2 database |
+| GET | `/settings/geolite2/status` | GeoLite2 database status |
 
 ### Google Consent Mode
 
@@ -304,7 +306,9 @@ All endpoints under `faz/v1`. Admin endpoints require authentication (WordPress 
 | POST | `/cookies` | Create a cookie |
 | GET/PUT/DELETE | `/cookies/{id}` | Read/update/delete a cookie |
 | POST | `/cookies/bulk-update` | Bulk update cookies |
+| POST | `/cookies/bulk-delete` | Bulk delete cookies |
 | POST | `/cookies/scrape` | Lookup names against Open Cookie Database |
+| GET | `/cookies/definitions` | Get cookie definitions status |
 | POST | `/cookies/definitions/update` | Download/refresh definitions from GitHub |
 
 ### Scanner
@@ -314,15 +318,18 @@ All endpoints under `faz/v1`. Admin endpoints require authentication (WordPress 
 | GET | `/scans` | Scan history |
 | POST | `/scans` | Start a new scan |
 | GET | `/scans/{id}` | Scan details |
+| GET | `/scans/info` | Scanner configuration |
+| POST | `/scans/discover` | Discover site pages |
+| POST | `/scans/import` | Import scan results |
 
 ### Consent Logs
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/consent_logs` | List logs (paginated, searchable) |
-| POST | `/consent_logs` | Record consent event (public, no auth) |
 | GET | `/consent_logs/statistics` | Aggregate statistics |
 | GET | `/consent_logs/export` | CSV export |
+| GET | `/consent_logs/{consent_id}` | Single consent record |
 
 ### Pageviews
 
@@ -331,6 +338,7 @@ All endpoints under `faz/v1`. Admin endpoints require authentication (WordPress 
 | POST | `/pageviews` | Record event (public) |
 | GET | `/pageviews/chart` | Pageview chart data |
 | GET | `/pageviews/banner-stats` | Banner interaction stats |
+| GET | `/pageviews/daily` | Daily pageview breakdown |
 
 ### Banners
 
@@ -339,6 +347,10 @@ All endpoints under `faz/v1`. Admin endpoints require authentication (WordPress 
 | GET | `/banners` | List banners |
 | POST | `/banners` | Create a banner |
 | GET/PUT/DELETE | `/banners/{id}` | Read/update/delete a banner |
+| POST | `/banners/bulk` | Bulk operations |
+| GET | `/banners/preview` | Banner preview HTML |
+| GET | `/banners/presets` | Theme presets |
+| GET | `/banners/configs` | Banner configuration |
 
 ### Global Vendor List (GVL)
 
@@ -355,8 +367,7 @@ All endpoints under `faz/v1`. Admin endpoints require authentication (WordPress 
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/languages` | Get language configuration |
-| POST | `/languages` | Update languages and translations |
+| GET/POST | `/languages` | Get/update language configuration |
 
 ---
 
