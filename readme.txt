@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -117,6 +117,17 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 
 == Changelog ==
 
+= 1.2.0 =
+* Security: proxy header trust filter (faz_trust_proxy_headers) — proxy headers only parsed when explicitly enabled
+* Security: dual-guardrail consent throttle (per-IP + per-consent_id) to prevent flooding
+* Security: TTL normalization in rate limiter — prevents zero/negative TTL bypass
+* UX: necessary category toggle now uses active blue color instead of gray
+* UX: "Always active" label positioned right-aligned next to toggle
+* Cleanup: removed orphan methods from deprecated languages API
+* Hardening: trailingslashit() for GVL path in uninstall
+* E2E tests: custom dataLayerName support, try/finally context cleanup, safer element iteration
+* Playwright test suite: 11 e2e tests with proper fixtures and global setup
+
 = 1.1.0 =
 * IAB TCF v2.3 with Global Vendor List (GVL v3) -- server-side download, caching, weekly auto-update, admin page for vendor selection
 * Real vendor consent in TC Strings -- vendor consent bits, legitimate interest (honoring Right to Object), DisclosedVendors segment
@@ -164,6 +175,9 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.2.0 =
+Security hardening (proxy trust filter, dual-throttle consent logging, TTL normalization). Improved necessary toggle UX. Clear caches after upgrading.
 
 = 1.1.0 =
 Major update: IAB TCF v2.3 with full Global Vendor List integration. New GVL admin page for vendor management. 175 automated compliance tests. Clear caches after upgrading.
