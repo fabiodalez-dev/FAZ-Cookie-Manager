@@ -269,7 +269,11 @@ class Geolocation {
 			'https://download.maxmind.com/app/geoip_download'
 		);
 
-		$tmp_file = download_url( $url, 120 );
+		if ( ! function_exists( 'download_url' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php'; // phpcs:ignore WPThemeReview.CoreFunctionality.FileInclude.FileIncludeFound
+		}
+
+		$tmp_file = \download_url( $url, 120 );
 		if ( is_wp_error( $tmp_file ) ) {
 			return new \WP_Error(
 				'faz_geo_download_failed',
