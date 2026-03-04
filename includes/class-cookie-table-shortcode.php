@@ -111,6 +111,11 @@ class Cookie_Table_Shortcode {
 				$hidden_cat_ids[] = absint( $cat->category_id );
 				continue;
 			}
+			// Never show WordPress internal cookies to visitors.
+			if ( 'wordpress-internal' === $cat_obj->get_slug() ) {
+				$hidden_cat_ids[] = absint( $cat->category_id );
+				continue;
+			}
 			$cat_map[ $cat->category_id ] = $this->localize( $cat->name, $lang, $default );
 		}
 
@@ -141,6 +146,12 @@ class Cookie_Table_Shortcode {
 				return ! in_array( $cat_id, $hidden_cat_ids, true );
 			} );
 		}
+
+		// Exclude individual WP-internal cookies (may appear under "necessary" or other categories).
+		$cookies = array_filter( $cookies, function( $cookie ) {
+			$name = isset( $cookie->name ) ? $cookie->name : '';
+			return ! \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name );
+		} );
 
 		if ( empty( $cookies ) ) {
 			return '<p class="faz-cookie-table-empty">' . esc_html__( 'No cookies found.', 'faz-cookie-manager' ) . '</p>';
