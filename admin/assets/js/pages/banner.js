@@ -718,7 +718,7 @@
 
 		// Update brand logo src from our form field
 		var logoUrl = getVal('faz-b-brandlogo-url');
-		if (logoUrl) {
+		if (logoUrl && /^https?:\/\//.test(logoUrl)) {
 			host.querySelectorAll('[data-faz-tag="brand-logo"] img').forEach(function (img) {
 				img.setAttribute('src', logoUrl);
 			});
@@ -752,6 +752,7 @@
 		var el;
 		if (readMoreCfg.type === 'link') {
 			el = document.createElement('a');
+			if (!/^https?:\/\/|^\/[^\/]/.test(href)) href = '/cookie-policy';
 			el.href = href;
 			el.target = '_blank';
 			el.rel = 'noopener';

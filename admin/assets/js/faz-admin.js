@@ -300,14 +300,18 @@
 
 	FAZ.deepSet = function (obj, path, value) {
 		var keys = path.split('.');
+		var BLOCKED = { '__proto__': 1, 'constructor': 1, 'prototype': 1 };
 		var cur = obj;
 		for (var i = 0; i < keys.length - 1; i++) {
+			if (BLOCKED[keys[i]]) return;
 			if (cur[keys[i]] === undefined || cur[keys[i]] === null || typeof cur[keys[i]] !== 'object') {
 				cur[keys[i]] = {};
 			}
 			cur = cur[keys[i]];
 		}
-		cur[keys[keys.length - 1]] = value;
+		var lastKey = keys[keys.length - 1];
+		if (BLOCKED[lastKey]) return;
+		cur[lastKey] = value;
 	};
 
 	// ── Serialize form to nested JSON using data-path ────────
