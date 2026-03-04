@@ -1,9 +1,9 @@
 /**
- * FAZ Cookie Manager — IAB TCF v2.2 CMP Stub
+ * FAZ Cookie Manager — IAB TCF v2.3 CMP Stub
  *
  * Provides the window.__tcfapi() surface that ad-tech scripts expect.
- * Maps FAZ consent categories to TCF Purposes and generates a minimal
- * TC string (core segment only, no vendor consent).
+ * Maps FAZ consent categories to TCF Purposes and generates a TC string
+ * with core segment + mandatory DisclosedVendors segment (TCF v2.3).
  *
  * CMP ID 0 = unregistered / self-hosted.
  * For full TCF compliance users must register with IAB as a CMP.
@@ -182,6 +182,44 @@
 			str += base64Chars.charAt(val);
 		}
 
+		return str + "." + encodeDisclosedVendors();
+	}
+
+	/**
+	 * Encode the DisclosedVendors segment (mandatory in TCF v2.3).
+	 *
+	 * Bit layout:
+	 *   SegmentType      3 bits → 1 (DisclosedVendors)
+	 *   MaxVendorId     16 bits → 0 (no vendors disclosed)
+	 *   IsRangeEncoding  1 bit  → 0 (bitfield)
+	 *   ────────────────────────
+	 *   Total: 20 bits → padded to 24 (4 base64url chars)
+	 */
+	function encodeDisclosedVendors() {
+		var bits = [];
+		function pushBits(value, length) {
+			var s = (value >>> 0).toString(2);
+			while (s.length < length) s = "0" + s;
+			s = s.substring(s.length - length);
+			for (var k = 0; k < length; k++) bits.push(s.charAt(k) === "1" ? 1 : 0);
+		}
+
+		pushBits(1, 3);   // SegmentType = 1 (DisclosedVendors)
+		pushBits(0, 16);  // MaxVendorId = 0
+		pushBits(0, 1);   // IsRangeEncoding = 0
+
+		// Pad to multiple of 6 for base64
+		while (bits.length % 6 !== 0) bits.push(0);
+
+		var base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+		var str = "";
+		for (var i = 0; i < bits.length; i += 6) {
+			var val = 0;
+			for (var b = 0; b < 6; b++) {
+				val = (val << 1) | (bits[i + b] || 0);
+			}
+			str += base64Chars.charAt(val);
+		}
 		return str;
 	}
 
@@ -243,7 +281,7 @@
 	}
 
 	/**
-	 * The __tcfapi() stub — implements required TCF v2.2 commands.
+	 * The __tcfapi() stub — implements required TCF v2.3 commands.
 	 */
 	function tcfapi(command, version, callback, parameter) {
 		if (typeof callback !== "function") return;

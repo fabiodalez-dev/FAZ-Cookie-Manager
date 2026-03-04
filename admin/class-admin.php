@@ -77,7 +77,6 @@ class Admin {
 		$this->add_notices();
 		$this->add_review_notice();
 		$this->load_modules();
-		$this->pages = $this->get_admin_pages();
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
@@ -273,6 +272,9 @@ class Admin {
 		);
 
 		// Enqueue page-specific JS if it exists.
+		if ( ! isset( $this->pages ) ) {
+			$this->pages = $this->get_admin_pages();
+		}
 		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
 		foreach ( $this->pages as $page ) {
 			if ( $page['slug'] === $current_page ) {
@@ -333,6 +335,9 @@ class Admin {
 	 * @return void
 	 */
 	public function admin_menu() {
+		if ( ! isset( $this->pages ) ) {
+			$this->pages = $this->get_admin_pages();
+		}
 		$capability = 'manage_options';
 		$parent     = self::ADMIN_SLUG;
 

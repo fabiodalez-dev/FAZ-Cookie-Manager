@@ -91,7 +91,7 @@ defined( 'ABSPATH' ) || exit;
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="iab.enabled">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Enable IAB TCF v2.2</span>
+					<span class="faz-toggle-label">Enable IAB TCF v2.3</span>
 				</label>
 			</div>
 		</div>

@@ -8,7 +8,7 @@ Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-The only cookie consent plugin you need. 100% free, zero cloud dependencies, no subscriptions. Full GDPR, CCPA, ePrivacy, and IAB TCF v2.2 compliance out of the box.
+The only cookie consent plugin you need. 100% free, zero cloud dependencies, no subscriptions. Full GDPR, CCPA, ePrivacy, and IAB TCF v2.3 compliance out of the box.
 
 == Description ==
 
@@ -25,7 +25,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 * **Cookie scanner** -- Scans your site directly from your browser. No external service, no API limits, no waiting.
 * **Consent logging with CSV export** -- Every consent is recorded locally in your database. Export anytime for audits.
 * **Google Consent Mode v2** -- Sends all 7 consent signals to Google tags. No premium required.
-* **IAB TCF v2.2** -- Full Transparency and Consent Framework support, built in.
+* **IAB TCF v2.3** -- Full Transparency and Consent Framework support, built in.
 * **Geo-targeting** -- Show banners only to visitors from regulated regions (EU, California, etc.).
 * **180+ languages** -- Translate every string in the banner, or use one of the built-in translations.
 * **Script blocking** -- Tag any script with `data-faz-tag` to block it until the right category is accepted.
@@ -113,7 +113,7 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 6. **Consent Logs** -- Complete audit trail of every visitor's consent decision. Shows consent ID, status, categories accepted/rejected, anonymized IP, and page URL. Filter, search, and export to CSV.
 7. **Google Consent Mode v2** -- Configure all 7 consent signal types with default/granted states. Includes Google Additional Consent Mode (GACM) for ad technology provider IDs. Advanced settings for URL passthrough and ads data redaction.
 8. **Languages** -- Select from 180+ languages to translate the banner. Set a default language and add as many as you need. Banner text adapts automatically to visitor's browser language.
-9. **Settings** -- Global controls: enable/disable banner, exclude specific pages, configure consent log retention, set scanner limits, enable Microsoft UET/Clarity consent APIs, and toggle IAB TCF v2.2 support.
+9. **Settings** -- Global controls: enable/disable banner, exclude specific pages, configure consent log retention, set scanner limits, enable Microsoft UET/Clarity consent APIs, and toggle IAB TCF v2.3 support.
 
 == Changelog ==
 
@@ -144,7 +144,7 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 = 1.0.0 =
 * Initial release based on CookieYes v3.4.0 fork
 * Full GDPR, CCPA, ePrivacy Directive compliance
-* Google Consent Mode v2 and IAB TCF v2.2 support
+* Google Consent Mode v2 and IAB TCF v2.3 support
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==

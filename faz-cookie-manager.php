@@ -15,7 +15,7 @@
  * @wordpress-plugin
  * Plugin Name:       FAZ Cookie Manager
  * Plugin URI:        https://github.com/fabiodalez-dev/faz-cookie-manager
- * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.2 support.
+ * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
  * Version:           0.3.1
  * Requires at least: 5.0
  * Tested up to:      6.7
