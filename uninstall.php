@@ -72,8 +72,15 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 		$upload_dir = wp_upload_dir();
 		$gvl_dir    = $upload_dir['basedir'] . '/faz-cookie-manager/gvl';
 		if ( is_dir( $gvl_dir ) ) {
-			array_map( 'unlink', glob( $gvl_dir . '/*' ) );
-			rmdir( $gvl_dir );
+			$files = glob( $gvl_dir . '/*' );
+			if ( is_array( $files ) ) {
+				foreach ( $files as $file ) {
+					if ( is_file( $file ) ) {
+						@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					}
+				}
+			}
+			@rmdir( $gvl_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 	} catch ( Exception $e ) {
 		error_log( __( 'Failed to delete FAZ Cookie Manager plugin data!', 'faz-cookie-manager' ) . ' ' . $e->getMessage() ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log

@@ -126,12 +126,21 @@ class Api extends Rest_Controller {
 		$gvl  = Gvl::get_instance();
 		$meta = $gvl->get_meta();
 
+		$raw_purposes = $gvl->get_purposes();
+		$purposes     = array();
+		foreach ( $raw_purposes as $pid => $purpose ) {
+			$purposes[] = array(
+				'id'   => isset( $purpose['id'] ) ? absint( $purpose['id'] ) : absint( $pid ),
+				'name' => isset( $purpose['name'] ) ? $purpose['name'] : '',
+			);
+		}
+
 		return new WP_REST_Response( array(
 			'version'      => isset( $meta['version'] ) ? $meta['version'] : 0,
 			'vendor_count' => isset( $meta['vendor_count'] ) ? $meta['vendor_count'] : 0,
 			'last_updated' => isset( $meta['last_updated'] ) ? $meta['last_updated'] : '',
 			'has_data'     => $gvl->has_data(),
-			'purposes'     => array_values( $gvl->get_purposes() ),
+			'purposes'     => $purposes,
 		), 200 );
 	}
 
@@ -277,6 +286,13 @@ class Api extends Rest_Controller {
 		$vendor_ids = array_map( 'absint', $vendor_ids );
 		$vendor_ids = array_filter( $vendor_ids );
 		$vendor_ids = array_values( array_unique( $vendor_ids ) );
+
+		// Filter out vendor IDs not present in current GVL.
+		$gvl      = Gvl::get_instance();
+		$existing = $gvl->get_vendors( $vendor_ids );
+		if ( ! empty( $existing ) ) {
+			$vendor_ids = array_map( 'absint', array_keys( $existing ) );
+		}
 		sort( $vendor_ids );
 
 		update_option( 'faz_gvl_selected_vendors', $vendor_ids, false );

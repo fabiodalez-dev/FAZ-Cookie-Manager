@@ -35,7 +35,7 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 
 			<div style="margin-bottom:8px;">
-				<label style="cursor:pointer;font-weight:600;">
+				<label for="faz-gvl-select-all" style="cursor:pointer;font-weight:600;">
 					<input type="checkbox" id="faz-gvl-select-all"> Select all on this page
 				</label>
 			</div>

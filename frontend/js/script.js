@@ -1599,6 +1599,7 @@ function _fazRenderVendorSection() {
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.id = 'fazVendorSwitch' + vendor.id;
+        cb.setAttribute('aria-label', 'Vendor consent: ' + vendor.name);
         cb.checked = existingConsent[vendor.id] === true;
         cb.style.cssText = 'width:36px;height:20px;cursor:pointer;-webkit-appearance:none;appearance:none;border-radius:10px;border:none;position:relative;transition:background-color .2s;';
         cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
@@ -1625,9 +1626,18 @@ function _fazRenderVendorSection() {
         body.className = 'faz-accordion-body';
         body.style.cssText = 'display:none;padding:8px 0;font-size:12px;color:#374151;';
 
+        let safePolicyUrl = '';
         if (vendor.policyUrl) {
+            try {
+                const parsedUrl = new URL(vendor.policyUrl, window.location.origin);
+                if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+                    safePolicyUrl = parsedUrl.href;
+                }
+            } catch (_unused) { /* invalid URL */ }
+        }
+        if (safePolicyUrl) {
             const pLink = document.createElement('a');
-            pLink.href = vendor.policyUrl;
+            pLink.href = safePolicyUrl;
             pLink.target = '_blank';
             pLink.rel = 'noopener noreferrer';
             pLink.textContent = 'Privacy Policy';
@@ -1714,7 +1724,12 @@ function _fazSaveVendorConsent(choice) {
     if (_fazStore._rootDomain) {
         domain = ';domain=' + _fazStore._rootDomain;
     }
-    document.cookie = 'fazVendorConsent=' + parts.join(',') + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax';
+    const payload = parts.join(',');
+    if (payload.length > 3800) {
+        console.warn('fazVendorConsent cookie too large (' + payload.length + ' bytes), vendor consent may not persist reliably.');
+    }
+    const secure = location.protocol === 'https:' ? ';Secure' : '';
+    document.cookie = 'fazVendorConsent=' + payload + ';expires=' + date.toUTCString() + ';path=/' + domain + ';SameSite=Lax' + secure;
 }
 
 window.getFazConsent = function () {

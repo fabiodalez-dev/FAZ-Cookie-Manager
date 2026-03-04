@@ -166,7 +166,7 @@
 			// Derive from purpose consent: vendor gets consent if ALL its
 			// consent-basis purposes are consented.
 			if (!v || !v.purposes || v.purposes.length === 0) {
-				vendorConsent[vid] = true;
+				vendorConsent[vid] = false;
 				continue;
 			}
 			var allConsented = true;
@@ -344,7 +344,8 @@
 		if (window._fazConfig && window._fazConfig._rootDomain) {
 			domain = ";domain=" + window._fazConfig._rootDomain;
 		}
-		document.cookie = "euconsent-v2=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax";
+		var secure = location.protocol === "https:" ? ";Secure" : "";
+		document.cookie = "euconsent-v2=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax" + secure;
 	}
 
 	/**

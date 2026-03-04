@@ -111,7 +111,14 @@ class Gvl {
 		), false );
 
 		// Also save raw JSON to file for frontend access.
-		$this->save_to_file( 'vendor-list.json', $body );
+		if ( ! $this->save_to_file( 'vendor-list.json', $body ) ) {
+			return array(
+				'success'      => false,
+				'message'      => 'GVL saved to option but file write failed',
+				'version'      => $version,
+				'vendor_count' => $vendor_count,
+			);
+		}
 
 		return array(
 			'success'      => true,
@@ -164,7 +171,9 @@ class Gvl {
 		update_option( self::PURPOSES_KEY, $all_purposes, false );
 
 		// Save file for reference.
-		$this->save_to_file( 'purposes-' . $lang . '.json', $body );
+		if ( ! $this->save_to_file( 'purposes-' . $lang . '.json', $body ) ) {
+			return array( 'success' => false, 'message' => 'Purposes saved to option but file write failed' );
+		}
 
 		return array( 'success' => true, 'message' => sprintf( 'Purposes for "%s" downloaded', $lang ) );
 	}
@@ -326,8 +335,13 @@ class Gvl {
 			file_put_contents( $index, "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
 
-		$path = $dir . sanitize_file_name( $filename );
-		return (bool) file_put_contents( $path, $content ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		$path     = $dir . sanitize_file_name( $filename );
+		$tmp_path = $path . '.tmp';
+		$bytes    = file_put_contents( $tmp_path, $content, LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		if ( false === $bytes ) {
+			return false;
+		}
+		return rename( $tmp_path, $path );
 	}
 
 	/**
@@ -350,13 +364,19 @@ class Gvl {
 			return;
 		}
 
-		$gvl = self::get_instance();
-		$gvl->download();
+		$gvl    = self::get_instance();
+		$result = $gvl->download();
+		if ( ! $result['success'] ) {
+			error_log( 'FAZ GVL cron: download failed - ' . $result['message'] ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		}
 
 		// Download purposes for current language.
 		$lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
 		if ( 'en' !== $lang ) {
-			$gvl->download_purposes( $lang );
+			$purposes_result = $gvl->download_purposes( $lang );
+			if ( ! $purposes_result['success'] ) {
+				error_log( 'FAZ GVL cron: purposes download failed - ' . $purposes_result['message'] ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 		}
 	}
 }

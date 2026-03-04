@@ -180,52 +180,52 @@ class Frontend {
 						$country_code = 'IT';
 					}
 				}
-				// ConsentLanguage: use current banner language (uppercase 2-char ISO 639-1).
-			$consent_lang = strtoupper( substr( faz_current_language(), 0, 2 ) );
-			if ( ! preg_match( '/^[A-Z]{2}$/', $consent_lang ) ) {
-				$consent_lang = 'EN';
-			}
-
-			// gdprApplies: true when visitor is in EU/EEA or country unknown (safe default).
-			$visitor_country = Geolocation::get_country();
-			$gdpr_applies    = empty( $visitor_country ) ? 'true' : ( Geolocation::is_eu() ? 'true' : 'false' );
-
-			// Build TCF config with GVL data if available.
-			$tcf_config = array(
-				'publisherCC'         => $country_code,
-				'consentLanguage'     => $consent_lang,
-				'gdprApplies'         => 'true' === $gdpr_applies,
-				'cmpId'               => absint( $this->settings->get( 'iab', 'cmp_id' ) ),
-				'purposeOneTreatment' => (bool) $this->settings->get( 'iab', 'purpose_one_treatment' ),
-			);
-
-			$gvl = Gvl::get_instance();
-			if ( $gvl->has_data() ) {
-				$tcf_config['gvlVersion'] = $gvl->get_version();
-
-				$selected_ids = get_option( 'faz_gvl_selected_vendors', array() );
-				if ( ! empty( $selected_ids ) ) {
-					$tcf_config['selectedVendors'] = array_map( 'absint', $selected_ids );
-					$selected_vendors = $gvl->get_vendors( $selected_ids );
-					$compact_vendors  = array();
-					foreach ( $selected_vendors as $vid => $v ) {
-						$compact_vendors[ $vid ] = array(
-							'name'           => isset( $v['name'] ) ? $v['name'] : '',
-							'purposes'       => isset( $v['purposes'] ) ? $v['purposes'] : array(),
-							'legIntPurposes' => isset( $v['legIntPurposes'] ) ? $v['legIntPurposes'] : array(),
-							'features'       => isset( $v['features'] ) ? $v['features'] : array(),
-							'specialFeatures' => isset( $v['specialFeatures'] ) ? $v['specialFeatures'] : array(),
-						);
-					}
-					$tcf_config['vendors'] = $compact_vendors;
+					// ConsentLanguage: use current banner language (uppercase 2-char ISO 639-1).
+				$consent_lang = strtoupper( substr( faz_current_language(), 0, 2 ) );
+				if ( ! preg_match( '/^[A-Z]{2}$/', $consent_lang ) ) {
+					$consent_lang = 'EN';
 				}
-			}
 
-			wp_add_inline_script(
-				$tcf_handle,
-				'window._fazTcfConfig=' . wp_json_encode( $tcf_config ) . ';',
-				'before'
-			);
+				// gdprApplies: true when visitor is in EU/EEA or country unknown (safe default).
+				$visitor_country = Geolocation::get_country();
+				$gdpr_applies    = empty( $visitor_country ) ? 'true' : ( Geolocation::is_eu() ? 'true' : 'false' );
+
+				// Build TCF config with GVL data if available.
+				$tcf_config = array(
+					'publisherCC'         => $country_code,
+					'consentLanguage'     => $consent_lang,
+					'gdprApplies'         => 'true' === $gdpr_applies,
+					'cmpId'               => absint( $this->settings->get( 'iab', 'cmp_id' ) ),
+					'purposeOneTreatment' => (bool) $this->settings->get( 'iab', 'purpose_one_treatment' ),
+				);
+
+				$gvl = Gvl::get_instance();
+				if ( $gvl->has_data() ) {
+					$tcf_config['gvlVersion'] = $gvl->get_version();
+
+					$selected_ids = get_option( 'faz_gvl_selected_vendors', array() );
+					if ( ! empty( $selected_ids ) ) {
+						$tcf_config['selectedVendors'] = array_map( 'absint', $selected_ids );
+						$selected_vendors = $gvl->get_vendors( $selected_ids );
+						$compact_vendors  = array();
+						foreach ( $selected_vendors as $vid => $v ) {
+							$compact_vendors[ $vid ] = array(
+								'name'           => isset( $v['name'] ) ? $v['name'] : '',
+								'purposes'       => isset( $v['purposes'] ) ? $v['purposes'] : array(),
+								'legIntPurposes' => isset( $v['legIntPurposes'] ) ? $v['legIntPurposes'] : array(),
+								'features'       => isset( $v['features'] ) ? $v['features'] : array(),
+								'specialFeatures' => isset( $v['specialFeatures'] ) ? $v['specialFeatures'] : array(),
+							);
+						}
+						$tcf_config['vendors'] = $compact_vendors;
+					}
+				}
+
+				wp_add_inline_script(
+					$tcf_handle,
+					'window._fazTcfConfig=' . wp_json_encode( $tcf_config ) . ';',
+					'before'
+				);
 			}
 
 			// Pageview and banner interaction tracking.

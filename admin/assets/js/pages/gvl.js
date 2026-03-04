@@ -62,6 +62,9 @@
 				// Populate purpose filter.
 				if (data.purposes && data.purposes.length) {
 					var select = document.getElementById('faz-gvl-purpose-filter');
+					if (select) {
+						while (select.options.length > 1) { select.remove(1); }
+					}
 					data.purposes.forEach(function (p) {
 						var opt = document.createElement('option');
 						opt.value = p.id;

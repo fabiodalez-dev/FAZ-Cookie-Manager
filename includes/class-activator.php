@@ -86,7 +86,7 @@ class Activator {
 	}
 
 	/**
-	 * Schedule the daily retention cleanup if not already scheduled.
+	 * Schedule recurring cron events: daily retention cleanup and weekly GVL update.
 	 */
 	public static function schedule_cleanup() {
 		if ( ! wp_next_scheduled( 'faz_daily_cleanup' ) ) {
