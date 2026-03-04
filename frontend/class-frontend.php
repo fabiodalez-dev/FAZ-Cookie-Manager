@@ -152,7 +152,7 @@ class Frontend {
 				$gcm      = $this->get_gcm_data();
 				$gcm_json = wp_json_encode( $gcm );
 				wp_add_inline_script( $this->plugin_name, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
-				$gcm_suffix = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? '' : '.min';
+				$gcm_suffix = ''; // Always load non-minified (no build tooling).
 				$gcm_handle = $this->plugin_name . '-gcm';
 				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array(), $this->version, false );
 			}
@@ -163,7 +163,7 @@ class Frontend {
 				// Early command-queue stub so ad scripts can call __tcfapi before CMP loads.
 				$tcf_stub = 'if(typeof window.__tcfapi!=="function"){var a=[];window.__tcfapi=function(){a.push(arguments);};window.__tcfapi.a=a;}';
 				wp_add_inline_script( $this->plugin_name, $tcf_stub, 'before' );
-				$tcf_suffix = defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ? '' : '.min';
+				$tcf_suffix = ''; // Always load non-minified (no build tooling).
 				$tcf_handle = $this->plugin_name . '-tcf-cmp';
 				wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $this->plugin_name ), $this->version, false );
 
@@ -177,7 +177,21 @@ class Frontend {
 						$country_code = 'IT';
 					}
 				}
-				wp_add_inline_script( $tcf_handle, 'window._fazTcfConfig={publisherCC:"' . esc_js( $country_code ) . '"};', 'before' );
+				// ConsentLanguage: use current banner language (uppercase 2-char ISO 639-1).
+			$consent_lang = strtoupper( substr( faz_current_language(), 0, 2 ) );
+			if ( ! preg_match( '/^[A-Z]{2}$/', $consent_lang ) ) {
+				$consent_lang = 'EN';
+			}
+
+			// gdprApplies: true when visitor is in EU/EEA or country unknown (safe default).
+			$visitor_country = Geolocation::get_country();
+			$gdpr_applies    = empty( $visitor_country ) ? 'true' : ( Geolocation::is_eu() ? 'true' : 'false' );
+
+			wp_add_inline_script(
+				$tcf_handle,
+				'window._fazTcfConfig={publisherCC:"' . esc_js( $country_code ) . '",consentLanguage:"' . esc_js( $consent_lang ) . '",gdprApplies:' . $gdpr_applies . '};',
+				'before'
+			);
 			}
 
 			// Pageview and banner interaction tracking.

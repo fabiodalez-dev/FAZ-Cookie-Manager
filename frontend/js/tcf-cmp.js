@@ -169,8 +169,9 @@
 		pushBits(bits, CMP_ID, 12);           // CmpId
 		pushBits(bits, CMP_VERSION, 12);      // CmpVersion
 		pushBits(bits, 1, 6);                 // ConsentScreen
-		pushBits(bits, charTo6("E"), 6);      // ConsentLanguage char 1
-		pushBits(bits, charTo6("N"), 6);      // ConsentLanguage char 2
+		var consentLang = (window._fazTcfConfig && window._fazTcfConfig.consentLanguage) || "EN";
+		pushBits(bits, charTo6(consentLang.charAt(0)), 6);  // ConsentLanguage char 1
+		pushBits(bits, charTo6(consentLang.charAt(1)), 6);  // ConsentLanguage char 2
 		pushBits(bits, VENDOR_LIST, 12);      // VendorListVersion
 		pushBits(bits, 4, 6);                 // TcfPolicyVersion (GVL policy 4)
 		pushBits(bits, 1, 1);                 // IsServiceSpecific = true
@@ -217,7 +218,7 @@
 			tcfPolicyVersion:  4,
 			cmpId:             CMP_ID,
 			cmpVersion:        CMP_VERSION,
-			gdprApplies:       true,
+			gdprApplies:       (window._fazTcfConfig && typeof window._fazTcfConfig.gdprApplies !== "undefined") ? !!window._fazTcfConfig.gdprApplies : true,
 			tcString:          tcString,
 			listenerId:        listenerIdVal || undefined,
 			eventStatus:       "tcloaded",
@@ -225,7 +226,7 @@
 			isServiceSpecific: true,
 			useNonStandardTexts: false,
 			purposeOneTreatment: false,
-			publisherCC:       "IT",
+			publisherCC:       (window._fazTcfConfig && window._fazTcfConfig.publisherCC) || "IT",
 			outOfBand: {
 				allowedVendors:  {},
 				disclosedVendors: {}
@@ -278,7 +279,7 @@
 
 			case "ping":
 				callback({
-					gdprApplies:       true,
+					gdprApplies:       (window._fazTcfConfig && typeof window._fazTcfConfig.gdprApplies !== "undefined") ? !!window._fazTcfConfig.gdprApplies : true,
 					cmpLoaded:         cmpLoaded,
 					cmpStatus:         "loaded",
 					displayStatus:     displayOpen ? "visible" : "hidden",
@@ -374,19 +375,24 @@
 		}, call.parameter);
 	}, false);
 
-	// Listen for FAZ consent changes and re-notify TCF listeners
-	document.addEventListener("fazcookie_consent_update", function () {
-		notifyListeners("useractioncomplete");
-	});
+	// Track banner visibility for ping displayStatus.
+	// The first fazcookie_consent_update after banner_loaded is always the
+	// init state (from _fazSetInitialState) — skip it, it's not a user action.
+	var skipNextConsentUpdate = false;
 
-	// Track banner visibility for ping displayStatus
 	document.addEventListener("fazcookie_banner_loaded", function () {
 		displayOpen = true;
+		skipNextConsentUpdate = true;
 		notifyListeners("cmpuishown");
 	});
 
 	document.addEventListener("fazcookie_consent_update", function () {
+		if (skipNextConsentUpdate) {
+			skipNextConsentUpdate = false;
+			return;
+		}
 		displayOpen = false;
+		notifyListeners("useractioncomplete");
 	});
 
 })();
