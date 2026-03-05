@@ -400,6 +400,7 @@
 	var IFRAME_LOAD_TIMEOUT = 6000;  // Max wait for iframe load (ms). Must exceed adaptive settle (700+800=1500ms).
 	var CONCURRENCY = 3;             // Parallel iframes.
 	var EARLY_STOP_THRESHOLD = 5;    // Stop after N consecutive pages with no new findings.
+	var SAFE_SCAN_THRESHOLD = 1000;  // Deep/full scans use safer timings and disable early stop.
 
 	/**
 	 * Normalize a URL: strip hash, preserve query, ensure trailing slash.
@@ -505,12 +506,20 @@
 
 		var parsedMaxPages = parseInt(maxPages, 10);
 		var requestPages = 20;
+		var isFullScan = false;
 		if (isFinite(parsedMaxPages) && parsedMaxPages > 0) {
 			requestPages = parsedMaxPages;
 		} else if (parsedMaxPages === 0) {
 			// "Full scan" option in the UI: request maximum server cap.
 			requestPages = 2000;
+			isFullScan = true;
 		}
+		var safeMode = isFullScan || requestPages >= SAFE_SCAN_THRESHOLD;
+		var scanOptions = {
+			enableEarlyStop: !safeMode,
+			loadTimeoutMs: safeMode ? 10000 : IFRAME_LOAD_TIMEOUT,
+			settleTimeoutMs: safeMode ? 2600 : 1700,
+		};
 
 		// Metrics.
 		var scanMetrics = {
@@ -531,7 +540,10 @@
 		}
 
 		// Step 1: Ask server for URLs to scan.
-		FAZ.post('scans/discover', { max_pages: requestPages, fingerprint: storedFingerprint }).then(function (result) {
+		FAZ.post('scans/discover', {
+			max_pages: requestPages,
+			fingerprint: safeMode ? '' : storedFingerprint,
+		}).then(function (result) {
 			scanMetrics.discoverMs = Date.now() - discoverStart;
 			scanMetrics.incremental = !!result.incremental;
 			var urls = deduplicateUrls(result.urls || []);
@@ -599,7 +611,7 @@
 						var detail = buildScanApiErrorDetail(err);
 						finishScan(btn, progress, 'Scan finished but failed to save results.' + detail, true);
 					});
-				}, bar, statusEl, scanMetrics);
+				}, bar, statusEl, scanMetrics, scanOptions);
 			}).catch(function (err) {
 				console.error('[FAZ Scanner] Discover failed:', err);
 				var detail = buildScanApiErrorDetail(err);
@@ -623,7 +635,11 @@
 	 * @param {Element}   statusEl    Status text element.
 	 * @param {object}    metrics     Metrics object to populate.
 	 */
-	function scanUrlsConcurrent(urls, done, bar, statusEl, metrics) {
+	function scanUrlsConcurrent(urls, done, bar, statusEl, metrics, options) {
+		options = options || {};
+		var enableEarlyStop = options.enableEarlyStop !== false;
+		var loadTimeoutMs = (typeof options.loadTimeoutMs === 'number' && options.loadTimeoutMs > 0) ? options.loadTimeoutMs : IFRAME_LOAD_TIMEOUT;
+		var settleTimeoutMs = (typeof options.settleTimeoutMs === 'number' && options.settleTimeoutMs > 0) ? options.settleTimeoutMs : 1700;
 		var collectedCookies = [];
 		var collectedScripts = [];
 		var diagnostics = {
@@ -729,13 +745,16 @@
 
 				// Early stop check.
 				noNewCount = foundNew ? 0 : noNewCount + 1;
-				if (noNewCount >= EARLY_STOP_THRESHOLD && completed >= EARLY_STOP_THRESHOLD) {
+				if (enableEarlyStop && noNewCount >= EARLY_STOP_THRESHOLD && completed >= EARLY_STOP_THRESHOLD) {
 					stopped = true;
 					metrics.earlyStopReason = noNewCount + ' consecutive pages with no new findings';
 				}
 
 				updateProgress();
 				dispatch();
+			}, {
+				loadTimeoutMs: loadTimeoutMs,
+				settleTimeoutMs: settleTimeoutMs,
 			});
 		}
 
@@ -748,7 +767,11 @@
 	 * @param {string}   url  The URL to scan.
 	 * @param {Function} done Callback({cookies, scripts}).
 	 */
-	function scanSingleUrl(url, done) {
+	function scanSingleUrl(url, done, options) {
+		options = options || {};
+		var loadTimeoutMs = (typeof options.loadTimeoutMs === 'number' && options.loadTimeoutMs > 0) ? options.loadTimeoutMs : IFRAME_LOAD_TIMEOUT;
+		var settleTimeoutMs = (typeof options.settleTimeoutMs === 'number' && options.settleTimeoutMs > 0) ? options.settleTimeoutMs : 1700;
+
 		function emptyResult(issue) {
 			return { cookies: [], scripts: [], issue: issue || '' };
 		}
@@ -838,8 +861,8 @@
 		iframe.addEventListener('load', function () {
 			// Cancel the pre-load fallback timer — page loaded, settle phase starts.
 			if (timer) { clearTimeout(timer); timer = null; }
-			// Settle watchdog: 700ms + 800ms + 200ms margin = 1700ms max.
-			timer = setTimeout(function () { finish(emptyResult('settleTimeout')); }, 1700);
+			// Settle watchdog for slow pages/scripts.
+			timer = setTimeout(function () { finish(emptyResult('settleTimeout')); }, settleTimeoutMs);
 
 			var firstRead = readIframe();
 			var firstCount = firstRead.cookies.length + firstRead.scripts.length;
@@ -863,7 +886,7 @@
 		});
 
 		// Timeout fallback in case load never fires (e.g. network error, 404).
-		timer = setTimeout(function () { finish(emptyResult('iframeTimeout')); }, IFRAME_LOAD_TIMEOUT);
+		timer = setTimeout(function () { finish(emptyResult('iframeTimeout')); }, loadTimeoutMs);
 
 		// Navigate the iframe.
 		iframe.src = parsedUrl.href;
