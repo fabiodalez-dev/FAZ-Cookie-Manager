@@ -746,11 +746,21 @@
 		// Inject readmore link (not in template - frontend JS adds it dynamically)
 		attachPreviewReadMore(host);
 
-		// Update brand logo src from our form field
-		var logoUrl = sanitizeHttpUrl(getVal('faz-b-brandlogo-url'), false);
-		if (logoUrl) {
+		// Update brand logo src from our form field.
+		// Keep validation inline so static analyzers can verify protocol checks.
+		var logoUrlRaw = (getVal('faz-b-brandlogo-url') || '').trim();
+		var logoUrlSafe = '';
+		try {
+			if (logoUrlRaw) {
+				var parsedLogoUrl = new URL(logoUrlRaw, window.location.origin);
+				if (parsedLogoUrl.protocol === 'http:' || parsedLogoUrl.protocol === 'https:') {
+					logoUrlSafe = parsedLogoUrl.href;
+				}
+			}
+		} catch (_unused2) {}
+		if (logoUrlSafe) {
 			host.querySelectorAll('[data-faz-tag="brand-logo"] img').forEach(function (img) {
-				img.setAttribute('src', logoUrl);
+				img.src = logoUrlSafe;
 			});
 		}
 
@@ -782,11 +792,27 @@
 		var el;
 		if (readMoreCfg.type === 'link') {
 			el = document.createElement('a');
-			el.href = sanitizeHttpUrl(href, true) || '/cookie-policy';
+			var hrefRaw = String(href || '').trim();
+			var safeHref = '/cookie-policy';
+			try {
+				if (hrefRaw) {
+					var parsedHref = new URL(hrefRaw, window.location.origin);
+					var isHttpHref = parsedHref.protocol === 'http:' || parsedHref.protocol === 'https:';
+					var isRelativePath = hrefRaw.charAt(0) === '/' && hrefRaw.charAt(1) !== '/';
+					if (isHttpHref) {
+						if (isRelativePath && parsedHref.origin === window.location.origin) {
+							safeHref = parsedHref.pathname + parsedHref.search + parsedHref.hash;
+						} else if (hrefRaw.indexOf('http://') === 0 || hrefRaw.indexOf('https://') === 0) {
+							safeHref = parsedHref.href;
+						}
+					}
+				}
+			} catch (_unused3) {}
+			el.href = safeHref;
 			el.target = '_blank';
 			el.rel = 'noopener';
 		} else {
-				el = document.createElement('button');
+			el = document.createElement('button');
 		}
 		el.className = 'faz-policy';
 		el.setAttribute('aria-label', label);
