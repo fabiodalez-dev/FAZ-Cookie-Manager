@@ -294,6 +294,32 @@ class Controller {
 	}
 
 	/**
+	 * Collect normalized, deduplicated permalink URLs from an array of post IDs.
+	 *
+	 * @param int[]  $post_ids Post IDs to resolve permalinks for.
+	 * @param array  &$pages   Pages array to append to (passed by reference).
+	 * @param array  &$seen    Seen-URL hash map (passed by reference).
+	 * @param int    $max      Maximum total pages to collect.
+	 * @return void
+	 */
+	private function collect_post_urls( $post_ids, &$pages, &$seen, $max ) {
+		foreach ( $post_ids as $post_id ) {
+			$url = get_permalink( $post_id );
+			if ( ! $url ) {
+				continue;
+			}
+			$normalized = $this->normalize_url( $url );
+			if ( ! isset( $seen[ $normalized ] ) ) {
+				$seen[ $normalized ] = true;
+				$pages[]             = $normalized;
+				if ( count( $pages ) >= $max ) {
+					break;
+				}
+			}
+		}
+	}
+
+	/**
 	 * Discover pages using WordPress database queries (no HTTP requests).
 	 *
 	 * Used by the browser-based scanner's discover endpoint to avoid
@@ -324,20 +350,7 @@ class Controller {
 			)
 		);
 
-		foreach ( $posts as $post_id ) {
-			$url = get_permalink( $post_id );
-			if ( ! $url ) {
-				continue;
-			}
-			$normalized = $this->normalize_url( $url );
-			if ( ! isset( $seen[ $normalized ] ) ) {
-				$seen[ $normalized ] = true;
-				$pages[]             = $normalized;
-				if ( count( $pages ) >= $max ) {
-					break;
-				}
-			}
-		}
+		$this->collect_post_urls( $posts, $pages, $seen, $max );
 
 		// Add category/tag archive pages if we still have room.
 		if ( count( $pages ) < $max ) {
@@ -697,28 +710,24 @@ class Controller {
 	 * @return array Scan result summary.
 	 */
 	public function save_scan_result( $cookies, $pages_scanned, $scripts = array(), $metrics = array() ) {
-		// Merge inferred cookies from script patterns.
-		if ( ! empty( $scripts ) ) {
-			$inferred       = Cookie_Database::lookup_scripts( $scripts );
-			$existing_names = array();
-			foreach ( $cookies as $c ) {
-				$existing_names[ $c['name'] ] = true;
-			}
-			foreach ( $inferred as $inf ) {
-				if ( ! isset( $existing_names[ $inf['name'] ] ) ) {
-					$cookies[]                       = $inf;
-					$existing_names[ $inf['name'] ]  = true;
-				}
-			}
-		}
-
-		// Deduplicate by name.
-		$unique  = array();
-		$seen    = array();
+		// Deduplicate cookies by name (single pass, also used for merge check).
+		$unique = array();
+		$seen   = array();
 		foreach ( $cookies as $c ) {
 			if ( ! isset( $seen[ $c['name'] ] ) ) {
 				$seen[ $c['name'] ] = true;
 				$unique[]           = $c;
+			}
+		}
+
+		// Merge inferred cookies from script patterns.
+		if ( ! empty( $scripts ) ) {
+			$inferred = Cookie_Database::lookup_scripts( $scripts );
+			foreach ( $inferred as $inf ) {
+				if ( ! isset( $seen[ $inf['name'] ] ) ) {
+					$seen[ $inf['name'] ] = true;
+					$unique[]             = $inf;
+				}
 			}
 		}
 
@@ -739,19 +748,7 @@ class Controller {
 			)
 		);
 
-		// Sanitize metrics for storage.
-		$clean_metrics = array();
-		if ( ! empty( $metrics ) && is_array( $metrics ) ) {
-			$clean_metrics = array(
-				'discoverMs'      => isset( $metrics['discoverMs'] ) ? absint( $metrics['discoverMs'] ) : 0,
-				'scanMs'          => isset( $metrics['scanMs'] ) ? absint( $metrics['scanMs'] ) : 0,
-				'importMs'        => isset( $metrics['importMs'] ) ? absint( $metrics['importMs'] ) : 0,
-				'urlsDiscovered'  => isset( $metrics['urlsDiscovered'] ) ? absint( $metrics['urlsDiscovered'] ) : 0,
-				'cookiesFound'    => isset( $metrics['cookiesFound'] ) ? absint( $metrics['cookiesFound'] ) : 0,
-				'scriptsFound'    => isset( $metrics['scriptsFound'] ) ? absint( $metrics['scriptsFound'] ) : 0,
-				'earlyStopReason' => isset( $metrics['earlyStopReason'] ) ? sanitize_text_field( $metrics['earlyStopReason'] ) : '',
-			);
-		}
+		$clean_metrics = $this->sanitize_scan_metrics( $metrics );
 
 		// Store scan history entry.
 		$history       = get_option( 'faz_scan_history', array() );
@@ -844,6 +841,27 @@ class Controller {
 	}
 
 	/**
+	 * Sanitize client-side scan metrics for safe storage.
+	 *
+	 * @param array $metrics Raw metrics from the client.
+	 * @return array Sanitized metrics, or empty array if input is empty.
+	 */
+	private function sanitize_scan_metrics( $metrics ) {
+		if ( empty( $metrics ) || ! is_array( $metrics ) ) {
+			return array();
+		}
+
+		$int_keys = array( 'discoverMs', 'scanMs', 'importMs', 'urlsDiscovered', 'cookiesFound', 'scriptsFound' );
+		$clean    = array();
+		foreach ( $int_keys as $key ) {
+			$clean[ $key ] = isset( $metrics[ $key ] ) ? absint( $metrics[ $key ] ) : 0;
+		}
+		$clean['earlyStopReason'] = isset( $metrics['earlyStopReason'] ) ? sanitize_text_field( $metrics['earlyStopReason'] ) : '';
+
+		return $clean;
+	}
+
+	/**
 	 * Get the last scan info.
 	 *
 	 * @return array
@@ -908,20 +926,27 @@ class Controller {
 		global $wpdb;
 
 		$post_types = get_post_types( array( 'public' => true ), 'names' );
-		$types_in   = "'" . implode( "','", array_map( 'esc_sql', array_values( $post_types ) ) ) . "'";
+		if ( empty( $post_types ) ) {
+			return ''; // Unknown state — forces full scan.
+		}
+
+		$post_types_values = array_values( $post_types );
+		$placeholders      = implode( ',', array_fill( 0, count( $post_types_values ), '%s' ) );
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$row = $wpdb->get_row(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $types_in is esc_sql'd above
-			"SELECT COUNT(*) as cnt, MAX(post_modified_gmt) as latest
-			 FROM {$wpdb->posts}
-			 WHERE post_status = 'publish' AND post_type IN ({$types_in})"
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- dynamic placeholder count
+				"SELECT COUNT(*) as cnt, MAX(post_modified_gmt) as latest FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ({$placeholders})",
+				$post_types_values
+			)
 		);
 
-		$count  = $row ? $row->cnt : 0;
-		$latest = $row ? $row->latest : '';
+		if ( null === $row || ! empty( $wpdb->last_error ) ) {
+			return ''; // DB error — forces full scan.
+		}
 
-		return md5( $count . '|' . $latest . '|' . $max );
+		return md5( $row->cnt . '|' . $row->latest . '|' . $max );
 	}
 
 	/**
@@ -958,20 +983,7 @@ class Controller {
 			)
 		);
 
-		foreach ( $recent as $post_id ) {
-			$url = get_permalink( $post_id );
-			if ( ! $url ) {
-				continue;
-			}
-			$normalized = $this->normalize_url( $url );
-			if ( ! isset( $seen[ $normalized ] ) ) {
-				$seen[ $normalized ] = true;
-				$pages[]             = $normalized;
-				if ( count( $pages ) >= $max ) {
-					break;
-				}
-			}
-		}
+		$this->collect_post_urls( $recent, $pages, $seen, $max );
 
 		return $pages;
 	}

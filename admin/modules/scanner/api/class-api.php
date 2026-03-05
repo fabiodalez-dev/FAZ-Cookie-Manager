@@ -297,14 +297,13 @@ class Api extends Rest_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function discover_urls( $request ) {
-		$max_pages   = isset( $request['max_pages'] ) ? absint( $request['max_pages'] ) : 20;
-		$max_pages   = min( $max_pages, 2000 );
-		$fingerprint = isset( $request['fingerprint'] ) ? sanitize_text_field( $request['fingerprint'] ) : '';
+		$max_pages   = min( absint( $request['max_pages'] ), 2000 );
+		$fingerprint = $request['fingerprint'];
 
 		$current_fingerprint = $this->controller->get_scan_fingerprint( $max_pages );
 		$incremental         = false;
 
-		if ( ! empty( $fingerprint ) && $fingerprint === $current_fingerprint ) {
+		if ( ! empty( $fingerprint ) && ! empty( $current_fingerprint ) && $fingerprint === $current_fingerprint ) {
 			// Nothing changed — return only priority URLs.
 			$urls        = $this->controller->get_priority_urls( $max_pages );
 			$incremental = true;

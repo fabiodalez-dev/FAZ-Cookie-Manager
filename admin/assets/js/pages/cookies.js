@@ -397,8 +397,7 @@
 	// Loads pages in hidden iframes to discover cookies set by JavaScript
 	// (e.g. _ga, _fbp) that server-side scanning cannot detect.
 
-	var IFRAME_LOAD_TIMEOUT = 4000;  // Max wait for iframe load (ms).
-	var IFRAME_SETTLE_DELAY = 1500;  // Max wait after load for JS cookies.
+	var IFRAME_LOAD_TIMEOUT = 6000;  // Max wait for iframe load (ms). Must exceed adaptive settle (700+800=1500ms).
 	var CONCURRENCY = 3;             // Parallel iframes.
 	var EARLY_STOP_THRESHOLD = 5;    // Stop after N consecutive pages with no new findings.
 
@@ -462,7 +461,11 @@
 
 		// Get stored fingerprint for incremental scanning.
 		var storedFingerprint = '';
-		try { storedFingerprint = localStorage.getItem('faz_scan_fingerprint') || ''; } catch (e) {}
+		try {
+			storedFingerprint = localStorage.getItem('faz_scan_fingerprint') || '';
+		} catch (e) {
+			console.warn('[FAZ Scanner] Cannot read fingerprint from localStorage — incremental scanning disabled.', e.message);
+		}
 
 		// Step 1: Ask server for URLs to scan.
 		FAZ.post('scans/discover', { max_pages: requestPages, fingerprint: storedFingerprint }).then(function (result) {
@@ -473,7 +476,9 @@
 			// Store new fingerprint for next scan.
 			try {
 				if (result.fingerprint) localStorage.setItem('faz_scan_fingerprint', result.fingerprint);
-			} catch (e) {}
+			} catch (e) {
+				console.warn('[FAZ Scanner] Cannot persist fingerprint — next scan will be full.', e.message);
+			}
 			scanMetrics.urlsDiscovered = urls.length;
 
 			if (!urls.length) {
@@ -495,13 +500,23 @@
 
 				var importStart = Date.now();
 
-				// Step 3: Send results to server.
+				// Step 3: Send results to server (strip pageTimes to avoid bloating payload).
+				var metricsToSend = {
+					discoverMs: scanMetrics.discoverMs,
+					scanMs: scanMetrics.scanMs,
+					urlsDiscovered: scanMetrics.urlsDiscovered,
+					cookiesFound: scanMetrics.cookiesFound,
+					scriptsFound: scanMetrics.scriptsFound,
+					earlyStopReason: scanMetrics.earlyStopReason,
+					pagesScanned: scanMetrics.pagesScanned,
+					incremental: scanMetrics.incremental,
+				};
 				FAZ.post('scans/import', {
 					cookies: collectedCookies,
 					pages_scanned: scanMetrics.pagesScanned,
 					scripts: collectedScripts,
 					urls: urls,
-					metrics: scanMetrics,
+					metrics: metricsToSend,
 				}).then(function (res) {
 					scanMetrics.importMs = Date.now() - importStart;
 					var total = res.total_cookies || collectedCookies.length;
@@ -513,12 +528,20 @@
 					finishScan(btn, progress, msg);
 					loadCookies();
 					loadCategories();
-				}).catch(function () {
+				}).catch(function (err) {
+					console.error('[FAZ Scanner] Import failed:', err);
 					finishScan(btn, progress, 'Scan finished but failed to save results.', true);
 				});
 			}, bar, statusEl, scanMetrics);
-		}).catch(function () {
-			finishScan(btn, progress, 'Failed to discover pages.', true);
+		}).catch(function (err) {
+			console.error('[FAZ Scanner] Discover failed:', err);
+			var detail = '';
+			if (err && err.status === 401) {
+				detail = ' Your session may have expired — try refreshing the page.';
+			} else if (err && err.status >= 500) {
+				detail = ' Server error — check your PHP error log.';
+			}
+			finishScan(btn, progress, 'Failed to discover pages.' + detail, true);
 		});
 	}
 
@@ -549,27 +572,31 @@
 		var stopped = false;   // Early stop flag.
 		var noNewCount = 0;    // Consecutive pages with no new findings.
 		var total = urls.length;
+		var totalPageTime = 0; // Running sum for ETA calculation.
+
+		/**
+		 * Add an item to an array if not already in the dedup set.
+		 * Returns true if the item was new.
+		 */
+		function addUnique(set, arr, key, item) {
+			if (set[key]) return false;
+			set[key] = true;
+			arr.push(item);
+			return true;
+		}
 
 		function updateProgress() {
 			var pct = Math.round((completed / total) * 100);
 			bar.style.width = pct + '%';
-			var cookieCount = collectedCookies.length;
-			var scriptCount = collectedScripts.length;
-			// ETA based on average page time.
 			var eta = '';
-			if (metrics.pageTimes.length > 0) {
-				var avg = 0;
-				for (var i = 0; i < metrics.pageTimes.length; i++) avg += metrics.pageTimes[i];
-				avg = avg / metrics.pageTimes.length;
-				var remaining = total - completed;
-				// Account for concurrency.
-				var etaMs = Math.round((remaining * avg) / CONCURRENCY);
+			if (completed > 0) {
+				var etaMs = Math.round(((total - completed) * totalPageTime / completed) / CONCURRENCY);
 				if (etaMs > 1000) {
 					eta = ' (~' + Math.ceil(etaMs / 1000) + 's left)';
 				}
 			}
 			statusEl.textContent = completed + '/' + total + ' pages | ' +
-				cookieCount + ' cookies | ' + scriptCount + ' scripts' + eta;
+				collectedCookies.length + ' cookies | ' + collectedScripts.length + ' scripts' + eta;
 		}
 
 		function dispatch() {
@@ -578,9 +605,10 @@
 				nextIndex++;
 				active++;
 			}
-			// If nothing active and nothing left, we're done.
 			if (active === 0 && (nextIndex >= total || stopped)) {
 				metrics.pagesScanned = completed;
+				// Clean up any orphaned iframes.
+				try { document.getElementById('faz-scan-frame').textContent = ''; } catch (e) {}
 				done(collectedCookies, collectedScripts);
 			}
 		}
@@ -592,54 +620,41 @@
 			scanSingleUrl(urls[idx], function (pageResult) {
 				active--;
 				completed++;
-				metrics.pageTimes.push(Date.now() - pageStart);
+				var elapsed = Date.now() - pageStart;
+				metrics.pageTimes.push(elapsed);
+				totalPageTime += elapsed;
 
 				var foundNew = false;
 
 				// Add page-detected cookies.
-				if (pageResult.cookies) {
-					for (var i = 0; i < pageResult.cookies.length; i++) {
-						var c = pageResult.cookies[i];
-						if (!cookieSet[c.name]) {
-							cookieSet[c.name] = true;
-							collectedCookies.push(c);
-							foundNew = true;
-						}
+				var pageCookies = pageResult.cookies || [];
+				for (var i = 0; i < pageCookies.length; i++) {
+					if (addUnique(cookieSet, collectedCookies, pageCookies[i].name, pageCookies[i])) {
+						foundNew = true;
 					}
 				}
 
 				// Diff cookies: find new ones set during this page load.
-				var cookiesAfter = parseBrowserCookies();
-				var newCookies = diffCookies(cookiesBefore, cookiesAfter);
+				var newCookies = diffCookies(cookiesBefore, parseBrowserCookies());
 				for (var j = 0; j < newCookies.length; j++) {
-					if (!cookieSet[newCookies[j].name]) {
-						cookieSet[newCookies[j].name] = true;
-						collectedCookies.push(newCookies[j]);
+					if (addUnique(cookieSet, collectedCookies, newCookies[j].name, newCookies[j])) {
 						foundNew = true;
 					}
 				}
 
 				// Collect scripts.
-				if (pageResult.scripts) {
-					for (var k = 0; k < pageResult.scripts.length; k++) {
-						var src = pageResult.scripts[k];
-						if (!scriptSet[src]) {
-							scriptSet[src] = true;
-							collectedScripts.push(src);
-							foundNew = true;
-						}
+				var pageScripts = pageResult.scripts || [];
+				for (var k = 0; k < pageScripts.length; k++) {
+					if (addUnique(scriptSet, collectedScripts, pageScripts[k], pageScripts[k])) {
+						foundNew = true;
 					}
 				}
 
 				// Early stop check.
-				if (foundNew) {
-					noNewCount = 0;
-				} else {
-					noNewCount++;
-					if (noNewCount >= EARLY_STOP_THRESHOLD && completed >= EARLY_STOP_THRESHOLD) {
-						stopped = true;
-						metrics.earlyStopReason = noNewCount + ' consecutive pages with no new findings';
-					}
+				noNewCount = foundNew ? 0 : noNewCount + 1;
+				if (noNewCount >= EARLY_STOP_THRESHOLD && completed >= EARLY_STOP_THRESHOLD) {
+					stopped = true;
+					metrics.earlyStopReason = noNewCount + ' consecutive pages with no new findings';
 				}
 
 				updateProgress();
@@ -657,25 +672,23 @@
 	 * @param {Function} done Callback({cookies, scripts}).
 	 */
 	function scanSingleUrl(url, done) {
+		var emptyResult = { cookies: [], scripts: [] };
+
 		// Validate URL: only allow http/https same-origin pages.
 		var parsedUrl;
 		try {
 			parsedUrl = new URL(url, window.location.origin);
 		} catch (_unused) {
-			done({ cookies: [], scripts: [] });
-			return;
-		}
-		if (
-			(parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') ||
-			parsedUrl.origin !== window.location.origin
-		) {
-			done({ cookies: [], scripts: [] });
+			done(emptyResult);
 			return;
 		}
 
 		var container = document.getElementById('faz-scan-frame');
-		if (!container) {
-			done({ cookies: [], scripts: [] });
+		var isSameOriginHttp = (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') &&
+			parsedUrl.origin === window.location.origin;
+
+		if (!isSameOriginHttp || !container) {
+			done(emptyResult);
 			return;
 		}
 
