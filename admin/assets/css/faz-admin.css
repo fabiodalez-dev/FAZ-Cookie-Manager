@@ -877,7 +877,7 @@
 }
 .faz-scan-progress {
 	width: 100%;
-	background: var(--faz-border);
+	background: #334155;
 	border-radius: 4px;
 	height: 24px;
 	position: relative;
@@ -904,7 +904,7 @@
 	font-weight: 500;
 	color: #fff;
 	mix-blend-mode: normal;
-	text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+	text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
 }
 .faz-scan-pages {
 	margin-top: 6px;
@@ -925,6 +925,23 @@
 	background: #fef2f2;
 	border: 1px solid #fecaca;
 	border-radius: var(--faz-radius);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.faz-stale-delete-all {
+	background: #991b1b;
+	color: #fff;
+	border: 1px solid #7f1d1d;
+}
+
+.faz-stale-delete-all:hover {
+	background: #7f1d1d;
+	color: #fff;
+	border-color: #7f1d1d;
 }
 
 #faz-cookies-tbody tr.faz-cookie-stale td {

@@ -164,9 +164,19 @@
 			return;
 		}
 		staleBar.style.display = 'block';
-		staleBar.textContent = visibleStaleCount > 0
-			? visibleStaleCount + ' cookie(s) not found in the latest scan are highlighted in red. You can remove them with "Delete stale".'
+		staleBar.textContent = '';
+		var msg = document.createElement('span');
+		msg.textContent = visibleStaleCount > 0
+			? visibleStaleCount + ' cookie(s) not found in the latest scan are highlighted in red.'
 			: staleCookieCount + ' cookie(s) not found in the latest scan (not visible in this filter).';
+		staleBar.appendChild(msg);
+
+		var deleteAllBtn = document.createElement('button');
+		deleteAllBtn.type = 'button';
+		deleteAllBtn.className = 'faz-btn faz-btn-sm faz-stale-delete-all';
+		deleteAllBtn.textContent = 'Delete all stale';
+		deleteAllBtn.addEventListener('click', deleteAllStaleCookies);
+		staleBar.appendChild(deleteAllBtn);
 	}
 
 	function renderCategories() {
@@ -482,6 +492,40 @@
 			loadCategories();
 		}).catch(function () {
 			FAZ.notify('Failed to delete stale cookie', 'error');
+		});
+	}
+
+	function deleteAllStaleCookies() {
+		if (!staleCookieCount) return;
+		FAZ.confirm('Delete all stale cookies not found in the latest scan?').then(function (ok) {
+			if (!ok) return;
+			FAZ.get('cookies').then(function (data) {
+				var list = Array.isArray(data) ? data : (data.items || []);
+				var ids = [];
+				list.forEach(function (cookie) {
+					var name = (cookie && cookie.name) ? String(cookie.name) : '';
+					var id = getCookieId(cookie);
+					if (name && staleCookieNames[name] && id) {
+						ids.push(parseInt(id, 10));
+					}
+				});
+				if (!ids.length) {
+					FAZ.notify('No stale cookies to delete');
+					return;
+				}
+				FAZ.post('cookies/bulk-delete', { ids: ids }).then(function (res) {
+					var deletedCount = (res && typeof res.deleted === 'number') ? res.deleted : ids.length;
+					staleCookieNames = {};
+					staleCookieCount = 0;
+					FAZ.notify(deletedCount + ' stale cookie(s) deleted');
+					loadCookies();
+					loadCategories();
+				}).catch(function () {
+					FAZ.notify('Failed to delete stale cookies', 'error');
+				});
+			}).catch(function () {
+				FAZ.notify('Failed to load cookies for stale cleanup', 'error');
+			});
 		});
 	}
 
