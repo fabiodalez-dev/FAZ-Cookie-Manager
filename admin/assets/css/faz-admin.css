@@ -880,7 +880,7 @@
 	width: 30%;
 	background: var(--faz-primary);
 	border-radius: 4px;
-	animation: fazScanPulse 1.5s ease-in-out infinite;
+	animation: faz-scan-pulse 1.5s ease-in-out infinite;
 	transition: width 0.4s ease;
 }
 .faz-scan-status {
@@ -903,7 +903,7 @@
 	color: var(--faz-text-muted);
 	text-align: right;
 }
-@keyframes fazScanPulse {
+@keyframes faz-scan-pulse {
 	0%, 100% { opacity: 0.7; }
 	50% { opacity: 1; }
 }

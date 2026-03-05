@@ -700,7 +700,13 @@
 						} else {
 							currentDetectedSet = buildCookieNameSet(collectedCookies, false);
 						}
-						setStaleCookies(previousDiscoveredSet, currentDetectedSet);
+						if (scanMetrics.incremental) {
+							// Incremental scan covers only a subset; avoid false stale flags.
+							staleCookieNames = {};
+							staleCookieCount = 0;
+						} else {
+							setStaleCookies(previousDiscoveredSet, currentDetectedSet);
+						}
 
 						var msg = 'Scan complete \u2014 ' + total + ' cookies found on ' + scanMetrics.pagesScanned + ' pages';
 						if (scanMetrics.earlyStopReason) {

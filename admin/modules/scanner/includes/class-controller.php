@@ -97,13 +97,15 @@ class Controller {
 		// Fallback for shared hosts where exec/system calls are disabled.
 		if ( ! $this->can_spawn_background_process() ) {
 			update_option( 'faz_scan_max_pages', $max_pages );
-			wp_clear_scheduled_hook( self::CRON_HOOK );
-			wp_schedule_single_event( time() + 1, self::CRON_HOOK );
 
 			// If WP-Cron is disabled, run inline as a last-resort fallback.
 			if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
 				$this->run_scan( $max_pages );
+				return $this->get_info();
 			}
+
+			wp_clear_scheduled_hook( self::CRON_HOOK );
+			wp_schedule_single_event( time() + 1, self::CRON_HOOK );
 
 			return $this->get_info();
 		}
@@ -761,10 +763,16 @@ class Controller {
 		$unique = array();
 		$seen   = array();
 		foreach ( $cookies as $c ) {
-			if ( ! isset( $seen[ $c['name'] ] ) ) {
-				$seen[ $c['name'] ] = true;
-				$unique[]           = $c;
+			if ( ! is_array( $c ) || empty( $c['name'] ) ) {
+				continue;
 			}
+			$name = sanitize_text_field( $c['name'] );
+			if ( isset( $seen[ $name ] ) ) {
+				continue;
+			}
+			$seen[ $name ] = true;
+			$c['name']     = $name;
+			$unique[]      = $c;
 		}
 
 		// Merge inferred cookies from script patterns.
