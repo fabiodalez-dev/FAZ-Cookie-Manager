@@ -449,7 +449,13 @@
 		dropdown.parentNode.insertBefore(progress, dropdown.nextSibling);
 
 		var parsedMaxPages = parseInt(maxPages, 10);
-		var requestPages = (isFinite(parsedMaxPages) && parsedMaxPages > 0) ? parsedMaxPages : 20;
+		var requestPages = 20;
+		if (isFinite(parsedMaxPages) && parsedMaxPages > 0) {
+			requestPages = parsedMaxPages;
+		} else if (parsedMaxPages === 0) {
+			// "Full scan" option in the UI: request maximum server cap.
+			requestPages = 2000;
+		}
 
 		// Metrics.
 		var scanMetrics = {
@@ -517,7 +523,6 @@
 					cookies: collectedCookies,
 					pages_scanned: scanMetrics.pagesScanned,
 					scripts: collectedScripts,
-					urls: urls,
 					metrics: metricsToSend,
 				}).then(function (res) {
 					scanMetrics.importMs = Date.now() - importStart;
@@ -532,7 +537,17 @@
 					loadCategories();
 				}).catch(function (err) {
 					console.error('[FAZ Scanner] Import failed:', err);
-					finishScan(btn, progress, 'Scan finished but failed to save results.', true);
+					var detail = '';
+					if (err && err.message) {
+						detail = ' ' + err.message;
+					} else if (err && err.status === 401) {
+						detail = ' Your session may have expired — try refreshing the page.';
+					} else if (err && err.status === 403) {
+						detail = ' Invalid nonce/permissions — try refreshing the page.';
+					} else if (err && err.status >= 500) {
+						detail = ' Server error — check your PHP error log.';
+					}
+					finishScan(btn, progress, 'Scan finished but failed to save results.' + detail, true);
 				});
 			}, bar, statusEl, scanMetrics);
 		}).catch(function (err) {

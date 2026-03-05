@@ -339,14 +339,6 @@ class Api extends Rest_Controller {
 		$scripts       = isset( $body['scripts'] ) && is_array( $body['scripts'] ) ? $body['scripts'] : array();
 		$metrics       = isset( $body['metrics'] ) && is_array( $body['metrics'] ) ? $body['metrics'] : array();
 
-		if ( empty( $raw_cookies ) && empty( $scripts ) ) {
-			return new \WP_Error(
-				'faz_rest_no_data',
-				__( 'No cookies or scripts provided.', 'faz-cookie-manager' ),
-				array( 'status' => 400 )
-			);
-		}
-
 		// Sanitize cookie data.
 		$cookies = array();
 		foreach ( $raw_cookies as $c ) {
