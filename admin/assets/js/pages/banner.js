@@ -614,6 +614,25 @@
 		});
 	}
 
+	function sanitizeHttpUrl(raw, allowRelativePath) {
+		if (typeof raw !== 'string') return '';
+		var value = raw.trim();
+		if (!value) return '';
+		try {
+			var parsed;
+			if (allowRelativePath && value.charAt(0) === '/' && value.charAt(1) !== '/') {
+				parsed = new URL(value, window.location.origin);
+				if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+				return parsed.pathname + parsed.search + parsed.hash;
+			}
+			parsed = new URL(value);
+			if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+			return parsed.href;
+		} catch (_unused) {
+			return '';
+		}
+	}
+
 	function renderPreview(html, css, hiddenTags) {
 		var host = document.getElementById('faz-b-preview-host');
 		var stylesHost = document.getElementById('faz-b-preview-styles');
@@ -717,8 +736,8 @@
 		attachPreviewReadMore(host);
 
 		// Update brand logo src from our form field
-		var logoUrl = getVal('faz-b-brandlogo-url');
-		if (logoUrl && /^https?:\/\//.test(logoUrl)) {
+		var logoUrl = sanitizeHttpUrl(getVal('faz-b-brandlogo-url'), false);
+		if (logoUrl) {
 			host.querySelectorAll('[data-faz-tag="brand-logo"] img').forEach(function (img) {
 				img.setAttribute('src', logoUrl);
 			});
@@ -748,15 +767,14 @@
 		var href = (noticeEl.privacyLink || getVal('faz-b-privacy-link') || '').trim() || '/cookie-policy';
 		if (!label) return;
 
-		// Build readmore element via DOM API (avoids XSS from unescaped values)
-		var el;
-		if (readMoreCfg.type === 'link') {
-			el = document.createElement('a');
-			if (!/^https?:\/\/|^\/[^\/]/.test(href)) href = '/cookie-policy';
-			el.href = href;
-			el.target = '_blank';
-			el.rel = 'noopener';
-		} else {
+			// Build readmore element via DOM API (avoids XSS from unescaped values)
+			var el;
+			if (readMoreCfg.type === 'link') {
+				el = document.createElement('a');
+				el.href = sanitizeHttpUrl(href, true) || '/cookie-policy';
+				el.target = '_blank';
+				el.rel = 'noopener';
+			} else {
 			el = document.createElement('button');
 		}
 		el.className = 'faz-policy';

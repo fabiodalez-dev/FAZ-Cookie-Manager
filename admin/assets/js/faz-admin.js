@@ -299,18 +299,23 @@
 	};
 
 	FAZ.deepSet = function (obj, path, value) {
+		if (!obj || typeof obj !== 'object' || !path) return;
 		var keys = path.split('.');
-		var BLOCKED = { '__proto__': 1, 'constructor': 1, 'prototype': 1 };
+		function isBlockedKey(key) {
+			return key === '__proto__' || key === 'constructor' || key === 'prototype';
+		}
 		var cur = obj;
 		for (var i = 0; i < keys.length - 1; i++) {
-			if (BLOCKED[keys[i]]) return;
-			if (cur[keys[i]] === undefined || cur[keys[i]] === null || typeof cur[keys[i]] !== 'object') {
-				cur[keys[i]] = {};
+			var key = keys[i];
+			if (isBlockedKey(key)) return;
+			if (!Object.prototype.hasOwnProperty.call(cur, key) || cur[key] === null || typeof cur[key] !== 'object') {
+				cur[key] = Object.create(null);
 			}
-			cur = cur[keys[i]];
+			cur = cur[key];
+			if (!cur || typeof cur !== 'object') return;
 		}
 		var lastKey = keys[keys.length - 1];
-		if (BLOCKED[lastKey]) return;
+		if (isBlockedKey(lastKey)) return;
 		cur[lastKey] = value;
 	};
 

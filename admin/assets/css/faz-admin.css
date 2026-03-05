@@ -932,7 +932,14 @@
 	flex-wrap: wrap;
 }
 
+.faz-stale-bar > span {
+	flex: 1 1 auto;
+	text-align: left;
+}
+
 .faz-stale-delete-all {
+	margin-left: auto;
+	flex: 0 0 auto;
 	background: #991b1b;
 	color: #fff;
 	border: 1px solid #7f1d1d;
