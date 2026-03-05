@@ -94,6 +94,20 @@ class Controller {
 		$max_pages = absint( $max_pages );
 		$abspath   = ABSPATH;
 
+		// Fallback for shared hosts where exec/system calls are disabled.
+		if ( ! $this->can_spawn_background_process() ) {
+			update_option( 'faz_scan_max_pages', $max_pages );
+			wp_clear_scheduled_hook( self::CRON_HOOK );
+			wp_schedule_single_event( time() + 1, self::CRON_HOOK );
+
+			// If WP-Cron is disabled, run inline as a last-resort fallback.
+			if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
+				$this->run_scan( $max_pages );
+			}
+
+			return $this->get_info();
+		}
+
 		// Try WP-CLI first (most reliable).
 		$wp_cli = $this->find_wp_cli();
 		if ( $wp_cli ) {
@@ -135,6 +149,12 @@ class Controller {
 	 * @return void
 	 */
 	public function schedule_httponly_check() {
+		// Lightweight fallback: scan only homepage when exec is unavailable.
+		if ( ! $this->can_spawn_background_process() ) {
+			$this->run_httponly_check();
+			return;
+		}
+
 		$abspath = ABSPATH;
 		$wp_cli  = $this->find_wp_cli();
 
@@ -187,6 +207,10 @@ class Controller {
 	 * @return string|false Path to wp binary, or false if not found.
 	 */
 	private function find_wp_cli() {
+		if ( ! $this->can_spawn_background_process() ) {
+			return false;
+		}
+
 		$output = array();
 		$code   = 0;
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec
@@ -202,6 +226,25 @@ class Controller {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Check if shell process spawning is available on this host.
+	 *
+	 * @return bool
+	 */
+	private function can_spawn_background_process() {
+		if ( ! function_exists( 'exec' ) ) {
+			return false;
+		}
+
+		$disabled = (string) ini_get( 'disable_functions' );
+		if ( '' === trim( $disabled ) ) {
+			return true;
+		}
+
+		$list = array_map( 'trim', explode( ',', $disabled ) );
+		return ! in_array( 'exec', $list, true );
 	}
 
 	/**
