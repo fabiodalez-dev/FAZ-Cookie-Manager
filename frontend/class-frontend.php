@@ -289,7 +289,7 @@ class Frontend {
 						"headers:{'Content-Type':'application/json','X-WP-Nonce':_fazConsentLog.nonce}," .
 						"body:JSON.stringify({" .
 							"consent_id:(function(){var m=document.cookie.match(/consentid:([^,;]+)/);return m?m[1]:''})()," .
-							"status:(d.rejected&&d.rejected.length&&(!d.accepted||!d.accepted.length))?'rejected':(d.accepted&&d.accepted.length?'accepted':'partial')," .
+							"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 							"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
 							"url:window.location.href" .
 						"})" .

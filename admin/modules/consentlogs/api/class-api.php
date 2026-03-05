@@ -186,8 +186,16 @@ class Api extends Rest_Controller {
 
 		$csv = Controller::get_instance()->export_csv( $args );
 
+		if ( ! is_string( $csv ) ) {
+			status_header( 500 );
+			exit;
+		}
+
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="consent-logs-' . gmdate( 'Y-m-d' ) . '.csv"' );
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
 		header( 'Content-Length: ' . strlen( $csv ) );
 		echo $csv; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Raw CSV file download.
 		exit;
