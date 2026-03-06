@@ -1192,6 +1192,63 @@ function _fazUnblock() {
             }
         }
     );
+    // Unblock server-side blocked scripts (type="text/plain" with data-faz-category).
+    _fazUnblockServerSide();
+}
+
+/**
+ * Re-enable resources that were blocked server-side via PHP output buffering.
+ *
+ * Handles four element types:
+ * - Scripts:     type="text/plain" + data-faz-category → clone with type="text/javascript"
+ * - Iframes:     data-faz-src + data-faz-category     → restore src
+ * - Images:      data-faz-src + data-faz-category      → restore src (tracking pixels)
+ * - Stylesheets: data-faz-href + data-faz-category     → restore href
+ */
+function _fazUnblockServerSide() {
+    // 1. Scripts.
+    document.querySelectorAll('script[type="text/plain"][data-faz-category]')
+        .forEach(function (script) {
+            var category = script.getAttribute("data-faz-category");
+            if (_fazIsCategoryToBeBlocked(category)) return;
+            var clone = _fazCreateElementBackup.call(document, "script");
+            clone.type = "text/javascript";
+            if (script.src) clone.src = script.src;
+            else clone.textContent = script.textContent;
+            for (var i = 0; i < script.attributes.length; i++) {
+                var attr = script.attributes[i];
+                if (attr.name === "type" || attr.name === "data-faz-category") continue;
+                clone.setAttribute(attr.name, attr.value);
+            }
+            script.parentNode.replaceChild(clone, script);
+        });
+
+    // 2. Iframes.
+    document.querySelectorAll('iframe[data-faz-src][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            if (_fazIsCategoryToBeBlocked(cat)) return;
+            el.src = el.getAttribute("data-faz-src");
+            el.removeAttribute("data-faz-src");
+        });
+
+    // 3. Images (tracking pixels inside noscript tags that JS can see).
+    document.querySelectorAll('img[data-faz-src][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            if (_fazIsCategoryToBeBlocked(cat)) return;
+            el.src = el.getAttribute("data-faz-src");
+            el.removeAttribute("data-faz-src");
+        });
+
+    // 4. Stylesheets.
+    document.querySelectorAll('link[data-faz-href][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            if (_fazIsCategoryToBeBlocked(cat)) return;
+            el.href = el.getAttribute("data-faz-href");
+            el.removeAttribute("data-faz-href");
+        });
 }
 
 function _fazAddProviderToList(node, cleanedHostname) {

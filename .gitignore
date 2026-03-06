@@ -33,3 +33,6 @@ release.md
 tests/e2e/reports/
 test-results/
 playwright-report/
+
+# Planning docs (local only)
+plan.md
