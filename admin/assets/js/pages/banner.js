@@ -313,6 +313,13 @@
 		setVal('faz-b-pref-reject', prefBtns.reject || '');
 	}
 
+	// Helper: only overwrite field if the value is readable (not undefined).
+	// getVal returns undefined when a TinyMCE editor is on a hidden tab.
+	function storeField(obj, key, id) {
+		var v = getVal(id);
+		if (v !== undefined) obj[key] = v;
+	}
+
 	function storeCurrentLangContents() {
 		if (!bannerData) return;
 		var contents = bannerData.contents || {};
@@ -322,35 +329,37 @@
 		// Notice
 		if (!c.notice) c.notice = { elements: {} };
 		if (!c.notice.elements) c.notice.elements = {};
-		c.notice.elements.title = getVal('faz-b-notice-title');
-		c.notice.elements.description = getVal('faz-b-notice-desc');
-		c.notice.elements.closeButton = getVal('faz-b-close-label');
+		storeField(c.notice.elements, 'title', 'faz-b-notice-title');
+		storeField(c.notice.elements, 'description', 'faz-b-notice-desc');
+		storeField(c.notice.elements, 'closeButton', 'faz-b-close-label');
 		if (!c.notice.elements.buttons) c.notice.elements.buttons = { elements: {} };
 		if (!c.notice.elements.buttons.elements) c.notice.elements.buttons.elements = {};
-		c.notice.elements.buttons.elements.accept = getVal('faz-b-btn-accept-label');
-		c.notice.elements.buttons.elements.reject = getVal('faz-b-btn-reject-label');
-		c.notice.elements.buttons.elements.settings = getVal('faz-b-btn-settings-label');
-		c.notice.elements.buttons.elements.readMore = getVal('faz-b-btn-readmore-label');
+		storeField(c.notice.elements.buttons.elements, 'accept', 'faz-b-btn-accept-label');
+		storeField(c.notice.elements.buttons.elements, 'reject', 'faz-b-btn-reject-label');
+		storeField(c.notice.elements.buttons.elements, 'settings', 'faz-b-btn-settings-label');
+		storeField(c.notice.elements.buttons.elements, 'readMore', 'faz-b-btn-readmore-label');
 
 		// Cookie policy link (fallback to /cookie-policy if empty)
-		var privacyLinkVal = (getVal('faz-b-privacy-link') || '').trim();
-		c.notice.elements.privacyLink = privacyLinkVal || '/cookie-policy';
+		var privacyLinkVal = getVal('faz-b-privacy-link');
+		if (privacyLinkVal !== undefined) {
+			c.notice.elements.privacyLink = (privacyLinkVal || '').trim() || '/cookie-policy';
+		}
 
-		// Preference center
 		// Revisit consent title
 		if (!c.revisitConsent) c.revisitConsent = { elements: {} };
 		if (!c.revisitConsent.elements) c.revisitConsent.elements = {};
-		c.revisitConsent.elements.title = getVal('faz-b-revisit-title');
+		storeField(c.revisitConsent.elements, 'title', 'faz-b-revisit-title');
 
+		// Preference center
 		if (!c.preferenceCenter) c.preferenceCenter = { elements: {} };
 		if (!c.preferenceCenter.elements) c.preferenceCenter.elements = {};
-		c.preferenceCenter.elements.title = getVal('faz-b-pref-title');
-		c.preferenceCenter.elements.description = getVal('faz-b-pref-desc');
+		storeField(c.preferenceCenter.elements, 'title', 'faz-b-pref-title');
+		storeField(c.preferenceCenter.elements, 'description', 'faz-b-pref-desc');
 		if (!c.preferenceCenter.elements.buttons) c.preferenceCenter.elements.buttons = { elements: {} };
 		if (!c.preferenceCenter.elements.buttons.elements) c.preferenceCenter.elements.buttons.elements = {};
-		c.preferenceCenter.elements.buttons.elements.accept = getVal('faz-b-pref-accept');
-		c.preferenceCenter.elements.buttons.elements.save = getVal('faz-b-pref-save');
-		c.preferenceCenter.elements.buttons.elements.reject = getVal('faz-b-pref-reject');
+		storeField(c.preferenceCenter.elements.buttons.elements, 'accept', 'faz-b-pref-accept');
+		storeField(c.preferenceCenter.elements.buttons.elements, 'save', 'faz-b-pref-save');
+		storeField(c.preferenceCenter.elements.buttons.elements, 'reject', 'faz-b-pref-reject');
 
 		bannerData.contents = contents;
 	}
@@ -961,7 +970,15 @@
 		// For wp_editor fields, read from TinyMCE
 		if (wpEditorIds.indexOf(id) > -1 && typeof tinyMCE !== 'undefined') {
 			var editor = tinyMCE.get(id);
-			if (editor) return editor.getContent();
+			if (editor) {
+				// TinyMCE on a hidden tab can return empty; guard against it.
+				var panel = editor.getContainer();
+				if (panel) panel = panel.closest('.faz-tab-panel');
+				if (panel && !panel.classList.contains('active')) {
+					return undefined; // Signal: field not readable right now.
+				}
+				return editor.getContent();
+			}
 		}
 		var el = document.getElementById(id);
 		return el ? el.value : '';
