@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.2.1
+Stable tag: 1.3.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -116,6 +116,19 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 9. **Settings** -- Global controls: enable/disable banner, exclude specific pages, configure consent log retention, set scanner limits, enable Microsoft UET/Clarity consent APIs, and toggle IAB TCF v2.3 support.
 
 == Changelog ==
+
+= 1.3.0 =
+* New: Cookie scanner optimization — incremental scans, page discovery from DB, settle watchdog, scan metrics
+* New: Advertisement → Marketing category rename with idempotent DB migration
+* New: Taxonomy-aware scan fingerprint (detects term renames/additions for accurate incremental scans)
+* Fix: Boundary-aware provider hostname matching in script blocking
+* Fix: CSS transient cache key includes plugin version to prevent stale styles after upgrades
+* Fix: TCF Special Features always return false per IAB spec (no category-based derivation)
+* Fix: Scanner iframe cookies use scanned page hostname instead of admin hostname
+* Fix: Scanner fingerprint persisted only after successful import
+* Fix: German category translation typo ("Werbekampagne nzu" → "Werbekampagnen zu")
+* Security: Inline-safe URL handling for banner preview sinks
+* Security: Hardened admin URL handling and stale bar actions
 
 = 1.2.1 =
 * Fix: CSV export no longer wraps data in JSON encoding — produces valid CSV files
