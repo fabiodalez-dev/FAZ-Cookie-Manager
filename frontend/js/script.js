@@ -940,8 +940,10 @@ function _fazAcceptReject(option = "custom") {
 }
 
 function _fazActionClose() {
-    ref._fazSetInStore("action", "yes");
+    _fazAcceptCookies("reject");
     _fazRemoveBanner();
+    _fazHidePreferenceCenter();
+    _fazAfterConsent();
 }
 /**
  * Consent accept callback.

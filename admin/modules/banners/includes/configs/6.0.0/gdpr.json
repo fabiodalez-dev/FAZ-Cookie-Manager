@@ -132,7 +132,7 @@
                             }
                         },
                         "readMore": {
-                            "status": false,
+                            "status": true,
                             "tag": "readmore-button",
                             "type": "link",
                             "meta": {
@@ -158,7 +158,7 @@
                     }
                 },
                 "closeButton": {
-                    "status": false,
+                    "status": true,
                     "tag": "close-button"
                 }
             }
