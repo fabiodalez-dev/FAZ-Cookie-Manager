@@ -56,7 +56,7 @@ for (var index = 0; index < regionSettings.length; index++) {
     var regionSetting = regionSettings[index];
     if (!regionSetting || typeof regionSetting !== "object") continue;
     var consentRegionData = {
-        ad_storage: regionSetting.advertisement,
+        ad_storage: regionSetting.marketing || regionSetting.advertisement,
         analytics_storage: regionSetting.analytics,
         functionality_storage: regionSetting.functional,
         personalization_storage: regionSetting.functional,
@@ -98,7 +98,11 @@ function parseConsentCookie() {
         acc[key] = getConsentStateForCategory(kv[1].trim());
         return acc;
     }, {});
-    var required = ["advertisement", "analytics", "functional", "necessary"];
+    // Backward compat: accept old "advertisement" key as alias for "marketing".
+    if (!parsed.marketing && parsed.advertisement) {
+        parsed.marketing = parsed.advertisement;
+    }
+    var required = ["marketing", "analytics", "functional", "necessary"];
     for (var i = 0; i < required.length; i++) {
         if (parsed[required[i]] !== "granted" && parsed[required[i]] !== "denied") {
             return null;
@@ -109,13 +113,13 @@ function parseConsentCookie() {
 
 function buildConsentState(cookieObj) {
     return {
-        ad_storage: cookieObj.advertisement,
+        ad_storage: cookieObj.marketing,
         analytics_storage: cookieObj.analytics,
         functionality_storage: cookieObj.functional,
         personalization_storage: cookieObj.functional,
         security_storage: cookieObj.necessary,
-        ad_user_data: cookieObj.advertisement,
-        ad_personalization: cookieObj.advertisement,
+        ad_user_data: cookieObj.marketing,
+        ad_personalization: cookieObj.marketing,
     };
 }
 
@@ -150,8 +154,8 @@ function setAdditionalConsent(consentObj) {
     var providerStr = typeof providerRaw === "string" ? providerRaw.trim() : "";
     if (!providerStr) return;
 
-    // Only include provider IDs when advertisement consent is granted.
-    var adsGranted = consentObj && consentObj.advertisement === "granted";
+    // Only include provider IDs when marketing consent is granted.
+    var adsGranted = consentObj && consentObj.marketing === "granted";
     var acString;
     if (adsGranted) {
         // Include all configured provider IDs.

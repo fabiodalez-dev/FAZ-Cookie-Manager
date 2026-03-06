@@ -109,33 +109,33 @@ class Cookie_Database {
 		),
 		// Google Ads.
 		'_gcl_au'                 => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '90 days',
 			'description' => 'Google Ads conversion linker cookie.',
 		),
 		'IDE'                     => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '1 year',
 			'description' => 'DoubleClick/Google cookie used for targeted advertising.',
 		),
 		'DSID'                    => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '2 weeks',
 			'description' => 'Google advertising cookie for ad personalization.',
 		),
 		// Facebook.
 		'_fbp'                    => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '3 months',
 			'description' => 'Facebook Pixel cookie used for advertising and analytics.',
 		),
 		'_fbc'                    => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '2 years',
 			'description' => 'Facebook click identifier cookie.',
 		),
 		'fr'                      => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '3 months',
 			'description' => 'Facebook advertising cookie.',
 		),
@@ -168,18 +168,18 @@ class Cookie_Database {
 			'description' => 'Microsoft Clarity session cookie.',
 		),
 		'MUID'                    => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '1 year',
 			'description' => 'Microsoft Bing Ads Universal Event Tracking cookie.',
 		),
 		// LinkedIn.
 		'bcookie'                 => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '1 year',
 			'description' => 'LinkedIn browser identification cookie.',
 		),
 		'li_sugr'                 => array(
-			'category'    => 'advertisement',
+			'category'    => 'marketing',
 			'duration'    => '3 months',
 			'description' => 'LinkedIn Insight Tag cookie.',
 		),
@@ -227,6 +227,23 @@ class Cookie_Database {
 			'duration'    => '2 days',
 			'description' => 'WooCommerce session cookie.',
 			'match'       => 'prefix',
+		),
+		// TikTok.
+		'__tea_cache_tokens_'     => array(
+			'category'    => 'marketing',
+			'duration'    => '1 day',
+			'description' => 'TikTok cache token used by the analytics SDK.',
+			'match'       => 'prefix',
+		),
+		'_ttp'                    => array(
+			'category'    => 'marketing',
+			'duration'    => '13 months',
+			'description' => 'TikTok Pixel cookie used to track visitors across websites for advertising.',
+		),
+		'tt_webid'                => array(
+			'category'    => 'marketing',
+			'duration'    => '13 months',
+			'description' => 'TikTok cookie used to identify and track users for advertising purposes.',
 		),
 		// PHP.
 		'PHPSESSID'               => array(
@@ -283,7 +300,8 @@ class Cookie_Database {
 		'sc-static.net'         => array( '_scid', 'sc_at' ),
 		'ads.linkedin.com'      => array( 'li_sugr', 'bcookie', 'lidc' ),
 		'platform.twitter.com'  => array( 'guest_id', 'ct0', 'personalization_id' ),
-		'tiktok.com'            => array( '_ttp', 'tt_webid' ),
+		'tiktok.com'            => array( '_ttp', 'tt_webid', '__tea_cache_tokens_' ),
+		'analytics.tiktok.com'  => array( '_ttp', 'tt_webid', '__tea_cache_tokens_' ),
 		'pinterest.com'         => array( '_pinterest_sess', '_pin_unauth' ),
 	);
 

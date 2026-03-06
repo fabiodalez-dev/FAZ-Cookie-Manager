@@ -121,7 +121,9 @@ class Cookie_Controller extends Base_Controller {
 			meta longtext,
 			date_created datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			date_modified datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-			PRIMARY KEY  (cookie_id)
+			PRIMARY KEY  (cookie_id),
+			KEY category (category),
+			KEY name (name)
         ) $collate;
 	";
 		return $tables;

@@ -709,11 +709,24 @@
 		var allowIncremental = !safeMode && !!storedFingerprint;
 
 		snapshotDiscoveredCookies().then(function (previousDiscoveredSet) {
-			// Step 1: Ask server for URLs to scan.
-			FAZ.post('scans/discover', {
+			// Step 1: Ask server for URLs to scan (with retry for transient failures).
+			var discoverPayload = {
 				max_pages: requestPages,
 				fingerprint: (!safeMode && allowIncremental) ? storedFingerprint : '',
-			}).then(function (result) {
+			};
+			function discoverWithRetry(attempt) {
+				return FAZ.post('scans/discover', discoverPayload).catch(function (err) {
+					if (attempt < 2 && err && err.code === 'fetch_error') {
+						var delay = attempt === 0 ? 1000 : 3000;
+						statusEl.textContent = 'Server busy, retrying in ' + (delay / 1000) + 's...';
+						console.warn('[FAZ Scanner] Discover attempt ' + (attempt + 1) + ' failed, retrying...', err.message);
+						return new Promise(function (resolve) { setTimeout(resolve, delay); })
+							.then(function () { return discoverWithRetry(attempt + 1); });
+					}
+					throw err;
+				});
+			}
+			discoverWithRetry(0).then(function (result) {
 				scanMetrics.discoverMs = Date.now() - discoverStart;
 				scanMetrics.incremental = !!(allowIncremental && result.incremental);
 				var urls = deduplicateUrls(result.urls || []);

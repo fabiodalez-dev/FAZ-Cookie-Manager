@@ -15,12 +15,12 @@
         "name": "El rendimiento",
         "description": "<p>Las cookies de rendimiento se utilizan para comprender y analizar los índices de rendimiento clave del sitio web, lo que ayuda a proporcionar una mejor experiencia de usuario para los visitantes.</p>"
     },
-    "advertisement": {
-        "name": "Anuncio",
-        "description": "<p>Las cookies publicitarias se utilizan para entregar a los visitantes anuncios personalizados basados ​​en las páginas que visitaron antes y analizar la efectividad de la campaña publicitaria.</p>"
-    },
     "uncategorized": {
         "name": "Sin categorizar",
         "description": "<p>Cookies que aún no han sido categorizadas.</p>"
+    },
+    "marketing": {
+        "name": "Anuncio",
+        "description": "<p>Las cookies publicitarias se utilizan para entregar a los visitantes anuncios personalizados basados ​​en las páginas que visitaron antes y analizar la efectividad de la campaña publicitaria.</p>"
     }
 }

@@ -122,32 +122,7 @@ class Frontend {
 			if ( ! $this->template ) {
 				return;
 			}
-			$css    = isset( $this->template['styles'] ) ? $this->template['styles'] : '';
-
-			// CSS specificity isolation against page builders (Elementor, Divi,
-			// Beaver Builder).  Two layers:
-			// 1. Prefix ALL template selectors with #faz-consent (specificity 100+)
-			//    so every rule beats class-based page-builder overrides.
-			// 2. Baseline * reset (specificity 100) for inherited text properties
-			//    that builders inject globally; prefixed template rules (110+)
-			//    override this where needed.
-			$css = $this->boost_css_specificity( $css );
-			$css_reset = '#faz-consent,#faz-consent *,#faz-consent *::before,#faz-consent *::after{'
-				. 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;'
-				. 'letter-spacing:normal;'
-				. 'text-transform:none;'
-				. 'font-style:normal;'
-				. 'text-decoration:none;'
-				. 'word-spacing:normal;'
-				. 'line-height:1.5;'
-				. 'box-sizing:border-box;'
-				. '}';
-			// "Always active" label: push right, next to the toggle.
-			$css_fixes = '#faz-consent .faz-accordion-header .faz-always-active,'
-				. '.faz-modal .faz-accordion-header .faz-always-active{'
-				. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
-				. '}';
-			$css = $css_reset . $css . $css_fixes;
+			$css = $this->get_boosted_css();
 
 			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
 			wp_localize_script( $this->plugin_name, '_fazConfig', $this->get_store_data() );
@@ -634,7 +609,7 @@ class Frontend {
 		$cat_slug = $category->get_slug();
 		$items    = \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_items_by_category( $category->get_id() );
 		foreach ( $items as $item ) {
-			$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $item->cookie_id );
+			$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $item );
 			// Skip WordPress-internal cookies — visitors never receive them.
 			if ( self::is_wp_internal_cookie( $cookie->get_name() ) ) {
 				continue;
@@ -880,6 +855,41 @@ class Frontend {
 	 */
 	public function is_wpconsentapi_enabled() {
 		return class_exists( 'WP_CONSENT_API' );
+	}
+
+	/**
+	 * Return the fully assembled banner CSS with specificity boosting, cached
+	 * in a transient so the regex work only runs once per template change.
+	 *
+	 * @return string Complete CSS string ready for inline output.
+	 */
+	private function get_boosted_css() {
+		$raw_css   = isset( $this->template['styles'] ) ? $this->template['styles'] : '';
+		$cache_key = 'faz_boosted_css_' . md5( $raw_css );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
+		$css       = $this->boost_css_specificity( $raw_css );
+		$css_reset = '#faz-consent,#faz-consent *,#faz-consent *::before,#faz-consent *::after{'
+			. 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;'
+			. 'letter-spacing:normal;'
+			. 'text-transform:none;'
+			. 'font-style:normal;'
+			. 'text-decoration:none;'
+			. 'word-spacing:normal;'
+			. 'line-height:1.5;'
+			. 'box-sizing:border-box;'
+			. '}';
+		$css_fixes = '#faz-consent .faz-accordion-header .faz-always-active,'
+			. '.faz-modal .faz-accordion-header .faz-always-active{'
+			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
+			. '}';
+		$css = $css_reset . $css . $css_fixes;
+
+		set_transient( $cache_key, $css, DAY_IN_SECONDS );
+		return $css;
 	}
 
 	/**

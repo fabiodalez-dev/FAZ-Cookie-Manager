@@ -15,12 +15,12 @@
         "name": "Teljesítmény",
         "description": "<p>A teljesítmény-sütiket a weboldal kulcsfontosságú teljesítménymutatóinak megértésére és elemzésére használják, amelyek hozzájárulnak a látogatók jobb felhasználói élményének biztosításához.</p>"
     },
-    "advertisement": {
-        "name": "Hirdetés",
-        "description": "<p>A hirdetési sütiket arra használják, hogy a látogatókat személyre szabott hirdetésekkel juttassák el a korábban meglátogatott oldalak alapján, és elemezzék a hirdetési kampány hatékonyságát.</p>"
-    },
     "uncategorized": {
         "name": "Nem kategorizált",
         "description": "<p>Sütik, amelyeket még nem kategorizáltak.</p>"
+    },
+    "marketing": {
+        "name": "Hirdetés",
+        "description": "<p>A hirdetési sütiket arra használják, hogy a látogatókat személyre szabott hirdetésekkel juttassák el a korábban meglátogatott oldalak alapján, és elemezzék a hirdetési kampány hatékonyságát.</p>"
     }
 }

@@ -15,12 +15,12 @@
         "name": "Leistungs",
         "description": "<p>Leistungs-Cookies werden verwendet, um die wichtigsten Leistungsindizes der Website zu verstehen und zu analysieren. Dies trägt dazu bei, den Besuchern ein besseres Nutzererlebnis zu bieten.</p>"
     },
-    "advertisement": {
-        "name": "Werbe",
-        "description": "<p>Werbe-Cookies werden verwendet, um Besuchern auf der Grundlage der von ihnen zuvor besuchten Seiten maßgeschneiderte Werbung zu liefern und die Wirksamkeit von Werbekampagne nzu analysieren.</p>"
-    },
     "uncategorized": {
         "name": "Nicht kategorisiert",
         "description": "<p>Cookies, die noch nicht kategorisiert wurden.</p>"
+    },
+    "marketing": {
+        "name": "Werbe",
+        "description": "<p>Werbe-Cookies werden verwendet, um Besuchern auf der Grundlage der von ihnen zuvor besuchten Seiten maßgeschneiderte Werbung zu liefern und die Wirksamkeit von Werbekampagne nzu analysieren.</p>"
     }
 }

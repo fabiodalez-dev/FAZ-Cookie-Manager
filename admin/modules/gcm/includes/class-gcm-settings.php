@@ -30,7 +30,7 @@ class Gcm_Settings extends Store {
 			'default_settings' => array(
 				array(
 					'analytics' => 'denied',
-					'advertisement' => 'denied',
+					'marketing' => 'denied',
 					'functional' => 'denied',
 					'necessary' => 'granted',
 					'ad_user_data' => 'denied',

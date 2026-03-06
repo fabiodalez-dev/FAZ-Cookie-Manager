@@ -15,12 +15,12 @@
         "name": "Występ",
         "description": "<p>Wydajnościowe pliki cookie służą do zrozumienia i analizy kluczowych wskaźników wydajności witryny, co pomaga zapewnić lepsze wrażenia użytkownika dla odwiedzających.</p>"
     },
-    "advertisement": {
-        "name": "Reklama",
-        "description": "<p>Reklamowe pliki cookie służą do dostarczania użytkownikom spersonalizowanych reklam w oparciu o strony, które odwiedzili wcześniej, oraz do analizowania skuteczności kampanii reklamowej.</p>"
-    },
     "uncategorized": {
         "name": "Nieskategoryzowane",
         "description": "<p>Pliki cookie, które nie zostały jeszcze skategoryzowane.</p>"
+    },
+    "marketing": {
+        "name": "Reklama",
+        "description": "<p>Reklamowe pliki cookie służą do dostarczania użytkownikom spersonalizowanych reklam w oparciu o strony, które odwiedzili wcześniej, oraz do analizowania skuteczności kampanii reklamowej.</p>"
     }
 }

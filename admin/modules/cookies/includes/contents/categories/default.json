@@ -15,10 +15,6 @@
         "name": "Performance",
         "description": "<p>Performance cookies are used to understand and analyse the key performance indexes of the website which helps in delivering a better user experience for the visitors.</p>"
     },
-    "advertisement": {
-        "name": "Advertisement",
-        "description": "<p>Advertisement cookies are used to provide visitors with customised advertisements based on the pages you visited previously and to analyse the effectiveness of the ad campaigns.</p>"
-    },
     "uncategorized": {
         "name": "Uncategorized",
         "description": "<p>Cookies that have not yet been categorized.</p>"
@@ -26,5 +22,9 @@
     "wordpress-internal": {
         "name": "WordPress Internal",
         "description": "<p>Cookies set by WordPress core for logged-in administrators. Not shown to site visitors.</p>"
+    },
+    "marketing": {
+        "name": "Marketing",
+        "description": "<p>Marketing cookies are used to provide visitors with customised ads based on the pages you visited previously and to analyse the effectiveness of the ad campaigns.</p>"
     }
 }

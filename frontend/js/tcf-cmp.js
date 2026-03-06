@@ -69,7 +69,7 @@
 		functional:    [5, 6, 11],
 		analytics:     [8, 9, 10],
 		performance:   [8, 9],
-		advertisement: [2, 3, 4, 7]
+		marketing:     [2, 3, 4, 7]
 	};
 
 	// Event listeners
@@ -93,8 +93,8 @@
 				var key = kv[0].trim();
 				var val = kv[1].trim();
 				if (key === "necessary" || key === "functional" || key === "analytics" ||
-					key === "performance" || key === "advertisement") {
-					consent[key] = val === "yes";
+					key === "performance" || key === "marketing" || key === "advertisement") {
+					consent[key === "advertisement" ? "marketing" : key] = val === "yes";
 				}
 			}
 		}

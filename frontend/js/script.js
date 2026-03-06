@@ -69,9 +69,15 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
  * @returns {string}
  */
 ref._fazGetCookie = function (name) {
-    const match = new RegExp(`${name}=([^;]+)`).exec(document.cookie);  // eslint-disable-line no-useless-escape
-    if (!match || !Array.isArray(match) || !match[1]) return null;
-    try { return decodeURIComponent(match[1]); } catch (_) { return match[1]; }
+    const prefix = name + '=';
+    const cookies = document.cookie.split('; ');
+    for (var i = 0; i < cookies.length; i++) {
+        if (cookies[i].indexOf(prefix) === 0) {
+            var val = cookies[i].substring(prefix.length);
+            try { return decodeURIComponent(val); } catch (_) { return val; }
+        }
+    }
+    return null;
 }
 
 /**
@@ -119,9 +125,6 @@ function _fazGetElementByTag(tag) {
     return item ? item : false;
 }
 
-function _fazEscapeRegex(literal) {
-    return literal.replace(/[.*+?^${}()[\]\\]/g, "\\$&");
-}
 
 /**
  * Bind click event to banner elements.
@@ -1235,8 +1238,9 @@ function _fazIsCategoryToBeBlocked(category) {
 }
 
 function _fazShouldBlockProvider(formattedRE) {
+    if (!formattedRE) return false;
     const provider = _fazStore._providersToBlock.find(({ re }) =>
-        new RegExp(_fazEscapeRegex(re)).test(formattedRE)
+        re && formattedRE.indexOf(re) !== -1
     );
     return (
         provider &&

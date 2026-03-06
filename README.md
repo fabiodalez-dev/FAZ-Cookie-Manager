@@ -423,7 +423,7 @@ JavaScript events fired on the `document` for third-party integration:
 
 Cookie name: `fazcookie-consent`
 
-Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functional:no,analytics:no,advertisement:no,performance:no`
+Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functional:no,analytics:no,marketing:no,performance:no`
 
 ## WordPress Hooks
 

@@ -116,9 +116,14 @@ class Settings extends Store {
 	 * @param string $key Name of the key.
 	 * @return array
 	 */
+	private static $cached_settings = null;
+
 	public function get( $group = '', $key = '' ) {
-		$settings = get_option( 'faz_settings', $this->data );
-		$settings = self::sanitize( $settings, $this->data );
+		if ( null === self::$cached_settings ) {
+			$settings = get_option( 'faz_settings', $this->data );
+			self::$cached_settings = self::sanitize( $settings, $this->data );
+		}
+		$settings = self::$cached_settings;
 		if ( empty( $key ) && empty( $group ) ) {
 			return $settings;
 		} elseif ( ! empty( $key ) && ! empty( $group ) ) {
@@ -151,6 +156,7 @@ class Settings extends Store {
 		$defaults = $this->get_defaults();
 		$settings = self::sanitize( $data, $defaults );
 		update_option( 'faz_settings', $settings );
+		self::$cached_settings = null;
 		do_action( 'faz_after_update_settings', $clear );
 	}
 

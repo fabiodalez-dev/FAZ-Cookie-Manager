@@ -15,12 +15,12 @@
         "name": "Performance",
         "description": "<p>Les cookies de performance sont utilisés pour comprendre et analyser les indices de performance clés du site Web, ce qui permet de fournir une meilleure expérience utilisateur aux visiteurs.</p>"
     },
-    "advertisement": {
-        "name": "Publicité",
-        "description": "<p>Les cookies de publicité sont utilisés pour fournir aux visiteurs des publicités personnalisées basées sur les pages visitées précédemment et analyser l'efficacité de la campagne publicitaire.</p>"
-    },
     "uncategorized": {
         "name": "Non catégorisé",
         "description": "<p>Cookies qui n'ont pas encore été catégorisés.</p>"
+    },
+    "marketing": {
+        "name": "Publicité",
+        "description": "<p>Les cookies de publicité sont utilisés pour fournir aux visiteurs des publicités personnalisées basées sur les pages visitées précédemment et analyser l'efficacité de la campagne publicitaire.</p>"
     }
 }

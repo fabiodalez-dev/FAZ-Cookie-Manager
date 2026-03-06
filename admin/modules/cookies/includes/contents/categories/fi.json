@@ -15,12 +15,12 @@
         "name": "Suorituskykyä",
         "description": "<p>Suorituskykyevästeitä käytetään verkkosivuston tärkeimpien suorituskykyindeksien ymmärtämiseen ja analysointiin, mikä auttaa tarjoamaan vierailijoille paremman käyttökokemuksen.</p>"
     },
-    "advertisement": {
-        "name": "Mainos",
-        "description": "<p>Mainosevästeitä käytetään tarjoamaan kävijöille räätälöityjä mainoksia sivujen perusteella, joilla he ovat käyneet aiemmin, ja analysoimaan mainoskampanjan tehokkuutta.</p>"
-    },
     "uncategorized": {
         "name": "Luokittelematon",
         "description": "<p>Evästeet, joita ei ole vielä luokiteltu.</p>"
+    },
+    "marketing": {
+        "name": "Mainos",
+        "description": "<p>Mainosevästeitä käytetään tarjoamaan kävijöille räätälöityjä mainoksia sivujen perusteella, joilla he ovat käyneet aiemmin, ja analysoimaan mainoskampanjan tehokkuutta.</p>"
     }
 }

@@ -6,7 +6,7 @@ const categoryMap = {
     functional: 'preferences',
     analytics: ['statistics','statistics-anonymous'],
     performance: 'functional',
-    advertisement: 'marketing',
+    marketing: 'marketing',
 };
 const gskEnabled = typeof _fazGsk !== 'undefined' && _fazGsk ? _fazGsk : false;
 document.addEventListener("fazcookie_consent_update", function () {

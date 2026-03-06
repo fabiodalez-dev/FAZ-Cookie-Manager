@@ -67,6 +67,10 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 	 * @return string
 	 */
 	function faz_current_language() {
+		static $cached = null;
+		if ( null !== $cached ) {
+			return $cached;
+		}
 		$current_language = null;
 
 		if ( faz_i18n_is_multilingual() ) {
@@ -96,7 +100,8 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 		if ( in_array( $current_language, faz_selected_languages(), true ) === false ) {
 			$current_language = faz_default_language();
 		}
-		return apply_filters( 'faz_current_language', $current_language );
+		$cached = apply_filters( 'faz_current_language', $current_language );
+		return $cached;
 	}
 }
 

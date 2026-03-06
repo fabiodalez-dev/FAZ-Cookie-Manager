@@ -15,12 +15,12 @@
         "name": "Prestazioni",
         "description": "<p>I cookie per le prestazioni vengono utilizzati per comprendere e analizzare gli indici di prestazione chiave del sito Web che aiutano a fornire ai visitatori un'esperienza utente migliore.</p>"
     },
-    "advertisement": {
-        "name": "Pubblicitari",
-        "description": "<p>I cookie pubblicitari vengono utilizzati per fornire ai visitatori annunci pubblicitari personalizzati in base alle pagine visitate in precedenza e per analizzare l'efficacia della campagna pubblicitaria.</p>"
-    },
     "uncategorized": {
         "name": "Non categorizzati",
         "description": "<p>Cookie che non sono ancora stati categorizzati.</p>"
+    },
+    "marketing": {
+        "name": "Pubblicitari",
+        "description": "<p>I cookie pubblicitari vengono utilizzati per fornire ai visitatori annunci pubblicitari personalizzati in base alle pagine visitate in precedenza e per analizzare l'efficacia della campagna pubblicitaria.</p>"
     }
 }
