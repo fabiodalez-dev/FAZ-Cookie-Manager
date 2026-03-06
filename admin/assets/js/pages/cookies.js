@@ -731,12 +731,6 @@
 				scanMetrics.incremental = !!(allowIncremental && result.incremental);
 				var urls = deduplicateUrls(result.urls || []);
 
-				// Store new fingerprint for next scan.
-				try {
-					if (result.fingerprint) localStorage.setItem('faz_scan_fingerprint', result.fingerprint);
-				} catch (e) {
-					console.warn('[FAZ Scanner] Cannot persist fingerprint — next scan will be full.', e.message);
-				}
 				scanMetrics.urlsDiscovered = urls.length;
 
 				if (!urls.length) {
@@ -777,6 +771,12 @@
 							metrics: metricsToSend,
 						}).then(function (res) {
 							scanMetrics.importMs = Date.now() - importStart;
+							// Persist fingerprint only after successful import.
+							try {
+								if (result.fingerprint) localStorage.setItem('faz_scan_fingerprint', result.fingerprint);
+							} catch (e) {
+								console.warn('[FAZ Scanner] Cannot persist fingerprint — next scan will be full.', e.message);
+							}
 							var total = res.total_cookies || collectedCookies.length;
 							var currentDetectedSet = buildCookieNameSet(collectedCookies, false);
 							if (res && Array.isArray(res.cookie_names) && res.cookie_names.length) {
@@ -1037,6 +1037,7 @@
 
 		var finished = false;
 		var timer = null;
+		var lastRead = null;
 
 		function readIframe() {
 			var result = { cookies: [], scripts: [], issue: '' };
@@ -1046,7 +1047,7 @@
 				var iframeCookieStr = '';
 				try { iframeCookieStr = doc.cookie || ''; } catch (e) { hadAccessError = true; }
 				if (iframeCookieStr) {
-					result.cookies = parseCookieString(iframeCookieStr, location.hostname);
+					result.cookies = parseCookieString(iframeCookieStr, parsedUrl.hostname);
 				}
 
 				try {
@@ -1092,14 +1093,24 @@
 			// Cancel the pre-load fallback timer — page loaded, settle phase starts.
 			if (timer) { clearTimeout(timer); timer = null; }
 			// Settle watchdog for slow pages/scripts.
-			timer = setTimeout(function () { finish(emptyResult('settleTimeout')); }, settleTimeoutMs);
+			timer = setTimeout(function () {
+				// Use last successful read instead of discarding results.
+				if (lastRead) {
+					lastRead.issue = lastRead.issue || 'settleTimeout';
+					finish(lastRead);
+				} else {
+					finish(emptyResult('settleTimeout'));
+				}
+			}, settleTimeoutMs);
 
 			var firstRead = readIframe();
+			lastRead = firstRead;
 			var firstCount = firstRead.cookies.length + firstRead.scripts.length;
 
 			setTimeout(function () {
 				if (finished) return;
 				var secondRead = readIframe();
+				lastRead = secondRead;
 				var secondCount = secondRead.cookies.length + secondRead.scripts.length;
 
 				if (secondCount === firstCount) {
@@ -1109,7 +1120,8 @@
 					// Still changing — wait a bit more.
 					setTimeout(function () {
 						if (finished) return;
-						finish(readIframe());
+						lastRead = readIframe();
+						finish(lastRead);
 					}, 800);
 				}
 			}, 700);
@@ -1167,9 +1179,9 @@
 	/**
 	 * Find cookies in `after` that weren't in `before`.
 	 */
-	function diffCookies(before, after) {
+	function diffCookies(before, after, domain) {
 		var result = [];
-		var domain = location.hostname;
+		domain = domain || location.hostname;
 		for (var name in after) {
 			if (!before.hasOwnProperty(name)) {
 				result.push({

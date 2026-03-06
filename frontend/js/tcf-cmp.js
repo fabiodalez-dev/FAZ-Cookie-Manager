@@ -143,31 +143,16 @@
 		return purposes;
 	}
 
-	// Map FAZ category slugs → TCF Special Feature IDs
-	// SF 1: Use precise geolocation data  → analytics/performance categories
-	// SF 2: Actively scan device characteristics → analytics/functional categories
-	var CATEGORY_TO_SPECIAL_FEATURES = {
-		analytics:   [1, 2],
-		performance: [1],
-		functional:  [2]
-	};
-
 	/**
-	 * Build special feature opt-ins from FAZ category consent.
-	 * Returns an object { "1": true/false, "2": true/false }.
+	 * Build special feature opt-ins.
+	 *
+	 * IAB TCF v2.2 requires a separate, explicit opt-in for each Special Feature
+	 * (SF1: precise geolocation, SF2: device scanning) — they cannot be derived
+	 * from Purpose/category consent.  Since the FAZ banner has no dedicated SF
+	 * toggle, we always return false.  This keeps the TC string compliant.
 	 */
-	function buildSpecialFeatureOptins(categoryConsent) {
-		var sf = { "1": false, "2": false };
-		for (var cat in CATEGORY_TO_SPECIAL_FEATURES) {
-			if (!CATEGORY_TO_SPECIAL_FEATURES.hasOwnProperty(cat)) continue;
-			if (categoryConsent[cat]) {
-				var ids = CATEGORY_TO_SPECIAL_FEATURES[cat];
-				for (var j = 0; j < ids.length; j++) {
-					sf[String(ids[j])] = true;
-				}
-			}
-		}
-		return sf;
+	function buildSpecialFeatureOptins() {
+		return { "1": false, "2": false };
 	}
 
 	/**

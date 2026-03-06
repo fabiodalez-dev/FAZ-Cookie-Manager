@@ -1239,9 +1239,17 @@ function _fazIsCategoryToBeBlocked(category) {
 
 function _fazShouldBlockProvider(formattedRE) {
     if (!formattedRE) return false;
-    const provider = _fazStore._providersToBlock.find(({ re }) =>
-        re && formattedRE.indexOf(re) !== -1
-    );
+    const provider = _fazStore._providersToBlock.find(({ re }) => {
+        if (!re) return false;
+        var idx = formattedRE.indexOf(re);
+        if (idx === -1) return false;
+        // Boundary check: character before must be empty, /, . or protocol separator.
+        if (idx > 0) {
+            var before = formattedRE.charAt(idx - 1);
+            if (before !== '/' && before !== '.' && before !== ':') return false;
+        }
+        return true;
+    });
     return (
         provider &&
         provider.categories.some((category) => _fazIsCategoryToBeBlocked(category))

@@ -865,7 +865,7 @@ class Frontend {
 	 */
 	private function get_boosted_css() {
 		$raw_css   = isset( $this->template['styles'] ) ? $this->template['styles'] : '';
-		$cache_key = 'faz_boosted_css_' . md5( $raw_css );
+		$cache_key = 'faz_boosted_css_' . FAZ_VERSION . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;

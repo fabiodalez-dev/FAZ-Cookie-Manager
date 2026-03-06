@@ -1055,16 +1055,21 @@ class Controller {
 		}
 
 		// Include taxonomy state so archive page changes also invalidate the fingerprint.
+		// Uses term slugs (not just counts) to detect renames/slug changes.
 		$tax_part = '';
 		$taxonomies = get_taxonomies( array( 'public' => true ), 'names' );
 		if ( ! empty( $taxonomies ) ) {
-			$tax_counts = array();
+			$tax_entries = array();
 			foreach ( $taxonomies as $tax ) {
-				$count = wp_count_terms( array( 'taxonomy' => $tax, 'hide_empty' => true ) );
-				$tax_counts[] = $tax . ':' . ( is_wp_error( $count ) ? 0 : intval( $count ) );
+				$terms = get_terms( array( 'taxonomy' => $tax, 'hide_empty' => true, 'fields' => 'slugs' ) );
+				if ( is_wp_error( $terms ) ) {
+					$terms = array();
+				}
+				sort( $terms );
+				$tax_entries[] = $tax . ':' . count( $terms ) . ':' . implode( '|', $terms );
 			}
-			sort( $tax_counts );
-			$tax_part = implode( ',', $tax_counts );
+			sort( $tax_entries );
+			$tax_part = implode( ',', $tax_entries );
 		}
 
 		return md5( $row->cnt . '|' . $row->latest . '|' . $max . '|' . $tax_part );
