@@ -72,6 +72,6 @@ test.describe('GCM and IAB TCF behavior', () => {
     expect(tcf.ping).toBeTruthy();
     expect(tcf.ping.cmpLoaded).toBeTruthy();
     expect(typeof tcf.ping.gdprApplies).toBe('boolean');
-    expect(tcf.ping.apiVersion).toBe('2.2');
+    expect(tcf.ping.apiVersion).toBe('2.3');
   });
 });
