@@ -909,7 +909,7 @@ class Controller {
 					'description' => '',
 					'duration'    => 'session',
 					'domain'      => '',
-					'category'    => 'necessary',
+					'category'    => '',
 				)
 			);
 			$name        = sanitize_text_field( $cookie_data['name'] );
@@ -1054,7 +1054,20 @@ class Controller {
 			return ''; // DB error — forces full scan.
 		}
 
-		return md5( $row->cnt . '|' . $row->latest . '|' . $max );
+		// Include taxonomy state so archive page changes also invalidate the fingerprint.
+		$tax_part = '';
+		$taxonomies = get_taxonomies( array( 'public' => true ), 'names' );
+		if ( ! empty( $taxonomies ) ) {
+			$tax_counts = array();
+			foreach ( $taxonomies as $tax ) {
+				$count = wp_count_terms( array( 'taxonomy' => $tax, 'hide_empty' => true ) );
+				$tax_counts[] = $tax . ':' . ( is_wp_error( $count ) ? 0 : intval( $count ) );
+			}
+			sort( $tax_counts );
+			$tax_part = implode( ',', $tax_counts );
+		}
+
+		return md5( $row->cnt . '|' . $row->latest . '|' . $max . '|' . $tax_part );
 	}
 
 	/**

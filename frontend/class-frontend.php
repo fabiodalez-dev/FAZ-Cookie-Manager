@@ -168,7 +168,7 @@ class Frontend {
 			if ( $iab_enabled ) {
 				// Early command-queue stub so ad scripts can call __tcfapi before CMP loads.
 				// Handles 'ping' directly so pre-CMP callers get a valid response.
-				$tcf_stub = 'if(typeof window.__tcfapi!=="function"){var a=[];window.__tcfapi=function(cmd,ver,cb){if(cmd==="ping"){cb({gdprApplies:undefined,cmpLoaded:false,cmpStatus:"stub",displayStatus:"hidden",apiVersion:"2.2"},true);return;}a.push(arguments);};window.__tcfapi.a=a;}';
+				$tcf_stub = 'if(typeof window.__tcfapi!=="function"){var a=[];window.__tcfapi=function(cmd,ver,cb){if(cmd==="ping"){cb({gdprApplies:undefined,cmpLoaded:false,cmpStatus:"stub",displayStatus:"hidden",apiVersion:"2.3"},true);return;}a.push(arguments);};window.__tcfapi.a=a;}';
 				wp_add_inline_script( $this->plugin_name, $tcf_stub, 'before' );
 				$tcf_suffix = ''; // Always load non-minified (no build tooling).
 				$tcf_handle = $this->plugin_name . '-tcf-cmp';

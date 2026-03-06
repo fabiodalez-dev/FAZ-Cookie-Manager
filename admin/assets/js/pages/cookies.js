@@ -124,18 +124,21 @@
 		return !!(cookie && (cookie.discovered === true || cookie.discovered === 1 || cookie.discovered === '1'));
 	}
 
+	function normalizeDomain(raw) {
+		if (!raw) return '';
+		return String(raw).trim().toLowerCase().replace(/^\.+/, '').replace(/:\d+$/, '');
+	}
+
 	function getStaleKey(cookie) {
 		var name = (cookie && cookie.name) ? String(cookie.name).trim().toLowerCase() : '';
-		var domain = (cookie && cookie.domain) ? String(cookie.domain).trim().toLowerCase() : '';
 		if (!name) return '';
-		return name + '|' + domain;
+		return name + '|' + normalizeDomain(cookie.domain);
 	}
 
 	function getStaleKeyFromName(name, domain) {
 		var normalizedName = name ? String(name).trim().toLowerCase() : '';
 		if (!normalizedName) return '';
-		var normalizedDomain = domain ? String(domain).trim().toLowerCase() : '';
-		return normalizedName + '|' + normalizedDomain;
+		return normalizedName + '|' + normalizeDomain(domain);
 	}
 
 	function buildCookieNameSet(list, discoveredOnly) {
@@ -177,7 +180,7 @@
 			staleBar.textContent = '';
 			return;
 		}
-		staleBar.style.display = 'block';
+		staleBar.style.display = '';
 		staleBar.textContent = '';
 		var msg = document.createElement('span');
 		msg.textContent = visibleStaleCount > 0
