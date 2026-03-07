@@ -19,6 +19,7 @@ use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Gvl;
+use FazCookie\Includes\Known_Providers;
 use FazCookie\Includes\Cookie_Table_Shortcode;
 /**
  * The public-facing functionality of the plugin.
@@ -84,6 +85,14 @@ class Frontend {
 	 * @var array
 	 */
 	protected $providers = array();
+
+	/**
+	 * Per-request cache for blocked categories and provider map.
+	 *
+	 * @var array|null
+	 */
+	private $blocked_categories_cache = null;
+	private $provider_map_cache       = null;
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -103,6 +112,16 @@ class Frontend {
 		add_action( 'wp_footer', array( $this, 'banner_html' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 1 );
 		add_action( 'wp_head', array( $this, 'insert_styles' ) );
+		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
+		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
+		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
+		add_action( 'send_headers', array( $this, 'shred_non_consented_cookies' ) );
+
+		// Content-level blocking (defense-in-depth — runs before output buffer).
+		add_filter( 'the_content', array( $this, 'filter_content_blocking' ), 1000 );
+		add_filter( 'widget_text', array( $this, 'filter_content_blocking' ), 1000 );
+		add_filter( 'widget_block_content', array( $this, 'filter_content_blocking' ), 1000 );
+		add_filter( 'embed_oembed_html', array( $this, 'filter_oembed_blocking' ), 1000, 2 );
 	}
 
 	/**
@@ -308,7 +327,20 @@ class Frontend {
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
-		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}</style>';
+		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
+			. '.faz-iframe-placeholder{position:relative;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden}'
+			. '.faz-iframe-placeholder-inner{text-align:center;padding:32px 24px;color:#555;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}'
+			. '.faz-iframe-placeholder-inner svg{color:#999;margin-bottom:12px}'
+			. '.faz-iframe-placeholder-inner p{margin:0 0 16px;font-size:14px;line-height:1.5}'
+			. '.faz-iframe-placeholder-btn{display:inline-block;padding:10px 24px;background:#1863DC;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;transition:background .2s}'
+			. '.faz-iframe-placeholder-btn:hover{background:#1352b5}'
+			. '.faz-iframe-placeholder--video{min-height:300px}'
+			. '.faz-iframe-placeholder--video .faz-iframe-placeholder-inner{position:relative;z-index:2;background:rgba(0,0,0,.65);border-radius:8px;padding:24px 32px;color:#fff}'
+			. '.faz-iframe-placeholder--video .faz-iframe-placeholder-inner svg{color:#fff}'
+			. '.faz-iframe-placeholder--video .faz-iframe-placeholder-inner p{color:#eee}'
+			. '.faz-iframe-placeholder-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px}'
+			. '.faz-social-placeholder{min-height:120px}'
+			. '</style>';
 	}
 	/**
 	 * Load active banner.
@@ -441,6 +473,36 @@ class Frontend {
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
 		);
+		// Merge DB-based providers with Known_Providers for client-side blocking.
+		$valid_categories = $this->get_valid_category_slugs();
+		$known            = Known_Providers::get_all();
+		foreach ( $known as $service ) {
+			if ( 'necessary' === $service['category'] ) {
+				continue;
+			}
+			if ( ! in_array( $service['category'], $valid_categories, true ) ) {
+				continue;
+			}
+			foreach ( $service['patterns'] as $pattern ) {
+				if ( ! isset( $this->providers[ $pattern ] ) ) {
+					$this->providers[ $pattern ] = array( $service['category'] );
+				}
+			}
+		}
+
+		// 3. Admin custom blocking rules (Settings → Script Blocking).
+		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		foreach ( $custom_rules as $rule ) {
+			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
+			$category = isset( $rule['category'] ) ? $rule['category'] : '';
+			if ( ! empty( $pattern ) && ! empty( $category ) && in_array( $category, $valid_categories, true ) ) {
+				$this->providers[ $pattern ] = array( $category );
+			}
+		}
+
+		// 4. Developer filter.
+		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
+
 		foreach ( $this->providers as $key => $value ) {
 			$providers[] = array(
 				're'         => $key,
@@ -448,6 +510,20 @@ class Frontend {
 			);
 		}
 		$store['_providersToBlock'] = $providers;
+
+		// Cookie-to-category map for client-side cookie cleanup on consent revocation.
+		$cookie_category_map = array();
+		$known_cookies = Known_Providers::get_cookie_map();
+		foreach ( $known_cookies as $cookie_pattern => $category ) {
+			if ( 'necessary' === $category ) {
+				continue;
+			}
+			if ( ! in_array( $category, $valid_categories, true ) ) {
+				continue;
+			}
+			$cookie_category_map[ $cookie_pattern ] = $category;
+		}
+		$store['_cookieCategoryMap'] = $cookie_category_map;
 
 		// IAB vendor data for preference center.
 		$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' );
@@ -533,6 +609,507 @@ class Frontend {
 		}
 		return false;
 	}
+
+	/* ─── Server-side script blocking via output buffering ───── */
+
+	/**
+	 * Start output buffering to intercept and block third-party scripts
+	 * before they reach the browser. This catches inline scripts that the
+	 * client-side MutationObserver cannot intercept.
+	 */
+	public function start_output_buffer() {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+			return;
+		}
+		if ( ! $this->template ) {
+			return;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
+		ob_start( array( $this, 'process_output_buffer' ) );
+	}
+
+	/**
+	 * Process the output buffer: find scripts, iframes, images, and CSS links
+	 * that belong to blocked providers and neutralise them.
+	 *
+	 * - Scripts: type → text/plain, add data-faz-category.
+	 * - Iframes: src → data-faz-src, add data-faz-category.
+	 * - Images:  src → data-faz-src, add data-faz-category.
+	 * - CSS:     href → data-faz-href, add data-faz-category.
+	 *
+	 * @param string $html Full page HTML.
+	 * @return string Modified HTML.
+	 */
+	public function process_output_buffer( $html ) {
+		if ( empty( $html ) ) {
+			return $html;
+		}
+
+		$blocked_categories = $this->get_blocked_categories();
+		if ( empty( $blocked_categories ) ) {
+			return $html;
+		}
+
+		$providers = $this->get_provider_category_map();
+		if ( empty( $providers ) ) {
+			return $html;
+		}
+
+		// 1. Block <script> tags.
+		if ( false !== strpos( $html, '<script' ) ) {
+			$html = preg_replace_callback(
+				'#<script\b([^>]*)>(.*?)</script>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_script_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+		}
+
+		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
+		if ( false !== strpos( $html, '<iframe' ) ) {
+			$html = preg_replace_callback(
+				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+		}
+
+		// 3. Block tracking pixel <img> inside <noscript> (Meta Pixel, etc.).
+		if ( false !== strpos( $html, '<noscript' ) ) {
+			$html = preg_replace_callback(
+				'#<noscript\b[^>]*>(.*?)</noscript>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_noscript_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+		}
+
+		// 4. Block <link rel="stylesheet"> (Google Fonts, Adobe Fonts, etc.).
+		if ( false !== strpos( $html, '<link' ) ) {
+			$html = preg_replace_callback(
+				'#<link\b([^>]*rel\s*=\s*["\']stylesheet["\'][^>]*)/?>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_link_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+		}
+
+		// 5. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
+		if ( false !== strpos( $html, 'data-faz-waitfor' ) ) {
+			$html = preg_replace_callback(
+				'#<script\b([^>]*data-faz-waitfor\s*=\s*["\']([^"\']+)["\'][^>]*)>(.*?)</script>#is',
+				function ( $m ) use ( $blocked_categories ) {
+					$attrs    = $m[1];
+					$wait_cat = $m[2];
+					$content  = $m[3];
+					if ( ! in_array( $wait_cat, $blocked_categories, true ) ) {
+						return $m[0]; // Category is allowed — let it run.
+					}
+					// Block: change type to text/plain so JS won't execute.
+					$new_attrs = $this->set_script_type_plain( $attrs );
+					return '<script' . $new_attrs . '>' . $content . '</script>';
+				},
+				$html
+			);
+		}
+
+		return $html;
+	}
+
+	/**
+	 * Process a single <script> tag for blocking.
+	 *
+	 * @param array $m               Regex match.
+	 * @param array $providers       Provider→category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_script_tag( $m, $providers, $blocked_categories ) {
+		$attrs   = $m[1];
+		$content = $m[2];
+		$full    = $m[0];
+
+		// Never block whitelisted scripts.
+		if ( $this->is_whitelisted( $attrs, $content ) ) {
+			return $full;
+		}
+		// Skip already-blocked scripts.
+		if ( preg_match( '/type\s*=\s*["\']text\/plain["\']/', $attrs ) ) {
+			return $full;
+		}
+		// Skip scripts already tagged with data-fazcookie.
+		if ( false !== strpos( $attrs, 'data-fazcookie' ) ) {
+			return $full;
+		}
+		// Skip non-executable script types (structured data, templates, etc.).
+		if ( preg_match( '/type\s*=\s*["\'](?:application\/(?:ld\+json|json)|text\/(?:template|html)|importmap)["\']/', $attrs ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( $attrs, $content, $providers );
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			return $full;
+		}
+
+		$new_attrs = $this->set_script_type_plain( $attrs );
+		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		return '<script' . $new_attrs . '>' . $content . '</script>';
+	}
+
+	/**
+	 * Process a single <iframe> tag for blocking.
+	 *
+	 * @param array $m               Regex match.
+	 * @param array $providers       Provider→category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_iframe_tag( $m, $providers, $blocked_categories ) {
+		$attrs = $m[1];
+		$full  = $m[0];
+
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+		if ( false !== strpos( $attrs, 'data-faz-src' ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			return $full;
+		}
+
+		// Rename src → data-faz-src (avoid matching data-src).
+		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
+		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		$new_attrs .= ' style="display:none"';
+
+		$inner = isset( $m[2] ) ? $m[2] : '';
+		$blocked_iframe = isset( $m[2] )
+			? '<iframe' . $new_attrs . '>' . $inner . '</iframe>'
+			: '<iframe' . $new_attrs . '/>';
+
+		// Detect the service label for the placeholder.
+		$service_label = $this->get_service_label_from_attrs( $attrs );
+
+		// Try to extract a video thumbnail (YouTube/Vimeo).
+		$thumbnail_html = $this->get_video_thumbnail_html( $attrs );
+
+		// Build placeholder.
+		$placeholder = '<div class="faz-iframe-placeholder' . ( $thumbnail_html ? ' faz-iframe-placeholder--video' : '' ) . '" data-faz-category="' . esc_attr( $matched_category ) . '">'
+			. $thumbnail_html
+			. '<div class="faz-iframe-placeholder-inner">'
+			. ( $thumbnail_html
+				? '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
+				: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>'
+			)
+			. '<p>' . esc_html( sprintf(
+				/* translators: %s: service name (e.g. "YouTube", "Google Maps") */
+				__( 'This content is blocked because %s cookies have not been accepted.', 'faz-cookie-manager' ),
+				$service_label ? $service_label : $matched_category
+			) ) . '</p>'
+			. '<button class="faz-iframe-placeholder-btn" onclick="(function(b){var p=b.closest(\'.faz-iframe-placeholder\');var cat=p.getAttribute(\'data-faz-category\');if(window._fazAcceptCategory){window._fazAcceptCategory(cat)}else{var el=document.querySelector(\'[data-faz-action=revisit-consent]\');if(el)el.click()}})(this)">'
+			. esc_html__( 'Accept cookies', 'faz-cookie-manager' )
+			. '</button>'
+			. '</div>'
+			. $blocked_iframe
+			. '</div>';
+
+		return $placeholder;
+	}
+
+	/**
+	 * Try to determine the service label from iframe attributes.
+	 *
+	 * @param string $attrs Iframe attribute string.
+	 * @return string|false Service label or false.
+	 */
+	private function get_service_label_from_attrs( $attrs ) {
+		$all = Known_Providers::get_all();
+		foreach ( $all as $service ) {
+			foreach ( $service['patterns'] as $pattern ) {
+				if ( false !== stripos( $attrs, $pattern ) ) {
+					return $service['label'];
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Extract a video thumbnail URL from iframe attributes (YouTube/Vimeo).
+	 *
+	 * @param string $attrs Iframe attribute string.
+	 * @return string HTML for the thumbnail background, or empty string.
+	 */
+	private function get_video_thumbnail_html( $attrs ) {
+		// YouTube: extract video ID. img.youtube.com is a static CDN (no cookies/tracking).
+		if ( preg_match( '/youtube(?:-nocookie)?\.com\/embed\/([a-zA-Z0-9_-]{11})/', $attrs, $yt ) ) {
+			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
+			return '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
+		}
+		return '';
+	}
+
+	/**
+	 * Process a <noscript> block — block tracking pixel <img> tags inside.
+	 *
+	 * @param array $m               Regex match.
+	 * @param array $providers       Provider→category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_noscript_tag( $m, $providers, $blocked_categories ) {
+		$full    = $m[0];
+		$content = $m[1];
+
+		// Only process if the noscript contains an <img> with a known provider.
+		if ( false === strpos( $content, '<img' ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( '', $content, $providers );
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			return $full;
+		}
+
+		// Block by replacing img src → data-faz-src inside the noscript.
+		$blocked_content = preg_replace( '/(<img\b[^>]*)(^|\s)src\s*=/i', '$1$2data-faz-src=', $content );
+		$blocked_content = preg_replace( '/(<img\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_content );
+		return str_replace( $content, $blocked_content, $full );
+	}
+
+	/**
+	 * Process a <link rel="stylesheet"> tag for blocking.
+	 *
+	 * @param array $m               Regex match.
+	 * @param array $providers       Provider→category map.
+	 * @param array $blocked_categories Currently blocked category slugs.
+	 * @return string
+	 */
+	private function process_link_tag( $m, $providers, $blocked_categories ) {
+		$attrs = $m[1];
+		$full  = $m[0];
+
+		if ( $this->is_whitelisted( $attrs, '' ) ) {
+			return $full;
+		}
+		if ( false !== strpos( $attrs, 'data-faz-href' ) ) {
+			return $full;
+		}
+
+		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
+		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
+			return $full;
+		}
+
+		// Rename href → data-faz-href (avoid matching data-href).
+		$new_attrs = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $attrs, 1 );
+		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
+		return '<link' . $new_attrs . '/>';
+	}
+
+	/**
+	 * Check if a tag should be whitelisted (never blocked).
+	 *
+	 * @param string $attrs   Tag attributes.
+	 * @param string $content Inline content (for scripts).
+	 * @return bool
+	 */
+	private function is_whitelisted( $attrs, $content ) {
+		$whitelist = apply_filters( 'faz_whitelisted_scripts', array(
+			'faz-cookie-manager',
+			'fazcookie',
+			'fazBannerTemplate',
+			'wp-includes/',
+			'wp-admin/',
+			'jquery.min.js',
+			'jquery.js',
+			'jquery-core',
+			'jquery-migrate',
+			'wp-embed',
+		) );
+
+		// Match against tag attributes only (src, id, class, etc.) to prevent
+		// tracking scripts from bypassing the block by including whitelist
+		// keywords in their inline content.
+		foreach ( $whitelist as $pattern ) {
+			if ( false !== stripos( $attrs, $pattern ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Determine which cookie categories are currently blocked.
+	 * On first visit (no consent cookie), all non-necessary categories are blocked.
+	 *
+	 * @return array Slugs of blocked categories.
+	 */
+	private function get_blocked_categories() {
+		if ( null !== $this->blocked_categories_cache ) {
+			return $this->blocked_categories_cache;
+		}
+		$consent = isset( $_COOKIE['fazcookie-consent'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) ) : '';
+		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
+		$blocked = array();
+
+		foreach ( $categories as $cat_data ) {
+			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
+			$slug     = $category->get_slug();
+			if ( 'necessary' === $slug ) {
+				continue;
+			}
+			if ( empty( $consent ) ) {
+				// No consent yet — block all non-necessary.
+				$blocked[] = $slug;
+			} else {
+				// Parse consent cookie: "consent:yes,necessary:yes,analytics:no,advertisement:no"
+				if ( preg_match( '/(^|,)' . preg_quote( $slug, '/' ) . ':(\w+)/', $consent, $cm ) ) {
+					if ( 'yes' !== $cm[2] ) {
+						$blocked[] = $slug;
+					}
+				} else {
+					// Category not mentioned in consent — treat as blocked.
+					$blocked[] = $slug;
+				}
+			}
+		}
+		$this->blocked_categories_cache = $blocked;
+		return $blocked;
+	}
+
+	/**
+	 * Build a map of provider URL patterns → category slugs.
+	 *
+	 * Merges three sources:
+	 * 1. url_pattern from cookie DB (existing, usually empty).
+	 * 2. Known_Providers hardcoded database (comprehensive).
+	 * 3. cookie domain from DB for third-party cookies.
+	 *
+	 * @return array [ 'connect.facebook.net' => 'marketing', ... ]
+	 */
+	private function get_provider_category_map() {
+		if ( null !== $this->provider_map_cache ) {
+			return $this->provider_map_cache;
+		}
+		// Force cookie groups to be loaded so $this->providers is populated.
+		if ( empty( $this->providers ) ) {
+			$this->get_cookie_groups();
+		}
+		$map = array();
+		// 1. Existing: url_pattern from cookie DB.
+		foreach ( $this->providers as $pattern => $cats ) {
+			if ( ! empty( $cats ) ) {
+				$map[ $pattern ] = $cats[0];
+			}
+		}
+
+		// 2. Known providers database.
+		$valid_categories = $this->get_valid_category_slugs();
+		$known_map        = Known_Providers::get_pattern_map();
+		foreach ( $known_map as $pattern => $category ) {
+			if ( 'necessary' === $category ) {
+				continue;
+			}
+			if ( ! in_array( $category, $valid_categories, true ) ) {
+				continue;
+			}
+			if ( ! isset( $map[ $pattern ] ) ) {
+				$map[ $pattern ] = $category;
+			}
+		}
+
+		// 3. Admin custom blocking rules (Settings → Script Blocking).
+		// Custom rules CAN override built-in providers (admin intent takes priority).
+		$settings     = get_option( 'faz_settings', array() );
+		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		foreach ( $custom_rules as $rule ) {
+			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
+			$category = isset( $rule['category'] ) ? $rule['category'] : '';
+			if ( ! empty( $pattern ) && ! empty( $category ) ) {
+				$map[ $pattern ] = $category;
+			}
+		}
+
+		// 4. Developer filter (allows code-level custom rules).
+		$map = apply_filters( 'faz_blocking_rules', $map );
+
+		$this->provider_map_cache = $map;
+		return $map;
+	}
+
+	/**
+	 * Return an array of all valid (existing) category slugs in this install.
+	 *
+	 * @return string[]
+	 */
+	private function get_valid_category_slugs() {
+		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
+		$slugs      = array();
+		foreach ( $categories as $cat_data ) {
+			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
+			$slugs[]  = $category->get_slug();
+		}
+		return $slugs;
+	}
+
+	/**
+	 * Check if a <script> tag (by src or inline content) matches a known provider.
+	 *
+	 * @param string $attrs   The tag's attribute string.
+	 * @param string $content The inline script content.
+	 * @param array  $providers Provider map from get_provider_category_map().
+	 * @return string|false Matched category slug or false.
+	 */
+	private function match_script_to_provider( $attrs, $content, $providers ) {
+		// Extract src or href if present (link tags use href, scripts use src).
+		$url = '';
+		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/', $attrs, $sm ) ) {
+			$url = $sm[1];
+		}
+
+		$haystack = $url . ' ' . $content;
+
+		foreach ( $providers as $pattern => $category ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			if ( false !== stripos( $haystack, $pattern ) ) {
+				return $category;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Replace or insert type="text/plain" in a script tag's attributes.
+	 *
+	 * @param string $attrs Original attributes string.
+	 * @return string Modified attributes string.
+	 */
+	private function set_script_type_plain( $attrs ) {
+		if ( preg_match( '/type\s*=\s*["\']([^"\']*)["\']/', $attrs, $tm ) ) {
+			$original = $tm[1];
+			$attrs    = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/', 'type="text/plain"', $attrs );
+			// Preserve non-default types (e.g. "module") so JS can restore them.
+			if ( 'text/plain' !== $original && 'text/javascript' !== $original && '' !== $original ) {
+				$attrs .= ' data-faz-original-type="' . esc_attr( $original ) . '"';
+			}
+			return $attrs;
+		}
+		return $attrs . ' type="text/plain"';
+	}
+
 	/**
 	 * Get cookie groups
 	 *
@@ -1021,6 +1598,419 @@ class Frontend {
 			},
 			$css
 		);
+	}
+
+	/**
+	 * Filter WordPress-enqueued scripts via script_loader_tag.
+	 *
+	 * Intercepts scripts at registration time (before OB) so even late-enqueued
+	 * scripts from third-party plugins get blocked.
+	 *
+	 * @param string $tag    Full <script> tag.
+	 * @param string $handle Script handle.
+	 * @param string $src    Script source URL.
+	 * @return string Modified tag.
+	 */
+	public function filter_script_loader_tag( $tag, $handle, $src ) {
+		if ( is_admin() ) {
+			return $tag;
+		}
+		if ( ! $this->template ) {
+			return $tag;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return $tag;
+		}
+		// Never block our own scripts.
+		if ( $this->is_whitelisted( $tag, '' ) ) {
+			return $tag;
+		}
+
+		$providers = $this->get_provider_category_map();
+		if ( empty( $providers ) ) {
+			return $tag;
+		}
+
+		foreach ( $providers as $pattern => $category ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			// Match against handle, src, and full tag.
+			if ( false !== stripos( $handle, $pattern ) || false !== stripos( $src, $pattern ) || false !== stripos( $tag, $pattern ) ) {
+				$blocked = $this->get_blocked_categories();
+				if ( in_array( $category, $blocked, true ) ) {
+					// Replace any type attribute with text/plain, saving the original.
+					if ( preg_match( '/type\s*=\s*[\'"]([^\'"]*)[\'"]/', $tag, $type_match ) ) {
+						$original_type = $type_match[1];
+						$tag = preg_replace( '/type\s*=\s*[\'"][^\'"]*[\'"]/', 'type="text/plain"', $tag, 1 );
+						if ( 'text/plain' !== $original_type && 'text/javascript' !== $original_type ) {
+							$tag = str_replace( '<script ', '<script data-faz-original-type="' . esc_attr( $original_type ) . '" ', $tag );
+						}
+					} else {
+						$tag = str_replace( '<script ', '<script type="text/plain" ', $tag );
+					}
+					// Add category attribute.
+					if ( false === strpos( $tag, 'data-faz-category' ) ) {
+						$tag = str_replace( '<script ', '<script data-faz-category="' . esc_attr( $category ) . '" ', $tag );
+					}
+				}
+				break;
+			}
+		}
+		return $tag;
+	}
+
+	/**
+	 * Filter WP-enqueued stylesheets (e.g. Google Fonts, Adobe Fonts).
+	 *
+	 * Replaces href with data-faz-href to prevent loading before consent.
+	 *
+	 * @param string $tag    Full <link> tag.
+	 * @param string $handle Style handle.
+	 * @param string $href   Stylesheet URL.
+	 * @param string $media  Media attribute.
+	 * @return string Modified tag.
+	 */
+	public function filter_style_loader_tag( $tag, $handle, $href, $media ) {
+		if ( is_admin() ) {
+			return $tag;
+		}
+		if ( ! $this->template ) {
+			return $tag;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return $tag;
+		}
+		if ( $this->is_whitelisted( $tag, '' ) ) {
+			return $tag;
+		}
+
+		$providers = $this->get_provider_category_map();
+		if ( empty( $providers ) ) {
+			return $tag;
+		}
+
+		foreach ( $providers as $pattern => $category ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			if ( false !== stripos( $handle, $pattern ) || false !== stripos( $href, $pattern ) ) {
+				$blocked = $this->get_blocked_categories();
+				if ( in_array( $category, $blocked, true ) ) {
+					$tag = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $tag, 1 );
+					if ( false === strpos( $tag, 'data-faz-category' ) ) {
+						$tag = str_replace( '<link ', '<link data-faz-category="' . esc_attr( $category ) . '" ', $tag );
+					}
+				}
+				break;
+			}
+		}
+		return $tag;
+	}
+
+	/**
+	 * Delete non-consented cookies before the page renders (cookie shredding).
+	 *
+	 * Runs on the send_headers hook. Compares cookies against the
+	 * Known_Providers cookie map and deletes any that belong to
+	 * categories the visitor has not consented to.
+	 */
+	public function shred_non_consented_cookies() {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+			return;
+		}
+		if ( ! $this->template ) {
+			return;
+		}
+		if ( true === faz_disable_banner() ) {
+			return;
+		}
+
+		$blocked_categories = $this->get_blocked_categories();
+		if ( empty( $blocked_categories ) ) {
+			return;
+		}
+
+		$cookie_map = Known_Providers::get_cookie_map();
+		if ( empty( $cookie_map ) ) {
+			return;
+		}
+
+		$host   = isset( $_SERVER['HTTP_HOST'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) : '';
+		$domain = preg_replace( '/^www\./', '', $host );
+
+		foreach ( array_keys( $_COOKIE ) as $name ) {
+			foreach ( $cookie_map as $pattern => $category ) {
+				if ( ! in_array( $category, $blocked_categories, true ) ) {
+					continue;
+				}
+				if ( $this->cookie_name_matches( $name, $pattern ) ) {
+					setcookie( $name, '', -1, '/' );
+					if ( $domain ) {
+						setcookie( $name, '', -1, '/', $domain );
+						setcookie( $name, '', -1, '/', '.' . $domain );
+					}
+					unset( $_COOKIE[ $name ] );
+					break;
+				}
+			}
+		}
+	}
+
+	/**
+	 * Check if a cookie name matches a pattern.
+	 * Supports exact match and wildcard * suffix.
+	 *
+	 * @param string $name    Cookie name.
+	 * @param string $pattern Pattern (e.g. '_ga', '_ga_*', '_pk_id.*').
+	 * @return bool
+	 */
+	private function cookie_name_matches( $name, $pattern ) {
+		if ( $name === $pattern ) {
+			return true;
+		}
+		// Wildcard patterns: _ga_*, _pk_id.*, etc.
+		if ( false !== strpos( $pattern, '*' ) ) {
+			$regex = '/^' . str_replace( '\\*', '.*', preg_quote( $pattern, '/' ) ) . '$/';
+			return (bool) preg_match( $regex, $name );
+		}
+		return false;
+	}
+
+	/**
+	 * Content-level blocking for the_content / widget_text / widget_block_content.
+	 *
+	 * Scans HTML fragments from post content and widgets for scripts, iframes,
+	 * and social embeds that belong to blocked providers. This runs at priority
+	 * 1000 (after all plugins have injected their markup) and provides defense-
+	 * in-depth — the output buffer catches anything that slips through.
+	 *
+	 * @param string $content HTML content.
+	 * @return string Modified content.
+	 */
+	public function filter_content_blocking( $content ) {
+		if ( empty( $content ) || is_admin() ) {
+			return $content;
+		}
+		if ( ! $this->template ) {
+			return $content;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return $content;
+		}
+
+		$blocked_categories = $this->get_blocked_categories();
+		if ( empty( $blocked_categories ) ) {
+			return $content;
+		}
+
+		$providers = $this->get_provider_category_map();
+		if ( empty( $providers ) ) {
+			return $content;
+		}
+
+		// Block <script> tags in content.
+		if ( false !== strpos( $content, '<script' ) ) {
+			$content = preg_replace_callback(
+				'#<script\b([^>]*)>(.*?)</script>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_script_tag( $m, $providers, $blocked_categories );
+				},
+				$content
+			);
+		}
+
+		// Block <iframe> tags in content.
+		if ( false !== strpos( $content, '<iframe' ) ) {
+			$content = preg_replace_callback(
+				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
+				},
+				$content
+			);
+		}
+
+		// Hide social embed containers that depend on blocked scripts.
+		$content = $this->process_social_embeds( $content, $blocked_categories );
+
+		return $content;
+	}
+
+	/**
+	 * Block WordPress oEmbed HTML (YouTube, Vimeo, etc.).
+	 *
+	 * Intercepts oEmbed output before it reaches the page. If the embed URL
+	 * matches a blocked provider, wraps the embed in a consent placeholder.
+	 *
+	 * @param string $html Embed HTML.
+	 * @param string $url  Original URL.
+	 * @return string Modified HTML.
+	 */
+	public function filter_oembed_blocking( $html, $url ) {
+		if ( empty( $html ) || is_admin() ) {
+			return $html;
+		}
+		if ( ! $this->template ) {
+			return $html;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return $html;
+		}
+
+		$blocked_categories = $this->get_blocked_categories();
+		if ( empty( $blocked_categories ) ) {
+			return $html;
+		}
+
+		$providers = $this->get_provider_category_map();
+		if ( empty( $providers ) ) {
+			return $html;
+		}
+
+		// Check if the oEmbed URL matches a known provider.
+		$matched_category = false;
+		foreach ( $providers as $pattern => $category ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			if ( false !== stripos( $url, $pattern ) || false !== stripos( $html, $pattern ) ) {
+				if ( in_array( $category, $blocked_categories, true ) ) {
+					$matched_category = $category;
+					break;
+				}
+			}
+		}
+
+		if ( ! $matched_category ) {
+			return $html;
+		}
+
+		// Detect service label.
+		$service_label = false;
+		$all = Known_Providers::get_all();
+		foreach ( $all as $service ) {
+			foreach ( $service['patterns'] as $pat ) {
+				if ( false !== stripos( $url, $pat ) ) {
+					$service_label = $service['label'];
+					break 2;
+				}
+			}
+		}
+
+		// Try to get video thumbnail. img.youtube.com is a static CDN (no cookies/tracking).
+		$thumbnail_html = '';
+		if ( preg_match( '/youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/)([a-zA-Z0-9_-]{11})/', $url, $yt ) ) {
+			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
+			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
+		} elseif ( preg_match( '/youtu\.be\/([a-zA-Z0-9_-]{11})/', $url, $yt ) ) {
+			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
+			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
+		}
+
+		// Neutralize the embed: wrap iframes, disable scripts.
+		$blocked_html = $html;
+		// Rename iframe src to prevent loading.
+		$blocked_html = preg_replace( '/(<iframe\b[^>]*\s)src\s*=\s*/i', '$1data-faz-src=', $blocked_html );
+		// Add data-faz-category to iframes.
+		$blocked_html = preg_replace( '/(<iframe\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '" style="display:none"', $blocked_html );
+		// Disable scripts using set_script_type_plain() for consistent type handling.
+		$cat_attr = $matched_category;
+		$blocked_html = preg_replace_callback(
+			'#<script\b([^>]*)>(.*?)</script>#is',
+			function ( $m ) use ( $cat_attr ) {
+				$attrs = $this->set_script_type_plain( $m[1] );
+				if ( false === strpos( $attrs, 'data-faz-category' ) ) {
+					$attrs .= ' data-faz-category="' . esc_attr( $cat_attr ) . '"';
+				}
+				return '<script' . $attrs . '>' . $m[2] . '</script>';
+			},
+			$blocked_html
+		);
+
+		// Build placeholder.
+		$placeholder = '<div class="faz-iframe-placeholder' . ( $thumbnail_html ? ' faz-iframe-placeholder--video' : '' ) . '" data-faz-category="' . esc_attr( $matched_category ) . '">'
+			. $thumbnail_html
+			. '<div class="faz-iframe-placeholder-inner">'
+			. ( $thumbnail_html
+				? '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
+				: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>'
+			)
+			. '<p>' . esc_html( sprintf(
+				/* translators: %s: service name */
+				__( 'This content is blocked because %s cookies have not been accepted.', 'faz-cookie-manager' ),
+				$service_label ? $service_label : $matched_category
+			) ) . '</p>'
+			. '<button class="faz-iframe-placeholder-btn" onclick="(function(b){var p=b.closest(\'.faz-iframe-placeholder\');var cat=p.getAttribute(\'data-faz-category\');if(window._fazAcceptCategory){window._fazAcceptCategory(cat)}else{var el=document.querySelector(\'[data-faz-action=revisit-consent]\');if(el)el.click()}})(this)">'
+			. esc_html__( 'Accept cookies', 'faz-cookie-manager' )
+			. '</button>'
+			. '</div>'
+			. $blocked_html
+			. '</div>';
+
+		return $placeholder;
+	}
+
+	/**
+	 * Process social embed containers (Facebook, Instagram, Twitter/X).
+	 *
+	 * Social embeds use specific CSS class patterns that rely on external
+	 * scripts to render. When those scripts are blocked, the raw HTML
+	 * elements remain visible as plain text. This method hides them and
+	 * adds a consent placeholder.
+	 *
+	 * @param string $content            HTML content.
+	 * @param array  $blocked_categories Blocked category slugs.
+	 * @return string Modified content.
+	 */
+	private function process_social_embeds( $content, $blocked_categories ) {
+		$social_classes = array(
+			'fb-page'          => array( 'label' => 'Facebook', 'category' => 'marketing' ),
+			'fb-video'         => array( 'label' => 'Facebook', 'category' => 'marketing' ),
+			'fb-post'          => array( 'label' => 'Facebook', 'category' => 'marketing' ),
+			'fb-comments'      => array( 'label' => 'Facebook', 'category' => 'marketing' ),
+			'fb-like'          => array( 'label' => 'Facebook', 'category' => 'marketing' ),
+			'instagram-media'  => array( 'label' => 'Instagram', 'category' => 'marketing' ),
+			'twitter-tweet'    => array( 'label' => 'X (Twitter)', 'category' => 'marketing' ),
+			'twitter-timeline' => array( 'label' => 'X (Twitter)', 'category' => 'marketing' ),
+		);
+
+		foreach ( $social_classes as $class => $info ) {
+			if ( false === strpos( $content, $class ) ) {
+				continue;
+			}
+			$category = $info['category'];
+			if ( ! in_array( $category, $blocked_categories, true ) ) {
+				continue;
+			}
+
+			// Insert a placeholder BEFORE the social element, and hide the element.
+			$content = preg_replace_callback(
+				'#(<(?:div|blockquote|span)\b)([^>]*class\s*=\s*["\'][^"\']*\b' . preg_quote( $class, '#' ) . '\b[^"\']*["\'][^>]*)>#i',
+				function ( $m ) use ( $category, $info ) {
+					// Skip if already processed.
+					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
+						return $m[0];
+					}
+					$placeholder = '<div class="faz-iframe-placeholder faz-social-placeholder" data-faz-category="' . esc_attr( $category ) . '">'
+						. '<div class="faz-iframe-placeholder-inner">'
+						. '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>'
+						. '<p>' . esc_html( sprintf(
+							__( 'This content is blocked because %s cookies have not been accepted.', 'faz-cookie-manager' ),
+							$info['label']
+						) ) . '</p>'
+						. '<button class="faz-iframe-placeholder-btn" onclick="(function(b){var p=b.closest(\'.faz-iframe-placeholder\');var cat=p.getAttribute(\'data-faz-category\');if(window._fazAcceptCategory){window._fazAcceptCategory(cat)}else{var el=document.querySelector(\'[data-faz-action=revisit-consent]\');if(el)el.click()}})(this)">'
+						. esc_html__( 'Accept cookies', 'faz-cookie-manager' )
+						. '</button>'
+						. '</div></div>';
+					// Placeholder before + hidden original element.
+					return $placeholder . $m[1] . $m[2] . ' style="display:none" data-faz-category="' . esc_attr( $category ) . '">';
+				},
+				$content
+			);
+		}
+
+		return $content;
 	}
 
 	/**

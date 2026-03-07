@@ -80,6 +80,8 @@ class Activator {
 		add_action( 'admin_init', array( __CLASS__, 'ensure_uncategorized_category' ) );
 		add_action( 'admin_init', array( __CLASS__, 'ensure_wordpress_internal_category' ) );
 		add_action( 'admin_init', array( __CLASS__, 'rename_advertisement_to_marketing' ) );
+		add_action( 'admin_init', array( __CLASS__, 'fix_uncategorized_prior_consent' ) );
+		add_action( 'admin_init', array( __CLASS__, 'fix_banner_gdpr_defaults' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
@@ -366,7 +368,77 @@ class Activator {
 		self::ensure_category_by_slug( 'uncategorized', array(
 			'name'        => 'Uncategorized',
 			'description' => 'Cookies that have not yet been categorized.',
-		), true );
+		), false );
+	}
+
+	/**
+	 * Fix uncategorized category to opt-out by default (GDPR compliance).
+	 * Existing installs had prior_consent=1 (opt-in), which violates GDPR.
+	 */
+	public static function fix_uncategorized_prior_consent() {
+		if ( get_option( 'faz_uncategorized_consent_fixed' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_cookie_categories';
+		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) === $table ) {
+			$wpdb->update(
+				$table,
+				array( 'prior_consent' => 0 ),
+				array( 'slug' => 'uncategorized' ),
+				array( '%d' ),
+				array( '%s' )
+			);
+		}
+		update_option( 'faz_uncategorized_consent_fixed', 1 );
+	}
+
+	/**
+	 * One-time migration: enable readMore link and closeButton on the banner.
+	 * GDPR requires a cookie policy link and a non-ambiguous way to dismiss.
+	 */
+	public static function fix_banner_gdpr_defaults() {
+		if ( get_option( 'faz_banner_gdpr_defaults_fixed' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_banners';
+		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) !== $table ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is $wpdb->prefix constant.
+		$rows = $wpdb->get_results( "SELECT banner_id, settings FROM `" . esc_sql( $table ) . "`" );
+		foreach ( $rows as $row ) {
+			$settings = json_decode( $row->settings, true );
+			if ( ! is_array( $settings ) ) {
+				continue;
+			}
+			$changed = false;
+			// Enable readMore link.
+			if ( isset( $settings['config']['notice']['elements']['buttons']['elements']['readMore']['status'] )
+				&& ! $settings['config']['notice']['elements']['buttons']['elements']['readMore']['status'] ) {
+				$settings['config']['notice']['elements']['buttons']['elements']['readMore']['status'] = true;
+				$changed = true;
+			}
+			// Enable close button.
+			if ( isset( $settings['config']['notice']['elements']['closeButton']['status'] )
+				&& ! $settings['config']['notice']['elements']['closeButton']['status'] ) {
+				$settings['config']['notice']['elements']['closeButton']['status'] = true;
+				$changed = true;
+			}
+			if ( $changed ) {
+				$wpdb->update(
+					$table,
+					array( 'settings' => wp_json_encode( $settings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ),
+					array( 'banner_id' => $row->banner_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+			}
+		}
+		// Clear banner template cache to force regeneration.
+		delete_option( 'faz_banner_template' );
+		update_option( 'faz_banner_gdpr_defaults_fixed', 1 );
 	}
 
 	/**

@@ -815,6 +815,17 @@ class Controller {
 				$seen[ $name ] = true;
 				$unique[]      = $inf;
 			}
+
+			// Also infer cookies from Known Providers based on detected scripts.
+			$kp_inferred = $this->infer_cookies_from_scripts( $scripts );
+			foreach ( $kp_inferred as $inf ) {
+				$name = sanitize_text_field( $inf['name'] );
+				if ( isset( $seen[ $name ] ) ) {
+					continue;
+				}
+				$seen[ $name ] = true;
+				$unique[]      = $inf;
+			}
 		}
 
 		$total_cookies = count( $unique );
@@ -928,7 +939,9 @@ class Controller {
 					$cookie_data['duration'] = $known['duration'];
 				}
 			} else {
-				$cat_slug = isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'necessary';
+				// Fallback: try Known Providers cookie map for auto-categorization.
+				$provider_cat = $this->match_cookie_to_provider( $name );
+				$cat_slug     = $provider_cat ? $provider_cat : ( isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'necessary' );
 			}
 			$category_id = isset( $category_map[ $cat_slug ] ) ? $category_map[ $cat_slug ] : $default_cat_id;
 
@@ -945,6 +958,85 @@ class Controller {
 			Cookie_Controller::get_instance()->create_item( $cookie );
 			$existing_names[ $name ] = true;
 		}
+	}
+
+	/**
+	 * Match a cookie name against Known Providers' cookie map.
+	 *
+	 * Supports exact match and wildcard patterns (e.g. '_ga_*').
+	 *
+	 * @param string $name Cookie name.
+	 * @return string|false Category slug or false.
+	 */
+	/**
+	 * Infer cookies from detected scripts using Known Providers.
+	 *
+	 * When a script URL matches a Known Provider, return that provider's
+	 * cookie names so they can be pre-registered in the database.
+	 *
+	 * @param array $scripts Array of script URL strings.
+	 * @return array Array of cookie data arrays.
+	 */
+	private function infer_cookies_from_scripts( $scripts ) {
+		$all      = \FazCookie\Includes\Known_Providers::get_all();
+		$inferred = array();
+		$seen     = array();
+
+		foreach ( $scripts as $script_url ) {
+			if ( ! is_string( $script_url ) ) {
+				continue;
+			}
+			foreach ( $all as $service ) {
+				if ( empty( $service['cookies'] ) ) {
+					continue;
+				}
+				$matched = false;
+				foreach ( $service['patterns'] as $pattern ) {
+					if ( false !== stripos( $script_url, $pattern ) ) {
+						$matched = true;
+						break;
+					}
+				}
+				if ( ! $matched ) {
+					continue;
+				}
+				foreach ( $service['cookies'] as $cookie_name ) {
+					// Skip wildcard-only patterns for inference.
+					if ( false !== strpos( $cookie_name, '*' ) ) {
+						continue;
+					}
+					if ( isset( $seen[ $cookie_name ] ) ) {
+						continue;
+					}
+					$seen[ $cookie_name ] = true;
+					$inferred[] = array(
+						'name'        => $cookie_name,
+						'category'    => $service['category'],
+						'description' => sprintf( 'Set by %s', $service['label'] ),
+						'domain'      => '',
+						'duration'    => '',
+					);
+				}
+			}
+		}
+		return $inferred;
+	}
+
+	private function match_cookie_to_provider( $name ) {
+		$cookie_map = \FazCookie\Includes\Known_Providers::get_cookie_map();
+		foreach ( $cookie_map as $pattern => $category ) {
+			if ( $pattern === $name ) {
+				return $category;
+			}
+			// Wildcard: '_ga_*' matches '_ga_ABC123'.
+			if ( false !== strpos( $pattern, '*' ) ) {
+				$regex = '/^' . str_replace( '\\*', '.*', preg_quote( $pattern, '/' ) ) . '$/';
+				if ( preg_match( $regex, $name ) ) {
+					return $category;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

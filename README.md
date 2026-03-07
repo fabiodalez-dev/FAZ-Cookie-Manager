@@ -451,51 +451,65 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.4.0
+- **Comprehensive script blocking** — 5-layer system: WP hook filters, HTML content filters, output buffer, client-side interceptors (createElement, XHR, fetch, sendBeacon), and cookie shredding
+- **Known Providers database** — 147+ services with 500+ URL/script patterns for automatic categorization
+- **Video embed placeholders** — YouTube/Vimeo iframes replaced with consent-required placeholder showing video thumbnail
+- **Social embed blocking** — Facebook, Instagram, Twitter/X embeds blocked until consent
+- **Iframe placeholders** — Visual placeholder with consent button for blocked third-party iframes
+- **Custom blocking rules** — Admin UI for user-defined script/iframe blocking patterns per category
+- **Network interception** — XHR, fetch, sendBeacon requests to blocked providers silently dropped
+- **Cookie shredding** — Automatic cleanup of cookies from revoked categories
+- **Revocation reload** — Forces page reload when a previously accepted category is revoked
+- **Security** — URL scheme validation, SRI/CSP-safe script cloning, word-boundary-safe regex
+
+### 1.3.0
+- **Incremental cookie scans** — only re-scans pages modified since the last run
+- **Page discovery from DB** — discovers URLs from `wp_posts` and taxonomy archives
+- **Scan progress UI** — real-time progress bar with page count, cookie count, and ETA
+- `advertisement` category renamed to `marketing` across the entire plugin
+- Boundary-aware provider hostname matching, CSS transient cache key includes version
+- Security: inline-safe URL handling, hardened admin URLs, HTML injection prevention
+
+### 1.2.1
+- CSV export produces valid CSV (no JSON encoding)
+- Consent log correctly records "rejected" status on Reject All
+- Security: prototype pollution guard, DOM XSS prevention, CSV export hardening
+- Composer/Packagist support
+
+### 1.2.0
+- Proxy header trust filter and dual-guardrail consent throttle
+- Necessary category toggle uses active blue color with right-aligned label
+- Playwright E2E test suite (11 tests)
+
 ### 1.1.0
-- **IAB TCF v2.3 with Global Vendor List**: Full GVL v3 integration -- server-side download, caching, weekly auto-update, admin page for vendor browsing and selection
-- **Real Vendor Consent**: TC Strings now encode actual vendor consent bits, legitimate interest bits (honoring Right to Object), and DisclosedVendors segment with real vendor IDs
-- **Vendor Consent UI**: Per-vendor toggles in the preference center with vendor details, privacy policy links, and purpose declarations
-- **GVL Admin Page**: Browse, search, and filter 1,100+ IAB-registered vendors. Paginated table, purpose filter, select-all, save selection
-- **IAB Settings**: CMP ID, Purpose One Treatment, publisher country code configuration
-- **Dynamic TCF Config**: ConsentLanguage, publisherCC, gdprApplies derived from server settings instead of hardcoded values
-- **CMP Stub**: Inline `__tcfapi` stub responds to `ping` before main script loads
-- **`getVendorList` Command**: Returns complete GVL structure (vendors, purposes, features, special purposes/features)
-- **`euconsent-v2` Cookie**: Standard TCF cookie written only after explicit user consent action
-- **Security Hardening**: Cookie overflow protection (abort > 3800 bytes), iframe URL origin validation in scanner, atomic GVL file writes, defensive array casts
-- **Dead Code Cleanup**: Removed ~4.3 MB of unused modules (upgrade wizard, review feedback, dashboard widget, uninstall feedback, cache services), legacy routes, and cloud stubs
-- **CodeQL**: Added GitHub code scanning workflow
-- **GeoLite2 Fix**: Ensured WordPress file API is loaded before database download (PR #9)
-- **175 automated tests**: Expanded test suite from 21 to 175 tests covering TCF, GCM, visual integrity, and IAB settings
+- **IAB TCF v2.3 with Global Vendor List** — full GVL v3 integration, vendor consent UI, TC String encoding
+- **GVL Admin Page** — browse, search, filter 1,100+ IAB-registered vendors
+- **CMP Stub** — inline `__tcfapi` stub responds to `ping` before main script loads
+- **Security Hardening** — cookie overflow protection, iframe URL validation, atomic GVL file writes
+- **Dead Code Cleanup** — removed ~4.3 MB of unused modules, legacy routes, and cloud stubs
+- 175 automated compliance tests
 
 ### 1.0.5
 - Unified text domain and plugin slug to `faz-cookie-manager`
-- WordPress.com Marketplace compliance (headers, readme.txt)
-- Replaced all backward-compat constant aliases
-- Cleaned up admin page slugs
-- Added screenshots and comprehensive documentation
+- WordPress.com Marketplace compliance
 
 ### 1.0.4
 - Full uninstall/reinstall support with clean data removal
-- Fixed consent cookie handling on reject
 
 ### 1.0.3
 - Browser-based cookie scanner with iframe detection
-- Local consent log storage with database table and CSV export
-- Dashboard analytics with pageview tracking
+- Local consent log storage with CSV export
 
 ### 1.0.2
-- Unlocked all premium features for local use
-- Removed all cloud dependencies and external API calls
+- Unlocked all premium features, removed cloud dependencies
 
 ### 1.0.1
 - Complete de-branding (renamed all prefixes, namespaces, CSS classes)
-- PHP namespace rename to FazCookie
 
 ### 1.0.0
-- Initial release based on CookieYes v3.4.0 fork
-- Full GDPR, CCPA, ePrivacy Directive compliance
-- Google Consent Mode v2 and IAB TCF v2.2 support
-- Self-hosted cookie scanner and consent logging
+- Initial release — fork of CookieYes v3.4.0
+- GDPR, CCPA, ePrivacy compliance, Google Consent Mode v2, IAB TCF v2.2
 
 ## Author
 
