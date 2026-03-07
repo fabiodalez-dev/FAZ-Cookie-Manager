@@ -50,11 +50,15 @@ class Known_Providers {
 					"ga('create'",
 					"ga('send'",
 					'__gaTracker',
+					'GoogleAnalyticsObject',
+					'_gaq',
+					'ga-disable-',
 					'mi_track_user',
 					'mi_version',
 					'monsterinsights',
 					'monsterinsights_frontend',
 					'monsterinsights-frontend-script',
+					'monsterinsights-vue-script',
 					'google-analytics-for-wordpress/assets/js/',
 					'google-analytics-premium/pro/assets/',
 					'exactmetrics',
@@ -77,8 +81,15 @@ class Known_Providers {
 					'google-analytics-wd',
 					'google_gtagjs',
 					'woocommerce-google-analytics-integration',
+					'caos-analytics',
+					'gadwp-tracking-analytics-events',
+					'gadwp-pagescrolldepth-tracking',
+					'ga_events_frontend_bundle',
+					'ga_events_main_script',
+					'ga-external-tracking',
+					'googleanalytics_get_script',
 				),
-				'cookies'  => array( '_ga', '_ga_*', '_gid', '_gat', '__utma', '__utmb', '__utmc', '__utmz', '__utmt' ),
+				'cookies'  => array( '_ga', '_ga_*', '_gid', '_gat', '_gat_*', '__utma', '__utmb', '__utmc', '__utmz', '__utmt' ),
 			),
 
 			/* ── Google Tag Manager ───────────────────────── */
@@ -95,6 +106,7 @@ class Known_Providers {
 					'gtm4wp-',
 					'zeeker-gtm',
 					'dataLayer.push(',
+					'google_tag_manager',
 				),
 				'cookies'  => array(),
 			),
@@ -295,8 +307,9 @@ class Known_Providers {
 					'js.hsforms.net',
 					'track.hubspot.com',
 					'js.hs-analytics.net',
+					'hs-script-loader',
 				),
-				'cookies'  => array( '__hstc', 'hubspotutk', '__hssc', '__hssrc' ),
+				'cookies'  => array( '__hstc', 'hubspotutk', '__hssc', '__hssrc', '__hs_opt_out' ),
 			),
 
 			/* ── YouTube ──────────────────────────────────── */
@@ -1299,6 +1312,254 @@ class Known_Providers {
 					'wfLogHumanRan',
 				),
 				'cookies'  => array( 'wfvt_*' ),
+			),
+
+			/* ── VideoPress ──────────────────────────────── */
+			'videopress' => array(
+				'label'    => 'VideoPress',
+				'category' => 'functional',
+				'patterns' => array(
+					'videopress.com/embed',
+					'videopress.com/videopress-iframe.js',
+					'video.wordpress.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── SpeakerDeck ─────────────────────────────── */
+			'speakerdeck' => array(
+				'label'    => 'SpeakerDeck',
+				'category' => 'functional',
+				'patterns' => array(
+					'speakerdeck.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── SlideShare ──────────────────────────────── */
+			'slideshare' => array(
+				'label'    => 'SlideShare',
+				'category' => 'functional',
+				'patterns' => array(
+					'slideshare.net',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Mixcloud ────────────────────────────────── */
+			'mixcloud' => array(
+				'label'    => 'Mixcloud',
+				'category' => 'functional',
+				'patterns' => array(
+					'mixcloud.com/widget/',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Issuu ───────────────────────────────────── */
+			'issuu' => array(
+				'label'    => 'Issuu',
+				'category' => 'functional',
+				'patterns' => array(
+					'e.issuu.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Imgur ───────────────────────────────────── */
+			'imgur' => array(
+				'label'    => 'Imgur',
+				'category' => 'functional',
+				'patterns' => array(
+					'imgur.com/a/',
+					'imgur.com/gallery/',
+					's.imgur.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── TED ─────────────────────────────────────── */
+			'ted' => array(
+				'label'    => 'TED',
+				'category' => 'functional',
+				'patterns' => array(
+					'embed.ted.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Kickstarter ─────────────────────────────── */
+			'kickstarter' => array(
+				'label'    => 'Kickstarter',
+				'category' => 'functional',
+				'patterns' => array(
+					'kickstarter.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Screencast ──────────────────────────────── */
+			'screencast' => array(
+				'label'    => 'Screencast',
+				'category' => 'functional',
+				'patterns' => array(
+					'screencast.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Animoto ─────────────────────────────────── */
+			'animoto' => array(
+				'label'    => 'Animoto',
+				'category' => 'functional',
+				'patterns' => array(
+					'animoto.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Cloudup ──────────────────────────────────── */
+			'cloudup' => array(
+				'label'    => 'Cloudup',
+				'category' => 'functional',
+				'patterns' => array(
+					'cloudup.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── ReverbNation ────────────────────────────── */
+			'reverbnation' => array(
+				'label'    => 'ReverbNation',
+				'category' => 'functional',
+				'patterns' => array(
+					'reverbnation.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Embedly ─────────────────────────────────── */
+			'embedly' => array(
+				'label'    => 'Embedly',
+				'category' => 'functional',
+				'patterns' => array(
+					'embedly.com',
+					'embed.ly',
+					'cdn.embedly.com',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Mautic ──────────────────────────────────── */
+			'mautic' => array(
+				'label'    => 'Mautic',
+				'category' => 'marketing',
+				'patterns' => array(
+					'MauticTrackingObject',
+					'mautic.js',
+					'mtracking.gif',
+				),
+				'cookies'  => array( 'mtc_id', 'mtc_sid', 'mautic_device_id' ),
+			),
+
+			/* ── WooCommerce Order Attribution ────────────── */
+			'woocommerce-attribution' => array(
+				'label'    => 'WooCommerce Order Attribution',
+				'category' => 'analytics',
+				'patterns' => array(
+					'wc-order-attribution',
+					'sourcebuster-js',
+				),
+				'cookies'  => array( 'sbjs_*' ),
+			),
+
+			/* ── Pixel Caffeine ──────────────────────────── */
+			'pixel-caffeine' => array(
+				'label'    => 'Pixel Caffeine',
+				'category' => 'marketing',
+				'patterns' => array(
+					'aepc-pixel-events',
+					'aepc_pixel',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Simple Share Buttons ────────────────────── */
+			'simple-share-buttons' => array(
+				'label'    => 'Simple Share Buttons',
+				'category' => 'marketing',
+				'patterns' => array(
+					'ssba-sharethis',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── HubSpot LeadIn ──────────────────────────── */
+			'hubspot-leadin' => array(
+				'label'    => 'HubSpot LeadIn',
+				'category' => 'marketing',
+				'patterns' => array(
+					'leadin-script-loader-js',
+					'leadin-scriptloader-js',
+					'hs-script-loader',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Custom Facebook Feed ────────────────────── */
+			'custom-facebook-feed' => array(
+				'label'    => 'Custom Facebook Feed',
+				'category' => 'marketing',
+				'patterns' => array(
+					'cffscripts',
+					'cfflinkhashtags',
+					'custom-facebook-feed',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Smash Balloon Instagram Feed ────────────── */
+			'smash-balloon-instagram' => array(
+				'label'    => 'Smash Balloon Instagram Feed',
+				'category' => 'marketing',
+				'patterns' => array(
+					'sb_instagram_scripts',
+					'sb-instagram',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Ninja Forms reCAPTCHA ───────────────────── */
+			'ninja-forms-recaptcha' => array(
+				'label'    => 'Ninja Forms reCAPTCHA',
+				'category' => 'functional',
+				'patterns' => array(
+					'nf-google-recaptcha',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Tumblr ──────────────────────────────────── */
+			'tumblr' => array(
+				'label'    => 'Tumblr',
+				'category' => 'marketing',
+				'patterns' => array(
+					'assets.tumblr.com',
+					'tumblr.com/share',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Polldaddy / Crowdsignal ─────────────────── */
+			'polldaddy' => array(
+				'label'    => 'Crowdsignal (Polldaddy)',
+				'category' => 'functional',
+				'patterns' => array(
+					'polldaddy.com',
+					'crowdsignal.com',
+					'survey.fm',
+				),
+				'cookies'  => array(),
 			),
 		);
 	}
