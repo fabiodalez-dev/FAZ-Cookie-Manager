@@ -1,4 +1,6 @@
 <?php
+namespace FazCookie\Admin;
+
 /**
  * The admin-specific functionality of the plugin.
  *
@@ -8,10 +10,7 @@
  * @package    FazCookie\Admin
  */
 
-namespace FazCookie\Admin;
-
 if ( ! defined( 'ABSPATH' ) ) { exit; }
-
 
 /**
  * The admin-specific functionality of the plugin.
@@ -24,7 +23,7 @@ class Admin {
 	/**
 	 * Admin menu slug prefix.
 	 */
-	private const ADMIN_SLUG = 'faz-cookie-manager';
+	const ADMIN_SLUG = 'faz-cookie-manager';
 
 	/**
 	 * The version of this plugin.
@@ -67,7 +66,7 @@ class Admin {
 	 * Initialize the class and set its properties.
 	 *
 	 * @since    3.0.0
-	 * @param      string $version    The version of this plugin.
+	 * @param    string $version    The version of this plugin.
 	 */
 	public function __construct( $version ) {
 		$this->version = $version;
@@ -77,6 +76,7 @@ class Admin {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
 		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
@@ -185,6 +185,46 @@ class Admin {
 	}
 
 	/**
+	 * Check if running on ClassicPress.
+	 *
+	 * Uses the officially recommended detection method per ClassicPress docs:
+	 * https://docs.classicpress.net/developer-guides/best-practice-to-detect-a-classicpress-install/
+	 *
+	 * classicpress_version() is a function registered exclusively by ClassicPress
+	 * core and is guaranteed to exist on every CP install from 1.0.0 onwards.
+	 * There is no CLASSICPRESS_VERSION constant — function_exists() is the correct check.
+	 *
+	 * @return bool
+	 */
+	private function is_classicpress() {
+		return function_exists( 'classicpress_version' );
+	}
+
+	/**
+	 * Deregister the native wp-api-fetch handle on FAZ admin pages.
+	 *
+	 * On ClassicPress (a WP 4.9 fork), core outputs an inline bootstrap script
+	 * alongside wp-api-fetch that calls wp.apiFetch.createRootURLMiddleware — a
+	 * function that does not exist in the 4.9 build — crashing the page before
+	 * any plugin JS runs.  By deregistering the handle at priority 0 and replacing
+	 * it with an empty stub we prevent that bootstrap from ever being output.
+	 * Our own polyfill (injected before faz-admin.js) then provides the full
+	 * wp.apiFetch implementation on both platforms.
+	 *
+	 * @return void
+	 */
+	public function deregister_api_fetch() {
+		if ( false === faz_is_admin_page() ) {
+			return;
+		}
+		wp_dequeue_script( 'wp-api-fetch' );
+		wp_deregister_script( 'wp-api-fetch' );
+		// Re-register as an empty stub so any handle that declares wp-api-fetch
+		// as a dependency still resolves without pulling in the broken script.
+		wp_register_script( 'wp-api-fetch', false, array(), false, true ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NoExplicitVersion
+	}
+
+	/**
 	 * Register the stylesheets for the admin area.
 	 *
 	 * @since    3.0.0
@@ -199,8 +239,76 @@ class Admin {
 			array(),
 			$this->version
 		);
-		// WordPress dashicons (for icon support in quick links, etc.).
+		// WordPress / ClassicPress dashicons (for icon support in quick links, etc.).
 		wp_enqueue_style( 'dashicons' );
+	}
+
+	/**
+	 * Get base script dependencies.
+	 *
+	 * We intentionally return an empty array and never depend on the native
+	 * wp-api-fetch handle.  WP core unconditionally outputs an inline bootstrap
+	 * alongside wp-api-fetch that calls wp.apiFetch.createRootURLMiddleware — a
+	 * function absent on older WordPress and all ClassicPress versions — which
+	 * crashes the page before our code runs.  Our polyfill owns the full fetch
+	 * layer so no core handle is required.
+	 *
+	 * @return array
+	 */
+	private function get_script_dependencies() {
+		return array();
+	}
+
+	/**
+	 * Inline wp.apiFetch polyfill for both WordPress and ClassicPress.
+	 *
+	 * Replaces the core wp-api-fetch package entirely. Covers every call
+	 * pattern used by faz-admin.js:
+	 *   - Promise-based requests via the native Fetch API
+	 *   - Automatic X-WP-Nonce header injection
+	 *   - Relative path → absolute URL resolution against the WP REST root
+	 *   - parse:false support (returns raw Response for header inspection)
+	 *   - No-op .use() so any middleware registration calls do not throw
+	 *
+	 * @return void
+	 */
+	private function enqueue_api_fetch_polyfill() {
+		$nonce    = wp_create_nonce( 'wp_rest' );
+		$rest_url = rest_url(); // base REST root, e.g. https://example.com/wp-json/
+
+		$polyfill = sprintf(
+			'(function(){
+	var restRoot=%s,nonce=%s;
+	window.wp=window.wp||{};
+	window.wp.apiFetch=function(opts){
+		var url=opts.url||(restRoot+(opts.path||"").replace(/^\//,""));
+		var fetchOpts={
+			method:(opts.method||"GET").toUpperCase(),
+			credentials:"same-origin",
+			headers:Object.assign(
+				{"X-WP-Nonce":nonce,"Content-Type":"application/json"},
+				opts.headers||{}
+			)
+		};
+		if(opts.data){fetchOpts.body=JSON.stringify(opts.data);}
+		return fetch(url,fetchOpts).then(function(r){
+			if(opts.parse===false){
+				if(!r.ok){return r.json().then(function(e){return Promise.reject(e);});}
+				return r;
+			}
+			return r.json().then(function(body){
+				if(!r.ok){return Promise.reject(body);}
+				return body;
+			});
+		});
+	};
+	window.wp.apiFetch.use=function(){};
+})();',
+			wp_json_encode( $rest_url ),
+			wp_json_encode( $nonce )
+		);
+
+		wp_add_inline_script( 'faz-admin', $polyfill, 'before' );
 	}
 
 	/**
@@ -213,70 +321,103 @@ class Admin {
 			return;
 		}
 
-		// Core utilities — depends on wp-api-fetch for REST calls.
+		$deps = $this->get_script_dependencies();
+
+		// Core utilities.
 		wp_enqueue_script(
 			'faz-admin',
 			plugin_dir_url( __FILE__ ) . 'assets/js/faz-admin.js',
-			array( 'wp-api-fetch' ),
+			$deps,
 			$this->version,
 			true
 		);
 
+		// Always inject our own wp.apiFetch polyfill before faz-admin.js.
+		// See get_script_dependencies() and deregister_api_fetch() for context.
+		$this->enqueue_api_fetch_polyfill();
+
 		// Localize config data for JS.
+		$this->localize_admin_config();
+
+		// Enqueue page-specific assets.
+		$this->enqueue_page_assets();
+	}
+
+	/**
+	 * Localize configuration data for JS.
+	 *
+	 * @return void
+	 */
+	private function localize_admin_config() {
 		$settings = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
 		wp_localize_script(
 			'faz-admin',
 			'fazConfig',
 			array(
-				'api'          => array(
+				'api'            => array(
 					'base'  => rest_url( 'faz/v1/' ),
 					'nonce' => wp_create_nonce( 'wp_rest' ),
 				),
-				'site'         => array(
+				'site'           => array(
 					'url'  => get_site_url(),
 					'name' => esc_attr( get_option( 'blogname' ) ),
 				),
-				'assetsURL'    => defined( 'FAZ_PLUGIN_URL' ) ? FAZ_PLUGIN_URL . 'frontend/images/' : '',
-				'defaultLogo'  => plugins_url( 'cookie.png', FAZ_PLUGIN_FILENAME ),
-				'adminURL'     => admin_url( 'admin.php' ),
-				'multilingual' => faz_i18n_is_multilingual() && count( faz_selected_languages() ) > 0,
-				'languages'    => array(
+				'adminURL'       => admin_url( 'admin.php' ),
+				'assetsURL'      => defined( 'FAZ_PLUGIN_URL' )
+					? FAZ_PLUGIN_URL . 'frontend/images/'
+					: '',
+				'defaultLogo'    => plugins_url( 'cookie.png', FAZ_PLUGIN_FILENAME ),
+				'isClassicPress' => $this->is_classicpress(),
+				'multilingual'   => faz_i18n_is_multilingual() && count( faz_selected_languages() ) > 0,
+				'languages'      => array(
 					'selected' => faz_selected_languages(),
 					'default'  => faz_default_language(),
 				),
-				'version'      => $this->version,
-				'modules'      => self::$active_modules,
+				'version'        => $this->version,
+				'modules'        => self::$active_modules,
 			)
 		);
-
-		// Enqueue page-specific JS if it exists.
-		$this->ensure_pages_loaded();
-		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
-		foreach ( $this->pages as $page ) {
-			if ( $page['slug'] === $current_page ) {
-				$page_js = plugin_dir_path( __FILE__ ) . 'assets/js/pages/' . $page['view'] . '.js';
-				if ( file_exists( $page_js ) ) {
-					wp_enqueue_script(
-						'faz-page-' . $page['view'],
-						plugin_dir_url( __FILE__ ) . 'assets/js/pages/' . $page['view'] . '.js',
-						array( 'faz-admin' ),
-						filemtime( $page_js ),
-						true
-					);
-				}
-				// Enqueue WordPress media library for banner page (brand logo uploader).
-				if ( 'banner' === $page['view'] ) {
-					wp_enqueue_media();
-					// Pass theme presets so banner.js can reset colours on theme switch.
-					$theme_file = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/templates/6.2.0/theme.json';
-					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
-				}
-				break;
-			}
-		}
 	}
 
+	/**
+	 * Enqueue page-specific JS and any extra assets required by a page.
+	 *
+	 * @return void
+	 */
+	private function enqueue_page_assets() {
+		$this->ensure_pages_loaded();
+		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+
+		foreach ( $this->pages as $page ) {
+			if ( $page['slug'] !== $current_page ) {
+				continue;
+			}
+
+			$page_js = plugin_dir_path( __FILE__ ) . 'assets/js/pages/' . $page['view'] . '.js';
+			if ( file_exists( $page_js ) ) {
+				wp_enqueue_script(
+					'faz-page-' . $page['view'],
+					plugin_dir_url( __FILE__ ) . 'assets/js/pages/' . $page['view'] . '.js',
+					array( 'faz-admin' ),
+					filemtime( $page_js ),
+					true
+				);
+			}
+
+			// Enqueue WordPress / ClassicPress media library for the banner page (brand logo uploader).
+			if ( 'banner' === $page['view'] ) {
+				wp_enqueue_media();
+				// Pass theme presets so banner.js can reset colours on theme switch.
+				$theme_file = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/templates/6.2.0/theme.json';
+				$presets    = file_exists( $theme_file )
+					? json_decode( file_get_contents( $theme_file ), true ) // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+					: array();
+				wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
+			}
+
+			break;
+		}
+	}
 
 	/**
 	 * Prepare shortcodes for banner preview.
@@ -458,7 +599,7 @@ class Admin {
 
 		foreach ( $json_paths as $path ) {
 			if ( file_exists( $path ) ) {
-				$json_content = file_get_contents( $path );
+				$json_content = file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 				$json_data    = json_decode( $json_content, true );
 
 				if ( $json_data && is_array( $json_data ) ) {
