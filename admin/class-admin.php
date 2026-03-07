@@ -201,20 +201,25 @@ class Admin {
 	}
 
 	/**
-	 * Deregister the native wp-api-fetch handle on FAZ admin pages.
+	 * Deregister the native wp-api-fetch handle on ClassicPress admin pages only.
 	 *
 	 * On ClassicPress (a WP 4.9 fork), core outputs an inline bootstrap script
 	 * alongside wp-api-fetch that calls wp.apiFetch.createRootURLMiddleware — a
 	 * function that does not exist in the 4.9 build — crashing the page before
-	 * any plugin JS runs.  By deregistering the handle at priority 0 and replacing
-	 * it with an empty stub we prevent that bootstrap from ever being output.
-	 * Our own polyfill (injected before faz-admin.js) then provides the full
-	 * wp.apiFetch implementation on both platforms.
+	 * any plugin JS runs.  We therefore remove the handle and replace it with an
+	 * empty stub so that bootstrap is never output; our polyfill then provides the
+	 * full wp.apiFetch implementation.
+	 *
+	 * On standard WordPress the native wp-api-fetch bundle is complete and correct,
+	 * so we leave it entirely untouched.
 	 *
 	 * @return void
 	 */
 	public function deregister_api_fetch() {
 		if ( false === faz_is_admin_page() ) {
+			return;
+		}
+		if ( ! $this->is_classicpress() ) {
 			return;
 		}
 		wp_dequeue_script( 'wp-api-fetch' );
@@ -246,29 +251,41 @@ class Admin {
 	/**
 	 * Get base script dependencies.
 	 *
-	 * We intentionally return an empty array and never depend on the native
-	 * wp-api-fetch handle.  WP core unconditionally outputs an inline bootstrap
-	 * alongside wp-api-fetch that calls wp.apiFetch.createRootURLMiddleware — a
-	 * function absent on older WordPress and all ClassicPress versions — which
-	 * crashes the page before our code runs.  Our polyfill owns the full fetch
-	 * layer so no core handle is required.
+	 * On standard WordPress we depend on the native wp-api-fetch handle, which
+	 * ships a complete, up-to-date implementation including createRootURLMiddleware.
+	 *
+	 * On ClassicPress the native wp-api-fetch is a WP 4.9 build that lacks the
+	 * full 5.x middleware stack; we deregister it (see deregister_api_fetch()) and
+	 * inject our own polyfill instead, so no core handle is needed there.
 	 *
 	 * @return array
 	 */
 	private function get_script_dependencies() {
-		return array();
+		if ( $this->is_classicpress() ) {
+			return array();
+		}
+		return array( 'wp-api-fetch' );
 	}
 
 	/**
-	 * Inline wp.apiFetch polyfill for both WordPress and ClassicPress.
+	 * Complete wp.apiFetch polyfill for ClassicPress.
 	 *
-	 * Replaces the core wp-api-fetch package entirely. Covers every call
-	 * pattern used by faz-admin.js:
-	 *   - Promise-based requests via the native Fetch API
-	 *   - Automatic X-WP-Nonce header injection
-	 *   - Relative path → absolute URL resolution against the WP REST root
-	 *   - parse:false support (returns raw Response for header inspection)
-	 *   - No-op .use() so any middleware registration calls do not throw
+	 * Mirrors the full WordPress 5.x wp-api-fetch package API so that:
+	 *   - The WP core inline bootstrap (createRootURLMiddleware / createNonceMiddleware)
+	 *     runs without errors on ClassicPress.
+	 *   - Any plugin that registers custom middleware via .use() works correctly.
+	 *   - All call patterns used by faz-admin.js are supported:
+	 *       path-based requests, data payloads, parse:false for raw Response access.
+	 *
+	 * Public API surface matches WordPress 5.x wp-api-fetch:
+	 *   apiFetch( options )                         — main callable
+	 *   apiFetch.use( middleware )                  — register a middleware
+	 *   apiFetch.setFetchHandler( handler )         — override the fetch layer
+	 *   apiFetch.createRootURLMiddleware( root )    — resolves relative paths
+	 *   apiFetch.createNonceMiddleware( nonce )     — injects X-WP-Nonce header
+	 *   apiFetch.createPreloadingMiddleware( data ) — serves cached responses
+	 *   apiFetch.fetchAllMiddleware                 — follows X-WP-TotalPages
+	 *   apiFetch.mediaUploadMiddleware              — handles FormData uploads
 	 *
 	 * @return void
 	 */
@@ -277,33 +294,170 @@ class Admin {
 		$rest_url = rest_url(); // base REST root, e.g. https://example.com/wp-json/
 
 		$polyfill = sprintf(
-			'(function(){
-	var restRoot=%s,nonce=%s;
-	window.wp=window.wp||{};
-	window.wp.apiFetch=function(opts){
-		var url=opts.url||(restRoot+(opts.path||"").replace(/^\//,""));
-		var fetchOpts={
-			method:(opts.method||"GET").toUpperCase(),
-			credentials:"same-origin",
-			headers:Object.assign(
-				{"X-WP-Nonce":nonce,"Content-Type":"application/json"},
-				opts.headers||{}
-			)
-		};
-		if(opts.data){fetchOpts.body=JSON.stringify(opts.data);}
-		return fetch(url,fetchOpts).then(function(r){
-			if(opts.parse===false){
-				if(!r.ok){return r.json().then(function(e){return Promise.reject(e);});}
-				return r;
+			'(function(root,nonce){
+"use strict";
+
+/* ── Middleware stack ──────────────────────────────────────────────────── */
+var middlewares=[];
+function registerMiddleware(m){middlewares.unshift(m);}
+
+/* ── Default fetch handler ─────────────────────────────────────────────── */
+var fetchHandler=defaultFetchHandler;
+function defaultFetchHandler(options){
+	var parse=options.parse!==false;
+	return window.fetch(options.url,options).then(function(response){
+		if(!parse){return response;}
+		return response.text().then(function(text){
+			var data;
+			try{data=text?JSON.parse(text):null;}catch(e){data=null;}
+			if(!response.ok){
+				var err=Object.assign(
+					new Error(data&&data.message?data.message:'Unknown error'),
+					{code:'unknown_error',data:{status:response.status}},
+					data||{}
+				);
+				return Promise.reject(err);
 			}
-			return r.json().then(function(body){
-				if(!r.ok){return Promise.reject(body);}
-				return body;
-			});
+			return data;
+		});
+	});
+}
+
+/* ── Run middleware chain ──────────────────────────────────────────────── */
+function runMiddleware(idx,options){
+	if(idx>=middlewares.length){
+		var req=Object.assign({},options);
+		if(req.data&&!req.body&&!(req.data instanceof window.FormData)){
+			req.body=JSON.stringify(req.data);
+		}
+		return fetchHandler(req);
+	}
+	return middlewares[idx](options,function(next){return runMiddleware(idx+1,next);});
+}
+
+/* ── Main apiFetch function ────────────────────────────────────────────── */
+function apiFetch(options){return runMiddleware(0,options);}
+
+/* ── Built-in middleware factories ────────────────────────────────────── */
+
+// Resolves a relative `path` against the REST root URL.
+function createRootURLMiddleware(rootURL){
+	return function(options,next){
+		var opts=Object.assign({},options);
+		if(opts.path!==undefined&&opts.url===undefined){
+			opts.url=rootURL.replace(/\/+$/,"")+"/"+opts.path.replace(/^\/+/,"");
+			delete opts.path;
+		}
+		return next(opts);
+	};
+}
+
+// Injects X-WP-Nonce and refreshes it from the response header.
+function createNonceMiddleware(initialNonce){
+	var currentNonce=initialNonce;
+	var middleware=function(options,next){
+		var opts=Object.assign({},options);
+		opts.headers=Object.assign({},opts.headers);
+		if(currentNonce&&!opts.headers["X-WP-Nonce"]){
+			opts.headers["X-WP-Nonce"]=currentNonce;
+		}
+		return next(opts).then(function(result){
+			if(result&&result.headers&&typeof result.headers.get==="function"){
+				var fresh=result.headers.get("X-WP-Nonce");
+				if(fresh){currentNonce=fresh;}
+			}
+			return result;
 		});
 	};
-	window.wp.apiFetch.use=function(){};
-})();',
+	middleware.nonce=currentNonce;
+	return middleware;
+}
+
+// Returns preloaded cached data for matching GET requests.
+function createPreloadingMiddleware(preloadedData){
+	var cache=Object.assign({},preloadedData);
+	return function(options,next){
+		var method=(options.method||"GET").toUpperCase();
+		if(method!=="GET"){return next(options);}
+		var key=options.path||(options.url||"");
+		if(Object.prototype.hasOwnProperty.call(cache,key)){
+			var cached=cache[key];
+			delete cache[key];
+			if(options.parse===false){
+				return Promise.resolve(
+					new window.Response(JSON.stringify(cached.body),{
+						status:200,
+						headers:new window.Headers(cached.headers||{})
+					})
+				);
+			}
+			return Promise.resolve(cached.body);
+		}
+		return next(options);
+	};
+}
+
+// Removes Content-Type for FormData so the browser sets the multipart boundary.
+var mediaUploadMiddleware=function(options,next){
+	var opts=Object.assign({},options);
+	if(opts.data instanceof window.FormData){
+		opts.body=opts.data;
+		opts.headers=Object.assign({},opts.headers);
+		delete opts.headers["Content-Type"];
+		delete opts.data;
+	}
+	return next(opts);
+};
+
+// Follows X-WP-TotalPages to accumulate all pages of a paginated endpoint.
+var fetchAllMiddleware=function(options,next){
+	if(options.parse!==false){return next(options);}
+	return next(options).then(function(response){
+		var total=parseInt(
+			(response.headers&&response.headers.get("X-WP-TotalPages"))||"1",10
+		);
+		if(isNaN(total)||total<=1){return response;}
+		var pages=[response.json()];
+		for(var p=2;p<=total;p++){
+			var sep=(options.path||"").indexOf("?")>-1?"&":"?";
+			pages.push(apiFetch(Object.assign({},options,{
+				path:(options.path||"")+sep+"page="+p,
+				parse:true
+			})));
+		}
+		return Promise.all(pages).then(function(results){
+			return [].concat.apply([],results);
+		});
+	});
+};
+
+/* ── Default Content-Type middleware ─────────────────────────────────── */
+apiFetch.use(function(options,next){
+	var opts=Object.assign({},options);
+	if(opts.data&&!(opts.data instanceof window.FormData)){
+		opts.headers=Object.assign({"Content-Type":"application/json"},opts.headers||{});
+	}
+	return next(opts);
+});
+
+/* ── Register default root + nonce middlewares ───────────────────────── */
+apiFetch.use(createNonceMiddleware(nonce));
+apiFetch.use(createRootURLMiddleware(root));
+
+/* ── Assemble public API ─────────────────────────────────────────────── */
+apiFetch.use=registerMiddleware;
+apiFetch.setFetchHandler=function(h){fetchHandler=h;};
+apiFetch.createRootURLMiddleware=createRootURLMiddleware;
+apiFetch.createNonceMiddleware=createNonceMiddleware;
+apiFetch.createPreloadingMiddleware=createPreloadingMiddleware;
+apiFetch.fetchAllMiddleware=fetchAllMiddleware;
+apiFetch.mediaUploadMiddleware=mediaUploadMiddleware;
+
+window.wp=window.wp||{};
+window.wp.apiFetch=apiFetch;
+
+}(%s,%s));
+',
 			wp_json_encode( $rest_url ),
 			wp_json_encode( $nonce )
 		);
@@ -332,9 +486,12 @@ class Admin {
 			true
 		);
 
-		// Always inject our own wp.apiFetch polyfill before faz-admin.js.
+		// On ClassicPress inject our own wp.apiFetch polyfill before faz-admin.js.
+		// On WordPress the native wp-api-fetch handle is used instead.
 		// See get_script_dependencies() and deregister_api_fetch() for context.
-		$this->enqueue_api_fetch_polyfill();
+		if ( $this->is_classicpress() ) {
+			$this->enqueue_api_fetch_polyfill();
+		}
 
 		// Localize config data for JS.
 		$this->localize_admin_config();
