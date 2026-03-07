@@ -1161,7 +1161,6 @@ function _fazMutationObserver(mutations) {
 }
 
 function _fazUnblock() {
-    if (navigator.doNotTrack === "1") return;
     const fazconsent = ref._fazGetFromStore("consent");
     if (
         _fazGetLaw() === "gdpr" &&

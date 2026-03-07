@@ -1389,26 +1389,35 @@
 
 	function collectCustomRules() {
 		var tbody = document.getElementById('faz-custom-rules-body');
-		if (!tbody) return [];
+		if (!tbody) return { rules: [], invalid: 0 };
 		var rules = [];
+		var invalid = 0;
 		tbody.querySelectorAll('tr').forEach(function (tr) {
 			var patternInput = tr.querySelector('[data-rule="pattern"]');
 			var categorySelect = tr.querySelector('[data-rule="category"]');
 			var pattern = patternInput ? patternInput.value.trim() : '';
 			var category = categorySelect ? categorySelect.value : '';
-			if (pattern && category) {
-				rules.push({ pattern: pattern, category: category });
+			if (!pattern && !category) return; // empty row, skip
+			if (!pattern || !category) {
+				invalid++;
+				return;
 			}
+			rules.push({ pattern: pattern, category: category });
 		});
-		return rules;
+		return { rules: rules, invalid: invalid };
 	}
 
 	function saveCustomRules() {
 		var btn = document.getElementById('faz-save-rules-btn');
+		var collected = collectCustomRules();
+		if (collected.invalid > 0) {
+			FAZ.notify(collected.invalid + ' rule(s) incomplete — fill in both pattern and category', 'error');
+			return;
+		}
 		FAZ.btnLoading(btn, true);
 		FAZ.get('settings').then(function (current) {
 			current.script_blocking = current.script_blocking || {};
-			current.script_blocking.custom_rules = collectCustomRules();
+			current.script_blocking.custom_rules = collected.rules;
 			return FAZ.post('settings', current);
 		}).then(function () {
 			FAZ.btnLoading(btn, false);

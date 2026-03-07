@@ -88,6 +88,9 @@ class Known_Providers {
 					'ga_events_main_script',
 					'ga-external-tracking',
 					'googleanalytics_get_script',
+					'analytics-insights',
+					'wpac-integration-for-google-analytics',
+					'wpac-integration-google-analytics',
 				),
 				'cookies'  => array( '_ga', '_ga_*', '_gid', '_gat', '_gat_*', '__utma', '__utmb', '__utmc', '__utmz', '__utmt' ),
 			),
@@ -107,6 +110,13 @@ class Known_Providers {
 					'zeeker-gtm',
 					'dataLayer.push({',
 					'google_tag_manager',
+					'easy-google-tag-manager',
+					'google-tag-manager-integration-for-woocommerce',
+					'server-side-tracking-via-gtm',
+					'conversion-pixel-and-tracking-tag-manager',
+					'conversion-pixel-tracking-tag-manager',
+					'tracking-and-consent-manager',
+					'wp-full-picture',
 				),
 				'cookies'  => array(),
 			),
@@ -164,6 +174,12 @@ class Known_Providers {
 					'wc-facebook-pixel-events',
 					'wc-facebook-pixel-event-placeholder',
 					'fatcatapps-pixel',
+					'official-facebook-pixel',
+					'meta-pixel-for-wordpress',
+					'meta-for-woocommerce',
+					'meta-pixel-event-tracker-for-woocommerce',
+					'all-in-one-capi',
+					'all-in-one-capi-for-meta-pinterest-gtm',
 					'kliken',
 					'analytics.sitewit.com',
 					'weapi.kliken.com',
@@ -185,6 +201,7 @@ class Known_Providers {
 					'ttq.load (',
 					'ttq.page(',
 					'tiktok-events',
+					'add-tiktok-pixel-for-tiktok-ads',
 					'__tea_cache_tokens_',
 				),
 				'cookies'  => array( '_ttp', 'tt_webid', 'tt_webid_v2' ),
@@ -201,6 +218,7 @@ class Known_Providers {
 					'pintrk(',
 					'pintrk (',
 					'pinterest-for-woocommerce',
+					'add-pinterest-conversion-tags',
 					'pinmarklet.js',
 				),
 				'cookies'  => array( '_pin_unauth', '_pinterest_ct_ua' ),
@@ -356,7 +374,7 @@ class Known_Providers {
 				'cookies'  => array(),
 			),
 
-			/* ── Google reCAPTCHA ─────────────────────────── */
+			/* ── Google reCAPTCHA (v2 & v3) ──────────────── */
 			'google-recaptcha' => array(
 				'label'    => 'Google reCAPTCHA',
 				'category' => 'necessary',
@@ -364,9 +382,10 @@ class Known_Providers {
 					'google.com/recaptcha',
 					'gstatic.com/recaptcha',
 					'grecaptcha',
-					'recaptcha/api',
+					'recaptcha/api.js',
+					'recaptcha/enterprise.js',
 				),
-				'cookies'  => array(),
+				'cookies'  => array( '_GRECAPTCHA' ),
 			),
 
 			/* ── Google Fonts ─────────────────────────────── */
@@ -583,6 +602,8 @@ class Known_Providers {
 				'patterns' => array(
 					'pixel-manager-pro-for-woocommerce',
 					'pixel-manager-for-woocommerce',
+					'pixel-tag-manager-for-woocommerce',
+					'woocommerce-conversion-tracking',
 					'woocommerce-google-adwords-conversion-tracking-tag',
 					'wpmDataLayer',
 					'pmwDataLayer',
@@ -633,18 +654,40 @@ class Known_Providers {
 			),
 
 			/* ── Independent Analytics ─────────────────────── */
-			'independent-analytics' => array(
-				'label'    => 'Independent Analytics',
-				'category' => 'analytics',
-				'patterns' => array(
-					'independent-analytics',
-					'iawp-',
-					'iawp-javascript',
-					'iawp-layout-javascript',
-					'window.IAWP',
+				'independent-analytics' => array(
+					'label'    => 'Independent Analytics',
+					'category' => 'analytics',
+					'patterns' => array(
+						'independent-analytics',
+						'iawp-',
+						'iawp-javascript',
+						'iawp-layout-javascript',
+						'window.IAWP',
+					),
+					'cookies'  => array(),
 				),
-				'cookies'  => array(),
-			),
+
+				/* ── Header/Footer & snippet injectors ───────── */
+				'script-injectors' => array(
+					'label'    => 'Header/Footer and Snippet Injectors',
+					'category' => 'functional',
+					'patterns' => array(
+						'wpcode',
+						'insert-headers-and-footers',
+						'header-footer-code-manager',
+						'head-footer-code',
+						'ht-script',
+						'custom-css-js',
+						'simple-custom-css-and-js',
+						'code-snippets',
+						'woody',
+						'insert-php',
+						'ad-inserter',
+						'cm-header-footer-script-loader',
+						'tag-manager-header-body-and-footer',
+					),
+					'cookies'  => array(),
+				),
 
 			/* ── Taboola ──────────────────────────────────── */
 			'taboola' => array(
@@ -1674,20 +1717,6 @@ class Known_Providers {
 				'cookies'  => array(),
 			),
 
-			/* ── Google reCAPTCHA (v2 & v3) ──────────────── */
-			'recaptcha' => array(
-				'label'    => 'Google reCAPTCHA',
-				'category' => 'functional',
-				'patterns' => array(
-					'google.com/recaptcha',
-					'gstatic.com/recaptcha',
-					'recaptcha/api.js',
-					'recaptcha/enterprise.js',
-					'grecaptcha',
-				),
-				'cookies'  => array( '_GRECAPTCHA' ),
-			),
-
 			/* ── Wistia ──────────────────────────────────── */
 			'wistia' => array(
 				'label'    => 'Wistia',
@@ -1772,6 +1801,8 @@ class Known_Providers {
 					'wpm-frontend',
 					'window.wpm',
 					'wpmDataLayer',
+					'pixel-tag-manager-for-woocommerce',
+					'woocommerce-conversion-tracking',
 				),
 				'cookies'  => array(),
 			),

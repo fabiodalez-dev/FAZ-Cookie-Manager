@@ -847,10 +847,10 @@ class Frontend {
 	 * @return string HTML for the thumbnail background, or empty string.
 	 */
 	private function get_video_thumbnail_html( $attrs ) {
-		// YouTube: extract video ID — use data-src to avoid third-party request before consent.
+		// YouTube: extract video ID. img.youtube.com is a static CDN (no cookies/tracking).
 		if ( preg_match( '/youtube(?:-nocookie)?\.com\/embed\/([a-zA-Z0-9_-]{11})/', $attrs, $yt ) ) {
 			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
-			return '<img class="faz-iframe-placeholder-thumb" data-src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
+			return '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
 		}
 		return '';
 	}
@@ -878,7 +878,7 @@ class Frontend {
 		}
 
 		// Block by replacing img src → data-faz-src inside the noscript.
-		$blocked_content = preg_replace( '/(<img\b[^>]*)\bsrc\s*=/', '$1data-faz-src=', $content );
+		$blocked_content = preg_replace( '/(<img\b[^>]*)(^|\s)src\s*=/i', '$1$2data-faz-src=', $content );
 		$blocked_content = preg_replace( '/(<img\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_content );
 		return str_replace( $content, $blocked_content, $full );
 	}
@@ -1690,7 +1690,7 @@ class Frontend {
 			if ( false !== stripos( $handle, $pattern ) || false !== stripos( $href, $pattern ) ) {
 				$blocked = $this->get_blocked_categories();
 				if ( in_array( $category, $blocked, true ) ) {
-					$tag = preg_replace( '/\bhref\s*=\s*/', 'data-faz-href=', $tag, 1 );
+					$tag = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $tag, 1 );
 					if ( false === strpos( $tag, 'data-faz-category' ) ) {
 						$tag = str_replace( '<link ', '<link data-faz-category="' . esc_attr( $category ) . '" ', $tag );
 					}
@@ -1891,14 +1891,14 @@ class Frontend {
 			}
 		}
 
-		// Try to get video thumbnail — use data-src to avoid third-party request before consent.
+		// Try to get video thumbnail. img.youtube.com is a static CDN (no cookies/tracking).
 		$thumbnail_html = '';
 		if ( preg_match( '/youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/)([a-zA-Z0-9_-]{11})/', $url, $yt ) ) {
 			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
-			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" data-src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
+			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
 		} elseif ( preg_match( '/youtu\.be\/([a-zA-Z0-9_-]{11})/', $url, $yt ) ) {
 			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
-			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" data-src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
+			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
 		}
 
 		// Neutralize the embed: wrap iframes, disable scripts.

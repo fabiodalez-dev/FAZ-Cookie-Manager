@@ -252,6 +252,18 @@ class Api extends Rest_Controller {
 			if ( 'en' !== $lang ) {
 				$gvl->download_purposes( $lang );
 			}
+
+			// Auto-select all vendors if none have been selected yet.
+			$existing_selected = get_option( 'faz_gvl_selected_vendors', array() );
+			if ( empty( $existing_selected ) ) {
+				$all_vendors = $gvl->get_vendors();
+				if ( ! empty( $all_vendors ) ) {
+					$all_ids = array_map( 'absint', array_keys( $all_vendors ) );
+					sort( $all_ids );
+					update_option( 'faz_gvl_selected_vendors', $all_ids, false );
+					delete_option( 'faz_banner_template' );
+				}
+			}
 		}
 
 		$status = $result['success'] ? 200 : 500;

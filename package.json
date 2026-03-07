@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build:min": "terser frontend/js/tcf-cmp.js -c -m -o frontend/js/tcf-cmp.min.js && terser frontend/js/gcm.js -c -m -o frontend/js/gcm.min.js",
+    "full-test-codex": "playwright test -c tests/e2e/playwright.config.ts tests/e2e/specs/full-test-codex.spec.ts",
     "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test -c tests/e2e/playwright.config.ts --headed",
     "test:e2e:report": "playwright show-report tests/e2e/reports/html"
