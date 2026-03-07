@@ -2,6 +2,40 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.4.0] — 2026-03-07
+
+### Added
+- **5-layer script blocking** — WP hook filters (`script_loader_tag`, `style_loader_tag`), HTML content filters (`the_content`, `widget_text_content`), output buffer processing, client-side interceptors (createElement, XHR, fetch, sendBeacon), and cookie shredding
+- **Known Providers database** — 147+ services with 500+ URL/script patterns for automatic categorization (Google Analytics, Meta Pixel, HubSpot, Hotjar, TikTok, LinkedIn, etc.)
+- **Video embed placeholders** — YouTube/Vimeo iframes replaced with consent-required placeholder showing video thumbnail
+- **Social embed blocking** — Facebook, Instagram, Twitter/X embeds blocked until consent
+- **Iframe placeholder system** — Visual placeholder with consent button for blocked third-party iframes
+- **Custom blocking rules** — Admin UI on Cookies page for user-defined script/iframe blocking patterns per category
+- **Script dependency chains** — `data-faz-waitfor` attribute for scripts that depend on consent-blocked resources
+- **Network request interception** — XHR, fetch, and sendBeacon requests to blocked providers silently dropped
+- **Cookie shredding** — Automatic cleanup of cookies from revoked categories using Known Providers cookie map
+- **Revocation page reload** — Forces page reload when a previously accepted category is revoked (executed JS cannot be unloaded)
+
+### Changed
+- Custom Rules UI moved from Settings to Cookies page
+- WPForms and Ninja Forms CAPTCHA handles classified as `necessary` (was `functional`)
+- jQuery whitelist narrowed to avoid false positives on third-party plugin handles
+
+### Fixed
+- SRI/CSP-safe script clone attribute ordering — integrity/crossorigin/nonce set before src
+- XHR instance reuse after blocked request — synthetic properties use `configurable: true` with cleanup on `open()`
+- Non-executable script types (`application/ld+json`, `application/json`, `text/template`, `importmap`) never blocked
+- GVL auto-select distinguishes "never set" from "user explicitly saved empty array"
+- ReadMore link enabled in banner
+- Close button functionality restored
+- Uncategorized toggle behavior fixed
+
+### Security
+- URL scheme validation (`_fazIsAllowedScheme`) prevents `javascript:` / `data:` injection on restored iframe/image/stylesheet URLs
+- Word-boundary-safe regex for `src`/`href` attribute renaming — prevents matching `data-src` / `data-href`
+- Inline-safe URL handling for banner preview sinks
+- Hardened admin URL handling and stale bar actions
+
 ## [1.3.0] — 2026-03-06
 
 ### Added
