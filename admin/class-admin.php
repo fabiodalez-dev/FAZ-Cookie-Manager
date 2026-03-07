@@ -457,20 +457,18 @@ return [].concat.apply([],results);
 });
 };
 
-/* Default Content-Type middleware */
-apiFetch.use(function(options,next){
+/* Register built-in middlewares directly — apiFetch.use does not exist yet */
+registerMiddleware(function(options,next){
 var opts=Object.assign({},options);
 if(opts.data&&!(opts.data instanceof window.FormData)){
 opts.headers=Object.assign({"Content-Type":"application/json"},opts.headers||{});
 }
 return next(opts);
 });
+registerMiddleware(createNonceMiddleware(nonce));
+registerMiddleware(createRootURLMiddleware(root));
 
-/* Register default root + nonce middlewares */
-apiFetch.use(createNonceMiddleware(nonce));
-apiFetch.use(createRootURLMiddleware(root));
-
-/* Assign public API — must come after the .use() calls above */
+/* Assign public API — must come after the registerMiddleware calls above */
 apiFetch.use=registerMiddleware;
 apiFetch.setFetchHandler=function(h){fetchHandler=h;};
 apiFetch.createRootURLMiddleware=createRootURLMiddleware;
