@@ -85,6 +85,35 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<!-- Script Blocking — Custom Rules -->
+	<div class="faz-card" style="margin-top:16px;">
+		<div class="faz-card-header">
+			<h3>Script Blocking — Custom Rules</h3>
+			<div class="faz-page-header-actions">
+				<button class="faz-btn faz-btn-primary faz-btn-sm" id="faz-save-rules-btn" type="button">Save Rules</button>
+			</div>
+		</div>
+		<div class="faz-card-body">
+			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
+				Add custom URL patterns to block. Each pattern is matched against script/iframe src, inline code, and enqueued handle names.
+				The plugin already blocks 143+ known services automatically.
+			</p>
+			<table class="faz-table" id="faz-custom-rules-table" style="width:100%;margin-bottom:12px;">
+				<thead>
+					<tr>
+						<th style="width:55%;">URL Pattern</th>
+						<th style="width:30%;">Category</th>
+						<th style="width:15%;text-align:center;">Actions</th>
+					</tr>
+				</thead>
+				<tbody id="faz-custom-rules-body">
+					<!-- rows injected by JS -->
+				</tbody>
+			</table>
+			<button class="faz-btn faz-btn-secondary" id="faz-add-rule" type="button">+ Add Rule</button>
+		</div>
+	</div>
+
 	<!-- Shortcode Info -->
 	<div class="faz-card" style="margin-top:16px;">
 		<div class="faz-card-header">

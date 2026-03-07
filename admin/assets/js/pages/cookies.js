@@ -93,6 +93,13 @@
 		if (updateDefsBtn) {
 			updateDefsBtn.addEventListener('click', updateDefinitions);
 		}
+
+		// Custom Blocking Rules
+		loadCustomRules();
+		var addRuleBtn = document.getElementById('faz-add-rule');
+		if (addRuleBtn) addRuleBtn.addEventListener('click', function () { addRuleRow('', ''); });
+		var saveRulesBtn = document.getElementById('faz-save-rules-btn');
+		if (saveRulesBtn) saveRulesBtn.addEventListener('click', saveCustomRules);
 	});
 
 	function loadCategories() {
@@ -1311,6 +1318,104 @@
 			FAZ.btnLoading(btn, false);
 			FAZ.notify('Failed to update definitions', 'error');
 			if (el) el.textContent = 'Update failed. Check your network connection.';
+		});
+	}
+
+	/* ── Custom Blocking Rules ────────────────────────── */
+
+	var ruleCategories = ['analytics', 'marketing', 'functional', 'performance'];
+
+	function loadCustomRules() {
+		FAZ.get('settings').then(function (data) {
+			var rules = (data.script_blocking && Array.isArray(data.script_blocking.custom_rules))
+				? data.script_blocking.custom_rules
+				: [];
+			var tbody = document.getElementById('faz-custom-rules-body');
+			if (!tbody) return;
+			while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+			rules.forEach(function (r) {
+				addRuleRow(r.pattern || '', r.category || '');
+			});
+		});
+	}
+
+	function addRuleRow(pattern, category) {
+		var tbody = document.getElementById('faz-custom-rules-body');
+		if (!tbody) return;
+		var tr = document.createElement('tr');
+
+		var tdPattern = document.createElement('td');
+		var input = document.createElement('input');
+		input.type = 'text';
+		input.className = 'faz-input';
+		input.placeholder = 'e.g. custom-tracker.com/script.js';
+		input.value = pattern;
+		input.setAttribute('data-rule', 'pattern');
+		input.style.width = '100%';
+		tdPattern.appendChild(input);
+
+		var tdCategory = document.createElement('td');
+		var select = document.createElement('select');
+		select.className = 'faz-input';
+		select.setAttribute('data-rule', 'category');
+		select.style.width = '100%';
+		var emptyOpt = document.createElement('option');
+		emptyOpt.value = '';
+		emptyOpt.textContent = '\u2014 Select \u2014';
+		select.appendChild(emptyOpt);
+		ruleCategories.forEach(function (cat) {
+			var opt = document.createElement('option');
+			opt.value = cat;
+			opt.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+			if (cat === category) opt.selected = true;
+			select.appendChild(opt);
+		});
+		tdCategory.appendChild(select);
+
+		var tdActions = document.createElement('td');
+		tdActions.style.textAlign = 'center';
+		var removeBtn = document.createElement('button');
+		removeBtn.type = 'button';
+		removeBtn.className = 'faz-btn faz-btn-danger faz-btn-sm';
+		removeBtn.textContent = 'Remove';
+		removeBtn.addEventListener('click', function () { tr.remove(); });
+		tdActions.appendChild(removeBtn);
+
+		tr.appendChild(tdPattern);
+		tr.appendChild(tdCategory);
+		tr.appendChild(tdActions);
+		tbody.appendChild(tr);
+	}
+
+	function collectCustomRules() {
+		var tbody = document.getElementById('faz-custom-rules-body');
+		if (!tbody) return [];
+		var rules = [];
+		tbody.querySelectorAll('tr').forEach(function (tr) {
+			var patternInput = tr.querySelector('[data-rule="pattern"]');
+			var categorySelect = tr.querySelector('[data-rule="category"]');
+			var pattern = patternInput ? patternInput.value.trim() : '';
+			var category = categorySelect ? categorySelect.value : '';
+			if (pattern && category) {
+				rules.push({ pattern: pattern, category: category });
+			}
+		});
+		return rules;
+	}
+
+	function saveCustomRules() {
+		var btn = document.getElementById('faz-save-rules-btn');
+		FAZ.btnLoading(btn, true);
+		FAZ.get('settings').then(function (current) {
+			current.script_blocking = current.script_blocking || {};
+			current.script_blocking.custom_rules = collectCustomRules();
+			return FAZ.post('settings', current);
+		}).then(function () {
+			FAZ.btnLoading(btn, false);
+			FAZ.notify('Custom rules saved');
+		}).catch(function () {
+			FAZ.btnLoading(btn, false);
+			FAZ.notify('Failed to save custom rules', 'error');
 		});
 	}
 
