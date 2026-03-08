@@ -2,9 +2,10 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
-## [1.4.0] — 2026-03-07
+## [1.4.0] — 2026-03-08
 
 ### Added
+- **ClassicPress compatibility layer** — wp.apiFetch polyfill with nonce middleware, fetchAll pagination, and media upload via FilePond fallback when wp.media is unavailable
 - **5-layer script blocking** — WP hook filters (`script_loader_tag`, `style_loader_tag`), HTML content filters (`the_content`, `widget_text_content`), output buffer processing, client-side interceptors (createElement, XHR, fetch, sendBeacon), and cookie shredding
 - **Known Providers database** — 147+ services with 500+ URL/script patterns for automatic categorization (Google Analytics, Meta Pixel, HubSpot, Hotjar, TikTok, LinkedIn, etc.)
 - **Video embed placeholders** — YouTube/Vimeo iframes replaced with consent-required placeholder showing video thumbnail
@@ -22,6 +23,8 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - jQuery whitelist narrowed to avoid false positives on third-party plugin handles
 
 ### Fixed
+- TinyMCE content preserved across banner tab switches (issue #18) — serialize outgoing editor before panel hide, restore from stored data if empty
+- Brand logo upload lock prevents concurrent uploads and duplicate attachments
 - SRI/CSP-safe script clone attribute ordering — integrity/crossorigin/nonce set before src
 - XHR instance reuse after blocked request — synthetic properties use `configurable: true` with cleanup on `open()`
 - Non-executable script types (`application/ld+json`, `application/json`, `text/template`, `importmap`) never blocked
