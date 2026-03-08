@@ -921,6 +921,7 @@
 		function uploadFile(file, done, pond) {
 			if (!file || !window.fetch || !window.fazConfig || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
 				showBrandLogoStatus('Upload is not available.', 'error');
+				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
 			}
@@ -928,6 +929,7 @@
 			if (file.size > maxBytes) {
 				var maxMB = Math.floor(maxBytes / (1024 * 1024));
 				showBrandLogoStatus('File too large (max ' + maxMB + ' MB).', 'error');
+				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 				return;
 			}
@@ -958,6 +960,7 @@
 				if (typeof done === 'function') done(true);
 			}).catch(function (err) {
 				showBrandLogoStatus('Upload failed: ' + (err.message || err), 'error');
+				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
 			});
 		}
