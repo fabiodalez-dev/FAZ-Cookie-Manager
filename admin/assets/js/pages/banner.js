@@ -12,12 +12,20 @@
 	var previewVisible = true;
 
 	FAZ.ready(function () {
+		// Serialize visible TinyMCE content into bannerData BEFORE FAZ.tabs
+		// hides the outgoing panel. Registered first so it fires first.
+		document.querySelectorAll('#faz-banner .faz-tab').forEach(function (btn) {
+			btn.addEventListener('click', function () {
+				storeCurrentLangContents();
+			});
+		});
+
 		FAZ.tabs('#faz-banner');
 
 		// TinyMCE editors in hidden containers can lose iframe content.
 		// When their tab becomes visible, restore from bannerData if empty.
-		// FAZ.tabs handler runs first (registered above) and toggles the panel
-		// to active, so the iframe is renderable by the time this handler runs.
+		// FAZ.tabs handler (registered above) toggles the panel to active,
+		// so the iframe is renderable by the time this handler runs.
 		var editorTabs = { content: true, preferences: true };
 		document.querySelectorAll('#faz-banner .faz-tab').forEach(function (btn) {
 			btn.addEventListener('click', function () {
@@ -936,6 +944,7 @@
 		var uploadBtn = document.getElementById('faz-b-brandlogo-upload');
 		var removeBtn = document.getElementById('faz-b-brandlogo-remove');
 		var fileInput = document.getElementById('faz-b-brandlogo-file');
+		var uploadInFlight = false;
 
 		function applyLogoUrl(url) {
 			setVal('faz-b-brandlogo-url', url || '');
@@ -946,6 +955,10 @@
 		}
 
 		function uploadFile(file, done, pond) {
+			if (uploadInFlight) {
+				if (typeof done === 'function') done(false);
+				return;
+			}
 			if (!file || !window.fetch || !window.fazConfig || !fazConfig.api || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
 				showBrandLogoStatus('Upload is not available.', 'error');
 				if (fileInput) fileInput.value = '';
@@ -960,6 +973,7 @@
 				if (typeof done === 'function') done(false);
 				return;
 			}
+			uploadInFlight = true;
 			showBrandLogoStatus('Uploading logo\u2026');
 			window.fetch(fazConfig.upload.mediaEndpoint, {
 				method: 'POST',
@@ -989,6 +1003,8 @@
 				showBrandLogoStatus('Upload failed: ' + (err.message || err), 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
+			}).then(function () {
+				uploadInFlight = false;
 			});
 		}
 
