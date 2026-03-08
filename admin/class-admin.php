@@ -78,6 +78,7 @@ class Admin {
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
+		add_action( 'admin_head', array( $this, 'print_api_fetch_polyfill' ), 0 );
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
 		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
@@ -224,14 +225,21 @@ class Admin {
 	}
 
 	/**
-	 * Inline wp.apiFetch polyfill for ClassicPress.
+	 * Print wp.apiFetch polyfill for ClassicPress.
 	 *
 	 * Mirrors the WordPress 5.x wp-api-fetch API surface so that all admin
 	 * JS works identically on ClassicPress without the broken native bundle.
 	 *
+	 * Hooked to admin_head at priority 0 so it runs before any script that
+	 * depends on wp.apiFetch. We echo directly because ClassicPress (WP 4.9
+	 * fork) does not output inline scripts for handles with no source URL.
+	 *
 	 * @return void
 	 */
-	private function enqueue_api_fetch_polyfill() {
+	public function print_api_fetch_polyfill() {
+		if ( false === faz_is_admin_page() || ! $this->is_classicpress() ) {
+			return;
+		}
 		$nonce    = wp_create_nonce( 'wp_rest' );
 		$rest_url = rest_url();
 
@@ -376,7 +384,8 @@ window.wp.apiFetch=apiFetch;
 			wp_json_encode( $nonce )
 		);
 
-		wp_add_inline_script( 'wp-api-fetch', $polyfill, 'after' );
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- trusted polyfill source.
+		echo '<script>' . $polyfill . '</script>';
 	}
 
 	/**
@@ -417,10 +426,7 @@ window.wp.apiFetch=apiFetch;
 			true
 		);
 
-		// On ClassicPress inject our own wp.apiFetch polyfill before faz-admin.js.
-		if ( $this->is_classicpress() ) {
-			$this->enqueue_api_fetch_polyfill();
-		}
+		// ClassicPress polyfill is printed directly in admin_head — see print_api_fetch_polyfill().
 
 		// Localize config data for JS.
 		wp_localize_script(

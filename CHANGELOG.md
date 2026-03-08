@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.4.1] — 2026-03-08
+
+### Fixed
+- **ClassicPress polyfill not loading** — WP 4.9 (ClassicPress base) does not output inline scripts for handles with no source URL; polyfill now prints directly in `admin_head` instead of relying on `wp_add_inline_script`
+
 ## [1.4.0] — 2026-03-08
 
 ### Added
