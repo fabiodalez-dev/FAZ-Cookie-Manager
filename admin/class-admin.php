@@ -219,7 +219,8 @@ class Admin {
 	 * @return array
 	 */
 	private function get_script_dependencies() {
-		return $this->is_classicpress() ? array() : array( 'wp-api-fetch' );
+		// Always depend on wp-api-fetch: native on WP, polyfill-carrying stub on CP.
+		return array( 'wp-api-fetch' );
 	}
 
 	/**
@@ -339,10 +340,11 @@ var total=parseInt(
 );
 if(isNaN(total)||total<=1){return response;}
 var pages=[response.json()];
+var base=(options.path||"").replace(/([?&])page=[^&]*/g,"").replace(/\?$/,"");
 for(var p=2;p<=total;p++){
-var sep=(options.path||"").indexOf("?")>-1?"&":"?";
+var sep=base.indexOf("?")>-1?"&":"?";
 pages.push(apiFetch(Object.assign({},options,{
-path:(options.path||"")+sep+"page="+p,
+path:base+sep+"page="+p,
 parse:true
 })));
 }
@@ -374,7 +376,7 @@ window.wp.apiFetch=apiFetch;
 			wp_json_encode( $nonce )
 		);
 
-		wp_add_inline_script( 'faz-admin', $polyfill, 'before' );
+		wp_add_inline_script( 'wp-api-fetch', $polyfill, 'after' );
 	}
 
 	/**
@@ -439,6 +441,7 @@ window.wp.apiFetch=apiFetch;
 				'isClassicPress' => $this->is_classicpress(),
 				'upload'         => array(
 					'mediaEndpoint' => rest_url( 'wp/v2/media' ),
+					'maxSize'       => wp_max_upload_size(),
 				),
 				'multilingual'   => faz_i18n_is_multilingual() && count( faz_selected_languages() ) > 0,
 				'languages'      => array(
@@ -519,7 +522,8 @@ window.wp.apiFetch=apiFetch;
 			);
 			$found = $this->find_core_asset( $candidates );
 			if ( $found ) {
-				wp_register_style( 'filepond', $this->core_asset_url( $found ), array(), $this->version );
+				$abs = trailingslashit( ABSPATH ) . $found;
+				wp_register_style( 'filepond', $this->core_asset_url( $found ), array(), (string) filemtime( $abs ) );
 				$style_handle = 'filepond';
 			}
 		}
@@ -535,7 +539,8 @@ window.wp.apiFetch=apiFetch;
 			);
 			$found = $this->find_core_asset( $candidates );
 			if ( $found ) {
-				wp_register_script( 'filepond', $this->core_asset_url( $found ), array(), $this->version, true );
+				$abs = trailingslashit( ABSPATH ) . $found;
+				wp_register_script( 'filepond', $this->core_asset_url( $found ), array(), (string) filemtime( $abs ), true );
 				$script_handle = 'filepond';
 			}
 		}

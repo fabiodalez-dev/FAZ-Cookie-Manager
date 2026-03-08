@@ -919,12 +919,14 @@
 
 		function uploadFile(file, done, pond) {
 			if (!file || !window.fetch || !window.fazConfig || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
-				showBrandLogoStatus('Upload is not available. Paste an image URL instead.', 'error');
+				showBrandLogoStatus('Upload is not available.', 'error');
 				if (typeof done === 'function') done(false);
 				return;
 			}
-			if (file.size > 2 * 1024 * 1024) {
-				showBrandLogoStatus('File too large (max 2 MB for a logo).', 'error');
+			var maxBytes = fazConfig.upload.maxSize || (2 * 1024 * 1024);
+			if (file.size > maxBytes) {
+				var maxMB = Math.floor(maxBytes / (1024 * 1024));
+				showBrandLogoStatus('File too large (max ' + maxMB + ' MB).', 'error');
 				if (typeof done === 'function') done(false);
 				return;
 			}
@@ -981,7 +983,7 @@
 				if (fileInput) {
 					fileInput.click();
 				} else {
-					showBrandLogoStatus('Media library unavailable. Paste an image URL below.', 'error');
+					showBrandLogoStatus('Media library unavailable.', 'error');
 				}
 			});
 		}

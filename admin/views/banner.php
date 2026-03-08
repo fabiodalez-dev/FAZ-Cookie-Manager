@@ -113,7 +113,7 @@ defined( 'ABSPATH' ) || exit;
 					</div>
 					<input type="file" id="faz-b-brandlogo-file" accept="image/*" style="display:none;">
 					<input type="hidden" id="faz-b-brandlogo-url" value="">
-					<div id="faz-b-brandlogo-upload-status" style="display:none;margin-top:6px;font-size:13px;"></div>
+					<div id="faz-b-brandlogo-upload-status" role="status" aria-live="polite" aria-atomic="true" style="display:none;margin-top:6px;font-size:13px;"></div>
 					<div class="faz-help">Select or upload a logo. Uses the media library on WordPress, or file upload on ClassicPress.</div>
 				</div>
 			</div>
