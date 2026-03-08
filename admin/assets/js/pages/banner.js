@@ -14,24 +14,29 @@
 	FAZ.ready(function () {
 		FAZ.tabs('#faz-banner');
 
-		// TinyMCE editors on hidden tabs may not render content properly.
-		// When Content or Preferences tabs become visible, refresh each editor.
+		// TinyMCE editors in hidden containers can lose iframe content.
+		// When their tab becomes visible, restore from bannerData if empty.
+		// FAZ.tabs handler runs first (registered above) and toggles the panel
+		// to active, so the iframe is renderable by the time this handler runs.
 		var editorTabs = { content: true, preferences: true };
 		document.querySelectorAll('#faz-banner .faz-tab').forEach(function (btn) {
 			btn.addEventListener('click', function () {
 				if (!editorTabs[btn.dataset.tab]) return;
-				setTimeout(function () {
-					wpEditorIds.forEach(function (id) {
-						if (typeof tinyMCE !== 'undefined') {
-							var editor = tinyMCE.get(id);
-							if (editor) {
-								// Force re-render: trigger resize so iframe repaints.
-								editor.fire('show');
-								editor.fire('resize');
-							}
-						}
-					});
-				}, 50);
+				if (typeof tinyMCE === 'undefined' || !bannerData) return;
+				var contents = bannerData.contents || {};
+				var c = contents[currentLang] || contents[Object.keys(contents)[0]] || {};
+				var notice = (c.notice && c.notice.elements) || {};
+				var pref = (c.preferenceCenter && c.preferenceCenter.elements) || {};
+				var stored = {
+					'faz-b-notice-desc': notice.description || '',
+					'faz-b-pref-desc': pref.description || ''
+				};
+				['faz-b-notice-desc', 'faz-b-pref-desc'].forEach(function (id) {
+					var editor = tinyMCE.get(id);
+					if (editor && !editor.getContent() && stored[id]) {
+						editor.setContent(stored[id]);
+					}
+				});
 			});
 		});
 
@@ -941,7 +946,7 @@
 		}
 
 		function uploadFile(file, done, pond) {
-			if (!file || !window.fetch || !window.fazConfig || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
+			if (!file || !window.fetch || !window.fazConfig || !fazConfig.api || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
 				showBrandLogoStatus('Upload is not available.', 'error');
 				if (fileInput) fileInput.value = '';
 				if (typeof done === 'function') done(false);
