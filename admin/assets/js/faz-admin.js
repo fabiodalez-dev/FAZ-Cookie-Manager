@@ -351,6 +351,7 @@
 
 	// ── Loading states ───────────────────────────────────────
 	FAZ.btnLoading = function (btn, loading) {
+		if (!btn) return;
 		if (loading) {
 			btn.dataset.origText = btn.textContent;
 			btn.disabled = true;

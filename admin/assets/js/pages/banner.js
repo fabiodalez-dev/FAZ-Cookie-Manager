@@ -903,45 +903,137 @@
 	}
 
 	// ── Brand Logo Media Uploader ──
+	// Cascade: wp.media (WordPress) → FilePond (ClassicPress) → native file input.
 
 	function initBrandLogoUploader() {
 		var uploadBtn = document.getElementById('faz-b-brandlogo-upload');
 		var removeBtn = document.getElementById('faz-b-brandlogo-remove');
+		var fileInput = document.getElementById('faz-b-brandlogo-file');
+
+		function applyLogoUrl(url) {
+			setVal('faz-b-brandlogo-url', url || '');
+			updateBrandLogoPreview(url || '');
+			syncFormToBannerData();
+			refreshPreview();
+		}
+
+		function uploadFile(file, done, pond) {
+			if (!file || !window.fetch || !window.fazConfig || !fazConfig.upload || !fazConfig.upload.mediaEndpoint) {
+				showBrandLogoStatus('Upload is not available. Paste an image URL instead.', 'error');
+				if (typeof done === 'function') done(false);
+				return;
+			}
+			if (file.size > 2 * 1024 * 1024) {
+				showBrandLogoStatus('File too large (max 2 MB for a logo).', 'error');
+				if (typeof done === 'function') done(false);
+				return;
+			}
+			showBrandLogoStatus('Uploading logo\u2026');
+			window.fetch(fazConfig.upload.mediaEndpoint, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: {
+					'X-WP-Nonce': (fazConfig.api.nonce || ''),
+					'Content-Disposition': 'attachment; filename="' + encodeURIComponent(file.name || 'logo') + '"',
+					'Content-Type': file.type || 'application/octet-stream',
+				},
+				body: file,
+			}).then(function (response) {
+				return response.json().catch(function () { return {}; }).then(function (payload) {
+					if (!response.ok) {
+						throw new Error((payload && payload.message) || 'Upload failed');
+					}
+					return payload;
+				});
+			}).then(function (payload) {
+				var url = payload && (payload.source_url || (payload.guid && payload.guid.rendered)) || '';
+				if (!url) throw new Error('Upload succeeded but no media URL was returned.');
+				applyLogoUrl(url);
+				showBrandLogoStatus('Logo uploaded successfully.', 'success');
+				if (pond && typeof pond.removeFiles === 'function') pond.removeFiles();
+				if (fileInput) fileInput.value = '';
+				if (typeof done === 'function') done(true);
+			}).catch(function (err) {
+				showBrandLogoStatus('Upload failed: ' + (err.message || err), 'error');
+				if (typeof done === 'function') done(false);
+			});
+		}
 
 		if (uploadBtn) {
 			uploadBtn.addEventListener('click', function (e) {
 				e.preventDefault();
-				// Open WordPress media frame
-				var frame = wp.media({
-					title: 'Select Brand Logo',
-					button: { text: 'Use this image' },
-					multiple: false,
-					library: { type: 'image' },
-				});
-
-				frame.on('select', function () {
-					var attachment = frame.state().get('selection').first().toJSON();
-					var url = attachment.url;
-					setVal('faz-b-brandlogo-url', url);
-					updateBrandLogoPreview(url);
-					// Trigger preview refresh
-					syncFormToBannerData();
-					refreshPreview();
-				});
-
-				frame.open();
+				// 1. WordPress media library (standard WP).
+				if (window.wp && window.wp.media && typeof window.wp.media === 'function') {
+					var frame = wp.media({
+						title: 'Select Brand Logo',
+						button: { text: 'Use this image' },
+						multiple: false,
+						library: { type: 'image' },
+					});
+					frame.on('select', function () {
+						var attachment = frame.state().get('selection').first().toJSON();
+						applyLogoUrl(attachment.url || '');
+					});
+					frame.open();
+					return;
+				}
+				// 2. Fallback: trigger file input (ClassicPress / no media library).
+				if (fileInput) {
+					fileInput.click();
+				} else {
+					showBrandLogoStatus('Media library unavailable. Paste an image URL below.', 'error');
+				}
 			});
+		}
+
+		// File input handler — uses FilePond if available, else native.
+		if (fileInput) {
+			if (window.FilePond && typeof window.FilePond.create === 'function') {
+				try {
+					var pond = window.FilePond.create(fileInput, {
+						allowMultiple: false,
+						credits: false,
+						acceptedFileTypes: ['image/*'],
+						labelIdle: 'Drag & drop a logo image or browse',
+					});
+					if (pond && typeof pond.on === 'function') {
+						pond.on('addfile', function (error, item) {
+							if (error || !item || !item.file) return;
+							uploadFile(item.file, null, pond);
+						});
+					}
+				} catch (err) {
+					fileInput.addEventListener('change', function () {
+						if (fileInput.files && fileInput.files[0]) uploadFile(fileInput.files[0]);
+					});
+				}
+			} else {
+				fileInput.addEventListener('change', function () {
+					if (fileInput.files && fileInput.files[0]) uploadFile(fileInput.files[0]);
+				});
+			}
 		}
 
 		if (removeBtn) {
 			removeBtn.addEventListener('click', function (e) {
 				e.preventDefault();
-				setVal('faz-b-brandlogo-url', '');
-				updateBrandLogoPreview('');
-				syncFormToBannerData();
-				refreshPreview();
+				applyLogoUrl('');
+				showBrandLogoStatus('', 'clear');
 			});
 		}
+	}
+
+	function showBrandLogoStatus(message, type) {
+		var status = document.getElementById('faz-b-brandlogo-upload-status');
+		if (!status) return;
+		if (!message || type === 'clear') {
+			status.textContent = '';
+			status.style.display = 'none';
+			return;
+		}
+		status.textContent = message;
+		status.style.display = 'block';
+		status.style.color = type === 'error' ? '#dc2626' : (type === 'success' ? '#16a34a' : '#64748b');
 	}
 
 	function updateBrandLogoPreview(url) {

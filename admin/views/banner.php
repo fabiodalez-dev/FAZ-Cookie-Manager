@@ -111,8 +111,10 @@ defined( 'ABSPATH' ) || exit;
 						<button type="button" class="faz-btn faz-btn-outline faz-btn-sm" id="faz-b-brandlogo-upload">Select Image</button>
 						<button type="button" class="faz-btn faz-btn-outline faz-btn-sm" id="faz-b-brandlogo-remove" style="display:none;color:var(--faz-danger);">Remove</button>
 					</div>
+					<input type="file" id="faz-b-brandlogo-file" accept="image/*" style="display:none;">
 					<input type="hidden" id="faz-b-brandlogo-url" value="">
-					<div class="faz-help">Select or upload a logo from the WordPress Media Library.</div>
+					<div id="faz-b-brandlogo-upload-status" style="display:none;margin-top:6px;font-size:13px;"></div>
+					<div class="faz-help">Select or upload a logo. Uses the media library on WordPress, or file upload on ClassicPress.</div>
 				</div>
 			</div>
 		</div>

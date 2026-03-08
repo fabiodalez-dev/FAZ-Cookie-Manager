@@ -77,6 +77,7 @@ class Admin {
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
 		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
@@ -185,6 +186,198 @@ class Admin {
 	}
 
 	/**
+	 * Check if running on ClassicPress.
+	 *
+	 * @return bool
+	 */
+	private function is_classicpress() {
+		return function_exists( 'classicpress_version' );
+	}
+
+	/**
+	 * Deregister the native wp-api-fetch on ClassicPress admin pages.
+	 *
+	 * ClassicPress ships a WP 4.9 build of wp-api-fetch that lacks
+	 * createRootURLMiddleware, crashing the page before any plugin JS runs.
+	 * We replace it with an empty stub and provide our own polyfill.
+	 *
+	 * @return void
+	 */
+	public function deregister_api_fetch() {
+		if ( false === faz_is_admin_page() || ! $this->is_classicpress() ) {
+			return;
+		}
+		wp_dequeue_script( 'wp-api-fetch' );
+		wp_deregister_script( 'wp-api-fetch' );
+		wp_register_script( 'wp-api-fetch', false, array(), false, true );
+	}
+
+	/**
+	 * Script dependencies — uses native wp-api-fetch on WordPress,
+	 * none on ClassicPress (polyfill injected separately).
+	 *
+	 * @return array
+	 */
+	private function get_script_dependencies() {
+		return $this->is_classicpress() ? array() : array( 'wp-api-fetch' );
+	}
+
+	/**
+	 * Inline wp.apiFetch polyfill for ClassicPress.
+	 *
+	 * Mirrors the WordPress 5.x wp-api-fetch API surface so that all admin
+	 * JS works identically on ClassicPress without the broken native bundle.
+	 *
+	 * @return void
+	 */
+	private function enqueue_api_fetch_polyfill() {
+		$nonce    = wp_create_nonce( 'wp_rest' );
+		$rest_url = rest_url();
+
+		$polyfill = sprintf(
+			'(function(root,nonce){
+"use strict";
+var middlewares=[];
+function registerMiddleware(m){middlewares.unshift(m);}
+var fetchHandler=defaultFetchHandler;
+function defaultFetchHandler(options){
+var parse=options.parse!==false;
+return window.fetch(options.url,options).then(function(response){
+if(!parse){return response;}
+return response.text().then(function(text){
+var data;
+try{data=text?JSON.parse(text):null;}catch(e){data=null;}
+if(!response.ok){
+var err=Object.assign(
+new Error(data&&data.message?data.message:"Unknown error"),
+{code:"unknown_error",data:{status:response.status}},
+data||{}
+);
+return Promise.reject(err);
+}
+return data;
+});
+});
+}
+function runMiddleware(idx,options){
+if(idx>=middlewares.length){
+var req=Object.assign({},options);
+if(req.data&&!req.body&&!(req.data instanceof window.FormData)){
+req.body=JSON.stringify(req.data);
+}
+return fetchHandler(req);
+}
+return middlewares[idx](options,function(next){return runMiddleware(idx+1,next);});
+}
+function apiFetch(options){return runMiddleware(0,options);}
+function createRootURLMiddleware(rootURL){
+return function(options,next){
+var opts=Object.assign({},options);
+if(opts.path!==undefined&&opts.url===undefined){
+opts.url=rootURL.replace(/\/+$/,"")+"/"+opts.path.replace(/^\/+/,"");
+delete opts.path;
+}
+return next(opts);
+};
+}
+function createNonceMiddleware(initialNonce){
+var currentNonce=initialNonce;
+var middleware=function(options,next){
+var opts=Object.assign({},options);
+opts.headers=Object.assign({},opts.headers);
+if(currentNonce&&!opts.headers["X-WP-Nonce"]){
+opts.headers["X-WP-Nonce"]=currentNonce;
+}
+return next(opts).then(function(result){
+if(result&&result.headers&&typeof result.headers.get==="function"){
+var fresh=result.headers.get("X-WP-Nonce");
+if(fresh){currentNonce=fresh;}
+}
+return result;
+});
+};
+middleware.nonce=currentNonce;
+return middleware;
+}
+function createPreloadingMiddleware(preloadedData){
+var cache=Object.assign({},preloadedData);
+return function(options,next){
+var method=(options.method||"GET").toUpperCase();
+if(method!=="GET"){return next(options);}
+var key=options.path||(options.url||"");
+if(Object.prototype.hasOwnProperty.call(cache,key)){
+var cached=cache[key];
+delete cache[key];
+if(options.parse===false){
+return Promise.resolve(
+new window.Response(JSON.stringify(cached.body),{
+status:200,
+headers:new window.Headers(cached.headers||{})
+})
+);
+}
+return Promise.resolve(cached.body);
+}
+return next(options);
+};
+}
+var mediaUploadMiddleware=function(options,next){
+var opts=Object.assign({},options);
+if(opts.data instanceof window.FormData){
+opts.body=opts.data;
+opts.headers=Object.assign({},opts.headers);
+delete opts.headers["Content-Type"];
+delete opts.data;
+}
+return next(opts);
+};
+var fetchAllMiddleware=function(options,next){
+if(options.parse!==false){return next(options);}
+return next(options).then(function(response){
+var total=parseInt(
+(response.headers&&response.headers.get("X-WP-TotalPages"))||"1",10
+);
+if(isNaN(total)||total<=1){return response;}
+var pages=[response.json()];
+for(var p=2;p<=total;p++){
+var sep=(options.path||"").indexOf("?")>-1?"&":"?";
+pages.push(apiFetch(Object.assign({},options,{
+path:(options.path||"")+sep+"page="+p,
+parse:true
+})));
+}
+return Promise.all(pages).then(function(results){
+return [].concat.apply([],results);
+});
+});
+};
+registerMiddleware(function(options,next){
+var opts=Object.assign({},options);
+if(opts.data&&!(opts.data instanceof window.FormData)){
+opts.headers=Object.assign({"Content-Type":"application/json"},opts.headers||{});
+}
+return next(opts);
+});
+registerMiddleware(createNonceMiddleware(nonce));
+registerMiddleware(createRootURLMiddleware(root));
+apiFetch.use=registerMiddleware;
+apiFetch.setFetchHandler=function(h){fetchHandler=h;};
+apiFetch.createRootURLMiddleware=createRootURLMiddleware;
+apiFetch.createNonceMiddleware=createNonceMiddleware;
+apiFetch.createPreloadingMiddleware=createPreloadingMiddleware;
+apiFetch.fetchAllMiddleware=fetchAllMiddleware;
+apiFetch.mediaUploadMiddleware=mediaUploadMiddleware;
+window.wp=window.wp||{};
+window.wp.apiFetch=apiFetch;
+}(%s,%s));',
+			wp_json_encode( $rest_url ),
+			wp_json_encode( $nonce )
+		);
+
+		wp_add_inline_script( 'faz-admin', $polyfill, 'before' );
+	}
+
+	/**
 	 * Register the stylesheets for the admin area.
 	 *
 	 * @since    3.0.0
@@ -213,39 +406,47 @@ class Admin {
 			return;
 		}
 
-		// Core utilities — depends on wp-api-fetch for REST calls.
+		// Core utilities — wp-api-fetch on WordPress, polyfill on ClassicPress.
 		wp_enqueue_script(
 			'faz-admin',
 			plugin_dir_url( __FILE__ ) . 'assets/js/faz-admin.js',
-			array( 'wp-api-fetch' ),
+			$this->get_script_dependencies(),
 			$this->version,
 			true
 		);
 
+		// On ClassicPress inject our own wp.apiFetch polyfill before faz-admin.js.
+		if ( $this->is_classicpress() ) {
+			$this->enqueue_api_fetch_polyfill();
+		}
+
 		// Localize config data for JS.
-		$settings = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
 		wp_localize_script(
 			'faz-admin',
 			'fazConfig',
 			array(
-				'api'          => array(
+				'api'            => array(
 					'base'  => rest_url( 'faz/v1/' ),
 					'nonce' => wp_create_nonce( 'wp_rest' ),
 				),
-				'site'         => array(
+				'site'           => array(
 					'url'  => get_site_url(),
 					'name' => esc_attr( get_option( 'blogname' ) ),
 				),
-				'assetsURL'    => defined( 'FAZ_PLUGIN_URL' ) ? FAZ_PLUGIN_URL . 'frontend/images/' : '',
-				'defaultLogo'  => plugins_url( 'cookie.png', FAZ_PLUGIN_FILENAME ),
-				'adminURL'     => admin_url( 'admin.php' ),
-				'multilingual' => faz_i18n_is_multilingual() && count( faz_selected_languages() ) > 0,
-				'languages'    => array(
+				'assetsURL'      => defined( 'FAZ_PLUGIN_URL' ) ? FAZ_PLUGIN_URL . 'frontend/images/' : '',
+				'defaultLogo'    => plugins_url( 'cookie.png', FAZ_PLUGIN_FILENAME ),
+				'adminURL'       => admin_url( 'admin.php' ),
+				'isClassicPress' => $this->is_classicpress(),
+				'upload'         => array(
+					'mediaEndpoint' => rest_url( 'wp/v2/media' ),
+				),
+				'multilingual'   => faz_i18n_is_multilingual() && count( faz_selected_languages() ) > 0,
+				'languages'      => array(
 					'selected' => faz_selected_languages(),
 					'default'  => faz_default_language(),
 				),
-				'version'      => $this->version,
-				'modules'      => self::$active_modules,
+				'version'        => $this->version,
+				'modules'        => self::$active_modules,
 			)
 		);
 
@@ -264,9 +465,12 @@ class Admin {
 						true
 					);
 				}
-				// Enqueue WordPress media library for banner page (brand logo uploader).
+				// Enqueue media library for banner page (brand logo uploader).
 				if ( 'banner' === $page['view'] ) {
-					wp_enqueue_media();
+					if ( function_exists( 'wp_enqueue_media' ) ) {
+						wp_enqueue_media();
+					}
+					$this->maybe_enqueue_core_filepond();
 					// Pass theme presets so banner.js can reset colours on theme switch.
 					$theme_file = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/templates/6.2.0/theme.json';
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
@@ -275,6 +479,105 @@ class Admin {
 				break;
 			}
 		}
+	}
+
+	/**
+	 * Enqueue FilePond from ClassicPress core if available.
+	 *
+	 * ClassicPress ships FilePond as its media uploader instead of the
+	 * WordPress plupload / wp.media stack. If present, banner.js will
+	 * use it as a fallback for the brand logo upload.
+	 *
+	 * @return void
+	 */
+	private function maybe_enqueue_core_filepond() {
+		if ( ! $this->is_classicpress() ) {
+			return;
+		}
+		$style_handle  = '';
+		$script_handle = '';
+
+		foreach ( array( 'filepond', 'wp-filepond' ) as $handle ) {
+			if ( wp_style_is( $handle, 'registered' ) ) {
+				$style_handle = $handle;
+				break;
+			}
+		}
+		foreach ( array( 'filepond', 'wp-filepond' ) as $handle ) {
+			if ( wp_script_is( $handle, 'registered' ) ) {
+				$script_handle = $handle;
+				break;
+			}
+		}
+
+		if ( ! $style_handle ) {
+			$candidates = array(
+				'wp-admin/css/filepond.min.css',
+				'wp-admin/css/filepond.css',
+				'wp-includes/css/filepond.min.css',
+				'wp-includes/css/filepond.css',
+			);
+			$found = $this->find_core_asset( $candidates );
+			if ( $found ) {
+				wp_register_style( 'filepond', $this->core_asset_url( $found ), array(), $this->version );
+				$style_handle = 'filepond';
+			}
+		}
+
+		if ( ! $script_handle ) {
+			$candidates = array(
+				'wp-admin/js/filepond/filepond.min.js',
+				'wp-admin/js/filepond.min.js',
+				'wp-admin/js/filepond.js',
+				'wp-includes/js/filepond/filepond.min.js',
+				'wp-includes/js/filepond.min.js',
+				'wp-includes/js/filepond.js',
+			);
+			$found = $this->find_core_asset( $candidates );
+			if ( $found ) {
+				wp_register_script( 'filepond', $this->core_asset_url( $found ), array(), $this->version, true );
+				$script_handle = 'filepond';
+			}
+		}
+
+		if ( $style_handle ) {
+			wp_enqueue_style( $style_handle );
+		}
+		if ( $script_handle ) {
+			wp_enqueue_script( $script_handle );
+		}
+	}
+
+	/**
+	 * Find a core asset from a list of candidate relative paths.
+	 *
+	 * @param array $candidates Relative paths from ABSPATH.
+	 * @return string Found relative path, or empty string.
+	 */
+	private function find_core_asset( $candidates ) {
+		foreach ( $candidates as $relative ) {
+			if ( file_exists( trailingslashit( ABSPATH ) . ltrim( $relative, '/' ) ) ) {
+				return ltrim( $relative, '/' );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Convert a core-relative path into a public URL.
+	 *
+	 * @param string $relative Path relative to ABSPATH.
+	 * @return string
+	 */
+	private function core_asset_url( $relative ) {
+		$relative = ltrim( $relative, '/' );
+		if ( 0 === strpos( $relative, 'wp-admin/' ) ) {
+			return admin_url( substr( $relative, strlen( 'wp-admin/' ) ) );
+		}
+		if ( 0 === strpos( $relative, 'wp-includes/' ) ) {
+			return includes_url( substr( $relative, strlen( 'wp-includes/' ) ) );
+		}
+		return site_url( '/' . $relative );
 	}
 
 
