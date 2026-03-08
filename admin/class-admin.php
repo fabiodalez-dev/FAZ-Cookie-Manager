@@ -256,7 +256,7 @@ data||{}
 );
 return Promise.reject(err);
 }
-return data;
+return {__fazParsed:true,data:data,headers:{get:function(h){return response.headers.get(h);}}};
 });
 });
 }
@@ -294,7 +294,7 @@ if(result&&result.headers&&typeof result.headers.get==="function"){
 var fresh=result.headers.get("X-WP-Nonce");
 if(fresh){currentNonce=fresh;}
 }
-return result;
+return (result&&result.__fazParsed)?result.data:result;
 });
 };
 middleware.nonce=currentNonce;
@@ -459,22 +459,37 @@ window.wp.apiFetch=apiFetch;
 		foreach ( $this->pages as $page ) {
 			if ( $page['slug'] === $current_page ) {
 				$page_js = plugin_dir_path( __FILE__ ) . 'assets/js/pages/' . $page['view'] . '.js';
-				if ( file_exists( $page_js ) ) {
-					wp_enqueue_script(
-						'faz-page-' . $page['view'],
-						plugin_dir_url( __FILE__ ) . 'assets/js/pages/' . $page['view'] . '.js',
-						array( 'faz-admin' ),
-						filemtime( $page_js ),
-						true
-					);
-				}
-				// Enqueue media library for banner page (brand logo uploader).
+
+				// For banner page: enqueue media/FilePond BEFORE page script so deps are declared.
 				if ( 'banner' === $page['view'] ) {
 					if ( function_exists( 'wp_enqueue_media' ) ) {
 						wp_enqueue_media();
 					}
 					$this->maybe_enqueue_core_filepond();
-					// Pass theme presets so banner.js can reset colours on theme switch.
+				}
+
+				if ( file_exists( $page_js ) ) {
+					$page_deps = array( 'faz-admin' );
+					// Add FilePond as an explicit dependency if enqueued (ClassicPress).
+					if ( 'banner' === $page['view'] ) {
+						foreach ( array( 'filepond', 'wp-filepond' ) as $fp ) {
+							if ( wp_script_is( $fp, 'enqueued' ) ) {
+								$page_deps[] = $fp;
+								break;
+							}
+						}
+					}
+					wp_enqueue_script(
+						'faz-page-' . $page['view'],
+						plugin_dir_url( __FILE__ ) . 'assets/js/pages/' . $page['view'] . '.js',
+						$page_deps,
+						filemtime( $page_js ),
+						true
+					);
+				}
+
+				// Pass theme presets so banner.js can reset colours on theme switch.
+				if ( 'banner' === $page['view'] ) {
 					$theme_file = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/templates/6.2.0/theme.json';
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );

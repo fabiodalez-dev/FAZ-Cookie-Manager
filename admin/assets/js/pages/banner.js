@@ -913,6 +913,7 @@
 		function applyLogoUrl(url) {
 			setVal('faz-b-brandlogo-url', url || '');
 			updateBrandLogoPreview(url || '');
+			showBrandLogoStatus('', 'clear');
 			syncFormToBannerData();
 			refreshPreview();
 		}
