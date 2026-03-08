@@ -12,10 +12,6 @@
     "require": {
         "php": ">=7.4"
     },
-    "require-dev": {
-        "php-stubs/wordpress-stubs": "^6.9",
-        "szepeviktor/phpstan-wordpress": "^2.0"
-    },
     "support": {
         "issues": "https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues",
         "source": "https://github.com/fabiodalez-dev/FAZ-Cookie-Manager"
