@@ -13,6 +13,28 @@
 
 	FAZ.ready(function () {
 		FAZ.tabs('#faz-banner');
+
+		// TinyMCE editors on hidden tabs may not render content properly.
+		// When Content or Preferences tabs become visible, refresh each editor.
+		var editorTabs = { content: true, preferences: true };
+		document.querySelectorAll('#faz-banner .faz-tab').forEach(function (btn) {
+			btn.addEventListener('click', function () {
+				if (!editorTabs[btn.dataset.tab]) return;
+				setTimeout(function () {
+					wpEditorIds.forEach(function (id) {
+						if (typeof tinyMCE !== 'undefined') {
+							var editor = tinyMCE.get(id);
+							if (editor) {
+								// Force re-render: trigger resize so iframe repaints.
+								editor.fire('show');
+								editor.fire('resize');
+							}
+						}
+					});
+				}, 50);
+			});
+		});
+
 		loadBanner();
 
 		document.getElementById('faz-b-save').addEventListener('click', saveBanner);
