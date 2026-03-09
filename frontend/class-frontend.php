@@ -643,7 +643,10 @@ class Frontend {
 	 * @return string Modified HTML.
 	 */
 	public function process_output_buffer( $html ) {
-		if ( empty( $html ) ) {
+		// ob_start callbacks may receive null in edge cases (nested buffers, abort).
+		// Cast to string to satisfy PHP 8.1+ strict typing for strpos().
+		$html = (string) $html;
+		if ( '' === $html ) {
 			return $html;
 		}
 
@@ -657,6 +660,11 @@ class Frontend {
 			return $html;
 		}
 
+		// preg_replace_callback returns null on PCRE error (e.g. backtrack limit
+		// exceeded with very large page builders like Bricks). The ?? $html
+		// fallback keeps the original HTML instead of cascading null into the
+		// next strpos() call, which would trigger a PHP 8.1+ deprecation.
+
 		// 1. Block <script> tags.
 		if ( false !== strpos( $html, '<script' ) ) {
 			$html = preg_replace_callback(
@@ -665,7 +673,7 @@ class Frontend {
 					return $this->process_script_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			);
+			) ?? $html;
 		}
 
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
@@ -676,7 +684,7 @@ class Frontend {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			);
+			) ?? $html;
 		}
 
 		// 3. Block tracking pixel <img> inside <noscript> (Meta Pixel, etc.).
@@ -687,7 +695,7 @@ class Frontend {
 					return $this->process_noscript_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			);
+			) ?? $html;
 		}
 
 		// 4. Block <link rel="stylesheet"> (Google Fonts, Adobe Fonts, etc.).
@@ -698,7 +706,7 @@ class Frontend {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			);
+			) ?? $html;
 		}
 
 		// 5. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
@@ -717,7 +725,7 @@ class Frontend {
 					return '<script' . $new_attrs . '>' . $content . '</script>';
 				},
 				$html
-			);
+			) ?? $html;
 		}
 
 		return $html;
