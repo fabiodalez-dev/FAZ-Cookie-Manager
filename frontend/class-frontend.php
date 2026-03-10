@@ -661,57 +661,79 @@ class Frontend {
 		}
 
 		// preg_replace_callback returns null on PCRE error (e.g. backtrack limit
-		// exceeded with very large page builders like Bricks). The ?? $html
-		// fallback keeps the original HTML instead of cascading null into the
-		// next strpos() call, which would trigger a PHP 8.1+ deprecation.
+		// exceeded with very large page builders like Bricks). Graceful degradation:
+		// serve unfiltered HTML (page works without consent blocking) rather than
+		// stripping all markup (broken page) or throwing (crash). Log the error
+		// so site owners can diagnose and raise pcre.backtrack_limit if needed.
+		$pcre_failed = false;
 
 		// 1. Block <script> tags.
 		if ( false !== strpos( $html, '<script' ) ) {
-			$html = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#<script\b([^>]*)>(.*?)</script>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_script_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			) ?? $html;
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
 		}
 
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
 		if ( false !== strpos( $html, '<iframe' ) ) {
-			$html = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			) ?? $html;
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
 		}
 
 		// 3. Block tracking pixel <img> inside <noscript> (Meta Pixel, etc.).
 		if ( false !== strpos( $html, '<noscript' ) ) {
-			$html = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#<noscript\b[^>]*>(.*?)</noscript>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_noscript_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			) ?? $html;
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
 		}
 
 		// 4. Block <link rel="stylesheet"> (Google Fonts, Adobe Fonts, etc.).
 		if ( false !== strpos( $html, '<link' ) ) {
-			$html = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#<link\b([^>]*rel\s*=\s*["\']stylesheet["\'][^>]*)/?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_link_tag( $m, $providers, $blocked_categories );
 				},
 				$html
-			) ?? $html;
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
 		}
 
 		// 5. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
 		if ( false !== strpos( $html, 'data-faz-waitfor' ) ) {
-			$html = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#<script\b([^>]*data-faz-waitfor\s*=\s*["\']([^"\']+)["\'][^>]*)>(.*?)</script>#is',
 				function ( $m ) use ( $blocked_categories ) {
 					$attrs    = $m[1];
@@ -725,7 +747,17 @@ class Frontend {
 					return '<script' . $new_attrs . '>' . $content . '</script>';
 				},
 				$html
-			) ?? $html;
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
+		if ( $pcre_failed ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'FAZ Cookie Manager: PCRE error in output buffer — script blocking skipped. Consider raising pcre.backtrack_limit (current: ' . ini_get( 'pcre.backtrack_limit' ) . ').' );
 		}
 
 		return $html;
