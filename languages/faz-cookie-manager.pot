@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.5.0\n"
 "Report-Msgid-Bugs-To: dev@fabiodalez.com\n"
-"POT-Creation-Date: 2026-03-11 18:15+0100\n"
+"POT-Creation-Date: 2026-03-11 18:21+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1161,7 +1161,7 @@ msgid "Settings Button"
 msgstr ""
 
 #: admin/views/banner.php:179
-msgid "Customize"
+msgid "Customise"
 msgstr ""
 
 #: admin/views/banner.php:182
@@ -1360,7 +1360,7 @@ msgid "Title"
 msgstr ""
 
 #: admin/views/banner.php:458
-msgid "Customize consent preferences"
+msgid "Customise consent preferences"
 msgstr ""
 
 #: admin/views/banner.php:481

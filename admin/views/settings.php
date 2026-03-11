@@ -111,7 +111,7 @@ defined( 'ABSPATH' ) || exit;
 				<input type="number" id="faz-iab-cmp-id" class="faz-input faz-input-sm" data-path="iab.cmp_id" min="0" max="4095" style="width:120px;" placeholder="0">
 				<div class="faz-help"><?php
 					printf(
-						/* translators: %s: URL to IAB CMP list */
+						/* translators: %s: HTML link to the IAB CMP list */
 						esc_html__( 'Your registered IAB CMP ID (0–4095). You can find the official list at %s. With ID 0 the banner works normally, but ad-tech vendors will ignore the TC String. Google Consent Mode works regardless.', 'faz-cookie-manager' ),
 						'<a href="https://iabeurope.eu/cmp-list/" target="_blank" rel="noopener noreferrer">iabeurope.eu/cmp-list</a>'
 					);
@@ -143,7 +143,7 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-help" style="margin:0 0 12px;">
 				<?php
 				printf(
-					/* translators: %s: URL to MaxMind signup */
+					/* translators: %s: HTML link to the MaxMind signup page */
 					esc_html__( 'Geo-targeting lets you show the consent banner only to visitors from regulated regions (e.g. EU for GDPR, California for CCPA). It requires a MaxMind GeoLite2-Country database. %s to get a free license key.', 'faz-cookie-manager' ),
 					'<a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">' . esc_html__( 'Sign up at MaxMind', 'faz-cookie-manager' ) . '</a>'
 				);

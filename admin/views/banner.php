@@ -176,7 +176,7 @@ defined( 'ABSPATH' ) || exit;
 					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Settings Button', 'faz-cookie-manager' ); ?></label>
-						<input type="text" class="faz-input" id="faz-b-btn-settings-label" placeholder="<?php echo esc_attr__( 'Customize', 'faz-cookie-manager' ); ?>">
+						<input type="text" class="faz-input" id="faz-b-btn-settings-label" placeholder="<?php echo esc_attr__( 'Customise', 'faz-cookie-manager' ); ?>">
 					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Read More Link', 'faz-cookie-manager' ); ?></label>
@@ -455,7 +455,7 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Title', 'faz-cookie-manager' ); ?></label>
-					<input type="text" class="faz-input" id="faz-b-pref-title" placeholder="<?php echo esc_attr__( 'Customize consent preferences', 'faz-cookie-manager' ); ?>">
+					<input type="text" class="faz-input" id="faz-b-pref-title" placeholder="<?php echo esc_attr__( 'Customise consent preferences', 'faz-cookie-manager' ); ?>">
 				</div>
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Description', 'faz-cookie-manager' ); ?></label>
