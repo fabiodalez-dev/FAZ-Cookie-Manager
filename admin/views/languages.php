@@ -21,35 +21,42 @@ foreach ( $all_languages as $name => $code ) {
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>Active Languages</h3>
+			<h3><?php echo esc_html__( 'Active Languages', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 
 			<div class="faz-form-group">
-				<label>Selected Languages</label>
+				<label><?php echo esc_html__( 'Selected Languages', 'faz-cookie-manager' ); ?></label>
 				<div id="faz-lang-tags" class="faz-lang-tags">
 					<!-- JS renders selected language tags here -->
 				</div>
 			</div>
 
 			<div class="faz-form-group">
-				<label>Add Language</label>
+				<label><?php echo esc_html__( 'Add Language', 'faz-cookie-manager' ); ?></label>
 				<div class="faz-lang-search-wrap">
-					<input type="text" class="faz-input" id="faz-lang-search" placeholder="Search languages..." autocomplete="off">
+					<input type="text" class="faz-input" id="faz-lang-search" placeholder="<?php echo esc_attr__( 'Search languages...', 'faz-cookie-manager' ); ?>" autocomplete="off">
 					<div id="faz-lang-dropdown" class="faz-lang-dropdown"></div>
 				</div>
-				<div class="faz-help">Type to search from <?php echo count( $lang_map ); ?> available languages.</div>
+				<div class="faz-help"><?php
+					printf(
+						/* translators: %d: number of available languages */
+						esc_html__( 'Type to search from %d available languages.', 'faz-cookie-manager' ),
+						count( $lang_map )
+					);
+				?></div>
 			</div>
 
 			<div class="faz-form-group">
-				<label>Default Language</label>
+				<label><?php echo esc_html__( 'Default Language', 'faz-cookie-manager' ); ?></label>
 				<select class="faz-select" id="faz-default-lang" style="width:auto;max-width:300px;">
 					<!-- JS populates from selected languages -->
 				</select>
+				<div class="faz-help"><?php echo esc_html__( 'The language used when the visitor\'s browser language does not match any of the selected languages.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 		<div class="faz-card-footer">
-			<button class="faz-btn faz-btn-primary" id="faz-lang-save">Save Languages</button>
+			<button class="faz-btn faz-btn-primary" id="faz-lang-save"><?php echo esc_html__( 'Save Languages', 'faz-cookie-manager' ); ?></button>
 		</div>
 	</div>
 </div>
