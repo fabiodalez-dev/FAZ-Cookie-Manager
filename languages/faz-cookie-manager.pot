@@ -7,9 +7,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.5.0\n"
-"Report-Msgid-Bugs-To: https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/"
-"issues\n"
-"POT-Creation-Date: 2026-03-11 15:58+0100\n"
+"Report-Msgid-Bugs-To: dev@fabiodalez.com\n"
+"POT-Creation-Date: 2026-03-11 18:15+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,12 +17,125 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+#: frontend/class-frontend.php:856 frontend/class-frontend.php:1981
+#: frontend/class-frontend.php:2039
+#, php-format
+msgid "This content is blocked because %s cookies have not been accepted."
+msgstr ""
+
+#: frontend/class-frontend.php:860 frontend/class-frontend.php:1985
+#: frontend/class-frontend.php:2043
+msgid "Accept cookies"
+msgstr ""
+
+#: frontend/modules/consent-logger/class-consent-logger.php:100
+msgid "Failed to log consent."
+msgstr ""
+
+#: faz-cookie-manager.php:99
+msgid ""
+"Please make sure the cache is cleared after each plugin update especially if "
+"you have minified JS and/or CSS files."
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:96
+msgid "Cookie"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:97 admin/views/cookies.php:58
+msgid "Domain"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:98 admin/views/cookies.php:59
+msgid "Duration"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:99 admin/views/banner.php:461
+#: admin/views/cookies.php:60 admin/views/cookies.php:142
+msgid "Description"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:100 admin/views/cookies.php:110
+msgid "Category"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:164
+msgid "No cookies found."
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:224
+msgid "Other"
+msgstr ""
+
+#: includes/class-utils.php:315
+msgid "Invalid nonce. Please refresh the page and try again."
+msgstr ""
+
+#: includes/class-activator.php:102
+msgid "Weekly"
+msgstr ""
+
+#: includes/class-rest-controller.php:52
+msgid "Sorry, you cannot list resources."
+msgstr ""
+
+#: includes/class-rest-controller.php:66
+msgid "Sorry, you are not allowed to create resources."
+msgstr ""
+
+#: includes/class-rest-controller.php:80
+msgid "Sorry, you cannot view this resource."
+msgstr ""
+
+#: includes/class-rest-controller.php:94
+msgid "Sorry, you are not allowed to edit this resource."
+msgstr ""
+
+#: includes/class-rest-controller.php:108
+msgid "Sorry, you are not allowed to delete this resource."
+msgstr ""
+
+#: includes/class-store.php:145 includes/class-store.php:156
+#: includes/class-store.php:167 includes/class-store.php:178
+#: admin/modules/cookies/api/class-api-controller.php:44
+#: admin/modules/cookies/api/class-api-controller.php:54
+#: admin/modules/cookies/api/class-api-controller.php:65
+#, php-format
+msgid "Method '%s' not implemented. Must be overridden in subclass."
+msgstr ""
+
+#: includes/class-geolocation.php:241
+msgid "MaxMind license key is required."
+msgstr ""
+
+#: includes/class-geolocation.php:264
+#, php-format
+msgid "Download failed: %s"
+msgstr ""
+
+#: includes/class-geolocation.php:284
+msgid "PharData extension is required to extract the database."
+msgstr ""
+
+#: includes/class-geolocation.php:301
+msgid "Failed to copy database file."
+msgstr ""
+
+#: includes/class-geolocation.php:312
+msgid "No .mmdb file found in the archive."
+msgstr ""
+
+#: includes/class-geolocation.php:324
+#, php-format
+msgid "Extraction failed: %s"
+msgstr ""
+
 #: admin/class-admin.php:147 admin/views/base.php:16
 msgid "Dashboard"
 msgstr ""
 
-#: admin/class-admin.php:152 admin/views/base.php:17
-#: admin/views/dashboard.php:103
+#: admin/class-admin.php:152 admin/views/dashboard.php:103
+#: admin/views/base.php:17
 msgid "Cookie Banner"
 msgstr ""
 
@@ -31,27 +143,27 @@ msgstr ""
 msgid "Cookies"
 msgstr ""
 
-#: admin/class-admin.php:162 admin/views/base.php:19
-#: admin/views/dashboard.php:111 admin/views/settings.php:35
+#: admin/class-admin.php:162 admin/views/dashboard.php:111
+#: admin/views/settings.php:35 admin/views/base.php:19
 msgid "Consent Logs"
 msgstr ""
 
-#: admin/class-admin.php:167 admin/views/base.php:20
-#: admin/views/dashboard.php:107
+#: admin/class-admin.php:167 admin/views/dashboard.php:107
+#: admin/views/base.php:20
 msgid "Google Consent Mode"
 msgstr ""
 
-#: admin/class-admin.php:172 admin/views/base.php:21
-#: admin/views/dashboard.php:115
+#: admin/class-admin.php:172 admin/views/dashboard.php:115
+#: admin/views/base.php:22
 msgid "Languages"
 msgstr ""
 
-#: admin/class-admin.php:177
+#: admin/class-admin.php:177 admin/views/base.php:21
 msgid "Vendor List (IAB)"
 msgstr ""
 
-#: admin/class-admin.php:182 admin/class-admin.php:887 admin/views/base.php:22
-#: admin/views/dashboard.php:119
+#: admin/class-admin.php:182 admin/class-admin.php:887
+#: admin/views/dashboard.php:119 admin/views/base.php:23
 msgid "Settings"
 msgstr ""
 
@@ -59,97 +171,100 @@ msgstr ""
 msgid "FAZ Cookie"
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:104
-#: admin/modules/banners/api/class-api.php:447
-#: admin/modules/cookies/api/class-categories-api.php:95
-#: admin/modules/cookies/api/class-categories-api.php:230
-#: admin/modules/cookies/api/class-cookies-api.php:101
-#: admin/modules/cookies/api/class-cookies-api.php:171
-#: admin/modules/scanner/api/class-api.php:139
-#: admin/modules/scanner/api/class-api.php:412
-#: admin/modules/settings/api/class-api.php:350
-#: admin/modules/settings/api/class-api.php:356
-msgid "Unique identifier for the resource."
+#: admin/modules/settings/includes/class-controller.php:227
+msgid "Ultimate Plan (Local)"
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:196
-#: admin/modules/cookies/api/class-api-controller.php:107
-#: admin/modules/cookies/api/class-api-controller.php:155
-#: admin/modules/cookies/api/class-api-controller.php:200
-#: admin/modules/scanner/api/class-api.php:220
-msgid "Invalid ID."
+#: admin/modules/settings/includes/class-controller.php:345
+msgid "Cloud requests are not available in local mode."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:212
-msgid "Cannot create existing banner."
+#: admin/modules/settings/includes/class-controller.php:368
+msgid "Payments are not available in local mode."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:232
-#: admin/modules/banners/api/class-api.php:256
-msgid "Invalid banner id"
+#: admin/modules/settings/api/class-api.php:184
+msgid "Filter name is required."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:280
-msgid "No data specified to create/edit banners"
+#: admin/modules/settings/api/class-api.php:194
+msgid "Filter name is not permitted."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:414
-#: admin/modules/consentlogs/api/class-api.php:230
-#: admin/modules/cookies/api/class-api-controller.php:263
+#: admin/modules/settings/api/class-api.php:309
+#: admin/modules/consentlogs/api/class-api.php:213
+#: admin/modules/cookies/api/class-api-controller.php:246
+msgid "Current page of the collection."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:317
+#: admin/modules/consentlogs/api/class-api.php:221
+#: admin/modules/cookies/api/class-api-controller.php:254
+msgid "Maximum number of items to be returned in result set."
+msgstr ""
+
 #: admin/modules/settings/api/class-api.php:326
+#: admin/modules/consentlogs/api/class-api.php:230
+#: admin/modules/banners/api/class-api.php:414
+#: admin/modules/cookies/api/class-api-controller.php:263
 msgid "Limit results to those matching a string."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:420
-msgid "Version"
+#: admin/modules/settings/api/class-api.php:333
+msgid "Force fetch data"
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:426
-msgid "Language of the banner"
+#: admin/modules/settings/api/class-api.php:350
+#: admin/modules/settings/api/class-api.php:356
+#: admin/modules/banners/api/class-api.php:104
+#: admin/modules/banners/api/class-api.php:447
+#: admin/modules/scanner/api/class-api.php:139
+#: admin/modules/scanner/api/class-api.php:412
+#: admin/modules/cookies/api/class-cookies-api.php:101
+#: admin/modules/cookies/api/class-cookies-api.php:171
+#: admin/modules/cookies/api/class-categories-api.php:95
+#: admin/modules/cookies/api/class-categories-api.php:230
+msgid "Unique identifier for the resource."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:453
-msgid "Banner name for reference"
+#: admin/modules/settings/api/class-api.php:361
+#: admin/modules/settings/api/class-api.php:366
+#: admin/modules/settings/api/class-api.php:371
+#: admin/modules/settings/api/class-api.php:376
+#: admin/modules/settings/api/class-api.php:381
+msgid "Language."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:458
-msgid "Banner unique name"
+#: admin/modules/settings/api/class-api.php:386
+msgid "Banner control settings."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:463
-msgid "Banner settings."
+#: admin/modules/settings/api/class-api.php:391
+msgid "Microsoft consent settings."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:468
-msgid "Banner contents."
+#: admin/modules/settings/api/class-api.php:396
+msgid "Scanner settings."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:473
-msgid "Indicates whether the banner is default or not"
+#: admin/modules/settings/api/class-api.php:401
+msgid "Linked sites settings."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:478
-msgid "The date the banner was created, as GMT."
+#: admin/modules/settings/api/class-api.php:406
+msgid "IAB TCF settings."
 msgstr ""
 
-#: admin/modules/banners/api/class-api.php:484
-msgid "The date the banner was last modified, as GMT."
+#: admin/modules/settings/api/class-api.php:432
+msgid "A MaxMind license key is required."
+msgstr ""
+
+#: admin/modules/gvl/api/class-api.php:307
+msgid "GVL data not available. Please update GVL first."
 msgstr ""
 
 #: admin/modules/consentlogs/api/class-api.php:165
 msgid "Consent log not found."
-msgstr ""
-
-#: admin/modules/consentlogs/api/class-api.php:213
-#: admin/modules/cookies/api/class-api-controller.php:246
-#: admin/modules/settings/api/class-api.php:309
-msgid "Current page of the collection."
-msgstr ""
-
-#: admin/modules/consentlogs/api/class-api.php:221
-#: admin/modules/cookies/api/class-api-controller.php:254
-#: admin/modules/settings/api/class-api.php:317
-msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
 #: admin/modules/consentlogs/api/class-api.php:236
@@ -188,133 +303,6 @@ msgstr ""
 msgid "Date the consent was logged."
 msgstr ""
 
-#. translators: %s: Class method name.
-#: admin/modules/cookies/api/class-api-controller.php:44
-#: admin/modules/cookies/api/class-api-controller.php:54
-#: admin/modules/cookies/api/class-api-controller.php:65
-#: includes/class-store.php:145 includes/class-store.php:156
-#: includes/class-store.php:167 includes/class-store.php:178
-#, php-format
-msgid "Method '%s' not implemented. Must be overridden in subclass."
-msgstr ""
-
-#: admin/modules/cookies/api/class-api-controller.php:123
-msgid "Cannot create existing post."
-msgstr ""
-
-#: admin/modules/cookies/api/class-api-controller.php:269
-msgid "Language of the cookie"
-msgstr ""
-
-#: admin/modules/cookies/api/class-api-controller.php:275
-msgid "Cookie category"
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:174
-msgid "No data specified to create/edit categories"
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:215
-msgid "Bulk operation failed."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:236
-msgid "The date the category was created, as GMT."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:242
-msgid "The date the category was last modified, as GMT."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:248
-#: admin/modules/cookies/api/class-cookies-api.php:193
-msgid "Cookie category name."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:253
-msgid "Cookie category unique name"
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:258
-msgid "Cookie category language"
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:263
-msgid "Cookie category description."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:268
-msgid "Whether prior consent is required."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:273
-msgid "Category display priority."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:278
-msgid "Whether category is visible in audit table."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:283
-msgid "Whether category involves selling personal data."
-msgstr ""
-
-#: admin/modules/cookies/api/class-categories-api.php:288
-msgid "List of cookies in this category."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookie-scraper.php:78
-msgid "You do not have permission to use this endpoint."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookie-scraper.php:117
-msgid "Failed to update cookie definitions. Check server logs for details."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:177
-msgid "The date the cookie was created, as GMT."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:183
-msgid "The date the cookie was last modified, as GMT."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:188
-msgid "Cookie name."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:198
-msgid "Cookie unique name"
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:203
-msgid "Cookie description."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:208
-msgid "Cookie duration"
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:213
-msgid "Cookie language."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:218
-msgid "Cookie type."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:223
-msgid "Cookie domain."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:228
-msgid "If cookies added from the scanner or not."
-msgstr ""
-
-#: admin/modules/cookies/api/class-cookies-api.php:233
-msgid "URL patterns for blocking purposes"
-msgstr ""
-
 #: admin/modules/gcm/api/class-api.php:139
 msgid "GCM status."
 msgstr ""
@@ -343,20 +331,65 @@ msgstr ""
 msgid "GACM provider IDs (comma-separated)."
 msgstr ""
 
-#: admin/modules/gvl/api/class-api.php:307
-msgid "GVL data not available. Please update GVL first."
+#: admin/modules/banners/api/class-api.php:196
+#: admin/modules/scanner/api/class-api.php:220
+#: admin/modules/cookies/api/class-api-controller.php:107
+#: admin/modules/cookies/api/class-api-controller.php:155
+#: admin/modules/cookies/api/class-api-controller.php:200
+msgid "Invalid ID."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:212
+msgid "Cannot create existing banner."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:232
+#: admin/modules/banners/api/class-api.php:256
+msgid "Invalid banner id"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:280
+msgid "No data specified to create/edit banners"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:420
+msgid "Version"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:426
+msgid "Language of the banner"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:453
+msgid "Banner name for reference"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:458
+msgid "Banner unique name"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:463
+msgid "Banner settings."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:468
+msgid "Banner contents."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:473
+msgid "Indicates whether the banner is default or not"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:478
+msgid "The date the banner was created, as GMT."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:484
+msgid "The date the banner was last modified, as GMT."
 msgstr ""
 
 #: admin/modules/languages/api/class-api.php:86
 msgid "This endpoint is deprecated. Use the settings endpoint instead."
-msgstr ""
-
-#: admin/modules/pageviews/api/class-api.php:190
-msgid "Failed to record event."
-msgstr ""
-
-#: admin/modules/pageviews/api/class-api.php:254
-msgid "Number of days to look back."
 msgstr ""
 
 #: admin/modules/scanner/api/class-api.php:251
@@ -391,60 +424,488 @@ msgstr ""
 msgid "Maximum pages to scan."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:184
-msgid "Filter name is required."
+#: admin/modules/cookies/api/class-cookies-api.php:177
+msgid "The date the cookie was created, as GMT."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:194
-msgid "Filter name is not permitted."
+#: admin/modules/cookies/api/class-cookies-api.php:183
+msgid "The date the cookie was last modified, as GMT."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:333
-msgid "Force fetch data"
+#: admin/modules/cookies/api/class-cookies-api.php:188
+msgid "Cookie name."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:361
-#: admin/modules/settings/api/class-api.php:366
-#: admin/modules/settings/api/class-api.php:371
-#: admin/modules/settings/api/class-api.php:376
-#: admin/modules/settings/api/class-api.php:381
-msgid "Language."
+#: admin/modules/cookies/api/class-cookies-api.php:193
+#: admin/modules/cookies/api/class-categories-api.php:248
+msgid "Cookie category name."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:386
-msgid "Banner control settings."
+#: admin/modules/cookies/api/class-cookies-api.php:198
+msgid "Cookie unique name"
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:391
-msgid "Microsoft consent settings."
+#: admin/modules/cookies/api/class-cookies-api.php:203
+msgid "Cookie description."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:396
-msgid "Scanner settings."
+#: admin/modules/cookies/api/class-cookies-api.php:208
+msgid "Cookie duration"
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:401
-msgid "Linked sites settings."
+#: admin/modules/cookies/api/class-cookies-api.php:213
+msgid "Cookie language."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:406
-msgid "IAB TCF settings."
+#: admin/modules/cookies/api/class-cookies-api.php:218
+msgid "Cookie type."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:432
-msgid "A MaxMind license key is required."
+#: admin/modules/cookies/api/class-cookies-api.php:223
+msgid "Cookie domain."
 msgstr ""
 
-#: admin/modules/settings/includes/class-controller.php:227
-msgid "Ultimate Plan (Local)"
+#: admin/modules/cookies/api/class-cookies-api.php:228
+msgid "If cookies added from the scanner or not."
 msgstr ""
 
-#: admin/modules/settings/includes/class-controller.php:345
-msgid "Cloud requests are not available in local mode."
+#: admin/modules/cookies/api/class-cookies-api.php:233
+msgid "URL patterns for blocking purposes"
 msgstr ""
 
-#: admin/modules/settings/includes/class-controller.php:368
-msgid "Payments are not available in local mode."
+#: admin/modules/cookies/api/class-cookie-scraper.php:78
+msgid "You do not have permission to use this endpoint."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookie-scraper.php:117
+msgid "Failed to update cookie definitions. Check server logs for details."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:174
+msgid "No data specified to create/edit categories"
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:215
+msgid "Bulk operation failed."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:236
+msgid "The date the category was created, as GMT."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:242
+msgid "The date the category was last modified, as GMT."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:253
+msgid "Cookie category unique name"
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:258
+msgid "Cookie category language"
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:263
+msgid "Cookie category description."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:268
+msgid "Whether prior consent is required."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:273
+msgid "Category display priority."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:278
+msgid "Whether category is visible in audit table."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:283
+msgid "Whether category involves selling personal data."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:288
+msgid "List of cookies in this category."
+msgstr ""
+
+#: admin/modules/cookies/api/class-api-controller.php:123
+msgid "Cannot create existing post."
+msgstr ""
+
+#: admin/modules/cookies/api/class-api-controller.php:269
+msgid "Language of the cookie"
+msgstr ""
+
+#: admin/modules/cookies/api/class-api-controller.php:275
+msgid "Cookie category"
+msgstr ""
+
+#: admin/modules/pageviews/api/class-api.php:190
+msgid "Failed to record event."
+msgstr ""
+
+#: admin/modules/pageviews/api/class-api.php:254
+msgid "Number of days to look back."
+msgstr ""
+
+#: admin/views/dashboard.php:18
+msgid "Total Pageviews"
+msgstr ""
+
+#: admin/views/dashboard.php:25
+msgid "Banner Views"
+msgstr ""
+
+#: admin/views/dashboard.php:32
+msgid "Accept Rate"
+msgstr ""
+
+#: admin/views/dashboard.php:39
+msgid "Reject Rate"
+msgstr ""
+
+#: admin/views/dashboard.php:45
+msgid "1D"
+msgstr ""
+
+#: admin/views/dashboard.php:46
+msgid "7D"
+msgstr ""
+
+#: admin/views/dashboard.php:47
+msgid "30D"
+msgstr ""
+
+#: admin/views/dashboard.php:48
+msgid "1Y"
+msgstr ""
+
+#: admin/views/dashboard.php:49
+msgid "All"
+msgstr ""
+
+#: admin/views/dashboard.php:55
+msgid "Apply"
+msgstr ""
+
+#: admin/views/dashboard.php:62
+msgid "Pageviews"
+msgstr ""
+
+#: admin/views/dashboard.php:62 admin/views/dashboard.php:77
+msgid "Last 7 Days"
+msgstr ""
+
+#: admin/views/dashboard.php:69
+msgid "No pageview data yet."
+msgstr ""
+
+#: admin/views/dashboard.php:69
+msgid "Data will appear once visitors interact with your site."
+msgstr ""
+
+#: admin/views/dashboard.php:77
+msgid "Consent Distribution"
+msgstr ""
+
+#: admin/views/dashboard.php:84
+msgid "No consent data yet."
+msgstr ""
+
+#: admin/views/dashboard.php:84
+msgid "Data will appear once visitors respond to the banner."
+msgstr ""
+
+#: admin/views/dashboard.php:93
+msgid "Quick Links"
+msgstr ""
+
+#: admin/views/dashboard.php:99
+msgid "Manage Cookies"
+msgstr ""
+
+#: admin/views/settings.php:14
+msgid "Banner Control"
+msgstr ""
+
+#: admin/views/settings.php:21
+msgid "Enable cookie banner"
+msgstr ""
+
+#: admin/views/settings.php:23
+msgid ""
+"When enabled, the cookie consent banner is shown to visitors who have not "
+"yet given or denied consent."
+msgstr ""
+
+#: admin/views/settings.php:26
+msgid "Excluded Pages"
+msgstr ""
+
+#: admin/views/settings.php:27
+msgid "One per line: page ID or URL pattern like /privacy/*"
+msgstr ""
+
+#: admin/views/settings.php:28
+msgid ""
+"Enter page IDs or URL patterns (one per line) where the banner should not "
+"appear. Supports wildcards, e.g. /checkout/*"
+msgstr ""
+
+#: admin/views/settings.php:42
+msgid "Enable consent logging"
+msgstr ""
+
+#: admin/views/settings.php:44
+msgid ""
+"Records every visitor consent action (accept, reject, customise) in your "
+"local database. Required by GDPR Article 7 for demonstrating valid consent."
+msgstr ""
+
+#: admin/views/settings.php:47
+msgid "Retention Period (months)"
+msgstr ""
+
+#: admin/views/settings.php:49
+msgid ""
+"How long consent records are kept before automatic deletion. Most "
+"regulations require at least 12 months."
+msgstr ""
+
+#: admin/views/settings.php:56
+msgid "Scanner"
+msgstr ""
+
+#: admin/views/settings.php:60
+msgid "Max Pages to Scan"
+msgstr ""
+
+#: admin/views/settings.php:62
+msgid ""
+"Upper limit for the Standard scan depth. The scanner crawls your site pages "
+"in the browser to detect cookies. Higher values find more cookies but take "
+"longer."
+msgstr ""
+
+#: admin/views/settings.php:69
+msgid "Microsoft Consent APIs"
+msgstr ""
+
+#: admin/views/settings.php:76
+msgid "Microsoft UET Consent Mode"
+msgstr ""
+
+#: admin/views/settings.php:78
+msgid ""
+"Enable if you use Microsoft Advertising (Bing Ads). Sends consent signals "
+"via the UET tag so Microsoft respects visitor choices."
+msgstr ""
+
+#: admin/views/settings.php:84
+msgid "Microsoft Clarity Consent API"
+msgstr ""
+
+#: admin/views/settings.php:86
+msgid ""
+"Enable if you use Microsoft Clarity for session recordings and heatmaps. "
+"Passes consent status so Clarity only records when the visitor has consented."
+msgstr ""
+
+#: admin/views/settings.php:93
+msgid "IAB TCF"
+msgstr ""
+
+#: admin/views/settings.php:100
+msgid "Enable IAB TCF v2.3"
+msgstr ""
+
+#: admin/views/settings.php:102
+msgid ""
+"The IAB Transparency and Consent Framework is required by most programmatic "
+"advertising platforms (Google AdSense, AdX, header bidding). Enable this if "
+"you run ads on your site."
+msgstr ""
+
+#: admin/views/settings.php:105
+msgid "Publisher Country Code"
+msgstr ""
+
+#: admin/views/settings.php:107
+msgid ""
+"ISO 3166-1 alpha-2 code of the country where the publisher (you) is "
+"established (e.g. IT, DE, FR, US). This is embedded in the TCF consent "
+"string."
+msgstr ""
+
+#: admin/views/settings.php:110
+msgid "CMP ID"
+msgstr ""
+
+#: admin/views/settings.php:115
+#, php-format
+msgid ""
+"Your registered IAB CMP ID (0–4095). You can find the official list at %s. "
+"With ID 0 the banner works normally, but ad-tech vendors will ignore the TC "
+"String. Google Consent Mode works regardless."
+msgstr ""
+
+#: admin/views/settings.php:124
+msgid "Purpose One Treatment"
+msgstr ""
+
+#: admin/views/settings.php:126
+msgid ""
+"Enable only if your country does not require consent for Purpose 1 (Store "
+"and/or access information on a device). Most EU countries require it, so "
+"leave this off unless you are certain."
+msgstr ""
+
+#: admin/views/settings.php:130 admin/views/gvl.php:19
+msgid "Loading GVL status..."
+msgstr ""
+
+#: admin/views/settings.php:132 admin/views/gvl.php:15
+msgid "Update GVL Now"
+msgstr ""
+
+#: admin/views/settings.php:133
+msgid ""
+"The Global Vendor List (GVL) is maintained by IAB Europe and contains all "
+"registered ad-tech vendors. It is updated automatically every week."
+msgstr ""
+
+#: admin/views/settings.php:140
+msgid "GeoIP Database (MaxMind GeoLite2)"
+msgstr ""
+
+#: admin/views/settings.php:147
+#, php-format
+msgid ""
+"Geo-targeting lets you show the consent banner only to visitors from "
+"regulated regions (e.g. EU for GDPR, California for CCPA). It requires a "
+"MaxMind GeoLite2-Country database. %s to get a free license key."
+msgstr ""
+
+#: admin/views/settings.php:148
+msgid "Sign up at MaxMind"
+msgstr ""
+
+#: admin/views/settings.php:153
+msgid "MaxMind License Key"
+msgstr ""
+
+#: admin/views/settings.php:154
+msgid "Enter your MaxMind license key"
+msgstr ""
+
+#: admin/views/settings.php:155
+msgid ""
+"Your GeoLite2 license key from your MaxMind account. The key is stored "
+"locally and used only to download the database file."
+msgstr ""
+
+#: admin/views/settings.php:159
+msgid "Update Database"
+msgstr ""
+
+#: admin/views/settings.php:164
+msgid "Save Settings"
+msgstr ""
+
+#: admin/views/consent-logs.php:20
+msgid "Total Logs"
+msgstr ""
+
+#: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
+msgid "Accepted"
+msgstr ""
+
+#: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
+msgid "Rejected"
+msgstr ""
+
+#: admin/views/consent-logs.php:41 admin/views/consent-logs.php:54
+msgid "Partial"
+msgstr ""
+
+#: admin/views/consent-logs.php:51
+msgid "All Statuses"
+msgstr ""
+
+#: admin/views/consent-logs.php:56
+msgid "Search consent ID or URL..."
+msgstr ""
+
+#: admin/views/consent-logs.php:58
+msgid "Filter"
+msgstr ""
+
+#: admin/views/consent-logs.php:63
+msgid "Export CSV"
+msgstr ""
+
+#: admin/views/consent-logs.php:76
+msgid "Date"
+msgstr ""
+
+#: admin/views/consent-logs.php:77
+msgid "Consent ID"
+msgstr ""
+
+#: admin/views/consent-logs.php:78
+msgid "Status"
+msgstr ""
+
+#: admin/views/consent-logs.php:79 admin/views/cookies.php:14
+msgid "Categories"
+msgstr ""
+
+#: admin/views/consent-logs.php:80
+msgid "IP Hash"
+msgstr ""
+
+#: admin/views/consent-logs.php:81
+msgid "Page URL"
+msgstr ""
+
+#: admin/views/consent-logs.php:85 admin/views/cookies.php:65
+msgid "Loading..."
+msgstr ""
+
+#: admin/views/languages.php:24
+msgid "Active Languages"
+msgstr ""
+
+#: admin/views/languages.php:29
+msgid "Selected Languages"
+msgstr ""
+
+#: admin/views/languages.php:36
+msgid "Add Language"
+msgstr ""
+
+#: admin/views/languages.php:38
+msgid "Search languages..."
+msgstr ""
+
+#: admin/views/languages.php:44
+#, php-format
+msgid "Type to search from %d available languages."
+msgstr ""
+
+#: admin/views/languages.php:51
+msgid "Default Language"
+msgstr ""
+
+#: admin/views/languages.php:55
+msgid ""
+"The language used when the visitor's browser language does not match any of "
+"the selected languages."
+msgstr ""
+
+#: admin/views/languages.php:59
+msgid "Save Languages"
 msgstr ""
 
 #: admin/views/banner.php:14
@@ -902,11 +1363,6 @@ msgstr ""
 msgid "Customize consent preferences"
 msgstr ""
 
-#: admin/views/banner.php:461 admin/views/cookies.php:60
-#: admin/views/cookies.php:142 includes/class-cookie-table-shortcode.php:99
-msgid "Description"
-msgstr ""
-
 #: admin/views/banner.php:481
 msgid "Accept All Button"
 msgstr ""
@@ -1020,70 +1476,6 @@ msgstr ""
 msgid "Refresh Preview"
 msgstr ""
 
-#: admin/views/base.php:25
-msgid "FAZ Cookie Manager navigation"
-msgstr ""
-
-#: admin/views/consent-logs.php:20
-msgid "Total Logs"
-msgstr ""
-
-#: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
-msgid "Accepted"
-msgstr ""
-
-#: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
-msgid "Rejected"
-msgstr ""
-
-#: admin/views/consent-logs.php:41 admin/views/consent-logs.php:54
-msgid "Partial"
-msgstr ""
-
-#: admin/views/consent-logs.php:51
-msgid "All Statuses"
-msgstr ""
-
-#: admin/views/consent-logs.php:56
-msgid "Search consent ID or URL..."
-msgstr ""
-
-#: admin/views/consent-logs.php:58
-msgid "Filter"
-msgstr ""
-
-#: admin/views/consent-logs.php:63
-msgid "Export CSV"
-msgstr ""
-
-#: admin/views/consent-logs.php:76
-msgid "Date"
-msgstr ""
-
-#: admin/views/consent-logs.php:77
-msgid "Consent ID"
-msgstr ""
-
-#: admin/views/consent-logs.php:78
-msgid "Status"
-msgstr ""
-
-#: admin/views/consent-logs.php:79 admin/views/cookies.php:14
-msgid "Categories"
-msgstr ""
-
-#: admin/views/consent-logs.php:80
-msgid "IP Hash"
-msgstr ""
-
-#: admin/views/consent-logs.php:81
-msgid "Page URL"
-msgstr ""
-
-#: admin/views/consent-logs.php:85 admin/views/cookies.php:65
-msgid "Loading..."
-msgstr ""
-
 #: admin/views/cookies.php:18 admin/views/cookies.php:25
 msgid "All Cookies"
 msgstr ""
@@ -1140,14 +1532,6 @@ msgstr ""
 msgid "Name"
 msgstr ""
 
-#: admin/views/cookies.php:58 includes/class-cookie-table-shortcode.php:97
-msgid "Domain"
-msgstr ""
-
-#: admin/views/cookies.php:59 includes/class-cookie-table-shortcode.php:98
-msgid "Duration"
-msgstr ""
-
 #: admin/views/cookies.php:61 admin/views/cookies.php:111
 msgid "Actions"
 msgstr ""
@@ -1160,7 +1544,6 @@ msgstr ""
 msgid "Update Definitions"
 msgstr ""
 
-#. translators: %s: URL to Open Cookie Database repository
 #: admin/views/cookies.php:86
 #, php-format
 msgid ""
@@ -1197,10 +1580,6 @@ msgstr ""
 msgid "URL Pattern"
 msgstr ""
 
-#: admin/views/cookies.php:110 includes/class-cookie-table-shortcode.php:100
-msgid "Category"
-msgstr ""
-
 #: admin/views/cookies.php:118
 msgid "+ Add Rule"
 msgstr ""
@@ -1213,6 +1592,10 @@ msgstr ""
 msgid ""
 "Use the following shortcode to display a table of all cookies on any page or "
 "post (e.g. your Cookie Policy page):"
+msgstr ""
+
+#: admin/views/cookies.php:131
+msgid "Shortcode copied!"
 msgstr ""
 
 #: admin/views/cookies.php:131
@@ -1267,80 +1650,43 @@ msgid ""
 "compatibility."
 msgstr ""
 
-#: admin/views/dashboard.php:18
-msgid "Total Pageviews"
+#: admin/views/gvl.php:14
+msgid "Global Vendor List (IAB TCF 2.3)"
 msgstr ""
 
-#: admin/views/dashboard.php:25
-msgid "Banner Views"
+#: admin/views/gvl.php:21
+msgid ""
+"The Global Vendor List is published by IAB Europe and contains all "
+"registered ad-tech vendors with their declared purposes and legal bases. "
+"Select the vendors you work with to include them in the TCF consent flow."
 msgstr ""
 
-#: admin/views/dashboard.php:32
-msgid "Accept Rate"
+#: admin/views/gvl.php:27
+msgid "Vendor Selection"
 msgstr ""
 
-#: admin/views/dashboard.php:39
-msgid "Reject Rate"
+#: admin/views/gvl.php:31
+msgid "Search vendors..."
 msgstr ""
 
-#: admin/views/dashboard.php:45
-msgid "1D"
+#: admin/views/gvl.php:31
+msgid "Search vendors"
 msgstr ""
 
-#: admin/views/dashboard.php:46
-msgid "7D"
+#: admin/views/gvl.php:32
+msgid "Filter by purpose"
 msgstr ""
 
-#: admin/views/dashboard.php:47
-msgid "30D"
+#: admin/views/gvl.php:33
+msgid "All purposes"
 msgstr ""
 
-#: admin/views/dashboard.php:48
-msgid "1Y"
+#: admin/views/gvl.php:40
+msgid "Select all on this page"
 msgstr ""
 
-#: admin/views/dashboard.php:49
-msgid "All"
-msgstr ""
-
-#: admin/views/dashboard.php:55
-msgid "Apply"
-msgstr ""
-
-#: admin/views/dashboard.php:62
-msgid "Pageviews"
-msgstr ""
-
-#: admin/views/dashboard.php:62 admin/views/dashboard.php:77
-msgid "Last 7 Days"
-msgstr ""
-
-#: admin/views/dashboard.php:69
-msgid "No pageview data yet."
-msgstr ""
-
-#: admin/views/dashboard.php:69
-msgid "Data will appear once visitors interact with your site."
-msgstr ""
-
-#: admin/views/dashboard.php:77
-msgid "Consent Distribution"
-msgstr ""
-
-#: admin/views/dashboard.php:84
-msgid "No consent data yet."
-msgstr ""
-
-#: admin/views/dashboard.php:84
-msgid "Data will appear once visitors respond to the banner."
-msgstr ""
-
-#: admin/views/dashboard.php:93
-msgid "Quick Links"
-msgstr ""
-
-#: admin/views/dashboard.php:99
-msgid "Manage Cookies"
+#: admin/views/gvl.php:49
+msgid "Save Selection"
 msgstr ""
 
 #: admin/views/gcm.php:14
@@ -1465,360 +1811,8 @@ msgstr ""
 msgid "Save GCM Settings"
 msgstr ""
 
-#: admin/views/gvl.php:14
-msgid "Global Vendor List (IAB TCF 2.3)"
-msgstr ""
-
-#: admin/views/gvl.php:15 admin/views/settings.php:132
-msgid "Update GVL Now"
-msgstr ""
-
-#: admin/views/gvl.php:19 admin/views/settings.php:130
-msgid "Loading GVL status..."
-msgstr ""
-
-#: admin/views/gvl.php:21
-msgid ""
-"The Global Vendor List is published by IAB Europe and contains all "
-"registered ad-tech vendors with their declared purposes and legal bases. "
-"Select the vendors you work with to include them in the TCF consent flow."
-msgstr ""
-
-#: admin/views/gvl.php:27
-msgid "Vendor Selection"
-msgstr ""
-
-#: admin/views/gvl.php:31
-msgid "Search vendors..."
-msgstr ""
-
-#: admin/views/gvl.php:31
-msgid "Search vendors"
-msgstr ""
-
-#: admin/views/gvl.php:32
-msgid "Filter by purpose"
-msgstr ""
-
-#: admin/views/gvl.php:33
-msgid "All purposes"
-msgstr ""
-
-#: admin/views/gvl.php:40
-msgid "Select all on this page"
-msgstr ""
-
-#: admin/views/gvl.php:49
-msgid "Save Selection"
-msgstr ""
-
-#: admin/views/languages.php:24
-msgid "Active Languages"
-msgstr ""
-
-#: admin/views/languages.php:29
-msgid "Selected Languages"
-msgstr ""
-
-#: admin/views/languages.php:36
-msgid "Add Language"
-msgstr ""
-
-#: admin/views/languages.php:38
-msgid "Search languages..."
-msgstr ""
-
-#. translators: %d: number of available languages
-#: admin/views/languages.php:44
-#, php-format
-msgid "Type to search from %d available languages."
-msgstr ""
-
-#: admin/views/languages.php:51
-msgid "Default Language"
-msgstr ""
-
-#: admin/views/languages.php:55
-msgid ""
-"The language used when the visitor's browser language does not match any of "
-"the selected languages."
-msgstr ""
-
-#: admin/views/languages.php:59
-msgid "Save Languages"
-msgstr ""
-
-#: admin/views/settings.php:14
-msgid "Banner Control"
-msgstr ""
-
-#: admin/views/settings.php:21
-msgid "Enable cookie banner"
-msgstr ""
-
-#: admin/views/settings.php:23
-msgid ""
-"When enabled, the cookie consent banner is shown to visitors who have not "
-"yet given or denied consent."
-msgstr ""
-
-#: admin/views/settings.php:26
-msgid "Excluded Pages"
-msgstr ""
-
-#: admin/views/settings.php:27
-msgid "One per line: page ID or URL pattern like /privacy/*"
-msgstr ""
-
-#: admin/views/settings.php:28
-msgid ""
-"Enter page IDs or URL patterns (one per line) where the banner should not "
-"appear. Supports wildcards, e.g. /checkout/*"
-msgstr ""
-
-#: admin/views/settings.php:42
-msgid "Enable consent logging"
-msgstr ""
-
-#: admin/views/settings.php:44
-msgid ""
-"Records every visitor consent action (accept, reject, customise) in your "
-"local database. Required by GDPR Article 7 for demonstrating valid consent."
-msgstr ""
-
-#: admin/views/settings.php:47
-msgid "Retention Period (months)"
-msgstr ""
-
-#: admin/views/settings.php:49
-msgid ""
-"How long consent records are kept before automatic deletion. Most "
-"regulations require at least 12 months."
-msgstr ""
-
-#: admin/views/settings.php:56
-msgid "Scanner"
-msgstr ""
-
-#: admin/views/settings.php:60
-msgid "Max Pages to Scan"
-msgstr ""
-
-#: admin/views/settings.php:62
-msgid ""
-"Upper limit for the Standard scan depth. The scanner crawls your site pages "
-"in the browser to detect cookies. Higher values find more cookies but take "
-"longer."
-msgstr ""
-
-#: admin/views/settings.php:69
-msgid "Microsoft Consent APIs"
-msgstr ""
-
-#: admin/views/settings.php:76
-msgid "Microsoft UET Consent Mode"
-msgstr ""
-
-#: admin/views/settings.php:78
-msgid ""
-"Enable if you use Microsoft Advertising (Bing Ads). Sends consent signals "
-"via the UET tag so Microsoft respects visitor choices."
-msgstr ""
-
-#: admin/views/settings.php:84
-msgid "Microsoft Clarity Consent API"
-msgstr ""
-
-#: admin/views/settings.php:86
-msgid ""
-"Enable if you use Microsoft Clarity for session recordings and heatmaps. "
-"Passes consent status so Clarity only records when the visitor has consented."
-msgstr ""
-
-#: admin/views/settings.php:93
-msgid "IAB TCF"
-msgstr ""
-
-#: admin/views/settings.php:100
-msgid "Enable IAB TCF v2.3"
-msgstr ""
-
-#: admin/views/settings.php:102
-msgid ""
-"The IAB Transparency and Consent Framework is required by most programmatic "
-"advertising platforms (Google AdSense, AdX, header bidding). Enable this if "
-"you run ads on your site."
-msgstr ""
-
-#: admin/views/settings.php:105
-msgid "Publisher Country Code"
-msgstr ""
-
-#: admin/views/settings.php:107
-msgid ""
-"ISO 3166-1 alpha-2 code of the country where the publisher (you) is "
-"established (e.g. IT, DE, FR, US). This is embedded in the TCF consent "
-"string."
-msgstr ""
-
-#: admin/views/settings.php:110
-msgid "CMP ID"
-msgstr ""
-
-#. translators: %s: URL to IAB CMP list
-#: admin/views/settings.php:115
-#, php-format
-msgid ""
-"Your registered IAB CMP ID (0–4095). You can find the official list at %s. "
-"With ID 0 the banner works normally, but ad-tech vendors will ignore the TC "
-"String. Google Consent Mode works regardless."
-msgstr ""
-
-#: admin/views/settings.php:124
-msgid "Purpose One Treatment"
-msgstr ""
-
-#: admin/views/settings.php:126
-msgid ""
-"Enable only if your country does not require consent for Purpose 1 (Store "
-"and/or access information on a device). Most EU countries require it, so "
-"leave this off unless you are certain."
-msgstr ""
-
-#: admin/views/settings.php:133
-msgid ""
-"The Global Vendor List (GVL) is maintained by IAB Europe and contains all "
-"registered ad-tech vendors. It is updated automatically every week."
-msgstr ""
-
-#: admin/views/settings.php:140
-msgid "GeoIP Database (MaxMind GeoLite2)"
-msgstr ""
-
-#. translators: %s: URL to MaxMind signup
-#: admin/views/settings.php:147
-#, php-format
-msgid ""
-"Geo-targeting lets you show the consent banner only to visitors from "
-"regulated regions (e.g. EU for GDPR, California for CCPA). It requires a "
-"MaxMind GeoLite2-Country database. %s to get a free license key."
-msgstr ""
-
-#: admin/views/settings.php:148
-msgid "Sign up at MaxMind"
-msgstr ""
-
-#: admin/views/settings.php:153
-msgid "MaxMind License Key"
-msgstr ""
-
-#: admin/views/settings.php:154
-msgid "Enter your MaxMind license key"
-msgstr ""
-
-#: admin/views/settings.php:155
-msgid ""
-"Your GeoLite2 license key from your MaxMind account. The key is stored "
-"locally and used only to download the database file."
-msgstr ""
-
-#: admin/views/settings.php:159
-msgid "Update Database"
-msgstr ""
-
-#: admin/views/settings.php:164
-msgid "Save Settings"
-msgstr ""
-
-#: faz-cookie-manager.php:99
-msgid ""
-"Please make sure the cache is cleared after each plugin update especially if "
-"you have minified JS and/or CSS files."
-msgstr ""
-
-#. translators: %s: service name (e.g. "YouTube", "Google Maps")
-#. translators: %s: service name
-#: frontend/class-frontend.php:856 frontend/class-frontend.php:1981
-#: frontend/class-frontend.php:2039
-#, php-format
-msgid "This content is blocked because %s cookies have not been accepted."
-msgstr ""
-
-#: frontend/class-frontend.php:860 frontend/class-frontend.php:1985
-#: frontend/class-frontend.php:2043
-msgid "Accept cookies"
-msgstr ""
-
-#: frontend/modules/consent-logger/class-consent-logger.php:100
-msgid "Failed to log consent."
-msgstr ""
-
-#: includes/class-activator.php:102
-msgid "Weekly"
-msgstr ""
-
-#: includes/class-cookie-table-shortcode.php:96
-msgid "Cookie"
-msgstr ""
-
-#: includes/class-cookie-table-shortcode.php:164
-msgid "No cookies found."
-msgstr ""
-
-#: includes/class-cookie-table-shortcode.php:224
-msgid "Other"
-msgstr ""
-
-#: includes/class-geolocation.php:241
-msgid "MaxMind license key is required."
-msgstr ""
-
-#. translators: %s: error message
-#: includes/class-geolocation.php:264
-#, php-format
-msgid "Download failed: %s"
-msgstr ""
-
-#: includes/class-geolocation.php:284
-msgid "PharData extension is required to extract the database."
-msgstr ""
-
-#: includes/class-geolocation.php:301
-msgid "Failed to copy database file."
-msgstr ""
-
-#: includes/class-geolocation.php:312
-msgid "No .mmdb file found in the archive."
-msgstr ""
-
-#. translators: %s: error message
-#: includes/class-geolocation.php:324
-#, php-format
-msgid "Extraction failed: %s"
-msgstr ""
-
-#: includes/class-rest-controller.php:52
-msgid "Sorry, you cannot list resources."
-msgstr ""
-
-#: includes/class-rest-controller.php:66
-msgid "Sorry, you are not allowed to create resources."
-msgstr ""
-
-#: includes/class-rest-controller.php:80
-msgid "Sorry, you cannot view this resource."
-msgstr ""
-
-#: includes/class-rest-controller.php:94
-msgid "Sorry, you are not allowed to edit this resource."
-msgstr ""
-
-#: includes/class-rest-controller.php:108
-msgid "Sorry, you are not allowed to delete this resource."
-msgstr ""
-
-#: includes/class-utils.php:315
-msgid "Invalid nonce. Please refresh the page and try again."
+#: admin/views/base.php:26
+msgid "FAZ Cookie Manager navigation"
 msgstr ""
 
 #: uninstall.php:99

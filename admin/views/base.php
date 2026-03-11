@@ -18,6 +18,7 @@ defined( 'ABSPATH' ) || exit;
 		'cookies'      => array( 'slug' => 'faz-cookie-manager-cookies',      'label' => __( 'Cookies', 'faz-cookie-manager' ) ),
 		'consent-logs' => array( 'slug' => 'faz-cookie-manager-consent-logs', 'label' => __( 'Consent Logs', 'faz-cookie-manager' ) ),
 		'gcm'          => array( 'slug' => 'faz-cookie-manager-gcm',          'label' => __( 'Google Consent Mode', 'faz-cookie-manager' ) ),
+		'gvl'          => array( 'slug' => 'faz-cookie-manager-gvl',          'label' => __( 'Vendor List (IAB)', 'faz-cookie-manager' ) ),
 		'languages'    => array( 'slug' => 'faz-cookie-manager-languages',    'label' => __( 'Languages', 'faz-cookie-manager' ) ),
 		'settings'     => array( 'slug' => 'faz-cookie-manager-settings',     'label' => __( 'Settings', 'faz-cookie-manager' ) ),
 	);
