@@ -2,6 +2,13 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.5.1] — 2026-03-11
+
+### Fixed
+- **Link color not applying** — link colour picker now applies to all visible links including the Cookie Policy/Read More link (fixes #30)
+- **Brand logo 404** — moved `cookie.png` to `frontend/images/` and added DB migration to fix stored URLs on existing installs
+- **Removed unused asset** — deleted orphaned `poweredbtcky.svg`
+
 ## [1.5.0] — 2026-03-11
 
 ### Added

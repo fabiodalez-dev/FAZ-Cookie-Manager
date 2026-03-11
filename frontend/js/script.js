@@ -1591,7 +1591,6 @@ function _fazAttachManualLinksStyles() {
     const manualLinks = document.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a');
     if (manualLinks.length < 1) return;
     Array.from(manualLinks).forEach((link) => {
-        if (link.getAttribute('data-faz-tag') === 'readmore-button') return;
         for (const style in manualLinksStyles) {
             if (!manualLinksStyles[style]) continue;
             link.style[style] = manualLinksStyles[style];

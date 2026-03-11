@@ -835,7 +835,6 @@
 		// Apply link text colour
 		var linkColor = getColor('faz-b-link-color') || '#1863DC';
 		host.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a').forEach(function (a) {
-			if (a.getAttribute('data-faz-tag') === 'readmore-button') return;
 			a.style.color = linkColor;
 			a.style.textDecorationColor = linkColor;
 		});
