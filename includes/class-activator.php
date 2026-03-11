@@ -82,6 +82,7 @@ class Activator {
 		add_action( 'admin_init', array( __CLASS__, 'rename_advertisement_to_marketing' ) );
 		add_action( 'admin_init', array( __CLASS__, 'fix_uncategorized_prior_consent' ) );
 		add_action( 'admin_init', array( __CLASS__, 'fix_banner_gdpr_defaults' ) );
+		add_action( 'admin_init', array( __CLASS__, 'fix_brand_logo_path' ) );
 		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
@@ -439,6 +440,55 @@ class Activator {
 		// Clear banner template cache to force regeneration.
 		delete_option( 'faz_banner_template' );
 		update_option( 'faz_banner_gdpr_defaults_fixed', 1 );
+	}
+
+	/**
+	 * Fix the brand logo URL in banner settings after moving cookie.png
+	 * from plugin root to frontend/images/.
+	 *
+	 * Replaces any stored URL ending in /faz-cookie-manager/cookie.png
+	 * with /faz-cookie-manager/frontend/images/cookie.png.
+	 * Idempotent — runs once, guarded by option flag.
+	 */
+	public static function fix_brand_logo_path() {
+		if ( get_option( 'faz_brand_logo_path_fixed' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_banners';
+		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) !== $table ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is $wpdb->prefix constant.
+		$rows = $wpdb->get_results( "SELECT banner_id, settings FROM `" . esc_sql( $table ) . "`" );
+		$old_suffix = '/faz-cookie-manager/cookie.png';
+		$new_suffix = '/faz-cookie-manager/frontend/images/cookie.png';
+		foreach ( $rows as $row ) {
+			$settings = json_decode( $row->settings, true );
+			if ( ! is_array( $settings ) ) {
+				continue;
+			}
+			$url = isset( $settings['config']['notice']['elements']['brandLogo']['meta']['url'] )
+				? $settings['config']['notice']['elements']['brandLogo']['meta']['url']
+				: '';
+			if ( $url && false !== strpos( $url, $old_suffix ) ) {
+				$settings['config']['notice']['elements']['brandLogo']['meta']['url'] = str_replace(
+					$old_suffix,
+					$new_suffix,
+					$url
+				);
+				$wpdb->update(
+					$table,
+					array( 'settings' => wp_json_encode( $settings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ),
+					array( 'banner_id' => $row->banner_id ),
+					array( '%s' ),
+					array( '%d' )
+				);
+			}
+		}
+		// Clear banner template cache to force regeneration with new URL.
+		delete_option( 'faz_banner_template' );
+		update_option( 'faz_brand_logo_path_fixed', 1, false );
 	}
 
 	/**
