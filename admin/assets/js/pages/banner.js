@@ -22,14 +22,19 @@
 
 		FAZ.tabs('#faz-banner');
 
-		// TinyMCE editors in hidden containers can lose iframe content.
-		// When their tab becomes visible, restore from bannerData if empty.
-		// FAZ.tabs handler (registered above) toggles the panel to active,
-		// so the iframe is renderable by the time this handler runs.
-		var editorTabs = { content: true, preferences: true };
+		// TinyMCE editors initialized in hidden containers may not visually
+		// render their content (iframe had 0 dimensions when setContent ran).
+		// When their tab becomes visible, force a re-render:
+		//  - content in data model but not painted → re-set to force paint
+		//  - content lost entirely (iframe content gone) → restore from bannerData
+		var tabEditors = {
+			content: ['faz-b-notice-desc'],
+			preferences: ['faz-b-pref-desc']
+		};
 		document.querySelectorAll('#faz-banner .faz-tab').forEach(function (btn) {
 			btn.addEventListener('click', function () {
-				if (!editorTabs[btn.dataset.tab]) return;
+				var ids = tabEditors[btn.dataset.tab];
+				if (!ids) return;
 				if (typeof tinyMCE === 'undefined' || !bannerData) return;
 				var contents = bannerData.contents || {};
 				var c = contents[currentLang] || contents[Object.keys(contents)[0]] || {};
@@ -39,11 +44,13 @@
 					'faz-b-notice-desc': notice.description || '',
 					'faz-b-pref-desc': pref.description || ''
 				};
-				['faz-b-notice-desc', 'faz-b-pref-desc'].forEach(function (id) {
+				ids.forEach(function (id) {
 					var editor = tinyMCE.get(id);
-					if (editor && !editor.getContent() && stored[id]) {
-						editor.setContent(stored[id]);
-					}
+					if (!editor) return;
+					var current = editor.getContent();
+					// Re-set to force the iframe to paint the content now that
+					// the panel is visible. Falls back to bannerData if lost.
+					editor.setContent(current || stored[id] || '');
 				});
 			});
 		});
