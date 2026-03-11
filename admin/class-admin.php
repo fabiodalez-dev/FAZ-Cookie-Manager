@@ -442,7 +442,7 @@ window.wp.apiFetch=apiFetch;
 					'name' => esc_attr( get_option( 'blogname' ) ),
 				),
 				'assetsURL'      => defined( 'FAZ_PLUGIN_URL' ) ? FAZ_PLUGIN_URL . 'frontend/images/' : '',
-				'defaultLogo'    => plugins_url( 'cookie.png', FAZ_PLUGIN_FILENAME ),
+				'defaultLogo'    => plugins_url( 'frontend/images/cookie.png', FAZ_PLUGIN_FILENAME ),
 				'adminURL'       => admin_url( 'admin.php' ),
 				'isClassicPress' => $this->is_classicpress(),
 				'upload'         => array(
