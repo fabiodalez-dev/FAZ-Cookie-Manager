@@ -229,6 +229,10 @@
 		var descStyles = (config.notice && config.notice.elements && config.notice.elements.description && config.notice.elements.description.styles) || {};
 		setColor('faz-b-desc-color', descStyles.color || '#64748b');
 
+		var ao = config.accessibilityOverrides || {};
+		var linkStyles = (ao.elements && ao.elements.manualLinks && ao.elements.manualLinks.styles) || {};
+		setColor('faz-b-link-color', linkStyles.color || '#1863DC');
+
 		// Colours - buttons
 		var buttons = (config.notice && config.notice.elements && config.notice.elements.buttons && config.notice.elements.buttons.elements) || {};
 		populateButtonColors('accept', buttons.accept);
@@ -431,6 +435,10 @@
 		setColor('faz-b-title-color', (ne.title && ne.title.styles && ne.title.styles.color) || '#212121');
 		setColor('faz-b-desc-color', (ne.description && ne.description.styles && ne.description.styles.color) || '#212121');
 
+		var presetAo = preset.accessibilityOverrides || {};
+		var presetLink = (presetAo.elements && presetAo.elements.manualLinks && presetAo.elements.manualLinks.styles) || {};
+		setColor('faz-b-link-color', presetLink.color || '#1863DC');
+
 		var btns = (ne.buttons && ne.buttons.elements) || {};
 		populateButtonColors('accept', btns.accept);
 		populateButtonColors('reject', btns.reject);
@@ -526,6 +534,9 @@
 		props.config.notice.elements.title.styles.color = getColor('faz-b-title-color');
 		ensureObj(props, 'config.notice.elements.description.styles');
 		props.config.notice.elements.description.styles.color = getColor('faz-b-desc-color');
+
+		ensureObj(props, 'config.accessibilityOverrides.elements.manualLinks.styles');
+		props.config.accessibilityOverrides.elements.manualLinks.styles.color = getColor('faz-b-link-color');
 
 		// Colours + status - buttons
 		ensureObj(props, 'config.notice.elements.buttons.elements');
@@ -820,6 +831,14 @@
 
 		// Initialize category toggle switches (the frontend JS isn't loaded in admin)
 		initPreviewToggles(host);
+
+		// Apply link text colour
+		var linkColor = getColor('faz-b-link-color') || '#1863DC';
+		host.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a').forEach(function (a) {
+			if (a.getAttribute('data-faz-tag') === 'readmore-button') return;
+			a.style.color = linkColor;
+			a.style.textDecorationColor = linkColor;
+		});
 
 		// Apply display state (panel-level, not host)
 		var panel = document.getElementById('faz-b-preview-panel');

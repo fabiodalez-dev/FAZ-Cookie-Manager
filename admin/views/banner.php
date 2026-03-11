@@ -233,6 +233,13 @@ defined( 'ABSPATH' ) || exit;
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-desc-color-hex" style="width:90px;">
 						</div>
 					</div>
+					<div class="faz-form-group">
+						<label><?php echo esc_html__( 'Link Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-link-color" aria-label="<?php echo esc_attr__( 'Link text colour picker', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-link-color-hex" aria-label="<?php echo esc_attr__( 'Link text colour hex value', 'faz-cookie-manager' ); ?>" style="width:90px;">
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
