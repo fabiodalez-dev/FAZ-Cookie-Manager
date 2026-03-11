@@ -131,7 +131,8 @@ async function saveBanner(page: Page) {
   await page.click('#faz-b-save');
   const response = await responsePromise;
   expect(response.status()).toBe(200);
-  await page.waitForTimeout(500);
+  // Wait for the success toast to confirm save completed
+  await page.waitForSelector('.faz-toast-success', { state: 'visible', timeout: 5_000 }).catch(() => {});
 }
 
 /** Read a select value. */
@@ -704,7 +705,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       const settingsBtn = visitor.page.locator('[data-faz-tag="settings-button"]');
       if (await settingsBtn.isVisible()) {
         await settingsBtn.click();
-        await visitor.page.waitForTimeout(1000);
+        await visitor.page.waitForSelector('[data-faz-tag="detail-title"]', { state: 'visible', timeout: 5_000 });
 
         const prefTitle = visitor.page.locator('[data-faz-tag="detail-title"]');
         if (await prefTitle.count() > 0) {
@@ -771,7 +772,8 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       const acceptBtn = visitor.page.locator('[data-faz-tag="accept-button"]');
       if (await acceptBtn.isVisible()) {
         await acceptBtn.click();
-        await visitor.page.waitForTimeout(1500);
+        // Wait for the banner to hide after accept
+        await visitor.page.waitForSelector('[data-faz-tag="notice"]', { state: 'hidden', timeout: 5_000 }).catch(() => {});
       }
       const revisitWidget = visitor.page.locator('[data-faz-tag="revisit-consent"]');
       if (await revisitWidget.count() > 0) {
