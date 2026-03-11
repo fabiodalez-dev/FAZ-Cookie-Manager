@@ -114,9 +114,12 @@ async function setColorHex(page: Page, hexInputId: string, hexValue: string) {
 
 /** Click the Save button and wait for the save to complete. */
 async function saveBanner(page: Page) {
-  // Listen for any request containing "banners" to catch both /wp-json/ and ?rest_route= formats
+  // Wait for the real save; exclude /banners/preview which fires from live preview.
   const responsePromise = page.waitForResponse(
-    (r) => r.url().includes('banners') && (r.request().method() === 'PUT' || r.request().method() === 'POST'),
+    (r) =>
+      r.url().includes('banners') &&
+      !r.url().includes('preview') &&
+      (r.request().method() === 'PUT' || r.request().method() === 'POST'),
     { timeout: 15_000 },
   );
   await page.click('#faz-b-save');
@@ -556,7 +559,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       expect(html).toContain('"manualLinks"');
       expect(html.toLowerCase()).toContain(testLinkColor);
 
-      // If links exist in the banner, verify JS applied the computed color style
+      // If links exist in the notice, also verify JS applied the computed color
       const link = visitor.page.locator('[data-faz-tag="notice"] a:not([data-faz-tag="readmore-button"])').first();
       if (await link.count() > 0) {
         const computedColor = await link.evaluate((el) => getComputedStyle(el).color);

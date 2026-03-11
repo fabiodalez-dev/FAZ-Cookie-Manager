@@ -234,7 +234,7 @@ defined( 'ABSPATH' ) || exit;
 						</div>
 					</div>
 					<div class="faz-form-group">
-						<label>Link Text</label>
+						<label><?php echo esc_html__( 'Link Text', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-link-color">
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-link-color-hex" style="width:90px;">
