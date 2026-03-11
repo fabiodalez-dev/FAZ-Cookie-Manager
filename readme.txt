@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.4.1
+Stable tag: 1.5.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -117,6 +117,37 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 
 == Changelog ==
 
+= 1.5.0 =
+* New: Link text colour picker in Banner → Colours tab for customising link colours in the consent notice
+* New: 21 Playwright E2E tests covering all banner settings tabs
+* Fix: TinyMCE re-render on tab switch limited to the activated tab's editor only
+* Fix: Output buffer null guard against null from preg_replace_callback
+* Fix: PCRE error logging instead of silent fallback
+* Fix: Accessibility — aria-labels on link colour picker inputs
+* Fix: Admin preview link selector aligned with frontend (includes optout-popup links)
+
+= 1.4.1 =
+* Fix: ClassicPress polyfill not loading — prints directly in admin_head instead of wp_add_inline_script
+
+= 1.4.0 =
+* New: ClassicPress compatibility layer — wp.apiFetch polyfill with nonce middleware and FilePond fallback
+* New: 5-layer script blocking — WP hook filters, HTML content filters, output buffer processing, client-side interceptors, and cookie shredding
+* New: Known Providers database — 147+ services with 500+ URL/script patterns for automatic categorization
+* New: Video embed placeholders — YouTube/Vimeo iframes replaced with consent-required placeholder
+* New: Social embed blocking — Facebook, Instagram, Twitter/X embeds blocked until consent
+* New: Iframe placeholder system — visual placeholder with consent button for blocked third-party iframes
+* New: Custom blocking rules — admin UI for user-defined script/iframe blocking patterns per category
+* New: Script dependency chains — data-faz-waitfor attribute for scripts that depend on consent-blocked resources
+* New: Network request interception — XHR, fetch, and sendBeacon requests to blocked providers silently dropped
+* New: Cookie shredding — automatic cleanup of cookies from revoked categories
+* Fix: TinyMCE content preserved across banner tab switches
+* Fix: SRI/CSP-safe script clone attribute ordering
+* Fix: Non-executable script types never blocked
+* Fix: ReadMore link enabled in banner
+* Fix: Close button functionality restored
+* Security: URL scheme validation prevents javascript:/data: injection on restored URLs
+* Security: Word-boundary-safe regex for src/href attribute renaming
+
 = 1.3.0 =
 * New: Cookie scanner optimization — incremental scans, page discovery from DB, settle watchdog, scan metrics
 * New: Advertisement → Marketing category rename with idempotent DB migration
@@ -197,6 +228,15 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+New link text colour picker for banner links. 21 new E2E tests. TinyMCE, accessibility, and output buffer fixes. Clear caches after upgrading.
+
+= 1.4.1 =
+Fixes ClassicPress polyfill loading. Clear caches after upgrading.
+
+= 1.4.0 =
+Major update: 5-layer script blocking with Known Providers database (147+ services), video/social embed placeholders, cookie shredding on revocation, ClassicPress compatibility. Clear caches after upgrading.
 
 = 1.2.1 =
 Fixes CSV export formatting, consent log accuracy (rejected now tracked), and CodeQL security alerts. Adds Composer/Packagist support. Clear caches after upgrading.

@@ -2,6 +2,19 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.5.0] — 2026-03-11
+
+### Added
+- **Link text colour picker** — new colour control in Banner → Colours tab for customising link colours in the consent notice (closes #26)
+- **E2E test suite for banner settings** — 21 Playwright tests covering all banner tabs (content, colours, buttons, preference center, advanced)
+
+### Fixed
+- **TinyMCE re-render on tab switch** — limited to the activated tab's editor only
+- **Output buffer null guard** — guard against null from `preg_replace_callback`
+- **PCRE error logging** — log regex compilation errors instead of silent fallback
+- **Accessibility** — added `aria-label` attributes to link colour picker inputs
+- **Admin preview link selector** — aligned with frontend to include optout-popup links
+
 ## [1.4.1] — 2026-03-08
 
 ### Fixed
