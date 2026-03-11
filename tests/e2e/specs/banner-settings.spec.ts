@@ -46,8 +46,14 @@ async function goToBannerPage(page: Page) {
     waitUntil: 'domcontentloaded',
   });
   await bannerLoad;
-  // populateSettings runs synchronously after the GET resolves — give it a beat
-  await page.waitForTimeout(500);
+  // Wait for populateSettings to finish filling the form
+  await page.waitForFunction(
+    () => {
+      const el = document.getElementById('faz-b-type') as HTMLSelectElement;
+      return el && el.value !== '';
+    },
+    { timeout: 5_000 },
+  );
 }
 
 /** Click a tab button in the banner admin page. */
@@ -565,6 +571,9 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
         const computedColor = await link.evaluate((el) => getComputedStyle(el).color);
         // #ff0000 = rgb(255, 0, 0)
         expect(computedColor).toContain('255');
+      } else {
+        // No links in the notice — colour was verified via HTML source above
+        console.warn('link-color test: no <a> found in [data-faz-tag="notice"], skipping computed-style check');
       }
     } finally {
       await visitor.ctx.close();
