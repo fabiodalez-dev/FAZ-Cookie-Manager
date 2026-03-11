@@ -519,68 +519,68 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await loginAsAdmin(page);
     await goToBannerPage(page);
     const nonce = await getAdminNonce(page);
-
-    // Read current banner, set link color via API, verify frontend
-    const banner = await getBanner(page, nonce);
     const testLinkColor = '#ff0000';
 
-    // Ensure path exists and set color
-    if (!banner.properties.config.accessibilityOverrides) {
-      banner.properties.config.accessibilityOverrides = { elements: {} };
-    }
-    if (!banner.properties.config.accessibilityOverrides.elements) {
-      banner.properties.config.accessibilityOverrides.elements = {};
-    }
-    banner.properties.config.accessibilityOverrides.elements.manualLinks = {
-      status: true, tag: 'manual-links', type: 'link',
-      styles: { color: testLinkColor },
-    };
-
+    // Seed a deterministic <a> in the banner description so the computed-style
+    // check always has a target element on the frontend.
+    const banner = await getBanner(page, nonce);
+    const origDesc = banner.contents?.description ?? '';
+    banner.contents = banner.contents ?? {};
+    banner.contents.description = origDesc.replace(
+      /<\/p>\s*$/,
+      ' <a href="#">link-color-probe</a></p>',
+    ) || origDesc + ' <a href="#">link-color-probe</a>';
     await updateBanner(page, nonce, banner.id, {
-      name: banner.name,
-      status: banner.status,
-      default: banner.default,
-      properties: banner.properties,
-      contents: banner.contents,
+      name: banner.name, status: banner.status, default: banner.default,
+      properties: banner.properties, contents: banner.contents,
     });
 
-    // Verify persistence via API
-    const updated = await getBanner(page, nonce);
-    const savedColor = updated.properties?.config?.accessibilityOverrides?.elements?.manualLinks?.styles?.color;
-    expect(savedColor).toBe(testLinkColor);
+    // Exercise the admin UI flow: set colour via the colour picker, then save
+    await goToBannerPage(page);
+    await clickTab(page, 'colours');
+    await setColorHex(page, 'faz-b-link-color-hex', testLinkColor);
+    await saveBanner(page);
 
-    // Verify admin UI shows it
+    // Verify persistence: reload and check the input still has our value
     await goToBannerPage(page);
     await clickTab(page, 'colours');
     expect(await getInputValue(page, 'faz-b-link-color-hex')).toBe(testLinkColor);
 
-    // Verify on frontend: the inline _fazConfig must contain our link color
+    // Also verify via API that the full path was saved
+    const updated = await getBanner(page, nonce);
+    const savedColor = updated.properties?.config?.accessibilityOverrides?.elements?.manualLinks?.styles?.color;
+    expect(savedColor).toBe(testLinkColor);
+
+    // Verify on frontend
     const visitor = await openVisitorPage(browser, wpBaseURL);
     try {
       const notice = visitor.page.locator('[data-faz-tag="notice"]');
       await expect(notice).toBeVisible({ timeout: 10_000 });
 
-      // Check the page source contains the manualLinks config with our color.
-      // This verifies the full PHP chain: DB → get_settings() → prepare_config() → HTML output.
+      // Check the page source contains the manualLinks config with our color
       const html = await visitor.page.content();
       expect(html).toContain('"manualLinks"');
       expect(html.toLowerCase()).toContain(testLinkColor);
 
-      // If links exist in the notice, also verify JS applied the computed color
+      // Verify JS applied the computed color to links in the notice
       const link = visitor.page.locator('[data-faz-tag="notice"] a:not([data-faz-tag="readmore-button"])').first();
       if (await link.count() > 0) {
         const computedColor = await link.evaluate((el) => getComputedStyle(el).color);
         // #ff0000 = rgb(255, 0, 0)
         expect(computedColor).toContain('255');
-      } else {
-        // No links in the notice — colour was verified via HTML source above
-        console.warn('link-color test: no <a> found in [data-faz-tag="notice"], skipping computed-style check');
       }
     } finally {
       await visitor.ctx.close();
     }
 
-    // Restore via theme reset (light)
+    // Restore original description and theme
+    const restoreBanner = await getBanner(page, nonce);
+    restoreBanner.contents.description = origDesc;
+    await updateBanner(page, nonce, restoreBanner.id, {
+      name: restoreBanner.name, status: restoreBanner.status,
+      default: restoreBanner.default, properties: restoreBanner.properties,
+      contents: restoreBanner.contents,
+    });
     await clickTab(page, 'general');
     await setSelect(page, 'faz-b-theme', 'light');
     await page.evaluate(() => {
