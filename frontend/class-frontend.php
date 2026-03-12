@@ -1192,7 +1192,22 @@ class Frontend {
 			}
 		}
 
-		$this->whitelist_cache = apply_filters( 'faz_whitelisted_scripts', $whitelist );
+		$whitelist = apply_filters( 'faz_whitelisted_scripts', $whitelist );
+
+		if ( ! is_array( $whitelist ) ) {
+			$whitelist = array();
+		}
+
+		// Sanitise: trim, remove empty strings (stripos('x','') === 0 always).
+		$this->whitelist_cache = array_values(
+			array_filter(
+				array_map( 'trim', array_map( 'strval', $whitelist ) ),
+				function ( $p ) {
+					return '' !== $p;
+				}
+			)
+		);
+
 		return $this->whitelist_cache;
 	}
 
