@@ -93,6 +93,7 @@ class Frontend {
 	 */
 	private $blocked_categories_cache = null;
 	private $provider_map_cache       = null;
+	private $whitelist_cache          = null;
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -1040,6 +1041,29 @@ class Frontend {
 	 * @return bool
 	 */
 	private function is_whitelisted( $attrs, $content ) {
+		$whitelist = $this->get_whitelist();
+
+		// Match against tag attributes only (src, id, class, etc.) to prevent
+		// tracking scripts from bypassing the block by including whitelist
+		// keywords in their inline content.
+		foreach ( $whitelist as $pattern ) {
+			if ( false !== stripos( $attrs, $pattern ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Build and cache the whitelist array (once per request).
+	 *
+	 * @return string[]
+	 */
+	private function get_whitelist() {
+		if ( null !== $this->whitelist_cache ) {
+			return $this->whitelist_cache;
+		}
+
 		// ── Core infrastructure: WordPress, jQuery, and our own scripts ──
 		$whitelist = array(
 			'faz-cookie-manager',
@@ -1168,17 +1192,8 @@ class Frontend {
 			}
 		}
 
-		$whitelist = apply_filters( 'faz_whitelisted_scripts', $whitelist );
-
-		// Match against tag attributes only (src, id, class, etc.) to prevent
-		// tracking scripts from bypassing the block by including whitelist
-		// keywords in their inline content.
-		foreach ( $whitelist as $pattern ) {
-			if ( false !== stripos( $attrs, $pattern ) ) {
-				return true;
-			}
-		}
-		return false;
+		$this->whitelist_cache = apply_filters( 'faz_whitelisted_scripts', $whitelist );
+		return $this->whitelist_cache;
 	}
 
 	/**
@@ -1214,7 +1229,7 @@ class Frontend {
 	 * @return string[]
 	 */
 	private function get_payment_gateway_whitelist() {
-		return apply_filters( 'faz_payment_gateway_whitelist', array(
+		$patterns = apply_filters( 'faz_payment_gateway_whitelist', array(
 			// PayPal.
 			'paypal.com/sdk/js',
 			'paypalobjects.com/api/checkout.js',
@@ -1240,6 +1255,20 @@ class Frontend {
 			'amazonpay',
 			'amazon-payments',
 		) );
+
+		if ( ! is_array( $patterns ) ) {
+			return array();
+		}
+
+		// Sanitise: trim, remove empty strings (stripos('x','') === 0 always).
+		return array_values(
+			array_filter(
+				array_map( 'trim', array_map( 'strval', $patterns ) ),
+				function ( $p ) {
+					return '' !== $p;
+				}
+			)
+		);
 	}
 
 	/**

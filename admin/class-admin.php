@@ -858,8 +858,7 @@ window.wp.apiFetch=apiFetch;
 	 * @return void
 	 */
 	public function woocommerce_compat_notice() {
-		// Only show on FAZ Cookie Manager admin pages.
-		if ( empty( $_REQUEST['page'] ) || false === strpos( sanitize_text_field( wp_unslash( $_REQUEST['page'] ) ), self::ADMIN_SLUG ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		if ( ! faz_is_admin_page() ) {
 			return;
 		}
 		if ( ! class_exists( 'WooCommerce', false ) ) {
