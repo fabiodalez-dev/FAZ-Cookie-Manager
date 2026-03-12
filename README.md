@@ -451,6 +451,20 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.5.2
+- **Security & mixed-content fixes** — auto-repair cached banner template on HTTPS, sanitise inline CSS values, harden URL parsing
+- **Migration safety** — guard `$wpdb->update()`/`$wpdb->delete()` return values in category rename
+- **Plugin lifecycle E2E tests** — upgrade and fresh-install paths with full category verification
+
+### 1.5.1
+- **Link color fix** — link colour picker now applies to all visible links including Cookie Policy/Read More link
+- **Brand logo 404** — moved `cookie.png` to `frontend/images/` and added DB migration to fix stored URLs
+
+### 1.5.0
+- **Link text colour picker** — new colour control in Banner Colours tab for customising link colours
+- **E2E test suite for banner settings** — 21 Playwright tests covering all banner tabs
+- **TinyMCE re-render fix** — limited to the activated tab's editor only
+
 ### 1.4.0
 - **Comprehensive script blocking** — 5-layer system: WP hook filters, HTML content filters, output buffer, client-side interceptors (createElement, XHR, fetch, sendBeacon), and cookie shredding
 - **Known Providers database** — 147+ services with 500+ URL/script patterns for automatic categorization
