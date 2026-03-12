@@ -514,7 +514,7 @@ class Template {
 	 * @return string
 	 */
 	public function get_assets_path( $path ) {
-		$base_name = wp_basename( $path );
+		$base_name  = wp_basename( $path );
 		$assets_url = defined( 'FAZ_APP_ASSETS_URL' ) ? FAZ_APP_ASSETS_URL : '';
 		return $assets_url . $base_name;
 	}

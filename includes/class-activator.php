@@ -522,7 +522,7 @@ class Activator {
 		} elseif ( $old_id && $new_id ) {
 			// Both exist — reassign cookies from old to new, then delete legacy row.
 			$cookies_table = $wpdb->prefix . 'faz_cookies';
-			$wpdb->update( $cookies_table, array( 'category_id' => $new_id ), array( 'category_id' => $old_id ) );
+			$wpdb->update( $cookies_table, array( 'category' => $new_id ), array( 'category' => $old_id ) );
 			$wpdb->delete( $table, array( 'category_id' => $old_id ) );
 		}
 

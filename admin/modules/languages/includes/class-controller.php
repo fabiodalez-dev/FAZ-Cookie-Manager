@@ -310,15 +310,16 @@ class Controller {
 
 	public function get_translations($lang) {
 		if ($lang != 'en' && $this->is_faz_translated($lang)) {
-			$upload_dir = wp_upload_dir();
-			$upload_path = $upload_dir['basedir'] . '/fazcookie/languages/banners/' . esc_html( $lang ) . '.json';
-			$contents = faz_read_json_file( $upload_path );
+			$safe_lang   = sanitize_file_name( $lang );
+			$upload_dir  = wp_upload_dir();
+			$upload_path = $upload_dir['basedir'] . '/fazcookie/languages/banners/' . $safe_lang . '.json';
+			$contents    = faz_read_json_file( $upload_path );
 			if ( empty( $contents ) ) {
 				// Copy from bundled translation files instead of downloading from cloud.
-				$bundled = dirname( __DIR__, 2 ) . '/banners/includes/contents/' . esc_html( $lang ) . '.json';
+				$bundled = dirname( __DIR__, 2 ) . '/banners/includes/contents/' . $safe_lang . '.json';
 				if ( file_exists( $bundled ) ) {
 					$dest_dir = $this->get_upload_path( 'languages/banners/' );
-					copy( $bundled, $dest_dir . esc_html( $lang ) . '.json' );
+					copy( $bundled, $dest_dir . $safe_lang . '.json' );
 				}
 			}
 		}

@@ -138,10 +138,10 @@ function faz_get_consent_db_version() {
 if ( ! function_exists( 'faz_define_constants' ) ) {
 	function faz_define_constants() {
 		if ( ! defined( 'FAZ_PLUGIN_URL' ) ) {
-			define( 'FAZ_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+			define( 'FAZ_PLUGIN_URL', set_url_scheme( plugin_dir_url( __FILE__ ) ) );
 		}
 		if ( ! defined( 'FAZ_APP_ASSETS_URL' ) ) {
-			define( 'FAZ_APP_ASSETS_URL', plugin_dir_url( __FILE__ ) . 'frontend/images/' );
+			define( 'FAZ_APP_ASSETS_URL', set_url_scheme( plugin_dir_url( __FILE__ ) . 'frontend/images/' ) );
 		}
 	}
 }

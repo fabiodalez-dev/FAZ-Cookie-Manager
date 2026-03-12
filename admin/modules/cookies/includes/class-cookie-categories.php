@@ -312,12 +312,13 @@ class Cookie_Categories extends Store {
 		$upload_dir    = wp_upload_dir();
 		if ( ! $contents ) {
 			if ( $translated ) {
-				$translation = faz_read_json_file( $upload_dir['basedir'] . '/fazcookie/languages/banners/' . esc_html( $lang ) . '.json' );
+				$safe_lang = sanitize_file_name( $lang );
+				$translation = faz_read_json_file( $upload_dir['basedir'] . '/fazcookie/languages/banners/' . $safe_lang . '.json' );
 				if($translation) {
 					$contents = $translation['category_data'];
 				}
 				if(!$contents) {
-					$contents = faz_read_json_file( dirname( __FILE__ ) . "/contents/categories/{$lang}.json" );
+					$contents = faz_read_json_file( dirname( __FILE__ ) . "/contents/categories/{$safe_lang}.json" );
 				}
 			}
 			if (empty($contents)) {
