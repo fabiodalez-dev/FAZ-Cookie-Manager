@@ -1,5 +1,6 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import { execFileSync } from 'node:child_process';
+import { basename } from 'node:path';
 
 /**
  * Plugin lifecycle tests — upgrade (deactivate → activate) and fresh install
@@ -36,7 +37,8 @@ function isPluginActive(rowClass: string | null): boolean {
 
 /** Validate DEPLOY_PATH before destructive filesystem ops. */
 function assertSafeDeployPath(): void {
-  if (!DEPLOY_PATH || DEPLOY_PATH === '/' || !DEPLOY_PATH.includes('plugins')) {
+  const base = basename(DEPLOY_PATH.replace(/\/+$/, ''));
+  if (!DEPLOY_PATH || DEPLOY_PATH === '/' || !DEPLOY_PATH.includes('plugins') || base !== PLUGIN_SLUG) {
     throw new Error(`Refusing to delete: DEPLOY_PATH appears unsafe: "${DEPLOY_PATH}"`);
   }
 }
@@ -85,14 +87,14 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Verify we have data: at least one cookie category exists ---
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
-    const categoriesBefore = await page.evaluate(async () => {
+    const categoriesBefore = await page.evaluate(async (base) => {
       const nonce = window.fazConfig?.api?.nonce ?? '';
-      const res = await fetch('/?rest_route=/faz/v1/cookies/categories/', {
+      const res = await fetch(`${base}/?rest_route=/faz/v1/cookies/categories/`, {
         headers: { 'X-WP-Nonce': nonce },
       });
       if (!res.ok) return null;
       return res.json();
-    });
+    }, wpBaseURL);
     expect(Array.isArray(categoriesBefore)).toBeTruthy();
     expect(categoriesBefore!.length).toBeGreaterThan(0);
     const categoryCountBefore = categoriesBefore!.length;
@@ -120,14 +122,14 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Verify data is still there (categories preserved) ---
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
-    const categoriesAfter = await page.evaluate(async () => {
+    const categoriesAfter = await page.evaluate(async (base) => {
       const nonce = window.fazConfig?.api?.nonce ?? '';
-      const res = await fetch('/?rest_route=/faz/v1/cookies/categories/', {
+      const res = await fetch(`${base}/?rest_route=/faz/v1/cookies/categories/`, {
         headers: { 'X-WP-Nonce': nonce },
       });
       if (!res.ok) return null;
       return res.json();
-    });
+    }, wpBaseURL);
     expect(Array.isArray(categoriesAfter)).toBeTruthy();
     expect(categoriesAfter!.length).toBe(categoryCountBefore);
 
@@ -164,9 +166,11 @@ test.describe.serial('Plugin lifecycle', () => {
     expect(isPluginActive(rowAfterDeactivate)).toBe(false);
 
     // --- Step 2: Delete plugin files from disk ---
-    // Note: this does NOT run uninstall.php (that requires WP's own delete flow).
-    // DB tables/options from the previous install may persist, which is fine —
-    // the activation hook must handle both fresh and pre-existing DB states.
+    // This only removes files — it does NOT exercise uninstall.php (which requires
+    // WP's filesystem-delete flow and wp-cli). DB tables/options from the previous
+    // install will persist, which is intentional: this test verifies the activation
+    // hook handles re-activation with pre-existing DB state (the most common
+    // real-world upgrade scenario).
     assertSafeDeployPath();
     execFileSync('rm', ['-rf', DEPLOY_PATH], { timeout: 10000 });
 
@@ -198,22 +202,25 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Step 7: Verify DB tables created and default categories present ---
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
-    const categories = await page.evaluate(async () => {
+    const categories = await page.evaluate(async (base) => {
       const nonce = window.fazConfig?.api?.nonce ?? '';
-      const res = await fetch('/?rest_route=/faz/v1/cookies/categories/', {
+      const res = await fetch(`${base}/?rest_route=/faz/v1/cookies/categories/`, {
         headers: { 'X-WP-Nonce': nonce },
       });
       if (!res.ok) return null;
       return res.json();
-    });
+    }, wpBaseURL);
     expect(categories).not.toBeNull();
     expect(Array.isArray(categories)).toBeTruthy();
 
-    // Verify all 4 default category slugs are present
+    // Verify all default category slugs from en.json are present
     const slugs = new Set(
       categories!.map((c: { slug?: string }) => c.slug).filter(Boolean),
     );
-    for (const expected of ['necessary', 'functional', 'analytics', 'marketing']) {
+    for (const expected of [
+      'necessary', 'functional', 'analytics', 'performance',
+      'uncategorized', 'wordpress-internal', 'marketing',
+    ]) {
       expect(slugs.has(expected), `Missing default category: ${expected}`).toBe(true);
     }
 
@@ -230,13 +237,13 @@ test.describe.serial('Plugin lifecycle', () => {
     // Re-login since we cleared cookies
     await loginAsAdmin(page);
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
-    const settingsOk = await page.evaluate(async () => {
+    const settingsOk = await page.evaluate(async (base) => {
       const nonce = window.fazConfig?.api?.nonce ?? '';
-      const res = await fetch('/?rest_route=/faz/v1/settings/', {
+      const res = await fetch(`${base}/?rest_route=/faz/v1/settings/`, {
         headers: { 'X-WP-Nonce': nonce },
       });
       return res.ok;
-    });
+    }, wpBaseURL);
     expect(settingsOk).toBeTruthy();
   });
 });
