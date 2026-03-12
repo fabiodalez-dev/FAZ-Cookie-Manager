@@ -107,7 +107,8 @@ class Settings extends Store {
 				'maxmind_license_key' => '',
 			),
 			'script_blocking' => array(
-				'custom_rules' => array(),
+				'custom_rules'   => array(),
+				'excluded_pages' => array(),
 			),
 		);
 

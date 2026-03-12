@@ -531,6 +531,26 @@ class Frontend {
 		// 4. Developer filter.
 		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
 
+		// On WooCommerce checkout/cart pages, remove payment gateway patterns
+		// from client-side blocking so JS interceptors don't break payments.
+		if ( $this->is_wc_checkout_or_cart() ) {
+			$gateway_whitelist = $this->get_payment_gateway_whitelist();
+			foreach ( array_keys( $this->providers ) as $pattern ) {
+				foreach ( $gateway_whitelist as $gw ) {
+					if ( false !== stripos( $pattern, $gw ) ) {
+						unset( $this->providers[ $pattern ] );
+						break;
+					}
+				}
+			}
+		}
+
+		// On pages excluded from script blocking, send empty providers
+		// so client-side interceptors don't block anything.
+		if ( $this->is_blocking_disabled_for_page() ) {
+			$this->providers = array();
+		}
+
 		foreach ( $this->providers as $key => $value ) {
 			$providers[] = array(
 				're'         => $key,
@@ -638,6 +658,30 @@ class Frontend {
 		return false;
 	}
 
+	/**
+	 * Check if script blocking is disabled for the current page.
+	 * The banner still shows, but all blocking layers are bypassed.
+	 *
+	 * @return boolean
+	 */
+	protected function is_blocking_disabled_for_page() {
+		$excluded = $this->settings->get( 'script_blocking', 'excluded_pages' );
+		if ( empty( $excluded ) || ! is_array( $excluded ) ) {
+			return false;
+		}
+		$current_url = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		foreach ( $excluded as $pattern ) {
+			$pattern = trim( $pattern );
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			if ( fnmatch( $pattern, $current_url ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	/* ─── Server-side script blocking via output buffering ───── */
 
 	/**
@@ -653,6 +697,9 @@ class Frontend {
 			return;
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
+		if ( $this->is_blocking_disabled_for_page() ) {
 			return;
 		}
 		ob_start( array( $this, 'process_output_buffer' ) );
@@ -993,7 +1040,8 @@ class Frontend {
 	 * @return bool
 	 */
 	private function is_whitelisted( $attrs, $content ) {
-		$whitelist = apply_filters( 'faz_whitelisted_scripts', array(
+		// ── Core infrastructure: WordPress, jQuery, and our own scripts ──
+		$whitelist = array(
 			'faz-cookie-manager',
 			'fazcookie',
 			'fazBannerTemplate',
@@ -1004,7 +1052,123 @@ class Frontend {
 			'jquery-core',
 			'jquery-migrate',
 			'wp-embed',
+			'wp-polyfill',
+			'wp-hooks',
+			'wp-i18n',
+			'wp-api-fetch',
+			'wp-url',
+			'regenerator-runtime',
+		);
+
+		// ── Page builders — essential for layout rendering ──
+		$whitelist = array_merge( $whitelist, array(
+			'plugins/elementor/',
+			'plugins/elementor-pro/',
+			'elementor-frontend',
+			'elementor-common',
+			'elementor-waypoints',
+			'plugins/js_composer/',
+			'plugins/wpbakery/',
+			'js_composer_front',
+			'wpb_composer_front_js',
+			'plugins/beaver-builder-lite-version/',
+			'plugins/bb-plugin/',
+			'fl-builder-',
+			'plugins/divi-builder/',
+			'et_pb_',
+			'et-builder-',
+			'plugins/oxygen/',
+			'plugins/bricks/',
+			'bricks-frontend',
 		) );
+
+		// ── Form plugins — necessary for form submission ──
+		$whitelist = array_merge( $whitelist, array(
+			'plugins/contact-form-7/',
+			'wpcf7',
+			'plugins/wpforms/',
+			'wpforms-',
+			'plugins/gravityforms/',
+			'gform_',
+			'plugins/formidable/',
+			'frm_',
+			'plugins/ninja-forms/',
+			'nf-front-end',
+			'plugins/happyforms/',
+			'plugins/forminator/',
+			'forminator-front',
+			'plugins/fluent-forms/',
+			'fluentform',
+			'plugins/ws-form/',
+		) );
+
+		// ── Anti-spam / CAPTCHA — necessary for form protection ──
+		$whitelist = array_merge( $whitelist, array(
+			'google.com/recaptcha',
+			'gstatic.com/recaptcha',
+			'grecaptcha',
+			'recaptcha/api.js',
+			'hcaptcha.com',
+			'js.hcaptcha.com',
+			'challenges.cloudflare.com/turnstile',
+			'akismet',
+		) );
+
+		// ── Security plugins ──
+		$whitelist = array_merge( $whitelist, array(
+			'plugins/wordfence/',
+			'plugins/better-wp-security/',
+			'plugins/sucuri-scanner/',
+			'plugins/all-in-one-wp-security-and-firewall/',
+		) );
+
+		// ── Caching / optimisation plugins ──
+		$whitelist = array_merge( $whitelist, array(
+			'plugins/wp-rocket/',
+			'plugins/litespeed-cache/',
+			'plugins/w3-total-cache/',
+			'plugins/wp-super-cache/',
+			'plugins/autoptimize/',
+			'plugins/wp-fastest-cache/',
+		) );
+
+		// ── Translation / multilingual ──
+		$whitelist = array_merge( $whitelist, array(
+			'plugins/sitepress-multilingual-cms/',
+			'plugins/polylang/',
+			'plugins/translatepress-multilingual/',
+		) );
+
+		// ── Other WordPress essentials ──
+		$whitelist = array_merge( $whitelist, array(
+			'plugins/advanced-custom-fields/',
+			'plugins/acf/',
+			'plugins/classic-editor/',
+			'plugins/shortcodes-ultimate/',
+		) );
+
+		// ── WooCommerce core infrastructure ──
+		if ( class_exists( 'WooCommerce', false ) ) {
+			$whitelist = array_merge( $whitelist, array(
+				'plugins/woocommerce/',
+				'wc-settings',
+				'wc-blocks-',
+				'wc-cart',
+				'wc-checkout',
+				'wc-payment-method-',
+				'woocommerce-layout',
+				'woocommerce-smallscreen',
+				'woocommerce-general',
+			) );
+
+			// On checkout/cart pages, also whitelist payment gateway scripts
+			// (PayPal SDK, Stripe.js, etc.) — they are necessary for purchases.
+			if ( $this->is_wc_checkout_or_cart() ) {
+				$whitelist = array_merge( $whitelist, $this->get_payment_gateway_whitelist() );
+			}
+		}
+
+		$whitelist = apply_filters( 'faz_whitelisted_scripts', $whitelist );
 
 		// Match against tag attributes only (src, id, class, etc.) to prevent
 		// tracking scripts from bypassing the block by including whitelist
@@ -1015,6 +1179,67 @@ class Frontend {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Check if the current page is a WooCommerce checkout or cart page.
+	 *
+	 * @return bool
+	 */
+	private function is_wc_checkout_or_cart() {
+		if ( ! class_exists( 'WooCommerce', false ) ) {
+			return false;
+		}
+		if ( function_exists( 'is_checkout' ) && is_checkout() ) {
+			return true;
+		}
+		if ( function_exists( 'is_cart' ) && is_cart() ) {
+			return true;
+		}
+		// WooCommerce Blocks checkout/cart (shortcode-less pages).
+		if ( function_exists( 'has_block' ) ) {
+			if ( has_block( 'woocommerce/checkout' ) || has_block( 'woocommerce/cart' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Return additional whitelist patterns for payment gateway scripts.
+	 *
+	 * These scripts are necessary for completing purchases on checkout/cart pages.
+	 * Filterable via `faz_payment_gateway_whitelist` for custom gateways.
+	 *
+	 * @return string[]
+	 */
+	private function get_payment_gateway_whitelist() {
+		return apply_filters( 'faz_payment_gateway_whitelist', array(
+			// PayPal.
+			'paypal.com/sdk/js',
+			'paypalobjects.com/api/checkout.js',
+			'ppcp-',
+			'PayPalCommerceGateway',
+			// Stripe.
+			'js.stripe.com',
+			'm.stripe.network',
+			'wc-stripe-',
+			'stripe-',
+			// Mollie.
+			'mollie',
+			// Square.
+			'squareup.com',
+			'square-credit-card',
+			// Braintree.
+			'braintreegateway.com',
+			'braintree-',
+			// Klarna.
+			'x.klarnacdn.net',
+			'klarna-',
+			// Amazon Pay.
+			'amazonpay',
+			'amazon-payments',
+		) );
 	}
 
 	/**
@@ -1686,7 +1911,7 @@ class Frontend {
 		if ( ! $this->template ) {
 			return $tag;
 		}
-		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $tag;
 		}
 		// Never block our own scripts.
@@ -1746,7 +1971,7 @@ class Frontend {
 		if ( ! $this->template ) {
 			return $tag;
 		}
-		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $tag;
 		}
 		if ( $this->is_whitelisted( $tag, '' ) ) {
@@ -1863,7 +2088,7 @@ class Frontend {
 		if ( ! $this->template ) {
 			return $content;
 		}
-		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $content;
 		}
 
@@ -1922,7 +2147,7 @@ class Frontend {
 		if ( ! $this->template ) {
 			return $html;
 		}
-		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $html;
 		}
 

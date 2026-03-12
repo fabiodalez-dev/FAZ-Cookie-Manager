@@ -31,6 +31,19 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
+			<h3>Script Blocking</h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label>Pages Excluded from Script Blocking</label>
+				<textarea class="faz-textarea" data-path="script_blocking.excluded_pages" rows="3" placeholder="One per line: /checkout/* or /cart/*"></textarea>
+				<div class="faz-help">URL patterns where script blocking is disabled (banner still shows). One per line, supports wildcards (e.g. <code>/checkout/*</code>).</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
 			<h3>Consent Logs</h3>
 		</div>
 		<div class="faz-card-body">
