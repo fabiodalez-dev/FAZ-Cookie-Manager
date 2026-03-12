@@ -319,7 +319,9 @@ class Controller {
 				$bundled = dirname( __DIR__, 2 ) . '/banners/includes/contents/' . $safe_lang . '.json';
 				if ( file_exists( $bundled ) ) {
 					$dest_dir = $this->get_upload_path( 'languages/banners/' );
-					copy( $bundled, $dest_dir . $safe_lang . '.json' );
+					if ( ! @copy( $bundled, $dest_dir . $safe_lang . '.json' ) ) {
+						error_log( 'FazCookie: failed to copy translation file for language ' . $safe_lang );
+					}
 				}
 			}
 		}

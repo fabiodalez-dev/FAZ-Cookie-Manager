@@ -431,7 +431,24 @@ class Frontend {
 		if ( is_ssl() && defined( 'FAZ_PLUGIN_URL' ) ) {
 			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
 			if ( strpos( $html, $http_url ) !== false ) {
-				$html = str_replace( $http_url, set_url_scheme( FAZ_PLUGIN_URL, 'https' ), $html );
+				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
+				$html      = str_replace( $http_url, $https_url, $html );
+
+				// Auto-repair the cached template so subsequent requests
+				// skip this replacement entirely.
+				$stored = get_option( 'faz_banner_template', array() );
+				if ( is_array( $stored ) ) {
+					$repaired = false;
+					foreach ( $stored as $lang => $tpl ) {
+						if ( isset( $tpl['html'] ) && strpos( $tpl['html'], $http_url ) !== false ) {
+							$stored[ $lang ]['html'] = str_replace( $http_url, $https_url, $tpl['html'] );
+							$repaired = true;
+						}
+					}
+					if ( $repaired ) {
+						update_option( 'faz_banner_template', $stored );
+					}
+				}
 			}
 		}
 
