@@ -533,7 +533,10 @@ class Activator {
 				// Update failed — abort to avoid orphaning cookies.
 				return;
 			}
-			$wpdb->delete( $table, array( 'category_id' => (int) $old_id ), array( '%d' ) );
+			$deleted = $wpdb->delete( $table, array( 'category_id' => (int) $old_id ), array( '%d' ) );
+			if ( false === $deleted ) {
+				return;
+			}
 		}
 
 		// 2. Fix display name: rename "Advertisement" → "Marketing" in all languages.

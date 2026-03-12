@@ -15,9 +15,16 @@ const PLUGIN_SLUG = 'faz-cookie-manager';
 const PLUGIN_FILE = `${PLUGIN_SLUG}/faz-cookie-manager.php`;
 const PLUGINS_PAGE = '/wp-admin/plugins.php';
 
-// Source and deploy paths for rsync
-const SOURCE_PATH = '/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/';
-const DEPLOY_PATH = '/Users/fabio/Sites/faz-test/wp-content/plugins/faz-cookie-manager/';
+// Source and deploy paths — configurable via env vars for CI portability.
+const SOURCE_PATH = process.env.FAZ_PLUGIN_SOURCE_PATH ?? `${process.cwd()}/`;
+const DEPLOY_PATH = process.env.FAZ_PLUGIN_DEPLOY_PATH ?? '';
+
+if (!DEPLOY_PATH) {
+  throw new Error(
+    'FAZ_PLUGIN_DEPLOY_PATH environment variable is required for lifecycle tests.\n' +
+    'Example: FAZ_PLUGIN_DEPLOY_PATH=/path/to/wp-content/plugins/faz-cookie-manager/',
+  );
+}
 
 /** Helper: check if the plugin row has WordPress "active" class (not "inactive"). */
 function isPluginActive(rowClass: string | null): boolean {
@@ -27,10 +34,25 @@ function isPluginActive(rowClass: string | null): boolean {
   return rowClass.split(/\s+/).includes('active');
 }
 
+/** Validate DEPLOY_PATH before destructive filesystem ops. */
+function assertSafeDeployPath(): void {
+  if (!DEPLOY_PATH || DEPLOY_PATH === '/' || !DEPLOY_PATH.includes('plugins')) {
+    throw new Error(`Refusing to delete: DEPLOY_PATH appears unsafe: "${DEPLOY_PATH}"`);
+  }
+}
+
 /** Helper: ensure the plugin is present and activated, handling any prior state. */
 async function ensurePluginActive(page: import('@playwright/test').Page, wpBaseURL: string): Promise<void> {
   // Re-deploy in case a previous run deleted the plugin files
-  execFileSync('rsync', ['-a', '--delete', SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
+  try {
+    execFileSync('rsync', ['-a', '--delete', SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
+  } catch (error) {
+    throw new Error(
+      `Failed to deploy plugin files via rsync.\n` +
+      `SOURCE_PATH: ${SOURCE_PATH}\nDEPLOY_PATH: ${DEPLOY_PATH}\n` +
+      `Original error: ${error}`,
+    );
+  }
 
   await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
   const pluginRow = page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`);
@@ -141,11 +163,11 @@ test.describe.serial('Plugin lifecycle', () => {
     const rowAfterDeactivate = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
     expect(isPluginActive(rowAfterDeactivate)).toBe(false);
 
-    // --- Step 2: Delete plugin files from disk + run uninstall.php ---
-    // Using filesystem directly is more reliable than the WP delete UI
-    // (which requires WP_Filesystem and may ask for FTP credentials).
-    // This also triggers uninstall.php via WordPress if the plugin registered
-    // an uninstall hook, which is how WP handles deletions.
+    // --- Step 2: Delete plugin files from disk ---
+    // Note: this does NOT run uninstall.php (that requires WP's own delete flow).
+    // DB tables/options from the previous install may persist, which is fine —
+    // the activation hook must handle both fresh and pre-existing DB states.
+    assertSafeDeployPath();
     execFileSync('rm', ['-rf', DEPLOY_PATH], { timeout: 10000 });
 
     // --- Step 3: Verify plugin is gone ---
@@ -174,7 +196,7 @@ test.describe.serial('Plugin lifecycle', () => {
     const activatedClass = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
     expect(isPluginActive(activatedClass)).toBe(true);
 
-    // --- Step 7: Verify DB tables created (via API) ---
+    // --- Step 7: Verify DB tables created and default categories present ---
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
     const categories = await page.evaluate(async () => {
       const nonce = window.fazConfig?.api?.nonce ?? '';
@@ -186,14 +208,14 @@ test.describe.serial('Plugin lifecycle', () => {
     });
     expect(categories).not.toBeNull();
     expect(Array.isArray(categories)).toBeTruthy();
-    // Fresh install creates default categories (Necessary, Functional, Analytics, Marketing)
-    expect(categories!.length).toBeGreaterThanOrEqual(3);
 
-    // Verify "Necessary" category exists
-    const hasNecessary = categories!.some(
-      (c: { slug?: string }) => c.slug === 'necessary'
+    // Verify all 4 default category slugs are present
+    const slugs = new Set(
+      categories!.map((c: { slug?: string }) => c.slug).filter(Boolean),
     );
-    expect(hasNecessary).toBeTruthy();
+    for (const expected of ['necessary', 'functional', 'analytics', 'marketing']) {
+      expect(slugs.has(expected), `Missing default category: ${expected}`).toBe(true);
+    }
 
     // --- Step 8: Verify admin dashboard loads ---
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager`, { waitUntil: 'domcontentloaded' });
