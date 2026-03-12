@@ -884,7 +884,7 @@ window.wp.apiFetch=apiFetch;
 	 * @return array
 	 */
 	public function plugin_action_links( $links ) {
-		$links[] = '<a href="' . get_admin_url( null, 'admin.php?page=' . self::ADMIN_SLUG ) . '">' . esc_html__( 'Settings', 'faz-cookie-manager' ) . '</a>';
+		$links[] = '<a href="' . esc_url( get_admin_url( null, 'admin.php?page=' . self::ADMIN_SLUG ) ) . '">' . esc_html__( 'Settings', 'faz-cookie-manager' ) . '</a>';
 		return array_reverse( $links );
 	}
 }

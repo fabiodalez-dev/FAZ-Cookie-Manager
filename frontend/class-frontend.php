@@ -424,6 +424,34 @@ class Frontend {
 			return;
 		}
 		$html = isset( $this->template['html'] ) ? $this->template['html'] : '';
+
+		// Fix mixed-content: cached template may contain http:// plugin URLs
+		// when the site is served over HTTPS (reverse proxy, load balancer, or
+		// siteurl stored as http:// in the database).
+		if ( is_ssl() && defined( 'FAZ_PLUGIN_URL' ) ) {
+			$http_url = str_replace( 'https://', 'http://', FAZ_PLUGIN_URL );
+			if ( strpos( $html, $http_url ) !== false ) {
+				$https_url = set_url_scheme( FAZ_PLUGIN_URL, 'https' );
+				$html      = str_replace( $http_url, $https_url, $html );
+
+				// Auto-repair the cached template so subsequent requests
+				// skip this replacement entirely.
+				$stored = get_option( 'faz_banner_template', array() );
+				if ( is_array( $stored ) ) {
+					$repaired = false;
+					foreach ( $stored as $lang => $tpl ) {
+						if ( isset( $tpl['html'] ) && strpos( $tpl['html'], $http_url ) !== false ) {
+							$stored[ $lang ]['html'] = str_replace( $http_url, $https_url, $tpl['html'] );
+							$repaired = true;
+						}
+					}
+					if ( $repaired ) {
+						update_option( 'faz_banner_template', $stored );
+					}
+				}
+			}
+		}
+
 		echo '<script id="fazBannerTemplate" type="text/template">';
 		echo wp_kses( $html, faz_allowed_html() );
 		echo '</script>';
@@ -458,7 +486,7 @@ class Frontend {
 		$store     = array(
 			'_ipData'       => array(),
 			'_assetsURL'    => FAZ_PLUGIN_URL . 'frontend/images/',
-			'_publicURL'    => get_site_url(),
+			'_publicURL'    => set_url_scheme( get_site_url() ),
 			'_expiry'       => min( 180, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'    => 'gdpr',

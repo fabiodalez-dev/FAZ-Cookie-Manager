@@ -522,8 +522,21 @@ class Activator {
 		} elseif ( $old_id && $new_id ) {
 			// Both exist — reassign cookies from old to new, then delete legacy row.
 			$cookies_table = $wpdb->prefix . 'faz_cookies';
-			$wpdb->update( $cookies_table, array( 'category_id' => $new_id ), array( 'category_id' => $old_id ) );
-			$wpdb->delete( $table, array( 'category_id' => $old_id ) );
+			$updated = $wpdb->update(
+				$cookies_table,
+				array( 'category' => (int) $new_id ),
+				array( 'category' => (int) $old_id ),
+				array( '%d' ),
+				array( '%d' )
+			);
+			if ( false === $updated ) {
+				// Update failed — abort to avoid orphaning cookies.
+				return;
+			}
+			$deleted = $wpdb->delete( $table, array( 'category_id' => (int) $old_id ), array( '%d' ) );
+			if ( false === $deleted ) {
+				return;
+			}
 		}
 
 		// 2. Fix display name: rename "Advertisement" → "Marketing" in all languages.

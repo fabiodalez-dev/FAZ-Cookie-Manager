@@ -1627,6 +1627,18 @@ function _fazAfterConsent() {
 
     if (revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
         window.location.reload();
+        return;
+    }
+
+    // Clean up script interception if no categories remain blocked.
+    // Revocations always trigger a page reload above, so the interceptors
+    // will be reinstated on the fresh page load if needed.
+    var anyBlocked = _fazStore._categories.some(
+        function (cat) { return !cat.isNecessary && _fazIsCategoryToBeBlocked(cat.slug); }
+    );
+    if (!anyBlocked) {
+        _nodeListObserver.disconnect();
+        document.createElement = _fazCreateElementBackup;
     }
 }
 

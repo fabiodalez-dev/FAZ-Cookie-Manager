@@ -79,6 +79,9 @@ class Cookie_Scraper {
 				array( 'status' => 403 )
 			);
 		}
+		if ( in_array( $request->get_method(), array( 'POST', 'PUT', 'DELETE' ), true ) ) {
+			return faz_verify_nonce( $request );
+		}
 		return true;
 	}
 
