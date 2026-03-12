@@ -1,0 +1,623 @@
+# Copyright (C) 2026 Fabio D'Alessandro
+# This file is distributed under the GPL-3.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: FAZ Cookie Manager 1.5.2\n"
+"Report-Msgid-Bugs-To: https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-03-12T10:30:58+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: faz-cookie-manager\n"
+
+#. Plugin Name of the plugin
+#: faz-cookie-manager.php
+msgid "FAZ Cookie Manager"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: faz-cookie-manager.php
+msgid "https://github.com/fabiodalez-dev/faz-cookie-manager"
+msgstr ""
+
+#. Description of the plugin
+#: faz-cookie-manager.php
+msgid "A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support."
+msgstr ""
+
+#. Author of the plugin
+#: faz-cookie-manager.php
+msgid "Fabio D'Alessandro"
+msgstr ""
+
+#. Author URI of the plugin
+#: faz-cookie-manager.php
+msgid "https://fabiodalez.it/"
+msgstr ""
+
+#: admin/class-admin.php:147
+msgid "Dashboard"
+msgstr ""
+
+#: admin/class-admin.php:152
+msgid "Cookie Banner"
+msgstr ""
+
+#: admin/class-admin.php:157
+msgid "Cookies"
+msgstr ""
+
+#: admin/class-admin.php:162
+msgid "Consent Logs"
+msgstr ""
+
+#: admin/class-admin.php:167
+msgid "Google Consent Mode"
+msgstr ""
+
+#: admin/class-admin.php:172
+msgid "Languages"
+msgstr ""
+
+#: admin/class-admin.php:177
+msgid "Vendor List (IAB)"
+msgstr ""
+
+#: admin/class-admin.php:182
+#: admin/class-admin.php:887
+msgid "Settings"
+msgstr ""
+
+#: admin/class-admin.php:649
+#: admin/class-admin.php:650
+msgid "FAZ Cookie"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:104
+#: admin/modules/banners/api/class-api.php:447
+#: admin/modules/cookies/api/class-categories-api.php:95
+#: admin/modules/cookies/api/class-categories-api.php:230
+#: admin/modules/cookies/api/class-cookies-api.php:101
+#: admin/modules/cookies/api/class-cookies-api.php:171
+#: admin/modules/scanner/api/class-api.php:139
+#: admin/modules/scanner/api/class-api.php:412
+#: admin/modules/settings/api/class-api.php:350
+#: admin/modules/settings/api/class-api.php:356
+msgid "Unique identifier for the resource."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:196
+#: admin/modules/cookies/api/class-api-controller.php:107
+#: admin/modules/cookies/api/class-api-controller.php:155
+#: admin/modules/cookies/api/class-api-controller.php:200
+#: admin/modules/scanner/api/class-api.php:220
+msgid "Invalid ID."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:212
+msgid "Cannot create existing banner."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:232
+#: admin/modules/banners/api/class-api.php:256
+msgid "Invalid banner id"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:280
+msgid "No data specified to create/edit banners"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:414
+#: admin/modules/consentlogs/api/class-api.php:230
+#: admin/modules/cookies/api/class-api-controller.php:263
+#: admin/modules/settings/api/class-api.php:326
+msgid "Limit results to those matching a string."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:420
+msgid "Version"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:426
+msgid "Language of the banner"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:453
+msgid "Banner name for reference"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:458
+msgid "Banner unique name"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:463
+msgid "Banner settings."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:468
+msgid "Banner contents."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:473
+msgid "Indicates whether the banner is default or not"
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:478
+msgid "The date the banner was created, as GMT."
+msgstr ""
+
+#: admin/modules/banners/api/class-api.php:484
+msgid "The date the banner was last modified, as GMT."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:165
+msgid "Consent log not found."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:213
+#: admin/modules/cookies/api/class-api-controller.php:246
+#: admin/modules/settings/api/class-api.php:309
+msgid "Current page of the collection."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:221
+#: admin/modules/cookies/api/class-api-controller.php:254
+#: admin/modules/settings/api/class-api.php:317
+msgid "Maximum number of items to be returned in result set."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:236
+msgid "Filter by consent status."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:256
+msgid "Log ID."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:262
+msgid "Unique consent ID."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:267
+msgid "Consent status."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:272
+msgid "Consent categories."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:277
+msgid "Hashed visitor IP."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:283
+msgid "Visitor user agent."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:289
+msgid "Page URL where consent was given."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:294
+msgid "Date the consent was logged."
+msgstr ""
+
+#. translators: %s: Class method name.
+#: admin/modules/cookies/api/class-api-controller.php:44
+#: admin/modules/cookies/api/class-api-controller.php:54
+#: admin/modules/cookies/api/class-api-controller.php:65
+#: includes/class-store.php:145
+#: includes/class-store.php:156
+#: includes/class-store.php:167
+#: includes/class-store.php:178
+#, php-format
+msgid "Method '%s' not implemented. Must be overridden in subclass."
+msgstr ""
+
+#: admin/modules/cookies/api/class-api-controller.php:123
+msgid "Cannot create existing post."
+msgstr ""
+
+#: admin/modules/cookies/api/class-api-controller.php:269
+msgid "Language of the cookie"
+msgstr ""
+
+#: admin/modules/cookies/api/class-api-controller.php:275
+msgid "Cookie category"
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:174
+msgid "No data specified to create/edit categories"
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:215
+msgid "Bulk operation failed."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:236
+msgid "The date the category was created, as GMT."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:242
+msgid "The date the category was last modified, as GMT."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:248
+#: admin/modules/cookies/api/class-cookies-api.php:193
+msgid "Cookie category name."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:253
+msgid "Cookie category unique name"
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:258
+msgid "Cookie category language"
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:263
+msgid "Cookie category description."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:268
+msgid "Whether prior consent is required."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:273
+msgid "Category display priority."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:278
+msgid "Whether category is visible in audit table."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:283
+msgid "Whether category involves selling personal data."
+msgstr ""
+
+#: admin/modules/cookies/api/class-categories-api.php:288
+msgid "List of cookies in this category."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookie-scraper.php:78
+msgid "You do not have permission to use this endpoint."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookie-scraper.php:120
+msgid "Failed to update cookie definitions. Check server logs for details."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:177
+msgid "The date the cookie was created, as GMT."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:183
+msgid "The date the cookie was last modified, as GMT."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:188
+msgid "Cookie name."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:198
+msgid "Cookie unique name"
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:203
+msgid "Cookie description."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:208
+msgid "Cookie duration"
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:213
+msgid "Cookie language."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:218
+msgid "Cookie type."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:223
+msgid "Cookie domain."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:228
+msgid "If cookies added from the scanner or not."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:233
+msgid "URL patterns for blocking purposes"
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:139
+msgid "GCM status."
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:144
+msgid "Default settings."
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:149
+msgid "Wait for update."
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:154
+msgid "Pass ad click information through URLs."
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:159
+msgid "Redact ads data."
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:164
+msgid "Enable Google Additional Consent Mode."
+msgstr ""
+
+#: admin/modules/gcm/api/class-api.php:169
+msgid "GACM provider IDs (comma-separated)."
+msgstr ""
+
+#: admin/modules/gvl/api/class-api.php:307
+msgid "GVL data not available. Please update GVL first."
+msgstr ""
+
+#: admin/modules/languages/api/class-api.php:86
+msgid "This endpoint is deprecated. Use the settings endpoint instead."
+msgstr ""
+
+#: admin/modules/pageviews/api/class-api.php:190
+msgid "Failed to record event."
+msgstr ""
+
+#: admin/modules/pageviews/api/class-api.php:254
+msgid "Number of days to look back."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:251
+msgid "A scan is already in progress, please wait for it to complete."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:351
+msgid "Empty or invalid request body."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:418
+msgid "Scan status."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:424
+msgid "Scan type."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:430
+msgid "Scan date."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:436
+msgid "Total cookies found."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:442
+msgid "Total pages scanned."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:448
+msgid "Maximum pages to scan."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:184
+msgid "Filter name is required."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:194
+msgid "Filter name is not permitted."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:333
+msgid "Force fetch data"
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:361
+#: admin/modules/settings/api/class-api.php:366
+#: admin/modules/settings/api/class-api.php:371
+#: admin/modules/settings/api/class-api.php:376
+#: admin/modules/settings/api/class-api.php:381
+msgid "Language."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:386
+msgid "Banner control settings."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:391
+msgid "Microsoft consent settings."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:396
+msgid "Scanner settings."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:401
+msgid "Linked sites settings."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:406
+msgid "IAB TCF settings."
+msgstr ""
+
+#: admin/modules/settings/api/class-api.php:432
+msgid "A MaxMind license key is required."
+msgstr ""
+
+#: admin/modules/settings/includes/class-controller.php:227
+msgid "Ultimate Plan (Local)"
+msgstr ""
+
+#: admin/modules/settings/includes/class-controller.php:345
+msgid "Cloud requests are not available in local mode."
+msgstr ""
+
+#: admin/modules/settings/includes/class-controller.php:368
+msgid "Payments are not available in local mode."
+msgstr ""
+
+#: admin/views/banner.php:182
+msgid "Cookie Policy URL"
+msgstr ""
+
+#: admin/views/banner.php:184
+msgid "Relative (/cookie-policy) or absolute (https://example.com/privacy). Default: /cookie-policy"
+msgstr ""
+
+#: admin/views/banner.php:237
+msgid "Link Text"
+msgstr ""
+
+#: admin/views/banner.php:239
+msgid "Link text colour picker"
+msgstr ""
+
+#: admin/views/banner.php:240
+msgid "Link text colour hex value"
+msgstr ""
+
+#: admin/views/banner.php:371
+msgid "Revisit Widget"
+msgstr ""
+
+#: admin/views/banner.php:375
+msgid "Background"
+msgstr ""
+
+#: admin/views/banner.php:382
+msgid "Icon"
+msgstr ""
+
+#: admin/views/banner.php:523
+msgid "Widget Label"
+msgstr ""
+
+#: admin/views/banner.php:525
+msgid "Used as tooltip and screen reader label (aria-label)."
+msgstr ""
+
+#: admin/views/cookies.php:56
+msgid "Select all cookies"
+msgstr ""
+
+#: faz-cookie-manager.php:99
+msgid "Please make sure the cache is cleared after each plugin update especially if you have minified JS and/or CSS files."
+msgstr ""
+
+#. translators: %s: service name (e.g. "YouTube", "Google Maps")
+#. translators: %s: service name
+#: frontend/class-frontend.php:884
+#: frontend/class-frontend.php:2009
+#: frontend/class-frontend.php:2067
+#, php-format
+msgid "This content is blocked because %s cookies have not been accepted."
+msgstr ""
+
+#: frontend/class-frontend.php:888
+#: frontend/class-frontend.php:2013
+#: frontend/class-frontend.php:2071
+msgid "Accept cookies"
+msgstr ""
+
+#: frontend/modules/consent-logger/class-consent-logger.php:100
+msgid "Failed to log consent."
+msgstr ""
+
+#: includes/class-activator.php:103
+msgid "Weekly"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:96
+msgid "Cookie"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:97
+msgid "Domain"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:98
+msgid "Duration"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:99
+msgid "Description"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:100
+msgid "Category"
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:164
+msgid "No cookies found."
+msgstr ""
+
+#: includes/class-cookie-table-shortcode.php:224
+msgid "Other"
+msgstr ""
+
+#: includes/class-geolocation.php:241
+msgid "MaxMind license key is required."
+msgstr ""
+
+#. translators: %s: error message
+#: includes/class-geolocation.php:264
+#, php-format
+msgid "Download failed: %s"
+msgstr ""
+
+#: includes/class-geolocation.php:284
+msgid "PharData extension is required to extract the database."
+msgstr ""
+
+#: includes/class-geolocation.php:301
+msgid "Failed to copy database file."
+msgstr ""
+
+#: includes/class-geolocation.php:312
+msgid "No .mmdb file found in the archive."
+msgstr ""
+
+#. translators: %s: error message
+#: includes/class-geolocation.php:324
+#, php-format
+msgid "Extraction failed: %s"
+msgstr ""
+
+#: includes/class-rest-controller.php:52
+msgid "Sorry, you cannot list resources."
+msgstr ""
+
+#: includes/class-rest-controller.php:66
+msgid "Sorry, you are not allowed to create resources."
+msgstr ""
+
+#: includes/class-rest-controller.php:80
+msgid "Sorry, you cannot view this resource."
+msgstr ""
+
+#: includes/class-rest-controller.php:94
+msgid "Sorry, you are not allowed to edit this resource."
+msgstr ""
+
+#: includes/class-rest-controller.php:108
+msgid "Sorry, you are not allowed to delete this resource."
+msgstr ""
+
+#: includes/class-utils.php:315
+msgid "Invalid nonce. Please refresh the page and try again."
+msgstr ""
+
+#: uninstall.php:99
+msgid "Failed to delete FAZ Cookie Manager plugin data!"
+msgstr ""

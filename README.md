@@ -525,6 +525,19 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 - Initial release — fork of CookieYes v3.4.0
 - GDPR, CCPA, ePrivacy compliance, Google Consent Mode v2, IAB TCF v2.2
 
+## Translations
+
+FAZ Cookie Manager is fully translatable. All admin and frontend strings use WordPress i18n functions (`__()`, `_e()`, `esc_html__()`) with the `faz-cookie-manager` text domain.
+
+**How to translate:**
+
+1. Use the included `.pot` file at `languages/faz-cookie-manager.pot` as a template
+2. Create a `.po` file for your language (e.g., `faz-cookie-manager-it_IT.po`) using [Poedit](https://poedit.net/) or any gettext editor
+3. Compile it to `.mo` and place both files in the `languages/` folder
+4. WordPress will automatically load the translation matching your site language
+
+The banner content (title, description, button labels) is configured separately in the admin UI under **Banner → Content** and supports per-language customisation via the **Languages** module.
+
 ## Author
 
 **Fabio D'Alessandro** -- [fabiodalez.it](https://fabiodalez.it/)
