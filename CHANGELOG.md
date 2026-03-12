@@ -2,6 +2,20 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.5.2] — 2026-03-12
+
+### Fixed
+- **Mixed-content banner URLs** — auto-repair cached banner template when site switches to HTTPS (reverse proxy, load balancer)
+- **Banner inline style injection** — sanitise user-controlled CSS values with allowlist to prevent style injection
+- **Frontend URL handling** — harden `script.js` URL parsing with strict protocol validation and `_fazIsAllowedScheme()` guard
+- **Cookie scraper origin matching** — relax www/apex comparison and add async httponly fallback
+- **Migration safety** — guard `$wpdb->update()` and `$wpdb->delete()` return values in category rename migration
+- **Translation file fallback** — copy from bundled files instead of downloading from cloud, with error logging on failure
+- **Plugin action link** — wrap `get_admin_url()` output with `esc_url()` for defense-in-depth
+
+### Added
+- **Plugin lifecycle E2E tests** — upgrade path (deactivate → reactivate) and fresh install (delete → reinstall) with full category and banner verification
+
 ## [1.5.1] — 2026-03-11
 
 ### Fixed
