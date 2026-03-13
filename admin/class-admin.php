@@ -875,7 +875,7 @@ window.wp.apiFetch=apiFetch;
 			return;
 		}
 		$dismiss_url = wp_nonce_url( add_query_arg( 'faz_dismiss_wc_notice', '1' ), 'faz_dismiss_wc_notice', '_faz_nonce' );
-		echo '<div class="notice notice-info is-dismissible" style="position:relative">';
+		echo '<div class="notice notice-info" style="position:relative">';
 		echo '<p><strong>' . esc_html__( 'WooCommerce detected', 'faz-cookie-manager' ) . '</strong> — ';
 		echo esc_html__( 'FAZ Cookie Manager automatically whitelists WooCommerce core scripts and payment gateway scripts (PayPal, Stripe, Mollie, etc.) on checkout and cart pages so your store keeps working. This can be customised via the', 'faz-cookie-manager' );
 		echo ' <code>faz_whitelisted_scripts</code> ' . esc_html__( 'and', 'faz-cookie-manager' );

@@ -1248,27 +1248,32 @@ class Frontend {
 			// PayPal.
 			'paypal.com/sdk/js',
 			'paypalobjects.com/api/checkout.js',
-			'ppcp-',
+			'ppcp-gateway',
+			'ppcp-webhooks',
 			'PayPalCommerceGateway',
 			// Stripe.
 			'js.stripe.com',
 			'm.stripe.network',
 			'wc-stripe-',
-			'stripe-',
+			'stripe-payment',
+			'stripe-upe',
 			// Mollie.
-			'mollie',
+			'mollie-payments',
+			'plugins/mollie-payments-for-woocommerce/',
 			// Square.
 			'squareup.com',
 			'square-credit-card',
 			// Braintree.
 			'braintreegateway.com',
-			'braintree-',
+			'braintree-web/',
+			'wc-braintree',
 			// Klarna.
 			'x.klarnacdn.net',
-			'klarna-',
+			'klarna-payments',
+			'klarna-checkout',
 			// Amazon Pay.
 			'amazonpay',
-			'amazon-payments',
+			'amazon-payments-advanced',
 		) );
 
 		if ( ! is_array( $patterns ) ) {
@@ -2059,7 +2064,7 @@ class Frontend {
 		if ( ! $this->template ) {
 			return;
 		}
-		if ( true === faz_disable_banner() ) {
+		if ( true === faz_disable_banner() || $this->is_blocking_disabled_for_page() ) {
 			return;
 		}
 
