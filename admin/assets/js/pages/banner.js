@@ -115,6 +115,14 @@
 			});
 		}
 
+		// Toggle "Do Not Sell" colour row when law changes
+		var lawEl = document.getElementById('faz-b-law');
+		if (lawEl) {
+			lawEl.addEventListener('change', function () {
+				toggleDoNotSellColorRow(lawEl.value);
+			});
+		}
+
 		// ── Brand Logo Media Uploader ──
 		initBrandLogoUploader();
 
@@ -238,6 +246,10 @@
 		populateButtonColors('accept', buttons.accept);
 		populateButtonColors('reject', buttons.reject);
 		populateButtonColors('settings', buttons.settings);
+		// Do Not Sell text colour (single picker, not full button trio)
+		var donotSellStyles = (buttons.donotSell && buttons.donotSell.styles) || {};
+		setColor('faz-b-donotsell-text', donotSellStyles.color || '#1863DC');
+		toggleDoNotSellColorRow(lawVal);
 
 		// Category preview colours
 		var catPreview = (config.categoryPreview && config.categoryPreview.elements) || {};
@@ -290,6 +302,11 @@
 		}
 		setVal('faz-b-brandlogo-url', logoUrl);
 		updateBrandLogoPreview(logoUrl);
+	}
+
+	function toggleDoNotSellColorRow(law) {
+		var row = document.getElementById('faz-donotsell-color-row');
+		if (row) row.style.display = (law === 'ccpa' || law === 'gdpr_ccpa') ? '' : 'none';
 	}
 
 	function populateButtonColors(name, btnData) {
@@ -443,6 +460,8 @@
 		populateButtonColors('accept', btns.accept);
 		populateButtonColors('reject', btns.reject);
 		populateButtonColors('settings', btns.settings);
+		var presetDns = (btns.donotSell && btns.donotSell.styles) || {};
+		setColor('faz-b-donotsell-text', presetDns.color || '#1863DC');
 
 		// Category preview colours from preset
 		var catPrev = (preset.categoryPreview && preset.categoryPreview.elements) || {};
@@ -547,6 +566,10 @@
 		readButtonColors('accept', btns.accept);
 		readButtonColors('reject', btns.reject);
 		readButtonColors('settings', btns.settings);
+		// Do Not Sell text colour
+		ensureObj(btns, 'donotSell.styles');
+		btns.donotSell.tag = 'donotsell-button';
+		btns.donotSell.styles.color = getColor('faz-b-donotsell-text');
 
 		btns.accept.status = isChecked('faz-b-accept-toggle');
 		btns.reject.status = isChecked('faz-b-reject-toggle');
@@ -837,6 +860,12 @@
 		host.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a').forEach(function (a) {
 			a.style.color = linkColor;
 			a.style.textDecorationColor = linkColor;
+		});
+		// Do Not Sell has its own dedicated colour
+		var dnsColor = getColor('faz-b-donotsell-text') || '#1863DC';
+		host.querySelectorAll('[data-faz-tag="donotsell-button"]').forEach(function (el) {
+			el.style.color = dnsColor;
+			if (el.tagName === 'A') el.style.textDecorationColor = dnsColor;
 		});
 
 		// Apply display state (panel-level, not host)

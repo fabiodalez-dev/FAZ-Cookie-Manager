@@ -1588,7 +1588,7 @@ function _fazAttachManualLinksStyles() {
     const manualLinksStyles = _fazStore._bannerConfig.config.manualLinks.styles;
     if (!manualLinksStyles) return;
     
-    const manualLinks = document.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a');
+    const manualLinks = document.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a:not([data-faz-tag="donotsell-button"])');
     if (manualLinks.length < 1) return;
     Array.from(manualLinks).forEach((link) => {
         for (const style in manualLinksStyles) {

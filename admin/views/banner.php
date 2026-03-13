@@ -313,6 +313,14 @@ defined( 'ABSPATH' ) || exit;
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-settings-border-hex" style="width:90px;">
 						</div>
 					</div>
+
+					<div class="faz-form-group" id="faz-donotsell-color-row" style="display:none;">
+						<label><?php echo esc_html__( 'Do Not Sell — Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-donotsell-text" aria-label="<?php echo esc_attr__( 'Do Not Sell text colour picker', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-donotsell-text-hex" aria-label="<?php echo esc_attr__( 'Do Not Sell text colour hex value', 'faz-cookie-manager' ); ?>" style="width:90px;">
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
