@@ -673,6 +673,9 @@ class Frontend {
 		}
 		$current_url = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
 		foreach ( $excluded as $pattern ) {
+			if ( ! is_string( $pattern ) ) {
+				continue;
+			}
 			$pattern = trim( $pattern );
 			if ( empty( $pattern ) ) {
 				continue;
@@ -1199,13 +1202,15 @@ class Frontend {
 			$whitelist = array();
 		}
 
-		// Sanitise: trim, remove empty strings (stripos('x','') === 0 always).
+		// Sanitise: trim, deduplicate, remove empty strings (stripos('x','') === 0 always).
 		$this->whitelist_cache = array_values(
-			array_filter(
-				array_map( 'trim', array_map( 'strval', $whitelist ) ),
-				function ( $p ) {
-					return '' !== $p;
-				}
+			array_unique(
+				array_filter(
+					array_map( 'trim', array_map( 'strval', $whitelist ) ),
+					function ( $p ) {
+						return '' !== $p;
+					}
+				)
 			)
 		);
 

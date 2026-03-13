@@ -566,9 +566,10 @@
 		readButtonColors('accept', btns.accept);
 		readButtonColors('reject', btns.reject);
 		readButtonColors('settings', btns.settings);
-		// Do Not Sell text colour
+		// Do Not Sell text colour + mirror status for consistency
 		ensureObj(btns, 'donotSell.styles');
 		btns.donotSell.tag = 'donotsell-button';
+		btns.donotSell.status = (law === 'ccpa' || law === 'gdpr_ccpa');
 		btns.donotSell.styles.color = getColor('faz-b-donotsell-text');
 
 		btns.accept.status = isChecked('faz-b-accept-toggle');
