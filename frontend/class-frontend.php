@@ -234,12 +234,14 @@ class Frontend {
 			}
 
 			// Pageview and banner interaction tracking.
+			// No nonce needed — the endpoint uses __return_true permission.
+			// Sending a stale nonce (page-cached pages) triggers a 403 because
+			// WordPress validates X-WP-Nonce before the permission_callback.
 			wp_localize_script(
 				$this->plugin_name,
 				'_fazPageviewConfig',
 				array(
 					'restUrl'   => rest_url( 'faz/v1/pageviews' ),
-					'nonce'     => wp_create_nonce( 'wp_rest' ),
 					'pageUrl'   => home_url( add_query_arg( array(), false ) ),
 					'pageTitle' => wp_get_document_title(),
 				)
@@ -249,8 +251,8 @@ class Frontend {
 				"var sid=sessionStorage.getItem('faz_sid');" .
 				"if(!sid){sid=Math.random().toString(36).substring(2)+Date.now().toString(36);sessionStorage.setItem('faz_sid',sid);}" .
 				"function fazTrack(t){" .
-					"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json','X-WP-Nonce':_fazPageviewConfig.nonce}," .
-					"body:JSON.stringify({page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t,session_id:sid})});" .
+					"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'}," .
+					"body:JSON.stringify({page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t,session_id:sid})}).catch(function(){});" .
 				"}" .
 				"fazTrack('pageview');" .
 				"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .
@@ -273,7 +275,6 @@ class Frontend {
 					'_fazConsentLog',
 					array(
 						'restUrl' => rest_url( 'faz/v1/consent' ),
-						'nonce'   => wp_create_nonce( 'wp_rest' ),
 					)
 				);
 				$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
@@ -282,14 +283,14 @@ class Frontend {
 					"if(typeof _fazConsentLog==='undefined')return;" .
 					"fetch(_fazConsentLog.restUrl,{" .
 						"method:'POST'," .
-						"headers:{'Content-Type':'application/json','X-WP-Nonce':_fazConsentLog.nonce}," .
+						"headers:{'Content-Type':'application/json'}," .
 						"body:JSON.stringify({" .
 							"consent_id:(function(){var m=document.cookie.match(/consentid:([^,;]+)/);return m?m[1]:''})()," .
 							"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 							"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
 							"url:window.location.href" .
 						"})" .
-					"});" .
+					"}).catch(function(){});" .
 				"});";
 				wp_add_inline_script( $this->plugin_name, $inline_js );
 			}

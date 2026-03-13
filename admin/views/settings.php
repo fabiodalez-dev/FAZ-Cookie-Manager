@@ -11,51 +11,51 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>Banner Control</h3>
+			<h3><?php esc_html_e( 'Banner Control', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.status">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Enable cookie banner</span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable cookie banner', 'faz-cookie-manager' ); ?></span>
 				</label>
 			</div>
 			<div class="faz-form-group">
-				<label>Excluded Pages</label>
-				<textarea class="faz-textarea" data-path="banner_control.excluded_pages" rows="3" placeholder="One per line: page ID or URL pattern like /privacy/*"></textarea>
-				<div class="faz-help">Enter page IDs or URL patterns, one per line.</div>
+				<label><?php esc_html_e( 'Excluded Pages', 'faz-cookie-manager' ); ?></label>
+				<textarea class="faz-textarea" data-path="banner_control.excluded_pages" rows="3" placeholder="<?php esc_attr_e( 'One per line: page ID or URL pattern like /privacy/*', 'faz-cookie-manager' ); ?>"></textarea>
+				<div class="faz-help"><?php esc_html_e( 'Enter page IDs or URL patterns, one per line.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>Script Blocking</h3>
+			<h3><?php esc_html_e( 'Script Blocking', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-form-group">
-				<label>Pages Excluded from Script Blocking</label>
-				<textarea class="faz-textarea" data-path="script_blocking.excluded_pages" rows="3" placeholder="One per line: /checkout/* or /cart/*"></textarea>
-				<div class="faz-help">URL patterns where script blocking is disabled (banner still shows). One per line, supports wildcards (e.g. <code>/checkout/*</code>).</div>
+				<label><?php esc_html_e( 'Pages Excluded from Script Blocking', 'faz-cookie-manager' ); ?></label>
+				<textarea class="faz-textarea" data-path="script_blocking.excluded_pages" rows="3" placeholder="<?php esc_attr_e( 'One per line: /checkout/* or /cart/*', 'faz-cookie-manager' ); ?>"></textarea>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'URL patterns where script blocking is disabled (banner still shows). One per line, supports wildcards (e.g. <code>/checkout/*</code>).', 'faz-cookie-manager' ) ); ?></div>
 			</div>
 		</div>
 	</div>
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>Consent Logs</h3>
+			<h3><?php esc_html_e( 'Consent Logs', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="consent_logs.status">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Enable consent logging</span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable consent logging', 'faz-cookie-manager' ); ?></span>
 				</label>
 			</div>
 			<div class="faz-form-group">
-				<label>Retention Period (months)</label>
+				<label><?php esc_html_e( 'Retention Period (months)', 'faz-cookie-manager' ); ?></label>
 				<input type="number" class="faz-input faz-input-sm" data-path="consent_logs.retention" value="12" min="1" max="120" style="width:120px;">
 			</div>
 		</div>
@@ -63,11 +63,11 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>Scanner</h3>
+			<h3><?php esc_html_e( 'Scanner', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-form-group">
-				<label>Max Pages to Scan</label>
+				<label><?php esc_html_e( 'Max Pages to Scan', 'faz-cookie-manager' ); ?></label>
 				<input type="number" class="faz-input faz-input-sm" data-path="scanner.max_pages" value="100" min="1" style="width:120px;">
 			</div>
 		</div>
@@ -75,21 +75,21 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>Microsoft Consent APIs</h3>
+			<h3><?php esc_html_e( 'Microsoft Consent APIs', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="microsoft.uet_consent_mode">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Microsoft UET Consent Mode</span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Microsoft UET Consent Mode', 'faz-cookie-manager' ); ?></span>
 				</label>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="microsoft.clarity_consent">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Microsoft Clarity Consent API</span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Microsoft Clarity Consent API', 'faz-cookie-manager' ); ?></span>
 				</label>
 			</div>
 		</div>
@@ -97,63 +97,62 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>IAB TCF</h3>
+			<h3><?php esc_html_e( 'IAB TCF', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="iab.enabled">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Enable IAB TCF v2.3</span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable IAB TCF v2.3', 'faz-cookie-manager' ); ?></span>
 				</label>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
-				<label for="faz-iab-publisher-cc" style="display:block;margin-bottom:4px;font-weight:600;">Publisher Country Code</label>
+				<label for="faz-iab-publisher-cc" style="display:block;margin-bottom:4px;font-weight:600;"><?php esc_html_e( 'Publisher Country Code', 'faz-cookie-manager' ); ?></label>
 				<input type="text" id="faz-iab-publisher-cc" data-path="iab.publisher_cc" maxlength="2" style="width:60px;text-transform:uppercase;" placeholder="IT">
-				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);">ISO 3166-1 alpha-2 code of the publisher's country (e.g. IT, DE, FR). Used in the TCF consent string.</p>
+				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);"><?php esc_html_e( 'ISO 3166-1 alpha-2 code of the publisher\'s country (e.g. IT, DE, FR). Used in the TCF consent string.', 'faz-cookie-manager' ); ?></p>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
-				<label for="faz-iab-cmp-id" style="display:block;margin-bottom:4px;font-weight:600;">CMP ID</label>
+				<label for="faz-iab-cmp-id" style="display:block;margin-bottom:4px;font-weight:600;"><?php esc_html_e( 'CMP ID', 'faz-cookie-manager' ); ?></label>
 				<input type="number" id="faz-iab-cmp-id" class="faz-input faz-input-sm" data-path="iab.cmp_id" min="0" max="4095" style="width:120px;" placeholder="0">
-				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);">Your registered IAB CMP ID (<a href="https://iabeurope.eu/cmp-list/" target="_blank" rel="noopener noreferrer">IAB CMP List</a>). With ID&nbsp;0 the banner and cookie blocking work normally, but ad-tech vendors will ignore the TC String. Google Consent Mode v2 works regardless of CMP registration.</p>
+				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);"><?php echo wp_kses_post( __( 'Your registered IAB CMP ID (<a href="https://iabeurope.eu/cmp-list/" target="_blank" rel="noopener noreferrer">IAB CMP List</a>). With ID&nbsp;0 the banner and cookie blocking work normally, but ad-tech vendors will ignore the TC String. Google Consent Mode v2 works regardless of CMP registration.', 'faz-cookie-manager' ) ); ?></p>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="iab.purpose_one_treatment">
 					<span class="faz-toggle-track"></span>
-					<span class="faz-toggle-label">Purpose One Treatment</span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Purpose One Treatment', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);">Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a country where Purpose 1 is not required).</p>
+				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);"><?php esc_html_e( 'Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a country where Purpose 1 is not required).', 'faz-cookie-manager' ); ?></p>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
 				<div id="faz-gvl-status" role="status" aria-live="polite" aria-atomic="true" style="padding:10px;border-radius:6px;background:var(--faz-bg-secondary);">
-					<span style="color:var(--faz-text-secondary);">Loading GVL status...</span>
+					<span style="color:var(--faz-text-secondary);"><?php esc_html_e( 'Loading GVL status...', 'faz-cookie-manager' ); ?></span>
 				</div>
-				<button class="faz-btn faz-btn-secondary" id="faz-gvl-update" type="button" style="margin-top:8px;">Update GVL Now</button>
+				<button class="faz-btn faz-btn-secondary" id="faz-gvl-update" type="button" style="margin-top:8px;"><?php esc_html_e( 'Update GVL Now', 'faz-cookie-manager' ); ?></button>
 			</div>
 		</div>
 	</div>
 
 	<div class="faz-card">
 		<div class="faz-card-header">
-			<h3>GeoIP Database (MaxMind GeoLite2)</h3>
+			<h3><?php esc_html_e( 'GeoIP Database (MaxMind GeoLite2)', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
 			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
-				Geo-targeting requires a MaxMind GeoLite2-Country database.
-				<a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">Get a free license key</a>.
+				<?php echo wp_kses_post( __( 'Geo-targeting requires a MaxMind GeoLite2-Country database. <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">Get a free license key</a>.', 'faz-cookie-manager' ) ); ?>
 			</p>
 			<div class="faz-form-group">
-				<label>MaxMind License Key</label>
-				<input type="password" class="faz-input" data-path="geolocation.maxmind_license_key" placeholder="Enter your MaxMind license key" style="max-width:400px;">
+				<label><?php esc_html_e( 'MaxMind License Key', 'faz-cookie-manager' ); ?></label>
+				<input type="password" class="faz-input" data-path="geolocation.maxmind_license_key" placeholder="<?php esc_attr_e( 'Enter your MaxMind license key', 'faz-cookie-manager' ); ?>" style="max-width:400px;">
 			</div>
 			<div id="faz-geodb-status" style="margin:12px 0;padding:10px;border-radius:6px;background:var(--faz-bg-secondary);display:none;">
 			</div>
-			<button class="faz-btn faz-btn-secondary" id="faz-geodb-update" type="button">Update Database</button>
+			<button class="faz-btn faz-btn-secondary" id="faz-geodb-update" type="button"><?php esc_html_e( 'Update Database', 'faz-cookie-manager' ); ?></button>
 		</div>
 	</div>
 
 	<div style="margin-top:8px;">
-		<button class="faz-btn faz-btn-primary" id="faz-settings-save">Save Settings</button>
+		<button class="faz-btn faz-btn-primary" id="faz-settings-save"><?php esc_html_e( 'Save Settings', 'faz-cookie-manager' ); ?></button>
 	</div>
 </div>

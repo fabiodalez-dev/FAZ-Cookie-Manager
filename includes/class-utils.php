@@ -199,7 +199,8 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 	function faz_disable_banner() {
 		global $wp_customize;
 		if ( isset( $_GET['et_fb'] ) || ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		|| isset( $_GET['elementor-preview'] ) || isset( $_POST['cs_preview_state'] ) || isset( $wp_customize ) ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+		|| isset( $_GET['elementor-preview'] ) || isset( $_POST['cs_preview_state'] ) || isset( $wp_customize ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+		|| ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) )
 		{
 			return true;
 		}
