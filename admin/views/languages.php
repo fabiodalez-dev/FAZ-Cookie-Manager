@@ -49,6 +49,7 @@ foreach ( $all_languages as $name => $code ) {
 				<select class="faz-select" id="faz-default-lang" style="width:auto;max-width:300px;">
 					<!-- JS populates from selected languages -->
 				</select>
+				<div class="faz-help"><?php esc_html_e( 'The language used when the visitor\'s browser language does not match any of the active languages above.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 		<div class="faz-card-footer">

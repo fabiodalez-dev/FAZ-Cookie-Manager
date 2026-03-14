@@ -20,6 +20,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable cookie banner', 'faz-cookie-manager' ); ?></span>
 				</label>
+				<div class="faz-help"><?php esc_html_e( 'When disabled, the cookie consent banner will not appear on your site and no scripts will be blocked.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Excluded Pages', 'faz-cookie-manager' ); ?></label>
@@ -53,10 +54,12 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable consent logging', 'faz-cookie-manager' ); ?></span>
 				</label>
+				<div class="faz-help"><?php esc_html_e( 'Records each visitor\'s consent choice (accepted, rejected, or partial) for GDPR accountability. Required by Art. 7(1) GDPR to demonstrate that consent was given.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Retention Period (months)', 'faz-cookie-manager' ); ?></label>
 				<input type="number" class="faz-input faz-input-sm" data-path="consent_logs.retention" value="12" min="1" max="120" style="width:120px;">
+				<div class="faz-help"><?php esc_html_e( 'How long consent records are kept before automatic deletion. Most DPAs recommend 12 months. Logs older than this period are purged daily.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>
@@ -69,6 +72,7 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Max Pages to Scan', 'faz-cookie-manager' ); ?></label>
 				<input type="number" class="faz-input faz-input-sm" data-path="scanner.max_pages" value="100" min="1" style="width:120px;">
+				<div class="faz-help"><?php esc_html_e( 'Maximum number of pages the cookie scanner will crawl. Higher values find more cookies but take longer. 100 pages is sufficient for most sites.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>
@@ -84,6 +88,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Microsoft UET Consent Mode', 'faz-cookie-manager' ); ?></span>
 				</label>
+				<div class="faz-help"><?php esc_html_e( 'Signals consent status to Microsoft Advertising (Bing Ads) via the UET tag. Enable if you use Microsoft Advertising and need to respect consent for ad tracking.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
@@ -91,6 +96,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Microsoft Clarity Consent API', 'faz-cookie-manager' ); ?></span>
 				</label>
+				<div class="faz-help"><?php esc_html_e( 'Signals consent status to Microsoft Clarity (heatmaps and session recordings). Enable if you use Clarity and want it to pause tracking until consent is given.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>
@@ -106,16 +112,17 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable IAB TCF v2.3', 'faz-cookie-manager' ); ?></span>
 				</label>
+				<div class="faz-help"><?php esc_html_e( 'Enables the IAB Transparency & Consent Framework. Required if you work with ad-tech vendors that need a standardised TC String for programmatic advertising in the EU.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
 				<label for="faz-iab-publisher-cc" style="display:block;margin-bottom:4px;font-weight:600;"><?php esc_html_e( 'Publisher Country Code', 'faz-cookie-manager' ); ?></label>
 				<input type="text" id="faz-iab-publisher-cc" data-path="iab.publisher_cc" maxlength="2" style="width:60px;text-transform:uppercase;" placeholder="IT">
-				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);"><?php esc_html_e( 'ISO 3166-1 alpha-2 code of the publisher\'s country (e.g. IT, DE, FR). Used in the TCF consent string.', 'faz-cookie-manager' ); ?></p>
+				<div class="faz-help"><?php esc_html_e( 'ISO 3166-1 alpha-2 code of the publisher\'s country (e.g. IT, DE, FR). Used in the TCF consent string.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
 				<label for="faz-iab-cmp-id" style="display:block;margin-bottom:4px;font-weight:600;"><?php esc_html_e( 'CMP ID', 'faz-cookie-manager' ); ?></label>
 				<input type="number" id="faz-iab-cmp-id" class="faz-input faz-input-sm" data-path="iab.cmp_id" min="0" max="4095" style="width:120px;" placeholder="0">
-				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);"><?php echo wp_kses_post( __( 'Your registered IAB CMP ID (<a href="https://iabeurope.eu/cmp-list/" target="_blank" rel="noopener noreferrer">IAB CMP List</a>). With ID&nbsp;0 the banner and cookie blocking work normally, but ad-tech vendors will ignore the TC String. Google Consent Mode v2 works regardless of CMP registration.', 'faz-cookie-manager' ) ); ?></p>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Your registered IAB CMP ID (<a href="https://iabeurope.eu/cmp-list/" target="_blank" rel="noopener noreferrer">IAB CMP List</a>). With ID&nbsp;0 the banner and cookie blocking work normally, but ad-tech vendors will ignore the TC String. Google Consent Mode v2 works regardless of CMP registration.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
 				<label class="faz-toggle">
@@ -123,7 +130,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Purpose One Treatment', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<p class="description" style="margin-top:4px;color:var(--faz-text-secondary);"><?php esc_html_e( 'Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a country where Purpose 1 is not required).', 'faz-cookie-manager' ); ?></p>
+				<div class="faz-help"><?php esc_html_e( 'Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a country where Purpose 1 is not required).', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group" data-show-if="iab.enabled" style="margin-top:12px;">
 				<div id="faz-gvl-status" role="status" aria-live="polite" aria-atomic="true" style="padding:10px;border-radius:6px;background:var(--faz-bg-secondary);">
