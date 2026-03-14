@@ -46,6 +46,11 @@ class Consent_Logger {
 				'callback'            => array( $this, 'handle_rest_consent' ),
 				'permission_callback' => '__return_true',
 				'args'                => array(
+					'token' => array(
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 					'consent_id' => array(
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
@@ -75,6 +80,31 @@ class Consent_Logger {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_rest_consent( $request ) {
+		// Verify origin token: a time-bucketed HMAC generated server-side and
+		// embedded in the page. Prevents casual spoofing from external origins.
+		// Accepts current and previous buckets (24h total) to tolerate caching.
+		$token = $request->get_param( 'token' );
+		if ( ! empty( $token ) ) {
+			$current_bucket  = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
+			$previous_bucket = (string) ( floor( time() / ( 12 * HOUR_IN_SECONDS ) ) - 1 );
+			$valid = hash_equals( wp_hash( 'faz_consent_' . $current_bucket ), $token )
+				|| hash_equals( wp_hash( 'faz_consent_' . $previous_bucket ), $token );
+			if ( ! $valid ) {
+				return new \WP_Error(
+					'invalid_token',
+					'Invalid origin token.',
+					array( 'status' => 403 )
+				);
+			}
+		} else {
+			// No token = request not from a page rendered by this plugin.
+			return new \WP_Error(
+				'missing_token',
+				'Origin token required.',
+				array( 'status' => 403 )
+			);
+		}
+
 		// Dual guardrail: per-IP AND per-consent_id throttle.
 		// The IP check prevents a single client from flooding with different consent_ids.
 		// The consent_id check prevents replaying the same consent_id from different IPs.

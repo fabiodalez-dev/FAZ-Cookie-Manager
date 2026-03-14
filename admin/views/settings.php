@@ -32,6 +32,22 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="pageview_tracking">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable pageview and banner interaction tracking', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Tracks pageviews and banner interactions (accept, reject, settings) for the dashboard analytics. This sends first-party data (page URL, title, session ID) before consent is given. Disable for stricter compliance.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Script Blocking', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">

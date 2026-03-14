@@ -233,48 +233,58 @@ class Frontend {
 				);
 			}
 
-			// Pageview and banner interaction tracking.
-			// No nonce needed — the endpoint uses __return_true permission.
-			// Sending a stale nonce (page-cached pages) triggers a 403 because
-			// WordPress validates X-WP-Nonce before the permission_callback.
-			wp_localize_script(
-				$this->plugin_name,
-				'_fazPageviewConfig',
-				array(
-					'restUrl'   => rest_url( 'faz/v1/pageviews' ),
-					'pageUrl'   => home_url( add_query_arg( array(), false ) ),
-					'pageTitle' => wp_get_document_title(),
-				)
-			);
-			$pv_js = "(function(){" .
-				"if(typeof _fazPageviewConfig==='undefined')return;" .
-				"var sid=sessionStorage.getItem('faz_sid');" .
-				"if(!sid){sid=Math.random().toString(36).substring(2)+Date.now().toString(36);sessionStorage.setItem('faz_sid',sid);}" .
-				"function fazTrack(t){" .
-					"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'}," .
-					"body:JSON.stringify({page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t,session_id:sid})}).catch(function(){});" .
-				"}" .
-				"fazTrack('pageview');" .
-				"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .
-				"document.addEventListener('fazcookie_consent_update',function(e){" .
-					"var d=e.detail||{};" .
-					"if(d.action==='init')return;" .
-					"if(d.action==='all')fazTrack('banner_accept');" .
-					"else if(d.action==='reject')fazTrack('banner_reject');" .
-					"else fazTrack('banner_settings');" .
-				"});" .
-			"})();";
-			wp_add_inline_script( $this->plugin_name, $pv_js );
+			// Load settings once for pageview tracking and consent logging checks.
+			$faz_settings = get_option( 'faz_settings' );
+
+			// Pageview and banner interaction tracking (opt-in via Settings).
+			$pv_tracking = isset( $faz_settings['pageview_tracking'] ) && true === $faz_settings['pageview_tracking'];
+			if ( $pv_tracking ) {
+				wp_localize_script(
+					$this->plugin_name,
+					'_fazPageviewConfig',
+					array(
+						'restUrl'   => rest_url( 'faz/v1/pageviews' ),
+						'pageUrl'   => home_url( add_query_arg( array(), false ) ),
+						'pageTitle' => wp_get_document_title(),
+					)
+				);
+				$pv_js = "(function(){" .
+					"if(typeof _fazPageviewConfig==='undefined')return;" .
+					"var sid=sessionStorage.getItem('faz_sid');" .
+					"if(!sid){sid=Math.random().toString(36).substring(2)+Date.now().toString(36);sessionStorage.setItem('faz_sid',sid);}" .
+					"function fazTrack(t){" .
+						"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'}," .
+						"body:JSON.stringify({page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t,session_id:sid})}).catch(function(){});" .
+					"}" .
+					"fazTrack('pageview');" .
+					"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .
+					"document.addEventListener('fazcookie_consent_update',function(e){" .
+						"var d=e.detail||{};" .
+						"if(d.action==='init')return;" .
+						"if(d.action==='all')fazTrack('banner_accept');" .
+						"else if(d.action==='reject')fazTrack('banner_reject');" .
+						"else fazTrack('banner_settings');" .
+					"});" .
+				"})();";
+				wp_add_inline_script( $this->plugin_name, $pv_js );
+			}
 
 			// Add consent logging if enabled.
-			$faz_settings    = get_option( 'faz_settings' );
 			$log_consent_on  = isset( $faz_settings['consent_logs']['status'] ) && true === $faz_settings['consent_logs']['status'];
 			if ( $log_consent_on ) {
+				// Generate a time-bucketed HMAC token to verify requests originate
+				// from pages rendered by this site. The bucket covers 12 hours to
+				// tolerate page caching. The token is NOT a secret (it's in the
+				// HTML source) but prevents casual spoofing from external origins.
+				$bucket    = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
+				$hmac_token = wp_hash( 'faz_consent_' . $bucket );
+
 				wp_localize_script(
 					$this->plugin_name,
 					'_fazConsentLog',
 					array(
 						'restUrl' => rest_url( 'faz/v1/consent' ),
+						'token'   => $hmac_token,
 					)
 				);
 				$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
@@ -288,7 +298,8 @@ class Frontend {
 							"consent_id:(function(){var m=document.cookie.match(/consentid:([^,;]+)/);return m?m[1]:''})()," .
 							"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 							"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
-							"url:window.location.href" .
+							"url:window.location.href," .
+							"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .
 				"});";
@@ -624,7 +635,40 @@ class Frontend {
 			$parsed = wp_parse_url( home_url() );
 			$host   = isset( $parsed['host'] ) ? $parsed['host'] : '';
 			$parts  = explode( '.', $host );
-			if ( count( $parts ) > 2 ) {
+			$count  = count( $parts );
+
+			// Multi-level public suffixes (co.uk, com.au, etc.) need 3 labels
+			// to form a valid registrable domain. Taking only 2 labels would
+			// give ".co.uk" which browsers reject as a public suffix.
+			$multi_level_tlds = array(
+				'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'net.uk',
+				'com.au', 'net.au', 'org.au', 'edu.au',
+				'co.nz', 'net.nz', 'org.nz',
+				'co.jp', 'or.jp', 'ne.jp',
+				'co.kr', 'or.kr',
+				'co.in', 'net.in', 'org.in',
+				'co.za', 'org.za', 'web.za',
+				'com.br', 'net.br', 'org.br',
+				'com.cn', 'net.cn', 'org.cn',
+				'com.hk', 'org.hk',
+				'com.my', 'net.my', 'org.my',
+				'com.sg', 'net.sg', 'org.sg',
+				'com.tw', 'net.tw', 'org.tw',
+				'co.id', 'or.id', 'web.id',
+				'com.mx', 'org.mx',
+				'co.il',
+				'com.tr', 'org.tr',
+			);
+
+			$is_multi = false;
+			if ( $count >= 3 ) {
+				$last_two = implode( '.', array_slice( $parts, -2 ) );
+				$is_multi = in_array( $last_two, $multi_level_tlds, true );
+			}
+
+			if ( $is_multi && $count > 3 ) {
+				$domain = '.' . implode( '.', array_slice( $parts, -3 ) );
+			} elseif ( ! $is_multi && $count > 2 ) {
 				$domain = '.' . implode( '.', array_slice( $parts, -2 ) );
 			} elseif ( ! empty( $host ) ) {
 				$domain = '.' . $host;
@@ -2159,24 +2203,30 @@ class Frontend {
 
 		// Block <script> tags in content.
 		if ( false !== strpos( $content, '<script' ) ) {
-			$content = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#<script\b([^>]*)>(.*?)</script>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_script_tag( $m, $providers, $blocked_categories );
 				},
 				$content
 			);
+			if ( null !== $result ) {
+				$content = $result;
+			}
 		}
 
 		// Block <iframe> tags in content.
 		if ( false !== strpos( $content, '<iframe' ) ) {
-			$content = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
 					return $this->process_iframe_tag( $m, $providers, $blocked_categories );
 				},
 				$content
 			);
+			if ( null !== $result ) {
+				$content = $result;
+			}
 		}
 
 		// Hide social embed containers that depend on blocked scripts.
@@ -2264,7 +2314,7 @@ class Frontend {
 		$blocked_html = preg_replace( '/(<iframe\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '" style="display:none"', $blocked_html );
 		// Disable scripts using set_script_type_plain() for consistent type handling.
 		$cat_attr = $matched_category;
-		$blocked_html = preg_replace_callback(
+		$result = preg_replace_callback(
 			'#<script\b([^>]*)>(.*?)</script>#is',
 			function ( $m ) use ( $cat_attr ) {
 				$attrs = $this->set_script_type_plain( $m[1] );
@@ -2275,6 +2325,9 @@ class Frontend {
 			},
 			$blocked_html
 		);
+		if ( null !== $result ) {
+			$blocked_html = $result;
+		}
 
 		// Build placeholder.
 		$placeholder = '<div class="faz-iframe-placeholder' . ( $thumbnail_html ? ' faz-iframe-placeholder--video' : '' ) . '" data-faz-category="' . esc_attr( $matched_category ) . '">'
