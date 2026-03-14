@@ -110,6 +110,7 @@ class Settings extends Store {
 				'custom_rules'   => array(),
 				'excluded_pages' => array(),
 			),
+			'pageview_tracking' => false,
 		);
 
 	}
@@ -212,6 +213,7 @@ class Settings extends Store {
 			case 'clarity_consent':
 			case 'enabled':
 			case 'purpose_one_treatment':
+			case 'pageview_tracking':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'installed':

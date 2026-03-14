@@ -2202,6 +2202,8 @@ class Frontend {
 		}
 
 		// Block <script> tags in content.
+		// Fail-secure: on PCRE error, strip scripts entirely rather than serving
+		// them unblocked, which would violate consent requirements.
 		if ( false !== strpos( $content, '<script' ) ) {
 			$result = preg_replace_callback(
 				'#<script\b([^>]*)>(.*?)</script>#is',
@@ -2212,6 +2214,9 @@ class Frontend {
 			);
 			if ( null !== $result ) {
 				$content = $result;
+			} else {
+				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (scripts)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				$content = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', $content ) ?? $content;
 			}
 		}
 
@@ -2226,6 +2231,9 @@ class Frontend {
 			);
 			if ( null !== $result ) {
 				$content = $result;
+			} else {
+				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in filter_content_blocking (iframes)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				$content = preg_replace( '#<iframe\b[^>]*>.*?</iframe>#is', '', $content ) ?? $content;
 			}
 		}
 
@@ -2327,6 +2335,9 @@ class Frontend {
 		);
 		if ( null !== $result ) {
 			$blocked_html = $result;
+		} else {
+			error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in block_oembed (scripts)' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			$blocked_html = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', $blocked_html ) ?? $blocked_html;
 		}
 
 		// Build placeholder.
