@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FAZ Cookie Manager 1.5.2\n"
+"Project-Id-Version: FAZ Cookie Manager 1.6.0\n"
 "Report-Msgid-Bugs-To: https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-03-14T19:41:51+00:00\n"
+"POT-Creation-Date: 2026-03-15T13:24:55+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -54,7 +54,7 @@ msgstr ""
 
 #: admin/class-admin.php:163
 #: admin/views/dashboard.php:111
-#: admin/views/settings.php:48
+#: admin/views/settings.php:64
 msgid "Consent Logs"
 msgstr ""
 
@@ -1431,134 +1431,146 @@ msgid "Enter page IDs or URL patterns, one per line."
 msgstr ""
 
 #: admin/views/settings.php:35
+msgid "Pageview Tracking"
+msgstr ""
+
+#: admin/views/settings.php:42
+msgid "Enable pageview and banner interaction tracking"
+msgstr ""
+
+#: admin/views/settings.php:44
+msgid "Tracks pageviews and banner interactions (accept, reject, settings) for the dashboard analytics. This sends first-party data (page URL, title, session ID) before consent is given. Disable for stricter compliance."
+msgstr ""
+
+#: admin/views/settings.php:51
 msgid "Script Blocking"
 msgstr ""
 
-#: admin/views/settings.php:39
+#: admin/views/settings.php:55
 msgid "Pages Excluded from Script Blocking"
 msgstr ""
 
-#: admin/views/settings.php:40
+#: admin/views/settings.php:56
 msgid "One per line: /checkout/* or /cart/*"
 msgstr ""
 
-#: admin/views/settings.php:41
+#: admin/views/settings.php:57
 msgid "URL patterns where script blocking is disabled (banner still shows). One per line, supports wildcards (e.g. <code>/checkout/*</code>)."
 msgstr ""
 
-#: admin/views/settings.php:55
+#: admin/views/settings.php:71
 msgid "Enable consent logging"
 msgstr ""
 
-#: admin/views/settings.php:57
+#: admin/views/settings.php:73
 msgid "Records each visitor's consent choice (accepted, rejected, or partial) for GDPR accountability. Required by Art. 7(1) GDPR to demonstrate that consent was given."
 msgstr ""
 
-#: admin/views/settings.php:60
+#: admin/views/settings.php:76
 msgid "Retention Period (months)"
 msgstr ""
 
-#: admin/views/settings.php:62
+#: admin/views/settings.php:78
 msgid "How long consent records are kept before automatic deletion. Most DPAs recommend 12 months. Logs older than this period are purged daily."
 msgstr ""
 
-#: admin/views/settings.php:69
+#: admin/views/settings.php:85
 msgid "Scanner"
 msgstr ""
 
-#: admin/views/settings.php:73
+#: admin/views/settings.php:89
 msgid "Max Pages to Scan"
 msgstr ""
 
-#: admin/views/settings.php:75
+#: admin/views/settings.php:91
 msgid "Maximum number of pages the cookie scanner will crawl. Higher values find more cookies but take longer. 100 pages is sufficient for most sites."
 msgstr ""
 
-#: admin/views/settings.php:82
+#: admin/views/settings.php:98
 msgid "Microsoft Consent APIs"
 msgstr ""
 
-#: admin/views/settings.php:89
+#: admin/views/settings.php:105
 msgid "Microsoft UET Consent Mode"
 msgstr ""
 
-#: admin/views/settings.php:91
+#: admin/views/settings.php:107
 msgid "Signals consent status to Microsoft Advertising (Bing Ads) via the UET tag. Enable if you use Microsoft Advertising and need to respect consent for ad tracking."
 msgstr ""
 
-#: admin/views/settings.php:97
+#: admin/views/settings.php:113
 msgid "Microsoft Clarity Consent API"
 msgstr ""
 
-#: admin/views/settings.php:99
+#: admin/views/settings.php:115
 msgid "Signals consent status to Microsoft Clarity (heatmaps and session recordings). Enable if you use Clarity and want it to pause tracking until consent is given."
 msgstr ""
 
-#: admin/views/settings.php:106
+#: admin/views/settings.php:122
 msgid "IAB TCF"
 msgstr ""
 
-#: admin/views/settings.php:113
+#: admin/views/settings.php:129
 msgid "Enable IAB TCF v2.3"
 msgstr ""
 
-#: admin/views/settings.php:115
+#: admin/views/settings.php:131
 msgid "Enables the IAB Transparency & Consent Framework. Required if you work with ad-tech vendors that need a standardised TC String for programmatic advertising in the EU."
 msgstr ""
 
-#: admin/views/settings.php:118
+#: admin/views/settings.php:134
 msgid "Publisher Country Code"
 msgstr ""
 
-#: admin/views/settings.php:120
+#: admin/views/settings.php:136
 msgid "ISO 3166-1 alpha-2 code of the publisher's country (e.g. IT, DE, FR). Used in the TCF consent string."
 msgstr ""
 
-#: admin/views/settings.php:123
+#: admin/views/settings.php:139
 msgid "CMP ID"
 msgstr ""
 
-#: admin/views/settings.php:125
+#: admin/views/settings.php:141
 msgid "Your registered IAB CMP ID (<a href=\"https://iabeurope.eu/cmp-list/\" target=\"_blank\" rel=\"noopener noreferrer\">IAB CMP List</a>). With ID&nbsp;0 the banner and cookie blocking work normally, but ad-tech vendors will ignore the TC String. Google Consent Mode v2 works regardless of CMP registration."
 msgstr ""
 
-#: admin/views/settings.php:131
+#: admin/views/settings.php:147
 msgid "Purpose One Treatment"
 msgstr ""
 
-#: admin/views/settings.php:133
+#: admin/views/settings.php:149
 msgid "Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a country where Purpose 1 is not required)."
 msgstr ""
 
-#: admin/views/settings.php:137
+#: admin/views/settings.php:153
 msgid "Loading GVL status..."
 msgstr ""
 
-#: admin/views/settings.php:139
+#: admin/views/settings.php:155
 msgid "Update GVL Now"
 msgstr ""
 
-#: admin/views/settings.php:146
+#: admin/views/settings.php:162
 msgid "GeoIP Database (MaxMind GeoLite2)"
 msgstr ""
 
-#: admin/views/settings.php:150
+#: admin/views/settings.php:166
 msgid "Geo-targeting requires a MaxMind GeoLite2-Country database. <a href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Get a free license key</a>."
 msgstr ""
 
-#: admin/views/settings.php:153
+#: admin/views/settings.php:169
 msgid "MaxMind License Key"
 msgstr ""
 
-#: admin/views/settings.php:154
+#: admin/views/settings.php:170
 msgid "Enter your MaxMind license key"
 msgstr ""
 
-#: admin/views/settings.php:158
+#: admin/views/settings.php:174
 msgid "Update Database"
 msgstr ""
 
-#: admin/views/settings.php:163
+#: admin/views/settings.php:179
 msgid "Save Settings"
 msgstr ""
 
@@ -1568,20 +1580,20 @@ msgstr ""
 
 #. translators: %s: service name (e.g. "YouTube", "Google Maps")
 #. translators: %s: service name
-#: frontend/class-frontend.php:936
-#: frontend/class-frontend.php:2289
-#: frontend/class-frontend.php:2347
+#: frontend/class-frontend.php:980
+#: frontend/class-frontend.php:2353
+#: frontend/class-frontend.php:2411
 #, php-format
 msgid "This content is blocked because %s cookies have not been accepted."
 msgstr ""
 
-#: frontend/class-frontend.php:940
-#: frontend/class-frontend.php:2293
-#: frontend/class-frontend.php:2351
+#: frontend/class-frontend.php:984
+#: frontend/class-frontend.php:2357
+#: frontend/class-frontend.php:2415
 msgid "Accept cookies"
 msgstr ""
 
-#: frontend/modules/consent-logger/class-consent-logger.php:100
+#: frontend/modules/consent-logger/class-consent-logger.php:130
 msgid "Failed to log consent."
 msgstr ""
 
