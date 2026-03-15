@@ -81,6 +81,7 @@ class Admin {
 		add_action( 'admin_head', array( $this, 'print_api_fetch_polyfill' ), 0 );
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
 		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
+		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
 	}
 
@@ -846,6 +847,43 @@ window.wp.apiFetch=apiFetch;
 				}
 			}
 		}
+	}
+
+	/**
+	 * Display a dismissible notice on FAZ admin pages when WooCommerce is active.
+	 *
+	 * Informs the site owner that payment gateway scripts are automatically
+	 * whitelisted on checkout/cart pages to prevent breaking the store.
+	 *
+	 * @return void
+	 */
+	public function woocommerce_compat_notice() {
+		if ( ! faz_is_admin_page() ) {
+			return;
+		}
+		if ( ! class_exists( 'WooCommerce', false ) ) {
+			return;
+		}
+		// Dismissible via user meta — once dismissed, never show again.
+		$user_id = get_current_user_id();
+		if ( get_user_meta( $user_id, 'faz_wc_notice_dismissed', true ) ) {
+			return;
+		}
+		// Handle dismiss action.
+		if ( isset( $_GET['faz_dismiss_wc_notice'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_faz_nonce'] ?? '' ) ), 'faz_dismiss_wc_notice' ) ) {
+			update_user_meta( $user_id, 'faz_wc_notice_dismissed', 1 );
+			return;
+		}
+		$dismiss_url = wp_nonce_url( add_query_arg( 'faz_dismiss_wc_notice', '1' ), 'faz_dismiss_wc_notice', '_faz_nonce' );
+		echo '<div class="notice notice-info" style="position:relative">';
+		echo '<p><strong>' . esc_html__( 'WooCommerce detected', 'faz-cookie-manager' ) . '</strong> — ';
+		echo esc_html__( 'FAZ Cookie Manager automatically whitelists WooCommerce core scripts and payment gateway scripts (PayPal, Stripe, Mollie, etc.) on checkout and cart pages so your store keeps working. This can be customised via the', 'faz-cookie-manager' );
+		echo ' <code>faz_whitelisted_scripts</code> ' . esc_html__( 'and', 'faz-cookie-manager' );
+		echo ' <code>faz_payment_gateway_whitelist</code> ' . esc_html__( 'filters.', 'faz-cookie-manager' );
+		echo '</p>';
+		echo '<a href="' . esc_url( $dismiss_url ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
+		echo '<span class="dashicons dashicons-dismiss"></span></a>';
+		echo '</div>';
 	}
 
 	/**

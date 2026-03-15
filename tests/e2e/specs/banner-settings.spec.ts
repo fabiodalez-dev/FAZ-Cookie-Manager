@@ -589,6 +589,56 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await saveBanner(page);
   });
 
+  test('Colours: Do Not Sell text colour persists and reflects on frontend (issue #34)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    await goToBannerPage(page);
+    const nonce = await getAdminNonce(page);
+    const testDnsColor = '#00cc66';
+
+    // 1. Switch regulation to CCPA so the Do Not Sell button + colour row appear
+    await setSelect(page, 'faz-b-law', 'ccpa');
+    await saveBanner(page);
+
+    // 2. Set custom Do Not Sell colour via the admin UI (CCPA law auto-enables the button)
+    await goToBannerPage(page);
+    await clickTab(page, 'colours');
+    // Wait for the DNS colour row to be visible (depends on law=ccpa)
+    await page.waitForSelector('#faz-donotsell-color-row', { state: 'visible', timeout: 5_000 });
+    await setColorHex(page, 'faz-b-donotsell-text-hex', testDnsColor);
+    await saveBanner(page);
+
+    // 3. Verify persistence: reload and check the input still has our value
+    await goToBannerPage(page);
+    await clickTab(page, 'colours');
+    await page.waitForSelector('#faz-donotsell-color-row', { state: 'visible', timeout: 5_000 });
+    expect(await getInputValue(page, 'faz-b-donotsell-text-hex')).toBe(testDnsColor);
+
+    // 4. Verify via API that the config path was saved
+    const updated = await getBanner(page, nonce);
+    const savedColor = updated.properties?.config?.notice?.elements?.buttons?.elements?.donotSell?.styles?.color;
+    expect(savedColor).toBe(testDnsColor);
+
+    // 5. Verify on frontend: the Do Not Sell button should have the custom colour
+    const visitor = await openVisitorPage(browser, wpBaseURL);
+    try {
+      const banner = visitor.page.locator('[data-faz-tag="notice"]');
+      await expect(banner).toBeVisible({ timeout: 10_000 });
+
+      const dnsButton = visitor.page.locator('[data-faz-tag="donotsell-button"]');
+      await expect(dnsButton).toBeVisible({ timeout: 5_000 });
+      const computedColor = await dnsButton.evaluate((el) => getComputedStyle(el).color);
+      // #00cc66 = rgb(0, 204, 102)
+      expect(computedColor).toBe('rgb(0, 204, 102)');
+    } finally {
+      await visitor.ctx.close();
+    }
+
+    // 6. Restore to GDPR
+    await goToBannerPage(page);
+    await setSelect(page, 'faz-b-law', 'gdpr');
+    await saveBanner(page);
+  });
+
   // ─── Buttons Tab ───────────────────────────────────────
 
   test('Buttons: visibility toggles persist and reflect on frontend', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {

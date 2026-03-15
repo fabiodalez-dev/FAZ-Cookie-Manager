@@ -107,8 +107,10 @@ class Settings extends Store {
 				'maxmind_license_key' => '',
 			),
 			'script_blocking' => array(
-				'custom_rules' => array(),
+				'custom_rules'   => array(),
+				'excluded_pages' => array(),
 			),
+			'pageview_tracking' => false,
 		);
 
 	}
@@ -211,6 +213,7 @@ class Settings extends Store {
 			case 'clarity_consent':
 			case 'enabled':
 			case 'purpose_one_treatment':
+			case 'pageview_tracking':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'installed':

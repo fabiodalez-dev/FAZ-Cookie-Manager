@@ -249,7 +249,7 @@ class Known_Providers {
 					'platform.linkedin.com',
 					'snap.licdn.com',
 					'linkedin.com/embed',
-					'insight.min.js',
+					'snap.licdn.com/li.lms-analytics/insight.min.js',
 					'_linkedin_partner_id',
 					'lintrk(',
 				),
@@ -276,7 +276,7 @@ class Known_Providers {
 				'patterns' => array(
 					'bat.bing.com',
 					'bat.bing.com/bat.js',
-					'UET tag',
+					'UET tag helper',
 					'uetq',
 					'uetTag',
 				),
@@ -608,6 +608,8 @@ class Known_Providers {
 					'wpmDataLayer',
 					'pmwDataLayer',
 					'_pmwq',
+					'wpm-frontend',
+					'window.wpm',
 				),
 				'cookies'  => array(),
 			),
@@ -1199,9 +1201,9 @@ class Known_Providers {
 				'label'    => 'WooCommerce',
 				'category' => 'analytics',
 				'patterns' => array(
-					'wc-tracks',
+					'wc-tracks-',
 					'woocommerce-google-analytics-integration',
-					'wcTracks',
+					'wcTracks.recordEvent',
 				),
 				'cookies'  => array(),
 			),
@@ -1793,19 +1795,7 @@ class Known_Providers {
 				'cookies'  => array( '__qca', 'mc' ),
 			),
 
-			/* ── Pixel Manager for WooCommerce ───────────── */
-			'pixel_manager_woo' => array(
-				'label'    => 'Pixel Manager for WooCommerce',
-				'category' => 'marketing',
-				'patterns' => array(
-					'wpm-frontend',
-					'window.wpm',
-					'wpmDataLayer',
-					'pixel-tag-manager-for-woocommerce',
-					'woocommerce-conversion-tracking',
-				),
-				'cookies'  => array(),
-			),
+			/* Pixel Manager for WooCommerce — merged into 'pixel-manager-woo' above. */
 
 			/* ── Kissmetrics ─────────────────────────────── */
 			'kissmetrics' => array(
@@ -1845,7 +1835,7 @@ class Known_Providers {
 					'demdex.net',
 					'2o7.net',
 					'assets.adobedtm.com',
-					'launch-',
+					'adobedtm.com/launch-',
 					's_code.js',
 					'AppMeasurement.js',
 					'AppMeasurement',

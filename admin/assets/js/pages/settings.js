@@ -25,6 +25,9 @@
 			if (data.banner_control && Array.isArray(data.banner_control.excluded_pages)) {
 				data.banner_control.excluded_pages = data.banner_control.excluded_pages.join('\n');
 			}
+			if (data.script_blocking && Array.isArray(data.script_blocking.excluded_pages)) {
+				data.script_blocking.excluded_pages = data.script_blocking.excluded_pages.join('\n');
+			}
 			FAZ.populateForm(form, data);
 			applyShowIf();
 		}).catch(function () {
@@ -55,6 +58,12 @@
 			// Convert excluded pages back to array
 			if (formData.banner_control && typeof formData.banner_control.excluded_pages === 'string') {
 				formData.banner_control.excluded_pages = formData.banner_control.excluded_pages
+					.split('\n')
+					.map(function (s) { return s.trim(); })
+					.filter(Boolean);
+			}
+			if (formData.script_blocking && typeof formData.script_blocking.excluded_pages === 'string') {
+				formData.script_blocking.excluded_pages = formData.script_blocking.excluded_pages
 					.split('\n')
 					.map(function (s) { return s.trim(); })
 					.filter(Boolean);
