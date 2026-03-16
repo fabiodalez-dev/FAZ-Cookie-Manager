@@ -96,7 +96,14 @@ class Gcm_Settings extends Store {
 			foreach ( $entry as $k => $v ) {
 				$k = sanitize_text_field( $k );
 				if ( 'regions' === $k ) {
-					$clean['regions'] = sanitize_text_field( $v );
+					$v = sanitize_text_field( $v );
+					if ( 'All' !== $v ) {
+						$codes = array_filter( array_map( 'trim', explode( ',', strtoupper( $v ) ) ), function ( $c ) {
+							return preg_match( '/^[A-Z]{2}(-[A-Z0-9]{1,3})?$/', $c );
+						} );
+						$v = ! empty( $codes ) ? implode( ',', $codes ) : 'All';
+					}
+					$clean['regions'] = $v;
 				} elseif ( in_array( $k, $allowed_consent_keys, true ) ) {
 					$clean[ $k ] = in_array( $v, $allowed_values, true ) ? $v : 'denied';
 				}

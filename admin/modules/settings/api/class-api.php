@@ -217,7 +217,7 @@ class Api extends Rest_Controller {
 	 */
 	private function sanitize_filter_data( $data ) {
 		if ( is_string( $data ) ) {
-			return sanitize_text_field( $data );
+			return wp_kses_post( $data );
 		}
 		if ( is_array( $data ) ) {
 			return array_map( array( $this, 'sanitize_filter_data' ), $data );

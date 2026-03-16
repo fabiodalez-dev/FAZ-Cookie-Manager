@@ -1824,6 +1824,7 @@ function _fazSetCCPAOptions() {
     const optOutTitle = _fazStore._shortCodes.find(
         (code) => code.key === "faz_optout_option_title"
     );
+    if (!toggleDataCode || !optOutTitle) return;
     const formattedLabel = toggleDataCode.content.replace(
         `[faz_optout_option_title]`,
         optOutTitle.content
