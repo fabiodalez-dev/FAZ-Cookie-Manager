@@ -64,9 +64,49 @@ class Gcm_Settings extends Store {
 	 * @return array
 	 */
 	public static function get_excludes() {
-		return array(
-			'default_settings',
+		return array();
+	}
+
+	/**
+	 * Sanitize a default_settings array: whitelist keys, validate values.
+	 *
+	 * @param array $settings Raw default_settings entries.
+	 * @return array Sanitized entries.
+	 */
+	public static function sanitize_default_settings( $settings ) {
+		if ( ! is_array( $settings ) ) {
+			return array();
+		}
+
+		$allowed_consent_keys = array(
+			'ad_storage', 'analytics_storage', 'ad_user_data',
+			'ad_personalization', 'functionality_storage',
+			'personalization_storage', 'security_storage',
+			// Legacy category-based keys used by the admin UI.
+			'analytics', 'marketing', 'functional', 'necessary',
 		);
+		$allowed_values = array( 'granted', 'denied' );
+
+		$sanitized = array();
+		foreach ( $settings as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+			$clean = array();
+			foreach ( $entry as $k => $v ) {
+				$k = sanitize_text_field( $k );
+				if ( 'regions' === $k ) {
+					$clean['regions'] = sanitize_text_field( $v );
+				} elseif ( in_array( $k, $allowed_consent_keys, true ) ) {
+					$clean[ $k ] = in_array( $v, $allowed_values, true ) ? $v : 'denied';
+				}
+				// Unknown keys are silently dropped.
+			}
+			if ( ! empty( $clean ) ) {
+				$sanitized[] = $clean;
+			}
+		}
+		return $sanitized;
 	}
 	/**
 	 * Update settings to database.
@@ -91,6 +131,10 @@ class Gcm_Settings extends Store {
 			$value = isset( $settings[ $key ] ) ? $settings[ $key ] : $data;
 			if ( in_array( $key, $excludes, true ) ) {
 				$result[ $key ] = $value;
+				continue;
+			}
+			if ( 'default_settings' === $key ) {
+				$result[ $key ] = self::sanitize_default_settings( $value );
 				continue;
 			}
 			if ( is_array( $value ) ) {

@@ -194,6 +194,9 @@ class Api extends Rest_Controller {
 			return new WP_Error( 'invalid_filter_name', __( 'Filter name is not permitted.', 'faz-cookie-manager' ), array( 'status' => 403 ) );
 		}
 
+		// Sanitize filter data before passing to apply_filters.
+		$filter_data = $this->sanitize_filter_data( $filter_data );
+
 		// Apply the WordPress filter
 		$result = apply_filters( $filter_name, $filter_data );
 
@@ -204,6 +207,29 @@ class Api extends Rest_Controller {
 		);
 
 		return rest_ensure_response( $response_data );
+	}
+
+	/**
+	 * Recursively sanitize filter data before passing to apply_filters.
+	 *
+	 * @param mixed $data Raw filter data from the request.
+	 * @return mixed Sanitized data.
+	 */
+	private function sanitize_filter_data( $data ) {
+		if ( is_string( $data ) ) {
+			return sanitize_text_field( $data );
+		}
+		if ( is_array( $data ) ) {
+			return array_map( array( $this, 'sanitize_filter_data' ), $data );
+		}
+		if ( is_bool( $data ) ) {
+			return $data;
+		}
+		if ( is_int( $data ) || is_float( $data ) ) {
+			return $data;
+		}
+		// Null or unsupported types — return null.
+		return null;
 	}
 
 	/**

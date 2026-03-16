@@ -66,6 +66,11 @@ class Api extends Rest_Controller {
 					'callback'            => array( $this, 'record_event' ),
 					'permission_callback' => '__return_true',
 					'args'                => array(
+						'token' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => 'sanitize_text_field',
+						),
 						'page_url' => array(
 							'type'              => 'string',
 							'sanitize_callback' => 'esc_url_raw',
@@ -172,6 +177,29 @@ class Api extends Rest_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function record_event( $request ) {
+		// Verify origin token: a time-bucketed HMAC generated server-side and
+		// embedded in the page. Prevents casual spoofing from external origins.
+		$token = $request->get_param( 'token' );
+		if ( ! empty( $token ) ) {
+			$current_bucket  = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
+			$previous_bucket = (string) ( floor( time() / ( 12 * HOUR_IN_SECONDS ) ) - 1 );
+			$valid = hash_equals( wp_hash( 'faz_pageview_' . $current_bucket ), $token )
+				|| hash_equals( wp_hash( 'faz_pageview_' . $previous_bucket ), $token );
+			if ( ! $valid ) {
+				return new WP_Error(
+					'invalid_token',
+					'Invalid origin token.',
+					array( 'status' => 403 )
+				);
+			}
+		} else {
+			return new WP_Error(
+				'missing_token',
+				'Origin token required.',
+				array( 'status' => 403 )
+			);
+		}
+
 		// Rate limit: 1 request per IP per second — silently skip DB insert on duplicate.
 		if ( faz_throttle_request( 'faz_pv' ) ) {
 			return rest_ensure_response( array( 'throttled' => true ) );

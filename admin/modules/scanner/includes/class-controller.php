@@ -594,7 +594,7 @@ class Controller {
 			'sslverify'   => false,
 			'redirection' => 3,
 		);
-		if ( ! empty( $static_ip ) && filter_var( $static_ip, FILTER_VALIDATE_IP ) ) {
+		if ( ! empty( $static_ip ) && filter_var( $static_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
 			$parsed = wp_parse_url( $url );
 			$host   = isset( $parsed['host'] ) ? $parsed['host'] : '';
 			$scheme = isset( $parsed['scheme'] ) ? $parsed['scheme'] : 'https';

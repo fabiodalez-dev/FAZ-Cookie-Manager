@@ -239,6 +239,9 @@ class Frontend {
 			// Pageview and banner interaction tracking (opt-in via Settings).
 			$pv_tracking = isset( $faz_settings['pageview_tracking'] ) && true === $faz_settings['pageview_tracking'];
 			if ( $pv_tracking ) {
+				$pv_bucket    = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
+				$pv_token     = wp_hash( 'faz_pageview_' . $pv_bucket );
+
 				wp_localize_script(
 					$this->plugin_name,
 					'_fazPageviewConfig',
@@ -246,6 +249,7 @@ class Frontend {
 						'restUrl'   => rest_url( 'faz/v1/pageviews' ),
 						'pageUrl'   => home_url( add_query_arg( array(), false ) ),
 						'pageTitle' => wp_get_document_title(),
+						'token'     => $pv_token,
 					)
 				);
 				$pv_js = "(function(){" .
@@ -254,7 +258,7 @@ class Frontend {
 					"if(!sid){sid=Math.random().toString(36).substring(2)+Date.now().toString(36);sessionStorage.setItem('faz_sid',sid);}" .
 					"function fazTrack(t){" .
 						"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'}," .
-						"body:JSON.stringify({page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t,session_id:sid})}).catch(function(){});" .
+						"body:JSON.stringify({token:_fazPageviewConfig.token,page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t,session_id:sid})}).catch(function(){});" .
 					"}" .
 					"fazTrack('pageview');" .
 					"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .

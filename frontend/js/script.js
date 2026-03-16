@@ -16,7 +16,7 @@ ref._fazConsentStore = new Map();
 ref._fazGetCookieMap = function () {
     const cookieMap = {};
     try {
-        document.cookie.split(";").map((cookie) => {
+        document.cookie.split(";").forEach((cookie) => {
             const [key, value] = cookie.split("=");
             if (!key) return;
             cookieMap[key.trim()] = value;
@@ -57,7 +57,7 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
     }, {});
 ["consentid", "consent", "action"]
     .concat(_fazStore._categories.map(({ slug }) => slug))
-    .map((item) =>
+    .forEach((item) =>
         ref._fazConsentStore.set(item, fazcookieConsentMap[item] || "")
     );
 
@@ -159,6 +159,7 @@ function _fazFindElement(selector, forParent) {
     switch (true) {
         case selector.startsWith("="):
             createdSelector = `[data-faz-tag="${selector.substring(1)}"]`;
+            break;
         default:
             break;
     }
@@ -468,7 +469,7 @@ function _fazRegisterListeners() {
 function _fazAttachCategoryListeners() {
     if (!_fazStore._bannerConfig.config.auditTable.status) return;
     const categoryNames = _fazStore._categories.map(({ slug }) => slug);
-    categoryNames.map((category) => {
+    categoryNames.forEach((category) => {
         const selector = `#fazDetailCategory${category}`;
         const accordionButtonSelector = `${selector}  .faz-accordion-btn`;
 
@@ -503,7 +504,7 @@ function _fazAttachCategoryListeners() {
             _fazToggleAriaExpandStatus(accordionButtonSelector, "true");
             categoryNames
                 .filter((categoryName) => categoryName !== category)
-                .map(filteredName => {
+                .forEach(filteredName => {
                     _fazClassRemove(
                         `#fazDetailCategory${filteredName}`,
                         "faz-accordion-active",
@@ -724,7 +725,7 @@ function _fazAttachFocusLoop(element, targetElement, isReverse = false) {
     if (!element || !targetElement) return;
     element.addEventListener("keydown", (event) => {
         if (
-            event.which !== 9 ||
+            event.key !== 'Tab' ||
             (isReverse && !event.shiftKey) ||
             (!isReverse && event.shiftKey)
         )
@@ -760,7 +761,7 @@ function _fazRemoveDeadCookies({ cookies }) {
         // Never delete the plugin's own consent-mechanism cookies.
         if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
         if (currentCookieMap[cookieID])
-            [domain, ""].map((cookieDomain) =>
+            [domain, ""].forEach((cookieDomain) =>
                 ref._fazSetCookie(cookieID, "", 0, cookieDomain)
             );
     }
@@ -777,6 +778,7 @@ function _fazSetPreferenceCheckBoxStates(revisit = false) {
         const shortCodeData = _fazStore._shortCodes.find(
             (code) => code.key === 'faz_category_toggle_label'
         );
+        if (!shortCodeData) return;
         const toggleTextFormatted = shortCodeData.content.replace(
             `[faz_preference_{{category_slug}}_title]`,
             category.name
@@ -802,7 +804,7 @@ function _fazSetCheckboxes(
     const prefToggle = _fazStore._bannerConfig.config.preferenceCenter.toggle;
     const previewToggle = _fazStore._bannerConfig.config.categoryPreview?.toggle;
 
-    [`fazCategoryDirect`, `fazSwitch`].map((key) => {
+    [`fazCategoryDirect`, `fazSwitch`].forEach((key) => {
         const boxElem = document.getElementById(`${key}${category.slug}`);
         if (!boxElem) return;
         const toggle = key === 'fazCategoryDirect' ? (previewToggle || prefToggle) : prefToggle;
@@ -1487,7 +1489,7 @@ function _fazAttachReadMore() {
     const readMoreButton = _fazStore._shortCodes.find(
         (code) => code.key === "faz_readmore"
     );
-    if (!readMoreButton.status) return;
+    if (!readMoreButton || !readMoreButton.status) return;
     const content = readMoreButton.content;
     const styles = _fazStore._bannerConfig.config.readMore.styles;
     const readMoreElement = document.querySelector(
@@ -1688,10 +1690,10 @@ function _fazCookieNameMatches(name, pattern) {
 
 function _fazAttachNoticeStyles() {
     if (document.getElementById("faz-style") || !_fazStyle) return;
-    document.head.insertAdjacentHTML(
-        "beforeend",
-        ` <style id="faz-style">${_fazStyle.css}</style>`
-    );
+    var styleEl = document.createElement('style');
+    styleEl.id = 'faz-style';
+    styleEl.textContent = _fazStyle.css;
+    document.head.appendChild(styleEl);
 }
 
 function _fazFindCheckBoxValue(id = "") {
@@ -1747,7 +1749,6 @@ function _fazSetPlaceHolder() {
     const status = _fazStore._bannerConfig.config.videoPlaceholder.status;
     const styles = _fazStore._bannerConfig.config.videoPlaceholder.styles;
     if (!status) return;
-    if (!status) return;
     const placeHolders = document.querySelectorAll(
         `[data-faz-tag="placeholder-title"]`
     );
@@ -1767,7 +1768,8 @@ function _fazAddRtlClass() {
     if (!_fazStore._rtl) return;
     const rtlElements = ['notice', 'detail', 'optout-popup', 'revisit-consent', 'video-placeholder']
     rtlElements.forEach(function (item) {
-        _fazGetElementByTag(item) && _fazGetElementByTag(item).classList.add('faz-rtl');
+        var el = _fazGetElementByTag(item);
+        if (el) el.classList.add('faz-rtl');
     });
 }
 
@@ -1779,7 +1781,7 @@ function _fazSetFocus(tagName) {
 
 function _fazSetPoweredBy() {
     let position = 'flex-end';
-    ['detail-powered-by', 'optout-powered-by'].map((key) => {
+    ['detail-powered-by', 'optout-powered-by'].forEach((key) => {
         const element = document.querySelector(
             `[data-faz-tag="${key}"]`
         );
@@ -1810,7 +1812,9 @@ function _fazRemoveAllDeadCookies() {
 }
 
 function _fazSetCCPAOptions() {
-    const toggle = _fazStore._bannerConfig.config.optOption.toggle;
+    var optOption = _fazStore._bannerConfig && _fazStore._bannerConfig.config && _fazStore._bannerConfig.config.optOption;
+    if (!optOption) return;
+    const toggle = optOption.toggle;
     const activeColor = toggle.states.active.styles['background-color'];
     const inactiveColor = toggle.states.inactive.styles['background-color'];
     _fazClassRemove("=optout-option", "faz-disabled", false);

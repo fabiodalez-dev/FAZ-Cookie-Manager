@@ -114,7 +114,7 @@ class Api extends Rest_Controller {
 				} elseif ( 'wait_for_update' === $key ) {
 					$data[ $key ] = absint( $value );
 				} elseif ( 'default_settings' === $key ) {
-					$data[ $key ] = is_array( $value ) ? $value : array();
+					$data[ $key ] = is_array( $value ) ? Gcm_Settings::sanitize_default_settings( $value ) : array();
 				} else {
 					$data[ $key ] = sanitize_text_field( $value );
 				}
