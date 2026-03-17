@@ -100,6 +100,9 @@
 		if (addRuleBtn) addRuleBtn.addEventListener('click', function () { addRuleRow('', ''); });
 		var saveRulesBtn = document.getElementById('faz-save-rules-btn');
 		if (saveRulesBtn) saveRulesBtn.addEventListener('click', saveCustomRules);
+
+		// Blocker Templates
+		loadBlockerTemplates();
 	});
 
 	function loadCategories() {
@@ -1425,6 +1428,51 @@
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify('Failed to save custom rules', 'error');
+		});
+	}
+
+	/* ── Blocker Templates ────────────────────────────── */
+
+	function loadBlockerTemplates() {
+		FAZ.get('blocker-templates').then(function (templates) {
+			var container = document.getElementById('faz-blocker-templates');
+			if (!container || !templates || !templates.length) return;
+
+			// Clear loading text safely
+			while (container.firstChild) container.removeChild(container.firstChild);
+
+			templates.forEach(function (tpl) {
+				var card = document.createElement('div');
+				card.style.cssText = 'padding:12px;border:1px solid var(--faz-border);border-radius:8px;cursor:pointer;transition:border-color 0.2s;';
+				card.onmouseenter = function () { card.style.borderColor = 'var(--faz-primary)'; };
+				card.onmouseleave = function () { card.style.borderColor = 'var(--faz-border)'; };
+
+				var name = document.createElement('div');
+				name.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:4px;';
+				name.textContent = tpl.name;
+				card.appendChild(name);
+
+				var desc = document.createElement('div');
+				desc.style.cssText = 'font-size:11px;color:var(--faz-text-muted);margin-bottom:8px;line-height:1.4;';
+				desc.textContent = tpl.description;
+				card.appendChild(desc);
+
+				var badge = document.createElement('span');
+				badge.style.cssText = 'display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase;background:var(--faz-bg-secondary);color:var(--faz-text-secondary);';
+				badge.textContent = tpl.category;
+				card.appendChild(badge);
+
+				card.addEventListener('click', function () {
+					var added = 0;
+					tpl.patterns.forEach(function (pattern) {
+						addRuleRow(pattern, tpl.category);
+						added++;
+					});
+					FAZ.notify('Added ' + added + ' rules from ' + tpl.name, 'success');
+				});
+
+				container.appendChild(card);
+			});
 		});
 	}
 

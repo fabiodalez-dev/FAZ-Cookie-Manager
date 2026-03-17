@@ -1,0 +1,13 @@
+{
+    "id": "meta-pixel",
+    "name": "Meta Pixel (Facebook)",
+    "description": "Blocks Meta/Facebook Pixel tracking, conversion API, and social plugins.",
+    "category": "marketing",
+    "patterns": [
+        "connect.facebook.net",
+        "facebook.com/tr",
+        "fbevents.js",
+        "facebook.com/plugins"
+    ],
+    "cookies": ["_fbp", "_fbc", "fr", "datr"]
+}

@@ -1,0 +1,11 @@
+{
+    "id": "vimeo",
+    "name": "Vimeo",
+    "description": "Blocks Vimeo video embeds.",
+    "category": "marketing",
+    "patterns": [
+        "player.vimeo.com",
+        "i.vimeocdn.com"
+    ],
+    "cookies": ["vuid", "__ssid"]
+}

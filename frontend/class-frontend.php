@@ -114,6 +114,7 @@ class Frontend {
 		new Consent_Logger();
 		new Cookie_Table_Shortcode();
 		new Cookie_Policy_Shortcode();
+		new AMP_Consent();
 		add_action( 'init', array( $this, 'load_banner' ) );
 		add_action( 'wp_footer', array( $this, 'banner_html' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 1 );
@@ -396,6 +397,10 @@ class Frontend {
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
+		// AMP pages use <amp-consent> — skip regular inline styles.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+			return;
+		}
 		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
 			. Placeholder_Builder::get_css()
 			. '</style>';
@@ -529,6 +534,10 @@ class Frontend {
 			return;
 		}
 		if ( $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
+		// AMP pages use <amp-consent> — skip regular banner template.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
 		$html = isset( $this->template['html'] ) ? $this->template['html'] : '';
@@ -885,6 +894,10 @@ class Frontend {
 			return;
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
+		// AMP pages have no custom scripts — skip output buffering.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
 		if ( $this->is_blocking_disabled_for_page() ) {
@@ -2478,6 +2491,10 @@ class Frontend {
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $content;
 		}
+		// AMP pages disallow custom scripts — content blocking is unnecessary.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+			return $content;
+		}
 
 		$blocked_categories = $this->get_blocked_categories();
 		$has_service_consent = ! empty( $this->get_service_consent() );
@@ -2550,6 +2567,10 @@ class Frontend {
 			return $html;
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return $html;
+		}
+		// AMP pages disallow custom scripts — oEmbed blocking is unnecessary.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return $html;
 		}
 

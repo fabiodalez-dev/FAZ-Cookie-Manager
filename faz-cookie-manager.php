@@ -199,3 +199,8 @@ add_action( 'wp_initialize_site', function( $new_site ) {
 
 $faz_loader = new \FazCookie\Includes\CLI();
 $faz_loader->run();
+
+// Register WP-CLI commands.
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	\WP_CLI::add_command( 'faz', 'FazCookie\Includes\WP_CLI_Commands' );
+}

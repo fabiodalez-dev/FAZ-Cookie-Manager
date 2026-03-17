@@ -85,6 +85,19 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<!-- Content Blocker Templates -->
+	<div class="faz-card" style="margin-top:16px;">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Content Blocker Templates', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<p><?php esc_html_e( 'Pre-configured blocking rules for popular services. Click to add a template to your custom rules.', 'faz-cookie-manager' ); ?></p>
+			<div id="faz-blocker-templates" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px;">
+				<p style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading templates...', 'faz-cookie-manager' ); ?></p>
+			</div>
+		</div>
+	</div>
+
 	<!-- Script Blocking — Custom Rules -->
 	<div class="faz-card" style="margin-top:16px;">
 		<div class="faz-card-header">

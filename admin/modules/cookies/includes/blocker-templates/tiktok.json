@@ -1,0 +1,11 @@
+{
+    "id": "tiktok",
+    "name": "TikTok Pixel",
+    "description": "Blocks TikTok conversion tracking pixel.",
+    "category": "marketing",
+    "patterns": [
+        "analytics.tiktok.com",
+        "tiktok.com/i18n/pixel"
+    ],
+    "cookies": ["_ttp", "tt_webid"]
+}

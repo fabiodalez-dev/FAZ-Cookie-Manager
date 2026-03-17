@@ -1,0 +1,12 @@
+{
+    "id": "twitter",
+    "name": "Twitter/X Pixel",
+    "description": "Blocks Twitter/X conversion tracking and embedded tweets.",
+    "category": "marketing",
+    "patterns": [
+        "platform.twitter.com",
+        "ads-twitter.com",
+        "static.ads-twitter.com"
+    ],
+    "cookies": ["personalization_id", "guest_id"]
+}
