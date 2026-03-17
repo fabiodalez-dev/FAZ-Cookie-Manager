@@ -541,8 +541,8 @@ class Activator {
 				);
 			}
 		}
-		// Clear banner template cache to force regeneration.
-		delete_option( 'faz_banner_template' );
+		// Clear banner template cache (base + language variants) to force regeneration.
+		faz_clear_banner_template_cache();
 		update_option( 'faz_banner_gdpr_defaults_fixed', 1 );
 	}
 
@@ -590,8 +590,8 @@ class Activator {
 				);
 			}
 		}
-		// Clear banner template cache to force regeneration with new URL.
-		delete_option( 'faz_banner_template' );
+		// Clear banner template cache (base + language variants) to force regeneration with new URL.
+		faz_clear_banner_template_cache();
 		update_option( 'faz_brand_logo_path_fixed', 1, false );
 	}
 

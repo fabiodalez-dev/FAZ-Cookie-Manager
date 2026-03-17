@@ -261,7 +261,7 @@ class Api extends Rest_Controller {
 					$all_ids = array_map( 'absint', array_keys( $all_vendors ) );
 					sort( $all_ids );
 					update_option( 'faz_gvl_selected_vendors', $all_ids, false );
-					delete_option( 'faz_banner_template' );
+					faz_clear_banner_template_cache();
 				}
 			}
 		}
@@ -313,8 +313,8 @@ class Api extends Rest_Controller {
 
 		update_option( 'faz_gvl_selected_vendors', $vendor_ids, false );
 
-		// Clear banner template cache so frontend picks up new vendor data.
-		delete_option( 'faz_banner_template' );
+		// Clear banner template cache (base + language variants) so frontend picks up new vendor data.
+		faz_clear_banner_template_cache();
 
 		return new WP_REST_Response( array(
 			'success'    => true,

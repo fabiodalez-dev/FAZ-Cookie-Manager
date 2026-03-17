@@ -651,8 +651,8 @@ class Api extends Rest_Controller {
 					$wpdb->insert( $table, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				}
 			}
-			// Clear banner cache so the template is regenerated.
-			delete_option( 'faz_banner_template' );
+			// Clear banner cache (base + language variants) so the template is regenerated.
+			faz_clear_banner_template_cache();
 			$imported[] = 'banners';
 		}
 

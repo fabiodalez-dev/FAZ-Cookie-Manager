@@ -56,6 +56,17 @@ if ( ! function_exists( 'faz_i18n_is_multilingual' ) ) {
 		if ( defined( 'ICL_LANGUAGE_CODE' ) || defined( 'POLYLANG_FILE' ) ) {
 			$status = true;
 		}
+
+		// TranslatePress compatibility.
+		if ( defined( 'TRP_PLUGIN_VERSION' ) || class_exists( 'TRP_Translate_Press' ) ) {
+			$status = true;
+		}
+
+		// Weglot compatibility.
+		if ( defined( 'WEGLOT_VERSION' ) || function_exists( 'weglot_get_current_language' ) ) {
+			$status = true;
+		}
+
 		return $status;
 	}
 }
@@ -82,13 +93,22 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 				if ( empty( $current_language ) ) {
 					$current_language = pll_default_language();
 				}
+			} elseif ( defined( 'TRP_PLUGIN_VERSION' ) || class_exists( 'TRP_Translate_Press' ) ) {
+				// TranslatePress: read the global language variable.
+				global $TRP_LANGUAGE;
+				if ( ! empty( $TRP_LANGUAGE ) ) {
+					$current_language = substr( $TRP_LANGUAGE, 0, 2 );
+				}
+			} elseif ( function_exists( 'weglot_get_current_language' ) ) {
+				// Weglot: use the helper function.
+				$current_language = weglot_get_current_language();
 			} else {
 				// If the plugin used is WPML.
 				$current_language = apply_filters( 'wpml_current_language', null );
 			}
 
 			// Fallback if neither WPML nor Polylang is used.
-			if ( 'all' === $current_language ) {
+			if ( 'all' === $current_language || empty( $current_language ) ) {
 				$current_language = faz_default_language();
 			}
 		} else {
@@ -340,5 +360,36 @@ if ( ! function_exists( 'faz_i18n_term_language' ) ) {
 			}
 		}
 		return $language;
+	}
+}
+
+if ( ! function_exists( 'faz_clear_banner_template_cache' ) ) {
+	/**
+	 * Clear all banner template cache variants.
+	 *
+	 * Deletes the base option and any language-suffixed variants created by
+	 * the faz_banner_template_cache_key filter (e.g. faz_banner_template_en,
+	 * faz_banner_template_it). Used whenever the banner needs full regeneration.
+	 *
+	 * @return void
+	 */
+	function faz_clear_banner_template_cache() {
+		global $wpdb;
+
+		// Delete the base option.
+		delete_option( 'faz_banner_template' );
+
+		// Delete any language-suffixed variants.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name != %s",
+				$wpdb->esc_like( 'faz_banner_template_' ) . '%',
+				'faz_banner_template'
+			)
+		);
+		foreach ( $rows as $option_name ) {
+			delete_option( $option_name );
+		}
 	}
 }

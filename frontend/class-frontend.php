@@ -115,6 +115,7 @@ class Frontend {
 		new Cookie_Table_Shortcode();
 		new Cookie_Policy_Shortcode();
 		new AMP_Consent();
+		new Translation_Compat();
 		add_action( 'init', array( $this, 'load_banner' ) );
 		add_action( 'wp_footer', array( $this, 'banner_html' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 1 );
@@ -553,7 +554,8 @@ class Frontend {
 
 				// Auto-repair the cached template so subsequent requests
 				// skip this replacement entirely.
-				$stored = get_option( 'faz_banner_template', array() );
+				$cache_key = apply_filters( 'faz_banner_template_cache_key', 'faz_banner_template' );
+				$stored    = get_option( $cache_key, array() );
 				if ( is_array( $stored ) ) {
 					$repaired = false;
 					foreach ( $stored as $lang => $tpl ) {
@@ -563,7 +565,7 @@ class Frontend {
 						}
 					}
 					if ( $repaired ) {
-						update_option( 'faz_banner_template', $stored );
+						update_option( $cache_key, $stored );
 					}
 				}
 			}

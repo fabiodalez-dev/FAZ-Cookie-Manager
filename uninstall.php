@@ -78,6 +78,20 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 				delete_option( $option_name );
 			}
 
+			// Also delete any language-suffixed banner template variants
+			// (e.g. faz_banner_template_en, faz_banner_template_it).
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$lang_variants = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND option_name != %s",
+					$wpdb->esc_like( 'faz_banner_template_' ) . '%',
+					'faz_banner_template'
+				)
+			);
+			foreach ( $lang_variants as $variant ) {
+				delete_option( $variant );
+			}
+
 			// Remove GVL files (recursive to handle dotfiles and subdirectories).
 			$upload_dir = wp_upload_dir();
 			$gvl_dir    = trailingslashit( $upload_dir['basedir'] ) . 'faz-cookie-manager/gvl';

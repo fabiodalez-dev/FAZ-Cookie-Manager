@@ -194,6 +194,11 @@ class Admin {
 				'slug'  => self::ADMIN_SLUG . '-import-export',
 				'view'  => 'import-export',
 			),
+			'system-status' => array(
+				'title' => __( 'System Status', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-system-status',
+				'view'  => 'system-status',
+			),
 		);
 	}
 

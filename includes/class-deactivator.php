@@ -33,8 +33,12 @@ class Deactivator {
 	 * @since    3.0.0
 	 */
 	public static function deactivate() {
-		// Clear banner template cache.
-		delete_option( 'faz_banner_template' );
+		// Clear banner template cache (base + language variants).
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		} else {
+			delete_option( 'faz_banner_template' );
+		}
 		delete_transient( 'faz_scan_running' );
 
 		// Unschedule all cron jobs.
