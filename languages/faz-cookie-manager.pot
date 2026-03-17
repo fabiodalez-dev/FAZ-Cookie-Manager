@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FAZ Cookie Manager 1.6.0\n"
+"Project-Id-Version: FAZ Cookie Manager 1.6.1\n"
 "Report-Msgid-Bugs-To: https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-03-15T13:24:55+00:00\n"
+"POT-Creation-Date: 2026-03-17T06:28:25+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -107,8 +107,8 @@ msgstr ""
 #: admin/modules/cookies/api/class-cookies-api.php:171
 #: admin/modules/scanner/api/class-api.php:139
 #: admin/modules/scanner/api/class-api.php:412
-#: admin/modules/settings/api/class-api.php:350
-#: admin/modules/settings/api/class-api.php:356
+#: admin/modules/settings/api/class-api.php:376
+#: admin/modules/settings/api/class-api.php:382
 msgid "Unique identifier for the resource."
 msgstr ""
 
@@ -136,7 +136,7 @@ msgstr ""
 #: admin/modules/banners/api/class-api.php:414
 #: admin/modules/consentlogs/api/class-api.php:230
 #: admin/modules/cookies/api/class-api-controller.php:263
-#: admin/modules/settings/api/class-api.php:326
+#: admin/modules/settings/api/class-api.php:352
 msgid "Limit results to those matching a string."
 msgstr ""
 
@@ -182,13 +182,13 @@ msgstr ""
 
 #: admin/modules/consentlogs/api/class-api.php:213
 #: admin/modules/cookies/api/class-api-controller.php:246
-#: admin/modules/settings/api/class-api.php:309
+#: admin/modules/settings/api/class-api.php:335
 msgid "Current page of the collection."
 msgstr ""
 
 #: admin/modules/consentlogs/api/class-api.php:221
 #: admin/modules/cookies/api/class-api-controller.php:254
-#: admin/modules/settings/api/class-api.php:317
+#: admin/modules/settings/api/class-api.php:343
 msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
@@ -393,11 +393,11 @@ msgstr ""
 msgid "This endpoint is deprecated. Use the settings endpoint instead."
 msgstr ""
 
-#: admin/modules/pageviews/api/class-api.php:190
+#: admin/modules/pageviews/api/class-api.php:218
 msgid "Failed to record event."
 msgstr ""
 
-#: admin/modules/pageviews/api/class-api.php:254
+#: admin/modules/pageviews/api/class-api.php:282
 msgid "Number of days to look back."
 msgstr ""
 
@@ -441,39 +441,39 @@ msgstr ""
 msgid "Filter name is not permitted."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:333
+#: admin/modules/settings/api/class-api.php:359
 msgid "Force fetch data"
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:361
-#: admin/modules/settings/api/class-api.php:366
-#: admin/modules/settings/api/class-api.php:371
-#: admin/modules/settings/api/class-api.php:376
-#: admin/modules/settings/api/class-api.php:381
+#: admin/modules/settings/api/class-api.php:387
+#: admin/modules/settings/api/class-api.php:392
+#: admin/modules/settings/api/class-api.php:397
+#: admin/modules/settings/api/class-api.php:402
+#: admin/modules/settings/api/class-api.php:407
 msgid "Language."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:386
+#: admin/modules/settings/api/class-api.php:412
 msgid "Banner control settings."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:391
+#: admin/modules/settings/api/class-api.php:417
 msgid "Microsoft consent settings."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:396
+#: admin/modules/settings/api/class-api.php:422
 msgid "Scanner settings."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:401
+#: admin/modules/settings/api/class-api.php:427
 msgid "Linked sites settings."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:406
+#: admin/modules/settings/api/class-api.php:432
 msgid "IAB TCF settings."
 msgstr ""
 
-#: admin/modules/settings/api/class-api.php:432
+#: admin/modules/settings/api/class-api.php:458
 msgid "A MaxMind license key is required."
 msgstr ""
 
@@ -1580,16 +1580,16 @@ msgstr ""
 
 #. translators: %s: service name (e.g. "YouTube", "Google Maps")
 #. translators: %s: service name
-#: frontend/class-frontend.php:980
-#: frontend/class-frontend.php:2353
-#: frontend/class-frontend.php:2411
+#: frontend/class-frontend.php:984
+#: frontend/class-frontend.php:2357
+#: frontend/class-frontend.php:2415
 #, php-format
 msgid "This content is blocked because %s cookies have not been accepted."
 msgstr ""
 
-#: frontend/class-frontend.php:984
-#: frontend/class-frontend.php:2357
-#: frontend/class-frontend.php:2415
+#: frontend/class-frontend.php:988
+#: frontend/class-frontend.php:2361
+#: frontend/class-frontend.php:2419
 msgid "Accept cookies"
 msgstr ""
 

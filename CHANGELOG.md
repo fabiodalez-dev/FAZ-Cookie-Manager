@@ -2,6 +2,23 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.6.1] — 2026-03-17
+
+### Security
+- **GCM settings sanitisation** — whitelist allowed consent signal keys and validate `granted`/`denied` values; `regions` field now validated as ISO 3166 country codes
+- **Pageview endpoint HMAC** — added origin token verification (same pattern as consent logger) to prevent external request spoofing
+- **Scanner SSRF prevention** — `static_ip` setting now blocks private and reserved IP ranges (RFC 1918, loopback, link-local)
+- **Filter data sanitisation** — recursive `wp_kses_post()` sanitisation before `apply_filters()` in the settings API
+- **CSS injection fix** — replaced `insertAdjacentHTML` with `createElement` + `textContent` for dynamic style injection
+
+### Fixed
+- Switch fallthrough bug in frontend selector parser
+- Duplicate guard removed in placeholder rendering
+- Null guards added to prevent banner crash in CCPA opt-out, preference checkbox, and read-more shortcode handlers
+- Deprecated `event.which` replaced with `event.key` for Tab key detection
+- Double DOM query eliminated in RTL class application
+- `.map()` replaced with `.forEach()` for side-effect-only iterations (7 instances)
+
 ## [1.6.0] — 2026-03-15
 
 ### Added
