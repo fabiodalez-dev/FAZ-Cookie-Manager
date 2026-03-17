@@ -153,8 +153,49 @@ require_once FAZ_PLUGIN_BASEPATH . 'class-autoloader.php';
 $autoloader = new \FazCookie\Autoloader();
 $autoloader->register();
 
-register_activation_hook( __FILE__, array( \FazCookie\Includes\Activator::get_instance(), 'install' ) );
-register_deactivation_hook( __FILE__, array( 'FazCookie\Includes\Deactivator', 'deactivate' ) );
+register_activation_hook( __FILE__, function( $network_wide ) {
+	if ( is_multisite() && $network_wide ) {
+		$sites = get_sites( array( 'number' => 0 ) );
+		foreach ( $sites as $site ) {
+			switch_to_blog( $site->blog_id );
+			\FazCookie\Includes\Activator::install();
+			restore_current_blog();
+		}
+	} else {
+		\FazCookie\Includes\Activator::install();
+	}
+});
+
+register_deactivation_hook( __FILE__, function( $network_wide ) {
+	if ( is_multisite() && $network_wide ) {
+		$sites = get_sites( array( 'number' => 0 ) );
+		foreach ( $sites as $site ) {
+			switch_to_blog( $site->blog_id );
+			\FazCookie\Includes\Deactivator::deactivate();
+			restore_current_blog();
+		}
+	} else {
+		\FazCookie\Includes\Deactivator::deactivate();
+	}
+});
+
+/**
+ * Auto-activate on newly created subsites when the plugin is network-activated.
+ *
+ * @since 1.7.0
+ * @param WP_Site $new_site The new site object.
+ */
+add_action( 'wp_initialize_site', function( $new_site ) {
+	if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	if ( ! is_plugin_active_for_network( plugin_basename( FAZ_PLUGIN_FILENAME ) ) ) {
+		return;
+	}
+	switch_to_blog( $new_site->blog_id );
+	\FazCookie\Includes\Activator::install();
+	restore_current_blog();
+}, 900, 1 );
 
 $faz_loader = new \FazCookie\Includes\CLI();
 $faz_loader->run();

@@ -19,6 +19,7 @@ use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Consentlogs\Includes\Controller as ConsentLogs_Controller;
 use FazCookie\Admin\Modules\Pageviews\Includes\Controller as Pageviews_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
 
 /**
  * Fired during plugin activation.
@@ -86,6 +87,8 @@ class Activator {
 		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
+		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
+		add_action( 'faz_after_update_settings', array( __CLASS__, 'reschedule_auto_scan' ) );
 		add_filter( 'cron_schedules', array( __CLASS__, 'register_cron_schedules' ) );
 		self::schedule_cleanup();
 	}
@@ -103,6 +106,24 @@ class Activator {
 				'display'  => __( 'Weekly', 'faz-cookie-manager' ),
 			);
 		}
+		if ( ! isset( $schedules['faz_daily'] ) ) {
+			$schedules['faz_daily'] = array(
+				'interval' => DAY_IN_SECONDS,
+				'display'  => __( 'Once Daily (FAZ)', 'faz-cookie-manager' ),
+			);
+		}
+		if ( ! isset( $schedules['faz_weekly'] ) ) {
+			$schedules['faz_weekly'] = array(
+				'interval' => 7 * DAY_IN_SECONDS,
+				'display'  => __( 'Once Weekly (FAZ)', 'faz-cookie-manager' ),
+			);
+		}
+		if ( ! isset( $schedules['faz_monthly'] ) ) {
+			$schedules['faz_monthly'] = array(
+				'interval' => 30 * DAY_IN_SECONDS,
+				'display'  => __( 'Once Monthly (FAZ)', 'faz-cookie-manager' ),
+			);
+		}
 		return $schedules;
 	}
 
@@ -116,6 +137,40 @@ class Activator {
 		if ( ! wp_next_scheduled( 'faz_weekly_gvl_update' ) ) {
 			wp_schedule_event( time(), 'weekly', 'faz_weekly_gvl_update' );
 		}
+		self::schedule_auto_scan();
+	}
+
+	/**
+	 * Schedule or unschedule automatic cookie scanning based on settings.
+	 */
+	public static function schedule_auto_scan() {
+		$settings = get_option( 'faz_settings' );
+		if ( ! empty( $settings['scanner']['auto_scan'] ) ) {
+			$frequency = isset( $settings['scanner']['scan_frequency'] ) ? $settings['scanner']['scan_frequency'] : 'weekly';
+			$schedule  = 'faz_' . $frequency;
+			if ( ! wp_next_scheduled( 'faz_scheduled_scan' ) ) {
+				wp_schedule_event( time() + HOUR_IN_SECONDS, $schedule, 'faz_scheduled_scan' );
+			}
+		}
+	}
+
+	/**
+	 * Reschedule automatic scanning when settings are updated.
+	 *
+	 * Clears any existing schedule and re-registers if auto_scan is enabled.
+	 */
+	public static function reschedule_auto_scan() {
+		$timestamp = wp_next_scheduled( 'faz_scheduled_scan' );
+		if ( $timestamp ) {
+			wp_unschedule_event( $timestamp, 'faz_scheduled_scan' );
+		}
+
+		$settings = get_option( 'faz_settings' );
+		if ( ! empty( $settings['scanner']['auto_scan'] ) ) {
+			$frequency = isset( $settings['scanner']['scan_frequency'] ) ? $settings['scanner']['scan_frequency'] : 'weekly';
+			$schedule  = 'faz_' . $frequency;
+			wp_schedule_event( time() + HOUR_IN_SECONDS, $schedule, 'faz_scheduled_scan' );
+		}
 	}
 
 	/**
@@ -126,6 +181,55 @@ class Activator {
 		$retention = isset( $settings['consent_logs']['retention'] ) ? (int) $settings['consent_logs']['retention'] : 12;
 		if ( $retention > 0 ) {
 			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
+		}
+	}
+
+	/**
+	 * Run scheduled cookie scan and notify admin if new cookies are found.
+	 *
+	 * Hooked to the faz_scheduled_scan cron event. Compares cookie count
+	 * before and after the scan to determine how many new cookies were added.
+	 */
+	public static function run_scheduled_scan() {
+		$settings = get_option( 'faz_settings' );
+		if ( empty( $settings['scanner']['auto_scan'] ) ) {
+			return;
+		}
+
+		$max_pages = isset( $settings['scanner']['max_pages'] ) ? absint( $settings['scanner']['max_pages'] ) : 20;
+
+		// Count cookies before scan to detect newly added ones.
+		$cookie_controller = Cookie_Controller::get_instance();
+		$before            = $cookie_controller->get_item_from_db();
+		$count_before      = is_array( $before ) ? count( $before ) : 0;
+
+		// Run the scan.
+		$scanner = Scanner_Controller::get_instance();
+		$scanner->run_scan( $max_pages );
+
+		// Count cookies after scan.
+		$after       = $cookie_controller->get_item_from_db();
+		$count_after = is_array( $after ) ? count( $after ) : 0;
+		$new_count   = $count_after - $count_before;
+
+		if ( $new_count > 0 ) {
+			// Set admin notice transient.
+			set_transient( 'faz_scan_new_cookies', $new_count, DAY_IN_SECONDS );
+
+			// Send email to admin.
+			$admin_email = get_option( 'admin_email' );
+			$site_name   = get_bloginfo( 'name' );
+			/* translators: 1: site name, 2: number of new cookies */
+			$subject = sprintf( '[%s] %d new cookies detected', $site_name, $new_count );
+			$message = sprintf(
+				"The scheduled cookie scan on %s found %d new cookie(s).\n\n" .
+				"Review them at: %s\n\n" .
+				"— FAZ Cookie Manager",
+				$site_name,
+				$new_count,
+				admin_url( 'admin.php?page=faz-cookie-manager-cookies' )
+			);
+			wp_mail( $admin_email, $subject, $message );
 		}
 	}
 

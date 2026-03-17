@@ -1429,3 +1429,55 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	border: none;
 	border-radius: 4px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Consent Statistics Dashboard Card
+   ═══════════════════════════════════════════════════════════ */
+.faz-consent-stats-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 12px;
+}
+.faz-consent-stat {
+	text-align: center;
+	padding: 16px 12px;
+	border-radius: 8px;
+	background: var(--faz-bg, #f8fafc);
+}
+.faz-consent-stat-value {
+	font-size: 28px;
+	font-weight: 700;
+	color: var(--faz-text);
+}
+.faz-consent-stat-label {
+	font-size: 12px;
+	color: var(--faz-text-muted);
+	margin-top: 4px;
+}
+.faz-consent-stat-accept .faz-consent-stat-value { color: var(--faz-success); }
+.faz-consent-stat-reject .faz-consent-stat-value { color: var(--faz-danger); }
+.faz-consent-stat-partial .faz-consent-stat-value { color: var(--faz-warning, #f0ad4e); }
+.faz-category-bar-wrap {
+	margin-bottom: 8px;
+}
+.faz-category-bar-label {
+	display: flex;
+	justify-content: space-between;
+	font-size: 13px;
+	margin-bottom: 4px;
+}
+.faz-category-bar {
+	height: 8px;
+	border-radius: 4px;
+	background: var(--faz-border, #e9ecef);
+	overflow: hidden;
+}
+.faz-category-bar-fill {
+	height: 100%;
+	border-radius: 4px;
+	background: var(--faz-primary);
+	transition: width 0.3s ease;
+}
+@media (max-width: 768px) {
+	.faz-consent-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}

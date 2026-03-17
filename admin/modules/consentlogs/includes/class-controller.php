@@ -442,6 +442,105 @@ class Controller {
 	}
 
 	/**
+	 * Get detailed consent statistics: daily breakdown, totals, and per-category acceptance.
+	 *
+	 * @param int $days Number of days to look back.
+	 * @return array {
+	 *     @type array      $daily      Daily breakdown with date, accepted, rejected, partial, total.
+	 *     @type array      $totals     Overall totals for the period.
+	 *     @type array      $categories Per-category yes/no counts.
+	 * }
+	 */
+	public function get_consent_stats( $days = 30 ) {
+		global $wpdb;
+
+		$table = $this->get_table_name();
+		$days  = absint( $days );
+
+		// Daily consent breakdown.
+		$daily = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT DATE(created_at) as date,
+						SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial,
+						COUNT(*) as total
+				 FROM {$table}
+				 WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+				 GROUP BY DATE(created_at)
+				 ORDER BY date ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$days
+			),
+			ARRAY_A
+		);
+
+		if ( ! is_array( $daily ) ) {
+			$daily = array();
+		}
+
+		// Overall totals.
+		$totals = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT COUNT(*) as total,
+						SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
+				 FROM {$table}
+				 WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$days
+			),
+			ARRAY_A
+		);
+
+		if ( ! is_array( $totals ) ) {
+			$totals = array(
+				'total'    => 0,
+				'accepted' => 0,
+				'rejected' => 0,
+				'partial'  => 0,
+			);
+		}
+
+		// Per-category acceptance rates — parse the JSON categories column.
+		$category_rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT categories FROM {$table}
+				 WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+				 AND categories IS NOT NULL AND categories != ''", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$days
+			),
+			ARRAY_A
+		);
+
+		$cat_counts = array();
+		if ( is_array( $category_rows ) ) {
+			foreach ( $category_rows as $row ) {
+				$cats = json_decode( $row['categories'], true );
+				if ( ! is_array( $cats ) ) {
+					continue;
+				}
+				foreach ( $cats as $cat => $value ) {
+					$cat = sanitize_text_field( $cat );
+					if ( ! isset( $cat_counts[ $cat ] ) ) {
+						$cat_counts[ $cat ] = array( 'yes' => 0, 'no' => 0 );
+					}
+					if ( 'yes' === $value ) {
+						$cat_counts[ $cat ]['yes']++;
+					} else {
+						$cat_counts[ $cat ]['no']++;
+					}
+				}
+			}
+		}
+
+		return array(
+			'daily'      => $daily,
+			'totals'     => $totals,
+			'categories' => $cat_counts,
+		);
+	}
+
+	/**
 	 * Cleanup old consent logs beyond a given retention period.
 	 *
 	 * @param int $months Number of months to retain. Logs older than this are deleted.

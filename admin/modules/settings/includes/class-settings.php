@@ -81,9 +81,11 @@ class Settings extends Store {
 				'step' => 2,
 			),
 			'scanner'      => array(
-				'max_pages'  => 20,
-				'last_scan'  => '',
-				'static_ip'  => '',
+				'max_pages'       => 20,
+				'last_scan'       => '',
+				'static_ip'       => '',
+				'auto_scan'       => false,
+				'scan_frequency'  => 'weekly',
 			),
 			'banner_control' => array(
 				'status'            => true,
@@ -105,6 +107,9 @@ class Settings extends Store {
 			),
 			'geolocation'  => array(
 				'maxmind_license_key' => '',
+				'geo_targeting'       => false,
+				'target_regions'      => array( 'eu', 'uk' ),
+				'default_behavior'    => 'show_banner',
 			),
 			'script_blocking' => array(
 				'custom_rules'   => array(),
@@ -150,6 +155,7 @@ class Settings extends Store {
 			'excluded_pages',
 			'sites',
 			'custom_rules',
+			'target_regions',
 		);
 	}
 	/**
@@ -214,7 +220,13 @@ class Settings extends Store {
 			case 'enabled':
 			case 'purpose_one_treatment':
 			case 'pageview_tracking':
+			case 'auto_scan':
+			case 'geo_targeting':
 				$value = faz_sanitize_bool( $value );
+				break;
+			case 'scan_frequency':
+				$allowed = array( 'daily', 'weekly', 'monthly' );
+				$value   = in_array( $value, $allowed, true ) ? $value : 'weekly';
 				break;
 			case 'installed':
 			case 'step':
@@ -247,6 +259,16 @@ class Settings extends Store {
 					}
 					return array( 'pattern' => $pattern, 'category' => $category );
 				}, $value ) ) );
+				break;
+			case 'default_behavior':
+				$allowed = array( 'show_banner', 'no_banner' );
+				$value   = in_array( $value, $allowed, true ) ? $value : 'show_banner';
+				break;
+			case 'target_regions':
+				if ( ! is_array( $value ) ) {
+					$value = array();
+				}
+				$value = array_values( array_unique( array_map( 'sanitize_text_field', $value ) ) );
 				break;
 			case 'publisher_cc':
 				$value = strtoupper( sanitize_text_field( (string) $value ) );

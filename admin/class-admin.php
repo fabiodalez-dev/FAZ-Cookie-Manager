@@ -75,6 +75,9 @@ class Admin {
 		$this->load();
 		$this->load_modules();
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
+		if ( is_multisite() ) {
+			add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
+		}
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
@@ -82,6 +85,7 @@ class Admin {
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
 		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
+		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
 	}
 
@@ -670,6 +674,81 @@ window.wp.apiFetch=apiFetch;
 	}
 
 	/**
+	 * Register a network admin menu page for multisite installs.
+	 *
+	 * @since 1.7.0
+	 * @return void
+	 */
+	public function register_network_menu() {
+		add_menu_page(
+			__( 'FAZ Cookie', 'faz-cookie-manager' ),
+			__( 'FAZ Cookie', 'faz-cookie-manager' ),
+			'manage_network_options',
+			'faz-cookie-manager-network',
+			array( $this, 'render_network_page' ),
+			'dashicons-food',
+			81
+		);
+	}
+
+	/**
+	 * Render the network admin overview page.
+	 *
+	 * Lists all subsites with their banner status and a link to each
+	 * subsite's admin configuration page.
+	 *
+	 * @since 1.7.0
+	 * @return void
+	 */
+	public function render_network_page() {
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'FAZ Cookie Manager — Network', 'faz-cookie-manager' ); ?></h1>
+			<div class="card" style="max-width:800px;margin-top:20px;">
+				<h2><?php esc_html_e( 'Multisite Configuration', 'faz-cookie-manager' ); ?></h2>
+				<p><?php esc_html_e( 'FAZ Cookie Manager is network-activated. Each subsite has its own independent configuration.', 'faz-cookie-manager' ); ?></p>
+				<p><?php esc_html_e( 'Navigate to each subsite\'s admin panel to configure the cookie banner, categories, and settings.', 'faz-cookie-manager' ); ?></p>
+
+				<h3><?php esc_html_e( 'Active Sites', 'faz-cookie-manager' ); ?></h3>
+				<table class="widefat striped">
+					<thead>
+						<tr>
+							<th><?php esc_html_e( 'Site', 'faz-cookie-manager' ); ?></th>
+							<th><?php esc_html_e( 'Banner Status', 'faz-cookie-manager' ); ?></th>
+							<th><?php esc_html_e( 'Actions', 'faz-cookie-manager' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php
+						$sites = get_sites( array( 'number' => 100 ) );
+						foreach ( $sites as $site ) :
+							switch_to_blog( $site->blog_id );
+							$settings  = get_option( 'faz_settings' );
+							$banner_on = ! empty( $settings['banner_control']['status'] );
+							$admin_url = get_admin_url( $site->blog_id, 'admin.php?page=faz-cookie-manager' );
+							$site_name = get_bloginfo( 'name' );
+							restore_current_blog();
+						?>
+						<tr>
+							<td><strong><?php echo esc_html( $site_name ? $site_name : $site->domain . $site->path ); ?></strong></td>
+							<td>
+								<?php if ( $banner_on ) : ?>
+									<span style="color:green;">&#9679; <?php esc_html_e( 'Active', 'faz-cookie-manager' ); ?></span>
+								<?php else : ?>
+									<span style="color:#999;">&#9679; <?php esc_html_e( 'Inactive', 'faz-cookie-manager' ); ?></span>
+								<?php endif; ?>
+							</td>
+							<td><a href="<?php echo esc_url( $admin_url ); ?>"><?php esc_html_e( 'Configure', 'faz-cookie-manager' ); ?></a></td>
+						</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Render an admin page by including its view file.
 	 *
 	 * @return void
@@ -884,6 +963,35 @@ window.wp.apiFetch=apiFetch;
 		echo '<a href="' . esc_url( $dismiss_url ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
 		echo '<span class="dashicons dashicons-dismiss"></span></a>';
 		echo '</div>';
+	}
+
+	/**
+	 * Display a dismissible notice when a scheduled scan found new cookies.
+	 *
+	 * @return void
+	 */
+	public function scheduled_scan_notice() {
+		$new_count = get_transient( 'faz_scan_new_cookies' );
+		if ( ! $new_count ) {
+			return;
+		}
+
+		if ( ! faz_is_admin_page() ) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-info is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
+			sprintf(
+				/* translators: %d: number of new cookies found */
+				esc_html__( 'Scheduled scan found %d new cookie(s).', 'faz-cookie-manager' ),
+				absint( $new_count )
+			),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-cookies' ) ),
+			esc_html__( 'Review now', 'faz-cookie-manager' )
+		);
+
+		delete_transient( 'faz_scan_new_cookies' );
 	}
 
 	/**

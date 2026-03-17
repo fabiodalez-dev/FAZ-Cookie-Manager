@@ -95,6 +95,31 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Automatic Scanning', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="scanner.auto_scan">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable automatic cookie scanning', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Automatically scan your site for new cookies on a schedule. You will receive an email notification if new uncategorized cookies are found.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Scan Frequency', 'faz-cookie-manager' ); ?></label>
+				<select class="faz-select" data-path="scanner.scan_frequency" style="width:auto;max-width:200px;">
+					<option value="daily"><?php esc_html_e( 'Daily', 'faz-cookie-manager' ); ?></option>
+					<option value="weekly"><?php esc_html_e( 'Weekly', 'faz-cookie-manager' ); ?></option>
+					<option value="monthly"><?php esc_html_e( 'Monthly', 'faz-cookie-manager' ); ?></option>
+				</select>
+				<div class="faz-help"><?php esc_html_e( 'How often the scanner runs automatically. Weekly is recommended for most sites.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Microsoft Consent APIs', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
@@ -153,6 +178,54 @@ defined( 'ABSPATH' ) || exit;
 					<span style="color:var(--faz-text-secondary);"><?php esc_html_e( 'Loading GVL status...', 'faz-cookie-manager' ); ?></span>
 				</div>
 				<button class="faz-btn faz-btn-secondary" id="faz-gvl-update" type="button" style="margin-top:8px;"><?php esc_html_e( 'Update GVL Now', 'faz-cookie-manager' ); ?></button>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Geo-Targeting', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="geolocation.geo_targeting">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable geo-targeted banner display', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Show the cookie banner only to visitors from specific regions. Requires a MaxMind GeoLite2 database (configured below) or Cloudflare CF-IPCountry header.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+				<label><?php esc_html_e( 'Target Regions', 'faz-cookie-manager' ); ?></label>
+				<div id="faz-geo-regions" style="display:flex;flex-wrap:wrap;gap:8px;">
+					<?php
+					$region_labels = array(
+						'eu' => __( 'EU / EEA', 'faz-cookie-manager' ),
+						'uk' => __( 'United Kingdom', 'faz-cookie-manager' ),
+						'us' => __( 'United States', 'faz-cookie-manager' ),
+						'ca' => __( 'Canada', 'faz-cookie-manager' ),
+						'br' => __( 'Brazil', 'faz-cookie-manager' ),
+						'au' => __( 'Australia', 'faz-cookie-manager' ),
+						'jp' => __( 'Japan', 'faz-cookie-manager' ),
+						'ch' => __( 'Switzerland', 'faz-cookie-manager' ),
+					);
+					foreach ( $region_labels as $code => $label ) :
+					?>
+					<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:var(--faz-bg-secondary);border-radius:6px;font-size:13px;cursor:pointer;">
+						<input type="checkbox" data-path="geolocation.target_regions" value="<?php echo esc_attr( $code ); ?>">
+						<?php echo esc_html( $label ); ?>
+					</label>
+					<?php endforeach; ?>
+				</div>
+				<div class="faz-help"><?php esc_html_e( 'Select which regions should see the cookie banner. Visitors from other regions will not see it (if "Hide banner" is selected below).', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
+				<label><?php esc_html_e( 'Non-target visitors', 'faz-cookie-manager' ); ?></label>
+				<select class="faz-select" data-path="geolocation.default_behavior" style="width:auto;max-width:280px;">
+					<option value="show_banner"><?php esc_html_e( 'Show banner anyway (safest)', 'faz-cookie-manager' ); ?></option>
+					<option value="no_banner"><?php esc_html_e( 'Hide banner (scripts load normally)', 'faz-cookie-manager' ); ?></option>
+				</select>
+				<div class="faz-help"><?php esc_html_e( 'What happens when a visitor is from outside the target regions. "Show banner anyway" is the safest option and recommended for sites with global audiences.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>

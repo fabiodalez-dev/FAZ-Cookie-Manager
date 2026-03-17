@@ -85,6 +85,27 @@ class Api extends Rest_Controller {
 			)
 		);
 
+		// GET /consent_logs/stats - detailed consent statistics (admin only).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/stats',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_consent_stats' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+					'args'                => array(
+						'days' => array(
+							'description'       => __( 'Number of days to look back.', 'faz-cookie-manager' ),
+							'type'              => 'integer',
+							'default'           => 30,
+							'sanitize_callback' => 'absint',
+						),
+					),
+				),
+			)
+		);
+
 		// GET /consent_logs/export - CSV export (admin only).
 		register_rest_route(
 			$this->namespace,
@@ -147,6 +168,18 @@ class Api extends Rest_Controller {
 	public function get_statistics( $request ) {
 		$items = Controller::get_instance()->get_statistics();
 		return rest_ensure_response( $items );
+	}
+
+	/**
+	 * Get detailed consent statistics (daily breakdown, totals, per-category).
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function get_consent_stats( $request ) {
+		$days  = $request->get_param( 'days' ) ? absint( $request->get_param( 'days' ) ) : 30;
+		$stats = Controller::get_instance()->get_consent_stats( $days );
+		return rest_ensure_response( $stats );
 	}
 
 	/**

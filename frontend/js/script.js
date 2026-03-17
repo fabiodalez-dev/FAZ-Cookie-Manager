@@ -1250,7 +1250,50 @@ function _fazUnblockServerSide() {
             script.parentNode.replaceChild(clone, script);
         });
 
-    // 2. Iframes (may be inside placeholder wrappers).
+    // 2. Placeholders with <template> content (iframes, oEmbeds).
+    // The Placeholder_Builder wraps blocked content in a <template> inside
+    // a .faz-placeholder div. Restore by replacing the placeholder with the
+    // template content, then process the unblocked iframes/scripts within.
+    document.querySelectorAll('.faz-placeholder[data-faz-category]')
+        .forEach(function (placeholder) {
+            // Skip social placeholders — handled separately in step 6.
+            if (placeholder.classList.contains('faz-social-placeholder')) return;
+            var cat = placeholder.getAttribute("data-faz-category");
+            if (_fazIsCategoryToBeBlocked(cat)) return;
+            var tpl = placeholder.querySelector('template.faz-placeholder-content');
+            if (!tpl) return;
+            // Clone template content into a document fragment for safe DOM insertion.
+            // The template content is trusted server-rendered markup (the original
+            // blocked iframe/oEmbed HTML), not user-supplied input.
+            var fragment = tpl.content.cloneNode(true);
+            // Restore blocked iframes inside the template content.
+            fragment.querySelectorAll('iframe[data-faz-src]').forEach(function (iframe) {
+                var fazSrc = iframe.getAttribute("data-faz-src");
+                if (!_fazIsAllowedScheme(fazSrc)) return;
+                iframe.src = fazSrc;
+                iframe.removeAttribute("data-faz-src");
+                iframe.style.display = "";
+            });
+            // Restore blocked scripts inside the template content.
+            fragment.querySelectorAll('script[type="text/plain"][data-faz-category]').forEach(function (script) {
+                var clone = _fazCreateElementBackup.call(document, "script");
+                var origType = script.getAttribute("data-faz-original-type");
+                clone.type = origType || "text/javascript";
+                for (var i = 0; i < script.attributes.length; i++) {
+                    var attr = script.attributes[i];
+                    if (attr.name === "type" || attr.name === "src" || attr.name === "data-faz-category" || attr.name === "data-faz-original-type") continue;
+                    clone.setAttribute(attr.name, attr.value);
+                }
+                if (script.src) clone.src = script.src;
+                else clone.textContent = script.textContent;
+                script.parentNode.replaceChild(clone, script);
+            });
+            // Replace placeholder with restored content.
+            placeholder.parentNode.insertBefore(fragment, placeholder);
+            placeholder.remove();
+        });
+
+    // 2b. Standalone iframes with data-faz-src (not inside a placeholder).
     document.querySelectorAll('iframe[data-faz-src][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
@@ -1260,7 +1303,7 @@ function _fazUnblockServerSide() {
             el.src = fazSrc;
             el.removeAttribute("data-faz-src");
             el.style.display = "";
-            // Remove placeholder wrapper if present.
+            // Remove legacy placeholder wrapper if present.
             var placeholder = el.closest('.faz-iframe-placeholder');
             if (placeholder) {
                 placeholder.parentNode.insertBefore(el, placeholder);
@@ -1801,6 +1844,16 @@ function _fazWatchBannerElement() {
                 : event.target.msMatchesSelector(selector)
         )
             _revisitFazConsent();
+    });
+
+    // Delegate clicks on placeholder "Accept cookies" buttons.
+    document.querySelector("body").addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-faz-accept]");
+        if (!btn) return;
+        var cat = btn.getAttribute("data-faz-accept");
+        if (cat && typeof window._fazAcceptCategory === "function") {
+            window._fazAcceptCategory(cat);
+        }
     });
 }
 

@@ -21,6 +21,8 @@ use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Gvl;
 use FazCookie\Includes\Known_Providers;
 use FazCookie\Includes\Cookie_Table_Shortcode;
+use FazCookie\Includes\Cookie_Policy_Shortcode;
+use FazCookie\Frontend\Includes\Placeholder_Builder;
 /**
  * The public-facing functionality of the plugin.
  *
@@ -109,6 +111,7 @@ class Frontend {
 		$this->gcm_settings = new Gcm_Settings();
 		new Consent_Logger();
 		new Cookie_Table_Shortcode();
+		new Cookie_Policy_Shortcode();
 		add_action( 'init', array( $this, 'load_banner' ) );
 		add_action( 'wp_footer', array( $this, 'banner_html' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 1 );
@@ -137,6 +140,37 @@ class Frontend {
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
+
+		// Geo-targeting: skip banner for visitors outside target regions.
+		$faz_geo_settings = get_option( 'faz_settings' );
+		if ( ! empty( $faz_geo_settings['geolocation']['geo_targeting'] ) ) {
+			$country = '';
+			// Try Cloudflare header first (free, no MaxMind needed).
+			if ( isset( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
+				$country = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
+			}
+			// Fallback to MaxMind / other detection methods.
+			if ( empty( $country ) ) {
+				$country = Geolocation::get_country();
+			}
+
+			if ( ! empty( $country ) ) {
+				$target_regions = isset( $faz_geo_settings['geolocation']['target_regions'] )
+					? $faz_geo_settings['geolocation']['target_regions']
+					: array( 'eu', 'uk' );
+				$default_behavior = isset( $faz_geo_settings['geolocation']['default_behavior'] )
+					? $faz_geo_settings['geolocation']['default_behavior']
+					: 'show_banner';
+
+				$is_target = $this->is_country_in_regions( $country, $target_regions );
+
+				if ( ! $is_target && 'no_banner' === $default_behavior ) {
+					return; // Skip banner entirely for non-target visitors.
+				}
+			}
+			// If country cannot be resolved (no MaxMind DB, no Cloudflare), show banner to everyone (fail-open).
+		}
+
 		$suffix = ''; // Always load non-minified JS.
 		if ( false === $this->settings->is_connected() ) {
 			if ( ! $this->template ) {
@@ -345,18 +379,7 @@ class Frontend {
 			return;
 		}
 		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
-			. '.faz-iframe-placeholder{position:relative;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;min-height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden}'
-			. '.faz-iframe-placeholder-inner{text-align:center;padding:32px 24px;color:#555;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}'
-			. '.faz-iframe-placeholder-inner svg{color:#999;margin-bottom:12px}'
-			. '.faz-iframe-placeholder-inner p{margin:0 0 16px;font-size:14px;line-height:1.5}'
-			. '.faz-iframe-placeholder-btn{display:inline-block;padding:10px 24px;background:#1863DC;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;transition:background .2s}'
-			. '.faz-iframe-placeholder-btn:hover{background:#1352b5}'
-			. '.faz-iframe-placeholder--video{min-height:300px}'
-			. '.faz-iframe-placeholder--video .faz-iframe-placeholder-inner{position:relative;z-index:2;background:rgba(0,0,0,.65);border-radius:8px;padding:24px 32px;color:#fff}'
-			. '.faz-iframe-placeholder--video .faz-iframe-placeholder-inner svg{color:#fff}'
-			. '.faz-iframe-placeholder--video .faz-iframe-placeholder-inner p{color:#eee}'
-			. '.faz-iframe-placeholder-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:8px}'
-			. '.faz-social-placeholder{min-height:120px}'
+			. Placeholder_Builder::get_css()
 			. '</style>';
 	}
 	/**
@@ -427,6 +450,56 @@ class Frontend {
 				return false;
 		}
 	}
+
+	/**
+	 * Check if a country code belongs to any of the given region groups.
+	 *
+	 * @param string $country_code ISO 3166-1 alpha-2 country code.
+	 * @param array  $regions      List of region keys (e.g. 'eu', 'uk') or direct country codes.
+	 * @return bool
+	 */
+	private function is_country_in_regions( $country_code, $regions ) {
+		$country_code = strtoupper( $country_code );
+
+		$region_map = array(
+			'eu' => array(
+				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
+				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
+				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
+				// EEA.
+				'IS', 'LI', 'NO',
+			),
+			'uk' => array( 'GB' ),
+			'us' => array( 'US' ),
+			'ca' => array( 'CA' ),
+			'br' => array( 'BR' ),
+			'au' => array( 'AU' ),
+			'jp' => array( 'JP' ),
+			'ch' => array( 'CH' ),
+		);
+
+		foreach ( $regions as $region ) {
+			$region = strtolower( $region );
+			if ( isset( $region_map[ $region ] ) ) {
+				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
+					return true;
+				}
+			} elseif ( strtoupper( $region ) === $country_code ) {
+				// Direct country code match (e.g., 'ZA' for South Africa).
+				return true;
+			}
+		}
+
+		/**
+		 * Filters whether a country is considered within a target region.
+		 *
+		 * @param bool   $is_target    Whether the country matched any region (false at this point).
+		 * @param string $country_code ISO 3166-1 alpha-2 country code.
+		 * @param array  $regions      The configured target regions.
+		 */
+		return apply_filters( 'faz_is_target_region', false, $country_code, $regions );
+	}
+
 	/**
 	 * Print banner HTML as script template using
 	 * type="text/template" attribute
@@ -965,37 +1038,36 @@ class Frontend {
 			? '<iframe' . $new_attrs . '>' . $inner . '</iframe>'
 			: '<iframe' . $new_attrs . '/>';
 
-		// Detect the service label for the placeholder.
-		$service_label = $this->get_service_label_from_attrs( $attrs );
+		// Detect service from iframe src URL.
+		$src          = $this->extract_src_from_attrs( $attrs );
+		$service_id   = Placeholder_Builder::detect_service_from_url( $src );
+		$service_name = 'default' !== $service_id
+			? Placeholder_Builder::get_service_name( $service_id )
+			: $this->get_service_label_from_attrs( $attrs );
+		if ( ! $service_name ) {
+			$service_name = Placeholder_Builder::get_service_name( 'default' );
+		}
 
-		// Try to extract a video thumbnail (YouTube/Vimeo).
-		$thumbnail_html = $this->get_video_thumbnail_html( $attrs );
+		$thumb_url = Placeholder_Builder::get_video_thumbnail( $src );
 
-		// Build placeholder.
-		$placeholder = '<div class="faz-iframe-placeholder' . ( $thumbnail_html ? ' faz-iframe-placeholder--video' : '' ) . '" data-faz-category="' . esc_attr( $matched_category ) . '">'
-			. $thumbnail_html
-			. '<div class="faz-iframe-placeholder-inner">'
-			. ( $thumbnail_html
-				? '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
-				: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>'
-			)
-			. '<p>' . esc_html( sprintf(
-				/* translators: %s: service name (e.g. "YouTube", "Google Maps") */
-				__( 'This content is blocked because %s cookies have not been accepted.', 'faz-cookie-manager' ),
-				$service_label ? $service_label : $matched_category
-			) ) . '</p>'
-			. '<button class="faz-iframe-placeholder-btn" onclick="(function(b){var p=b.closest(\'.faz-iframe-placeholder\');var cat=p.getAttribute(\'data-faz-category\');if(window._fazAcceptCategory){window._fazAcceptCategory(cat)}else{var el=document.querySelector(\'[data-faz-action=revisit-consent]\');if(el)el.click()}})(this)">'
-			. esc_html__( 'Accept cookies', 'faz-cookie-manager' )
-			. '</button>'
-			. '</div>'
-			. $blocked_iframe
-			. '</div>';
-
-		return $placeholder;
+		return Placeholder_Builder::build( $service_id, $service_name, $matched_category, $blocked_iframe, $thumb_url );
 	}
 
 	/**
-	 * Try to determine the service label from iframe attributes.
+	 * Extract the src attribute value from an attribute string.
+	 *
+	 * @param string $attrs Attribute string.
+	 * @return string URL or empty string.
+	 */
+	private function extract_src_from_attrs( $attrs ) {
+		if ( preg_match( '/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $attrs, $m ) ) {
+			return $m[1];
+		}
+		return '';
+	}
+
+	/**
+	 * Try to determine the service label from iframe attributes via Known_Providers.
 	 *
 	 * @param string $attrs Iframe attribute string.
 	 * @return string|false Service label or false.
@@ -1010,21 +1082,6 @@ class Frontend {
 			}
 		}
 		return false;
-	}
-
-	/**
-	 * Extract a video thumbnail URL from iframe attributes (YouTube/Vimeo).
-	 *
-	 * @param string $attrs Iframe attribute string.
-	 * @return string HTML for the thumbnail background, or empty string.
-	 */
-	private function get_video_thumbnail_html( $attrs ) {
-		// YouTube: extract video ID. img.youtube.com is a static CDN (no cookies/tracking).
-		if ( preg_match( '/youtube(?:-nocookie)?\.com\/embed\/([a-zA-Z0-9_-]{11})/', $attrs, $yt ) ) {
-			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
-			return '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
-		}
-		return '';
 	}
 
 	/**
@@ -2296,27 +2353,16 @@ class Frontend {
 			return $html;
 		}
 
-		// Detect service label.
-		$service_label = false;
-		$all = Known_Providers::get_all();
-		foreach ( $all as $service ) {
-			foreach ( $service['patterns'] as $pat ) {
-				if ( false !== stripos( $url, $pat ) ) {
-					$service_label = $service['label'];
-					break 2;
-				}
-			}
+		// Detect service from the oEmbed URL.
+		$service_id   = Placeholder_Builder::detect_service_from_url( $url );
+		$service_name = 'default' !== $service_id
+			? Placeholder_Builder::get_service_name( $service_id )
+			: $this->get_service_label_from_attrs( $url );
+		if ( ! $service_name ) {
+			$service_name = Placeholder_Builder::get_service_name( 'default' );
 		}
 
-		// Try to get video thumbnail. img.youtube.com is a static CDN (no cookies/tracking).
-		$thumbnail_html = '';
-		if ( preg_match( '/youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/)([a-zA-Z0-9_-]{11})/', $url, $yt ) ) {
-			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
-			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
-		} elseif ( preg_match( '/youtu\.be\/([a-zA-Z0-9_-]{11})/', $url, $yt ) ) {
-			$thumb_url = 'https://img.youtube.com/vi/' . $yt[1] . '/hqdefault.jpg';
-			$thumbnail_html = '<img class="faz-iframe-placeholder-thumb" src="' . esc_url( $thumb_url ) . '" alt="" loading="lazy"/>';
-		}
+		$thumb_url = Placeholder_Builder::get_video_thumbnail( $url );
 
 		// Neutralize the embed: wrap iframes, disable scripts.
 		$blocked_html = $html;
@@ -2344,27 +2390,7 @@ class Frontend {
 			$blocked_html = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', $blocked_html ) ?? $blocked_html;
 		}
 
-		// Build placeholder.
-		$placeholder = '<div class="faz-iframe-placeholder' . ( $thumbnail_html ? ' faz-iframe-placeholder--video' : '' ) . '" data-faz-category="' . esc_attr( $matched_category ) . '">'
-			. $thumbnail_html
-			. '<div class="faz-iframe-placeholder-inner">'
-			. ( $thumbnail_html
-				? '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
-				: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>'
-			)
-			. '<p>' . esc_html( sprintf(
-				/* translators: %s: service name */
-				__( 'This content is blocked because %s cookies have not been accepted.', 'faz-cookie-manager' ),
-				$service_label ? $service_label : $matched_category
-			) ) . '</p>'
-			. '<button class="faz-iframe-placeholder-btn" onclick="(function(b){var p=b.closest(\'.faz-iframe-placeholder\');var cat=p.getAttribute(\'data-faz-category\');if(window._fazAcceptCategory){window._fazAcceptCategory(cat)}else{var el=document.querySelector(\'[data-faz-action=revisit-consent]\');if(el)el.click()}})(this)">'
-			. esc_html__( 'Accept cookies', 'faz-cookie-manager' )
-			. '</button>'
-			. '</div>'
-			. $blocked_html
-			. '</div>';
-
-		return $placeholder;
+		return Placeholder_Builder::build( $service_id, $service_name, $matched_category, $blocked_html, $thumb_url );
 	}
 
 	/**
@@ -2381,14 +2407,14 @@ class Frontend {
 	 */
 	private function process_social_embeds( $content, $blocked_categories ) {
 		$social_classes = array(
-			'fb-page'          => array( 'label' => 'Facebook', 'category' => 'marketing' ),
-			'fb-video'         => array( 'label' => 'Facebook', 'category' => 'marketing' ),
-			'fb-post'          => array( 'label' => 'Facebook', 'category' => 'marketing' ),
-			'fb-comments'      => array( 'label' => 'Facebook', 'category' => 'marketing' ),
-			'fb-like'          => array( 'label' => 'Facebook', 'category' => 'marketing' ),
-			'instagram-media'  => array( 'label' => 'Instagram', 'category' => 'marketing' ),
-			'twitter-tweet'    => array( 'label' => 'X (Twitter)', 'category' => 'marketing' ),
-			'twitter-timeline' => array( 'label' => 'X (Twitter)', 'category' => 'marketing' ),
+			'fb-page'          => array( 'service_id' => 'facebook',  'label' => 'Facebook',    'category' => 'marketing' ),
+			'fb-video'         => array( 'service_id' => 'facebook',  'label' => 'Facebook',    'category' => 'marketing' ),
+			'fb-post'          => array( 'service_id' => 'facebook',  'label' => 'Facebook',    'category' => 'marketing' ),
+			'fb-comments'      => array( 'service_id' => 'facebook',  'label' => 'Facebook',    'category' => 'marketing' ),
+			'fb-like'          => array( 'service_id' => 'facebook',  'label' => 'Facebook',    'category' => 'marketing' ),
+			'instagram-media'  => array( 'service_id' => 'instagram', 'label' => 'Instagram',   'category' => 'marketing' ),
+			'twitter-tweet'    => array( 'service_id' => 'twitter',   'label' => 'X (Twitter)', 'category' => 'marketing' ),
+			'twitter-timeline' => array( 'service_id' => 'twitter',   'label' => 'X (Twitter)', 'category' => 'marketing' ),
 		);
 
 		foreach ( $social_classes as $class => $info ) {
@@ -2408,17 +2434,7 @@ class Frontend {
 					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
 						return $m[0];
 					}
-					$placeholder = '<div class="faz-iframe-placeholder faz-social-placeholder" data-faz-category="' . esc_attr( $category ) . '">'
-						. '<div class="faz-iframe-placeholder-inner">'
-						. '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>'
-						. '<p>' . esc_html( sprintf(
-							__( 'This content is blocked because %s cookies have not been accepted.', 'faz-cookie-manager' ),
-							$info['label']
-						) ) . '</p>'
-						. '<button class="faz-iframe-placeholder-btn" onclick="(function(b){var p=b.closest(\'.faz-iframe-placeholder\');var cat=p.getAttribute(\'data-faz-category\');if(window._fazAcceptCategory){window._fazAcceptCategory(cat)}else{var el=document.querySelector(\'[data-faz-action=revisit-consent]\');if(el)el.click()}})(this)">'
-						. esc_html__( 'Accept cookies', 'faz-cookie-manager' )
-						. '</button>'
-						. '</div></div>';
+					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
 					// Placeholder before + hidden original element.
 					return $placeholder . $m[1] . $m[2] . ' style="display:none" data-faz-category="' . esc_attr( $category ) . '">';
 				},
