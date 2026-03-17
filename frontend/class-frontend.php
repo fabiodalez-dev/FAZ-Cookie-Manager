@@ -139,9 +139,12 @@ class Frontend {
 		if ( true === faz_disable_banner() ) {
 			return;
 		}
-		// Skip banner for search engine bots (better SEO, no consent needed for crawlers).
-		if ( faz_is_bot() ) {
-			return;
+		// Skip banner for search engine bots (configurable via Settings).
+		$bot_settings = get_option( 'faz_settings' );
+		if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
+			if ( faz_is_bot() ) {
+				return;
+			}
 		}
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
@@ -684,6 +687,9 @@ class Frontend {
 			'minAge'  => isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16,
 		);
 		$store['_ageGate'] = $age_gate;
+
+		// GTM Data Layer toggle.
+		$store['_gtmDataLayer'] = ! empty( $settings['banner_control']['gtm_datalayer'] );
 
 		// IAB vendor data for preference center.
 		$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' );

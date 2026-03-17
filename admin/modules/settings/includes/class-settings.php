@@ -91,6 +91,8 @@ class Settings extends Store {
 				'status'                 => true,
 				'excluded_pages'         => array(),
 				'subdomain_sharing'      => false,
+				'hide_from_bots'         => true,
+				'gtm_datalayer'          => false,
 				'alternative_asset_path' => false,
 				'per_service_consent'    => false,
 			),
@@ -233,6 +235,8 @@ class Settings extends Store {
 			case 'pageview_tracking':
 			case 'auto_scan':
 			case 'geo_targeting':
+			case 'hide_from_bots':
+			case 'gtm_datalayer':
 			case 'alternative_asset_path':
 			case 'per_service_consent':
 				$value = faz_sanitize_bool( $value );

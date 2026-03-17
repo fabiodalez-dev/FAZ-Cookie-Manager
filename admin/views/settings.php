@@ -29,6 +29,22 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
+					<input type="checkbox" data-path="banner_control.hide_from_bots">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Hide banner from search engine bots', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Automatically detects search engine crawlers (Googlebot, Bingbot, etc.) and skips the banner for them. Improves SEO by serving cleaner HTML to crawlers.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="banner_control.gtm_datalayer">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Push consent events to GTM Data Layer', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Pushes a faz_consent_update event with per-category granted/denied values to window.dataLayer after each consent action. Enable if you use Google Tag Manager.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.alternative_asset_path">
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Ad-blocker compatibility mode', 'faz-cookie-manager' ); ?></span>

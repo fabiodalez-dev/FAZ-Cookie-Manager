@@ -1804,8 +1804,8 @@ function _fazAfterConsent() {
     _fazUpdateServiceToggleStates();
     _fazUpdateVendorCheckboxStates();
 
-    // GTM Data Layer integration — push consent state after every consent action.
-    if (typeof window.dataLayer !== 'undefined') {
+    // GTM Data Layer integration — push consent state after every consent action (configurable).
+    if (_fazStore._gtmDataLayer && typeof window.dataLayer !== 'undefined') {
         var consentData = { event: 'faz_consent_update' };
         var cats = _fazStore._categories || [];
         for (var i = 0; i < cats.length; i++) {
