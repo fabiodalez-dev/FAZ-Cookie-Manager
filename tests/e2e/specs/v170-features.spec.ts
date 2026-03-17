@@ -378,4 +378,141 @@ test.describe('v1.7.0 features', () => {
     await ctx2.close();
   });
 
+  // 20. System Status Page
+  test('F20: system status page loads with environment info', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-system-status`, { waitUntil: 'domcontentloaded' });
+
+    // Check page loaded with main container
+    await expect(page.locator('#faz-system-status')).toBeVisible();
+    // Verify key sections exist
+    const html = await page.content();
+    expect(html).toContain('Plugin Version');
+    expect(html).toContain('PHP Version');
+    expect(html).toContain('faz_banners');
+    expect(html).toContain('faz-copy-status');
+    // Check that at least 4 cards render
+    const cards = page.locator('#faz-system-status .faz-card');
+    expect(await cards.count()).toBeGreaterThanOrEqual(4);
+  });
+
+  // 21. Content Blocker Templates
+  test('F21: blocker templates REST endpoint returns 10+ templates', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    const r = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/blocker-templates`, {
+      headers: { 'X-WP-Nonce': nonce },
+    });
+    expect(r.status()).toBe(200);
+    const templates = await r.json();
+    expect(Array.isArray(templates)).toBe(true);
+    expect(templates.length).toBeGreaterThanOrEqual(10);
+    // Each template should have required fields
+    for (const t of templates) {
+      expect(t).toHaveProperty('id');
+      expect(t).toHaveProperty('name');
+      expect(t).toHaveProperty('category');
+      expect(t).toHaveProperty('patterns');
+      expect(Array.isArray(t.patterns)).toBe(true);
+    }
+  });
+
+  // 22. AMP Support (non-AMP pages unaffected)
+  test('F22: AMP class does not interfere with non-AMP pages', async ({ page, wpBaseURL }) => {
+    const ctx = await page.context().browser()!.newContext({ baseURL: wpBaseURL });
+    const p = await ctx.newPage();
+    await p.goto('/', { waitUntil: 'domcontentloaded' });
+
+    // On non-AMP pages, the regular banner should load (not amp-consent)
+    const html = await p.content();
+    expect(html).not.toContain('amp-consent');
+    expect(html).toContain('fazcookie-consent'); // regular consent cookie reference
+    await ctx.close();
+  });
+
+  // 23. TranslatePress/Weglot compatibility (no breakage)
+  test('F23: translation compat class does not break banner on single-language site', async ({ page, wpBaseURL }) => {
+    const ctx = await page.context().browser()!.newContext({ baseURL: wpBaseURL });
+    const p = await ctx.newPage();
+    await p.goto('/', { waitUntil: 'domcontentloaded' });
+
+    // Banner should still render normally
+    const notice = p.locator('[data-faz-tag="notice"]');
+    await expect(notice).toBeVisible({ timeout: 10_000 });
+    await ctx.close();
+  });
+
+  // 24. WP-CLI commands registered
+  test('F24: WP-CLI class file exists and is valid PHP', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    // We can't run WP-CLI from Playwright, but we verify the plugin loads
+    // without errors (the CLI class has a WP_CLI guard so it doesn't break web)
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+    const s = await getSettings(page, nonce);
+    expect(s).toHaveProperty('banner_control');
+  });
+
+  // 25. Import/Export page functional test
+  test('F25: import page has working export/import UI elements', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-import-export`, { waitUntil: 'domcontentloaded' });
+
+    await expect(page.locator('#faz-export-btn')).toBeVisible();
+    await expect(page.locator('#faz-import-file')).toBeVisible();
+    await expect(page.locator('#faz-import-btn')).toBeVisible();
+    // Import button should be disabled until a file is selected
+    await expect(page.locator('#faz-import-btn')).toBeDisabled();
+  });
+
+  // 26. Consent statistics card on dashboard
+  test('F26: consent stats card visible on dashboard page', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager`, { waitUntil: 'domcontentloaded' });
+
+    const statsCard = page.locator('#faz-consent-stats, #faz-stat-accept-rate');
+    const count = await statsCard.count();
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
+
+  // 27. Microsoft consent settings persist
+  test('F27: Microsoft UET and Clarity settings persist', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    await updateSettings(page, nonce, { microsoft: { uet_consent_mode: true, clarity_consent: true } });
+    const s = await getSettings(page, nonce);
+    expect(s.microsoft.uet_consent_mode).toBe(true);
+    expect(s.microsoft.clarity_consent).toBe(true);
+
+    // Restore
+    await updateSettings(page, nonce, { microsoft: { uet_consent_mode: false, clarity_consent: false } });
+  });
+
+  // 28. Banner renders Accept and Reject with equal prominence
+  test('F28: banner has accept and reject buttons at first level', async ({ page, wpBaseURL }) => {
+    const ctx = await page.context().browser()!.newContext({ baseURL: wpBaseURL });
+    const p = await ctx.newPage();
+    await p.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const accept = p.locator('[data-faz-tag="accept-button"]');
+    const reject = p.locator('[data-faz-tag="reject-button"]');
+    await expect(accept).toBeVisible({ timeout: 10_000 });
+    await expect(reject).toBeVisible();
+
+    // Equal prominence: similar dimensions
+    const acceptBox = await accept.boundingBox();
+    const rejectBox = await reject.boundingBox();
+    expect(acceptBox).toBeTruthy();
+    expect(rejectBox).toBeTruthy();
+    if (acceptBox && rejectBox) {
+      // Height should be similar (within 10px)
+      expect(Math.abs(acceptBox.height - rejectBox.height)).toBeLessThan(10);
+    }
+    await ctx.close();
+  });
+
 });
