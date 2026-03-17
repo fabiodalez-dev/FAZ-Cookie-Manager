@@ -88,9 +88,11 @@ class Settings extends Store {
 				'scan_frequency'  => 'weekly',
 			),
 			'banner_control' => array(
-				'status'            => true,
-				'excluded_pages'    => array(),
-				'subdomain_sharing' => false,
+				'status'                 => true,
+				'excluded_pages'         => array(),
+				'subdomain_sharing'      => false,
+				'alternative_asset_path' => false,
+				'per_service_consent'    => false,
 			),
 			'microsoft'    => array(
 				'uet_consent_mode' => false,
@@ -116,6 +118,14 @@ class Settings extends Store {
 				'excluded_pages' => array(),
 			),
 			'pageview_tracking' => false,
+			'consent_forwarding' => array(
+				'enabled'        => false,
+				'target_domains' => array(),
+			),
+			'age_gate'          => array(
+				'enabled' => false,
+				'min_age' => 16,
+			),
 		);
 
 	}
@@ -156,6 +166,7 @@ class Settings extends Store {
 			'sites',
 			'custom_rules',
 			'target_regions',
+			'target_domains',
 		);
 	}
 	/**
@@ -222,6 +233,8 @@ class Settings extends Store {
 			case 'pageview_tracking':
 			case 'auto_scan':
 			case 'geo_targeting':
+			case 'alternative_asset_path':
+			case 'per_service_consent':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'scan_frequency':
@@ -236,11 +249,15 @@ class Settings extends Store {
 			case 'retention':
 				$value = max( 1, min( 120, absint( $value ) ) );
 				break;
+			case 'min_age':
+				$value = max( 13, min( 18, absint( $value ) ) );
+				break;
 			case 'cmp_id':
 				$value = min( 4095, absint( $value ) );
 				break;
 			case 'excluded_pages':
 			case 'sites':
+			case 'target_domains':
 				$value = is_array( $value ) ? array_map( 'sanitize_text_field', $value ) : array();
 				break;
 			case 'custom_rules':

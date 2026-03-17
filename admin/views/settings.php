@@ -27,6 +27,43 @@ defined( 'ABSPATH' ) || exit;
 				<textarea class="faz-textarea" data-path="banner_control.excluded_pages" rows="3" placeholder="<?php esc_attr_e( 'One per line: page ID or URL pattern like /privacy/*', 'faz-cookie-manager' ); ?>"></textarea>
 				<div class="faz-help"><?php esc_html_e( 'Enter page IDs or URL patterns, one per line.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="banner_control.alternative_asset_path">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Ad-blocker compatibility mode', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Uses generic script handle names to prevent ad blockers from blocking the cookie banner. Enable if visitors report the banner not appearing.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="banner_control.per_service_consent">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable per-service consent', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. This provides more granular privacy control but makes the preference center more complex.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Cross-Domain Consent', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="consent_forwarding.enabled">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable cross-domain consent forwarding', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Share consent choices across multiple domains. When a visitor accepts or rejects cookies on one domain, the same choice is forwarded to all configured target domains via secure postMessage.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Target Domains', 'faz-cookie-manager' ); ?></label>
+				<textarea class="faz-textarea" data-path="consent_forwarding.target_domains" rows="3" placeholder="<?php esc_attr_e( 'One per line: https://shop.example.com', 'faz-cookie-manager' ); ?>"></textarea>
+				<div class="faz-help"><?php esc_html_e( 'Full URLs of other sites that should receive consent state. Each site must also have FAZ Cookie Manager installed. One URL per line.', 'faz-cookie-manager' ); ?></div>
+			</div>
 		</div>
 	</div>
 
@@ -138,6 +175,27 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Microsoft Clarity Consent API', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Signals consent status to Microsoft Clarity (heatmaps and session recordings). Enable if you use Clarity and want it to pause tracking until consent is given.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Age Verification', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="age_gate.enabled">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Require age verification for consent', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Under GDPR Art. 8, children below the minimum age cannot give valid consent for data processing. When enabled, visitors must confirm they meet the minimum age before accepting optional cookies.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Minimum Age', 'faz-cookie-manager' ); ?></label>
+				<input type="number" class="faz-input faz-input-sm" data-path="age_gate.min_age" min="13" max="18" style="width:80px;">
+				<div class="faz-help"><?php esc_html_e( 'GDPR default is 16. Some EU member states allow 13-15. Check your local law.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>

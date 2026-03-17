@@ -96,6 +96,8 @@ class Frontend {
 	private $blocked_categories_cache = null;
 	private $provider_map_cache       = null;
 	private $whitelist_cache          = null;
+	private $service_consent_cache    = null;
+	private $pattern_service_cache    = null;
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -182,15 +184,24 @@ class Frontend {
 			}
 			$css = $this->get_boosted_css();
 
-			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
-			wp_localize_script( $this->plugin_name, '_fazConfig', $this->get_store_data() );
-			wp_localize_script( $this->plugin_name, '_fazStyles', array( 'css' => $css ) );
+			// Ad-blocker compatibility: use generic handle/var names to avoid filter lists.
+			$alt_asset = ! empty( $faz_geo_settings['banner_control']['alternative_asset_path'] );
+			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
+			$config_var    = $alt_asset ? '_fazCfg' : '_fazConfig';
+
+			wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
+			wp_localize_script( $script_handle, $config_var, $this->get_store_data() );
+			if ( $alt_asset ) {
+				// Bridge the alternative config variable to the expected name.
+				wp_add_inline_script( $script_handle, 'window._fazConfig = window._fazCfg;', 'before' );
+			}
+			wp_localize_script( $script_handle, '_fazStyles', array( 'css' => $css ) );
 
 			// GCM (Google Consent Mode) in local mode.
 			if ( true === $this->gcm_settings->is_gcm_enabled() ) {
 				$gcm      = $this->get_gcm_data();
 				$gcm_json = wp_json_encode( $gcm );
-				wp_add_inline_script( $this->plugin_name, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
+				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = ''; // Always load non-minified (no build tooling).
 				$gcm_handle = $this->plugin_name . '-gcm';
 				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array(), $this->version, false );
@@ -202,10 +213,10 @@ class Frontend {
 				// Early command-queue stub so ad scripts can call __tcfapi before CMP loads.
 				// Handles 'ping' directly so pre-CMP callers get a valid response.
 				$tcf_stub = 'if(typeof window.__tcfapi!=="function"){var a=[];window.__tcfapi=function(cmd,ver,cb){if(cmd==="ping"){cb({gdprApplies:undefined,cmpLoaded:false,cmpStatus:"stub",displayStatus:"hidden",apiVersion:"2.3"},true);return;}a.push(arguments);};window.__tcfapi.a=a;}';
-				wp_add_inline_script( $this->plugin_name, $tcf_stub, 'before' );
+				wp_add_inline_script( $script_handle, $tcf_stub, 'before' );
 				$tcf_suffix = ''; // Always load non-minified (no build tooling).
-				$tcf_handle = $this->plugin_name . '-tcf-cmp';
-				wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $this->plugin_name ), $this->version, false );
+				$tcf_handle = $script_handle . '-tcf-cmp';
+				wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 
 				// PublisherCC: use admin setting, fall back to site locale.
 				$saved_cc     = $this->settings->get( 'iab', 'publisher_cc' );
@@ -281,7 +292,7 @@ class Frontend {
 				$pv_token     = wp_hash( 'faz_pageview_' . $pv_bucket );
 
 				wp_localize_script(
-					$this->plugin_name,
+					$script_handle,
 					'_fazPageviewConfig',
 					array(
 						'restUrl'   => rest_url( 'faz/v1/pageviews' ),
@@ -308,7 +319,7 @@ class Frontend {
 						"else fazTrack('banner_settings');" .
 					"});" .
 				"})();";
-				wp_add_inline_script( $this->plugin_name, $pv_js );
+				wp_add_inline_script( $script_handle, $pv_js );
 			}
 
 			// Add consent logging if enabled.
@@ -322,7 +333,7 @@ class Frontend {
 				$hmac_token = wp_hash( 'faz_consent_' . $bucket );
 
 				wp_localize_script(
-					$this->plugin_name,
+					$script_handle,
 					'_fazConsentLog',
 					array(
 						'restUrl' => rest_url( 'faz/v1/consent' ),
@@ -345,7 +356,7 @@ class Frontend {
 						"})" .
 					"}).catch(function(){});" .
 				"});";
-				wp_add_inline_script( $this->plugin_name, $inline_js );
+				wp_add_inline_script( $script_handle, $inline_js );
 			}
 		}
 		if ( true === $this->is_wpconsentapi_enabled() ) {
@@ -667,6 +678,13 @@ class Frontend {
 		}
 		$store['_cookieCategoryMap'] = $cookie_category_map;
 
+		// Age gate (GDPR Art. 8).
+		$age_gate = array(
+			'enabled' => ! empty( $settings['age_gate']['enabled'] ),
+			'minAge'  => isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16,
+		);
+		$store['_ageGate'] = $age_gate;
+
 		// IAB vendor data for preference center.
 		$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' );
 		$store['_iabEnabled'] = $iab_enabled;
@@ -700,6 +718,40 @@ class Frontend {
 				}
 				$store['_iabPurposes'] = $purpose_data;
 			}
+		}
+
+		// Cross-domain consent forwarding.
+		if ( ! empty( $settings['consent_forwarding']['enabled'] ) ) {
+			$targets = isset( $settings['consent_forwarding']['target_domains'] )
+				? array_filter( array_map( 'esc_url', $settings['consent_forwarding']['target_domains'] ) )
+				: array();
+			$store['_consentForwarding'] = array(
+				'enabled' => true,
+				'targets' => array_values( $targets ),
+			);
+		}
+
+		// Per-service consent: pass service list to frontend.
+		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
+		if ( $per_service ) {
+			$known    = Known_Providers::get_all();
+			$services = array();
+			foreach ( $known as $id => $service ) {
+				if ( 'necessary' === $service['category'] ) {
+					continue;
+				}
+				if ( ! in_array( $service['category'], $valid_categories, true ) ) {
+					continue;
+				}
+				$services[] = array(
+					'id'       => sanitize_key( $id ),
+					'label'    => sanitize_text_field( $service['label'] ),
+					'category' => sanitize_key( $service['category'] ),
+					'patterns' => array_map( 'sanitize_text_field', $service['patterns'] ),
+				);
+			}
+			$store['_perServiceConsent'] = true;
+			$store['_services']         = $services;
 		}
 
 		return $store;
@@ -856,7 +908,8 @@ class Frontend {
 		}
 
 		$blocked_categories = $this->get_blocked_categories();
-		if ( empty( $blocked_categories ) ) {
+		$has_service_consent = ! empty( $this->get_service_consent() );
+		if ( empty( $blocked_categories ) && ! $has_service_consent ) {
 			return $html;
 		}
 
@@ -1000,7 +1053,21 @@ class Frontend {
 
 		$matched_category = $this->match_script_to_provider( $attrs, $content, $providers );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
-			return $full;
+			// Category is allowed — but per-service consent might still block it.
+			$svc_blocked = $this->check_per_service_blocking( $attrs, $content );
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			// Per-service says block even though category is allowed.
+			if ( ! $matched_category ) {
+				$matched_category = 'functional'; // Fallback if no category matched.
+			}
+		} else {
+			// Category is blocked — but per-service consent might allow this specific service.
+			$svc_blocked = $this->check_per_service_blocking( $attrs, $content );
+			if ( false === $svc_blocked ) {
+				return $full; // Per-service says allow.
+			}
 		}
 
 		$new_attrs = $this->set_script_type_plain( $attrs );
@@ -1029,7 +1096,20 @@ class Frontend {
 
 		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
-			return $full;
+			// Category allowed — but per-service might block.
+			$svc_blocked = $this->check_per_service_blocking( $attrs, '' );
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			if ( ! $matched_category ) {
+				$matched_category = 'functional';
+			}
+		} else {
+			// Category blocked — per-service might allow.
+			$svc_blocked = $this->check_per_service_blocking( $attrs, '' );
+			if ( false === $svc_blocked ) {
+				return $full;
+			}
 		}
 
 		// Rename src → data-faz-src (avoid matching data-src).
@@ -1107,7 +1187,18 @@ class Frontend {
 
 		$matched_category = $this->match_script_to_provider( '', $content, $providers );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
-			return $full;
+			$svc_blocked = $this->check_per_service_blocking( '', $content );
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			if ( ! $matched_category ) {
+				$matched_category = 'functional';
+			}
+		} else {
+			$svc_blocked = $this->check_per_service_blocking( '', $content );
+			if ( false === $svc_blocked ) {
+				return $full;
+			}
 		}
 
 		// Block by replacing img src → data-faz-src inside the noscript.
@@ -1137,7 +1228,18 @@ class Frontend {
 
 		$matched_category = $this->match_script_to_provider( $attrs, '', $providers );
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
-			return $full;
+			$svc_blocked = $this->check_per_service_blocking( $attrs, '' );
+			if ( true !== $svc_blocked ) {
+				return $full;
+			}
+			if ( ! $matched_category ) {
+				$matched_category = 'functional';
+			}
+		} else {
+			$svc_blocked = $this->check_per_service_blocking( $attrs, '' );
+			if ( false === $svc_blocked ) {
+				return $full;
+			}
 		}
 
 		// Rename href → data-faz-href (avoid matching data-href).
@@ -1443,6 +1545,101 @@ class Frontend {
 		}
 		$this->blocked_categories_cache = $blocked;
 		return $blocked;
+	}
+
+	/**
+	 * Parse per-service consent entries from the consent cookie.
+	 *
+	 * Service consent keys use the format "svc.service-id:yes|no".
+	 *
+	 * @return array [ 'google-analytics' => 'yes', 'hotjar' => 'no', ... ]
+	 */
+	private function get_service_consent() {
+		if ( null !== $this->service_consent_cache ) {
+			return $this->service_consent_cache;
+		}
+		$this->service_consent_cache = array();
+		$settings    = get_option( 'faz_settings', array() );
+		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
+		if ( ! $per_service ) {
+			return $this->service_consent_cache;
+		}
+
+		$consent = isset( $_COOKIE['fazcookie-consent'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) ) : '';
+		if ( empty( $consent ) ) {
+			return $this->service_consent_cache;
+		}
+
+		// Extract all svc.* entries from the consent cookie.
+		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(\w+)/', $consent, $matches, PREG_SET_ORDER ) ) {
+			foreach ( $matches as $match ) {
+				$this->service_consent_cache[ $match[1] ] = $match[2];
+			}
+		}
+		return $this->service_consent_cache;
+	}
+
+	/**
+	 * Build a lookup map from Known_Providers patterns → service IDs.
+	 *
+	 * @return array [ 'google-analytics.com/analytics.js' => 'google-analytics', ... ]
+	 */
+	private function get_pattern_service_map() {
+		if ( null !== $this->pattern_service_cache ) {
+			return $this->pattern_service_cache;
+		}
+		$this->pattern_service_cache = array();
+		$known = Known_Providers::get_all();
+		foreach ( $known as $id => $service ) {
+			if ( 'necessary' === $service['category'] ) {
+				continue;
+			}
+			foreach ( $service['patterns'] as $pattern ) {
+				$this->pattern_service_cache[ $pattern ] = $id;
+			}
+		}
+		return $this->pattern_service_cache;
+	}
+
+	/**
+	 * Check if a script should be blocked considering per-service consent.
+	 *
+	 * Returns:
+	 *   true  — service is explicitly blocked (svc.id:no)
+	 *   false — service is explicitly allowed (svc.id:yes)
+	 *   null  — no per-service consent, fall back to category blocking
+	 *
+	 * @param string $attrs   Script tag attributes.
+	 * @param string $content Script inline content.
+	 * @return bool|null
+	 */
+	private function check_per_service_blocking( $attrs, $content ) {
+		$service_consent = $this->get_service_consent();
+		if ( empty( $service_consent ) ) {
+			return null;
+		}
+
+		$pattern_map = $this->get_pattern_service_map();
+		$haystack    = '';
+		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/', $attrs, $sm ) ) {
+			$haystack = $sm[1];
+		}
+		$haystack .= ' ' . $content;
+
+		foreach ( $pattern_map as $pattern => $service_id ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			if ( false !== stripos( $haystack, $pattern ) ) {
+				if ( isset( $service_consent[ $service_id ] ) ) {
+					return 'yes' !== $service_consent[ $service_id ];
+				}
+				// Service found but no explicit consent — fall back to category.
+				return null;
+			}
+		}
+
+		return null;
 	}
 
 	/**
@@ -2095,7 +2292,17 @@ class Frontend {
 			// Match against handle, src, and full tag.
 			if ( false !== stripos( $handle, $pattern ) || false !== stripos( $src, $pattern ) || false !== stripos( $tag, $pattern ) ) {
 				$blocked = $this->get_blocked_categories();
-				if ( in_array( $category, $blocked, true ) ) {
+				$should_block = in_array( $category, $blocked, true );
+
+				// Per-service consent override.
+				$svc_blocked = $this->check_per_service_blocking( $tag, '' );
+				if ( false === $svc_blocked ) {
+					$should_block = false; // Service explicitly allowed.
+				} elseif ( true === $svc_blocked ) {
+					$should_block = true;  // Service explicitly blocked.
+				}
+
+				if ( $should_block ) {
 					// Replace any type attribute with text/plain, saving the original.
 					if ( preg_match( '/type\s*=\s*[\'"]([^\'"]*)[\'"]/', $tag, $type_match ) ) {
 						$original_type = $type_match[1];
@@ -2153,7 +2360,17 @@ class Frontend {
 			}
 			if ( false !== stripos( $handle, $pattern ) || false !== stripos( $href, $pattern ) ) {
 				$blocked = $this->get_blocked_categories();
-				if ( in_array( $category, $blocked, true ) ) {
+				$should_block = in_array( $category, $blocked, true );
+
+				// Per-service consent override.
+				$svc_blocked = $this->check_per_service_blocking( $tag, '' );
+				if ( false === $svc_blocked ) {
+					$should_block = false;
+				} elseif ( true === $svc_blocked ) {
+					$should_block = true;
+				}
+
+				if ( $should_block ) {
 					$tag = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $tag, 1 );
 					if ( false === strpos( $tag, 'data-faz-category' ) ) {
 						$tag = str_replace( '<link ', '<link data-faz-category="' . esc_attr( $category ) . '" ', $tag );
@@ -2257,7 +2474,8 @@ class Frontend {
 		}
 
 		$blocked_categories = $this->get_blocked_categories();
-		if ( empty( $blocked_categories ) ) {
+		$has_service_consent = ! empty( $this->get_service_consent() );
+		if ( empty( $blocked_categories ) && ! $has_service_consent ) {
 			return $content;
 		}
 
@@ -2330,7 +2548,8 @@ class Frontend {
 		}
 
 		$blocked_categories = $this->get_blocked_categories();
-		if ( empty( $blocked_categories ) ) {
+		$has_service_consent = ! empty( $this->get_service_consent() );
+		if ( empty( $blocked_categories ) && ! $has_service_consent ) {
 			return $html;
 		}
 
@@ -2346,7 +2565,17 @@ class Frontend {
 				continue;
 			}
 			if ( false !== stripos( $url, $pattern ) || false !== stripos( $html, $pattern ) ) {
-				if ( in_array( $category, $blocked_categories, true ) ) {
+				$is_cat_blocked = in_array( $category, $blocked_categories, true );
+
+				// Per-service consent override.
+				$svc_blocked = $this->check_per_service_blocking( $html, $url );
+				if ( false === $svc_blocked ) {
+					$is_cat_blocked = false; // Service explicitly allowed.
+				} elseif ( true === $svc_blocked ) {
+					$is_cat_blocked = true;  // Service explicitly blocked.
+				}
+
+				if ( $is_cat_blocked ) {
 					$matched_category = $category;
 					break;
 				}
