@@ -137,6 +137,21 @@ function _fazGetElementByTag(tag) {
     return item ? item : false;
 }
 
+/**
+ * Parse a trusted HTML string into a DocumentFragment.
+ *
+ * Used to convert server-rendered shortcode HTML (buttons, links) into DOM
+ * nodes for safe insertion without innerHTML/insertAdjacentHTML.  The HTML
+ * originates from PHP wp_kses-sanitized shortcodes and template JSON.
+ *
+ * @param {string} html  Trusted HTML string from server shortcodes.
+ * @returns {DocumentFragment}
+ */
+function _fazParseHTML(html) {
+    var tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    return tpl.content.cloneNode(true);
+}
 
 /**
  * Bind click event to banner elements.
@@ -922,10 +937,15 @@ function _fazRenderBanner() {
     const templateHtml = template.innerHTML;
     const doc = new DOMParser().parseFromString(templateHtml, 'text/html');
     _fazSetFooterShadow(doc);
-    document.body.insertAdjacentHTML(
-        "afterbegin",
-        doc.body.innerHTML
-    );
+    // Insert parsed DOM nodes instead of re-serializing to HTML string.
+    // The template content originates from PHP wp_kses-sanitized HTML in
+    // a <template> element; DOMParser is used only to apply footer shadow
+    // styles before insertion.
+    var fragment = document.createDocumentFragment();
+    while (doc.body.firstChild) {
+        fragment.appendChild(doc.body.firstChild);
+    }
+    document.body.insertBefore(fragment, document.body.firstChild);
     if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') _fazToggleAriaExpandStatus("=settings-button", "false");
     _fazSetPreferenceCheckBoxStates();
     _fazRenderVendorSection();
@@ -1138,54 +1158,58 @@ function _fazSetShowMoreLess() {
     if (!element) return;
     const content = element.textContent;
     if (content.length < contentLimit) return;
+
+    // Snapshot the original DOM content (already rendered, safe).
+    const originalNodes = document.createDocumentFragment();
+    Array.from(element.childNodes).forEach(function (n) {
+        originalNodes.appendChild(n.cloneNode(true));
+    });
+
     const contentHTML = element.innerHTML;
     const htmlDoc = new DOMParser().parseFromString(contentHTML, "text/html");
     const innerElements = htmlDoc.querySelectorAll("body > p");
     if (innerElements.length <= 1) return;
-    let strippedContent = ``;
+
+    // Build truncated DOM fragment from paragraphs.
+    let strippedLen = 0;
+    const truncatedFragment = document.createDocumentFragment();
     for (let index = 0; index < innerElements.length; index++) {
         if (index === innerElements.length - 1) return;
-        const element = innerElements[index];
-        if (`${strippedContent}${element.outerHTML}`.length > contentLimit)
-            element.insertAdjacentHTML("beforeend", `...&nbsp;${showButtonContent}`);
-        strippedContent = `${strippedContent}${element.outerHTML}`;
-        if (strippedContent.length > contentLimit) break;
+        const para = innerElements[index];
+        const paraHTML = para.outerHTML;
+        if (strippedLen + paraHTML.length > contentLimit) {
+            // Append ellipsis and show-more button to this paragraph via DOM.
+            para.appendChild(document.createTextNode('...\u00A0'));
+            var showBtnNodes = _fazParseHTML(showButtonContent);
+            para.appendChild(showBtnNodes);
+        }
+        // Adopt the paragraph node into the live document.
+        truncatedFragment.appendChild(document.adoptNode(para));
+        strippedLen += paraHTML.length;
+        if (strippedLen > contentLimit) break;
     }
+
     function showMoreHandler() {
-        element.innerHTML = `${contentHTML}${hideButtonContent}`;
+        // Replace content with full original nodes + hide button.
+        while (element.firstChild) element.removeChild(element.firstChild);
+        Array.from(originalNodes.childNodes).forEach(function (n) {
+            element.appendChild(n.cloneNode(true));
+        });
+        element.appendChild(_fazParseHTML(hideButtonContent));
         _fazAttachListener("=hide-desc-button", showLessHandler);
         _fazAttachShowMoreLessStyles();
     }
     function showLessHandler() {
-        element.innerHTML = strippedContent;
+        // Replace content with truncated nodes (cloned each time).
+        while (element.firstChild) element.removeChild(element.firstChild);
+        Array.from(truncatedFragment.childNodes).forEach(function (n) {
+            element.appendChild(n.cloneNode(true));
+        });
         _fazAttachListener("=show-desc-button", showMoreHandler);
         _fazAttachShowMoreLessStyles();
     }
     showLessHandler();
 }
-/**
- * Toggle show more or less on click event.
- * 
- * @param {object} object Object containing toggle buttons and texts.
- * @param {*} element Target element.
- */
-function _fazToggleMoreLess(object, element) {    let {
-        currentTarget,
-        target
-    } = element;
-    if (target && target.tagName.toUpperCase() !== 'BUTTON') return;
-    const ariaExpanded = currentTarget.getAttribute('aria-expanded');
-    const trimmed = ariaExpanded === 'false';
-    let btn = object.btnTrim;
-    let text = object.originalText;
-    if (!trimmed) {
-        btn = object.btnExpand;
-        text = object.truncatedText;
-    }
-    currentTarget.innerHTML = `${text}${btn}`;
-    currentTarget.ariaExpanded = trimmed;
-}
-
 /**
  * Add styles to the shortcode HTML rendered outside of the banner.
  * 
@@ -1690,19 +1714,16 @@ function _fazAttachReadMore() {
         '[data-faz-tag="description"]'
     );
     if (!readMoreElement) return;
+    // Append the readmore button/link via DOM nodes instead of insertAdjacentHTML.
+    // The content is a PHP wp_kses-sanitized shortcode (<a> or <button> tag).
+    var readMoreNodes = _fazParseHTML('\u00A0' + content);
     if (readMoreElement.childNodes.length > 1) {
         const innerElement = document.querySelector(
             '[data-faz-tag="description"] p:last-child'
         );
-        innerElement && innerElement.insertAdjacentHTML(
-            "beforeend",
-            `&nbsp;${content}`
-        );
+        if (innerElement) innerElement.appendChild(readMoreNodes);
     } else {
-        readMoreElement.insertAdjacentHTML(
-            "beforeend",
-            `&nbsp;${content}`
-        );
+        readMoreElement.appendChild(readMoreNodes);
     }
     const placeHolders = document.querySelectorAll(
         `[data-faz-tag="readmore-button"]`
@@ -1978,10 +1999,12 @@ function _fazAddPlaceholder(htmlElm, uniqueID) {
     const videoPlaceHolderDataCode = shortCodeData.content;
     const { offsetWidth, offsetHeight } = htmlElm;
     if (offsetWidth === 0 || offsetHeight === 0) return;
-    htmlElm.insertAdjacentHTML(
-        "beforebegin",
+    // Insert placeholder via DOM nodes instead of insertAdjacentHTML.
+    // The HTML is a PHP wp_kses-sanitized shortcode template.
+    var placeholderNodes = _fazParseHTML(
         `${videoPlaceHolderDataCode}`.replace("[UNIQUEID]", uniqueID)
     );
+    htmlElm.parentNode.insertBefore(placeholderNodes, htmlElm);
     const addedNode = document.getElementById(uniqueID);
     addedNode.style.width = `${offsetWidth}px`;
     addedNode.style.height = `${offsetHeight}px`;
