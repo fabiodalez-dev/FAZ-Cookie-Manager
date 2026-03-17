@@ -451,79 +451,62 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.6.1
+- **Security hardening** — GCM settings sanitisation (whitelist keys, validate values), pageview endpoint HMAC token, scanner SSRF prevention (block private IPs), filter data sanitisation, CSS injection fix
+- **Bug fixes** — switch fallthrough, null guards for CCPA/preference/readmore handlers, deprecated `event.which` → `event.key`, double DOM query fix, `.map()` → `.forEach()` cleanup
+
+### 1.6.0
+- **WooCommerce compatibility** — auto-whitelists WooCommerce core + payment gateway scripts on checkout/cart pages
+- **Complete admin i18n** — all 387 admin UI strings wrapped in WordPress translation functions
+- **Italian translation** — complete `it_IT` (386 strings) with formal register and GDPR terminology
+- **Contextual help text** — `.faz-help` descriptions on all settings pages (fixes #27)
+- **Do Not Sell text colour picker** — dedicated colour control for CCPA opt-out link (fixes #34)
+- **Pageview tracking opt-in** — new toggle in Settings (default: off for compliance)
+- **Customize overlay fix** — removed nonce from public REST endpoints; stale nonces on cached pages caused 403 (fixes #35)
+- **Consent log integrity** — HMAC origin token prevents external spoofing
+- **Subdomain cookie sharing** — fixed for `.co.uk`, `.com.au`, `.co.jp` and 30+ multi-level TLDs
+- **PCRE fail-secure** — strips scripts on regex error instead of serving unblocked
+
 ### 1.5.2
 - **Security & mixed-content fixes** — auto-repair cached banner template on HTTPS, sanitise inline CSS values, harden URL parsing
-- **Migration safety** — guard `$wpdb->update()`/`$wpdb->delete()` return values in category rename
 - **Plugin lifecycle E2E tests** — upgrade and fresh-install paths with full category verification
 
 ### 1.5.1
 - **Link color fix** — link colour picker now applies to all visible links including Cookie Policy/Read More link
-- **Brand logo 404** — moved `cookie.png` to `frontend/images/` and added DB migration to fix stored URLs
+- **Brand logo 404** — moved `cookie.png` to `frontend/images/` with DB migration for existing installs
 
 ### 1.5.0
-- **Link text colour picker** — new colour control in Banner Colours tab for customising link colours
+- **Link text colour picker** — new colour control in Banner Colours tab
 - **E2E test suite for banner settings** — 21 Playwright tests covering all banner tabs
-- **TinyMCE re-render fix** — limited to the activated tab's editor only
+
+### 1.4.1
+- **ClassicPress polyfill fix** — WP 4.9 inline script compatibility
 
 ### 1.4.0
-- **Comprehensive script blocking** — 5-layer system: WP hook filters, HTML content filters, output buffer, client-side interceptors (createElement, XHR, fetch, sendBeacon), and cookie shredding
-- **Known Providers database** — 147+ services with 500+ URL/script patterns for automatic categorization
-- **Video embed placeholders** — YouTube/Vimeo iframes replaced with consent-required placeholder showing video thumbnail
-- **Social embed blocking** — Facebook, Instagram, Twitter/X embeds blocked until consent
-- **Iframe placeholders** — Visual placeholder with consent button for blocked third-party iframes
-- **Custom blocking rules** — Admin UI for user-defined script/iframe blocking patterns per category
+- **5-layer script blocking** — WP hooks, content filters, output buffer, client-side interceptors, cookie shredding
+- **Known Providers database** — 147+ services with 500+ URL/script patterns
+- **Video/social embed placeholders** — YouTube, Vimeo, Facebook, Instagram, Twitter/X consent placeholders
+- **Custom blocking rules** — admin UI for user-defined patterns per category
 - **Network interception** — XHR, fetch, sendBeacon requests to blocked providers silently dropped
-- **Cookie shredding** — Automatic cleanup of cookies from revoked categories
-- **Revocation reload** — Forces page reload when a previously accepted category is revoked
-- **Security** — URL scheme validation, SRI/CSP-safe script cloning, word-boundary-safe regex
 
 ### 1.3.0
-- **Incremental cookie scans** — only re-scans pages modified since the last run
-- **Page discovery from DB** — discovers URLs from `wp_posts` and taxonomy archives
-- **Scan progress UI** — real-time progress bar with page count, cookie count, and ETA
+- **Incremental cookie scans** — only re-scans modified pages
+- **Scan progress UI** — real-time progress bar with ETA
 - `advertisement` category renamed to `marketing` across the entire plugin
-- Boundary-aware provider hostname matching, CSS transient cache key includes version
-- Security: inline-safe URL handling, hardened admin URLs, HTML injection prevention
 
-### 1.2.1
-- CSV export produces valid CSV (no JSON encoding)
-- Consent log correctly records "rejected" status on Reject All
-- Security: prototype pollution guard, DOM XSS prevention, CSV export hardening
-- Composer/Packagist support
-
-### 1.2.0
-- Proxy header trust filter and dual-guardrail consent throttle
-- Necessary category toggle uses active blue color with right-aligned label
-- Playwright E2E test suite (11 tests)
+### 1.2.0 – 1.2.1
+- Dual-guardrail consent throttle, proxy header trust filter
+- CSV export fix, consent log "rejected" status fix
+- Security: prototype pollution guard, DOM XSS prevention
+- Playwright E2E test suite (11 tests), Composer/Packagist support
 
 ### 1.1.0
-- **IAB TCF v2.3 with Global Vendor List** — full GVL v3 integration, vendor consent UI, TC String encoding
-- **GVL Admin Page** — browse, search, filter 1,100+ IAB-registered vendors
-- **CMP Stub** — inline `__tcfapi` stub responds to `ping` before main script loads
-- **Security Hardening** — cookie overflow protection, iframe URL validation, atomic GVL file writes
-- **Dead Code Cleanup** — removed ~4.3 MB of unused modules, legacy routes, and cloud stubs
-- 175 automated compliance tests
-
-### 1.0.5
-- Unified text domain and plugin slug to `faz-cookie-manager`
-- WordPress.com Marketplace compliance
-
-### 1.0.4
-- Full uninstall/reinstall support with clean data removal
-
-### 1.0.3
-- Browser-based cookie scanner with iframe detection
-- Local consent log storage with CSV export
-
-### 1.0.2
-- Unlocked all premium features, removed cloud dependencies
-
-### 1.0.1
-- Complete de-branding (renamed all prefixes, namespaces, CSS classes)
+- **IAB TCF v2.3** with Global Vendor List, vendor consent UI, TC String encoding
+- **GVL Admin Page** — browse, search, filter 1,100+ IAB vendors
+- Google Consent Mode v2, Microsoft UET/Clarity consent, local consent logging, cookie scanner
 
 ### 1.0.0
-- Initial release — fork of CookieYes v3.4.0
-- GDPR, CCPA, ePrivacy compliance, Google Consent Mode v2, IAB TCF v2.2
+- Initial release — fork of CookieYes v3.4.0, fully de-branded, cloud-free, all premium features unlocked
 
 ## Translations
 
