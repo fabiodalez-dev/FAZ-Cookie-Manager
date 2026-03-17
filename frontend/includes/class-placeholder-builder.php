@@ -117,7 +117,23 @@ class Placeholder_Builder {
 		$html .= '</div>';
 
 		// Hidden original content for JS to restore after consent.
-		$html .= '<template class="faz-placeholder-content">' . $blocked_html . '</template>';
+		// Sanitize with wp_kses to prevent XSS from crafted oEmbed/post content.
+		$safe_html = wp_kses( $blocked_html, array_merge(
+			wp_kses_allowed_html( 'post' ),
+			array(
+				'iframe' => array(
+					'src' => true, 'data-faz-src' => true, 'data-faz-category' => true,
+					'width' => true, 'height' => true, 'frameborder' => true,
+					'allow' => true, 'allowfullscreen' => true, 'loading' => true,
+					'style' => true, 'class' => true, 'id' => true, 'title' => true,
+				),
+				'script' => array(
+					'type' => true, 'src' => true, 'data-faz-category' => true,
+					'data-faz-src' => true, 'async' => true, 'defer' => true,
+				),
+			)
+		) );
+		$html .= '<template class="faz-placeholder-content">' . $safe_html . '</template>';
 
 		$html .= '</div>';
 

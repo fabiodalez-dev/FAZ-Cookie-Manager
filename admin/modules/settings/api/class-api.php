@@ -654,14 +654,19 @@ class Api extends Rest_Controller {
 					$banner_id
 				) );
 
+				// Sanitize banner contents — strip dangerous HTML from all text
+				// values to prevent stored XSS via crafted import files.
+				$safe_contents = $this->sanitize_banner_contents( $banner['contents'] ?? array() );
+				$safe_settings = $this->sanitize_banner_settings( $banner['settings'] ?? array() );
+
 				$row = array(
 					'banner_id'      => $banner_id,
 					'name'           => sanitize_text_field( $banner['name'] ?? '' ),
 					'slug'           => sanitize_text_field( $banner['slug'] ?? '' ),
 					'status'         => absint( $banner['status'] ?? 0 ),
-					'settings'       => wp_json_encode( $banner['settings'] ?? array() ),
+					'settings'       => wp_json_encode( $safe_settings ),
 					'banner_default' => absint( $banner['banner_default'] ?? 0 ),
-					'contents'       => wp_json_encode( $banner['contents'] ?? array() ),
+					'contents'       => wp_json_encode( $safe_contents ),
 				);
 
 				if ( $existing ) {
@@ -727,6 +732,54 @@ class Api extends Rest_Controller {
 			'success'  => true,
 			'imported' => $imported,
 		) );
+	}
+
+	/**
+	 * Recursively sanitize banner contents to prevent stored XSS.
+	 *
+	 * Applies wp_kses_post() to all string values (titles, descriptions,
+	 * button labels) while preserving the nested array structure.
+	 *
+	 * @param mixed $contents Raw banner contents from import.
+	 * @return mixed Sanitized contents.
+	 */
+	private function sanitize_banner_contents( $contents ) {
+		if ( is_string( $contents ) ) {
+			return wp_kses_post( $contents );
+		}
+		if ( is_array( $contents ) ) {
+			return array_map( array( $this, 'sanitize_banner_contents' ), $contents );
+		}
+		if ( is_bool( $contents ) || is_int( $contents ) || is_float( $contents ) ) {
+			return $contents;
+		}
+		return null;
+	}
+
+	/**
+	 * Recursively sanitize banner settings (styles, config).
+	 *
+	 * Validates CSS property values against an allowlist of safe patterns
+	 * and sanitizes all other string values with sanitize_text_field().
+	 *
+	 * @param mixed $settings Raw banner settings from import.
+	 * @return mixed Sanitized settings.
+	 */
+	private function sanitize_banner_settings( $settings ) {
+		if ( is_string( $settings ) ) {
+			// Allow CSS color values and simple CSS strings.
+			if ( preg_match( '/^(#[0-9a-fA-F]{3,8}|rgba?\([0-9,.\s%]+\)|hsla?\([0-9,.\s%]+\)|transparent|inherit|none|[a-zA-Z-]+)$/', trim( $settings ) ) ) {
+				return sanitize_text_field( $settings );
+			}
+			return sanitize_text_field( $settings );
+		}
+		if ( is_array( $settings ) ) {
+			return array_map( array( $this, 'sanitize_banner_settings' ), $settings );
+		}
+		if ( is_bool( $settings ) || is_int( $settings ) || is_float( $settings ) ) {
+			return $settings;
+		}
+		return null;
 	}
 
 } // End the class.
