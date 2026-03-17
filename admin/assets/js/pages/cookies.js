@@ -944,7 +944,6 @@
 							msg += ' | ' + staleCookieCount + ' stale cookie(s) highlighted';
 						}
 						msg += buildScanDiagnosticsHint(diagnostics, total);
-						console.log('[FAZ Scanner] Metrics:', scanMetrics);
 						if (diagnostics && diagnostics.totalIssues > 0) {
 							console.warn('[FAZ Scanner] Diagnostics:', diagnostics);
 						}

@@ -73,6 +73,11 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 				'faz_gvl_meta',
 				'faz_gvl_purposes',
 				'faz_gvl_selected_vendors',
+				'faz_version',
+				'faz_brand_logo_path_fixed',
+				'faz_banner_gdpr_defaults_fixed',
+				'faz_uncategorized_consent_fixed',
+				'faz_migrated_advert_to_marketing',
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );
