@@ -56,6 +56,7 @@
 		});
 
 		loadBanner();
+		loadDesignPresets();
 
 		document.getElementById('faz-b-save').addEventListener('click', saveBanner);
 		document.getElementById('faz-b-refresh-preview').addEventListener('click', function () {
@@ -494,6 +495,128 @@
 		Object.keys(obj).forEach(function (key) {
 			if (key !== 'styles') stripStyles(obj[key]);
 		});
+	}
+
+	// ── Design Presets ──
+
+	function loadDesignPresets() {
+		FAZ.get('banners/design-presets').then(function (presets) {
+			var grid = document.getElementById('faz-presets-grid');
+			if (!grid || !presets || !presets.length) return;
+
+			// Clear loading text safely
+			while (grid.firstChild) grid.removeChild(grid.firstChild);
+
+			presets.forEach(function (preset) {
+				var card = document.createElement('div');
+				card.className = 'faz-preset-card';
+				card.style.cssText = 'padding:16px;border:2px solid var(--faz-border);border-radius:8px;cursor:pointer;text-align:center;transition:border-color 0.2s;';
+				card.onmouseenter = function () { card.style.borderColor = 'var(--faz-primary)'; };
+				card.onmouseleave = function () { card.style.borderColor = 'var(--faz-border)'; };
+
+				// Color preview dots
+				var dots = document.createElement('div');
+				dots.style.cssText = 'display:flex;gap:4px;justify-content:center;margin-bottom:8px;';
+				var bg = preset.config.notice.styles['background-color'];
+				var accent = preset.config.notice.elements.buttons.elements.accept.styles['background-color'];
+				var text = preset.config.notice.elements.title.styles.color;
+				[bg, accent, text].forEach(function (c) {
+					var dot = document.createElement('span');
+					dot.style.cssText = 'width:16px;height:16px;border-radius:50%;border:1px solid #ccc;display:inline-block;background:' + c;
+					dots.appendChild(dot);
+				});
+				card.appendChild(dots);
+
+				var name = document.createElement('div');
+				name.style.cssText = 'font-weight:600;font-size:13px;';
+				name.textContent = preset.name;
+				card.appendChild(name);
+
+				var desc = document.createElement('div');
+				desc.style.cssText = 'font-size:11px;color:var(--faz-text-muted);margin-top:4px;';
+				desc.textContent = preset.description;
+				card.appendChild(desc);
+
+				card.addEventListener('click', function () {
+					applyDesignPreset(preset);
+				});
+
+				grid.appendChild(card);
+			});
+		}).catch(function () {
+			var grid = document.getElementById('faz-presets-grid');
+			if (grid) {
+				while (grid.firstChild) grid.removeChild(grid.firstChild);
+			}
+		});
+	}
+
+	function applyDesignPreset(preset) {
+		var c = preset.config;
+		// Type, position, theme
+		if (c.type) setVal('faz-b-type', c.type);
+		if (c.position) setVal('faz-b-position', c.position);
+		if (c.preferenceCenterType) setVal('faz-b-pref-type', c.preferenceCenterType);
+		if (c.theme) {
+			setVal('faz-b-theme', c.theme);
+		}
+
+		// Update position options for the new type
+		updatePositionOptions();
+
+		// Notice colours
+		var n = c.notice;
+		if (n && n.styles) {
+			setColorPair('faz-b-notice-bg', n.styles['background-color']);
+			setColorPair('faz-b-notice-border', n.styles['border-color']);
+		}
+		if (n && n.elements) {
+			if (n.elements.title) setColorPair('faz-b-title-color', n.elements.title.styles.color);
+			if (n.elements.description) setColorPair('faz-b-desc-color', n.elements.description.styles.color);
+
+			var btns = n.elements.buttons && n.elements.buttons.elements;
+			if (btns) {
+				if (btns.accept) {
+					setColorPair('faz-b-accept-bg', btns.accept.styles['background-color']);
+					setColorPair('faz-b-accept-text', btns.accept.styles.color);
+					setColorPair('faz-b-accept-border', btns.accept.styles['border-color']);
+				}
+				if (btns.reject) {
+					setColorPair('faz-b-reject-bg', btns.reject.styles['background-color']);
+					setColorPair('faz-b-reject-text', btns.reject.styles.color);
+					setColorPair('faz-b-reject-border', btns.reject.styles['border-color']);
+				}
+				if (btns.settings) {
+					setColorPair('faz-b-settings-bg', btns.settings.styles['background-color']);
+					setColorPair('faz-b-settings-text', btns.settings.styles.color);
+					setColorPair('faz-b-settings-border', btns.settings.styles['border-color']);
+				}
+			}
+		}
+
+		// Re-init color pickers so swatches update
+		FAZ.initColorPickers();
+
+		// Sync to bannerData and refresh preview
+		syncFormToBannerData();
+		refreshPreview();
+
+		FAZ.notify('Preset applied: ' + preset.name, 'success');
+	}
+
+	function setColorPair(baseId, value) {
+		if (!value) return;
+		var colorEl = document.getElementById(baseId);
+		var hexEl = document.getElementById(baseId + '-hex');
+		if (colorEl) {
+			// <input type="color"> only accepts #rrggbb; skip "transparent"
+			if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+				colorEl.value = value;
+			}
+		}
+		if (hexEl) {
+			hexEl.value = value;
+		}
 	}
 
 	// ── Sync form → bannerData (used by save and live preview) ──

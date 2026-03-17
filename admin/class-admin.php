@@ -87,6 +87,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
+		add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
 	}
 
 	/**
@@ -1021,6 +1022,73 @@ window.wp.apiFetch=apiFetch;
 			do_action( 'faz_after_first_time_install' );
 			delete_option( 'faz_first_time_activated_plugin' );
 		}
+	}
+
+	/**
+	 * Register the dashboard widget for consent stats overview.
+	 *
+	 * @since 1.5.0
+	 * @return void
+	 */
+	public function register_dashboard_widget() {
+		wp_add_dashboard_widget(
+			'faz_consent_widget',
+			__( 'Cookie Consent Overview', 'faz-cookie-manager' ),
+			array( $this, 'render_dashboard_widget' )
+		);
+	}
+
+	/**
+	 * Render the dashboard widget with consent statistics.
+	 *
+	 * Shows acceptance/rejection percentages and total interactions
+	 * from the last 30 days.
+	 *
+	 * @since 1.5.0
+	 * @return void
+	 */
+	public function render_dashboard_widget() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_consent_logs';
+
+		$stats = $wpdb->get_row(
+			"SELECT COUNT(*) as total,
+					SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+					SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+					SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
+			 FROM {$table}
+			 WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+
+		$total    = intval( $stats['total'] ?? 0 );
+		$accepted = intval( $stats['accepted'] ?? 0 );
+		$rejected = intval( $stats['rejected'] ?? 0 );
+
+		$accept_pct = $total > 0 ? round( $accepted / $total * 100 ) : 0;
+		$reject_pct = $total > 0 ? round( $rejected / $total * 100 ) : 0;
+		?>
+		<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+			<div style="text-align:center;padding:12px;background:#f0f0f1;border-radius:6px;">
+				<div style="font-size:24px;font-weight:700;color:#00a32a;"><?php echo esc_html( $accept_pct ); ?>%</div>
+				<div style="font-size:12px;color:#646970;"><?php esc_html_e( 'Accepted', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div style="text-align:center;padding:12px;background:#f0f0f1;border-radius:6px;">
+				<div style="font-size:24px;font-weight:700;color:#d63638;"><?php echo esc_html( $reject_pct ); ?>%</div>
+				<div style="font-size:12px;color:#646970;"><?php esc_html_e( 'Rejected', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+		<p style="margin:0;font-size:13px;color:#646970;">
+			<?php
+			printf(
+				/* translators: %d: number of consent interactions in last 30 days */
+				esc_html__( '%d consent interactions in the last 30 days.', 'faz-cookie-manager' ),
+				$total
+			);
+			?>
+			<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager' ) ); ?>"><?php esc_html_e( 'View details', 'faz-cookie-manager' ); ?></a>
+		</p>
+		<?php
 	}
 
 	/**

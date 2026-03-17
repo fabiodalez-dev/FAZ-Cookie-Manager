@@ -137,6 +137,10 @@ class Frontend {
 		if ( true === faz_disable_banner() ) {
 			return;
 		}
+		// Skip banner for search engine bots (better SEO, no consent needed for crawlers).
+		if ( faz_is_bot() ) {
+			return;
+		}
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}

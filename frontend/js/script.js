@@ -1652,6 +1652,16 @@ function _fazAfterConsent() {
     if (_fazGetLaw() === 'gdpr') _fazSetPreferenceCheckBoxStates(true);
     _fazUpdateVendorCheckboxStates();
 
+    // GTM Data Layer integration — push consent state after every consent action.
+    if (typeof window.dataLayer !== 'undefined') {
+        var consentData = { event: 'faz_consent_update' };
+        var cats = _fazStore._categories || [];
+        for (var i = 0; i < cats.length; i++) {
+            consentData['faz_' + cats[i].slug] = ref._fazGetFromStore(cats[i].slug) === 'yes' ? 'granted' : 'denied';
+        }
+        window.dataLayer.push(consentData);
+    }
+
     // Clean up cookies from categories the user has not consented to.
     _fazCleanupRevokedCookies();
 

@@ -96,7 +96,9 @@ class CLI {
 		$this->set_locale();
 		$this->define_admin_hooks();
 		$this->define_public_hooks();
+		$this->register_blocks();
 		$this->init_license();
+		$this->register_privacy_hooks();
 
 	}
 
@@ -207,6 +209,61 @@ class CLI {
 	 */
 	public function get_version() {
 		return $this->version;
+	}
+
+	/**
+	 * Register Gutenberg blocks.
+	 *
+	 * Blocks are loaded on every request (admin + frontend) so that
+	 * the editor can register them and the frontend can render them.
+	 *
+	 * @return void
+	 */
+	private function register_blocks() {
+		new \FazCookie\Includes\Blocks\Blocks();
+	}
+
+	/**
+	 * Register WordPress privacy tools hooks (Export/Erase Personal Data).
+	 *
+	 * Adds privacy policy suggested content, a personal data exporter,
+	 * and a personal data eraser for consent logs.
+	 *
+	 * @since 1.5.0
+	 * @return void
+	 */
+	private function register_privacy_hooks() {
+		// Register privacy policy suggested content.
+		add_action( 'admin_init', function () {
+			if ( ! function_exists( 'wp_add_privacy_policy_content' ) ) {
+				return;
+			}
+			$content = sprintf(
+				'<h2>%s</h2><p>%s</p><p>%s</p>',
+				esc_html__( 'Cookie Consent (FAZ Cookie Manager)', 'faz-cookie-manager' ),
+				esc_html__( 'This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a hashed version of your IP address, your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months).', 'faz-cookie-manager' ),
+				esc_html__( 'You can change your cookie preferences at any time using the cookie icon in the bottom corner of the page.', 'faz-cookie-manager' )
+			);
+			wp_add_privacy_policy_content( 'FAZ Cookie Manager', $content );
+		});
+
+		// Register personal data exporter.
+		add_filter( 'wp_privacy_personal_data_exporters', function ( $exporters ) {
+			$exporters['faz-cookie-manager'] = array(
+				'exporter_friendly_name' => __( 'FAZ Cookie Manager - Consent Logs', 'faz-cookie-manager' ),
+				'callback'               => 'faz_privacy_exporter',
+			);
+			return $exporters;
+		});
+
+		// Register personal data eraser.
+		add_filter( 'wp_privacy_personal_data_erasers', function ( $erasers ) {
+			$erasers['faz-cookie-manager'] = array(
+				'eraser_friendly_name' => __( 'FAZ Cookie Manager - Consent Logs', 'faz-cookie-manager' ),
+				'callback'             => 'faz_privacy_eraser',
+			);
+			return $erasers;
+		});
 	}
 
 	/**

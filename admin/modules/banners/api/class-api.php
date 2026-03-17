@@ -154,6 +154,17 @@ class Api extends Rest_Controller {
 		);
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/design-presets',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_design_presets' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/configs',
 			array(
 				array(
@@ -336,6 +347,33 @@ class Api extends Rest_Controller {
 			$template = new \FazCookie\Admin\Modules\Banners\Includes\Template( false );
 			$presets  = $template->get_presets( $request['ver'] );
 		}
+		return rest_ensure_response( $presets );
+	}
+
+	/**
+	 * Load design presets (one-click banner styles).
+	 *
+	 * Reads JSON files from admin/modules/banners/includes/presets/ and returns
+	 * them as an array of preset objects with an added `id` key.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_design_presets() {
+		$presets_dir = FAZ_PLUGIN_BASEPATH . 'admin/modules/banners/includes/presets/';
+		$presets     = array();
+
+		$files = glob( $presets_dir . '*.json' );
+		if ( is_array( $files ) ) {
+			foreach ( $files as $file ) {
+				$raw  = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file
+				$data = json_decode( $raw, true );
+				if ( $data && is_array( $data ) ) {
+					$data['id'] = basename( $file, '.json' );
+					$presets[]  = $data;
+				}
+			}
+		}
+
 		return rest_ensure_response( $presets );
 	}
 
