@@ -697,6 +697,8 @@ class Api extends Rest_Controller {
 					'meta'             => isset( $cat['meta'] ) ? wp_json_encode( $cat['meta'] ) : null,
 				) );
 			}
+			// Invalidate category cache.
+			do_action( 'faz_after_update_cookie_category' );
 			$imported[] = 'categories';
 		}
 
@@ -719,6 +721,8 @@ class Api extends Rest_Controller {
 					'meta'        => isset( $cookie['meta'] ) ? wp_json_encode( $cookie['meta'] ) : null,
 				) );
 			}
+			// Invalidate cookie cache.
+			do_action( 'faz_after_update_cookie' );
 			$imported[] = 'cookies';
 		}
 
