@@ -20,6 +20,7 @@ defined( 'ABSPATH' ) || exit;
 		'gcm'          => array( 'slug' => 'faz-cookie-manager-gcm',          'label' => 'Google Consent Mode' ),
 		'languages'    => array( 'slug' => 'faz-cookie-manager-languages',    'label' => 'Languages' ),
 		'settings'     => array( 'slug' => 'faz-cookie-manager-settings',     'label' => 'Settings' ),
+		'import-export' => array( 'slug' => 'faz-cookie-manager-import-export', 'label' => 'Import / Export' ),
 	);
 	?>
 	<nav class="faz-top-nav" aria-label="FAZ Cookie Manager navigation">

@@ -189,6 +189,11 @@ class Admin {
 				'slug'  => self::ADMIN_SLUG . '-settings',
 				'view'  => 'settings',
 			),
+			'import-export' => array(
+				'title' => __( 'Import / Export', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-import-export',
+				'view'  => 'import-export',
+			),
 		);
 	}
 

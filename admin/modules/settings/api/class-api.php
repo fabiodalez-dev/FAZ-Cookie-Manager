@@ -144,6 +144,28 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/export',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'export_settings' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/import',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'import_settings' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
 	}
 	/**
 	 * Get a collection of items.
@@ -485,6 +507,201 @@ class Api extends Rest_Controller {
 				'database'  => $info,
 			)
 		);
+	}
+
+	/**
+	 * Export all plugin settings, banners, categories, and cookies as JSON.
+	 *
+	 * Consent logs, pageview data, and sensitive API keys are excluded.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function export_settings( $request ) {
+		global $wpdb;
+
+		$settings     = get_option( 'faz_settings' );
+		$gcm_settings = get_option( 'faz_gcm_settings' );
+
+		// Strip sensitive data from the export.
+		if ( is_array( $settings ) && isset( $settings['geolocation']['maxmind_license_key'] ) ) {
+			$settings['geolocation']['maxmind_license_key'] = '';
+		}
+
+		// Banners.
+		$banners = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->prefix}faz_banners", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+		if ( is_array( $banners ) ) {
+			foreach ( $banners as &$banner ) {
+				if ( isset( $banner['settings'] ) ) {
+					$banner['settings'] = json_decode( $banner['settings'], true );
+				}
+				if ( isset( $banner['contents'] ) ) {
+					$banner['contents'] = json_decode( $banner['contents'], true );
+				}
+			}
+			unset( $banner );
+		}
+
+		// Cookie categories.
+		$categories = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->prefix}faz_cookie_categories", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+		if ( is_array( $categories ) ) {
+			foreach ( $categories as &$cat ) {
+				if ( isset( $cat['name'] ) ) {
+					$cat['name'] = json_decode( $cat['name'], true );
+				}
+				if ( isset( $cat['description'] ) ) {
+					$cat['description'] = json_decode( $cat['description'], true );
+				}
+			}
+			unset( $cat );
+		}
+
+		// Cookies.
+		$cookies = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->prefix}faz_cookies", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+
+		$export = array(
+			'plugin'       => 'faz-cookie-manager',
+			'version'      => FAZ_VERSION,
+			'exported_at'  => current_time( 'c' ),
+			'site_url'     => home_url(),
+			'settings'     => $settings,
+			'gcm_settings' => $gcm_settings,
+			'banners'      => $banners ? $banners : array(),
+			'categories'   => $categories ? $categories : array(),
+			'cookies'      => $cookies ? $cookies : array(),
+		);
+
+		return rest_ensure_response( $export );
+	}
+
+	/**
+	 * Import plugin settings, banners, categories, and cookies from JSON.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function import_settings( $request ) {
+		global $wpdb;
+
+		$data = $request->get_json_params();
+
+		// Validate export file identifier.
+		if ( empty( $data['plugin'] ) || 'faz-cookie-manager' !== $data['plugin'] ) {
+			return new WP_Error( 'invalid_export', __( 'Invalid export file.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+
+		$imported = array();
+
+		// --- Settings ---
+		if ( ! empty( $data['settings'] ) && is_array( $data['settings'] ) ) {
+			// Preserve the current MaxMind key when the export has it stripped.
+			$current = get_option( 'faz_settings' );
+			if (
+				empty( $data['settings']['geolocation']['maxmind_license_key'] )
+				&& is_array( $current )
+				&& ! empty( $current['geolocation']['maxmind_license_key'] )
+			) {
+				$data['settings']['geolocation']['maxmind_license_key'] = $current['geolocation']['maxmind_license_key'];
+			}
+			update_option( 'faz_settings', $data['settings'] );
+			$imported[] = 'settings';
+		}
+
+		// --- GCM Settings ---
+		if ( ! empty( $data['gcm_settings'] ) && is_array( $data['gcm_settings'] ) ) {
+			update_option( 'faz_gcm_settings', $data['gcm_settings'] );
+			$imported[] = 'gcm_settings';
+		}
+
+		// --- Banners ---
+		if ( ! empty( $data['banners'] ) && is_array( $data['banners'] ) ) {
+			$table = $wpdb->prefix . 'faz_banners';
+			foreach ( $data['banners'] as $banner ) {
+				$banner_id = absint( $banner['banner_id'] ?? 0 );
+				if ( ! $banner_id ) {
+					continue;
+				}
+				$existing = $wpdb->get_var( $wpdb->prepare(
+					"SELECT banner_id FROM {$table} WHERE banner_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$banner_id
+				) );
+
+				$row = array(
+					'banner_id'      => $banner_id,
+					'name'           => sanitize_text_field( $banner['name'] ?? '' ),
+					'slug'           => sanitize_text_field( $banner['slug'] ?? '' ),
+					'status'         => absint( $banner['status'] ?? 0 ),
+					'settings'       => wp_json_encode( $banner['settings'] ?? array() ),
+					'banner_default' => absint( $banner['banner_default'] ?? 0 ),
+					'contents'       => wp_json_encode( $banner['contents'] ?? array() ),
+				);
+
+				if ( $existing ) {
+					$wpdb->update( $table, $row, array( 'banner_id' => $banner_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				} else {
+					$wpdb->insert( $table, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+			}
+			// Clear banner cache so the template is regenerated.
+			delete_option( 'faz_banner_template' );
+			$imported[] = 'banners';
+		}
+
+		// --- Categories ---
+		if ( ! empty( $data['categories'] ) && is_array( $data['categories'] ) ) {
+			$table = $wpdb->prefix . 'faz_cookie_categories';
+			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			foreach ( $data['categories'] as $cat ) {
+				$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					'category_id'      => absint( $cat['category_id'] ?? 0 ),
+					'name'             => wp_json_encode( $cat['name'] ?? array() ),
+					'slug'             => sanitize_text_field( $cat['slug'] ?? '' ),
+					'description'      => wp_json_encode( $cat['description'] ?? array() ),
+					'prior_consent'    => absint( $cat['prior_consent'] ?? 0 ),
+					'visibility'       => absint( $cat['visibility'] ?? 1 ),
+					'priority'         => absint( $cat['priority'] ?? 0 ),
+					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 0 ),
+					'meta'             => isset( $cat['meta'] ) ? wp_json_encode( $cat['meta'] ) : null,
+				) );
+			}
+			$imported[] = 'categories';
+		}
+
+		// --- Cookies ---
+		if ( ! empty( $data['cookies'] ) && is_array( $data['cookies'] ) ) {
+			$table = $wpdb->prefix . 'faz_cookies';
+			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			foreach ( $data['cookies'] as $cookie ) {
+				$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
+					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
+					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
+					'description' => wp_json_encode( $cookie['description'] ?? '' ),
+					'duration'    => sanitize_text_field( $cookie['duration'] ?? '' ),
+					'domain'      => sanitize_text_field( $cookie['domain'] ?? '' ),
+					'category'    => absint( $cookie['category'] ?? 0 ),
+					'type'        => sanitize_text_field( $cookie['type'] ?? '' ),
+					'discovered'  => absint( $cookie['discovered'] ?? 0 ),
+					'url_pattern' => sanitize_text_field( $cookie['url_pattern'] ?? '' ),
+					'meta'        => isset( $cookie['meta'] ) ? wp_json_encode( $cookie['meta'] ) : null,
+				) );
+			}
+			$imported[] = 'cookies';
+		}
+
+		return rest_ensure_response( array(
+			'success'  => true,
+			'imported' => $imported,
+		) );
 	}
 
 } // End the class.
