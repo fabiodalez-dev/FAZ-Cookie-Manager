@@ -89,7 +89,7 @@ class Cookie_Policy_Shortcode {
 
 		<h2><?php esc_html_e( 'How to Manage Cookies', 'faz-cookie-manager' ); ?></h2>
 		<p><?php esc_html_e( 'You can manage your cookie preferences at any time by clicking the cookie icon in the bottom corner of the page, or by using the button below.', 'faz-cookie-manager' ); ?></p>
-		<p><button type="button" class="faz-policy-manage-btn" onclick="if(typeof revisitFazConsent==='function'){revisitFazConsent();}"><?php esc_html_e( 'Manage Cookie Preferences', 'faz-cookie-manager' ); ?></button></p>
+		<p><button type="button" class="faz-consent-trigger faz-policy-manage-btn"><?php esc_html_e( 'Manage Cookie Preferences', 'faz-cookie-manager' ); ?></button></p>
 		<p><?php esc_html_e( 'You can also control cookies through your browser settings. Most browsers allow you to:', 'faz-cookie-manager' ); ?></p>
 		<ul>
 			<li><?php esc_html_e( 'View what cookies are stored and delete them individually', 'faz-cookie-manager' ); ?></li>

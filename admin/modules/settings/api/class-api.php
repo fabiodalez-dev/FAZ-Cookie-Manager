@@ -683,6 +683,7 @@ class Api extends Rest_Controller {
 		// --- Categories ---
 		if ( ! empty( $data['categories'] ) && is_array( $data['categories'] ) ) {
 			$table = $wpdb->prefix . 'faz_cookie_categories';
+			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
 			foreach ( $data['categories'] as $cat ) {
 				$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -697,6 +698,7 @@ class Api extends Rest_Controller {
 					'meta'             => isset( $cat['meta'] ) ? wp_json_encode( $cat['meta'] ) : null,
 				) );
 			}
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			// Invalidate category cache.
 			do_action( 'faz_after_update_cookie_category' );
 			$imported[] = 'categories';
@@ -705,6 +707,7 @@ class Api extends Rest_Controller {
 		// --- Cookies ---
 		if ( ! empty( $data['cookies'] ) && is_array( $data['cookies'] ) ) {
 			$table = $wpdb->prefix . 'faz_cookies';
+			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
 			foreach ( $data['cookies'] as $cookie ) {
 				$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -721,6 +724,7 @@ class Api extends Rest_Controller {
 					'meta'        => isset( $cookie['meta'] ) ? wp_json_encode( $cookie['meta'] ) : null,
 				) );
 			}
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			// Invalidate cookie cache.
 			do_action( 'faz_after_update_cookie' );
 			$imported[] = 'cookies';
@@ -771,10 +775,6 @@ class Api extends Rest_Controller {
 	 */
 	private function sanitize_banner_settings( $settings ) {
 		if ( is_string( $settings ) ) {
-			// Allow CSS color values and simple CSS strings.
-			if ( preg_match( '/^(#[0-9a-fA-F]{3,8}|rgba?\([0-9,.\s%]+\)|hsla?\([0-9,.\s%]+\)|transparent|inherit|none|[a-zA-Z-]+)$/', trim( $settings ) ) ) {
-				return sanitize_text_field( $settings );
-			}
 			return sanitize_text_field( $settings );
 		}
 		if ( is_array( $settings ) ) {

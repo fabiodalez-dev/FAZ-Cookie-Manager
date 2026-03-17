@@ -1875,6 +1875,7 @@ function _fazAfterConsent() {
         var consentMatch = document.cookie.match(/fazcookie-consent=([^;]+)/);
         if (consentMatch && targets.length > 0) {
             targets.forEach(function(targetUrl) {
+                if (!_fazIsAllowedScheme(targetUrl)) return;
                 var iframe = document.createElement('iframe');
                 iframe.style.cssText = 'display:none;width:0;height:0;border:0;';
                 iframe.src = targetUrl + '?faz_consent_forward=1';
@@ -2089,6 +2090,14 @@ function _fazWatchBannerElement() {
                 : event.target.msMatchesSelector(selector)
         )
             _revisitFazConsent();
+    });
+
+    // Delegate clicks on .faz-consent-trigger elements (blocks, shortcodes).
+    document.querySelector("body").addEventListener("click", function (event) {
+        var trigger = event.target.closest(".faz-consent-trigger");
+        if (!trigger) return;
+        event.preventDefault();
+        _revisitFazConsent();
     });
 
     // Delegate clicks on placeholder "Accept cookies" buttons.

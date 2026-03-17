@@ -166,8 +166,8 @@ class Blocks {
 		$is_link = 'link' === ( isset( $atts['style'] ) ? $atts['style'] : 'button' );
 
 		if ( $is_link ) {
-			return '<a href="#" class="faz-consent-trigger" onclick="if(typeof revisitFazConsent===\'function\'){revisitFazConsent();return false;}">' . $label . '</a>';
+			return '<a href="#" class="faz-consent-trigger">' . $label . '</a>';
 		}
-		return '<button type="button" class="faz-consent-trigger wp-element-button" onclick="if(typeof revisitFazConsent===\'function\'){revisitFazConsent();}">' . $label . '</button>';
+		return '<button type="button" class="faz-consent-trigger wp-element-button">' . $label . '</button>';
 	}
 }

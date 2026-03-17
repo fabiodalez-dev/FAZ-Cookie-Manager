@@ -28,6 +28,15 @@ use FazCookie\Admin\Modules\Banners\Includes\Controller;
  */
 class AMP_Consent {
 
+	/** @var bool Whether AMP styles have been output (prevents double rendering). */
+	private static $styles_output = false;
+
+	/** @var bool Whether AMP boilerplate has been output. */
+	private static $boilerplate_output = false;
+
+	/** @var bool Whether AMP consent component has been output. */
+	private static $consent_output = false;
+
 	/**
 	 * Constructor — hooks into `wp` to detect AMP pages.
 	 */
@@ -120,9 +129,10 @@ class AMP_Consent {
 	 * @return void
 	 */
 	public function output_amp_boilerplate() {
-		if ( ! $this->is_amp_page() ) {
+		if ( ! $this->is_amp_page() || self::$boilerplate_output ) {
 			return;
 		}
+		self::$boilerplate_output = true;
 		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- AMP requires inline script tags.
 		echo '<script async custom-element="amp-consent" src="https://cdn.ampproject.org/v0/amp-consent-0.1.js"></script>' . "\n";
 	}
@@ -192,9 +202,10 @@ class AMP_Consent {
 	 * @return void
 	 */
 	public function output_amp_styles() {
-		if ( ! $this->is_amp_page() ) {
+		if ( ! $this->is_amp_page() || self::$styles_output ) {
 			return;
 		}
+		self::$styles_output = true;
 
 		$c = $this->get_amp_colours();
 		if ( false === $c ) {
@@ -224,9 +235,10 @@ class AMP_Consent {
 	 * @return void
 	 */
 	public function output_amp_consent() {
-		if ( ! $this->is_amp_page() ) {
+		if ( ! $this->is_amp_page() || self::$consent_output ) {
 			return;
 		}
+		self::$consent_output = true;
 
 		// Respect global banner toggle.
 		$settings = get_option( 'faz_settings' );
