@@ -130,6 +130,19 @@ class WP_CLI_Commands {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$cookies = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}faz_cookies", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( is_array( $cookies ) ) {
+			foreach ( $cookies as &$ck ) {
+				if ( isset( $ck['description'] ) ) {
+					$decoded = json_decode( $ck['description'], true );
+					$ck['description'] = ( null !== $decoded ) ? $decoded : $ck['description'];
+				}
+				if ( isset( $ck['meta'] ) ) {
+					$decoded = json_decode( $ck['meta'], true );
+					$ck['meta'] = ( null !== $decoded ) ? $decoded : $ck['meta'];
+				}
+			}
+			unset( $ck );
+		}
 
 		$export = array(
 			'plugin'       => 'faz-cookie-manager',
@@ -204,10 +217,25 @@ class WP_CLI_Commands {
 
 		WP_CLI::confirm( 'This will overwrite your current settings. Continue?', $assoc_args );
 
+		// Ensure we have an admin user context for the internal REST request.
+		// WP-CLI runs with full privileges but rest_do_request() checks
+		// permission callbacks that require an authenticated user with
+		// manage_options capability.
+		if ( ! is_user_logged_in() || ! current_user_can( 'manage_options' ) ) {
+			$admins = get_users( array( 'role' => 'administrator', 'number' => 1 ) );
+			if ( ! empty( $admins ) ) {
+				wp_set_current_user( $admins[0]->ID );
+			} else {
+				WP_CLI::error( 'No administrator user found. Cannot authenticate the internal REST request.' );
+				return;
+			}
+		}
+
 		// Reuse the REST import logic via an internal request.
 		$request = new \WP_REST_Request( 'POST', '/faz/v1/settings/import' );
 		$request->set_body( $json );
 		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
 		$response = rest_do_request( $request );
 
 		if ( $response->is_error() ) {

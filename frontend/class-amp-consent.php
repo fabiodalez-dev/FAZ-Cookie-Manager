@@ -52,9 +52,15 @@ class AMP_Consent {
 		// the regular banner template and inline styles.
 		add_filter( 'faz_is_amp_request', '__return_true' );
 
-		// Add AMP consent component.
+		// AMP boilerplate script in head.
 		add_action( 'amp_post_template_head', array( $this, 'output_amp_boilerplate' ) );
 		add_action( 'wp_head', array( $this, 'output_amp_boilerplate' ) );
+
+		// AMP custom CSS in head (AMP requires <style amp-custom> in <head>).
+		add_action( 'amp_post_template_head', array( $this, 'output_amp_styles' ) );
+		add_action( 'wp_head', array( $this, 'output_amp_styles' ) );
+
+		// AMP consent component in footer.
 		add_action( 'amp_post_template_footer', array( $this, 'output_amp_consent' ) );
 		add_action( 'wp_footer', array( $this, 'output_amp_consent' ) );
 	}
@@ -119,6 +125,97 @@ class AMP_Consent {
 		}
 		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- AMP requires inline script tags.
 		echo '<script async custom-element="amp-consent" src="https://cdn.ampproject.org/v0/amp-consent-0.1.js"></script>' . "\n";
+	}
+
+	/**
+	 * Load and cache the active banner colours for AMP output.
+	 *
+	 * Returns an associative array of colour values extracted from the
+	 * active banner settings, or false if the banner is not available.
+	 *
+	 * @return array|false
+	 */
+	private function get_amp_colours() {
+		static $cached = null;
+		if ( null !== $cached ) {
+			return $cached;
+		}
+
+		// Respect global banner toggle.
+		$settings = get_option( 'faz_settings' );
+		if ( empty( $settings['banner_control']['status'] ) ) {
+			$cached = false;
+			return false;
+		}
+
+		$banner = Controller::get_instance()->get_active_banner();
+		if ( false === $banner ) {
+			$cached = false;
+			return false;
+		}
+
+		$banner_settings = $banner->get_settings();
+		$config          = isset( $banner_settings['config'] ) ? $banner_settings['config'] : array();
+		$notice_cfg      = isset( $config['notice'] ) ? $config['notice'] : array();
+		$notice_styles   = isset( $notice_cfg['styles'] ) ? $notice_cfg['styles'] : array();
+		$btn_cfg         = isset( $notice_cfg['elements']['buttons']['elements'] ) ? $notice_cfg['elements']['buttons']['elements'] : array();
+		$accept_cfg      = isset( $btn_cfg['accept']['styles'] ) ? $btn_cfg['accept']['styles'] : array();
+		$reject_cfg      = isset( $btn_cfg['reject']['styles'] ) ? $btn_cfg['reject']['styles'] : array();
+		$link_cfg        = isset( $config['accessibilityOverrides']['elements']['manualLinks']['styles'] ) ? $config['accessibilityOverrides']['elements']['manualLinks']['styles'] : array();
+		$revisit_cfg     = isset( $config['revisitConsent']['styles'] ) ? $config['revisitConsent']['styles'] : array();
+
+		$accept_bg = ! empty( $accept_cfg['background-color'] ) ? $accept_cfg['background-color'] : '#1863DC';
+
+		$cached = array(
+			'bg_color'       => ! empty( $notice_styles['background-color'] ) ? $notice_styles['background-color'] : '#fff',
+			'text_color'     => ! empty( $notice_styles['color'] ) ? $notice_styles['color'] : '#555',
+			'title_color'    => ! empty( $notice_styles['color'] ) ? $notice_styles['color'] : '#111',
+			'accept_bg'      => $accept_bg,
+			'accept_color'   => ! empty( $accept_cfg['color'] ) ? $accept_cfg['color'] : '#fff',
+			'reject_bg'      => ! empty( $reject_cfg['background-color'] ) ? $reject_cfg['background-color'] : 'transparent',
+			'reject_color'   => ! empty( $reject_cfg['color'] ) ? $reject_cfg['color'] : '#333',
+			'reject_border'  => ! empty( $reject_cfg['border-color'] ) ? $reject_cfg['border-color'] : '#ccc',
+			'link_color'     => ! empty( $link_cfg['color'] ) ? $link_cfg['color'] : '#666',
+			'revisit_bg'     => ! empty( $revisit_cfg['background-color'] ) ? $revisit_cfg['background-color'] : $accept_bg,
+			'revisit_color'  => ! empty( $revisit_cfg['color'] ) ? $revisit_cfg['color'] : '#fff',
+		);
+
+		return $cached;
+	}
+
+	/**
+	 * Output AMP custom CSS in <head>.
+	 *
+	 * AMP requires <style amp-custom> to be inside <head>; there can only
+	 * be one per page.
+	 *
+	 * @return void
+	 */
+	public function output_amp_styles() {
+		if ( ! $this->is_amp_page() ) {
+			return;
+		}
+
+		$c = $this->get_amp_colours();
+		if ( false === $c ) {
+			return;
+		}
+
+		?>
+		<style amp-custom>
+			.faz-amp-banner{position:fixed;bottom:0;left:0;right:0;background:<?php echo esc_attr( $c['bg_color'] ); ?>;box-shadow:0 -2px 10px rgba(0,0,0,.15);z-index:9999;padding:16px 20px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+			.faz-amp-banner-inner{max-width:960px;margin:0 auto}
+			.faz-amp-title{font-size:16px;font-weight:700;margin:0 0 8px;color:<?php echo esc_attr( $c['title_color'] ); ?>}
+			.faz-amp-desc{font-size:13px;line-height:1.5;color:<?php echo esc_attr( $c['text_color'] ); ?>;margin:0 0 12px}
+			.faz-amp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+			.faz-amp-btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer}
+			.faz-amp-btn-accept{background:<?php echo esc_attr( $c['accept_bg'] ); ?>;color:<?php echo esc_attr( $c['accept_color'] ); ?>}
+			.faz-amp-btn-reject{background:<?php echo esc_attr( $c['reject_bg'] ); ?>;color:<?php echo esc_attr( $c['reject_color'] ); ?>;border:1px solid <?php echo esc_attr( $c['reject_border'] ); ?>}
+			.faz-amp-link{font-size:12px;color:<?php echo esc_attr( $c['link_color'] ); ?>;text-decoration:underline}
+			.faz-amp-revisit{position:fixed;bottom:16px;left:16px;z-index:9998}
+			.faz-amp-revisit-btn{width:40px;height:40px;border-radius:50%;border:none;background:<?php echo esc_attr( $c['revisit_bg'] ); ?>;color:<?php echo esc_attr( $c['revisit_color'] ); ?>;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center}
+		</style>
+		<?php
 	}
 
 	/**
@@ -202,37 +299,6 @@ class AMP_Consent {
 			);
 		}
 
-		// Extract banner colours for styling.
-		$config      = isset( $banner_settings['config'] ) ? $banner_settings['config'] : array();
-		$notice_cfg  = isset( $config['notice'] ) ? $config['notice'] : array();
-		$notice_styles = isset( $notice_cfg['styles'] ) ? $notice_cfg['styles'] : array();
-
-		$bg_color   = ! empty( $notice_styles['background-color'] ) ? $notice_styles['background-color'] : '#fff';
-		$text_color = ! empty( $notice_styles['color'] ) ? $notice_styles['color'] : '#555';
-
-		// Button colours.
-		$btn_cfg     = isset( $notice_cfg['elements']['buttons']['elements'] ) ? $notice_cfg['elements']['buttons']['elements'] : array();
-		$accept_cfg  = isset( $btn_cfg['accept']['styles'] ) ? $btn_cfg['accept']['styles'] : array();
-		$reject_cfg  = isset( $btn_cfg['reject']['styles'] ) ? $btn_cfg['reject']['styles'] : array();
-
-		$accept_bg    = ! empty( $accept_cfg['background-color'] ) ? $accept_cfg['background-color'] : '#1863DC';
-		$accept_color = ! empty( $accept_cfg['color'] ) ? $accept_cfg['color'] : '#fff';
-		$reject_bg    = ! empty( $reject_cfg['background-color'] ) ? $reject_cfg['background-color'] : 'transparent';
-		$reject_color = ! empty( $reject_cfg['color'] ) ? $reject_cfg['color'] : '#333';
-		$reject_border = ! empty( $reject_cfg['border-color'] ) ? $reject_cfg['border-color'] : '#ccc';
-
-		// Title colour (if present in notice title styles).
-		$title_color = ! empty( $notice_styles['color'] ) ? $notice_styles['color'] : '#111';
-
-		// Link colour.
-		$link_cfg   = isset( $config['accessibilityOverrides']['elements']['manualLinks']['styles'] ) ? $config['accessibilityOverrides']['elements']['manualLinks']['styles'] : array();
-		$link_color = ! empty( $link_cfg['color'] ) ? $link_cfg['color'] : '#666';
-
-		// Revisit widget colours.
-		$revisit_cfg   = isset( $config['revisitConsent']['styles'] ) ? $config['revisitConsent']['styles'] : array();
-		$revisit_bg    = ! empty( $revisit_cfg['background-color'] ) ? $revisit_cfg['background-color'] : $accept_bg;
-		$revisit_color = ! empty( $revisit_cfg['color'] ) ? $revisit_cfg['color'] : '#fff';
-
 		?>
 		<amp-consent id="faz-amp-consent" layout="nodisplay">
 			<script type="application/json"><?php echo wp_json_encode( $amp_config ); ?></script>
@@ -259,20 +325,6 @@ class AMP_Consent {
 				</button>
 			</div>
 		</amp-consent>
-
-		<style amp-custom>
-			.faz-amp-banner{position:fixed;bottom:0;left:0;right:0;background:<?php echo esc_attr( $bg_color ); ?>;box-shadow:0 -2px 10px rgba(0,0,0,.15);z-index:9999;padding:16px 20px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-			.faz-amp-banner-inner{max-width:960px;margin:0 auto}
-			.faz-amp-title{font-size:16px;font-weight:700;margin:0 0 8px;color:<?php echo esc_attr( $title_color ); ?>}
-			.faz-amp-desc{font-size:13px;line-height:1.5;color:<?php echo esc_attr( $text_color ); ?>;margin:0 0 12px}
-			.faz-amp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-			.faz-amp-btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer}
-			.faz-amp-btn-accept{background:<?php echo esc_attr( $accept_bg ); ?>;color:<?php echo esc_attr( $accept_color ); ?>}
-			.faz-amp-btn-reject{background:<?php echo esc_attr( $reject_bg ); ?>;color:<?php echo esc_attr( $reject_color ); ?>;border:1px solid <?php echo esc_attr( $reject_border ); ?>}
-			.faz-amp-link{font-size:12px;color:<?php echo esc_attr( $link_color ); ?>;text-decoration:underline}
-			.faz-amp-revisit{position:fixed;bottom:16px;left:16px;z-index:9998}
-			.faz-amp-revisit-btn{width:40px;height:40px;border-radius:50%;border:none;background:<?php echo esc_attr( $revisit_bg ); ?>;color:<?php echo esc_attr( $revisit_color ); ?>;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center}
-		</style>
 		<?php
 	}
 }

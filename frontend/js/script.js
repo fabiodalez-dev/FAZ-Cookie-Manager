@@ -2587,10 +2587,15 @@ window.addEventListener('message', function(event) {
     if (!originAllowed) return;
 
     if (event.data && event.data.type === 'faz_consent_forward' && event.data.consent) {
+        // Validate consent string format and length before writing to cookie.
+        var consent = event.data.consent;
+        if (typeof consent !== 'string' || consent.length > 2048) return;
+        if (!/^[a-zA-Z0-9._:\-]+(,[a-zA-Z0-9._:\-]+)*$/.test(consent)) return;
+
         // Apply forwarded consent cookie.
         var d = new Date();
         d.setTime(d.getTime() + (_fazStore._expiry || 180) * 24 * 60 * 60 * 1000);
-        document.cookie = 'fazcookie-consent=' + event.data.consent + '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax';
+        document.cookie = 'fazcookie-consent=' + consent + '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax';
         // Reload to apply the forwarded consent state.
         window.location.reload();
     }

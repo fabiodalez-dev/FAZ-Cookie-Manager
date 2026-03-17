@@ -28,7 +28,7 @@ foreach ( $tables as $t ) {
 
 // Cron status.
 $next_scan    = wp_next_scheduled( 'faz_scheduled_scan' );
-$next_cleanup = wp_next_scheduled( 'faz_consent_log_cleanup' );
+$next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 ?>
 <div id="faz-system-status">
 

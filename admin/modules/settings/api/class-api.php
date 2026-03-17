@@ -15,6 +15,7 @@ use stdClass;
 use FazCookie\Includes\Rest_Controller;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Settings\Includes\Controller;
+use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Includes\Notice;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -239,7 +240,7 @@ class Api extends Rest_Controller {
 	 */
 	private function sanitize_filter_data( $data ) {
 		if ( is_string( $data ) ) {
-			return wp_kses_post( $data );
+			return sanitize_text_field( $data );
 		}
 		if ( is_array( $data ) ) {
 			return array_map( array( $this, 'sanitize_filter_data' ), $data );
@@ -562,11 +563,25 @@ class Api extends Rest_Controller {
 			unset( $cat );
 		}
 
-		// Cookies.
+		// Cookies — decode JSON fields so they export as structured data
+		// (matching categories above) and avoid double-encoding on re-import.
 		$cookies = $wpdb->get_results(
 			"SELECT * FROM {$wpdb->prefix}faz_cookies", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			ARRAY_A
 		);
+		if ( is_array( $cookies ) ) {
+			foreach ( $cookies as &$ck ) {
+				if ( isset( $ck['description'] ) ) {
+					$decoded = json_decode( $ck['description'], true );
+					$ck['description'] = ( null !== $decoded ) ? $decoded : $ck['description'];
+				}
+				if ( isset( $ck['meta'] ) ) {
+					$decoded = json_decode( $ck['meta'], true );
+					$ck['meta'] = ( null !== $decoded ) ? $decoded : $ck['meta'];
+				}
+			}
+			unset( $ck );
+		}
 
 		$export = array(
 			'plugin'       => 'faz-cookie-manager',
@@ -612,13 +627,17 @@ class Api extends Rest_Controller {
 			) {
 				$data['settings']['geolocation']['maxmind_license_key'] = $current['geolocation']['maxmind_license_key'];
 			}
-			update_option( 'faz_settings', $data['settings'] );
+			// Use Settings::update() for sanitization, cache clearing, and hooks.
+			$settings_obj = new Settings();
+			$settings_obj->update( $data['settings'] );
 			$imported[] = 'settings';
 		}
 
 		// --- GCM Settings ---
 		if ( ! empty( $data['gcm_settings'] ) && is_array( $data['gcm_settings'] ) ) {
-			update_option( 'faz_gcm_settings', $data['gcm_settings'] );
+			// Use Gcm_Settings::update() for sanitization and hooks.
+			$gcm_obj = new Gcm_Settings();
+			$gcm_obj->update( $data['gcm_settings'] );
 			$imported[] = 'gcm_settings';
 		}
 
@@ -696,6 +715,12 @@ class Api extends Rest_Controller {
 				) );
 			}
 			$imported[] = 'cookies';
+		}
+
+		// Clear the banner template cache — settings changes (e.g. consent
+		// forwarding, GCM) can affect the rendered template.
+		if ( ! empty( $imported ) ) {
+			faz_clear_banner_template_cache();
 		}
 
 		return rest_ensure_response( array(

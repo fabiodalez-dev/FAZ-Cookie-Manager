@@ -374,7 +374,10 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 	/**
 	 * Export personal data (consent logs) for WordPress privacy tools.
 	 *
-	 * Matches records by hashed IP address.
+	 * Consent logs store only one-way hashed IPs (SHA-256 + salt), not email
+	 * addresses. We cannot link consent records to a specific email address.
+	 * This is privacy-by-design: the data is pseudonymized and not
+	 * attributable to a specific individual without the original IP.
 	 *
 	 * @since 1.5.0
 	 * @param string $email_address The user's email address.
@@ -382,41 +385,8 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 	 * @return array Export data conforming to the WP privacy exporter format.
 	 */
 	function faz_privacy_exporter( $email_address, $page = 1 ) {
-		global $wpdb;
-		$table = $wpdb->prefix . 'faz_consent_logs';
-
-		$ip      = faz_resolve_client_ip();
-		$ip_hash = hash( 'sha256', $ip . wp_salt() );
-
-		$records = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT consent_id, status, categories, url, created_at FROM {$table} WHERE ip_hash = %s LIMIT 100", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$ip_hash
-			),
-			ARRAY_A
-		);
-
-		$export_items = array();
-		if ( is_array( $records ) ) {
-			foreach ( $records as $record ) {
-				$export_items[] = array(
-					'group_id'          => 'faz-consent-logs',
-					'group_label'       => __( 'Cookie Consent Logs', 'faz-cookie-manager' ),
-					'group_description' => __( 'Records of your cookie consent choices.', 'faz-cookie-manager' ),
-					'item_id'           => 'consent-' . $record['consent_id'],
-					'data'              => array(
-						array( 'name' => __( 'Consent ID', 'faz-cookie-manager' ), 'value' => $record['consent_id'] ),
-						array( 'name' => __( 'Status', 'faz-cookie-manager' ), 'value' => $record['status'] ),
-						array( 'name' => __( 'Categories', 'faz-cookie-manager' ), 'value' => $record['categories'] ),
-						array( 'name' => __( 'Page URL', 'faz-cookie-manager' ), 'value' => $record['url'] ),
-						array( 'name' => __( 'Date', 'faz-cookie-manager' ), 'value' => $record['created_at'] ),
-					),
-				);
-			}
-		}
-
 		return array(
-			'data' => $export_items,
+			'data' => array(),
 			'done' => true,
 		);
 	}
@@ -426,7 +396,9 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	/**
 	 * Erase personal data (consent logs) for WordPress privacy tools.
 	 *
-	 * Deletes records matching the hashed IP address.
+	 * Consent logs use one-way IP hashing (SHA-256 + salt). We cannot
+	 * identify which records belong to a specific email address.
+	 * Records are auto-purged after the configured retention period.
 	 *
 	 * @since 1.5.0
 	 * @param string $email_address The user's email address.
@@ -434,18 +406,12 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	 * @return array Erasure result conforming to the WP privacy eraser format.
 	 */
 	function faz_privacy_eraser( $email_address, $page = 1 ) {
-		global $wpdb;
-		$table = $wpdb->prefix . 'faz_consent_logs';
-
-		$ip      = faz_resolve_client_ip();
-		$ip_hash = hash( 'sha256', $ip . wp_salt() );
-
-		$deleted = $wpdb->delete( $table, array( 'ip_hash' => $ip_hash ), array( '%s' ) );
-
 		return array(
-			'items_removed'  => false !== $deleted ? (int) $deleted : 0,
-			'items_retained' => false,
-			'messages'       => array(),
+			'items_removed'  => 0,
+			'items_retained' => true,
+			'messages'       => array(
+				__( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses. Records are automatically purged after the configured retention period.', 'faz-cookie-manager' ),
+			),
 			'done'           => true,
 		);
 	}
