@@ -8,6 +8,33 @@
 defined( 'ABSPATH' ) || exit;
 ?>
 <div id="faz-cookies">
+	<!-- Cookie Categories Editor -->
+	<div class="faz-card" style="margin-bottom:16px;">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Cookie Categories', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-help" style="margin-bottom:12px;"><?php esc_html_e( 'Edit the display name and description for each cookie category. These are shown to visitors in the cookie preference center.', 'faz-cookie-manager' ); ?></div>
+			<div class="faz-table-wrap">
+				<table class="faz-table" id="faz-category-edit-table">
+					<thead>
+						<tr>
+							<th style="width:120px;"><?php esc_html_e( 'Slug', 'faz-cookie-manager' ); ?></th>
+							<th style="width:200px;"><?php esc_html_e( 'Display Name', 'faz-cookie-manager' ); ?></th>
+							<th><?php esc_html_e( 'Description', 'faz-cookie-manager' ); ?></th>
+						</tr>
+					</thead>
+					<tbody id="faz-category-edit-rows">
+						<tr><td colspan="3" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
+					</tbody>
+				</table>
+			</div>
+			<div style="margin-top:12px;">
+				<button class="faz-btn faz-btn-primary faz-btn-sm" id="faz-save-categories" type="button"><?php esc_html_e( 'Save Categories', 'faz-cookie-manager' ); ?></button>
+			</div>
+		</div>
+	</div>
+
 	<div class="faz-grid faz-grid-sidebar">
 		<div class="faz-card" id="faz-cat-sidebar">
 			<div class="faz-card-header">

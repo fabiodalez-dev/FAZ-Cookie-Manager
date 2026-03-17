@@ -189,6 +189,15 @@ class Frontend {
 			}
 			$css = $this->get_boosted_css();
 
+			// Append user-defined custom CSS from Banner → Advanced tab.
+			if ( $this->banner ) {
+				$banner_settings = $this->banner->get_settings();
+				$custom_css      = isset( $banner_settings['meta']['customCSS'] ) ? trim( $banner_settings['meta']['customCSS'] ) : '';
+				if ( '' !== $custom_css ) {
+					$css .= $custom_css;
+				}
+			}
+
 			// Ad-blocker compatibility: use generic handle/var names to avoid filter lists.
 			$alt_asset = ! empty( $faz_geo_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;

@@ -292,6 +292,10 @@
 		setChecked('faz-b-reload-toggle', b.reloadBannerOnAccept && b.reloadBannerOnAccept.status);
 		setChecked('faz-b-gpc-toggle', b.respectGPC && b.respectGPC.status);
 
+		// Custom CSS
+		var meta = props.meta || {};
+		setVal('faz-b-custom-css', meta.customCSS || '');
+
 		// Brand logo
 		var brandLogo = (config.notice && config.notice.elements && config.notice.elements.brandLogo) || {};
 		setChecked('faz-b-brandlogo-toggle', getStatus(brandLogo));
@@ -747,6 +751,10 @@
 		props.behaviours.reloadBannerOnAccept.status = isChecked('faz-b-reload-toggle');
 		if (!props.behaviours.respectGPC) props.behaviours.respectGPC = {};
 		props.behaviours.respectGPC.status = isChecked('faz-b-gpc-toggle');
+
+		// Custom CSS
+		if (!props.meta) props.meta = {};
+		props.meta.customCSS = getVal('faz-b-custom-css') || '';
 	}
 
 	// ── Save ──
