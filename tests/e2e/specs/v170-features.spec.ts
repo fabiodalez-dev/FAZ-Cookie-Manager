@@ -515,4 +515,96 @@ test.describe('v1.7.0 features', () => {
     await ctx.close();
   });
 
+  // 29. Issue #37: Custom CSS saves and renders
+  test('F29: custom CSS saves in banner settings and appears on frontend (issue #37)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
+
+    // Wait for banner data to load
+    await page.waitForResponse(
+      (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
+      { timeout: 20_000 },
+    );
+    await page.waitForFunction(() => {
+      const el = document.getElementById('faz-b-type') as HTMLSelectElement;
+      return el && el.value !== '';
+    }, { timeout: 5_000 });
+
+    // Switch to Advanced tab and set custom CSS
+    await page.click('#faz-banner-tabs button[data-tab="advanced"]');
+    await page.waitForSelector('#tab-advanced.active', { timeout: 5_000 });
+
+    const testCSS = '.faz-test-custom-css-marker { color: red; }';
+    await page.fill('#faz-b-custom-css', testCSS);
+
+    // Save
+    const saveResponse = page.waitForResponse(
+      (r) => r.url().includes('banners') && !r.url().includes('preview') &&
+        (r.request().method() === 'PUT' || r.request().method() === 'POST'),
+      { timeout: 15_000 },
+    );
+    await page.click('#faz-b-save');
+    const resp = await saveResponse;
+    expect(resp.status()).toBe(200);
+
+    // Reload and verify persistence
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
+    await page.waitForResponse(
+      (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
+      { timeout: 20_000 },
+    );
+    await page.waitForFunction(() => {
+      const el = document.getElementById('faz-b-type') as HTMLSelectElement;
+      return el && el.value !== '';
+    }, { timeout: 5_000 });
+    await page.click('#faz-banner-tabs button[data-tab="advanced"]');
+    await page.waitForSelector('#tab-advanced.active', { timeout: 5_000 });
+
+    const savedCSS = await page.inputValue('#faz-b-custom-css');
+    expect(savedCSS).toContain('faz-test-custom-css-marker');
+
+    // Check frontend has the custom CSS
+    const ctx = await browser.newContext({ baseURL: wpBaseURL });
+    const visitor = await ctx.newPage();
+    await visitor.goto('/', { waitUntil: 'domcontentloaded' });
+    const html = await visitor.content();
+    expect(html).toContain('faz-test-custom-css-marker');
+    await ctx.close();
+
+    // Clean up — remove the custom CSS
+    await page.click('#faz-banner-tabs button[data-tab="advanced"]');
+    await page.fill('#faz-b-custom-css', '');
+    await page.click('#faz-b-save');
+    await page.waitForResponse(
+      (r) => r.url().includes('banners') && !r.url().includes('preview') &&
+        (r.request().method() === 'PUT' || r.request().method() === 'POST'),
+      { timeout: 15_000 },
+    );
+  });
+
+  // 30. Issue #38: Category names editable from admin
+  test('F30: category editor table and save button exist on cookies page (issue #38)', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    // The category editor table should be in the page HTML
+    const html = await page.content();
+    expect(html).toContain('faz-category-edit-table');
+    expect(html).toContain('faz-category-edit-rows');
+    expect(html).toContain('faz-save-categories');
+
+    // Verify the save button element is attached to the DOM
+    await expect(page.locator('#faz-save-categories')).toBeAttached({ timeout: 5_000 });
+
+    // Verify the categories REST endpoint returns data
+    const nonce = await getAdminNonce(page);
+    const r = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/cookies/categories`, {
+      headers: { 'X-WP-Nonce': nonce },
+    });
+    expect(r.status()).toBe(200);
+    const cats = await r.json();
+    expect(Array.isArray(cats)).toBe(true);
+    expect(cats.length).toBeGreaterThanOrEqual(2);
+  });
+
 });
