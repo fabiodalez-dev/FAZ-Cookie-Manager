@@ -1392,9 +1392,23 @@ function _fazUnblockServerSide() {
                 if (attr.name === "type" || attr.name === "src" || attr.name === "data-faz-category" || attr.name === "data-faz-original-type") continue;
                 clone.setAttribute(attr.name, attr.value);
             }
-            if (script.src) clone.src = script.src;
-            else clone.textContent = script.textContent;
-            script.parentNode.replaceChild(clone, script);
+            var scriptSrc = script.getAttribute('src') || script.src;
+            if (scriptSrc) {
+                // data: URIs cannot be loaded as external script src in most
+                // browsers; decode and execute as inline content instead.
+                if (scriptSrc.indexOf('data:') === 0) {
+                    try {
+                        clone.textContent = decodeURIComponent(scriptSrc.split(',').slice(1).join(','));
+                    } catch (_e) {
+                        clone.src = scriptSrc;
+                    }
+                } else {
+                    clone.src = scriptSrc;
+                }
+            } else {
+                clone.textContent = script.textContent;
+            }
+            if (script.parentNode) script.parentNode.replaceChild(clone, script);
         });
 
     // 2. Placeholders with <template> content (iframes, oEmbeds).
