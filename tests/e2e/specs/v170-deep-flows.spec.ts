@@ -150,7 +150,7 @@ test.describe.serial('v1.7.0 deep flows', () => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
 
-    const templates = page.locator('#faz-blocker-templates > div');
+    const templates = page.locator('#faz-blocker-templates > button');
     const googleAnalyticsCard = templates.filter({ hasText: 'Google Analytics' });
 
     await expect(googleAnalyticsCard).toHaveCount(1);
