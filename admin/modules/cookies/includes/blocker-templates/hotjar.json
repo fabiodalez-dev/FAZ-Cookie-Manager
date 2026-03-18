@@ -1,0 +1,11 @@
+{
+    "id": "hotjar",
+    "name": "Hotjar",
+    "description": "Blocks Hotjar heatmaps and session recordings.",
+    "category": "analytics",
+    "patterns": [
+        "static.hotjar.com",
+        "hotjar.com/c/hotjar"
+    ],
+    "cookies": ["_hjid", "_hjSession*", "_hjIncludedInPageviewSample", "_hjAbsoluteSessionInProgress"]
+}

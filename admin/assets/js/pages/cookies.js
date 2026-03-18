@@ -24,6 +24,10 @@
 	FAZ.ready(function () {
 		loadCategories();
 		loadCookies();
+		loadCategoryEditor();
+		var saveCatsBtn = document.getElementById('faz-save-categories');
+		if (saveCatsBtn) saveCatsBtn.addEventListener('click', saveCategoryEdits);
+
 		document.getElementById('faz-add-cookie-btn').addEventListener('click', function () {
 			openCookieModal();
 		});
@@ -100,6 +104,9 @@
 		if (addRuleBtn) addRuleBtn.addEventListener('click', function () { addRuleRow('', ''); });
 		var saveRulesBtn = document.getElementById('faz-save-rules-btn');
 		if (saveRulesBtn) saveRulesBtn.addEventListener('click', saveCustomRules);
+
+		// Blocker Templates
+		loadBlockerTemplates();
 	});
 
 	function loadCategories() {
@@ -107,6 +114,143 @@
 			categories = Array.isArray(data) ? data : (data.items || []);
 			renderCategories();
 		}).catch(function (err) { console.error('FAZ: Failed to load categories', err); });
+	}
+
+	// ── Category editor (name & description editing) ──────────────────
+	var categoryEditorData = []; // raw category objects for the editor
+
+	function loadCategoryEditor() {
+		FAZ.get('cookies/categories').then(function (data) {
+			categoryEditorData = Array.isArray(data) ? data : (data.items || []);
+			renderCategoryEditor();
+		}).catch(function (err) {
+			console.error('FAZ: Failed to load categories for editor', err);
+		});
+	}
+
+	function getCategoryEditorLang() {
+		return (window.fazConfig && fazConfig.languages && fazConfig.languages['default'])
+			? fazConfig.languages['default']
+			: 'en';
+	}
+
+	/**
+	 * Strip <p> wrapper tags from a string but keep inner HTML (links, bold, etc.).
+	 * Converts <p> boundaries to line breaks for textarea display.
+	 */
+	function stripParagraphTags(html) {
+		if (!html || typeof html !== 'string') return html || '';
+		return html
+			.replace(/<\/p>\s*<p>/gi, '\n')  // </p><p> → newline
+			.replace(/<\/?p[^>]*>/gi, '')     // remaining <p> and </p> → remove
+			.trim();
+	}
+
+	function renderCategoryEditor() {
+		var tbody = document.getElementById('faz-category-edit-rows');
+		if (!tbody) return;
+		tbody.innerHTML = '';
+		if (!categoryEditorData || !categoryEditorData.length) return;
+
+		var lang = getCategoryEditorLang();
+
+		categoryEditorData.forEach(function (cat) {
+			var tr = document.createElement('tr');
+			tr.setAttribute('data-cat-id', cat.id);
+
+			// Slug (read-only)
+			var tdSlug = document.createElement('td');
+			var code = document.createElement('code');
+			code.textContent = cat.slug || '';
+			tdSlug.appendChild(code);
+			tr.appendChild(tdSlug);
+
+			// Name (editable input)
+			var tdName = document.createElement('td');
+			var nameInput = document.createElement('input');
+			nameInput.type = 'text';
+			nameInput.className = 'faz-input faz-input-sm faz-cat-edit-name';
+			var nameObj = cat.name;
+			nameInput.value = (typeof nameObj === 'object' && nameObj !== null)
+				? (nameObj[lang] || nameObj.en || Object.values(nameObj)[0] || '')
+				: (nameObj || '');
+			tdName.appendChild(nameInput);
+			tr.appendChild(tdName);
+
+			// Description (editable textarea)
+			var tdDesc = document.createElement('td');
+			var descInput = document.createElement('textarea');
+			descInput.className = 'faz-textarea faz-cat-edit-desc';
+			descInput.rows = 2;
+			descInput.style.cssText = 'font-size:13px;min-height:50px;width:100%;';
+			var descObj = cat.description;
+			var rawDesc = (typeof descObj === 'object' && descObj !== null)
+				? (descObj[lang] || descObj.en || Object.values(descObj)[0] || '')
+				: (descObj || '');
+			descInput.value = stripParagraphTags(rawDesc);
+			tdDesc.appendChild(descInput);
+			tr.appendChild(tdDesc);
+
+			tbody.appendChild(tr);
+		});
+	}
+
+	function saveCategoryEdits() {
+		var rows = document.querySelectorAll('#faz-category-edit-rows tr[data-cat-id]');
+		if (!rows.length) return;
+
+		var lang = getCategoryEditorLang();
+		var saveBtn = document.getElementById('faz-save-categories');
+		if (saveBtn) saveBtn.disabled = true;
+
+		var promises = [];
+
+		rows.forEach(function (row) {
+			var id = row.getAttribute('data-cat-id');
+			var nameVal = row.querySelector('.faz-cat-edit-name').value;
+			var descVal = row.querySelector('.faz-cat-edit-desc').value;
+
+			// Find the original category data to preserve other language keys
+			var original = null;
+			for (var i = 0; i < categoryEditorData.length; i++) {
+				if (String(categoryEditorData[i].id) === String(id)) {
+					original = categoryEditorData[i];
+					break;
+				}
+			}
+
+			// Merge: copy all existing language keys, then update the current language
+			var nameObj = {};
+			if (original && typeof original.name === 'object' && original.name !== null) {
+				Object.keys(original.name).forEach(function (k) { nameObj[k] = original.name[k]; });
+			}
+			nameObj[lang] = nameVal;
+
+			var descObj = {};
+			if (original && typeof original.description === 'object' && original.description !== null) {
+				Object.keys(original.description).forEach(function (k) { descObj[k] = original.description[k]; });
+			}
+			descObj[lang] = descVal;
+
+			promises.push(
+				FAZ.put('cookies/categories/' + id, {
+					name: nameObj,
+					description: descObj
+				})
+			);
+		});
+
+		Promise.allSettled(promises).then(function (results) {
+			var failed = results.filter(function (r) { return r.status === 'rejected'; }).length;
+			if (failed === 0) {
+				FAZ.notify('Categories saved.', 'success');
+			} else {
+				FAZ.notify((results.length - failed) + ' saved, ' + failed + ' failed.', 'error');
+			}
+			loadCategories();
+			loadCategoryEditor();
+			if (saveBtn) saveBtn.disabled = false;
+		});
 	}
 
 	function loadCookies(done) {
@@ -814,7 +958,6 @@
 							msg += ' | ' + staleCookieCount + ' stale cookie(s) highlighted';
 						}
 						msg += buildScanDiagnosticsHint(diagnostics, total);
-						console.log('[FAZ Scanner] Metrics:', scanMetrics);
 						if (diagnostics && diagnostics.totalIssues > 0) {
 							console.warn('[FAZ Scanner] Diagnostics:', diagnostics);
 						}
@@ -1425,6 +1568,73 @@
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify('Failed to save custom rules', 'error');
+		});
+	}
+
+	/* ── Blocker Templates ────────────────────────────── */
+
+	function loadBlockerTemplates() {
+		FAZ.get('blocker-templates').then(function (templates) {
+			var container = document.getElementById('faz-blocker-templates');
+			if (!container) return;
+
+			// Clear loading text safely
+			while (container.firstChild) container.removeChild(container.firstChild);
+
+			if (!templates || !templates.length) {
+				var emptyMsg = document.createElement('p');
+				emptyMsg.style.color = 'var(--faz-text-muted)';
+				emptyMsg.textContent = 'No templates available.';
+				container.appendChild(emptyMsg);
+				return;
+			}
+
+			templates.forEach(function (tpl) {
+				var card = document.createElement('button');
+				card.type = 'button';
+				card.style.cssText = 'padding:12px;border:1px solid var(--faz-border);border-radius:8px;cursor:pointer;transition:border-color 0.2s;background:none;display:block;width:100%;text-align:left;';
+				card.onmouseenter = function () { card.style.borderColor = 'var(--faz-primary)'; };
+				card.onmouseleave = function () { card.style.borderColor = 'var(--faz-border)'; };
+				card.onfocus = function () { card.style.borderColor = 'var(--faz-primary)'; };
+				card.onblur = function () { card.style.borderColor = 'var(--faz-border)'; };
+
+				var name = document.createElement('div');
+				name.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:4px;';
+				name.textContent = tpl.name;
+				card.appendChild(name);
+
+				var desc = document.createElement('div');
+				desc.style.cssText = 'font-size:11px;color:var(--faz-text-muted);margin-bottom:8px;line-height:1.4;';
+				desc.textContent = tpl.description;
+				card.appendChild(desc);
+
+				var badge = document.createElement('span');
+				badge.style.cssText = 'display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase;background:var(--faz-bg-secondary);color:var(--faz-text-secondary);';
+				badge.textContent = tpl.category;
+				card.appendChild(badge);
+
+				card.addEventListener('click', function () {
+					var patterns = Array.isArray(tpl.patterns) ? tpl.patterns : [];
+					if (!patterns.length) { FAZ.notify('No patterns in template.', 'error'); return; }
+					var added = 0;
+					patterns.forEach(function (pattern) {
+						addRuleRow(pattern, tpl.category);
+						added++;
+					});
+					FAZ.notify('Added ' + added + ' rules from ' + tpl.name, 'success');
+				});
+
+				container.appendChild(card);
+			});
+		}).catch(function () {
+			var container = document.getElementById('faz-blocker-templates');
+			if (container) {
+				while (container.firstChild) container.removeChild(container.firstChild);
+				var errMsg = document.createElement('p');
+				errMsg.style.color = 'var(--faz-danger, red)';
+				errMsg.textContent = 'Failed to load templates.';
+				container.appendChild(errMsg);
+			}
 		});
 	}
 

@@ -94,6 +94,16 @@ class Cookies_API extends API_Controller {
 
 		register_rest_route(
 			$this->namespace,
+			'/blocker-templates',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_blocker_templates' ),
+				'permission_callback' => array( $this, 'get_items_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/(?P<id>[\d]+)',
 			array(
 				'args'   => array(
@@ -307,6 +317,26 @@ class Cookies_API extends API_Controller {
 		}
 		do_action( 'faz_after_update_cookie' );
 		return rest_ensure_response( array( 'deleted' => $deleted ) );
+	}
+
+	/**
+	 * Return all available blocker templates.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function get_blocker_templates( $request ) {
+		$templates_dir = FAZ_PLUGIN_BASEPATH . 'admin/modules/cookies/includes/blocker-templates/';
+		$templates     = array();
+
+		foreach ( glob( $templates_dir . '*.json' ) as $file ) {
+			$data = json_decode( file_get_contents( $file ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			if ( $data && isset( $data['id'] ) ) {
+				$templates[] = $data;
+			}
+		}
+
+		return rest_ensure_response( $templates );
 	}
 
 } // End the class.

@@ -1,0 +1,47 @@
+{
+    "name": "Dark Professional",
+    "description": "Dark theme with professional appearance.",
+    "preview": "dark",
+    "config": {
+        "type": "banner",
+        "position": "bottom",
+        "theme": "dark",
+        "preferenceCenterType": "popup",
+        "notice": {
+            "styles": {
+                "background-color": "#1f2937",
+                "border-color": "#374151",
+                "color": "#d1d5db"
+            },
+            "elements": {
+                "title": { "styles": { "color": "#f9fafb" } },
+                "description": { "styles": { "color": "#9ca3af" } },
+                "buttons": {
+                    "elements": {
+                        "accept": {
+                            "styles": {
+                                "background-color": "#3b82f6",
+                                "color": "#ffffff",
+                                "border-color": "#3b82f6"
+                            }
+                        },
+                        "reject": {
+                            "styles": {
+                                "background-color": "transparent",
+                                "color": "#d1d5db",
+                                "border-color": "#4b5563"
+                            }
+                        },
+                        "settings": {
+                            "styles": {
+                                "background-color": "transparent",
+                                "color": "#9ca3af",
+                                "border-color": "transparent"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

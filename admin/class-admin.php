@@ -75,6 +75,9 @@ class Admin {
 		$this->load();
 		$this->load_modules();
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
+		if ( is_multisite() ) {
+			add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
+		}
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
@@ -82,7 +85,11 @@ class Admin {
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
 		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
+		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
+		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
+		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
+		add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
 	}
 
 	/**
@@ -183,6 +190,16 @@ class Admin {
 				'title' => __( 'Settings', 'faz-cookie-manager' ),
 				'slug'  => self::ADMIN_SLUG . '-settings',
 				'view'  => 'settings',
+			),
+			'import-export' => array(
+				'title' => __( 'Import / Export', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-import-export',
+				'view'  => 'import-export',
+			),
+			'system-status' => array(
+				'title' => __( 'System Status', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-system-status',
+				'view'  => 'system-status',
 			),
 		);
 	}
@@ -670,6 +687,82 @@ window.wp.apiFetch=apiFetch;
 	}
 
 	/**
+	 * Register a network admin menu page for multisite installs.
+	 *
+	 * @since 1.7.0
+	 * @return void
+	 */
+	public function register_network_menu() {
+		add_menu_page(
+			__( 'FAZ Cookie', 'faz-cookie-manager' ),
+			__( 'FAZ Cookie', 'faz-cookie-manager' ),
+			'manage_network_options',
+			'faz-cookie-manager-network',
+			array( $this, 'render_network_page' ),
+			'dashicons-food',
+			81
+		);
+	}
+
+	/**
+	 * Render the network admin overview page.
+	 *
+	 * Lists all subsites with their banner status and a link to each
+	 * subsite's admin configuration page.
+	 *
+	 * @since 1.7.0
+	 * @return void
+	 */
+	public function render_network_page() {
+		?>
+		<div class="wrap">
+			<h1><?php esc_html_e( 'FAZ Cookie Manager — Network', 'faz-cookie-manager' ); ?></h1>
+			<div class="card" style="max-width:800px;margin-top:20px;">
+				<h2><?php esc_html_e( 'Multisite Configuration', 'faz-cookie-manager' ); ?></h2>
+				<p><?php esc_html_e( 'FAZ Cookie Manager is network-activated. Each subsite has its own independent configuration.', 'faz-cookie-manager' ); ?></p>
+				<p><?php esc_html_e( 'Navigate to each subsite\'s admin panel to configure the cookie banner, categories, and settings.', 'faz-cookie-manager' ); ?></p>
+
+				<h3><?php esc_html_e( 'Active Sites', 'faz-cookie-manager' ); ?></h3>
+				<table class="widefat striped">
+					<thead>
+						<tr>
+							<th><?php esc_html_e( 'Site', 'faz-cookie-manager' ); ?></th>
+							<th><?php esc_html_e( 'Banner Status', 'faz-cookie-manager' ); ?></th>
+							<th><?php esc_html_e( 'Actions', 'faz-cookie-manager' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php
+						$site_ids = get_sites( array( 'number' => 0, 'fields' => 'ids' ) );
+						foreach ( $site_ids as $site_id ) :
+							switch_to_blog( $site_id );
+							$settings  = get_option( 'faz_settings' );
+							$banner_on = ! empty( $settings['banner_control']['status'] );
+							$admin_url = get_admin_url( $site_id, 'admin.php?page=faz-cookie-manager' );
+							$site_name = get_bloginfo( 'name' );
+							$site_obj  = get_site( $site_id );
+							restore_current_blog();
+						?>
+						<tr>
+							<td><strong><?php echo esc_html( $site_name ? $site_name : ( $site_obj ? $site_obj->domain . $site_obj->path : '#' . $site_id ) ); ?></strong></td>
+							<td>
+								<?php if ( $banner_on ) : ?>
+									<span style="color:green;">&#9679; <?php esc_html_e( 'Active', 'faz-cookie-manager' ); ?></span>
+								<?php else : ?>
+									<span style="color:#999;">&#9679; <?php esc_html_e( 'Inactive', 'faz-cookie-manager' ); ?></span>
+								<?php endif; ?>
+							</td>
+							<td><a href="<?php echo esc_url( $admin_url ); ?>"><?php esc_html_e( 'Configure', 'faz-cookie-manager' ); ?></a></td>
+						</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Render an admin page by including its view file.
 	 *
 	 * @return void
@@ -887,6 +980,88 @@ window.wp.apiFetch=apiFetch;
 	}
 
 	/**
+	 * Display a dismissible notice when a scheduled scan found new cookies.
+	 *
+	 * @return void
+	 */
+	public function scheduled_scan_notice() {
+		$new_count = get_transient( 'faz_scan_new_cookies' );
+		if ( ! $new_count ) {
+			return;
+		}
+
+		if ( ! faz_is_admin_page() ) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-info is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
+			sprintf(
+				/* translators: %d: number of new cookies found */
+				esc_html__( 'Scheduled scan found %d new cookie(s).', 'faz-cookie-manager' ),
+				absint( $new_count )
+			),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-cookies' ) ),
+			esc_html__( 'Review now', 'faz-cookie-manager' )
+		);
+
+		delete_transient( 'faz_scan_new_cookies' );
+	}
+
+	/**
+	 * Display a dismissible notice when detected services lack a matching selected IAB vendor.
+	 *
+	 * Only shown on FAZ admin pages when IAB TCF is enabled.
+	 *
+	 * @return void
+	 */
+	public function unmatched_vendors_notice() {
+		$unmatched = get_transient( 'faz_unmatched_vendors' );
+		if ( empty( $unmatched ) || ! is_array( $unmatched ) ) {
+			return;
+		}
+		if ( ! faz_is_admin_page() ) {
+			return;
+		}
+
+		$names = array_map(
+			function ( $u ) {
+				return '<strong>' . esc_html( $u['service'] ) . '</strong>';
+			},
+			$unmatched
+		);
+		$list = implode( ', ', $names );
+
+		$dismiss_nonce = wp_create_nonce( 'faz_dismiss_unmatched' );
+		printf(
+			'<div class="notice notice-warning is-dismissible" id="faz-unmatched-vendors-notice"><p>%s %s</p><p><a href="%s" class="button button-small">%s</a> <button type="button" class="button button-small button-link" onclick="jQuery(\'#faz-unmatched-vendors-notice\').fadeOut();jQuery.post(ajaxurl,{action:\'faz_dismiss_unmatched\',_wpnonce:\'%s\'});">%s</button></p></div>',
+			wp_kses_post(
+				sprintf(
+					/* translators: %s: comma-separated list of service names */
+					__( 'FAZ Cookie Manager detected services on your site that are not covered by any selected IAB vendor: %s.', 'faz-cookie-manager' ),
+					$list
+				)
+			),
+			esc_html__( 'Add the matching vendors to ensure proper TCF consent for these services.', 'faz-cookie-manager' ),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-gvl' ) ),
+			esc_html__( 'Go to Vendor List', 'faz-cookie-manager' ),
+			esc_attr( $dismiss_nonce ),
+			esc_html__( 'Dismiss', 'faz-cookie-manager' )
+		);
+	}
+
+	/**
+	 * AJAX handler: dismiss the unmatched vendors notice.
+	 *
+	 * @return void
+	 */
+	public function ajax_dismiss_unmatched_vendors() {
+		check_ajax_referer( 'faz_dismiss_unmatched', '_wpnonce' );
+		delete_transient( 'faz_unmatched_vendors' );
+		wp_die();
+	}
+
+	/**
 	 * Handle redirect after plugin activation.
 	 *
 	 * @param string $plugin Plugin basename.
@@ -913,6 +1088,77 @@ window.wp.apiFetch=apiFetch;
 			do_action( 'faz_after_first_time_install' );
 			delete_option( 'faz_first_time_activated_plugin' );
 		}
+	}
+
+	/**
+	 * Register the dashboard widget for consent stats overview.
+	 *
+	 * @since 1.5.0
+	 * @return void
+	 */
+	public function register_dashboard_widget() {
+		wp_add_dashboard_widget(
+			'faz_consent_widget',
+			__( 'Cookie Consent Overview', 'faz-cookie-manager' ),
+			array( $this, 'render_dashboard_widget' )
+		);
+	}
+
+	/**
+	 * Render the dashboard widget with consent statistics.
+	 *
+	 * Shows acceptance/rejection percentages and total interactions
+	 * from the last 30 days.
+	 *
+	 * @since 1.5.0
+	 * @return void
+	 */
+	public function render_dashboard_widget() {
+		global $wpdb;
+		$table  = $wpdb->prefix . 'faz_consent_logs';
+		$cutoff = date( 'Y-m-d H:i:s', strtotime( '-30 days', strtotime( current_time( 'mysql' ) ) ) ); // phpcs:ignore WordPress.DateTime.RestrictedFunctions.date_date
+
+		$stats = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT COUNT(*) as total,
+						SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
+				 FROM {$table}
+				 WHERE created_at >= %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$cutoff
+			),
+			ARRAY_A
+		);
+
+		$total    = intval( $stats['total'] ?? 0 );
+		$accepted = intval( $stats['accepted'] ?? 0 );
+		$rejected = intval( $stats['rejected'] ?? 0 );
+
+		$accept_pct = $total > 0 ? round( $accepted / $total * 100 ) : 0;
+		$reject_pct = $total > 0 ? round( $rejected / $total * 100 ) : 0;
+		?>
+		<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+			<div style="text-align:center;padding:12px;background:#f0f0f1;border-radius:6px;">
+				<div style="font-size:24px;font-weight:700;color:#00a32a;"><?php echo esc_html( $accept_pct ); ?>%</div>
+				<div style="font-size:12px;color:#646970;"><?php esc_html_e( 'Accepted', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div style="text-align:center;padding:12px;background:#f0f0f1;border-radius:6px;">
+				<div style="font-size:24px;font-weight:700;color:#d63638;"><?php echo esc_html( $reject_pct ); ?>%</div>
+				<div style="font-size:12px;color:#646970;"><?php esc_html_e( 'Rejected', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+		<p style="margin:0;font-size:13px;color:#646970;">
+			<?php
+			printf(
+				/* translators: %d: number of consent interactions in last 30 days */
+				esc_html__( '%d consent interactions in the last 30 days.', 'faz-cookie-manager' ),
+				$total
+			);
+			?>
+			<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager' ) ); ?>"><?php esc_html_e( 'View details', 'faz-cookie-manager' ); ?></a>
+		</p>
+		<?php
 	}
 
 	/**

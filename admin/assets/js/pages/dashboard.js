@@ -83,7 +83,7 @@
 			text = map[currentFilter.days] || ('Last ' + currentFilter.days + ' Days');
 		}
 
-		var ids = ['faz-chart-range-label', 'faz-consent-range-label'];
+		var ids = ['faz-chart-range-label', 'faz-consent-range-label', 'faz-consent-stats-range-label'];
 		ids.forEach(function (id) {
 			var el = document.getElementById(id);
 			if (el) el.textContent = text;
@@ -113,6 +113,7 @@
 		var params = buildParams();
 		loadStats(params);
 		loadChart(params);
+		loadConsentStats(params);
 	}
 
 	/* ── Stats + Donut ── */
@@ -265,6 +266,80 @@
 			ctx.font = '12px -apple-system, sans-serif';
 			ctx.textAlign = 'left';
 			ctx.fillText(seg.label + ' (' + Math.round(seg.value * 100) + '%)', x + 10, legendY + 4);
+		});
+	}
+
+	/* ── Consent Statistics ── */
+
+	function loadConsentStats(params) {
+		params = params || { days: currentFilter.days || 30 };
+		FAZ.get('consent_logs/stats', params).then(function (stats) {
+			if (!stats || !stats.totals) return;
+
+			var total    = parseInt(stats.totals.total, 10) || 0;
+			var accepted = parseInt(stats.totals.accepted, 10) || 0;
+			var rejected = parseInt(stats.totals.rejected, 10) || 0;
+			var partial  = parseInt(stats.totals.partial, 10) || 0;
+
+			var acceptEl  = document.getElementById('faz-cstat-accept-rate');
+			var rejectEl  = document.getElementById('faz-cstat-reject-rate');
+			var partialEl = document.getElementById('faz-cstat-partial-rate');
+			var totalEl   = document.getElementById('faz-cstat-total');
+
+			if (acceptEl)  acceptEl.textContent  = total > 0 ? Math.round(accepted / total * 100) + '%' : '--';
+			if (rejectEl)  rejectEl.textContent  = total > 0 ? Math.round(rejected / total * 100) + '%' : '--';
+			if (partialEl) partialEl.textContent  = total > 0 ? Math.round(partial / total * 100) + '%' : '--';
+			if (totalEl)   totalEl.textContent    = total.toLocaleString();
+
+			// Category bars — built with safe DOM methods.
+			var catContainer = document.getElementById('faz-category-bars');
+			if (catContainer && stats.categories) {
+				while (catContainer.firstChild) {
+					catContainer.removeChild(catContainer.firstChild);
+				}
+				var cats = stats.categories;
+				var hasCats = false;
+				for (var cat in cats) {
+					if (!cats.hasOwnProperty(cat) || cat === 'necessary') continue;
+					hasCats = true;
+					var yes = cats[cat].yes || 0;
+					var no  = cats[cat].no || 0;
+					var catTotal = yes + no;
+					var pct = catTotal > 0 ? Math.round(yes / catTotal * 100) : 0;
+					var label = cat.charAt(0).toUpperCase() + cat.slice(1);
+
+					var wrap = document.createElement('div');
+					wrap.className = 'faz-category-bar-wrap';
+
+					var barLabel = document.createElement('div');
+					barLabel.className = 'faz-category-bar-label';
+					var nameSpan = document.createElement('span');
+					nameSpan.textContent = label;
+					var pctSpan = document.createElement('span');
+					pctSpan.textContent = pct + '%';
+					barLabel.appendChild(nameSpan);
+					barLabel.appendChild(pctSpan);
+
+					var barOuter = document.createElement('div');
+					barOuter.className = 'faz-category-bar';
+					var barFill = document.createElement('div');
+					barFill.className = 'faz-category-bar-fill';
+					barFill.style.width = pct + '%';
+					barOuter.appendChild(barFill);
+
+					wrap.appendChild(barLabel);
+					wrap.appendChild(barOuter);
+					catContainer.appendChild(wrap);
+				}
+				if (!hasCats) {
+					var emptyP = document.createElement('p');
+					emptyP.style.color = 'var(--faz-text-muted)';
+					emptyP.textContent = 'No category data yet.';
+					catContainer.appendChild(emptyP);
+				}
+			}
+		}).catch(function () {
+			// Silently fail — stats card shows default dashes.
 		});
 	}
 

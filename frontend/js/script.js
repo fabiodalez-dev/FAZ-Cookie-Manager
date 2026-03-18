@@ -51,7 +51,10 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
     .split(",")
     .reduce((prev, curr) => {
         if (!curr) return prev;
-        const [key, value] = curr.split(":");
+        const sepIdx = curr.lastIndexOf(":");
+        if (sepIdx === -1) return prev;
+        const key = curr.substring(0, sepIdx);
+        const value = curr.substring(sepIdx + 1);
         prev[key] = value;
         return prev;
     }, {});
@@ -60,6 +63,15 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
     .forEach((item) =>
         ref._fazConsentStore.set(item, fazcookieConsentMap[item] || "")
     );
+// Restore per-service consent keys (svc.service-id) from existing cookie.
+if (_fazStore._perServiceConsent && _fazStore._services) {
+    _fazStore._services.forEach(function(svc) {
+        const svcKey = "svc." + svc.id;
+        if (fazcookieConsentMap[svcKey]) {
+            ref._fazConsentStore.set(svcKey, fazcookieConsentMap[svcKey]);
+        }
+    });
+}
 
 
 /**
@@ -125,6 +137,21 @@ function _fazGetElementByTag(tag) {
     return item ? item : false;
 }
 
+/**
+ * Parse a trusted HTML string into a DocumentFragment.
+ *
+ * Used to convert server-rendered shortcode HTML (buttons, links) into DOM
+ * nodes for safe insertion without innerHTML/insertAdjacentHTML.  The HTML
+ * originates from PHP wp_kses-sanitized shortcodes and template JSON.
+ *
+ * @param {string} html  Trusted HTML string from server shortcodes.
+ * @returns {DocumentFragment}
+ */
+function _fazParseHTML(html) {
+    var tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    return tpl.content.cloneNode(true);
+}
 
 /**
  * Bind click event to banner elements.
@@ -303,6 +330,13 @@ function _fazSetInitialState() {
         if (valueToSet === "no") responseCategories.rejected.push(category.slug);
         else responseCategories.accepted.push(category.slug);
         ref._fazSetInStore(`${category.slug}`, valueToSet);
+    }
+    // Set initial per-service consent (all "no" = blocked before consent, matching category).
+    if (_fazStore._perServiceConsent && _fazStore._services) {
+        _fazStore._services.forEach(function(svc) {
+            var catValue = ref._fazGetFromStore(svc.category);
+            ref._fazSetInStore("svc." + svc.id, catValue || "no");
+        });
     }
     _fazUnblock();
     _fazFireEvent(responseCategories);
@@ -903,13 +937,19 @@ function _fazRenderBanner() {
     const templateHtml = template.innerHTML;
     const doc = new DOMParser().parseFromString(templateHtml, 'text/html');
     _fazSetFooterShadow(doc);
-    document.body.insertAdjacentHTML(
-        "afterbegin",
-        doc.body.innerHTML
-    );
+    // Insert parsed DOM nodes instead of re-serializing to HTML string.
+    // The template content originates from PHP wp_kses-sanitized HTML in
+    // a <template> element; DOMParser is used only to apply footer shadow
+    // styles before insertion.
+    var fragment = document.createDocumentFragment();
+    while (doc.body.firstChild) {
+        fragment.appendChild(doc.body.firstChild);
+    }
+    document.body.insertBefore(fragment, document.body.firstChild);
     if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') _fazToggleAriaExpandStatus("=settings-button", "false");
     _fazSetPreferenceCheckBoxStates();
     _fazRenderVendorSection();
+    _fazRenderServiceToggles();
     _fazAttachCategoryListeners();
     _fazRegisterListeners();
     _fazSetCCPAOptions();
@@ -927,9 +967,82 @@ function _fazRenderBanner() {
 }
 
 /**
+ * Simple translation helper — checks _fazStore._shortCodes first, falls back to default.
+ *
+ * @param {string} key      Shortcode key (without faz_ prefix).
+ * @param {string} fallback Default text if no shortcode found.
+ * @returns {string}
+ */
+function _fazTranslate(key, fallback) {
+    if (_fazStore._shortCodes) {
+        var found = _fazStore._shortCodes.find(function(s) { return s.key === 'faz_' + key; });
+        if (found && found.content) return found.content;
+    }
+    return fallback;
+}
+
+/**
+ * Show the age verification modal (GDPR Art. 8).
+ * Under-age visitors are treated as reject (only necessary cookies).
+ *
+ * @param {string} pendingChoice  The consent choice to execute if age-verified.
+ */
+function _fazShowAgeGate(pendingChoice) {
+    var minAge = (_fazStore._ageGate && _fazStore._ageGate.minAge)
+        ? _fazStore._ageGate.minAge
+        : 16;
+
+    // Create modal overlay
+    var overlay = document.createElement('div');
+    overlay.id = 'faz-age-gate';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;';
+
+    var modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;border-radius:12px;padding:32px;max-width:400px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+
+    var title = document.createElement('h3');
+    title.style.cssText = 'margin:0 0 12px;font-size:18px;';
+    title.textContent = _fazTranslate('age_gate_title', 'Age Verification');
+    modal.appendChild(title);
+
+    var msg = document.createElement('p');
+    msg.style.cssText = 'margin:0 0 20px;color:#666;font-size:14px;line-height:1.5;';
+    msg.textContent = _fazTranslate('age_gate_message', 'You must be at least ' + minAge + ' years old to accept optional cookies on this site.');
+    modal.appendChild(msg);
+
+    var btnYes = document.createElement('button');
+    btnYes.type = 'button';
+    btnYes.style.cssText = 'background:#1863DC;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;margin:0 6px;';
+    btnYes.textContent = _fazTranslate('age_gate_yes', 'I am ' + minAge + ' or older');
+    btnYes.addEventListener('click', function() {
+        sessionStorage.setItem('faz_age_verified', '1');
+        overlay.remove();
+        _fazAcceptCookies(pendingChoice);
+    });
+    modal.appendChild(btnYes);
+
+    var btnNo = document.createElement('button');
+    btnNo.type = 'button';
+    btnNo.style.cssText = 'background:transparent;color:#666;border:1px solid #ccc;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;margin:0 6px;';
+    btnNo.textContent = _fazTranslate('age_gate_no', 'I am under ' + minAge);
+    btnNo.addEventListener('click', function() {
+        overlay.remove();
+        // Under-age: treat as reject (only necessary cookies)
+        _fazAcceptCookies('reject');
+        _fazRemoveBanner();
+        _fazHidePreferenceCenter();
+        _fazAfterConsent();
+    });
+    modal.appendChild(btnNo);
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+}
+
+/**
  * Accept or reject the consent based on the option.
- * 
- * @param {string} option Type of consent. 
+ *
+ * @param {string} option Type of consent.
  * @returns {void}
  */
 function _fazAcceptReject(option = "custom") {
@@ -949,10 +1062,18 @@ function _fazActionClose() {
 }
 /**
  * Consent accept callback.
- * 
+ *
  * @param {string} choice  Type of consent.
  */
 function _fazAcceptCookies(choice = "all") {
+    // Age gate check (GDPR Art. 8): only on accept/partial, never on reject.
+    if (choice !== 'reject' && _fazStore._ageGate && _fazStore._ageGate.enabled) {
+        if (!sessionStorage.getItem('faz_age_verified')) {
+            _fazShowAgeGate(choice);
+            return;
+        }
+    }
+
     // Snapshot accepted categories before updating consent, so _fazAfterConsent
     // can detect revocations (executed JS cannot be unloaded — needs page reload).
     _fazCategoriesBeforeConsent = [];
@@ -990,6 +1111,27 @@ function _fazAcceptCookies(choice = "all") {
             _fazRemoveDeadCookies(category);
         } else responseCategories.accepted.push(category.slug);
     }
+    // Handle per-service consent.
+    if (_fazStore._perServiceConsent && _fazStore._services) {
+        _fazStore._services.forEach(function(svc) {
+            var svcKey = "svc." + svc.id;
+            if (choice === "all") {
+                ref._fazSetInStore(svcKey, "yes");
+            } else if (choice === "reject") {
+                ref._fazSetInStore(svcKey, "no");
+            } else if (choice === "custom") {
+                var svcToggle = document.querySelector('.faz-service-toggle[data-service="' + svc.id + '"]');
+                if (svcToggle) {
+                    ref._fazSetInStore(svcKey, svcToggle.checked ? "yes" : "no");
+                } else {
+                    // No toggle found — follow category consent.
+                    var catConsent = ref._fazGetFromStore(svc.category);
+                    ref._fazSetInStore(svcKey, catConsent || "no");
+                }
+            }
+        });
+    }
+
     // Handle IAB vendor consent.
     _fazSaveVendorConsent(choice);
 
@@ -1016,54 +1158,58 @@ function _fazSetShowMoreLess() {
     if (!element) return;
     const content = element.textContent;
     if (content.length < contentLimit) return;
+
+    // Snapshot the original DOM content (already rendered, safe).
+    const originalNodes = document.createDocumentFragment();
+    Array.from(element.childNodes).forEach(function (n) {
+        originalNodes.appendChild(n.cloneNode(true));
+    });
+
     const contentHTML = element.innerHTML;
     const htmlDoc = new DOMParser().parseFromString(contentHTML, "text/html");
     const innerElements = htmlDoc.querySelectorAll("body > p");
     if (innerElements.length <= 1) return;
-    let strippedContent = ``;
+
+    // Build truncated DOM fragment from paragraphs.
+    let strippedLen = 0;
+    const truncatedFragment = document.createDocumentFragment();
     for (let index = 0; index < innerElements.length; index++) {
         if (index === innerElements.length - 1) return;
-        const element = innerElements[index];
-        if (`${strippedContent}${element.outerHTML}`.length > contentLimit)
-            element.insertAdjacentHTML("beforeend", `...&nbsp;${showButtonContent}`);
-        strippedContent = `${strippedContent}${element.outerHTML}`;
-        if (strippedContent.length > contentLimit) break;
+        const para = innerElements[index];
+        const paraHTML = para.outerHTML;
+        if (strippedLen + paraHTML.length > contentLimit) {
+            // Append ellipsis and show-more button to this paragraph via DOM.
+            para.appendChild(document.createTextNode('...\u00A0'));
+            var showBtnNodes = _fazParseHTML(showButtonContent);
+            para.appendChild(showBtnNodes);
+        }
+        // Adopt the paragraph node into the live document.
+        truncatedFragment.appendChild(document.adoptNode(para));
+        strippedLen += paraHTML.length;
+        if (strippedLen > contentLimit) break;
     }
+
     function showMoreHandler() {
-        element.innerHTML = `${contentHTML}${hideButtonContent}`;
+        // Replace content with full original nodes + hide button.
+        while (element.firstChild) element.removeChild(element.firstChild);
+        Array.from(originalNodes.childNodes).forEach(function (n) {
+            element.appendChild(n.cloneNode(true));
+        });
+        element.appendChild(_fazParseHTML(hideButtonContent));
         _fazAttachListener("=hide-desc-button", showLessHandler);
         _fazAttachShowMoreLessStyles();
     }
     function showLessHandler() {
-        element.innerHTML = strippedContent;
+        // Replace content with truncated nodes (cloned each time).
+        while (element.firstChild) element.removeChild(element.firstChild);
+        Array.from(truncatedFragment.childNodes).forEach(function (n) {
+            element.appendChild(n.cloneNode(true));
+        });
         _fazAttachListener("=show-desc-button", showMoreHandler);
         _fazAttachShowMoreLessStyles();
     }
     showLessHandler();
 }
-/**
- * Toggle show more or less on click event.
- * 
- * @param {object} object Object containing toggle buttons and texts.
- * @param {*} element Target element.
- */
-function _fazToggleMoreLess(object, element) {    let {
-        currentTarget,
-        target
-    } = element;
-    if (target && target.tagName.toUpperCase() !== 'BUTTON') return;
-    const ariaExpanded = currentTarget.getAttribute('aria-expanded');
-    const trimmed = ariaExpanded === 'false';
-    let btn = object.btnTrim;
-    let text = object.originalText;
-    if (!trimmed) {
-        btn = object.btnExpand;
-        text = object.truncatedText;
-    }
-    currentTarget.innerHTML = `${text}${btn}`;
-    currentTarget.ariaExpanded = trimmed;
-}
-
 /**
  * Add styles to the shortcode HTML rendered outside of the banner.
  * 
@@ -1231,10 +1377,11 @@ function _fazIsAllowedScheme(url) {
  * - Stylesheets: data-faz-href + data-faz-category     → restore href
  */
 function _fazUnblockServerSide() {
-    // 1. Scripts.
-    document.querySelectorAll('script[type="text/plain"][data-faz-category]')
+    // 1. Scripts (data-faz-category from server-side, data-fazcookie from client-side).
+    document.querySelectorAll('script[type="text/plain"][data-faz-category], script[type="javascript/blocked"][data-fazcookie]')
         .forEach(function (script) {
-            var category = script.getAttribute("data-faz-category");
+            var category = script.getAttribute("data-faz-category")
+                || (script.getAttribute("data-fazcookie") || "").replace("fazcookie-", "");
             if (_fazIsCategoryToBeBlocked(category)) return;
             var clone = _fazCreateElementBackup.call(document, "script");
             var origType = script.getAttribute("data-faz-original-type");
@@ -1245,12 +1392,69 @@ function _fazUnblockServerSide() {
                 if (attr.name === "type" || attr.name === "src" || attr.name === "data-faz-category" || attr.name === "data-faz-original-type") continue;
                 clone.setAttribute(attr.name, attr.value);
             }
-            if (script.src) clone.src = script.src;
-            else clone.textContent = script.textContent;
-            script.parentNode.replaceChild(clone, script);
+            var scriptSrc = script.getAttribute('src') || script.src;
+            if (scriptSrc) {
+                // data: URIs cannot be loaded as external script src in most
+                // browsers; decode and execute as inline content instead.
+                if (scriptSrc.indexOf('data:') === 0) {
+                    try {
+                        clone.textContent = decodeURIComponent(scriptSrc.split(',').slice(1).join(','));
+                    } catch (_e) {
+                        clone.src = scriptSrc;
+                    }
+                } else {
+                    clone.src = scriptSrc;
+                }
+            } else {
+                clone.textContent = script.textContent;
+            }
+            if (script.parentNode) script.parentNode.replaceChild(clone, script);
         });
 
-    // 2. Iframes (may be inside placeholder wrappers).
+    // 2. Placeholders with <template> content (iframes, oEmbeds).
+    // The Placeholder_Builder wraps blocked content in a <template> inside
+    // a .faz-placeholder div. Restore by replacing the placeholder with the
+    // template content, then process the unblocked iframes/scripts within.
+    document.querySelectorAll('.faz-placeholder[data-faz-category]')
+        .forEach(function (placeholder) {
+            // Skip social placeholders — handled separately in step 6.
+            if (placeholder.classList.contains('faz-social-placeholder')) return;
+            var cat = placeholder.getAttribute("data-faz-category");
+            if (_fazIsCategoryToBeBlocked(cat)) return;
+            var tpl = placeholder.querySelector('template.faz-placeholder-content');
+            if (!tpl) return;
+            // Clone template content into a document fragment for safe DOM insertion.
+            // The template content is trusted server-rendered markup (the original
+            // blocked iframe/oEmbed HTML), not user-supplied input.
+            var fragment = tpl.content.cloneNode(true);
+            // Restore blocked iframes inside the template content.
+            fragment.querySelectorAll('iframe[data-faz-src]').forEach(function (iframe) {
+                var fazSrc = iframe.getAttribute("data-faz-src");
+                if (!_fazIsAllowedScheme(fazSrc)) return;
+                iframe.src = fazSrc;
+                iframe.removeAttribute("data-faz-src");
+                iframe.style.display = "";
+            });
+            // Restore blocked scripts inside the template content.
+            fragment.querySelectorAll('script[type="text/plain"][data-faz-category]').forEach(function (script) {
+                var clone = _fazCreateElementBackup.call(document, "script");
+                var origType = script.getAttribute("data-faz-original-type");
+                clone.type = origType || "text/javascript";
+                for (var i = 0; i < script.attributes.length; i++) {
+                    var attr = script.attributes[i];
+                    if (attr.name === "type" || attr.name === "src" || attr.name === "data-faz-category" || attr.name === "data-faz-original-type") continue;
+                    clone.setAttribute(attr.name, attr.value);
+                }
+                if (script.src) clone.src = script.src;
+                else clone.textContent = script.textContent;
+                script.parentNode.replaceChild(clone, script);
+            });
+            // Replace placeholder with restored content.
+            placeholder.parentNode.insertBefore(fragment, placeholder);
+            placeholder.remove();
+        });
+
+    // 2b. Standalone iframes with data-faz-src (not inside a placeholder).
     document.querySelectorAll('iframe[data-faz-src][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
@@ -1260,7 +1464,7 @@ function _fazUnblockServerSide() {
             el.src = fazSrc;
             el.removeAttribute("data-faz-src");
             el.style.display = "";
-            // Remove placeholder wrapper if present.
+            // Remove legacy placeholder wrapper if present.
             var placeholder = el.closest('.faz-iframe-placeholder');
             if (placeholder) {
                 placeholder.parentNode.insertBefore(el, placeholder);
@@ -1372,6 +1576,24 @@ function _fazIsCategoryToBeBlocked(category) {
     );
 }
 
+/**
+ * Build a lookup map from provider pattern → service ID (lazily cached).
+ * Used by _fazShouldBlockProvider when per-service consent is active.
+ */
+var _fazPatternServiceMap = null;
+function _fazGetPatternServiceMap() {
+    if (_fazPatternServiceMap) return _fazPatternServiceMap;
+    _fazPatternServiceMap = {};
+    if (!_fazStore._services) return _fazPatternServiceMap;
+    _fazStore._services.forEach(function(svc) {
+        if (!svc.patterns) return;
+        svc.patterns.forEach(function(p) {
+            _fazPatternServiceMap[p] = svc.id;
+        });
+    });
+    return _fazPatternServiceMap;
+}
+
 function _fazShouldBlockProvider(formattedRE) {
     if (!formattedRE) return false;
     const provider = _fazStore._providersToBlock.find(({ re }) => {
@@ -1385,10 +1607,21 @@ function _fazShouldBlockProvider(formattedRE) {
         }
         return true;
     });
-    return (
-        provider &&
-        provider.categories.some((category) => _fazIsCategoryToBeBlocked(category))
-    );
+    if (!provider) return false;
+
+    // Per-service consent: check the specific service first.
+    if (_fazStore._perServiceConsent && _fazStore._services && provider.re) {
+        var psMap = _fazGetPatternServiceMap();
+        var serviceId = psMap[provider.re];
+        if (serviceId) {
+            var svcConsent = ref._fazGetFromStore("svc." + serviceId);
+            if (svcConsent === "yes") return false; // Explicitly allowed.
+            if (svcConsent === "no") return true;   // Explicitly blocked.
+            // No specific consent — fall through to category check.
+        }
+    }
+
+    return provider.categories.some((category) => _fazIsCategoryToBeBlocked(category));
 }
 function _fazShouldChangeType(element, src) {
     return (
@@ -1496,19 +1729,16 @@ function _fazAttachReadMore() {
         '[data-faz-tag="description"]'
     );
     if (!readMoreElement) return;
+    // Append the readmore button/link via DOM nodes instead of insertAdjacentHTML.
+    // The content is a PHP wp_kses-sanitized shortcode (<a> or <button> tag).
+    var readMoreNodes = _fazParseHTML('\u00A0' + content);
     if (readMoreElement.childNodes.length > 1) {
         const innerElement = document.querySelector(
             '[data-faz-tag="description"] p:last-child'
         );
-        innerElement && innerElement.insertAdjacentHTML(
-            "beforeend",
-            `&nbsp;${content}`
-        );
+        if (innerElement) innerElement.appendChild(readMoreNodes);
     } else {
-        readMoreElement.insertAdjacentHTML(
-            "beforeend",
-            `&nbsp;${content}`
-        );
+        readMoreElement.appendChild(readMoreNodes);
     }
     const placeHolders = document.querySelectorAll(
         `[data-faz-tag="readmore-button"]`
@@ -1607,7 +1837,18 @@ var _fazCategoriesBeforeConsent = null;
 
 function _fazAfterConsent() {
     if (_fazGetLaw() === 'gdpr') _fazSetPreferenceCheckBoxStates(true);
+    _fazUpdateServiceToggleStates();
     _fazUpdateVendorCheckboxStates();
+
+    // GTM Data Layer integration — push consent state after every consent action (configurable).
+    if (_fazStore._gtmDataLayer && typeof window.dataLayer !== 'undefined') {
+        var consentData = { event: 'faz_consent_update' };
+        var cats = _fazStore._categories || [];
+        for (var i = 0; i < cats.length; i++) {
+            consentData['faz_' + cats[i].slug] = ref._fazGetFromStore(cats[i].slug) === 'yes' ? 'granted' : 'denied';
+        }
+        window.dataLayer.push(consentData);
+    }
 
     // Clean up cookies from categories the user has not consented to.
     _fazCleanupRevokedCookies();
@@ -1642,24 +1883,87 @@ function _fazAfterConsent() {
         _nodeListObserver.disconnect();
         document.createElement = _fazCreateElementBackup;
     }
+
+    // Cross-domain consent forwarding: send consent to configured target domains.
+    if (_fazStore._consentForwarding && _fazStore._consentForwarding.enabled) {
+        var targets = _fazStore._consentForwarding.targets || [];
+        var consentMatch = document.cookie.match(/fazcookie-consent=([^;]+)/);
+        if (consentMatch && targets.length > 0) {
+            targets.forEach(function(targetUrl) {
+                if (!_fazIsAllowedScheme(targetUrl)) return;
+                var iframe = document.createElement('iframe');
+                iframe.style.cssText = 'display:none;width:0;height:0;border:0;';
+                iframe.src = targetUrl + '?faz_consent_forward=1';
+                iframe.addEventListener('load', function() {
+                    try {
+                        iframe.contentWindow.postMessage({
+                            type: 'faz_consent_forward',
+                            consent: consentMatch[1]
+                        }, new URL(targetUrl).origin);
+                    } catch(e) { /* cross-origin error — ignore */ }
+                    setTimeout(function() { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
+                });
+                document.body.appendChild(iframe);
+            });
+        }
+    }
+}
+
+/**
+ * Delete a single cookie by name, trying multiple path and domain combinations
+ * to ensure deletion regardless of how the cookie was originally set.
+ */
+function _fazDeleteCookie(name) {
+    var paths = ['/', window.location.pathname];
+    var hostname = window.location.hostname;
+    var rootDomain = _fazStore._rootDomain || '';
+    var domains = ['', hostname];
+    if (hostname.indexOf('.') !== -1) {
+        domains.push('.' + hostname);
+    }
+    if (rootDomain && domains.indexOf(rootDomain) === -1) {
+        domains.push(rootDomain);
+    }
+    if (rootDomain && rootDomain.charAt(0) !== '.') {
+        var dotRoot = '.' + rootDomain;
+        if (domains.indexOf(dotRoot) === -1) {
+            domains.push(dotRoot);
+        }
+    }
+
+    var expires = '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=';
+    for (var pi = 0; pi < paths.length; pi++) {
+        for (var di = 0; di < domains.length; di++) {
+            var cookieStr = name + expires + paths[pi];
+            if (domains[di]) cookieStr += ';domain=' + domains[di];
+            document.cookie = cookieStr;
+        }
+    }
 }
 
 /**
  * Delete cookies belonging to categories the user has NOT consented to.
  * Uses the _cookieCategoryMap provided by the server (Known Providers cookie map).
+ *
+ * Skips the plugin's own consent-tracking cookies (fazcookie-consent,
+ * fazVendorConsent, euconsent-v2) so that consent state is preserved.
  */
 function _fazCleanupRevokedCookies() {
     var cookieMap = _fazStore._cookieCategoryMap;
     if (!cookieMap || typeof cookieMap !== "object") return;
 
+    // Plugin cookies that must never be deleted.
+    var protectedCookies = ['fazcookie-consent', 'fazVendorConsent', 'euconsent-v2'];
+
     var currentCookies = document.cookie.split(";");
-    var domain = _fazStore._rootDomain || "";
-    var domainSuffix = domain ? ";domain=" + domain : "";
 
     for (var i = 0; i < currentCookies.length; i++) {
         var parts = currentCookies[i].split("=");
         var cookieName = (parts[0] || "").trim();
         if (!cookieName) continue;
+
+        // Never delete the plugin's own cookies.
+        if (protectedCookies.indexOf(cookieName) !== -1) continue;
 
         for (var pattern in cookieMap) {
             if (!cookieMap.hasOwnProperty(pattern)) continue;
@@ -1668,9 +1972,7 @@ function _fazCleanupRevokedCookies() {
             if (!_fazIsCategoryToBeBlocked(category)) continue;
 
             if (_fazCookieNameMatches(cookieName, pattern)) {
-                // Delete from all possible paths and domains.
-                document.cookie = cookieName + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-                document.cookie = cookieName + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/" + domainSuffix;
+                _fazDeleteCookie(cookieName);
                 break;
             }
         }
@@ -1713,10 +2015,12 @@ function _fazAddPlaceholder(htmlElm, uniqueID) {
     const videoPlaceHolderDataCode = shortCodeData.content;
     const { offsetWidth, offsetHeight } = htmlElm;
     if (offsetWidth === 0 || offsetHeight === 0) return;
-    htmlElm.insertAdjacentHTML(
-        "beforebegin",
+    // Insert placeholder via DOM nodes instead of insertAdjacentHTML.
+    // The HTML is a PHP wp_kses-sanitized shortcode template.
+    var placeholderNodes = _fazParseHTML(
         `${videoPlaceHolderDataCode}`.replace("[UNIQUEID]", uniqueID)
     );
+    htmlElm.parentNode.insertBefore(placeholderNodes, htmlElm);
     const addedNode = document.getElementById(uniqueID);
     addedNode.style.width = `${offsetWidth}px`;
     addedNode.style.height = `${offsetHeight}px`;
@@ -1802,6 +2106,24 @@ function _fazWatchBannerElement() {
         )
             _revisitFazConsent();
     });
+
+    // Delegate clicks on .faz-consent-trigger elements (blocks, shortcodes).
+    document.querySelector("body").addEventListener("click", function (event) {
+        var trigger = event.target.closest(".faz-consent-trigger");
+        if (!trigger) return;
+        event.preventDefault();
+        _revisitFazConsent();
+    });
+
+    // Delegate clicks on placeholder "Accept cookies" buttons.
+    document.querySelector("body").addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-faz-accept]");
+        if (!btn) return;
+        var cat = btn.getAttribute("data-faz-accept");
+        if (cat && typeof window._fazAcceptCategory === "function") {
+            window._fazAcceptCategory(cat);
+        }
+    });
 }
 
 function _fazRemoveAllDeadCookies() {
@@ -1865,6 +2187,130 @@ function _fazSetCheckBoxInfo(
 }
 
 window.revisitFazConsent = () => _revisitFazConsent();
+
+/**
+ * Render per-service toggles inside each category accordion (if per-service consent enabled).
+ */
+function _fazRenderServiceToggles() {
+    if (!_fazStore._perServiceConsent || !_fazStore._services || !_fazStore._services.length) return;
+
+    // Get toggle colors from banner config (matching category toggles).
+    var prefToggle = _fazStore._bannerConfig && _fazStore._bannerConfig.config
+        ? _fazStore._bannerConfig.config.preferenceCenter && _fazStore._bannerConfig.config.preferenceCenter.toggle
+        : null;
+    var activeColor = (prefToggle && prefToggle.states && prefToggle.states.active && prefToggle.states.active.styles)
+        ? prefToggle.states.active.styles['background-color'] || '#1863dc' : '#1863dc';
+    var inactiveColor = (prefToggle && prefToggle.states && prefToggle.states.inactive && prefToggle.states.inactive.styles)
+        ? prefToggle.states.inactive.styles['background-color'] || '#d0d5d2' : '#d0d5d2';
+
+    _fazStore._categories.forEach(function(category) {
+        if (category.isNecessary || category.slug === 'necessary') return;
+
+        // Find the accordion body for this category.
+        var accordionEl = document.getElementById('fazDetailCategory' + category.slug);
+        if (!accordionEl) return;
+        var accordionBody = accordionEl.querySelector('.faz-accordion-body');
+        if (!accordionBody) return;
+
+        // Get services for this category.
+        var categoryServices = _fazStore._services.filter(function(s) { return s.category === category.slug; });
+        if (!categoryServices.length) return;
+
+        // Create service toggles container.
+        var serviceList = document.createElement('div');
+        serviceList.className = 'faz-service-list';
+        serviceList.setAttribute('data-faz-category', category.slug);
+        serviceList.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.1);';
+
+        var serviceTitle = document.createElement('div');
+        serviceTitle.style.cssText = 'font-size:12px;color:#888;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;';
+        serviceTitle.textContent = 'Services';
+        serviceList.appendChild(serviceTitle);
+
+        categoryServices.forEach(function(service) {
+            var row = document.createElement('div');
+            row.className = 'faz-service-row';
+            row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:4px 0;';
+
+            var label = document.createElement('span');
+            label.style.cssText = 'font-size:13px;';
+            label.textContent = service.label;
+            row.appendChild(label);
+
+            // Toggle switch (same visual structure as category toggles).
+            var switchWrap = document.createElement('div');
+            switchWrap.className = 'faz-switch';
+            switchWrap.style.cssText = 'flex-shrink:0;';
+
+            var checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'faz-service-toggle';
+            checkbox.setAttribute('data-service', service.id);
+            checkbox.setAttribute('data-category', service.category);
+            checkbox.setAttribute('aria-label', 'Service consent: ' + service.label);
+
+            // Determine checked state: explicit service consent > category consent.
+            var svcConsent = ref._fazGetFromStore('svc.' + service.id);
+            var catConsent = ref._fazGetFromStore(service.category);
+            checkbox.checked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
+            checkbox.style.backgroundColor = checkbox.checked ? activeColor : inactiveColor;
+
+            checkbox.addEventListener('change', function() {
+                this.style.backgroundColor = this.checked ? activeColor : inactiveColor;
+                // When a service is unchecked but category is checked, keep the category
+                // on — individual service opt-out within an accepted category.
+            });
+
+            switchWrap.appendChild(checkbox);
+            row.appendChild(switchWrap);
+            serviceList.appendChild(row);
+        });
+
+        accordionBody.appendChild(serviceList);
+    });
+
+    // Sync: when a category toggle changes, update all its service toggles.
+    _fazStore._categories.forEach(function(category) {
+        if (category.isNecessary || category.slug === 'necessary') return;
+
+        ['fazSwitch', 'fazCategoryDirect'].forEach(function(prefix) {
+            var catToggle = document.getElementById(prefix + category.slug);
+            if (!catToggle) return;
+            catToggle.addEventListener('change', function() {
+                var isChecked = catToggle.checked;
+                document.querySelectorAll('.faz-service-toggle[data-category="' + category.slug + '"]')
+                    .forEach(function(svcToggle) {
+                        svcToggle.checked = isChecked;
+                        svcToggle.style.backgroundColor = isChecked ? activeColor : inactiveColor;
+                    });
+            });
+        });
+    });
+}
+
+/**
+ * Update per-service toggle states from the consent store (e.g., on revisit).
+ */
+function _fazUpdateServiceToggleStates() {
+    if (!_fazStore._perServiceConsent || !_fazStore._services) return;
+    var prefToggle = _fazStore._bannerConfig && _fazStore._bannerConfig.config
+        ? _fazStore._bannerConfig.config.preferenceCenter && _fazStore._bannerConfig.config.preferenceCenter.toggle
+        : null;
+    var activeColor = (prefToggle && prefToggle.states && prefToggle.states.active && prefToggle.states.active.styles)
+        ? prefToggle.states.active.styles['background-color'] || '#1863dc' : '#1863dc';
+    var inactiveColor = (prefToggle && prefToggle.states && prefToggle.states.inactive && prefToggle.states.inactive.styles)
+        ? prefToggle.states.inactive.styles['background-color'] || '#d0d5d2' : '#d0d5d2';
+
+    document.querySelectorAll('.faz-service-toggle').forEach(function(toggle) {
+        var serviceId = toggle.getAttribute('data-service');
+        var category = toggle.getAttribute('data-category');
+        var svcConsent = ref._fazGetFromStore('svc.' + serviceId);
+        var catConsent = ref._fazGetFromStore(category);
+        var isChecked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
+        toggle.checked = isChecked;
+        toggle.style.backgroundColor = isChecked ? activeColor : inactiveColor;
+    });
+}
 
 /**
  * Render IAB vendor section in preference center (if IAB enabled).
@@ -2141,6 +2587,9 @@ window._fazAcceptCategory = function (categorySlug) {
             if (cb) cb.checked = true;
             var cbDirect = document.getElementById("fazCategoryDirect" + cat.slug);
             if (cbDirect) cbDirect.checked = true;
+            // Sync service toggles for this category.
+            document.querySelectorAll('.faz-service-toggle[data-category="' + cat.slug + '"]')
+                .forEach(function(svcToggle) { svcToggle.checked = true; });
             break;
         }
     }
@@ -2174,3 +2623,27 @@ window.getFazConsent = function () {
 
     return cookieConsent;
 };
+
+// Cross-domain consent forwarding: listen for incoming consent from other domains.
+window.addEventListener('message', function(event) {
+    if (!_fazStore._consentForwarding || !_fazStore._consentForwarding.enabled) return;
+    var targets = _fazStore._consentForwarding.targets || [];
+    var originAllowed = targets.some(function(t) {
+        try { return new URL(t).origin === event.origin; } catch(e) { return false; }
+    });
+    if (!originAllowed) return;
+
+    if (event.data && event.data.type === 'faz_consent_forward' && event.data.consent) {
+        // Validate consent string format and length before writing to cookie.
+        var consent = event.data.consent;
+        if (typeof consent !== 'string' || consent.length > 2048) return;
+        if (!/^[a-zA-Z0-9._:\-]+(,[a-zA-Z0-9._:\-]+)*$/.test(consent)) return;
+
+        // Apply forwarded consent cookie.
+        var d = new Date();
+        d.setTime(d.getTime() + (_fazStore._expiry || 180) * 24 * 60 * 60 * 1000);
+        document.cookie = 'fazcookie-consent=' + consent + '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax';
+        // Reload to apply the forwarded consent state.
+        window.location.reload();
+    }
+});

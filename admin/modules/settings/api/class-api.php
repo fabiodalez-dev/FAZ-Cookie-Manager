@@ -15,6 +15,7 @@ use stdClass;
 use FazCookie\Includes\Rest_Controller;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Settings\Includes\Controller;
+use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Includes\Notice;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -144,6 +145,28 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/export',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'export_settings' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/import',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'import_settings' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
 	}
 	/**
 	 * Get a collection of items.
@@ -217,7 +240,7 @@ class Api extends Rest_Controller {
 	 */
 	private function sanitize_filter_data( $data ) {
 		if ( is_string( $data ) ) {
-			return wp_kses_post( $data );
+			return sanitize_text_field( $data );
 		}
 		if ( is_array( $data ) ) {
 			return array_map( array( $this, 'sanitize_filter_data' ), $data );
@@ -485,6 +508,315 @@ class Api extends Rest_Controller {
 				'database'  => $info,
 			)
 		);
+	}
+
+	/**
+	 * Export all plugin settings, banners, categories, and cookies as JSON.
+	 *
+	 * Consent logs, pageview data, and sensitive API keys are excluded.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function export_settings( $request ) {
+		global $wpdb;
+
+		$settings     = get_option( 'faz_settings' );
+		$gcm_settings = get_option( 'faz_gcm_settings' );
+
+		// Strip sensitive data from the export.
+		if ( is_array( $settings ) && isset( $settings['geolocation']['maxmind_license_key'] ) ) {
+			$settings['geolocation']['maxmind_license_key'] = '';
+		}
+
+		// Banners.
+		$banners = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->prefix}faz_banners", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+		if ( is_array( $banners ) ) {
+			foreach ( $banners as &$banner ) {
+				if ( isset( $banner['settings'] ) ) {
+					$banner['settings'] = json_decode( $banner['settings'], true );
+				}
+				if ( isset( $banner['contents'] ) ) {
+					$banner['contents'] = json_decode( $banner['contents'], true );
+				}
+			}
+			unset( $banner );
+		}
+
+		// Cookie categories.
+		$categories = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->prefix}faz_cookie_categories", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+		if ( is_array( $categories ) ) {
+			foreach ( $categories as &$cat ) {
+				if ( isset( $cat['name'] ) ) {
+					$cat['name'] = json_decode( $cat['name'], true );
+				}
+				if ( isset( $cat['description'] ) ) {
+					$cat['description'] = json_decode( $cat['description'], true );
+				}
+				if ( isset( $cat['meta'] ) ) {
+					$decoded = json_decode( $cat['meta'], true );
+					$cat['meta'] = ( null !== $decoded ) ? $decoded : $cat['meta'];
+				}
+			}
+			unset( $cat );
+		}
+
+		// Cookies — decode JSON fields so they export as structured data
+		// (matching categories above) and avoid double-encoding on re-import.
+		$cookies = $wpdb->get_results(
+			"SELECT * FROM {$wpdb->prefix}faz_cookies", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+		if ( is_array( $cookies ) ) {
+			foreach ( $cookies as &$ck ) {
+				if ( isset( $ck['description'] ) ) {
+					$decoded = json_decode( $ck['description'], true );
+					$ck['description'] = ( null !== $decoded ) ? $decoded : $ck['description'];
+				}
+				if ( isset( $ck['meta'] ) ) {
+					$decoded = json_decode( $ck['meta'], true );
+					$ck['meta'] = ( null !== $decoded ) ? $decoded : $ck['meta'];
+				}
+			}
+			unset( $ck );
+		}
+
+		$export = array(
+			'plugin'       => 'faz-cookie-manager',
+			'version'      => FAZ_VERSION,
+			'exported_at'  => current_time( 'c' ),
+			'site_url'     => home_url(),
+			'settings'     => $settings,
+			'gcm_settings' => $gcm_settings,
+			'banners'      => $banners ? $banners : array(),
+			'categories'   => $categories ? $categories : array(),
+			'cookies'      => $cookies ? $cookies : array(),
+		);
+
+		return rest_ensure_response( $export );
+	}
+
+	/**
+	 * Import plugin settings, banners, categories, and cookies from JSON.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function import_settings( $request ) {
+		global $wpdb;
+
+		$data = $request->get_json_params();
+
+		// Validate export file identifier.
+		if ( empty( $data['plugin'] ) || 'faz-cookie-manager' !== $data['plugin'] ) {
+			return new WP_Error( 'invalid_export', __( 'Invalid export file.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+
+		$imported = array();
+
+		// --- Settings ---
+		if ( ! empty( $data['settings'] ) && is_array( $data['settings'] ) ) {
+			// Preserve the current MaxMind key when the export has it stripped.
+			$current = get_option( 'faz_settings' );
+			if (
+				empty( $data['settings']['geolocation']['maxmind_license_key'] )
+				&& is_array( $current )
+				&& ! empty( $current['geolocation']['maxmind_license_key'] )
+			) {
+				$data['settings']['geolocation']['maxmind_license_key'] = $current['geolocation']['maxmind_license_key'];
+			}
+			// Use Settings::update() for sanitization, cache clearing, and hooks.
+			$settings_obj = new Settings();
+			$settings_obj->update( $data['settings'] );
+			$imported[] = 'settings';
+		}
+
+		// --- GCM Settings ---
+		if ( ! empty( $data['gcm_settings'] ) && is_array( $data['gcm_settings'] ) ) {
+			// Use Gcm_Settings::update() for sanitization and hooks.
+			$gcm_obj = new Gcm_Settings();
+			$gcm_obj->update( $data['gcm_settings'] );
+			$imported[] = 'gcm_settings';
+		}
+
+		// --- Banners ---
+		if ( ! empty( $data['banners'] ) && is_array( $data['banners'] ) ) {
+			$table = $wpdb->prefix . 'faz_banners';
+			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$banner_failed = false;
+			foreach ( $data['banners'] as $banner ) {
+				$banner_id = absint( $banner['banner_id'] ?? 0 );
+				if ( ! $banner_id ) {
+					continue;
+				}
+				$existing = $wpdb->get_var( $wpdb->prepare(
+					"SELECT banner_id FROM {$table} WHERE banner_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$banner_id
+				) );
+
+				// Sanitize banner contents — strip dangerous HTML from all text
+				// values to prevent stored XSS via crafted import files.
+				$safe_contents = $this->sanitize_banner_contents( $banner['contents'] ?? array() );
+				$safe_settings = $this->sanitize_banner_settings( $banner['settings'] ?? array() );
+
+				$row = array(
+					'banner_id'      => $banner_id,
+					'name'           => sanitize_text_field( $banner['name'] ?? '' ),
+					'slug'           => sanitize_text_field( $banner['slug'] ?? '' ),
+					'status'         => absint( $banner['status'] ?? 0 ),
+					'settings'       => wp_json_encode( $safe_settings ),
+					'banner_default' => absint( $banner['banner_default'] ?? 0 ),
+					'contents'       => wp_json_encode( $safe_contents ),
+				);
+
+				if ( $existing ) {
+					$result = $wpdb->update( $table, $row, array( 'banner_id' => $banner_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				} else {
+					$result = $wpdb->insert( $table, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+				if ( false === $result ) {
+					$banner_failed = true;
+					break;
+				}
+			}
+			if ( $banner_failed ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return new WP_Error( 'import_banners_failed', __( 'Failed to import banners. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+			}
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			// Clear banner cache (base + language variants) so the template is regenerated.
+			faz_clear_banner_template_cache();
+			$imported[] = 'banners';
+		}
+
+		// --- Categories ---
+		if ( isset( $data['categories'] ) && is_array( $data['categories'] ) ) {
+			$table = $wpdb->prefix . 'faz_cookie_categories';
+			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			$cat_failed = false;
+			foreach ( $data['categories'] as $cat ) {
+				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					'category_id'      => absint( $cat['category_id'] ?? 0 ),
+					'name'             => wp_json_encode( $cat['name'] ?? array() ),
+					'slug'             => sanitize_text_field( $cat['slug'] ?? '' ),
+					'description'      => wp_json_encode( $cat['description'] ?? array() ),
+					'prior_consent'    => absint( $cat['prior_consent'] ?? 0 ),
+					'visibility'       => absint( $cat['visibility'] ?? 1 ),
+					'priority'         => absint( $cat['priority'] ?? 0 ),
+					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 0 ),
+					'meta'             => isset( $cat['meta'] ) ? wp_json_encode( $cat['meta'] ) : null,
+				) );
+				if ( false === $result ) {
+					$cat_failed = true;
+					break;
+				}
+			}
+			if ( $cat_failed ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return new WP_Error( 'import_categories_failed', __( 'Failed to import categories. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+			}
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			// Invalidate category cache.
+			do_action( 'faz_after_update_cookie_category' );
+			$imported[] = 'categories';
+		}
+
+		// --- Cookies ---
+		if ( isset( $data['cookies'] ) && is_array( $data['cookies'] ) ) {
+			$table = $wpdb->prefix . 'faz_cookies';
+			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			$cookie_failed = false;
+			foreach ( $data['cookies'] as $cookie ) {
+				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
+					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
+					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
+					'description' => wp_json_encode( $cookie['description'] ?? '' ),
+					'duration'    => sanitize_text_field( $cookie['duration'] ?? '' ),
+					'domain'      => sanitize_text_field( $cookie['domain'] ?? '' ),
+					'category'    => absint( $cookie['category'] ?? 0 ),
+					'type'        => sanitize_text_field( $cookie['type'] ?? '' ),
+					'discovered'  => absint( $cookie['discovered'] ?? 0 ),
+					'url_pattern' => sanitize_text_field( $cookie['url_pattern'] ?? '' ),
+					'meta'        => isset( $cookie['meta'] ) ? wp_json_encode( $cookie['meta'] ) : null,
+				) );
+				if ( false === $result ) {
+					$cookie_failed = true;
+					break;
+				}
+			}
+			if ( $cookie_failed ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return new WP_Error( 'import_cookies_failed', __( 'Failed to import cookies. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+			}
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			// Invalidate cookie cache.
+			do_action( 'faz_after_update_cookie' );
+			$imported[] = 'cookies';
+		}
+
+		// Clear the banner template cache — settings changes (e.g. consent
+		// forwarding, GCM) can affect the rendered template.
+		if ( ! empty( $imported ) ) {
+			faz_clear_banner_template_cache();
+		}
+
+		return rest_ensure_response( array(
+			'success'  => true,
+			'imported' => $imported,
+		) );
+	}
+
+	/**
+	 * Recursively sanitize banner contents to prevent stored XSS.
+	 *
+	 * Applies wp_kses_post() to all string values (titles, descriptions,
+	 * button labels) while preserving the nested array structure.
+	 *
+	 * @param mixed $contents Raw banner contents from import.
+	 * @return mixed Sanitized contents.
+	 */
+	private function sanitize_banner_contents( $contents ) {
+		if ( is_string( $contents ) ) {
+			return wp_kses_post( $contents );
+		}
+		if ( is_array( $contents ) ) {
+			return array_map( array( $this, 'sanitize_banner_contents' ), $contents );
+		}
+		if ( is_bool( $contents ) || is_int( $contents ) || is_float( $contents ) ) {
+			return $contents;
+		}
+		return null;
+	}
+
+	/**
+	 * Recursively sanitize banner settings (styles, config).
+	 *
+	 * Validates CSS property values against an allowlist of safe patterns
+	 * and sanitizes all other string values with sanitize_text_field().
+	 *
+	 * @param mixed $settings Raw banner settings from import.
+	 * @return mixed Sanitized settings.
+	 */
+	private function sanitize_banner_settings( $settings ) {
+		if ( is_string( $settings ) ) {
+			return sanitize_text_field( $settings );
+		}
+		if ( is_array( $settings ) ) {
+			return array_map( array( $this, 'sanitize_banner_settings' ), $settings );
+		}
+		if ( is_bool( $settings ) || is_int( $settings ) || is_float( $settings ) ) {
+			return $settings;
+		}
+		return null;
 	}
 
 } // End the class.

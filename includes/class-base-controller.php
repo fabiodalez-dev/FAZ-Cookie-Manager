@@ -84,6 +84,12 @@ abstract class Base_Controller {
 		Cache::delete( $this->cache_group );
 		wp_cache_delete( 'faz_settings', 'options' );
 		wp_cache_delete( 'faz_banner_template', 'options' );
+		// Also flush wp_cache for any language-suffixed variants.
+		if ( function_exists( 'faz_selected_languages' ) ) {
+			foreach ( faz_selected_languages() as $lang ) {
+				wp_cache_delete( 'faz_banner_template_' . sanitize_key( $lang ), 'options' );
+			}
+		}
 	}
 
 	/**

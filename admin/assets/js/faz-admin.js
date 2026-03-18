@@ -303,16 +303,20 @@
 		// Paths come from trusted data-path attributes in admin HTML templates.
 		// Reject any path containing prototype-pollution keys as a defense-in-depth measure.
 		if (/(?:^|\.)(__proto__|constructor|prototype)(?:\.|$)/.test(path)) return;
+		var UNSAFE = { __proto__: 1, constructor: 1, prototype: 1 };
 		var keys = path.split('.');
 		var cur = obj;
 		for (var i = 0; i < keys.length - 1; i++) {
 			var segment = keys[i];
+			if (segment in UNSAFE) return; // per-segment guard
 			if (!Object.prototype.hasOwnProperty.call(cur, segment) || cur[segment] === null || typeof cur[segment] !== 'object') {
 				cur[segment] = {};
 			}
 			cur = cur[segment];
 		}
-		cur[keys[keys.length - 1]] = value;
+		var lastKey = keys[keys.length - 1];
+		if (lastKey in UNSAFE) return; // per-segment guard
+		cur[lastKey] = value;
 	};
 
 	// ── Serialize form to nested JSON using data-path ────────

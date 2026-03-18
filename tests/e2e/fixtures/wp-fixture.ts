@@ -45,7 +45,7 @@ export const test = base.extend<WPFixtures>({
       await page.locator('#user_pass').fill(adminPass);
       await page.locator('#wp-submit').click();
 
-      await expect(page).toHaveURL(/\/wp-admin\//);
+      await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
       await expect(page.locator('#wpadminbar')).toBeVisible();
       await expect(page.locator('#loginform')).toHaveCount(0);
     });

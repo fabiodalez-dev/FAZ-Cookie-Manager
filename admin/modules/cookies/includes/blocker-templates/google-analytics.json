@@ -1,0 +1,12 @@
+{
+    "id": "google-analytics",
+    "name": "Google Analytics",
+    "description": "Blocks Google Analytics tracking (GA4, Universal Analytics, gtag.js).",
+    "category": "analytics",
+    "patterns": [
+        "google-analytics.com/analytics.js",
+        "googletagmanager.com/gtag/js",
+        "google-analytics.com/ga.js"
+    ],
+    "cookies": ["_ga", "_ga_*", "_gid", "_gat", "__utma", "__utmb", "__utmc", "__utmz"]
+}
