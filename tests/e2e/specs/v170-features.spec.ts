@@ -83,6 +83,7 @@ test.describe('v1.7.0 features', () => {
       },
     });
 
+    expect(createResp.status(), `Failed to create test page: ${createResp.status()}`).toBe(201);
     if (createResp.status() === 201) {
       const postData = await createResp.json();
       const postUrl = postData.link;

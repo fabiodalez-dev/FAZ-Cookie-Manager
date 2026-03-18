@@ -733,17 +733,18 @@ window.wp.apiFetch=apiFetch;
 					</thead>
 					<tbody>
 						<?php
-						$sites = get_sites( array( 'number' => 100 ) );
-						foreach ( $sites as $site ) :
-							switch_to_blog( $site->blog_id );
+						$site_ids = get_sites( array( 'number' => 0, 'fields' => 'ids' ) );
+						foreach ( $site_ids as $site_id ) :
+							switch_to_blog( $site_id );
 							$settings  = get_option( 'faz_settings' );
 							$banner_on = ! empty( $settings['banner_control']['status'] );
-							$admin_url = get_admin_url( $site->blog_id, 'admin.php?page=faz-cookie-manager' );
+							$admin_url = get_admin_url( $site_id, 'admin.php?page=faz-cookie-manager' );
 							$site_name = get_bloginfo( 'name' );
+							$site_obj  = get_site( $site_id );
 							restore_current_blog();
 						?>
 						<tr>
-							<td><strong><?php echo esc_html( $site_name ? $site_name : $site->domain . $site->path ); ?></strong></td>
+							<td><strong><?php echo esc_html( $site_name ? $site_name : ( $site_obj ? $site_obj->domain . $site_obj->path : '#' . $site_id ) ); ?></strong></td>
 							<td>
 								<?php if ( $banner_on ) : ?>
 									<span style="color:green;">&#9679; <?php esc_html_e( 'Active', 'faz-cookie-manager' ); ?></span>

@@ -1595,6 +1595,8 @@
 				card.style.cssText = 'padding:12px;border:1px solid var(--faz-border);border-radius:8px;cursor:pointer;transition:border-color 0.2s;background:none;display:block;width:100%;text-align:left;';
 				card.onmouseenter = function () { card.style.borderColor = 'var(--faz-primary)'; };
 				card.onmouseleave = function () { card.style.borderColor = 'var(--faz-border)'; };
+				card.onfocus = function () { card.style.borderColor = 'var(--faz-primary)'; };
+				card.onblur = function () { card.style.borderColor = 'var(--faz-border)'; };
 
 				var name = document.createElement('div');
 				name.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:4px;';

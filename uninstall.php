@@ -25,15 +25,14 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 		try {
 			global $wpdb;
 
-			// Drop all plugin tables.
-			$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'faz_banners' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'faz_cookie_categories' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'faz_cookies' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'faz_consent_logs' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'faz_pageviews' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-
-			if ( $wpdb->last_error ) {
-				error_log( 'FAZ uninstall: DB error during table cleanup: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			// Drop all plugin tables, checking each result.
+			$blog_id    = function_exists( 'get_current_blog_id' ) ? get_current_blog_id() : 0;
+			$faz_tables = array( 'faz_banners', 'faz_cookie_categories', 'faz_cookies', 'faz_consent_logs', 'faz_pageviews' );
+			foreach ( $faz_tables as $tbl ) {
+				$result = $wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . $tbl ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+				if ( false === $result ) {
+					error_log( 'FAZ uninstall: DROP ' . $tbl . ' failed on blog ' . $blog_id . ' — ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				}
 			}
 
 			// Clean up transients.

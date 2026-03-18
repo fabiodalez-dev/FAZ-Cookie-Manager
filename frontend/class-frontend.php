@@ -424,6 +424,10 @@ class Frontend {
 		if ( ! faz_is_front_end_request() ) {
 			return;
 		}
+		// AMP uses <amp-consent>: skip the classic JS banner/runtime.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+			return;
+		}
 		// Global geo-targeting (Settings → Geolocation): skip banner for
 		// visitors outside configured target regions.
 		if ( $this->is_geo_banner_disabled() ) {
@@ -539,6 +543,7 @@ class Frontend {
 	 */
 	private function is_country_in_regions( $country_code, $regions ) {
 		$country_code = strtoupper( $country_code );
+		$regions      = is_array( $regions ) ? $regions : (array) $regions;
 
 		$region_map = array(
 			'eu' => array(
@@ -2489,20 +2494,53 @@ class Frontend {
 		$host   = isset( $_SERVER['HTTP_HOST'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) : '';
 		$domain = preg_replace( '/^www\./', '', $host );
 
+		// Per-service consent: also shred cookies for explicitly denied services
+		// even when their category is allowed (svc.hotjar:no + analytics:yes).
+		$service_consent   = $this->get_service_consent();
+		$svc_cookie_map    = array(); // pattern → service_id
+		if ( ! empty( $service_consent ) ) {
+			$known = Known_Providers::get_all();
+			foreach ( $known as $id => $service ) {
+				$svc_id = sanitize_key( $id );
+				if ( isset( $service_consent[ $svc_id ] ) && 'no' === $service_consent[ $svc_id ] && ! empty( $service['cookies'] ) ) {
+					foreach ( $service['cookies'] as $cookie_pattern ) {
+						$svc_cookie_map[ $cookie_pattern ] = $svc_id;
+					}
+				}
+			}
+		}
+
 		foreach ( array_keys( $_COOKIE ) as $name ) {
+			$should_shred = false;
+
+			// Category-based shredding.
 			foreach ( $cookie_map as $pattern => $category ) {
 				if ( ! in_array( $category, $blocked_categories, true ) ) {
 					continue;
 				}
 				if ( $this->cookie_name_matches( $name, $pattern ) ) {
-					setcookie( $name, '', -1, '/' );
-					if ( $domain ) {
-						setcookie( $name, '', -1, '/', $domain );
-						setcookie( $name, '', -1, '/', '.' . $domain );
-					}
-					unset( $_COOKIE[ $name ] );
+					$should_shred = true;
 					break;
 				}
+			}
+
+			// Per-service shredding (service explicitly denied).
+			if ( ! $should_shred && ! empty( $svc_cookie_map ) ) {
+				foreach ( $svc_cookie_map as $pattern => $svc_id ) {
+					if ( $this->cookie_name_matches( $name, $pattern ) ) {
+						$should_shred = true;
+						break;
+					}
+				}
+			}
+
+			if ( $should_shred ) {
+				setcookie( $name, '', -1, '/' );
+				if ( $domain ) {
+					setcookie( $name, '', -1, '/', $domain );
+					setcookie( $name, '', -1, '/', '.' . $domain );
+				}
+				unset( $_COOKIE[ $name ] );
 			}
 		}
 	}
