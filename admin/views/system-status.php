@@ -17,18 +17,22 @@ $gcm_settings = get_option( 'faz_gcm_settings' );
 $active_plugins = get_option( 'active_plugins', array() );
 $theme = wp_get_theme();
 
-// DB table sizes.
-$tables = array( 'faz_banners', 'faz_cookies', 'faz_cookie_categories', 'faz_consent_logs', 'faz_pageviews' );
-$table_info = array();
-foreach ( $tables as $t ) {
-	$full   = $wpdb->prefix . $t;
-	$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	if ( $exists ) {
-		$row = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$table_info[ $t ] = $row ? absint( $row->cnt ) : 0;
-	} else {
-		$table_info[ $t ] = -1; // table missing
+// DB table sizes — cached for 2 minutes to avoid 10 queries per page load.
+$table_info = get_transient( 'faz_system_status_tables' );
+if ( false === $table_info ) {
+	$tables     = array( 'faz_banners', 'faz_cookies', 'faz_cookie_categories', 'faz_consent_logs', 'faz_pageviews' );
+	$table_info = array();
+	foreach ( $tables as $t ) {
+		$full   = $wpdb->prefix . $t;
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $exists ) {
+			$row = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$table_info[ $t ] = $row ? absint( $row->cnt ) : 0;
+		} else {
+			$table_info[ $t ] = -1; // table missing
+		}
 	}
+	set_transient( 'faz_system_status_tables', $table_info, 2 * MINUTE_IN_SECONDS );
 }
 
 // Cron status.

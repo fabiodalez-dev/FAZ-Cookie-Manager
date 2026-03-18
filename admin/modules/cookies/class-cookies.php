@@ -32,15 +32,29 @@ class Cookies extends Modules {
 	 */
 	public function init() {
 		$this->load_apis();
-		add_action( 'admin_init', array( Category_Controller::get_instance(), 'install_tables' ) );
 		add_action( 'faz_after_update_cookie', array( Category_Controller::get_instance(), 'delete_cache' ) );
 		add_action( 'faz_after_update_cookie_category', array( Cookie_Controller::get_instance(), 'delete_cache' ) );
 		add_action( 'faz_after_update_cookie_category', array( Category_Controller::get_instance(), 'delete_cache' ) );
-		add_action( 'admin_init', array( Cookie_Controller::get_instance(), 'reset_cache' ) );
-		add_action( 'admin_init', array( Category_Controller::get_instance(), 'reset_cache' ) );
-		add_action( 'admin_init', array( Cookie_Controller::get_instance(), 'install_tables' ) );
 		add_action( 'faz_reinstall_tables', array( Category_Controller::get_instance(), 'reinstall' ) );
 		add_action( 'faz_reinstall_tables', array( Cookie_Controller::get_instance(), 'reinstall' ) );
+		// Only run cache reset on FAZ admin pages — not on every admin_init.
+		if ( self::is_faz_admin_request() ) {
+			Cookie_Controller::get_instance()->reset_cache();
+			Category_Controller::get_instance()->reset_cache();
+		}
+	}
+
+	/**
+	 * Quick check whether the current request is a FAZ admin page.
+	 *
+	 * @return bool
+	 */
+	private static function is_faz_admin_request() {
+		if ( ! is_admin() || wp_doing_ajax() ) {
+			return false;
+		}
+		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return false !== strpos( $page, 'faz-cookie-manager' );
 	}
 
 	/**

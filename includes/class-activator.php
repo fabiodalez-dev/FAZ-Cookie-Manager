@@ -78,13 +78,9 @@ class Activator {
 	 */
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'check_version' ), 5 );
-		add_action( 'admin_init', array( __CLASS__, 'ensure_uncategorized_category' ) );
-		add_action( 'admin_init', array( __CLASS__, 'ensure_wordpress_internal_category' ) );
-		add_action( 'admin_init', array( __CLASS__, 'rename_advertisement_to_marketing' ) );
-		add_action( 'admin_init', array( __CLASS__, 'fix_uncategorized_prior_consent' ) );
-		add_action( 'admin_init', array( __CLASS__, 'fix_banner_gdpr_defaults' ) );
-		add_action( 'admin_init', array( __CLASS__, 'fix_brand_logo_path' ) );
-		add_action( 'admin_init', array( __CLASS__, 'maybe_download_cookie_definitions' ) );
+		// Consolidate one-time migrations into a single admin_init callback
+		// to avoid 7 separate get_option() calls on every admin page load.
+		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
@@ -92,6 +88,31 @@ class Activator {
 		add_action( 'faz_after_update_cookie', array( __CLASS__, 'maybe_check_unmatched_vendors' ) );
 		add_filter( 'cron_schedules', array( __CLASS__, 'register_cron_schedules' ) );
 		self::schedule_cleanup();
+	}
+
+	/**
+	 * Run all pending one-time data migrations in a single admin_init callback.
+	 *
+	 * Checks a consolidated version flag first. When the flag matches
+	 * FAZ_VERSION, all migrations have already completed and we skip
+	 * everything with a single get_option() call. This replaces 7
+	 * separate admin_init hooks that each performed their own DB lookup.
+	 *
+	 * @return void
+	 */
+	public static function run_pending_migrations() {
+		// Single option check — once set, skips all migrations.
+		if ( get_option( 'faz_migrations_version' ) === FAZ_VERSION ) {
+			return;
+		}
+		self::ensure_uncategorized_category();
+		self::ensure_wordpress_internal_category();
+		self::rename_advertisement_to_marketing();
+		self::fix_uncategorized_prior_consent();
+		self::fix_banner_gdpr_defaults();
+		self::fix_brand_logo_path();
+		self::maybe_download_cookie_definitions();
+		update_option( 'faz_migrations_version', FAZ_VERSION, false );
 	}
 
 	/**
