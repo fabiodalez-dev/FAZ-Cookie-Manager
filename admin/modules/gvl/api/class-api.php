@@ -333,6 +333,9 @@ class Api extends Rest_Controller {
 		// Clear banner template cache (base + language variants) so frontend picks up new vendor data.
 		faz_clear_banner_template_cache();
 
+		// Re-check unmatched vendors now that the selection changed.
+		\FazCookie\Includes\Activator::maybe_check_unmatched_vendors();
+
 		return new WP_REST_Response( array(
 			'success'    => true,
 			'vendor_ids' => $vendor_ids,

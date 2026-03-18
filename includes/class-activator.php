@@ -89,6 +89,7 @@ class Activator {
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
 		add_action( 'faz_after_update_settings', array( __CLASS__, 'reschedule_auto_scan' ) );
+		add_action( 'faz_after_update_cookie', array( __CLASS__, 'maybe_check_unmatched_vendors' ) );
 		add_filter( 'cron_schedules', array( __CLASS__, 'register_cron_schedules' ) );
 		self::schedule_cleanup();
 	}
@@ -230,6 +231,16 @@ class Activator {
 				admin_url( 'admin.php?page=faz-cookie-manager-cookies' )
 			);
 			wp_mail( $admin_email, $subject, $message );
+		}
+
+		// Check for unmatched IAB vendors (only if IAB TCF is enabled).
+		if ( ! empty( $settings['iab']['enabled'] ) ) {
+			$unmatched = self::detect_unmatched_vendors();
+			if ( ! empty( $unmatched ) ) {
+				set_transient( 'faz_unmatched_vendors', $unmatched, WEEK_IN_SECONDS );
+			} else {
+				delete_transient( 'faz_unmatched_vendors' );
+			}
 		}
 	}
 
@@ -679,6 +690,114 @@ class Activator {
 		}
 
 		update_option( 'faz_migrated_advert_to_marketing', 1, false );
+	}
+
+	/**
+	 * Re-check unmatched IAB vendors after cookies are updated.
+	 *
+	 * Hooked to `faz_after_update_cookie` so the notice stays current
+	 * when cookies are added, removed, or re-categorised.
+	 *
+	 * @return void
+	 */
+	public static function maybe_check_unmatched_vendors() {
+		$settings = get_option( 'faz_settings' );
+		if ( ! empty( $settings['iab']['enabled'] ) ) {
+			$unmatched = self::detect_unmatched_vendors();
+			if ( ! empty( $unmatched ) ) {
+				set_transient( 'faz_unmatched_vendors', $unmatched, WEEK_IN_SECONDS );
+			} else {
+				delete_transient( 'faz_unmatched_vendors' );
+			}
+		}
+	}
+
+	/**
+	 * Detect services found by the scanner that have a Known Provider entry
+	 * but no matching GVL vendor selected.
+	 *
+	 * Compares detected cookie domains against Known Provider patterns,
+	 * then checks whether a corresponding IAB GVL vendor is selected.
+	 *
+	 * @return array Array of unmatched service descriptors, each with
+	 *               'service', 'category', and optional 'suggested' keys.
+	 */
+	public static function detect_unmatched_vendors() {
+		$known        = Known_Providers::get_all();
+		$selected_ids = (array) get_option( 'faz_gvl_selected_vendors', array() );
+
+		// Get selected vendor names from GVL data.
+		$gvl = Gvl::get_instance();
+		if ( ! $gvl->has_data() ) {
+			return array();
+		}
+
+		$all_vendors    = $gvl->get_vendors();
+		$selected_names = array();
+		foreach ( $selected_ids as $id ) {
+			if ( isset( $all_vendors[ $id ] ) ) {
+				$selected_names[] = strtolower( $all_vendors[ $id ]['name'] ?? '' );
+			}
+		}
+
+		// Get detected cookie domains from the database.
+		global $wpdb;
+		$detected_domains = $wpdb->get_col(
+			"SELECT DISTINCT domain FROM {$wpdb->prefix}faz_cookies WHERE domain != '' AND discovered = 1"
+		);
+
+		// For each Known Provider, check if it is detected on the site
+		// but NOT covered by a selected GVL vendor.
+		$unmatched = array();
+		foreach ( $known as $service_id => $service ) {
+			// Check if any detected cookie domain matches this service's patterns.
+			$is_detected = false;
+			foreach ( $detected_domains as $domain ) {
+				foreach ( $service['patterns'] as $pattern ) {
+					if ( false !== stripos( $domain, $pattern ) || false !== stripos( $pattern, $domain ) ) {
+						$is_detected = true;
+						break 2;
+					}
+				}
+			}
+
+			if ( ! $is_detected ) {
+				continue;
+			}
+
+			// Check if there is a matching GVL vendor selected.
+			$service_name_lower = strtolower( $service['label'] );
+			$has_vendor         = false;
+			foreach ( $selected_names as $vname ) {
+				if ( false !== strpos( $vname, $service_name_lower ) || false !== strpos( $service_name_lower, $vname ) ) {
+					$has_vendor = true;
+					break;
+				}
+			}
+
+			if ( ! $has_vendor ) {
+				// Try to find a matching GVL vendor to suggest.
+				$suggested_vendor = null;
+				foreach ( $all_vendors as $vid => $v ) {
+					$vendor_name = strtolower( $v['name'] ?? '' );
+					if ( false !== strpos( $vendor_name, $service_name_lower ) || false !== strpos( $service_name_lower, $vendor_name ) ) {
+						$suggested_vendor = array(
+							'id'   => absint( $vid ),
+							'name' => $v['name'],
+						);
+						break;
+					}
+				}
+
+				$unmatched[] = array(
+					'service'   => $service['label'],
+					'category'  => $service['category'],
+					'suggested' => $suggested_vendor,
+				);
+			}
+		}
+
+		return $unmatched;
 	}
 
 	/**

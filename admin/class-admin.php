@@ -86,6 +86,8 @@ class Admin {
 		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
+		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
+		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_filter( 'plugin_action_links_' . FAZ_PLUGIN_BASENAME, array( $this, 'plugin_action_links' ) );
 		add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
 	}
@@ -1003,6 +1005,56 @@ window.wp.apiFetch=apiFetch;
 		);
 
 		delete_transient( 'faz_scan_new_cookies' );
+	}
+
+	/**
+	 * Display a dismissible notice when detected services lack a matching selected IAB vendor.
+	 *
+	 * Only shown on FAZ admin pages when IAB TCF is enabled.
+	 *
+	 * @return void
+	 */
+	public function unmatched_vendors_notice() {
+		$unmatched = get_transient( 'faz_unmatched_vendors' );
+		if ( empty( $unmatched ) || ! is_array( $unmatched ) ) {
+			return;
+		}
+		if ( ! faz_is_admin_page() ) {
+			return;
+		}
+
+		$names = array_map(
+			function ( $u ) {
+				return '<strong>' . esc_html( $u['service'] ) . '</strong>';
+			},
+			$unmatched
+		);
+		$list = implode( ', ', $names );
+
+		printf(
+			'<div class="notice notice-warning is-dismissible" id="faz-unmatched-vendors-notice"><p>%s %s</p><p><a href="%s" class="button button-small">%s</a> <button type="button" class="button button-small button-link" onclick="jQuery(\'#faz-unmatched-vendors-notice\').fadeOut();jQuery.post(ajaxurl,{action:\'faz_dismiss_unmatched\'});">%s</button></p></div>',
+			wp_kses_post(
+				sprintf(
+					/* translators: %s: comma-separated list of service names */
+					__( 'FAZ Cookie Manager detected services on your site that are not covered by any selected IAB vendor: %s.', 'faz-cookie-manager' ),
+					$list
+				)
+			),
+			esc_html__( 'Add the matching vendors to ensure proper TCF consent for these services.', 'faz-cookie-manager' ),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-gvl' ) ),
+			esc_html__( 'Go to Vendor List', 'faz-cookie-manager' ),
+			esc_html__( 'Dismiss', 'faz-cookie-manager' )
+		);
+	}
+
+	/**
+	 * AJAX handler: dismiss the unmatched vendors notice.
+	 *
+	 * @return void
+	 */
+	public function ajax_dismiss_unmatched_vendors() {
+		delete_transient( 'faz_unmatched_vendors' );
+		wp_die();
 	}
 
 	/**
