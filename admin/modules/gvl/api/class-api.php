@@ -253,14 +253,31 @@ class Api extends Rest_Controller {
 				$gvl->download_purposes( $lang );
 			}
 
-			// Auto-select all vendors if none have been selected yet.
+			// Auto-detect relevant vendors from Known Providers if none selected yet.
+			// Only selects GVL vendors whose name matches a service in the Known
+			// Providers database, so the preference center shows only vendors
+			// actually relevant to the site — not all 1400+ from the GVL.
 			$existing_selected = get_option( 'faz_gvl_selected_vendors', null );
 			if ( null === $existing_selected ) {
-				$all_vendors = $gvl->get_vendors();
-				if ( ! empty( $all_vendors ) ) {
-					$all_ids = array_map( 'absint', array_keys( $all_vendors ) );
-					sort( $all_ids );
-					update_option( 'faz_gvl_selected_vendors', $all_ids, false );
+				$all_vendors   = $gvl->get_vendors();
+				$known         = \FazCookie\Includes\Known_Providers::get_all();
+				$known_labels  = array();
+				foreach ( $known as $service ) {
+					$known_labels[] = strtolower( $service['label'] );
+				}
+				$auto_ids = array();
+				foreach ( $all_vendors as $vid => $v ) {
+					$vendor_name = strtolower( $v['name'] ?? '' );
+					foreach ( $known_labels as $label ) {
+						if ( false !== strpos( $vendor_name, $label ) || false !== strpos( $label, $vendor_name ) ) {
+							$auto_ids[] = absint( $vid );
+							break;
+						}
+					}
+				}
+				sort( $auto_ids );
+				update_option( 'faz_gvl_selected_vendors', $auto_ids, false );
+				if ( ! empty( $auto_ids ) ) {
 					faz_clear_banner_template_cache();
 				}
 			}
