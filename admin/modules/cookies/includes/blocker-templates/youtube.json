@@ -2,7 +2,7 @@
     "id": "youtube",
     "name": "YouTube",
     "description": "Blocks YouTube video embeds. Shows a thumbnail placeholder with an accept button.",
-    "category": "functional",
+    "category": "marketing",
     "patterns": [
         "youtube.com/embed",
         "youtube-nocookie.com/embed",

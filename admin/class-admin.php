@@ -1114,15 +1114,19 @@ window.wp.apiFetch=apiFetch;
 	 */
 	public function render_dashboard_widget() {
 		global $wpdb;
-		$table = $wpdb->prefix . 'faz_consent_logs';
+		$table  = $wpdb->prefix . 'faz_consent_logs';
+		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-30 days', strtotime( current_time( 'mysql' ) ) ) );
 
 		$stats = $wpdb->get_row(
-			"SELECT COUNT(*) as total,
-					SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
-					SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-					SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
-			 FROM {$table}
-			 WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				"SELECT COUNT(*) as total,
+						SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
+				 FROM {$table}
+				 WHERE created_at >= %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$cutoff
+			),
 			ARRAY_A
 		);
 

@@ -35,7 +35,7 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 			// Clean up transients.
 			$prefix = $wpdb->esc_like( '_transient_faz' ) . '%';
 			$keys   = $wpdb->get_results( $wpdb->prepare( "SELECT option_name FROM $wpdb->options WHERE option_name LIKE %s", $prefix ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			if ( ! is_wp_error( $keys ) ) {
+			if ( ! empty( $keys ) && is_array( $keys ) ) {
 				$transients = array_map(
 					function( $key ) {
 						$name = $key['option_name'];
@@ -122,8 +122,8 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 					}
 				}
 			}
-		} catch ( Exception $e ) {
-			error_log( __( 'Failed to delete FAZ Cookie Manager plugin data!', 'faz-cookie-manager' ) . ' ' . $e->getMessage() ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		} catch ( \Throwable $e ) {
+			error_log( 'Failed to delete FAZ Cookie Manager plugin data! ' . $e->getMessage() ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		}
 	}
 

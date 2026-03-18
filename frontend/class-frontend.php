@@ -153,38 +153,8 @@ class Frontend {
 		}
 
 		// Geo-targeting: skip banner for visitors outside target regions.
-		$faz_geo_settings = get_option( 'faz_settings' );
-		if ( ! empty( $faz_geo_settings['geolocation']['geo_targeting'] ) ) {
-			$country = '';
-			// Try Cloudflare header first (free, no MaxMind needed).
-			// Only trust the header when explicitly opted in via filter and value is valid.
-			if (
-				apply_filters( 'faz_trust_cf_ipcountry_header', false )
-				&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
-				&& preg_match( '/^[A-Z]{2}$/', sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) )
-			) {
-				$country = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
-			}
-			// Fallback to MaxMind / other detection methods.
-			if ( empty( $country ) ) {
-				$country = Geolocation::get_country();
-			}
-
-			if ( ! empty( $country ) ) {
-				$target_regions = isset( $faz_geo_settings['geolocation']['target_regions'] )
-					? $faz_geo_settings['geolocation']['target_regions']
-					: array( 'eu', 'uk' );
-				$default_behavior = isset( $faz_geo_settings['geolocation']['default_behavior'] )
-					? $faz_geo_settings['geolocation']['default_behavior']
-					: 'show_banner';
-
-				$is_target = $this->is_country_in_regions( $country, $target_regions );
-
-				if ( ! $is_target && 'no_banner' === $default_behavior ) {
-					return; // Skip banner entirely for non-target visitors.
-				}
-			}
-			// If country cannot be resolved (no MaxMind DB, no Cloudflare), show banner to everyone (fail-open).
+		if ( $this->is_geo_banner_disabled() ) {
+			return;
 		}
 
 		$suffix = ''; // Always load non-minified JS.
@@ -204,7 +174,8 @@ class Frontend {
 			}
 
 			// Ad-blocker compatibility: use generic handle/var names to avoid filter lists.
-			$alt_asset = ! empty( $faz_geo_settings['banner_control']['alternative_asset_path'] );
+			$faz_settings = get_option( 'faz_settings' );
+			$alt_asset = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 			$config_var    = $alt_asset ? '_fazCfg' : '_fazConfig';
 
@@ -449,12 +420,17 @@ class Frontend {
 		if ( ! faz_is_front_end_request() ) {
 			return;
 		}
+		// Global geo-targeting (Settings → Geolocation): skip banner for
+		// visitors outside configured target regions.
+		if ( $this->is_geo_banner_disabled() ) {
+			return;
+		}
 		$this->banner = Controller::get_instance()->get_active_banner();
 		if ( false === $this->banner ) {
 			return;
 		}
 
-		// Geo-targeting: skip banner if visitor's country doesn't match the ruleSet.
+		// Per-banner geo-targeting: skip banner if visitor's country doesn't match the ruleSet.
 		if ( $this->is_geo_blocked() ) {
 			return;
 		}
@@ -501,6 +477,53 @@ class Frontend {
 			default:
 				return false;
 		}
+	}
+
+	/**
+	 * Check if the banner should be disabled for this visitor based on
+	 * the global geo-targeting settings (Settings → Geolocation).
+	 *
+	 * Shared guard used by both enqueue_scripts() and load_banner().
+	 *
+	 * @return bool True if the banner should NOT be shown.
+	 */
+	private function is_geo_banner_disabled() {
+		$faz_geo_settings = get_option( 'faz_settings' );
+		if ( empty( $faz_geo_settings['geolocation']['geo_targeting'] ) ) {
+			return false;
+		}
+
+		$country = '';
+		// Try Cloudflare header first (free, no MaxMind needed).
+		// Only trust the header when explicitly opted in via filter and value is valid.
+		if (
+			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
+			&& preg_match( '/^[A-Z]{2}$/', sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) )
+		) {
+			$country = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
+		}
+		// Fallback to MaxMind / other detection methods.
+		if ( empty( $country ) ) {
+			$country = Geolocation::get_country();
+		}
+
+		if ( ! empty( $country ) ) {
+			$target_regions = isset( $faz_geo_settings['geolocation']['target_regions'] )
+				? $faz_geo_settings['geolocation']['target_regions']
+				: array( 'eu', 'uk' );
+			$default_behavior = isset( $faz_geo_settings['geolocation']['default_behavior'] )
+				? $faz_geo_settings['geolocation']['default_behavior']
+				: 'show_banner';
+
+			$is_target = $this->is_country_in_regions( $country, $target_regions );
+
+			if ( ! $is_target && 'no_banner' === $default_behavior ) {
+				return true;
+			}
+		}
+		// If country cannot be resolved (no MaxMind DB, no Cloudflare), show banner to everyone (fail-open).
+		return false;
 	}
 
 	/**
@@ -2712,18 +2735,23 @@ class Frontend {
 				continue;
 			}
 
-			// Per-service consent check: if per-service consent is active and
-			// the visitor explicitly allowed this service, skip blocking.
+			$category     = $info['category'];
+			$should_block = in_array( $category, $blocked_categories, true );
+
+			// Per-service consent check: override category-level decision.
 			$service_consent = $this->get_service_consent();
 			if ( ! empty( $service_consent ) && ! empty( $info['service_id'] ) ) {
 				$svc_key = $info['service_id'];
-				if ( isset( $service_consent[ $svc_key ] ) && 'yes' === $service_consent[ $svc_key ] ) {
-					continue;
+				if ( isset( $service_consent[ $svc_key ] ) ) {
+					if ( 'yes' === $service_consent[ $svc_key ] ) {
+						$should_block = false;
+					} elseif ( 'no' === $service_consent[ $svc_key ] ) {
+						$should_block = true;
+					}
 				}
 			}
 
-			$category = $info['category'];
-			if ( ! in_array( $category, $blocked_categories, true ) ) {
+			if ( ! $should_block ) {
 				continue;
 			}
 

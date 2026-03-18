@@ -644,6 +644,8 @@ class Api extends Rest_Controller {
 		// --- Banners ---
 		if ( ! empty( $data['banners'] ) && is_array( $data['banners'] ) ) {
 			$table = $wpdb->prefix . 'faz_banners';
+			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$banner_failed = false;
 			foreach ( $data['banners'] as $banner ) {
 				$banner_id = absint( $banner['banner_id'] ?? 0 );
 				if ( ! $banner_id ) {
@@ -670,11 +672,20 @@ class Api extends Rest_Controller {
 				);
 
 				if ( $existing ) {
-					$wpdb->update( $table, $row, array( 'banner_id' => $banner_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$result = $wpdb->update( $table, $row, array( 'banner_id' => $banner_id ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				} else {
-					$wpdb->insert( $table, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$result = $wpdb->insert( $table, $row ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				}
+				if ( false === $result ) {
+					$banner_failed = true;
+					break;
 				}
 			}
+			if ( $banner_failed ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return new WP_Error( 'import_banners_failed', __( 'Failed to import banners. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+			}
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			// Clear banner cache (base + language variants) so the template is regenerated.
 			faz_clear_banner_template_cache();
 			$imported[] = 'banners';

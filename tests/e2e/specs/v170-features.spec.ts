@@ -32,6 +32,7 @@ async function updateSettings(page: any, nonce: string, data: Record<string, unk
 /* ─── Tests ────────────────────────────────────── */
 
 test.describe('v1.7.0 features', () => {
+  test.describe.configure({ mode: 'serial' });
 
   // 1. Scheduled Cookie Scanning
   test('F01: auto_scan and scan_frequency settings persist', async ({ page, loginAsAdmin }) => {
@@ -133,12 +134,13 @@ test.describe('v1.7.0 features', () => {
     const r = await page.request.get(`${WP_BASE}/?rest_route=/wp/v2/block-types`, {
       headers: { 'X-WP-Nonce': nonce },
     });
-    if (r.status() === 200) {
-      const blocks = await r.json();
-      const fazBlocks = blocks.filter((b: any) => b.name?.startsWith('faz/'));
-      expect(fazBlocks.length).toBeGreaterThanOrEqual(3);
+    if (r.status() === 404 || r.status() === 501) {
+      test.skip(true, 'block-types endpoint not available on this WP version');
     }
-    // If REST block-types endpoint is not available (older WP), skip gracefully
+    expect(r.status()).toBe(200);
+    const blocks = await r.json();
+    const fazBlocks = blocks.filter((b: any) => b.name?.startsWith('faz/'));
+    expect(fazBlocks.length).toBeGreaterThanOrEqual(3);
   });
 
   // 8. Design Presets
@@ -574,12 +576,13 @@ test.describe('v1.7.0 features', () => {
     // Clean up — remove the custom CSS
     await page.click('#faz-banner-tabs button[data-tab="advanced"]');
     await page.fill('#faz-b-custom-css', '');
-    await page.click('#faz-b-save');
-    await page.waitForResponse(
+    const cleanupResponse = page.waitForResponse(
       (r) => r.url().includes('banners') && !r.url().includes('preview') &&
         (r.request().method() === 'PUT' || r.request().method() === 'POST'),
       { timeout: 15_000 },
     );
+    await page.click('#faz-b-save');
+    await cleanupResponse;
   });
 
   // 30. Issue #38: Category names editable from admin

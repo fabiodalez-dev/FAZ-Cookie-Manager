@@ -222,7 +222,7 @@ class Api extends Rest_Controller {
 		$data = array(
 			'page_url'   => $request->get_param( 'page_url' ),
 			'page_title' => $request->get_param( 'page_title' ),
-			'event_type' => $request->get_param( 'event_type' ),
+			'event_type' => $event_type,
 			'session_id' => $request->get_param( 'session_id' ),
 		);
 

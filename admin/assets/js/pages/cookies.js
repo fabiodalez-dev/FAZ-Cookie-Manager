@@ -148,10 +148,11 @@
 
 	function renderCategoryEditor() {
 		var tbody = document.getElementById('faz-category-edit-rows');
-		if (!tbody || !categoryEditorData || !categoryEditorData.length) return;
+		if (!tbody) return;
+		tbody.innerHTML = '';
+		if (!categoryEditorData || !categoryEditorData.length) return;
 
 		var lang = getCategoryEditorLang();
-		tbody.innerHTML = '';
 
 		categoryEditorData.forEach(function (cat) {
 			var tr = document.createElement('tr');
@@ -1611,8 +1612,10 @@
 				card.appendChild(badge);
 
 				card.addEventListener('click', function () {
+					var patterns = Array.isArray(tpl.patterns) ? tpl.patterns : [];
+					if (!patterns.length) { FAZ.notify('No patterns in template.', 'error'); return; }
 					var added = 0;
-					tpl.patterns.forEach(function (pattern) {
+					patterns.forEach(function (pattern) {
 						addRuleRow(pattern, tpl.category);
 						added++;
 					});
