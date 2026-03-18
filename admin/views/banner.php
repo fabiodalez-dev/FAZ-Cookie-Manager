@@ -22,6 +22,16 @@ defined( 'ABSPATH' ) || exit;
 	<!-- ─── General ─────────────────────────────────────── -->
 	<div id="tab-general" class="faz-tab-panel active">
 		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Design Presets', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div id="faz-presets-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;">
+					<p style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading presets...', 'faz-cookie-manager' ); ?></p>
+				</div>
+				<div class="faz-help" style="margin-top:8px;"><?php esc_html_e( 'Click a preset to apply its colours and layout. Your text content will not be changed.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+
+		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Banner Layout', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
 

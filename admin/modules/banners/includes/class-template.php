@@ -453,12 +453,21 @@ class Template {
 		return defined( 'FAZ_PREVIEW_REQUEST' ) && FAZ_PREVIEW_REQUEST;
 	}
 	/**
+	 * Return the language-aware cache key for the banner template option.
+	 *
+	 * @return string
+	 */
+	private function get_cache_key() {
+		return apply_filters( 'faz_banner_template_cache_key', 'faz_banner_template' );
+	}
+
+	/**
 	 * Retrieve stored template.
 	 *
 	 * @return string
 	 */
 	public function get_stored() {
-		$stored = get_option( 'faz_banner_template', array() );
+		$stored = get_option( $this->get_cache_key(), array() );
 		return isset( $stored[ $this->language ] ) ? $stored[ $this->language ] : array();
 	}
 
@@ -468,8 +477,9 @@ class Template {
 	 * @return void
 	 */
 	public function update() {
-		$stored = get_option( 'faz_banner_template', array() );
-		$stored = is_array( $stored ) && ! empty( $stored ) ? $stored : array();
+		$cache_key = $this->get_cache_key();
+		$stored    = get_option( $cache_key, array() );
+		$stored    = is_array( $stored ) && ! empty( $stored ) ? $stored : array();
 
 		$stored[ $this->language ] = array(
 			'html'   => wp_kses( $this->html, faz_allowed_html() ),
@@ -479,7 +489,7 @@ class Template {
 			),
 		);
 		update_option(
-			'faz_banner_template',
+			$cache_key,
 			$stored
 		);
 	}
@@ -504,7 +514,7 @@ class Template {
 		if ( false === $clear ) {
 			return;
 		}
-		update_option( 'faz_banner_template', '' );
+		faz_clear_banner_template_cache();
 	}
 
 	/**

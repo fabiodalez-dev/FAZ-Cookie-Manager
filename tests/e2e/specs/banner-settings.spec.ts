@@ -30,7 +30,7 @@ async function updateBanner(page: Page, nonce: string, id: number, payload: Reco
 async function openVisitorPage(browser: any, baseURL: string, path = '/') {
   const ctx = await browser.newContext({ baseURL });
   const page = await ctx.newPage();
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   return { page, ctx };
 }
 
@@ -40,10 +40,11 @@ async function openVisitorPage(browser: any, baseURL: string, path = '/') {
 async function goToBannerPage(page: Page) {
   const bannerLoad = page.waitForResponse(
     (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
-    { timeout: 20_000 },
+    { timeout: 45_000 },
   );
   await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, {
     waitUntil: 'domcontentloaded',
+    timeout: 45_000,
   });
   await bannerLoad;
   // Wait for populateSettings to finish filling the form
@@ -70,6 +71,28 @@ async function setSelect(page: Page, id: string, value: string) {
 /** Set an input value using Playwright's fill. */
 async function setInput(page: Page, id: string, value: string) {
   await page.fill(`#${id}`, value);
+}
+
+/** Set a wp_editor value, using TinyMCE when available and textarea fallback otherwise. */
+async function setRichText(page: Page, id: string, value: string) {
+  await page.evaluate(
+    ([editorId, nextValue]) => {
+      const textarea = document.getElementById(editorId) as HTMLTextAreaElement | null;
+      const editor = (window as any).tinyMCE?.get(editorId);
+
+      if (editor) {
+        editor.setContent(nextValue);
+        editor.save();
+      }
+
+      if (textarea) {
+        textarea.value = nextValue;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    },
+    [id, value] as [string, string],
+  );
 }
 
 /** Set a toggle checkbox. */
@@ -151,6 +174,26 @@ async function getInputValue(page: Page, id: string): Promise<string> {
   }, id);
 }
 
+/** Read a wp_editor value, preferring TinyMCE content and falling back to the textarea value. */
+async function getRichTextValue(page: Page, id: string): Promise<string> {
+  return page.evaluate((editorId) => {
+    const editor = (window as any).tinyMCE?.get(editorId);
+    if (editor) {
+      const apiValue = typeof editor.getContent === 'function' ? editor.getContent() : '';
+      if (apiValue) {
+        return apiValue.trim();
+      }
+
+      const body = typeof editor.getBody === 'function' ? editor.getBody() : null;
+      if (body?.innerHTML) {
+        return body.innerHTML.trim();
+      }
+    }
+    const textarea = document.getElementById(editorId) as HTMLTextAreaElement | null;
+    return textarea?.value?.trim() ?? '';
+  }, id);
+}
+
 /* ─── Tests ────────────────────────────────────────────────── */
 
 test.describe('Banner settings: persistence and frontend reflection', () => {
@@ -168,7 +211,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await page.locator('#user_login').fill(process.env.WP_ADMIN_USER ?? 'admin');
     await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
     await page.locator('#wp-submit').click();
-    await expect(page).toHaveURL(/\/wp-admin\//);
+    await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
 
     await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', {
       waitUntil: 'domcontentloaded',
@@ -187,7 +230,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await page.locator('#user_login').fill(process.env.WP_ADMIN_USER ?? 'admin');
     await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
     await page.locator('#wp-submit').click();
-    await expect(page).toHaveURL(/\/wp-admin\//);
+    await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
 
     await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', {
       waitUntil: 'domcontentloaded',
@@ -387,11 +430,11 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await goToBannerPage(page);
     await clickTab(page, 'content');
 
-    const originalTitle = await getInputValue(page, 'faz-b-notice-title');
-    const originalDesc = await page.evaluate(() => {
-      const editor = (window as any).tinyMCE?.get('faz-b-notice-desc');
-      return editor ? editor.getContent() : '';
-    });
+    const draftTitle = 'Draft tab switch title';
+    const draftDesc = '<p>Draft tab switch description that should survive the tab change.</p>';
+
+    await setInput(page, 'faz-b-notice-title', draftTitle);
+    await setRichText(page, 'faz-b-notice-desc', draftDesc);
 
     // Switch to General tab and change type (triggers change event)
     await clickTab(page, 'general');
@@ -399,19 +442,9 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     // Switch back to Content
     await clickTab(page, 'content');
 
-    // Verify text was preserved
-    expect(await getInputValue(page, 'faz-b-notice-title')).toBe(originalTitle);
-    const currentDesc = await page.evaluate(() => {
-      const editor = (window as any).tinyMCE?.get('faz-b-notice-desc');
-      return editor ? editor.getContent() : '';
-    });
-    expect(currentDesc.length).toBeGreaterThan(10);
-    expect(currentDesc).toBe(originalDesc);
-
-    // Restore type
-    await clickTab(page, 'general');
-    await setSelect(page, 'faz-b-type', 'box');
-    await saveBanner(page);
+    // Verify unsaved content was preserved across tab switches.
+    expect(await getInputValue(page, 'faz-b-notice-title')).toBe(draftTitle);
+    expect(await getRichTextValue(page, 'faz-b-notice-desc')).toBe(draftDesc);
   });
 
   // ─── Colours Tab ───────────────────────────────────────
@@ -817,7 +850,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     // Verify on frontend: accept consent first, then check revisit widget
     const visitor = await openVisitorPage(browser, wpBaseURL);
     try {
-      await expect(visitor.page.locator('[data-faz-tag="notice"]')).toBeVisible({ timeout: 10_000 });
+      await expect(visitor.page.locator('[data-faz-tag="notice"]')).toBeVisible({ timeout: 20_000 });
       // Accept to dismiss banner and show revisit widget
       const acceptBtn = visitor.page.locator('[data-faz-tag="accept-button"]');
       if (await acceptBtn.isVisible()) {

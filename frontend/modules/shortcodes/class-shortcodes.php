@@ -95,7 +95,24 @@ class Shortcodes {
 		$this->template   = $template;
 		$this->properties = $settings;
 		$this->law        = $banner->get_law();
-		$this->contents   = isset( $contents[ $this->language ] ) ? $contents[ $this->language ] : '';
+		// Load contents for the current language, falling back to English,
+		// then to the bundled en.json defaults for any empty fields.
+		$lang_contents = isset( $contents[ $this->language ] ) ? $contents[ $this->language ] : array();
+		$en_contents   = isset( $contents['en'] ) ? $contents['en'] : array();
+
+		// Merge: current language ← English DB ← en.json defaults.
+		$defaults_file = dirname( dirname( dirname( __DIR__ ) ) ) . '/admin/modules/banners/includes/contents/en.json';
+		$defaults      = array();
+		if ( file_exists( $defaults_file ) ) {
+			$json = faz_read_json_file( $defaults_file );
+			if ( ! empty( $json[ $this->law ] ) ) {
+				$defaults = $json[ $this->law ];
+			} elseif ( ! empty( $json['gdpr'] ) ) {
+				$defaults = $json['gdpr'];
+			}
+		}
+
+		$this->contents = $this->merge_contents_deep( $defaults, $en_contents, $lang_contents );
 		$this->load_shortcodes();
 		$this->init();
 	}
@@ -105,6 +122,34 @@ class Shortcodes {
 	 *
 	 * @return void
 	 */
+	/**
+	 * Deep-merge content arrays: later arguments override earlier ones.
+	 *
+	 * Higher-priority layers always win, including empty strings.
+	 * If an admin intentionally clears a field (e.g. the notice title),
+	 * the saved empty value overrides the en.json default.  Defaults
+	 * only fill in keys that are completely absent from the DB.
+	 *
+	 * @param array ...$layers Content arrays ordered from lowest to highest priority.
+	 * @return array Merged contents.
+	 */
+	private function merge_contents_deep( ...$layers ) {
+		$result = array();
+		foreach ( $layers as $layer ) {
+			if ( ! is_array( $layer ) ) {
+				continue;
+			}
+			foreach ( $layer as $key => $value ) {
+				if ( is_array( $value ) && isset( $result[ $key ] ) && is_array( $result[ $key ] ) ) {
+					$result[ $key ] = $this->merge_contents_deep( $result[ $key ], $value );
+				} else {
+					$result[ $key ] = $value;
+				}
+			}
+		}
+		return $result;
+	}
+
 	private function load_shortcodes() {
 		$this->shortcodes = faz_read_json_file( dirname( __FILE__ ) . '/versions/' . esc_html( $this->template ) . '/shortcodes.json' );
 	}

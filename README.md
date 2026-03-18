@@ -451,6 +451,14 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.7.0
+- **26 new features** — scheduled scanning, consent stats, cookie policy shortcode, geo-IP banner, visual placeholders, multisite, Gutenberg blocks (3), design presets (5), bot detection, GTM data layer, WP privacy tools, dashboard widget, cross-domain consent, cookie deletion, age protection, anti-ad-blocker, per-service consent, import/export, AMP consent, content blocker templates (10), WP-CLI commands, system status, TranslatePress/Weglot compat, unmatched vendor notification
+- **Category editor** — edit category names/descriptions from admin (fixes #38)
+- **Custom CSS** — banner custom CSS now saves and renders (fixes #37)
+- **Per-service consent** — individual service toggles override category consent
+- **Security** — import sanitization, CodeQL DOM XSS resolved, AMP guards, per-service cookie shredding, transactions with ROLLBACK
+- **34 new E2E tests** for all features + deep-flow coverage
+
 ### 1.6.1
 - **Security hardening** — GCM settings sanitisation (whitelist keys, validate values), pageview endpoint HMAC token, scanner SSRF prevention (block private IPs), filter data sanitisation, CSS injection fix
 - **Bug fixes** — switch fallthrough, null guards for CCPA/preference/readmore handlers, deprecated `event.which` → `event.key`, double DOM query fix, `.map()` → `.forEach()` cleanup

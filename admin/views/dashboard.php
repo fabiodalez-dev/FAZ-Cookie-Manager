@@ -90,6 +90,44 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
+			<h3><?php
+				echo wp_kses_post( sprintf(
+					/* translators: %s: date range label injected by JS */
+					__( 'Consent Statistics &mdash; %s', 'faz-cookie-manager' ),
+					'<span id="faz-consent-stats-range-label">' . esc_html__( 'Last 30 Days', 'faz-cookie-manager' ) . '</span>'
+				) );
+			?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-consent-stats-grid" id="faz-consent-stats">
+				<div class="faz-consent-stat faz-consent-stat-accept">
+					<div class="faz-consent-stat-value" id="faz-cstat-accept-rate">&mdash;</div>
+					<div class="faz-consent-stat-label"><?php esc_html_e( 'Acceptance Rate', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-consent-stat faz-consent-stat-reject">
+					<div class="faz-consent-stat-value" id="faz-cstat-reject-rate">&mdash;</div>
+					<div class="faz-consent-stat-label"><?php esc_html_e( 'Rejection Rate', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-consent-stat faz-consent-stat-partial">
+					<div class="faz-consent-stat-value" id="faz-cstat-partial-rate">&mdash;</div>
+					<div class="faz-consent-stat-label"><?php esc_html_e( 'Partial Consent', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-consent-stat">
+					<div class="faz-consent-stat-value" id="faz-cstat-total">&mdash;</div>
+					<div class="faz-consent-stat-label"><?php esc_html_e( 'Total Consents', 'faz-cookie-manager' ); ?></div>
+				</div>
+			</div>
+			<div id="faz-category-stats" style="margin-top:16px;">
+				<h4 style="margin:0 0 8px;font-size:14px;color:var(--faz-text-muted);"><?php esc_html_e( 'Per-Category Acceptance', 'faz-cookie-manager' ); ?></h4>
+				<div id="faz-category-bars">
+					<p style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></p>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Quick Links', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">

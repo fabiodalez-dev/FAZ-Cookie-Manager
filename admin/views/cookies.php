@@ -8,6 +8,33 @@
 defined( 'ABSPATH' ) || exit;
 ?>
 <div id="faz-cookies">
+	<!-- Cookie Categories Editor -->
+	<div class="faz-card" style="margin-bottom:16px;">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Cookie Categories', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-help" style="margin-bottom:12px;"><?php esc_html_e( 'Edit the display name and description for each cookie category. These are shown to visitors in the cookie preference center.', 'faz-cookie-manager' ); ?></div>
+			<div class="faz-table-wrap">
+				<table class="faz-table" id="faz-category-edit-table">
+					<thead>
+						<tr>
+							<th style="width:120px;"><?php esc_html_e( 'Slug', 'faz-cookie-manager' ); ?></th>
+							<th style="width:200px;"><?php esc_html_e( 'Display Name', 'faz-cookie-manager' ); ?></th>
+							<th><?php esc_html_e( 'Description', 'faz-cookie-manager' ); ?></th>
+						</tr>
+					</thead>
+					<tbody id="faz-category-edit-rows">
+						<tr><td colspan="3" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
+					</tbody>
+				</table>
+			</div>
+			<div style="margin-top:12px;">
+				<button class="faz-btn faz-btn-primary faz-btn-sm" id="faz-save-categories" type="button"><?php esc_html_e( 'Save Categories', 'faz-cookie-manager' ); ?></button>
+			</div>
+		</div>
+	</div>
+
 	<div class="faz-grid faz-grid-sidebar">
 		<div class="faz-card" id="faz-cat-sidebar">
 			<div class="faz-card-header">
@@ -82,6 +109,19 @@ defined( 'ABSPATH' ) || exit;
 		<div class="faz-card-body">
 			<p><?php echo wp_kses_post( __( 'Cookie definitions are sourced from the <a href="https://github.com/fabiodalez-dev/Open-Cookie-Database" target="_blank" rel="noopener">Open Cookie Database</a> (Apache-2.0 license). These definitions power the auto-categorize feature.', 'faz-cookie-manager' ) ); ?></p>
 			<div id="faz-defs-status" style="margin-top:8px;font-size:13px;color:var(--faz-text-muted);"><?php esc_html_e( 'Loading status...', 'faz-cookie-manager' ); ?></div>
+		</div>
+	</div>
+
+	<!-- Content Blocker Templates -->
+	<div class="faz-card" style="margin-top:16px;">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Content Blocker Templates', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<p><?php esc_html_e( 'Pre-configured blocking rules for popular services. Click to add a template to your custom rules.', 'faz-cookie-manager' ); ?></p>
+			<div id="faz-blocker-templates" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px;">
+				<p style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading templates...', 'faz-cookie-manager' ); ?></p>
+			</div>
 		</div>
 	</div>
 
@@ -163,6 +203,21 @@ defined( 'ABSPATH' ) || exit;
 			</details>
 		</div>
 	</div>
+
+	<!-- Cookie Policy Shortcode -->
+	<div class="faz-card" style="margin-top:16px;">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Cookie Policy Shortcode', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<p><?php esc_html_e( 'Use the following shortcode to display a complete cookie policy page:', 'faz-cookie-manager' ); ?></p>
+			<div style="display:flex;align-items:center;gap:8px;margin:12px 0;">
+				<code id="faz-policy-shortcode" style="font-size:14px;padding:8px 12px;background:var(--faz-bg);border:1px solid var(--faz-border);border-radius:var(--faz-radius);user-select:all;">[faz_cookie_policy]</code>
+				<button class="faz-btn faz-btn-outline faz-btn-sm" id="faz-copy-policy-shortcode" type="button"><?php esc_html_e( 'Copy', 'faz-cookie-manager' ); ?></button>
+			</div>
+			<div class="faz-help"><?php echo wp_kses_post( __( 'Generates a complete cookie policy with sections: What Are Cookies, How We Use Cookies, Cookies We Use (table), How to Manage Cookies, and contact information. Customise with attributes: <code>site_name</code>, <code>contact</code>, <code>show_table</code>.', 'faz-cookie-manager' ) ); ?></div>
+		</div>
+	</div>
 </div>
 
 <!-- Hidden iframe container for browser-based cookie scanning -->
@@ -178,6 +233,22 @@ document.getElementById('faz-copy-shortcode').addEventListener('click', function
 	} else {
 		var range = document.createRange();
 		range.selectNodeContents(document.getElementById('faz-shortcode-text'));
+		var sel = window.getSelection();
+		sel.removeAllRanges();
+		sel.addRange(range);
+		document.execCommand('copy');
+		FAZ.notify('<?php echo esc_js( __( 'Shortcode copied!', 'faz-cookie-manager' ) ); ?>');
+	}
+});
+document.getElementById('faz-copy-policy-shortcode').addEventListener('click', function() {
+	var text = document.getElementById('faz-policy-shortcode').textContent;
+	if (navigator.clipboard) {
+		navigator.clipboard.writeText(text).then(function() {
+			FAZ.notify('<?php echo esc_js( __( 'Shortcode copied!', 'faz-cookie-manager' ) ); ?>');
+		});
+	} else {
+		var range = document.createRange();
+		range.selectNodeContents(document.getElementById('faz-policy-shortcode'));
 		var sel = window.getSelection();
 		sel.removeAllRanges();
 		sel.addRange(range);

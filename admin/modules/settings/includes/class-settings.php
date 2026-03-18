@@ -81,14 +81,20 @@ class Settings extends Store {
 				'step' => 2,
 			),
 			'scanner'      => array(
-				'max_pages'  => 20,
-				'last_scan'  => '',
-				'static_ip'  => '',
+				'max_pages'       => 20,
+				'last_scan'       => '',
+				'static_ip'       => '',
+				'auto_scan'       => false,
+				'scan_frequency'  => 'weekly',
 			),
 			'banner_control' => array(
-				'status'            => true,
-				'excluded_pages'    => array(),
-				'subdomain_sharing' => false,
+				'status'                 => true,
+				'excluded_pages'         => array(),
+				'subdomain_sharing'      => false,
+				'hide_from_bots'         => true,
+				'gtm_datalayer'          => false,
+				'alternative_asset_path' => false,
+				'per_service_consent'    => false,
 			),
 			'microsoft'    => array(
 				'uet_consent_mode' => false,
@@ -105,12 +111,23 @@ class Settings extends Store {
 			),
 			'geolocation'  => array(
 				'maxmind_license_key' => '',
+				'geo_targeting'       => false,
+				'target_regions'      => array( 'eu', 'uk' ),
+				'default_behavior'    => 'show_banner',
 			),
 			'script_blocking' => array(
 				'custom_rules'   => array(),
 				'excluded_pages' => array(),
 			),
 			'pageview_tracking' => false,
+			'consent_forwarding' => array(
+				'enabled'        => false,
+				'target_domains' => array(),
+			),
+			'age_gate'          => array(
+				'enabled' => false,
+				'min_age' => 16,
+			),
 		);
 
 	}
@@ -150,6 +167,8 @@ class Settings extends Store {
 			'excluded_pages',
 			'sites',
 			'custom_rules',
+			'target_regions',
+			'target_domains',
 		);
 	}
 	/**
@@ -214,7 +233,17 @@ class Settings extends Store {
 			case 'enabled':
 			case 'purpose_one_treatment':
 			case 'pageview_tracking':
+			case 'auto_scan':
+			case 'geo_targeting':
+			case 'hide_from_bots':
+			case 'gtm_datalayer':
+			case 'alternative_asset_path':
+			case 'per_service_consent':
 				$value = faz_sanitize_bool( $value );
+				break;
+			case 'scan_frequency':
+				$allowed = array( 'daily', 'weekly', 'monthly' );
+				$value   = in_array( $value, $allowed, true ) ? $value : 'weekly';
 				break;
 			case 'installed':
 			case 'step':
@@ -224,11 +253,15 @@ class Settings extends Store {
 			case 'retention':
 				$value = max( 1, min( 120, absint( $value ) ) );
 				break;
+			case 'min_age':
+				$value = max( 13, min( 18, absint( $value ) ) );
+				break;
 			case 'cmp_id':
 				$value = min( 4095, absint( $value ) );
 				break;
 			case 'excluded_pages':
 			case 'sites':
+			case 'target_domains':
 				$value = is_array( $value ) ? array_map( 'sanitize_text_field', $value ) : array();
 				break;
 			case 'custom_rules':
@@ -247,6 +280,16 @@ class Settings extends Store {
 					}
 					return array( 'pattern' => $pattern, 'category' => $category );
 				}, $value ) ) );
+				break;
+			case 'default_behavior':
+				$allowed = array( 'show_banner', 'no_banner' );
+				$value   = in_array( $value, $allowed, true ) ? $value : 'show_banner';
+				break;
+			case 'target_regions':
+				if ( ! is_array( $value ) ) {
+					$value = array();
+				}
+				$value = array_values( array_unique( array_map( 'sanitize_text_field', $value ) ) );
 				break;
 			case 'publisher_cc':
 				$value = strtoupper( sanitize_text_field( (string) $value ) );

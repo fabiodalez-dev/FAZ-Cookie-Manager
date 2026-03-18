@@ -28,11 +28,35 @@
 			if (data.script_blocking && Array.isArray(data.script_blocking.excluded_pages)) {
 				data.script_blocking.excluded_pages = data.script_blocking.excluded_pages.join('\n');
 			}
+			// Target domains comes as array, convert to newline-separated text
+			if (data.consent_forwarding && Array.isArray(data.consent_forwarding.target_domains)) {
+				data.consent_forwarding.target_domains = data.consent_forwarding.target_domains.join('\n');
+			}
 			FAZ.populateForm(form, data);
+			populateTargetRegions(data);
 			applyShowIf();
 		}).catch(function () {
 			FAZ.notify('Failed to load settings', 'error');
 		});
+	}
+
+	/** Populate target region checkboxes from the stored array */
+	function populateTargetRegions(data) {
+		var regions = (data.geolocation && Array.isArray(data.geolocation.target_regions))
+			? data.geolocation.target_regions
+			: [];
+		form.querySelectorAll('input[type="checkbox"][data-path="geolocation.target_regions"]').forEach(function (cb) {
+			cb.checked = regions.indexOf(cb.value) !== -1;
+		});
+	}
+
+	/** Collect checked target region values into an array */
+	function serializeTargetRegions() {
+		var regions = [];
+		form.querySelectorAll('input[type="checkbox"][data-path="geolocation.target_regions"]').forEach(function (cb) {
+			if (cb.checked) regions.push(cb.value);
+		});
+		return regions;
 	}
 
 	/** Show/hide elements based on data-show-if="path.to.checkbox" */
@@ -68,6 +92,17 @@
 					.map(function (s) { return s.trim(); })
 					.filter(Boolean);
 			}
+			// Convert target domains back to array
+			if (formData.consent_forwarding && typeof formData.consent_forwarding.target_domains === 'string') {
+				formData.consent_forwarding.target_domains = formData.consent_forwarding.target_domains
+					.split('\n')
+					.map(function (s) { return s.trim(); })
+					.filter(Boolean);
+			}
+
+			// Target regions: replace boolean from generic serializer with proper array
+			if (!formData.geolocation) formData.geolocation = {};
+			formData.geolocation.target_regions = serializeTargetRegions();
 
 			// Deep merge form data into current settings
 			Object.keys(formData).forEach(function (key) {

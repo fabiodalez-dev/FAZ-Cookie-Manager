@@ -304,6 +304,57 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_is_bot' ) ) {
+	/**
+	 * Detect search engine bots and crawlers by user agent.
+	 *
+	 * Returns true for known bot user agents so the cookie banner
+	 * can be skipped (crawlers don't need consent).
+	 *
+	 * @since 1.5.0
+	 * @return bool True if the current request is from a known bot.
+	 */
+	function faz_is_bot() {
+		if ( ! isset( $_SERVER['HTTP_USER_AGENT'] ) ) {
+			return false;
+		}
+		$ua = wp_unslash( $_SERVER['HTTP_USER_AGENT'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$bot_patterns = array(
+			'Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider',
+			'YandexBot', 'facebot', 'ia_archiver', 'Twitterbot', 'LinkedInBot',
+			'Pinterest', 'WhatsApp', 'TelegramBot', 'Applebot', 'AdsBot-Google',
+			'Mediapartners-Google', 'Google-InspectionTool', 'Storebot-Google',
+			'SemrushBot', 'AhrefsBot', 'MJ12bot', 'DotBot', 'PetalBot',
+			'Bytespider', 'GPTBot', 'ChatGPT-User', 'ClaudeBot', 'PerplexityBot',
+			'Amazonbot', 'anthropic-ai', 'Discordbot',
+		);
+
+		/**
+		 * Filter the list of bot user agent patterns.
+		 *
+		 * @since 1.5.0
+		 * @param array $bot_patterns Array of user agent substrings to match.
+		 */
+		$bot_patterns = apply_filters( 'faz_bot_patterns', $bot_patterns );
+
+		foreach ( $bot_patterns as $pattern ) {
+			if ( false !== stripos( $ua, $pattern ) ) {
+				/**
+				 * Filter the bot detection result.
+				 *
+				 * @since 1.5.0
+				 * @param bool   $is_bot Whether the current request is from a bot.
+				 * @param string $ua     The user agent string.
+				 */
+				return apply_filters( 'faz_is_bot', true, $ua );
+			}
+		}
+
+		/** This filter is documented above. */
+		return apply_filters( 'faz_is_bot', false, $ua );
+	}
+}
+
 if ( ! function_exists( 'faz_verify_nonce' ) ) {
 	/**
 	 * Verify nonce.
@@ -316,5 +367,52 @@ if ( ! function_exists( 'faz_verify_nonce' ) ) {
 			return new WP_Error( 'fazcookie_rest_invalid_nonce', __( 'Invalid nonce. Please refresh the page and try again.', 'faz-cookie-manager' ), array( 'status' => 403 ) );
 		}
 		return true;
+	}
+}
+
+if ( ! function_exists( 'faz_privacy_exporter' ) ) {
+	/**
+	 * Export personal data (consent logs) for WordPress privacy tools.
+	 *
+	 * Consent logs store only one-way hashed IPs (SHA-256 + salt), not email
+	 * addresses. We cannot link consent records to a specific email address.
+	 * This is privacy-by-design: the data is pseudonymized and not
+	 * attributable to a specific individual without the original IP.
+	 *
+	 * @since 1.5.0
+	 * @param string $email_address The user's email address.
+	 * @param int    $page          Page number for batched exports.
+	 * @return array Export data conforming to the WP privacy exporter format.
+	 */
+	function faz_privacy_exporter( $email_address, $page = 1 ) {
+		return array(
+			'data' => array(),
+			'done' => true,
+		);
+	}
+}
+
+if ( ! function_exists( 'faz_privacy_eraser' ) ) {
+	/**
+	 * Erase personal data (consent logs) for WordPress privacy tools.
+	 *
+	 * Consent logs use one-way IP hashing (SHA-256 + salt). We cannot
+	 * identify which records belong to a specific email address.
+	 * Records are auto-purged after the configured retention period.
+	 *
+	 * @since 1.5.0
+	 * @param string $email_address The user's email address.
+	 * @param int    $page          Page number for batched erasures.
+	 * @return array Erasure result conforming to the WP privacy eraser format.
+	 */
+	function faz_privacy_eraser( $email_address, $page = 1 ) {
+		return array(
+			'items_removed'  => 0,
+			'items_retained' => true,
+			'messages'       => array(
+				__( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses. Records are automatically purged after the configured retention period.', 'faz-cookie-manager' ),
+			),
+			'done'           => true,
+		);
 	}
 }

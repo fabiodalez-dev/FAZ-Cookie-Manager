@@ -1,0 +1,47 @@
+{
+    "name": "High Contrast",
+    "description": "WCAG AAA accessible design with maximum contrast ratios.",
+    "preview": "light",
+    "config": {
+        "type": "banner",
+        "position": "bottom",
+        "theme": "light",
+        "preferenceCenterType": "popup",
+        "notice": {
+            "styles": {
+                "background-color": "#ffffff",
+                "border-color": "#000000",
+                "color": "#000000"
+            },
+            "elements": {
+                "title": { "styles": { "color": "#000000" } },
+                "description": { "styles": { "color": "#000000" } },
+                "buttons": {
+                    "elements": {
+                        "accept": {
+                            "styles": {
+                                "background-color": "#000000",
+                                "color": "#ffffff",
+                                "border-color": "#000000"
+                            }
+                        },
+                        "reject": {
+                            "styles": {
+                                "background-color": "#ffffff",
+                                "color": "#000000",
+                                "border-color": "#000000"
+                            }
+                        },
+                        "settings": {
+                            "styles": {
+                                "background-color": "#ffffff",
+                                "color": "#000000",
+                                "border-color": "#000000"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

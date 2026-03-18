@@ -425,6 +425,10 @@ class Banner extends Store {
 			case 'background-color':
 				$value = faz_sanitize_color( $value );
 				break;
+			case 'customCSS':
+				// Preserve newlines/special chars for CSS — strip HTML tags only.
+				$value = is_scalar( $value ) ? wp_strip_all_tags( (string) $value ) : '';
+				break;
 			default:
 				$value = faz_sanitize_text( $value );
 				break;

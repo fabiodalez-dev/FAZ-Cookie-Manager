@@ -1,0 +1,47 @@
+{
+    "name": "Light Minimal",
+    "description": "Clean, light design with minimal visual footprint.",
+    "preview": "light",
+    "config": {
+        "type": "box",
+        "position": "bottom-left",
+        "theme": "light",
+        "preferenceCenterType": "popup",
+        "notice": {
+            "styles": {
+                "background-color": "#ffffff",
+                "border-color": "#e5e7eb",
+                "color": "#374151"
+            },
+            "elements": {
+                "title": { "styles": { "color": "#111827" } },
+                "description": { "styles": { "color": "#6b7280" } },
+                "buttons": {
+                    "elements": {
+                        "accept": {
+                            "styles": {
+                                "background-color": "#111827",
+                                "color": "#ffffff",
+                                "border-color": "#111827"
+                            }
+                        },
+                        "reject": {
+                            "styles": {
+                                "background-color": "transparent",
+                                "color": "#374151",
+                                "border-color": "#d1d5db"
+                            }
+                        },
+                        "settings": {
+                            "styles": {
+                                "background-color": "transparent",
+                                "color": "#6b7280",
+                                "border-color": "transparent"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

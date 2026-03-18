@@ -1,0 +1,13 @@
+{
+    "id": "hubspot",
+    "name": "HubSpot",
+    "description": "Blocks HubSpot tracking, forms, and chat widget.",
+    "category": "marketing",
+    "patterns": [
+        "js.hs-scripts.com",
+        "js.hsforms.net",
+        "track.hubspot.com",
+        "js.hs-analytics.net"
+    ],
+    "cookies": ["__hstc", "hubspotutk", "__hssc", "__hssrc"]
+}

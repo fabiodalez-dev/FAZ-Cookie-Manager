@@ -1,0 +1,11 @@
+{
+    "id": "linkedin",
+    "name": "LinkedIn Insight Tag",
+    "description": "Blocks LinkedIn conversion tracking and audience insights.",
+    "category": "marketing",
+    "patterns": [
+        "snap.licdn.com",
+        "platform.linkedin.com"
+    ],
+    "cookies": ["li_sugr", "bcookie", "lidc", "UserMatchHistory", "AnalyticsSyncHistory"]
+}
