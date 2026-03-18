@@ -1377,10 +1377,11 @@ function _fazIsAllowedScheme(url) {
  * - Stylesheets: data-faz-href + data-faz-category     → restore href
  */
 function _fazUnblockServerSide() {
-    // 1. Scripts.
-    document.querySelectorAll('script[type="text/plain"][data-faz-category]')
+    // 1. Scripts (data-faz-category from server-side, data-fazcookie from client-side).
+    document.querySelectorAll('script[type="text/plain"][data-faz-category], script[type="javascript/blocked"][data-fazcookie]')
         .forEach(function (script) {
-            var category = script.getAttribute("data-faz-category");
+            var category = script.getAttribute("data-faz-category")
+                || (script.getAttribute("data-fazcookie") || "").replace("fazcookie-", "");
             if (_fazIsCategoryToBeBlocked(category)) return;
             var clone = _fazCreateElementBackup.call(document, "script");
             var origType = script.getAttribute("data-faz-original-type");
