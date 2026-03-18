@@ -203,7 +203,21 @@ class Frontend {
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 			$config_var    = $alt_asset ? '_fazCfg' : '_fazConfig';
 
-			wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
+			if ( $alt_asset ) {
+				// Serve script inline to avoid ad blocker URL pattern matching.
+				// The plugin directory name contains "cookie" which triggers filter lists.
+				$script_path = plugin_dir_path( __FILE__ ) . 'js/script' . $suffix . '.js';
+				wp_register_script( $script_handle, false, array(), $this->version, false );
+				wp_enqueue_script( $script_handle );
+				if ( file_exists( $script_path ) ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file
+					$script_content = file_get_contents( $script_path );
+					wp_add_inline_script( $script_handle, $script_content );
+				}
+			} else {
+				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
+			}
+
 			wp_localize_script( $script_handle, $config_var, $this->get_store_data() );
 			if ( $alt_asset ) {
 				// Bridge the alternative config variable to the expected name.
@@ -333,7 +347,7 @@ class Frontend {
 						"else fazTrack('banner_settings');" .
 					"});" .
 				"})();";
-				wp_add_inline_script( $script_handle, $pv_js );
+				wp_add_inline_script( $script_handle, $pv_js, 'before' );
 			}
 
 			// Add consent logging if enabled.

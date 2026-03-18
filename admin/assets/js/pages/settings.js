@@ -28,6 +28,10 @@
 			if (data.script_blocking && Array.isArray(data.script_blocking.excluded_pages)) {
 				data.script_blocking.excluded_pages = data.script_blocking.excluded_pages.join('\n');
 			}
+			// Target domains comes as array, convert to newline-separated text
+			if (data.consent_forwarding && Array.isArray(data.consent_forwarding.target_domains)) {
+				data.consent_forwarding.target_domains = data.consent_forwarding.target_domains.join('\n');
+			}
 			FAZ.populateForm(form, data);
 			populateTargetRegions(data);
 			applyShowIf();
@@ -84,6 +88,13 @@
 			}
 			if (formData.script_blocking && typeof formData.script_blocking.excluded_pages === 'string') {
 				formData.script_blocking.excluded_pages = formData.script_blocking.excluded_pages
+					.split('\n')
+					.map(function (s) { return s.trim(); })
+					.filter(Boolean);
+			}
+			// Convert target domains back to array
+			if (formData.consent_forwarding && typeof formData.consent_forwarding.target_domains === 'string') {
+				formData.consent_forwarding.target_domains = formData.consent_forwarding.target_domains
 					.split('\n')
 					.map(function (s) { return s.trim(); })
 					.filter(Boolean);

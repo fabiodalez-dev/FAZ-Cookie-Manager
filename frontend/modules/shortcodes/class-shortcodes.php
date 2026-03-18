@@ -124,8 +124,11 @@ class Shortcodes {
 	 */
 	/**
 	 * Deep-merge content arrays: later arguments override earlier ones.
-	 * Empty strings in higher-priority layers are treated as "not set"
-	 * so the default value shines through.
+	 *
+	 * Higher-priority layers always win, including empty strings.
+	 * If an admin intentionally clears a field (e.g. the notice title),
+	 * the saved empty value overrides the en.json default.  Defaults
+	 * only fill in keys that are completely absent from the DB.
 	 *
 	 * @param array ...$layers Content arrays ordered from lowest to highest priority.
 	 * @return array Merged contents.
@@ -139,9 +142,6 @@ class Shortcodes {
 			foreach ( $layer as $key => $value ) {
 				if ( is_array( $value ) && isset( $result[ $key ] ) && is_array( $result[ $key ] ) ) {
 					$result[ $key ] = $this->merge_contents_deep( $result[ $key ], $value );
-				} elseif ( is_string( $value ) && '' === trim( wp_strip_all_tags( $value ) ) ) {
-					// Empty string — keep the existing (default) value.
-					continue;
 				} else {
 					$result[ $key ] = $value;
 				}

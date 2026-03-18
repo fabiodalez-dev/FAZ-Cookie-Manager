@@ -200,8 +200,12 @@ class Api extends Rest_Controller {
 			);
 		}
 
-		// Rate limit: 1 request per IP per second — silently skip DB insert on duplicate.
-		if ( faz_throttle_request( 'faz_pv' ) ) {
+		// Rate limit: 1 request per IP per event type per second.
+		// Each event type (pageview, banner_view, banner_accept, etc.) gets its own
+		// throttle bucket so near-simultaneous events don't suppress each other.
+		$event_type = sanitize_key( $request->get_param( 'event_type' ) );
+		$throttle_key = 'faz_pv_' . $event_type;
+		if ( faz_throttle_request( $throttle_key ) ) {
 			return rest_ensure_response( array( 'throttled' => true ) );
 		}
 
