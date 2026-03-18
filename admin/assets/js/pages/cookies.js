@@ -134,6 +134,18 @@
 			: 'en';
 	}
 
+	/**
+	 * Strip <p> wrapper tags from a string but keep inner HTML (links, bold, etc.).
+	 * Converts <p> boundaries to line breaks for textarea display.
+	 */
+	function stripParagraphTags(html) {
+		if (!html || typeof html !== 'string') return html || '';
+		return html
+			.replace(/<\/p>\s*<p>/gi, '\n')  // </p><p> → newline
+			.replace(/<\/?p[^>]*>/gi, '')     // remaining <p> and </p> → remove
+			.trim();
+	}
+
 	function renderCategoryEditor() {
 		var tbody = document.getElementById('faz-category-edit-rows');
 		if (!tbody || !categoryEditorData || !categoryEditorData.length) return;
@@ -171,9 +183,10 @@
 			descInput.rows = 2;
 			descInput.style.cssText = 'font-size:13px;min-height:50px;width:100%;';
 			var descObj = cat.description;
-			descInput.value = (typeof descObj === 'object' && descObj !== null)
+			var rawDesc = (typeof descObj === 'object' && descObj !== null)
 				? (descObj[lang] || descObj.en || Object.values(descObj)[0] || '')
 				: (descObj || '');
+			descInput.value = stripParagraphTags(rawDesc);
 			tdDesc.appendChild(descInput);
 			tr.appendChild(tdDesc);
 
