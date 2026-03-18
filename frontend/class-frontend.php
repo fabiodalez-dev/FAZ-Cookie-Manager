@@ -141,6 +141,10 @@ class Frontend {
 		if ( true === faz_disable_banner() ) {
 			return;
 		}
+		// AMP pages use amp-consent; do not enqueue the JS banner.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+			return;
+		}
 		// Skip banner for search engine bots (configurable via Settings).
 		$bot_settings = get_option( 'faz_settings' );
 		if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {

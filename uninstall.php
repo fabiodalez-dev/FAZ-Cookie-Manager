@@ -32,6 +32,10 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 			$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'faz_consent_logs' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( 'DROP TABLE IF EXISTS ' . $wpdb->prefix . 'faz_pageviews' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 
+			if ( $wpdb->last_error ) {
+				error_log( 'FAZ uninstall: DB error during table cleanup: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+
 			// Clean up transients.
 			$prefix = $wpdb->esc_like( '_transient_faz' ) . '%';
 			$keys   = $wpdb->get_results( $wpdb->prepare( "SELECT option_name FROM $wpdb->options WHERE option_name LIKE %s", $prefix ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery

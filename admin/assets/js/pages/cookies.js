@@ -240,15 +240,15 @@
 			);
 		});
 
-		Promise.all(promises).then(function () {
-			FAZ.notify('Categories saved.', 'success');
-			// Refresh the sidebar category list as well
+		Promise.allSettled(promises).then(function (results) {
+			var failed = results.filter(function (r) { return r.status === 'rejected'; }).length;
+			if (failed === 0) {
+				FAZ.notify('Categories saved.', 'success');
+			} else {
+				FAZ.notify((results.length - failed) + ' saved, ' + failed + ' failed.', 'error');
+			}
 			loadCategories();
-			// Refresh editor data
 			loadCategoryEditor();
-		}).catch(function () {
-			FAZ.notify('Failed to save categories.', 'error');
-		}).then(function () {
 			if (saveBtn) saveBtn.disabled = false;
 		});
 	}

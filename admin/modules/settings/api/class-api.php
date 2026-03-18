@@ -559,6 +559,10 @@ class Api extends Rest_Controller {
 				if ( isset( $cat['description'] ) ) {
 					$cat['description'] = json_decode( $cat['description'], true );
 				}
+				if ( isset( $cat['meta'] ) ) {
+					$decoded = json_decode( $cat['meta'], true );
+					$cat['meta'] = ( null !== $decoded ) ? $decoded : $cat['meta'];
+				}
 			}
 			unset( $cat );
 		}
@@ -692,7 +696,7 @@ class Api extends Rest_Controller {
 		}
 
 		// --- Categories ---
-		if ( ! empty( $data['categories'] ) && is_array( $data['categories'] ) ) {
+		if ( isset( $data['categories'] ) && is_array( $data['categories'] ) ) {
 			$table = $wpdb->prefix . 'faz_cookie_categories';
 			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
@@ -725,7 +729,7 @@ class Api extends Rest_Controller {
 		}
 
 		// --- Cookies ---
-		if ( ! empty( $data['cookies'] ) && is_array( $data['cookies'] ) ) {
+		if ( isset( $data['cookies'] ) && is_array( $data['cookies'] ) ) {
 			$table = $wpdb->prefix . 'faz_cookies';
 			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery

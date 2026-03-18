@@ -1115,7 +1115,7 @@ window.wp.apiFetch=apiFetch;
 	public function render_dashboard_widget() {
 		global $wpdb;
 		$table  = $wpdb->prefix . 'faz_consent_logs';
-		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-30 days', strtotime( current_time( 'mysql' ) ) ) );
+		$cutoff = date( 'Y-m-d H:i:s', strtotime( '-30 days', strtotime( current_time( 'mysql' ) ) ) ); // phpcs:ignore WordPress.DateTime.RestrictedFunctions.date_date
 
 		$stats = $wpdb->get_row(
 			$wpdb->prepare(

@@ -69,15 +69,18 @@ test.describe('v1.7.0 features', () => {
     // Visit a page that has the shortcode — we test by evaluating the shortcode via REST
     const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
     const p = await ctx.newPage();
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
+    try {
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
 
-    // Check that the shortcode class is registered by looking for it in the page source
-    // (We can't easily add a shortcode to a page via E2E, so we test the REST rendering)
-    const html = await p.evaluate(() => document.documentElement.outerHTML);
-    // The shortcode won't be on the homepage, but we verify the class is loaded
-    // by checking that the plugin's script is enqueued (proves the shortcode class initialized)
-    expect(html).toContain('faz-cookie-manager');
-    await ctx.close();
+      // Check that the shortcode class is registered by looking for it in the page source
+      // (We can't easily add a shortcode to a page via E2E, so we test the REST rendering)
+      const html = await p.evaluate(() => document.documentElement.outerHTML);
+      // The shortcode won't be on the homepage, but we verify the class is loaded
+      // by checking that the plugin's script is enqueued (proves the shortcode class initialized)
+      expect(html).toContain('faz-cookie-manager');
+    } finally {
+      await ctx.close();
+    }
   });
 
   // 4. Geo-IP Banner Display
@@ -239,26 +242,27 @@ test.describe('v1.7.0 features', () => {
   test('F14: reject all sets optional categories to no', async ({ page, wpBaseURL, getConsentCookie, parseConsentCookie }) => {
     const ctx = await page.context().browser()!.newContext({ baseURL: wpBaseURL });
     const p = await ctx.newPage();
+    try {
+      // Visit and reject all
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
+      const notice = p.locator('[data-faz-tag="notice"]');
+      await expect(notice).toBeVisible({ timeout: 10_000 });
+      await p.locator('[data-faz-tag="reject-button"]').click();
+      await p.waitForTimeout(500);
 
-    // Visit and reject all
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
-    const notice = p.locator('[data-faz-tag="notice"]');
-    await expect(notice).toBeVisible({ timeout: 10_000 });
-    await p.locator('[data-faz-tag="reject-button"]').click();
-    await p.waitForTimeout(500);
-
-    // Verify consent cookie shows rejection for optional categories
-    const cookie = await getConsentCookie(ctx);
-    expect(cookie).toBeDefined();
-    if (cookie) {
-      const parsed = parseConsentCookie(cookie.value);
-      expect(parsed['necessary']).toBe('yes');
-      // At least one optional category should be 'no'
-      const optionalNo = Object.entries(parsed).some(([k, v]) => k !== 'necessary' && k !== 'consent' && k !== 'action' && k !== 'consentid' && v === 'no');
-      expect(optionalNo).toBe(true);
+      // Verify consent cookie shows rejection for optional categories
+      const cookie = await getConsentCookie(ctx);
+      expect(cookie).toBeDefined();
+      if (cookie) {
+        const parsed = parseConsentCookie(cookie.value);
+        expect(parsed['necessary']).toBe('yes');
+        // At least one optional category should be 'no'
+        const optionalNo = Object.entries(parsed).some(([k, v]) => k !== 'necessary' && k !== 'consent' && k !== 'action' && k !== 'consentid' && v === 'no');
+        expect(optionalNo).toBe(true);
+      }
+    } finally {
+      await ctx.close();
     }
-
-    await ctx.close();
   });
 
   // 15. Youth/Age Protection
@@ -289,10 +293,13 @@ test.describe('v1.7.0 features', () => {
     // Verify frontend uses different handle
     const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
     const p = await ctx.newPage();
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
-    const html = await p.content();
-    expect(html).toContain('faz-fw');
-    await ctx.close();
+    try {
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
+      const html = await p.content();
+      expect(html).toContain('faz-fw');
+    } finally {
+      await ctx.close();
+    }
 
     // Restore
     await updateSettings(page, nonce, { banner_control: { alternative_asset_path: false } });
@@ -311,12 +318,15 @@ test.describe('v1.7.0 features', () => {
     // Check frontend has services data in the page source
     const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
     const p = await ctx.newPage();
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
-    const html = await p.content();
-    // The per-service data is embedded in the inline config
-    expect(html).toContain('_perServiceConsent');
-    expect(html).toContain('_services');
-    await ctx.close();
+    try {
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
+      const html = await p.content();
+      // The per-service data is embedded in the inline config
+      expect(html).toContain('_perServiceConsent');
+      expect(html).toContain('_services');
+    } finally {
+      await ctx.close();
+    }
 
     // Restore
     await updateSettings(page, nonce, { banner_control: { per_service_consent: false } });
@@ -363,20 +373,26 @@ test.describe('v1.7.0 features', () => {
 
     const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
     const p = await ctx.newPage();
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
-    const hasPvConfig = await p.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
-    expect(hasPvConfig).toBe(true);
-    await ctx.close();
+    try {
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
+      const hasPvConfig = await p.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
+      expect(hasPvConfig).toBe(true);
+    } finally {
+      await ctx.close();
+    }
 
     // Disable and verify no PV config
     await updateSettings(page, nonce, { pageview_tracking: false });
 
     const ctx2 = await page.context().browser()!.newContext({ baseURL: WP_BASE });
     const p2 = await ctx2.newPage();
-    await p2.goto('/', { waitUntil: 'domcontentloaded' });
-    const hasPvConfig2 = await p2.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
-    expect(hasPvConfig2).toBe(false);
-    await ctx2.close();
+    try {
+      await p2.goto('/', { waitUntil: 'domcontentloaded' });
+      const hasPvConfig2 = await p2.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
+      expect(hasPvConfig2).toBe(false);
+    } finally {
+      await ctx2.close();
+    }
   });
 
   // 20. System Status Page
@@ -424,25 +440,31 @@ test.describe('v1.7.0 features', () => {
   test('F22: AMP class does not interfere with non-AMP pages', async ({ page, wpBaseURL }) => {
     const ctx = await page.context().browser()!.newContext({ baseURL: wpBaseURL });
     const p = await ctx.newPage();
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
+    try {
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
 
-    // On non-AMP pages, the regular banner should load (not amp-consent)
-    const html = await p.content();
-    expect(html).not.toContain('amp-consent');
-    expect(html).toContain('fazcookie-consent'); // regular consent cookie reference
-    await ctx.close();
+      // On non-AMP pages, the regular banner should load (not amp-consent)
+      const html = await p.content();
+      expect(html).not.toContain('amp-consent');
+      expect(html).toContain('fazcookie-consent'); // regular consent cookie reference
+    } finally {
+      await ctx.close();
+    }
   });
 
   // 23. TranslatePress/Weglot compatibility (no breakage)
   test('F23: translation compat class does not break banner on single-language site', async ({ page, wpBaseURL }) => {
     const ctx = await page.context().browser()!.newContext({ baseURL: wpBaseURL });
     const p = await ctx.newPage();
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
+    try {
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
 
-    // Banner should still render normally
-    const notice = p.locator('[data-faz-tag="notice"]');
-    await expect(notice).toBeVisible({ timeout: 10_000 });
-    await ctx.close();
+      // Banner should still render normally
+      const notice = p.locator('[data-faz-tag="notice"]');
+      await expect(notice).toBeVisible({ timeout: 10_000 });
+    } finally {
+      await ctx.close();
+    }
   });
 
   // 24. WP-CLI commands registered
@@ -497,23 +519,26 @@ test.describe('v1.7.0 features', () => {
   test('F28: banner has accept and reject buttons at first level', async ({ page, wpBaseURL }) => {
     const ctx = await page.context().browser()!.newContext({ baseURL: wpBaseURL });
     const p = await ctx.newPage();
-    await p.goto('/', { waitUntil: 'domcontentloaded' });
+    try {
+      await p.goto('/', { waitUntil: 'domcontentloaded' });
 
-    const accept = p.locator('[data-faz-tag="accept-button"]');
-    const reject = p.locator('[data-faz-tag="reject-button"]');
-    await expect(accept).toBeVisible({ timeout: 10_000 });
-    await expect(reject).toBeVisible();
+      const accept = p.locator('[data-faz-tag="accept-button"]');
+      const reject = p.locator('[data-faz-tag="reject-button"]');
+      await expect(accept).toBeVisible({ timeout: 10_000 });
+      await expect(reject).toBeVisible();
 
-    // Equal prominence: similar dimensions
-    const acceptBox = await accept.boundingBox();
-    const rejectBox = await reject.boundingBox();
-    expect(acceptBox).toBeTruthy();
-    expect(rejectBox).toBeTruthy();
-    if (acceptBox && rejectBox) {
-      // Height should be similar (within 10px)
-      expect(Math.abs(acceptBox.height - rejectBox.height)).toBeLessThan(10);
+      // Equal prominence: similar dimensions
+      const acceptBox = await accept.boundingBox();
+      const rejectBox = await reject.boundingBox();
+      expect(acceptBox).toBeTruthy();
+      expect(rejectBox).toBeTruthy();
+      if (acceptBox && rejectBox) {
+        // Height should be similar (within 10px)
+        expect(Math.abs(acceptBox.height - rejectBox.height)).toBeLessThan(10);
+      }
+    } finally {
+      await ctx.close();
     }
-    await ctx.close();
   });
 
   // 29. Issue #37: Custom CSS saves and renders
@@ -567,10 +592,13 @@ test.describe('v1.7.0 features', () => {
     // Check frontend has the custom CSS
     const ctx = await browser.newContext({ baseURL: wpBaseURL });
     const visitor = await ctx.newPage();
-    await visitor.goto('/', { waitUntil: 'domcontentloaded' });
-    const html = await visitor.content();
-    expect(html).toContain('faz-test-custom-css-marker');
-    await ctx.close();
+    try {
+      await visitor.goto('/', { waitUntil: 'domcontentloaded' });
+      const html = await visitor.content();
+      expect(html).toContain('faz-test-custom-css-marker');
+    } finally {
+      await ctx.close();
+    }
 
     // Clean up — remove the custom CSS
     await page.click('#faz-banner-tabs button[data-tab="advanced"]');
