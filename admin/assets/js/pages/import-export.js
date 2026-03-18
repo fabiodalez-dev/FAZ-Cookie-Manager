@@ -87,6 +87,8 @@
             } catch (err) {
                 FAZ.notify('Invalid JSON file.', 'error');
                 importData = null;
+                document.getElementById('faz-import-preview').style.display = 'none';
+                document.getElementById('faz-import-btn').disabled = true;
                 return;
             }
 
@@ -94,6 +96,8 @@
             if (!importData.plugin || importData.plugin !== 'faz-cookie-manager') {
                 FAZ.notify('This file is not a FAZ Cookie Manager export.', 'error');
                 importData = null;
+                document.getElementById('faz-import-preview').style.display = 'none';
+                document.getElementById('faz-import-btn').disabled = true;
                 return;
             }
 

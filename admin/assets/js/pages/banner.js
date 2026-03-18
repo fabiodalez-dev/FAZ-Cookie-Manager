@@ -512,9 +512,10 @@
 			while (grid.firstChild) grid.removeChild(grid.firstChild);
 
 			presets.forEach(function (preset) {
-				var card = document.createElement('div');
+				var card = document.createElement('button');
+				card.type = 'button';
 				card.className = 'faz-preset-card';
-				card.style.cssText = 'padding:16px;border:2px solid var(--faz-border);border-radius:8px;cursor:pointer;text-align:center;transition:border-color 0.2s;';
+				card.style.cssText = 'padding:16px;border:2px solid var(--faz-border);border-radius:8px;cursor:pointer;text-align:center;transition:border-color 0.2s;background:none;display:block;width:100%;';
 				card.onmouseenter = function () { card.style.borderColor = 'var(--faz-primary)'; };
 				card.onmouseleave = function () { card.style.borderColor = 'var(--faz-border)'; };
 

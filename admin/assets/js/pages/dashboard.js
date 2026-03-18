@@ -113,7 +113,7 @@
 		var params = buildParams();
 		loadStats(params);
 		loadChart(params);
-		loadConsentStats();
+		loadConsentStats(params);
 	}
 
 	/* ── Stats + Donut ── */
@@ -271,9 +271,9 @@
 
 	/* ── Consent Statistics ── */
 
-	function loadConsentStats() {
-		var days = currentFilter.days || 30;
-		FAZ.get('consent_logs/stats', { days: days }).then(function (stats) {
+	function loadConsentStats(params) {
+		params = params || { days: currentFilter.days || 30 };
+		FAZ.get('consent_logs/stats', params).then(function (stats) {
 			if (!stats || !stats.totals) return;
 
 			var total    = parseInt(stats.totals.total, 10) || 0;

@@ -1,6 +1,6 @@
 /**
  * E2E tests for all v1.7.0 features.
- * 19 tests — one per new feature.
+ * 30 tests — one per new feature.
  */
 import { expect, test } from '../fixtures/wp-fixture';
 

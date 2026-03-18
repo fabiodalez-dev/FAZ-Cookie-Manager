@@ -749,7 +749,7 @@ class Activator {
 		// For each Known Provider, check if it is detected on the site
 		// but NOT covered by a selected GVL vendor.
 		$unmatched = array();
-		foreach ( $known as $service_id => $service ) {
+		foreach ( $known as $service ) {
 			// Check if any detected cookie domain matches this service's patterns.
 			$is_detected = false;
 			foreach ( $detected_domains as $domain ) {

@@ -98,7 +98,7 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 			}
 
 			// Remove GVL files (recursive to handle dotfiles and subdirectories).
-			$upload_dir = wp_upload_dir();
+			$upload_dir = wp_upload_dir( null, false );
 			$gvl_dir    = trailingslashit( $upload_dir['basedir'] ) . 'faz-cookie-manager/gvl';
 			if ( is_dir( $gvl_dir ) ) {
 				$iterator = new \RecursiveIteratorIterator(
@@ -128,12 +128,21 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 	}
 
 	if ( is_multisite() ) {
-		$sites = get_sites( array( 'number' => 0 ) );
-		foreach ( $sites as $site ) {
-			switch_to_blog( $site->blog_id );
-			faz_cleanup_site_data();
-			restore_current_blog();
-		}
+		$offset = 0;
+		$batch  = 100;
+		do {
+			$site_ids = get_sites( array(
+				'fields' => 'ids',
+				'number' => $batch,
+				'offset' => $offset,
+			) );
+			foreach ( $site_ids as $site_id ) {
+				switch_to_blog( $site_id );
+				faz_cleanup_site_data();
+				restore_current_blog();
+			}
+			$offset += $batch;
+		} while ( count( $site_ids ) === $batch );
 	} else {
 		faz_cleanup_site_data();
 	}

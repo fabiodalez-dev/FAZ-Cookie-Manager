@@ -200,10 +200,20 @@ class Api extends Rest_Controller {
 			);
 		}
 
+		// Validate event_type against known values to prevent cache-key flooding.
+		$event_type = sanitize_key( $request->get_param( 'event_type' ) );
+		$allowed_event_types = array( 'pageview', 'banner_view', 'banner_accept', 'banner_reject', 'banner_settings' );
+		if ( ! in_array( $event_type, $allowed_event_types, true ) ) {
+			return new WP_Error(
+				'invalid_event_type',
+				__( 'Unknown event type.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+
 		// Rate limit: 1 request per IP per event type per second.
 		// Each event type (pageview, banner_view, banner_accept, etc.) gets its own
 		// throttle bucket so near-simultaneous events don't suppress each other.
-		$event_type = sanitize_key( $request->get_param( 'event_type' ) );
 		$throttle_key = 'faz_pv_' . $event_type;
 		if ( faz_throttle_request( $throttle_key ) ) {
 			return rest_ensure_response( array( 'throttled' => true ) );

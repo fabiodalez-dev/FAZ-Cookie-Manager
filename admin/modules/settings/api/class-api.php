@@ -685,8 +685,9 @@ class Api extends Rest_Controller {
 			$table = $wpdb->prefix . 'faz_cookie_categories';
 			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			$cat_failed = false;
 			foreach ( $data['categories'] as $cat ) {
-				$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					'category_id'      => absint( $cat['category_id'] ?? 0 ),
 					'name'             => wp_json_encode( $cat['name'] ?? array() ),
 					'slug'             => sanitize_text_field( $cat['slug'] ?? '' ),
@@ -697,6 +698,14 @@ class Api extends Rest_Controller {
 					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 0 ),
 					'meta'             => isset( $cat['meta'] ) ? wp_json_encode( $cat['meta'] ) : null,
 				) );
+				if ( false === $result ) {
+					$cat_failed = true;
+					break;
+				}
+			}
+			if ( $cat_failed ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return new WP_Error( 'import_categories_failed', __( 'Failed to import categories. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 			}
 			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			// Invalidate category cache.
@@ -709,8 +718,9 @@ class Api extends Rest_Controller {
 			$table = $wpdb->prefix . 'faz_cookies';
 			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			$cookie_failed = false;
 			foreach ( $data['cookies'] as $cookie ) {
-				$wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
 					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
 					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
@@ -723,6 +733,14 @@ class Api extends Rest_Controller {
 					'url_pattern' => sanitize_text_field( $cookie['url_pattern'] ?? '' ),
 					'meta'        => isset( $cookie['meta'] ) ? wp_json_encode( $cookie['meta'] ) : null,
 				) );
+				if ( false === $result ) {
+					$cookie_failed = true;
+					break;
+				}
+			}
+			if ( $cookie_failed ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				return new WP_Error( 'import_cookies_failed', __( 'Failed to import cookies. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 			}
 			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			// Invalidate cookie cache.

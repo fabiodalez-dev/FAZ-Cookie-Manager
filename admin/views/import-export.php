@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
 		<div class="faz-card-body">
 			<p><?php esc_html_e( 'Upload a previously exported JSON file to restore or migrate settings. This will overwrite your current plugin configuration.', 'faz-cookie-manager' ); ?></p>
 			<div class="faz-form-group">
-				<label><?php esc_html_e( 'Select JSON file', 'faz-cookie-manager' ); ?></label>
+				<label for="faz-import-file"><?php esc_html_e( 'Select JSON file', 'faz-cookie-manager' ); ?></label>
 				<input type="file" id="faz-import-file" accept=".json,application/json" class="faz-input" style="max-width:400px;">
 			</div>
 			<div id="faz-import-preview" style="display:none;margin:16px 0;">

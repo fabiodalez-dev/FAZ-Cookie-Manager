@@ -454,8 +454,11 @@ class Controller {
 	public function get_consent_stats( $days = 30 ) {
 		global $wpdb;
 
-		$table = $this->get_table_name();
-		$days  = absint( $days );
+		$table  = $this->get_table_name();
+		$days   = absint( $days );
+		// Use PHP-computed cutoff with current_time() for consistency with
+		// how created_at is stored (via current_time('mysql') in log_consent).
+		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-' . $days . ' days', strtotime( current_time( 'mysql' ) ) ) );
 
 		// Daily consent breakdown.
 		$daily = $wpdb->get_results(
@@ -466,10 +469,10 @@ class Controller {
 						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial,
 						COUNT(*) as total
 				 FROM {$table}
-				 WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+				 WHERE created_at >= %s
 				 GROUP BY DATE(created_at)
 				 ORDER BY date ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$days
+				$cutoff
 			),
 			ARRAY_A
 		);
@@ -486,8 +489,8 @@ class Controller {
 						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
 						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
 				 FROM {$table}
-				 WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$days
+				 WHERE created_at >= %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$cutoff
 			),
 			ARRAY_A
 		);
@@ -505,9 +508,9 @@ class Controller {
 		$category_rows = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT categories FROM {$table}
-				 WHERE created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+				 WHERE created_at >= %s
 				 AND categories IS NOT NULL AND categories != ''", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$days
+				$cutoff
 			),
 			ARRAY_A
 		);

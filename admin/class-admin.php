@@ -1031,8 +1031,9 @@ window.wp.apiFetch=apiFetch;
 		);
 		$list = implode( ', ', $names );
 
+		$dismiss_nonce = wp_create_nonce( 'faz_dismiss_unmatched' );
 		printf(
-			'<div class="notice notice-warning is-dismissible" id="faz-unmatched-vendors-notice"><p>%s %s</p><p><a href="%s" class="button button-small">%s</a> <button type="button" class="button button-small button-link" onclick="jQuery(\'#faz-unmatched-vendors-notice\').fadeOut();jQuery.post(ajaxurl,{action:\'faz_dismiss_unmatched\'});">%s</button></p></div>',
+			'<div class="notice notice-warning is-dismissible" id="faz-unmatched-vendors-notice"><p>%s %s</p><p><a href="%s" class="button button-small">%s</a> <button type="button" class="button button-small button-link" onclick="jQuery(\'#faz-unmatched-vendors-notice\').fadeOut();jQuery.post(ajaxurl,{action:\'faz_dismiss_unmatched\',_wpnonce:\'%s\'});">%s</button></p></div>',
 			wp_kses_post(
 				sprintf(
 					/* translators: %s: comma-separated list of service names */
@@ -1043,6 +1044,7 @@ window.wp.apiFetch=apiFetch;
 			esc_html__( 'Add the matching vendors to ensure proper TCF consent for these services.', 'faz-cookie-manager' ),
 			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-gvl' ) ),
 			esc_html__( 'Go to Vendor List', 'faz-cookie-manager' ),
+			esc_attr( $dismiss_nonce ),
 			esc_html__( 'Dismiss', 'faz-cookie-manager' )
 		);
 	}
@@ -1053,6 +1055,7 @@ window.wp.apiFetch=apiFetch;
 	 * @return void
 	 */
 	public function ajax_dismiss_unmatched_vendors() {
+		check_ajax_referer( 'faz_dismiss_unmatched', '_wpnonce' );
 		delete_transient( 'faz_unmatched_vendors' );
 		wp_die();
 	}

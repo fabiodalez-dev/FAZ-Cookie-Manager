@@ -99,7 +99,10 @@ class Api extends Rest_Controller {
 							'description'       => __( 'Number of days to look back.', 'faz-cookie-manager' ),
 							'type'              => 'integer',
 							'default'           => 30,
+							'minimum'           => 1,
+							'maximum'           => 365,
 							'sanitize_callback' => 'absint',
+							'validate_callback' => 'rest_validate_request_arg',
 						),
 					),
 				),
@@ -177,7 +180,7 @@ class Api extends Rest_Controller {
 	 * @return WP_REST_Response
 	 */
 	public function get_consent_stats( $request ) {
-		$days  = $request->get_param( 'days' ) ? absint( $request->get_param( 'days' ) ) : 30;
+		$days  = max( 1, min( 365, absint( $request->get_param( 'days' ) ) ) );
 		$stats = Controller::get_instance()->get_consent_stats( $days );
 		return rest_ensure_response( $stats );
 	}

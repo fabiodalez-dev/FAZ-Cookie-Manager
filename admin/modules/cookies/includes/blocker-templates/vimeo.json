@@ -2,7 +2,7 @@
     "id": "vimeo",
     "name": "Vimeo",
     "description": "Blocks Vimeo video embeds.",
-    "category": "marketing",
+    "category": "functional",
     "patterns": [
         "player.vimeo.com",
         "i.vimeocdn.com"

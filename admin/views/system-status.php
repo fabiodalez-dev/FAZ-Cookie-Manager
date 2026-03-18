@@ -21,9 +21,14 @@ $theme = wp_get_theme();
 $tables = array( 'faz_banners', 'faz_cookies', 'faz_cookie_categories', 'faz_consent_logs', 'faz_pageviews' );
 $table_info = array();
 foreach ( $tables as $t ) {
-	$full = $wpdb->prefix . $t;
-	$row  = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-	$table_info[ $t ] = $row ? absint( $row->cnt ) : 0;
+	$full   = $wpdb->prefix . $t;
+	$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	if ( $exists ) {
+		$row = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$table_info[ $t ] = $row ? absint( $row->cnt ) : 0;
+	} else {
+		$table_info[ $t ] = -1; // table missing
+	}
 }
 
 // Cron status.
@@ -86,7 +91,13 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 		<div class="faz-card-body">
 			<table class="faz-status-table">
 				<?php foreach ( $table_info as $name => $count ) : ?>
-				<tr><td><code><?php echo esc_html( $wpdb->prefix . $name ); ?></code></td><td><?php echo esc_html( number_format_i18n( $count ) ); ?> <?php esc_html_e( 'rows', 'faz-cookie-manager' ); ?></td></tr>
+				<tr><td><code><?php echo esc_html( $wpdb->prefix . $name ); ?></code></td><td><?php
+					if ( -1 === $count ) {
+						echo '<span style="color:red;">' . esc_html__( 'Table missing', 'faz-cookie-manager' ) . '</span>';
+					} else {
+						echo esc_html( number_format_i18n( $count ) ) . ' ' . esc_html__( 'rows', 'faz-cookie-manager' );
+					}
+				?></td></tr>
 				<?php endforeach; ?>
 			</table>
 		</div>

@@ -1575,14 +1575,23 @@
 	function loadBlockerTemplates() {
 		FAZ.get('blocker-templates').then(function (templates) {
 			var container = document.getElementById('faz-blocker-templates');
-			if (!container || !templates || !templates.length) return;
+			if (!container) return;
 
 			// Clear loading text safely
 			while (container.firstChild) container.removeChild(container.firstChild);
 
+			if (!templates || !templates.length) {
+				var emptyMsg = document.createElement('p');
+				emptyMsg.style.color = 'var(--faz-text-muted)';
+				emptyMsg.textContent = 'No templates available.';
+				container.appendChild(emptyMsg);
+				return;
+			}
+
 			templates.forEach(function (tpl) {
-				var card = document.createElement('div');
-				card.style.cssText = 'padding:12px;border:1px solid var(--faz-border);border-radius:8px;cursor:pointer;transition:border-color 0.2s;';
+				var card = document.createElement('button');
+				card.type = 'button';
+				card.style.cssText = 'padding:12px;border:1px solid var(--faz-border);border-radius:8px;cursor:pointer;transition:border-color 0.2s;background:none;display:block;width:100%;text-align:left;';
 				card.onmouseenter = function () { card.style.borderColor = 'var(--faz-primary)'; };
 				card.onmouseleave = function () { card.style.borderColor = 'var(--faz-border)'; };
 
@@ -1612,6 +1621,15 @@
 
 				container.appendChild(card);
 			});
+		}).catch(function () {
+			var container = document.getElementById('faz-blocker-templates');
+			if (container) {
+				while (container.firstChild) container.removeChild(container.firstChild);
+				var errMsg = document.createElement('p');
+				errMsg.style.color = 'var(--faz-danger, red)';
+				errMsg.textContent = 'Failed to load templates.';
+				container.appendChild(errMsg);
+			}
 		});
 	}
 

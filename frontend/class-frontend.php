@@ -157,7 +157,12 @@ class Frontend {
 		if ( ! empty( $faz_geo_settings['geolocation']['geo_targeting'] ) ) {
 			$country = '';
 			// Try Cloudflare header first (free, no MaxMind needed).
-			if ( isset( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
+			// Only trust the header when explicitly opted in via filter and value is valid.
+			if (
+				apply_filters( 'faz_trust_cf_ipcountry_header', false )
+				&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
+				&& preg_match( '/^[A-Z]{2}$/', sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) )
+			) {
 				$country = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
 			}
 			// Fallback to MaxMind / other detection methods.
@@ -1639,7 +1644,7 @@ class Frontend {
 				continue;
 			}
 			foreach ( $service['patterns'] as $pattern ) {
-				$this->pattern_service_cache[ $pattern ] = $id;
+				$this->pattern_service_cache[ $pattern ] = sanitize_key( $id );
 			}
 		}
 		return $this->pattern_service_cache;
@@ -2706,6 +2711,17 @@ class Frontend {
 			if ( false === strpos( $content, $class ) ) {
 				continue;
 			}
+
+			// Per-service consent check: if per-service consent is active and
+			// the visitor explicitly allowed this service, skip blocking.
+			$service_consent = $this->get_service_consent();
+			if ( ! empty( $service_consent ) && ! empty( $info['service_id'] ) ) {
+				$svc_key = $info['service_id'];
+				if ( isset( $service_consent[ $svc_key ] ) && 'yes' === $service_consent[ $svc_key ] ) {
+					continue;
+				}
+			}
+
 			$category = $info['category'];
 			if ( ! in_array( $category, $blocked_categories, true ) ) {
 				continue;
