@@ -2,6 +2,35 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.7.0] — 2026-03-18
+
+### Added
+- **26 new features**: Scheduled scanning, consent statistics, cookie policy shortcode, geo-IP banner, visual placeholders, multisite, Gutenberg blocks (3), design presets (5), bot detection, GTM data layer, WP privacy tools, dashboard widget, cross-domain consent, 1st-party cookie deletion, age protection, anti-ad-blocker, per-service consent, import/export, AMP consent, content blocker templates (10), WP-CLI commands, system status page, TranslatePress/Weglot compatibility, unmatched IAB vendor notification
+- **Category editor** — edit cookie category names and descriptions from admin (fixes #38)
+- **Custom CSS** — banner custom CSS field now saves and renders on frontend (fixes #37)
+- **30 E2E tests** for all new features + 4 deep-flow tests (import/export round-trip, WP-CLI, shortcode render, blocker templates)
+
+### Fixed
+- Per-service consent: `svc.id:no` now shreds cookies even when category is allowed
+- AMP: guards in all 7 runtime entry points prevent classic JS runtime on AMP pages
+- Import: transactions with ROLLBACK, cache invalidation, round-trip safe JSON encoding
+- Consent stats: timezone-consistent queries, filter sync with dashboard
+- Cross-domain consent: format + length validation, scheme check on iframe.src
+- Rate limiter: validates event_type against allowlist
+- Script unblocking: handles `data:` URIs + `data-fazcookie` attribute
+- Banner text fallback: defaults from en.json only for absent keys, empty strings respected
+- GVL: auto-detect vendors from Known Providers instead of selecting all 1400+
+
+### Security
+- Import handler: recursive sanitization of banner contents/settings (wp_kses_post)
+- Placeholder HTML: wp_kses with iframe/script allowlist
+- AMP consent: double-output prevention guards
+- Blocks/shortcodes: CSP-friendly event delegation (no inline onclick)
+- CodeQL: all 7 DOM XSS + 1 prototype pollution alerts resolved
+- AJAX dismiss: nonce verification
+- CF-IPCountry: behind trust filter
+- Uninstall: per-table return-value checks with contextual logging
+
 ## [1.6.1] — 2026-03-17
 
 ### Security
