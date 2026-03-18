@@ -32,7 +32,6 @@ async function updateSettings(page: any, nonce: string, data: Record<string, unk
 /* ─── Tests ────────────────────────────────────── */
 
 test.describe('v1.7.0 features', () => {
-  test.describe.configure({ mode: 'serial' });
 
   // 1. Scheduled Cookie Scanning
   test('F01: auto_scan and scan_frequency settings persist', async ({ page, loginAsAdmin }) => {
