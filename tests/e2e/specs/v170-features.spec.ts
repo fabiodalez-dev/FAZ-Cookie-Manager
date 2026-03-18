@@ -39,13 +39,16 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, { scanner: { auto_scan: true, scan_frequency: 'daily' } });
-    const s = await getSettings(page, nonce);
-    expect(s.scanner.auto_scan).toBe(true);
-    expect(s.scanner.scan_frequency).toBe('daily');
-
-    // Restore
-    await updateSettings(page, nonce, { scanner: { auto_scan: false, scan_frequency: 'weekly' } });
+    const before = await getSettings(page, nonce);
+    try {
+      await updateSettings(page, nonce, { scanner: { auto_scan: true, scan_frequency: 'daily' } });
+      const s = await getSettings(page, nonce);
+      expect(s.scanner.auto_scan).toBe(true);
+      expect(s.scanner.scan_frequency).toBe('daily');
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { scanner: before.scanner });
+    }
   });
 
   // 2. Consent Statistics Dashboard
@@ -65,21 +68,45 @@ test.describe('v1.7.0 features', () => {
   });
 
   // 3. Cookie Policy Auto-Generation
-  test('F03: [faz_cookie_policy] shortcode renders policy content', async ({ page }) => {
-    // Visit a page that has the shortcode — we test by evaluating the shortcode via REST
-    const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
-    const p = await ctx.newPage();
-    try {
-      await p.goto('/', { waitUntil: 'domcontentloaded' });
+  test('F03: [faz_cookie_policy] shortcode renders policy content', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
 
-      // Check that the shortcode class is registered by looking for it in the page source
-      // (We can't easily add a shortcode to a page via E2E, so we test the REST rendering)
-      const html = await p.evaluate(() => document.documentElement.outerHTML);
-      // The shortcode won't be on the homepage, but we verify the class is loaded
-      // by checking that the plugin's script is enqueued (proves the shortcode class initialized)
-      expect(html).toContain('faz-cookie-manager');
-    } finally {
-      await ctx.close();
+    // Create a test page with the shortcode via REST API
+    const createResp = await page.request.post(`${WP_BASE}/?rest_route=/wp/v2/pages`, {
+      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+      data: {
+        title: 'FAZ Test Cookie Policy',
+        content: '[faz_cookie_policy]',
+        status: 'publish',
+      },
+    });
+
+    if (createResp.status() === 201) {
+      const postData = await createResp.json();
+      const postUrl = postData.link;
+      const postId = postData.id;
+
+      try {
+        // Visit the page and check shortcode output
+        const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
+        const p = await ctx.newPage();
+        try {
+          await p.goto(postUrl || `/?p=${postId}`, { waitUntil: 'domcontentloaded' });
+          const html = await p.content();
+          expect(html).toContain('faz-cookie-policy');
+          expect(html).toContain('How to Manage Cookies');
+        } finally {
+          await ctx.close();
+        }
+      } finally {
+        // Delete the test page
+        await page.request.delete(`${WP_BASE}/?rest_route=/wp/v2/pages/${postId}`, {
+          headers: { 'X-WP-Nonce': nonce },
+          data: { force: true },
+        });
+      }
     }
   });
 
@@ -89,22 +116,23 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, {
-      geolocation: { geo_targeting: true, target_regions: ['eu', 'uk'], default_behavior: 'no_banner' },
-    });
-    const s = await getSettings(page, nonce);
-    expect(s.geolocation.geo_targeting).toBe(true);
-    expect(s.geolocation.target_regions).toContain('eu');
-    expect(s.geolocation.default_behavior).toBe('no_banner');
-
-    // Restore
-    await updateSettings(page, nonce, {
-      geolocation: { geo_targeting: false, default_behavior: 'show_banner' },
-    });
+    const before = await getSettings(page, nonce);
+    try {
+      await updateSettings(page, nonce, {
+        geolocation: { geo_targeting: true, target_regions: ['eu', 'uk'], default_behavior: 'no_banner' },
+      });
+      const s = await getSettings(page, nonce);
+      expect(s.geolocation.geo_targeting).toBe(true);
+      expect(s.geolocation.target_regions).toContain('eu');
+      expect(s.geolocation.default_behavior).toBe('no_banner');
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { geolocation: before.geolocation });
+    }
   });
 
   // 5. Visual Placeholders
-  test('F05: Placeholder_Builder class is loaded (CSS available)', async ({ page, loginAsAdmin }) => {
+  test('F05: Placeholder_Builder infrastructure loads without errors (smoke test)', async ({ page, loginAsAdmin }) => {
     // Verify the placeholder CSS class exists in the frontend stylesheet
     // The CSS is always injected (regardless of whether there are blocked iframes)
     await loginAsAdmin(page);
@@ -117,7 +145,7 @@ test.describe('v1.7.0 features', () => {
   });
 
   // 6. Multisite Support
-  test('F06: network activation hooks are registered', async ({ page, loginAsAdmin }) => {
+  test('F06: multisite hooks do not break single-site (smoke test)', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     // Verify the plugin loads — multisite-specific behaviour can't be tested on single-site
@@ -168,17 +196,19 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    const s = await getSettings(page, nonce);
+    const before = await getSettings(page, nonce);
     // Default should be true
-    expect(s.banner_control.hide_from_bots).toBe(true);
+    expect(before.banner_control.hide_from_bots).toBe(true);
 
-    // Toggle off and verify
-    await updateSettings(page, nonce, { banner_control: { hide_from_bots: false } });
-    const s2 = await getSettings(page, nonce);
-    expect(s2.banner_control.hide_from_bots).toBe(false);
-
-    // Restore
-    await updateSettings(page, nonce, { banner_control: { hide_from_bots: true } });
+    try {
+      // Toggle off and verify
+      await updateSettings(page, nonce, { banner_control: { hide_from_bots: false } });
+      const s2 = await getSettings(page, nonce);
+      expect(s2.banner_control.hide_from_bots).toBe(false);
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { banner_control: before.banner_control });
+    }
   });
 
   // 10. GTM Data Layer
@@ -187,16 +217,19 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, { banner_control: { gtm_datalayer: true } });
-    const s = await getSettings(page, nonce);
-    expect(s.banner_control.gtm_datalayer).toBe(true);
-
-    // Restore
-    await updateSettings(page, nonce, { banner_control: { gtm_datalayer: false } });
+    const before = await getSettings(page, nonce);
+    try {
+      await updateSettings(page, nonce, { banner_control: { gtm_datalayer: true } });
+      const s = await getSettings(page, nonce);
+      expect(s.banner_control.gtm_datalayer).toBe(true);
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { banner_control: before.banner_control });
+    }
   });
 
   // 11. WP Privacy Tools
-  test('F11: privacy hooks are registered (exporter and eraser)', async ({ page, loginAsAdmin }) => {
+  test('F11: privacy hooks load without errors (smoke test)', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     // We can't easily test the WP privacy page content because it requires a privacy policy
@@ -225,17 +258,18 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, {
-      consent_forwarding: { enabled: true, target_domains: ['https://example.com'] },
-    });
-    const s = await getSettings(page, nonce);
-    expect(s.consent_forwarding.enabled).toBe(true);
-    expect(s.consent_forwarding.target_domains).toContain('https://example.com');
-
-    // Restore
-    await updateSettings(page, nonce, {
-      consent_forwarding: { enabled: false, target_domains: [] },
-    });
+    const before = await getSettings(page, nonce);
+    try {
+      await updateSettings(page, nonce, {
+        consent_forwarding: { enabled: true, target_domains: ['https://example.com'] },
+      });
+      const s = await getSettings(page, nonce);
+      expect(s.consent_forwarding.enabled).toBe(true);
+      expect(s.consent_forwarding.target_domains).toContain('https://example.com');
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { consent_forwarding: before.consent_forwarding });
+    }
   });
 
   // 14. 1st-Party Cookie Deletion
@@ -248,7 +282,7 @@ test.describe('v1.7.0 features', () => {
       const notice = p.locator('[data-faz-tag="notice"]');
       await expect(notice).toBeVisible({ timeout: 10_000 });
       await p.locator('[data-faz-tag="reject-button"]').click();
-      await p.waitForTimeout(500);
+      await p.waitForFunction(() => document.cookie.includes('fazcookie-consent'), { timeout: 10_000 });
 
       // Verify consent cookie shows rejection for optional categories
       const cookie = await getConsentCookie(ctx);
@@ -271,13 +305,16 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, { age_gate: { enabled: true, min_age: 14 } });
-    const s = await getSettings(page, nonce);
-    expect(s.age_gate.enabled).toBe(true);
-    expect(s.age_gate.min_age).toBe(14);
-
-    // Restore
-    await updateSettings(page, nonce, { age_gate: { enabled: false, min_age: 16 } });
+    const before = await getSettings(page, nonce);
+    try {
+      await updateSettings(page, nonce, { age_gate: { enabled: true, min_age: 14 } });
+      const s = await getSettings(page, nonce);
+      expect(s.age_gate.enabled).toBe(true);
+      expect(s.age_gate.min_age).toBe(14);
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { age_gate: before.age_gate });
+    }
   });
 
   // 16. Anti-Ad-Blocker
@@ -286,23 +323,26 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, { banner_control: { alternative_asset_path: true } });
-    const s = await getSettings(page, nonce);
-    expect(s.banner_control.alternative_asset_path).toBe(true);
-
-    // Verify frontend uses different handle
-    const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
-    const p = await ctx.newPage();
+    const before = await getSettings(page, nonce);
     try {
-      await p.goto('/', { waitUntil: 'domcontentloaded' });
-      const html = await p.content();
-      expect(html).toContain('faz-fw');
-    } finally {
-      await ctx.close();
-    }
+      await updateSettings(page, nonce, { banner_control: { alternative_asset_path: true } });
+      const s = await getSettings(page, nonce);
+      expect(s.banner_control.alternative_asset_path).toBe(true);
 
-    // Restore
-    await updateSettings(page, nonce, { banner_control: { alternative_asset_path: false } });
+      // Verify frontend uses different handle
+      const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
+      const p = await ctx.newPage();
+      try {
+        await p.goto('/', { waitUntil: 'domcontentloaded' });
+        const html = await p.content();
+        expect(html).toContain('faz-fw');
+      } finally {
+        await ctx.close();
+      }
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { banner_control: before.banner_control });
+    }
   });
 
   // 17. Per-Service Consent
@@ -311,25 +351,28 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, { banner_control: { per_service_consent: true } });
-    const s = await getSettings(page, nonce);
-    expect(s.banner_control.per_service_consent).toBe(true);
-
-    // Check frontend has services data in the page source
-    const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
-    const p = await ctx.newPage();
+    const before = await getSettings(page, nonce);
     try {
-      await p.goto('/', { waitUntil: 'domcontentloaded' });
-      const html = await p.content();
-      // The per-service data is embedded in the inline config
-      expect(html).toContain('_perServiceConsent');
-      expect(html).toContain('_services');
-    } finally {
-      await ctx.close();
-    }
+      await updateSettings(page, nonce, { banner_control: { per_service_consent: true } });
+      const s = await getSettings(page, nonce);
+      expect(s.banner_control.per_service_consent).toBe(true);
 
-    // Restore
-    await updateSettings(page, nonce, { banner_control: { per_service_consent: false } });
+      // Check frontend has services data in the page source
+      const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
+      const p = await ctx.newPage();
+      try {
+        await p.goto('/', { waitUntil: 'domcontentloaded' });
+        const html = await p.content();
+        // The per-service data is embedded in the inline config
+        expect(html).toContain('_perServiceConsent');
+        expect(html).toContain('_services');
+      } finally {
+        await ctx.close();
+      }
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { banner_control: before.banner_control });
+    }
   });
 
   // 18. Import/Export
@@ -365,25 +408,28 @@ test.describe('v1.7.0 features', () => {
     const nonce = await getAdminNonce(page);
 
     // Default should be off
-    const s = await getSettings(page, nonce);
-    expect(s.pageview_tracking).toBe(false);
+    const before = await getSettings(page, nonce);
+    expect(before.pageview_tracking).toBe(false);
 
-    // Enable and check frontend
-    await updateSettings(page, nonce, { pageview_tracking: true });
-
-    const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
-    const p = await ctx.newPage();
     try {
-      await p.goto('/', { waitUntil: 'domcontentloaded' });
-      const hasPvConfig = await p.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
-      expect(hasPvConfig).toBe(true);
+      // Enable and check frontend
+      await updateSettings(page, nonce, { pageview_tracking: true });
+
+      const ctx = await page.context().browser()!.newContext({ baseURL: WP_BASE });
+      const p = await ctx.newPage();
+      try {
+        await p.goto('/', { waitUntil: 'domcontentloaded' });
+        const hasPvConfig = await p.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
+        expect(hasPvConfig).toBe(true);
+      } finally {
+        await ctx.close();
+      }
     } finally {
-      await ctx.close();
+      // Restore
+      await updateSettings(page, nonce, { pageview_tracking: before.pageview_tracking });
     }
 
-    // Disable and verify no PV config
-    await updateSettings(page, nonce, { pageview_tracking: false });
-
+    // Verify disabled state (should match original)
     const ctx2 = await page.context().browser()!.newContext({ baseURL: WP_BASE });
     const p2 = await ctx2.newPage();
     try {
@@ -468,7 +514,7 @@ test.describe('v1.7.0 features', () => {
   });
 
   // 24. WP-CLI commands registered
-  test('F24: WP-CLI class file exists and is valid PHP', async ({ page, loginAsAdmin }) => {
+  test('F24: WP-CLI class loads without errors (smoke test)', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     // We can't run WP-CLI from Playwright, but we verify the plugin loads
     // without errors (the CLI class has a WP_CLI guard so it doesn't break web)
@@ -506,13 +552,16 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    await updateSettings(page, nonce, { microsoft: { uet_consent_mode: true, clarity_consent: true } });
-    const s = await getSettings(page, nonce);
-    expect(s.microsoft.uet_consent_mode).toBe(true);
-    expect(s.microsoft.clarity_consent).toBe(true);
-
-    // Restore
-    await updateSettings(page, nonce, { microsoft: { uet_consent_mode: false, clarity_consent: false } });
+    const before = await getSettings(page, nonce);
+    try {
+      await updateSettings(page, nonce, { microsoft: { uet_consent_mode: true, clarity_consent: true } });
+      const s = await getSettings(page, nonce);
+      expect(s.microsoft.uet_consent_mode).toBe(true);
+      expect(s.microsoft.clarity_consent).toBe(true);
+    } finally {
+      // Restore
+      await updateSettings(page, nonce, { microsoft: before.microsoft });
+    }
   });
 
   // 28. Banner renders Accept and Reject with equal prominence
@@ -544,13 +593,14 @@ test.describe('v1.7.0 features', () => {
   // 29. Issue #37: Custom CSS saves and renders
   test('F29: custom CSS saves in banner settings and appears on frontend (issue #37)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
     await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
 
-    // Wait for banner data to load
-    await page.waitForResponse(
+    // Register waitForResponse BEFORE goto to avoid race
+    const bannerLoad = page.waitForResponse(
       (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
       { timeout: 20_000 },
     );
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
+    await bannerLoad;
     await page.waitForFunction(() => {
       const el = document.getElementById('faz-b-type') as HTMLSelectElement;
       return el && el.value !== '';
@@ -573,12 +623,13 @@ test.describe('v1.7.0 features', () => {
     const resp = await saveResponse;
     expect(resp.status()).toBe(200);
 
-    // Reload and verify persistence
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
-    await page.waitForResponse(
+    // Reload and verify persistence — register waitForResponse BEFORE goto
+    const bannerReload = page.waitForResponse(
       (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
       { timeout: 20_000 },
     );
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
+    await bannerReload;
     await page.waitForFunction(() => {
       const el = document.getElementById('faz-b-type') as HTMLSelectElement;
       return el && el.value !== '';
