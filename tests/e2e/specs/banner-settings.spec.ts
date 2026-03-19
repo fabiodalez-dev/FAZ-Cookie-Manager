@@ -1031,8 +1031,11 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     const n = await getAdminNonce(page);
     const banner = await getBanner(page, n);
 
-    // Deep-copy and clear the notice title in all language layers
+    // Deep-copy and clear the notice title in base and all language layers
     const modified = JSON.parse(JSON.stringify(banner));
+    if (modified.contents?.notice?.elements) {
+      modified.contents.notice.elements.title = '';
+    }
     for (const lang of Object.keys(modified.contents || {})) {
       if (modified.contents[lang]?.notice?.elements) {
         modified.contents[lang].notice.elements.title = '';

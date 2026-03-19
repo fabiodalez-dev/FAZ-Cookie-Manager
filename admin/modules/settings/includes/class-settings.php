@@ -277,7 +277,15 @@ class Settings extends Store {
 			case 'sites':
 			case 'target_domains':
 			case 'whitelist_patterns':
-				$value = is_array( $value ) ? array_map( 'sanitize_text_field', $value ) : array();
+				if ( ! is_array( $value ) ) {
+					$value = array();
+					break;
+				}
+				$value = array_values( array_filter( array_map( function ( $item ) {
+					return trim( sanitize_text_field( (string) $item ) );
+				}, $value ), function ( $item ) {
+					return '' !== $item;
+				} ) );
 				break;
 			case 'custom_rules':
 				$allowed_categories = array( 'analytics', 'marketing', 'functional', 'performance' );

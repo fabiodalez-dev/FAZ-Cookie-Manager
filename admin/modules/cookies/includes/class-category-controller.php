@@ -161,7 +161,7 @@ class Category_Controller extends Base_Controller {
 		$grouped     = array();
 		foreach ( $all_cookies as $cookie ) {
 			$object = new Cookie( $cookie );
-			$cat_id = (int) $cookie->category;
+			$cat_id = isset( $cookie->category ) ? (int) $cookie->category : 0;
 			if ( ! isset( $grouped[ $cat_id ] ) ) {
 				$grouped[ $cat_id ] = array();
 			}

@@ -605,6 +605,9 @@ window.wp.apiFetch=apiFetch;
 				$request->set_query_params( $query_params );
 			}
 			$response = rest_do_request( $request );
+			if ( $response->is_error() ) {
+				continue;
+			}
 			if ( 200 === $response->get_status() ) {
 				$key = ltrim( $parts['path'], '/' );
 				if ( ! empty( $parts['query'] ) ) {

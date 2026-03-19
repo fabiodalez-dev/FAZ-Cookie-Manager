@@ -22,7 +22,7 @@
 	}
 
 	FAZ.ready(function () {
-		loadCategories();
+		loadCategories(true);
 		loadCookies();
 		var saveCatsBtn = document.getElementById('faz-save-categories');
 		if (saveCatsBtn) saveCatsBtn.addEventListener('click', saveCategoryEdits);
@@ -108,12 +108,12 @@
 		loadBlockerTemplates();
 	});
 
-	function loadCategories() {
+	function loadCategories(refreshEditor) {
 		FAZ.get('cookies/categories').then(function (data) {
 			categories = Array.isArray(data) ? data : (data.items || []);
 			categoryEditorData = categories;
 			renderCategories();
-			renderCategoryEditor();
+			if (refreshEditor) renderCategoryEditor();
 		}).catch(function (err) { console.error('FAZ: Failed to load categories', err); });
 	}
 
@@ -239,7 +239,7 @@
 			} else {
 				FAZ.notify((results.length - failed) + ' saved, ' + failed + ' failed.', 'error');
 			}
-			loadCategories();
+			loadCategories(true);
 			if (saveBtn) saveBtn.disabled = false;
 		});
 	}
