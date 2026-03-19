@@ -1643,30 +1643,6 @@ function _fazShouldChangeType(element, src) {
  */
 (function _fazNetworkInterceptors() {
     /**
-     * Data-only API endpoints that should NEVER be blocked by the network
-     * interceptor. These return JSON data without setting cookies or tracking.
-     * Blocking them breaks legitimate site functionality without privacy benefit.
-     */
-    var _fazApiWhitelist = [
-        'googleapis.com/youtube/v3/',      // YouTube Data API (playlist metadata, no cookies)
-        'googleapis.com/customsearch/',    // Google Custom Search API
-        'translation.googleapis.com/',     // Google Translate API
-        'www.google.com/recaptcha/api',    // reCAPTCHA (functional, required for forms)
-        'challenges.cloudflare.com/',      // Cloudflare Turnstile
-    ];
-
-    /**
-     * Check if a URL matches a whitelisted data-only API endpoint.
-     */
-    function _fazIsWhitelistedApi(endpoint) {
-        if (!endpoint) return false;
-        for (var i = 0; i < _fazApiWhitelist.length; i++) {
-            if (endpoint.indexOf(_fazApiWhitelist[i]) !== -1) return true;
-        }
-        return false;
-    }
-
-    /**
      * Extract a clean hostname+path from a URL string for provider matching.
      * Returns empty string on failure (non-blocking).
      */
@@ -1687,7 +1663,7 @@ function _fazShouldChangeType(element, src) {
         var _fazOrigSendBeacon = navigator.sendBeacon.bind(navigator);
         navigator.sendBeacon = function (url, data) {
             var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && !_fazIsWhitelistedApi(endpoint) && _fazShouldBlockProvider(endpoint)) {
+            if (endpoint && _fazShouldBlockProvider(endpoint)) {
                 return true; // Pretend success — silently drop.
             }
             return _fazOrigSendBeacon(url, data);
@@ -1700,7 +1676,7 @@ function _fazShouldChangeType(element, src) {
         window.fetch = function (input, init) {
             var url = typeof input === "string" ? input : (input && input.url ? input.url : "");
             var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && !_fazIsWhitelistedApi(endpoint) && _fazShouldBlockProvider(endpoint)) {
+            if (endpoint && _fazShouldBlockProvider(endpoint)) {
                 return Promise.resolve(new Response("", { status: 200, statusText: "Blocked by consent" }));
             }
             return _fazOrigFetch(input, init);
@@ -1718,7 +1694,7 @@ function _fazShouldChangeType(element, src) {
             try { delete this.responseText; } catch (e) { /* non-configurable fallback */ }
         }
         var endpoint = _fazExtractEndpoint(url);
-        this._fazBlocked = !!(endpoint && !_fazIsWhitelistedApi(endpoint) && _fazShouldBlockProvider(endpoint));
+        this._fazBlocked = !!(endpoint && _fazShouldBlockProvider(endpoint));
         return _fazOrigXHROpen.apply(this, arguments);
     };
     var _fazOrigXHRSend = XMLHttpRequest.prototype.send;
