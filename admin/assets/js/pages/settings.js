@@ -28,6 +28,9 @@
 			if (data.script_blocking && Array.isArray(data.script_blocking.excluded_pages)) {
 				data.script_blocking.excluded_pages = data.script_blocking.excluded_pages.join('\n');
 			}
+			if (data.script_blocking && Array.isArray(data.script_blocking.whitelist_patterns)) {
+				data.script_blocking.whitelist_patterns = data.script_blocking.whitelist_patterns.join('\n');
+			}
 			// Target domains comes as array, convert to newline-separated text
 			if (data.consent_forwarding && Array.isArray(data.consent_forwarding.target_domains)) {
 				data.consent_forwarding.target_domains = data.consent_forwarding.target_domains.join('\n');
@@ -88,6 +91,12 @@
 			}
 			if (formData.script_blocking && typeof formData.script_blocking.excluded_pages === 'string') {
 				formData.script_blocking.excluded_pages = formData.script_blocking.excluded_pages
+					.split('\n')
+					.map(function (s) { return s.trim(); })
+					.filter(Boolean);
+			}
+			if (formData.script_blocking && typeof formData.script_blocking.whitelist_patterns === 'string') {
+				formData.script_blocking.whitelist_patterns = formData.script_blocking.whitelist_patterns
 					.split('\n')
 					.map(function (s) { return s.trim(); })
 					.filter(Boolean);

@@ -116,8 +116,9 @@ class Settings extends Store {
 				'default_behavior'    => 'show_banner',
 			),
 			'script_blocking' => array(
-				'custom_rules'   => array(),
-				'excluded_pages' => array(),
+				'custom_rules'       => array(),
+				'excluded_pages'     => array(),
+				'whitelist_patterns' => array(),
 			),
 			'pageview_tracking' => false,
 			'consent_forwarding' => array(
@@ -169,6 +170,7 @@ class Settings extends Store {
 			'custom_rules',
 			'target_regions',
 			'target_domains',
+			'whitelist_patterns',
 		);
 	}
 	/**
@@ -262,6 +264,7 @@ class Settings extends Store {
 			case 'excluded_pages':
 			case 'sites':
 			case 'target_domains':
+			case 'whitelist_patterns':
 				$value = is_array( $value ) ? array_map( 'sanitize_text_field', $value ) : array();
 				break;
 			case 'custom_rules':
