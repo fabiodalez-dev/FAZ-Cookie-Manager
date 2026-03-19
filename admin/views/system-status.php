@@ -113,11 +113,11 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 			<table class="faz-status-table">
 				<tr>
 					<td><?php esc_html_e( 'Next Scheduled Scan', 'faz-cookie-manager' ); ?></td>
-					<td><?php echo $next_scan ? esc_html( wp_date( 'Y-m-d H:i:s', $next_scan ) ) : '&mdash;'; ?></td>
+					<td><?php echo $next_scan ? esc_html( date_i18n( 'Y-m-d H:i:s', $next_scan ) ) : '&mdash;'; ?></td>
 				</tr>
 				<tr>
 					<td><?php esc_html_e( 'Next Consent Log Cleanup', 'faz-cookie-manager' ); ?></td>
-					<td><?php echo $next_cleanup ? esc_html( wp_date( 'Y-m-d H:i:s', $next_cleanup ) ) : '&mdash;'; ?></td>
+					<td><?php echo $next_cleanup ? esc_html( date_i18n( 'Y-m-d H:i:s', $next_cleanup ) ) : '&mdash;'; ?></td>
 				</tr>
 			</table>
 		</div>

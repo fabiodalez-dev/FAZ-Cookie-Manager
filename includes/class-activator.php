@@ -81,6 +81,7 @@ class Activator {
 		// Consolidate one-time migrations into a single admin_init callback
 		// to avoid 7 separate get_option() calls on every admin page load.
 		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
+		add_action( 'admin_init', array( __CLASS__, 'ensure_cookie_definitions' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
@@ -100,19 +101,82 @@ class Activator {
 	 *
 	 * @return void
 	 */
+	/**
+	 * Bump this only when adding/changing a migration in the sequence below.
+	 */
+	const MIGRATIONS_VERSION = '2026.03.19.1';
+
 	public static function run_pending_migrations() {
-		// Single option check — once set, skips all migrations.
-		if ( get_option( 'faz_migrations_version' ) === FAZ_VERSION ) {
+		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
 			return;
 		}
-		self::ensure_uncategorized_category();
-		self::ensure_wordpress_internal_category();
-		self::rename_advertisement_to_marketing();
-		self::fix_uncategorized_prior_consent();
-		self::fix_banner_gdpr_defaults();
-		self::fix_brand_logo_path();
+		try {
+			self::ensure_uncategorized_category();
+			self::ensure_wordpress_internal_category();
+			self::rename_advertisement_to_marketing();
+			self::fix_uncategorized_prior_consent();
+			self::fix_banner_gdpr_defaults();
+			self::fix_brand_logo_path();
+			self::seed_default_whitelist();
+		} catch ( \Throwable $e ) {
+			// Do not mark migrations complete — retry on next admin load.
+			return;
+		}
+		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+	}
+
+	/**
+	 * Seed default whitelist patterns for existing installs.
+	 *
+	 * Only adds defaults when the whitelist is empty, so user customizations
+	 * are never overwritten.
+	 *
+	 * @return void
+	 */
+	public static function seed_default_whitelist() {
+		$settings = get_option( 'faz_settings' );
+		if ( ! is_array( $settings ) ) {
+			return;
+		}
+		$current = isset( $settings['script_blocking']['whitelist_patterns'] )
+			? $settings['script_blocking']['whitelist_patterns']
+			: null;
+
+		if ( ! empty( $current ) ) {
+			return;
+		}
+
+		$defaults = array(
+			'googleapis.com/youtube/v3/',
+			'googleapis.com/customsearch/',
+			'translation.googleapis.com/',
+			'www.google.com/recaptcha/api',
+			'challenges.cloudflare.com/',
+			'maps.googleapis.com/maps/api/',
+			'www.googleapis.com/oauth2/',
+			'fonts.googleapis.com/',
+			'cdn.jsdelivr.net/',
+			'unpkg.com/',
+			'hcaptcha.com/',
+		);
+
+		if ( ! isset( $settings['script_blocking'] ) ) {
+			$settings['script_blocking'] = array();
+		}
+		$settings['script_blocking']['whitelist_patterns'] = $defaults;
+		update_option( 'faz_settings', $settings );
+	}
+
+	/**
+	 * Ensure cookie definitions are downloaded.
+	 *
+	 * Runs outside the version-gated migrations so a failed download
+	 * (e.g. network timeout) is retried on the next admin visit.
+	 *
+	 * @return void
+	 */
+	public static function ensure_cookie_definitions() {
 		self::maybe_download_cookie_definitions();
-		update_option( 'faz_migrations_version', FAZ_VERSION, false );
 	}
 
 	/**

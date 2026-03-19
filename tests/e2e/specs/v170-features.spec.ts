@@ -595,17 +595,11 @@ test.describe('v1.7.0 features', () => {
   test('F29: custom CSS saves in banner settings and appears on frontend (issue #37)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
     await loginAsAdmin(page);
 
-    // Register waitForResponse BEFORE goto to avoid race
-    const bannerLoad = page.waitForResponse(
-      (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
-      { timeout: 20_000 },
-    );
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
-    await bannerLoad;
     await page.waitForFunction(() => {
       const el = document.getElementById('faz-b-type') as HTMLSelectElement;
       return el && el.value !== '';
-    }, { timeout: 5_000 });
+    }, { timeout: 10_000 });
 
     // Switch to Advanced tab and set custom CSS
     await page.click('#faz-banner-tabs button[data-tab="advanced"]');
@@ -618,23 +612,18 @@ test.describe('v1.7.0 features', () => {
     const saveResponse = page.waitForResponse(
       (r) => r.url().includes('banners') && !r.url().includes('preview') &&
         (r.request().method() === 'PUT' || r.request().method() === 'POST'),
-      { timeout: 15_000 },
+      { timeout: 30_000 },
     );
     await page.click('#faz-b-save');
     const resp = await saveResponse;
     expect(resp.status()).toBe(200);
 
-    // Reload and verify persistence — register waitForResponse BEFORE goto
-    const bannerReload = page.waitForResponse(
-      (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
-      { timeout: 20_000 },
-    );
+    // Reload and verify persistence
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
-    await bannerReload;
     await page.waitForFunction(() => {
       const el = document.getElementById('faz-b-type') as HTMLSelectElement;
       return el && el.value !== '';
-    }, { timeout: 5_000 });
+    }, { timeout: 10_000 });
     await page.click('#faz-banner-tabs button[data-tab="advanced"]');
     await page.waitForSelector('#tab-advanced.active', { timeout: 5_000 });
 

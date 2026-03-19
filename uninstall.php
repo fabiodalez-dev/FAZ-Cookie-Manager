@@ -81,6 +81,7 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 				'faz_banner_gdpr_defaults_fixed',
 				'faz_uncategorized_consent_fixed',
 				'faz_migrated_advert_to_marketing',
+			'faz_migrations_version',
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );

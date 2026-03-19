@@ -1286,6 +1286,7 @@ function _fazMutationObserver(mutations) {
                 const { hostname, pathname } = new URL(urlToParse);
                 const cleanedHostname = _fazCleanHostName(`${hostname}${pathname}`);
                 _fazAddProviderToList(node, cleanedHostname);
+                if (_fazIsUserWhitelisted(node.src)) continue;
                 if (!_fazShouldBlockProvider(cleanedHostname)) continue;
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
@@ -1624,12 +1625,14 @@ function _fazShouldBlockProvider(formattedRE) {
     return provider.categories.some((category) => _fazIsCategoryToBeBlocked(category));
 }
 function _fazShouldChangeType(element, src) {
+    var url = src ? src : element.src;
+    if (_fazIsUserWhitelisted(url)) return false;
     return (
         (element.hasAttribute("data-fazcookie") &&
             _fazIsCategoryToBeBlocked(
                 element.getAttribute("data-fazcookie").replace("fazcookie-", "")
             )) ||
-        _fazShouldBlockProvider(src ? src : element.src)
+        _fazShouldBlockProvider(url)
     );
 }
 

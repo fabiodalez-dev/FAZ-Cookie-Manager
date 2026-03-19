@@ -112,7 +112,7 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Whitelisted URL Patterns', 'faz-cookie-manager' ); ?></label>
 				<textarea class="faz-textarea" data-path="script_blocking.whitelist_patterns" rows="3" placeholder="<?php esc_attr_e( 'One per line: googleapis.com/youtube/v3 or recaptcha', 'faz-cookie-manager' ); ?>"></textarea>
-				<div class="faz-help"><?php esc_html_e( 'URL patterns that should never be blocked, even before consent. One per line. Use this for data-only APIs, reCAPTCHA, or other services that do not set tracking cookies. These patterns apply to both script tags and network requests (fetch/XHR).', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'URL patterns that should never be blocked, even before consent. One per line. Use this for data-only APIs, reCAPTCHA, or other services that do not set tracking cookies. These patterns apply to both script tags and network requests (fetch/XHR). <strong>Be specific</strong> — avoid broad patterns like <code>google.com</code> which would also whitelist tracking scripts. Use paths like <code>googleapis.com/youtube/v3/</code> instead.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
 		</div>
 	</div>

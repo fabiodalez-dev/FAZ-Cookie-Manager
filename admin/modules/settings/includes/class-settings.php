@@ -118,7 +118,19 @@ class Settings extends Store {
 			'script_blocking' => array(
 				'custom_rules'       => array(),
 				'excluded_pages'     => array(),
-				'whitelist_patterns' => array(),
+				'whitelist_patterns' => array(
+					'googleapis.com/youtube/v3/',
+					'googleapis.com/customsearch/',
+					'translation.googleapis.com/',
+					'www.google.com/recaptcha/api',
+					'challenges.cloudflare.com/',
+					'maps.googleapis.com/maps/api/',
+					'www.googleapis.com/oauth2/',
+					'fonts.googleapis.com/',
+					'cdn.jsdelivr.net/',
+					'unpkg.com/',
+					'hcaptcha.com/',
+				),
 			),
 			'pageview_tracking' => false,
 			'consent_forwarding' => array(

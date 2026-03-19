@@ -1659,3 +1659,15 @@ msgstr "Nonce non valido. Aggiornare la pagina e riprovare."
 #: uninstall.php:99
 msgid "Failed to delete FAZ Cookie Manager plugin data!"
 msgstr "Eliminazione dei dati del plugin FAZ Cookie Manager non riuscita!"
+
+#: admin/views/settings.php:113
+msgid "Whitelisted URL Patterns"
+msgstr "Pattern URL in whitelist"
+
+#: admin/views/settings.php:114
+msgid "One per line: googleapis.com/youtube/v3 or recaptcha"
+msgstr "Uno per riga: googleapis.com/youtube/v3 o recaptcha"
+
+#: admin/views/settings.php:115
+msgid "URL patterns that should never be blocked, even before consent. One per line. Use this for data-only APIs, reCAPTCHA, or other services that do not set tracking cookies. These patterns apply to both script tags and network requests (fetch/XHR). <strong>Be specific</strong> — avoid broad patterns like <code>google.com</code> which would also whitelist tracking scripts. Use paths like <code>googleapis.com/youtube/v3/</code> instead."
+msgstr "Pattern URL che non devono mai essere bloccati, anche prima del consenso. Uno per riga. Usare per API che restituiscono solo dati, reCAPTCHA o altri servizi che non impostano cookie di tracciamento. Questi pattern si applicano sia ai tag script che alle richieste di rete (fetch/XHR). <strong>Sii specifico</strong> — evita pattern generici come <code>google.com</code> che sbloccherebbe anche gli script di tracciamento. Usa percorsi come <code>googleapis.com/youtube/v3/</code>."

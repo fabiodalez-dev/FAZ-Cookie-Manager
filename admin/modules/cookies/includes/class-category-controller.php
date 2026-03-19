@@ -132,10 +132,12 @@ class Category_Controller extends Base_Controller {
 		}
 		if ( isset( $results ) && ! empty( $results ) ) {
 			if ( true === is_array( $results ) ) {
+				// Batch-load all cookies in one query to avoid N+1.
+				$cookies_by_cat = $this->get_all_cookies_grouped();
 				foreach ( $results as $data ) {
 					$item = $this->prepare_item( $data );
 					if ( ! empty( $item ) ) {
-						$item->cookies               = $this->get_cookies( $item->category_id );
+						$item->cookies               = isset( $cookies_by_cat[ $item->category_id ] ) ? $cookies_by_cat[ $item->category_id ] : array();
 						$items[ $item->{$this->id} ] = $item;
 					}
 				}
@@ -147,6 +149,25 @@ class Category_Controller extends Base_Controller {
 			}
 		}
 		return $items;
+	}
+
+	/**
+	 * Batch-load all cookies grouped by category ID (avoids N+1).
+	 *
+	 * @return array<int, array> Category ID => array of prepared cookie data.
+	 */
+	private function get_all_cookies_grouped() {
+		$all_cookies = Cookie_Controller::get_instance()->get_item_from_db();
+		$grouped     = array();
+		foreach ( $all_cookies as $cookie ) {
+			$object = new Cookie( $cookie );
+			$cat_id = (int) $cookie->category;
+			if ( ! isset( $grouped[ $cat_id ] ) ) {
+				$grouped[ $cat_id ] = array();
+			}
+			$grouped[ $cat_id ][] = $object->get_prepared_data();
+		}
+		return $grouped;
 	}
 
 	/**

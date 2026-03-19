@@ -176,7 +176,7 @@ class CLI {
 		if ( is_admin() && ! wp_doing_ajax() && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) && ! self::is_rest_url() ) {
 			return;
 		}
-		$plugin_public = new Frontend( $this->get_plugin_name(), $this->get_version() );
+		new Frontend( $this->get_plugin_name(), $this->get_version() );
 	}
 
 	/**

@@ -31,6 +31,10 @@ class Blocks {
 	 * @return void
 	 */
 	public function register_blocks() {
+		// Gutenberg blocks require WP 5.0+; skip on ClassicPress.
+		if ( ! function_exists( 'register_block_type' ) ) {
+			return;
+		}
 		// Block 1: Cookie Table.
 		register_block_type( 'faz/cookie-table', array(
 			'api_version'     => 3,

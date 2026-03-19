@@ -559,8 +559,70 @@ window.wp.apiFetch=apiFetch;
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
 				}
+
+				// Preload REST API responses so page JS gets instant data.
+				$this->preload_page_data( $page['view'] );
 				break;
 			}
+		}
+	}
+
+	/**
+	 * Preload REST API data for the current page so wp.apiFetch serves it
+	 * from memory instead of making HTTP requests.
+	 *
+	 * @param string $view The page view name (e.g. 'banner', 'settings', 'dashboard', 'cookies').
+	 * @return void
+	 */
+	private function preload_page_data( $view ) {
+		$paths = array();
+		switch ( $view ) {
+			case 'banner':
+				$paths = array( '/faz/v1/banners/1', '/faz/v1/banners/design-presets' );
+				break;
+			case 'settings':
+				$paths = array( '/faz/v1/settings', '/faz/v1/settings/geolite2/status', '/faz/v1/gvl' );
+				break;
+			case 'dashboard':
+				$paths = array( '/faz/v1/pageviews/banner-stats?days=7', '/faz/v1/pageviews/chart?days=7', '/faz/v1/consent_logs/stats?days=7' );
+				break;
+			case 'cookies':
+				$paths = array( '/faz/v1/cookies/categories' );
+				break;
+		}
+		if ( empty( $paths ) ) {
+			return;
+		}
+
+		// Execute REST requests internally and build preload cache.
+		// Keys must match FAZ.api path format: "faz/v1/endpoint" (no leading slash).
+		$preloaded = array();
+		foreach ( $paths as $path ) {
+			$parts   = wp_parse_url( $path );
+			$request = new \WP_REST_Request( 'GET', $parts['path'] );
+			if ( ! empty( $parts['query'] ) ) {
+				parse_str( $parts['query'], $query_params );
+				$request->set_query_params( $query_params );
+			}
+			$response = rest_do_request( $request );
+			if ( 200 === $response->get_status() ) {
+				$key = ltrim( $parts['path'], '/' );
+				if ( ! empty( $parts['query'] ) ) {
+					$key .= '?' . $parts['query'];
+				}
+				$preloaded[ $key ] = array(
+					'body'    => $response->get_data(),
+					'headers' => $response->get_headers(),
+				);
+			}
+		}
+
+		if ( ! empty( $preloaded ) ) {
+			wp_add_inline_script(
+				'faz-admin',
+				sprintf( 'wp.apiFetch.use(wp.apiFetch.createPreloadingMiddleware(%s));', wp_json_encode( $preloaded ) ),
+				'before'
+			);
 		}
 	}
 
@@ -1161,7 +1223,7 @@ window.wp.apiFetch=apiFetch;
 		if ( false === $stats ) {
 			global $wpdb;
 			$table  = $wpdb->prefix . 'faz_consent_logs';
-			$cutoff = date( 'Y-m-d H:i:s', strtotime( '-30 days', strtotime( current_time( 'mysql' ) ) ) ); // phpcs:ignore WordPress.DateTime.RestrictedFunctions.date_date
+			$cutoff = date_i18n( 'Y-m-d H:i:s', current_time( 'timestamp' ) - 30 * DAY_IN_SECONDS ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested
 
 			$stats = $wpdb->get_row(
 				$wpdb->prepare(
