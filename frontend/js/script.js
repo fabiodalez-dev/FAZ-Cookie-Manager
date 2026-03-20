@@ -1360,7 +1360,7 @@ function _fazUnblock() {
  * Blocks dangerous schemes like javascript: and data:.
  */
 function _fazIsAllowedScheme(url) {
-    if (!url) return false;
+    if (!url || typeof url !== "string") return false;
     var colonPos = url.indexOf(':');
     if (colonPos < 0) return true;
     if (url.indexOf('//') === 0) return true;
