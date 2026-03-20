@@ -1625,9 +1625,23 @@ function _fazShouldBlockProvider(formattedRE) {
 
     return provider.categories.some((category) => _fazIsCategoryToBeBlocked(category));
 }
+/**
+ * Check if the URL matches a user-defined whitelist pattern.
+ * Defined at module scope so both _fazShouldChangeType, _fazMutationObserver,
+ * and _fazNetworkInterceptors can all access it.
+ */
+function _fazIsUserWhitelisted(url) {
+    if (typeof url !== "string") return false;
+    var wl = _fazStore._userWhitelist;
+    if (!Array.isArray(wl) || !wl.length) return false;
+    for (var i = 0; i < wl.length; i++) {
+        if (typeof wl[i] === "string" && wl[i] && url.indexOf(wl[i]) !== -1) return true;
+    }
+    return false;
+}
 function _fazShouldChangeType(element, src) {
     var url = src ? src : element.src;
-    if (typeof _fazIsUserWhitelisted === "function" && _fazIsUserWhitelisted(url)) return false;
+    if (_fazIsUserWhitelisted(url)) return false;
     return (
         (element.hasAttribute("data-fazcookie") &&
             _fazIsCategoryToBeBlocked(
@@ -1660,19 +1674,6 @@ function _fazShouldChangeType(element, src) {
         } catch (e) {
             return "";
         }
-    }
-
-    /**
-     * Check if the endpoint matches a user-defined whitelist pattern.
-     * User whitelist patterns are simple substring matches against the full URL.
-     */
-    function _fazIsUserWhitelisted(url) {
-        var wl = _fazStore._userWhitelist;
-        if (!wl || !wl.length) return false;
-        for (var i = 0; i < wl.length; i++) {
-            if (url.indexOf(wl[i]) !== -1) return true;
-        }
-        return false;
     }
 
     // --- sendBeacon ---
