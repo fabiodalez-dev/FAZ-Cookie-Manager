@@ -1042,7 +1042,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       }
     }
 
-    await updateBanner(page, n, 1, {
+    await updateBanner(page, n, banner.id, {
       name: modified.name,
       status: modified.status,
       default: modified.default,
@@ -1068,7 +1068,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       }
     } finally {
       // Restore original
-      await updateBanner(page, n, 1, {
+      await updateBanner(page, n, banner.id, {
         name: banner.name,
         status: banner.status,
         default: banner.default,
