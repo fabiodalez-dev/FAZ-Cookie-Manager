@@ -1596,7 +1596,8 @@ function _fazGetPatternServiceMap() {
 }
 
 function _fazShouldBlockProvider(formattedRE) {
-    if (!formattedRE) return false;
+    if (!formattedRE || typeof formattedRE !== "string") return false;
+    if (!_fazStore._providersToBlock || !_fazStore._providersToBlock.length) return false;
     const provider = _fazStore._providersToBlock.find(({ re }) => {
         if (!re) return false;
         var idx = formattedRE.indexOf(re);
@@ -1626,7 +1627,7 @@ function _fazShouldBlockProvider(formattedRE) {
 }
 function _fazShouldChangeType(element, src) {
     var url = src ? src : element.src;
-    if (_fazIsUserWhitelisted(url)) return false;
+    if (typeof _fazIsUserWhitelisted === "function" && _fazIsUserWhitelisted(url)) return false;
     return (
         (element.hasAttribute("data-fazcookie") &&
             _fazIsCategoryToBeBlocked(
