@@ -599,12 +599,17 @@
 				data[el.dataset.field] = el.value;
 			});
 
-			// Wrap duration and description as multilingual objects
+			// Wrap duration and description as multilingual objects using the default language
+			var defLang = (window.fazConfig && fazConfig.languages && fazConfig.languages['default']) || 'en';
 			if (typeof data.duration === 'string') {
-				data.duration = { en: data.duration };
+				var durObj = {};
+				durObj[defLang] = data.duration;
+				data.duration = durObj;
 			}
 			if (typeof data.description === 'string') {
-				data.description = { en: data.description };
+				var descObj = {};
+				descObj[defLang] = data.description;
+				data.description = descObj;
 			}
 			// Category must be integer
 			if (data.category) {
