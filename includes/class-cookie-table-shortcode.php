@@ -45,7 +45,7 @@ class Cookie_Table_Shortcode {
 	 * @param string $default Default language code.
 	 * @return string
 	 */
-	private function localize( $value, $lang, $default ) {
+	private function localize( $value, $lang, $default, $wp_lang = '' ) {
 		if ( empty( $value ) ) {
 			return '';
 		}
@@ -55,6 +55,10 @@ class Cookie_Table_Shortcode {
 		if ( is_array( $value ) ) {
 			if ( isset( $value[ $lang ] ) && '' !== $value[ $lang ] ) {
 				return $value[ $lang ];
+			}
+			// Try WordPress locale prefix (e.g. 'fr' from 'fr_FR').
+			if ( $wp_lang && isset( $value[ $wp_lang ] ) && '' !== $value[ $wp_lang ] ) {
+				return $value[ $wp_lang ];
 			}
 			if ( isset( $value[ $default ] ) && '' !== $value[ $default ] ) {
 				return $value[ $default ];
@@ -90,6 +94,9 @@ class Cookie_Table_Shortcode {
 
 		$lang    = function_exists( 'faz_current_language' ) ? faz_current_language() : 'en';
 		$default = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		// Also consider the WordPress locale (e.g. 'fr_FR' → 'fr') for sites
+		// that set a non-English locale without a multilingual plugin.
+		$wp_lang = substr( get_locale(), 0, 2 );
 
 		// Parse requested columns.
 		$allowed_columns = array(
@@ -123,7 +130,10 @@ class Cookie_Table_Shortcode {
 				$hidden_cat_ids[] = absint( $cat->category_id );
 				continue;
 			}
-			$cat_map[ $cat->category_id ] = $this->localize( $cat->name, $lang, $default );
+			$localized_name = $this->localize( $cat->name, $lang, $default, $wp_lang );
+			// Allow category names to be translated via .po/.mo as a fallback.
+			// translators: This is a dynamic cookie category name (e.g. "Necessary", "Analytics").
+			$cat_map[ $cat->category_id ] = __( $localized_name, 'faz-cookie-manager' ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
 		}
 
 		// Fetch cookies.
@@ -249,14 +259,16 @@ class Cookie_Table_Shortcode {
 									echo esc_html( $this->localize(
 										isset( $cookie->duration ) ? $cookie->duration : '',
 										$lang,
-										$default
+										$default,
+										$wp_lang
 									) );
 									break;
 								case 'description':
 									echo esc_html( $this->localize(
 										isset( $cookie->description ) ? $cookie->description : '',
 										$lang,
-										$default
+										$default,
+										$wp_lang
 									) );
 									break;
 								case 'category':
