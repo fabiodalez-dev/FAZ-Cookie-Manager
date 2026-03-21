@@ -738,6 +738,12 @@ class Frontend {
 		}
 		$store['_providersToBlock'] = $providers;
 
+		// User-defined whitelist patterns for client-side network interceptors.
+		$user_whitelist = isset( $settings['script_blocking']['whitelist_patterns'] )
+			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
+			: array();
+		$store['_userWhitelist'] = $user_whitelist;
+
 		// Cookie-to-category map for client-side cookie cleanup on consent revocation.
 		$cookie_category_map = array();
 		$known_cookies = Known_Providers::get_cookie_map();
@@ -1493,6 +1499,13 @@ class Frontend {
 		if ( ! is_array( $whitelist ) ) {
 			$whitelist = array();
 		}
+
+		// Merge user-defined whitelist patterns from Settings → Script Blocking.
+		$faz_settings_wl = get_option( 'faz_settings' );
+		$user_patterns   = isset( $faz_settings_wl['script_blocking']['whitelist_patterns'] )
+			? array_filter( array_map( 'sanitize_text_field', (array) $faz_settings_wl['script_blocking']['whitelist_patterns'] ) )
+			: array();
+		$whitelist = array_merge( $whitelist, $user_patterns );
 
 		// Sanitise: trim, deduplicate, remove empty strings (stripos('x','') === 0 always).
 		$this->whitelist_cache = array_values(

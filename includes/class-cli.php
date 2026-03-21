@@ -168,7 +168,32 @@ class CLI {
 	 * @access   private
 	 */
 	private function define_public_hooks() {
-		$plugin_public = new Frontend( $this->get_plugin_name(), $this->get_version() );
+		// Skip frontend initialization on admin page requests — none of the
+		// frontend hooks (wp_footer, wp_enqueue_scripts, template_redirect,
+		// etc.) fire in admin context, so the object creation is wasted work.
+		// We must NOT skip on REST API or AJAX requests because the
+		// Consent_Logger registers REST routes through the Frontend class.
+		if ( is_admin() && ! wp_doing_ajax() && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) && ! self::is_rest_url() ) {
+			return;
+		}
+		new Frontend( $this->get_plugin_name(), $this->get_version() );
+	}
+
+	/**
+	 * Check if the current request URL targets the REST API.
+	 *
+	 * REST_REQUEST is not defined yet during plugins_loaded, so we
+	 * also check the request URI as a fallback.
+	 *
+	 * @return bool
+	 */
+	private static function is_rest_url() {
+		if ( empty( $_SERVER['REQUEST_URI'] ) ) {
+			return false;
+		}
+		$rest_prefix = rest_get_url_prefix();
+		$request_uri = sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+		return false !== strpos( $request_uri, '/' . $rest_prefix . '/' );
 	}
 
 	/**

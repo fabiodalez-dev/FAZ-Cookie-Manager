@@ -17,18 +17,22 @@ $gcm_settings = get_option( 'faz_gcm_settings' );
 $active_plugins = get_option( 'active_plugins', array() );
 $theme = wp_get_theme();
 
-// DB table sizes.
-$tables = array( 'faz_banners', 'faz_cookies', 'faz_cookie_categories', 'faz_consent_logs', 'faz_pageviews' );
-$table_info = array();
-foreach ( $tables as $t ) {
-	$full   = $wpdb->prefix . $t;
-	$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-	if ( $exists ) {
-		$row = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$table_info[ $t ] = $row ? absint( $row->cnt ) : 0;
-	} else {
-		$table_info[ $t ] = -1; // table missing
+// DB table sizes — cached for 2 minutes to avoid 10 queries per page load.
+$table_info = get_transient( 'faz_system_status_tables' );
+if ( false === $table_info ) {
+	$tables     = array( 'faz_banners', 'faz_cookies', 'faz_cookie_categories', 'faz_consent_logs', 'faz_pageviews' );
+	$table_info = array();
+	foreach ( $tables as $t ) {
+		$full   = $wpdb->prefix . $t;
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $exists ) {
+			$row = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$table_info[ $t ] = $row ? absint( $row->cnt ) : 0;
+		} else {
+			$table_info[ $t ] = -1; // table missing
+		}
 	}
+	set_transient( 'faz_system_status_tables', $table_info, 2 * MINUTE_IN_SECONDS );
 }
 
 // Cron status.
@@ -109,11 +113,11 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 			<table class="faz-status-table">
 				<tr>
 					<td><?php esc_html_e( 'Next Scheduled Scan', 'faz-cookie-manager' ); ?></td>
-					<td><?php echo $next_scan ? esc_html( wp_date( 'Y-m-d H:i:s', $next_scan ) ) : '&mdash;'; ?></td>
+					<td><?php echo $next_scan ? esc_html( date_i18n( 'Y-m-d H:i:s', $next_scan ) ) : '&mdash;'; ?></td>
 				</tr>
 				<tr>
 					<td><?php esc_html_e( 'Next Consent Log Cleanup', 'faz-cookie-manager' ); ?></td>
-					<td><?php echo $next_cleanup ? esc_html( wp_date( 'Y-m-d H:i:s', $next_cleanup ) ) : '&mdash;'; ?></td>
+					<td><?php echo $next_cleanup ? esc_html( date_i18n( 'Y-m-d H:i:s', $next_cleanup ) ) : '&mdash;'; ?></td>
 				</tr>
 			</table>
 		</div>

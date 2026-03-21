@@ -1286,6 +1286,7 @@ function _fazMutationObserver(mutations) {
                 const { hostname, pathname } = new URL(urlToParse);
                 const cleanedHostname = _fazCleanHostName(`${hostname}${pathname}`);
                 _fazAddProviderToList(node, cleanedHostname);
+                if (_fazIsUserWhitelisted(node.src)) continue;
                 if (!_fazShouldBlockProvider(cleanedHostname)) continue;
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
@@ -1359,7 +1360,7 @@ function _fazUnblock() {
  * Blocks dangerous schemes like javascript: and data:.
  */
 function _fazIsAllowedScheme(url) {
-    if (!url) return false;
+    if (!url || typeof url !== "string") return false;
     var colonPos = url.indexOf(':');
     if (colonPos < 0) return true;
     if (url.indexOf('//') === 0) return true;
@@ -1595,7 +1596,8 @@ function _fazGetPatternServiceMap() {
 }
 
 function _fazShouldBlockProvider(formattedRE) {
-    if (!formattedRE) return false;
+    if (!formattedRE || typeof formattedRE !== "string") return false;
+    if (!_fazStore._providersToBlock || !_fazStore._providersToBlock.length) return false;
     const provider = _fazStore._providersToBlock.find(({ re }) => {
         if (!re) return false;
         var idx = formattedRE.indexOf(re);
@@ -1623,13 +1625,29 @@ function _fazShouldBlockProvider(formattedRE) {
 
     return provider.categories.some((category) => _fazIsCategoryToBeBlocked(category));
 }
+/**
+ * Check if the URL matches a user-defined whitelist pattern.
+ * Defined at module scope so both _fazShouldChangeType, _fazMutationObserver,
+ * and _fazNetworkInterceptors can all access it.
+ */
+function _fazIsUserWhitelisted(url) {
+    if (typeof url !== "string") return false;
+    var wl = _fazStore._userWhitelist;
+    if (!Array.isArray(wl) || !wl.length) return false;
+    for (var i = 0; i < wl.length; i++) {
+        if (typeof wl[i] === "string" && wl[i] && url.indexOf(wl[i]) !== -1) return true;
+    }
+    return false;
+}
 function _fazShouldChangeType(element, src) {
+    var url = src ? src : element.src;
+    if (_fazIsUserWhitelisted(url)) return false;
     return (
         (element.hasAttribute("data-fazcookie") &&
             _fazIsCategoryToBeBlocked(
                 element.getAttribute("data-fazcookie").replace("fazcookie-", "")
             )) ||
-        _fazShouldBlockProvider(src ? src : element.src)
+        _fazShouldBlockProvider(url)
     );
 }
 
@@ -1663,7 +1681,7 @@ function _fazShouldChangeType(element, src) {
         var _fazOrigSendBeacon = navigator.sendBeacon.bind(navigator);
         navigator.sendBeacon = function (url, data) {
             var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && _fazShouldBlockProvider(endpoint)) {
+            if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
                 return true; // Pretend success — silently drop.
             }
             return _fazOrigSendBeacon(url, data);
@@ -1676,7 +1694,7 @@ function _fazShouldChangeType(element, src) {
         window.fetch = function (input, init) {
             var url = typeof input === "string" ? input : (input && input.url ? input.url : "");
             var endpoint = _fazExtractEndpoint(url);
-            if (endpoint && _fazShouldBlockProvider(endpoint)) {
+            if (endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint)) {
                 return Promise.resolve(new Response("", { status: 200, statusText: "Blocked by consent" }));
             }
             return _fazOrigFetch(input, init);
@@ -1694,7 +1712,7 @@ function _fazShouldChangeType(element, src) {
             try { delete this.responseText; } catch (e) { /* non-configurable fallback */ }
         }
         var endpoint = _fazExtractEndpoint(url);
-        this._fazBlocked = !!(endpoint && _fazShouldBlockProvider(endpoint));
+        this._fazBlocked = !!(endpoint && !_fazIsUserWhitelisted(url) && _fazShouldBlockProvider(endpoint));
         return _fazOrigXHROpen.apply(this, arguments);
     };
     var _fazOrigXHRSend = XMLHttpRequest.prototype.send;

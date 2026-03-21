@@ -73,7 +73,7 @@ class Admin {
 		$this->version = $version;
 		self::$modules = $this->get_default_modules();
 		$this->load();
-		$this->load_modules();
+		$this->maybe_load_modules();
 		add_action( 'admin_menu', array( $this, 'admin_menu' ) );
 		if ( is_multisite() ) {
 			add_action( 'network_admin_menu', array( $this, 'register_network_menu' ) );
@@ -123,11 +123,52 @@ class Admin {
 	}
 
 	/**
+	 * Decide whether to load modules immediately or defer them.
+	 *
+	 * Modules register REST API routes and admin_init hooks. On non-FAZ,
+	 * non-REST admin pages (e.g. WP Dashboard, Posts editor) none of this
+	 * work is needed. Deferring module instantiation on those pages avoids
+	 * instantiating 11 module classes, 11 API classes, and registering
+	 * 49 REST routes on every admin request.
+	 *
+	 * @return void
+	 */
+	private function maybe_load_modules() {
+		// REST API requests need routes registered — always load.
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			$this->load_modules();
+			return;
+		}
+		// AJAX requests may target FAZ endpoints — always load.
+		if ( wp_doing_ajax() ) {
+			$this->load_modules();
+			return;
+		}
+		// On admin pages, check if this is a FAZ page (early, before get_current_screen).
+		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( false !== strpos( $page, 'faz-cookie-manager' ) ) {
+			$this->load_modules();
+			return;
+		}
+		// Deferred load: hook into rest_api_init so routes are still registered
+		// if WordPress processes a REST request that was not detected above
+		// (e.g. internal REST calls without REST_REQUEST defined).
+		add_action( 'rest_api_init', array( $this, 'load_modules' ), 1 );
+	}
+
+	/**
 	 * Load all the modules.
 	 *
 	 * @return void
 	 */
 	public function load_modules() {
+		// Prevent double-loading when called from both maybe_load_modules and rest_api_init.
+		static $loaded = false;
+		if ( $loaded ) {
+			return;
+		}
+		$loaded = true;
+
 		foreach ( self::$modules as $module ) {
 			$parts      = explode( '_', $module );
 			$class      = implode( '_', $parts );
@@ -518,8 +559,73 @@ window.wp.apiFetch=apiFetch;
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
 				}
+
+				// Preload REST API responses so page JS gets instant data.
+				$this->preload_page_data( $page['view'] );
 				break;
 			}
+		}
+	}
+
+	/**
+	 * Preload REST API data for the current page so wp.apiFetch serves it
+	 * from memory instead of making HTTP requests.
+	 *
+	 * @param string $view The page view name (e.g. 'banner', 'settings', 'dashboard', 'cookies').
+	 * @return void
+	 */
+	private function preload_page_data( $view ) {
+		$paths = array();
+		switch ( $view ) {
+			case 'banner':
+				$paths = array( '/faz/v1/banners/1', '/faz/v1/banners/design-presets' );
+				break;
+			case 'settings':
+				$paths = array( '/faz/v1/settings', '/faz/v1/settings/geolite2/status', '/faz/v1/gvl' );
+				break;
+			case 'dashboard':
+				$paths = array( '/faz/v1/pageviews/banner-stats?days=7', '/faz/v1/pageviews/chart?days=7', '/faz/v1/consent_logs/stats?days=7' );
+				break;
+			case 'cookies':
+				$paths = array( '/faz/v1/cookies/categories' );
+				break;
+		}
+		if ( empty( $paths ) ) {
+			return;
+		}
+
+		// Execute REST requests internally and build preload cache.
+		// Keys must match FAZ.api path format: "faz/v1/endpoint" (no leading slash).
+		$preloaded = array();
+		foreach ( $paths as $path ) {
+			$parts   = wp_parse_url( $path );
+			$request = new \WP_REST_Request( 'GET', $parts['path'] );
+			if ( ! empty( $parts['query'] ) ) {
+				parse_str( $parts['query'], $query_params );
+				$request->set_query_params( $query_params );
+			}
+			$response = rest_do_request( $request );
+			if ( $response->is_error() ) {
+				continue;
+			}
+			if ( 200 === $response->get_status() ) {
+				$key = ltrim( $parts['path'], '/' );
+				if ( ! empty( $parts['query'] ) ) {
+					$key .= '?' . $parts['query'];
+				}
+				$preloaded[ $key ] = array(
+					'body'    => $response->get_data(),
+					'headers' => $response->get_headers(),
+				);
+			}
+		}
+
+		if ( ! empty( $preloaded ) ) {
+			wp_add_inline_script(
+				'faz-admin',
+				sprintf( 'wp.apiFetch.use(wp.apiFetch.createPreloadingMiddleware(%s));', wp_json_encode( $preloaded ) ),
+				'before'
+			);
 		}
 	}
 
@@ -1114,22 +1220,28 @@ window.wp.apiFetch=apiFetch;
 	 * @return void
 	 */
 	public function render_dashboard_widget() {
-		global $wpdb;
-		$table  = $wpdb->prefix . 'faz_consent_logs';
-		$cutoff = date( 'Y-m-d H:i:s', strtotime( '-30 days', strtotime( current_time( 'mysql' ) ) ) ); // phpcs:ignore WordPress.DateTime.RestrictedFunctions.date_date
+		// Cache the aggregation query for 5 minutes to avoid
+		// running a COUNT/SUM on every WP Dashboard page load.
+		$stats = get_transient( 'faz_dashboard_widget_stats' );
+		if ( false === $stats ) {
+			global $wpdb;
+			$table  = $wpdb->prefix . 'faz_consent_logs';
+			$cutoff = date_i18n( 'Y-m-d H:i:s', current_time( 'timestamp' ) - 30 * DAY_IN_SECONDS ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested
 
-		$stats = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT COUNT(*) as total,
-						SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
-						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
-				 FROM {$table}
-				 WHERE created_at >= %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$cutoff
-			),
-			ARRAY_A
-		);
+			$stats = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT COUNT(*) as total,
+							SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+							SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+							SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
+					 FROM {$table}
+					 WHERE created_at >= %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff
+				),
+				ARRAY_A
+			);
+			set_transient( 'faz_dashboard_widget_stats', $stats, 5 * MINUTE_IN_SECONDS );
+		}
 
 		$total    = intval( $stats['total'] ?? 0 );
 		$accepted = intval( $stats['accepted'] ?? 0 );

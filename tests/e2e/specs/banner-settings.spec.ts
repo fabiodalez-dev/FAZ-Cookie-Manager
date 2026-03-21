@@ -35,25 +35,20 @@ async function openVisitorPage(browser: any, baseURL: string, path = '/') {
 }
 
 /** Navigate to the Cookie Banner admin page and wait for banner data to fully load.
- *  loadBanner() fires a GET to banners/1 on page load; we must wait for its
- *  response (and the subsequent populateSettings) before touching the form. */
+ *  With REST preloading, the banner API response comes from the middleware cache
+ *  (no network request). We wait for populateSettings to fill the form. */
 async function goToBannerPage(page: Page) {
-  const bannerLoad = page.waitForResponse(
-    (r) => r.url().includes('banners') && !r.url().includes('preview') && r.status() === 200,
-    { timeout: 45_000 },
-  );
   await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, {
     waitUntil: 'domcontentloaded',
     timeout: 45_000,
   });
-  await bannerLoad;
   // Wait for populateSettings to finish filling the form
   await page.waitForFunction(
     () => {
       const el = document.getElementById('faz-b-type') as HTMLSelectElement;
       return el && el.value !== '';
     },
-    { timeout: 5_000 },
+    { timeout: 10_000 },
   );
 }
 
@@ -149,13 +144,13 @@ async function saveBanner(page: Page) {
       r.url().includes('banners') &&
       !r.url().includes('preview') &&
       (r.request().method() === 'PUT' || r.request().method() === 'POST'),
-    { timeout: 15_000 },
+    { timeout: 30_000 },
   );
   await page.click('#faz-b-save');
   const response = await responsePromise;
   expect(response.status()).toBe(200);
   // Wait for the success toast to confirm save completed
-  await page.waitForSelector('.faz-toast-success', { state: 'visible', timeout: 5_000 }).catch(() => {});
+  await page.waitForSelector('.faz-toast-success', { state: 'visible', timeout: 10_000 }).catch(() => {});
 }
 
 /** Read a select value. */
@@ -1024,5 +1019,62 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       properties: banner.properties,
       contents: banner.contents,
     });
+  });
+
+  // ─── Intentionally empty text fields ──────────────────────
+
+  test('Empty banner title stays empty on frontend (no en.json fallback)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    // Navigate to any admin page to get the nonce — skip goToBannerPage
+    // since preloading serves the banner API from cache (no network response to wait for).
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    const n = await getAdminNonce(page);
+    const banner = await getBanner(page, n);
+
+    // Deep-copy and clear the notice title in base and all language layers
+    const modified = JSON.parse(JSON.stringify(banner));
+    if (modified.contents?.notice?.elements) {
+      modified.contents.notice.elements.title = '';
+    }
+    for (const lang of Object.keys(modified.contents || {})) {
+      if (modified.contents[lang]?.notice?.elements) {
+        modified.contents[lang].notice.elements.title = '';
+      }
+    }
+
+    await updateBanner(page, n, banner.id, {
+      name: modified.name,
+      status: modified.status,
+      default: modified.default,
+      properties: modified.properties,
+      contents: modified.contents,
+    });
+
+    try {
+      const visitor = await openVisitorPage(browser, wpBaseURL);
+      try {
+        await expect(visitor.page.locator('[data-faz-tag="notice"]')).toBeVisible({ timeout: 10_000 });
+
+        // The title element should either be absent or empty — NOT the en.json default
+        const titleEl = visitor.page.locator('[data-faz-tag="title"]');
+        const titleCount = await titleEl.count();
+        if (titleCount > 0) {
+          const titleText = await titleEl.textContent();
+          expect(titleText?.trim(), 'Title should be empty, not filled by en.json fallback').toBe('');
+        }
+        // If count is 0, the template correctly omitted the empty element — also valid
+      } finally {
+        await visitor.ctx.close();
+      }
+    } finally {
+      // Restore original
+      await updateBanner(page, n, banner.id, {
+        name: banner.name,
+        status: banner.status,
+        default: banner.default,
+        properties: banner.properties,
+        contents: banner.contents,
+      });
+    }
   });
 });

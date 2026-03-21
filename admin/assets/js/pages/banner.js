@@ -205,11 +205,8 @@
 		var b = props.behaviours || {};
 		var config = props.config || {};
 
-		// General tab - type is stored directly; legacy data may have banner+pushdown for classic
+		// General tab - type is stored directly (classic is its own type since v1.6).
 		var displayType = s.type || 'box';
-		if (displayType === 'banner' && s.preferenceCenterType === 'pushdown') {
-			displayType = 'classic'; // backward compat: old data stored classic as banner+pushdown
-		}
 		setVal('faz-b-type', displayType);
 		setVal('faz-b-position', s.position || 'bottom-right');
 		setVal('faz-b-theme', s.theme || 'light');

@@ -107,7 +107,7 @@ class Cookie_Policy_Shortcode {
 		?></p>
 		<p><?php
 			/* translators: %s: current date */
-			printf( esc_html__( 'This cookie policy was last updated on %s.', 'faz-cookie-manager' ), esc_html( wp_date( get_option( 'date_format' ) ) ) );
+			printf( esc_html__( 'This cookie policy was last updated on %s.', 'faz-cookie-manager' ), esc_html( date_i18n( get_option( 'date_format' ) ) ) );
 		?></p>
 
 		</div>

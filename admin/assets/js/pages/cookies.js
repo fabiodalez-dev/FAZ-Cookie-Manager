@@ -22,9 +22,8 @@
 	}
 
 	FAZ.ready(function () {
-		loadCategories();
+		loadCategories(true);
 		loadCookies();
-		loadCategoryEditor();
 		var saveCatsBtn = document.getElementById('faz-save-categories');
 		if (saveCatsBtn) saveCatsBtn.addEventListener('click', saveCategoryEdits);
 
@@ -109,24 +108,17 @@
 		loadBlockerTemplates();
 	});
 
-	function loadCategories() {
+	function loadCategories(refreshEditor) {
 		FAZ.get('cookies/categories').then(function (data) {
 			categories = Array.isArray(data) ? data : (data.items || []);
+			categoryEditorData = categories;
 			renderCategories();
+			if (refreshEditor) renderCategoryEditor();
 		}).catch(function (err) { console.error('FAZ: Failed to load categories', err); });
 	}
 
 	// ── Category editor (name & description editing) ──────────────────
 	var categoryEditorData = []; // raw category objects for the editor
-
-	function loadCategoryEditor() {
-		FAZ.get('cookies/categories').then(function (data) {
-			categoryEditorData = Array.isArray(data) ? data : (data.items || []);
-			renderCategoryEditor();
-		}).catch(function (err) {
-			console.error('FAZ: Failed to load categories for editor', err);
-		});
-	}
 
 	function getCategoryEditorLang() {
 		return (window.fazConfig && fazConfig.languages && fazConfig.languages['default'])
@@ -247,8 +239,7 @@
 			} else {
 				FAZ.notify((results.length - failed) + ' saved, ' + failed + ' failed.', 'error');
 			}
-			loadCategories();
-			loadCategoryEditor();
+			loadCategories(true);
 			if (saveBtn) saveBtn.disabled = false;
 		});
 	}

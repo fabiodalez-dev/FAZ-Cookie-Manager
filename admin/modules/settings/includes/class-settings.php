@@ -116,8 +116,21 @@ class Settings extends Store {
 				'default_behavior'    => 'show_banner',
 			),
 			'script_blocking' => array(
-				'custom_rules'   => array(),
-				'excluded_pages' => array(),
+				'custom_rules'       => array(),
+				'excluded_pages'     => array(),
+				'whitelist_patterns' => array(
+					'googleapis.com/youtube/v3/',
+					'googleapis.com/customsearch/',
+					'translation.googleapis.com/',
+					'www.google.com/recaptcha/api',
+					'challenges.cloudflare.com/',
+					'maps.googleapis.com/maps/api/',
+					'www.googleapis.com/oauth2/',
+					'fonts.googleapis.com/',
+					'cdn.jsdelivr.net/',
+					'unpkg.com/',
+					'hcaptcha.com/',
+				),
 			),
 			'pageview_tracking' => false,
 			'consent_forwarding' => array(
@@ -169,6 +182,7 @@ class Settings extends Store {
 			'custom_rules',
 			'target_regions',
 			'target_domains',
+			'whitelist_patterns',
 		);
 	}
 	/**
@@ -262,7 +276,16 @@ class Settings extends Store {
 			case 'excluded_pages':
 			case 'sites':
 			case 'target_domains':
-				$value = is_array( $value ) ? array_map( 'sanitize_text_field', $value ) : array();
+			case 'whitelist_patterns':
+				if ( ! is_array( $value ) ) {
+					$value = array();
+					break;
+				}
+				$value = array_values( array_filter( array_map( function ( $item ) {
+					return trim( sanitize_text_field( (string) $item ) );
+				}, $value ), function ( $item ) {
+					return '' !== $item;
+				} ) );
 				break;
 			case 'custom_rules':
 				$allowed_categories = array( 'analytics', 'marketing', 'functional', 'performance' );

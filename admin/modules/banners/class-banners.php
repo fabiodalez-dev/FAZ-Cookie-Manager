@@ -36,12 +36,10 @@ class Banners extends Modules {
 	 * Constructor.
 	 */
 	public function init() {
-		$this->load_apis();
 		$this->controller = Controller::get_instance();
-		add_action( 'admin_init', array( $this->controller, 'install_tables' ) );
+		$this->load_apis();
 		add_action( 'faz_after_update_banner', array( $this->controller, 'delete_cache' ) );
-		add_action( 'admin_init', array( $this->controller, 'reset_cache' ) );
-		add_action( 'admin_init', array( Template::get_instance(), 'delete_cache' ) );
+		add_action( 'faz_after_update_banner', array( Template::get_instance(), 'delete_cache' ) );
 		add_action( 'faz_reinstall_tables', array( $this->controller, 'reinstall' ) );
 	}
 
