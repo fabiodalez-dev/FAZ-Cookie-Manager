@@ -451,6 +451,13 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.7.1
+- **Admin performance** — 50-68% faster backend navigation (cache fix, N+1 query, REST preloading)
+- **User-configurable whitelist** for scripts/network requests with 11 default API patterns (fixes #40)
+- **Google Maps TypeError fix** — type guards on all DOM-facing blocking functions (fixes #35)
+- **ClassicPress compatibility** — Gutenberg guard, `wp_date` → `date_i18n`
+- **Banner type persistence** — fixed incorrect classic↔banner mapping in admin JS
+
 ### 1.7.0
 - **26 new features** — scheduled scanning, consent stats, cookie policy shortcode, geo-IP banner, visual placeholders, multisite, Gutenberg blocks (3), design presets (5), bot detection, GTM data layer, WP privacy tools, dashboard widget, cross-domain consent, cookie deletion, age protection, anti-ad-blocker, per-service consent, import/export, AMP consent, content blocker templates (10), WP-CLI commands, system status, TranslatePress/Weglot compat, unmatched vendor notification
 - **Category editor** — edit category names/descriptions from admin (fixes #38)

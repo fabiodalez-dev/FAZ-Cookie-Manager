@@ -2,6 +2,28 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.7.1] — 2026-03-21
+
+### Performance
+- **Admin backend 50-68% faster** — removed cache reset from page load, N+1 query fix on categories, deduplicated JS fetches, REST API preloading for all admin pages
+
+### Added
+- **User-configurable whitelist** for scripts and network requests — 11 default API patterns (YouTube, reCAPTCHA, Google Maps, Cloudflare Turnstile, etc.)
+- Whitelist applies to all blocking paths: createElement, MutationObserver, fetch, XHR, sendBeacon
+
+### Fixed
+- **Google Maps / NitroPack TypeError** — `_fazShouldBlockProvider` and `_fazShouldChangeType` now validate input type before calling string methods (fixes #35)
+- **Whitelist scope bug** — `_fazIsUserWhitelisted` was defined inside IIFE, unreachable from `_fazShouldChangeType` and MutationObserver (fixes #40)
+- **Banner type persistence** — removed incorrect `banner+pushdown → classic` mapping in admin JS
+- Migration version decoupled from `FAZ_VERSION` (dedicated constant, try/catch for safety)
+- Timezone drift in dashboard widget cutoff (`date_i18n` replaces `wp_date`)
+- `faz_migrations_version` added to uninstall cleanup
+- Whitelist patterns sanitization: trim + filter empty strings to prevent universal match
+
+### ClassicPress Compatibility
+- Guard `register_block_type()` with `function_exists` check
+- Replace `wp_date()` with `date_i18n()` (WP 2.1+ compatible)
+
 ## [1.7.0] — 2026-03-18
 
 ### Added
