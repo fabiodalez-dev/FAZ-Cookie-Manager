@@ -600,14 +600,19 @@
 			});
 
 			// Wrap duration and description as multilingual objects using the default language
+			// while preserving existing translations on edit.
 			var defLang = (window.fazConfig && fazConfig.languages && fazConfig.languages['default']) || 'en';
 			if (typeof data.duration === 'string') {
-				var durObj = {};
+				var durObj = (isEdit && cookie.duration && typeof cookie.duration === 'object' && !Array.isArray(cookie.duration))
+					? Object.assign({}, cookie.duration)
+					: {};
 				durObj[defLang] = data.duration;
 				data.duration = durObj;
 			}
 			if (typeof data.description === 'string') {
-				var descObj = {};
+				var descObj = (isEdit && cookie.description && typeof cookie.description === 'object' && !Array.isArray(cookie.description))
+					? Object.assign({}, cookie.description)
+					: {};
 				descObj[defLang] = data.description;
 				data.description = descObj;
 			}
