@@ -1402,7 +1402,10 @@
 					categorized++;
 					var updateData = { category: parseInt(targetCatId, 10) };
 					if (info.description) {
-						updateData.description = { en: info.description };
+						var descLang = getCategoryEditorLang();
+						var descObj = {};
+						descObj[descLang] = info.description;
+						updateData.description = descObj;
 					}
 					updates.push(FAZ.put('cookies/' + (cookie.id || cookie.cookie_id), updateData));
 				});
