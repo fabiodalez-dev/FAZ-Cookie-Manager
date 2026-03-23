@@ -294,15 +294,23 @@ abstract class Store {
 	public function get_description( $language = '' ) {
 		$contents        = array();
 		$prop            = 'description';
-		$data            = $this->get_object_data( $prop );
+		$data            = $this->normalize_multilingual_data( $this->get_object_data( $prop ) );
 		$languages       = faz_selected_languages( $language );
-		$default_content = isset( $data['en'] ) ? $data['en'] : $this->get_translations( 'en', $prop );
+		$default         = faz_default_language();
+		$default_content = isset( $data[ $default ] ) ? $data[ $default ] : $this->get_translations( $default, $prop );
 
 		foreach ( $languages as $lang ) {
 			$content           = isset( $data[ $lang ] ) ? $data[ $lang ] : '';
 			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
 			$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+		}
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $content ) {
+				if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
+					$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+				}
+			}
 		}
 		if ( '' !== $language ) {
 			return isset( $contents[ $language ] ) ? $contents[ $language ] : '';
@@ -470,6 +478,7 @@ abstract class Store {
 	 * @param string|array $data Item description.
 	 */
 	public function set_description( $data ) {
+		$data        = $this->normalize_multilingual_data( $data );
 		$description = array();
 		$languages   = faz_selected_languages();
 		// Ensure selected languages are always present.
@@ -486,6 +495,28 @@ abstract class Store {
 			}
 		}
 		$this->set_object_data( 'description', $description );
+	}
+
+	/**
+	 * Normalize multilingual payloads coming from DB, REST, or direct callers.
+	 *
+	 * @param mixed $data Raw multilingual value.
+	 * @return array
+	 */
+	protected function normalize_multilingual_data( $data ) {
+		if ( is_array( $data ) ) {
+			return $data;
+		}
+		if ( is_object( $data ) ) {
+			$data = json_decode( wp_json_encode( $data ), true );
+			return is_array( $data ) ? $data : array();
+		}
+		if ( is_string( $data ) && '' !== $data ) {
+			return array(
+				faz_default_language() => $data,
+			);
+		}
+		return array();
 	}
 
 	/**

@@ -181,7 +181,7 @@ class Cookie extends Store {
 	public function get_duration() {
 		$contents        = array();
 		$prop            = 'duration';
-		$data            = $this->get_object_data( $prop );
+		$data            = $this->normalize_multilingual_data( $this->get_object_data( $prop ) );
 		$default         = faz_default_language();
 		$languages       = faz_selected_languages();
 		$default_content = isset( $data[ $default ] ) ? $data[ $default ] : '';
@@ -190,6 +190,13 @@ class Cookie extends Store {
 			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
 			$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+		}
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $content ) {
+				if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
+					$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+				}
+			}
 		}
 		return $contents;
 	}
@@ -262,6 +269,7 @@ class Cookie extends Store {
 	 * @return void
 	 */
 	public function set_duration( $data ) {
+		$data      = $this->normalize_multilingual_data( $data );
 		$duration  = array();
 		$languages = faz_selected_languages();
 		// Ensure selected languages are always present.

@@ -16,7 +16,19 @@
 		if (!val) return '';
 		if (typeof val === 'string') return val;
 		if (typeof val === 'object') {
-			return val.en || val[Object.keys(val)[0]] || '';
+			var defLang = (window.fazConfig && fazConfig.languages && fazConfig.languages['default']) || '';
+			if (defLang && typeof val[defLang] === 'string' && val[defLang] !== '') {
+				return val[defLang];
+			}
+			if (typeof val.en === 'string' && val.en !== '') {
+				return val.en;
+			}
+			for (var key in val) {
+				if (Object.prototype.hasOwnProperty.call(val, key) && typeof val[key] === 'string' && val[key] !== '') {
+					return val[key];
+				}
+			}
+			return '';
 		}
 		return String(val);
 	}

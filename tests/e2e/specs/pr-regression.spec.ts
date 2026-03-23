@@ -45,6 +45,27 @@ async function apiDelete(page: any, nonce: string, route: string) {
   return { status: r.status() };
 }
 
+async function fazGet(page: any, route: string, params?: Record<string, unknown>) {
+  return page.evaluate(
+    async ({ route, params }) => (window as any).FAZ.get(route, params),
+    { route, params: params ?? null },
+  );
+}
+
+async function fazPost(page: any, route: string, data: Record<string, unknown>) {
+  return page.evaluate(
+    async ({ route, data }) => (window as any).FAZ.post(route, data),
+    { route, data },
+  );
+}
+
+async function fazPut(page: any, route: string, data: Record<string, unknown>) {
+  return page.evaluate(
+    async ({ route, data }) => (window as any).FAZ.put(route, data),
+    { route, data },
+  );
+}
+
 /* ═══════════════════════════════════════════════════
    PR #44 — i18n cookie save
    ═══════════════════════════════════════════════════ */
@@ -53,78 +74,102 @@ test.describe('PR #44: i18n cookie save', () => {
   test.describe.configure({ mode: 'serial' });
 
   let cookieId: number | null = null;
+  let originalLanguages: Record<string, unknown> | null = null;
 
-  test('cookie save wraps duration/description with plugin default language', async ({ page, loginAsAdmin }) => {
+  test('manual add from admin modal saves duration/description under the plugin default language', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
-    const nonce = await getAdminNonce(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    let nonce = await getAdminNonce(page);
 
-    // Create a test cookie with plain string fields
-    const result = await apiPost(page, nonce, 'cookies', {
-      name: '_faz_test_i18n',
-      domain: '.example.com',
-      duration: { en: '1 year' },
-      description: { en: 'Test cookie for i18n' },
-      category: 1,
+    const settings = (await apiGet(page, nonce, 'settings')).data;
+    originalLanguages = settings?.languages ?? null;
+
+    const updateLanguages = await apiPost(page, nonce, 'settings', {
+      languages: {
+        selected: ['en', 'it'],
+        default: 'it',
+      },
     });
-    expect(result.status).toBe(200);
-    cookieId = result.data?.cookie_id ?? result.data?.id ?? null;
+    expect(updateLanguages.status).toBe(200);
+
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    await page.locator('#faz-add-cookie-btn').click();
+
+    const modal = page.locator('.faz-modal');
+    await expect(modal).toBeVisible();
+    await modal.locator('[data-field="name"]').fill('_faz_test_i18n');
+    await modal.locator('[data-field="domain"]').fill('.example.com');
+    await modal.locator('[data-field="duration"]').fill('1 anno');
+    await modal.locator('[data-field="description"]').fill('Descrizione italiana');
+    await modal.locator('[data-field="category"]').selectOption({ index: 0 });
+    await modal.locator('.faz-btn-primary').click();
+
+    await expect(page.locator('.faz-toast')).toContainText('Cookie added');
+
+    nonce = await getAdminNonce(page);
+    const cookies = await apiGet(page, nonce, 'cookies');
+    const created = Array.isArray(cookies.data)
+      ? cookies.data.find((item: any) => item.name === '_faz_test_i18n')
+      : null;
+    expect(created).toBeTruthy();
+    cookieId = created?.id ?? created?.cookie_id ?? null;
     expect(cookieId).toBeTruthy();
 
-    // Fetch the cookie back and verify duration/description are objects
     const fetched = await apiGet(page, nonce, `cookies/${cookieId}`);
     expect(fetched.status).toBe(200);
     expect(typeof fetched.data.duration).toBe('object');
-    expect(fetched.data.duration).toHaveProperty('en', '1 year');
+    expect(fetched.data.duration).toHaveProperty('it', '1 anno');
     expect(typeof fetched.data.description).toBe('object');
-    expect(fetched.data.description).toHaveProperty('en', 'Test cookie for i18n');
+    expect(fetched.data.description).toHaveProperty('it', 'Descrizione italiana');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const row = page.locator('#faz-cookies-tbody tr').filter({ hasText: '_faz_test_i18n' });
+    await expect(row).toHaveCount(1);
+    await row.getByRole('button', { name: 'Edit' }).click();
+
+    const editModal = page.locator('.faz-modal');
+    await expect(editModal.locator('[data-field="duration"]')).toHaveValue('1 anno');
+    await expect(editModal.locator('[data-field="description"]')).toHaveValue('Descrizione italiana');
+    await editModal.locator('.faz-modal-close').click();
   });
 
-  test('editing cookie preserves existing translations (only updates default lang)', async ({ page, loginAsAdmin }) => {
+  test('editing via admin modal preserves translations beyond selected languages', async ({ page, loginAsAdmin }) => {
     expect(cookieId).toBeTruthy();
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    // Set multilingual values using only configured languages (en + it).
-    // Note: the backend strips language keys not in faz_selected_languages(),
-    // so we only test with languages actually configured on the test site.
-    await apiPut(page, nonce, `cookies/${cookieId}`, {
-      duration: { en: '1 year', it: '1 anno' },
-      description: { en: 'Test cookie', it: 'Cookie di test' },
+    await fazPut(page, `cookies/${cookieId}`, {
+      duration: { en: '1 year', it: '1 anno', de: '1 Jahr' },
+      description: { en: 'English description', it: 'Cookie di test', de: 'Deutsche Beschreibung' },
     });
 
-    // Update only the default-lang value — Italian should survive
-    await apiPut(page, nonce, `cookies/${cookieId}`, {
-      duration: { en: '2 years', it: '1 anno' },
-      description: { en: 'Updated test cookie', it: 'Cookie di test' },
-    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const row = page.locator('#faz-cookies-tbody tr').filter({ hasText: '_faz_test_i18n' });
+    await expect(row).toHaveCount(1);
+    await row.getByRole('button', { name: 'Edit' }).click();
 
-    // Verify both language keys are preserved
+    const modal = page.locator('.faz-modal');
+    await expect(modal.locator('[data-field="duration"]')).toHaveValue('1 anno');
+    await expect(modal.locator('[data-field="description"]')).toHaveValue('Cookie di test');
+
+    await modal.locator('[data-field="duration"]').fill('2 anni');
+    await modal.locator('[data-field="description"]').fill('Descrizione aggiornata');
+    await modal.locator('.faz-btn-primary').click();
+    await expect(page.locator('.faz-toast')).toContainText('Cookie updated');
+
     const fetched = await apiGet(page, nonce, `cookies/${cookieId}`);
     expect(fetched.status).toBe(200);
-    expect(fetched.data.duration).toHaveProperty('en', '2 years');
-    expect(fetched.data.duration).toHaveProperty('it', '1 anno');
-    expect(fetched.data.description).toHaveProperty('en', 'Updated test cookie');
-    expect(fetched.data.description).toHaveProperty('it', 'Cookie di test');
-  });
-
-  test('defLang reads from fazConfig.languages.default', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
-
-    // Verify fazConfig.languages.default is accessible and non-empty
-    const defLang = await page.evaluate(() => {
-      const cfg = (window as any).fazConfig;
-      return cfg?.languages?.default ?? null;
-    });
-    expect(defLang).toBeTruthy();
-    expect(typeof defLang).toBe('string');
+    expect(fetched.data.duration).toHaveProperty('en', '1 year');
+    expect(fetched.data.duration).toHaveProperty('it', '2 anni');
+    expect(fetched.data.duration).toHaveProperty('de', '1 Jahr');
+    expect(fetched.data.description).toHaveProperty('en', 'English description');
+    expect(fetched.data.description).toHaveProperty('it', 'Descrizione aggiornata');
+    expect(fetched.data.description).toHaveProperty('de', 'Deutsche Beschreibung');
   });
 
   test.afterAll(async ({ browser }) => {
-    // Cleanup: delete the test cookie
-    if (!cookieId) return;
+    if (!cookieId && !originalLanguages) return;
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     await page.goto(`${WP_BASE}/wp-login.php`, { waitUntil: 'domcontentloaded' });
@@ -132,9 +177,14 @@ test.describe('PR #44: i18n cookie save', () => {
     await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
     await page.locator('#wp-submit').click();
     await page.waitForURL(/wp-admin/, { timeout: 20_000 });
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
-    await apiDelete(page, nonce, `cookies/${cookieId}`);
+    if (cookieId) {
+      await apiDelete(page, nonce, `cookies/${cookieId}`);
+    }
+    if (originalLanguages) {
+      await apiPost(page, nonce, 'settings', { languages: originalLanguages });
+    }
     await ctx.close();
   });
 });
@@ -291,6 +341,79 @@ test.describe('PR #39: v1.7.0 additional features', () => {
     expect(categories.data.length).toBeGreaterThan(0);
   });
 
+  test('cookie table shortcode prefers custom category names saved in plugin settings', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    const settings = (await apiGet(page, nonce, 'settings')).data;
+    const originalLanguages = settings?.languages ?? null;
+    let pageId: number | null = null;
+    let targetId: number | null = null;
+    let originalName: Record<string, unknown> | null = null;
+
+    try {
+      await apiPost(page, nonce, 'settings', {
+        languages: {
+          selected: ['en', 'it'],
+          default: 'en',
+        },
+      });
+
+      await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+      const categories = await fazGet(page, 'cookies/categories');
+      const target = Array.isArray(categories)
+        ? categories.find((category: any) => Array.isArray(category.cookie_list) && category.cookie_list.length > 0 && category.slug !== 'wordpress-internal')
+        : null;
+
+      expect(target).toBeTruthy();
+      targetId = target?.id ?? target?.category_id ?? null;
+      originalName = target?.name ?? {};
+      const customName = `QA Category ${Date.now()}`;
+
+      await fazPut(page, `cookies/categories/${targetId}`, {
+        name: {
+          ...(typeof originalName === 'object' && originalName !== null ? originalName : {}),
+          en: customName,
+        },
+      });
+
+      const createPage = await page.request.post(`${WP_BASE}/?rest_route=/wp/v2/pages`, {
+        headers: {
+          'X-WP-Nonce': nonce,
+          'Content-Type': 'application/json',
+        },
+        data: {
+          title: 'QA Cookie Table',
+          slug: `qa-cookie-table-${Date.now()}`,
+          status: 'publish',
+          content: '[faz_cookie_table]',
+        },
+      });
+
+      expect([200, 201]).toContain(createPage.status());
+      const createdPage = await createPage.json();
+      pageId = createdPage.id ?? null;
+
+      await page.goto(createdPage.link, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.faz-cookie-table-wrap')).toContainText(customName);
+    } finally {
+      if (pageId) {
+        await page.request.delete(`${WP_BASE}/?rest_route=/wp/v2/pages/${pageId}&force=true`, {
+          headers: { 'X-WP-Nonce': nonce },
+        });
+      }
+      if (targetId && originalName) {
+        await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+        await fazPut(page, `cookies/categories/${targetId}`, { name: originalName });
+      }
+      if (originalLanguages) {
+        await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+        await apiPost(page, await getAdminNonce(page), 'settings', { languages: originalLanguages });
+      }
+    }
+  });
+
   test('import/export settings endpoint round-trips', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
@@ -381,16 +504,17 @@ test.describe('P1 fix: per-service cookie shredding', () => {
     const nonce = await getAdminNonce(page);
 
     const settings = (await apiGet(page, nonce, 'settings')).data;
-    const perServiceEnabled = settings?.banner_control?.per_service_consent;
+    const originalBannerControl = settings?.banner_control ?? {};
 
-    if (!perServiceEnabled) {
-      test.skip(true, 'per_service_consent is not enabled');
-      return;
-    }
-
-    // Check that the frontend store includes cookies arrays in _services
-    const ctx = await browser.newContext({ baseURL: wpBaseURL });
     try {
+      await apiPost(page, nonce, 'settings', {
+        banner_control: {
+          ...originalBannerControl,
+          per_service_consent: true,
+        },
+      });
+
+      const ctx = await browser.newContext({ baseURL: wpBaseURL });
       const visitor = await ctx.newPage();
       await visitor.goto('/', { waitUntil: 'domcontentloaded' });
       const services = await visitor.evaluate(() => {
@@ -402,8 +526,12 @@ test.describe('P1 fix: per-service cookie shredding', () => {
       // At least one service should have a cookies array
       const withCookies = services.filter((s: any) => Array.isArray(s.cookies));
       expect(withCookies.length).toBe(services.length); // ALL must have cookies array
-    } finally {
+      expect(withCookies.some((s: any) => s.cookies.length > 0)).toBe(true);
       await ctx.close();
+    } finally {
+      await apiPost(page, nonce, 'settings', {
+        banner_control: originalBannerControl,
+      });
     }
   });
 
@@ -415,13 +543,17 @@ test.describe('P1 fix: per-service cookie shredding', () => {
     const nonce = await getAdminNonce(page);
 
     const settings = (await apiGet(page, nonce, 'settings')).data;
-    if (!settings?.banner_control?.per_service_consent) {
-      test.skip(true, 'per_service_consent not enabled');
-      return;
-    }
+    const originalBannerControl = settings?.banner_control ?? {};
 
-    const ctx = await browser.newContext({ baseURL: wpBaseURL });
     try {
+      await apiPost(page, nonce, 'settings', {
+        banner_control: {
+          ...originalBannerControl,
+          per_service_consent: true,
+        },
+      });
+
+      const ctx = await browser.newContext({ baseURL: wpBaseURL });
       const visitor = await ctx.newPage();
       await visitor.goto('/', { waitUntil: 'domcontentloaded' });
 
@@ -440,8 +572,11 @@ test.describe('P1 fix: per-service cookie shredding', () => {
       const hjCookie = cookies.find(c => c.name === '_hjid');
       // _hjid should have been shredded by PHP since svc.hotjar:no
       expect(hjCookie).toBeUndefined();
-    } finally {
       await ctx.close();
+    } finally {
+      await apiPost(page, nonce, 'settings', {
+        banner_control: originalBannerControl,
+      });
     }
   });
 });
@@ -452,18 +587,97 @@ test.describe('P1 fix: per-service cookie shredding', () => {
 
 test.describe('P3 fix: scanner uses default language', () => {
 
-  test('getCategoryEditorLang() returns configured default language', async ({ page, loginAsAdmin }) => {
+  test('auto-categorize stores scraped descriptions under the default language and preserves existing translations', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    let nonce = await getAdminNonce(page);
 
-    // The function getCategoryEditorLang is local — test via fazConfig
-    const defLang = await page.evaluate(() => {
-      const cfg = (window as any).fazConfig;
-      return cfg?.languages?.default ?? null;
-    });
-    expect(defLang).toBeTruthy();
-    expect(typeof defLang).toBe('string');
-    // Should match one of the configured languages (en, it, etc.)
-    expect(defLang.length).toBeGreaterThanOrEqual(2);
+    const settings = (await apiGet(page, nonce, 'settings')).data;
+    const originalLanguages = settings?.languages ?? null;
+    let cookieId: number | null = null;
+
+    try {
+      const setLanguages = await apiPost(page, nonce, 'settings', {
+        languages: {
+          selected: ['en', 'it'],
+          default: 'it',
+        },
+      });
+      expect(setLanguages.status).toBe(200);
+
+      const categories = (await apiGet(page, nonce, 'cookies/categories')).data;
+      const uncategorized = categories.find((category: any) => category.slug === 'uncategorized');
+      const analytics = categories.find((category: any) => category.slug === 'analytics');
+      expect(uncategorized).toBeTruthy();
+      expect(analytics).toBeTruthy();
+
+      await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+      const createCookie = await fazPost(page, 'cookies', {
+        name: '_faz_scanner_deflang',
+        domain: '.example.com',
+        category: uncategorized.id,
+        description: { de: 'Bestehende Beschreibung' },
+      });
+      cookieId = createCookie?.cookie_id ?? createCookie?.id ?? null;
+      expect(cookieId).toBeTruthy();
+      expect(createCookie.description).toHaveProperty('de', 'Bestehende Beschreibung');
+
+      const fetchedBeforeAutoCategorize = await apiGet(page, nonce, `cookies/${cookieId}`);
+      expect(fetchedBeforeAutoCategorize.status).toBe(200);
+      expect(fetchedBeforeAutoCategorize.data.description).toHaveProperty('de', 'Bestehende Beschreibung');
+
+      const listedBeforeAutoCategorize = await fazGet(page, 'cookies');
+      const listedCookie = Array.isArray(listedBeforeAutoCategorize)
+        ? listedBeforeAutoCategorize.find((item: any) => (item.id ?? item.cookie_id) === cookieId)
+        : null;
+      expect(listedCookie).toBeTruthy();
+      expect(listedCookie?.description).toHaveProperty('de', 'Bestehende Beschreibung');
+      await page.evaluate(() => {
+        const originalPost = window.FAZ.post;
+        (window as any).__fazOriginalPost = originalPost;
+        window.FAZ.post = function (endpoint: string, data: Record<string, unknown>) {
+          if (endpoint === 'cookies/scrape') {
+            return Promise.resolve([
+              {
+                name: '_faz_scanner_deflang',
+                found: true,
+                category: 'analytics',
+                description: 'Descrizione scanner',
+              },
+            ]);
+          }
+          return originalPost(endpoint, data);
+        };
+      });
+
+      await page.locator('#faz-auto-cat-btn').click();
+      await page.locator('#faz-auto-cat-dropdown .faz-dropdown-item[data-scope="all"]').click();
+      await expect(page.locator('.faz-toast')).toContainText('Auto-categorized 1 cookies');
+
+      nonce = await getAdminNonce(page);
+      const fetched = await apiGet(page, nonce, `cookies/${cookieId}`);
+      expect(fetched.status).toBe(200);
+      expect(fetched.data.category).toBe(analytics.id);
+      expect(fetched.data.description).toHaveProperty('it', 'Descrizione scanner');
+      expect(fetched.data.description).toHaveProperty('de', 'Bestehende Beschreibung');
+    } finally {
+      await page.evaluate(() => {
+        const originalPost = (window as any).__fazOriginalPost;
+        if (originalPost) {
+          window.FAZ.post = originalPost;
+          delete (window as any).__fazOriginalPost;
+        }
+      }).catch(() => {});
+
+      await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+      nonce = await getAdminNonce(page);
+      if (cookieId) {
+        await apiDelete(page, nonce, `cookies/${cookieId}`);
+      }
+      if (originalLanguages) {
+        await apiPost(page, nonce, 'settings', { languages: originalLanguages });
+      }
+    }
   });
 });
