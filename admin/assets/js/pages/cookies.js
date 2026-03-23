@@ -1403,7 +1403,9 @@
 					var updateData = { category: parseInt(targetCatId, 10) };
 					if (info.description) {
 						var descLang = getCategoryEditorLang();
-						var descObj = {};
+						var descObj = (cookie.description && typeof cookie.description === 'object' && !Array.isArray(cookie.description))
+							? Object.assign({}, cookie.description)
+							: {};
 						descObj[descLang] = info.description;
 						updateData.description = descObj;
 					}

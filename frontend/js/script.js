@@ -1986,6 +1986,7 @@ function _fazCleanupRevokedCookies() {
 
     // Plugin cookies that must never be deleted.
     var protectedCookies = ['fazcookie-consent', 'fazVendorConsent', 'euconsent-v2'];
+    var svcRevoked = false;
 
     var currentCookies = document.cookie.split(";");
 
@@ -2018,6 +2019,7 @@ function _fazCleanupRevokedCookies() {
                 if (!svcCookieMap.hasOwnProperty(svcPat)) continue;
                 if (_fazCookieNameMatches(cookieName, svcPat)) {
                     shouldDelete = true;
+                    svcRevoked = true;
                     break;
                 }
             }
@@ -2026,6 +2028,12 @@ function _fazCleanupRevokedCookies() {
         if (shouldDelete) {
             _fazDeleteCookie(cookieName);
         }
+    }
+
+    // If per-service cookies were shredded, reload to tear down already-loaded
+    // vendor SDKs that may recreate cookies or keep running in memory.
+    if (svcRevoked) {
+        location.reload();
     }
 }
 

@@ -274,49 +274,21 @@ test.describe('PR #39: v1.7.0 additional features', () => {
     expect(hasGA || hasYT).toBeTruthy();
   });
 
-  test('[faz_cookie_table] shortcode renders table with categories', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+  test('cookie and category APIs return data used by [faz_cookie_table]', async ({ page, loginAsAdmin }) => {
+    // The actual shortcode rendering is covered by v170-deep-flows.spec.ts.
+    // Here we verify the API endpoints the shortcode depends on work correctly.
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    // Verify there are cookies in the system
     const cookies = await apiGet(page, nonce, 'cookies');
-    if (!Array.isArray(cookies.data) || cookies.data.length === 0) {
-      test.skip(true, 'No cookies in system — shortcode would render empty');
-      return;
-    }
+    expect(cookies.status).toBe(200);
+    expect(Array.isArray(cookies.data)).toBe(true);
 
-    // Render the shortcode via WP's do_shortcode through a REST eval trick:
-    // Navigate to a page that uses the shortcode, or use the shortcode API
-    // The cookie policy page should contain [faz_cookie_table]
-    const ctx = await browser.newContext({ baseURL: wpBaseURL });
-    try {
-      const visitor = await ctx.newPage();
-      // Try the cookie policy page (auto-created by the plugin)
-      await visitor.goto('/?p=3', { waitUntil: 'domcontentloaded' });
-      // Also try direct shortcode rendering via REST
-      const hasTable = await visitor.evaluate(() => {
-        return document.querySelector('.faz-cookie-table') !== null;
-      });
-
-      if (!hasTable) {
-        // Fallback: try the main page — some setups put it there
-        await visitor.goto('/', { waitUntil: 'domcontentloaded' });
-      }
-
-      // Even if the shortcode page isn't found, verify the shortcode renders
-      // by checking the admin preview if available
-      const tableOnPage = await visitor.evaluate(() =>
-        document.querySelector('.faz-cookie-table') !== null ||
-        document.querySelector('.faz-cookie-table-wrap') !== null
-      );
-      // We'll log but not hard-fail if no shortcode page is set up
-      if (!tableOnPage) {
-        console.log('Cookie table shortcode page not configured — testing via admin');
-      }
-    } finally {
-      await ctx.close();
-    }
+    const categories = await apiGet(page, nonce, 'cookies/categories');
+    expect(categories.status).toBe(200);
+    expect(Array.isArray(categories.data)).toBe(true);
+    expect(categories.data.length).toBeGreaterThan(0);
   });
 
   test('import/export settings endpoint round-trips', async ({ page, loginAsAdmin }) => {
@@ -364,11 +336,13 @@ test.describe('PR #39: v1.7.0 additional features', () => {
 
       // Check banner categories — none should be "wordpress-internal"
       const categorySlugs = await visitor.evaluate(() => {
-        const store = (window as any)._fazStore;
+        const store = (window as any)._fazConfig;
         if (!store?._categories) return [];
         return store._categories.map((c: any) => c.slug ?? '');
       });
 
+      expect(Array.isArray(categorySlugs)).toBe(true);
+      expect(categorySlugs.length).toBeGreaterThan(0);
       expect(categorySlugs).not.toContain('wordpress-internal');
     } finally {
       await ctx.close();
@@ -433,29 +407,39 @@ test.describe('P1 fix: per-service cookie shredding', () => {
     }
   });
 
-  test('_fazCleanupRevokedCookies handles per-service denial (no JS errors)', async ({ page, browser, wpBaseURL }) => {
-    // This test verifies the JS function doesn't crash when called.
-    // Full integration (setting cookies from a denied service) would need
-    // a real third-party script, so we smoke-test the function structure.
+  test('per-service denial shreds matching cookies via PHP', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    // Simulate: accept all cookies, then set svc.hotjar:no in the consent cookie.
+    // The PHP shredding on next page load should delete Hotjar cookies.
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    const settings = (await apiGet(page, nonce, 'settings')).data;
+    if (!settings?.banner_control?.per_service_consent) {
+      test.skip(true, 'per_service_consent not enabled');
+      return;
+    }
+
     const ctx = await browser.newContext({ baseURL: wpBaseURL });
     try {
       const visitor = await ctx.newPage();
       await visitor.goto('/', { waitUntil: 'domcontentloaded' });
 
-      const result = await visitor.evaluate(() => {
-        // Verify the function exists and handles the svc path
-        if (typeof (window as any)._fazCleanupRevokedCookies !== 'function') {
-          // The function is not global — it's internal. Verify the store structure instead.
-          const store = (window as any)._fazConfig;
-          return {
-            hasStore: !!store,
-            hasCookieMap: !!store?._cookieCategoryMap,
-            hasPerService: !!store?._perServiceConsent,
-          };
-        }
-        return { hasStore: true, hasCookieMap: true, hasPerService: false };
+      // Set a fake Hotjar cookie and consent cookie with svc.hotjar:no
+      await visitor.evaluate(() => {
+        // Plant a fake Hotjar cookie
+        document.cookie = '_hjid=test123;path=/';
+        // Set consent: all categories yes, but svc.hotjar denied
+        document.cookie = 'fazcookie-consent=necessary:yes,analytics:yes,marketing:yes,svc.hotjar:no;path=/';
       });
-      expect(result.hasStore).toBe(true);
+
+      // Reload — PHP shredding should delete _hjid on the server side
+      await visitor.goto('/', { waitUntil: 'domcontentloaded' });
+
+      const cookies = await ctx.cookies(wpBaseURL);
+      const hjCookie = cookies.find(c => c.name === '_hjid');
+      // _hjid should have been shredded by PHP since svc.hotjar:no
+      expect(hjCookie).toBeUndefined();
     } finally {
       await ctx.close();
     }

@@ -264,8 +264,18 @@ class Cookie extends Store {
 	public function set_duration( $data ) {
 		$duration  = array();
 		$languages = faz_selected_languages();
+		// Ensure selected languages are always present.
 		foreach ( $languages as $lang ) {
 			$duration[ $lang ] = isset( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+		}
+		// Preserve extra language keys already in the payload so that
+		// translations are not silently lost when a language is deselected.
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $value ) {
+				if ( ! isset( $duration[ $lang ] ) && is_string( $value ) ) {
+					$duration[ $lang ] = wp_filter_post_kses( $value );
+				}
+			}
 		}
 		$this->set_object_data( 'duration', $duration );
 	}

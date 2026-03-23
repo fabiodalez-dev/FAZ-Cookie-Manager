@@ -472,8 +472,18 @@ abstract class Store {
 	public function set_description( $data ) {
 		$description = array();
 		$languages   = faz_selected_languages();
+		// Ensure selected languages are always present.
 		foreach ( $languages as $lang ) {
 			$description[ $lang ] = isset( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+		}
+		// Preserve extra language keys already in the payload so that
+		// translations are not silently lost when a language is deselected.
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $value ) {
+				if ( ! isset( $description[ $lang ] ) && is_string( $value ) ) {
+					$description[ $lang ] = wp_filter_post_kses( $value );
+				}
+			}
 		}
 		$this->set_object_data( 'description', $description );
 	}
