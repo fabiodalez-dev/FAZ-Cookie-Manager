@@ -921,27 +921,42 @@
 						cookieNames: collectedCookies.map(function(c) { return c.name; }),
 						diagnostics: diagnostics,
 					});
-					// Fallback: if iframe scan found nothing, ask server to scan
-					// the homepage directly (parses HTML for script tags server-side).
-					if (!collectedCookies.length && !collectedScripts.length && urls.length > 0) {
-						console.warn('[FAZ Scanner] Iframe scan found nothing — trying server-side fallback');
-						statusEl.textContent = 'Iframe blocked — trying server scan...';
+					// Always run server-side scan to catch data-src / litespeed
+					// deferred scripts that the iframe may miss, then merge.
+					if (urls.length > 0) {
+						statusEl.textContent = 'Enriching with server scan...';
 						FAZ.post('scans/server-scan', { url: urls[0] }).then(function (serverResult) {
-							if (serverResult && Array.isArray(serverResult.cookies)) {
-								collectedCookies = collectedCookies.concat(serverResult.cookies);
-								scanMetrics.cookiesFound = collectedCookies.length;
-							}
+							// Merge server-discovered scripts (deduped).
+							var existingScripts = {};
+							collectedScripts.forEach(function (s) { existingScripts[s] = true; });
 							if (serverResult && Array.isArray(serverResult.scripts)) {
-								collectedScripts = collectedScripts.concat(serverResult.scripts);
-								scanMetrics.scriptsFound = collectedScripts.length;
+								serverResult.scripts.forEach(function (s) {
+									if (!existingScripts[s]) {
+										collectedScripts.push(s);
+										existingScripts[s] = true;
+									}
+								});
 							}
-							console.log('[FAZ Scanner] Server fallback:', {
+							// Merge server-discovered cookies (deduped by name).
+							var existingCookies = {};
+							collectedCookies.forEach(function (c) { existingCookies[(c.name || '').toLowerCase()] = true; });
+							if (serverResult && Array.isArray(serverResult.cookies)) {
+								serverResult.cookies.forEach(function (c) {
+									if (c.name && !existingCookies[c.name.toLowerCase()]) {
+										collectedCookies.push(c);
+										existingCookies[c.name.toLowerCase()] = true;
+									}
+								});
+							}
+							scanMetrics.cookiesFound = collectedCookies.length;
+							scanMetrics.scriptsFound = collectedScripts.length;
+							console.log('[FAZ Scanner] After server merge:', {
 								cookies: collectedCookies.length,
 								scripts: collectedScripts.length,
 							});
 							doImport();
 						}).catch(function () {
-							console.warn('[FAZ Scanner] Server fallback failed, proceeding with empty results');
+							console.warn('[FAZ Scanner] Server scan failed, using iframe results only');
 							doImport();
 						});
 						return;
@@ -1252,9 +1267,11 @@
 				}
 
 				try {
-					var scriptEls = doc.querySelectorAll('script[src]');
+					// Collect script URLs from src, data-src, data-litespeed-src
+					// (covers LiteSpeed/WP Rocket/Autoptimize delay loaders).
+					var scriptEls = doc.querySelectorAll('script[src], script[data-src], script[data-litespeed-src]');
 					scriptEls.forEach(function (s) {
-						var src = s.getAttribute('src') || '';
+						var src = s.getAttribute('src') || s.getAttribute('data-src') || s.getAttribute('data-litespeed-src') || '';
 						if (src) {
 							try { src = new URL(src, parsedUrl.href).href; } catch (_u) {}
 							result.scripts.push(src);
@@ -1263,9 +1280,9 @@
 				} catch (e) { hadAccessError = true; }
 
 				try {
-					var iframeEls = doc.querySelectorAll('iframe[src]');
+					var iframeEls = doc.querySelectorAll('iframe[src], iframe[data-src]');
 					iframeEls.forEach(function (f) {
-						var src = f.getAttribute('src') || '';
+						var src = f.getAttribute('src') || f.getAttribute('data-src') || '';
 						if (src) {
 							try { src = new URL(src, parsedUrl.href).href; } catch (_u) {}
 							result.scripts.push(src);

@@ -400,16 +400,22 @@ class Api extends Rest_Controller {
 		$scripts = array();
 		$cookies = array();
 
-		// Extract all script src URLs from the HTML (including blocked ones with type="text/plain").
-		if ( preg_match_all( '/<script[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>/i', $html, $matches ) ) {
-			$scripts = array_unique( $matches[1] );
+		// Extract all script URLs from src, data-src, data-litespeed-src
+		// (covers LiteSpeed/WP Rocket/Autoptimize delay loaders).
+		foreach ( array( 'src', 'data-src', 'data-litespeed-src' ) as $attr ) {
+			if ( preg_match_all( '/<script[^>]*\b' . preg_quote( $attr, '/' ) . '=["\x27]([^"\x27]+)["\x27][^>]*>/i', $html, $matches ) ) {
+				$scripts = array_merge( $scripts, $matches[1] );
+			}
 		}
+		$scripts = array_unique( $scripts );
 
-		// Also extract iframe src URLs.
-		if ( preg_match_all( '/<iframe[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>/i', $html, $iframe_matches ) ) {
-			$scripts = array_merge( $scripts, $iframe_matches[1] );
-			$scripts = array_unique( $scripts );
+		// Also extract iframe URLs (src + data-src).
+		foreach ( array( 'src', 'data-src' ) as $attr ) {
+			if ( preg_match_all( '/<iframe[^>]*\b' . preg_quote( $attr, '/' ) . '=["\x27]([^"\x27]+)["\x27][^>]*>/i', $html, $iframe_matches ) ) {
+				$scripts = array_merge( $scripts, $iframe_matches[1] );
+			}
 		}
+		$scripts = array_unique( $scripts );
 
 		// Parse Set-Cookie headers.
 		$headers = wp_remote_retrieve_headers( $response );
