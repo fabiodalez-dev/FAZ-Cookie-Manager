@@ -353,7 +353,7 @@ class Api extends Rest_Controller {
 			array(
 				'urls'          => array_values( $urls ),
 				'priority_urls' => array_values( $priority_urls ),
-				'total'         => count( $urls ),
+				'total'         => count( $urls ) + count( $priority_urls ),
 				'fingerprint'   => $current_fingerprint,
 				'incremental'   => $incremental,
 			)

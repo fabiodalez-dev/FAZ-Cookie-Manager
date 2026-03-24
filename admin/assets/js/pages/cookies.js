@@ -942,11 +942,13 @@
 						cookieNames: collectedCookies.map(function(c) { return c.name; }),
 						diagnostics: diagnostics,
 					});
-					// Always run server-side scan to catch data-src / litespeed
-					// deferred scripts that the iframe may miss, then merge.
+					// Always run server-side scan on the HOMEPAGE to catch data-src /
+					// litespeed deferred scripts. Uses site root, not urls[0] which
+					// may be a WooCommerce page after priority URL prepending.
 					if (urls.length > 0) {
 						statusEl.textContent = 'Enriching with server scan...';
-						FAZ.post('scans/server-scan', { url: urls[0] }).then(function (serverResult) {
+						var homepageUrl = window.fazConfig ? (fazConfig._publicURL || fazConfig._homeURL || urls[0]) : urls[0];
+						FAZ.post('scans/server-scan', { url: homepageUrl }).then(function (serverResult) {
 							// Merge server-discovered scripts (deduped).
 							var existingScripts = {};
 							collectedScripts.forEach(function (s) { existingScripts[s] = true; });

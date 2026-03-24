@@ -1292,10 +1292,13 @@ class Controller {
 		// First published product — loads retargeting pixels (FB, TikTok).
 		$products = get_posts(
 			array(
-				'post_type'   => 'product',
-				'post_status' => 'publish',
-				'numberposts' => 1,
-				'fields'      => 'ids',
+				'post_type'              => 'product',
+				'post_status'            => 'publish',
+				'numberposts'            => 1,
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
 			)
 		);
 		if ( ! empty( $products ) ) {

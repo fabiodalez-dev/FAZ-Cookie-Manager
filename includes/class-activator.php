@@ -82,6 +82,7 @@ class Activator {
 		// to avoid 7 separate get_option() calls on every admin page load.
 		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'admin_init', array( __CLASS__, 'ensure_cookie_definitions' ) );
+		add_action( 'faz_download_cookie_definitions', array( __CLASS__, 'ensure_cookie_definitions' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
@@ -365,21 +366,14 @@ class Activator {
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
 
-		// Auto-download Open Cookie Database definitions on activation so the
-		// scanner can auto-categorize cookies immediately. Skips if data was
-		// already downloaded within the last 7 days. Wrapped in try/catch so
-		// network failures never block plugin activation.
-		try {
-			$meta       = get_option( Cookie_Definitions::META_KEY, array() );
-			$updated_at = isset( $meta['updated_at'] ) ? $meta['updated_at'] : '';
-			$is_recent  = $updated_at && ( strtotime( $updated_at ) > strtotime( '-7 days' ) );
-
-			if ( ! $is_recent ) {
-				Cookie_Definitions::get_instance()->update_definitions();
-			}
-		} catch ( \Throwable $e ) {
-			// Silently ignore — OCD download will be retried on first admin visit
-			// via the ensure_cookie_definitions() admin_init hook.
+		// Schedule async download of the Open Cookie Database so the scanner
+		// has full cookie recognition. Uses wp_schedule_single_event to avoid
+		// blocking activation (wp_remote_get has a 30s timeout).
+		$meta       = get_option( Cookie_Definitions::META_KEY, array() );
+		$updated_at = isset( $meta['updated_at'] ) ? $meta['updated_at'] : '';
+		$is_recent  = $updated_at && ( strtotime( $updated_at ) > strtotime( '-7 days' ) );
+		if ( ! $is_recent && ! wp_next_scheduled( 'faz_download_cookie_definitions' ) ) {
+			wp_schedule_single_event( time() + 5, 'faz_download_cookie_definitions' );
 		}
 	}
 
