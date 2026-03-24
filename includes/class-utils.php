@@ -208,6 +208,15 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 		// can detect third-party scripts and the cookies they set.
 		// Only works for logged-in admins to prevent abuse.
 		if ( isset( $_GET['faz_scanning'] ) && '1' === $_GET['faz_scanning'] && current_user_can( 'manage_options' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			// Prevent LiteSpeed/cache from serving a cached version during scan.
+			if ( ! headers_sent() ) {
+				header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+				header( 'X-LiteSpeed-Cache-Control: no-cache' );
+			}
+			// Tell LiteSpeed not to cache this page variation.
+			if ( defined( 'LSCWP_V' ) ) {
+				do_action( 'litespeed_control_set_nocache', 'FAZ scanner bypass' );
+			}
 			return true;
 		}
 		return false;
