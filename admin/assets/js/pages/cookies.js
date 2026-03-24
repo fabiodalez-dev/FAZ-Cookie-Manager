@@ -912,6 +912,13 @@
 					scanMetrics.scanMs = Date.now() - scanStart;
 					scanMetrics.cookiesFound = collectedCookies.length;
 					scanMetrics.scriptsFound = collectedScripts.length;
+					console.log('[FAZ Scanner] Scan complete:', {
+						cookies: collectedCookies.length,
+						scripts: collectedScripts.length,
+						scriptUrls: collectedScripts.slice(0, 10),
+						cookieNames: collectedCookies.map(function(c) { return c.name; }),
+						diagnostics: diagnostics,
+					});
 					bar.style.width = '100%';
 					statusEl.textContent = 'Saving results...';
 
