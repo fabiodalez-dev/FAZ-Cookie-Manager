@@ -107,6 +107,31 @@ class Cookie_Database {
 			'description' => 'Google Analytics cookie containing campaign information.',
 			'match'       => 'prefix',
 		),
+		'__utma'                  => array(
+			'category'    => 'analytics',
+			'duration'    => '2 years',
+			'description' => 'Google Analytics (Classic) cookie used to distinguish users and sessions.',
+		),
+		'__utmb'                  => array(
+			'category'    => 'analytics',
+			'duration'    => '30 minutes',
+			'description' => 'Google Analytics (Classic) cookie used to determine new sessions.',
+		),
+		'__utmc'                  => array(
+			'category'    => 'analytics',
+			'duration'    => 'session',
+			'description' => 'Google Analytics (Classic) cookie used with __utmb to determine new sessions.',
+		),
+		'__utmz'                  => array(
+			'category'    => 'analytics',
+			'duration'    => '6 months',
+			'description' => 'Google Analytics (Classic) cookie that stores the traffic source or campaign.',
+		),
+		'__utmt'                  => array(
+			'category'    => 'analytics',
+			'duration'    => '10 minutes',
+			'description' => 'Google Analytics (Classic) cookie used to throttle request rate.',
+		),
 		// Google Ads.
 		'_gcl_au'                 => array(
 			'category'    => 'marketing',
@@ -150,6 +175,12 @@ class Cookie_Database {
 			'duration'    => '30 days',
 			'description' => 'Cloudflare cookie used for identifying trusted web traffic.',
 		),
+		// Google reCAPTCHA.
+		'_GRECAPTCHA'             => array(
+			'category'    => 'necessary',
+			'duration'    => '6 months',
+			'description' => 'Used by Google reCAPTCHA to distinguish between humans and bots.',
+		),
 		// GDPR/Cookie consent.
 		'fazcookie-consent'       => array(
 			'category'    => 'necessary',
@@ -172,6 +203,17 @@ class Cookie_Database {
 			'duration'    => '1 year',
 			'description' => 'Microsoft Bing Ads Universal Event Tracking cookie.',
 		),
+		// Microsoft Ads (Bing UET).
+		'_uetsid'                 => array(
+			'category'    => 'marketing',
+			'duration'    => '1 day',
+			'description' => 'Microsoft Bing Ads UET session tracking cookie.',
+		),
+		'_uetvid'                 => array(
+			'category'    => 'marketing',
+			'duration'    => '16 days',
+			'description' => 'Microsoft Bing Ads UET cross-session tracking cookie.',
+		),
 		// LinkedIn.
 		'bcookie'                 => array(
 			'category'    => 'marketing',
@@ -183,26 +225,76 @@ class Cookie_Database {
 			'duration'    => '3 months',
 			'description' => 'LinkedIn Insight Tag cookie.',
 		),
+		'lidc'                    => array(
+			'category'    => 'marketing',
+			'duration'    => '1 day',
+			'description' => 'LinkedIn cookie for data center routing optimization.',
+		),
 		// HubSpot.
 		'__hssc'                  => array(
-			'category'    => 'analytics',
+			'category'    => 'marketing',
 			'duration'    => '30 minutes',
 			'description' => 'HubSpot session tracking cookie.',
 		),
 		'__hssrc'                 => array(
-			'category'    => 'analytics',
+			'category'    => 'marketing',
 			'duration'    => 'session',
 			'description' => 'HubSpot session reset detection cookie.',
 		),
 		'__hstc'                  => array(
-			'category'    => 'analytics',
+			'category'    => 'marketing',
 			'duration'    => '13 months',
 			'description' => 'HubSpot main analytics cookie.',
 		),
 		'hubspotutk'              => array(
-			'category'    => 'analytics',
+			'category'    => 'marketing',
 			'duration'    => '13 months',
 			'description' => 'HubSpot visitor tracking cookie.',
+		),
+		'__hs_opt_out'            => array(
+			'category'    => 'marketing',
+			'duration'    => '13 months',
+			'description' => 'HubSpot cookie to remember opt-out preference.',
+		),
+		// YouTube.
+		'YSC'                     => array(
+			'category'    => 'marketing',
+			'duration'    => 'session',
+			'description' => 'YouTube cookie used to track views of embedded videos.',
+		),
+		'VISITOR_INFO1_LIVE'      => array(
+			'category'    => 'marketing',
+			'duration'    => '6 months',
+			'description' => 'YouTube cookie used to estimate bandwidth and display settings.',
+		),
+		// Vimeo.
+		'vuid'                    => array(
+			'category'    => 'marketing',
+			'duration'    => '2 years',
+			'description' => 'Vimeo analytics cookie to track video views.',
+		),
+		// Stripe.
+		'__stripe_mid'            => array(
+			'category'    => 'functional',
+			'duration'    => '1 year',
+			'description' => 'Stripe fraud prevention cookie for payment processing.',
+		),
+		'__stripe_sid'            => array(
+			'category'    => 'functional',
+			'duration'    => '30 minutes',
+			'description' => 'Stripe fraud prevention session cookie for payment processing.',
+		),
+		// Mixpanel.
+		'mp_'                     => array(
+			'category'    => 'analytics',
+			'duration'    => '1 year',
+			'description' => 'Mixpanel analytics cookie for tracking user interactions.',
+			'match'       => 'prefix',
+		),
+		'distinct_id'             => array(
+			'category'    => 'analytics',
+			'duration'    => '1 year',
+			'description' => 'Mixpanel cookie used to identify unique users.',
 		),
 		// Hotjar.
 		'_hj'                     => array(
@@ -244,6 +336,44 @@ class Cookie_Database {
 			'category'    => 'marketing',
 			'duration'    => '13 months',
 			'description' => 'TikTok cookie used to identify and track users for advertising purposes.',
+		),
+		// Twitter / X.
+		'guest_id'                => array(
+			'category'    => 'marketing',
+			'duration'    => '2 years',
+			'description' => 'Twitter cookie used to identify non-logged-in users.',
+		),
+		'personalization_id'      => array(
+			'category'    => 'marketing',
+			'duration'    => '2 years',
+			'description' => 'Twitter cookie used for personalization and advertising.',
+		),
+		'ct0'                     => array(
+			'category'    => 'marketing',
+			'duration'    => 'session',
+			'description' => 'Twitter cookie used for security and spam prevention on embedded content.',
+		),
+		// Snapchat.
+		'_scid'                   => array(
+			'category'    => 'marketing',
+			'duration'    => '13 months',
+			'description' => 'Snapchat Pixel cookie for cross-site visitor identification.',
+		),
+		'sc_at'                   => array(
+			'category'    => 'marketing',
+			'duration'    => '13 months',
+			'description' => 'Snapchat Pixel cookie used for advertising attribution.',
+		),
+		// Pinterest.
+		'_pin_unauth'             => array(
+			'category'    => 'marketing',
+			'duration'    => '1 year',
+			'description' => 'Pinterest cookie used to track unauthenticated users.',
+		),
+		'_pinterest_sess'         => array(
+			'category'    => 'marketing',
+			'duration'    => '1 year',
+			'description' => 'Pinterest session cookie used for advertising and tracking.',
 		),
 		// PHP.
 		'PHPSESSID'               => array(

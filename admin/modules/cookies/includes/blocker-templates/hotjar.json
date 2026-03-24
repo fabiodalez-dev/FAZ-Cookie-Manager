@@ -7,5 +7,5 @@
         "static.hotjar.com",
         "hotjar.com/c/hotjar"
     ],
-    "cookies": ["_hjid", "_hjSession*", "_hjIncludedInPageviewSample", "_hjAbsoluteSessionInProgress"]
+    "cookies": ["_hjid", "_hjSession*", "_hjSessionUser_*", "_hjSession_*", "_hjIncludedInPageviewSample", "_hjAbsoluteSessionInProgress", "_hjFirstSeen"]
 }

@@ -8,5 +8,5 @@
         "ads-twitter.com",
         "static.ads-twitter.com"
     ],
-    "cookies": ["personalization_id", "guest_id"]
+    "cookies": ["personalization_id", "guest_id", "muc_ads"]
 }

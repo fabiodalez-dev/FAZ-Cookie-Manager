@@ -9,5 +9,5 @@
         "fbevents.js",
         "facebook.com/plugins"
     ],
-    "cookies": ["_fbp", "_fbc", "fr", "datr"]
+    "cookies": ["_fbp", "_fbc", "fr", "datr", "sb"]
 }

@@ -7,5 +7,5 @@
         "snap.licdn.com",
         "platform.linkedin.com"
     ],
-    "cookies": ["li_sugr", "bcookie", "lidc", "UserMatchHistory", "AnalyticsSyncHistory"]
+    "cookies": ["li_sugr", "bcookie", "lidc", "UserMatchHistory", "AnalyticsSyncHistory", "ln_or"]
 }
