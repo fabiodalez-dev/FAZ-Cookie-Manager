@@ -676,3 +676,80 @@ test.describe('P3 fix: scanner uses default language', () => {
     }
   });
 });
+
+/* ═══════════════════════════════════════════════════
+   Blocker template → cookie creation → recognition
+   ═══════════════════════════════════════════════════ */
+
+test.describe('Blocker template end-to-end flow', () => {
+
+  test('applying a blocker template creates cookies in the DB with correct category', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // Get current cookies before template application
+    const before = await apiGet(page, nonce, 'cookies');
+    const beforeNames = new Set(
+      (Array.isArray(before.data) ? before.data : []).map((c: any) => String(c.name).toLowerCase())
+    );
+
+    // Get templates
+    const templates = await apiGet(page, nonce, 'blocker-templates');
+    expect(templates.status).toBe(200);
+    expect(Array.isArray(templates.data)).toBe(true);
+
+    // Find a template with cookies (e.g., Google Analytics)
+    const gaTpl = templates.data.find((t: any) => t.id === 'google-analytics');
+    expect(gaTpl).toBeTruthy();
+    expect(Array.isArray(gaTpl.cookies)).toBe(true);
+    expect(gaTpl.cookies.length).toBeGreaterThan(0);
+
+    // Click the GA template card in the UI
+    await page.waitForSelector('#faz-blocker-templates', { timeout: 5_000 });
+    const gaCard = page.locator('#faz-blocker-templates > *').filter({ hasText: 'Google Analytics' });
+    if (await gaCard.count() > 0) {
+      await gaCard.first().click();
+      await page.waitForTimeout(3_000);
+
+      // Get cookies after template application
+      const after = await apiGet(page, nonce, 'cookies');
+      const afterCookies = Array.isArray(after.data) ? after.data : [];
+      const afterNames = new Set(afterCookies.map((c: any) => String(c.name).toLowerCase()));
+
+      // Verify GA cookies exist in the DB
+      const analyticsCat = (await apiGet(page, nonce, 'cookies/categories')).data
+        .find((c: any) => c.slug === 'analytics');
+      expect(analyticsCat).toBeTruthy();
+      const analyticsCatId = analyticsCat.id ?? analyticsCat.category_id;
+
+      // Check that at least _ga exists and is in analytics category
+      const gaInDb = afterCookies.find((c: any) => c.name === '_ga');
+      expect(gaInDb, '_ga should exist in DB after applying GA template').toBeTruthy();
+      expect(gaInDb.category, '_ga should be in analytics category').toBe(analyticsCatId);
+    }
+  });
+
+  test('all cookies in the DB have a valid category', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    const cookies = await apiGet(page, nonce, 'cookies');
+    const categories = await apiGet(page, nonce, 'cookies/categories');
+
+    const catIds = new Set(
+      (Array.isArray(categories.data) ? categories.data : [])
+        .map((c: any) => c.id ?? c.category_id)
+    );
+
+    if (Array.isArray(cookies.data)) {
+      for (const cookie of cookies.data) {
+        expect(
+          catIds.has(cookie.category),
+          `Cookie "${cookie.name}" has unknown category ID ${cookie.category}`
+        ).toBe(true);
+      }
+    }
+  });
+});

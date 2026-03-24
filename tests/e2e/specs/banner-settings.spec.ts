@@ -26,9 +26,11 @@ async function updateBanner(page: Page, nonce: string, id: number, payload: Reco
   return r.json();
 }
 
-/** Open a fresh visitor page (no cookies/session). */
-async function openVisitorPage(browser: any, baseURL: string, path = '/') {
-  const ctx = await browser.newContext({ baseURL });
+/** Open a fresh visitor page (no cookies/session).
+ *  Sets Accept-Language to the plugin's default language so that the
+ *  frontend renders in the same language the admin saved texts in. */
+async function openVisitorPage(browser: any, baseURL: string, path = '/', locale = 'en-US') {
+  const ctx = await browser.newContext({ baseURL, locale, extraHTTPHeaders: { 'Accept-Language': locale } });
   const page = await ctx.newPage();
   await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   return { page, ctx };
