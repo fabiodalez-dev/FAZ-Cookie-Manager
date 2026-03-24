@@ -148,6 +148,14 @@ defined( 'ABSPATH' ) || exit;
 				<input type="number" class="faz-input faz-input-sm" data-path="scanner.max_pages" value="100" min="1" style="width:120px;">
 				<div class="faz-help"><?php esc_html_e( 'Maximum number of pages the cookie scanner will crawl. Higher values find more cookies but take longer. 100 pages is sufficient for most sites.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="scanner.debug_mode">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Scanner Debug Mode', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'When enabled, the scanner logs every categorization decision. Download logs from the Cookies page.', 'faz-cookie-manager' ); ?></div>
+			</div>
 		</div>
 	</div>
 

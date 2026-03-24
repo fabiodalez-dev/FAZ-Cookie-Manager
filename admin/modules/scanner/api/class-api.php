@@ -11,6 +11,7 @@ use WP_REST_Server;
 use WP_Error;
 use stdClass;
 use FazCookie\Includes\Rest_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Scanner_Logger;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -167,6 +168,24 @@ class Api extends Rest_Controller {
 					'args'                => array(
 						'context' => $this->get_context_param( array( 'default' => 'view' ) ),
 					),
+				),
+			)
+		);
+
+		// Scanner debug log endpoints.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/debug-log',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_debug_log' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+				array(
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'clear_debug_log' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
 				),
 			)
 		);
@@ -381,10 +400,15 @@ class Api extends Rest_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function server_scan( $request ) {
-		$url = $request->get_param( 'url' );
+		$logger = Scanner_Logger::get_instance();
+		$url    = $request->get_param( 'url' );
+
 		if ( empty( $url ) ) {
+			$logger->log( 'Server-scan: empty URL, returning empty result' );
 			return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
 		}
+
+		$logger->log( 'Server-scan URL: ' . $url );
 
 		// Fetch the page HTML server-side.
 		$response = wp_remote_get(
@@ -398,12 +422,16 @@ class Api extends Rest_Controller {
 		);
 
 		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			$err_msg = is_wp_error( $response ) ? $response->get_error_message() : 'HTTP ' . wp_remote_retrieve_response_code( $response );
+			$logger->log( 'Server-scan fetch failed: ' . $err_msg );
 			return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
 		}
 
 		$html    = wp_remote_retrieve_body( $response );
 		$scripts = array();
 		$cookies = array();
+
+		$logger->log( 'HTML size: ' . strlen( $html ) . ' bytes' );
 
 		// Extract all script URLs from src, data-src, data-litespeed-src
 		// (covers LiteSpeed/WP Rocket/Autoptimize delay loaders).
@@ -422,6 +450,9 @@ class Api extends Rest_Controller {
 		}
 		$scripts = array_unique( $scripts );
 
+		$script_list = array_values( $scripts );
+		$logger->log( 'Scripts found: ' . count( $script_list ), array_slice( $script_list, 0, 20 ) );
+
 		// Parse Set-Cookie headers.
 		$headers = wp_remote_retrieve_headers( $response );
 		$raw_cookies = array();
@@ -435,6 +466,8 @@ class Api extends Rest_Controller {
 				$raw_cookies = (array) $headers['set-cookie'];
 			}
 		}
+
+		$logger->log( 'Set-Cookie headers: ' . count( $raw_cookies ) );
 
 		$site_domain = wp_parse_url( home_url(), PHP_URL_HOST );
 		foreach ( $raw_cookies as $cookie_str ) {
@@ -450,7 +483,9 @@ class Api extends Rest_Controller {
 
 		// Infer cookies from detected scripts using Cookie_Database.
 		$inferred = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup_scripts( $scripts );
+		$logger->log( 'Inferred cookies from scripts: ' . count( $inferred ) );
 		foreach ( $inferred as $inf ) {
+			$logger->log( '  Inferred: "' . $inf['name'] . '" → ' . ( isset( $inf['category'] ) ? $inf['category'] : 'uncategorized' ) );
 			$cookies[] = array(
 				'name'        => $inf['name'],
 				'domain'      => isset( $inf['domain'] ) ? $inf['domain'] : $site_domain,
@@ -459,6 +494,8 @@ class Api extends Rest_Controller {
 				'category'    => isset( $inf['category'] ) ? $inf['category'] : 'uncategorized',
 			);
 		}
+
+		$logger->log( 'Server-scan complete: ' . count( $cookies ) . ' cookies, ' . count( $scripts ) . ' scripts' );
 
 		return new \WP_REST_Response(
 			array(
@@ -509,6 +546,41 @@ class Api extends Rest_Controller {
 		$result = $this->controller->save_scan_result( $cookies, $pages_scanned, $clean_scripts, $metrics );
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Return scanner debug logs as plain text.
+	 *
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
+	public function get_debug_log( $request ) {
+		$logger = Scanner_Logger::get_instance();
+		$text   = $logger->get_all_logs_text();
+
+		return new \WP_REST_Response(
+			array(
+				'log'     => $text,
+				'enabled' => $logger->is_enabled(),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Clear scanner debug logs.
+	 *
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
+	public function clear_debug_log( $request ) {
+		$logger = Scanner_Logger::get_instance();
+		$logger->clear_logs();
+
+		return new \WP_REST_Response(
+			array( 'cleared' => true ),
+			200
+		);
 	}
 
 	/**

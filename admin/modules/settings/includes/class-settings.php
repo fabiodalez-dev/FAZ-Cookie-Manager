@@ -86,6 +86,7 @@ class Settings extends Store {
 				'static_ip'       => '',
 				'auto_scan'       => false,
 				'scan_frequency'  => 'weekly',
+				'debug_mode'      => false,
 			),
 			'banner_control' => array(
 				'status'                 => true,
@@ -248,6 +249,7 @@ class Settings extends Store {
 			case 'purpose_one_treatment':
 			case 'pageview_tracking':
 			case 'auto_scan':
+			case 'debug_mode':
 			case 'geo_targeting':
 			case 'hide_from_bots':
 			case 'gtm_datalayer':

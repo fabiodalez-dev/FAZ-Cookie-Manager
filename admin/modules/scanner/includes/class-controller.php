@@ -15,6 +15,7 @@ use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Includes\Cookie_Definitions;
+use FazCookie\Admin\Modules\Scanner\Includes\Scanner_Logger;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -216,12 +217,19 @@ class Controller {
 	 * @return void
 	 */
 	public function run_httponly_check() {
+		$logger       = Scanner_Logger::get_instance();
+		$logger->start( 'httpOnly cookie check' );
+
 		$site_url     = home_url( '/' );
+		$logger->log( 'Checking homepage for httpOnly cookies: ' . $site_url );
 		$page_cookies = $this->scan_page( $site_url );
+		$logger->log( 'Found ' . count( $page_cookies ) . ' cookies from Set-Cookie headers' );
 
 		if ( ! empty( $page_cookies ) ) {
 			$this->save_cookies( $page_cookies );
 		}
+
+		$logger->finish();
 	}
 
 	/**
@@ -288,12 +296,18 @@ class Controller {
 		// Scanning makes many HTTP requests; prevent PHP timeout.
 		@set_time_limit( 300 );
 
+		$logger = Scanner_Logger::get_instance();
+		$logger->start( 'Server-side scan (run_scan)' );
+		$logger->log( 'Max pages: ' . $max_pages );
+
 		$site_url = home_url( '/' );
 		$pages    = $this->discover_pages( $site_url, $max_pages );
+		$logger->log( 'Discovered ' . count( $pages ) . ' pages to scan' );
 		$cookies  = array();
 
 		foreach ( $pages as $url ) {
 			$page_cookies = $this->scan_page( $url );
+			$logger->log( 'Scanned: ' . $url . ' → ' . count( $page_cookies ) . ' cookies' );
 			foreach ( $page_cookies as $cookie_data ) {
 				$name = $cookie_data['name'];
 				// Deduplicate by cookie name, keeping first occurrence.
@@ -304,6 +318,7 @@ class Controller {
 		}
 
 		$total_cookies = count( $cookies );
+		$logger->log( 'Total unique cookies discovered: ' . $total_cookies );
 		$this->save_cookies( $cookies );
 
 		$scan_id = absint( get_option( 'faz_scan_counter', 0 ) ) + 1;
@@ -335,6 +350,9 @@ class Controller {
 			$history = array_slice( $history, -50 );
 		}
 		update_option( 'faz_scan_history', $history );
+
+		$logger->log( 'Server-side scan result: scan_id=' . $scan_id . ', total_cookies=' . $total_cookies . ', pages=' . count( $pages ) );
+		$logger->finish();
 
 		return $this->get_info();
 	}
@@ -799,6 +817,11 @@ class Controller {
 	 * @return array Scan result summary.
 	 */
 	public function save_scan_result( $cookies, $pages_scanned, $scripts = array(), $metrics = array() ) {
+		$logger = Scanner_Logger::get_instance();
+		$logger->start( 'Browser scan import' );
+		$logger->log( 'Received ' . count( $cookies ) . ' cookies, ' . count( $scripts ) . ' scripts from client' );
+		$logger->log( 'Pages scanned: ' . $pages_scanned );
+
 		// Deduplicate cookies by name (single pass, also used for merge check).
 		$unique = array();
 		$seen   = array();
@@ -814,36 +837,48 @@ class Controller {
 			$c['name']     = $name;
 			$unique[]      = $c;
 		}
+		$logger->log( 'Deduplicating: ' . count( $unique ) . ' unique cookies from client data' );
 
 		// Merge inferred cookies from script patterns.
 		if ( ! empty( $scripts ) ) {
+			$logger->log( 'Script inference from ' . count( $scripts ) . ' scripts (Cookie_Database)...' );
 			$inferred = Cookie_Database::lookup_scripts( $scripts );
+			$logger->log( 'Cookie_Database::lookup_scripts returned ' . count( $inferred ) . ' inferred cookies' );
 			foreach ( $inferred as $inf ) {
 				if ( ! is_array( $inf ) || empty( $inf['name'] ) ) {
 					continue;
 				}
 				$name = sanitize_text_field( $inf['name'] );
 				if ( isset( $seen[ $name ] ) ) {
+					$logger->log( '  Script-inferred cookie "' . $name . '" already seen, skipping' );
 					continue;
 				}
+				$inf_cat = isset( $inf['category'] ) ? $inf['category'] : 'unknown';
+				$logger->log( '  Script-inferred: "' . $name . '" → category=' . $inf_cat );
 				$inf['name']  = $name;
 				$seen[ $name ] = true;
 				$unique[]      = $inf;
 			}
 
 			// Also infer cookies from Known Providers based on detected scripts.
+			$logger->log( 'Script inference from Known Providers...' );
 			$kp_inferred = $this->infer_cookies_from_scripts( $scripts );
+			$logger->log( 'Known Providers returned ' . count( $kp_inferred ) . ' inferred cookies' );
 			foreach ( $kp_inferred as $inf ) {
 				$name = sanitize_text_field( $inf['name'] );
 				if ( isset( $seen[ $name ] ) ) {
+					$logger->log( '  KP-inferred cookie "' . $name . '" already seen, skipping' );
 					continue;
 				}
+				$kp_cat = isset( $inf['category'] ) ? $inf['category'] : 'unknown';
+				$logger->log( '  KP-inferred: "' . $name . '" → category=' . $kp_cat );
 				$seen[ $name ] = true;
 				$unique[]      = $inf;
 			}
 		}
 
 		$total_cookies = count( $unique );
+		$logger->log( 'Total unique cookies to save: ' . $total_cookies );
 		$this->save_cookies( $unique );
 		$cookie_names = array();
 		foreach ( $unique as $item ) {
@@ -887,6 +922,9 @@ class Controller {
 		}
 		update_option( 'faz_scan_history', $history );
 
+		$logger->log( 'Scan result: scan_id=' . $scan_id . ', total_cookies=' . $total_cookies . ', pages_scanned=' . $pages_scanned );
+		$logger->finish();
+
 		return array(
 			'scan_id'       => $scan_id,
 			'total_cookies' => $total_cookies,
@@ -902,12 +940,16 @@ class Controller {
 	 * @return void
 	 */
 	public function save_cookies( $cookies ) {
+		$logger = Scanner_Logger::get_instance();
+
 		$category_controller = Category_Controller::get_instance();
 		$categories          = $category_controller->get_items();
 		$category_map        = array();
 		foreach ( $categories as $cat ) {
 			$category_map[ $cat->slug ] = $cat->category_id;
 		}
+
+		$logger->log( 'Category map', $category_map );
 
 		// Get existing cookies to avoid duplicates (hash map for O(1) lookup).
 		$existing_cookies = Cookie_Controller::get_instance()->get_item_from_db();
@@ -917,6 +959,9 @@ class Controller {
 				$existing_names[ $ec->name ] = true;
 			}
 		}
+
+		$existing_list = array_keys( $existing_names );
+		$logger->log( 'Existing cookies in DB: ' . count( $existing_list ), $existing_list );
 
 		$default_lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
 
@@ -939,7 +984,11 @@ class Controller {
 				)
 			);
 			$name        = sanitize_text_field( $cookie_data['name'] );
+
+			$logger->log( 'Processing: "' . $name . '"' );
+
 			if ( isset( $existing_names[ $name ] ) ) {
+				$logger->log( '  SKIPPED: already exists in DB' );
 				continue; // Don't overwrite existing cookies.
 			}
 
@@ -947,6 +996,7 @@ class Controller {
 			$known = Cookie_Database::lookup( $name );
 			if ( $known ) {
 				$cat_slug = $known['category'];
+				$logger->log( '  Cookie_Database lookup: FOUND → category=' . $known['category'] . ', description="' . mb_substr( $known['description'], 0, 60 ) . '..."' );
 				if ( ! empty( $known['description'] ) && empty( $cookie_data['description'] ) ) {
 					$cookie_data['description'] = $known['description'];
 				}
@@ -954,27 +1004,34 @@ class Controller {
 					$cookie_data['duration'] = $known['duration'];
 				}
 			} else {
+				$logger->log( '  Cookie_Database lookup: not found' );
 				// Fallback 2: Known Providers cookie map.
 				$provider_cat = $this->match_cookie_to_provider( $name );
 				if ( $provider_cat ) {
 					$cat_slug = $provider_cat;
+					$logger->log( '  Known_Providers match: FOUND → category=' . $provider_cat );
 					// Known Providers only gives category — try OCD for description/duration.
 					if ( empty( $cookie_data['description'] ) || empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) {
 						$ocd_extra = Cookie_Definitions::get_instance()->lookup( $name );
 						if ( $ocd_extra ) {
+							$logger->log( '  OCD lookup (for description/duration): FOUND' );
 							if ( ! empty( $ocd_extra['description'] ) && empty( $cookie_data['description'] ) ) {
 								$cookie_data['description'] = $ocd_extra['description'];
 							}
 							if ( ! empty( $ocd_extra['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
 								$cookie_data['duration'] = $ocd_extra['duration'];
 							}
+						} else {
+							$logger->log( '  OCD lookup (for description/duration): not found' );
 						}
 					}
 				} else {
+					$logger->log( '  Known_Providers match: not found' );
 					// Fallback 3: Open Cookie Database (1400+ definitions).
 					$ocd = Cookie_Definitions::get_instance()->lookup( $name );
 					if ( $ocd ) {
 						$cat_slug = ! empty( $ocd['category'] ) ? $ocd['category'] : 'uncategorized';
+						$logger->log( '  OCD lookup: FOUND → category=' . $cat_slug . ', description="' . mb_substr( isset( $ocd['description'] ) ? $ocd['description'] : '', 0, 60 ) . '..."' );
 						if ( ! empty( $ocd['description'] ) && empty( $cookie_data['description'] ) ) {
 							$cookie_data['description'] = $ocd['description'];
 						}
@@ -983,10 +1040,16 @@ class Controller {
 						}
 					} else {
 						$cat_slug = isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'uncategorized';
+						$logger->log( '  OCD lookup: not found' );
+						$logger->log( '  Using client-provided category: ' . $cat_slug );
 					}
 				}
 			}
 			$category_id = isset( $category_map[ $cat_slug ] ) ? $category_map[ $cat_slug ] : $default_cat_id;
+
+			$logger->log( '  Final category: ' . $cat_slug . ' (id=' . $category_id . ')' );
+			$logger->log( '  Description: "' . mb_substr( $cookie_data['description'], 0, 80 ) . '"' );
+			$logger->log( '  Duration: ' . $cookie_data['duration'] );
 
 			$cookie = new Cookie();
 			$cookie->set_name( $name );
@@ -999,6 +1062,7 @@ class Controller {
 			$cookie->set_discovered( true );
 
 			Cookie_Controller::get_instance()->create_item( $cookie );
+			$logger->log( '  CREATED: "' . $name . '"' );
 			$existing_names[ $name ] = true;
 		}
 
