@@ -13,7 +13,12 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
-if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
+// Check the plugin setting OR the wp-config constant.
+$faz_settings    = get_option( 'faz_settings', array() );
+$remove_on_uninstall = ! empty( $faz_settings['general']['remove_data_on_uninstall'] )
+	|| ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA );
+
+if ( $remove_on_uninstall ) {
 
 	/**
 	 * Clean up all plugin data for the current site.

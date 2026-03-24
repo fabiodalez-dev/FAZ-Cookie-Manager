@@ -335,6 +335,22 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Data Management', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="general.remove_data_on_uninstall">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Remove all data on uninstall', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help" style="color:var(--faz-danger);"><?php esc_html_e( 'When enabled, deleting the plugin will permanently remove ALL data: cookies, categories, consent logs, pageviews, banner settings, and scan history. Keep this OFF if you plan to reinstall or update the plugin.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
 	<div style="margin-top:8px;">
 		<button class="faz-btn faz-btn-primary" id="faz-settings-save"><?php esc_html_e( 'Save Settings', 'faz-cookie-manager' ); ?></button>
 	</div>
