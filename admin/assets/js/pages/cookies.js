@@ -16,7 +16,19 @@
 		if (!val) return '';
 		if (typeof val === 'string') return val;
 		if (typeof val === 'object') {
-			return val.en || val[Object.keys(val)[0]] || '';
+			var defLang = (window.fazConfig && fazConfig.languages && fazConfig.languages['default']) || '';
+			if (defLang && typeof val[defLang] === 'string' && val[defLang] !== '') {
+				return val[defLang];
+			}
+			if (typeof val.en === 'string' && val.en !== '') {
+				return val.en;
+			}
+			for (var key in val) {
+				if (Object.prototype.hasOwnProperty.call(val, key) && typeof val[key] === 'string' && val[key] !== '') {
+					return val[key];
+				}
+			}
+			return '';
 		}
 		return String(val);
 	}
@@ -1402,7 +1414,12 @@
 					categorized++;
 					var updateData = { category: parseInt(targetCatId, 10) };
 					if (info.description) {
-						updateData.description = { en: info.description };
+						var descLang = getCategoryEditorLang();
+						var descObj = (cookie.description && typeof cookie.description === 'object' && !Array.isArray(cookie.description))
+							? Object.assign({}, cookie.description)
+							: {};
+						descObj[descLang] = info.description;
+						updateData.description = descObj;
 					}
 					updates.push(FAZ.put('cookies/' + (cookie.id || cookie.cookie_id), updateData));
 				});
@@ -1616,13 +1633,71 @@
 
 				card.addEventListener('click', function () {
 					var patterns = Array.isArray(tpl.patterns) ? tpl.patterns : [];
-					if (!patterns.length) { FAZ.notify('No patterns in template.', 'error'); return; }
+					if (!patterns.length && !(Array.isArray(tpl.cookies) && tpl.cookies.length)) {
+						FAZ.notify('No patterns or cookies in template.', 'error');
+						return;
+					}
 					var added = 0;
 					patterns.forEach(function (pattern) {
 						addRuleRow(pattern, tpl.category);
 						added++;
 					});
-					FAZ.notify('Added ' + added + ' rules from ' + tpl.name, 'success');
+					if (added) {
+						FAZ.notify('Added ' + added + ' rules from ' + tpl.name, 'success');
+					}
+
+					// Also create cookies from the template if they don't already exist
+					var tplCookies = Array.isArray(tpl.cookies) ? tpl.cookies : [];
+					if (!tplCookies.length) return;
+
+					// Resolve category ID from slug
+					var catId = null;
+					categories.forEach(function (c) {
+						if (c.slug === tpl.category) catId = c.id;
+					});
+					if (!catId) {
+						FAZ.notify('Category "' + tpl.category + '" not found — cookies not added', 'error');
+						return;
+					}
+
+					// Fetch all cookies to check for duplicates (global `cookies` may be filtered)
+					FAZ.get('cookies').then(function (data) {
+						var allCookies = Array.isArray(data) ? data : (data.items || []);
+						var existingNames = {};
+						allCookies.forEach(function (c) {
+							if (c.name) existingNames[String(c.name).toLowerCase()] = true;
+						});
+
+						var lang = getCategoryEditorLang();
+						var creates = [];
+						tplCookies.forEach(function (cookieName) {
+							if (existingNames[String(cookieName).toLowerCase()]) return;
+							var descObj = {};
+							descObj[lang] = '';
+							var durObj = {};
+							durObj[lang] = '';
+							creates.push(FAZ.post('cookies', {
+								name: cookieName,
+								domain: '',
+								duration: durObj,
+								description: descObj,
+								category: parseInt(catId, 10)
+							}));
+						});
+
+						if (!creates.length) {
+							FAZ.notify('All cookies from ' + tpl.name + ' already exist', 'info');
+							return;
+						}
+
+						return Promise.all(creates).then(function () {
+							FAZ.notify(creates.length + ' cookie(s) added from ' + tpl.name, 'success');
+							loadCookies();
+							loadCategories();
+						});
+					}).catch(function () {
+						FAZ.notify('Failed to create cookies from template', 'error');
+					});
 				});
 
 				container.appendChild(card);

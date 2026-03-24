@@ -1868,8 +1868,8 @@ function _fazAfterConsent() {
         window.dataLayer.push(consentData);
     }
 
-    // Clean up cookies from categories the user has not consented to.
-    _fazCleanupRevokedCookies();
+    // Clean up cookies from categories/services the user has not consented to.
+    var svcRevoked = _fazCleanupRevokedCookies();
 
     // Detect category revocation: executed JavaScript cannot be unloaded,
     // so we must reload the page for the server to omit those scripts.
@@ -1886,7 +1886,7 @@ function _fazAfterConsent() {
     // Re-run server-side unblocking for newly accepted categories.
     _fazUnblockServerSide();
 
-    if (revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
+    if (svcRevoked || revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
         window.location.reload();
         return;
     }
@@ -1968,10 +1968,25 @@ function _fazDeleteCookie(name) {
  */
 function _fazCleanupRevokedCookies() {
     var cookieMap = _fazStore._cookieCategoryMap;
-    if (!cookieMap || typeof cookieMap !== "object") return;
+
+    // Build a per-service cookie map: pattern → service_id for denied services.
+    var svcCookieMap = {};
+    if (_fazStore._perServiceConsent && _fazStore._services) {
+        _fazStore._services.forEach(function(svc) {
+            var svcConsent = ref._fazGetFromStore("svc." + svc.id);
+            if (svcConsent === "no" && svc.cookies && svc.cookies.length) {
+                svc.cookies.forEach(function(pat) { svcCookieMap[pat] = svc.id; });
+            }
+        });
+    }
+
+    var hasCategoryMap = cookieMap && typeof cookieMap === "object";
+    var hasSvcMap = Object.keys(svcCookieMap).length > 0;
+    if (!hasCategoryMap && !hasSvcMap) return;
 
     // Plugin cookies that must never be deleted.
     var protectedCookies = ['fazcookie-consent', 'fazVendorConsent', 'euconsent-v2'];
+    var svcRevoked = false;
 
     var currentCookies = document.cookie.split(";");
 
@@ -1983,18 +1998,39 @@ function _fazCleanupRevokedCookies() {
         // Never delete the plugin's own cookies.
         if (protectedCookies.indexOf(cookieName) !== -1) continue;
 
-        for (var pattern in cookieMap) {
-            if (!cookieMap.hasOwnProperty(pattern)) continue;
-            var category = cookieMap[pattern];
+        var shouldDelete = false;
 
-            if (!_fazIsCategoryToBeBlocked(category)) continue;
-
-            if (_fazCookieNameMatches(cookieName, pattern)) {
-                _fazDeleteCookie(cookieName);
-                break;
+        // Category-based shredding.
+        if (hasCategoryMap) {
+            for (var pattern in cookieMap) {
+                if (!cookieMap.hasOwnProperty(pattern)) continue;
+                var category = cookieMap[pattern];
+                if (!_fazIsCategoryToBeBlocked(category)) continue;
+                if (_fazCookieNameMatches(cookieName, pattern)) {
+                    shouldDelete = true;
+                    break;
+                }
             }
         }
+
+        // Per-service shredding (service denied even if category allowed).
+        if (!shouldDelete && hasSvcMap) {
+            for (var svcPat in svcCookieMap) {
+                if (!svcCookieMap.hasOwnProperty(svcPat)) continue;
+                if (_fazCookieNameMatches(cookieName, svcPat)) {
+                    shouldDelete = true;
+                    svcRevoked = true;
+                    break;
+                }
+            }
+        }
+
+        if (shouldDelete) {
+            _fazDeleteCookie(cookieName);
+        }
     }
+
+    return svcRevoked;
 }
 
 /**

@@ -831,6 +831,7 @@ class Frontend {
 					'label'    => sanitize_text_field( $service['label'] ),
 					'category' => sanitize_key( $service['category'] ),
 					'patterns' => array_map( 'sanitize_text_field', $service['patterns'] ),
+					'cookies'  => ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array(),
 				);
 			}
 			$store['_perServiceConsent'] = true;
@@ -2495,17 +2496,6 @@ class Frontend {
 		}
 
 		$blocked_categories = $this->get_blocked_categories();
-		if ( empty( $blocked_categories ) ) {
-			return;
-		}
-
-		$cookie_map = Known_Providers::get_cookie_map();
-		if ( empty( $cookie_map ) ) {
-			return;
-		}
-
-		$host   = isset( $_SERVER['HTTP_HOST'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) : '';
-		$domain = preg_replace( '/^www\./', '', $host );
 
 		// Per-service consent: also shred cookies for explicitly denied services
 		// even when their category is allowed (svc.hotjar:no + analytics:yes).
@@ -2522,6 +2512,21 @@ class Frontend {
 				}
 			}
 		}
+
+		// Nothing to shred: no blocked categories AND no denied services.
+		if ( empty( $blocked_categories ) && empty( $svc_cookie_map ) ) {
+			return;
+		}
+
+		$cookie_map = Known_Providers::get_cookie_map();
+		if ( empty( $cookie_map ) && empty( $svc_cookie_map ) ) {
+			return;
+		}
+
+		$host              = isset( $_SERVER['HTTP_HOST'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) : '';
+		$current_host      = preg_replace( '/^www\./', '', preg_replace( '/:\d+$/', '', $host ) );
+		$shared_domain     = ltrim( (string) $this->get_cookie_domain(), '.' );
+		$domain_candidates = array_values( array_unique( array_filter( array( $current_host, $shared_domain ) ) ) );
 
 		foreach ( array_keys( $_COOKIE ) as $name ) {
 			$should_shred = false;
@@ -2549,7 +2554,7 @@ class Frontend {
 
 			if ( $should_shred ) {
 				setcookie( $name, '', -1, '/' );
-				if ( $domain ) {
+				foreach ( $domain_candidates as $domain ) {
 					setcookie( $name, '', -1, '/', $domain );
 					setcookie( $name, '', -1, '/', '.' . $domain );
 				}

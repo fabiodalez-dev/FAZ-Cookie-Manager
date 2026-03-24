@@ -149,14 +149,22 @@ class Cookie_Categories extends Store {
 	public function get_name( $language = '' ) {
 		$contents        = array();
 		$prop            = 'name';
-		$data            = $this->get_object_data( $prop );
+		$data            = $this->normalize_multilingual_data( $this->get_object_data( $prop ) );
 		$languages       = faz_selected_languages( $language );
-		$default_content = isset( $data['en'] ) ? $data['en'] : $this->get_translations( 'en', $prop );
+		$default         = faz_default_language();
+		$default_content = isset( $data[ $default ] ) ? $data[ $default ] : $this->get_translations( $default, $prop );
 		foreach ( $languages as $lang ) {
 			$content           = isset( $data[ $lang ] ) ? $data[ $lang ] : '';
 			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
 			$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+		}
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $content ) {
+				if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
+					$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+				}
+			}
 		}
 		if ( '' !== $language ) {
 			return isset( $contents[ $language ] ) ? $contents[ $language ] : '';
@@ -230,10 +238,18 @@ class Cookie_Categories extends Store {
 	 * @return void
 	 */
 	public function set_name( $data ) {
+		$data      = $this->normalize_multilingual_data( $data );
 		$name      = array();
 		$languages = faz_selected_languages();
 		foreach ( $languages as $lang ) {
 			$name[ $lang ] = isset( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+		}
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $value ) {
+				if ( ! isset( $name[ $lang ] ) && is_string( $value ) ) {
+					$name[ $lang ] = wp_filter_post_kses( $value );
+				}
+			}
 		}
 		$this->set_object_data( 'name', $name );
 	}

@@ -7,5 +7,5 @@
         "analytics.tiktok.com",
         "tiktok.com/i18n/pixel"
     ],
-    "cookies": ["_ttp", "tt_webid"]
+    "cookies": ["_ttp", "tt_webid", "tt_webid_v2"]
 }

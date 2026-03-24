@@ -181,7 +181,7 @@ class Cookie extends Store {
 	public function get_duration() {
 		$contents        = array();
 		$prop            = 'duration';
-		$data            = $this->get_object_data( $prop );
+		$data            = $this->normalize_multilingual_data( $this->get_object_data( $prop ) );
 		$default         = faz_default_language();
 		$languages       = faz_selected_languages();
 		$default_content = isset( $data[ $default ] ) ? $data[ $default ] : '';
@@ -190,6 +190,13 @@ class Cookie extends Store {
 			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
 			$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+		}
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $content ) {
+				if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
+					$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+				}
+			}
 		}
 		return $contents;
 	}
@@ -262,10 +269,21 @@ class Cookie extends Store {
 	 * @return void
 	 */
 	public function set_duration( $data ) {
+		$data      = $this->normalize_multilingual_data( $data );
 		$duration  = array();
 		$languages = faz_selected_languages();
+		// Ensure selected languages are always present.
 		foreach ( $languages as $lang ) {
-			$duration[ $lang ] = isset( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+			$duration[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+		}
+		// Preserve extra language keys already in the payload so that
+		// translations are not silently lost when a language is deselected.
+		if ( is_array( $data ) ) {
+			foreach ( $data as $lang => $value ) {
+				if ( ! isset( $duration[ $lang ] ) && is_string( $value ) ) {
+					$duration[ $lang ] = wp_filter_post_kses( $value );
+				}
+			}
 		}
 		$this->set_object_data( 'duration', $duration );
 	}

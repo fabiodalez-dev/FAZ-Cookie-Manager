@@ -165,6 +165,7 @@ class Banner extends Store {
 	public function set_contents( $data ) {
 		$key = 'contents';
 		if ( array_key_exists( $key, $this->data ) ) {
+			$data      = $this->normalize_multilingual_data( $data );
 			$contents  = array();
 			$languages = faz_selected_languages();
 			foreach ( $languages as $lang ) {
@@ -290,7 +291,7 @@ class Banner extends Store {
 		$current   = $this->get_language();
 		$languages = faz_selected_languages( $current );
 		if ( array_key_exists( $key, $this->data ) ) {
-			$data = $this->data[ $key ];
+			$data = $this->normalize_multilingual_data( $this->data[ $key ] );
 			foreach ( $languages as $lang ) {
 				$content           = isset( $data[ $lang ] ) ? $data[ $lang ] : array();
 				$content           = empty( self::array_empty_assoc( $content ) ) ? $this->get_translations( $lang ) : $content;

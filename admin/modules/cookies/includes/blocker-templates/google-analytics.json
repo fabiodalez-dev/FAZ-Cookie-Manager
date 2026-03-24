@@ -8,5 +8,5 @@
         "googletagmanager.com/gtag/js",
         "google-analytics.com/ga.js"
     ],
-    "cookies": ["_ga", "_ga_*", "_gid", "_gat", "__utma", "__utmb", "__utmc", "__utmz"]
+    "cookies": ["_ga", "_ga_*", "_gid", "_gat", "_gat_*", "__utma", "__utmb", "__utmc", "__utmz", "__utmt"]
 }

@@ -74,6 +74,70 @@ class Cookie_Table_Shortcode {
 	}
 
 	/**
+	 * Localize a category name while preferring plugin customizations over stock translations.
+	 *
+	 * Custom names are saved in the plugin settings, typically in the default language.
+	 * When they exist, they should win over bundled fallback translations used by the shortcode.
+	 *
+	 * @param \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories $cat_obj Category object.
+	 * @param mixed                                                       $value Category name value.
+	 * @param string                                                      $lang Current language code.
+	 * @param string                                                      $default Default language code.
+	 * @param string                                                      $wp_lang WordPress locale prefix.
+	 * @return string
+	 */
+	private function localize_category_name( $cat_obj, $value, $lang, $default, $wp_lang = '' ) {
+		if ( empty( $value ) ) {
+			return '';
+		}
+		if ( is_string( $value ) ) {
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $value, 'faz-cookie-manager' );
+		}
+		if ( ! is_array( $value ) ) {
+			return '';
+		}
+
+		$current_value = ( $lang && isset( $value[ $lang ] ) && '' !== $value[ $lang ] ) ? $value[ $lang ] : '';
+		$wp_value      = ( $wp_lang && isset( $value[ $wp_lang ] ) && '' !== $value[ $wp_lang ] ) ? $value[ $wp_lang ] : '';
+		$default_value = ( isset( $value[ $default ] ) && '' !== $value[ $default ] ) ? $value[ $default ] : '';
+
+		$stock_current = $lang ? $cat_obj->get_translations( $lang, 'name' ) : '';
+		$stock_wp      = $wp_lang ? $cat_obj->get_translations( $wp_lang, 'name' ) : '';
+		$stock_default = $default ? $cat_obj->get_translations( $default, 'name' ) : '';
+
+		// User custom name wins over stock translations.
+		if ( '' !== $current_value && $current_value !== $stock_current ) {
+			return $current_value;
+		}
+		if ( '' !== $wp_value && $wp_value !== $stock_wp ) {
+			return $wp_value;
+		}
+		if ( '' !== $default_value && $default_value !== $stock_default ) {
+			return $default_value;
+		}
+		// Stock value: try .po/.mo translation as last resort.
+		if ( '' !== $current_value ) {
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $current_value, 'faz-cookie-manager' );
+		}
+		if ( '' !== $wp_value ) {
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $wp_value, 'faz-cookie-manager' );
+		}
+		if ( '' !== $default_value ) {
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $default_value, 'faz-cookie-manager' );
+		}
+		foreach ( $value as $entry ) {
+			if ( '' !== $entry ) {
+				return $entry;
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Render the cookie table.
 	 *
 	 * @param array $atts Shortcode attributes.
@@ -130,10 +194,8 @@ class Cookie_Table_Shortcode {
 				$hidden_cat_ids[] = absint( $cat->category_id );
 				continue;
 			}
-			$localized_name = $this->localize( $cat->name, $lang, $default, $wp_lang );
-			// Allow category names to be translated via .po/.mo as a fallback.
-			// translators: This is a dynamic cookie category name (e.g. "Necessary", "Analytics").
-			$cat_map[ $cat->category_id ] = __( $localized_name, 'faz-cookie-manager' ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			$localized_name               = $this->localize_category_name( $cat_obj, $cat->name, $lang, $default, $wp_lang );
+			$cat_map[ $cat->category_id ] = $localized_name;
 		}
 
 		// Fetch cookies.
