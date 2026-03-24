@@ -958,6 +958,18 @@ class Controller {
 				$provider_cat = $this->match_cookie_to_provider( $name );
 				if ( $provider_cat ) {
 					$cat_slug = $provider_cat;
+					// Known Providers only gives category — try OCD for description/duration.
+					if ( empty( $cookie_data['description'] ) || empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) {
+						$ocd_extra = Cookie_Definitions::get_instance()->lookup( $name );
+						if ( $ocd_extra ) {
+							if ( ! empty( $ocd_extra['description'] ) && empty( $cookie_data['description'] ) ) {
+								$cookie_data['description'] = $ocd_extra['description'];
+							}
+							if ( ! empty( $ocd_extra['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
+								$cookie_data['duration'] = $ocd_extra['duration'];
+							}
+						}
+					}
 				} else {
 					// Fallback 3: Open Cookie Database (1400+ definitions).
 					$ocd = Cookie_Definitions::get_instance()->lookup( $name );
