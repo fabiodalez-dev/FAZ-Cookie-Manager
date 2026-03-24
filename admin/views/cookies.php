@@ -261,43 +261,44 @@ document.getElementById('faz-copy-policy-shortcode').addEventListener('click', f
 	}
 });
 
-/* Scanner Debug Log — show buttons if debug mode is enabled */
+/* Scanner Debug Log — show buttons and attach listeners only if debug mode is enabled */
 (function() {
 	FAZ.get('settings').then(function(settings) {
-		if (settings && settings.scanner && settings.scanner.debug_mode) {
-			document.getElementById('faz-debug-log-actions').style.display = '';
-		}
+		if (!(settings && settings.scanner && settings.scanner.debug_mode)) return;
+
+		var actionsEl = document.getElementById('faz-debug-log-actions');
+		if (actionsEl) actionsEl.style.display = '';
+
+		var dlBtn = document.getElementById('faz-download-debug-log');
+		if (dlBtn) dlBtn.addEventListener('click', function() {
+			FAZ.get('scans/debug-log').then(function(res) {
+				if (!res || !res.log) {
+					FAZ.notify('<?php echo esc_js( __( 'No scan logs available.', 'faz-cookie-manager' ) ); ?>', 'warning');
+					return;
+				}
+				var blob = new Blob([res.log], { type: 'text/plain' });
+				var url  = URL.createObjectURL(blob);
+				var a    = document.createElement('a');
+				a.href     = url;
+				a.download = 'faz-scanner-debug-' + new Date().toISOString().slice(0,10) + '.log';
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}).catch(function() {
+				FAZ.notify('<?php echo esc_js( __( 'Failed to download debug log.', 'faz-cookie-manager' ) ); ?>', 'error');
+			});
+		});
+
+		var clearBtn = document.getElementById('faz-clear-debug-log');
+		if (clearBtn) clearBtn.addEventListener('click', function() {
+			if (!confirm('<?php echo esc_js( __( 'Clear all scanner debug logs?', 'faz-cookie-manager' ) ); ?>')) return;
+			FAZ.del('scans/debug-log').then(function() {
+				FAZ.notify('<?php echo esc_js( __( 'Debug logs cleared.', 'faz-cookie-manager' ) ); ?>');
+			}).catch(function() {
+				FAZ.notify('<?php echo esc_js( __( 'Failed to clear debug logs.', 'faz-cookie-manager' ) ); ?>', 'error');
+			});
+		});
 	}).catch(function() {});
-
-	document.getElementById('faz-download-debug-log').addEventListener('click', function() {
-		FAZ.get('scans/debug-log').then(function(res) {
-			if (!res || !res.log) {
-				FAZ.notify('<?php echo esc_js( __( 'No scan logs available.', 'faz-cookie-manager' ) ); ?>', 'warning');
-				return;
-			}
-			var blob = new Blob([res.log], { type: 'text/plain' });
-			var url  = URL.createObjectURL(blob);
-			var a    = document.createElement('a');
-			a.href     = url;
-			a.download = 'faz-scanner-debug-' + new Date().toISOString().slice(0,10) + '.log';
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
-		}).catch(function() {
-			FAZ.notify('<?php echo esc_js( __( 'Failed to download debug log.', 'faz-cookie-manager' ) ); ?>', 'error');
-		});
-	});
-
-	document.getElementById('faz-clear-debug-log').addEventListener('click', function() {
-		if (!confirm('<?php echo esc_js( __( 'Clear all scanner debug logs?', 'faz-cookie-manager' ) ); ?>')) {
-			return;
-		}
-		FAZ.del('scans/debug-log').then(function() {
-			FAZ.notify('<?php echo esc_js( __( 'Debug logs cleared.', 'faz-cookie-manager' ) ); ?>');
-		}).catch(function() {
-			FAZ.notify('<?php echo esc_js( __( 'Failed to clear debug logs.', 'faz-cookie-manager' ) ); ?>', 'error');
-		});
-	});
 })();
 </script>

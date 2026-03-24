@@ -100,8 +100,8 @@ class Scanner_Logger {
 	 * @return bool
 	 */
 	private function read_enabled_setting() {
-		$settings = get_option( 'faz_settings', array() );
-		return ! empty( $settings['scanner']['debug_mode'] );
+		$settings = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
+		return (bool) $settings->get( 'scanner', 'debug_mode' );
 	}
 
 	/**
