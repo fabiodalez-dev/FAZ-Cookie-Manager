@@ -117,6 +117,26 @@ class Api extends Rest_Controller {
 			)
 		);
 
+		// Server-side fallback: scan a URL server-side when iframes fail.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/server-scan',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'server_scan' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+					'args'                => array(
+						'url' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => 'esc_url_raw',
+						),
+					),
+				),
+			)
+		);
+
 		// Browser-based scanner: import cookies discovered by client JS.
 		register_rest_route(
 			$this->namespace,
@@ -344,6 +364,99 @@ class Api extends Rest_Controller {
 	 * @param \WP_REST_Request $request Full details about the request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
+
+	/**
+	 * Server-side scan fallback: fetch a URL via wp_remote_get,
+	 * parse script tags from HTML, and infer cookies via Cookie_Database.
+	 *
+	 * Used when the iframe-based scanner fails (e.g. LiteSpeed optimization,
+	 * X-Frame-Options, or slow page loads that exceed iframe timeouts).
+	 *
+	 * @param \WP_REST_Request $request Request with 'url' parameter.
+	 * @return \WP_REST_Response
+	 */
+	public function server_scan( $request ) {
+		$url = $request->get_param( 'url' );
+		if ( empty( $url ) ) {
+			return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
+		}
+
+		// Fetch the page HTML server-side.
+		$response = wp_remote_get(
+			$url,
+			array(
+				'timeout'     => 20,
+				'sslverify'   => false,
+				'redirection' => 3,
+				'user-agent'  => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
+			)
+		);
+
+		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+			return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
+		}
+
+		$html    = wp_remote_retrieve_body( $response );
+		$scripts = array();
+		$cookies = array();
+
+		// Extract all script src URLs from the HTML (including blocked ones with type="text/plain").
+		if ( preg_match_all( '/<script[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>/i', $html, $matches ) ) {
+			$scripts = array_unique( $matches[1] );
+		}
+
+		// Also extract iframe src URLs.
+		if ( preg_match_all( '/<iframe[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>/i', $html, $iframe_matches ) ) {
+			$scripts = array_merge( $scripts, $iframe_matches[1] );
+			$scripts = array_unique( $scripts );
+		}
+
+		// Parse Set-Cookie headers.
+		$headers = wp_remote_retrieve_headers( $response );
+		$raw_cookies = array();
+		if ( $headers instanceof \WpOrg\Requests\Utility\CaseInsensitiveDictionary || ( class_exists( '\Requests_Utility_CaseInsensitiveDictionary' ) && $headers instanceof \Requests_Utility_CaseInsensitiveDictionary ) ) {
+			$all = $headers->getAll();
+			if ( isset( $all['set-cookie'] ) ) {
+				$raw_cookies = (array) $all['set-cookie'];
+			}
+		} elseif ( is_array( $headers ) ) {
+			if ( isset( $headers['set-cookie'] ) ) {
+				$raw_cookies = (array) $headers['set-cookie'];
+			}
+		}
+
+		$site_domain = wp_parse_url( home_url(), PHP_URL_HOST );
+		foreach ( $raw_cookies as $cookie_str ) {
+			$parts = explode( '=', explode( ';', $cookie_str )[0], 2 );
+			$name  = trim( $parts[0] );
+			if ( $name ) {
+				$cookies[] = array(
+					'name'   => $name,
+					'domain' => $site_domain,
+				);
+			}
+		}
+
+		// Infer cookies from detected scripts using Cookie_Database.
+		$inferred = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup_scripts( $scripts );
+		foreach ( $inferred as $inf ) {
+			$cookies[] = array(
+				'name'        => $inf['name'],
+				'domain'      => isset( $inf['domain'] ) ? $inf['domain'] : $site_domain,
+				'duration'    => isset( $inf['duration'] ) ? $inf['duration'] : '',
+				'description' => isset( $inf['description'] ) ? $inf['description'] : '',
+				'category'    => isset( $inf['category'] ) ? $inf['category'] : 'uncategorized',
+			);
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'cookies' => $cookies,
+				'scripts' => array_values( $scripts ),
+			),
+			200
+		);
+	}
 	public function import_cookies( $request ) {
 		$body = $request->get_json_params();
 

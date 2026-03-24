@@ -716,9 +716,9 @@
 	// Loads pages in hidden iframes to discover cookies set by JavaScript
 	// (e.g. _ga, _fbp) that server-side scanning cannot detect.
 
-	var IFRAME_LOAD_TIMEOUT = 6000;  // Max wait for iframe load (ms). Must exceed adaptive settle (700+800=1500ms).
-	var CONCURRENCY = 3;             // Parallel iframes.
-	var EARLY_STOP_THRESHOLD = 5;    // Stop after N consecutive pages with no new findings.
+	var IFRAME_LOAD_TIMEOUT = 15000; // Max wait for iframe load (ms). Increased for sites with cache/optimization plugins.
+	var CONCURRENCY = 2;             // Parallel iframes (reduced for slow hosts).
+	var EARLY_STOP_THRESHOLD = 7;    // Stop after N consecutive pages with no new findings.
 	var SAFE_SCAN_THRESHOLD = 1000;  // Deep/full scans use safer timings and disable early stop.
 
 	/**
@@ -919,6 +919,34 @@
 						cookieNames: collectedCookies.map(function(c) { return c.name; }),
 						diagnostics: diagnostics,
 					});
+					// Fallback: if iframe scan found nothing, ask server to scan
+					// the homepage directly (parses HTML for script tags server-side).
+					if (!collectedCookies.length && !collectedScripts.length && urls.length > 0) {
+						console.warn('[FAZ Scanner] Iframe scan found nothing — trying server-side fallback');
+						statusEl.textContent = 'Iframe blocked — trying server scan...';
+						FAZ.post('scans/server-scan', { url: urls[0] }).then(function (serverResult) {
+							if (serverResult && Array.isArray(serverResult.cookies)) {
+								collectedCookies = collectedCookies.concat(serverResult.cookies);
+								scanMetrics.cookiesFound = collectedCookies.length;
+							}
+							if (serverResult && Array.isArray(serverResult.scripts)) {
+								collectedScripts = collectedScripts.concat(serverResult.scripts);
+								scanMetrics.scriptsFound = collectedScripts.length;
+							}
+							console.log('[FAZ Scanner] Server fallback:', {
+								cookies: collectedCookies.length,
+								scripts: collectedScripts.length,
+							});
+							doImport();
+						}).catch(function () {
+							console.warn('[FAZ Scanner] Server fallback failed, proceeding with empty results');
+							doImport();
+						});
+						return;
+					}
+					doImport();
+
+					function doImport() {
 					bar.style.width = '100%';
 					statusEl.textContent = 'Saving results...';
 
@@ -990,6 +1018,7 @@
 						var detail = buildScanApiErrorDetail(err);
 						finishScan(btn, progressWrap, 'Scan finished but failed to save results.' + detail, true);
 					});
+					} // end doImport
 				}, bar, statusEl, pagesEl, scanMetrics, scanOptions);
 			}).catch(function (err) {
 				console.error('[FAZ Scanner] Discover failed:', err);
