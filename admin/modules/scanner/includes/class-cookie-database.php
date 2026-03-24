@@ -453,13 +453,18 @@ class Cookie_Database {
 	 * @param array $script_urls Array of script URL strings.
 	 * @return array Array of cookie data arrays with 'source' => 'inferred'.
 	 */
-	public static function lookup_scripts( $script_urls ) {
+	public static function lookup_scripts( $script_urls, $site_domain = '' ) {
 		$inferred = array();
 		$seen     = array();
 
+		// Use the site domain for inferred cookies (they're set on the site, not the script host).
+		if ( empty( $site_domain ) ) {
+			$site_domain = wp_parse_url( home_url(), PHP_URL_HOST );
+		}
+
 		foreach ( $script_urls as $url ) {
-			foreach ( self::$script_cookies as $domain => $cookie_names ) {
-				if ( false === strpos( $url, $domain ) ) {
+			foreach ( self::$script_cookies as $pattern => $cookie_names ) {
+				if ( false === strpos( $url, $pattern ) ) {
 					continue;
 				}
 				foreach ( $cookie_names as $name ) {
@@ -472,7 +477,7 @@ class Cookie_Database {
 					if ( $known ) {
 						$inferred[] = array(
 							'name'        => $name,
-							'domain'      => $domain,
+							'domain'      => $site_domain,
 							'duration'    => $known['duration'],
 							'description' => $known['description'],
 							'category'    => $known['category'],
@@ -481,9 +486,9 @@ class Cookie_Database {
 					} else {
 						$inferred[] = array(
 							'name'        => $name,
-							'domain'      => $domain,
+							'domain'      => $site_domain,
 							'duration'    => 'unknown',
-							'description' => 'Inferred from ' . $domain . ' script.',
+							'description' => 'Inferred from ' . $pattern . ' script.',
 							'category'    => 'uncategorized',
 							'source'      => 'inferred',
 						);
