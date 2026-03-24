@@ -451,6 +451,15 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.7.2
+- **Per-service cookie shredding** — denied services now have their cookies deleted even when the parent category is consented
+- **Scanner 3-tier lookup** — integrates Open Cookie Database (1400+ entries) as fallback, drastically reducing "uncategorized" cookies
+- **Blocker templates create cookies** — applying a template now adds cookies to the DB, not just blocking rules
+- **French translation** — complete `fr_FR` locale with 579 translated strings (thanks @pascalminator)
+- **Cookie_Database expanded** — 40 → 64 entries including `_GRECAPTCHA`, GA Classic, YouTube, Stripe, and more
+- **i18n fixes** — scanner uses default language, backend preserves all translation keys, shortcode category names use `localize_category_name()`
+- **18 new E2E tests** — comprehensive regression coverage for PRs #39, #41, #44
+
 ### 1.7.1
 - **Admin performance** — 50-68% faster backend navigation (cache fix, N+1 query, REST preloading)
 - **User-configurable whitelist** for scripts/network requests with 11 default API patterns (fixes #40)
