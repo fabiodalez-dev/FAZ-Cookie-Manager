@@ -91,7 +91,8 @@ class Cookie_Table_Shortcode {
 			return '';
 		}
 		if ( is_string( $value ) ) {
-			return $value;
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $value, 'faz-cookie-manager' );
 		}
 		if ( ! is_array( $value ) ) {
 			return '';
@@ -105,6 +106,7 @@ class Cookie_Table_Shortcode {
 		$stock_wp      = $wp_lang ? $cat_obj->get_translations( $wp_lang, 'name' ) : '';
 		$stock_default = $default ? $cat_obj->get_translations( $default, 'name' ) : '';
 
+		// User custom name wins over stock translations.
 		if ( '' !== $current_value && $current_value !== $stock_current ) {
 			return $current_value;
 		}
@@ -114,14 +116,18 @@ class Cookie_Table_Shortcode {
 		if ( '' !== $default_value && $default_value !== $stock_default ) {
 			return $default_value;
 		}
+		// Stock value: try .po/.mo translation as last resort.
 		if ( '' !== $current_value ) {
-			return $current_value;
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $current_value, 'faz-cookie-manager' );
 		}
 		if ( '' !== $wp_value ) {
-			return $wp_value;
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $wp_value, 'faz-cookie-manager' );
 		}
 		if ( '' !== $default_value ) {
-			return $default_value;
+			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			return __( $default_value, 'faz-cookie-manager' );
 		}
 		foreach ( $value as $entry ) {
 			if ( '' !== $entry ) {
@@ -188,10 +194,8 @@ class Cookie_Table_Shortcode {
 				$hidden_cat_ids[] = absint( $cat->category_id );
 				continue;
 			}
-			$localized_name = $this->localize_category_name( $cat_obj, $cat->name, $lang, $default, $wp_lang );
-			// Allow category names to be translated via .po/.mo as a fallback.
-			// translators: This is a dynamic cookie category name (e.g. "Necessary", "Analytics").
-			$cat_map[ $cat->category_id ] = __( $localized_name, 'faz-cookie-manager' ); // phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
+			$localized_name               = $this->localize_category_name( $cat_obj, $cat->name, $lang, $default, $wp_lang );
+			$cat_map[ $cat->category_id ] = $localized_name;
 		}
 
 		// Fetch cookies.

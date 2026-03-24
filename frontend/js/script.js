@@ -1868,8 +1868,8 @@ function _fazAfterConsent() {
         window.dataLayer.push(consentData);
     }
 
-    // Clean up cookies from categories the user has not consented to.
-    _fazCleanupRevokedCookies();
+    // Clean up cookies from categories/services the user has not consented to.
+    var svcRevoked = _fazCleanupRevokedCookies();
 
     // Detect category revocation: executed JavaScript cannot be unloaded,
     // so we must reload the page for the server to omit those scripts.
@@ -1886,7 +1886,7 @@ function _fazAfterConsent() {
     // Re-run server-side unblocking for newly accepted categories.
     _fazUnblockServerSide();
 
-    if (revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
+    if (svcRevoked || revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
         window.location.reload();
         return;
     }
@@ -2030,11 +2030,7 @@ function _fazCleanupRevokedCookies() {
         }
     }
 
-    // If per-service cookies were shredded, reload to tear down already-loaded
-    // vendor SDKs that may recreate cookies or keep running in memory.
-    if (svcRevoked) {
-        location.reload();
-    }
+    return svcRevoked;
 }
 
 /**

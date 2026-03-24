@@ -483,7 +483,7 @@ abstract class Store {
 		$languages   = faz_selected_languages();
 		// Ensure selected languages are always present.
 		foreach ( $languages as $lang ) {
-			$description[ $lang ] = isset( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
+			$description[ $lang ] = isset( $data[ $lang ] ) && is_string( $data[ $lang ] ) ? wp_filter_post_kses( $data[ $lang ] ) : '';
 		}
 		// Preserve extra language keys already in the payload so that
 		// translations are not silently lost when a language is deselected.
