@@ -189,13 +189,12 @@ class Cookie extends Store {
 			$content           = isset( $data[ $lang ] ) ? $data[ $lang ] : '';
 			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
-			$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
+			$contents[ $lang ] = is_string( $content ) ? stripslashes( wp_kses_post( $content ) ) : '';
 		}
-		if ( is_array( $data ) ) {
-			foreach ( $data as $lang => $content ) {
-				if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
-					$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
-				}
+		// Preserve extra language keys beyond faz_selected_languages().
+		foreach ( $data as $lang => $content ) {
+			if ( ! isset( $contents[ $lang ] ) && is_string( $content ) ) {
+				$contents[ $lang ] = stripslashes( wp_kses_post( $content ) );
 			}
 		}
 		return $contents;
