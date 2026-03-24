@@ -95,12 +95,27 @@ class Cookie_Scraper {
 		$names = $request->get_param( 'names' );
 		$defs  = Cookie_Definitions::get_instance();
 
+		$logger = \FazCookie\Admin\Modules\Scanner\Includes\Scanner_Logger::get_instance();
+		$logger->start( 'Auto-categorize lookup' );
+		$logger->log( 'Lookup request for ' . count( $names ) . ' cookies', $names );
+
 		// Auto-download definitions if not yet available.
 		if ( ! $defs->has_definitions() ) {
+			$logger->log( 'OCD not available, downloading...' );
 			$defs->update_definitions();
 		}
 
 		$results = $defs->lookup_batch( $names );
+
+		foreach ( $results as $r ) {
+			$found = ! empty( $r['found'] );
+			$logger->log( '  "' . $r['name'] . '": ' . ( $found ? 'FOUND → ' . $r['category'] . ' (' . mb_substr( $r['description'] ?? '', 0, 50 ) . ')' : 'NOT FOUND' ) );
+		}
+
+		$found_count = count( array_filter( $results, function( $r ) { return ! empty( $r['found'] ); } ) );
+		$logger->log( 'Lookup complete: ' . $found_count . '/' . count( $results ) . ' found' );
+		$logger->finish();
+
 		return rest_ensure_response( $results );
 	}
 

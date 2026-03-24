@@ -1486,8 +1486,8 @@
 				var catMap = {};
 				categories.forEach(function (c) { catMap[c.slug] = c.id; });
 
-				// Step 3: Update each cookie that got a real category.
-				var updates = [];
+				// Step 3: Build update queue (serialized to avoid 503 rate limiting).
+				var updateQueue = [];
 				var categorized = 0;
 
 				results.forEach(function (info) {
@@ -1508,21 +1508,40 @@
 						descObj[descLang] = info.description;
 						updateData.description = descObj;
 					}
-					updates.push(FAZ.put('cookies/' + (cookie.id || cookie.cookie_id), updateData));
+					updateQueue.push({ id: cookie.id || cookie.cookie_id, data: updateData, name: cookie.name });
 				});
 
-				if (!updates.length) {
+				if (!updateQueue.length) {
 					FAZ.btnLoading(btn, false);
 					FAZ.notify('No cookies could be auto-categorized');
 					return;
 				}
 
-				return Promise.all(updates).then(function () {
-					FAZ.btnLoading(btn, false);
-					FAZ.notify('Auto-categorized ' + categorized + ' cookies');
-					loadCookies();
-					loadCategories();
-				});
+				// Execute updates sequentially (one at a time) to avoid 503 rate limiting.
+				var completed = 0;
+				var failed = 0;
+				function processNext() {
+					if (completed + failed >= updateQueue.length) {
+						FAZ.btnLoading(btn, false);
+						var msg = 'Auto-categorized ' + completed + '/' + categorized + ' cookies';
+						if (failed > 0) msg += ' (' + failed + ' failed)';
+						FAZ.notify(msg, failed > 0 ? 'error' : 'success');
+						loadCookies();
+						loadCategories();
+						return;
+					}
+					var item = updateQueue[completed + failed];
+					FAZ.put('cookies/' + item.id, item.data).then(function () {
+						completed++;
+						console.log('[FAZ Auto-categorize] Updated "' + item.name + '" (' + completed + '/' + updateQueue.length + ')');
+						processNext();
+					}).catch(function (err) {
+						failed++;
+						console.error('[FAZ Auto-categorize] Failed "' + item.name + '":', err);
+						processNext();
+					});
+				}
+				processNext();
 			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
