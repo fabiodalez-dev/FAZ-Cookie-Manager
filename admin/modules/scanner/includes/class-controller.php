@@ -14,6 +14,7 @@ use FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
+use FazCookie\Includes\Cookie_Definitions;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -647,28 +648,42 @@ class Controller {
 					'description' => $known['description'],
 					'category'    => $known['category'],
 				);
-			} else {
-				// Unknown cookie - categorize as uncategorized.
-				$duration = 'session';
-				if ( ! empty( $parsed['expires'] ) ) {
-					$expires_time = strtotime( $parsed['expires'] );
-					if ( false !== $expires_time ) {
-						$diff     = $expires_time - time();
-						$duration = $diff > 0 ? $this->seconds_to_human( $diff ) : 'session';
-					}
-				} elseif ( ! empty( $parsed['max-age'] ) ) {
-					$max_age  = absint( $parsed['max-age'] );
-					$duration = $max_age > 0 ? $this->seconds_to_human( $max_age ) : 'session';
-				}
+				continue;
+			}
 
+			// Fallback: Open Cookie Database (1400+ cookie definitions).
+			$ocd = Cookie_Definitions::get_instance()->lookup( $name );
+			if ( $ocd ) {
 				$cookies[] = array(
 					'name'        => $name,
 					'domain'      => $domain,
-					'duration'    => $duration,
-					'description' => '',
-					'category'    => 'uncategorized',
+					'duration'    => ! empty( $ocd['duration'] ) ? $ocd['duration'] : 'session',
+					'description' => ! empty( $ocd['description'] ) ? $ocd['description'] : '',
+					'category'    => ! empty( $ocd['category'] ) ? $ocd['category'] : 'uncategorized',
 				);
+				continue;
 			}
+
+			// Unknown cookie — try to extract duration from headers.
+			$duration = 'session';
+			if ( ! empty( $parsed['expires'] ) ) {
+				$expires_time = strtotime( $parsed['expires'] );
+				if ( false !== $expires_time ) {
+					$diff     = $expires_time - time();
+					$duration = $diff > 0 ? $this->seconds_to_human( $diff ) : 'session';
+				}
+			} elseif ( ! empty( $parsed['max-age'] ) ) {
+				$max_age  = absint( $parsed['max-age'] );
+				$duration = $max_age > 0 ? $this->seconds_to_human( $max_age ) : 'session';
+			}
+
+			$cookies[] = array(
+				'name'        => $name,
+				'domain'      => $domain,
+				'duration'    => $duration,
+				'description' => '',
+				'category'    => 'uncategorized',
+			);
 		}
 
 		return $cookies;
@@ -939,9 +954,25 @@ class Controller {
 					$cookie_data['duration'] = $known['duration'];
 				}
 			} else {
-				// Fallback: try Known Providers cookie map for auto-categorization.
+				// Fallback 2: Known Providers cookie map.
 				$provider_cat = $this->match_cookie_to_provider( $name );
-				$cat_slug     = $provider_cat ? $provider_cat : ( isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'necessary' );
+				if ( $provider_cat ) {
+					$cat_slug = $provider_cat;
+				} else {
+					// Fallback 3: Open Cookie Database (1400+ definitions).
+					$ocd = Cookie_Definitions::get_instance()->lookup( $name );
+					if ( $ocd ) {
+						$cat_slug = ! empty( $ocd['category'] ) ? $ocd['category'] : 'uncategorized';
+						if ( ! empty( $ocd['description'] ) && empty( $cookie_data['description'] ) ) {
+							$cookie_data['description'] = $ocd['description'];
+						}
+						if ( ! empty( $ocd['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
+							$cookie_data['duration'] = $ocd['duration'];
+						}
+					} else {
+						$cat_slug = isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'uncategorized';
+					}
+				}
 			}
 			$category_id = isset( $category_map[ $cat_slug ] ) ? $category_map[ $cat_slug ] : $default_cat_id;
 
