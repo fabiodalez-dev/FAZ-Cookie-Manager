@@ -204,6 +204,12 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 		{
 			return true;
 		}
+		// Scanner mode: disable banner and blocking so the scanner iframe
+		// can detect third-party scripts and the cookies they set.
+		// Only works for logged-in admins to prevent abuse.
+		if ( isset( $_GET['faz_scanning'] ) && '1' === $_GET['faz_scanning'] && current_user_can( 'manage_options' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return true;
+		}
 		return false;
 	}
 }

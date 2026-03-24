@@ -1293,8 +1293,10 @@
 		// Timeout fallback in case load never fires (e.g. network error, 404).
 		timer = setTimeout(function () { finish(emptyResult('iframeTimeout')); }, loadTimeoutMs);
 
-		// Navigate the iframe.
-		iframe.src = parsedUrl.href;
+		// Navigate the iframe — append scan param to disable script blocking.
+		var scanUrl = new URL(parsedUrl.href);
+		scanUrl.searchParams.set('faz_scanning', '1');
+		iframe.src = scanUrl.href;
 	}
 
 	/**
