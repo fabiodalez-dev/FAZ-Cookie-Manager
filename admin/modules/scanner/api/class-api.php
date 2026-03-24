@@ -368,11 +368,17 @@ class Api extends Rest_Controller {
 		// These are scanned first and exempt from early stop in the JS scanner.
 		$priority_urls = $this->controller->discover_woocommerce_urls();
 
+		// Remove priority URLs that already appear in the main list.
+		$url_set       = array_flip( $urls );
+		$unique_priority = array_filter( $priority_urls, function( $u ) use ( $url_set ) {
+			return ! isset( $url_set[ $u ] );
+		} );
+
 		return rest_ensure_response(
 			array(
 				'urls'          => array_values( $urls ),
-				'priority_urls' => array_values( $priority_urls ),
-				'total'         => count( $urls ) + count( $priority_urls ),
+				'priority_urls' => array_values( $unique_priority ),
+				'total'         => count( $urls ) + count( $unique_priority ),
 				'fingerprint'   => $current_fingerprint,
 				'incremental'   => $incremental,
 			)

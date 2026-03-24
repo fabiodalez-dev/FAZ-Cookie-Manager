@@ -996,7 +996,7 @@ class Controller {
 			$known = Cookie_Database::lookup( $name );
 			if ( $known ) {
 				$cat_slug = $known['category'];
-				$logger->log( '  Cookie_Database lookup: FOUND → category=' . $known['category'] . ', description="' . mb_substr( $known['description'], 0, 60 ) . '..."' );
+				$logger->log( '  Cookie_Database lookup: FOUND → category=' . $known['category'] . ', description="' . substr( $known['description'], 0, 60 ) . '..."' );
 				if ( ! empty( $known['description'] ) && empty( $cookie_data['description'] ) ) {
 					$cookie_data['description'] = $known['description'];
 				}
@@ -1031,7 +1031,7 @@ class Controller {
 					$ocd = Cookie_Definitions::get_instance()->lookup( $name );
 					if ( $ocd ) {
 						$cat_slug = ! empty( $ocd['category'] ) ? $ocd['category'] : 'uncategorized';
-						$logger->log( '  OCD lookup: FOUND → category=' . $cat_slug . ', description="' . mb_substr( isset( $ocd['description'] ) ? $ocd['description'] : '', 0, 60 ) . '..."' );
+						$logger->log( '  OCD lookup: FOUND → category=' . $cat_slug . ', description="' . substr( isset( $ocd['description'] ) ? $ocd['description'] : '', 0, 60 ) . '..."' );
 						if ( ! empty( $ocd['description'] ) && empty( $cookie_data['description'] ) ) {
 							$cookie_data['description'] = $ocd['description'];
 						}
@@ -1048,7 +1048,7 @@ class Controller {
 			$category_id = isset( $category_map[ $cat_slug ] ) ? $category_map[ $cat_slug ] : $default_cat_id;
 
 			$logger->log( '  Final category: ' . $cat_slug . ' (id=' . $category_id . ')' );
-			$logger->log( '  Description: "' . mb_substr( $cookie_data['description'], 0, 80 ) . '"' );
+			$logger->log( '  Description: "' . substr( $cookie_data['description'], 0, 80 ) . '"' );
 			$logger->log( '  Duration: ' . $cookie_data['duration'] );
 
 			$cookie = new Cookie();

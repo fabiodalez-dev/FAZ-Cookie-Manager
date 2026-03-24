@@ -82,7 +82,7 @@ class Activator {
 		// to avoid 7 separate get_option() calls on every admin page load.
 		add_action( 'admin_init', array( __CLASS__, 'run_pending_migrations' ) );
 		add_action( 'admin_init', array( __CLASS__, 'ensure_cookie_definitions' ) );
-		add_action( 'faz_download_cookie_definitions', array( __CLASS__, 'ensure_cookie_definitions' ) );
+		add_action( 'faz_download_cookie_definitions', array( __CLASS__, 'force_refresh_cookie_definitions' ) );
 		add_action( 'faz_daily_cleanup', array( __CLASS__, 'run_retention_cleanup' ) );
 		add_action( 'faz_weekly_gvl_update', array( 'FazCookie\Includes\Gvl', 'cron_update' ) );
 		add_action( 'faz_scheduled_scan', array( __CLASS__, 'run_scheduled_scan' ) );
@@ -178,6 +178,19 @@ class Activator {
 	 */
 	public static function ensure_cookie_definitions() {
 		self::maybe_download_cookie_definitions();
+	}
+
+	/**
+	 * Force-refresh cookie definitions (called by scheduled cron event).
+	 * Unlike ensure_cookie_definitions, this always downloads even if
+	 * definitions already exist (handles stale data refresh).
+	 */
+	public static function force_refresh_cookie_definitions() {
+		try {
+			Cookie_Definitions::get_instance()->update_definitions();
+		} catch ( \Throwable $e ) {
+			// Silently ignore — will retry on next admin visit.
+		}
 	}
 
 	/**

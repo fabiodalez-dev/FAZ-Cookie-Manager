@@ -109,7 +109,7 @@ class Cookie_Scraper {
 
 		foreach ( $results as $r ) {
 			$found = ! empty( $r['found'] );
-			$logger->log( '  "' . $r['name'] . '": ' . ( $found ? 'FOUND → ' . $r['category'] . ' (' . mb_substr( $r['description'] ?? '', 0, 50 ) . ')' : 'NOT FOUND' ) );
+			$logger->log( '  "' . $r['name'] . '": ' . ( $found ? 'FOUND → ' . $r['category'] . ' (' . substr( $r['description'] ?? '', 0, 50 ) . ')' : 'NOT FOUND' ) );
 		}
 
 		$found_count = count( array_filter( $results, function( $r ) { return ! empty( $r['found'] ); } ) );
