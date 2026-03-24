@@ -512,6 +512,11 @@ abstract class Store {
 			return is_array( $data ) ? $data : array();
 		}
 		if ( is_string( $data ) && '' !== $data ) {
+			// Try JSON decode first — DB may store multilingual data as JSON string.
+			$decoded = json_decode( $data, true );
+			if ( JSON_ERROR_NONE === json_last_error() && is_array( $decoded ) ) {
+				return $decoded;
+			}
 			return array(
 				faz_default_language() => $data,
 			);

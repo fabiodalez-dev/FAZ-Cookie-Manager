@@ -2523,8 +2523,10 @@ class Frontend {
 			return;
 		}
 
-		$host   = isset( $_SERVER['HTTP_HOST'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) : '';
-		$domain = preg_replace( '/^www\./', '', $host );
+		$host              = isset( $_SERVER['HTTP_HOST'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) : '';
+		$current_host      = preg_replace( '/^www\./', '', preg_replace( '/:\d+$/', '', $host ) );
+		$shared_domain     = ltrim( (string) $this->get_cookie_domain(), '.' );
+		$domain_candidates = array_values( array_unique( array_filter( array( $current_host, $shared_domain ) ) ) );
 
 		foreach ( array_keys( $_COOKIE ) as $name ) {
 			$should_shred = false;
@@ -2552,7 +2554,7 @@ class Frontend {
 
 			if ( $should_shred ) {
 				setcookie( $name, '', -1, '/' );
-				if ( $domain ) {
+				foreach ( $domain_candidates as $domain ) {
 					setcookie( $name, '', -1, '/', $domain );
 					setcookie( $name, '', -1, '/', '.' . $domain );
 				}

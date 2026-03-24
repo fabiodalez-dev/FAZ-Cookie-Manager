@@ -294,8 +294,8 @@ test.describe('PR #41: whitelist and admin performance', () => {
 
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
 
-    // The page should load the cookies table
-    await page.waitForTimeout(2_000);
+    // Wait for the cookies table to render
+    await page.waitForSelector('#faz-cookies-tbody', { timeout: 5_000 }).catch(() => {});
     expect(jsErrors.filter(e => e.includes('faz'))).toHaveLength(0);
   });
 });
@@ -434,17 +434,14 @@ test.describe('PR #39: v1.7.0 additional features', () => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
 
-    // Navigate to system status tab
     const statusTab = page.locator('button.faz-tab[data-tab="system_status"], [data-tab="system_status"], a[href*="system-status"]');
-    if (await statusTab.count() > 0) {
-      await statusTab.first().click();
-      await page.waitForTimeout(1_000);
+    expect(await statusTab.count()).toBeGreaterThan(0);
+    await statusTab.first().click();
 
-      // Should show DB table sizes or plugin info
-      const statusContent = await page.evaluate(() => document.body.innerText);
-      const hasPluginInfo = statusContent.includes('FAZ') || statusContent.includes('faz_');
-      expect(hasPluginInfo).toBeTruthy();
-    }
+    // System status is rendered in the visible tab content after click
+    await page.waitForTimeout(1_000);
+    const statusContent = await page.evaluate(() => document.body.innerText);
+    expect(statusContent).toMatch(/faz_banners|faz_cookies|PHP Version|WordPress|FAZ Cookie/i);
   });
 
   test('cookie categories hide wordpress-internal from frontend', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
@@ -473,21 +470,18 @@ test.describe('PR #39: v1.7.0 additional features', () => {
   });
 
   test('banner design presets are available', async ({ page, loginAsAdmin }) => {
+    const jsErrors: string[] = [];
+    page.on('pageerror', (error) => jsErrors.push(error.message));
+
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
 
-    // Check that preset buttons/options exist
-    const hasPresets = await page.evaluate(() => {
-      // Presets are typically shown as selectable cards or in a dropdown
-      const presetEls = document.querySelectorAll('[data-preset], .faz-preset, select[data-path*="preset"] option');
-      return presetEls.length > 0;
-    });
-
-    // Presets were added in PR #39 — should exist if feature is loaded
-    // Soft check: the page should at least load without errors
-    const jsErrors: string[] = [];
-    page.on('pageerror', (error) => jsErrors.push(error.message));
-    await page.waitForTimeout(1_000);
+    // Presets grid is populated dynamically via JS — wait for it
+    const presetsGrid = page.locator('#faz-presets-grid');
+    await expect(presetsGrid).toBeVisible({ timeout: 5_000 });
+    // The grid should have preset cards (children) loaded by JS
+    const presetCount = await presetsGrid.locator('> *').count();
+    expect(presetCount).toBeGreaterThan(0);
     expect(jsErrors.filter(e => e.includes('faz'))).toHaveLength(0);
   });
 });
@@ -553,7 +547,8 @@ test.describe('P1 fix: per-service cookie shredding', () => {
         },
       });
 
-      const ctx = await browser.newContext({ baseURL: wpBaseURL });
+      // Disable JS so only PHP shredding runs (not client-side cleanup)
+      const ctx = await browser.newContext({ baseURL: wpBaseURL, javaScriptEnabled: false });
       const visitor = await ctx.newPage();
       await visitor.goto('/', { waitUntil: 'domcontentloaded' });
 
