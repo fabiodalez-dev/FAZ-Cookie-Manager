@@ -459,6 +459,8 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 - **Cookie_Database expanded** — 40 → 64 entries including `_GRECAPTCHA`, GA Classic, YouTube, Stripe, and more
 - **i18n fixes** — scanner uses default language, backend preserves all translation keys, shortcode category names use `localize_category_name()`
 - **18 new E2E tests** — comprehensive regression coverage for PRs #39, #41, #44
+- **Scanner LiteSpeed/cache compatibility** — reads `data-src` and `data-litespeed-src`, server-side scan always merges, description enrichment from OCD
+- **Cache flush after scan** — fixes empty cookie table after scan on sites with object cache
 
 ### 1.7.1
 - **Admin performance** — 50-68% faster backend navigation (cache fix, N+1 query, REST preloading)
