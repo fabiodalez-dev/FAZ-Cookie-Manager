@@ -844,6 +844,9 @@ class Controller {
 		}
 
 		$total_cookies = count( $unique );
+		// Debug: log what we're about to save.
+		$debug_names = array_map( function( $c ) { return isset( $c['name'] ) ? $c['name'] : '?'; }, $unique );
+		error_log( '[FAZ Scanner] save_scan_result: ' . count( $unique ) . ' unique cookies to save: ' . implode( ', ', array_slice( $debug_names, 0, 20 ) ) );
 		$this->save_cookies( $unique );
 		$cookie_names = array();
 		foreach ( $unique as $item ) {

@@ -82,6 +82,12 @@ abstract class Base_Controller {
 	 */
 	public function delete_cache() {
 		Cache::delete( $this->cache_group );
+		// Flush wp_cache entries used by get_items_by_category() and get_items().
+		wp_cache_flush_group( $this->cache_group );
+		// Fallback for hosts without wp_cache_flush_group (pre-WP 6.1).
+		if ( ! function_exists( 'wp_cache_flush_group' ) || ! wp_cache_supports( 'flush_group' ) ) {
+			wp_cache_delete( $this->cache_group . '_category_all', $this->cache_group );
+		}
 		wp_cache_delete( 'faz_settings', 'options' );
 		wp_cache_delete( 'faz_banner_template', 'options' );
 		// Also flush wp_cache for any language-suffixed variants.
