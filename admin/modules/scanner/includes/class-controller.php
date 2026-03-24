@@ -989,6 +989,10 @@ class Controller {
 			Cookie_Controller::get_instance()->create_item( $cookie );
 			$existing_names[ $name ] = true;
 		}
+
+		// Flush cookie and category caches so the API returns fresh data.
+		Cookie_Controller::get_instance()->delete_cache();
+		Category_Controller::get_instance()->delete_cache();
 	}
 
 	/**
