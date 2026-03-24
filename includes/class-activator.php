@@ -364,6 +364,23 @@ class Activator {
 		update_option( 'faz_version', FAZ_VERSION );
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
+
+		// Auto-download Open Cookie Database definitions on activation so the
+		// scanner can auto-categorize cookies immediately. Skips if data was
+		// already downloaded within the last 7 days. Wrapped in try/catch so
+		// network failures never block plugin activation.
+		try {
+			$meta       = get_option( Cookie_Definitions::META_KEY, array() );
+			$updated_at = isset( $meta['updated_at'] ) ? $meta['updated_at'] : '';
+			$is_recent  = $updated_at && ( strtotime( $updated_at ) > strtotime( '-7 days' ) );
+
+			if ( ! $is_recent ) {
+				Cookie_Definitions::get_instance()->update_definitions();
+			}
+		} catch ( \Throwable $e ) {
+			// Silently ignore — OCD download will be retried on first admin visit
+			// via the ensure_cookie_definitions() admin_init hook.
+		}
 	}
 
 	/**

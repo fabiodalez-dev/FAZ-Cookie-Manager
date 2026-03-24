@@ -1259,6 +1259,99 @@ class Controller {
 	}
 
 	/**
+	 * Discover WooCommerce-specific URLs that are likely to load
+	 * tracking pixels, payment SDKs, and analytics cookies.
+	 *
+	 * These URLs are returned as "priority" so the scanner does not
+	 * skip them via early stop — they often set unique cookies that
+	 * generic pages never trigger.
+	 *
+	 * @return array List of normalized WooCommerce URLs.
+	 */
+	public function discover_woocommerce_urls() {
+		if ( ! class_exists( 'WooCommerce' ) ) {
+			return array();
+		}
+
+		$wc_urls = array();
+		$seen    = array();
+
+		// Shop page — loads analytics, pixel tracking.
+		$shop_id = wc_get_page_id( 'shop' );
+		if ( $shop_id > 0 ) {
+			$url = get_permalink( $shop_id );
+			if ( $url ) {
+				$normalized = $this->normalize_url( $url );
+				if ( ! isset( $seen[ $normalized ] ) ) {
+					$seen[ $normalized ] = true;
+					$wc_urls[]           = $normalized;
+				}
+			}
+		}
+
+		// First published product — loads retargeting pixels (FB, TikTok).
+		$products = get_posts(
+			array(
+				'post_type'   => 'product',
+				'post_status' => 'publish',
+				'numberposts' => 1,
+				'fields'      => 'ids',
+			)
+		);
+		if ( ! empty( $products ) ) {
+			$url = get_permalink( $products[0] );
+			if ( $url ) {
+				$normalized = $this->normalize_url( $url );
+				if ( ! isset( $seen[ $normalized ] ) ) {
+					$seen[ $normalized ] = true;
+					$wc_urls[]           = $normalized;
+				}
+			}
+		}
+
+		// Cart page — loads payment SDKs (even when empty).
+		$cart_id = wc_get_page_id( 'cart' );
+		if ( $cart_id > 0 ) {
+			$url = get_permalink( $cart_id );
+			if ( $url ) {
+				$normalized = $this->normalize_url( $url );
+				if ( ! isset( $seen[ $normalized ] ) ) {
+					$seen[ $normalized ] = true;
+					$wc_urls[]           = $normalized;
+				}
+			}
+		}
+
+		// Checkout page — loads full payment gateways (PayPal, Stripe).
+		$checkout_id = wc_get_page_id( 'checkout' );
+		if ( $checkout_id > 0 ) {
+			$url = get_permalink( $checkout_id );
+			if ( $url ) {
+				$normalized = $this->normalize_url( $url );
+				if ( ! isset( $seen[ $normalized ] ) ) {
+					$seen[ $normalized ] = true;
+					$wc_urls[]           = $normalized;
+				}
+			}
+		}
+
+		// My Account page — loads reCAPTCHA, login tracking.
+		$account_id = wc_get_page_id( 'myaccount' );
+		if ( $account_id > 0 ) {
+			$url = get_permalink( $account_id );
+			if ( $url ) {
+				$normalized = $this->normalize_url( $url );
+				if ( ! isset( $seen[ $normalized ] ) ) {
+					$seen[ $normalized ] = true;
+					$wc_urls[]           = $normalized;
+				}
+			}
+		}
+
+		return array_values( $wc_urls );
+	}
+
+	/**
 	 * Load scanner configs into WordPress localization function.
 	 *
 	 * @return array

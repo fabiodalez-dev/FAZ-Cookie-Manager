@@ -345,12 +345,17 @@ class Api extends Rest_Controller {
 			$urls = $this->controller->discover_pages_from_db( $max_pages );
 		}
 
+		// WooCommerce-aware priority URLs (shop, product, cart, checkout, my-account).
+		// These are scanned first and exempt from early stop in the JS scanner.
+		$priority_urls = $this->controller->discover_woocommerce_urls();
+
 		return rest_ensure_response(
 			array(
-				'urls'        => array_values( $urls ),
-				'total'       => count( $urls ),
-				'fingerprint' => $current_fingerprint,
-				'incremental' => $incremental,
+				'urls'          => array_values( $urls ),
+				'priority_urls' => array_values( $priority_urls ),
+				'total'         => count( $urls ),
+				'fingerprint'   => $current_fingerprint,
+				'incremental'   => $incremental,
 			)
 		);
 	}

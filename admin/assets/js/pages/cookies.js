@@ -895,9 +895,30 @@
 			discoverWithRetry(0).then(function (result) {
 				scanMetrics.discoverMs = Date.now() - discoverStart;
 				scanMetrics.incremental = !!(allowIncremental && result.incremental);
-				var urls = deduplicateUrls(result.urls || []);
+				var mainUrls = deduplicateUrls(result.urls || []);
+
+				// WooCommerce priority URLs — prepend and exempt from early stop.
+				var rawPriority = deduplicateUrls(result.priority_urls || []);
+				var prioritySet = {};
+				for (var p = 0; p < rawPriority.length; p++) {
+					prioritySet[rawPriority[p]] = true;
+				}
+
+				// Build final URL list: priority URLs first, then main (deduped).
+				var mainSeen = {};
+				for (var m = 0; m < rawPriority.length; m++) {
+					mainSeen[rawPriority[m]] = true;
+				}
+				var urls = rawPriority.slice();
+				for (var u = 0; u < mainUrls.length; u++) {
+					if (!mainSeen[mainUrls[u]]) {
+						mainSeen[mainUrls[u]] = true;
+						urls.push(mainUrls[u]);
+					}
+				}
 
 				scanMetrics.urlsDiscovered = urls.length;
+				scanOptions.priorityUrls = prioritySet;
 
 				if (!urls.length) {
 					finishScan(btn, progressWrap, 'No pages found to scan.', true);
@@ -1067,6 +1088,7 @@
 		var enableEarlyStop = options.enableEarlyStop !== false;
 		var loadTimeoutMs = (typeof options.loadTimeoutMs === 'number' && options.loadTimeoutMs > 0) ? options.loadTimeoutMs : IFRAME_LOAD_TIMEOUT;
 		var settleTimeoutMs = (typeof options.settleTimeoutMs === 'number' && options.settleTimeoutMs > 0) ? options.settleTimeoutMs : 1700;
+		var priorityUrls = options.priorityUrls || {};  // URL hash map — exempt from early stop counter.
 		var collectedCookies = [];
 		var collectedScripts = [];
 		var diagnostics = {
@@ -1171,8 +1193,14 @@
 					}
 				}
 
-				// Early stop check.
-				noNewCount = foundNew ? 0 : noNewCount + 1;
+				// Early stop check — priority URLs (e.g. WooCommerce pages) are exempt.
+				var isPriority = !!priorityUrls[urls[idx]];
+				if (isPriority) {
+					// Priority URL: reset counter if it found something, but never increment.
+					if (foundNew) noNewCount = 0;
+				} else {
+					noNewCount = foundNew ? 0 : noNewCount + 1;
+				}
 				if (enableEarlyStop && noNewCount >= EARLY_STOP_THRESHOLD && completed >= EARLY_STOP_THRESHOLD) {
 					stopped = true;
 					metrics.earlyStopReason = noNewCount + ' consecutive pages with no new findings';
