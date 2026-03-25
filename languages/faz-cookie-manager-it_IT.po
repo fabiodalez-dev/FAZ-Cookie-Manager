@@ -1691,3 +1691,11 @@ msgstr "Prestazioni"
 msgid "Uncategorized"
 msgstr "Non categorizzati"
 
+
+#: admin/views/base.php:23
+msgid "Import / Export"
+msgstr "Importa / Esporta"
+
+#: admin/views/base.php:24
+msgid "System Status"
+msgstr "Stato del sistema"
