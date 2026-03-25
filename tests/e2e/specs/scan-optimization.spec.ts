@@ -10,9 +10,45 @@
  * 6. Auto-categorize serialization (no parallel PUTs)
  * 7. Remove data on uninstall setting (default OFF)
  */
+import { createServer, type Server } from 'node:http';
 import { expect, test } from '../fixtures/wp-fixture';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+
+async function startServerScanFixture(): Promise<{ server: Server; url: string }> {
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <title>Scan Fixture</title>
+          <script src="https://www.googletagmanager.com/gtag/js?id=G-TEST"></script>
+        </head>
+        <body>
+          <h1>Scan fixture</h1>
+        </body>
+      </html>
+    `);
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.listen(0, '127.0.0.1', () => resolve());
+    server.once('error', reject);
+  });
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    throw new Error('Failed to resolve fixture server address');
+  }
+
+  return {
+    server,
+    url: `http://127.0.0.1:${address.port}/`,
+  };
+}
 
 async function getAdminNonce(page: any): Promise<string> {
   return page.evaluate(() => (window as any).fazConfig?.api?.nonce ?? '');
@@ -70,27 +106,26 @@ test.describe('Scan optimization features', () => {
   });
 
   test('T3: script inference uses site domain in Cookie_Database lookup_scripts', async ({ page, loginAsAdmin }) => {
-    // Cannot call server-scan on localhost (PHP built-in server is single-threaded → deadlock).
-    // Instead, verify the lookup_scripts function returns the site domain by checking
-    // that cookies inferred from the scrape endpoint have correct domains.
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
+    const fixture = await startServerScanFixture();
 
-    // Use the scrape endpoint which also uses Cookie_Database internally
-    const result = await apiPost(page, nonce, 'cookies/scrape', {
-      names: ['_ga', '_gid'],
-    });
-    expect(result.status).toBe(200);
-    expect(Array.isArray(result.data)).toBe(true);
+    try {
+      const result = await apiPost(page, nonce, 'scans/server-scan', {
+        url: fixture.url,
+      });
+      expect(result.status).toBe(200);
+      expect(Array.isArray(result.data.cookies)).toBe(true);
 
-    // Verify the scrape found _ga and categorized it correctly
-    const ga = result.data.find((r: any) => r.name === '_ga');
-    expect(ga).toBeTruthy();
-    expect(ga.found).toBeTruthy();
-    expect(ga.category).toBe('analytics');
-    // Description should exist (from Cookie_Database or OCD)
-    expect(ga.description).toBeTruthy();
+      const ga = result.data.cookies.find((r: any) => r.name === '_ga');
+      expect(ga).toBeTruthy();
+      expect(ga.category).toBe('analytics');
+      expect(ga.description).toBeTruthy();
+      expect(ga.domain).toBe(new URL(WP_BASE).hostname);
+    } finally {
+      await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
+    }
   });
 
   test('T4: scanner debug mode toggle persists via settings API', async ({ page, loginAsAdmin }) => {

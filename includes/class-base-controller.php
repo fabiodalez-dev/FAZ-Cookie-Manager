@@ -83,18 +83,10 @@ abstract class Base_Controller {
 	public function delete_cache() {
 		Cache::delete( $this->cache_group );
 
-		// Flush ALL wp_cache entries for this controller's group.
-		// wp_cache_flush_group is only available on WP 6.1+ with supporting backends.
+		// Flush the underlying object-cache group when supported so legacy keys
+		// are removed too; prefix invalidation above already handles active keys.
 		if ( function_exists( 'wp_cache_flush_group' ) && function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
 			wp_cache_flush_group( $this->cache_group );
-		} else {
-			// Manual flush: delete "all" key + every known category key.
-			wp_cache_delete( $this->cache_group . '_category_all', $this->cache_group );
-			// Delete per-category cache keys (category IDs are small integers).
-			for ( $i = 1; $i <= 50; $i++ ) {
-				wp_cache_delete( $this->cache_group . '_category_' . $i, $this->cache_group );
-				wp_cache_delete( $this->cache_group . '_' . $i, $this->cache_group );
-			}
 		}
 
 		wp_cache_delete( 'faz_settings', 'options' );
@@ -115,6 +107,27 @@ abstract class Base_Controller {
 		if ( faz_is_admin_request() && faz_is_admin_page() ) {
 			Cache::delete( $this->cache_group );
 		}
+	}
+
+	/**
+	 * Read an object-cache entry using the controller cache prefix.
+	 *
+	 * @param string $key Cache key without prefix.
+	 * @return mixed
+	 */
+	protected function get_object_cache( $key ) {
+		return wp_cache_get( Cache::get_cache_prefix( $this->cache_group ) . $key, $this->cache_group );
+	}
+
+	/**
+	 * Store an object-cache entry using the controller cache prefix.
+	 *
+	 * @param string $key Cache key without prefix.
+	 * @param mixed  $data Value to store.
+	 * @return void
+	 */
+	protected function set_object_cache( $key, $data ) {
+		wp_cache_set( Cache::get_cache_prefix( $this->cache_group ) . $key, $data, $this->cache_group );
 	}
 
 	/**
