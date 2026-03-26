@@ -1786,34 +1786,8 @@ function _fazAttachReadMore() {
  * @returns void
  */
 function _fazAttachShowMoreLessStyles() {
-    if (!_fazStore._bannerConfig.config.showMore || !_fazStore._bannerConfig.config.showLess) return;
-    
-    const showMoreStyles = _fazStore._bannerConfig.config.showMore.styles;
-    const showLessStyles = _fazStore._bannerConfig.config.showLess.styles;
-    
-    if (showMoreStyles) {
-        const showMoreButtons = document.querySelectorAll('[data-faz-tag="show-desc-button"]');
-        if (showMoreButtons.length > 0) {
-            Array.from(showMoreButtons).forEach((button) => {
-                for (const style in showMoreStyles) {
-                    if (!showMoreStyles[style]) continue;
-                    button.style[style] = showMoreStyles[style];
-                }
-            });
-        }
-    }
-    
-    if (showLessStyles) {
-        const showLessButtons = document.querySelectorAll('[data-faz-tag="hide-desc-button"]');
-        if (showLessButtons.length > 0) {
-            Array.from(showLessButtons).forEach((button) => {
-                for (const style in showLessStyles) {
-                    if (!showLessStyles[style]) continue;
-                    button.style[style] = showLessStyles[style];
-                }
-            });
-        }
-    }
+    // Styles handled via CSS custom properties (--faz-show-desc-button-*).
+    // Inline style setting removed to allow theme CSS var overrides.
 }
 
 /**
