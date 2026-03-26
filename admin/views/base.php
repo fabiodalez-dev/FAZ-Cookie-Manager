@@ -13,15 +13,15 @@ defined( 'ABSPATH' ) || exit;
 <div class="faz-wrap" id="faz-admin">
 	<?php
 	$faz_nav_items = array(
-		'dashboard'    => array( 'slug' => 'faz-cookie-manager',              'label' => 'Dashboard' ),
-		'banner'       => array( 'slug' => 'faz-cookie-manager-banner',       'label' => 'Cookie Banner' ),
-		'cookies'      => array( 'slug' => 'faz-cookie-manager-cookies',      'label' => 'Cookies' ),
-		'consent-logs' => array( 'slug' => 'faz-cookie-manager-consent-logs', 'label' => 'Consent Logs' ),
-		'gcm'          => array( 'slug' => 'faz-cookie-manager-gcm',          'label' => 'Google Consent Mode' ),
-		'languages'    => array( 'slug' => 'faz-cookie-manager-languages',    'label' => 'Languages' ),
-		'settings'     => array( 'slug' => 'faz-cookie-manager-settings',     'label' => 'Settings' ),
-		'import-export'  => array( 'slug' => 'faz-cookie-manager-import-export',  'label' => 'Import / Export' ),
-		'system-status'  => array( 'slug' => 'faz-cookie-manager-system-status',  'label' => 'System Status' ),
+		'dashboard'      => array( 'slug' => 'faz-cookie-manager',                'label' => __( 'Dashboard', 'faz-cookie-manager' ) ),
+		'banner'         => array( 'slug' => 'faz-cookie-manager-banner',         'label' => __( 'Cookie Banner', 'faz-cookie-manager' ) ),
+		'cookies'        => array( 'slug' => 'faz-cookie-manager-cookies',        'label' => __( 'Cookies', 'faz-cookie-manager' ) ),
+		'consent-logs'   => array( 'slug' => 'faz-cookie-manager-consent-logs',   'label' => __( 'Consent Logs', 'faz-cookie-manager' ) ),
+		'gcm'            => array( 'slug' => 'faz-cookie-manager-gcm',            'label' => __( 'Google Consent Mode', 'faz-cookie-manager' ) ),
+		'languages'      => array( 'slug' => 'faz-cookie-manager-languages',      'label' => __( 'Languages', 'faz-cookie-manager' ) ),
+		'settings'       => array( 'slug' => 'faz-cookie-manager-settings',       'label' => __( 'Settings', 'faz-cookie-manager' ) ),
+		'import-export'  => array( 'slug' => 'faz-cookie-manager-import-export',  'label' => __( 'Import / Export', 'faz-cookie-manager' ) ),
+		'system-status'  => array( 'slug' => 'faz-cookie-manager-system-status',  'label' => __( 'System Status', 'faz-cookie-manager' ) ),
 	);
 	?>
 	<nav class="faz-top-nav" aria-label="FAZ Cookie Manager navigation">

@@ -157,13 +157,13 @@ class Cookie_Controller extends Base_Controller {
 					$item = $this->prepare_item( $data );
 					if ( ! empty( $item ) ) {
 						$items[ $item->{$this->id} ] = $item;
-						wp_cache_set( $this->cache_group . '_' . $item->{$this->id}, $item, $this->cache_group );
+						$this->set_object_cache( $this->cache_group . '_' . $item->{$this->id}, $item );
 					}
 				}
 			} else {
 				$items = $this->prepare_item( $results );
 				if ( ! empty( $items ) ) {
-					wp_cache_set( $this->cache_group . '_' . $items->{$this->id}, $items, $this->cache_group );
+					$this->set_object_cache( $this->cache_group . '_' . $items->{$this->id}, $items );
 				}
 			}
 		}
@@ -181,7 +181,7 @@ class Cookie_Controller extends Base_Controller {
 			return array();
 		}
 		$cache_key = $this->cache_group . '_' . $id;
-		$cached    = wp_cache_get( $cache_key, $this->cache_group );
+		$cached    = $this->get_object_cache( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
 		}
@@ -209,12 +209,12 @@ class Cookie_Controller extends Base_Controller {
 		}
 
 		$cache_key = $this->cache_group . '_category_' . ( $cat ? $cat : 'all' );
-		$cached    = wp_cache_get( $cache_key, $this->cache_group );
+		$cached    = $this->get_object_cache( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
 		}
 		$items = $this->get_item_from_db( $args );
-		wp_cache_set( $cache_key, $items, $this->cache_group );
+		$this->set_object_cache( $cache_key, $items );
 		return $items;
 	}
 

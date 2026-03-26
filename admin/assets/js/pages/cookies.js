@@ -895,9 +895,30 @@
 			discoverWithRetry(0).then(function (result) {
 				scanMetrics.discoverMs = Date.now() - discoverStart;
 				scanMetrics.incremental = !!(allowIncremental && result.incremental);
-				var urls = deduplicateUrls(result.urls || []);
+				var mainUrls = deduplicateUrls(result.urls || []);
+
+				// WooCommerce priority URLs — prepend and exempt from early stop.
+				var rawPriority = deduplicateUrls(result.priority_urls || []);
+				var prioritySet = {};
+				for (var p = 0; p < rawPriority.length; p++) {
+					prioritySet[rawPriority[p]] = true;
+				}
+
+				// Build final URL list: priority URLs first, then main (deduped).
+				var mainSeen = {};
+				for (var m = 0; m < rawPriority.length; m++) {
+					mainSeen[rawPriority[m]] = true;
+				}
+				var urls = rawPriority.slice();
+				for (var u = 0; u < mainUrls.length; u++) {
+					if (!mainSeen[mainUrls[u]]) {
+						mainSeen[mainUrls[u]] = true;
+						urls.push(mainUrls[u]);
+					}
+				}
 
 				scanMetrics.urlsDiscovered = urls.length;
+				scanOptions.priorityUrls = prioritySet;
 
 				if (!urls.length) {
 					finishScan(btn, progressWrap, 'No pages found to scan.', true);
@@ -921,11 +942,13 @@
 						cookieNames: collectedCookies.map(function(c) { return c.name; }),
 						diagnostics: diagnostics,
 					});
-					// Always run server-side scan to catch data-src / litespeed
-					// deferred scripts that the iframe may miss, then merge.
+					// Always run server-side scan on the HOMEPAGE to catch data-src /
+					// litespeed deferred scripts. Uses site root, not urls[0] which
+					// may be a WooCommerce page after priority URL prepending.
 					if (urls.length > 0) {
 						statusEl.textContent = 'Enriching with server scan...';
-						FAZ.post('scans/server-scan', { url: urls[0] }).then(function (serverResult) {
+						var homepageUrl = result.home_url || urls[0];
+						FAZ.post('scans/server-scan', { url: homepageUrl }).then(function (serverResult) {
 							// Merge server-discovered scripts (deduped).
 							var existingScripts = {};
 							collectedScripts.forEach(function (s) { existingScripts[s] = true; });
@@ -1067,6 +1090,7 @@
 		var enableEarlyStop = options.enableEarlyStop !== false;
 		var loadTimeoutMs = (typeof options.loadTimeoutMs === 'number' && options.loadTimeoutMs > 0) ? options.loadTimeoutMs : IFRAME_LOAD_TIMEOUT;
 		var settleTimeoutMs = (typeof options.settleTimeoutMs === 'number' && options.settleTimeoutMs > 0) ? options.settleTimeoutMs : 1700;
+		var priorityUrls = options.priorityUrls || {};  // URL hash map — exempt from early stop counter.
 		var collectedCookies = [];
 		var collectedScripts = [];
 		var diagnostics = {
@@ -1171,8 +1195,14 @@
 					}
 				}
 
-				// Early stop check.
-				noNewCount = foundNew ? 0 : noNewCount + 1;
+				// Early stop check — priority URLs (e.g. WooCommerce pages) are exempt.
+				var isPriority = !!priorityUrls[urls[idx]];
+				if (isPriority) {
+					// Priority URL: reset counter if it found something, but never increment.
+					if (foundNew) noNewCount = 0;
+				} else {
+					noNewCount = foundNew ? 0 : noNewCount + 1;
+				}
 				if (enableEarlyStop && noNewCount >= EARLY_STOP_THRESHOLD && completed >= EARLY_STOP_THRESHOLD) {
 					stopped = true;
 					metrics.earlyStopReason = noNewCount + ' consecutive pages with no new findings';
@@ -1456,8 +1486,8 @@
 				var catMap = {};
 				categories.forEach(function (c) { catMap[c.slug] = c.id; });
 
-				// Step 3: Update each cookie that got a real category.
-				var updates = [];
+				// Step 3: Build update queue (serialized to avoid 503 rate limiting).
+				var updateQueue = [];
 				var categorized = 0;
 
 				results.forEach(function (info) {
@@ -1478,21 +1508,40 @@
 						descObj[descLang] = info.description;
 						updateData.description = descObj;
 					}
-					updates.push(FAZ.put('cookies/' + (cookie.id || cookie.cookie_id), updateData));
+					updateQueue.push({ id: cookie.id || cookie.cookie_id, data: updateData, name: cookie.name });
 				});
 
-				if (!updates.length) {
+				if (!updateQueue.length) {
 					FAZ.btnLoading(btn, false);
 					FAZ.notify('No cookies could be auto-categorized');
 					return;
 				}
 
-				return Promise.all(updates).then(function () {
-					FAZ.btnLoading(btn, false);
-					FAZ.notify('Auto-categorized ' + categorized + ' cookies');
-					loadCookies();
-					loadCategories();
-				});
+				// Execute updates sequentially (one at a time) to avoid 503 rate limiting.
+				var completed = 0;
+				var failed = 0;
+				function processNext() {
+					if (completed + failed >= updateQueue.length) {
+						FAZ.btnLoading(btn, false);
+						var msg = 'Auto-categorized ' + completed + '/' + categorized + ' cookies';
+						if (failed > 0) msg += ' (' + failed + ' failed)';
+						FAZ.notify(msg, failed > 0 ? 'error' : 'success');
+						loadCookies();
+						loadCategories();
+						return;
+					}
+					var item = updateQueue[completed + failed];
+					FAZ.put('cookies/' + item.id, item.data).then(function () {
+						completed++;
+						console.log('[FAZ Auto-categorize] Updated "' + item.name + '" (' + completed + '/' + updateQueue.length + ')');
+						processNext();
+					}).catch(function (err) {
+						failed++;
+						console.error('[FAZ Auto-categorize] Failed "' + item.name + '":', err);
+						processNext();
+					});
+				}
+				processNext();
 			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);

@@ -82,15 +82,23 @@ abstract class Base_Controller {
 	 */
 	public function delete_cache() {
 		Cache::delete( $this->cache_group );
-		// Flush wp_cache entries used by get_items_by_category() and get_items().
-		wp_cache_flush_group( $this->cache_group );
-		// Fallback for hosts without wp_cache_flush_group (pre-WP 6.1).
-		if ( ! function_exists( 'wp_cache_flush_group' ) || ! wp_cache_supports( 'flush_group' ) ) {
+
+		// Flush the underlying object-cache group when supported so legacy keys
+		// are removed too; prefix invalidation above already handles active keys.
+		if ( function_exists( 'wp_cache_flush_group' ) && function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
+			wp_cache_flush_group( $this->cache_group );
+		} else {
+			// Fallback: delete known legacy cache keys when flush_group unavailable.
 			wp_cache_delete( $this->cache_group . '_category_all', $this->cache_group );
+			// Delete per-category keys (IDs are small integers).
+			for ( $i = 1; $i <= 50; $i++ ) {
+				wp_cache_delete( $this->cache_group . '_category_' . $i, $this->cache_group );
+				wp_cache_delete( $this->cache_group . '_' . $i, $this->cache_group );
+			}
 		}
+
 		wp_cache_delete( 'faz_settings', 'options' );
 		wp_cache_delete( 'faz_banner_template', 'options' );
-		// Also flush wp_cache for any language-suffixed variants.
 		if ( function_exists( 'faz_selected_languages' ) ) {
 			foreach ( faz_selected_languages() as $lang ) {
 				wp_cache_delete( 'faz_banner_template_' . sanitize_key( $lang ), 'options' );
@@ -107,6 +115,27 @@ abstract class Base_Controller {
 		if ( faz_is_admin_request() && faz_is_admin_page() ) {
 			Cache::delete( $this->cache_group );
 		}
+	}
+
+	/**
+	 * Read an object-cache entry using the controller cache prefix.
+	 *
+	 * @param string $key Cache key without prefix.
+	 * @return mixed
+	 */
+	protected function get_object_cache( $key ) {
+		return wp_cache_get( Cache::get_cache_prefix( $this->cache_group ) . $key, $this->cache_group );
+	}
+
+	/**
+	 * Store an object-cache entry using the controller cache prefix.
+	 *
+	 * @param string $key Cache key without prefix.
+	 * @param mixed  $data Value to store.
+	 * @return void
+	 */
+	protected function set_object_cache( $key, $data ) {
+		wp_cache_set( Cache::get_cache_prefix( $this->cache_group ) . $key, $data, $this->cache_group );
 	}
 
 	/**

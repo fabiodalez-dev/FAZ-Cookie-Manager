@@ -11,6 +11,7 @@ use WP_REST_Server;
 use WP_Error;
 use stdClass;
 use FazCookie\Includes\Rest_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Scanner_Logger;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -167,6 +168,24 @@ class Api extends Rest_Controller {
 					'args'                => array(
 						'context' => $this->get_context_param( array( 'default' => 'view' ) ),
 					),
+				),
+			)
+		);
+
+		// Scanner debug log endpoints.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/debug-log',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_debug_log' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+				array(
+					'methods'             => WP_REST_Server::DELETABLE,
+					'callback'            => array( $this, 'clear_debug_log' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
 				),
 			)
 		);
@@ -345,12 +364,18 @@ class Api extends Rest_Controller {
 			$urls = $this->controller->discover_pages_from_db( $max_pages );
 		}
 
+		// WooCommerce-aware priority URLs (shop, product, cart, checkout, my-account).
+		// These are scanned first and exempt from early stop in the JS scanner.
+		$priority_urls = array_values( array_unique( $this->controller->discover_woocommerce_urls() ) );
+
 		return rest_ensure_response(
 			array(
-				'urls'        => array_values( $urls ),
-				'total'       => count( $urls ),
-				'fingerprint' => $current_fingerprint,
-				'incremental' => $incremental,
+				'urls'          => array_values( $urls ),
+				'priority_urls' => array_values( $priority_urls ),
+				'total'         => count( array_unique( array_merge( $urls, $priority_urls ) ) ),
+				'fingerprint'   => $current_fingerprint,
+				'incremental'   => $incremental,
+				'home_url'      => home_url( '/' ),
 			)
 		);
 	}
@@ -376,92 +401,118 @@ class Api extends Rest_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function server_scan( $request ) {
-		$url = $request->get_param( 'url' );
-		if ( empty( $url ) ) {
-			return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
-		}
+		$logger = Scanner_Logger::get_instance();
+		$logger->start( 'Server-side fallback scan' );
+		$url    = $request->get_param( 'url' );
 
-		// Fetch the page HTML server-side.
-		$response = wp_remote_get(
-			$url,
-			array(
-				'timeout'     => 20,
-				'sslverify'   => false,
-				'redirection' => 3,
-				'user-agent'  => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
-			)
-		);
-
-		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
-		}
-
-		$html    = wp_remote_retrieve_body( $response );
-		$scripts = array();
-		$cookies = array();
-
-		// Extract all script URLs from src, data-src, data-litespeed-src
-		// (covers LiteSpeed/WP Rocket/Autoptimize delay loaders).
-		foreach ( array( 'src', 'data-src', 'data-litespeed-src' ) as $attr ) {
-			if ( preg_match_all( '/<script[^>]*\b' . preg_quote( $attr, '/' ) . '=["\x27]([^"\x27]+)["\x27][^>]*>/i', $html, $matches ) ) {
-				$scripts = array_merge( $scripts, $matches[1] );
+		try {
+			if ( empty( $url ) ) {
+				$logger->log( 'Server-scan: empty URL, returning empty result' );
+				$response = new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
+				return $response;
 			}
-		}
-		$scripts = array_unique( $scripts );
 
-		// Also extract iframe URLs (src + data-src).
-		foreach ( array( 'src', 'data-src' ) as $attr ) {
-			if ( preg_match_all( '/<iframe[^>]*\b' . preg_quote( $attr, '/' ) . '=["\x27]([^"\x27]+)["\x27][^>]*>/i', $html, $iframe_matches ) ) {
-				$scripts = array_merge( $scripts, $iframe_matches[1] );
-			}
-		}
-		$scripts = array_unique( $scripts );
+			$logger->log( 'Server-scan URL: ' . $url );
 
-		// Parse Set-Cookie headers.
-		$headers = wp_remote_retrieve_headers( $response );
-		$raw_cookies = array();
-		if ( $headers instanceof \WpOrg\Requests\Utility\CaseInsensitiveDictionary || ( class_exists( '\Requests_Utility_CaseInsensitiveDictionary' ) && $headers instanceof \Requests_Utility_CaseInsensitiveDictionary ) ) {
-			$all = $headers->getAll();
-			if ( isset( $all['set-cookie'] ) ) {
-				$raw_cookies = (array) $all['set-cookie'];
-			}
-		} elseif ( is_array( $headers ) ) {
-			if ( isset( $headers['set-cookie'] ) ) {
-				$raw_cookies = (array) $headers['set-cookie'];
-			}
-		}
+			// Fetch the page HTML server-side.
+			$http_response = wp_remote_get(
+				$url,
+				array(
+					'timeout'     => 20,
+					'sslverify'   => false,
+					'redirection' => 3,
+					'user-agent'  => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
+				)
+			);
 
-		$site_domain = wp_parse_url( home_url(), PHP_URL_HOST );
-		foreach ( $raw_cookies as $cookie_str ) {
-			$parts = explode( '=', explode( ';', $cookie_str )[0], 2 );
-			$name  = trim( $parts[0] );
-			if ( $name ) {
+			if ( is_wp_error( $http_response ) || 200 !== wp_remote_retrieve_response_code( $http_response ) ) {
+				$err_msg = is_wp_error( $http_response ) ? $http_response->get_error_message() : 'HTTP ' . wp_remote_retrieve_response_code( $http_response );
+				$logger->log( 'Server-scan fetch failed: ' . $err_msg );
+				$response = new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
+				return $response;
+			}
+
+			$html    = wp_remote_retrieve_body( $http_response );
+			$scripts = array();
+			$cookies = array();
+
+			$logger->log( 'HTML size: ' . strlen( $html ) . ' bytes' );
+
+			// Extract all script URLs from src, data-src, data-litespeed-src
+			// (covers LiteSpeed/WP Rocket/Autoptimize delay loaders).
+			foreach ( array( 'src', 'data-src', 'data-litespeed-src' ) as $attr ) {
+				if ( preg_match_all( '/<script[^>]*\b' . preg_quote( $attr, '/' ) . '=["\x27]([^"\x27]+)["\x27][^>]*>/i', $html, $matches ) ) {
+					$scripts = array_merge( $scripts, $matches[1] );
+				}
+			}
+			$scripts = array_unique( $scripts );
+
+			// Also extract iframe URLs (src + data-src).
+			foreach ( array( 'src', 'data-src' ) as $attr ) {
+				if ( preg_match_all( '/<iframe[^>]*\b' . preg_quote( $attr, '/' ) . '=["\x27]([^"\x27]+)["\x27][^>]*>/i', $html, $iframe_matches ) ) {
+					$scripts = array_merge( $scripts, $iframe_matches[1] );
+				}
+			}
+			$scripts = array_unique( $scripts );
+
+			$script_list = array_values( $scripts );
+			$logger->log( 'Scripts found: ' . count( $script_list ), array_slice( $script_list, 0, 20 ) );
+
+			// Parse Set-Cookie headers.
+			$headers = wp_remote_retrieve_headers( $http_response );
+			$raw_cookies = array();
+			if ( $headers instanceof \WpOrg\Requests\Utility\CaseInsensitiveDictionary || ( class_exists( '\Requests_Utility_CaseInsensitiveDictionary' ) && $headers instanceof \Requests_Utility_CaseInsensitiveDictionary ) ) {
+				$all = $headers->getAll();
+				if ( isset( $all['set-cookie'] ) ) {
+					$raw_cookies = (array) $all['set-cookie'];
+				}
+			} elseif ( is_array( $headers ) ) {
+				if ( isset( $headers['set-cookie'] ) ) {
+					$raw_cookies = (array) $headers['set-cookie'];
+				}
+			}
+
+			$logger->log( 'Set-Cookie headers: ' . count( $raw_cookies ) );
+
+			$site_domain = wp_parse_url( home_url(), PHP_URL_HOST );
+			foreach ( $raw_cookies as $cookie_str ) {
+				$parts = explode( '=', explode( ';', $cookie_str )[0], 2 );
+				$name  = trim( $parts[0] );
+				if ( $name ) {
+					$cookies[] = array(
+						'name'   => $name,
+						'domain' => $site_domain,
+					);
+				}
+			}
+
+			// Infer cookies from detected scripts using Cookie_Database.
+			$inferred = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup_scripts( $scripts );
+			$logger->log( 'Inferred cookies from scripts: ' . count( $inferred ) );
+			foreach ( $inferred as $inf ) {
+				$logger->log( '  Inferred: "' . $inf['name'] . '" → ' . ( isset( $inf['category'] ) ? $inf['category'] : 'uncategorized' ) );
 				$cookies[] = array(
-					'name'   => $name,
-					'domain' => $site_domain,
+					'name'        => $inf['name'],
+					'domain'      => isset( $inf['domain'] ) ? $inf['domain'] : $site_domain,
+					'duration'    => isset( $inf['duration'] ) ? $inf['duration'] : '',
+					'description' => isset( $inf['description'] ) ? $inf['description'] : '',
+					'category'    => isset( $inf['category'] ) ? $inf['category'] : 'uncategorized',
 				);
 			}
-		}
 
-		// Infer cookies from detected scripts using Cookie_Database.
-		$inferred = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup_scripts( $scripts );
-		foreach ( $inferred as $inf ) {
-			$cookies[] = array(
-				'name'        => $inf['name'],
-				'domain'      => isset( $inf['domain'] ) ? $inf['domain'] : $site_domain,
-				'duration'    => isset( $inf['duration'] ) ? $inf['duration'] : '',
-				'description' => isset( $inf['description'] ) ? $inf['description'] : '',
-				'category'    => isset( $inf['category'] ) ? $inf['category'] : 'uncategorized',
+			$logger->log( 'Server-scan complete: ' . count( $cookies ) . ' cookies, ' . count( $scripts ) . ' scripts' );
+
+			$response = new \WP_REST_Response(
+				array(
+					'cookies' => $cookies,
+					'scripts' => array_values( $scripts ),
+				),
+				200
 			);
+			return $response;
+		} finally {
+			$logger->finish();
 		}
-
-		return new \WP_REST_Response(
-			array(
-				'cookies' => $cookies,
-				'scripts' => array_values( $scripts ),
-			),
-			200
-		);
 	}
 	public function import_cookies( $request ) {
 		$body = $request->get_json_params();
@@ -504,6 +555,43 @@ class Api extends Rest_Controller {
 		$result = $this->controller->save_scan_result( $cookies, $pages_scanned, $clean_scripts, $metrics );
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Return scanner debug logs as plain text.
+	 *
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
+	public function get_debug_log( $request ) {
+		$logger = Scanner_Logger::get_instance();
+		$text   = $logger->get_all_logs_text();
+
+		return new \WP_REST_Response(
+			array(
+				'log'     => $text,
+				'enabled' => $logger->is_enabled(),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Clear scanner debug logs.
+	 *
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
+	public function clear_debug_log( $request ) {
+		$logger = Scanner_Logger::get_instance();
+		$logger->clear_logs();
+
+		return new \WP_REST_Response(
+			array( 'cleared' => true ),
+			200
+		);
 	}
 
 	/**

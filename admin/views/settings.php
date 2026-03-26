@@ -148,6 +148,14 @@ defined( 'ABSPATH' ) || exit;
 				<input type="number" class="faz-input faz-input-sm" data-path="scanner.max_pages" value="100" min="1" style="width:120px;">
 				<div class="faz-help"><?php esc_html_e( 'Maximum number of pages the cookie scanner will crawl. Higher values find more cookies but take longer. 100 pages is sufficient for most sites.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="scanner.debug_mode">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Scanner Debug Mode', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'When enabled, the scanner logs every categorization decision. Download logs from the Cookies page.', 'faz-cookie-manager' ); ?></div>
+			</div>
 		</div>
 	</div>
 
@@ -324,6 +332,22 @@ defined( 'ABSPATH' ) || exit;
 			<div id="faz-geodb-status" style="margin:12px 0;padding:10px;border-radius:6px;background:var(--faz-bg-secondary);display:none;">
 			</div>
 			<button class="faz-btn faz-btn-secondary" id="faz-geodb-update" type="button"><?php esc_html_e( 'Update Database', 'faz-cookie-manager' ); ?></button>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Data Management', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="general.remove_data_on_uninstall">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Remove all data on uninstall', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help" style="color:var(--faz-danger);"><?php esc_html_e( 'When enabled, deleting the plugin will permanently remove ALL data: cookies, categories, consent logs, pageviews, banner settings, and scan history. Keep this OFF if you plan to reinstall or update the plugin.', 'faz-cookie-manager' ); ?></div>
+			</div>
 		</div>
 	</div>
 

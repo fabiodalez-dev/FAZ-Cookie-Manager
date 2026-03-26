@@ -13,7 +13,29 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
-if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
+/**
+ * Check whether plugin data should be removed for a given site.
+ *
+ * @param int|null $site_id Optional multisite blog ID.
+ * @return bool
+ */
+function faz_should_remove_on_uninstall( $site_id = null ) {
+	if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
+		return true;
+	}
+
+	if ( null !== $site_id && is_multisite() && function_exists( 'get_blog_option' ) ) {
+		$faz_settings = get_blog_option( (int) $site_id, 'faz_settings', array() );
+	} else {
+		$faz_settings = get_option( 'faz_settings', array() );
+	}
+
+	return ! empty( $faz_settings['general']['remove_data_on_uninstall'] );
+}
+
+$force_remove_all = defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA;
+
+if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 
 	/**
 	 * Clean up all plugin data for the current site.
@@ -141,13 +163,16 @@ if ( defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_DATA ) {
 				'offset' => $offset,
 			) );
 			foreach ( $site_ids as $site_id ) {
+				if ( ! faz_should_remove_on_uninstall( $site_id ) ) {
+					continue;
+				}
 				switch_to_blog( $site_id );
 				faz_cleanup_site_data();
 				restore_current_blog();
 			}
 			$offset += $batch;
 		} while ( count( $site_ids ) === $batch );
-	} else {
+	} elseif ( faz_should_remove_on_uninstall() ) {
 		faz_cleanup_site_data();
 	}
 }

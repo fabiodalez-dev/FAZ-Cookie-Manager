@@ -80,12 +80,16 @@ class Settings extends Store {
 			'onboarding'   => array(
 				'step' => 2,
 			),
+			'general'      => array(
+				'remove_data_on_uninstall' => false,
+			),
 			'scanner'      => array(
 				'max_pages'       => 20,
 				'last_scan'       => '',
 				'static_ip'       => '',
 				'auto_scan'       => false,
 				'scan_frequency'  => 'weekly',
+				'debug_mode'      => false,
 			),
 			'banner_control' => array(
 				'status'                 => true,
@@ -248,6 +252,8 @@ class Settings extends Store {
 			case 'purpose_one_treatment':
 			case 'pageview_tracking':
 			case 'auto_scan':
+			case 'remove_data_on_uninstall':
+			case 'debug_mode':
 			case 'geo_targeting':
 			case 'hide_from_bots':
 			case 'gtm_datalayer':
