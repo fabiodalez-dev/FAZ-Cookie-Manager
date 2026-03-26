@@ -1217,14 +1217,18 @@ function _fazSetShowMoreLess() {
  */
 function _fazAttachShortCodeStyles() {
     const shortCodes = _fazStore._tags;
+    // revisit-consent lives outside #faz-consent; its CSS vars are already set
+    // by the PHP-generated <style> block on .faz-btn-revisit-wrapper. Skip it here.
+    const root = document.getElementById('faz-consent');
+    if (!root) return;
     Array.prototype.forEach.call(shortCodes, function (shortcode) {
-        document.querySelectorAll('[data-faz-tag=' + shortcode.tag + ']').forEach(function (item) {
-            let styles = '';
-            for (const key in shortcode.styles) {
-                styles += `${key}: ${shortcode.styles[key]};`;
+        if (!shortcode.styles || shortcode.tag === 'revisit-consent') return;
+        for (const key in shortcode.styles) {
+            const val = shortcode.styles[key];
+            if (val) {
+                root.style.setProperty('--faz-' + shortcode.tag + '-' + key, val);
             }
-            item.style.cssText = styles;
-        });
+        }
     });
 }
 
