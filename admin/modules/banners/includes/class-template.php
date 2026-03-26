@@ -374,9 +374,9 @@ class Template {
 				$configs = array_replace_recursive( $colors, $configs );
 			}
 
-		$css_vars = array();
+			$css_vars = array();
 
-		foreach ( $elements as $element ) {
+			foreach ( $elements as $element ) {
 				if ( ! $element instanceof \DOMElement ) {
 					continue;
 				}
