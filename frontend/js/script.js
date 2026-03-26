@@ -835,15 +835,9 @@ function _fazSetCheckboxes(
     formattedLabel,
     revisit = false
 ) {
-    const prefToggle = _fazStore._bannerConfig.config.preferenceCenter.toggle;
-    const previewToggle = _fazStore._bannerConfig.config.categoryPreview?.toggle;
-
     [`fazCategoryDirect`, `fazSwitch`].forEach((key) => {
         const boxElem = document.getElementById(`${key}${category.slug}`);
         if (!boxElem) return;
-        const toggle = key === 'fazCategoryDirect' ? (previewToggle || prefToggle) : prefToggle;
-        const activeColor = toggle?.states?.active?.styles?.['background-color'] || '#1863dc';
-        const inactiveColor = toggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
         _fazSetCategoryToggle(
             boxElem,
             category,
@@ -851,18 +845,14 @@ function _fazSetCheckboxes(
         boxElem.checked = checked;
         boxElem.disabled = disabled;
         if (disabled) {
-            // Necessary toggles: use active (blue) color to indicate "always on".
-            boxElem.style.backgroundColor = activeColor;
+            // Necessary toggles: active colour shown via CSS :checked rule.
             boxElem.style.opacity = '1';
             boxElem.style.cursor = 'not-allowed';
-        } else {
-            boxElem.style.backgroundColor = checked ? activeColor : inactiveColor;
         }
         _fazSetCheckBoxAriaLabel(boxElem, checked, formattedLabel);
         if (revisit || disabled) return;
         boxElem.addEventListener("change", ({ currentTarget: elem }) => {
             const isChecked = elem.checked;
-            elem.style.backgroundColor = isChecked ? activeColor : inactiveColor;
             _fazSetCheckBoxAriaLabel(boxElem, isChecked, formattedLabel);
 
             // Sync the paired toggle (fazSwitch ↔ fazCategoryDirect).
@@ -873,10 +863,6 @@ function _fazSetCheckboxes(
             const paired = document.getElementById(pairedId);
             if (paired && paired.checked !== isChecked) {
                 paired.checked = isChecked;
-                const pairedToggle = key === 'fazCategoryDirect' ? prefToggle : (previewToggle || prefToggle);
-                const pairedActive = pairedToggle?.states?.active?.styles?.['background-color'] || '#1863dc';
-                const pairedInactive = pairedToggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
-                paired.style.backgroundColor = isChecked ? pairedActive : pairedInactive;
                 _fazSetCheckBoxAriaLabel(paired, isChecked, formattedLabel);
             }
         });
