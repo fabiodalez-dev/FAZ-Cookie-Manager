@@ -50,7 +50,7 @@ test.describe('CSS Custom Properties', () => {
         if (!consent) return null;
         return getComputedStyle(consent).getPropertyValue('--faz-notice-background-color').trim();
       });
-      expect(noticeBgVar).toMatch(/^#[fF]{6}$|^#[fF]{3}$|^rgb\(255.*255.*255\)$/);
+      expect(noticeBgVar).toMatch(/^#[fF]{6}$|^#[fF]{3}$|^rgb\(255,\s*255,\s*255\)$/);
     } finally {
       await ctx.close();
     }
@@ -68,9 +68,9 @@ test.describe('CSS Custom Properties', () => {
       const inlineStyle = await acceptBtn.getAttribute('style');
       expect(inlineStyle ?? '').toBe('');
 
-      // Computed color should be white (#fff = rgb(255,255,255))
+      // Computed color should be white (#fff = rgb(255, 255, 255))
       const computed = await acceptBtn.evaluate((el) => getComputedStyle(el).color);
-      expect(computed).toContain('255');
+      expect(computed).toMatch(/^rgb\(255,\s*255,\s*255\)$/);
     } finally {
       await ctx.close();
     }
