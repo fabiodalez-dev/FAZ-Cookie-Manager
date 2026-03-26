@@ -378,10 +378,7 @@ function _fazAddPositionClass() {
     const revisitPosition = 'faz-revisit-' + _fazStore._bannerConfig.config.revisitConsent.position;
     revisitConsent.classList.add(revisitPosition);
 
-    // Replace <img> with inline SVG so icon color inherits from CSS `color` property.
-    // Buttons don't inherit `color` by default (browser uses `buttontext`), so force it.
     const revisitBtn = revisitConsent.querySelector('.faz-btn-revisit');
-    if (revisitBtn) revisitBtn.style.color = 'inherit';
     const revisitImg = revisitConsent.querySelector('.faz-btn-revisit img[src*="revisit"]');
     if (revisitImg) {
         const svgMarkup = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50" fill="currentColor" aria-hidden="true">'
