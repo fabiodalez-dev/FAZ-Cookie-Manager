@@ -2,6 +2,32 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.8.0] — 2026-03-26
+
+### Added
+- **WooCommerce-aware scanner** — automatically discovers and prioritizes shop, product, cart, checkout, and my-account pages during scans. Catches payment SDKs (PayPal/Stripe), retargeting pixels, and reCAPTCHA that homepage-only scans miss.
+- **Scanner Debug Mode** — comprehensive logging of every scan step and categorization decision. Toggle in Settings → Scanner, download logs from the Cookies page. Logs every Cookie_Database lookup, Known_Providers match, OCD fallback, and final category assignment.
+- **OCD auto-download on activation** — the Open Cookie Database (7400+ definitions) is automatically scheduled for download when the plugin is activated, so the scanner has full cookie recognition from day one.
+- **"Remove all data on uninstall" setting** — new toggle in Settings → Data Management (default: OFF). Prevents accidental data loss when users delete+reinstall to update.
+- **Admin nav bar translation** — all navigation labels now use `__()` and are translatable via .po/.mo files. Italian translations added for Import/Export and System Status.
+- **Server-side scan always merges** — runs after every iframe scan to catch `data-src`, `data-litespeed-src`, and deferred scripts invisible to iframes.
+- **Priority URLs exempt from early stop** — WooCommerce pages are always scanned regardless of the early stop threshold.
+
+### Fixed
+- **Inferred cookies use site domain** — `lookup_scripts()` now uses the site domain instead of the script host domain (e.g., `cartaedilizia.it` instead of `googletagmanager.com`).
+- **Auto-categorize serialized** — PUT requests sent one at a time to avoid 503 rate limiting on shared hosts.
+- **Cache flush robustness** — `delete_cache()` cleans legacy `wp_cache` keys when `wp_cache_flush_group` is unavailable.
+- **Logger try/finally** — all scanner entrypoints guarantee `finish()` is called even on exceptions.
+- **Scanner bypass for cache plugins** — `?faz_scanning=1` sends no-cache headers and LiteSpeed bypass.
+- **Categorization description enrichment** — OCD queried for description/duration even when Known Providers matches only the category.
+- **`is_string()` guard** on `wp_kses_post()` in multilingual getters.
+
+### Improved
+- Iframe timeout increased from 6s to 15s for slow hosts
+- Scanner concurrency reduced from 3 to 2 for better compatibility
+- `get_posts` optimization flags for WooCommerce product query
+- Auto-categorize scrape endpoint logs every lookup decision when debug mode is active
+
 ## [1.7.2] — 2026-03-24
 
 ### Fixed

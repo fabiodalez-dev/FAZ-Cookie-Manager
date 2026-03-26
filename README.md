@@ -451,6 +451,16 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.8.0
+- **WooCommerce-aware scanner** — auto-discovers shop, product, cart, checkout, my-account pages for comprehensive cookie detection
+- **Scanner Debug Mode** — logs every categorization decision, downloadable from admin
+- **OCD auto-download** — 7400+ cookie definitions downloaded on activation
+- **"Remove all data on uninstall"** — opt-in setting (default OFF) prevents accidental data loss
+- **Admin nav bar translated** — all labels now translatable via .po/.mo
+- **Inferred cookies use site domain** — no more `googletagmanager.com` as cookie domain
+- **Auto-categorize serialized** — no more 503 rate limiting on shared hosts
+- **Server-scan always merges** — catches LiteSpeed/WP Rocket deferred scripts
+
 ### 1.7.2
 - **Per-service cookie shredding** — denied services now have their cookies deleted even when the parent category is consented
 - **Scanner 3-tier lookup** — integrates Open Cookie Database (1400+ entries) as fallback, drastically reducing "uncategorized" cookies
