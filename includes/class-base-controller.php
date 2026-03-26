@@ -87,6 +87,14 @@ abstract class Base_Controller {
 		// are removed too; prefix invalidation above already handles active keys.
 		if ( function_exists( 'wp_cache_flush_group' ) && function_exists( 'wp_cache_supports' ) && wp_cache_supports( 'flush_group' ) ) {
 			wp_cache_flush_group( $this->cache_group );
+		} else {
+			// Fallback: delete known legacy cache keys when flush_group unavailable.
+			wp_cache_delete( $this->cache_group . '_category_all', $this->cache_group );
+			// Delete per-category keys (IDs are small integers).
+			for ( $i = 1; $i <= 50; $i++ ) {
+				wp_cache_delete( $this->cache_group . '_category_' . $i, $this->cache_group );
+				wp_cache_delete( $this->cache_group . '_' . $i, $this->cache_group );
+			}
 		}
 
 		wp_cache_delete( 'faz_settings', 'options' );

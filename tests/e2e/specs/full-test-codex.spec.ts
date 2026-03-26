@@ -33,6 +33,7 @@ type InstallResult = {
 const WP_PATH = process.env.WP_PATH ?? '/Users/fabio/Sites/faz-test';
 const FULL_TEST_CODEX_REPORT = process.env.FULL_TEST_CODEX_REPORT
   ?? resolve(process.cwd(), 'tests/e2e/reports/full-test-codex-report.json');
+const MIN_ACTIVE_TARGET_PLUGINS = 20;
 
 const TARGET_CONFIGS: TargetConfig[] = [
   { label: 'Site Kit by Google', installSlugs: ['google-site-kit'], probePattern: 'google-site-kit', expectedCategory: 'analytics' },
@@ -192,12 +193,30 @@ async function setTextarea(page: Page, selector: string, value: string): Promise
   );
 }
 
+async function gotoResilient(page: Page, url: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await page.goto(url, { waitUntil: 'commit', timeout: 120_000 });
+      await page.waitForLoadState('domcontentloaded', { timeout: 120_000 }).catch(() => {
+        // Some plugin combinations keep requests open for a long time.
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
-  await page.goto(`${wpBaseURL}/wp-login.php`, { waitUntil: 'domcontentloaded' });
+  await gotoResilient(page, `${wpBaseURL}/wp-login.php`);
   await page.locator('#user_login').fill(adminUser);
   await page.locator('#user_pass').fill(adminPass);
   await page.locator('#wp-submit').click();
-  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState('domcontentloaded', { timeout: 120_000 }).catch(() => {
+    // Some plugin combinations keep the request open after auth succeeds.
+  });
 
   if (page.url().includes('/wp-admin/')) {
     await expect(page.locator('#wpadminbar')).toBeVisible();
@@ -207,7 +226,7 @@ async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: str
   const cookies = await page.context().cookies(wpBaseURL);
   const hasLoggedCookie = cookies.some((cookie) => cookie.name.startsWith('wordpress_logged_in_'));
   if (hasLoggedCookie) {
-    await page.goto(`${wpBaseURL}/wp-admin/`, { waitUntil: 'domcontentloaded' });
+    await gotoResilient(page, `${wpBaseURL}/wp-admin/`);
     await expect(page).toHaveURL(/\/wp-admin\//);
     await expect(page.locator('#wpadminbar')).toBeVisible();
     return;
@@ -234,8 +253,14 @@ test.describe('full-test-codex', () => {
     installResults.push(injectorStatus);
     expect(injectorStatus.status).toBe('active');
 
+    const activeTargetPlugins = installResults.filter((row) => row.status === 'active' && !row.label.startsWith('Head & Footer Code')).length;
+    expect(
+      activeTargetPlugins,
+      `Expected at least ${MIN_ACTIVE_TARGET_PLUGINS} real third-party plugins to be active for compatibility coverage.\n${JSON.stringify(installResults, null, 2)}`,
+    ).toBeGreaterThanOrEqual(MIN_ACTIVE_TARGET_PLUGINS);
+
     await loginAdminResilient(page, wpBaseURL, adminUser, adminPass);
-    await page.goto('/wp-admin/tools.php?page=head-footer-code', { waitUntil: 'domcontentloaded' });
+    await gotoResilient(page, '/wp-admin/tools.php?page=head-footer-code');
     await expect(page).toHaveURL(/tools\.php\?page=head-footer-code/);
 
     const selectors = {
@@ -278,6 +303,7 @@ test.describe('full-test-codex', () => {
       installSummary: {
         active: installResults.filter((row) => row.status === 'active').length,
         failed: installResults.filter((row) => row.status === 'failed').length,
+        minActiveTargets: MIN_ACTIVE_TARGET_PLUGINS,
       },
       preConsentFailures: [],
       postConsentFailures: [],
@@ -292,7 +318,7 @@ test.describe('full-test-codex', () => {
       await saveButton.first().click();
       await expect(page.locator('.notice-success, #message.updated')).toBeVisible({ timeout: 20_000 });
 
-      await page.goto('/wp-admin/tools.php?page=head-footer-code', { waitUntil: 'domcontentloaded' });
+      await gotoResilient(page, '/wp-admin/tools.php?page=head-footer-code');
       const persisted = await page.evaluate((sel) => {
         const head = document.querySelector<HTMLTextAreaElement>(sel.head)?.value ?? '';
         const body = document.querySelector<HTMLTextAreaElement>(sel.body)?.value ?? '';
@@ -457,7 +483,7 @@ test.describe('full-test-codex', () => {
       };
       throw error;
     } finally {
-      await page.goto('/wp-admin/tools.php?page=head-footer-code', { waitUntil: 'domcontentloaded' });
+      await gotoResilient(page, '/wp-admin/tools.php?page=head-footer-code');
       await setTextarea(page, selectors.head, originalValues.head);
       await setTextarea(page, selectors.body, originalValues.body);
       await setTextarea(page, selectors.footer, originalValues.footer);

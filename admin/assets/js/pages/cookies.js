@@ -947,7 +947,7 @@
 					// may be a WooCommerce page after priority URL prepending.
 					if (urls.length > 0) {
 						statusEl.textContent = 'Enriching with server scan...';
-						var homepageUrl = window.fazConfig ? (fazConfig._publicURL || fazConfig._homeURL || urls[0]) : urls[0];
+						var homepageUrl = result.home_url || urls[0];
 						FAZ.post('scans/server-scan', { url: homepageUrl }).then(function (serverResult) {
 							// Merge server-discovered scripts (deduped).
 							var existingScripts = {};
