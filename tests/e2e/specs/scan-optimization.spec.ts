@@ -100,9 +100,9 @@ test.describe('Scan optimization features', () => {
     expect(Array.isArray(result.data.urls)).toBe(true);
     expect(Array.isArray(result.data.priority_urls)).toBe(true);
 
-    // Total should be urls + unique priority_urls
-    const totalExpected = result.data.urls.length + result.data.priority_urls.length;
-    expect(result.data.total).toBe(totalExpected);
+    // Total is the unique union of urls + priority_urls (priority may overlap)
+    const allUrls = new Set([...result.data.urls, ...result.data.priority_urls]);
+    expect(result.data.total).toBe(allUrls.size);
   });
 
   test('T3: script inference uses site domain in Cookie_Database lookup_scripts', async ({ page, loginAsAdmin }) => {
