@@ -1735,7 +1735,6 @@ function _fazAttachReadMore() {
     );
     if (!readMoreButton || !readMoreButton.status) return;
     const content = readMoreButton.content;
-    const styles = _fazStore._bannerConfig.config.readMore.styles;
     const readMoreElement = document.querySelector(
         '[data-faz-tag="description"]'
     );
@@ -1755,12 +1754,6 @@ function _fazAttachReadMore() {
         `[data-faz-tag="readmore-button"]`
     );
     if (placeHolders.length < 1) return;
-    Array.from(placeHolders).forEach((placeHolder) => {
-        for (const style in styles) {
-            if (!styles[style]) continue;
-            placeHolder.style[style] = styles[style];
-        }
-    });
 }
 
 /**
