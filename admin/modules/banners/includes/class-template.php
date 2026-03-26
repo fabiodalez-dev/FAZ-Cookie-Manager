@@ -374,7 +374,9 @@ class Template {
 				$configs = array_replace_recursive( $colors, $configs );
 			}
 
-			foreach ( $elements as $element ) {
+		$css_vars = array();
+
+		foreach ( $elements as $element ) {
 				if ( ! $element instanceof \DOMElement ) {
 					continue;
 				}
@@ -415,9 +417,6 @@ class Template {
 				}
 
 				$styles = isset( $config['styles'] ) ? $config['styles'] : array();
-
-				$existing = $element->getAttribute( 'style' );
-				$style    = isset( $existing ) ? $existing : '';
 				if ( ! empty( $styles ) ) {
 					foreach ( $styles as $property => $value ) {
 						if ( '' !== $value ) {
@@ -427,13 +426,28 @@ class Template {
 							if ( 'background-color' === $property && '#000000' === $value ) {
 								continue;
 							}
-							$style .= $property . ':' . $value . ';';
+							$css_vars[ '--faz-' . $tag . '-' . $property ] = $value;
 						}
 					}
 				}
-				if ( '' !== $style ) {
-					$element->setAttribute( 'style', esc_attr( $style ) );
+			}
+
+			if ( ! empty( $css_vars ) ) {
+				$vars_string = '';
+				foreach ( $css_vars as $var => $val ) {
+					$vars_string .= esc_attr( $var ) . ':' . esc_attr( $val ) . ';';
 				}
+				// Emit vars on three selectors:
+				// .faz-consent-container → boost_css_specificity() converts to #faz-consent
+				//   covers banner-internal elements and classic-mode preference center
+				// .faz-modal → left as-is (sibling element)
+				//   covers popup-mode preference center and optout popup
+				// .faz-btn-revisit-wrapper → left as-is (sibling element)
+				//   covers the revisit consent floating button
+				$this->styles = '.faz-consent-container{' . $vars_string . '}'
+					. '.faz-modal{' . $vars_string . '}'
+					. '.faz-btn-revisit-wrapper{' . $vars_string . '}'
+					. $this->styles;
 			}
 
 			$this->html = $dom->saveHTML( $dom->documentElement ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
