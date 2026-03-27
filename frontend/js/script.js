@@ -2180,27 +2180,24 @@ function _fazRenderServiceToggles() {
         var serviceList = document.createElement('div');
         serviceList.className = 'faz-service-list';
         serviceList.setAttribute('data-faz-category', category.slug);
-        serviceList.style.cssText = 'margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.1);';
 
         var serviceTitle = document.createElement('div');
-        serviceTitle.style.cssText = 'font-size:12px;color:#888;margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;';
+        serviceTitle.classList.add('faz-service-list-title');
         serviceTitle.textContent = 'Services';
         serviceList.appendChild(serviceTitle);
 
         categoryServices.forEach(function(service) {
             var row = document.createElement('div');
-            row.className = 'faz-service-row';
-            row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:4px 0;';
+            row.classList.add('faz-service-row');
 
             var label = document.createElement('span');
-            label.style.cssText = 'font-size:13px;';
+            label.classList.add('faz-service-row-label');
             label.textContent = service.label;
             row.appendChild(label);
 
             // Toggle switch (same visual structure as category toggles).
             var switchWrap = document.createElement('div');
-            switchWrap.className = 'faz-switch';
-            switchWrap.style.cssText = 'flex-shrink:0;';
+            switchWrap.classList.add('faz-switch');
 
             var checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
