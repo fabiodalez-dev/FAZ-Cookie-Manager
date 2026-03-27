@@ -2056,17 +2056,7 @@ function _fazSetFocus(tagName) {
 }
 
 function _fazSetPoweredBy() {
-    let position = 'flex-end';
-    ['detail-powered-by', 'optout-powered-by'].forEach((key) => {
-        const element = document.querySelector(
-            `[data-faz-tag="${key}"]`
-        );
-        if (!element) return;
-        element.style.display = "flex";
-        element.style.justifyContent = position;
-        element.style.alignItems = "center";
-    });
-
+    // Layout handled via CSS: [data-faz-tag="detail-powered-by"], [data-faz-tag="optout-powered-by"] { display: flex; justify-content: flex-end; align-items: center; }
 }
 function _fazWatchBannerElement() {
     document.querySelector("body").addEventListener("click", (event) => {
