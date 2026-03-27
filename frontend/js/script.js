@@ -2275,17 +2275,17 @@ function _fazRenderVendorSection() {
                              scrollBody.querySelector('[data-faz-tag="detail-categories"]');
 
     const section = document.createElement('div');
-    section.className = 'faz-iab-vendors-section';
-    section.style.cssText = 'margin:16px 0;padding:0 16px;';
+    section.classList.add('faz-iab-vendors-section');
+    section.classList.add('faz-iab-section');
 
     const heading = document.createElement('h4');
     heading.className = 'faz-preference-title';
-    heading.style.cssText = 'margin:16px 0 8px;font-size:14px;font-weight:600;';
+    heading.classList.add('faz-iab-section-heading');
     heading.textContent = 'IAB Vendor Consent';
     section.appendChild(heading);
 
     const count = document.createElement('p');
-    count.style.cssText = 'margin:0 0 12px;font-size:12px;color:#6b7280;';
+    count.classList.add('faz-iab-section-count');
     count.textContent = _fazStore._iabVendors.length + ' vendor' +
         (_fazStore._iabVendors.length !== 1 ? 's' : '') + ' use your data for advertising and measurement purposes';
     section.appendChild(count);
@@ -2367,7 +2367,7 @@ function _fazRenderVendorSection() {
         const body = document.createElement('div');
         body.className = 'faz-accordion-body';
         body.id = bodyId;
-        body.style.cssText = 'font-size:12px;color:#374151;padding:8px 0 8px 24px;';
+        body.classList.add('faz-iab-vendor-body');
         nameBtn.setAttribute('aria-controls', bodyId);
 
         let safePolicyUrl = '';
@@ -2385,14 +2385,14 @@ function _fazRenderVendorSection() {
             pLink.target = '_blank';
             pLink.rel = 'noopener noreferrer';
             pLink.textContent = 'Privacy Policy';
-            pLink.style.cssText = 'color:#1863dc;text-decoration:underline;';
+            pLink.classList.add('faz-iab-privacy-link');
             body.appendChild(pLink);
             body.appendChild(document.createElement('br'));
         }
 
         function appendDetail(parent, label, text) {
             const p = document.createElement('p');
-            p.style.margin = '4px 0 0';
+            p.classList.add('faz-iab-detail');
             const b = document.createElement('strong');
             b.textContent = label + ': ';
             p.appendChild(b);
@@ -2411,10 +2411,10 @@ function _fazRenderVendorSection() {
         accordion.appendChild(item);
         accordion.appendChild(body);
 
-        // Toggle body on chevron/name click.
+        // Toggle body on chevron/name click (uses .faz-accordion-active like category accordions).
         function toggleBody() {
-            const isOpen = body.style.display === 'block';
-            body.style.display = isOpen ? 'none' : 'block';
+            const isOpen = accordion.classList.contains('faz-accordion-active');
+            accordion.classList.toggle('faz-accordion-active');
             nameBtn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
             if (isOpen) {
                 chevronIcon.classList.remove('faz-chevron-down');
