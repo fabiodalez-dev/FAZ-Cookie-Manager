@@ -212,6 +212,7 @@ class Category_Controller extends Base_Controller {
 			)
 		);
 		$object->set_id( $wpdb->insert_id );
+		$this->delete_cache();
 		do_action( 'faz_after_update_cookie_category' );
 	}
 
@@ -251,6 +252,7 @@ class Category_Controller extends Base_Controller {
 				'%s',
 			)
 		);
+		$this->delete_cache();
 		if ( defined( 'FAZ_BULK_REQUEST' ) && FAZ_BULK_REQUEST ) {
 			return;
 		}
@@ -297,6 +299,7 @@ class Category_Controller extends Base_Controller {
 				'category_id' => $object->get_id(),
 			)
 		);
+		$this->delete_cache();
 		do_action( 'faz_after_update_cookie_category' );
 	}
 
