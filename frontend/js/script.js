@@ -389,9 +389,6 @@ function _fazAddPositionClass() {
             + '</svg>';
         const doc = new DOMParser().parseFromString(svgMarkup, 'image/svg+xml');
         const svg = doc.documentElement;
-        svg.style.height = '30px';
-        svg.style.width = '30px';
-        svg.style.margin = '0';
         if (revisitImg.parentNode) revisitImg.parentNode.replaceChild(document.importNode(svg, true), revisitImg);
     }
 }
@@ -773,12 +770,7 @@ function _fazAttachFocusLoop(element, targetElement, isReverse = false) {
  * @returns 
  */
 function _fazSetFooterShadow($doc) {
-    const footer = $doc.querySelector('[data-faz-tag="detail"] .faz-footer-shadow');
-    const preference = $doc.querySelector('[data-faz-tag="detail"]');
-    if (!footer) return;
-    const background = preference && preference.style.backgroundColor || '#ffffff';
-    footer.style.background = `linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, ${background
-        } 100%)`;
+    // Background handled via CSS: .faz-footer-shadow { background: linear-gradient(180deg, rgba(255,255,255,0) 0%, var(--faz-detail-background-color, #ffffff) 100%) }
 }
 
 /**
@@ -841,11 +833,6 @@ function _fazSetCheckboxes(
             revisit);
         boxElem.checked = checked;
         boxElem.disabled = disabled;
-        if (disabled) {
-            // Necessary toggles: active colour shown via CSS :checked rule.
-            boxElem.style.opacity = '1';
-            boxElem.style.cursor = 'not-allowed';
-        }
         _fazSetCheckBoxAriaLabel(boxElem, checked, formattedLabel);
         if (revisit || disabled) return;
         boxElem.addEventListener("change", ({ currentTarget: elem }) => {
@@ -1772,19 +1759,7 @@ function _fazAttachShowMoreLessStyles() {
  * @returns void
  */
 function _fazAttachAlwaysActiveStyles() {
-    if (!_fazStore._bannerConfig.config.alwaysActive) return;
-    
-    const alwaysActiveStyles = _fazStore._bannerConfig.config.alwaysActive.styles;
-    if (!alwaysActiveStyles) return;
-    
-    const alwaysActiveElements = document.querySelectorAll('.faz-always-active');
-    if (alwaysActiveElements.length < 1) return;
-    Array.from(alwaysActiveElements).forEach((element) => {
-        for (const style in alwaysActiveStyles) {
-            if (!alwaysActiveStyles[style]) continue;
-            element.style[style] = alwaysActiveStyles[style];
-        }
-    });
+    // Color handled via CSS: .faz-always-active { color: var(--faz-always-active-color, #008000) }
 }
 
 /**
@@ -1793,22 +1768,8 @@ function _fazAttachAlwaysActiveStyles() {
  * @returns void
  */
 function _fazAttachManualLinksStyles() {
-    if (!_fazStore._bannerConfig.config.manualLinks) return;
-    
-    const manualLinksStyles = _fazStore._bannerConfig.config.manualLinks.styles;
-    if (!manualLinksStyles) return;
-    
-    const manualLinks = document.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a:not([data-faz-tag="donotsell-button"]):not([data-faz-tag="readmore-button"])');
-    if (manualLinks.length < 1) return;
-    Array.from(manualLinks).forEach((link) => {
-        for (const style in manualLinksStyles) {
-            if (!manualLinksStyles[style]) continue;
-            link.style[style] = manualLinksStyles[style];
-        }
-        if (manualLinksStyles.color) {
-            link.style.textDecorationColor = manualLinksStyles.color;
-        }
-    });
+    // Styles handled via CSS: .faz-notice-des a:not(.faz-policy), [data-faz-tag="detail"] a:not(.faz-policy)
+    // using var(--faz-manual-link-color, #1863dc)
 }
 
 var _fazCategoriesBeforeConsent = null;
