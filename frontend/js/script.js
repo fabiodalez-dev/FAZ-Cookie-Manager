@@ -1831,7 +1831,8 @@ function _fazAfterConsent() {
             targets.forEach(function(targetUrl) {
                 if (!_fazIsAllowedScheme(targetUrl)) return;
                 var iframe = document.createElement('iframe');
-                iframe.style.cssText = 'display:none;width:0;height:0;border:0;';
+                iframe.classList.add('faz-hidden');
+                iframe.classList.add('faz-consent-bridge');
                 iframe.src = targetUrl + '?faz_consent_forward=1';
                 iframe.addEventListener('load', function() {
                     try {
