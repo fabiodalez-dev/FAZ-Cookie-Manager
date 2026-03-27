@@ -232,7 +232,7 @@ class Placeholder_Builder {
 			. '.faz-placeholder .faz-placeholder-overlay{position:relative;z-index:1;text-align:center;padding:32px 24px;color:#495057;max-width:400px}'
 			. '.faz-placeholder--video .faz-placeholder-overlay{color:#fff;background:rgba(0,0,0,.6);border-radius:12px;padding:28px 36px;backdrop-filter:blur(4px)}'
 			. '.faz-placeholder .faz-placeholder-icon{margin:0 auto 16px;display:block;opacity:.7}'
-			. 'p.faz-placeholder-msg,.faz-placeholder .faz-placeholder-msg{margin:0 0 20px;font-size:14px;line-height:22px;max-width:340px;color:inherit;padding:0;letter-spacing:normal;word-spacing:normal}'
+			. '.faz-placeholder .faz-placeholder-msg{margin:0 0 20px;font-size:14px;line-height:22px;max-width:340px;color:inherit;padding:0;letter-spacing:normal;word-spacing:normal}'
 			. '.faz-placeholder .faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s;letter-spacing:.3px;line-height:normal;display:inline-block;text-decoration:none}'
 			. '.faz-placeholder .faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
 			. '.faz-placeholder .faz-placeholder-btn:active{transform:translateY(0)}'
