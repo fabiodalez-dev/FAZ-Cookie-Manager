@@ -236,6 +236,7 @@ class Placeholder_Builder {
 			. '.faz-placeholder .faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s;letter-spacing:.3px;line-height:normal;display:inline-block;text-decoration:none}'
 			. '.faz-placeholder .faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
 			. '.faz-placeholder .faz-placeholder-btn:active{transform:translateY(0)}'
+			. '.faz-placeholder .faz-placeholder-btn:focus-visible{outline:2px solid #0b5ed7;outline-offset:2px}'
 			. '.faz-placeholder--social{min-height:120px}';
 	}
 }

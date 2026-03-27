@@ -1449,10 +1449,9 @@ class Frontend {
 			'plugins/all-in-one-wp-security-and-firewall/',
 		) );
 
-		// ── WooCommerce essential scripts ──
+		// ── WooCommerce essential scripts (specific handles only, not the broad path) ──
 		$whitelist = array_merge( $whitelist, array(
 			'wc-order-attribution',
-			'woocommerce/assets/js/',
 			'wc-cart-fragments',
 			'wc-checkout',
 			'wc-add-to-cart',
