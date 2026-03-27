@@ -75,4 +75,33 @@ test.describe('CSS Custom Properties', () => {
       await ctx.close();
     }
   });
+
+  test('no inline style attributes on any element inside #faz-consent (including preference center)', async ({ browser, wpBaseURL }) => {
+    const { page, ctx } = await openVisitorPage(browser, wpBaseURL);
+    try {
+      const notice = page.locator('[data-faz-tag="notice"]');
+      await expect(notice).toBeVisible({ timeout: 15_000 });
+
+      // Open the preference center to expose .faz-always-active and .faz-footer-shadow.
+      await page.locator('[data-faz-tag="settings-button"]').click();
+      await page.locator('[data-faz-tag="detail"]').waitFor({ state: 'visible', timeout: 10_000 });
+
+      const elementsWithInlineStyle = await page.evaluate(() => {
+        const consent = document.getElementById('faz-consent');
+        if (!consent) return [];
+        return Array.from(consent.querySelectorAll('*'))
+          .filter(el => {
+            const s = el.getAttribute('style');
+            return s !== null && s.trim() !== '';
+          })
+          .map(el => `<${el.tagName.toLowerCase()} class="${el.className}" style="${el.getAttribute('style')}">`);
+      });
+      expect(
+        elementsWithInlineStyle,
+        'Elements with inline styles:\n' + elementsWithInlineStyle.join('\n')
+      ).toEqual([]);
+    } finally {
+      await ctx.close();
+    }
+  });
 });
