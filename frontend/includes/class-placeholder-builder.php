@@ -225,16 +225,17 @@ class Placeholder_Builder {
 	 * @return string Minified CSS.
 	 */
 	public static function get_css() {
-		return '.faz-placeholder{position:relative;width:100%;min-height:200px;background:linear-gradient(135deg,#f8f9fa 0%,#e9ecef 100%);border:1px solid #dee2e6;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;margin:16px 0}'
+		return '.faz-placeholder{position:relative;width:100%;min-height:200px;background:#f5f5f5;border:1px solid #dee2e6;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;margin:16px 0}'
+			. '.faz-placeholder *{box-sizing:border-box}'
 			. '.faz-placeholder--video{aspect-ratio:16/9;min-height:0}'
 			. '.faz-placeholder-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(4px) brightness(.7)}'
-			. '.faz-placeholder-overlay{position:relative;z-index:1;text-align:center;padding:32px 24px;color:#495057;max-width:400px}'
+			. '.faz-placeholder .faz-placeholder-overlay{position:relative;z-index:1;text-align:center;padding:32px 24px;color:#495057;max-width:400px}'
 			. '.faz-placeholder--video .faz-placeholder-overlay{color:#fff;background:rgba(0,0,0,.6);border-radius:12px;padding:28px 36px;backdrop-filter:blur(4px)}'
-			. '.faz-placeholder-icon{margin:0 auto 16px;display:block;opacity:.7}'
-			. '.faz-placeholder-msg{margin:0 0 20px;font-size:14px;line-height:1.6;max-width:340px;color:inherit}'
-			. '.faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s;letter-spacing:.3px}'
-			. '.faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
-			. '.faz-placeholder-btn:active{transform:translateY(0)}'
+			. '.faz-placeholder .faz-placeholder-icon{margin:0 auto 16px;display:block;opacity:.7}'
+			. 'p.faz-placeholder-msg,.faz-placeholder .faz-placeholder-msg{margin:0 0 20px;font-size:14px;line-height:22px;max-width:340px;color:inherit;padding:0;letter-spacing:normal;word-spacing:normal}'
+			. '.faz-placeholder .faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s;letter-spacing:.3px;line-height:normal;display:inline-block;text-decoration:none}'
+			. '.faz-placeholder .faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
+			. '.faz-placeholder .faz-placeholder-btn:active{transform:translateY(0)}'
 			. '.faz-placeholder--social{min-height:120px}';
 	}
 }
