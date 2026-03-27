@@ -1214,7 +1214,11 @@ class Frontend {
 		// Rename src → data-faz-src (avoid matching data-src).
 		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
 		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		$new_attrs .= ' style="display:none"';
+		if ( preg_match( '/\bclass=/', $new_attrs ) ) {
+			$new_attrs = preg_replace( '/\bclass="([^"]*)"/', 'class="$1 faz-hidden"', $new_attrs );
+		} else {
+			$new_attrs .= ' class="faz-hidden"';
+		}
 
 		$inner = isset( $m[2] ) ? $m[2] : '';
 		$blocked_iframe = isset( $m[2] )
@@ -2762,7 +2766,8 @@ class Frontend {
 		// Rename iframe src to prevent loading.
 		$blocked_html = preg_replace( '/(<iframe\b[^>]*\s)src\s*=\s*/i', '$1data-faz-src=', $blocked_html );
 		// Add data-faz-category to iframes.
-		$blocked_html = preg_replace( '/(<iframe\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '" style="display:none"', $blocked_html );
+		$blocked_html = preg_replace( '/(<iframe\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_html );
+		$blocked_html = self::faz_add_hidden_class( $blocked_html );
 		// Disable scripts using set_script_type_plain() for consistent type handling.
 		$cat_attr = $matched_category;
 		$result = preg_replace_callback(
@@ -2845,7 +2850,8 @@ class Frontend {
 					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
 					// Placeholder before + hidden original element.
-					return $placeholder . $m[1] . $m[2] . ' style="display:none" data-faz-category="' . esc_attr( $category ) . '">';
+					$blocked = $m[1] . $m[2] . ' data-faz-category="' . esc_attr( $category ) . '">';
+				return $placeholder . self::faz_add_hidden_class( $blocked );
 				},
 				$content
 			);
@@ -2864,5 +2870,19 @@ class Frontend {
 			include_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 		return is_plugin_active( 'google-site-kit/google-site-kit.php' );
+	}
+
+	/**
+	 * Append faz-hidden to an HTML element's class attribute safely.
+	 * If a class= attribute already exists, extends it. Otherwise adds one.
+	 *
+	 * @param string $html Full HTML element string.
+	 * @return string
+	 */
+	private static function faz_add_hidden_class( string $html ): string {
+		if ( preg_match( '/\bclass=/', $html ) ) {
+			return preg_replace( '/\bclass="([^"]*)"/', 'class="$1 faz-hidden"', $html );
+		}
+		return preg_replace( '/(<\w+)(\s|>)/', '$1 class="faz-hidden"$2', $html, 1 );
 	}
 }
