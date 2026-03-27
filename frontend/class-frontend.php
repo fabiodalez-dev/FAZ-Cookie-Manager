@@ -209,13 +209,13 @@ class Frontend {
 				// Bridge the alternative config variable to the expected name.
 				wp_add_inline_script( $script_handle, 'window._fazConfig = window._fazCfg;', 'before' );
 			}
-		// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
-		$css_handle = $this->plugin_name . '-css';
-		wp_register_style( $css_handle, false, array(), $this->version );
-		wp_enqueue_style( $css_handle );
-		wp_add_inline_style( $css_handle, $css );
+			// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
+			$css_handle = $this->plugin_name . '-css';
+			wp_register_style( $css_handle, false, array(), $this->version );
+			wp_enqueue_style( $css_handle );
+			wp_add_inline_style( $css_handle, $css );
 
-		wp_localize_script( $script_handle, '_fazStyles', array( 'css' => $css ) );
+			wp_localize_script( $script_handle, '_fazStyles', array( 'css' => $css ) );
 
 			// GCM (Google Consent Mode) in local mode.
 			if ( true === $this->gcm_settings->is_gcm_enabled() ) {
