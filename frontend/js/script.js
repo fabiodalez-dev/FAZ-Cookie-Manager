@@ -965,24 +965,24 @@ function _fazShowAgeGate(pendingChoice) {
     // Create modal overlay
     var overlay = document.createElement('div');
     overlay.id = 'faz-age-gate';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;';
+    overlay.classList.add('faz-age-gate-overlay');
 
     var modal = document.createElement('div');
-    modal.style.cssText = 'background:#fff;border-radius:12px;padding:32px;max-width:400px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);';
+    modal.classList.add('faz-age-gate-modal');
 
     var title = document.createElement('h3');
-    title.style.cssText = 'margin:0 0 12px;font-size:18px;';
+    title.classList.add('faz-age-gate-title');
     title.textContent = _fazTranslate('age_gate_title', 'Age Verification');
     modal.appendChild(title);
 
     var msg = document.createElement('p');
-    msg.style.cssText = 'margin:0 0 20px;color:#666;font-size:14px;line-height:1.5;';
+    msg.classList.add('faz-age-gate-message');
     msg.textContent = _fazTranslate('age_gate_message', 'You must be at least ' + minAge + ' years old to accept optional cookies on this site.');
     modal.appendChild(msg);
 
     var btnYes = document.createElement('button');
     btnYes.type = 'button';
-    btnYes.style.cssText = 'background:#1863DC;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;margin:0 6px;';
+    btnYes.classList.add('faz-age-gate-btn-yes');
     btnYes.textContent = _fazTranslate('age_gate_yes', 'I am ' + minAge + ' or older');
     btnYes.addEventListener('click', function() {
         sessionStorage.setItem('faz_age_verified', '1');
@@ -993,7 +993,7 @@ function _fazShowAgeGate(pendingChoice) {
 
     var btnNo = document.createElement('button');
     btnNo.type = 'button';
-    btnNo.style.cssText = 'background:transparent;color:#666;border:1px solid #ccc;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:14px;margin:0 6px;';
+    btnNo.classList.add('faz-age-gate-btn-no');
     btnNo.textContent = _fazTranslate('age_gate_no', 'I am under ' + minAge);
     btnNo.addEventListener('click', function() {
         overlay.remove();
