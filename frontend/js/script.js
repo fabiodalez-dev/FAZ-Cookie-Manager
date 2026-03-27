@@ -2112,8 +2112,6 @@ function _fazSetCCPAOptions() {
     var optOption = _fazStore._bannerConfig && _fazStore._bannerConfig.config && _fazStore._bannerConfig.config.optOption;
     if (!optOption) return;
     const toggle = optOption.toggle;
-    const activeColor = toggle.states.active.styles['background-color'];
-    const inactiveColor = toggle.states.inactive.styles['background-color'];
     _fazClassRemove("=optout-option", "faz-disabled", false);
     const toggleDataCode = _fazStore._shortCodes.find(
         (code) => code.key === "faz_optout_toggle_label"
@@ -2135,7 +2133,6 @@ function _fazSetCCPAOptions() {
             disabled: false,
             addListeners: true,
         },
-        { activeColor, inactiveColor },
         true
     );
 }
@@ -2143,7 +2140,6 @@ function _fazSetCheckBoxInfo(
     boxElem,
     formattedLabel,
     { checked, disabled, addListeners },
-    { activeColor, inactiveColor },
     isCCPA = false
 ) {
     if (!boxElem) return;
@@ -2151,12 +2147,10 @@ function _fazSetCheckBoxInfo(
         _fazAttachListener("=optout-option-title", () => boxElem.click());
     boxElem.checked = checked;
     boxElem.disabled = disabled;
-    boxElem.style.backgroundColor = checked ? activeColor : inactiveColor;
     _fazSetCheckBoxAriaLabel(boxElem, checked, formattedLabel, isCCPA);
     if (!addListeners) return;
     boxElem.addEventListener("change", ({ currentTarget: elem }) => {
         const isChecked = elem.checked;
-        elem.style.backgroundColor = isChecked ? activeColor : inactiveColor;
         _fazSetCheckBoxAriaLabel(boxElem, isChecked, formattedLabel, isCCPA);
     });
 }
@@ -2168,15 +2162,6 @@ window.revisitFazConsent = () => _revisitFazConsent();
  */
 function _fazRenderServiceToggles() {
     if (!_fazStore._perServiceConsent || !_fazStore._services || !_fazStore._services.length) return;
-
-    // Get toggle colors from banner config (matching category toggles).
-    var prefToggle = _fazStore._bannerConfig && _fazStore._bannerConfig.config
-        ? _fazStore._bannerConfig.config.preferenceCenter && _fazStore._bannerConfig.config.preferenceCenter.toggle
-        : null;
-    var activeColor = (prefToggle && prefToggle.states && prefToggle.states.active && prefToggle.states.active.styles)
-        ? prefToggle.states.active.styles['background-color'] || '#1863dc' : '#1863dc';
-    var inactiveColor = (prefToggle && prefToggle.states && prefToggle.states.inactive && prefToggle.states.inactive.styles)
-        ? prefToggle.states.inactive.styles['background-color'] || '#d0d5d2' : '#d0d5d2';
 
     _fazStore._categories.forEach(function(category) {
         if (category.isNecessary || category.slug === 'necessary') return;
@@ -2228,10 +2213,8 @@ function _fazRenderServiceToggles() {
             var svcConsent = ref._fazGetFromStore('svc.' + service.id);
             var catConsent = ref._fazGetFromStore(service.category);
             checkbox.checked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
-            checkbox.style.backgroundColor = checkbox.checked ? activeColor : inactiveColor;
 
             checkbox.addEventListener('change', function() {
-                this.style.backgroundColor = this.checked ? activeColor : inactiveColor;
                 // When a service is unchecked but category is checked, keep the category
                 // on — individual service opt-out within an accepted category.
             });
@@ -2256,7 +2239,6 @@ function _fazRenderServiceToggles() {
                 document.querySelectorAll('.faz-service-toggle[data-category="' + category.slug + '"]')
                     .forEach(function(svcToggle) {
                         svcToggle.checked = isChecked;
-                        svcToggle.style.backgroundColor = isChecked ? activeColor : inactiveColor;
                     });
             });
         });
@@ -2268,13 +2250,6 @@ function _fazRenderServiceToggles() {
  */
 function _fazUpdateServiceToggleStates() {
     if (!_fazStore._perServiceConsent || !_fazStore._services) return;
-    var prefToggle = _fazStore._bannerConfig && _fazStore._bannerConfig.config
-        ? _fazStore._bannerConfig.config.preferenceCenter && _fazStore._bannerConfig.config.preferenceCenter.toggle
-        : null;
-    var activeColor = (prefToggle && prefToggle.states && prefToggle.states.active && prefToggle.states.active.styles)
-        ? prefToggle.states.active.styles['background-color'] || '#1863dc' : '#1863dc';
-    var inactiveColor = (prefToggle && prefToggle.states && prefToggle.states.inactive && prefToggle.states.inactive.styles)
-        ? prefToggle.states.inactive.styles['background-color'] || '#d0d5d2' : '#d0d5d2';
 
     document.querySelectorAll('.faz-service-toggle').forEach(function(toggle) {
         var serviceId = toggle.getAttribute('data-service');
@@ -2283,7 +2258,6 @@ function _fazUpdateServiceToggleStates() {
         var catConsent = ref._fazGetFromStore(category);
         var isChecked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
         toggle.checked = isChecked;
-        toggle.style.backgroundColor = isChecked ? activeColor : inactiveColor;
     });
 }
 
@@ -2324,11 +2298,6 @@ function _fazRenderVendorSection() {
     if (_fazStore._iabPurposes) {
         _fazStore._iabPurposes.forEach(function(p) { purposeNames[p.id] = p.name; });
     }
-
-    // Get toggle colors from banner config (matching category toggles).
-    const prefToggle = _fazStore._bannerConfig?.config?.preferenceCenter?.toggle;
-    const activeColor = prefToggle?.states?.active?.styles?.['background-color'] || '#1863dc';
-    const inactiveColor = prefToggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
 
     // Read existing vendor consent.
     const existingConsent = _fazReadVendorConsent();
@@ -2372,10 +2341,6 @@ function _fazRenderVendorSection() {
         cb.id = 'fazVendorSwitch' + vendor.id;
         cb.setAttribute('aria-label', 'Vendor consent: ' + vendor.name);
         cb.checked = existingConsent[vendor.id] === true;
-        cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
-        cb.addEventListener('change', function() {
-            cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
-        });
         switchWrap.appendChild(cb);
         header.appendChild(switchWrap);
         headerWrapper.appendChild(header);
@@ -2499,14 +2464,10 @@ function _fazReadVendorConsent() {
 function _fazUpdateVendorCheckboxStates() {
     if (!_fazStore._iabEnabled || !_fazStore._iabVendors || !_fazStore._iabVendors.length) return;
     const consent = _fazReadVendorConsent();
-    const prefToggle = _fazStore._bannerConfig?.config?.preferenceCenter?.toggle;
-    const activeColor = prefToggle?.states?.active?.styles?.['background-color'] || '#1863dc';
-    const inactiveColor = prefToggle?.states?.inactive?.styles?.['background-color'] || '#d0d5d2';
     _fazStore._iabVendors.forEach(function(vendor) {
         const cb = document.getElementById('fazVendorSwitch' + vendor.id);
         if (!cb) return;
         cb.checked = consent[vendor.id] === true;
-        cb.style.backgroundColor = cb.checked ? activeColor : inactiveColor;
     });
 }
 
