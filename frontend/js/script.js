@@ -726,7 +726,7 @@ function _fazGetFocusableElements(element) {
         wrapperElement.querySelectorAll(
             'a:not([disabled]), button:not([disabled]), [tabindex]:not([disabled]):not([tabindex="-1"])'
         )
-    ).filter((element) => element.style.display !== "none");
+    ).filter((element) => !element.classList.contains('faz-hidden'));
     if (focussableElements.length <= 0) return [];
     return [
         focussableElements[0],
@@ -1414,7 +1414,7 @@ function _fazUnblockServerSide() {
                 if (!_fazIsAllowedScheme(fazSrc)) return;
                 iframe.src = fazSrc;
                 iframe.removeAttribute("data-faz-src");
-                iframe.style.display = "";
+                iframe.classList.remove('faz-hidden');
             });
             // Restore blocked scripts inside the template content.
             fragment.querySelectorAll('script[type="text/plain"][data-faz-category]').forEach(function (script) {
@@ -1444,7 +1444,7 @@ function _fazUnblockServerSide() {
             if (!_fazIsAllowedScheme(fazSrc)) return;
             el.src = fazSrc;
             el.removeAttribute("data-faz-src");
-            el.style.display = "";
+            el.classList.remove('faz-hidden');
             // Remove legacy placeholder wrapper if present.
             var placeholder = el.closest('.faz-iframe-placeholder');
             if (placeholder) {
@@ -1507,7 +1507,7 @@ function _fazUnblockServerSide() {
             // Show the hidden social element that follows the placeholder.
             var next = placeholder.nextElementSibling;
             if (next && next.getAttribute("data-faz-category") === cat) {
-                next.style.display = "";
+                next.classList.remove('faz-hidden');
                 next.removeAttribute("data-faz-category");
             }
             placeholder.remove();
@@ -1966,11 +1966,7 @@ function _fazCookieNameMatches(name, pattern) {
 }
 
 function _fazAttachNoticeStyles() {
-    if (document.getElementById("faz-style") || !_fazStyle) return;
-    var styleEl = document.createElement('style');
-    styleEl.id = 'faz-style';
-    styleEl.textContent = _fazStyle.css;
-    document.head.appendChild(styleEl);
+    // Template CSS is now injected by PHP via wp_add_inline_style() — no JS style injection needed.
 }
 
 function _fazFindCheckBoxValue(id = "") {
@@ -2002,7 +1998,7 @@ function _fazAddPlaceholder(htmlElm, uniqueID) {
     const innerTextElement = document.querySelector(
         `#${uniqueID} .video-placeholder-text-normal`
     );
-    innerTextElement.style.display = "none";
+    innerTextElement.classList.add('faz-hidden');
     const youtubeID = _fazGetYoutubeID(htmlElm.src);
     if (!youtubeID) return;
     addedNode.classList.replace(
@@ -2033,7 +2029,7 @@ function _fazSetPlaceHolder() {
     );
     if (placeHolders.length < 1) return;
     Array.from(placeHolders).forEach((placeHolder) => {
-        placeHolder.style.display = "block";
+        placeHolder.classList.remove('faz-hidden');
         placeHolder.addEventListener("click", () => {
             if (ref._fazGetFromStore("action")) _revisitFazConsent();
         });
