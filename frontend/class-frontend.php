@@ -1449,6 +1449,15 @@ class Frontend {
 			'plugins/all-in-one-wp-security-and-firewall/',
 		) );
 
+		// ── WooCommerce essential scripts ──
+		$whitelist = array_merge( $whitelist, array(
+			'wc-order-attribution',
+			'woocommerce/assets/js/',
+			'wc-cart-fragments',
+			'wc-checkout',
+			'wc-add-to-cart',
+		) );
+
 		// ── Caching / optimisation plugins ──
 		$whitelist = array_merge( $whitelist, array(
 			'plugins/wp-rocket/',

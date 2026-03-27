@@ -1552,9 +1552,18 @@ class Known_Providers {
 			/* ── WooCommerce Order Attribution ────────────── */
 			'woocommerce-attribution' => array(
 				'label'    => 'WooCommerce Order Attribution',
-				'category' => 'analytics',
+				'category' => 'necessary',
 				'patterns' => array(
 					'wc-order-attribution',
+				),
+				'cookies'  => array(),
+			),
+
+			/* ── Sourcebuster (WooCommerce traffic tracking) ── */
+			'sourcebuster' => array(
+				'label'    => 'Sourcebuster',
+				'category' => 'analytics',
+				'patterns' => array(
 					'sourcebuster-js',
 				),
 				'cookies'  => array( 'sbjs_*' ),

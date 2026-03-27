@@ -1407,7 +1407,13 @@ function _fazUnblockServerSide() {
                     clone.src = scriptSrc;
                 }
             } else {
-                clone.textContent = script.textContent;
+                var inlineText = script.textContent || '';
+                // Skip inline scripts that are pure JSON/data (not executable JS).
+                // These are often WooCommerce config blocks with type="application/json".
+                if (inlineText.trim() && /^\s*\{/.test(inlineText) && /\}\s*$/.test(inlineText)) {
+                    try { JSON.parse(inlineText); return; } catch (_e) { /* not JSON, continue */ }
+                }
+                clone.textContent = inlineText;
             }
             if (script.parentNode) script.parentNode.replaceChild(clone, script);
         });
