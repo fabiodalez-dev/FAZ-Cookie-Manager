@@ -14,10 +14,12 @@ if ( php_sapi_name() !== 'cli' ) {
 $abspath = isset( $argv[1] ) ? rtrim( $argv[1], '/' ) . '/' : '';
 $mode    = isset( $argv[2] ) ? $argv[2] : '20';
 
-if ( empty( $abspath ) || ! file_exists( $abspath . 'wp-load.php' ) ) {
-	fwrite( STDERR, "WordPress not found at: $abspath\n" );
+$resolved = realpath( $abspath );
+if ( false === $resolved || ! file_exists( $resolved . '/wp-load.php' ) ) {
+	fwrite( STDERR, "WordPress installation not found at: {$abspath}\n" );
 	exit( 1 );
 }
+$abspath = rtrim( $resolved, '/' ) . '/';
 
 // Bootstrap WordPress.
 define( 'ABSPATH', $abspath );

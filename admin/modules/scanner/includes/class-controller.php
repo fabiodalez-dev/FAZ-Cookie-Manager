@@ -133,6 +133,10 @@ class Controller {
 		} else {
 			// Fallback: spawn PHP-CLI with bootstrap script.
 			$runner = ( defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : plugin_dir_path( __DIR__ ) . '../../../' ) . 'admin/modules/scanner/run-scan.php';
+			$runner = realpath( $runner );
+			if ( false === $runner || 0 !== strpos( $runner, realpath( FAZ_PLUGIN_BASEPATH ) ) ) {
+				return $this->get_info();
+			}
 			$php_bin = defined( 'PHP_BINARY' ) ? PHP_BINARY : '';
 			$php    = ( '' !== $php_bin ) ? $php_bin : 'php';
 			$cmd    = sprintf(
@@ -193,6 +197,10 @@ class Controller {
 			$cmd = implode( ' ', $cmd_parts ) . ' > /dev/null 2>&1 &';
 		} else {
 			$runner  = ( defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : plugin_dir_path( __DIR__ ) . '../../../' ) . 'admin/modules/scanner/run-scan.php';
+			$runner  = realpath( $runner );
+			if ( false === $runner || 0 !== strpos( $runner, realpath( FAZ_PLUGIN_BASEPATH ) ) ) {
+				return;
+			}
 			$php_bin = defined( 'PHP_BINARY' ) ? PHP_BINARY : '';
 			$php     = ( '' !== $php_bin ) ? $php_bin : 'php';
 			// Note: all values passed to escapeshellarg are safe — $runner is a hardcoded path, $abspath is ABSPATH.

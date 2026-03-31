@@ -171,8 +171,13 @@ class Frontend {
 			// Append user-defined custom CSS from Banner → Advanced tab.
 			if ( $this->banner ) {
 				$banner_settings = $this->banner->get_settings();
-				$custom_css      = isset( $banner_settings['meta']['customCSS'] ) ? trim( $banner_settings['meta']['customCSS'] ) : '';
+				$custom_css = isset( $banner_settings['meta']['customCSS'] ) ? trim( $banner_settings['meta']['customCSS'] ) : '';
 				if ( '' !== $custom_css ) {
+					// Strip dangerous CSS patterns that could be used for data exfiltration.
+					$custom_css = wp_strip_all_tags( $custom_css );
+					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding/i', $custom_css ) ) {
+						$custom_css = '';
+					}
 					$css .= $custom_css;
 				}
 			}
