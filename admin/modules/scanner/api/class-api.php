@@ -422,7 +422,11 @@ class Api extends Rest_Controller {
 			$hosts_match   = ( $url_host === $site_host ) || ( $site_is_local && $url_is_local );
 			if ( ! $site_host || ! $url_host || ! $hosts_match ) {
 				$logger->log( 'Server-scan: URL domain mismatch (expected ' . $site_host . ', got ' . $url_host . ')' );
-				return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
+				return new \WP_Error(
+					'faz_server_scan_domain_mismatch',
+					__( 'The scan URL must match the current site domain.', 'faz-cookie-manager' ),
+					array( 'status' => 400 )
+				);
 			}
 
 			$logger->log( 'Server-scan URL: ' . $url );

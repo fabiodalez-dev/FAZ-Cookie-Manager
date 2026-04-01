@@ -503,7 +503,7 @@ window.wp.apiFetch=apiFetch;
 						array(
 							'faz_banner_preview' => '1',
 						),
-						home_url( '/' )
+						set_url_scheme( home_url( '/' ) )
 					),
 				),
 				'assetsURL'      => defined( 'FAZ_PLUGIN_URL' ) ? FAZ_PLUGIN_URL . 'frontend/images/' : '',

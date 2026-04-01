@@ -360,11 +360,11 @@ class Api extends Rest_Controller {
 			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
 			. '}';
 
-		$css .= $this->sanitize_preview_custom_css(
+		$custom_css = $this->sanitize_preview_custom_css(
 			isset( $settings['meta']['customCSS'] ) ? $settings['meta']['customCSS'] : ''
 		);
 
-		return $css_reset . $css . $css_fixes;
+		return $css_reset . $css . $css_fixes . $custom_css;
 	}
 
 	/**
@@ -380,7 +380,7 @@ class Api extends Rest_Controller {
 		}
 
 		$custom_css = wp_strip_all_tags( $custom_css );
-		if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding/i', $custom_css ) ) {
+		if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding|@import/i', $custom_css ) ) {
 			return '';
 		}
 
@@ -451,6 +451,12 @@ class Api extends Rest_Controller {
 				foreach ( $parts as $selector ) {
 					$selector = trim( $selector );
 					if ( '' === $selector ) {
+						continue;
+					}
+
+					// Skip @keyframes step selectors (0%, 100%, from, to).
+					if ( preg_match( '/^(?:\d+%|from|to)$/i', $selector ) ) {
+						$out[] = $selector;
 						continue;
 					}
 

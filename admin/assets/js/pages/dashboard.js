@@ -91,16 +91,21 @@
 		});
 	}
 
+	function getLocale() {
+		return (typeof fazConfig !== 'undefined' && fazConfig.locale) || document.documentElement.lang || undefined;
+	}
+
 	function formatDateRange(from, to) {
 		var opts = { month: 'short', day: 'numeric' };
 		var optsYear = { month: 'short', day: 'numeric', year: 'numeric' };
+		var locale = getLocale();
 		var d1 = new Date(from + 'T00:00:00');
 		var d2 = new Date(to + 'T00:00:00');
 
 		if (d1.getFullYear() === d2.getFullYear()) {
-			return d1.toLocaleDateString(undefined, opts) + ' – ' + d2.toLocaleDateString(undefined, optsYear);
+			return d1.toLocaleDateString(locale, opts) + ' – ' + d2.toLocaleDateString(locale, optsYear);
 		}
-		return d1.toLocaleDateString(undefined, optsYear) + ' – ' + d2.toLocaleDateString(undefined, optsYear);
+		return d1.toLocaleDateString(locale, optsYear) + ' – ' + d2.toLocaleDateString(locale, optsYear);
 	}
 
 	function buildParams() {
@@ -239,8 +244,9 @@
 		}
 
 		if (!isNaN(parsed.getTime())) {
+			var locale = getLocale();
 			var opts = total > 45 ? { month: 'short' } : { month: 'short', day: 'numeric' };
-			text = parsed.toLocaleDateString(undefined, opts);
+			text = parsed.toLocaleDateString(locale, opts);
 		} else if (label.length > 10) {
 			text = label.slice(0, 10);
 		}

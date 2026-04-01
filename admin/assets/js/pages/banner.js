@@ -1046,6 +1046,8 @@
 			var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
 			return doc && doc.body ? doc : null;
 		} catch (_unused4) {
+			showPreviewMessage('Preview unavailable: cross-origin restriction.', 'error');
+			previewFrameReady = false;
 			return null;
 		}
 	}

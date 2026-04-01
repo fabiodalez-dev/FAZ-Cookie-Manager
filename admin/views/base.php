@@ -46,7 +46,7 @@ defined( 'ABSPATH' ) || exit;
 				</svg>
 			</span>
 			<span class="faz-top-nav-brand-copy">
-				<strong>Cookie Manager</strong>
+				<strong><?php esc_html_e( 'Cookie Manager', 'faz-cookie-manager' ); ?></strong>
 				<small><?php esc_html_e( 'Privacy controls for this WordPress site', 'faz-cookie-manager' ); ?></small>
 			</span>
 		</div>

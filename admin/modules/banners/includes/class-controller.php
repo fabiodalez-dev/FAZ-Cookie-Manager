@@ -219,7 +219,7 @@ class Controller extends Base_Controller {
 				'%s',
 			)
 		);
-		if ( false !== $updated ) {
+		if ( false !== $updated && $updated > 0 ) {
 			$this->delete_cache();
 		}
 		if ( defined( 'FAZ_BULK_REQUEST' ) && FAZ_BULK_REQUEST ) {
