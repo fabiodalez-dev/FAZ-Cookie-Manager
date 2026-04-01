@@ -1,0 +1,30 @@
+{
+  "necessary": {
+    "name": "Noodzakelijk",
+    "description": "<p>Noodzakelijke cookies zijn vereist om de basisfuncties van deze site mogelijk te maken, zoals het aanbieden van een veilige login of het aanpassen van uw toestemmingsvoorkeuren. Deze cookies slaan geen persoonlijk identificeerbare gegevens op.</p>"
+  },
+  "functional": {
+    "name": "Functioneel",
+    "description": "<p>Functionele cookies helpen bepaalde functionaliteiten uit te voeren, zoals het delen van de inhoud van de website op socialemediaplatforms, het verzamelen van feedback en andere functies van derden.</p>"
+  },
+  "analytics": {
+    "name": "Analytics",
+    "description": "<p>Analytische cookies worden gebruikt om te begrijpen hoe bezoekers met de website omgaan. Deze cookies helpen informatie te geven over statistieken zoals het aantal bezoekers, het bouncepercentage, de verkeersbron, enzovoort.</p>"
+  },
+  "performance": {
+    "name": "Prestaties",
+    "description": "<p>Prestatiecookies worden gebruikt om de belangrijkste prestatie-indicatoren van de website te begrijpen en te analyseren, wat helpt bij het bieden van een betere gebruikerservaring voor bezoekers.</p>"
+  },
+  "uncategorized": {
+    "name": "Ongecategoriseerd",
+    "description": "<p>Cookies die nog niet zijn gecategoriseerd.</p>"
+  },
+  "wordpress-internal": {
+    "name": "WordPress intern",
+    "description": "<p>Cookies die door de WordPress-kern worden ingesteld voor ingelogde beheerders. Niet zichtbaar voor sitebezoekers.</p>"
+  },
+  "marketing": {
+    "name": "Marketing",
+    "description": "<p>Marketingcookies worden gebruikt om bezoekers gepersonaliseerde advertenties te tonen op basis van pagina’s die u eerder hebt bezocht en om de effectiviteit van advertentiecampagnes te analyseren.</p>"
+  }
+}
