@@ -219,6 +219,17 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 			}
 			return true;
 		}
+		// Admin-only frontend preview iframe used by the banner customizer.
+		if ( isset( $_GET['faz_banner_preview'] ) && '1' === $_GET['faz_banner_preview'] && current_user_can( 'manage_options' ) ) { //phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! headers_sent() ) {
+				header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+				header( 'X-LiteSpeed-Cache-Control: no-cache' );
+			}
+			if ( defined( 'LSCWP_V' ) ) {
+				do_action( 'litespeed_control_set_nocache', 'FAZ banner preview iframe' );
+			}
+			return true;
+		}
 		return false;
 	}
 }

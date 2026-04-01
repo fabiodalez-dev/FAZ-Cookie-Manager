@@ -581,7 +581,17 @@ defined( 'ABSPATH' ) || exit;
 	<!-- ─── Fixed Bottom: Preview + Save Bar ────── -->
 	<div id="faz-b-fixed-bottom">
 		<div id="faz-b-preview-panel">
-			<div id="faz-b-preview-host"></div>
+			<div id="faz-b-preview-host">
+				<iframe
+					id="faz-b-preview-frame"
+					title="<?php esc_attr_e( 'Frontend banner preview', 'faz-cookie-manager' ); ?>"
+					loading="eager"
+					referrerpolicy="same-origin"
+				></iframe>
+				<div id="faz-b-preview-message" role="status" aria-live="polite" aria-atomic="true">
+					<?php esc_html_e( 'Loading real site preview...', 'faz-cookie-manager' ); ?>
+				</div>
+			</div>
 		</div>
 		<div class="faz-save-bar">
 			<button class="faz-btn faz-btn-primary" id="faz-b-save"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> <?php esc_html_e( 'Save Banner Settings', 'faz-cookie-manager' ); ?></button>
@@ -590,5 +600,4 @@ defined( 'ABSPATH' ) || exit;
 			<span class="faz-save-status" id="faz-b-status"></span>
 		</div>
 	</div>
-	<div id="faz-b-preview-styles"></div>
 </div>

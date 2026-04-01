@@ -7,6 +7,7 @@
 	'use strict';
 
 	var currentFilter = { days: 7, from: null, to: null };
+	var themeCache = null;
 
 	FAZ.ready(function () {
 		reloadDashboard();
@@ -191,6 +192,92 @@
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 	}
 
+	function readCssVar(name, fallback) {
+		var value = window.getComputedStyle(document.documentElement).getPropertyValue(name);
+		value = value ? value.trim() : '';
+		return value || fallback;
+	}
+
+	function getTheme() {
+		if (themeCache) return themeCache;
+		themeCache = {
+			primary: readCssVar('--faz-primary', '#e5007e'),
+			success: readCssVar('--faz-success', '#17785b'),
+			danger: readCssVar('--faz-danger', '#c03658'),
+			text: readCssVar('--faz-text', '#1f1921'),
+			muted: readCssVar('--faz-text-muted', '#756a79'),
+			border: readCssVar('--faz-border', '#e7dde7'),
+			surface: readCssVar('--faz-bg-secondary', '#fbf7fa'),
+			font: readCssVar('--faz-font', '-apple-system, BlinkMacSystemFont, sans-serif')
+		};
+		return themeCache;
+	}
+
+	function hexToRgba(hex, alpha) {
+		if (!hex || hex.charAt(0) !== '#') {
+			return hex;
+		}
+
+		var normalized = hex.length === 4
+			? '#' + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3)
+			: hex;
+		var intVal = parseInt(normalized.slice(1), 16);
+		var r = (intVal >> 16) & 255;
+		var g = (intVal >> 8) & 255;
+		var b = intVal & 255;
+		return 'rgba(' + [r, g, b, alpha].join(',') + ')';
+	}
+
+	function formatAxisLabel(label, index, total) {
+		if (!label) return '';
+		var parsed = new Date(label + 'T00:00:00');
+		var text = label;
+		var every = Math.max(1, Math.ceil(total / 5));
+
+		if (total > 6 && index !== 0 && index !== total - 1 && (index % every) !== 0) {
+			return '';
+		}
+
+		if (!isNaN(parsed.getTime())) {
+			var opts = total > 45 ? { month: 'short' } : { month: 'short', day: 'numeric' };
+			text = parsed.toLocaleDateString('en-US', opts);
+		} else if (label.length > 10) {
+			text = label.slice(0, 10);
+		}
+
+		return text;
+	}
+
+	function traceSeries(ctx, points, baselineY) {
+		if (!points.length) return;
+
+		ctx.beginPath();
+		ctx.moveTo(points[0].x, points[0].y);
+
+		if (points.length === 1) {
+			ctx.lineTo(points[0].x, points[0].y);
+		} else {
+			for (var i = 1; i < points.length - 1; i++) {
+				var midX = (points[i].x + points[i + 1].x) / 2;
+				var midY = (points[i].y + points[i + 1].y) / 2;
+				ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+			}
+
+			ctx.quadraticCurveTo(
+				points[points.length - 1].x,
+				points[points.length - 1].y,
+				points[points.length - 1].x,
+				points[points.length - 1].y
+			);
+		}
+
+		if (typeof baselineY === 'number') {
+			ctx.lineTo(points[points.length - 1].x, baselineY);
+			ctx.lineTo(points[0].x, baselineY);
+			ctx.closePath();
+		}
+	}
+
 	/**
 	 * Consent donut chart - pure Canvas 2D.
 	 */
@@ -198,6 +285,7 @@
 		var canvas = document.getElementById('faz-chart-consent');
 		if (!canvas || !canvas.getContext) return;
 
+		var theme = getTheme();
 		var total = accepted + rejected;
 		if (total === 0) {
 			showEmpty('faz-consent-empty');
@@ -215,15 +303,22 @@
 		var h = rect.height;
 		var cx = w / 2;
 		var cy = h / 2 - 10;
-		var radius = Math.min(cx, cy) - 20;
-		var innerRadius = radius * 0.6;
+		var radius = Math.min(cx, cy) - 18;
+		var innerRadius = radius * 0.68;
 
 		var pctAccept = accepted / total;
 		var pctReject = rejected / total;
 
+		ctx.beginPath();
+		ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+		ctx.arc(cx, cy, innerRadius, Math.PI * 2, 0, true);
+		ctx.closePath();
+		ctx.fillStyle = theme.surface;
+		ctx.fill();
+
 		var segments = [
-			{ value: pctAccept, color: '#16a34a', label: 'Accepted' },
-			{ value: pctReject, color: '#dc2626', label: 'Rejected' },
+			{ value: pctAccept, color: theme.primary, label: 'Accepted' },
+			{ value: pctReject, color: theme.danger, label: 'Rejected' },
 		];
 
 		var start = -Math.PI / 2;
@@ -241,31 +336,33 @@
 		});
 
 		// Center text
-		ctx.fillStyle = '#1e293b';
-		ctx.font = 'bold 20px -apple-system, sans-serif';
+		ctx.fillStyle = theme.text;
+		ctx.font = '700 21px ' + theme.font;
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
 		ctx.fillText(total.toLocaleString(), cx, cy - 6);
-		ctx.fillStyle = '#64748b';
-		ctx.font = '11px -apple-system, sans-serif';
-		ctx.fillText('total responses', cx, cy + 12);
+		ctx.fillStyle = theme.muted;
+		ctx.font = '12px ' + theme.font;
+		ctx.fillText('total responses', cx, cy + 14);
 
 		// Legend
-		var legendY = cy + radius + 20;
-		var legendX = cx - 60;
+		var legendVertical = w < 320;
+		var legendY = cy + radius + 22;
+		var legendX = legendVertical ? cx - 54 : cx - 66;
 
 		segments.forEach(function (seg, i) {
-			var x = legendX + i * 120;
+			var x = legendVertical ? legendX : legendX + i * 132;
+			var y = legendVertical ? legendY + i * 18 : legendY;
 			// Dot
 			ctx.beginPath();
-			ctx.arc(x, legendY, 5, 0, Math.PI * 2);
+			ctx.arc(x, y, 5, 0, Math.PI * 2);
 			ctx.fillStyle = seg.color;
 			ctx.fill();
 			// Label
-			ctx.fillStyle = '#1e293b';
-			ctx.font = '12px -apple-system, sans-serif';
+			ctx.fillStyle = theme.text;
+			ctx.font = '12px ' + theme.font;
 			ctx.textAlign = 'left';
-			ctx.fillText(seg.label + ' (' + Math.round(seg.value * 100) + '%)', x + 10, legendY + 4);
+			ctx.fillText(seg.label + ' (' + Math.round(seg.value * 100) + '%)', x + 12, y + 4);
 		});
 	}
 
@@ -350,6 +447,7 @@
 		var canvas = document.getElementById(canvasId);
 		if (!canvas || !canvas.getContext) return;
 
+		var theme = getTheme();
 		var ctx = canvas.getContext('2d');
 		var dpr = window.devicePixelRatio || 1;
 		var rect = canvas.getBoundingClientRect();
@@ -378,7 +476,7 @@
 		});
 
 		// Grid lines
-		ctx.strokeStyle = '#e2e8f0';
+		ctx.strokeStyle = theme.border;
 		ctx.lineWidth = 1;
 		for (var g = 0; g <= 4; g++) {
 			var gy = padTop + (g / 4) * chartH;
@@ -387,57 +485,48 @@
 			ctx.lineTo(w - padRight, gy);
 			ctx.stroke();
 
-			ctx.fillStyle = '#94a3b8';
-			ctx.font = '11px -apple-system, sans-serif';
+			ctx.fillStyle = theme.muted;
+			ctx.font = '11px ' + theme.font;
 			ctx.textAlign = 'right';
 			ctx.fillText(Math.round(max - (g / 4) * max), padLeft - 8, gy + 4);
 		}
 
 		// X-axis labels
-		ctx.fillStyle = '#94a3b8';
-		ctx.font = '11px -apple-system, sans-serif';
+		ctx.fillStyle = theme.muted;
+		ctx.font = '11px ' + theme.font;
 		ctx.textAlign = 'center';
 		labels.forEach(function (label, i) {
 			var x = padLeft + (i / Math.max(labels.length - 1, 1)) * chartW;
-			var short = label.length > 5 ? label.slice(0, 5) : label;
-			ctx.fillText(short, x, h - 6);
+			var short = formatAxisLabel(label, i, labels.length);
+			if (short) {
+				ctx.fillText(short, x, h - 6);
+			}
 		});
 
-		// Gradient area fill
+		// Area fill
 		if (points.length > 1) {
-			var grad = ctx.createLinearGradient(0, padTop, 0, padTop + chartH);
-			grad.addColorStop(0, 'rgba(37, 99, 235, 0.15)');
-			grad.addColorStop(1, 'rgba(37, 99, 235, 0.01)');
-
-			ctx.beginPath();
-			ctx.moveTo(points[0].x, points[0].y);
-			for (var i = 1; i < points.length; i++) {
-				ctx.lineTo(points[i].x, points[i].y);
-			}
-			ctx.lineTo(points[points.length - 1].x, padTop + chartH);
-			ctx.lineTo(points[0].x, padTop + chartH);
-			ctx.closePath();
-			ctx.fillStyle = grad;
+			traceSeries(ctx, points, padTop + chartH);
+			ctx.fillStyle = hexToRgba(theme.primary, 0.12);
 			ctx.fill();
 		}
 
 		// Line
-		ctx.beginPath();
-		ctx.strokeStyle = '#2563eb';
-		ctx.lineWidth = 2.5;
+		traceSeries(ctx, points);
+		ctx.strokeStyle = theme.primary;
+		ctx.lineWidth = 3;
 		ctx.lineJoin = 'round';
 		ctx.lineCap = 'round';
-		points.forEach(function (p, i) {
-			if (i === 0) ctx.moveTo(p.x, p.y);
-			else ctx.lineTo(p.x, p.y);
-		});
+		ctx.shadowColor = hexToRgba(theme.primary, 0.08);
+		ctx.shadowBlur = 10;
+		ctx.shadowOffsetY = 6;
 		ctx.stroke();
+		ctx.shadowColor = 'transparent';
 
 		// Dots with white border
 		points.forEach(function (p) {
 			ctx.beginPath();
 			ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-			ctx.fillStyle = '#2563eb';
+			ctx.fillStyle = theme.primary;
 			ctx.fill();
 			ctx.strokeStyle = '#fff';
 			ctx.lineWidth = 2;

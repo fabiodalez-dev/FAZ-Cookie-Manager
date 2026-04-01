@@ -23,9 +23,27 @@ defined( 'ABSPATH' ) || exit;
 		'import-export'  => array( 'slug' => 'faz-cookie-manager-import-export',  'label' => __( 'Import / Export', 'faz-cookie-manager' ) ),
 		'system-status'  => array( 'slug' => 'faz-cookie-manager-system-status',  'label' => __( 'System Status', 'faz-cookie-manager' ) ),
 	);
+	$faz_page_descriptions = array(
+		'dashboard'     => __( 'Monitor pageviews, consent behaviour, and the health of your privacy setup at a glance.', 'faz-cookie-manager' ),
+		'banner'        => __( 'Configure layout, copy, colours, and consent behaviour without leaving the editor flow.', 'faz-cookie-manager' ),
+		'cookies'       => __( 'Review discovered cookies, categorise them, run scans, and keep your declarations current.', 'faz-cookie-manager' ),
+		'consent-logs'  => __( 'Inspect consent records, filter activity, and export audit data when you need it.', 'faz-cookie-manager' ),
+		'gcm'           => __( 'Control Google Consent Mode defaults and updates with a clearer view of every signal.', 'faz-cookie-manager' ),
+		'languages'     => __( 'Manage available languages and keep translated banner content organised.', 'faz-cookie-manager' ),
+		'settings'      => __( 'Tune privacy, logging, scanner, and integration settings from one backend workspace.', 'faz-cookie-manager' ),
+		'import-export' => __( 'Move settings safely between environments and keep repeatable backups close at hand.', 'faz-cookie-manager' ),
+		'system-status' => __( 'Check environment details, plugin health, and runtime dependencies before troubleshooting.', 'faz-cookie-manager' ),
+	);
+	$faz_page_description = isset( $faz_page_descriptions[ $faz_page_slug ] ) ? $faz_page_descriptions[ $faz_page_slug ] : '';
 	?>
 	<nav class="faz-top-nav" aria-label="FAZ Cookie Manager navigation">
-		<span class="faz-top-nav-brand">FAZ Cookie</span>
+		<div class="faz-top-nav-brand">
+			<span class="faz-top-nav-brand-mark" aria-hidden="true">FAZ</span>
+			<span class="faz-top-nav-brand-copy">
+				<strong>Cookie Manager</strong>
+				<small><?php esc_html_e( 'Backend privacy workspace', 'faz-cookie-manager' ); ?></small>
+			</span>
+		</div>
 		<ul class="faz-top-nav-menu">
 			<?php foreach ( $faz_nav_items as $nav_key => $nav_item ) :
 				$is_current = ( $faz_page_slug === $nav_key ) || ( 'dashboard' === $nav_key && $faz_nav_items['dashboard']['slug'] === $faz_page_slug );
@@ -37,7 +55,13 @@ defined( 'ABSPATH' ) || exit;
 		</ul>
 	</nav>
 	<div class="faz-page-header">
-		<h1><?php echo esc_html( $faz_page_title ); ?></h1>
+		<div class="faz-page-header-copy">
+			<span class="faz-page-eyebrow"><?php esc_html_e( 'FAZ Cookie Manager', 'faz-cookie-manager' ); ?></span>
+			<h1><?php echo esc_html( $faz_page_title ); ?></h1>
+			<?php if ( ! empty( $faz_page_description ) ) : ?>
+				<p><?php echo esc_html( $faz_page_description ); ?></p>
+			<?php endif; ?>
+		</div>
 		<div class="faz-page-header-actions" id="faz-page-actions"></div>
 	</div>
 	<div id="faz-page-content">

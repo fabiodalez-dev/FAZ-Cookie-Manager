@@ -1716,24 +1716,20 @@
 			templates.forEach(function (tpl) {
 				var card = document.createElement('button');
 				card.type = 'button';
-				card.style.cssText = 'padding:12px;border:1px solid var(--faz-border);border-radius:8px;cursor:pointer;transition:border-color 0.2s;background:none;display:block;width:100%;text-align:left;';
-				card.onmouseenter = function () { card.style.borderColor = 'var(--faz-primary)'; };
-				card.onmouseleave = function () { card.style.borderColor = 'var(--faz-border)'; };
-				card.onfocus = function () { card.style.borderColor = 'var(--faz-primary)'; };
-				card.onblur = function () { card.style.borderColor = 'var(--faz-border)'; };
+				card.className = 'faz-template-card';
 
 				var name = document.createElement('div');
-				name.style.cssText = 'font-weight:600;font-size:13px;margin-bottom:4px;';
+				name.className = 'faz-template-card-name';
 				name.textContent = tpl.name;
 				card.appendChild(name);
 
 				var desc = document.createElement('div');
-				desc.style.cssText = 'font-size:11px;color:var(--faz-text-muted);margin-bottom:8px;line-height:1.4;';
+				desc.className = 'faz-template-card-desc';
 				desc.textContent = tpl.description;
 				card.appendChild(desc);
 
 				var badge = document.createElement('span');
-				badge.style.cssText = 'display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase;background:var(--faz-bg-secondary);color:var(--faz-text-secondary);';
+				badge.className = 'faz-template-card-badge';
 				badge.textContent = tpl.category;
 				card.appendChild(badge);
 

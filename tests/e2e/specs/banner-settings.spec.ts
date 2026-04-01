@@ -287,6 +287,30 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     }
   });
 
+  test('General: admin preview renders inside a real frontend iframe', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await goToBannerPage(page);
+
+    const previewFrame = page.locator('#faz-b-preview-frame');
+    await expect(previewFrame).toBeVisible();
+    await expect(previewFrame).toHaveAttribute('src', /faz_banner_preview=1/);
+
+    await page.waitForFunction(() => {
+      const frame = document.getElementById('faz-b-preview-frame') as HTMLIFrameElement | null;
+      if (!frame || !frame.contentWindow) return false;
+      try {
+        const href = frame.contentWindow.location.href || '';
+        return href.includes('faz_banner_preview=1') && !href.includes('/wp-admin/');
+      } catch (_unused) {
+        return false;
+      }
+    }, { timeout: 15_000 });
+
+    await expect(
+      page.frameLocator('#faz-b-preview-frame').locator('#faz-b-preview-root .faz-consent-container'),
+    ).toBeVisible({ timeout: 15_000 });
+  });
+
   test('General: classic type forces pushdown and persists', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await goToBannerPage(page);
