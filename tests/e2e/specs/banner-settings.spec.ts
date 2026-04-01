@@ -306,6 +306,18 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       }
     }, { timeout: 15_000 });
 
+    await page.waitForFunction(() => {
+      const frame = document.getElementById('faz-b-preview-frame') as HTMLIFrameElement | null;
+      const doc = frame?.contentDocument;
+      if (!doc?.body) return false;
+      const visibleNonPreviewChildren = Array.from(doc.body.children).filter((el) => {
+        if (el.id === 'faz-b-preview-root') return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+      });
+      return visibleNonPreviewChildren.length === 0;
+    }, { timeout: 15_000 });
+
     await expect(
       page.frameLocator('#faz-b-preview-frame').locator('#faz-b-preview-root .faz-consent-container'),
     ).toBeVisible({ timeout: 15_000 });

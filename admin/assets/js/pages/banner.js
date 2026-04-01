@@ -978,7 +978,8 @@
 			head.appendChild(previewRuntimeStyle);
 		}
 		previewRuntimeStyle.textContent =
-			'body > *:not(#faz-b-preview-root):not(script):not(style){pointer-events:none!important;}' +
+			'html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:transparent!important;min-height:100vh!important;}' +
+			'body > *:not(#faz-b-preview-root):not(script):not(style){display:none!important;}' +
 			'#faz-b-preview-root{position:relative;z-index:2147483640;}' +
 			'#faz-b-preview-root [data-faz-tag]{visibility:visible!important;}' +
 			'#faz-b-preview-root .faz-consent-bar button,' +
