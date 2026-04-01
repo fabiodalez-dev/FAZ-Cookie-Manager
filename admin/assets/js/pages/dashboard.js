@@ -317,9 +317,11 @@
 		ctx.fill();
 
 		var i18n = (typeof fazConfig !== 'undefined' && fazConfig.i18n) || {};
+		var acceptPercent = Math.round(pctAccept * 100);
+		var rejectPercent = 100 - acceptPercent;
 		var segments = [
-			{ value: pctAccept, color: theme.primary, label: i18n.accepted || 'Accepted' },
-			{ value: pctReject, color: theme.danger, label: i18n.rejected || 'Rejected' },
+			{ value: pctAccept, percent: acceptPercent, color: theme.primary, label: i18n.accepted || 'Accepted' },
+			{ value: pctReject, percent: rejectPercent, color: theme.danger, label: i18n.rejected || 'Rejected' },
 		];
 
 		var start = -Math.PI / 2;
@@ -344,7 +346,7 @@
 		ctx.fillText(total.toLocaleString(), cx, cy - 6);
 		ctx.fillStyle = theme.muted;
 		ctx.font = '12px ' + theme.font;
-		ctx.fillText('total responses', cx, cy + 14);
+		ctx.fillText(i18n.totalResponses || 'total responses', cx, cy + 14);
 
 		// Legend
 		var legendVertical = w < 320;
@@ -363,7 +365,7 @@
 			ctx.fillStyle = theme.text;
 			ctx.font = '12px ' + theme.font;
 			ctx.textAlign = 'left';
-			ctx.fillText(seg.label + ' (' + Math.round(seg.value * 100) + '%)', x + 12, y + 4);
+			ctx.fillText(seg.label + ' (' + seg.percent + '%)', x + 12, y + 4);
 		});
 	}
 

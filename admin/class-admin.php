@@ -522,8 +522,9 @@ window.wp.apiFetch=apiFetch;
 				'version'        => $this->version,
 				'modules'        => self::$active_modules,
 				'i18n'           => array(
-					'accepted' => __( 'Accepted', 'faz-cookie-manager' ),
-					'rejected' => __( 'Rejected', 'faz-cookie-manager' ),
+					'accepted'       => __( 'Accepted', 'faz-cookie-manager' ),
+					'rejected'       => __( 'Rejected', 'faz-cookie-manager' ),
+					'totalResponses' => __( 'total responses', 'faz-cookie-manager' ),
 				),
 			)
 		);

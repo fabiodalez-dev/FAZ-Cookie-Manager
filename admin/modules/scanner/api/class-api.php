@@ -413,8 +413,8 @@ class Api extends Rest_Controller {
 			}
 
 			// SSRF protection: only allow URLs on the same domain as the site.
-			$site_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
-			$url_host  = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+			$site_host = preg_replace( '/^www\./i', '', strtolower( trim( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) ) );
+			$url_host  = preg_replace( '/^www\./i', '', strtolower( trim( (string) wp_parse_url( $url, PHP_URL_HOST ) ) ) );
 			// Treat localhost and 127.0.0.1 as equivalent for local dev environments.
 			$loopback  = array( 'localhost', '127.0.0.1', '::1' );
 			$site_is_local = in_array( $site_host, $loopback, true );

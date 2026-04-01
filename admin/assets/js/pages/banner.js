@@ -1222,9 +1222,9 @@
 						}
 					}
 				}
-				} catch (_unused3) {
-					safeHref = '/cookie-policy';
-				}
+			} catch (_unused3) {
+				safeHref = '/cookie-policy';
+			}
 			el.href = safeHref;
 			el.target = '_blank';
 			el.rel = 'noopener';
