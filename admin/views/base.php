@@ -9,6 +9,9 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+
+$faz_page_slug  = isset( $faz_page_slug ) && is_string( $faz_page_slug ) ? $faz_page_slug : 'dashboard';
+$faz_page_title = isset( $faz_page_title ) && is_string( $faz_page_title ) ? $faz_page_title : '';
 ?>
 <div class="faz-wrap" id="faz-admin">
 	<?php

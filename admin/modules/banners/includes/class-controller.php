@@ -177,16 +177,17 @@ class Controller extends Base_Controller {
 				'%s',
 			)
 		);
-		if ( false !== $created && $wpdb->insert_id ) {
-			$id = $wpdb->insert_id;
-			$banner->set_id( $id );
-			$banner->set_slug( $banner->get_name() );
-			$slug = $banner->get_slug() . '-' . $id; // Append ID to the slug of the each banner.
-			$banner->set_slug( $slug );
-			$banner->save();
-			$banner->set_id( $wpdb->insert_id );
-			$this->delete_cache();
+		if ( false === $created || ! $wpdb->insert_id ) {
+			return;
 		}
+		$id = $wpdb->insert_id;
+		$banner->set_id( $id );
+		$banner->set_slug( $banner->get_name() );
+		$slug = $banner->get_slug() . '-' . $id; // Append ID to the slug of the each banner.
+		$banner->set_slug( $slug );
+		$banner->save();
+		$banner->set_id( $wpdb->insert_id );
+		$this->delete_cache();
 		do_action( 'faz_after_update_banner' );
 	}
 
@@ -219,7 +220,10 @@ class Controller extends Base_Controller {
 				'%s',
 			)
 		);
-		if ( false !== $updated && $updated > 0 ) {
+		if ( false === $updated ) {
+			return;
+		}
+		if ( $updated > 0 ) {
 			$this->delete_cache();
 		}
 		if ( defined( 'FAZ_BULK_REQUEST' ) && FAZ_BULK_REQUEST ) {
@@ -242,7 +246,10 @@ class Controller extends Base_Controller {
 				'banner_id' => $id,
 			)
 		);
-		if ( false !== $status && $status > 0 ) {
+		if ( false === $status ) {
+			return false;
+		}
+		if ( $status > 0 ) {
 			$this->delete_cache();
 		}
 		do_action( 'faz_after_update_banner' );

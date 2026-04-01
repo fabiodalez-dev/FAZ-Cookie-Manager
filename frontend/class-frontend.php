@@ -672,7 +672,7 @@ class Frontend {
 			'_ipData'       => array(),
 			'_assetsURL'    => FAZ_PLUGIN_URL . 'frontend/images/',
 			'_publicURL'    => set_url_scheme( get_site_url() ),
-			'_expiry'       => min( 180, max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ) ),
+			'_expiry'       => max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'    => 'gdpr',
 			'_rootDomain'   => $this->get_cookie_domain(),
@@ -2342,6 +2342,12 @@ class Frontend {
 				foreach ( $parts as $sel ) {
 					$s = trim( $sel );
 					if ( '' === $s ) {
+						continue;
+					}
+
+					// Skip @keyframes step selectors (0%, 100%, from, to).
+					if ( preg_match( '/^(?:\d+%|from|to)$/i', $s ) ) {
+						$out[] = $s;
 						continue;
 					}
 
