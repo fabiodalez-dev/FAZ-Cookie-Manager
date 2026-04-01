@@ -38,10 +38,14 @@ defined( 'ABSPATH' ) || exit;
 	?>
 	<nav class="faz-top-nav" aria-label="FAZ Cookie Manager navigation">
 		<div class="faz-top-nav-brand">
-			<span class="faz-top-nav-brand-mark" aria-hidden="true">FAZ</span>
+			<span class="faz-top-nav-brand-mark" aria-hidden="true">
+				<svg viewBox="0 0 24 24" focusable="false">
+					<path d="M12 2.75c4.42 0 8 3.58 8 8 0 5.54-5.43 9.44-7.28 10.58a1.4 1.4 0 0 1-1.45 0C9.43 20.19 4 16.29 4 10.75c0-4.42 3.58-8 8-8Zm0 2.25a5.75 5.75 0 1 0 0 11.5A5.75 5.75 0 0 0 12 5Zm-2.9 4.2a1.15 1.15 0 1 1 0 2.3 1.15 1.15 0 0 1 0-2.3Zm5.8 0a1.15 1.15 0 1 1 0 2.3 1.15 1.15 0 0 1 0-2.3Zm-2.9 2.55a1.15 1.15 0 1 1 0 2.3 1.15 1.15 0 0 1 0-2.3Z"/>
+				</svg>
+			</span>
 			<span class="faz-top-nav-brand-copy">
 				<strong>Cookie Manager</strong>
-				<small><?php esc_html_e( 'Backend privacy workspace', 'faz-cookie-manager' ); ?></small>
+				<small><?php esc_html_e( 'Privacy controls for this WordPress site', 'faz-cookie-manager' ); ?></small>
 			</span>
 		</div>
 		<ul class="faz-top-nav-menu">

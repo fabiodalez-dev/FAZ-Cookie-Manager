@@ -120,6 +120,7 @@ class Frontend {
 		add_action( 'wp_footer', array( $this, 'banner_html' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 1 );
 		add_action( 'wp_head', array( $this, 'insert_styles' ) );
+		add_action( 'template_redirect', array( $this, 'render_banner_preview_frame' ), 0 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
@@ -954,6 +955,34 @@ class Frontend {
 	}
 
 	/* ─── Server-side script blocking via output buffering ───── */
+
+	/**
+	 * Render the dedicated minimal frontend page used by the admin preview iframe.
+	 *
+	 * The page intentionally skips theme markup and only prints a bare shell with
+	 * frontend assets from wp_head(), so the admin preview inherits real site CSS
+	 * without flashing the whole page before JS injects the preview banner.
+	 *
+	 * @return void
+	 */
+	public function render_banner_preview_frame() {
+		if ( ! function_exists( 'faz_is_banner_preview_request' ) || ! faz_is_banner_preview_request() ) {
+			return;
+		}
+
+		status_header( 200 );
+		nocache_headers();
+		header( 'X-Robots-Tag: noindex, nofollow', true );
+
+		add_filter( 'show_admin_bar', '__return_false', PHP_INT_MAX );
+		show_admin_bar( false );
+
+		$template = FAZ_PLUGIN_BASEPATH . 'frontend/views/banner-preview-frame.php';
+		if ( file_exists( $template ) ) {
+			require $template;
+		}
+		exit;
+	}
 
 	/**
 	 * Start output buffering to intercept and block third-party scripts

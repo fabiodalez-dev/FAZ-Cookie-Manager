@@ -25,6 +25,61 @@ const TECHNICAL_COOKIE_RE = [
 
 const isTechnicalCookie = (name: string): boolean => TECHNICAL_COOKIE_RE.some((re) => re.test(name));
 
+async function gotoResilient(page: Page, url: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto(url, { waitUntil: 'commit', timeout: 60_000 });
+      await page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {
+        // Some WordPress/plugin combinations keep requests open longer than needed.
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+async function completeAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
+  await gotoResilient(page, `${wpBaseURL}/wp-login.php`);
+
+  if (page.url().includes('/wp-admin/')) {
+    await expect(page.locator('#wpadminbar')).toBeVisible();
+    return;
+  }
+
+  await expect(page.locator('#user_login')).toBeVisible({ timeout: 20_000 });
+  await page.locator('#user_login').fill(adminUser);
+  await page.locator('#user_pass').fill(adminPass);
+
+  await Promise.all([
+    page.locator('#wp-submit').click(),
+    page.waitForLoadState('domcontentloaded', { timeout: 60_000 }).catch(() => {
+      // Some plugin combinations keep the request open after auth succeeds.
+    }),
+  ]);
+
+  if (page.url().includes('/wp-admin/')) {
+    await expect(page.locator('#wpadminbar')).toBeVisible();
+    await expect(page.locator('#loginform')).toHaveCount(0);
+    return;
+  }
+
+  const cookies = await page.context().cookies(wpBaseURL);
+  const hasLoggedCookie = cookies.some((cookie) => cookie.name.startsWith('wordpress_logged_in_'));
+  if (hasLoggedCookie) {
+    await gotoResilient(page, `${wpBaseURL}/wp-admin/`);
+    await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
+    await expect(page.locator('#wpadminbar')).toBeVisible();
+    await expect(page.locator('#loginform')).toHaveCount(0);
+    return;
+  }
+
+  const loginError = await page.locator('#login_error').textContent().catch(() => '');
+  throw new Error(`WordPress admin login failed. URL=${page.url()} error=${loginError ?? 'n/a'}`);
+}
+
 export const test = base.extend<WPFixtures>({
   wpBaseURL: async ({}, use) => { // biome-ignore lint/style/noEmptyPattern: Playwright fixture API requires destructured first argument
     await use(process.env.WP_BASE_URL ?? 'http://localhost:9998');
@@ -40,14 +95,7 @@ export const test = base.extend<WPFixtures>({
 
   loginAsAdmin: async ({ wpBaseURL, adminUser, adminPass }, use) => {
     await use(async (page: Page) => {
-      await page.goto(`${wpBaseURL}/wp-login.php`, { waitUntil: 'domcontentloaded' });
-      await page.locator('#user_login').fill(adminUser);
-      await page.locator('#user_pass').fill(adminPass);
-      await page.locator('#wp-submit').click();
-
-      await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
-      await expect(page.locator('#wpadminbar')).toBeVisible();
-      await expect(page.locator('#loginform')).toHaveCount(0);
+      await completeAdminLogin(page, wpBaseURL, adminUser, adminPass);
     });
   },
 

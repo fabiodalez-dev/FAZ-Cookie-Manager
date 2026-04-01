@@ -83,13 +83,16 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 	justify-content: center;
 	min-width: 52px;
 	height: 52px;
-	padding: 0 14px;
+	padding: 0;
 	border-radius: 18px;
 	background: var(--faz-primary);
 	color: #fff;
-	font-size: 15px;
-	font-weight: 800;
-	letter-spacing: 0.08em;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+.faz-top-nav-brand-mark svg {
+	width: 24px;
+	height: 24px;
+	fill: currentColor;
 }
 .faz-top-nav-brand-copy {
 	display: flex;
@@ -487,6 +490,14 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 .faz-textarea {
 	resize: vertical;
 	min-height: 96px;
+}
+.faz-richtext {
+	min-height: 160px;
+	line-height: 1.65;
+	background: #fff;
+}
+.faz-richtext:focus {
+	background: #fff;
 }
 .faz-input-sm {
 	padding: 8px 10px;
@@ -1504,14 +1515,14 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	position: relative;
 	overflow: hidden;
 	min-height: 280px;
-	background: #fff;
+	background: transparent;
 }
 #faz-b-preview-frame {
 	display: block;
 	width: 100%;
 	height: 280px;
 	border: 0;
-	background: #fff;
+	background: transparent;
 }
 #faz-b-preview-message {
 	position: absolute;

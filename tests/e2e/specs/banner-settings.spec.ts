@@ -191,6 +191,117 @@ async function getRichTextValue(page: Page, id: string): Promise<string> {
   }, id);
 }
 
+async function getPreviewPalette(page: Page) {
+  return page.frameLocator('#faz-b-preview-frame').locator('#faz-b-preview-root .faz-consent-container').evaluate((el) => {
+    const notice = el.querySelector('.faz-consent-bar');
+    const title = el.querySelector('[data-faz-tag="title"]');
+    const desc = el.querySelector('[data-faz-tag="description"]');
+    const accept = el.querySelector('[data-faz-tag="accept-button"]');
+    const settings = el.querySelector('[data-faz-tag="settings-button"]');
+    const read = (node: Element | null) => (node ? getComputedStyle(node) : null);
+
+    return {
+      noticeBg: read(notice)?.backgroundColor ?? '',
+      titleColor: read(title)?.color ?? '',
+      descColor: read(desc)?.color ?? '',
+      acceptBg: read(accept)?.backgroundColor ?? '',
+      acceptColor: read(accept)?.color ?? '',
+      settingsBg: read(settings)?.backgroundColor ?? '',
+      settingsColor: read(settings)?.color ?? '',
+    };
+  });
+}
+
+async function getPreviewMetrics(page: Page) {
+  return page.evaluate(() => {
+    const frame = document.getElementById('faz-b-preview-frame') as HTMLIFrameElement | null;
+    const doc = frame?.contentDocument;
+    const root = doc?.querySelector('#faz-b-preview-root') as HTMLElement | null;
+    const container = doc?.querySelector('#faz-b-preview-root .faz-consent-container') as HTMLElement | null;
+    const bar = doc?.querySelector('#faz-b-preview-root .faz-consent-container .faz-consent-bar') as HTMLElement | null;
+    const readRect = (el: HTMLElement | null) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return { width: rect.width, height: rect.height, top: rect.top, bottom: rect.bottom };
+    };
+    const frameRect = frame?.getBoundingClientRect();
+    const containerRect = readRect(container);
+    const barRect = readRect(bar);
+    return {
+      frameHeight: frameRect?.height ?? 0,
+      frameWidth: frameRect?.width ?? 0,
+      rootType: root?.getAttribute('data-faz-preview-type') ?? '',
+      containerWidth: containerRect?.width ?? 0,
+      barHeight: barRect?.height ?? 0,
+      extraHeight: Math.max(0, (frameRect?.height ?? 0) - (barRect?.height ?? 0)),
+    };
+  });
+}
+
+async function getPreviewStructureState(page: Page) {
+  return page.evaluate(() => {
+    const frame = document.getElementById('faz-b-preview-frame') as HTMLIFrameElement | null;
+    const host = document.getElementById('faz-b-preview-host') as HTMLElement | null;
+    const doc = frame?.contentDocument;
+    const root = doc?.querySelector('#faz-b-preview-root') as HTMLElement | null;
+    const overlay = doc?.querySelector('#faz-b-preview-root .faz-overlay') as HTMLElement | null;
+    const revisit = doc?.querySelector('#faz-b-preview-root [data-faz-tag="revisit-consent"]') as HTMLElement | null;
+    const modal = doc?.querySelector('#faz-b-preview-root .faz-modal') as HTMLElement | null;
+    const notice = doc?.querySelector('#faz-b-preview-root .faz-consent-bar') as HTMLElement | null;
+    return {
+      rootChildCount: root?.children.length ?? 0,
+      rootChildClasses: root ? Array.from(root.children).map((el) => el.className) : [],
+      hasOverlay: Boolean(overlay),
+      hasRevisit: Boolean(revisit),
+      hasModal: Boolean(modal),
+      frameBg: frame ? getComputedStyle(frame).backgroundColor : '',
+      hostBg: host ? getComputedStyle(host).backgroundColor : '',
+      noticeBg: notice ? getComputedStyle(notice).backgroundColor : '',
+    };
+  });
+}
+
+async function getPreviewRootState(page: Page) {
+  return page.evaluate(() => {
+    const frame = document.getElementById('faz-b-preview-frame') as HTMLIFrameElement | null;
+    const root = frame?.contentDocument?.querySelector('#faz-b-preview-root') as HTMLElement | null;
+    return {
+      type: root?.getAttribute('data-faz-preview-type') ?? '',
+      position: root?.getAttribute('data-faz-preview-position') ?? '',
+    };
+  });
+}
+
+async function expectPreviewMode(
+  page: Page,
+  expected: {
+    rootType: 'box' | 'banner' | 'classic';
+    compact: boolean;
+    position?: string;
+  },
+) {
+  await expect.poll(async () => (await getPreviewRootState(page)).type).toBe(expected.rootType);
+  if (expected.position) {
+    await expect.poll(async () => (await getPreviewRootState(page)).position).toBe(expected.position);
+  }
+  if (expected.compact) {
+    await expect.poll(async () => {
+      const m = await getPreviewMetrics(page);
+      return m.frameWidth - m.containerWidth;
+    }).toBeGreaterThan(100);
+  } else {
+    await expect.poll(async () => {
+      const m = await getPreviewMetrics(page);
+      return Math.abs(m.frameWidth - m.containerWidth);
+    }).toBeLessThan(40);
+  }
+  await expect.poll(async () => (await getPreviewMetrics(page)).extraHeight).toBeLessThan(24);
+  await expect.poll(async () => (await getPreviewStructureState(page)).rootChildCount).toBe(1);
+  await expect.poll(async () => (await getPreviewStructureState(page)).hasOverlay).toBe(false);
+  await expect.poll(async () => (await getPreviewStructureState(page)).hasRevisit).toBe(false);
+  await expect.poll(async () => (await getPreviewStructureState(page)).hasModal).toBe(false);
+}
+
 /* ─── Tests ────────────────────────────────────────────────── */
 
 test.describe('Banner settings: persistence and frontend reflection', () => {
@@ -310,17 +421,119 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       const frame = document.getElementById('faz-b-preview-frame') as HTMLIFrameElement | null;
       const doc = frame?.contentDocument;
       if (!doc?.body) return false;
-      const visibleNonPreviewChildren = Array.from(doc.body.children).filter((el) => {
+      const extraVisibleChildren = Array.from(doc.body.children).filter((el) => {
         if (el.id === 'faz-b-preview-root') return false;
         const style = window.getComputedStyle(el);
         return style.display !== 'none' && style.visibility !== 'hidden';
       });
-      return visibleNonPreviewChildren.length === 0;
+      return extraVisibleChildren.length === 0
+        && !doc.getElementById('wpadminbar');
     }, { timeout: 15_000 });
 
     await expect(
       page.frameLocator('#faz-b-preview-frame').locator('#faz-b-preview-root .faz-consent-container'),
     ).toBeVisible({ timeout: 15_000 });
+
+    await expect.poll(async () => (await getPreviewMetrics(page)).extraHeight).toBeLessThan(24);
+
+    await setSelect(page, 'faz-b-type', 'box');
+    await setSelect(page, 'faz-b-position', 'bottom-right');
+    await expect.poll(async () => (await getPreviewMetrics(page)).extraHeight).toBeLessThan(24);
+    await expect.poll(async () => (await getPreviewMetrics(page)).rootType).toBe('box');
+    await expect.poll(async () => (await getPreviewMetrics(page)).containerWidth).toBeLessThan((await getPreviewMetrics(page)).frameWidth - 100);
+
+    await page.locator('.faz-preset-card', { hasText: 'Dark Professional' }).click();
+    await expect.poll(async () => (await getPreviewStructureState(page)).rootChildCount).toBe(1);
+    await expect.poll(async () => (await getPreviewStructureState(page)).rootChildClasses[0] ?? '').toContain('faz-consent-container');
+    await expect.poll(async () => (await getPreviewStructureState(page)).hasOverlay).toBe(false);
+    await expect.poll(async () => (await getPreviewStructureState(page)).hasRevisit).toBe(false);
+    await expect.poll(async () => (await getPreviewStructureState(page)).hasModal).toBe(false);
+    await expect.poll(async () => (await getPreviewStructureState(page)).noticeBg).toBe('rgb(31, 41, 55)');
+  });
+
+  test('General: design preset updates backend fields and preview layout', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await goToBannerPage(page);
+
+    await page.locator('.faz-preset-card', { hasText: 'Light Minimal' }).click();
+
+    await expect.poll(async () => getSelectValue(page, 'faz-b-type')).toBe('box');
+    await expect.poll(async () => getSelectValue(page, 'faz-b-position')).toBe('bottom-left');
+    await expect.poll(async () => getSelectValue(page, 'faz-b-theme')).toBe('light');
+    await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('popup');
+    await expect.poll(async () => getInputValue(page, 'faz-b-notice-bg-hex')).toBe('#ffffff');
+    await expect.poll(async () => getInputValue(page, 'faz-b-title-color-hex')).toBe('#111827');
+    await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#111827');
+    await expect.poll(async () => getInputValue(page, 'faz-b-reject-border-hex')).toBe('#d1d5db');
+    await expect.poll(async () => (await getPreviewMetrics(page)).extraHeight).toBeLessThan(24);
+    await expect.poll(async () => (await getPreviewStructureState(page)).rootChildCount).toBe(1);
+    await expect.poll(async () => (await getPreviewStructureState(page)).hasOverlay).toBe(false);
+    await expect.poll(async () => (await getPreviewStructureState(page)).hasRevisit).toBe(false);
+    await expect.poll(async () => (await getPreviewStructureState(page)).frameBg).toBe('rgba(0, 0, 0, 0)');
+    await expect.poll(async () => (await getPreviewStructureState(page)).hostBg).toBe('rgba(0, 0, 0, 0)');
+
+    await page.locator('.faz-preset-card', { hasText: 'GDPR Strict' }).click();
+
+    await expect.poll(async () => getSelectValue(page, 'faz-b-type')).toBe('banner');
+    await expect.poll(async () => getSelectValue(page, 'faz-b-position')).toBe('bottom');
+    await expect.poll(async () => getSelectValue(page, 'faz-b-theme')).toBe('light');
+    await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('pushdown');
+    await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#16a34a');
+    await expect.poll(async () => getInputValue(page, 'faz-b-reject-bg-hex')).toBe('#dc2626');
+    await expect.poll(async () => getInputValue(page, 'faz-b-settings-bg-hex')).toBe('#1e40af');
+  });
+
+  test('General: switching from pushdown to box keeps a box preview', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await goToBannerPage(page);
+
+    await setSelect(page, 'faz-b-type', 'banner');
+    await setSelect(page, 'faz-b-pref-type', 'pushdown');
+    await setSelect(page, 'faz-b-type', 'box');
+
+    await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('popup');
+    await expect.poll(async () => (await getPreviewMetrics(page)).rootType).toBe('box');
+    await expect.poll(async () => (await getPreviewMetrics(page)).containerWidth).toBeLessThan((await getPreviewMetrics(page)).frameWidth - 100);
+  });
+
+  test('General: backend preview covers all valid layout combinations', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await goToBannerPage(page);
+
+    const cases = [
+      { type: 'box', position: 'bottom-left', prefType: 'popup', rootType: 'box' as const, compact: true },
+      { type: 'box', position: 'bottom-right', prefType: 'popup', rootType: 'box' as const, compact: true },
+      { type: 'box', position: 'bottom-left', prefType: 'sidebar', rootType: 'box' as const, compact: true },
+      { type: 'box', position: 'bottom-right', prefType: 'sidebar', rootType: 'box' as const, compact: true },
+      { type: 'banner', position: 'top', prefType: 'popup', rootType: 'banner' as const, compact: false },
+      { type: 'banner', position: 'bottom', prefType: 'popup', rootType: 'banner' as const, compact: false },
+      { type: 'banner', position: 'top', prefType: 'sidebar', rootType: 'banner' as const, compact: false },
+      { type: 'banner', position: 'bottom', prefType: 'sidebar', rootType: 'banner' as const, compact: false },
+      { type: 'banner', position: 'top', prefType: 'pushdown', rootType: 'classic' as const, compact: false },
+      { type: 'banner', position: 'bottom', prefType: 'pushdown', rootType: 'classic' as const, compact: false },
+      { type: 'classic', position: 'top', prefType: 'pushdown', rootType: 'classic' as const, compact: false },
+      { type: 'classic', position: 'bottom', prefType: 'pushdown', rootType: 'classic' as const, compact: false },
+    ];
+
+    for (const c of cases) {
+      await setSelect(page, 'faz-b-type', c.type);
+      await page.waitForTimeout(150);
+      if (c.type !== 'classic') {
+        await setSelect(page, 'faz-b-pref-type', c.prefType);
+      }
+      await setSelect(page, 'faz-b-position', c.position);
+      await expectPreviewMode(page, {
+        rootType: c.rootType,
+        compact: c.compact,
+        position: c.position,
+      });
+      if (c.type === 'box' && c.prefType === 'pushdown') {
+        throw new Error('Invalid test case: box should never use pushdown');
+      }
+      if (c.type === 'box') {
+        await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).not.toBe('pushdown');
+      }
+    }
   });
 
   test('General: classic type forces pushdown and persists', async ({ page, loginAsAdmin }) => {
@@ -346,6 +559,9 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await goToBannerPage(page);
 
     await setSelect(page, 'faz-b-theme', 'dark');
+    await expect.poll(async () => (await getPreviewPalette(page)).noticeBg).toBe('rgb(18, 18, 18)');
+    await expect.poll(async () => (await getPreviewPalette(page)).titleColor).toBe('rgb(208, 208, 208)');
+    await expect.poll(async () => (await getPreviewPalette(page)).acceptBg).toBe('rgb(21, 120, 247)');
     await saveBanner(page);
 
     await goToBannerPage(page);
@@ -494,6 +710,9 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await setColorHex(page, 'faz-b-notice-bg-hex', testBg);
     await setColorHex(page, 'faz-b-title-color-hex', testTitleColor);
     await setColorHex(page, 'faz-b-desc-color-hex', testDescColor);
+    await expect.poll(async () => (await getPreviewPalette(page)).noticeBg).toBe('rgb(45, 55, 72)');
+    await expect.poll(async () => (await getPreviewPalette(page)).titleColor).toBe('rgb(226, 232, 240)');
+    await expect.poll(async () => (await getPreviewPalette(page)).descColor).toBe('rgb(160, 174, 192)');
     await saveBanner(page);
 
     // Verify persistence
