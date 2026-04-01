@@ -850,11 +850,13 @@
 		if (law === 'gdpr') hiddenTags.push('donotsell-button');
 
 		var thisRequestId = ++previewRequestId;
+		pendingPreviewState = null;
 		FAZ.post('banners/preview', payload).then(function (result) {
 			if (thisRequestId !== previewRequestId) return; // stale response
 			renderPreview(result.html || '', result.styles || '', hiddenTags);
 		}).catch(function () {
 			if (thisRequestId !== previewRequestId) return;
+			pendingPreviewState = null;
 			showPreviewMessage('Preview unavailable', 'error');
 		});
 	}

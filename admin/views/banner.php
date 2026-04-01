@@ -557,6 +557,8 @@ defined( 'ABSPATH' ) || exit;
 				<iframe
 					id="faz-b-preview-frame"
 					title="<?php esc_attr_e( 'Frontend banner preview', 'faz-cookie-manager' ); ?>"
+					tabindex="-1"
+					aria-hidden="true"
 					loading="eager"
 					referrerpolicy="same-origin"
 					sandbox="allow-same-origin"

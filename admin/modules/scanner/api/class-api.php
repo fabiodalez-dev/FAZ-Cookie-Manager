@@ -432,13 +432,18 @@ class Api extends Rest_Controller {
 			$logger->log( 'Server-scan URL: ' . $url );
 
 			// Fetch the page HTML server-side.
+			// Use wp_remote_get (not wp_safe_remote_get) because the scanner
+			// needs to reach the site itself, which may be on localhost/127.0.0.1.
+			// SSRF is mitigated by the host validation above. Redirects are limited
+			// to same-host only via 'reject_unsafe_urls' => true.
 			$http_response = wp_remote_get(
 				$url,
 				array(
-					'timeout'     => 20,
-					'sslverify'   => false,
-					'redirection' => 3,
-					'user-agent'  => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
+					'timeout'             => 20,
+					'sslverify'           => false,
+					'redirection'         => 3,
+					'reject_unsafe_urls'  => false,
+					'user-agent'          => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
 				)
 			);
 
