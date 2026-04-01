@@ -398,7 +398,7 @@ class Api extends Rest_Controller {
 	 * X-Frame-Options, or slow page loads that exceed iframe timeouts).
 	 *
 	 * @param \WP_REST_Request $request Request with 'url' parameter.
-	 * @return \WP_REST_Response
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function server_scan( $request ) {
 		$logger = Scanner_Logger::get_instance();

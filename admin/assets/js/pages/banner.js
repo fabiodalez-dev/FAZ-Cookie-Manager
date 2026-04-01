@@ -86,6 +86,8 @@
 				}
 				if (previewVisible) {
 					ensurePreviewFrame(false);
+					syncFormToBannerData();
+					refreshPreview();
 					schedulePreviewFrameLayoutSync([0, 120]);
 				}
 				syncPreviewSpacer();
@@ -819,6 +821,7 @@
 
 	function refreshPreview() {
 		if (!bannerData) return;
+		if (!previewVisible) return;
 		var host = document.getElementById('faz-b-preview-host');
 		if (!host) return;
 

@@ -559,7 +559,7 @@ defined( 'ABSPATH' ) || exit;
 					title="<?php esc_attr_e( 'Frontend banner preview', 'faz-cookie-manager' ); ?>"
 					loading="eager"
 					referrerpolicy="same-origin"
-					sandbox="allow-same-origin allow-scripts"
+					sandbox="allow-same-origin"
 				></iframe>
 				<div id="faz-b-preview-message" role="status" aria-live="polite" aria-atomic="true">
 					<?php esc_html_e( 'Loading real site preview...', 'faz-cookie-manager' ); ?>
