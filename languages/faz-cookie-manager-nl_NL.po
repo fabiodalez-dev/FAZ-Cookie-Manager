@@ -3,9 +3,9 @@ msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues\n"
 "POT-Creation-Date: 2026-03-18T22:37:35+00:00\n"
-"PO-Revision-Date: 2026-04-01 14:07+0200\n"
-"Last-Translator: \n"
-"Language-Team: \n"
+"PO-Revision-Date: 2026-04-01 15:19+0200\n"
+"Last-Translator: Yannic van Veen (Yard Digital Agency)\n"
+"Language-Team: Dutch\n"
 "Language: nl_NL\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -162,7 +162,7 @@ msgstr "Nu beoordelen"
 #: admin/class-admin.php:1041
 #, php-format
 msgid "FAZ Cookie Manager detected services on your site that are not covered by any selected IAB vendor: %s."
-msgstr "FAZ Cookie Manager heeft services op uw site gedetecteerd die niet door een geselecteerde IAB leverancier worden gedekt: %s."
+msgstr "FAZ Cookie Manager heeft services op je site gedetecteerd die niet door een geselecteerde IAB leverancier worden gedekt: %s."
 
 #: admin/class-admin.php:1045
 msgid "Add the matching vendors to ensure proper TCF consent for these services."
@@ -791,7 +791,7 @@ msgstr "Mededeling titel"
 
 #: admin/views/banner.php:145
 msgid "We value your privacy"
-msgstr "Wij hechten waarde aan uw privacy"
+msgstr "Wij hechten waarde aan je privacy"
 
 #: admin/views/banner.php:148
 msgid "Notice Description"
@@ -1265,7 +1265,7 @@ msgstr "Sjablonen voor blokkeerregels"
 
 #: admin/views/cookies.php:121
 msgid "Pre-configured blocking rules for popular services. Click to add a template to your custom rules."
-msgstr "Vooraf geconfigureerde blokkeerregels voor populaire diensten. Klik om een sjabloon toe te voegen aan uw aangepaste regels."
+msgstr "Vooraf geconfigureerde blokkeerregels voor populaire diensten. Klik om een sjabloon toe te voegen aan je aangepaste regels."
 
 #: admin/views/cookies.php:123
 msgid "Loading templates..."
@@ -1302,7 +1302,7 @@ msgstr "Shortcode voor Cookie-tabel"
 
 #: admin/views/cookies.php:165
 msgid "Use the following shortcode to display a table of all cookies on any page or post (e.g. your Cookie Policy page):"
-msgstr "Gebruik de volgende shortcode om een tabel met alle cookies op elke pagina of post weer te geven (bijv. uw Cookiebeleidspagina):"
+msgstr "Gebruik de volgende shortcode om een tabel met alle cookies op elke pagina of post weer te geven (bijv. je Cookiebeleidspagina):"
 
 #: admin/views/cookies.php:168 admin/views/cookies.php:216
 msgid "Copy"
@@ -1362,7 +1362,7 @@ msgstr "Gebruik de volgende shortcode om een volledige cookiebeleidspagina weer 
 
 #: admin/views/cookies.php:218
 msgid "Generates a complete cookie policy with sections: What Are Cookies, How We Use Cookies, Cookies We Use (table), How to Manage Cookies, and contact information. Customise with attributes: <code>site_name</code>, <code>contact</code>, <code>show_table</code>."
-msgstr "Genereert een volledig cookiebeleid met secties: Wat zijn cookies, Hoe we cookies gebruiken, Cookies die we gebruiken (tabel), Hoe u cookies kunt beheren, en contactinformatie. Pas aan met attributen: <code>site_name</code>, <code>contact</code>, <code>show_table</code>."
+msgstr "Genereert een volledig cookiebeleid met secties: Wat zijn cookies, Hoe we cookies gebruiken, Cookies die we gebruiken (tabel), Hoe je cookies kunt beheren, en contactinformatie. Pas aan met attributen: <code>site_name</code>, <code>contact</code>, <code>show_table</code>."
 
 #: admin/views/cookies.php:231 admin/views/cookies.php:240
 #: admin/views/cookies.php:247 admin/views/cookies.php:256
@@ -1557,7 +1557,7 @@ msgstr "Instellingen importeren"
 
 #: admin/views/import-export.php:30
 msgid "Upload a previously exported JSON file to restore or migrate settings. This will overwrite your current plugin configuration."
-msgstr "Upload een eerder geëxporteerde JSON-bestand om instellingen te herstellen of te migreren. Dit overschrijft uw huidige plugin configuratie."
+msgstr "Upload een eerder geëxporteerde JSON-bestand om instellingen te herstellen of te migreren. Dit overschrijft je huidige plugin configuratie."
 
 #: admin/views/import-export.php:32
 msgid "Select JSON file"
@@ -1611,7 +1611,7 @@ msgstr "Cookie-banner inschakelen"
 
 #: admin/views/settings.php:23
 msgid "When disabled, the cookie consent banner will not appear on your site and no scripts will be blocked."
-msgstr "Indien uitgeschakeld, verschijnt de cookie-toestemmingsbanner niet op uw site en zullen er geen scripts geblokkeerd worden."
+msgstr "Indien uitgeschakeld, verschijnt de cookie-toestemmingsbanner niet op je site en zullen er geen scripts geblokkeerd worden."
 
 #: admin/views/settings.php:26
 msgid "Excluded Pages"
@@ -1747,7 +1747,7 @@ msgstr "Activeer automatisch cookie-scannen"
 
 #: admin/views/settings.php:160
 msgid "Automatically scan your site for new cookies on a schedule. You will receive an email notification if new uncategorized cookies are found."
-msgstr "Uw site wordt automatisch op nieuwe cookies gescand volgens een schema. U ontvangt een e-mailmelding als er nieuwe niet-gecategoriseerde cookies worden gevonden."
+msgstr "Je site wordt automatisch op nieuwe cookies gescand volgens een schema. Je ontvangt een e-mailmelding als er nieuwe niet-gecategoriseerde cookies worden gevonden."
 
 #: admin/views/settings.php:163
 msgid "Scan Frequency"
@@ -1779,7 +1779,7 @@ msgstr "Microsoft UET Consent Modus"
 
 #: admin/views/settings.php:185
 msgid "Signals consent status to Microsoft Advertising (Bing Ads) via the UET tag. Enable if you use Microsoft Advertising and need to respect consent for ad tracking."
-msgstr "Geeft de toestemmingsstatus door aan Microsoft Advertising (Bing Ads) via de UET-tag. Schakel dit in als u Microsoft Advertising gebruikt en toestemming voor advertentietracering moet respecteren."
+msgstr "Geeft de toestemmingsstatus door aan Microsoft Advertising (Bing Ads) via de UET-tag. Schakel dit in als je Microsoft Advertising gebruikt en toestemming voor advertentietracering moet respecteren."
 
 #: admin/views/settings.php:191
 msgid "Microsoft Clarity Consent API"
@@ -1787,7 +1787,7 @@ msgstr "Microsoft Clarity toestemmings-API"
 
 #: admin/views/settings.php:193
 msgid "Signals consent status to Microsoft Clarity (heatmaps and session recordings). Enable if you use Clarity and want it to pause tracking until consent is given."
-msgstr "Geeft de toestemmingsstatus door aan Microsoft Clarity (heatmap en sessieopnamen). Schakel dit in als u Clarity gebruikt en wilt dat het de tracking pauzeert tot toestemming is gegeven."
+msgstr "Geeft de toestemmingsstatus door aan Microsoft Clarity (heatmap en sessieopnamen). Schakel dit in als je Clarity gebruikt en wilt dat het de tracking pauzeert tot toestemming is gegeven."
 
 #: admin/views/settings.php:200
 msgid "Age Verification"
@@ -1807,7 +1807,7 @@ msgstr "Minimumleeftijd"
 
 #: admin/views/settings.php:214
 msgid "GDPR default is 16. Some EU member states allow 13-15. Check your local law."
-msgstr "GDPR-standaard is 16. Sommige EU-lidstaten staan 13-15 toe. Controleer uw lokale wetgeving."
+msgstr "GDPR-standaard is 16. Sommige EU-lidstaten staan 13-15 toe. Controleer je lokale wetgeving."
 
 #: admin/views/settings.php:221
 msgid "IAB TCF"
@@ -1819,7 +1819,7 @@ msgstr "IAB TCF v2.3 inschakelen"
 
 #: admin/views/settings.php:230
 msgid "Enables the IAB Transparency & Consent Framework. Required if you work with ad-tech vendors that need a standardised TC String for programmatic advertising in the EU."
-msgstr "Het IAB Transparency & Consent Framework inschakelen. Vereist als u werkt met ad-tech leveranciers die een gestandaardiseerde TC String nodig hebben voor programmatische adverteren in de EU."
+msgstr "Het IAB Transparency & Consent Framework inschakelen. Vereist als je werkt met ad-tech leveranciers die een gestandaardiseerde TC String nodig hebben voor programmatische adverteren in de EU."
 
 #: admin/views/settings.php:233
 msgid "Publisher Country Code"
@@ -1835,7 +1835,7 @@ msgstr "CMP ID"
 
 #: admin/views/settings.php:240
 msgid "Your registered IAB CMP ID (<a href=\"https://iabeurope.eu/cmp-list/\" target=\"_blank\" rel=\"noopener noreferrer\">IAB CMP List</a>). With ID&nbsp;0 the banner and cookie blocking work normally, but ad-tech vendors will ignore the TC String. Google Consent Mode v2 works regardless of CMP registration."
-msgstr "Uw geregistreerde IAB CMP ID (<a href=\"https://iabeurope.eu/cmp-list/\" target=\"_blank\" rel=\"noopener noreferrer\">IAB CMP List</a>). Met ID&nbsp;0 werkt de banner en cookieblokkering normaal, maar ad-tech leveranciers negeren de TC String. Google Consent Mode v2 werkt ongeacht CMP registratie."
+msgstr "Je geregistreerde IAB CMP ID (<a href=\"https://iabeurope.eu/cmp-list/\" target=\"_blank\" rel=\"noopener noreferrer\">IAB CMP List</a>). Met ID&nbsp;0 werkt de banner en cookieblokkering normaal, maar ad-tech leveranciers negeren de TC String. Google Consent Mode v2 werkt ongeacht CMP registratie."
 
 #: admin/views/settings.php:246
 msgid "Purpose One Treatment"
@@ -1935,7 +1935,7 @@ msgstr "MaxMind Licentiesleutel"
 
 #: admin/views/settings.php:317
 msgid "Enter your MaxMind license key"
-msgstr "Voer uw MaxMind licentiesleutel in"
+msgstr "Voer je MaxMind licentiesleutel in"
 
 #: admin/views/settings.php:321
 msgid "Update Database"
@@ -2075,7 +2075,7 @@ msgstr "Actieve plugins"
 
 #: faz-cookie-manager.php:99
 msgid "Please make sure the cache is cleared after each plugin update especially if you have minified JS and/or CSS files."
-msgstr "Zorg ervoor dat de cache wordt gewist na elke plugin-update, vooral als u geminifierde JS- en/of CSS-bestanden hebt."
+msgstr "Zorg ervoor dat de cache wordt gewist na elke plugin-update, vooral als je geminifierde JS- en/of CSS-bestanden hebt."
 
 #: frontend/class-amp-consent.php:335
 msgid "Manage cookie preferences"
@@ -2144,11 +2144,11 @@ msgstr "Cookie Toestemming (FAZ Cookie Manager)"
 
 #: includes/class-cli.php:244
 msgid "This site uses the FAZ Cookie Manager plugin to collect and manage cookie consent. When you interact with the cookie banner, we record your consent choice (accepted, rejected, or partial), a hashed version of your IP address, your browser user agent, and the page URL where consent was given. This data is stored locally on our server and retained for the period configured in the plugin settings (default: 12 months)."
-msgstr "Deze site gebruikt de FAZ Cookie Manager plugin om cookie toestemming te verzamelen en te beheren. Wanneer u interactie heeft met de cookie banner, registreren we uw keuze (geaccepteerd, geweigerd of gedeeltelijk), een gehashte versie van uw IP-adres, uw browser user agent en de URL van de pagina waar de toestemming is gegeven. Deze gegevens worden lokaal op onze server opgeslagen en behouden voor de periode die is geconfigureerd in de plugin instellingen (standaard: 12 maanden)."
+msgstr "Deze site gebruikt de FAZ Cookie Manager plugin om cookie toestemming te verzamelen en te beheren. Wanneer je interactie hebt met de cookie banner, registreren we je keuze (geaccepteerd, geweigerd of gedeeltelijk), een gehashte versie van je IP-adres, je browser user agent en de URL van de pagina waar de toestemming is gegeven. Deze gegevens worden lokaal op onze server opgeslagen en behouden voor de periode die is geconfigureerd in de plugin instellingen (standaard: 12 maanden)."
 
 #: includes/class-cli.php:245
 msgid "You can change your cookie preferences at any time using the cookie icon in the bottom corner of the page."
-msgstr "U kunt uw cookie voorkeuren op elk moment wijzigen met behulp van het cookie icoon in de rechterbenedenhoek van de pagina."
+msgstr "Je kunt je cookie voorkeuren op elk moment wijzigen met behulp van het cookie icoon in de rechterbenedenhoek van de pagina."
 
 #: includes/class-cli.php:253 includes/class-cli.php:262
 msgid "FAZ Cookie Manager - Consent Logs"
@@ -2162,7 +2162,7 @@ msgstr "Wat zijn cookies"
 #: includes/class-cookie-policy-shortcode.php:69
 #, php-format
 msgid "Cookies are small text files that are placed on your device when you visit %s. They are widely used to make websites work more efficiently, as well as to provide information to the website owners."
-msgstr "Cookies zijn kleine tekstbestanden die op uw apparaat worden geplaatst wanneer u %s bezoekt. Ze worden veel gebruikt om websites efficiënter te laten werken en om informatie te verstrekken aan de eigenaren van de websites."
+msgstr "Cookies zijn kleine tekstbestanden die op je apparaat worden geplaatst wanneer je %s bezoekt. Ze worden veel gebruikt om websites efficiënter te laten werken en om informatie te verstrekken aan de eigenaren van de websites."
 
 #: includes/class-cookie-policy-shortcode.php:72
 msgid "How We Use Cookies"
@@ -2196,7 +2196,7 @@ msgstr "Analysecookies"
 
 #: includes/class-cookie-policy-shortcode.php:80
 msgid "These cookies help us understand how visitors interact with the website by collecting and reporting information anonymously. This helps us improve the website and your experience."
-msgstr "Deze cookies helpen ons begrijpen hoe bezoekers met de website omgaan door informatie anoniem te verzamelen en te rapporteren. Dit helpt ons de website en uw ervaring te verbeteren."
+msgstr "Deze cookies helpen ons begrijpen hoe bezoekers met de website omgaan door informatie anoniem te verzamelen en te rapporteren. Dit helpt ons de website en je ervaring te verbeteren."
 
 #: includes/class-cookie-policy-shortcode.php:81
 msgid "Marketing cookies"
@@ -2204,7 +2204,7 @@ msgstr "Marketingcookies"
 
 #: includes/class-cookie-policy-shortcode.php:81
 msgid "These cookies are used to deliver advertisements that are relevant to you and your interests. They are also used to limit the number of times you see an advertisement and help measure the effectiveness of advertising campaigns."
-msgstr "Deze cookies worden gebruikt om advertenties te leveren die relevant zijn voor u en uw interesses. Ze worden ook gebruikt om het aantal keren dat u een advertentie ziet te beperken en helpen de effectiviteit van advertentiecampagnes te meten."
+msgstr "Deze cookies worden gebruikt om advertenties te leveren die relevant zijn voor je en je interesses. Ze worden ook gebruikt om het aantal keren dat je een advertentie ziet te beperken en helpen de effectiviteit van advertentiecampagnes te meten."
 
 #: includes/class-cookie-policy-shortcode.php:85
 msgid "Cookies We Use"
@@ -2220,11 +2220,11 @@ msgstr "Cookies beheren"
 
 #: includes/class-cookie-policy-shortcode.php:91
 msgid "You can manage your cookie preferences at any time by clicking the cookie icon in the bottom corner of the page, or by using the button below."
-msgstr "U kunt uw cookievoorkeuren op elk gewenst moment beheren door op het cookie-icoon in de rechterbenedenhoek van de pagina te klikken, of door de onderstaande knop te gebruiken."
+msgstr "Je kunt je cookievoorkeuren op elk gewenst moment beheren door op het cookie-icoon in de rechterbenedenhoek van de pagina te klikken, of door de onderstaande knop te gebruiken."
 
 #: includes/class-cookie-policy-shortcode.php:93
 msgid "You can also control cookies through your browser settings. Most browsers allow you to:"
-msgstr "U kunt cookies ook via de instellingen van uw browser beheren. De meeste browsers bieden de mogelijkheid om:"
+msgstr "Je kunt cookies ook via de instellingen van je browser beheren. De meeste browsers bieden de mogelijkheid om:"
 
 #: includes/class-cookie-policy-shortcode.php:95
 msgid "View what cookies are stored and delete them individually"
@@ -2244,11 +2244,11 @@ msgstr "Blokkeer alle cookies"
 
 #: includes/class-cookie-policy-shortcode.php:99
 msgid "Delete all cookies when you close your browser"
-msgstr "Verwijder alle cookies wanneer u uw browser afsluit"
+msgstr "Verwijder alle cookies wanneer je je browser afsluit"
 
 #: includes/class-cookie-policy-shortcode.php:101
 msgid "Please note that if you disable cookies, some features of this website may not function properly."
-msgstr "Let op: als u cookies uitschakelt, werken sommige functies van deze website mogelijk niet correct."
+msgstr "Let op: als je cookies uitschakelt, werken sommige functies van deze website mogelijk niet correct."
 
 #: includes/class-cookie-policy-shortcode.php:103
 msgid "More Information"
@@ -2258,7 +2258,7 @@ msgstr "Meer informatie"
 #: includes/class-cookie-policy-shortcode.php:106
 #, php-format
 msgid "If you have questions about our use of cookies, please contact us at %s."
-msgstr "Als u vragen heeft over ons gebruik van cookies, neem dan contact met ons op via %s."
+msgstr "Als je vragen hebt over ons gebruik van cookies, neem dan contact met ons op via %s."
 
 #. translators: %s: current date
 #: includes/class-cookie-policy-shortcode.php:110
@@ -2308,23 +2308,23 @@ msgstr "Uitpakken mislukt: %s"
 
 #: includes/class-rest-controller.php:52
 msgid "Sorry, you cannot list resources."
-msgstr "Sorry, u kunt geen bronnen weergeven."
+msgstr "Sorry, je kunt geen bronnen weergeven."
 
 #: includes/class-rest-controller.php:66
 msgid "Sorry, you are not allowed to create resources."
-msgstr "Sorry, u mag geen resources maken."
+msgstr "Sorry, je mag geen resources maken."
 
 #: includes/class-rest-controller.php:80
 msgid "Sorry, you cannot view this resource."
-msgstr "Sorry, u mag deze resource niet bekijken."
+msgstr "Sorry, je mag deze resource niet bekijken."
 
 #: includes/class-rest-controller.php:94
 msgid "Sorry, you are not allowed to edit this resource."
-msgstr "Sorry, u mag deze resource niet bewerken."
+msgstr "Sorry, je mag deze resource niet bewerken."
 
 #: includes/class-rest-controller.php:108
 msgid "Sorry, you are not allowed to delete this resource."
-msgstr "Sorry, u mag deze resource niet verwijderen."
+msgstr "Sorry, je mag deze resource niet verwijderen."
 
 #: includes/class-utils.php:367
 msgid "Invalid nonce. Please refresh the page and try again."

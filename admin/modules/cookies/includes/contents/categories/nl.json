@@ -1,14 +1,14 @@
 {
   "necessary": {
     "name": "Noodzakelijk",
-    "description": "<p>Noodzakelijke cookies zijn vereist om de basisfuncties van deze site mogelijk te maken, zoals het aanbieden van een veilige login of het aanpassen van uw toestemmingsvoorkeuren. Deze cookies slaan geen persoonlijk identificeerbare gegevens op.</p>"
+    "description": "<p>Noodzakelijke cookies zijn vereist om de basisfuncties van deze site mogelijk te maken, zoals het aanbieden van een veilige login of het aanpassen van je toestemmingsvoorkeuren. Deze cookies slaan geen persoonlijk identificeerbare gegevens op.</p>"
   },
   "functional": {
     "name": "Functioneel",
     "description": "<p>Functionele cookies helpen bepaalde functionaliteiten uit te voeren, zoals het delen van de inhoud van de website op socialemediaplatforms, het verzamelen van feedback en andere functies van derden.</p>"
   },
   "analytics": {
-    "name": "Analytics",
+    "name": "Analytisch",
     "description": "<p>Analytische cookies worden gebruikt om te begrijpen hoe bezoekers met de website omgaan. Deze cookies helpen informatie te geven over statistieken zoals het aantal bezoekers, het bouncepercentage, de verkeersbron, enzovoort.</p>"
   },
   "performance": {
@@ -21,10 +21,10 @@
   },
   "wordpress-internal": {
     "name": "WordPress intern",
-    "description": "<p>Cookies die door de WordPress-kern worden ingesteld voor ingelogde beheerders. Niet zichtbaar voor sitebezoekers.</p>"
+    "description": "<p>Cookies die door de WordPress worden ingesteld voor ingelogde beheerders. Niet zichtbaar voor sitebezoekers.</p>"
   },
   "marketing": {
     "name": "Marketing",
-    "description": "<p>Marketingcookies worden gebruikt om bezoekers gepersonaliseerde advertenties te tonen op basis van pagina’s die u eerder hebt bezocht en om de effectiviteit van advertentiecampagnes te analyseren.</p>"
+    "description": "<p>Marketingcookies worden gebruikt om bezoekers gepersonaliseerde advertenties te tonen op basis van pagina’s die je eerder hebt bezocht en om de effectiviteit van advertentiecampagnes te analyseren.</p>"
   }
 }
