@@ -517,7 +517,7 @@ class Shortcodes {
 			if ( empty( $object->get_cookies() ) ) {
 				continue;
 			}
-			$name = $object->get_name( $this->language );
+			$name = esc_html( $object->get_name( $this->language ) );
 			$html  .= str_replace(
 				array(
 					'[faz_preview_{{category_slug}}_title]',
@@ -525,7 +525,7 @@ class Shortcodes {
 				),
 				array(
 					$name,
-					$object->get_slug(),
+					esc_attr( $object->get_slug() ),
 				),
 				$container
 			);

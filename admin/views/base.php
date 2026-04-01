@@ -20,6 +20,7 @@ defined( 'ABSPATH' ) || exit;
 		'gcm'            => array( 'slug' => 'faz-cookie-manager-gcm',            'label' => __( 'Google Consent Mode', 'faz-cookie-manager' ) ),
 		'languages'      => array( 'slug' => 'faz-cookie-manager-languages',      'label' => __( 'Languages', 'faz-cookie-manager' ) ),
 		'settings'       => array( 'slug' => 'faz-cookie-manager-settings',       'label' => __( 'Settings', 'faz-cookie-manager' ) ),
+		'gvl'            => array( 'slug' => 'faz-cookie-manager-gvl',            'label' => __( 'Global Vendor List', 'faz-cookie-manager' ) ),
 		'import-export'  => array( 'slug' => 'faz-cookie-manager-import-export',  'label' => __( 'Import / Export', 'faz-cookie-manager' ) ),
 		'system-status'  => array( 'slug' => 'faz-cookie-manager-system-status',  'label' => __( 'System Status', 'faz-cookie-manager' ) ),
 	);
@@ -31,12 +32,13 @@ defined( 'ABSPATH' ) || exit;
 		'gcm'           => __( 'Control Google Consent Mode defaults and updates with a clearer view of every signal.', 'faz-cookie-manager' ),
 		'languages'     => __( 'Manage available languages and keep translated banner content organised.', 'faz-cookie-manager' ),
 		'settings'      => __( 'Tune privacy, logging, scanner, and integration settings from one backend workspace.', 'faz-cookie-manager' ),
+		'gvl'           => __( 'Browse IAB TCF vendors, review their declared purposes, and select which vendors your site works with.', 'faz-cookie-manager' ),
 		'import-export' => __( 'Move settings safely between environments and keep repeatable backups close at hand.', 'faz-cookie-manager' ),
 		'system-status' => __( 'Check environment details, plugin health, and runtime dependencies before troubleshooting.', 'faz-cookie-manager' ),
 	);
 	$faz_page_description = isset( $faz_page_descriptions[ $faz_page_slug ] ) ? $faz_page_descriptions[ $faz_page_slug ] : '';
 	?>
-	<nav class="faz-top-nav" aria-label="FAZ Cookie Manager navigation">
+	<nav class="faz-top-nav" aria-label="<?php esc_attr_e( 'FAZ Cookie Manager navigation', 'faz-cookie-manager' ); ?>">
 		<div class="faz-top-nav-brand">
 			<span class="faz-top-nav-brand-mark" aria-hidden="true">
 				<svg viewBox="0 0 24 24" focusable="false">

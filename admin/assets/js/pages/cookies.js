@@ -261,7 +261,6 @@
 		if (activeCat !== 'all') params.category = activeCat;
 		FAZ.get('cookies', params).then(function (data) {
 			cookies = Array.isArray(data) ? data : (data.items || []);
-			console.log('[FAZ] loadCookies:', { activeCat: activeCat, count: cookies.length, raw: typeof data, isArray: Array.isArray(data) });
 			renderCookies();
 			if (typeof done === 'function') done();
 		}).catch(function (err) {

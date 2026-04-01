@@ -186,6 +186,7 @@ class Controller extends Base_Controller {
 			$banner->save();
 			$banner->set_id( $wpdb->insert_id );
 		}
+		$this->delete_cache();
 		do_action( 'faz_after_update_banner' );
 	}
 
@@ -218,6 +219,7 @@ class Controller extends Base_Controller {
 				'%s',
 			)
 		);
+		$this->delete_cache();
 		if ( defined( 'FAZ_BULK_REQUEST' ) && FAZ_BULK_REQUEST ) {
 			return;
 		}
@@ -238,6 +240,7 @@ class Controller extends Base_Controller {
 				'banner_id' => $id,
 			)
 		);
+		$this->delete_cache();
 		do_action( 'faz_after_update_banner' );
 		return $status;
 	}

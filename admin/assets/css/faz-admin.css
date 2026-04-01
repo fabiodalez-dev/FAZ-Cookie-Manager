@@ -1372,7 +1372,7 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 
 /* ── Code / monospace spans ── */
 .faz-code {
-	font-family: 'SFMono-Regular', Consolas, monospace;
+	font-family: SFMono-Regular, Consolas, monospace;
 	font-size: 12px;
 	background: var(--faz-bg-secondary);
 	padding: 3px 7px;
@@ -1559,7 +1559,7 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 
 /* ── Textarea code style ── */
 .faz-textarea-code {
-	font-family: 'SFMono-Regular', Consolas, monospace;
+	font-family: SFMono-Regular, Consolas, monospace;
 	font-size: 13px;
 	line-height: 1.5;
 	tab-size: 2;

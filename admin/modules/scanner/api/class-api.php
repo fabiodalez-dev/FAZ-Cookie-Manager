@@ -412,6 +412,19 @@ class Api extends Rest_Controller {
 				return $response;
 			}
 
+			// SSRF protection: only allow URLs on the same domain as the site.
+			$site_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+			$url_host  = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+			// Treat localhost and 127.0.0.1 as equivalent for local dev environments.
+			$loopback  = array( 'localhost', '127.0.0.1', '::1' );
+			$site_is_local = in_array( $site_host, $loopback, true );
+			$url_is_local  = in_array( $url_host, $loopback, true );
+			$hosts_match   = ( $url_host === $site_host ) || ( $site_is_local && $url_is_local );
+			if ( ! $site_host || ! $url_host || ! $hosts_match ) {
+				$logger->log( 'Server-scan: URL domain mismatch (expected ' . $site_host . ', got ' . $url_host . ')' );
+				return new \WP_REST_Response( array( 'cookies' => array(), 'scripts' => array() ), 200 );
+			}
+
 			$logger->log( 'Server-scan URL: ' . $url );
 
 			// Fetch the page HTML server-side.

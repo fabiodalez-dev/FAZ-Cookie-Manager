@@ -176,7 +176,7 @@ class Frontend {
 				if ( '' !== $custom_css ) {
 					// Strip dangerous CSS patterns that could be used for data exfiltration.
 					$custom_css = wp_strip_all_tags( $custom_css );
-					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding/i', $custom_css ) ) {
+					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding|@import/i', $custom_css ) ) {
 						$custom_css = '';
 					}
 					$css .= $custom_css;
@@ -672,7 +672,7 @@ class Frontend {
 			'_ipData'       => array(),
 			'_assetsURL'    => FAZ_PLUGIN_URL . 'frontend/images/',
 			'_publicURL'    => set_url_scheme( get_site_url() ),
-			'_expiry'       => min( 180, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
+			'_expiry'       => min( 180, max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ) ),
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'    => 'gdpr',
 			'_rootDomain'   => $this->get_cookie_domain(),
@@ -1670,8 +1670,13 @@ class Frontend {
 				// No consent yet — block all non-necessary.
 				$blocked[] = $slug;
 			} else {
-				// Parse consent cookie: "consent:yes,necessary:yes,analytics:no,advertisement:no"
+				// Parse consent cookie: "consent:yes,necessary:yes,analytics:no,marketing:no"
 				if ( preg_match( '/(^|,)' . preg_quote( $slug, '/' ) . ':(\w+)/', $consent, $cm ) ) {
+					if ( 'yes' !== $cm[2] ) {
+						$blocked[] = $slug;
+					}
+				} elseif ( 'marketing' === $slug && preg_match( '/(^|,)advertisement:(\w+)/', $consent, $cm ) ) {
+					// Backward compat: old cookies may still use "advertisement" instead of "marketing".
 					if ( 'yes' !== $cm[2] ) {
 						$blocked[] = $slug;
 					}

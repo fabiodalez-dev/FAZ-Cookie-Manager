@@ -103,7 +103,10 @@ if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 				'faz_banner_gdpr_defaults_fixed',
 				'faz_uncategorized_consent_fixed',
 				'faz_migrated_advert_to_marketing',
-			'faz_migrations_version',
+				'faz_migrations_version',
+				'faz_cookie_definitions',
+				'faz_cookie_definitions_meta',
+				'faz_file_write_access',
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );

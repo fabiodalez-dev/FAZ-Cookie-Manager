@@ -10,6 +10,7 @@
 	var bannerData = null; // full API response
 	var currentLang = 'en';
 	var previewVisible = true;
+	var previewRequestId = 0; // race-condition guard for preview requests
 	var previewFrameReady = false;
 	var previewFrameHandlersBound = false;
 	var pendingPreviewState = null;
@@ -845,9 +846,12 @@
 		var law = getVal('faz-b-law') || 'gdpr';
 		if (law === 'gdpr') hiddenTags.push('donotsell-button');
 
+		var thisRequestId = ++previewRequestId;
 		FAZ.post('banners/preview', payload).then(function (result) {
+			if (thisRequestId !== previewRequestId) return; // stale response
 			renderPreview(result.html || '', result.styles || '', hiddenTags);
 		}).catch(function () {
+			if (thisRequestId !== previewRequestId) return;
 			showPreviewMessage('Preview unavailable', 'error');
 		});
 	}

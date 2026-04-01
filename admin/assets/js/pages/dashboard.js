@@ -98,9 +98,9 @@
 		var d2 = new Date(to + 'T00:00:00');
 
 		if (d1.getFullYear() === d2.getFullYear()) {
-			return d1.toLocaleDateString('en-US', opts) + ' – ' + d2.toLocaleDateString('en-US', optsYear);
+			return d1.toLocaleDateString(undefined, opts) + ' – ' + d2.toLocaleDateString(undefined, optsYear);
 		}
-		return d1.toLocaleDateString('en-US', optsYear) + ' – ' + d2.toLocaleDateString('en-US', optsYear);
+		return d1.toLocaleDateString(undefined, optsYear) + ' – ' + d2.toLocaleDateString(undefined, optsYear);
 	}
 
 	function buildParams() {
@@ -240,7 +240,7 @@
 
 		if (!isNaN(parsed.getTime())) {
 			var opts = total > 45 ? { month: 'short' } : { month: 'short', day: 'numeric' };
-			text = parsed.toLocaleDateString('en-US', opts);
+			text = parsed.toLocaleDateString(undefined, opts);
 		} else if (label.length > 10) {
 			text = label.slice(0, 10);
 		}
@@ -316,9 +316,10 @@
 		ctx.fillStyle = theme.surface;
 		ctx.fill();
 
+		var i18n = (typeof fazConfig !== 'undefined' && fazConfig.i18n) || {};
 		var segments = [
-			{ value: pctAccept, color: theme.primary, label: 'Accepted' },
-			{ value: pctReject, color: theme.danger, label: 'Rejected' },
+			{ value: pctAccept, color: theme.primary, label: i18n.accepted || 'Accepted' },
+			{ value: pctReject, color: theme.danger, label: i18n.rejected || 'Rejected' },
 		];
 
 		var start = -Math.PI / 2;

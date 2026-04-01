@@ -205,8 +205,6 @@ class Category_Controller extends Base_Controller {
 				'%d',
 				'%d',
 				'%s',
-				'%d',
-				'%s',
 				'%s',
 				'%s',
 			)
@@ -245,8 +243,6 @@ class Category_Controller extends Base_Controller {
 				'%d',
 				'%d',
 				'%d',
-				'%d',
-				'%s',
 				'%d',
 				'%s',
 				'%s',
