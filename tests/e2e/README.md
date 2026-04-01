@@ -13,6 +13,7 @@ Copia `.env.e2e.example` e imposta:
 - `WP_BASE_URL`
 - `WP_ADMIN_USER`
 - `WP_ADMIN_PASS`
+- `FAZ_PLUGIN_DEPLOY_PATH` (richiesto dai lifecycle tests, ad esempio `/path/to/wp-content/plugins/faz-cookie-manager`)
 
 ## Comandi
 - `npm install`

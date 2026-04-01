@@ -101,7 +101,7 @@ Global controls: enable/disable banner, exclude pages, consent log retention, sc
 
 ### Automated Compliance Tests
 
-175 Playwright tests verify compliance at runtime:
+Playwright tests verify compliance at runtime:
 
 - TF01-TF18: Full functional test suite covering banner display, cookie blocking, consent flow, mobile, accessibility, revocation, logging, GCM signals, and cookie declarations
 - P05: No ambiguous button labels (dark pattern check)
@@ -113,7 +113,7 @@ Global controls: enable/disable banner, exclude pages, consent log retention, sc
 - VIS01-VIS09: Visual integrity checks across banner types and preference centers
 - IAB01-IAB39: IAB Settings page, GVL admin page, vendor selection, TC String validation
 
-**Test suite includes 175 automated compliance checks.**
+**The test suite includes automated compliance checks across frontend, admin, scanner, GCM/TCF, visual integrity, and IAB flows.**
 
 ---
 

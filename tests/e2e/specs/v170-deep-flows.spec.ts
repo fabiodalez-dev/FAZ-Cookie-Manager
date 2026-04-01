@@ -80,7 +80,8 @@ function getSkipPluginsArg(): string {
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
-  const plugins = JSON.parse(raw) as string[];
+  const parsed = JSON.parse(raw) as string[] | Record<string, string>;
+  const plugins = Array.isArray(parsed) ? parsed : Object.values(parsed);
   const skipSlugs = [...new Set(
     plugins
       .map((entry) => String(entry).split('/')[0])

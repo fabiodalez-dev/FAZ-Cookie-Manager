@@ -77,6 +77,7 @@ test.describe('Scan progress UI', () => {
 		// 7. Wait for scan to complete.
 		await page.waitForFunction(
 			() => !document.querySelector('.faz-scan-progress-wrap'),
+			undefined,
 			{ timeout: 120000 }
 		);
 		console.log('[Progress] Scan complete — progress UI removed.');

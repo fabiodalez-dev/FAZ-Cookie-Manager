@@ -583,6 +583,7 @@ test.describe('P1 fix: per-service cookie shredding', () => {
 test.describe('P3 fix: scanner uses default language', () => {
 
   test('auto-categorize stores scraped descriptions under the default language and preserves existing translations', async ({ page, loginAsAdmin }) => {
+    const cookieName = `_faz_scanner_deflang_${Date.now()}`;
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     let nonce = await getAdminNonce(page);
@@ -609,7 +610,7 @@ test.describe('P3 fix: scanner uses default language', () => {
       await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
 
       const createCookie = await fazPost(page, 'cookies', {
-        name: '_faz_scanner_deflang',
+        name: cookieName,
         domain: '.example.com',
         category: uncategorized.id,
         description: { de: 'Bestehende Beschreibung' },
@@ -628,14 +629,14 @@ test.describe('P3 fix: scanner uses default language', () => {
         : null;
       expect(listedCookie).toBeTruthy();
       expect(listedCookie?.description).toHaveProperty('de', 'Bestehende Beschreibung');
-      await page.evaluate(() => {
+      await page.evaluate((mockCookieName) => {
         const originalPost = window.FAZ.post;
         (window as any).__fazOriginalPost = originalPost;
         window.FAZ.post = function (endpoint: string, data: Record<string, unknown>) {
           if (endpoint === 'cookies/scrape') {
             return Promise.resolve([
               {
-                name: '_faz_scanner_deflang',
+                name: mockCookieName,
                 found: true,
                 category: 'analytics',
                 description: 'Descrizione scanner',
@@ -644,11 +645,11 @@ test.describe('P3 fix: scanner uses default language', () => {
           }
           return originalPost(endpoint, data);
         };
-      });
+      }, cookieName);
 
       await page.locator('#faz-auto-cat-btn').click();
       await page.locator('#faz-auto-cat-dropdown .faz-dropdown-item[data-scope="all"]').click();
-      await expect(page.locator('.faz-toast')).toContainText('Auto-categorized 1 cookies');
+      await expect(page.locator('.faz-toast').last()).toContainText('Auto-categorized 1/1 cookies');
 
       nonce = await getAdminNonce(page);
       const fetched = await apiGet(page, nonce, `cookies/${cookieId}`);

@@ -560,7 +560,7 @@ class Api extends Rest_Controller {
 	/**
 	 * Return scanner debug logs as plain text.
 	 *
-	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @SuppressWarnings("PHPMD.UnusedFormalParameter")
 	 * @param \WP_REST_Request $request Full details about the request.
 	 * @return \WP_REST_Response
 	 */
@@ -580,7 +580,7 @@ class Api extends Rest_Controller {
 	/**
 	 * Clear scanner debug logs.
 	 *
-	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+	 * @SuppressWarnings("PHPMD.UnusedFormalParameter")
 	 * @param \WP_REST_Request $request Full details about the request.
 	 * @return \WP_REST_Response
 	 */
