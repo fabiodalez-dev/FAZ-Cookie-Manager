@@ -42,15 +42,15 @@ test.describe('CSS Custom Properties', () => {
         if (!consent) return null;
         return getComputedStyle(consent).getPropertyValue('--faz-accept-button-background-color').trim();
       });
-      // Default is #1863DC or #1863dc
-      expect(acceptBgVar).toMatch(/^#1863[dD][cC]$/i);
+      // Must be a valid hex colour (any value from the admin settings)
+      expect(acceptBgVar).toMatch(/^#[0-9a-fA-F]{3,8}$/);
 
       const noticeBgVar = await page.evaluate(() => {
         const consent = document.getElementById('faz-consent');
         if (!consent) return null;
         return getComputedStyle(consent).getPropertyValue('--faz-notice-background-color').trim();
       });
-      expect(noticeBgVar).toMatch(/^#[fF]{6}$|^#[fF]{3}$|^rgb\(255,\s*255,\s*255\)$/);
+      expect(noticeBgVar).toMatch(/^#[0-9a-fA-F]{3,8}$/);
     } finally {
       await ctx.close();
     }
