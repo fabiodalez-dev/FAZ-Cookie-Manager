@@ -10,8 +10,8 @@ import { deleteOption, setOption } from '../utils/wp-env';
 test.describe('Native a11y — PHP template fixes', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(async () => {
-    // Force template rebuild so A11y_Template::apply() changes take effect.
+  test.beforeAll(() => {
+    // Synchronous WP-CLI call — completes before the first test runs.
     deleteOption('faz_banner_template');
   });
 
@@ -69,9 +69,7 @@ test.describe('Native a11y — focus loop on banner', () => {
   test.describe.configure({ mode: 'serial' });
 
   test.beforeAll(() => {
-    // Explicitly set banner type to 'box' so this test exercises the code path
-    // that was broken before the _fazLoopFocus fix (the old guard only ran the
-    // focus loop for popup type; box was excluded).
+    // Synchronous WP-CLI call — completes before the first test runs.
     setOption('faz_banner_type', 'box');
   });
 
