@@ -403,12 +403,16 @@ class Frontend {
 				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y.js', array( $script_handle ), $this->version, false );
 			}
 			// Pass translatable checkbox label templates — {name} is replaced in JS.
-			wp_localize_script( $a11y_handle, 'fazA11yConfig', array(
-				/* translators: %s: cookie category name (appears twice) */
-				'checkboxEnabled'  => __( '{name} enabled, disable {name}', 'faz-cookie-manager' ),
-				/* translators: %s: cookie category name (appears twice) */
-				'checkboxDisabled' => __( '{name} disabled, enable {name}', 'faz-cookie-manager' ),
-			) );
+			wp_localize_script(
+				$a11y_handle,
+				'fazA11yConfig',
+				array(
+					/* translators: {name} is replaced with the cookie category name (appears twice, do not translate {name}) */
+					'checkboxEnabled'  => __( '{name} enabled, disable {name}', 'faz-cookie-manager' ),
+					/* translators: {name} is replaced with the cookie category name (appears twice, do not translate {name}) */
+					'checkboxDisabled' => __( '{name} disabled, enable {name}', 'faz-cookie-manager' ),
+				)
+			);
 		}
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';

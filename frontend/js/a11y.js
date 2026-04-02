@@ -136,7 +136,8 @@
 
         applyAriaControls();
 
-        // Re-apply when the plugin swaps the show/hide button variant.
+        // The observer is intentionally not disconnected — the banner is not re-injected
+        // in the current plugin design, so the lifecycle ends with the page.
         new MutationObserver( applyAriaControls ).observe( wrapper, { childList: true, subtree: true } );
     }
 
