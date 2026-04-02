@@ -75,6 +75,10 @@ test.describe('Native a11y — focus loop on banner', () => {
     setOption('faz_banner_type', 'box');
   });
 
+  test.afterAll(() => {
+    deleteOption('faz_banner_type');
+  });
+
   // For box-type banners the original _fazLoopFocus() only attached the loop
   // for popup type. After the fix it must also apply to box type.
   test('Tab from last banner button wraps to first (box type)', async ({ page }) => {
