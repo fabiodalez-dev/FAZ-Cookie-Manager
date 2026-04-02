@@ -1,19 +1,12 @@
 // tests/e2e/specs/a11y.spec.ts
 import { expect, test } from '../fixtures/wp-fixture';
-import { deleteOption, setOption } from '../utils/wp-env';
+import { setOption } from '../utils/wp-env';
 
 // ---------------------------------------------------------------------------
-// PHP template fixes — verified by checking the rendered DOM directly.
-// deleteOption clears the cached template so prepare_html() re-runs with our
-// new A11y_Template::apply() code on the next page request.
+// Structural DOM fixes — applied by a11y.js after fazcookie_banner_loaded fires.
 // ---------------------------------------------------------------------------
-test.describe('Native a11y — PHP template fixes', () => {
+test.describe('Native a11y — structural DOM fixes', () => {
   test.describe.configure({ mode: 'serial' });
-
-  test.beforeAll(() => {
-    // Synchronous WP-CLI call — completes before the first test runs.
-    deleteOption('faz_banner_template');
-  });
 
   // Banner title must be a real <h2> with the id used by aria-labelledby.
   test('banner title is an <h2> with id="faz-banner-title"', async ({ page }) => {
