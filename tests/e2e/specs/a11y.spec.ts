@@ -68,17 +68,6 @@ test.describe('Native a11y — PHP template fixes', () => {
 test.describe('Native a11y — focus loop on banner', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(() => {
-    // Synchronous WP-CLI call — completes before the first test runs.
-    setOption('faz_banner_type', 'box');
-  });
-
-  test.afterAll(() => {
-    deleteOption('faz_banner_type');
-  });
-
-  // For box-type banners the original _fazLoopFocus() only attached the loop
-  // for popup type. After the fix it must also apply to box type.
   test('Tab from last banner button wraps to first (box type)', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
