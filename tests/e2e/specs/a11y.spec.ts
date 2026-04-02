@@ -1,6 +1,6 @@
 // tests/e2e/specs/a11y.spec.ts
 import { expect, test } from '../fixtures/wp-fixture';
-import { deleteOption } from '../utils/wp-env';
+import { deleteOption, setOption } from '../utils/wp-env';
 
 // ---------------------------------------------------------------------------
 // PHP template fixes — verified by checking the rendered DOM directly.
@@ -67,6 +67,13 @@ test.describe('Native a11y — PHP template fixes', () => {
 // ---------------------------------------------------------------------------
 test.describe('Native a11y — focus loop on banner', () => {
   test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(() => {
+    // Explicitly set banner type to 'box' so this test exercises the code path
+    // that was broken before the _fazLoopFocus fix (the old guard only ran the
+    // focus loop for popup type; box was excluded).
+    setOption('faz_banner_type', 'box');
+  });
 
   // For box-type banners the original _fazLoopFocus() only attached the loop
   // for popup type. After the fix it must also apply to box type.
