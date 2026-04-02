@@ -1,20 +1,119 @@
 /**
  * @file Native accessibility enhancements for the faz-cookie-manager banner and modal.
  *
- * Handles dynamic ARIA improvements applied after the banner is injected into the DOM:
- *   - Overrides banner container role to "dialog" and adds aria-labelledby
- *   - Adds aria-labelledby to the modal preference center
+ * Handles all accessibility improvements applied after the banner is injected into the DOM:
+ *
+ * Structural fixes (run first in init):
+ *   - Banner title element replaced with <h2 id="faz-banner-title">
+ *   - Modal title element replaced with <h2 id="faz-modal-title">
+ *   - Accordion category buttons wrapped in <h3 class="faz-accordion-heading">
+ *   - Category toggle checkboxes get role="switch"
+ *   - Description wrapper gets id="faz-desc-content"
+ *
+ * ARIA attribute and behaviour fixes (run after structural fixes):
+ *   - Banner container role overridden to "dialog" with aria-labelledby
+ *   - Modal preference center gets aria-labelledby
  *   - ESC key handlers for banner and modal
  *   - State-aware aria-label sync on category toggle checkboxes
  *   - aria-controls on the show/hide description button
- *
- * Static fixes (heading tags, role="switch", h3 wrappers, stable IDs) are handled
- * by A11y_Template::apply() in PHP at template build time.
  *
  * Translatable strings are passed via wp_localize_script as window.fazA11yConfig.
  */
 ( function () {
     'use strict';
+
+    // ---------------------------------------------------------------------------
+    // Structural DOM fixes — replace/wrap/annotate elements before ARIA work runs.
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Replace a DOM element with a new element of a different tag, copying all
+     * attributes across, removing specified ones, and moving all child nodes.
+     *
+     * @param {Element} node      The element to replace.
+     * @param {string}  newTag    Tag name for the replacement (e.g. 'h2').
+     * @param {Object}  options
+     * @param {string}  [options.id]     Optional id to set on the new element.
+     * @param {Array}   [options.remove] Attribute names to strip.
+     */
+    function replaceTag( node, newTag, options ) {
+        var newEl = document.createElement( newTag );
+        // Copy all existing attributes to the new element.
+        Array.from( node.attributes ).forEach( function ( attr ) {
+            newEl.setAttribute( attr.name, attr.value );
+        } );
+        // Remove semantically incorrect attributes that should not carry over.
+        ( options.remove || [] ).forEach( function ( attrName ) {
+            newEl.removeAttribute( attrName );
+        } );
+        // Set the stable id used by aria-labelledby references.
+        if ( options.id ) {
+            newEl.setAttribute( 'id', options.id );
+        }
+        // Move all child nodes from the original to the new element.
+        while ( node.firstChild ) {
+            newEl.appendChild( node.firstChild );
+        }
+        // Swap the original node out of the tree.
+        node.parentNode.replaceChild( newEl, node );
+    }
+
+    /**
+     * Replace <p data-faz-tag="title"> with <h2 id="faz-banner-title">.
+     * A real heading element is required so aria-labelledby on the banner
+     * container can reference it and screen readers announce it correctly.
+     */
+    function transformBannerTitle() {
+        var node = document.querySelector( '[data-faz-tag="title"]' );
+        if ( ! node ) return;
+        replaceTag( node, 'h2', { id: 'faz-banner-title', remove: [ 'role', 'aria-level' ] } );
+    }
+
+    /**
+     * Replace <span data-faz-tag="detail-title"> with <h2 id="faz-modal-title">.
+     * Same reasoning as the banner title — real heading, stable id for labelledby.
+     */
+    function transformModalTitle() {
+        var node = document.querySelector( '[data-faz-tag="detail-title"]' );
+        if ( ! node ) return;
+        replaceTag( node, 'h2', { id: 'faz-modal-title', remove: [ 'role', 'aria-level' ] } );
+    }
+
+    /**
+     * Wrap each accordion category button in an <h3> so category names appear
+     * in the page heading hierarchy and can be navigated by screen reader users.
+     */
+    function wrapAccordionButtonsInH3() {
+        var buttons = document.querySelectorAll( '[data-faz-tag="detail-category-title"]' );
+        buttons.forEach( function ( button ) {
+            var h3 = document.createElement( 'h3' );
+            h3.className = 'faz-accordion-heading';
+            button.parentNode.insertBefore( h3, button );
+            h3.appendChild( button );
+        } );
+    }
+
+    /**
+     * Add role="switch" to all category toggle checkboxes.
+     * Combined with the state-aware aria-label set at runtime, this communicates
+     * toggle semantics to switch-aware screen readers.
+     */
+    function addRoleSwitchToCheckboxes() {
+        var checkboxes = document.querySelectorAll( '[data-faz-tag="detail-category-toggle"] input[type="checkbox"]' );
+        checkboxes.forEach( function ( checkbox ) {
+            checkbox.setAttribute( 'role', 'switch' );
+        } );
+    }
+
+    /**
+     * Add a stable id to the modal description wrapper so the show/hide button's
+     * aria-controls attribute always has a valid target element.
+     */
+    function addDescriptionWrapperId() {
+        var wrapper = document.querySelector( '[data-faz-tag="detail-description"]' );
+        if ( ! wrapper ) return;
+        wrapper.setAttribute( 'id', 'faz-desc-content' );
+    }
 
     // Translatable label templates — {name} is replaced with the category name in JS.
     // Populated by wp_localize_script in class-frontend.php.
@@ -27,6 +126,14 @@
      * Called once after fazcookie_banner_loaded fires.
      */
     function init() {
+        // Structural fixes — run first so the IDs they set are available
+        // for the ARIA attribute functions below.
+        transformBannerTitle();
+        transformModalTitle();
+        wrapAccordionButtonsInH3();
+        addRoleSwitchToCheckboxes();
+        addDescriptionWrapperId();
+        // ARIA attribute and behaviour fixes.
         fixBannerRole();
         fixModalLabelledby();
         initEscHandlers();
@@ -36,7 +143,7 @@
 
     /**
      * Override role="region" with role="dialog" on the banner container and add
-     * aria-labelledby pointing to the <h2 id="faz-banner-title"> set by PHP.
+     * aria-labelledby pointing to the <h2 id="faz-banner-title"> set by transformBannerTitle().
      * script.js sets role="region"; we override it here after banner_loaded fires.
      */
     function fixBannerRole() {
@@ -48,7 +155,7 @@
 
     /**
      * Add aria-labelledby to the preference center dialog element, pointing to
-     * <h2 id="faz-modal-title"> set by PHP. script.js sets aria-label on this
+     * <h2 id="faz-modal-title"> set by transformModalTitle(). script.js sets aria-label on this
      * element; aria-labelledby takes precedence per the ARIA spec.
      */
     function fixModalLabelledby() {
@@ -121,7 +228,7 @@
 
     /**
      * Set aria-controls="faz-desc-content" on the show/hide description button.
-     * The id "faz-desc-content" is added to the wrapper by A11y_Template::apply() in PHP.
+     * The id "faz-desc-content" is added to the wrapper by addDescriptionWrapperId().
      * A MutationObserver re-applies the attribute when the plugin swaps between
      * the "show more" and "show less" button variants.
      */
