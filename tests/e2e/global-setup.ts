@@ -10,14 +10,15 @@ async function globalSetup(): Promise<void> {
     ignoreHTTPSErrors: true,
   });
 
-  const loginPage = await api.get('/wp-login.php');
+  const loginPath = process.env.WP_LOGIN_PATH ?? '/wp-login.php';
+  const loginPage = await api.get(loginPath);
   if (!loginPage.ok()) {
     await api.dispose();
     throw new Error(`WordPress login page not reachable at ${baseURL}/wp-login.php (status ${loginPage.status()}).`);
   }
 
   // Verify credentials actually work before running the full suite.
-  const loginResponse = await api.post('/wp-login.php', {
+  const loginResponse = await api.post(loginPath, {
     form: {
       log: adminUser,
       pwd: adminPass,
