@@ -75,7 +75,7 @@ $faz_page_title = isset( $faz_page_title ) && is_string( $faz_page_title ) ? $fa
 	</div>
 	<div id="faz-page-content">
 		<?php
-		$view_file = __DIR__ . '/' . $faz_page_slug . '.php';
+		$view_file = __DIR__ . '/' . sanitize_file_name( $faz_page_slug ) . '.php';
 		if ( file_exists( $view_file ) ) {
 			include $view_file;
 		}

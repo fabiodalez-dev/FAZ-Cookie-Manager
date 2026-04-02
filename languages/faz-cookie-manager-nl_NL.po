@@ -539,7 +539,7 @@ msgstr "Maximum aantal pagina's om te scannen."
 
 #: admin/modules/settings/api/class-api.php:207
 msgid "Filter name is required."
-msgstr "Filterenaam is verplicht."
+msgstr "Filternaam is verplicht."
 
 #: admin/modules/settings/api/class-api.php:217
 msgid "Filter name is not permitted."
@@ -1557,7 +1557,7 @@ msgstr "Instellingen importeren"
 
 #: admin/views/import-export.php:30
 msgid "Upload a previously exported JSON file to restore or migrate settings. This will overwrite your current plugin configuration."
-msgstr "Upload een eerder geëxporteerde JSON-bestand om instellingen te herstellen of te migreren. Dit overschrijft je huidige plugin configuratie."
+msgstr "Upload een eerder geëxporteerd JSON-bestand om instellingen te herstellen of te migreren. Dit overschrijft je huidige plugin configuratie."
 
 #: admin/views/import-export.php:32
 msgid "Select JSON file"

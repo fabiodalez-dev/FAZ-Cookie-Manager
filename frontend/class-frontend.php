@@ -2080,7 +2080,9 @@ class Frontend {
 		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
 		$data['behaviours']['animations']             = $behaviours['animations'] ?? array();
 		$data['config']['revisitConsent']             = $config['revisitConsent'] ?? array();
-		$data['config']['preferenceCenter']['toggle'] = $config['preferenceCenter']['elements']['categories']['elements']['toggle'] ?? array();
+		$data['config']['preferenceCenter']['toggle'] = $config['preferenceCenter']['toggle']
+			?? $config['preferenceCenter']['elements']['categories']['elements']['toggle']
+			?? array();
 		$data['config']['categoryPreview']['status']  = $config['categoryPreview']['status'] ?? false;
 		$data['config']['categoryPreview']['toggle']  = $config['categoryPreview']['elements']['toggle'] ?? array();
 		$data['config']['videoPlaceholder']['status'] = $config['videoPlaceholder']['status'] ?? false;

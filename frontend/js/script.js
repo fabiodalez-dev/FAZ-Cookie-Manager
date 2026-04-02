@@ -473,9 +473,12 @@ _fazDomReady(async function () {
  */
 function _fazRegisterListeners() {
     for (const { slug } of _fazStore._categories) {
-        _fazAttachListener('detail-category-title', () => {
-            var el = document.getElementById(`fazCategory${slug}`);
-            if (el) el.classList.toggle("faz-tab-active");
+        var title = document.querySelector(
+            '#fazDetailCategory' + slug + ' [data-faz-tag="detail-category-title"]'
+        );
+        if (title) title.addEventListener('click', function() {
+            var el = document.getElementById('fazCategory' + slug);
+            if (el) el.classList.toggle('faz-tab-active');
         });
     }
     _fazAttachListener("=settings-button", () => _fazSetPreferenceAction('settings-button'));
@@ -741,7 +744,7 @@ function _fazGetFocusableElements(element) {
         wrapperElement.querySelectorAll(
             'a:not([disabled]), button:not([disabled]), [tabindex]:not([disabled]):not([tabindex="-1"])'
         )
-    ).filter((element) => !element.classList.contains('faz-hidden'));
+    ).filter((element) => !element.closest('.faz-hidden'));
     if (focussableElements.length <= 0) return [];
     return [
         focussableElements[0],
@@ -1007,6 +1010,9 @@ function _fazShowAgeGate(pendingChoice) {
         sessionStorage.setItem('faz_age_verified', '1');
         overlay.remove();
         _fazAcceptCookies(pendingChoice);
+        _fazRemoveBanner();
+        _fazHidePreferenceCenter();
+        _fazAfterConsent();
     });
     modal.appendChild(btnYes);
 
@@ -1049,7 +1055,7 @@ function _fazShowAgeGate(pendingChoice) {
  */
 function _fazAcceptReject(option = "custom") {
     return () => {
-        _fazAcceptCookies(option);
+        if (_fazAcceptCookies(option) === false) return;
         _fazRemoveBanner();
         _fazHidePreferenceCenter();
         _fazAfterConsent();
@@ -1072,7 +1078,7 @@ function _fazAcceptCookies(choice = "all") {
     if (choice !== 'reject' && _fazStore._ageGate && _fazStore._ageGate.enabled) {
         if (!sessionStorage.getItem('faz_age_verified')) {
             _fazShowAgeGate(choice);
-            return;
+            return false;
         }
     }
 
@@ -1139,6 +1145,7 @@ function _fazAcceptCookies(choice = "all") {
 
     _fazUnblock();
     _fazFireEvent(responseCategories);
+    return true;
 }
 function _fazSetShowMoreLess() {
     const activeLaw = _fazGetLaw();

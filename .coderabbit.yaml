@@ -22,9 +22,11 @@ reviews:
         This is a WordPress plugin (PHP 7.4+). Follow WordPress coding standards:
         - All output must be escaped: esc_html(), esc_attr(), esc_url(), wp_kses().
         - All DB queries must use $wpdb->prepare() with parameterized placeholders.
-        - All REST write endpoints must verify nonces via faz_verify_nonce(),
-          except public endpoints (/faz/v1/consent, /faz/v1/pageviews) which use
-          HMAC token validation instead (permission_callback => '__return_true').
+        - All REST write endpoints must verify nonces via faz_verify_nonce().
+        - Public exceptions:
+          - /faz/v1/consent: permission_callback => '__return_true', no frontend
+            nonce, abuse protection via faz_throttle_request().
+          - /faz/v1/pageviews: same public pattern.
         - All REST admin endpoints require manage_options capability.
         - Use absint() for IDs, sanitize_text_field() for strings.
         - Never suggest using WordPress deprecated functions.
@@ -126,6 +128,11 @@ reviews:
         CSS rewrite callback must skip @keyframes step selectors (0%, 100%, from, to).
         Custom CSS in preview must be appended AFTER css_fixes for correct specificity.
         previewUrl uses set_url_scheme() for HTTPS proxy compatibility.
+
+    - path: "frontend/views/banner-preview-frame.php"
+      instructions: |
+        Banner preview iframe renderer. Admin-only, gated by faz_is_banner_preview_request().
+        Renders same-origin preview content. Bypasses LiteSpeed cache.
 
     - path: "admin/assets/js/pages/*.js"
       instructions: |

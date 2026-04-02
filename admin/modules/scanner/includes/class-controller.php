@@ -531,8 +531,9 @@ class Controller {
 								$sub_response = wp_remote_get(
 									$sub_url,
 									array(
-										'timeout'   => 15,
-										'sslverify' => false,
+										'timeout'     => 15,
+										'sslverify'   => false,
+										'redirection' => 0,
 									)
 								);
 								if ( ! is_wp_error( $sub_response ) && 200 === wp_remote_retrieve_response_code( $sub_response ) ) {

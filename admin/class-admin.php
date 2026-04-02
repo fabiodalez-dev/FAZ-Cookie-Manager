@@ -521,6 +521,7 @@ window.wp.apiFetch=apiFetch;
 				),
 				'version'        => $this->version,
 				'modules'        => self::$active_modules,
+				'locale'         => get_user_locale(),
 				'i18n'           => array(
 					'accepted'       => __( 'Accepted', 'faz-cookie-manager' ),
 					'rejected'       => __( 'Rejected', 'faz-cookie-manager' ),

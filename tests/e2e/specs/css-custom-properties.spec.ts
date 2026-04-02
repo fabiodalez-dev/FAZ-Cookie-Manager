@@ -43,14 +43,14 @@ test.describe('CSS Custom Properties', () => {
         return getComputedStyle(consent).getPropertyValue('--faz-accept-button-background-color').trim();
       });
       // Must be a valid hex colour (any value from the admin settings)
-      expect(acceptBgVar).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+      expect(acceptBgVar).toMatch(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
 
       const noticeBgVar = await page.evaluate(() => {
         const consent = document.getElementById('faz-consent');
         if (!consent) return null;
         return getComputedStyle(consent).getPropertyValue('--faz-notice-background-color').trim();
       });
-      expect(noticeBgVar).toMatch(/^#[0-9a-fA-F]{3,8}$/);
+      expect(noticeBgVar).toMatch(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
     } finally {
       await ctx.close();
     }
