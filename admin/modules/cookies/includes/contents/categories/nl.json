@@ -21,7 +21,7 @@
   },
   "wordpress-internal": {
     "name": "WordPress intern",
-    "description": "<p>Cookies die door de WordPress worden ingesteld voor ingelogde beheerders. Niet zichtbaar voor sitebezoekers.</p>"
+    "description": "<p>Cookies die door WordPress worden ingesteld voor ingelogde beheerders. Niet zichtbaar voor sitebezoekers.</p>"
   },
   "marketing": {
     "name": "Marketing",

@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues\n"
 "POT-Creation-Date: 2026-03-18T22:37:35+00:00\n"
-"PO-Revision-Date: 2026-04-01 15:19+0200\n"
+"PO-Revision-Date: 2026-04-02 13:06+0200\n"
 "Last-Translator: Yannic van Veen (Yard Digital Agency)\n"
 "Language-Team: Dutch\n"
 "Language: nl_NL\n"
@@ -174,7 +174,7 @@ msgstr "Ga naar Leverancierslijst"
 
 #: admin/class-admin.php:1049
 msgid "Dismiss"
-msgstr "Weigeren"
+msgstr "Sluiten"
 
 #: admin/class-admin.php:1102
 msgid "Cookie Consent Overview"
@@ -1466,7 +1466,7 @@ msgstr "Activeer Google Consent Mode"
 
 #: admin/views/gcm.php:29
 msgid "Consent Signal Defaults"
-msgstr "Content Signal Standaardwaarden"
+msgstr "Consent Signal Standaardwaarden"
 
 #: admin/views/gcm.php:36
 msgid "Consent Type"
