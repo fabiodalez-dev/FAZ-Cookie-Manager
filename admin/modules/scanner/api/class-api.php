@@ -442,7 +442,7 @@ class Api extends Rest_Controller {
 					'timeout'             => 20,
 					'sslverify'           => false,
 					'redirection'         => 3,
-					'reject_unsafe_urls'  => false,
+					'reject_unsafe_urls'  => true,
 					'user-agent'          => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
 				)
 			);

@@ -523,8 +523,13 @@ class Controller {
 					if ( isset( $xml->sitemap ) ) {
 						foreach ( $xml->sitemap as $sitemap ) {
 							if ( isset( $sitemap->loc ) ) {
+								$sub_url = (string) $sitemap->loc;
+								// Validate sitemap URL belongs to the same host.
+								if ( wp_parse_url( $sub_url, PHP_URL_HOST ) !== wp_parse_url( home_url(), PHP_URL_HOST ) ) {
+									continue;
+								}
 								$sub_response = wp_remote_get(
-									(string) $sitemap->loc,
+									$sub_url,
 									array(
 										'timeout'   => 15,
 										'sslverify' => false,

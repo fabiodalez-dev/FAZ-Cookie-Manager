@@ -2068,27 +2068,31 @@ class Frontend {
 		}
 
 		$properties                                   = $banner->get_settings();
-		$data['settings']['type']                     = $properties['settings']['type'];
-		$data['settings']['preferenceCenterType']     = $properties['settings']['type'] === "classic" ? "pushdown" : $properties['settings']['preferenceCenterType'];
-		$data['settings']['position']                 = $properties['settings']['position'];
-		$data['settings']['applicableLaw']            = $properties['settings']['applicableLaw'];
-		$data['behaviours']['reloadBannerOnAccept']   = $properties['behaviours']['reloadBannerOnAccept']['status'];
-		$data['behaviours']['loadAnalyticsByDefault'] = $properties['behaviours']['loadAnalyticsByDefault']['status'];
-		$data['behaviours']['animations']             = $properties['behaviours']['animations'];
-		$data['config']['revisitConsent']             = $properties['config']['revisitConsent'];
-		$data['config']['preferenceCenter']['toggle'] = $properties['config']['preferenceCenter']['elements']['categories']['elements']['toggle'];
-		$data['config']['categoryPreview']['status']  = $properties['config']['categoryPreview']['status'];
-		$data['config']['categoryPreview']['toggle']  = $properties['config']['categoryPreview']['elements']['toggle'];
-		$data['config']['videoPlaceholder']['status'] = $properties['config']['videoPlaceholder']['status'];
-		$data['config']['videoPlaceholder']['styles'] = array_merge( $properties['config']['videoPlaceholder']['styles'], $properties['config']['videoPlaceholder']['elements']['title']['styles'] );
-		$data['config']['readMore']                   = $properties['config']['notice']['elements']['buttons']['elements']['readMore'];
-		$data['config']['showMore']                    = $properties['config']['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showMore'] ?? array();
-		$data['config']['showLess']                    = $properties['config']['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showLess'] ?? array();
-		$data['config']['alwaysActive']                = $properties['config']['accessibilityOverrides']['elements']['preferenceCenter']['elements']['alwaysActive'] ?? array();
-		$data['config']['manualLinks']                 = $properties['config']['accessibilityOverrides']['elements']['manualLinks'] ?? array();
-		$data['config']['auditTable']['status']       = $properties['config']['auditTable']['status'];
-		$data['config']['optOption']['status']        = $properties['config']['optoutPopup']['elements']['optOption']['status'];
-		$data['config']['optOption']['toggle']        = $properties['config']['optoutPopup']['elements']['optOption']['elements']['toggle'];
+		$settings   = $properties['settings'] ?? array();
+		$behaviours = $properties['behaviours'] ?? array();
+		$config     = $properties['config'] ?? array();
+
+		$data['settings']['type']                     = $settings['type'] ?? 'box';
+		$data['settings']['preferenceCenterType']     = ( $settings['type'] ?? '' ) === 'classic' ? 'pushdown' : ( $settings['preferenceCenterType'] ?? 'popup' );
+		$data['settings']['position']                 = $settings['position'] ?? 'bottom-right';
+		$data['settings']['applicableLaw']            = $settings['applicableLaw'] ?? 'gdpr';
+		$data['behaviours']['reloadBannerOnAccept']   = $behaviours['reloadBannerOnAccept']['status'] ?? false;
+		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
+		$data['behaviours']['animations']             = $behaviours['animations'] ?? array();
+		$data['config']['revisitConsent']             = $config['revisitConsent'] ?? array();
+		$data['config']['preferenceCenter']['toggle'] = $config['preferenceCenter']['elements']['categories']['elements']['toggle'] ?? array();
+		$data['config']['categoryPreview']['status']  = $config['categoryPreview']['status'] ?? false;
+		$data['config']['categoryPreview']['toggle']  = $config['categoryPreview']['elements']['toggle'] ?? array();
+		$data['config']['videoPlaceholder']['status'] = $config['videoPlaceholder']['status'] ?? false;
+		$data['config']['videoPlaceholder']['styles'] = array_merge( $config['videoPlaceholder']['styles'] ?? array(), $config['videoPlaceholder']['elements']['title']['styles'] ?? array() );
+		$data['config']['readMore']                   = $config['notice']['elements']['buttons']['elements']['readMore'] ?? array();
+		$data['config']['showMore']                    = $config['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showMore'] ?? array();
+		$data['config']['showLess']                    = $config['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showLess'] ?? array();
+		$data['config']['alwaysActive']                = $config['accessibilityOverrides']['elements']['preferenceCenter']['elements']['alwaysActive'] ?? array();
+		$data['config']['manualLinks']                 = $config['accessibilityOverrides']['elements']['manualLinks'] ?? array();
+		$data['config']['auditTable']['status']       = $config['auditTable']['status'] ?? false;
+		$data['config']['optOption']['status']        = $config['optoutPopup']['elements']['optOption']['status'] ?? false;
+		$data['config']['optOption']['toggle']        = $config['optoutPopup']['elements']['optOption']['elements']['toggle'] ?? array();
 		return $data;
 	}
 

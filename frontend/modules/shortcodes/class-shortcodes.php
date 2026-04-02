@@ -443,7 +443,7 @@ class Shortcodes {
 		$config         = faz_array_search( $this->properties['config'], 'tag', 'audit-table' );
 
 		if ( isset( $config['status'] ) && false === $config['status'] ) {
-			return;
+			return '';
 		}
 
 		$container = isset( $shortcode_data['content']['container'] ) ? $shortcode_data['content']['container'] : '';

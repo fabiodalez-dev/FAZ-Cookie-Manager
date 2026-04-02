@@ -473,11 +473,10 @@ _fazDomReady(async function () {
  */
 function _fazRegisterListeners() {
     for (const { slug } of _fazStore._categories) {
-        _fazAttachListener('detail-category-title', () =>
-            document
-                .getElementById(`fazCategory${slug}`)
-                .classList.toggle("faz-tab-active")
-        );
+        _fazAttachListener('detail-category-title', () => {
+            var el = document.getElementById(`fazCategory${slug}`);
+            if (el) el.classList.toggle("faz-tab-active");
+        });
     }
     _fazAttachListener("=settings-button", () => _fazSetPreferenceAction('settings-button'));
     _fazAttachListener("=detail-close", () => _fazHidePreferenceCenter());
@@ -493,6 +492,15 @@ function _fazRegisterListeners() {
     _fazAttachListener("=detail-reject-button", _fazAcceptReject("reject"));
     _fazAttachListener("=revisit-consent", () => _revisitFazConsent());
     _fazAttachListener("=optout-close", () => _fazHidePreferenceCenter());
+
+    // Escape key closes the preference center / optout popup.
+    document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        var pref = _fazGetPreferenceCenter();
+        if (pref && pref.classList.contains(_fazGetPreferenceClass())) {
+            _fazHidePreferenceCenter();
+        }
+    });
 }
 
 function _fazAttachCategoryListeners() {
@@ -663,6 +671,12 @@ function _fazShowPreferenceCenter() {
     } else {
         _fazToggleAriaExpandStatus("=settings-button");
     }
+
+    // Move focus into the preference center for keyboard/screen reader users.
+    if (element) {
+        var focusTarget = element.querySelector('button, [tabindex]:not([tabindex="-1"]), input, a');
+        if (focusTarget) focusTarget.focus();
+    }
 }
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
@@ -737,7 +751,7 @@ function _fazGetFocusableElements(element) {
 function _fazLoopFocus() {
     const activeLaw = _fazGetLaw();
     const bannerType = _fazGetType();
-    if (bannerType === "classic") return;
+    // Classic/pushdown banners also need focus trapping on their preference wrapper.
     if (bannerType === "popup") {
         const [firstElementBanner, lastElementBanner] =
             _fazGetFocusableElements("notice");

@@ -225,7 +225,10 @@ class Api extends Rest_Controller {
 			);
 		}
 		$object = $this->prepare_item_for_database( $request );
-		$object->save();
+		$result = $object->save();
+		if ( false === $result ) {
+			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to create banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+		}
 		$data = $this->prepare_item_for_response( $object, $request );
 		return rest_ensure_response( $data );
 	}
@@ -249,7 +252,10 @@ class Api extends Rest_Controller {
 		if ( isset( $registered['language'], $request['language'] ) ) {
 			$object->set_language( sanitize_text_field( $request['language'] ) );
 		}
-		$object->save();
+		$result = $object->save();
+		if ( false === $result ) {
+			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to update banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+		}
 		$data = $this->prepare_item_for_response( $object, $request );
 		return rest_ensure_response( $data );
 	}
@@ -270,6 +276,9 @@ class Api extends Rest_Controller {
 		}
 		$banner_id = $request['id'];
 		$data      = $this->controller->delete_item( $banner_id );
+		if ( false === $data ) {
+			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to delete banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+		}
 		return rest_ensure_response( $data );
 	}
 
