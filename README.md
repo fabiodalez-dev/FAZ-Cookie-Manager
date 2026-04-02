@@ -285,7 +285,7 @@ Detects visitor country for geo-targeted banner display:
 
 ### Multilingual Support
 
-- **10 bundled languages**: English, German, French, Italian, Spanish, Polish, Portuguese (PT + BR), Hungarian, Finnish
+- **11 bundled languages**: English, German, French, Italian, Spanish, Polish, Portuguese (PT + BR), Hungarian, Finnish, Dutch
 - **180+ selectable languages** in the admin configuration
 - **Browser language detection**: Parses `Accept-Language` header with quality factor sorting
 - **Plugin integration**: Polylang and WPML auto-detected

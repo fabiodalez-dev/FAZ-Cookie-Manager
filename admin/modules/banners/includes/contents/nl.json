@@ -1,0 +1,202 @@
+{
+  "gdpr": {
+    "notice": {
+      "elements": {
+        "title": "Wij hechten waarde aan je privacy",
+        "description": "<p>Wij gebruiken cookies om je browse-ervaring te verbeteren, gepersonaliseerde advertenties of inhoud aan te bieden en ons verkeer te analyseren. Door op \"Alles accepteren\" te klikken, stem je in met ons gebruik van cookies. Je kunt je toestemming op elk moment wijzigen of intrekken door op het pictogram voor toestemmingsvoorkeuren te klikken.</p>",
+        "privacyLink": "",
+        "buttons": {
+          "elements": {
+            "accept": "Alles accepteren",
+            "reject": "Alles afwijzen",
+            "settings": "Aanpassen",
+            "readMore": "Cookiebeleid",
+            "donotSell": "Mijn persoonsgegevens niet verkopen of delen"
+          }
+        },
+        "closeButton": "Sluiten"
+      }
+    },
+    "categoryPreview": {
+      "elements": {
+        "buttons": {
+          "elements": {
+            "save": "Mijn voorkeuren opslaan"
+          }
+        }
+      }
+    },
+    "preferenceCenter": {
+      "elements": {
+        "title": "Toestemmingsvoorkeuren aanpassen",
+        "description": "<p>Wij gebruiken cookies om je efficiënt te laten navigeren en bepaalde functies uit te voeren. Je vindt hieronder gedetailleerde informatie over alle cookies per toestemmingscategorie.</p><p>De cookies die als \"Noodzakelijk\" zijn gecategoriseerd, worden in je browser opgeslagen omdat ze essentieel zijn voor het mogelijk maken van de basisfunctionaliteiten van de site.</p><p>We gebruiken ook cookies van derden die ons helpen te analyseren hoe je deze website gebruikt, je voorkeuren op te slaan en inhoud en marketingmateriaal aan te bieden die relevant voor je zijn. Deze cookies worden alleen met je voorafgaande toestemming in je browser opgeslagen.</p><p>Je kunt ervoor kiezen om sommige of alle cookies in of uit te schakelen, maar het uitschakelen van sommige cookies kan invloed hebben op je browse-ervaring.</p>",
+        "showMore": "Meer tonen",
+        "showLess": "Minder tonen",
+        "category": {
+          "elements": {
+            "alwaysEnabled": "Altijd actief",
+            "enable": "Inschakelen",
+            "disable": "Uitschakelen"
+          }
+        },
+        "buttons": {
+          "elements": {
+            "accept": "Alles accepteren",
+            "save": "Mijn voorkeuren opslaan",
+            "reject": "Alles afwijzen"
+          }
+        },
+        "closeButton": "Sluiten"
+      }
+    },
+    "optoutPopup": {
+      "elements": {
+        "title": "Voorkeuren voor afmelden",
+        "description": "<p>We gebruiken cookies van derden die ons helpen te analyseren hoe je deze website gebruikt, je voorkeuren op te slaan en inhoud en marketingmateriaal aan te bieden die relevant voor je zijn. Je kunt je echter afmelden voor deze cookies door \"Mijn persoonsgegevens niet verkopen of delen\" aan te vinken en op de knop \"Mijn voorkeuren opslaan\" te klikken. Zodra je je hebt afgemeld, kun je je op elk moment weer aanmelden door \"Mijn persoonsgegevens niet verkopen of delen\" uit te vinken en op de knop \"Mijn voorkeuren opslaan\" te klikken.</p>",
+        "optOption": {
+          "elements": {
+            "title": "Mijn persoonsgegevens niet verkopen of delen",
+            "enable": "Inschakelen",
+            "disable": "Uitschakelen"
+          }
+        },
+        "gpcOption": {
+          "elements": {
+            "description": "<p>Je afmeldinstellingen voor deze website zijn gerespecteerd omdat we een <b>Global Privacy Control</b>-signaal van je browser hebben gedetecteerd. Daarom kun je deze instelling niet wijzigen.</p>"
+          }
+        },
+        "showLess": "Minder tonen",
+        "showMore": "Meer tonen",
+        "buttons": {
+          "elements": {
+            "cancel": "Annuleren",
+            "confirm": "Mijn voorkeuren opslaan"
+          }
+        },
+        "closeButton": "Sluiten"
+      }
+    },
+    "revisitConsent": {
+      "elements": {
+        "title": "Toestemmingsvoorkeuren"
+      }
+    },
+    "auditTable": {
+      "elements": {
+        "headers": {
+          "elements": {
+            "id": "Cookie",
+            "duration": "Duur",
+            "description": "Omschrijving"
+          }
+        },
+        "message": "Geen cookies om weer te geven."
+      }
+    },
+    "videoPlaceholder": {
+      "elements": {
+        "title": "Accepteer cookies om toegang te krijgen tot deze inhoud"
+      }
+    }
+  },
+  "ccpa": {
+    "notice": {
+      "elements": {
+        "title": "Wij hechten waarde aan je privacy",
+        "description": "<p>Deze website of tools van derden verwerken persoonsgegevens. Je kunt je afmelden voor de verkoop van je persoonsgegevens door op de link \"Mijn persoonsgegevens niet verkopen of delen\" te klikken. Je kunt je toestemming op elk moment wijzigen of intrekken door op het pictogram voor toestemmingsvoorkeuren te klikken.</p>",
+        "privacyLink": "",
+        "buttons": {
+          "elements": {
+            "accept": "Alles accepteren",
+            "reject": "Alles weigeren",
+            "settings": "Aanpassen",
+            "readMore": "Cookiebeleid",
+            "donotSell": "Mijn persoonsgegevens niet verkopen of delen"
+          }
+        },
+        "closeButton": "Sluiten"
+      }
+    },
+    "categoryPreview": {
+      "elements": {
+        "buttons": {
+          "elements": {
+            "save": "Mijn voorkeuren opslaan"
+          }
+        }
+      }
+    },
+    "preferenceCenter": {
+      "elements": {
+        "title": "Toestemmingsvoorkeuren aanpassen",
+        "description": "<p>Wij gebruiken cookies om je efficiënt te laten navigeren en bepaalde functies uit te voeren. Je vindt hieronder gedetailleerde informatie over alle cookies per toestemmingscategorie.</p><p>De cookies die als \"Noodzakelijk\" zijn gecategoriseerd, worden in je browser opgeslagen omdat ze essentieel zijn voor het mogelijk maken van de basisfunctionaliteiten van de site.</p><p>We gebruiken ook cookies van derden die ons helpen te analyseren hoe je deze website gebruikt, je voorkeuren op te slaan en inhoud en marketingmateriaal aan te bieden die relevant voor je zijn. Deze cookies worden alleen met je voorafgaande toestemming in je browser opgeslagen.</p><p>Je kunt ervoor kiezen om sommige of alle cookies in of uit te schakelen, maar het uitschakelen van sommige cookies kan invloed hebben op je browse-ervaring.</p>",
+        "showMore": "Meer tonen",
+        "showLess": "Minder tonen",
+        "category": {
+          "elements": {
+            "alwaysEnabled": "Altijd actief",
+            "enable": "Inschakelen",
+            "disable": "Uitschakelen"
+          }
+        },
+        "buttons": {
+          "elements": {
+            "accept": "Alles accepteren",
+            "save": "Mijn voorkeuren opslaan",
+            "reject": "Alles weigeren"
+          }
+        },
+        "closeButton": "Sluiten"
+      }
+    },
+    "optoutPopup": {
+      "elements": {
+        "title": "Voorkeuren voor afmelden",
+        "description": "<p>We gebruiken cookies van derden die ons helpen te analyseren hoe je deze website gebruikt, je voorkeuren op te slaan en inhoud en marketingmateriaal aan te bieden die relevant voor je zijn. Je kunt je echter afmelden voor deze cookies door \"Mijn persoonsgegevens niet verkopen of delen\" aan te vinken en op de knop \"Mijn voorkeuren opslaan\" te klikken. Zodra je je hebt afgemeld, kun je je op elk moment weer aanmelden door \"Mijn persoonsgegevens niet verkopen of delen\" uit te vinken en op de knop \"Mijn voorkeuren opslaan\" te klikken.</p>",
+        "optOption": {
+          "elements": {
+            "title": "Mijn persoonsgegevens niet verkopen of delen",
+            "enable": "Inschakelen",
+            "disable": "Uitschakelen"
+          }
+        },
+        "gpcOption": {
+          "elements": {
+            "description": "<p>Je afmeldinstellingen voor deze website zijn gerespecteerd sinds we een <b>Global Privacy Control</b>-signaal van je browser hebben gedetecteerd. Daarom kun je deze instelling niet wijzigen.</p>"
+          }
+        },
+        "showLess": "Minder tonen",
+        "showMore": "Meer tonen",
+        "buttons": {
+          "elements": {
+            "cancel": "Annuleren",
+            "confirm": "Mijn voorkeuren opslaan"
+          }
+        },
+        "closeButton": "Sluiten"
+      }
+    },
+    "revisitConsent": {
+      "elements": {
+        "title": "Toestemmingsvoorkeuren"
+      }
+    },
+    "auditTable": {
+      "elements": {
+        "headers": {
+          "elements": {
+            "id": "Cookie",
+            "duration": "Duur",
+            "description": "Omschrijving"
+          }
+        },
+        "message": "Geen cookies om weer te geven."
+      }
+    },
+    "videoPlaceholder": {
+      "elements": {
+        "title": "Accepteer cookies om toegang te krijgen tot deze inhoud"
+      }
+    }
+  }
+}
