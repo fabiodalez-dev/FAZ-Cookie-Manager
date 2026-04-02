@@ -75,7 +75,7 @@ if (_fazStore._perServiceConsent && _fazStore._services) {
 
 /**
  * Get the value of cookie by it's name.
- * 
+ *
  * @param {string} name Name of the cookie
  * @returns {string}
  */
@@ -93,7 +93,7 @@ ref._fazGetCookie = function (name) {
 
 /**
  * Set a cookie on document.cookie object.
- * 
+ *
  * @param {*} name Name of the cookie.
  * @param {*} value Value to be set.
  * @param {*} days Expiry in days.
@@ -127,8 +127,8 @@ var _revisitFazConsent = function () {
 };
 /**
  * Search an element by it's data-faz-tag attribute
- * 
- * @param {string} tag data-faz-tag of an element. 
+ *
+ * @param {string} tag data-faz-tag of an element.
  * @returns {object}
  */
 function _fazGetElementByTag(tag) {
@@ -154,7 +154,7 @@ function _fazParseHTML(html) {
 
 /**
  * Bind click event to banner elements.
- * 
+ *
  * @param {string} tag data-faz-tag of the element
  * @param {function} fn callback function
  */
@@ -195,7 +195,7 @@ function _fazFindElement(selector, forParent) {
 }
 /**
  * Remove an element from the DOM.
- * 
+ *
  * @param {string} tag data-faz-tag of the element.
  */
 function _fazRemoveElement(tag) {    const item = _fazGetElementByTag(tag);
@@ -219,9 +219,9 @@ function _fazRemoveStyles() {
 
 /**
  * Generate a random string for logging purposes.
- * 
+ *
  * @param {integer} length Length of the string to be generated.
- * @returns 
+ * @returns
  */
 ref._fazRandomString = function (length, allChars = true) {
     const chars = `${allChars ? `0123456789` : ""
@@ -260,7 +260,7 @@ function _fazRemoveBanner() {
 
 /**
  * Initialize the plugin front-end operations.
- * 
+ *
  * @returns {boolean}
  */
 function _fazInitOperations() {
@@ -345,7 +345,7 @@ function _fazSetInitialState() {
 
 /**
  * Add a class based on the banner type and position. Eg: 'faz-banner-top'
- * 
+ *
  * @returns {boolean}
  */
 function _fazAddPositionClass() {
@@ -353,10 +353,10 @@ function _fazAddPositionClass() {
     if (!notice) return false;
     const container = notice.closest('.faz-consent-container');
     if (!container) return false;
-    
+
     container.setAttribute("aria-label", "We value your privacy");
     container.setAttribute("role", "region");
-    
+
     const type = _fazStore._bannerConfig.settings.type;
     let position = _fazStore._bannerConfig.settings.position;
     let bannerType = type;
@@ -396,7 +396,7 @@ function _fazAddPositionClass() {
 
 /**
  * Add a class based on the preference center type and position. Eg: 'faz-sidebar-left'
- * 
+ *
  * @returns {boolean}
  */
 function _fazAddPreferenceCenterClass() {
@@ -441,9 +441,9 @@ async function _fazInit() {
 
 /**
  * Domready event, alternative to jQuery(document).ready() function
- * 
- * @param {function} callback 
- * @returns 
+ *
+ * @param {function} callback
+ * @returns
  */
 function _fazDomReady(callback) {
     if (typeof document === 'undefined') {
@@ -783,9 +783,9 @@ function _fazAttachFocusLoop(element, targetElement, isReverse = false) {
 
 /**
  * Replace footer shadow with current preference center background.
- * 
+ *
  * @param {object} $doc Dom node.
- * @returns 
+ * @returns
  */
 function _fazSetFooterShadow($doc) {
     // Background handled via CSS: .faz-footer-shadow { background: linear-gradient(180deg, rgba(255,255,255,0) 0%, var(--faz-detail-background-color, #ffffff) 100%) }
@@ -793,7 +793,7 @@ function _fazSetFooterShadow($doc) {
 
 /**
  * Remove all the rejected cookies.
- * 
+ *
  * @param {object} cookies Cookies list.
  */
 function _fazRemoveDeadCookies({ cookies }) {
@@ -1221,7 +1221,7 @@ function _fazSetShowMoreLess() {
 }
 /**
  * Add styles to the shortcode HTML rendered outside of the banner.
- * 
+ *
  * @returns {void}
  */
 function _fazAttachShortCodeStyles() {
@@ -1752,7 +1752,7 @@ function _fazShouldChangeType(element, src) {
 
 /**
  * Add readmore button to consent notice.
- * 
+ *
  * @returns void
  */
 function _fazAttachReadMore() {
@@ -1784,7 +1784,7 @@ function _fazAttachReadMore() {
 
 /**
  * Apply styles to show more/show less buttons.
- * 
+ *
  * @returns void
  */
 function _fazAttachShowMoreLessStyles() {
@@ -1794,7 +1794,7 @@ function _fazAttachShowMoreLessStyles() {
 
 /**
  * Apply styles to Always Active text.
- * 
+ *
  * @returns void
  */
 function _fazAttachAlwaysActiveStyles() {
@@ -1803,7 +1803,7 @@ function _fazAttachAlwaysActiveStyles() {
 
 /**
  * Apply styles to manually added links.
- * 
+ *
  * @returns void
  */
 function _fazAttachManualLinksStyles() {

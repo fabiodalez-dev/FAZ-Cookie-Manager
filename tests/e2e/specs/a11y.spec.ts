@@ -61,3 +61,30 @@ test.describe('Native a11y — PHP template fixes', () => {
     await expect(wrapper).toBeAttached();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Focus loop — Tab key must cycle within the banner for all non-classic types.
+// ---------------------------------------------------------------------------
+test.describe('Native a11y — focus loop on banner', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  // For box-type banners the original _fazLoopFocus() only attached the loop
+  // for popup type. After the fix it must also apply to box type.
+  test('Tab from last banner button wraps to first (box type)', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const notice = page.locator('[data-faz-tag="notice"]');
+    await expect(notice).toBeVisible();
+
+    // Collect all visible, non-disabled focusable elements in the notice.
+    const buttons = notice.locator('button:not([disabled])');
+    await expect(buttons.first()).toBeVisible();
+
+    // Focus the last button in the banner.
+    await buttons.last().focus();
+
+    // Tab should loop back to the first button.
+    await page.keyboard.press('Tab');
+    await expect(buttons.first()).toBeFocused();
+  });
+});
