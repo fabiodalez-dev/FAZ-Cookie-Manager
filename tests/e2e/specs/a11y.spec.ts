@@ -1,6 +1,5 @@
 // tests/e2e/specs/a11y.spec.ts
 import { expect, test } from '../fixtures/wp-fixture';
-import { setOption } from '../utils/wp-env';
 
 // ---------------------------------------------------------------------------
 // Structural DOM fixes — applied by a11y.js after fazcookie_banner_loaded fires.
