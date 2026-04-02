@@ -22,6 +22,25 @@
 ( function () {
     'use strict';
 
+	/**
+     * Run all accessibility enhancements.
+     * Called once after fazcookie_banner_loaded fires.
+     */
+    function init() {
+        // Structural fixes
+        transformBannerTitle();
+        transformModalTitle();
+        wrapAccordionButtonsInH3();
+        addRoleSwitchToCheckboxes();
+        addDescriptionWrapperId();
+        // ARIA attribute and behavior fixes.
+        fixBannerRole();
+        fixModalLabelledby();
+        initEscHandlers();
+        initCheckboxAriaLabels();
+        initShowHideAriaControls();
+    }
+
     // ---------------------------------------------------------------------------
     // Structural DOM fixes — replace/wrap/annotate elements before ARIA work runs.
     // ---------------------------------------------------------------------------
@@ -115,32 +134,6 @@
         wrapper.setAttribute( 'id', 'faz-desc-content' );
     }
 
-    // Translatable label templates — {name} is replaced with the category name in JS.
-    // Populated by wp_localize_script in class-frontend.php.
-    var config = window.fazA11yConfig || {};
-    var LABEL_ENABLED  = config.checkboxEnabled  || '{name} enabled, disable {name}';
-    var LABEL_DISABLED = config.checkboxDisabled || '{name} disabled, enable {name}';
-
-    /**
-     * Run all accessibility enhancements.
-     * Called once after fazcookie_banner_loaded fires.
-     */
-    function init() {
-        // Structural fixes — run first so the IDs they set are available
-        // for the ARIA attribute functions below.
-        transformBannerTitle();
-        transformModalTitle();
-        wrapAccordionButtonsInH3();
-        addRoleSwitchToCheckboxes();
-        addDescriptionWrapperId();
-        // ARIA attribute and behaviour fixes.
-        fixBannerRole();
-        fixModalLabelledby();
-        initEscHandlers();
-        initCheckboxAriaLabels();
-        initShowHideAriaControls();
-    }
-
     /**
      * Override role="region" with role="dialog" on the banner container and add
      * aria-labelledby pointing to the <h2 id="faz-banner-title"> set by transformBannerTitle().
@@ -221,6 +214,9 @@
      * Uses the translatable LABEL_ENABLED / LABEL_DISABLED templates from fazA11yConfig.
      */
     function syncCheckboxAriaLabel( button, checkbox ) {
+		var config = window.fazA11yConfig || {};
+		var LABEL_ENABLED  = config.checkboxEnabled  || '{name} enabled, disable {name}';
+		var LABEL_DISABLED = config.checkboxDisabled || '{name} disabled, enable {name}';
         var name     = ( button.getAttribute( 'aria-label' ) || button.textContent || '' ).trim();
         var template = checkbox.checked ? LABEL_ENABLED : LABEL_DISABLED;
         checkbox.setAttribute( 'aria-label', template.replace( /\{name\}/g, name ) );
