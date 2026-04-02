@@ -154,7 +154,7 @@ class Controller extends Base_Controller {
 		$banner->set_date_created( $date_created );
 		$banner->set_date_modified( $date_created );
 
-		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$created = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_banners',
 			array(
 				'name'           => $banner->get_name(),
@@ -177,15 +177,17 @@ class Controller extends Base_Controller {
 				'%s',
 			)
 		);
-		if ( $wpdb->insert_id ) {
-			$id = $wpdb->insert_id;
-			$banner->set_id( $id );
-			$banner->set_slug( $banner->get_name() );
-			$slug = $banner->get_slug() . '-' . $id; // Append ID to the slug of the each banner.
-			$banner->set_slug( $slug );
-			$banner->save();
-			$banner->set_id( $wpdb->insert_id );
+		if ( false === $created || ! $wpdb->insert_id ) {
+			return;
 		}
+		$id = $wpdb->insert_id;
+		$banner->set_id( $id );
+		$banner->set_slug( $banner->get_name() );
+		$slug = $banner->get_slug() . '-' . $id; // Append ID to the slug of the each banner.
+		$banner->set_slug( $slug );
+		$banner->save();
+		$banner->set_id( $wpdb->insert_id );
+		$this->delete_cache();
 		do_action( 'faz_after_update_banner' );
 	}
 
@@ -205,7 +207,7 @@ class Controller extends Base_Controller {
 			'banner_default' => ( true === $banner->get_default() ? 1 : 0 ),
 			'contents'       => wp_json_encode( $banner->get_contents() ),
 		);
-		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		$updated = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 			$wpdb->prefix . 'faz_banners',
 			$data,
 			array( 'banner_id' => $banner->get_id() ),
@@ -218,6 +220,12 @@ class Controller extends Base_Controller {
 				'%s',
 			)
 		);
+		if ( false === $updated ) {
+			return;
+		}
+		if ( $updated > 0 ) {
+			$this->delete_cache();
+		}
 		if ( defined( 'FAZ_BULK_REQUEST' ) && FAZ_BULK_REQUEST ) {
 			return;
 		}
@@ -238,6 +246,12 @@ class Controller extends Base_Controller {
 				'banner_id' => $id,
 			)
 		);
+		if ( false === $status ) {
+			return false;
+		}
+		if ( $status > 0 ) {
+			$this->delete_cache();
+		}
 		do_action( 'faz_after_update_banner' );
 		return $status;
 	}

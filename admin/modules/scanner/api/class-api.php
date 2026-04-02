@@ -398,7 +398,7 @@ class Api extends Rest_Controller {
 	 * X-Frame-Options, or slow page loads that exceed iframe timeouts).
 	 *
 	 * @param \WP_REST_Request $request Request with 'url' parameter.
-	 * @return \WP_REST_Response
+	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function server_scan( $request ) {
 		$logger = Scanner_Logger::get_instance();
@@ -412,16 +412,38 @@ class Api extends Rest_Controller {
 				return $response;
 			}
 
+			// SSRF protection: only allow URLs on the same domain as the site.
+			$site_host = preg_replace( '/^www\./i', '', strtolower( trim( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) ) );
+			$url_host  = preg_replace( '/^www\./i', '', strtolower( trim( (string) wp_parse_url( $url, PHP_URL_HOST ) ) ) );
+			// Treat localhost and 127.0.0.1 as equivalent for local dev environments.
+			$loopback  = array( 'localhost', '127.0.0.1', '::1' );
+			$site_is_local = in_array( $site_host, $loopback, true );
+			$url_is_local  = in_array( $url_host, $loopback, true );
+			$hosts_match   = ( $url_host === $site_host ) || ( $site_is_local && $url_is_local );
+			if ( ! $site_host || ! $url_host || ! $hosts_match ) {
+				$logger->log( 'Server-scan: URL domain mismatch (expected ' . $site_host . ', got ' . $url_host . ')' );
+				return new \WP_Error(
+					'faz_server_scan_domain_mismatch',
+					__( 'The scan URL must match the current site domain.', 'faz-cookie-manager' ),
+					array( 'status' => 400 )
+				);
+			}
+
 			$logger->log( 'Server-scan URL: ' . $url );
 
 			// Fetch the page HTML server-side.
+			// Use wp_remote_get (not wp_safe_remote_get) because the scanner
+			// needs to reach the site itself, which may be on localhost/127.0.0.1.
+			// SSRF is mitigated by the host validation above. Redirects are limited
+			// to same-host only via 'reject_unsafe_urls' => true.
 			$http_response = wp_remote_get(
 				$url,
 				array(
-					'timeout'     => 20,
-					'sslverify'   => false,
-					'redirection' => 3,
-					'user-agent'  => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
+					'timeout'             => 20,
+					'sslverify'           => false,
+					'redirection'         => 3,
+					'reject_unsafe_urls'  => true,
+					'user-agent'          => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
 				)
 			);
 

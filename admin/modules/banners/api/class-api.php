@@ -225,7 +225,10 @@ class Api extends Rest_Controller {
 			);
 		}
 		$object = $this->prepare_item_for_database( $request );
-		$object->save();
+		$result = $object->save();
+		if ( false === $result ) {
+			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to create banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+		}
 		$data = $this->prepare_item_for_response( $object, $request );
 		return rest_ensure_response( $data );
 	}
@@ -249,7 +252,10 @@ class Api extends Rest_Controller {
 		if ( isset( $registered['language'], $request['language'] ) ) {
 			$object->set_language( sanitize_text_field( $request['language'] ) );
 		}
-		$object->save();
+		$result = $object->save();
+		if ( false === $result ) {
+			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to update banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+		}
 		$data = $this->prepare_item_for_response( $object, $request );
 		return rest_ensure_response( $data );
 	}
@@ -270,6 +276,9 @@ class Api extends Rest_Controller {
 		}
 		$banner_id = $request['id'];
 		$data      = $this->controller->delete_item( $banner_id );
+		if ( false === $data ) {
+			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to delete banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+		}
 		return rest_ensure_response( $data );
 	}
 
@@ -330,8 +339,182 @@ class Api extends Rest_Controller {
 		$object->set_language( $language );
 		$template       = $object->get_template();
 		$data['html']   = $template['html'];
-		$data['styles'] = $template['styles'];
+		$data['styles'] = $this->build_preview_styles( $template, $object->get_settings() );
 		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Build the same banner CSS the frontend would emit for this preview.
+	 *
+	 * @param array $template Banner template payload.
+	 * @param array $settings Banner settings.
+	 * @return string
+	 */
+	private function build_preview_styles( $template, $settings ) {
+		$raw_css = isset( $template['styles'] ) ? (string) $template['styles'] : '';
+		$css     = $this->boost_preview_css_specificity( $raw_css );
+
+		$css_reset = '#faz-consent,#faz-consent *,#faz-consent *::before,#faz-consent *::after{'
+			. 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;'
+			. 'letter-spacing:normal;'
+			. 'text-transform:none;'
+			. 'font-style:normal;'
+			. 'text-decoration:none;'
+			. 'word-spacing:normal;'
+			. 'line-height:1.5;'
+			. 'box-sizing:border-box;'
+			. '}';
+		$css_fixes = '#faz-consent .faz-accordion-header .faz-always-active,'
+			. '.faz-modal .faz-accordion-header .faz-always-active{'
+			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
+			. '}';
+
+		$custom_css = $this->sanitize_preview_custom_css(
+			isset( $settings['meta']['customCSS'] ) ? $settings['meta']['customCSS'] : ''
+		);
+
+		return $css_reset . $css . $css_fixes . $custom_css;
+	}
+
+	/**
+	 * Sanitize banner custom CSS for preview output.
+	 *
+	 * @param string $custom_css Raw custom CSS.
+	 * @return string
+	 */
+	private function sanitize_preview_custom_css( $custom_css ) {
+		$custom_css = trim( (string) $custom_css );
+		if ( '' === $custom_css ) {
+			return '';
+		}
+
+		$custom_css = wp_strip_all_tags( $custom_css );
+		if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding|@import/i', $custom_css ) ) {
+			return '';
+		}
+
+		return $custom_css;
+	}
+
+	/**
+	 * Match frontend CSS specificity boosting for admin preview output.
+	 *
+	 * @param string $css Raw template CSS.
+	 * @return string
+	 */
+	private function boost_preview_css_specificity( $css ) {
+		if ( empty( $css ) ) {
+			return $css;
+		}
+
+		$container_classes = array(
+			'.faz-classic-top',
+			'.faz-classic-bottom',
+			'.faz-banner-top',
+			'.faz-banner-bottom',
+			'.faz-box-bottom-left',
+			'.faz-box-bottom-right',
+			'.faz-box-top-left',
+			'.faz-box-top-right',
+		);
+
+		$sibling_prefixes = array(
+			'.faz-overlay',
+			'.faz-btn-revisit',
+			'.faz-revisit-',
+			'.faz-hide',
+			'.faz-modal',
+		);
+
+		$modal_prefixes = array(
+			'.faz-preference',
+			'.faz-prefrence',
+			'.faz-accordion',
+			'.faz-audit',
+			'.faz-cookie-des',
+			'.faz-always-active',
+			'.faz-switch',
+			'.faz-chevron',
+			'.faz-show-desc',
+			'.faz-hide-desc',
+			'.faz-btn',
+			'.faz-category',
+			'.faz-notice',
+			'.faz-opt-out',
+			'.faz-footer',
+			'.faz-iab-vendors',
+			'.faz-vendor-',
+		);
+
+		return preg_replace_callback(
+			'/([^{}]+?)(\{)/',
+			function ( $matches ) use ( $container_classes, $sibling_prefixes, $modal_prefixes ) {
+				$raw = $matches[1];
+				if ( false !== strpos( $raw, '@' ) ) {
+					return $matches[0];
+				}
+
+				$parts = explode( ',', $raw );
+				$out   = array();
+
+				foreach ( $parts as $selector ) {
+					$selector = trim( $selector );
+					if ( '' === $selector ) {
+						continue;
+					}
+
+					// Skip @keyframes step selectors (0%, 100%, from, to).
+					if ( preg_match( '/^(?:\d+%|from|to)$/i', $selector ) ) {
+						$out[] = $selector;
+						continue;
+					}
+
+					if ( 0 === strpos( $selector, '.faz-consent-container' ) ) {
+						$out[] = '#faz-consent' . substr( $selector, 22 );
+						continue;
+					}
+
+					$matched = false;
+					foreach ( $container_classes as $class_name ) {
+						if ( 0 === strpos( $selector, $class_name ) ) {
+							$out[]   = '#faz-consent' . $selector;
+							$matched = true;
+							break;
+						}
+					}
+					if ( $matched ) {
+						continue;
+					}
+
+					foreach ( $sibling_prefixes as $prefix ) {
+						if ( 0 === strpos( $selector, $prefix ) ) {
+							$out[]   = $selector;
+							$matched = true;
+							break;
+						}
+					}
+					if ( $matched ) {
+						continue;
+					}
+
+					foreach ( $modal_prefixes as $prefix ) {
+						if ( 0 === strpos( $selector, $prefix ) ) {
+							$out[]   = '#faz-consent ' . $selector . ',.faz-modal ' . $selector;
+							$matched = true;
+							break;
+						}
+					}
+					if ( $matched ) {
+						continue;
+					}
+
+					$out[] = '#faz-consent ' . $selector;
+				}
+
+				return implode( ',', $out ) . '{';
+			},
+			$css
+		);
 	}
 
 	/**

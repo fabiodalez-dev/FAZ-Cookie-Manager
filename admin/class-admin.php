@@ -497,8 +497,14 @@ window.wp.apiFetch=apiFetch;
 					'nonce' => wp_create_nonce( 'wp_rest' ),
 				),
 				'site'           => array(
-					'url'  => get_site_url(),
-					'name' => esc_attr( get_option( 'blogname' ) ),
+					'url'        => get_site_url(),
+					'name'       => esc_attr( get_option( 'blogname' ) ),
+					'previewUrl' => add_query_arg(
+						array(
+							'faz_banner_preview' => '1',
+						),
+						set_url_scheme( home_url( '/' ) )
+					),
 				),
 				'assetsURL'      => defined( 'FAZ_PLUGIN_URL' ) ? FAZ_PLUGIN_URL . 'frontend/images/' : '',
 				'defaultLogo'    => plugins_url( 'frontend/images/cookie.png', FAZ_PLUGIN_FILENAME ),
@@ -515,6 +521,12 @@ window.wp.apiFetch=apiFetch;
 				),
 				'version'        => $this->version,
 				'modules'        => self::$active_modules,
+				'locale'         => get_user_locale(),
+				'i18n'           => array(
+					'accepted'       => __( 'Accepted', 'faz-cookie-manager' ),
+					'rejected'       => __( 'Rejected', 'faz-cookie-manager' ),
+					'totalResponses' => __( 'total responses', 'faz-cookie-manager' ),
+				),
 			)
 		);
 

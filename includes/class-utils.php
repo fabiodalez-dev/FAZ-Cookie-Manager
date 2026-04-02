@@ -189,6 +189,20 @@ if ( ! function_exists( 'faz_is_front_end_request' ) ) {
 		return true;
 	}
 }
+if ( ! function_exists( 'faz_is_banner_preview_request' ) ) {
+
+	/**
+	 * Check if the current request is the admin banner preview iframe.
+	 *
+	 * @return boolean
+	 */
+	function faz_is_banner_preview_request() {
+		return isset( $_GET['faz_banner_preview'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			&& '1' === $_GET['faz_banner_preview'] // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			&& current_user_can( 'manage_options' );
+	}
+}
+
 if ( ! function_exists( 'faz_disable_banner' ) ) {
 
 	/**
@@ -216,6 +230,17 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 			// Tell LiteSpeed not to cache this page variation.
 			if ( defined( 'LSCWP_V' ) ) {
 				do_action( 'litespeed_control_set_nocache', 'FAZ scanner bypass' );
+			}
+			return true;
+		}
+		// Admin-only frontend preview iframe used by the banner customizer.
+		if ( faz_is_banner_preview_request() ) {
+			if ( ! headers_sent() ) {
+				header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+				header( 'X-LiteSpeed-Cache-Control: no-cache' );
+			}
+			if ( defined( 'LSCWP_V' ) ) {
+				do_action( 'litespeed_control_set_nocache', 'FAZ banner preview iframe' );
 			}
 			return true;
 		}

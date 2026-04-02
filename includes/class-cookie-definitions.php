@@ -39,6 +39,7 @@ class Cookie_Definitions {
 	 * @var array
 	 */
 	private static $category_map = array(
+		'necessary'  => 'necessary',
 		'functional' => 'functional',
 		'analytics'  => 'analytics',
 		'marketing'  => 'marketing',

@@ -10,6 +10,14 @@
 	var bannerData = null; // full API response
 	var currentLang = 'en';
 	var previewVisible = true;
+	var previewRequestId = 0; // race-condition guard for preview requests
+	var previewFrameReady = false;
+	var previewFrameHandlersBound = false;
+	var pendingPreviewState = null;
+	var previewLayoutTimers = [];
+	var DEFAULT_PREVIEW_FRAME_HEIGHT = 280;
+	var MIN_PREVIEW_FRAME_HEIGHT = 72;
+	var MAX_PREVIEW_FRAME_HEIGHT = 640;
 
 	FAZ.ready(function () {
 		// Serialize visible TinyMCE content into bannerData BEFORE FAZ.tabs
@@ -57,10 +65,12 @@
 
 		loadBanner();
 		loadDesignPresets();
+		syncPreviewSpacer(DEFAULT_PREVIEW_FRAME_HEIGHT);
 
 		document.getElementById('faz-b-save').addEventListener('click', saveBanner);
 		document.getElementById('faz-b-refresh-preview').addEventListener('click', function () {
 			syncFormToBannerData();
+			ensurePreviewFrame(true);
 			refreshPreview();
 		});
 
@@ -74,11 +84,19 @@
 				if (panel) {
 					panel.classList.toggle('hidden', !previewVisible);
 				}
-				// Adjust spacer height
-				var spacer = document.getElementById('faz-b-spacer');
-				if (spacer) spacer.style.height = previewVisible ? '320px' : '80px';
+				if (previewVisible) {
+					ensurePreviewFrame(false);
+					syncFormToBannerData();
+					refreshPreview();
+					schedulePreviewFrameLayoutSync([0, 120]);
+				}
+				syncPreviewSpacer();
 			});
 		}
+
+		window.addEventListener('resize', function () {
+			schedulePreviewFrameLayoutSync([0, 120]);
+		});
 
 		// Language selectors (content + preferences tabs share same banner)
 		['faz-b-content-lang', 'faz-b-pref-lang'].forEach(function (id) {
@@ -176,6 +194,9 @@
 				prefEl.disabled = true;
 			} else {
 				prefEl.disabled = false;
+				if (type === 'box' && prefEl.value === 'pushdown') {
+					prefEl.value = 'popup';
+				}
 			}
 		}
 	}
@@ -189,6 +210,7 @@
 			FAZ.initColorPickers();
 			// Filter position options for current type
 			updatePositionOptions();
+			ensurePreviewFrame(false);
 			// Render live preview
 			refreshPreview();
 		}).catch(function () {
@@ -482,6 +504,10 @@
 
 		// Re-init color pickers (update swatch display)
 		FAZ.initColorPickers();
+
+		// Theme changes should reflect immediately in the live preview.
+		syncFormToBannerData();
+		refreshPreview();
 	}
 
 	function stripStyles(obj) {
@@ -795,6 +821,7 @@
 
 	function refreshPreview() {
 		if (!bannerData) return;
+		if (!previewVisible) return;
 		var host = document.getElementById('faz-b-preview-host');
 		if (!host) return;
 
@@ -822,14 +849,15 @@
 		var law = getVal('faz-b-law') || 'gdpr';
 		if (law === 'gdpr') hiddenTags.push('donotsell-button');
 
+		var thisRequestId = ++previewRequestId;
+		pendingPreviewState = null;
 		FAZ.post('banners/preview', payload).then(function (result) {
+			if (thisRequestId !== previewRequestId) return; // stale response
 			renderPreview(result.html || '', result.styles || '', hiddenTags);
 		}).catch(function () {
-			var errDiv = document.createElement('div');
-			errDiv.style.cssText = 'padding:24px;color:#94a3b8;text-align:center;';
-			errDiv.textContent = 'Preview unavailable';
-			host.textContent = '';
-			host.appendChild(errDiv);
+			if (thisRequestId !== previewRequestId) return;
+			pendingPreviewState = null;
+			showPreviewMessage('Preview unavailable', 'error');
 		});
 	}
 
@@ -852,120 +880,280 @@
 		}
 	}
 
-	function renderPreview(html, css, hiddenTags) {
-		var host = document.getElementById('faz-b-preview-host');
-		var stylesHost = document.getElementById('faz-b-preview-styles');
-		if (!host) return;
-		hiddenTags = hiddenTags || [];
+	function showPreviewMessage(message, type) {
+		var el = document.getElementById('faz-b-preview-message');
+		if (!el) return;
+		if (!message) {
+			el.textContent = '';
+			el.classList.remove('is-error');
+			el.classList.add('is-hidden');
+			return;
+		}
+		el.textContent = message;
+		el.classList.toggle('is-error', type === 'error');
+		el.classList.remove('is-hidden');
+	}
 
-		// Determine the position class the frontend would add.
-		// Full-width banners only use top/bottom; box uses corner positions.
+	function clearPreviewLayoutTimers() {
+		previewLayoutTimers.forEach(function (timer) {
+			window.clearTimeout(timer);
+		});
+		previewLayoutTimers = [];
+	}
+
+	function clampPreviewFrameHeight(height) {
+		var numeric = Number(height) || 0;
+		if (!numeric) return DEFAULT_PREVIEW_FRAME_HEIGHT;
+		return Math.max(MIN_PREVIEW_FRAME_HEIGHT, Math.min(MAX_PREVIEW_FRAME_HEIGHT, Math.ceil(numeric)));
+	}
+
+	function syncPreviewSpacer(frameHeight) {
+		var spacer = document.getElementById('faz-b-spacer');
+		if (!spacer) return;
+		var saveBar = document.querySelector('#faz-b-fixed-bottom .faz-save-bar');
+		var saveBarHeight = saveBar ? Math.ceil(saveBar.getBoundingClientRect().height) : 80;
+		var previewHeight = previewVisible ? clampPreviewFrameHeight(frameHeight || getCurrentPreviewFrameHeight()) : 0;
+		spacer.style.height = (saveBarHeight + previewHeight + 20) + 'px';
+	}
+
+	function getCurrentPreviewFrameHeight() {
+		var frame = document.getElementById('faz-b-preview-frame');
+		if (!frame) return DEFAULT_PREVIEW_FRAME_HEIGHT;
+		return Math.ceil(frame.getBoundingClientRect().height) || DEFAULT_PREVIEW_FRAME_HEIGHT;
+	}
+
+	function setPreviewFrameHeight(height) {
+		var frame = document.getElementById('faz-b-preview-frame');
+		var host = document.getElementById('faz-b-preview-host');
+		var safeHeight = clampPreviewFrameHeight(height);
+		if (host) {
+			host.style.height = safeHeight + 'px';
+			host.style.minHeight = safeHeight + 'px';
+		}
+		if (frame) {
+			frame.style.height = safeHeight + 'px';
+			frame.style.minHeight = safeHeight + 'px';
+		}
+		syncPreviewSpacer(safeHeight);
+	}
+
+	function isPreviewNodeVisible(node) {
+		if (!node || !node.ownerDocument || !node.ownerDocument.defaultView) return false;
+		var style = node.ownerDocument.defaultView.getComputedStyle(node);
+		return style.display !== 'none'
+			&& style.visibility !== 'hidden'
+			&& style.opacity !== '0';
+	}
+
+	function measurePreviewFrameHeight() {
+		var doc = getPreviewFrameDocument();
+		if (!doc) return DEFAULT_PREVIEW_FRAME_HEIGHT;
+		var root = doc.getElementById('faz-b-preview-root');
+		if (!root) return DEFAULT_PREVIEW_FRAME_HEIGHT;
+
+		var candidates = [
+			root.querySelector('.faz-modal.faz-modal-open .faz-preference-center'),
+			root.querySelector('.faz-consent-container:not(.faz-hide) .faz-consent-bar'),
+			root.querySelector('.faz-consent-container:not(.faz-hide)'),
+			root.querySelector('[data-faz-tag="revisit-consent"]:not(.faz-revisit-hide)')
+		];
+
+		for (var i = 0; i < candidates.length; i++) {
+			var node = candidates[i];
+			if (!isPreviewNodeVisible(node)) continue;
+			var rect = node.getBoundingClientRect();
+			if (rect && rect.height > 0) {
+				return rect.height + 12;
+			}
+		}
+
+		var fallbackHeight = Math.max(
+			root.scrollHeight || 0,
+			doc.body ? doc.body.scrollHeight || 0 : 0,
+			doc.documentElement ? doc.documentElement.scrollHeight || 0 : 0
+		);
+		return fallbackHeight || DEFAULT_PREVIEW_FRAME_HEIGHT;
+	}
+
+	function syncPreviewFrameLayout() {
+		if (!previewVisible) {
+			syncPreviewSpacer(0);
+			return;
+		}
+		setPreviewFrameHeight(measurePreviewFrameHeight());
+	}
+
+	function schedulePreviewFrameLayoutSync(delays) {
+		clearPreviewLayoutTimers();
+		var waits = Array.isArray(delays) ? delays : [0];
+		waits.forEach(function (delay) {
+			previewLayoutTimers.push(window.setTimeout(function () {
+				syncPreviewFrameLayout();
+			}, Math.max(0, Number(delay) || 0)));
+		});
+	}
+
+	function addPreviewCacheBust(urlString) {
+		try {
+			var url = new URL(urlString, window.location.origin);
+			url.searchParams.set('faz_preview_t', String(Date.now()));
+			return url.toString();
+		} catch (_unused2) {
+			return urlString;
+		}
+	}
+
+	function getPreviewFrameUrl(forceReload) {
+		var raw = (window.fazConfig && fazConfig.site && (fazConfig.site.previewUrl || fazConfig.site.url)) || window.location.origin;
+		var url;
+		try {
+			url = new URL(raw, window.location.origin);
+		} catch (_unused3) {
+			url = new URL('/', window.location.origin);
+		}
+		if (!url.searchParams.get('faz_banner_preview')) {
+			url.searchParams.set('faz_banner_preview', '1');
+		}
+		return forceReload ? addPreviewCacheBust(url.toString()) : url.toString();
+	}
+
+	function ensurePreviewFrame(forceReload) {
+		var frame = document.getElementById('faz-b-preview-frame');
+		if (!frame) return null;
+
+		if (!previewFrameHandlersBound) {
+			frame.addEventListener('load', function () {
+				previewFrameReady = true;
+				setPreviewFrameHeight(DEFAULT_PREVIEW_FRAME_HEIGHT);
+				renderPreviewIntoFrame();
+			});
+			frame.addEventListener('error', function () {
+				previewFrameReady = false;
+				showPreviewMessage('Unable to load the real site preview.', 'error');
+			});
+			previewFrameHandlersBound = true;
+		}
+
+		if (!frame.getAttribute('src') || forceReload) {
+			previewFrameReady = false;
+			setPreviewFrameHeight(DEFAULT_PREVIEW_FRAME_HEIGHT);
+			frame.setAttribute('src', getPreviewFrameUrl(forceReload));
+			showPreviewMessage('Loading real site preview...');
+		}
+
+		return frame;
+	}
+
+	function getPreviewFrameDocument() {
+		var frame = document.getElementById('faz-b-preview-frame');
+		if (!frame || !previewFrameReady) return null;
+		try {
+			var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+			return doc && doc.body ? doc : null;
+		} catch (_unused4) {
+			showPreviewMessage('Preview unavailable: cross-origin restriction.', 'error');
+			previewFrameReady = false;
+			return null;
+		}
+	}
+
+	function renderPreview(html, css, hiddenTags) {
+		pendingPreviewState = {
+			html: html || '',
+			css: css || '',
+			hiddenTags: hiddenTags || [],
+		};
+		ensurePreviewFrame(false);
+		renderPreviewIntoFrame();
+	}
+
+	function renderPreviewIntoFrame() {
+		if (!pendingPreviewState) return;
+
+		var doc = getPreviewFrameDocument();
+		if (!doc || !doc.body) return;
+
+		var state = pendingPreviewState;
+		var parsed = new DOMParser().parseFromString(state.html || '', 'text/html');
+		var head = doc.head || doc.getElementsByTagName('head')[0] || doc.body;
+		var root = doc.getElementById('faz-b-preview-root');
+
+		if (!root) {
+			root = doc.createElement('div');
+			root.id = 'faz-b-preview-root';
+			doc.body.appendChild(root);
+		}
+		while (root.firstChild) root.removeChild(root.firstChild);
+		var sourceContainer = parsed.querySelector('.faz-consent-container');
+		if (!sourceContainer) {
+			showPreviewMessage('Preview unavailable', 'error');
+			return;
+		}
+		root.appendChild(doc.importNode ? doc.importNode(sourceContainer, true) : sourceContainer.cloneNode(true));
+
+		var previewStyle = doc.getElementById('faz-preview-css');
+		if (!previewStyle) {
+			previewStyle = doc.createElement('style');
+			previewStyle.id = 'faz-preview-css';
+			head.appendChild(previewStyle);
+		}
+		previewStyle.textContent = String(state.css || '');
+
+		var previewRuntimeStyle = doc.getElementById('faz-preview-runtime');
+		if (!previewRuntimeStyle) {
+			previewRuntimeStyle = doc.createElement('style');
+			previewRuntimeStyle.id = 'faz-preview-runtime';
+			head.appendChild(previewRuntimeStyle);
+		}
+		previewRuntimeStyle.textContent =
+			'html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:transparent!important;height:auto!important;min-height:0!important;}' +
+			'#faz-b-preview-root{position:relative;z-index:2147483640;display:flex!important;width:100%!important;min-height:0!important;justify-content:flex-start;align-items:flex-start;}' +
+			'#faz-b-preview-root[data-faz-preview-type="box"]{padding:0 16px!important;}' +
+			'#faz-b-preview-root[data-faz-preview-type="box"][data-faz-preview-position$="right"]{justify-content:flex-end!important;}' +
+			'#faz-b-preview-root[data-faz-preview-type="box"][data-faz-preview-position$="left"]{justify-content:flex-start!important;}' +
+			'#faz-b-preview-root .faz-consent-container{position:relative!important;top:auto!important;right:auto!important;bottom:auto!important;left:auto!important;inset:auto!important;margin:0!important;z-index:auto!important;}' +
+			'#faz-b-preview-root[data-faz-preview-type="banner"] .faz-consent-container,' +
+			'#faz-b-preview-root[data-faz-preview-type="classic"] .faz-consent-container{width:100%!important;max-width:none!important;}' +
+			'#faz-b-preview-root [data-faz-tag]{visibility:visible!important;}' +
+			'#faz-b-preview-root .faz-consent-bar button,' +
+			'#faz-b-preview-root .faz-consent-bar a,' +
+			'#faz-b-preview-root .faz-category-direct-preview-btn-wrapper .faz-btn,' +
+			'#faz-b-preview-root .faz-prefrence-btn-wrapper .faz-btn,' +
+			'#faz-b-preview-root .faz-banner-btn-close,' +
+			'#faz-b-preview-root .faz-btn-close{pointer-events:none!important;cursor:default!important;}';
+
+		var container = root.querySelector('.faz-consent-container');
+		if (!container) {
+			showPreviewMessage('Preview unavailable', 'error');
+			return;
+		}
+
 		var type = getVal('faz-b-type') || 'box';
 		var position = getVal('faz-b-position') || 'bottom-right';
 		var ptype = getVal('faz-b-pref-type') || 'popup';
-		// For the position class, pushdown forces classic layout on frontend.
 		var positionType = type;
-		if (ptype === 'pushdown') positionType = 'classic';
+		if (type !== 'box' && ptype === 'pushdown') positionType = 'classic';
 		var positionForClass = position;
 		if (positionType !== 'box') {
 			positionForClass = (position.indexOf('top') !== -1) ? 'top' : 'bottom';
 		}
 		var positionClass = 'faz-' + positionType + '-' + positionForClass;
-		// For preview layout CSS, use the actual selected type (not overridden).
-		var bannerType = type;
+		root.setAttribute('data-faz-preview-type', positionType);
+		root.setAttribute('data-faz-preview-position', position);
 
-		// Override CSS: render preview inline in the fixed-bottom panel.
-		// Only the .faz-consent-container is injected (see above), so CSS
-		// overrides are minimal - just position it inline in the panel.
-		var overrideCSS =
-			'#faz-b-preview-host{' +
-			'position:relative;overflow:hidden;min-height:60px;background:none;}' +
-			'#faz-b-preview-host .faz-consent-container{' +
-			'position:relative!important;' +
-			'top:auto!important;bottom:auto!important;left:auto!important;right:auto!important;' +
-			'opacity:1!important;visibility:visible!important;z-index:1!important;' +
-			'transform:none!important;}' +
-			'#faz-b-preview-host .faz-consent-bar button,' +
-			'#faz-b-preview-host .faz-consent-bar a{pointer-events:none;cursor:default;}';
+		container.classList.add(positionClass);
+		container.classList.remove('faz-hide');
+		container.style.opacity = '1';
+		container.style.visibility = 'visible';
 
-		// Box type: keep compact width, use flexbox to show corner positioning.
-		if (bannerType === 'box') {
-			var justifyVal = 'flex-end';
-			if (position === 'bottom-left' || position === 'top-left') justifyVal = 'flex-start';
-			overrideCSS +=
-				'#faz-b-preview-host{display:flex;justify-content:' + justifyVal + ';' +
-				'align-items:flex-end;padding:16px;min-height:120px;}';
-		} else {
-			// Full-width types (classic, banner): use flexbox to show top/bottom position.
-			var vAlign = (positionForClass === 'top') ? 'flex-start' : 'flex-end';
-			overrideCSS +=
-				'#faz-b-preview-host{display:flex;flex-direction:column;' +
-				'justify-content:' + vAlign + ';min-height:140px;}' +
-				'#faz-b-preview-host .faz-consent-container{width:100%!important;}';
-		}
-
-		// Inject CSS
-		if (stylesHost) {
-			while (stylesHost.firstChild) {
-				stylesHost.removeChild(stylesHost.firstChild);
-			}
-
-			var previewStyle = document.createElement('style');
-			previewStyle.id = 'faz-preview-css';
-			previewStyle.textContent = String(css || '');
-
-			var overrideStyle = document.createElement('style');
-			overrideStyle.id = 'faz-preview-overrides';
-			overrideStyle.textContent = String(overrideCSS || '');
-
-			stylesHost.appendChild(previewStyle);
-			stylesHost.appendChild(overrideStyle);
-		}
-
-		// Parse the server-rendered banner template and extract only the consent
-		// bar (.faz-consent-container). Uses DOMParser for safe inert parsing
-		// (scripts won't execute). Content is trusted admin-only API output.
-		var parsed = new DOMParser().parseFromString(html, 'text/html');
-		var container = parsed.querySelector('.faz-consent-container');
-		while (host.firstChild) host.removeChild(host.firstChild);
-		if (!container) {
-			var fallback = document.createElement('div');
-			fallback.className = 'faz-consent-fallback';
-			fallback.style.cssText = 'padding:24px;color:#94a3b8;text-align:center;';
-			fallback.textContent = 'Preview unavailable';
-			host.appendChild(fallback);
-			return;
-		}
-		host.appendChild(container);
-
-		// Add position class to .faz-consent-container
-		if (container) {
-			container.classList.add(positionClass);
-			// Remove hide classes
-			container.classList.remove('faz-hide');
-			container.style.opacity = '1';
-			container.style.visibility = 'visible';
-		}
-
-		// Remove hide classes from all descendants
-		host.querySelectorAll('.faz-hide,.faz-revisit-hide').forEach(function (el) {
-			el.classList.remove('faz-hide', 'faz-revisit-hide');
-			el.style.opacity = '1';
-			el.style.visibility = 'visible';
-		});
-
-		// Hide toggled-off elements
-		hiddenTags.forEach(function (tag) {
-			host.querySelectorAll('[data-faz-tag="' + tag + '"]').forEach(function (el) {
+		state.hiddenTags.forEach(function (tag) {
+			root.querySelectorAll('[data-faz-tag="' + tag + '"]').forEach(function (el) {
 				el.style.display = 'none';
 			});
 		});
 
-		// Inject readmore link (not in template - frontend JS adds it dynamically)
-		attachPreviewReadMore(host);
+		attachPreviewReadMore(root);
 
-		// Update brand logo src from our form field.
-		// Keep validation inline so static analyzers can verify protocol checks.
 		var logoUrlRaw = (getVal('faz-b-brandlogo-url') || '').trim();
 		var logoUrlSafe = '';
 		try {
@@ -975,36 +1163,39 @@
 					logoUrlSafe = parsedLogoUrl.href;
 				}
 			}
-		} catch (_unused2) {}
+		} catch (_unused5) {
+			logoUrlSafe = '';
+		}
 		if (logoUrlSafe) {
-			host.querySelectorAll('[data-faz-tag="brand-logo"] img').forEach(function (img) {
+			root.querySelectorAll('[data-faz-tag="brand-logo"] img').forEach(function (img) {
 				img.src = logoUrlSafe;
 			});
 		}
 
-		// Initialize category toggle switches (the frontend JS isn't loaded in admin)
-		initPreviewToggles(host);
+		initPreviewToggles(root);
 
-		// Apply link text colour
 		var linkColor = getColor('faz-b-link-color') || '#1863DC';
-		host.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a').forEach(function (a) {
+		root.querySelectorAll('.faz-link, a.faz-link, [data-faz-tag="detail"] a, [data-faz-tag="optout-popup"] a, [data-faz-tag="notice"] a').forEach(function (a) {
 			a.style.color = linkColor;
 			a.style.textDecorationColor = linkColor;
 		});
-		// Do Not Sell has its own dedicated colour
 		var dnsColor = getColor('faz-b-donotsell-text') || '#1863DC';
-		host.querySelectorAll('[data-faz-tag="donotsell-button"]').forEach(function (el) {
+		root.querySelectorAll('[data-faz-tag="donotsell-button"]').forEach(function (el) {
 			el.style.color = dnsColor;
 			if (el.tagName === 'A') el.style.textDecorationColor = dnsColor;
 		});
 
-		// Apply display state (panel-level, not host)
+		syncPreviewFrameLayout();
+		schedulePreviewFrameLayoutSync([80, 240]);
+		showPreviewMessage('', 'clear');
+
 		var panel = document.getElementById('faz-b-preview-panel');
 		if (panel) panel.classList.toggle('hidden', !previewVisible);
 	}
 
 	function attachPreviewReadMore(host) {
 		if (!bannerData) return;
+		var doc = host && host.ownerDocument ? host.ownerDocument : document;
 		var config = bannerData.properties && bannerData.properties.config || {};
 		var readMoreCfg = config.notice && config.notice.elements
 			&& config.notice.elements.buttons && config.notice.elements.buttons.elements
@@ -1022,7 +1213,7 @@
 		// Build readmore element via DOM API (avoids XSS from unescaped values)
 		var el;
 		if (readMoreCfg.type === 'link') {
-			el = document.createElement('a');
+			el = doc.createElement('a');
 			var hrefRaw = String(href || '').trim();
 			var safeHref = '/cookie-policy';
 			try {
@@ -1038,12 +1229,14 @@
 						}
 					}
 				}
-			} catch (_unused3) {}
+			} catch (_unused3) {
+				safeHref = '/cookie-policy';
+			}
 			el.href = safeHref;
 			el.target = '_blank';
 			el.rel = 'noopener';
 		} else {
-			el = document.createElement('button');
+			el = doc.createElement('button');
 		}
 		el.className = 'faz-policy';
 		el.setAttribute('aria-label', label);
@@ -1055,7 +1248,7 @@
 		if (!descEl) return;
 		var lastP = descEl.querySelector('p:last-child');
 		var target = lastP || descEl;
-		target.appendChild(document.createTextNode('\u00A0'));
+		target.appendChild(doc.createTextNode('\u00A0'));
 		target.appendChild(el);
 
 		// Apply styles from config
@@ -1235,11 +1428,11 @@
 							uploadFile(item.file, null, pond);
 						});
 					}
-				} catch (err) {
-					fileInput.addEventListener('change', function () {
-						if (fileInput.files && fileInput.files[0]) uploadFile(fileInput.files[0]);
-					});
-				}
+					} catch (_unused6) {
+						fileInput.addEventListener('change', function () {
+							if (fileInput.files && fileInput.files[0]) uploadFile(fileInput.files[0]);
+						});
+					}
 			} else {
 				fileInput.addEventListener('change', function () {
 					if (fileInput.files && fileInput.files[0]) uploadFile(fileInput.files[0]);

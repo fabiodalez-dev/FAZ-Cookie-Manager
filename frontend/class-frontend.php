@@ -120,6 +120,7 @@ class Frontend {
 		add_action( 'wp_footer', array( $this, 'banner_html' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 1 );
 		add_action( 'wp_head', array( $this, 'insert_styles' ) );
+		add_action( 'template_redirect', array( $this, 'render_banner_preview_frame' ), 0 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
@@ -175,7 +176,7 @@ class Frontend {
 				if ( '' !== $custom_css ) {
 					// Strip dangerous CSS patterns that could be used for data exfiltration.
 					$custom_css = wp_strip_all_tags( $custom_css );
-					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding/i', $custom_css ) ) {
+					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding|@import/i', $custom_css ) ) {
 						$custom_css = '';
 					}
 					$css .= $custom_css;
@@ -208,7 +209,21 @@ class Frontend {
 				// Bridge the alternative config variable to the expected name.
 				wp_add_inline_script( $script_handle, 'window._fazConfig = window._fazCfg;', 'before' );
 			}
-			wp_localize_script( $script_handle, '_fazStyles', array( 'css' => $css ) );
+			// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
+			// Utility rules appended AFTER boost_css_specificity() so they are NOT
+			// scoped inside #faz-consent — these classes are used on elements outside
+			// the banner container (consent-bridge iframe, age-gate overlay, blocked embeds).
+			$css .= '.faz-hidden{display:none!important;visibility:hidden!important}'
+				. '.faz-consent-bridge{width:0;height:0;border:0}'
+				. '.faz-age-gate-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}'
+				. '.faz-age-gate-modal{background:#fff;border-radius:8px;padding:24px 32px;max-width:420px;text-align:center}';
+			$css_handle = $this->plugin_name . '-css';
+			wp_register_style( $css_handle, false, array(), $this->version );
+			wp_enqueue_style( $css_handle );
+			wp_add_inline_style( $css_handle, $css );
+
+			// wp_localize_script for _fazStyles removed: CSS is now injected via
+			// wp_add_inline_style above; the JS variable was no longer consumed.
 
 			// GCM (Google Consent Mode) in local mode.
 			if ( true === $this->gcm_settings->is_gcm_enabled() ) {
@@ -671,7 +686,7 @@ class Frontend {
 			'_ipData'       => array(),
 			'_assetsURL'    => FAZ_PLUGIN_URL . 'frontend/images/',
 			'_publicURL'    => set_url_scheme( get_site_url() ),
-			'_expiry'       => min( 180, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
+			'_expiry'       => max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'    => 'gdpr',
 			'_rootDomain'   => $this->get_cookie_domain(),
@@ -956,6 +971,34 @@ class Frontend {
 	/* ─── Server-side script blocking via output buffering ───── */
 
 	/**
+	 * Render the dedicated minimal frontend page used by the admin preview iframe.
+	 *
+	 * The page intentionally skips theme markup and only prints a bare shell with
+	 * frontend assets from wp_head(), so the admin preview inherits real site CSS
+	 * without flashing the whole page before JS injects the preview banner.
+	 *
+	 * @return void
+	 */
+	public function render_banner_preview_frame() {
+		if ( ! function_exists( 'faz_is_banner_preview_request' ) || ! faz_is_banner_preview_request() ) {
+			return;
+		}
+
+		status_header( 200 );
+		nocache_headers();
+		header( 'X-Robots-Tag: noindex, nofollow', true );
+
+		add_filter( 'show_admin_bar', '__return_false', PHP_INT_MAX );
+		show_admin_bar( false );
+
+		$template = __DIR__ . '/views/banner-preview-frame.php';
+		if ( file_exists( $template ) ) {
+			require $template;
+		}
+		exit;
+	}
+
+	/**
 	 * Start output buffering to intercept and block third-party scripts
 	 * before they reach the browser. This catches inline scripts that the
 	 * client-side MutationObserver cannot intercept.
@@ -1208,12 +1251,12 @@ class Frontend {
 		// Rename src → data-faz-src (avoid matching data-src).
 		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
 		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		$new_attrs .= ' style="display:none"';
 
 		$inner = isset( $m[2] ) ? $m[2] : '';
 		$blocked_iframe = isset( $m[2] )
 			? '<iframe' . $new_attrs . '>' . $inner . '</iframe>'
 			: '<iframe' . $new_attrs . '/>';
+		$blocked_iframe = self::faz_add_hidden_class( $blocked_iframe );
 
 		// Detect service from iframe src URL.
 		$src          = $this->extract_src_from_attrs( $attrs );
@@ -1641,8 +1684,13 @@ class Frontend {
 				// No consent yet — block all non-necessary.
 				$blocked[] = $slug;
 			} else {
-				// Parse consent cookie: "consent:yes,necessary:yes,analytics:no,advertisement:no"
+				// Parse consent cookie: "consent:yes,necessary:yes,analytics:no,marketing:no"
 				if ( preg_match( '/(^|,)' . preg_quote( $slug, '/' ) . ':(\w+)/', $consent, $cm ) ) {
+					if ( 'yes' !== $cm[2] ) {
+						$blocked[] = $slug;
+					}
+				} elseif ( 'marketing' === $slug && preg_match( '/(^|,)advertisement:(\w+)/', $consent, $cm ) ) {
+					// Backward compat: old cookies may still use "advertisement" instead of "marketing".
 					if ( 'yes' !== $cm[2] ) {
 						$blocked[] = $slug;
 					}
@@ -2020,27 +2068,33 @@ class Frontend {
 		}
 
 		$properties                                   = $banner->get_settings();
-		$data['settings']['type']                     = $properties['settings']['type'];
-		$data['settings']['preferenceCenterType']     = $properties['settings']['type'] === "classic" ? "pushdown" : $properties['settings']['preferenceCenterType'];
-		$data['settings']['position']                 = $properties['settings']['position'];
-		$data['settings']['applicableLaw']            = $properties['settings']['applicableLaw'];
-		$data['behaviours']['reloadBannerOnAccept']   = $properties['behaviours']['reloadBannerOnAccept']['status'];
-		$data['behaviours']['loadAnalyticsByDefault'] = $properties['behaviours']['loadAnalyticsByDefault']['status'];
-		$data['behaviours']['animations']             = $properties['behaviours']['animations'];
-		$data['config']['revisitConsent']             = $properties['config']['revisitConsent'];
-		$data['config']['preferenceCenter']['toggle'] = $properties['config']['preferenceCenter']['elements']['categories']['elements']['toggle'];
-		$data['config']['categoryPreview']['status']  = $properties['config']['categoryPreview']['status'];
-		$data['config']['categoryPreview']['toggle']  = $properties['config']['categoryPreview']['elements']['toggle'];
-		$data['config']['videoPlaceholder']['status'] = $properties['config']['videoPlaceholder']['status'];
-		$data['config']['videoPlaceholder']['styles'] = array_merge( $properties['config']['videoPlaceholder']['styles'], $properties['config']['videoPlaceholder']['elements']['title']['styles'] );
-		$data['config']['readMore']                   = $properties['config']['notice']['elements']['buttons']['elements']['readMore'];
-		$data['config']['showMore']                    = $properties['config']['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showMore'] ?? array();
-		$data['config']['showLess']                    = $properties['config']['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showLess'] ?? array();
-		$data['config']['alwaysActive']                = $properties['config']['accessibilityOverrides']['elements']['preferenceCenter']['elements']['alwaysActive'] ?? array();
-		$data['config']['manualLinks']                 = $properties['config']['accessibilityOverrides']['elements']['manualLinks'] ?? array();
-		$data['config']['auditTable']['status']       = $properties['config']['auditTable']['status'];
-		$data['config']['optOption']['status']        = $properties['config']['optoutPopup']['elements']['optOption']['status'];
-		$data['config']['optOption']['toggle']        = $properties['config']['optoutPopup']['elements']['optOption']['elements']['toggle'];
+		$settings   = $properties['settings'] ?? array();
+		$behaviours = $properties['behaviours'] ?? array();
+		$config     = $properties['config'] ?? array();
+
+		$data['settings']['type']                     = $settings['type'] ?? 'box';
+		$data['settings']['preferenceCenterType']     = ( $settings['type'] ?? '' ) === 'classic' ? 'pushdown' : ( $settings['preferenceCenterType'] ?? 'popup' );
+		$data['settings']['position']                 = $settings['position'] ?? 'bottom-right';
+		$data['settings']['applicableLaw']            = $settings['applicableLaw'] ?? 'gdpr';
+		$data['behaviours']['reloadBannerOnAccept']   = $behaviours['reloadBannerOnAccept']['status'] ?? false;
+		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
+		$data['behaviours']['animations']             = $behaviours['animations'] ?? array();
+		$data['config']['revisitConsent']             = $config['revisitConsent'] ?? array();
+		$data['config']['preferenceCenter']['toggle'] = $config['preferenceCenter']['toggle']
+			?? $config['preferenceCenter']['elements']['categories']['elements']['toggle']
+			?? array();
+		$data['config']['categoryPreview']['status']  = $config['categoryPreview']['status'] ?? false;
+		$data['config']['categoryPreview']['toggle']  = $config['categoryPreview']['elements']['toggle'] ?? array();
+		$data['config']['videoPlaceholder']['status'] = $config['videoPlaceholder']['status'] ?? false;
+		$data['config']['videoPlaceholder']['styles'] = array_merge( $config['videoPlaceholder']['styles'] ?? array(), $config['videoPlaceholder']['elements']['title']['styles'] ?? array() );
+		$data['config']['readMore']                   = $config['notice']['elements']['buttons']['elements']['readMore'] ?? array();
+		$data['config']['showMore']                    = $config['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showMore'] ?? array();
+		$data['config']['showLess']                    = $config['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showLess'] ?? array();
+		$data['config']['alwaysActive']                = $config['accessibilityOverrides']['elements']['preferenceCenter']['elements']['alwaysActive'] ?? array();
+		$data['config']['manualLinks']                 = $config['accessibilityOverrides']['elements']['manualLinks'] ?? array();
+		$data['config']['auditTable']['status']       = $config['auditTable']['status'] ?? false;
+		$data['config']['optOption']['status']        = $config['optoutPopup']['elements']['optOption']['status'] ?? false;
+		$data['config']['optOption']['toggle']        = $config['optoutPopup']['elements']['optOption']['elements']['toggle'] ?? array();
 		return $data;
 	}
 
@@ -2270,7 +2324,10 @@ class Frontend {
 			'.faz-btn-revisit',
 			'.faz-revisit-',
 			'.faz-hide',
+			'.faz-hidden',
 			'.faz-modal',
+			'.faz-age-gate',
+			'.faz-consent-bridge',
 		);
 
 		// Classes inside .faz-modal (popup/sidebar) OR inside #faz-consent (classic).
@@ -2293,6 +2350,7 @@ class Frontend {
 			'.faz-footer',
 			'.faz-iab-vendors',
 			'.faz-vendor-',
+			'.faz-service-',
 		);
 
 		return preg_replace_callback(
@@ -2308,6 +2366,12 @@ class Frontend {
 				foreach ( $parts as $sel ) {
 					$s = trim( $sel );
 					if ( '' === $s ) {
+						continue;
+					}
+
+					// Skip @keyframes step selectors (0%, 100%, from, to).
+					if ( preg_match( '/^(?:\d+%|from|to)$/i', $s ) ) {
+						$out[] = $s;
 						continue;
 					}
 
@@ -2756,7 +2820,8 @@ class Frontend {
 		// Rename iframe src to prevent loading.
 		$blocked_html = preg_replace( '/(<iframe\b[^>]*\s)src\s*=\s*/i', '$1data-faz-src=', $blocked_html );
 		// Add data-faz-category to iframes.
-		$blocked_html = preg_replace( '/(<iframe\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '" style="display:none"', $blocked_html );
+		$blocked_html = preg_replace( '/(<iframe\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_html );
+		$blocked_html = self::faz_add_hidden_class( $blocked_html );
 		// Disable scripts using set_script_type_plain() for consistent type handling.
 		$cat_attr = $matched_category;
 		$result = preg_replace_callback(
@@ -2839,7 +2904,8 @@ class Frontend {
 					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
 					// Placeholder before + hidden original element.
-					return $placeholder . $m[1] . $m[2] . ' style="display:none" data-faz-category="' . esc_attr( $category ) . '">';
+					$blocked = $m[1] . $m[2] . ' data-faz-category="' . esc_attr( $category ) . '">';
+				return $placeholder . self::faz_add_hidden_class( $blocked );
 				},
 				$content
 			);
@@ -2858,5 +2924,22 @@ class Frontend {
 			include_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 		return is_plugin_active( 'google-site-kit/google-site-kit.php' );
+	}
+
+	/**
+	 * Append faz-hidden to an HTML element's class attribute safely.
+	 * If a class= attribute already exists, extends it. Otherwise adds one.
+	 *
+	 * @param string $html Full HTML element string.
+	 * @return string
+	 */
+	private static function faz_add_hidden_class( string $html ): string {
+		if ( preg_match( '/\bclass\s*=\s*"/', $html ) ) {
+			return preg_replace( '/\bclass\s*=\s*"([^"]*)"/i', 'class="$1 faz-hidden"', $html, 1 );
+		}
+		if ( preg_match( '/\bclass\s*=\s*\'([^\']*)\'/i', $html ) ) {
+			return preg_replace( '/\bclass\s*=\s*\'([^\']*)\'/i', 'class=\'$1 faz-hidden\'', $html, 1 );
+		}
+		return preg_replace( '/(<\w+)(\s|>)/', '$1 class="faz-hidden"$2', $html, 1 );
 	}
 }

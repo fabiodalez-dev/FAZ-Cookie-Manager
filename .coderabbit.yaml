@@ -1,0 +1,223 @@
+# CodeRabbit Configuration — FAZ Cookie Manager
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: it-IT
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbit summary"
+  auto_title_placeholder: "@coderabbit"
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: false
+  labeling_instructions: []
+  path_instructions:
+    # ── PHP Architecture ──
+    - path: "**/*.php"
+      instructions: |
+        This is a WordPress plugin (PHP 7.4+). Follow WordPress coding standards:
+        - All output must be escaped: esc_html(), esc_attr(), esc_url(), wp_kses().
+        - All DB queries must use $wpdb->prepare() with parameterized placeholders.
+        - All REST write endpoints must verify nonces via faz_verify_nonce().
+        - Public exceptions:
+          - /faz/v1/consent: permission_callback => '__return_true', no frontend
+            nonce, abuse protection via faz_throttle_request().
+          - /faz/v1/pageviews: same public pattern.
+        - All REST admin endpoints require manage_options capability.
+        - Use absint() for IDs, sanitize_text_field() for strings.
+        - Never suggest using WordPress deprecated functions.
+        - The plugin namespace is FazCookie\*. Text domain is 'faz-cookie-manager'.
+        - Never suggest adding CookieYes, cky_, or cloud API references.
+
+    - path: "admin/modules/*/api/class-api.php"
+      instructions: |
+        REST API endpoint files. Check:
+        - Permission callbacks use the base Rest_Controller methods (manage_options + nonce).
+        - Route args have sanitize_callback and validate_callback.
+        - id params should use 'sanitize_callback' => 'absint'.
+        - Bulk endpoints should validate array structure.
+        - Error responses use WP_Error, not WP_REST_Response with error status.
+
+    - path: "admin/modules/*/includes/class-*-controller.php"
+      instructions: |
+        Database controller files. Check:
+        - Format specifier arrays in $wpdb->insert() / $wpdb->update() must match
+          the data array count exactly (1:1 positional mapping).
+        - CRUD methods (create_item, update_item, delete_item) must call
+          $this->delete_cache() DIRECTLY before firing do_action hooks.
+        - Check $wpdb return values: false === failure, 0 === no rows affected.
+        - Cache invalidation must happen on success only (false !== $result).
+
+    - path: "frontend/class-frontend.php"
+      instructions: |
+        Main frontend class. This file handles:
+        - Output buffer script/iframe/image blocking (server-side consent enforcement).
+        - Banner template rendering via wp_footer.
+        - CSS specificity boosting for page builder compatibility.
+        - Cookie shredding via send_headers hook.
+        - WooCommerce whitelist (payment gateways on checkout, wc-order-attribution always).
+        Key patterns:
+        - get_blocked_categories() reads fazcookie-consent cookie, blocks all non-necessary
+          when cookie is absent. Has backward compat for advertisement→marketing rename.
+        - Custom CSS is sanitized via regex blocklist (expression, javascript:, behavior,
+          -moz-binding, @import). Only manage_options users can set it.
+        - Three-layer script blocking: loader tag filter, content filter, output buffer.
+        - PCRE backtrack failures degrade gracefully (serve unblocked HTML, not crash).
+
+    - path: "frontend/js/script.js"
+      instructions: |
+        Main frontend consent JS. Key architecture:
+        - document.createElement monkey-patch intercepts dynamic script creation.
+        - MutationObserver catches DOM insertions via innerHTML.
+        - Network interceptors wrap fetch/XHR/sendBeacon.
+        - Cookie consent format: "consentid:X,consent:yes,necessary:yes,analytics:no,..."
+        - Category slugs are dynamic (from _fazStore._categories), never hardcoded.
+        - Backward compat: GCM and TCF map "advertisement" to "marketing" in cookie parsing.
+        - JSON/LD+JSON scripts are correctly skipped (not blocked).
+        - traceSeries() uses quadratic smoothing intentionally for visual appeal — this is
+          a design choice, NOT a bug. The dot markers show exact data points.
+
+    - path: "frontend/js/gcm.js"
+      instructions: |
+        Google Consent Mode v2 integration. Consent signals:
+        ad_storage, analytics_storage, functionality_storage, personalization_storage,
+        security_storage, ad_user_data, ad_personalization.
+        All default to "denied" for GDPR. Has backward compat for advertisement→marketing.
+
+    - path: "frontend/js/tcf-cmp.js"
+      instructions: |
+        IAB TCF v2.3 CMP stub. Provides __tcfapi before ad scripts load.
+        Has backward compat for advertisement→marketing rename.
+
+    - path: "includes/class-known-providers.php"
+      instructions: |
+        Static registry of ~100 known third-party services with script URL patterns,
+        associated cookies, and category classifications. Key rules:
+        - wc-order-attribution is classified as 'necessary' (not analytics).
+        - sourcebuster.js is separate from wc-order-attribution.
+        - recaptcha is classified as 'functional' (not necessary) because it tracks users.
+
+    - path: "includes/class-cookie-definitions.php"
+      instructions: |
+        Open Cookie Database (OCD) integration. Downloads 7400+ cookie definitions
+        from GitHub. Category map must include 'necessary' => 'necessary'.
+        Lookups: exact match first, then wildcard/prefix match.
+        autoload=false on wp_options to prevent loading on every page.
+
+    - path: "admin/modules/scanner/**"
+      instructions: |
+        Cookie scanner system. Three-tier architecture:
+        1. Cookie_Database (built-in, ~64 entries, highest priority)
+        2. Known_Providers (~100 services, pattern matching)
+        3. Cookie_Definitions (OCD, 7400+ entries, fallback)
+        Scanner supports: iframe-based, server-side (wp_remote_get), script inference.
+        Server-scan has SSRF protection: URL must match site domain (with www normalization
+        and loopback equivalence). Returns WP_Error on domain mismatch.
+        LiteSpeed compatibility via ?faz_scanning=1 parameter.
+        WooCommerce priority URLs for shop/cart/checkout/my-account pages.
+
+    - path: "admin/modules/banners/**"
+      instructions: |
+        Banner system. Three template types: box, banner (full-width), classic.
+        Pushdown uses classic template with stripped inline toggles.
+        Banner preview uses a sandboxed iframe with same-origin content.
+        CSS rewrite callback must skip @keyframes step selectors (0%, 100%, from, to).
+        Custom CSS in preview must be appended AFTER css_fixes for correct specificity.
+        previewUrl uses set_url_scheme() for HTTPS proxy compatibility.
+
+    - path: "frontend/views/banner-preview-frame.php"
+      instructions: |
+        Banner preview iframe renderer. Admin-only, gated by faz_is_banner_preview_request().
+        Renders same-origin preview content. Bypasses LiteSpeed cache.
+
+    - path: "admin/assets/js/pages/*.js"
+      instructions: |
+        Admin page JavaScript files. Key patterns:
+        - All user-visible strings should use fazConfig.i18n.* with English fallback.
+        - Date formatting should use getLocale() (fazConfig.locale || document.documentElement.lang).
+        - No console.log in production code (console.warn for diagnostics is OK).
+        - Async operations should handle race conditions (e.g., previewRequestId pattern).
+        - FAZ.post/get/put/delete are the AJAX helpers (not raw fetch).
+        - The plugin does NOT use React, jQuery UI, or any framework — vanilla JS only.
+
+    - path: "admin/views/*.php"
+      instructions: |
+        Admin view templates. All strings must use esc_html_e() / __() with text domain
+        'faz-cookie-manager'. The aria-label attributes must also be translatable.
+        The GVL page (gvl.php) needs full i18n — it was added recently.
+
+    - path: "uninstall.php"
+      instructions: |
+        Plugin uninstall cleanup. Must delete ALL plugin data:
+        - All wp_faz_* tables
+        - All faz_* options (including faz_cookie_definitions, faz_cookie_definitions_meta)
+        - All faz_* transients (via LIKE query)
+        - Upload directories: faz-cookie-manager/ AND fazcookie/
+        Conditional on faz_settings['general']['remove_data_on_uninstall'] or FAZ_REMOVE_ALL_DATA.
+        Multisite: iterates all sites via get_sites() with switch_to_blog().
+
+    - path: "includes/class-activator.php"
+      instructions: |
+        Plugin activation and migrations. Uses two-tier migration system:
+        1. Schema migrations via $db_updates version array
+        2. Data migrations via MIGRATIONS_VERSION constant
+        Key migration: advertisement→marketing slug rename with merge handling.
+        Async OCD download via wp_schedule_single_event (don't block activation).
+
+    - path: "tests/e2e/**"
+      instructions: |
+        Playwright E2E tests. Conventions:
+        - Always import from '../fixtures/wp-fixture' for loginAsAdmin().
+        - Use waitUntil: 'domcontentloaded' for page.goto() (PHP built-in server is slow).
+        - Banner admin tabs require clicking the tab button before accessing hidden elements.
+        - Clear cookies for fresh frontend visits (consent cookie persists).
+        - The test server-scan fixtures use local HTTP servers on 127.0.0.1 with random ports.
+
+    # ── CSS ──
+    - path: "admin/assets/css/faz-admin.css"
+      instructions: |
+        Admin design system CSS. Uses CSS custom properties (--faz-*).
+        Font stacks: SFMono-Regular without quotes (Stylelint compliance).
+        No RTL support yet — this is a known limitation, not a bug to flag.
+
+    # ── Config / Build ──
+    - path: "frontend/modules/shortcodes/**"
+      instructions: |
+        WordPress shortcodes for banner template content. Output is sanitized through
+        wp_kses() at the template level (banner_html), so individual shortcode returns
+        don't need escaping UNLESS they do str_replace into HTML (like faz_preview_category).
+
+  path_filters:
+    - "!vendor/**"
+    - "!node_modules/**"
+    - "!*.min.js"
+    - "!*.min.css"
+    - "!languages/*.mo"
+    - "!languages/*.po"
+    - "!admin/modules/banners/includes/templates/**/*.json"
+    - "!admin/modules/banners/includes/presets/**/*.json"
+    - "!admin/modules/cookies/includes/contents/**/*.json"
+    - "!admin/dist/**"
+
+  tools:
+    phpstan:
+      enabled: true
+    eslint:
+      enabled: false
+    stylelint:
+      enabled: true
+    shellcheck:
+      enabled: false
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+
+chat:
+  auto_reply: true
