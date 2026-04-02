@@ -210,13 +210,20 @@ class Frontend {
 				wp_add_inline_script( $script_handle, 'window._fazConfig = window._fazCfg;', 'before' );
 			}
 			// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
-			$css .= '.faz-hidden{display:none!important}';
+			// Utility rules appended AFTER boost_css_specificity() so they are NOT
+			// scoped inside #faz-consent — these classes are used on elements outside
+			// the banner container (consent-bridge iframe, age-gate overlay, blocked embeds).
+			$css .= '.faz-hidden{display:none!important;visibility:hidden!important}'
+				. '.faz-consent-bridge{width:0;height:0;border:0}'
+				. '.faz-age-gate-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}'
+				. '.faz-age-gate-modal{background:#fff;border-radius:8px;padding:24px 32px;max-width:420px;text-align:center}';
 			$css_handle = $this->plugin_name . '-css';
 			wp_register_style( $css_handle, false, array(), $this->version );
 			wp_enqueue_style( $css_handle );
 			wp_add_inline_style( $css_handle, $css );
 
-			wp_localize_script( $script_handle, '_fazStyles', array( 'css' => $css ) );
+			// wp_localize_script for _fazStyles removed: CSS is now injected via
+			// wp_add_inline_style above; the JS variable was no longer consumed.
 
 			// GCM (Google Consent Mode) in local mode.
 			if ( true === $this->gcm_settings->is_gcm_enabled() ) {
@@ -1244,16 +1251,12 @@ class Frontend {
 		// Rename src → data-faz-src (avoid matching data-src).
 		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
 		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		if ( preg_match( '/\bclass\s*=\s*["\']/', $new_attrs ) ) {
-			$new_attrs = preg_replace( '/\bclass\s*=\s*"([^"]*)"/i', 'class="$1 faz-hidden"', $new_attrs, 1 );
-		} else {
-			$new_attrs .= ' class="faz-hidden"';
-		}
 
 		$inner = isset( $m[2] ) ? $m[2] : '';
 		$blocked_iframe = isset( $m[2] )
 			? '<iframe' . $new_attrs . '>' . $inner . '</iframe>'
 			: '<iframe' . $new_attrs . '/>';
+		$blocked_iframe = self::faz_add_hidden_class( $blocked_iframe );
 
 		// Detect service from iframe src URL.
 		$src          = $this->extract_src_from_attrs( $attrs );
@@ -2315,7 +2318,10 @@ class Frontend {
 			'.faz-btn-revisit',
 			'.faz-revisit-',
 			'.faz-hide',
+			'.faz-hidden',
 			'.faz-modal',
+			'.faz-age-gate',
+			'.faz-consent-bridge',
 		);
 
 		// Classes inside .faz-modal (popup/sidebar) OR inside #faz-consent (classic).
@@ -2338,6 +2344,7 @@ class Frontend {
 			'.faz-footer',
 			'.faz-iab-vendors',
 			'.faz-vendor-',
+			'.faz-service-',
 		);
 
 		return preg_replace_callback(

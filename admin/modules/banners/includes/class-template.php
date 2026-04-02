@@ -426,7 +426,8 @@ class Template {
 							if ( 'background-color' === $property && '#000000' === $value ) {
 								continue;
 							}
-							$css_vars[ '--faz-' . $tag . '-' . $property ] = $value;
+							$safe_tag = preg_replace( '/[^a-zA-Z0-9\-_]/', '-', $tag );
+							$css_vars[ '--faz-' . $safe_tag . '-' . $property ] = $value;
 						}
 					}
 				}

@@ -2,7 +2,6 @@
  * WordPress localize object mapped to a constant.
  */
 const _fazStore = window._fazConfig;
-const _fazStyle = window._fazStyles;
 
 _fazStore._backupNodes = [];
 _fazStore._resetConsentID = false;
