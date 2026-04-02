@@ -452,10 +452,10 @@ class Template {
 			}
 
 			// Apply static accessibility improvements (heading tags, role="switch",
-				// h3 wrappers, stable IDs) before the HTML is serialised and cached.
-				\FazCookie\Frontend\Includes\A11y_Template::apply( $dom, $finder );
+			// h3 wrappers, stable IDs) before the HTML is serialised and cached.
+			\FazCookie\Frontend\Includes\A11y_Template::apply( $dom, $finder );
 
-				$this->html = $dom->saveHTML( $dom->documentElement ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
+			$this->html = $dom->saveHTML( $dom->documentElement ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
 		} catch ( \Exception $e ) {
 			// Could not generate the template.
 			$this->html = $html;

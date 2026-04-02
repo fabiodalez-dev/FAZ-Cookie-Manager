@@ -121,7 +121,7 @@ class A11y_Template {
 	 *     @type string[] $remove Attribute names to remove from the new element.
 	 * }
 	 */
-	private static function replace_tag( \DOMDocument $dom, \DOMNode $node, string $new_tag, array $options = array() ): void {
+	private static function replace_tag( \DOMDocument $dom, \DOMElement $node, string $new_tag, array $options = array() ): void {
 		$new_element = $dom->createElement( $new_tag );
 
 		// Copy all existing attributes to the new element.
