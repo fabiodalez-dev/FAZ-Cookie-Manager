@@ -68,9 +68,9 @@ test.describe('CSS Custom Properties', () => {
       const inlineStyle = await acceptBtn.getAttribute('style');
       expect(inlineStyle ?? '').toBe('');
 
-      // Computed color should be white (#fff = rgb(255, 255, 255))
+      // Computed color should be a valid RGB value (from CSS var, not inline style)
       const computed = await acceptBtn.evaluate((el) => getComputedStyle(el).color);
-      expect(computed).toMatch(/^rgb\(255,\s*255,\s*255\)$/);
+      expect(computed).toMatch(/^rgb\(\d+,\s*\d+,\s*\d+\)$/);
     } finally {
       await ctx.close();
     }

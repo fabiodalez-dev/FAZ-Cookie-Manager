@@ -210,6 +210,7 @@ class Frontend {
 				wp_add_inline_script( $script_handle, 'window._fazConfig = window._fazCfg;', 'before' );
 			}
 			// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
+			$css .= '.faz-hidden{display:none!important}';
 			$css_handle = $this->plugin_name . '-css';
 			wp_register_style( $css_handle, false, array(), $this->version );
 			wp_enqueue_style( $css_handle );
@@ -983,7 +984,7 @@ class Frontend {
 		add_filter( 'show_admin_bar', '__return_false', PHP_INT_MAX );
 		show_admin_bar( false );
 
-		$template = FAZ_PLUGIN_BASEPATH . 'frontend/views/banner-preview-frame.php';
+		$template = __DIR__ . '/views/banner-preview-frame.php';
 		if ( file_exists( $template ) ) {
 			require $template;
 		}
@@ -1243,8 +1244,8 @@ class Frontend {
 		// Rename src → data-faz-src (avoid matching data-src).
 		$new_attrs = preg_replace( '/(^|\s)src\s*=\s*/i', '$1data-faz-src=', $attrs, 1 );
 		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
-		if ( preg_match( '/\bclass=/', $new_attrs ) ) {
-			$new_attrs = preg_replace( '/\bclass="([^"]*)"/', 'class="$1 faz-hidden"', $new_attrs );
+		if ( preg_match( '/\bclass\s*=\s*["\']/', $new_attrs ) ) {
+			$new_attrs = preg_replace( '/\bclass\s*=\s*"([^"]*)"/i', 'class="$1 faz-hidden"', $new_attrs, 1 );
 		} else {
 			$new_attrs .= ' class="faz-hidden"';
 		}
@@ -2920,8 +2921,11 @@ class Frontend {
 	 * @return string
 	 */
 	private static function faz_add_hidden_class( string $html ): string {
-		if ( preg_match( '/\bclass=/', $html ) ) {
-			return preg_replace( '/\bclass="([^"]*)"/', 'class="$1 faz-hidden"', $html );
+		if ( preg_match( '/\bclass\s*=\s*"/', $html ) ) {
+			return preg_replace( '/\bclass\s*=\s*"([^"]*)"/i', 'class="$1 faz-hidden"', $html, 1 );
+		}
+		if ( preg_match( '/\bclass\s*=\s*\'([^\']*)\'/i', $html ) ) {
+			return preg_replace( '/\bclass\s*=\s*\'([^\']*)\'/i', 'class=\'$1 faz-hidden\'', $html, 1 );
 		}
 		return preg_replace( '/(<\w+)(\s|>)/', '$1 class="faz-hidden"$2', $html, 1 );
 	}

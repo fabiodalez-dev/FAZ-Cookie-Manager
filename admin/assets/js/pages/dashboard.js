@@ -263,18 +263,9 @@
 		if (points.length === 1) {
 			ctx.lineTo(points[0].x, points[0].y);
 		} else {
-			for (var i = 1; i < points.length - 1; i++) {
-				var midX = (points[i].x + points[i + 1].x) / 2;
-				var midY = (points[i].y + points[i + 1].y) / 2;
-				ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+			for (var i = 1; i < points.length; i++) {
+				ctx.lineTo(points[i].x, points[i].y);
 			}
-
-			ctx.quadraticCurveTo(
-				points[points.length - 1].x,
-				points[points.length - 1].y,
-				points[points.length - 1].x,
-				points[points.length - 1].y
-			);
 		}
 
 		if (typeof baselineY === 'number') {
@@ -355,12 +346,19 @@
 		ctx.fillText(i18n.totalResponses || 'total responses', cx, cy + 14);
 
 		// Legend
-		var legendVertical = w < 320;
 		var legendY = cy + radius + 22;
-		var legendX = legendVertical ? cx - 54 : cx - 66;
+		var maxLabelWidth = 0;
+		segments.forEach(function (seg) {
+			var tw = ctx.measureText(seg.label + ' (' + seg.percent + '%)').width;
+			if (tw > maxLabelWidth) maxLabelWidth = tw;
+		});
+		var itemWidth = maxLabelWidth + 20; // dot + padding
+		var totalWidth = itemWidth * segments.length;
+		var legendVertical = w < 320 || totalWidth > w - 40;
+		var legendX = legendVertical ? cx - 54 : cx - (totalWidth / 2) + 10;
 
 		segments.forEach(function (seg, i) {
-			var x = legendVertical ? legendX : legendX + i * 132;
+			var x = legendVertical ? legendX : legendX + i * itemWidth;
 			var y = legendVertical ? legendY + i * 18 : legendY;
 			// Dot
 			ctx.beginPath();

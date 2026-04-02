@@ -10,7 +10,18 @@ defined( 'ABSPATH' ) || exit;
 ob_start();
 wp_head();
 $faz_head_markup = ob_get_clean();
-$faz_head_markup = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $faz_head_markup );
+if ( class_exists( 'DOMDocument' ) ) {
+	$faz_dom = new DOMDocument();
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- malformed HTML from wp_head is expected.
+	@$faz_dom->loadHTML( '<!DOCTYPE html><html><head>' . $faz_head_markup . '</head></html>', LIBXML_HTML_NODEFDTD | LIBXML_HTML_NOIMPLIED );
+	$faz_scripts = $faz_dom->getElementsByTagName( 'script' );
+	while ( $faz_scripts->length > 0 ) {
+		$faz_scripts->item( 0 )->parentNode->removeChild( $faz_scripts->item( 0 ) );
+	}
+	$faz_head_markup = preg_replace( '#^.*?<head>|</head>.*$#is', '', $faz_dom->saveHTML() );
+} else {
+	$faz_head_markup = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $faz_head_markup );
+}
 ?>
 <!doctype html>
 <html <?php language_attributes(); ?>>
@@ -37,6 +48,8 @@ $faz_head_markup = preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string)
 	</style>
 </head>
 <body <?php body_class( 'faz-banner-preview-frame' ); ?>>
-	<div id="faz-b-preview-root"></div>
+	<div id="faz-b-preview-root">
+		<noscript><?php esc_html_e( 'JavaScript is required for banner preview.', 'faz-cookie-manager' ); ?></noscript>
+	</div>
 </body>
 </html>

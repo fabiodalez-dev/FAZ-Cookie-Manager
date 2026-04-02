@@ -266,8 +266,10 @@ function _fazRemoveBanner() {
  */
 function _fazInitOperations() {
     _fazAttachNoticeStyles();
-    _fazAttachShortCodeStyles();
     _fazRenderBanner();
+    // _fazAttachShortCodeStyles must run after _fazRenderBanner so that
+    // #faz-consent exists in the DOM when CSS custom properties are set.
+    _fazAttachShortCodeStyles();
     _fazSetShowMoreLess();
     if (!ref._fazGetFromStore("action") || _fazPreviewEnabled()) {
         _fazShowBanner();
@@ -969,8 +971,12 @@ function _fazShowAgeGate(pendingChoice) {
 
     var modal = document.createElement('div');
     modal.classList.add('faz-age-gate-modal');
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'faz-age-gate-title');
 
     var title = document.createElement('h3');
+    title.id = 'faz-age-gate-title';
     title.classList.add('faz-age-gate-title');
     title.textContent = _fazTranslate('age_gate_title', 'Age Verification');
     modal.appendChild(title);
@@ -1007,6 +1013,19 @@ function _fazShowAgeGate(pendingChoice) {
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
+    btnYes.focus();
+
+    // Trap focus between the two buttons while the age gate is open.
+    overlay.addEventListener('keydown', function(e) {
+        if (e.key !== 'Tab') return;
+        var focusable = [btnYes, btnNo];
+        var first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+            if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+            if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    });
 }
 
 /**
@@ -2170,7 +2189,7 @@ function _fazRenderServiceToggles() {
 
         var serviceTitle = document.createElement('div');
         serviceTitle.classList.add('faz-service-list-title');
-        serviceTitle.textContent = 'Services';
+        serviceTitle.textContent = _fazTranslate('services', 'Services');
         serviceList.appendChild(serviceTitle);
 
         categoryServices.forEach(function(service) {
@@ -2191,7 +2210,7 @@ function _fazRenderServiceToggles() {
             checkbox.className = 'faz-service-toggle';
             checkbox.setAttribute('data-service', service.id);
             checkbox.setAttribute('data-category', service.category);
-            checkbox.setAttribute('aria-label', 'Service consent: ' + service.label);
+            checkbox.setAttribute('aria-label', _fazTranslate('service_consent', 'Service consent') + ': ' + service.label);
 
             // Determine checked state: explicit service consent > category consent.
             var svcConsent = ref._fazGetFromStore('svc.' + service.id);
@@ -2268,7 +2287,7 @@ function _fazRenderVendorSection() {
     const heading = document.createElement('h4');
     heading.className = 'faz-preference-title';
     heading.classList.add('faz-iab-section-heading');
-    heading.textContent = 'IAB Vendor Consent';
+    heading.textContent = _fazTranslate('iab_vendor_consent', 'IAB Vendor Consent');
     section.appendChild(heading);
 
     const count = document.createElement('p');
@@ -2371,7 +2390,7 @@ function _fazRenderVendorSection() {
             pLink.href = safePolicyUrl;
             pLink.target = '_blank';
             pLink.rel = 'noopener noreferrer';
-            pLink.textContent = 'Privacy Policy';
+            pLink.textContent = _fazTranslate('privacy_policy', 'Privacy Policy');
             pLink.classList.add('faz-iab-privacy-link');
             body.appendChild(pLink);
             body.appendChild(document.createElement('br'));
@@ -2386,13 +2405,13 @@ function _fazRenderVendorSection() {
             p.appendChild(document.createTextNode(text));
             parent.appendChild(p);
         }
-        if (purposeLabels.length) appendDetail(body, 'Consent', purposeLabels.join(', '));
-        if (liLabels.length) appendDetail(body, 'Legitimate Interest', liLabels.join(', '));
+        if (purposeLabels.length) appendDetail(body, _fazTranslate('iab_consent', 'Consent'), purposeLabels.join(', '));
+        if (liLabels.length) appendDetail(body, _fazTranslate('iab_legitimate_interest', 'Legitimate Interest'), liLabels.join(', '));
         if (vendor.features && vendor.features.length) {
-            appendDetail(body, 'Features', vendor.features.map(function(fid) { return 'Feature ' + fid; }).join(', '));
+            appendDetail(body, _fazTranslate('iab_features', 'Features'), vendor.features.map(function(fid) { return 'Feature ' + fid; }).join(', '));
         }
         if (vendor.cookieMaxAgeSeconds != null) {
-            appendDetail(body, 'Cookie retention', Math.round(vendor.cookieMaxAgeSeconds / 86400) + ' days');
+            appendDetail(body, _fazTranslate('iab_cookie_retention', 'Cookie retention'), Math.round(vendor.cookieMaxAgeSeconds / 86400) + ' days');
         }
 
         accordion.appendChild(item);

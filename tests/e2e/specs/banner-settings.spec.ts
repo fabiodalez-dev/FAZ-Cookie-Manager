@@ -440,7 +440,10 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await setSelect(page, 'faz-b-position', 'bottom-right');
     await expect.poll(async () => (await getPreviewMetrics(page)).extraHeight).toBeLessThan(24);
     await expect.poll(async () => (await getPreviewMetrics(page)).rootType).toBe('box');
-    await expect.poll(async () => (await getPreviewMetrics(page)).containerWidth).toBeLessThan((await getPreviewMetrics(page)).frameWidth - 100);
+    await expect.poll(async () => {
+        const m = await getPreviewMetrics(page);
+        return m.containerWidth < m.frameWidth - 100;
+    }).toBe(true);
 
     await page.locator('.faz-preset-card', { hasText: 'Dark Professional' }).click();
     await expect.poll(async () => (await getPreviewStructureState(page)).rootChildCount).toBe(1);
@@ -493,7 +496,10 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
 
     await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('popup');
     await expect.poll(async () => (await getPreviewMetrics(page)).rootType).toBe('box');
-    await expect.poll(async () => (await getPreviewMetrics(page)).containerWidth).toBeLessThan((await getPreviewMetrics(page)).frameWidth - 100);
+    await expect.poll(async () => {
+        const m = await getPreviewMetrics(page);
+        return m.containerWidth < m.frameWidth - 100;
+    }).toBe(true);
   });
 
   test('General: backend preview covers all valid layout combinations', async ({ page, loginAsAdmin }) => {
