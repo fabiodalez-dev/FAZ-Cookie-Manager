@@ -23,10 +23,6 @@ class A11y_Template {
 	/**
 	 * Entry point — apply all static a11y fixes to the DOMDocument.
 	 * Called just before DOMDocument::saveHTML() in Template::prepare_html().
-	 *
-	 * @param \DOMDocument $dom    The document being processed.
-	 * @param \DOMXPath    $finder XPath instance bound to $dom.
-	 * @return void
 	 */
 	public static function apply( \DOMDocument $dom, \DOMXPath $finder ): void {
 		self::transform_banner_title( $dom, $finder );
@@ -78,6 +74,7 @@ class A11y_Template {
 		$button_list = iterator_to_array( $buttons );
 		foreach ( $button_list as $button ) {
 			$h3 = $dom->createElement( 'h3' );
+			$h3->setAttribute( 'class', 'faz-accordion-heading' );
 			$button->parentNode->insertBefore( $h3, $button ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName
 			$h3->appendChild( $button );
 		}
@@ -112,14 +109,6 @@ class A11y_Template {
 	/**
 	 * Generic helper: replace a DOM node with a new element of a different tag name,
 	 * copying all existing attributes and moving all child nodes across.
-	 *
-	 * @param \DOMDocument $dom      The document being processed.
-	 * @param \DOMNode     $node     The node to replace.
-	 * @param string       $new_tag  New element tag name (e.g. 'h2').
-	 * @param array        $options {
-	 *     @type string   $id     Optional id to set on the new element.
-	 *     @type string[] $remove Attribute names to remove from the new element.
-	 * }
 	 */
 	private static function replace_tag( \DOMDocument $dom, \DOMElement $node, string $new_tag, array $options = array() ): void {
 		$new_element = $dom->createElement( $new_tag );
