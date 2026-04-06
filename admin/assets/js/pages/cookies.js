@@ -1744,7 +1744,8 @@
 						added++;
 					});
 					if (added) {
-						FAZ.notify('Added ' + added + ' rules from ' + tpl.name, 'success');
+						saveCustomRules();
+						FAZ.notify('Added ' + added + ' rules from ' + tpl.name + ' (saved)', 'success');
 					}
 
 					// Also create cookies from the template if they don't already exist

@@ -456,3 +456,26 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 		);
 	}
 }
+
+/**
+ * Merge settings arrays recursively, replacing sequential (numeric-keyed)
+ * arrays entirely instead of concatenating them.
+ *
+ * @param array $existing Current settings from the database.
+ * @param array $incoming New values from the API request.
+ * @return array Merged settings.
+ */
+function faz_merge_settings( array $existing, array $incoming ) {
+	foreach ( $incoming as $key => $value ) {
+		if ( isset( $existing[ $key ] ) && is_array( $existing[ $key ] ) && is_array( $value ) ) {
+			if ( wp_is_numeric_array( $value ) ) {
+				$existing[ $key ] = $value;
+			} else {
+				$existing[ $key ] = faz_merge_settings( $existing[ $key ], $value );
+			}
+		} else {
+			$existing[ $key ] = $value;
+		}
+	}
+	return $existing;
+}
