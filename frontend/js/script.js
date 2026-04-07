@@ -755,7 +755,7 @@ function _fazLoopFocus() {
     const activeLaw = _fazGetLaw();
     const bannerType = _fazGetType();
     // Classic/pushdown banners also need focus trapping on their preference wrapper.
-    if (bannerType === "popup") {
+    if (bannerType === "popup" || bannerType === "box" ) {
         const [firstElementBanner, lastElementBanner] =
             _fazGetFocusableElements("notice");
         _fazAttachFocusLoop(firstElementBanner, lastElementBanner, true);
