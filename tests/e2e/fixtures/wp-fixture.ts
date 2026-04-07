@@ -1,4 +1,5 @@
 import { expect, test as base, type BrowserContext, type Page } from '@playwright/test';
+import { getWpLoginPath } from '../utils/wp-auth';
 
 type ConsentMap = Record<string, string>;
 

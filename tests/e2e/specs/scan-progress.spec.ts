@@ -1,14 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { getWpLoginPath } from '../utils/wp-auth';
 
 const BASE = process.env.WP_BASE_URL || 'http://localhost:9998';
 const USER = process.env.WP_ADMIN_USER || 'admin';
 const PASS = process.env.WP_ADMIN_PASS || 'admin';
+const WP_LOGIN_PATH = getWpLoginPath();
 
 test.describe('Scan progress UI', () => {
 	test.setTimeout(180_000);
 
 	test.beforeEach(async ({ page }) => {
-		await page.goto(`${BASE}/wp-login.php`);
+		await page.goto(`${BASE}${WP_LOGIN_PATH}`);
 		await page.fill('#user_login', USER);
 		await page.fill('#user_pass', PASS);
 		await page.click('#wp-submit');

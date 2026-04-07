@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
+import { getWpLoginPath } from '../utils/wp-auth';
 import { clickFirstVisible } from '../utils/ui';
 
 type ConsentCategory = 'analytics' | 'marketing' | 'functional';
@@ -31,6 +32,7 @@ type InstallResult = {
 };
 
 const WP_PATH = process.env.WP_PATH ?? '/Users/fabio/Sites/faz-test';
+const WP_LOGIN_PATH = getWpLoginPath();
 const FULL_TEST_CODEX_REPORT = process.env.FULL_TEST_CODEX_REPORT
   ?? resolve(process.cwd(), 'tests/e2e/reports/full-test-codex-report.json');
 const MIN_ACTIVE_TARGET_PLUGINS = 20;
@@ -210,7 +212,7 @@ async function gotoResilient(page: Page, url: string): Promise<void> {
 }
 
 async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
-  await gotoResilient(page, `${wpBaseURL}/wp-login.php`);
+  await gotoResilient(page, `${wpBaseURL}${WP_LOGIN_PATH}`);
   await page.locator('#user_login').fill(adminUser);
   await page.locator('#user_pass').fill(adminPass);
   await page.locator('#wp-submit').click();

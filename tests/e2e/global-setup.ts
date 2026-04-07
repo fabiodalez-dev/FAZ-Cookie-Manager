@@ -1,4 +1,5 @@
 import { request } from '@playwright/test';
+import { getWpLoginPath } from './utils/wp-auth';
 
 async function globalSetup(): Promise<void> {
   const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
@@ -10,11 +11,11 @@ async function globalSetup(): Promise<void> {
     ignoreHTTPSErrors: true,
   });
 
-  const loginPath = process.env.WP_LOGIN_PATH ?? '/wp-login.php';
+  const loginPath = getWpLoginPath();
   const loginPage = await api.get(loginPath);
   if (!loginPage.ok()) {
     await api.dispose();
-    throw new Error(`WordPress login page not reachable at ${baseURL}/wp-login.php (status ${loginPage.status()}).`);
+    throw new Error(`WordPress login page not reachable at ${baseURL}${loginPath} (status ${loginPage.status()}).`);
   }
 
   // Verify credentials actually work before running the full suite.
@@ -29,7 +30,7 @@ async function globalSetup(): Promise<void> {
   });
   if (!loginResponse.url().includes('/wp-admin')) {
     await api.dispose();
-    throw new Error(`WordPress login failed for user '${adminUser}' at ${baseURL}. Check WP_ADMIN_USER/WP_ADMIN_PASS.`);
+    throw new Error(`WordPress login failed for user '${adminUser}' at ${baseURL}${loginPath}. Check WP_ADMIN_USER/WP_ADMIN_PASS.`);
   }
 
   await api.dispose();
