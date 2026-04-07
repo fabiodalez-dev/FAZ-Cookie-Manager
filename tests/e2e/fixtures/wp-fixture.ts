@@ -1,4 +1,5 @@
 import { expect, test as base, type BrowserContext, type Page } from '@playwright/test';
+import { getWpLoginPath } from '../utils/wp-auth';
 
 type ConsentMap = Record<string, string>;
 
@@ -42,7 +43,8 @@ async function gotoResilient(page: Page, url: string): Promise<void> {
 }
 
 async function completeAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
-  await gotoResilient(page, `${wpBaseURL}/wp-login.php`);
+	const loginPath = getWpLoginPath();
+  await gotoResilient(page, `${wpBaseURL}${loginPath}`);
 
   if (page.url().includes('/wp-admin/')) {
     await expect(page.locator('#wpadminbar')).toBeVisible();

@@ -386,6 +386,33 @@ class Frontend {
 				"});";
 				wp_add_inline_script( $script_handle, $inline_js );
 			}
+
+			// Enqueue the native a11y module that runs after fazcookie_banner_loaded.
+			// In ad-blocker mode (alt_asset) the plugin path contains "cookie" which
+			// can match filter lists, so we inline the script to avoid blocking.
+			$a11y_handle = $script_handle . '-a11y';
+			if ( $alt_asset ) {
+				$a11y_path = plugin_dir_path( __FILE__ ) . 'js/a11y.js';
+				wp_register_script( $a11y_handle, false, array( $script_handle ), $this->version, false );
+				wp_enqueue_script( $a11y_handle );
+				if ( file_exists( $a11y_path ) ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file
+					wp_add_inline_script( $a11y_handle, file_get_contents( $a11y_path ) );
+				}
+			} else {
+				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y.js', array( $script_handle ), $this->version, false );
+			}
+			// Pass translatable checkbox label templates — {name} is replaced in JS.
+			wp_localize_script(
+				$a11y_handle,
+				'fazA11yConfig',
+				array(
+					/* translators: {name} is replaced with the cookie category name (appears twice, do not translate {name}) */
+					'checkboxEnabled'  => __( '{name} enabled, disable {name}', 'faz-cookie-manager' ),
+					/* translators: {name} is replaced with the cookie category name (appears twice, do not translate {name}) */
+					'checkboxDisabled' => __( '{name} disabled, enable {name}', 'faz-cookie-manager' ),
+				)
+			);
 		}
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';

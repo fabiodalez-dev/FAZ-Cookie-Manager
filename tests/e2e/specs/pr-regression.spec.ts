@@ -6,8 +6,10 @@
  * PR #39: v1.7.0 features (cookie table shortcode, blocker templates, import/export)
  */
 import { expect, test } from '../fixtures/wp-fixture';
+import { getWpLoginPath } from '../utils/wp-auth';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_LOGIN_PATH = getWpLoginPath();
 
 /* ─── Helpers ──────────────────────────────────── */
 
@@ -172,7 +174,7 @@ test.describe('PR #44: i18n cookie save', () => {
     if (!cookieId && !originalLanguages) return;
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await page.goto(`${WP_BASE}/wp-login.php`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}${WP_LOGIN_PATH}`, { waitUntil: 'domcontentloaded' });
     await page.locator('#user_login').fill(process.env.WP_ADMIN_USER ?? 'admin');
     await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
     await page.locator('#wp-submit').click();

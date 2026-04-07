@@ -1,9 +1,11 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
+import { getWpLoginPath } from '../utils/wp-auth';
 
 /* ─── Helpers ──────────────────────────────────────────────── */
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_LOGIN_PATH = getWpLoginPath();
 
 async function getAdminNonce(page: Page): Promise<string> {
   return page.evaluate(() => (window as any).fazConfig?.api?.nonce ?? '');
@@ -315,7 +317,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
     const ctx = await browser.newContext({ baseURL });
     const page = await ctx.newPage();
-    await page.goto('/wp-login.php', { waitUntil: 'domcontentloaded' });
+    await page.goto(WP_LOGIN_PATH, { waitUntil: 'domcontentloaded' });
     await page.locator('#user_login').fill(process.env.WP_ADMIN_USER ?? 'admin');
     await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
     await page.locator('#wp-submit').click();
@@ -334,7 +336,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
     const ctx = await browser.newContext({ baseURL });
     const page = await ctx.newPage();
-    await page.goto('/wp-login.php', { waitUntil: 'domcontentloaded' });
+    await page.goto(WP_LOGIN_PATH, { waitUntil: 'domcontentloaded' });
     await page.locator('#user_login').fill(process.env.WP_ADMIN_USER ?? 'admin');
     await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
     await page.locator('#wp-submit').click();
