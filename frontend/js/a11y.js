@@ -13,7 +13,6 @@
  * ARIA attribute and behaviour fixes (run after structural fixes):
  *   - Banner container role overridden to "dialog" with aria-labelledby
  *   - Modal preference center gets aria-labelledby
- *   - ESC key handlers for banner and modal
  *   - State-aware aria-label sync on category toggle checkboxes
  *   - aria-controls on the show/hide description button
  *
@@ -36,7 +35,6 @@
         // ARIA attribute and behavior fixes.
         fixBannerRole();
         fixModalLabelledby();
-        initEscHandlers();
         initCheckboxAriaLabels();
         initShowHideAriaControls();
     }
@@ -159,38 +157,6 @@
         var prefCenter = document.querySelector( '.faz-preference-center' );
         if ( ! prefCenter ) return;
         prefCenter.setAttribute( 'aria-labelledby', 'faz-modal-title' );
-    }
-
-    /**
-     * Attach ESC key handlers to the banner and modal.
-     * ESC clicks the plugin's own close button so all internal state cleanup runs.
-     */
-    function initEscHandlers() {
-        // Close the banner when Escape is pressed while focus is inside it.
-        var banner = document.querySelector( '.faz-consent-container' );
-        if ( banner ) {
-            banner.addEventListener( 'keydown', function ( event ) {
-                if ( event.key !== 'Escape' ) return;
-                var closeBtn = document.querySelector( '[data-faz-tag="close-button"]' );
-                if ( closeBtn && ! banner.classList.contains( 'faz-hide' ) ) {
-                    closeBtn.click();
-                }
-            } );
-        }
-
-        // Close the modal when Escape is pressed while focus is inside it.
-        var modal = document.querySelector( '.faz-modal' );
-        if ( modal ) {
-            modal.addEventListener( 'keydown', function ( event ) {
-                if ( event.key !== 'Escape' ) return;
-                var closeBtn = modal.querySelector(
-					'[data-faz-tag="detail-close"], [data-faz-tag="optout-close"], [data-faz-tag="optout-cancel-button"]'
-				);
-                if ( closeBtn ) {
-                    closeBtn.click();
-                }
-            } );
-        }
     }
 
     /**
