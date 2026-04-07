@@ -118,7 +118,9 @@
      * toggle semantics to switch-aware screen readers.
      */
     function addRoleSwitchToCheckboxes() {
-        var checkboxes = document.querySelectorAll( '[data-faz-tag="detail-category-toggle"] input[type="checkbox"]' );
+        var checkboxes = document.querySelectorAll(
+			'[data-faz-tag="detail-category-toggle"] input[type="checkbox"], [data-faz-tag="detail-category-preview-toggle"] input[type="checkbox"]'
+		);
         checkboxes.forEach( function ( checkbox ) {
             checkbox.setAttribute( 'role', 'switch' );
         } );
@@ -129,7 +131,9 @@
      * aria-controls attribute always has a valid target element.
      */
     function addDescriptionWrapperId() {
-        var wrapper = document.querySelector( '[data-faz-tag="detail-description"]' );
+        var wrapper = document.querySelector(
+			'[data-faz-tag="detail-description"], [data-faz-tag="optout-description"]'
+		);
         if ( ! wrapper ) return;
         wrapper.setAttribute( 'id', 'faz-desc-content' );
     }
@@ -179,7 +183,9 @@
         if ( modal ) {
             modal.addEventListener( 'keydown', function ( event ) {
                 if ( event.key !== 'Escape' ) return;
-                var closeBtn = modal.querySelector( '[data-faz-tag="detail-close"]' );
+                var closeBtn = modal.querySelector(
+					'[data-faz-tag="detail-close"], [data-faz-tag="optout-close"], [data-faz-tag="optout-cancel-button"]'
+				);
                 if ( closeBtn ) {
                     closeBtn.click();
                 }
@@ -229,11 +235,13 @@
      * the "show more" and "show less" button variants.
      */
     function initShowHideAriaControls() {
-        var wrapper = document.querySelector( '[data-faz-tag="detail-description"]' );
+        var wrapper = document.querySelector( '[data-faz-tag="detail-description"], [data-faz-tag="optout-description"], #detail-description, #optout-description, .detail-description, .optout-description' );
         if ( ! wrapper ) return;
 
         function applyAriaControls() {
-            var btn = wrapper.querySelector( '[data-faz-tag="show-desc-button"], [data-faz-tag="hide-desc-button"]' );
+            var btn = wrapper.querySelector(
+				'[data-faz-tag="show-desc-button"], [data-faz-tag="hide-desc-button"], [data-faz-tag="optout-show-desc-button"], [data-faz-tag="optout-hide-desc-button"]'
+			);
             if ( btn ) btn.setAttribute( 'aria-controls', 'faz-desc-content' );
         }
 
