@@ -451,6 +451,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.9.1
+- **Fix: default language uses site locale** — `faz_default_language()` now falls back to WPLANG (e.g. `de_DE` → `de`) instead of hardcoded `'en'`, so German/French/etc.-only sites work correctly without English being forced back
+- **Fix: theme link color bleed** — added CSS reset (`color:inherit`) on `#faz-consent a,button` to prevent Divi, Elementor, and other page builder themes from overriding banner button colors
+
 ### 1.9.0
 - **WCAG 2.2 accessibility** — new `a11y.js` with `role="dialog"`, `aria-modal`, `aria-labelledby`, heading hierarchy (`<h2>`/`<h3>`), `role="switch"` on toggles, dynamic checkbox labels, and Escape key support (contributed by Yard Digital Agency)
 - **CSS custom properties** — all banner inline styles replaced with `--faz-*` CSS vars for CSP compatibility and easy theme customization (contributed by Yard Digital Agency)
