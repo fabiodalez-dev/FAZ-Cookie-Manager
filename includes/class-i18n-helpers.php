@@ -19,7 +19,11 @@ if ( ! function_exists( 'faz_default_language' ) ) {
 	 */
 	function faz_default_language() {
 		$settings = get_option( 'faz_settings' );
-		return isset( $settings['languages']['default'] ) ? faz_sanitize_text( $settings['languages']['default'] ) : 'en';
+		if ( isset( $settings['languages']['default'] ) && is_string( $settings['languages']['default'] ) && '' !== $settings['languages']['default'] ) {
+			return faz_sanitize_text( $settings['languages']['default'] );
+		}
+		// Fall back to WordPress site language (e.g. de_DE → de) instead of hardcoded 'en'.
+		return function_exists( 'faz_set_default_language' ) ? faz_set_default_language() : 'en';
 	}
 }
 if ( ! function_exists( 'faz_selected_languages' ) ) {

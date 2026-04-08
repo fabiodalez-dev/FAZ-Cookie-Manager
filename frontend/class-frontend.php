@@ -2302,7 +2302,10 @@ class Frontend {
 			. 'word-spacing:normal;'
 			. 'line-height:1.5;'
 			. 'box-sizing:border-box;'
-			. '}';
+			. '}'
+			// Prevent page-builder themes (Divi, Elementor, Beaver) from leaking
+			// link colors into banner buttons rendered as <a> tags.
+			. '#faz-consent a,#faz-consent button{color:inherit;background-color:transparent;}';
 		$css_fixes = '#faz-consent .faz-accordion-header .faz-always-active,'
 			. '.faz-modal .faz-accordion-header .faz-always-active{'
 			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'

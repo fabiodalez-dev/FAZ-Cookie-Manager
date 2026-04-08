@@ -756,3 +756,72 @@ test.describe('Blocker template end-to-end flow', () => {
     }
   });
 });
+
+/* ─── Issue: default language respects WPLANG ── */
+
+test.describe('Language: default language uses site locale', () => {
+  test('removing English from selected languages persists when default is not en', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // Save original settings
+    const original = (await apiGet(page, nonce, 'settings')).data;
+    const origSelected = original?.languages?.selected ?? ['en'];
+    const origDefault = original?.languages?.default ?? 'en';
+
+    try {
+      // Set default to 'de' and selected to ['de'] only (no 'en')
+      await apiPost(page, nonce, 'settings', {
+        languages: { default: 'de', selected: ['de'] },
+      });
+
+      // Read back — 'en' should NOT be re-added
+      const updated = (await apiGet(page, nonce, 'settings')).data;
+      const saved = updated?.languages?.selected ?? [];
+      expect(saved).toContain('de');
+      expect(saved).not.toContain('en');
+    } finally {
+      // Restore original
+      await apiPost(page, nonce, 'settings', {
+        languages: { default: origDefault, selected: origSelected },
+      });
+    }
+  });
+});
+
+/* ─── Issue: theme link color does not leak into banner buttons ── */
+
+test.describe('CSS: theme link colors do not leak into banner buttons', () => {
+  test('settings button color is not inherited from page theme', async ({ browser, wpBaseURL }) => {
+    const ctx = await browser.newContext({
+      baseURL: wpBaseURL,
+      locale: 'en-US',
+      extraHTTPHeaders: { 'Accept-Language': 'en-US' },
+    });
+    const page = await ctx.newPage();
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+
+    try {
+      const settingsBtn = page.locator('[data-faz-tag="settings-button"]');
+      await expect(settingsBtn).toBeVisible({ timeout: 15_000 });
+
+      // The settings button should NOT have a color leaked from the theme.
+      // The CSS reset sets `color: inherit` on #faz-consent a/button,
+      // and the button should use the color from CSS custom properties.
+      const inlineColor = await settingsBtn.evaluate((el) => {
+        const computed = getComputedStyle(el);
+        return computed.color;
+      });
+
+      // It should be a valid rgb value (from the plugin CSS, not transparent/empty)
+      expect(inlineColor).toMatch(/^rgb\(\d+,\s*\d+,\s*\d+\)$/);
+
+      // It should NOT be the default browser blue for links (rgb(0, 0, 238) or similar)
+      expect(inlineColor).not.toBe('rgb(0, 0, 238)');
+      expect(inlineColor).not.toBe('rgb(0, 0, 255)');
+    } finally {
+      await ctx.close();
+    }
+  });
+});
