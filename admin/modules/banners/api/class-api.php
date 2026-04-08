@@ -308,7 +308,10 @@ class Api extends Rest_Controller {
 
 			foreach ( $data as $_banner ) {
 				$object = $this->prepare_item_for_database( $_banner );
-				$object->save();
+				$result = $object->save();
+				if ( false === $result ) {
+					return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to save banner during bulk update.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+				}
 				$item_objects[] = $object;
 			}
 			foreach ( $item_objects as $item ) {

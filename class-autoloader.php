@@ -7,6 +7,10 @@
 
 namespace FazCookie;
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Custom class autoloader class
  */

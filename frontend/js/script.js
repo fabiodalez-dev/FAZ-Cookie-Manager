@@ -651,8 +651,13 @@ function _fazHidePreferenceCenter() {
     if (ref._fazGetFromStore("action")) _fazShowRevisit();
     const origin = _fazStore._preferenceOriginTag;
     origin && _fazSetFocus(origin)
+    if (_fazStore._prefTriggerElement) {
+        _fazStore._prefTriggerElement.focus();
+        _fazStore._prefTriggerElement = null;
+    }
 }
 function _fazShowPreferenceCenter() {
+    _fazStore._prefTriggerElement = document.activeElement;
     const element = _fazGetPreferenceCenter();
     element && element.classList.add(_fazGetPreferenceClass());
 
@@ -880,6 +885,7 @@ function _fazSetCategoryToggle(element, category = {}, revisit = false) {
         const categoryTitle = document.querySelector(`[data-faz-tag="detail-category-title"][aria-label="${categoryName}"]`);
         if (categoryTitle) {
             const toggleContainer = categoryTitle.closest('.faz-accordion-item');
+            if (!toggleContainer) return;
             const necessaryText = toggleContainer.querySelector('.faz-always-active');
             necessaryText && necessaryText.remove();
         }

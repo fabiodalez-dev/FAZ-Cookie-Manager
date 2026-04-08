@@ -146,6 +146,7 @@
         var banner = document.querySelector( '.faz-consent-container' );
         if ( ! banner ) return;
         banner.setAttribute( 'role', 'dialog' );
+        banner.setAttribute( 'aria-modal', 'true' );
         banner.setAttribute( 'aria-labelledby', 'faz-banner-title' );
     }
 
