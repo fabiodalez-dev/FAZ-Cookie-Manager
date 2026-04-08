@@ -2,6 +2,42 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.9.0] — 2026-04-08
+
+### Added
+- **WCAG 2.2 accessibility** — new `a11y.js` module with `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, heading hierarchy (`<h2>`/`<h3>`), `role="switch"` on category toggles, dynamic checkbox aria-labels, Escape key on banner, and MutationObserver for `aria-controls` on show/hide buttons (contributed by Yard Digital Agency)
+- **CSS custom properties** — all banner inline styles replaced with `--faz-*` CSS custom properties for CSP compatibility and easy theme customization via parent theme CSS (contributed by Yard Digital Agency)
+- **Dutch language** — 573 fully translated strings for banner, categories, and admin (contributed by Yard Digital Agency)
+- **Admin UI refresh** — modern design system with CSS custom properties, real-time iframe-based banner preview, design presets (Light Minimal, Dark Professional), TinyMCE integration
+- **Live banner preview** — real-time iframe preview in admin banner editor showing actual site CSS with the banner overlaid
+- **Focus management** — preference center saves and restores focus to the trigger element on close (WCAG 2.4.3)
+
+### Fixed
+- **Settings save** — replaced `array_merge` with `faz_merge_settings()` that correctly handles sequential arrays (fixes language duplicate accumulation on repeated saves)
+- **Blocker templates** — clicking a template now auto-saves rules immediately (previously required manual "Save Rules" click)
+- **`.faz-accordion-heading` CSS** — normalized across all 5 template types in both 6.0.0 and 6.2.0 (was only in 1 type, causing layout shifts)
+- **`prepare_config()` null-safety** — all nested property access uses `??` fallback to prevent PHP warnings on banners with older schemas
+- **`faz_audit_table()` return** — returns `''` instead of `null` when audit table is disabled
+- **Category title listener scoping** — listeners scoped per slug instead of global querySelector
+- **Age gate post-consent flow** — `btnYes` now runs full post-consent steps (banner removal, GCM signals, reload)
+- **`toggleContainer` null guard** — prevents TypeError when DOM structure is unexpected
+
+### Security
+- **SSRF hardening** — `reject_unsafe_urls` set to `true` on scanner, sitemap sub-fetch disables redirects (`redirection => 0`), sitemap URL host validation
+- **Path traversal** — `sanitize_file_name()` on admin view slug before `include()`
+- **CSS variable sanitization** — `preg_replace` on `$tag` in CSS custom property names
+- **ABSPATH guard** — added to `class-autoloader.php` for direct access prevention
+- **Banner API** — `create_item`, `update_item`, `delete_item`, and `bulk` return `WP_Error` on DB failure instead of silent HTTP 200
+
+### Performance
+- **a11y.js in footer** — loaded with `in_footer: true` since it only runs after `fazcookie_banner_loaded`
+- **Dead code removal** — removed unused `wp_localize_script('_fazStyles')` and `const _fazStyle`
+
+### Contributors
+- Wybe van den Bosch ([@WybeBosch](https://github.com/WybeBosch)) — CSS custom properties
+- Yannic van Veen ([@Yannicvanveen](https://github.com/Yannicvanveen)) — Dutch translations
+- Yvette Nikolov ([@YvetteNikolov](https://github.com/YvetteNikolov)) — WCAG 2.2 accessibility
+
 ## [1.8.0] — 2026-03-26
 
 ### Added
@@ -294,4 +330,4 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 
 ## [1.0.0] — 2026-01-20
 
-- Initial release — fork of CookieYes v3.4.0, fully de-branded, cloud-free, all premium features unlocked
+- Initial release — based on the GPL-licensed CookieYes v3.4.0 codebase, fully de-branded, cloud-free, and self-hosted

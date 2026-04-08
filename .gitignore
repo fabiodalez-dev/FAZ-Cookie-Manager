@@ -30,6 +30,7 @@ phpstan-bootstrap.php
 release.md
 
 # Playwright
+.playwright-mcp/
 tests/e2e/reports/
 test-results/
 playwright-report/

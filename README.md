@@ -37,47 +37,47 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 ### Cookie Consent Banner
 GDPR-compliant banner with Customize, Reject All, and Accept All buttons. Appears on first visit, fully responsive and keyboard accessible.
 
-![Cookie consent banner](assets/screenshots/screenshot-1.png)
+![Cookie consent banner](assets/screenshot-1.png)
 
 ### Dashboard
 Analytics overview with pageviews chart, consent distribution (accept/reject rates), and quick links to all plugin sections.
 
-![Dashboard](assets/screenshots/screenshot-2.png)
+![Dashboard](assets/screenshot-2.png)
 
 ### Cookie Banner Editor
 Customize layout (box, bar, popup), position, theme (light/dark), and regulation type (GDPR/CCPA/both) with a live preview. Includes tabs for Content, Colours, Buttons, Preference Center, and Advanced settings.
 
-![Cookie Banner editor](assets/screenshots/screenshot-3.png)
+![Cookie Banner editor](assets/screenshot-3.png)
 
 ### Cookies Management
 View all detected cookies organized by category (Necessary, Functional, Analytics, Performance, Advertisement). Edit, delete, or add cookies manually. Integrated with the Open Cookie Database (2,242 definitions) for automatic categorization.
 
-![Cookies management](assets/screenshots/screenshot-4.png)
+![Cookies management](assets/screenshot-4.png)
 
 ### Cookie Scanner
 Built-in browser-based scanner with multiple scan depths: Quick (10 pages), Standard (100), Deep (1,000), or Full scan. Runs locally -- no external service, no API limits.
 
-![Cookie scanner](assets/screenshots/screenshot-5.png)
+![Cookie scanner](assets/screenshot-5.png)
 
 ### Consent Logs
 Complete audit trail of every visitor's consent decision. Shows consent ID, status, categories chosen, anonymized IP, and page URL. Search, filter, and export to CSV for GDPR accountability.
 
-![Consent Logs](assets/screenshots/screenshot-6.png)
+![Consent Logs](assets/screenshot-6.png)
 
 ### Google Consent Mode v2
 Configure all 7 consent signal types with default and granted states. Includes Google Additional Consent Mode (GACM) for ad technology provider IDs.
 
-![Google Consent Mode](assets/screenshots/screenshot-7.png)
+![Google Consent Mode](assets/screenshot-7.png)
 
 ### Languages
 Select from 180+ available languages. The banner text adapts automatically to the visitor's browser language.
 
-![Languages](assets/screenshots/screenshot-8.png)
+![Languages](assets/screenshot-8.png)
 
 ### Settings
 Global controls: enable/disable banner, exclude pages, consent log retention, scanner limits, Microsoft UET/Clarity consent APIs, and IAB TCF v2.3 toggle with CMP ID and Purpose One Treatment options.
 
-![Settings](assets/screenshots/screenshot-9.png)
+![Settings](assets/screenshot-9.png)
 
 ---
 
@@ -451,6 +451,20 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.9.0
+- **WCAG 2.2 accessibility** — new `a11y.js` with `role="dialog"`, `aria-modal`, `aria-labelledby`, heading hierarchy (`<h2>`/`<h3>`), `role="switch"` on toggles, dynamic checkbox labels, and Escape key support (contributed by Yard Digital Agency)
+- **CSS custom properties** — all banner inline styles replaced with `--faz-*` CSS vars for CSP compatibility and easy theme customization (contributed by Yard Digital Agency)
+- **Dutch language** — 573 fully translated strings (contributed by Yard Digital Agency)
+- **Admin UI refresh** — modern design system, real-time iframe-based banner preview, design presets
+- **Settings save fix** — `array_merge` no longer accumulates duplicates on repeated saves
+- **Blocker templates auto-save** — clicking a template now persists rules immediately
+- **Security hardening** — SSRF protection on scanner redirects, path traversal sanitization, CSS var name sanitization, ABSPATH guard on autoloader
+- **Error handling** — banner API returns `WP_Error` on DB failures (create, update, delete, bulk)
+- **Focus management** — preference center restores focus to trigger element on close (WCAG 2.4.3)
+- **Performance** — a11y.js loaded in footer (non render-blocking), `.faz-accordion-heading` CSS normalized across all template types
+- **10 rounds of CodeRabbit review** — 68+ findings addressed
+- **155+ E2E tests** across admin, frontend, scanner, a11y, and blocking flows
+
 ### 1.8.0
 - **WooCommerce-aware scanner** — auto-discovers shop, product, cart, checkout, my-account pages for comprehensive cookie detection
 - **Scanner Debug Mode** — logs every categorization decision, downloadable from admin
@@ -542,7 +556,7 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 - Google Consent Mode v2, Microsoft UET/Clarity consent, local consent logging, cookie scanner
 
 ### 1.0.0
-- Initial release — fork of CookieYes v3.4.0, fully de-branded, cloud-free, all premium features unlocked
+- Initial release — based on the GPL-licensed CookieYes v3.4.0 codebase, fully de-branded, cloud-free, and self-hosted
 
 ## Translations
 

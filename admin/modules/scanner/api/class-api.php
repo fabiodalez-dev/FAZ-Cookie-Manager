@@ -428,21 +428,22 @@ class Api extends Rest_Controller {
 					array( 'status' => 400 )
 				);
 			}
+			$is_validated_loopback = $site_is_local && $url_is_local;
 
 			$logger->log( 'Server-scan URL: ' . $url );
 
 			// Fetch the page HTML server-side.
 			// Use wp_remote_get (not wp_safe_remote_get) because the scanner
 			// needs to reach the site itself, which may be on localhost/127.0.0.1.
-			// SSRF is mitigated by the host validation above. Redirects are limited
-			// to same-host only via 'reject_unsafe_urls' => true.
+			// SSRF is mitigated by the host validation above. Loopback requests are
+			// allowed only when both the site and requested URL are loopback hosts.
 			$http_response = wp_remote_get(
 				$url,
 				array(
 					'timeout'             => 20,
 					'sslverify'           => false,
 					'redirection'         => 3,
-					'reject_unsafe_urls'  => true,
+					'reject_unsafe_urls'  => ! $is_validated_loopback,
 					'user-agent'          => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
 				)
 			);

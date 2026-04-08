@@ -318,7 +318,7 @@ test.describe('full-test-codex', () => {
 
       const saveButton = page.locator('button[type="submit"], input[type="submit"]');
       await saveButton.first().click();
-      await expect(page.locator('.notice-success, #message.updated')).toBeVisible({ timeout: 20_000 });
+			await expect(page.locator('.notice-success, #message.updated').first()).toBeVisible({ timeout: 20_000 });
 
       await gotoResilient(page, '/wp-admin/tools.php?page=head-footer-code');
       const persisted = await page.evaluate((sel) => {

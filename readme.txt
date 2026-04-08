@@ -3,12 +3,12 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.8.0
+Stable tag: 1.9.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-The only cookie consent plugin you need. 100% free, zero cloud dependencies, no subscriptions. Full GDPR, CCPA, ePrivacy, and IAB TCF v2.3 compliance out of the box.
+The only cookie consent plugin you need. 100% free, zero cloud dependencies, no subscriptions. Built to help with GDPR, CCPA, ePrivacy, and IAB TCF v2.3 consent workflows.
 
 == Description ==
 
@@ -69,7 +69,7 @@ No. FAZ Cookie Manager is 100% self-hosted. There are no cloud services, no API 
 
 = Is it really free? What's the catch? =
 
-It's free and open source (GPL-3.0). There are no premium upgrades, no feature gates, and no upsells. The plugin is a fork of CookieYes v3.4.0 with all premium features unlocked and all cloud dependencies removed.
+It's free and open source (GPL-3.0). There are no premium upgrades, no feature gates, and no upsells. The plugin is based on the GPL-licensed CookieYes v3.4.0 codebase, with cloud dependencies removed and all included features running locally.
 
 = Is it compatible with Google Consent Mode v2? =
 
@@ -116,6 +116,39 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 9. **Settings** -- Global controls: enable/disable banner, exclude specific pages, configure consent log retention, set scanner limits, enable Microsoft UET/Clarity consent APIs, and toggle IAB TCF v2.3 support.
 
 == Changelog ==
+
+= 1.9.0 =
+* New: WCAG 2.2 accessibility (a11y.js) — dialog roles, heading hierarchy, role="switch", dynamic labels, Escape key
+* New: CSS custom properties — CSP-compatible banner styling via --faz-* vars
+* New: Dutch language support (573 strings)
+* New: Admin UI refresh with real-time iframe banner preview and design presets
+* New: Focus management — preference center restores focus on close
+* Fix: Settings save no longer accumulates duplicate array entries
+* Fix: Blocker templates auto-save when clicked
+* Fix: .faz-accordion-heading CSS normalized across all template types
+* Security: SSRF redirect protection, path traversal sanitization, ABSPATH guard
+* Security: Banner API returns WP_Error on database failures
+* Performance: a11y.js loaded in footer (non render-blocking)
+* 10 rounds of code review, 155+ E2E tests
+
+= 1.8.0 =
+* New: Admin UI refresh with modern design system
+* New: Real-time iframe-based banner preview in admin
+* New: WooCommerce-aware scanner with priority page discovery
+* New: Scanner debug mode with downloadable logs
+* New: OCD auto-download (7400+ definitions)
+* New: Remove all data on uninstall setting
+* Fix: Inferred cookies use site domain
+* Fix: Auto-categorize serialized to prevent rate limiting
+
+= 1.7.0 =
+* New: 26 features including import/export, WP-CLI, per-service consent, age gate
+* New: Cookie policy shortcode, blocker templates, design presets
+* Security: Full input validation and nonce hardening
+
+= 1.6.0 =
+* New: WooCommerce compatibility with payment gateway whitelist
+* New: Video placeholder system for blocked embeds
 
 = 1.5.0 =
 * New: Link text colour picker in Banner → Colours tab for customising link colours in the consent notice
@@ -215,7 +248,7 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 * Dashboard analytics with pageview tracking
 
 = 1.0.2 =
-* Unlocked all premium features for local use
+* Moved included features to local/self-hosted operation
 * Removed all cloud dependencies and external API calls
 
 = 1.0.1 =
@@ -224,10 +257,13 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 
 = 1.0.0 =
 * Initial release based on CookieYes v3.4.0 fork
-* Full GDPR, CCPA, ePrivacy Directive compliance
+* GDPR, CCPA, and ePrivacy Directive consent workflows
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.9.0 =
+WCAG 2.2 accessibility, CSS custom properties for CSP compatibility, Dutch language, admin UI refresh with live preview, security hardening, and 155+ E2E tests. Clear caches after upgrading.
 
 = 1.5.0 =
 New link text colour picker for banner links. 21 new E2E tests. TinyMCE, accessibility, and output buffer fixes. Clear caches after upgrading.
