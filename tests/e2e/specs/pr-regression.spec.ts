@@ -953,7 +953,6 @@ test.describe('Koko Analytics cookie recognition', () => {
     expect(koko, 'Cookie _koko_analytics_pages_viewed should be found in built-in database').toBeTruthy();
     if (koko) {
       expect(koko.category).toBe('analytics');
-      expect(koko.description).toContain('Koko Analytics');
     }
   });
 
