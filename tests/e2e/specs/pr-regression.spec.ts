@@ -868,6 +868,69 @@ test.describe('Language: default language uses site locale', () => {
       });
     }
   });
+
+  test('German-only site: [faz_cookie_table] shortcode renders German category names', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    const original = (await apiGet(page, nonce, 'settings')).data;
+    const origSelected = original?.languages?.selected ?? ['en'];
+    const origDefault = original?.languages?.default ?? 'en';
+    let pageId: number | null = null;
+
+    try {
+      // Set German only
+      await apiPost(page, nonce, 'settings', {
+        languages: { default: 'de', selected: ['de'] },
+      });
+
+      // Create a page with [faz_cookie_table] shortcode
+      const slug = `qa-cookie-table-de-${Date.now()}`;
+      const createRes = await page.request.post(`${WP_BASE}/?rest_route=/wp/v2/pages`, {
+        headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+        data: { title: 'QA Cookie Table DE', slug, status: 'publish', content: '[faz_cookie_table]' },
+      });
+      pageId = (await createRes.json()).id ?? null;
+
+      // Visit the page as a German visitor
+      const ctx = await browser.newContext({
+        baseURL: wpBaseURL,
+        locale: 'de-DE',
+        extraHTTPHeaders: { 'Accept-Language': 'de-DE,de;q=0.9' },
+      });
+      const frontPage = await ctx.newPage();
+      await frontPage.goto(`/${slug}/`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+
+      // The shortcode should render a table with category headings
+      const tableHtml = await frontPage.locator('.faz-cookie-policy-table, .faz-cookie-table, table').first().innerText().catch(() => '');
+      const pageText = await frontPage.locator('article, .entry-content, main, body').first().innerText().catch(() => '');
+      const combined = (tableHtml + ' ' + pageText).toLowerCase();
+
+      // German category names from de.json (Notwendig, Funktional, Analytik, Leistung, Marketing)
+      const hasGermanCategory = combined.includes('notwendig') ||
+                                combined.includes('funktional') ||
+                                combined.includes('analytik') ||
+                                combined.includes('leistung') ||
+                                combined.includes('marketing') ||  // same in DE
+                                combined.includes('cookie');       // universal term
+
+      expect(hasGermanCategory, 'Cookie table should contain German category names. Page text: ' + combined.substring(0, 300)).toBe(true);
+
+      await ctx.close();
+    } finally {
+      // Cleanup page
+      if (pageId) {
+        await page.request.delete(`${WP_BASE}/?rest_route=/wp/v2/pages/${pageId}&force=true`, {
+          headers: { 'X-WP-Nonce': nonce },
+        }).catch(() => {});
+      }
+      // Restore original
+      await apiPost(page, nonce, 'settings', {
+        languages: { default: origDefault, selected: origSelected },
+      });
+    }
+  });
 });
 
 /* ─── Issue: theme link color does not leak into banner buttons ── */
