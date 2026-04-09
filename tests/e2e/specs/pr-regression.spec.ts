@@ -771,16 +771,96 @@ test.describe('Language: default language uses site locale', () => {
     const origDefault = original?.languages?.default ?? 'en';
 
     try {
-      // Set default to 'de' and selected to ['de'] only (no 'en')
+      // Step 1: Set default to 'de' and selected to ['de'] only (no 'en')
       await apiPost(page, nonce, 'settings', {
         languages: { default: 'de', selected: ['de'] },
       });
 
-      // Read back — 'en' should NOT be re-added
-      const updated = (await apiGet(page, nonce, 'settings')).data;
-      const saved = updated?.languages?.selected ?? [];
-      expect(saved).toContain('de');
-      expect(saved).not.toContain('en');
+      // Step 2: Read back immediately — 'en' should NOT be re-added
+      const read1 = (await apiGet(page, nonce, 'settings')).data;
+      expect(read1?.languages?.selected, 'First read: en should not be present').not.toContain('en');
+      expect(read1?.languages?.selected).toContain('de');
+      expect(read1?.languages?.default).toBe('de');
+
+      // Step 3: Read AGAIN (simulates page reload) — still no 'en'
+      const read2 = (await apiGet(page, nonce, 'settings')).data;
+      expect(read2?.languages?.selected, 'Second read: en should not reappear').not.toContain('en');
+      expect(read2?.languages?.selected).toContain('de');
+
+      // Step 4: Save again with same data (simulates user clicking Save)
+      await apiPost(page, nonce, 'settings', {
+        languages: { default: 'de', selected: ['de'] },
+      });
+
+      // Step 5: Read back after re-save — STILL no 'en'
+      const read3 = (await apiGet(page, nonce, 'settings')).data;
+      expect(read3?.languages?.selected, 'Third read after re-save: en must stay gone').not.toContain('en');
+      expect(read3?.languages?.selected.length, 'Only one language should be selected').toBe(1);
+      expect(read3?.languages?.selected[0]).toBe('de');
+    } finally {
+      // Restore original
+      await apiPost(page, nonce, 'settings', {
+        languages: { default: origDefault, selected: origSelected },
+      });
+    }
+  });
+
+  test('German-only site shows German banner text on frontend', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // Save original
+    const original = (await apiGet(page, nonce, 'settings')).data;
+    const origSelected = original?.languages?.selected ?? ['en'];
+    const origDefault = original?.languages?.default ?? 'en';
+
+    try {
+      // Set German only
+      await apiPost(page, nonce, 'settings', {
+        languages: { default: 'de', selected: ['de'] },
+      });
+
+      // Clear banner template cache so it regenerates with German
+      await page.evaluate(async () => {
+        const r = await (window as any).FAZ.post('settings', { banner_control: {} });
+        return r;
+      });
+
+      // Open frontend in a German browser context (no consent cookie)
+      const ctx = await browser.newContext({
+        baseURL: wpBaseURL,
+        locale: 'de-DE',
+        extraHTTPHeaders: { 'Accept-Language': 'de-DE,de;q=0.9' },
+      });
+      const frontPage = await ctx.newPage();
+      await frontPage.goto('/', { waitUntil: 'domcontentloaded', timeout: 45_000 });
+
+      // Wait for the banner to appear
+      const notice = frontPage.locator('[data-faz-tag="notice"]');
+      await expect(notice).toBeVisible({ timeout: 15_000 });
+
+      // The banner title or description should contain German text, NOT English
+      const bannerText = await frontPage.locator('#faz-consent').innerText();
+      const lowerText = bannerText.toLowerCase();
+
+      // German keywords that should appear in the de.json banner content
+      const hasGerman = lowerText.includes('datenschutz') ||
+                        lowerText.includes('cookies') ||  // universal
+                        lowerText.includes('einstellungen') ||
+                        lowerText.includes('akzeptieren') ||
+                        lowerText.includes('ablehnen') ||
+                        lowerText.includes('privat');
+
+      // English keywords that should NOT appear if language is German
+      const hasEnglish = lowerText.includes('we value your privacy') ||
+                         lowerText.includes('we use cookies') ||
+                         lowerText.includes('accept all') ||
+                         lowerText.includes('reject all');
+
+      expect(hasEnglish, 'Banner should NOT contain English text when set to German-only. Text: ' + bannerText.substring(0, 200)).toBe(false);
+
+      await ctx.close();
     } finally {
       // Restore original
       await apiPost(page, nonce, 'settings', {
