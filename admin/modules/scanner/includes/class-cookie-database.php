@@ -101,6 +101,12 @@ class Cookie_Database {
 			'duration'    => '1 minute',
 			'description' => 'Google Analytics cookie used to throttle request rate.',
 		),
+		// Koko Analytics (WordPress plugin — first-party analytics).
+		'_koko_analytics_pages_viewed' => array(
+			'category'    => 'analytics',
+			'duration'    => '24 hours',
+			'description' => 'Koko Analytics cookie used to detect unique visitors and count pages viewed per session.',
+		),
 		'_gac_'                   => array(
 			'category'    => 'analytics',
 			'duration'    => '90 days',

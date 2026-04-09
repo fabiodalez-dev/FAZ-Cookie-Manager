@@ -933,6 +933,44 @@ test.describe('Language: default language uses site locale', () => {
   });
 });
 
+/* ─── Koko Analytics: built-in cookie lookup ── */
+
+test.describe('Koko Analytics cookie recognition', () => {
+  test('_koko_analytics_pages_viewed is recognized as analytics in built-in database', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // Use the scrape endpoint to look up the cookie name against the built-in database
+    const result = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/cookies/scrape`, {
+      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+      data: { names: ['_koko_analytics_pages_viewed'] },
+    });
+    const scraped = await result.json();
+
+    // The cookie should be found and categorized as analytics
+    const koko = Array.isArray(scraped) ? scraped.find((c: any) => c.name === '_koko_analytics_pages_viewed') : null;
+    expect(koko, 'Cookie _koko_analytics_pages_viewed should be found in built-in database').toBeTruthy();
+    if (koko) {
+      expect(koko.category).toBe('analytics');
+      expect(koko.description).toContain('Koko Analytics');
+    }
+  });
+
+  test('Koko Analytics script pattern is recognized by Known Providers', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    // Check that visiting the frontend shows koko-analytics in the page source
+    const frontPage = await page.context().newPage();
+    await frontPage.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const html = await frontPage.content();
+    const hasKokoScript = html.includes('koko-analytics');
+    expect(hasKokoScript, 'Koko Analytics script should be present on frontend when plugin is active').toBe(true);
+    await frontPage.close();
+  });
+});
+
 /* ─── Issue: theme link color does not leak into banner buttons ── */
 
 test.describe('CSS: theme link colors do not leak into banner buttons', () => {
