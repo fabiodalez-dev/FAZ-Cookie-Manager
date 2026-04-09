@@ -16,7 +16,7 @@ Free cookie consent with GDPR, CCPA, ePrivacy, Google Consent Mode v2, and IAB T
 
 FAZ Cookie Manager is a WordPress plugin that helps you implement cookie consent and privacy workflows for international regulations -- completely free, with no strings attached.
 
-No account to create. No required cloud service to connect. No "premium" plan to unlock basic features like consent logging or geo-targeting. Core consent features run on your own server, and you own all your data.
+No account to create. The plugin requires no cloud service connection. Basic features like consent logging and geo-targeting are included -- no premium plan needed. Core consent features run on your own server, and you own all your data.
 
 = Why FAZ Cookie Manager? =
 
