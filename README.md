@@ -451,6 +451,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.9.2
+- **Fix: language settings controller** — settings API no longer re-injects the default language into the selected list on every read, fully fixing the "English always comes back" bug for non-English sites
+
 ### 1.9.1
 - **Fix: default language uses site locale** — `faz_default_language()` now falls back to WPLANG (e.g. `de_DE` → `de`) instead of hardcoded `'en'`, so German/French/etc.-only sites work correctly without English being forced back
 - **Fix: theme link color bleed** — added CSS reset (`color:inherit`) on `#faz-consent a,button` to prevent Divi, Elementor, and other page builder themes from overriding banner button colors

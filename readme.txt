@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.9.1
+Stable tag: 1.9.2
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -116,6 +116,9 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 9. **Settings** -- Global controls: enable/disable banner, exclude specific pages, configure consent log retention, set scanner limits, enable Microsoft UET/Clarity consent APIs, and toggle IAB TCF v2.3 support.
 
 == Changelog ==
+
+= 1.9.2 =
+* Fix: Settings API no longer re-injects default language into selected list on every read
 
 = 1.9.1 =
 * Fix: Default language now uses WordPress site locale instead of hardcoded English
@@ -265,6 +268,9 @@ Yes. The consent banner is rendered via JavaScript from a cached template, so it
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.9.2 =
+Fixes the "English always comes back" language bug. Clear caches after upgrading.
 
 = 1.9.1 =
 Fixes default language fallback and theme color bleed on banner buttons. Clear caches after upgrading.
