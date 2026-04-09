@@ -24,6 +24,11 @@ class Cookie_Definitions {
 	const SOURCE_URL = 'https://raw.githubusercontent.com/fabiodalez-dev/Open-Cookie-Database/master/open-cookie-database.json';
 
 	/**
+	 * Bundled snapshot shipped with the plugin for first-run lookups.
+	 */
+	const BUNDLED_DATA_FILE = 'includes/data/open-cookie-database.json';
+
+	/**
 	 * WP option key where definitions are cached.
 	 */
 	const OPTION_KEY = 'faz_cookie_definitions';
@@ -66,6 +71,13 @@ class Cookie_Definitions {
 	 * @var array|null
 	 */
 	private $wildcards = null;
+
+	/**
+	 * Cached bundled definitions payload.
+	 *
+	 * @var array|null
+	 */
+	private $bundled_data = null;
 
 	/**
 	 * Get singleton instance.
@@ -121,13 +133,7 @@ class Cookie_Definitions {
 			);
 		}
 
-		// Count individual cookies (data is grouped by platform).
-		$total_cookies = 0;
-		foreach ( $data as $entries ) {
-			if ( is_array( $entries ) ) {
-				$total_cookies += isset( $entries[0] ) ? count( $entries ) : 1;
-			}
-		}
+		$total_cookies = $this->count_definitions( $data );
 
 		// Store raw definitions.
 		update_option( self::OPTION_KEY, $data, false ); // autoload=false (large)
@@ -157,7 +163,12 @@ class Cookie_Definitions {
 	 * @return bool
 	 */
 	public function has_definitions() {
-		return false !== get_option( self::OPTION_KEY, false );
+		$stored = get_option( self::OPTION_KEY, false );
+		if ( is_array( $stored ) && ! empty( $stored ) ) {
+			return true;
+		}
+
+		return is_readable( $this->get_bundled_file_path() );
 	}
 
 	/**
@@ -166,7 +177,20 @@ class Cookie_Definitions {
 	 * @return array
 	 */
 	public function get_meta() {
-		return get_option( self::META_KEY, array() );
+		$meta = get_option( self::META_KEY, array() );
+		if ( ! empty( $meta ) ) {
+			return $meta;
+		}
+
+		$stored = get_option( self::OPTION_KEY, false );
+		if ( is_array( $stored ) && ! empty( $stored ) ) {
+			return array(
+				'count'  => $this->count_definitions( $stored ),
+				'source' => self::SOURCE_URL,
+			);
+		}
+
+		return $this->get_bundled_meta();
 	}
 
 	/**
@@ -180,7 +204,7 @@ class Cookie_Definitions {
 		$this->lookup    = array();
 		$this->wildcards = array();
 
-		$data = get_option( self::OPTION_KEY, array() );
+		$data = $this->get_runtime_data();
 		if ( ! is_array( $data ) ) {
 			return;
 		}
@@ -320,5 +344,94 @@ class Cookie_Definitions {
 		}
 
 		return $results;
+	}
+
+	/**
+	 * Return the currently active definitions dataset.
+	 *
+	 * Updated definitions stored in the database take precedence over the
+	 * bundled snapshot that ships with the plugin.
+	 *
+	 * @return array
+	 */
+	private function get_runtime_data() {
+		$stored = get_option( self::OPTION_KEY, array() );
+		if ( is_array( $stored ) && ! empty( $stored ) ) {
+			return $stored;
+		}
+
+		return $this->get_bundled_data();
+	}
+
+	/**
+	 * Return the absolute path to the bundled snapshot file.
+	 *
+	 * @return string
+	 */
+	private function get_bundled_file_path() {
+		return FAZ_PLUGIN_BASEPATH . self::BUNDLED_DATA_FILE;
+	}
+
+	/**
+	 * Load bundled definitions from disk once per request.
+	 *
+	 * @return array
+	 */
+	private function get_bundled_data() {
+		if ( null !== $this->bundled_data ) {
+			return $this->bundled_data;
+		}
+
+		$file = $this->get_bundled_file_path();
+		if ( ! is_readable( $file ) ) {
+			$this->bundled_data = array();
+			return $this->bundled_data;
+		}
+
+		$json = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local bundled JSON snapshot.
+		$data = json_decode( (string) $json, true );
+		if ( ! is_array( $data ) ) {
+			$this->bundled_data = array();
+			return $this->bundled_data;
+		}
+
+		$this->bundled_data = $data;
+		return $this->bundled_data;
+	}
+
+	/**
+	 * Return metadata for the bundled snapshot.
+	 *
+	 * @return array
+	 */
+	private function get_bundled_meta() {
+		$data = $this->get_bundled_data();
+		if ( empty( $data ) ) {
+			return array();
+		}
+
+		$file = $this->get_bundled_file_path();
+		return array(
+			'count'      => $this->count_definitions( $data ),
+			'updated_at' => is_readable( $file ) ? gmdate( 'Y-m-d H:i:s', filemtime( $file ) ) : '',
+			'source'     => 'bundled',
+		);
+	}
+
+	/**
+	 * Count individual cookie definitions in a raw dataset.
+	 *
+	 * @param array $data Raw OCD dataset.
+	 * @return int
+	 */
+	private function count_definitions( array $data ) {
+		$total_cookies = 0;
+		foreach ( $data as $entries ) {
+			if ( is_array( $entries ) ) {
+				$total_cookies += isset( $entries[0] ) ? count( $entries ) : 1;
+			}
+		}
+
+		return $total_cookies;
 	}
 }

@@ -83,8 +83,8 @@ class Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
 		add_action( 'admin_head', array( $this, 'print_api_fetch_polyfill' ), 0 );
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
-		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
+		add_action( 'admin_notices', array( $this, 'cookie_definitions_notice' ) );
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
@@ -1021,43 +1021,16 @@ window.wp.apiFetch=apiFetch;
 	}
 
 	/**
-	 * Hide all the unrelated notices from plugin pages.
+	 * Legacy notice handler retained as a no-op for backward compatibility.
 	 *
 	 * @since 3.0.0
 	 * @return void
 	 */
 	public function hide_admin_notices() {
-		if ( empty( $_REQUEST['page'] ) || ! preg_match( '/' . preg_quote( self::ADMIN_SLUG, '/' ) . '/', esc_html( wp_unslash( $_REQUEST['page'] ) ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			return;
-		}
-		global $wp_filter;
-
-		$notices_type = array(
-			'user_admin_notices',
-			'admin_notices',
-			'all_admin_notices',
-		);
-
-		foreach ( $notices_type as $type ) {
-			if ( empty( $wp_filter[ $type ]->callbacks ) || ! is_array( $wp_filter[ $type ]->callbacks ) ) {
-				continue;
-			}
-			foreach ( $wp_filter[ $type ]->callbacks as $priority => $hooks ) {
-				foreach ( $hooks as $name => $arr ) {
-					if ( is_object( $arr['function'] ) && $arr['function'] instanceof \Closure ) {
-						unset( $wp_filter[ $type ]->callbacks[ $priority ][ $name ] );
-						continue;
-					}
-					$class = ! empty( $arr['function'][0] ) && is_object( $arr['function'][0] ) ? strtolower( get_class( $arr['function'][0] ) ) : '';
-					if ( ! empty( $class ) && preg_match( '/^faz/', $class ) ) {
-						continue;
-					}
-					if ( ! empty( $name ) && ! preg_match( '/^faz/', $name ) ) {
-						unset( $wp_filter[ $type ]->callbacks[ $priority ][ $name ] );
-					}
-				}
-			}
-		}
+		// Intentionally left as a no-op.
+		// Plugins should not suppress notices from WordPress core or other
+		// plugins on their own admin screens.
+		return;
 	}
 
 	/**
@@ -1095,6 +1068,34 @@ window.wp.apiFetch=apiFetch;
 		echo '<a href="' . esc_url( $dismiss_url ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
 		echo '<span class="dashicons dashicons-dismiss"></span></a>';
 		echo '</div>';
+	}
+
+	/**
+	 * Display a persistent notice until local cookie definitions are downloaded.
+	 *
+	 * Kept scoped to FAZ admin screens so it does not hijack the wider WordPress
+	 * dashboard. The download itself remains an explicit user action.
+	 *
+	 * @return void
+	 */
+	public function cookie_definitions_notice() {
+		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$defs = \FazCookie\Includes\Cookie_Definitions::get_instance();
+		if ( $defs->has_definitions() ) {
+			return;
+		}
+
+		$url = admin_url( 'admin.php?page=faz-cookie-manager-cookies#faz-cookie-definitions-card' );
+
+		printf(
+			'<div class="notice notice-warning"><p>%s</p><p><a href="%s" class="button button-secondary">%s</a></p></div>',
+			esc_html__( 'To enable local cookie auto-categorization, download the cookie definitions from GitHub once from the Cookies page.', 'faz-cookie-manager' ),
+			esc_url( $url ),
+			esc_html__( 'Open Cookie Definitions', 'faz-cookie-manager' )
+		);
 	}
 
 	/**

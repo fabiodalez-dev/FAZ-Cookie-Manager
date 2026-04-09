@@ -1559,6 +1559,10 @@
 			}
 			var count = meta.count || 0;
 			var updated = meta.updated_at || '';
+			if (meta.source === 'bundled') {
+				el.textContent = count + ' built-in cookie definitions loaded' + (updated ? ' - bundled snapshot date: ' + updated : '') + '. Click "Update Definitions" to refresh from GitHub.';
+				return;
+			}
 			el.textContent = count + ' cookie definitions loaded' + (updated ? ' - last updated: ' + updated : '');
 		}).catch(function () {
 			el.textContent = 'Could not load definitions status.';
