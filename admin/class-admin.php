@@ -1084,7 +1084,8 @@ window.wp.apiFetch=apiFetch;
 		}
 
 		$defs = \FazCookie\Includes\Cookie_Definitions::get_instance();
-		if ( $defs->has_definitions() ) {
+		$meta = $defs->get_meta();
+		if ( $defs->has_definitions() && ( ! isset( $meta['source'] ) || 'bundled' !== $meta['source'] ) ) {
 			return;
 		}
 
@@ -1092,9 +1093,9 @@ window.wp.apiFetch=apiFetch;
 
 		printf(
 			'<div class="notice notice-warning"><p>%s</p><p><a href="%s" class="button button-secondary">%s</a></p></div>',
-			esc_html__( 'To enable local cookie auto-categorization, download the cookie definitions from GitHub once from the Cookies page.', 'faz-cookie-manager' ),
+			esc_html__( 'Cookie definitions are using the built-in snapshot. Download the latest version from GitHub for improved categorization.', 'faz-cookie-manager' ),
 			esc_url( $url ),
-			esc_html__( 'Open Cookie Definitions', 'faz-cookie-manager' )
+			esc_html__( 'Update Cookie Definitions', 'faz-cookie-manager' )
 		);
 	}
 

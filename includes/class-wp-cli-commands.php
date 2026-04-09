@@ -273,10 +273,13 @@ class WP_CLI_Commands {
 		$settings     = get_option( 'faz_settings' );
 		$gcm_settings = get_option( 'faz_gcm_settings' );
 
-		$banner_count   = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $wpdb->prefix . 'faz_banners' ) );
-		$cookie_count   = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $wpdb->prefix . 'faz_cookies' ) );
-		$category_count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $wpdb->prefix . 'faz_cookie_categories' ) );
-		$consent_count  = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $wpdb->prefix . 'faz_consent_logs' ) );
+		// Table names are trusted ($wpdb->prefix is set by WordPress core).
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$banner_count   = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_banners" );
+		$cookie_count   = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookies" );
+		$category_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories" );
+		$consent_count  = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_consent_logs" );
+		// phpcs:enable
 
 		$rows = array(
 			array( 'Key' => 'Plugin Version',     'Value' => FAZ_VERSION ),

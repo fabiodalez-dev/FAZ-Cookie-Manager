@@ -187,8 +187,7 @@ A fully local browser-based cookie crawler -- no external scanning service.
 
 Integrates the [Open Cookie Database](https://github.com/fabiodalez-dev/Open-Cookie-Database) (Apache-2.0) for automatic cookie identification.
 
-- **2,200+ cookie definitions** from major platforms (Google, Facebook, Microsoft, Stripe, etc.)
-- **Auto-download** on first activation
+- **Bundled snapshot included** — 2,200+ definitions ship with the plugin for immediate use
 - **Manual update** via admin UI button
 - **Exact + wildcard matching**: e.g., `_gat_` prefix matches `_gat_UA-12345`
 - **Auto-categorize**: One-click bulk categorization

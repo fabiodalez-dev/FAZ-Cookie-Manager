@@ -39,6 +39,13 @@ class Placeholder_Builder {
 	);
 
 	/**
+	 * Service IDs that are video platforms (used for aspect-ratio CSS class).
+	 *
+	 * @var array<int,string>
+	 */
+	private static $video_services = array( 'youtube', 'vimeo', 'dailymotion', 'twitch' );
+
+	/**
 	 * Map URL fragments to service identifiers.
 	 *
 	 * @var array<string,string>
@@ -94,7 +101,7 @@ class Placeholder_Builder {
 			: self::$service_icons['default'];
 
 		$has_thumb        = ! empty( $thumbnail_url );
-		$is_video_service = in_array( $service_id, array( 'youtube', 'vimeo', 'dailymotion', 'twitch' ), true );
+		$is_video_service = in_array( $service_id, self::$video_services, true );
 		$class            = 'faz-placeholder' . ( ( $has_thumb || $is_video_service ) ? ' faz-placeholder--video' : '' );
 
 		$message = sprintf(

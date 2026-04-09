@@ -9,7 +9,6 @@
 .playwright-mcp/
 .distignore
 docs/
-assets/
 node_modules/
 package.json
 package-lock.json

@@ -168,7 +168,8 @@ class Cookie_Definitions {
 			return true;
 		}
 
-		return is_readable( $this->get_bundled_file_path() );
+		$bundled = $this->get_bundled_data();
+		return is_array( $bundled ) && ! empty( $bundled );
 	}
 
 	/**
@@ -177,19 +178,17 @@ class Cookie_Definitions {
 	 * @return array
 	 */
 	public function get_meta() {
-		$meta = get_option( self::META_KEY, array() );
-		if ( ! empty( $meta ) ) {
-			return $meta;
-		}
-
 		$stored = get_option( self::OPTION_KEY, false );
 		if ( is_array( $stored ) && ! empty( $stored ) ) {
+			$meta = get_option( self::META_KEY, array() );
+			if ( ! empty( $meta ) ) {
+				return $meta;
+			}
 			return array(
 				'count'  => $this->count_definitions( $stored ),
 				'source' => self::SOURCE_URL,
 			);
 		}
-
 		return $this->get_bundled_meta();
 	}
 
