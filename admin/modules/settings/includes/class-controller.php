@@ -166,8 +166,13 @@ class Controller {
 				'status'  => ( true === $object->get_status() ? 'active' : 'inactive' ),
 			);
 			$data                                      = array_merge( $banner, array_merge( $object->get_settings(), array( 'content' => $object->get_contents() ) ) );
-			$data['settings']['languages']['selected'] = faz_selected_languages();
-			$data['settings']['languages']['default']  = faz_default_language();
+			// Read languages directly from settings — don't use faz_selected_languages()
+			// which injects the default language and prevents users from removing it.
+			$lang_settings = get_option( 'faz_settings' );
+			if ( isset( $lang_settings['languages']['selected'] ) && is_array( $lang_settings['languages']['selected'] ) ) {
+				$data['settings']['languages']['selected'] = array_values( array_unique( $lang_settings['languages']['selected'] ) );
+			}
+			$data['settings']['languages']['default'] = faz_default_language();
 
 			$data['settings']['ruleSet'] = array(
 				array(
