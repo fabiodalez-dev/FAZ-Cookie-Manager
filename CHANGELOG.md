@@ -2,6 +2,27 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.10.1] — 2026-04-10
+
+### Fixed
+- **Preference center transparent background on classic template** ([#57](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues/57)) — When the banner type is *full-width + pushdown* (internally mapped to the `classic` template), clicking the *Customize* button opened a preference center with no visible background colour.
+
+  Root cause: the DOM of the classic template is
+
+  ```
+  .faz-consent-container
+    .faz-consent-bar
+    .faz-preference-wrapper   ← no background-color, just position + animation
+      .faz-preference-center  ← the visible modal content
+  ```
+
+  and the CSS rule for `.faz-preference-center, .faz-preference, .faz-preference-header, .faz-footer-wrapper` was `background-color: inherit`. Box/banner templates wrap the same `.faz-preference-center` inside a `.faz-modal` that carries `background: var(--faz-detail-background-color, #ffffff)`, so `inherit` resolved to white there. Classic has no `.faz-modal`, so `inherit` walked up the tree, found no colour, and ended up transparent.
+
+  Fix: replace the `inherit` rule with `background-color: var(--faz-detail-background-color, #ffffff)` in both template versions (6.0.0 and 6.2.0). This gives the preference center its own default, independent of the parent chain, while still letting users override the colour via the banner editor — the CSS variable is set from the stored config.
+
+### Testing
+- **New E2E regression for issue #57** (`pr-regression.spec.ts` — "classic + pushdown: preference-center has a non-transparent default background"). Switches banner to `classic` + `pushdown`, opens the preference center on the frontend, verifies the DOM shape is classic (`.faz-preference-wrapper` present, `.faz-modal` absent) and asserts the computed `background-color` of `.faz-preference-center` is not in the set `{rgba(0, 0, 0, 0), transparent, ''}`. Restores the original banner settings in the `finally` block.
+
 ## [1.10.0] — 2026-04-10
 
 ### Added

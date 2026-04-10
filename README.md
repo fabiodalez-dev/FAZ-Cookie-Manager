@@ -451,6 +451,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.10.1
+- **Fix: preference center transparent background on classic template** — When the banner type is "full-width + pushdown" (which internally maps to the `classic` template), clicking the *Customize* button opened a preference center with no background colour. Root cause: `.faz-preference-center` used `background-color: inherit`, and the classic template wraps it in `.faz-preference-wrapper` (not `.faz-modal`), so there was no ancestor providing a colour — the modal ended up fully transparent. Replaced the `inherit` rule with `background-color: var(--faz-detail-background-color, #ffffff)` so the default is always a solid background, regardless of which template variant is active. Reported as [issue #57](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues/57).
+- **Test: E2E regression for issue #57** — switches the banner to `classic` + `pushdown`, opens the preference center on the frontend, and asserts the computed `background-color` of `.faz-preference-center` is not `rgba(0, 0, 0, 0)` / `transparent`. Canary for future regressions.
+
 ### 1.10.0
 - **German (de_DE) translation** — ships `languages/faz-cookie-manager-de_DE.po` and `.mo` covering `[faz_cookie_policy]`, `[faz_cookie_table]`, cookie category names and common banner labels. Fixes the gooloo.de user report where the Cookie Policy shortcode stayed in English on a German-only site because the plugin had no `de_DE.mo` to load.
 - **Admin JavaScript i18n infrastructure** — 128 localized keys exposed via `fazConfig.i18n.*`, organized in 8 namespaces (cookies, banner, settings, GCM, consent logs, languages, GVL, import/export, dashboard). Every admin page JS now uses a shared `__(key, fallback)` helper.

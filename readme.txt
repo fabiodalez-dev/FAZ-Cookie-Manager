@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.10.0
+Stable tag: 1.10.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,10 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.10.1 =
+* Fix: preference center transparent background on classic (full-width + pushdown) banner type. The `.faz-preference-center` CSS used `background-color: inherit` which left the modal visually empty when the classic template was active, because that template wraps the preference center in `.faz-preference-wrapper` (not `.faz-modal`) and no ancestor provided a colour. Replaced with `background-color: var(--faz-detail-background-color, #ffffff)` so the default is always a solid background, regardless of template variant. Reported as issue #57.
+* Test: new E2E regression that switches the banner to classic + pushdown, opens the preference center, and asserts the computed `background-color` of `.faz-preference-center` is not transparent.
 
 = 1.10.0 =
 * New: German (de_DE) translation — covers [faz_cookie_policy], [faz_cookie_table], cookie category names and common banner labels. Fixes a gooloo.de user report where the Cookie Policy shortcode stayed in English on a de_DE site because no de_DE .mo file was bundled.

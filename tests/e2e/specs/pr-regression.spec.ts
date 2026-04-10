@@ -1240,3 +1240,112 @@ test.describe('Admin i18n: WordPress site language switch', () => {
     ).toBeGreaterThanOrEqual(2);
   });
 });
+
+/* ─── Issue #57: preference center transparent background on classic template ── */
+
+test.describe('Issue #57: preference-center background default', () => {
+  /**
+   * Regression for https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues/57
+   *
+   * On the "classic" banner template (used by type=full-width + preferenceCenterType=pushdown)
+   * the DOM is:
+   *
+   *   .faz-consent-container
+   *     .faz-consent-bar
+   *     .faz-preference-wrapper   (no background set — just a position/animation container)
+   *       .faz-preference-center  (the visible modal content)
+   *
+   * The box/banner templates wrap the same .faz-preference-center inside a
+   * .faz-modal that has a default `background: var(--faz-detail-background-color, #ffffff)`.
+   * The classic template does NOT have .faz-modal, so the preference center
+   * relied on `background-color: inherit` and ended up transparent because no
+   * ancestor provided a colour.
+   *
+   * Fix: change `.faz-preference-center { background-color: inherit }` to
+   * `background-color: var(--faz-detail-background-color, #ffffff)`.
+   *
+   * This test switches the banner to classic + pushdown, opens the preference
+   * center on the frontend, and asserts the computed background-color is NOT
+   * transparent (rgba(0,0,0,0) or transparent).
+   */
+  test('classic + pushdown: preference-center has a non-transparent default background', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // Snapshot the banner settings so the test can restore them.
+    const bannerRes = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
+      headers: { 'X-WP-Nonce': nonce },
+    });
+    const original = await bannerRes.json().catch(() => null);
+    const baselineSettings = original?.settings?.settings ?? null;
+
+    try {
+      // Switch banner to classic + pushdown (forces preference-wrapper, no modal).
+      await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
+        headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+        data: {
+          settings: {
+            ...baselineSettings,
+            type: 'classic',
+            preferenceCenterType: 'pushdown',
+          },
+        },
+      });
+
+      // Visit the frontend in a fresh context so no consent cookie is set.
+      const ctx = await browser.newContext({ baseURL: wpBaseURL });
+      const front = await ctx.newPage();
+      await front.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await front.waitForSelector('.faz-consent-container', { timeout: 10_000 });
+
+      // Click Customize to open the preference center.
+      await front.click('[data-faz-tag="settings-button"]');
+      await front.waitForTimeout(500);
+
+      // Verify classic template is actually active (DOM has preference-wrapper, no modal).
+      const templateShape = await front.evaluate(() => ({
+        hasPreferenceWrapper: !!document.querySelector('.faz-preference-wrapper'),
+        hasModal: !!document.querySelector('.faz-modal'),
+      }));
+      expect(
+        templateShape.hasPreferenceWrapper,
+        'Classic template should render .faz-preference-wrapper',
+      ).toBe(true);
+      expect(
+        templateShape.hasModal,
+        'Classic template should NOT render .faz-modal',
+      ).toBe(false);
+
+      // Key assertion: the visible .faz-preference-center must have a
+      // non-transparent background-color.
+      const bgColor = await front.evaluate(() => {
+        const el = document.querySelector('.faz-preference-center') as HTMLElement | null;
+        if (!el) return null;
+        return window.getComputedStyle(el).backgroundColor;
+      });
+
+      expect(bgColor, '.faz-preference-center must exist').toBeTruthy();
+
+      const transparentValues = new Set([
+        'rgba(0, 0, 0, 0)',
+        'transparent',
+        '',
+      ]);
+      expect(
+        transparentValues.has(bgColor ?? ''),
+        `.faz-preference-center must not be transparent on the classic template. Got: ${bgColor}`,
+      ).toBe(false);
+
+      await ctx.close();
+    } finally {
+      // Restore the original banner settings so other tests see a clean slate.
+      if (baselineSettings) {
+        await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
+          headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+          data: { settings: baselineSettings },
+        }).catch(() => {});
+      }
+    }
+  });
+});
