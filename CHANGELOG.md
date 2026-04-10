@@ -2,6 +2,23 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.10.2] — 2026-04-10
+
+### Fixed
+- **Preference center text colour on dark-theme host sites** (follow-up to [#57](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues/57)). The 1.10.1 fix added a solid default background to `.faz-preference-center`, which resolved the transparent-modal bug on the classic template but exposed a pre-existing issue: several rules inside the preference center used `color: inherit`, which on sites with a dark theme (body text set to a light colour) inherited that light colour. The result was **unreadable "light on white" text** inside the now-white modal — technically a different bug than #57, but introduced to the user experience by the same fix.
+
+  Root cause: the template CSS had three inheritance-chain rules that all walked up to the host `<body>`:
+
+  - `.faz-preference-center, .faz-preference, .faz-preference-body-wrapper, .faz-accordion-wrapper { color: inherit }`
+  - `.faz-preference-body-wrapper .faz-preference-content-wrapper p { color: inherit }`
+  - `.faz-preference-center, .faz-preference, .faz-preference-header, .faz-footer-wrapper { background-color: var(--faz-detail-background-color, #ffffff) }` (no matching `color` lock — only backgrounds)
+
+  Fix: every `color: inherit` on preference-center elements was replaced with `color: var(--faz-detail-color, #212121)`, and the combined background+colour rule now sets both properties at once. The default is dark regardless of host theme, and users can still override the colour from the banner editor because the CSS variable is fed from the stored banner config.
+
+### Testing
+- **New E2E regression** (`pr-regression.spec.ts` — "dark-theme host site: preference center text stays dark (follow-up to #57)"). Injects `html, body, .wp-site-blocks { background: #0f0f10 !important; color: #e6e6e6 !important }` on the frontend after page load, opens the preference center, and asserts the computed `color` of `.faz-preference-center`, `.faz-preference-header`, `.faz-preference-title`, description paragraphs and accordion buttons is NOT `rgb(230, 230, 230)` (the injected light theme colour). Canary for future regressions.
+- **Existing #57 test hardened** — the classic+pushdown background test now tolerates both DOM shapes (`.faz-modal` wrapper on box/banner templates, direct `.faz-preference-center` on classic) so that what's asserted is the user-visible "modal has a visible background" condition, not the exact CSS class that carries it.
+
 ## [1.10.1] — 2026-04-10
 
 ### Fixed

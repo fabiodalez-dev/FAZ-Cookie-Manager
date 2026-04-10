@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.10.1
+Stable tag: 1.10.2
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,10 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.10.2 =
+* Fix: preference center text colour on sites with a dark theme (follow-up to #57). The 1.10.1 fix for the transparent background exposed a pre-existing issue: several rules inside the preference center used `color: inherit`, which on dark-theme host sites inherited a light text colour from `body`, producing unreadable "light on white" text. Locked the text colour to `var(--faz-detail-color, #212121)` on the preference center, preference, header, footer wrapper, body wrapper and description paragraphs. The default is dark regardless of host theme, and users can still override the colour from the banner editor because the CSS variable is fed from the stored banner config.
+* Test: new E2E regression that injects a dark-theme stylesheet on the host site, opens the preference center, and asserts every text-bearing element inherits the locked-down dark colour instead of the injected light one.
 
 = 1.10.1 =
 * Fix: preference center transparent background on classic (full-width + pushdown) banner type. The `.faz-preference-center` CSS used `background-color: inherit` which left the modal visually empty when the classic template was active, because that template wraps the preference center in `.faz-preference-wrapper` (not `.faz-modal`) and no ancestor provided a colour. Replaced with `background-color: var(--faz-detail-background-color, #ffffff)` so the default is always a solid background, regardless of template variant. Reported as issue #57.

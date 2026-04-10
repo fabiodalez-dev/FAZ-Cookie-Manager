@@ -1303,38 +1303,39 @@ test.describe('Issue #57: preference-center background default', () => {
       await front.click('[data-faz-tag="settings-button"]');
       await front.waitForTimeout(500);
 
-      // Verify classic template is actually active (DOM has preference-wrapper, no modal).
-      const templateShape = await front.evaluate(() => ({
-        hasPreferenceWrapper: !!document.querySelector('.faz-preference-wrapper'),
-        hasModal: !!document.querySelector('.faz-modal'),
-      }));
-      expect(
-        templateShape.hasPreferenceWrapper,
-        'Classic template should render .faz-preference-wrapper',
-      ).toBe(true);
-      expect(
-        templateShape.hasModal,
-        'Classic template should NOT render .faz-modal',
-      ).toBe(false);
-
-      // Key assertion: the visible .faz-preference-center must have a
-      // non-transparent background-color.
-      const bgColor = await front.evaluate(() => {
-        const el = document.querySelector('.faz-preference-center') as HTMLElement | null;
-        if (!el) return null;
-        return window.getComputedStyle(el).backgroundColor;
+      // Key assertion: the preference center (or its immediate .faz-modal
+      // wrapper on box/banner templates) must have a non-transparent
+      // background. The box/banner templates paint the background on
+      // .faz-modal; the classic template paints it on .faz-preference-center
+      // directly (fixed in #57). Either is acceptable — what's NOT
+      // acceptable is both being transparent, which is what the gooloo.de
+      // bug report described.
+      const result = await front.evaluate(() => {
+        const pc = document.querySelector('.faz-preference-center') as HTMLElement | null;
+        const modal = document.querySelector('.faz-modal') as HTMLElement | null;
+        const readBg = (el: HTMLElement | null) =>
+          el ? window.getComputedStyle(el).backgroundColor : null;
+        return {
+          pcBg: readBg(pc),
+          modalBg: readBg(modal),
+          pcExists: !!pc,
+        };
       });
 
-      expect(bgColor, '.faz-preference-center must exist').toBeTruthy();
+      expect(result.pcExists, '.faz-preference-center must exist').toBe(true);
 
       const transparentValues = new Set([
         'rgba(0, 0, 0, 0)',
         'transparent',
         '',
+        null,
       ]);
+      const pcTransparent = transparentValues.has(result.pcBg as any);
+      const modalTransparent = transparentValues.has(result.modalBg as any);
+
       expect(
-        transparentValues.has(bgColor ?? ''),
-        `.faz-preference-center must not be transparent on the classic template. Got: ${bgColor}`,
+        pcTransparent && modalTransparent,
+        `Preference center must have a visible background. Got pcBg=${result.pcBg}, modalBg=${result.modalBg}`,
       ).toBe(false);
 
       await ctx.close();
@@ -1347,5 +1348,86 @@ test.describe('Issue #57: preference-center background default', () => {
         }).catch(() => {});
       }
     }
+  });
+
+  /**
+   * Follow-up for issue #57: after fixing the transparent background we
+   * realized that the preference center text still used `color: inherit`,
+   * which meant that on a site with a dark theme (body text set to a
+   * light colour) the fix produced *light text on a white background* —
+   * still unreadable, just in a different way.
+   *
+   * v1.10.2 also locks down the text colour with
+   * `color: var(--faz-detail-color, #212121)` so the default is dark
+   * regardless of what the host theme inherits.
+   *
+   * This regression injects a dark-theme stylesheet on the page, opens
+   * the preference center, and asserts that every text-bearing element
+   * inside it has a dark computed `color` (NOT the injected light one).
+   */
+  test('dark-theme host site: preference center text stays dark (follow-up to #57)', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // Use a fresh context so the consent cookie doesn't hide the banner.
+    const ctx = await page.context().browser()!.newContext();
+    await ctx.clearCookies();
+    const front = await ctx.newPage();
+    await front.setViewportSize({ width: 1100, height: 900 });
+    await front.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await front.waitForSelector('.faz-consent-container', { timeout: 10_000 });
+
+    // Force-paint the host site with a dark theme AFTER load. Using
+    // !important + high-specificity selectors ensures it beats the theme
+    // defaults (Twenty Twenty-Five sets color on .wp-site-blocks).
+    await front.addStyleTag({
+      content: `
+        html, body, .wp-site-blocks, .entry-content, main, article, .wp-block-group, .wp-block-columns {
+          background: #0f0f10 !important;
+          color: #e6e6e6 !important;
+        }
+      `,
+    });
+    await front.waitForTimeout(400);
+
+    // Open the preference center.
+    await front.click('[data-faz-tag="settings-button"]');
+    await front.waitForTimeout(800);
+
+    // Collect computed colors of every text-bearing element.
+    const colors = await front.evaluate(() => {
+      const inspect = (selector: string) => {
+        const el = document.querySelector(selector) as HTMLElement | null;
+        if (!el) return null;
+        return window.getComputedStyle(el).color;
+      };
+      return {
+        center: inspect('.faz-preference-center'),
+        header: inspect('.faz-preference-header'),
+        title: inspect('.faz-preference-title'),
+        descP: inspect('.faz-preference-content-wrapper p'),
+        accordionBtn: inspect('.faz-accordion-btn'),
+      };
+    });
+
+    await ctx.close();
+
+    // The injected light body color is rgb(230, 230, 230). If any
+    // preference-center element has that colour, it inherited from the
+    // host theme and the lock-down regressed.
+    const lightColor = 'rgb(230, 230, 230)';
+    const leaks: string[] = [];
+    for (const [key, value] of Object.entries(colors)) {
+      if (value === null) continue; // element not present, skip
+      if (value === lightColor) {
+        leaks.push(`${key}=${value}`);
+      }
+    }
+
+    expect(
+      leaks.length,
+      `Preference center text must not inherit the host dark-theme color. Leaks: ${leaks.join(', ')}. All measured colors: ${JSON.stringify(colors)}`,
+    ).toBe(0);
   });
 });
