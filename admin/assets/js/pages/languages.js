@@ -69,7 +69,7 @@
 			removeBtn.type = 'button';
 			removeBtn.className = 'faz-lang-tag-remove';
 			removeBtn.textContent = '\u00D7'; // multiplication sign ×
-			removeBtn.title = 'Remove ' + name;
+			removeBtn.title = __('languages.removeLanguage', 'Remove %s').replace('%s', name);
 			removeBtn.addEventListener('click', function () {
 				removeLanguage(code);
 			});

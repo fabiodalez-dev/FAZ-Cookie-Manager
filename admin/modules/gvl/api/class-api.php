@@ -229,7 +229,7 @@ class Api extends Rest_Controller {
 		$vendor = $gvl->get_vendor( $id );
 
 		if ( null === $vendor ) {
-			return new WP_REST_Response( array( 'message' => 'Vendor not found' ), 404 );
+			return new WP_REST_Response( array( 'message' => __( 'Vendor not found', 'faz-cookie-manager' ) ), 404 );
 		}
 
 		$vendor['id'] = $id;

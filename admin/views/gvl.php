@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 		<div class="faz-card-body">
 			<div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
-				<input type="text" id="faz-gvl-search" class="faz-input" placeholder="Search vendors..." aria-label="Search vendors" style="flex:1;max-width:300px;">
+				<input type="text" id="faz-gvl-search" class="faz-input" placeholder="<?php esc_attr_e( 'Search vendors...', 'faz-cookie-manager' ); ?>" aria-label="<?php esc_attr_e( 'Search vendors', 'faz-cookie-manager' ); ?>" style="flex:1;max-width:300px;">
 				<select id="faz-gvl-purpose-filter" class="faz-input" aria-label="Filter by purpose" style="width:auto;">
 					<option value="0">All purposes</option>
 				</select>

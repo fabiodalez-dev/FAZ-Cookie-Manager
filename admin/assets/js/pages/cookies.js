@@ -402,7 +402,7 @@
 				var badge = document.createElement('span');
 				badge.className = 'faz-badge faz-badge-muted';
 				badge.textContent = __('cookies.hidden', 'hidden');
-				badge.title = 'Hidden from frontend';
+				badge.title = __('cookies.hiddenFromFrontend', 'Hidden from frontend');
 				badge.style.cssText = 'font-size:10px;margin-left:6px;padding:1px 6px;border-radius:3px;background:#e2e8f0;color:#64748b;vertical-align:middle;';
 				btn.appendChild(badge);
 			}
@@ -894,7 +894,7 @@
 				return FAZ.post('scans/discover', discoverPayload).catch(function (err) {
 					if (attempt < 2 && err && err.code === 'fetch_error') {
 						var delay = attempt === 0 ? 1000 : 3000;
-						statusEl.textContent = 'Server busy, retrying in ' + (delay / 1000) + 's...';
+						statusEl.textContent = __('cookies.serverBusyRetrying', 'Server busy, retrying in %ds...').replace('%d', delay / 1000);
 						console.warn('[FAZ Scanner] Discover attempt ' + (attempt + 1) + ' failed, retrying...', err.message);
 						return new Promise(function (resolve) { setTimeout(resolve, delay); })
 							.then(function () { return discoverWithRetry(attempt + 1); });
@@ -934,7 +934,7 @@
 					finishScan(btn, progressWrap, 'No pages found to scan.', true);
 					return;
 				}
-				statusEl.textContent = 'Scanning 0/' + urls.length + ' pages...';
+				statusEl.textContent = __('cookies.scanningPages', 'Scanning 0/%d pages...').replace('%d', urls.length);
 				pagesEl.textContent = '0/' + urls.length + ' pages';
 				bar.style.width = '0%';
 
@@ -1629,7 +1629,7 @@
 		var input = document.createElement('input');
 		input.type = 'text';
 		input.className = 'faz-input';
-		input.placeholder = 'e.g. custom-tracker.com/script.js';
+		input.placeholder = __('cookies.rulePlaceholder', 'e.g. custom-tracker.com/script.js');
 		input.value = pattern;
 		input.setAttribute('data-rule', 'pattern');
 		input.style.width = '100%';
@@ -1760,7 +1760,7 @@
 					});
 					if (added) {
 						saveCustomRules();
-						FAZ.notify('Added ' + added + ' rules from ' + tpl.name + ' (saved)', 'success');
+						FAZ.notify(__('cookies.rulesAdded', 'Added %1$d rules from %2$s (saved)').replace('%1$d', added).replace('%2$s', tpl.name), 'success');
 					}
 
 					// Also create cookies from the template if they don't already exist
@@ -1803,7 +1803,7 @@
 						});
 
 						if (!creates.length) {
-							FAZ.notify('All cookies from ' + tpl.name + ' already exist', 'info');
+							FAZ.notify(__('cookies.allCookiesExist', 'All cookies from %s already exist').replace('%s', tpl.name), 'info');
 							return;
 						}
 

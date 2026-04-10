@@ -540,6 +540,12 @@ window.wp.apiFetch=apiFetch;
 						'deleteAllStale'           => esc_html__( 'Delete all stale', 'faz-cookie-manager' ),
 						'allCookies'               => esc_html__( 'All Cookies', 'faz-cookie-manager' ),
 						'hidden'                   => esc_html__( 'hidden', 'faz-cookie-manager' ),
+						'hiddenFromFrontend'       => esc_html__( 'Hidden from frontend', 'faz-cookie-manager' ),
+						'serverBusyRetrying'       => esc_html__( 'Server busy, retrying in %ds...', 'faz-cookie-manager' ),
+						'scanningPages'            => esc_html__( 'Scanning 0/%d pages...', 'faz-cookie-manager' ),
+						'rulePlaceholder'          => esc_html__( 'e.g. custom-tracker.com/script.js', 'faz-cookie-manager' ),
+						'rulesAdded'               => esc_html__( 'Added %1$d rules from %2$s (saved)', 'faz-cookie-manager' ),
+						'allCookiesExist'          => esc_html__( 'All cookies from %s already exist', 'faz-cookie-manager' ),
 						'noCookiesFound'           => esc_html__( 'No cookies found.', 'faz-cookie-manager' ),
 						'edit'                     => esc_html__( 'Edit', 'faz-cookie-manager' ),
 						'delete'                   => esc_html__( 'Delete', 'faz-cookie-manager' ),
@@ -586,6 +592,7 @@ window.wp.apiFetch=apiFetch;
 					),
 					// Banner page.
 					'banner'                   => array(
+						'presetApplied'            => esc_html__( 'Preset applied: %s', 'faz-cookie-manager' ),
 						'loadFailed'               => esc_html__( 'Failed to load banner settings.', 'faz-cookie-manager' ),
 						'saved'                    => esc_html__( 'Banner settings saved.', 'faz-cookie-manager' ),
 						'saveFailed'               => esc_html__( 'Failed to save banner settings.', 'faz-cookie-manager' ),
@@ -616,6 +623,7 @@ window.wp.apiFetch=apiFetch;
 					),
 					// Consent logs page.
 					'consentLogs'              => array(
+						'showing'                  => esc_html__( 'Showing %1$s\u2013%2$s of %3$s', 'faz-cookie-manager' ),
 						'loadFailed'               => esc_html__( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => esc_html__( 'No consent logs found.', 'faz-cookie-manager' ),
 						'exportOk'                 => esc_html__( 'CSV exported successfully.', 'faz-cookie-manager' ),
@@ -630,6 +638,7 @@ window.wp.apiFetch=apiFetch;
 						'atLeastOne'               => esc_html__( 'At least one language must be selected.', 'faz-cookie-manager' ),
 						'added'                    => esc_html__( 'Added', 'faz-cookie-manager' ),
 						'noResults'                => esc_html__( 'No languages found.', 'faz-cookie-manager' ),
+						'removeLanguage'           => esc_html__( 'Remove %s', 'faz-cookie-manager' ),
 						'saved'                    => esc_html__( 'Languages saved successfully.', 'faz-cookie-manager' ),
 						'saveFailed'               => esc_html__( 'Failed to save languages.', 'faz-cookie-manager' ),
 					),
@@ -640,6 +649,10 @@ window.wp.apiFetch=apiFetch;
 						'vendorsLoadFailed'        => esc_html__( 'Failed to load vendors. Make sure GVL is downloaded.', 'faz-cookie-manager' ),
 						'noVendors'                => esc_html__( 'No vendors found.', 'faz-cookie-manager' ),
 						'vendorDetailFailed'       => esc_html__( 'Failed to load vendor details.', 'faz-cookie-manager' ),
+						'pagination'               => esc_html__( 'Page %1$d of %2$d (%3$d vendors)', 'faz-cookie-manager' ),
+						'selectedVendor'           => esc_html__( 'Selected: %d vendor', 'faz-cookie-manager' ),
+						'selectedVendors'          => esc_html__( 'Selected: %d vendors', 'faz-cookie-manager' ),
+						'savedCount'               => esc_html__( 'Saved %d vendor(s).', 'faz-cookie-manager' ),
 						'selectionSaved'           => esc_html__( 'vendor(s) saved.', 'faz-cookie-manager' ),
 						'selectionFailed'          => esc_html__( 'Failed to save selection.', 'faz-cookie-manager' ),
 						'updated'                  => esc_html__( 'GVL updated.', 'faz-cookie-manager' ),
@@ -659,6 +672,7 @@ window.wp.apiFetch=apiFetch;
 						'importing'                => esc_html__( 'Importing...', 'faz-cookie-manager' ),
 						'importOk'                 => esc_html__( 'Import completed successfully. Reloading...', 'faz-cookie-manager' ),
 						'importedOk'               => esc_html__( 'Settings imported successfully.', 'faz-cookie-manager' ),
+						'importFailed'             => esc_html__( 'Import failed: %s', 'faz-cookie-manager' ),
 					),
 					// Dashboard page.
 					'dashboard'                => array(

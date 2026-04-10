@@ -165,7 +165,7 @@ document.getElementById('faz-copy-status').addEventListener('click', function() 
 		text += '\n';
 	});
 	navigator.clipboard.writeText(text).then(function() {
-		FAZ.notify('Status copied to clipboard!', 'success');
+		FAZ.notify('<?php echo esc_js( __( 'Status copied to clipboard!', 'faz-cookie-manager' ) ); ?>', 'success');
 	});
 });
 </script>

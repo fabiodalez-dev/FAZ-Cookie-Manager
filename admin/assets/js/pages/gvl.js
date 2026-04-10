@@ -245,7 +245,7 @@
 
 		var info = document.createElement('span');
 		info.style.color = 'var(--faz-text-secondary)';
-		info.textContent = 'Page ' + page + ' of ' + pages + ' (' + total + ' vendors)';
+		info.textContent = __('gvl.pagination', 'Page %1$d of %2$d (%3$d vendors)').replace('%1$d', page).replace('%2$d', pages).replace('%3$d', total);
 		container.appendChild(info);
 	}
 
@@ -290,7 +290,7 @@
 	function updateSelectedCount() {
 		var count = Object.keys(selectedVendors).length;
 		var el = document.getElementById('faz-gvl-selected-count');
-		if (el) el.textContent = 'Selected: ' + count + ' vendor' + (count !== 1 ? 's' : '');
+		if (el) el.textContent = (count !== 1 ? __('gvl.selectedVendors', 'Selected: %d vendors') : __('gvl.selectedVendor', 'Selected: %d vendor')).replace('%d', count);
 	}
 
 	function saveSelection() {
@@ -301,7 +301,7 @@
 		FAZ.post('gvl/selected', { vendor_ids: ids }).then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify('Saved ' + data.count + ' ' + __('gvl.selectionSaved', 'vendor(s) saved.'));
+				FAZ.notify(__('gvl.savedCount', 'Saved %d vendor(s).').replace('%d', data.count), 'success');
 			} else {
 				FAZ.notify(__('gvl.selectionFailed', 'Failed to save selection.'), 'error');
 			}

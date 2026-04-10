@@ -1995,3 +1995,63 @@ msgstr "La data di inizio deve essere precedente alla data di fine."
 
 msgid "No category data yet."
 msgstr "Nessun dato per categoria ancora disponibile."
+
+msgid "Hidden from frontend"
+msgstr "Nascosto dal frontend"
+
+msgid "Server busy, retrying in %ds..."
+msgstr "Server occupato, nuovo tentativo tra %ds..."
+
+msgid "Scanning 0/%d pages..."
+msgstr "Scansione 0/%d pagine..."
+
+msgid "e.g. custom-tracker.com/script.js"
+msgstr "es. custom-tracker.com/script.js"
+
+msgid "Added %1$d rules from %2$s (saved)"
+msgstr "Aggiunte %1$d regole da %2$s (salvate)"
+
+msgid "All cookies from %s already exist"
+msgstr "Tutti i cookie da %s esistono già"
+
+msgid "Preset applied: %s"
+msgstr "Preset applicato: %s"
+
+msgid "Showing %1$s–%2$s of %3$s"
+msgstr "Visualizzazione %1$s–%2$s di %3$s"
+
+msgid "Remove %s"
+msgstr "Rimuovi %s"
+
+msgid "Page %1$d of %2$d (%3$d vendors)"
+msgstr "Pagina %1$d di %2$d (%3$d fornitori)"
+
+msgid "Selected: %d vendor"
+msgstr "Selezionato: %d fornitore"
+
+msgid "Selected: %d vendors"
+msgstr "Selezionati: %d fornitori"
+
+msgid "Saved %d vendor(s)."
+msgstr "Salvati %d fornitore/i."
+
+msgid "Import failed: %s"
+msgstr "Importazione non riuscita: %s"
+
+msgid "Vendor not found"
+msgstr "Fornitore non trovato"
+
+msgid "No cookies provided."
+msgstr "Nessun cookie fornito."
+
+msgid "No cookie IDs provided."
+msgstr "Nessun ID cookie fornito."
+
+msgid "Status copied to clipboard!"
+msgstr "Stato copiato negli appunti!"
+
+msgid "Search vendors..."
+msgstr "Cerca fornitori..."
+
+msgid "Search vendors"
+msgstr "Cerca fornitori"

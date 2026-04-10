@@ -206,7 +206,7 @@
 		// Info text
 		var start = (page - 1) * perPage + 1;
 		var end = Math.min(page * perPage, totalItems);
-		info.textContent = 'Showing ' + start + '-' + end + ' of ' + totalItems;
+		info.textContent = __('consentLogs.showing', 'Showing %1$s\u2013%2$s of %3$s').replace('%1$s', start).replace('%2$s', end).replace('%3$s', totalItems);
 
 		if (totalPages <= 1) return;
 

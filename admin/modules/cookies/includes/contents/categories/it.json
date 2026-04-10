@@ -22,5 +22,9 @@
     "marketing": {
         "name": "Pubblicitari",
         "description": "<p>I cookie pubblicitari vengono utilizzati per fornire ai visitatori annunci pubblicitari personalizzati in base alle pagine visitate in precedenza e per analizzare l'efficacia della campagna pubblicitaria.</p>"
+    },
+    "wordpress-internal": {
+        "name": "Interni WordPress",
+        "description": "<p>Cookie interni di WordPress (sessione, login, test) non mostrati nel banner frontend.</p>"
     }
 }

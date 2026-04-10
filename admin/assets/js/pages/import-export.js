@@ -139,7 +139,7 @@
             FAZ.notify(__('importExport.importedOk', 'Settings imported successfully.'), 'success');
             setTimeout(function() { window.location.reload(); }, 1500);
         }).catch(function(err) {
-            statusEl.textContent = 'Import failed: ' + (err.message || err);
+            statusEl.textContent = __('importExport.importFailed', 'Import failed: %s').replace('%s', err.message || err);
             statusEl.style.color = 'var(--faz-danger)';
             document.getElementById('faz-import-btn').disabled = false;
         });

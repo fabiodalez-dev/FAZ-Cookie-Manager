@@ -640,7 +640,7 @@
 		syncFormToBannerData();
 		refreshPreview();
 
-		FAZ.notify('Preset applied: ' + preset.name, 'success');
+		FAZ.notify(__('banner.presetApplied', 'Preset applied: %s').replace('%s', preset.name), 'success');
 	}
 
 	function setColorPair(baseId, value) {
