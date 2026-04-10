@@ -1005,3 +1005,97 @@ test.describe('CSS: theme link colors do not leak into banner buttons', () => {
     }
   });
 });
+
+/* ─── Admin i18n: language switch ── */
+
+test.describe('Admin i18n: WordPress site language switch', () => {
+  // Default WordPress installs have WPLANG='' which means English.
+  // Use empty string to restore default English.
+  const originalLocale = '';
+
+  test.afterAll(async ({ browser }) => {
+    // Restore original site language to default English
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await page.goto(`${WP_BASE}${WP_LOGIN_PATH}`, { waitUntil: 'domcontentloaded' });
+    await page.fill('#user_login', 'admin');
+    await page.fill('#user_pass', 'admin');
+    await page.click('#wp-submit');
+    await page.waitForLoadState('domcontentloaded');
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+    // Try to select empty (English default); fall back silently if not available
+    try {
+      await page.selectOption('#WPLANG', originalLocale, { timeout: 5000 });
+      await page.click('#submit');
+      await page.waitForLoadState('domcontentloaded');
+    } catch (_) {
+      // Some test environments only have one locale installed; ignore.
+    }
+    await ctx.close();
+  });
+
+  test('fazConfig.i18n is localized when site language is Italian', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+
+    // Switch WordPress site language to Italian
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+    await page.selectOption('#WPLANG', 'it_IT');
+    await page.click('#submit');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Now visit the plugin Cookies admin page
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    // Read fazConfig.i18n from the localized script
+    const i18n = await page.evaluate(() => (window as any).fazConfig?.i18n ?? null);
+    expect(i18n, 'fazConfig.i18n should be present').toBeTruthy();
+
+    // Italian translations should be present — pick a few keys that we know are translated
+    // Check at least one common string that has been translated to Italian
+    const i18nJson = JSON.stringify(i18n).toLowerCase();
+
+    // Italian keywords that should appear if translations loaded
+    const hasItalian = i18nJson.includes('salvat') ||    // "Salvato/Salvate/Salvataggio"
+                       i18nJson.includes('impostazion') || // "Impostazioni"
+                       i18nJson.includes('caricament') || // "Caricamento"
+                       i18nJson.includes('scansion') ||   // "Scansione"
+                       i18nJson.includes('eliminat') ||   // "Eliminato"
+                       i18nJson.includes('modific');      // "Modifica"
+
+    expect(
+      hasItalian,
+      'fazConfig.i18n should contain at least one Italian translation. Sample: ' + i18nJson.substring(0, 500)
+    ).toBe(true);
+  });
+
+  test('PHP strings are translated when site language is Italian', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+
+    // Ensure Italian is set
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+    const currentLang = await page.evaluate(() => {
+      const el = document.getElementById('WPLANG') as HTMLSelectElement | null;
+      return el?.value ?? '';
+    });
+    if (currentLang !== 'it_IT') {
+      await page.selectOption('#WPLANG', 'it_IT');
+      await page.click('#submit');
+      await page.waitForLoadState('domcontentloaded');
+    }
+
+    // Visit the plugin cookies page
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    const pageText = await page.locator('body').innerText();
+    const lower = pageText.toLowerCase();
+
+    // At least some Italian words should appear from PHP esc_html_e/esc_html__ calls
+    const italianWords = ['impostazion', 'categori', 'scansion', 'salva', 'necessari', 'funzional', 'analitic', 'pubblicitari', 'prestazioni'];
+    const foundWords = italianWords.filter((w) => lower.includes(w));
+
+    expect(
+      foundWords.length,
+      `At least 2 Italian words should appear on the Cookies page. Found: ${foundWords.join(', ')}`
+    ).toBeGreaterThanOrEqual(2);
+  });
+});
