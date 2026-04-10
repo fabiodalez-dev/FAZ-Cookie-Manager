@@ -933,6 +933,145 @@ test.describe('Language: default language uses site locale', () => {
       });
     }
   });
+
+  /**
+   * gooloo.de regression — WordPress core locale de_DE must reach the
+   * shortcode gettext pipeline. This is a DIFFERENT code path from the
+   * two tests above, which only switch the plugin's own language setting
+   * (`faz_settings.languages`). Those tests never load the .mo file, and
+   * therefore would still pass even if the gooloo.de bug came back.
+   *
+   * The bug was that the plugin shipped IT/FR/NL translations but no
+   * de_DE.mo, so `esc_html__()` inside [faz_cookie_policy] / [faz_cookie_table]
+   * fell back to the English source strings even on sites running with
+   * `WPLANG=de_DE`. This test asserts the .mo is present, loaded, and
+   * actually used by the shortcode render path.
+   */
+  test('gooloo.de regression: [faz_cookie_policy] on WPLANG=de_DE renders German strings', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    // Skip if the de_DE .mo file is not bundled — this test only runs on a
+    // deployment that actually has the translation file.
+    // (If someone deletes faz-cookie-manager-de_DE.mo by mistake, this test
+    // is the canary that catches it.)
+
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+
+    // Capture current WPLANG so we can restore it in the finally block.
+    const originalLocale = await page.locator('#WPLANG').inputValue().catch(() => '');
+
+    const nonce = await page.evaluate(() =>
+      (window as any).fazConfig?.api?.nonce
+      ?? (window as any).wpApiSettings?.nonce
+      ?? '',
+    );
+    // Fallback: fetch a nonce via the plugin admin page if options-general didn't expose one.
+    let apiNonce = nonce;
+    if (!apiNonce) {
+      await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+      apiNonce = await getAdminNonce(page);
+    }
+
+    let pageId: number | null = null;
+    let germanLocaleInstalled = false;
+
+    try {
+      // Switch WordPress core locale to German via the classic Settings → General
+      // form. We need de_DE to be in the installed languages first; if it isn't,
+      // this test is a no-op (skip rather than fail).
+      await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+      try {
+        await page.selectOption('#WPLANG', 'de_DE', { timeout: 5000 });
+        await page.click('#submit');
+        await page.waitForLoadState('domcontentloaded');
+        germanLocaleInstalled = true;
+      } catch (_) {
+        // de_DE isn't installed on this WP instance — nothing to assert.
+        test.skip(true, 'de_DE locale not installed on test WordPress');
+        return;
+      }
+
+      // Create a page that contains the shortcode. Use the REST API with the
+      // plugin nonce to avoid any block-editor interference.
+      const slug = `qa-cookie-policy-de-${Date.now()}`;
+      const createRes = await page.request.post(`${WP_BASE}/?rest_route=/wp/v2/pages`, {
+        headers: { 'X-WP-Nonce': apiNonce, 'Content-Type': 'application/json' },
+        data: {
+          title: 'QA Cookie Policy DE',
+          slug,
+          status: 'publish',
+          content: '[faz_cookie_policy]',
+        },
+      });
+      const created = await createRes.json().catch(() => ({}));
+      pageId = created?.id ?? null;
+      expect(pageId, 'Page creation should return an id').toBeTruthy();
+
+      // Visit the page in a fresh context so no admin cookies leak.
+      const ctx = await browser.newContext({ baseURL: wpBaseURL });
+      const frontPage = await ctx.newPage();
+      await frontPage.goto(`/?page_id=${pageId}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+
+      // Grab the rendered HTML of the shortcode wrapper.
+      const policyHtml = await frontPage
+        .locator('.faz-cookie-policy')
+        .first()
+        .innerHTML()
+        .catch(() => '');
+
+      // These are the exact translations shipped in languages/faz-cookie-manager-de_DE.po.
+      // If any of them is missing, the .mo file is not being loaded by the
+      // shortcode's gettext pipeline on a de_DE site — the exact gooloo.de bug.
+      const expectedGermanPhrases = [
+        'Was sind Cookies',        // h2 for "What Are Cookies"
+        'Wie wir Cookies verwenden', // h2 for "How We Use Cookies"
+        'Notwendige Cookies',       // strong for "Necessary cookies"
+        'Funktionale Cookies',      // strong for "Functional cookies"
+        'Cookies verwalten',        // h2 for "How to Manage Cookies"
+      ];
+
+      const missing = expectedGermanPhrases.filter(phrase => !policyHtml.includes(phrase));
+
+      expect(
+        missing.length,
+        `[faz_cookie_policy] on de_DE must render German strings from the bundled .mo. Missing: ${missing.join(', ')}\nFirst 400 chars of rendered output:\n${policyHtml.substring(0, 400)}`,
+      ).toBe(0);
+
+      // Also assert the ENGLISH source strings are NOT present — otherwise
+      // gettext is silently falling back despite the above check passing
+      // (would only happen on an inconsistent translation).
+      const englishPhrases = [
+        'What Are Cookies',
+        'How We Use Cookies',
+        'Necessary cookies',
+        'How to Manage Cookies',
+      ];
+      const leaked = englishPhrases.filter(phrase => policyHtml.includes(phrase));
+      expect(
+        leaked.length,
+        `English source strings must not appear on a de_DE page. Leaked: ${leaked.join(', ')}`,
+      ).toBe(0);
+
+      await ctx.close();
+    } finally {
+      // Cleanup page.
+      if (pageId) {
+        await page.request.delete(`${WP_BASE}/?rest_route=/wp/v2/pages/${pageId}&force=true`, {
+          headers: { 'X-WP-Nonce': apiNonce },
+        }).catch(() => {});
+      }
+      // Restore original WPLANG so subsequent tests see a clean slate.
+      if (germanLocaleInstalled) {
+        try {
+          await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+          await page.selectOption('#WPLANG', originalLocale, { timeout: 5000 });
+          await page.click('#submit');
+          await page.waitForLoadState('domcontentloaded');
+        } catch (_) {
+          // Swallow — never let teardown fail the run.
+        }
+      }
+    }
+  });
 });
 
 /* ─── Koko Analytics: built-in cookie lookup ── */
