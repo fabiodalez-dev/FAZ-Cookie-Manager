@@ -143,7 +143,8 @@ class Cookie_Definitions {
 				'updated_at' => current_time( 'mysql' ),
 				'count'      => $total_cookies,
 				'source'     => self::SOURCE_URL,
-			)
+			),
+			false // autoload=false, matches OPTION_KEY and keeps meta out of the autoload bucket
 		);
 
 		// Clear in-memory cache.
@@ -181,13 +182,19 @@ class Cookie_Definitions {
 		$stored = get_option( self::OPTION_KEY, false );
 		if ( is_array( $stored ) && ! empty( $stored ) ) {
 			$meta = get_option( self::META_KEY, array() );
-			if ( ! empty( $meta ) ) {
-				return $meta;
-			}
-			return array(
-				'count'  => $this->count_definitions( $stored ),
-				'source' => self::SOURCE_URL,
+			// Normalize legacy META_KEY entries that predate the 'source'
+			// field: without this, the UI branch that picks "downloaded"
+			// vs. "bundled" datasets can fire on stale metadata even when
+			// the active dataset is the downloaded one.
+			$defaults = array(
+				'updated_at' => '',
+				'count'      => $this->count_definitions( $stored ),
+				'source'     => self::SOURCE_URL,
 			);
+			if ( ! is_array( $meta ) ) {
+				$meta = array();
+			}
+			return array_merge( $defaults, $meta );
 		}
 		return $this->get_bundled_meta();
 	}

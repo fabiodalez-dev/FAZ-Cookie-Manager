@@ -676,7 +676,8 @@ window.wp.apiFetch=apiFetch;
 						'importing'                => __( 'Importing...', 'faz-cookie-manager' ),
 						'importOk'                 => __( 'Import completed successfully. Reloading...', 'faz-cookie-manager' ),
 						'importedOk'               => __( 'Settings imported successfully.', 'faz-cookie-manager' ),
-						'importFailed'             => __( 'Import failed: ', 'faz-cookie-manager' ),
+						/* translators: %s: low-level error message surfaced from the import endpoint */
+						'importFailed'             => __( 'Import failed: %s', 'faz-cookie-manager' ),
 					),
 					// Dashboard page.
 					'dashboard'                => array(

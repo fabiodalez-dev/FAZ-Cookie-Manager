@@ -309,7 +309,10 @@ class Api extends Rest_Controller {
 		$vendor_ids = isset( $body['vendor_ids'] ) ? $body['vendor_ids'] : array();
 
 		if ( ! is_array( $vendor_ids ) ) {
-			return new WP_REST_Response( array( 'message' => 'vendor_ids must be an array' ), 400 );
+			return new WP_REST_Response(
+				array( 'message' => __( 'vendor_ids must be an array.', 'faz-cookie-manager' ) ),
+				400
+			);
 		}
 
 		$vendor_ids = array_map( 'absint', $vendor_ids );

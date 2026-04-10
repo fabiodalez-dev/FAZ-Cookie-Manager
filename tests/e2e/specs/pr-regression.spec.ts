@@ -5,10 +5,12 @@
  * PR #41: user-configurable whitelist, lazy loading, admin perf
  * PR #39: v1.7.0 features (cookie table shortcode, blocker templates, import/export)
  */
-import { expect, test } from '../fixtures/wp-fixture';
+import { completeAdminLogin, expect, test } from '../fixtures/wp-fixture';
 import { getWpLoginPath } from '../utils/wp-auth';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_ADMIN_USER = process.env.WP_ADMIN_USER ?? 'admin';
+const WP_ADMIN_PASS = process.env.WP_ADMIN_PASS ?? 'admin';
 const WP_LOGIN_PATH = getWpLoginPath();
 
 /* ─── Helpers ──────────────────────────────────── */
@@ -1014,22 +1016,22 @@ test.describe('Admin i18n: WordPress site language switch', () => {
   const originalLocale = '';
 
   test.afterAll(async ({ browser }) => {
-    // Restore original site language to default English
+    // Restore original site language. Uses the shared login helper and
+    // env-based credentials so non-default WP installs (and CI with custom
+    // creds) don't poison the rest of the suite when this teardown runs.
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await page.goto(`${WP_BASE}${WP_LOGIN_PATH}`, { waitUntil: 'domcontentloaded' });
-    await page.fill('#user_login', 'admin');
-    await page.fill('#user_pass', 'admin');
-    await page.click('#wp-submit');
-    await page.waitForLoadState('domcontentloaded');
-    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
-    // Try to select empty (English default); fall back silently if not available
     try {
+      await completeAdminLogin(page, WP_BASE, WP_ADMIN_USER, WP_ADMIN_PASS);
+      await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+      // Try to select empty (English default); fall back silently if not available.
       await page.selectOption('#WPLANG', originalLocale, { timeout: 5000 });
       await page.click('#submit');
       await page.waitForLoadState('domcontentloaded');
     } catch (_) {
-      // Some test environments only have one locale installed; ignore.
+      // Some test environments only have one locale installed or use
+      // credentials that differ from the defaults; swallow so the cleanup
+      // never fails the run.
     }
     await ctx.close();
   });

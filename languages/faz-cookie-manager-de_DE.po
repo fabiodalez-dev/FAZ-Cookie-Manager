@@ -1,0 +1,219 @@
+# German translation for FAZ Cookie Manager
+# Copyright (C) 2026 Fabio D'Alessandro
+# This file is distributed under the GPL-3.0-or-later.
+msgid ""
+msgstr ""
+"Project-Id-Version: FAZ Cookie Manager 1.9.2\n"
+"Report-Msgid-Bugs-To: https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/issues\n"
+"Last-Translator: Fabio D'Alessandro\n"
+"Language-Team: German\n"
+"Language: de_DE\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-04-10T10:30:00+00:00\n"
+"PO-Revision-Date: 2026-04-10\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: faz-cookie-manager\n"
+
+#. Plugin Name of the plugin
+#: faz-cookie-manager.php
+msgid "FAZ Cookie Manager"
+msgstr "FAZ Cookie Manager"
+
+# ============================================================
+# [faz_cookie_policy] shortcode — includes/class-cookie-policy-shortcode.php
+# ============================================================
+
+#: includes/class-cookie-policy-shortcode.php:66
+msgid "What Are Cookies"
+msgstr "Was sind Cookies"
+
+#. translators: %s: site name
+#: includes/class-cookie-policy-shortcode.php:69
+msgid "Cookies are small text files that are placed on your device when you visit %s. They are widely used to make websites work more efficiently, as well as to provide information to the website owners."
+msgstr "Cookies sind kleine Textdateien, die auf Ihrem Gerät gespeichert werden, wenn Sie %s besuchen. Sie werden häufig verwendet, damit Websites effizienter funktionieren, und um den Websitebetreibern Informationen bereitzustellen."
+
+#: includes/class-cookie-policy-shortcode.php:72
+msgid "How We Use Cookies"
+msgstr "Wie wir Cookies verwenden"
+
+#. translators: %s: site name
+#: includes/class-cookie-policy-shortcode.php:75
+msgid "%s uses cookies for several purposes, including:"
+msgstr "%s verwendet Cookies zu verschiedenen Zwecken, darunter:"
+
+#: includes/class-cookie-policy-shortcode.php:78
+msgid "Necessary cookies"
+msgstr "Notwendige Cookies"
+
+#: includes/class-cookie-policy-shortcode.php:78
+msgid "These cookies are essential for the website to function properly. They enable basic functions like page navigation, access to secure areas, and shopping cart functionality. The website cannot function properly without these cookies."
+msgstr "Diese Cookies sind für das ordnungsgemäße Funktionieren der Website unerlässlich. Sie ermöglichen Grundfunktionen wie Seitennavigation, Zugriff auf sichere Bereiche und Warenkorb-Funktionalität. Ohne diese Cookies kann die Website nicht ordnungsgemäß funktionieren."
+
+#: includes/class-cookie-policy-shortcode.php:79
+msgid "Functional cookies"
+msgstr "Funktionale Cookies"
+
+#: includes/class-cookie-policy-shortcode.php:79
+msgid "These cookies enable the website to remember choices you make (such as your language preference or region) and provide enhanced, more personalised features."
+msgstr "Diese Cookies ermöglichen es der Website, sich an Ihre Auswahl (z. B. Ihre Sprach- oder Regionseinstellungen) zu erinnern und erweiterte, personalisierte Funktionen bereitzustellen."
+
+#: includes/class-cookie-policy-shortcode.php:80
+msgid "Analytics cookies"
+msgstr "Analyse-Cookies"
+
+#: includes/class-cookie-policy-shortcode.php:80
+msgid "These cookies help us understand how visitors interact with the website by collecting and reporting information anonymously. This helps us improve the website and your experience."
+msgstr "Diese Cookies helfen uns zu verstehen, wie Besucher mit der Website interagieren, indem sie Informationen anonym erfassen und weitergeben. So können wir die Website und Ihr Erlebnis verbessern."
+
+#: includes/class-cookie-policy-shortcode.php:81
+msgid "Marketing cookies"
+msgstr "Marketing-Cookies"
+
+#: includes/class-cookie-policy-shortcode.php:81
+msgid "These cookies are used to deliver advertisements that are relevant to you and your interests. They are also used to limit the number of times you see an advertisement and help measure the effectiveness of advertising campaigns."
+msgstr "Diese Cookies werden verwendet, um Werbung anzuzeigen, die für Sie und Ihre Interessen relevant ist. Sie dienen außerdem dazu, die Häufigkeit der Anzeigen zu begrenzen und die Wirksamkeit von Werbekampagnen zu messen."
+
+#: includes/class-cookie-policy-shortcode.php:85
+msgid "Cookies We Use"
+msgstr "Cookies, die wir verwenden"
+
+#: includes/class-cookie-policy-shortcode.php:86
+msgid "The table below lists the cookies used on this website, along with their purpose, duration, and category."
+msgstr "In der folgenden Tabelle sind die auf dieser Website verwendeten Cookies mit ihrem Zweck, ihrer Speicherdauer und Kategorie aufgeführt."
+
+#: includes/class-cookie-policy-shortcode.php:90
+msgid "How to Manage Cookies"
+msgstr "Cookies verwalten"
+
+#: includes/class-cookie-policy-shortcode.php:91
+msgid "You can manage your cookie preferences at any time by clicking the cookie icon in the bottom corner of the page, or by using the button below."
+msgstr "Sie können Ihre Cookie-Einstellungen jederzeit verwalten, indem Sie auf das Cookie-Symbol unten auf der Seite oder auf die Schaltfläche unten klicken."
+
+#: includes/class-cookie-policy-shortcode.php:92
+msgid "Manage Cookie Preferences"
+msgstr "Cookie-Einstellungen verwalten"
+
+#: includes/class-cookie-policy-shortcode.php:93
+msgid "You can also control cookies through your browser settings. Most browsers allow you to:"
+msgstr "Sie können Cookies auch über die Einstellungen Ihres Browsers steuern. Die meisten Browser erlauben Ihnen:"
+
+#: includes/class-cookie-policy-shortcode.php:95
+msgid "View what cookies are stored and delete them individually"
+msgstr "Gespeicherte Cookies anzuzeigen und einzeln zu löschen"
+
+#: includes/class-cookie-policy-shortcode.php:96
+msgid "Block third-party cookies"
+msgstr "Cookies von Drittanbietern zu blockieren"
+
+#: includes/class-cookie-policy-shortcode.php:97
+msgid "Block cookies from specific sites"
+msgstr "Cookies bestimmter Websites zu blockieren"
+
+#: includes/class-cookie-policy-shortcode.php:98
+msgid "Block all cookies from being set"
+msgstr "Alle Cookies zu blockieren"
+
+#: includes/class-cookie-policy-shortcode.php:99
+msgid "Delete all cookies when you close your browser"
+msgstr "Alle Cookies beim Schließen des Browsers zu löschen"
+
+#: includes/class-cookie-policy-shortcode.php:101
+msgid "Please note that if you disable cookies, some features of this website may not function properly."
+msgstr "Bitte beachten Sie, dass einige Funktionen dieser Website möglicherweise nicht ordnungsgemäß funktionieren, wenn Sie Cookies deaktivieren."
+
+#: includes/class-cookie-policy-shortcode.php:103
+msgid "More Information"
+msgstr "Weitere Informationen"
+
+#. translators: %s: contact email address wrapped in a mailto link
+#: includes/class-cookie-policy-shortcode.php:106
+msgid "If you have questions about our use of cookies, please contact us at %s."
+msgstr "Wenn Sie Fragen zu unserer Verwendung von Cookies haben, kontaktieren Sie uns bitte unter %s."
+
+#. translators: %s: current date
+#: includes/class-cookie-policy-shortcode.php:110
+msgid "This cookie policy was last updated on %s."
+msgstr "Diese Cookie-Richtlinie wurde zuletzt am %s aktualisiert."
+
+# ============================================================
+# [faz_cookie_table] shortcode — includes/class-cookie-table-shortcode.php
+# ============================================================
+
+#: includes/class-cookie-table-shortcode.php:167
+msgid "Cookie"
+msgstr "Cookie"
+
+#: includes/class-cookie-table-shortcode.php:168
+msgid "Domain"
+msgstr "Domain"
+
+#: includes/class-cookie-table-shortcode.php:169
+msgid "Duration"
+msgstr "Speicherdauer"
+
+#: includes/class-cookie-table-shortcode.php:170
+msgid "Description"
+msgstr "Beschreibung"
+
+#: includes/class-cookie-table-shortcode.php:171
+msgid "Category"
+msgstr "Kategorie"
+
+#: includes/class-cookie-table-shortcode.php:236
+msgid "No cookies found."
+msgstr "Keine Cookies gefunden."
+
+# ============================================================
+# Common cookie category names (used as fallback by the table)
+# ============================================================
+
+msgid "Necessary"
+msgstr "Notwendig"
+
+msgid "Functional"
+msgstr "Funktional"
+
+msgid "Analytics"
+msgstr "Analyse"
+
+msgid "Performance"
+msgstr "Leistung"
+
+msgid "Marketing"
+msgstr "Marketing"
+
+msgid "Uncategorized"
+msgstr "Nicht kategorisiert"
+
+# ============================================================
+# Common banner / consent labels
+# ============================================================
+
+msgid "Accept All"
+msgstr "Alle akzeptieren"
+
+msgid "Reject All"
+msgstr "Alle ablehnen"
+
+msgid "Customize"
+msgstr "Anpassen"
+
+msgid "Save My Preferences"
+msgstr "Meine Einstellungen speichern"
+
+msgid "Show more"
+msgstr "Mehr anzeigen"
+
+msgid "Show less"
+msgstr "Weniger anzeigen"
+
+msgid "We value your privacy"
+msgstr "Wir schätzen Ihre Privatsphäre"
+
+msgid "Always Active"
+msgstr "Immer aktiv"
+
+msgid "Customize Consent Preferences"
+msgstr "Einwilligungseinstellungen anpassen"
