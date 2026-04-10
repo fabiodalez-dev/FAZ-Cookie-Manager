@@ -1351,6 +1351,131 @@ test.describe('Issue #57: preference-center background default', () => {
   });
 
   /**
+   * Follow-up for issue #57 — verify that the `var(...)` fallbacks used by
+   * the 1.10.2 fix don't block user-configured custom colours. The fix
+   * replaces `color: inherit` with `color: var(--faz-detail-color, #212121)`,
+   * which is only safe if the CSS variable is actually fed by the stored
+   * banner config (e.g. when a user configures a dark preference center
+   * from the Colours tab of the banner editor).
+   *
+   * This test reads the banner from the REST API, patches
+   * `config.preferenceCenter.styles` to `{ color: #ffffff, background-color: #121212 }`
+   * and confirms that the rendered CSS variables pick up the custom values
+   * AND that .faz-modal's computed background-color matches the custom
+   * dark colour. If the fallback hardcoded #ffffff/#212121 ever overrides
+   * the user config, this test catches it.
+   */
+  test('custom detail colours override the var fallbacks (dark modal)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // GET current banner via REST so we have the full shape to patch.
+    const getRes = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
+      headers: { 'X-WP-Nonce': nonce },
+    });
+    const original = await getRes.json().catch(() => null);
+    if (!original?.properties?.config?.preferenceCenter?.styles) {
+      test.skip(true, 'Banner REST response does not expose preferenceCenter.styles — API shape may have changed.');
+      return;
+    }
+    // Snapshot the original styles so we can restore them.
+    const originalStyles = {
+      ...original.properties.config.preferenceCenter.styles,
+    };
+
+    try {
+      // Build a patched properties payload with a dark modal configuration.
+      const patched = JSON.parse(JSON.stringify(original.properties));
+      patched.config.preferenceCenter.styles.color = '#ffffff';
+      patched.config.preferenceCenter.styles['background-color'] = '#121212';
+
+      // Save via REST. The API uses a `properties` key for the full config.
+      await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
+        headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+        data: {
+          id: 1,
+          name: original.name,
+          default: original.default ?? 1,
+          status: original.status ?? 1,
+          properties: patched,
+          contents: original.contents ?? {},
+        },
+      });
+
+      // Visit the frontend in a fresh context and open the preference center.
+      const ctx = await browser.newContext({ baseURL: wpBaseURL });
+      const front = await ctx.newPage();
+      await front.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      await front.waitForSelector('.faz-consent-container', { timeout: 10_000 });
+      await front.click('[data-faz-tag="settings-button"]');
+      await front.waitForTimeout(800);
+
+      const result = await front.evaluate(() => {
+        const read = (sel: string, prop: string) => {
+          const el = document.querySelector(sel) as HTMLElement | null;
+          if (!el) return null;
+          return window.getComputedStyle(el).getPropertyValue(prop).trim();
+        };
+        // The CSS variables should be fed from the stored banner config.
+        const modalDetailBg = read('.faz-modal', '--faz-detail-background-color')
+          ?? read('.faz-consent-container', '--faz-detail-background-color');
+        const modalDetailFg = read('.faz-modal', '--faz-detail-color')
+          ?? read('.faz-consent-container', '--faz-detail-color');
+        // And the computed colours of the preference-center wrapper should
+        // reflect the custom values.
+        const prefCenterFg = read('.faz-preference-center', 'color');
+        const modalBg = read('.faz-modal', 'background-color');
+        return { modalDetailBg, modalDetailFg, prefCenterFg, modalBg };
+      });
+
+      await ctx.close();
+
+      // CSS variables must carry the custom hex values (case-insensitive).
+      expect(
+        (result.modalDetailBg ?? '').toLowerCase(),
+        `--faz-detail-background-color should equal the custom #121212. Got: ${result.modalDetailBg}`,
+      ).toBe('#121212');
+      expect(
+        (result.modalDetailFg ?? '').toLowerCase(),
+        `--faz-detail-color should equal the custom #ffffff. Got: ${result.modalDetailFg}`,
+      ).toBe('#ffffff');
+
+      // Computed background of .faz-modal must be the dark custom colour —
+      // if the fallback #ffffff had won, this would be rgb(255, 255, 255).
+      expect(
+        result.modalBg,
+        `.faz-modal background must use the custom dark colour. Got: ${result.modalBg}`,
+      ).toBe('rgb(18, 18, 18)');
+
+      // Computed text colour inside the preference center must be white.
+      expect(
+        result.prefCenterFg,
+        `.faz-preference-center text colour must be the custom white. Got: ${result.prefCenterFg}`,
+      ).toBe('rgb(255, 255, 255)');
+    } finally {
+      // Restore the original styles via REST so other tests see a clean slate.
+      try {
+        const restoredProperties = JSON.parse(JSON.stringify(original.properties));
+        restoredProperties.config.preferenceCenter.styles = originalStyles;
+        await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
+          headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+          data: {
+            id: 1,
+            name: original.name,
+            default: original.default ?? 1,
+            status: original.status ?? 1,
+            properties: restoredProperties,
+            contents: original.contents ?? {},
+          },
+        });
+      } catch (_) {
+        // Swallow — never let teardown fail the run.
+      }
+    }
+  });
+
+  /**
    * Follow-up for issue #57: after fixing the transparent background we
    * realized that the preference center text still used `color: inherit`,
    * which meant that on a site with a dark theme (body text set to a
