@@ -9,6 +9,9 @@
 .playwright-mcp/
 .wordpress-org/
 .distignore
+assets/
+composer.json
+composer.lock
 docs/
 node_modules/
 package.json
@@ -23,6 +26,7 @@ scripts/
 social-preview.png
 test-results/
 tests/
+tsconfig.json
 vendor/
 *.log
 *.zip
