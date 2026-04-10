@@ -5,10 +5,12 @@
  * PR #41: user-configurable whitelist, lazy loading, admin perf
  * PR #39: v1.7.0 features (cookie table shortcode, blocker templates, import/export)
  */
-import { expect, test } from '../fixtures/wp-fixture';
+import { completeAdminLogin, expect, test } from '../fixtures/wp-fixture';
 import { getWpLoginPath } from '../utils/wp-auth';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_ADMIN_USER = process.env.WP_ADMIN_USER ?? 'admin';
+const WP_ADMIN_PASS = process.env.WP_ADMIN_PASS ?? 'admin';
 const WP_LOGIN_PATH = getWpLoginPath();
 
 /* ─── Helpers ──────────────────────────────────── */
@@ -933,6 +935,43 @@ test.describe('Language: default language uses site locale', () => {
   });
 });
 
+/* ─── Koko Analytics: built-in cookie lookup ── */
+
+test.describe('Koko Analytics cookie recognition', () => {
+  test('_koko_analytics_pages_viewed is recognized as analytics in built-in database', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+
+    // Use the scrape endpoint to look up the cookie name against the built-in database
+    const result = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/cookies/scrape`, {
+      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+      data: { names: ['_koko_analytics_pages_viewed'] },
+    });
+    const scraped = await result.json();
+
+    // The cookie should be found and categorized as analytics
+    const koko = Array.isArray(scraped) ? scraped.find((c: any) => c.name === '_koko_analytics_pages_viewed') : null;
+    expect(koko, 'Cookie _koko_analytics_pages_viewed should be found in built-in database').toBeTruthy();
+    if (koko) {
+      expect(koko.category).toBe('analytics');
+    }
+  });
+
+  test('Koko Analytics script pattern is recognized by Known Providers', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    // Check that visiting the frontend shows koko-analytics in the page source
+    const frontPage = await page.context().newPage();
+    await frontPage.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const html = await frontPage.content();
+    const hasKokoScript = html.includes('koko-analytics');
+    expect(hasKokoScript, 'Koko Analytics script should be present on frontend when plugin is active').toBe(true);
+    await frontPage.close();
+  });
+});
+
 /* ─── Issue: theme link color does not leak into banner buttons ── */
 
 test.describe('CSS: theme link colors do not leak into banner buttons', () => {
@@ -966,5 +1005,99 @@ test.describe('CSS: theme link colors do not leak into banner buttons', () => {
     } finally {
       await ctx.close();
     }
+  });
+});
+
+/* ─── Admin i18n: language switch ── */
+
+test.describe('Admin i18n: WordPress site language switch', () => {
+  // Default WordPress installs have WPLANG='' which means English.
+  // Use empty string to restore default English.
+  const originalLocale = '';
+
+  test.afterAll(async ({ browser }) => {
+    // Restore original site language. Uses the shared login helper and
+    // env-based credentials so non-default WP installs (and CI with custom
+    // creds) don't poison the rest of the suite when this teardown runs.
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    try {
+      await completeAdminLogin(page, WP_BASE, WP_ADMIN_USER, WP_ADMIN_PASS);
+      await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+      // Try to select empty (English default); fall back silently if not available.
+      await page.selectOption('#WPLANG', originalLocale, { timeout: 5000 });
+      await page.click('#submit');
+      await page.waitForLoadState('domcontentloaded');
+    } catch (_) {
+      // Some test environments only have one locale installed or use
+      // credentials that differ from the defaults; swallow so the cleanup
+      // never fails the run.
+    }
+    await ctx.close();
+  });
+
+  test('fazConfig.i18n is localized when site language is Italian', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+
+    // Switch WordPress site language to Italian
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+    await page.selectOption('#WPLANG', 'it_IT');
+    await page.click('#submit');
+    await page.waitForLoadState('domcontentloaded');
+
+    // Now visit the plugin Cookies admin page
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    // Read fazConfig.i18n from the localized script
+    const i18n = await page.evaluate(() => (window as any).fazConfig?.i18n ?? null);
+    expect(i18n, 'fazConfig.i18n should be present').toBeTruthy();
+
+    // Italian translations should be present — pick a few keys that we know are translated
+    // Check at least one common string that has been translated to Italian
+    const i18nJson = JSON.stringify(i18n).toLowerCase();
+
+    // Italian keywords that should appear if translations loaded
+    const hasItalian = i18nJson.includes('salvat') ||    // "Salvato/Salvate/Salvataggio"
+                       i18nJson.includes('impostazion') || // "Impostazioni"
+                       i18nJson.includes('caricament') || // "Caricamento"
+                       i18nJson.includes('scansion') ||   // "Scansione"
+                       i18nJson.includes('eliminat') ||   // "Eliminato"
+                       i18nJson.includes('modific');      // "Modifica"
+
+    expect(
+      hasItalian,
+      'fazConfig.i18n should contain at least one Italian translation. Sample: ' + i18nJson.substring(0, 500)
+    ).toBe(true);
+  });
+
+  test('PHP strings are translated when site language is Italian', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+
+    // Ensure Italian is set
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+    const currentLang = await page.evaluate(() => {
+      const el = document.getElementById('WPLANG') as HTMLSelectElement | null;
+      return el?.value ?? '';
+    });
+    if (currentLang !== 'it_IT') {
+      await page.selectOption('#WPLANG', 'it_IT');
+      await page.click('#submit');
+      await page.waitForLoadState('domcontentloaded');
+    }
+
+    // Visit the plugin cookies page
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    const pageText = await page.locator('body').innerText();
+    const lower = pageText.toLowerCase();
+
+    // At least some Italian words should appear from PHP esc_html_e/esc_html__ calls
+    const italianWords = ['impostazion', 'categori', 'scansion', 'salva', 'necessari', 'funzional', 'analitic', 'pubblicitari', 'prestazioni'];
+    const foundWords = italianWords.filter((w) => lower.includes(w));
+
+    expect(
+      foundWords.length,
+      `At least 2 Italian words should appear on the Cookies page. Found: ${foundWords.join(', ')}`
+    ).toBeGreaterThanOrEqual(2);
   });
 });

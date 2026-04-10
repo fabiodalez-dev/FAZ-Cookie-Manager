@@ -1,4 +1,5 @@
 .coderabbit.yaml
+.claude/
 .DS_Store
 .env*
 .git/
@@ -6,6 +7,7 @@
 .githooks/
 .gitignore
 .playwright-mcp/
+.wordpress-org/
 .distignore
 docs/
 node_modules/
@@ -13,8 +15,13 @@ package.json
 package-lock.json
 phpstan.neon
 phpstan-bootstrap.php
+plan.md
 release.md
+README.md
+CHANGELOG.md
 scripts/
+social-preview.png
+test-results/
 tests/
 vendor/
 *.log

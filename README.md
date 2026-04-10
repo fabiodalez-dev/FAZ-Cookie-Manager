@@ -1,14 +1,14 @@
 # FAZ Cookie Manager
 
-**The only cookie consent plugin you need. 100% free, zero cloud dependencies, no subscriptions.**
+**The only cookie consent plugin you need. 100% free, no required cloud account, no subscriptions.**
 
 ---
 
 **Tired of cookie consent plugins that lock essential features behind paywalls, require cloud accounts, or send your visitors' data to third-party servers?**
 
-FAZ Cookie Manager is a WordPress plugin that gives you everything you need to make your site compliant with international privacy regulations -- completely free, with no strings attached.
+FAZ Cookie Manager is a WordPress plugin that helps you implement cookie consent and privacy workflows for international regulations -- completely free, with no strings attached.
 
-No account to create. No cloud service to connect. No "premium" plan to unlock basic features like consent logging or geo-targeting. Everything runs on your own server, and you own all your data.
+No account to create. No required cloud service to connect. No "premium" plan to unlock basic features like consent logging or geo-targeting. Core consent features run on your own server, and you own all your data.
 
 ## Why FAZ Cookie Manager?
 
@@ -35,7 +35,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 ## Screenshots
 
 ### Cookie Consent Banner
-GDPR-compliant banner with Customize, Reject All, and Accept All buttons. Appears on first visit, fully responsive and keyboard accessible.
+Consent banner with Customize, Reject All, and Accept All buttons. Appears on first visit, fully responsive and keyboard accessible.
 
 ![Cookie consent banner](assets/screenshot-1.png)
 
@@ -85,23 +85,23 @@ Global controls: enable/disable banner, exclude pages, consent log retention, sc
 
 | Standard | Status | Details |
 |----------|--------|---------|
-| GDPR (EU) | Compliant | Opt-in model, granular consent, right to withdraw |
-| ePrivacy Directive | Compliant | No cookies before consent, script blocking |
+| GDPR (EU) | Assists | Opt-in model, granular consent, right to withdraw |
+| ePrivacy Directive | Assists | Consent-based script blocking support |
 | CCPA / CPRA (California) | Supported | "Do Not Sell" opt-out, GPC signal detection |
-| Garante Privacy LG 2021 (Italy) | Compliant | Equal-weight buttons, no scroll-as-consent, 6-month max expiry |
-| EDPB Guidelines | Compliant | Scroll != consent, no pre-checked categories, equal button prominence |
-| IAB TCF v2.3 | Compliant | Full `__tcfapi()` CMP, GVL integration, real vendor consent, DisclosedVendors segment |
-| Google Consent Mode v2 | Compliant | Default-denied signals, consent update on interaction |
+| Garante Privacy LG 2021 (Italy) | Assists | Equal-weight buttons, no scroll-as-consent, 6-month max expiry option |
+| EDPB Guidelines | Assists | Scroll != consent, no pre-checked categories, equal button prominence |
+| IAB TCF v2.3 | Supports | Full `__tcfapi()` CMP, GVL integration, vendor consent UI, DisclosedVendors segment |
+| Google Consent Mode v2 | Supports | Default-denied signals, consent update on interaction |
 | LGPD (Brazil) | Supported | Consent-based model |
 | POPIA (South Africa) | Supported | Opt-in consent |
-| WCAG 2.1 AA | Partial | Keyboard navigation, focus indicators, ARIA labels |
-| WP Consent API | Compliant | Registered via `wp_consent_api_registered_` filter |
+| WCAG 2.1 AA | Accessibility-focused | Keyboard navigation, focus indicators, ARIA labels |
+| WP Consent API | Supports | Registered via `wp_consent_api_registered_` filter |
 
 > **Legal Disclaimer:** Compliance status depends on correct plugin configuration for your specific use case and does not constitute a legal guarantee. This table is for informational purposes only and is not legal advice. Consult a qualified legal professional for your jurisdiction.
 
 ### Automated Compliance Tests
 
-Playwright tests verify compliance at runtime:
+Playwright tests verify consent behavior and policy-oriented safeguards at runtime:
 
 - TF01-TF18: Full functional test suite covering banner display, cookie blocking, consent flow, mobile, accessibility, revocation, logging, GCM signals, and cookie declarations
 - P05: No ambiguous button labels (dark pattern check)
@@ -113,7 +113,7 @@ Playwright tests verify compliance at runtime:
 - VIS01-VIS09: Visual integrity checks across banner types and preference centers
 - IAB01-IAB39: IAB Settings page, GVL admin page, vendor selection, TC String validation
 
-**The test suite includes automated compliance checks across frontend, admin, scanner, GCM/TCF, visual integrity, and IAB flows.**
+**The test suite includes automated consent, privacy, accessibility, and integration checks across frontend, admin, scanner, GCM/TCF, visual integrity, and IAB flows.**
 
 ---
 
@@ -131,7 +131,8 @@ Playwright tests verify compliance at runtime:
 - WordPress 5.0+
 - PHP 7.4+
 - MySQL/MariaDB
-- No external services required (except optional: GitHub for cookie database updates, ip-api.com for geolocation fallback)
+- Built-in Open Cookie Database snapshot included; `Update Definitions` refreshes it from GitHub.
+- Core consent features run locally. Optional refresh/download features may contact GitHub, IAB Europe, MaxMind, or the AMP CDN depending on which features you enable and use.
 
 ---
 
@@ -186,8 +187,7 @@ A fully local browser-based cookie crawler -- no external scanning service.
 
 Integrates the [Open Cookie Database](https://github.com/fabiodalez-dev/Open-Cookie-Database) (Apache-2.0) for automatic cookie identification.
 
-- **2,200+ cookie definitions** from major platforms (Google, Facebook, Microsoft, Stripe, etc.)
-- **Auto-download** on first activation
+- **Bundled snapshot included** — 2,200+ definitions ship with the plugin for immediate use
 - **Manual update** via admin UI button
 - **Exact + wildcard matching**: e.g., `_gat_` prefix matches `_gat_UA-12345`
 - **Auto-categorize**: One-click bulk categorization
@@ -211,7 +211,7 @@ Full GCM v2 integration with all required consent signals:
 
 ### IAB TCF v2.3 CMP with Global Vendor List
 
-Full `__tcfapi()` implementation compliant with the IAB Transparency & Consent Framework v2.3:
+Full `__tcfapi()` implementation aligned with the IAB Transparency & Consent Framework v2.3:
 
 - **Commands**: `ping`, `getTCData`, `addEventListener`, `removeEventListener`, `getVendorList`
 - **Global Vendor List (GVL)**: Server-side download and caching of the IAB GVL v3 (1,100+ vendors). Weekly auto-update via WP-Cron, manual update from admin UI
@@ -240,11 +240,11 @@ FAZ Cookie Manager works in two modes:
 **When do you need a registered CMP ID?**
 
 - If you run programmatic advertising (header bidding, ad exchanges) and need the buy-side to respect granular vendor consent via the TC String
-- If your DPA or legal counsel requires a registered CMP for TCF compliance
+- If your DPA or legal counsel requires a registered CMP for full TCF vendor-chain support
 
 **When is self-hosted (CMP ID = 0) sufficient?**
 
-- You only need GDPR/ePrivacy-compliant cookie consent (banner + script blocking)
+- You only need GDPR/ePrivacy-oriented cookie consent tooling (banner + script blocking)
 - You use Google Consent Mode v2 (GCM uses its own consent signal channel, independent of TCF)
 - You don't participate in the IAB programmatic advertising supply chain
 
@@ -278,7 +278,7 @@ Built-in analytics dashboard -- no Google Analytics needed for basic metrics:
 
 Detects visitor country for geo-targeted banner display:
 
-- **Detection chain**: Cloudflare > Apache mod_geoip > PHP GeoIP extension > ip-api.com
+- **Detection chain**: Cloudflare > Apache mod_geoip > PHP GeoIP extension > local MaxMind GeoLite2 database
 - **Geo-targeting modes**: ALL (everyone), EU (EU/EEA + UK), US only, Custom country list
 - **Proxy-aware**: Reads `CF-Connecting-IP`, `X-Forwarded-For`, `X-Real-IP` headers
 - **Cached**: 1-hour WordPress transient per IP
@@ -518,7 +518,7 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 - **Italian translation** — complete `it_IT` (386 strings) with formal register and GDPR terminology
 - **Contextual help text** — `.faz-help` descriptions on all settings pages (fixes #27)
 - **Do Not Sell text colour picker** — dedicated colour control for CCPA opt-out link (fixes #34)
-- **Pageview tracking opt-in** — new toggle in Settings (default: off for compliance)
+- **Pageview tracking opt-in** — new toggle in Settings (default: off for stricter privacy defaults)
 - **Customize overlay fix** — removed nonce from public REST endpoints; stale nonces on cached pages caused 403 (fixes #35)
 - **Consent log integrity** — HMAC origin token prevents external spoofing
 - **Subdomain cookie sharing** — fixed for `.co.uk`, `.com.au`, `.co.jp` and 30+ multi-level TLDs

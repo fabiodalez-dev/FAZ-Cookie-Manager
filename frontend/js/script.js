@@ -2051,7 +2051,6 @@ function _fazAddPlaceholder(htmlElm, uniqueID) {
         "video-placeholder-normal",
         "video-placeholder-youtube"
     );
-    addedNode.style.backgroundImage = `linear-gradient(rgba(76,72,72,.7),rgba(76,72,72,.7)),url('https://img.youtube.com/vi/${youtubeID}/maxresdefault.jpg')`;
     innerTextElement.classList.replace(
         "video-placeholder-text-normal",
         "video-placeholder-text-youtube"

@@ -4,6 +4,17 @@
 (function () {
 	'use strict';
 
+	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
+	function __(key, fallback) {
+		var parts = key.split('.');
+		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
+		for (var i = 0; i < parts.length; i++) {
+			if (!obj || typeof obj !== 'object') { return fallback; }
+			obj = obj[parts[i]];
+		}
+		return typeof obj === 'string' ? obj : fallback;
+	}
+
 	var form;
 
 	FAZ.ready(function () {
@@ -39,7 +50,7 @@
 			populateTargetRegions(data);
 			applyShowIf();
 		}).catch(function () {
-			FAZ.notify('Failed to load settings', 'error');
+			FAZ.notify(__('settings.loadFailed', 'Failed to load settings.'), 'error');
 		});
 	}
 
@@ -125,10 +136,10 @@
 			return FAZ.post('settings', current);
 		}).then(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify('Settings saved successfully');
+			FAZ.notify(__('settings.saved', 'Settings saved successfully.'));
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify('Failed to save settings', 'error');
+			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');
 		});
 	}
 
@@ -141,13 +152,16 @@
 				var rawSize = parseInt(data.database.size, 10);
 			var sizeKB = isFinite(rawSize) ? Math.round(rawSize / 1024) : 0;
 				var b = document.createElement('strong');
-				b.textContent = 'Database: ';
+				b.textContent = __('settings.dbLabel', 'Database: ');
 				el.appendChild(b);
 				el.appendChild(document.createTextNode(
-					data.database.file + ' (' + sizeKB + ' KB) - Last updated: ' + data.database.modified
+					__('settings.dbFileInfo', '{file} ({size} KB) - Last updated: {date}')
+						.replace('{file}', data.database.file)
+						.replace('{size}', sizeKB)
+						.replace('{date}', data.database.modified)
 				));
 			} else {
-				el.textContent = 'No GeoIP database installed. Enter your license key and click "Update Database".';
+				el.textContent = __('settings.noGeoipDb', 'No GeoIP database installed. Enter your license key and click "Update Database".');
 			}
 			el.style.display = 'block';
 		}).catch(function (err) {
@@ -162,23 +176,23 @@
 			el.textContent = '';
 			if (data.version && data.version > 0) {
 				var b1 = document.createElement('strong');
-				b1.textContent = 'GVL Version: ';
+				b1.textContent = __('settings.gvlVersion', 'GVL Version: ');
 				el.appendChild(b1);
 				el.appendChild(document.createTextNode(data.version + ' | '));
 				var b2 = document.createElement('strong');
-				b2.textContent = 'Vendors: ';
+				b2.textContent = __('settings.gvlVendors', 'Vendors: ');
 				el.appendChild(b2);
 				el.appendChild(document.createTextNode((data.vendor_count || 0) + ' | '));
 				var b3 = document.createElement('strong');
-				b3.textContent = 'Last Updated: ';
+				b3.textContent = __('settings.gvlLastUpdated', 'Last Updated: ');
 				el.appendChild(b3);
 				el.appendChild(document.createTextNode(data.last_updated || 'N/A'));
 			} else {
-				el.textContent = 'No GVL data downloaded yet. Click "Update GVL Now" to download.';
+				el.textContent = __('settings.noGvlData', 'No GVL data downloaded yet. Click "Update GVL Now" to download.');
 			}
 		}).catch(function () {
 			var el = document.getElementById('faz-gvl-status');
-			if (el) el.textContent = 'No GVL data available.';
+			if (el) el.textContent = __('settings.noGvlAvailable', 'No GVL data available.');
 		});
 	}
 
@@ -189,14 +203,17 @@
 		FAZ.post('gvl/update').then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify('GVL updated: v' + data.version + ' (' + data.vendor_count + ' vendors)');
+				var gvlMsg = __('settings.gvlUpdatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
+					.replace('{version}', String(data.version))
+					.replace('{count}', String(data.vendor_count));
+				FAZ.notify(gvlMsg);
 				loadGvlStatus();
 			} else {
-				FAZ.notify(data.message || 'Failed to update GVL', 'error');
+				FAZ.notify(data.message || __('settings.gvlFailed', 'Failed to update GVL.'), 'error');
 			}
 		}).catch(function (err) {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify((err && err.message) || 'Failed to update GVL', 'error');
+			FAZ.notify((err && err.message) || __('settings.gvlFailed', 'Failed to update GVL.'), 'error');
 		});
 	}
 
@@ -207,7 +224,7 @@
 		var licenseKey = keyInput ? keyInput.value.trim() : '';
 
 		if (!licenseKey) {
-			FAZ.notify('Please enter a MaxMind license key first', 'error');
+			FAZ.notify(__('settings.geoipNoKey', 'Please enter a MaxMind license key first.'), 'error');
 			return;
 		}
 
@@ -215,15 +232,15 @@
 		FAZ.post('settings/geolite2/update', { license_key: licenseKey }).then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify('GeoIP database updated successfully');
+				FAZ.notify(__('settings.geoipUpdated', 'GeoIP database updated successfully.'));
 				loadGeoDbStatus();
 			}
 			else {
-				FAZ.notify(data.message || 'Failed to update database', 'error');
+				FAZ.notify(data.message || __('settings.geoipFailed', 'Failed to update database.'), 'error');
 			}
 		}).catch(function (err) {
 			FAZ.btnLoading(btn, false);
-			var msg = (err && err.message) ? err.message : 'Failed to update database';
+			var msg = (err && err.message) ? err.message : __('settings.geoipFailed', 'Failed to update database.');
 			FAZ.notify(msg, 'error');
 		});
 	}

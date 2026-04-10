@@ -258,7 +258,7 @@ class Cookies_API extends API_Controller {
 	public function bulk_update( $request ) {
 		$items = $request->get_param( 'cookies' );
 		if ( ! is_array( $items ) || empty( $items ) ) {
-			return new \WP_Error( 'invalid_data', 'No cookies provided.', array( 'status' => 400 ) );
+			return new \WP_Error( 'invalid_data', __( 'No cookies provided.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 
 		$updated = array();
@@ -301,7 +301,7 @@ class Cookies_API extends API_Controller {
 	public function bulk_delete( $request ) {
 		$ids = $request->get_param( 'ids' );
 		if ( ! is_array( $ids ) || empty( $ids ) ) {
-			return new \WP_Error( 'invalid_data', 'No cookie IDs provided.', array( 'status' => 400 ) );
+			return new \WP_Error( 'invalid_data', __( 'No cookie IDs provided.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 		$deleted = 0;
 		foreach ( $ids as $id ) {

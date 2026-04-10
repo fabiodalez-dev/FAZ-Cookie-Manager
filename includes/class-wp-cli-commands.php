@@ -273,7 +273,8 @@ class WP_CLI_Commands {
 		$settings     = get_option( 'faz_settings' );
 		$gcm_settings = get_option( 'faz_gcm_settings' );
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// Table names are trusted ($wpdb->prefix is set by WordPress core).
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$banner_count   = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_banners" );
 		$cookie_count   = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookies" );
 		$category_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories" );

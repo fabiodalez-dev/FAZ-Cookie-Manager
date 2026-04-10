@@ -319,6 +319,17 @@ class Known_Providers {
 				'cookies'  => array( '_pk_id.*', '_pk_ses.*', '_pk_ref.*' ),
 			),
 
+			/* ── Koko Analytics (WordPress plugin) ────────── */
+			'koko-analytics' => array(
+				'label'    => 'Koko Analytics',
+				'category' => 'analytics',
+				'patterns' => array(
+					'wp-content/plugins/koko-analytics/',
+					'koko-analytics-collect.js',
+				),
+				'cookies'  => array( '_koko_analytics_pages_viewed' ),
+			),
+
 			/* ── HubSpot ──────────────────────────────────── */
 			'hubspot' => array(
 				'label'    => 'HubSpot',

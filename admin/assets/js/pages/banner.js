@@ -6,6 +6,17 @@
 (function () {
 	'use strict';
 
+	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
+	function __(key, fallback) {
+		var parts = key.split('.');
+		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
+		for (var i = 0; i < parts.length; i++) {
+			if (!obj || typeof obj !== 'object') { return fallback; }
+			obj = obj[parts[i]];
+		}
+		return typeof obj === 'string' ? obj : fallback;
+	}
+
 	var bannerId = 1; // default banner
 	var bannerData = null; // full API response
 	var currentLang = 'en';
@@ -214,7 +225,7 @@
 			// Render live preview
 			refreshPreview();
 		}).catch(function () {
-			FAZ.notify('Failed to load banner settings', 'error');
+			FAZ.notify(__('banner.loadFailed', 'Failed to load banner settings.'), 'error');
 		});
 	}
 
@@ -629,7 +640,7 @@
 		syncFormToBannerData();
 		refreshPreview();
 
-		FAZ.notify('Preset applied: ' + preset.name, 'success');
+		FAZ.notify(__('banner.presetApplied', 'Preset applied: %s').replace('%s', preset.name), 'success');
 	}
 
 	function setColorPair(baseId, value) {
@@ -801,11 +812,11 @@
 		FAZ.put('banners/' + bannerId, payload).then(function (updated) {
 			bannerData = updated;
 			FAZ.btnLoading(btn, false);
-			FAZ.notify('Banner settings saved');
+			FAZ.notify(__('banner.saved', 'Banner settings saved.'));
 			refreshPreview();
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify('Failed to save banner settings', 'error');
+			FAZ.notify(__('banner.saveFailed', 'Failed to save banner settings.'), 'error');
 		});
 	}
 

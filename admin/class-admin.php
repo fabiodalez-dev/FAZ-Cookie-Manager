@@ -83,8 +83,8 @@ class Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
 		add_action( 'admin_head', array( $this, 'print_api_fetch_polyfill' ), 0 );
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
-		add_action( 'admin_print_scripts', array( $this, 'hide_admin_notices' ) );
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
+		add_action( 'admin_notices', array( $this, 'cookie_definitions_notice' ) );
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
@@ -523,9 +523,168 @@ window.wp.apiFetch=apiFetch;
 				'modules'        => self::$active_modules,
 				'locale'         => get_user_locale(),
 				'i18n'           => array(
-					'accepted'       => __( 'Accepted', 'faz-cookie-manager' ),
-					'rejected'       => __( 'Rejected', 'faz-cookie-manager' ),
-					'totalResponses' => __( 'total responses', 'faz-cookie-manager' ),
+					// Dashboard widget strings (used by dashboard.js).
+					'accepted'                 => __( 'Accepted', 'faz-cookie-manager' ),
+					'rejected'                 => __( 'Rejected', 'faz-cookie-manager' ),
+					'totalResponses'           => __( 'total responses', 'faz-cookie-manager' ),
+					// Common.
+					'saved'                    => __( 'Settings saved successfully.', 'faz-cookie-manager' ),
+					'saveFailed'               => __( 'Failed to save settings.', 'faz-cookie-manager' ),
+					'loadFailed'               => __( 'Failed to load settings.', 'faz-cookie-manager' ),
+					'confirmDelete'            => __( 'Are you sure you want to delete this?', 'faz-cookie-manager' ),
+					// Cookies page.
+					'cookies'                  => array(
+						'bulkDeleteConfirm'        => __( 'Delete selected cookie(s)?', 'faz-cookie-manager' ),
+						'bulkDeleteFailed'         => __( 'Bulk delete failed.', 'faz-cookie-manager' ),
+						'categoriesSaved'          => __( 'Categories saved.', 'faz-cookie-manager' ),
+						'deleteAllStale'           => __( 'Delete all stale', 'faz-cookie-manager' ),
+						'allCookies'               => __( 'All Cookies', 'faz-cookie-manager' ),
+						'hidden'                   => __( 'hidden', 'faz-cookie-manager' ),
+						'hiddenFromFrontend'       => __( 'Hidden from frontend', 'faz-cookie-manager' ),
+						'serverBusyRetrying'       => __( 'Server busy, retrying in %ds...', 'faz-cookie-manager' ),
+						'scanningPages'            => __( 'Scanning 0/%d pages...', 'faz-cookie-manager' ),
+						'rulePlaceholder'          => __( 'e.g. custom-tracker.com/script.js', 'faz-cookie-manager' ),
+						'rulesAdded'               => __( 'Added %1$d rules from %2$s (saved)', 'faz-cookie-manager' ),
+						'allCookiesExist'          => __( 'All cookies from %s already exist', 'faz-cookie-manager' ),
+						'noCookiesFound'           => __( 'No cookies found.', 'faz-cookie-manager' ),
+						'edit'                     => __( 'Edit', 'faz-cookie-manager' ),
+						'delete'                   => __( 'Delete', 'faz-cookie-manager' ),
+						'deleteStale'              => __( 'Delete stale', 'faz-cookie-manager' ),
+						'category'                 => __( 'Category', 'faz-cookie-manager' ),
+						'cancel'                   => __( 'Cancel', 'faz-cookie-manager' ),
+						'cookieUpdated'            => __( 'Cookie updated.', 'faz-cookie-manager' ),
+						'cookieAdded'              => __( 'Cookie added.', 'faz-cookie-manager' ),
+						'cookieSaveFailed'         => __( 'Failed to save cookie.', 'faz-cookie-manager' ),
+						'cookieDeleteConfirm'      => __( 'Delete cookie "%s"?', 'faz-cookie-manager' ),
+						'cookieDeleted'            => __( 'Cookie deleted.', 'faz-cookie-manager' ),
+						'cookieDeleteFailed'       => __( 'Failed to delete cookie.', 'faz-cookie-manager' ),
+						'staleDeleted'             => __( 'Stale cookie deleted.', 'faz-cookie-manager' ),
+						'staleDeleteFailed'        => __( 'Failed to delete stale cookie.', 'faz-cookie-manager' ),
+						'staleAllConfirm'          => __( 'Delete all stale cookies not found in the latest scan?', 'faz-cookie-manager' ),
+						'staleNone'                => __( 'No stale cookies to delete.', 'faz-cookie-manager' ),
+						'staleDeleteAllFailed'     => __( 'Failed to delete stale cookies.', 'faz-cookie-manager' ),
+						'staleLoadFailed'          => __( 'Failed to load cookies for stale cleanup.', 'faz-cookie-manager' ),
+						'scanStarted'              => __( 'Scanning...', 'faz-cookie-manager' ),
+						'scanSite'                 => __( 'Scan Site', 'faz-cookie-manager' ),
+						'discoveringPages'         => __( 'Discovering pages...', 'faz-cookie-manager' ),
+						'enrichingServer'          => __( 'Enriching with server scan...', 'faz-cookie-manager' ),
+						'savingResults'            => __( 'Saving results...', 'faz-cookie-manager' ),
+						'noCookiesToProcess'       => __( 'No cookies to process.', 'faz-cookie-manager' ),
+						'noUncategorized'          => __( 'No uncategorized cookies to process.', 'faz-cookie-manager' ),
+						'noneAutoCategorized'      => __( 'No cookies could be auto-categorized.', 'faz-cookie-manager' ),
+						'autoCatFailed'            => __( 'Auto-categorize failed.', 'faz-cookie-manager' ),
+						'noDefinitions'            => __( 'No definitions downloaded yet. Click "Update Definitions" to download.', 'faz-cookie-manager' ),
+						'definitionsLoadFailed'    => __( 'Could not load definitions status.', 'faz-cookie-manager' ),
+						'downloadingDefinitions'   => __( 'Downloading definitions from GitHub...', 'faz-cookie-manager' ),
+						'definitionsUpdated'       => __( 'Definitions updated.', 'faz-cookie-manager' ),
+						'definitionsFailed'        => __( 'Update failed.', 'faz-cookie-manager' ),
+						'definitionsNetworkFailed' => __( 'Update failed. Check your network connection.', 'faz-cookie-manager' ),
+						'select'                   => __( '— Select —', 'faz-cookie-manager' ),
+						'remove'                   => __( 'Remove', 'faz-cookie-manager' ),
+						'rulesIncomplete'          => __( 'rule(s) incomplete — fill in both pattern and category.', 'faz-cookie-manager' ),
+						'rulesSaved'               => __( 'Custom rules saved.', 'faz-cookie-manager' ),
+						'rulesSaveFailed'          => __( 'Failed to save custom rules.', 'faz-cookie-manager' ),
+						'noTemplates'              => __( 'No templates available.', 'faz-cookie-manager' ),
+						'templateEmpty'            => __( 'No patterns or cookies in template.', 'faz-cookie-manager' ),
+						'templateCatNotFound'      => __( 'not found — cookies not added.', 'faz-cookie-manager' ),
+						'templateCookiesFailed'    => __( 'Failed to create cookies from template.', 'faz-cookie-manager' ),
+						'templateLoadFailed'       => __( 'Failed to load templates.', 'faz-cookie-manager' ),
+					),
+					// Banner page.
+					'banner'                   => array(
+						'presetApplied'            => __( 'Preset applied: %s', 'faz-cookie-manager' ),
+						'loadFailed'               => __( 'Failed to load banner settings.', 'faz-cookie-manager' ),
+						'saved'                    => __( 'Banner settings saved.', 'faz-cookie-manager' ),
+						'saveFailed'               => __( 'Failed to save banner settings.', 'faz-cookie-manager' ),
+					),
+					// Settings page.
+					'settings'                 => array(
+						'loadFailed'               => __( 'Failed to load settings.', 'faz-cookie-manager' ),
+						'saved'                    => __( 'Settings saved successfully.', 'faz-cookie-manager' ),
+						'saveFailed'               => __( 'Failed to save settings.', 'faz-cookie-manager' ),
+						'gvlUpdated'               => __( 'GVL updated.', 'faz-cookie-manager' ),
+						'gvlFailed'                => __( 'Failed to update GVL.', 'faz-cookie-manager' ),
+						'geoipNoKey'               => __( 'Please enter a MaxMind license key first.', 'faz-cookie-manager' ),
+						'geoipUpdated'             => __( 'GeoIP database updated successfully.', 'faz-cookie-manager' ),
+						'geoipFailed'              => __( 'Failed to update database.', 'faz-cookie-manager' ),
+						'noGvlData'                => __( 'No GVL data downloaded yet. Click "Update GVL Now" to download.', 'faz-cookie-manager' ),
+						'noGvlAvailable'           => __( 'No GVL data available.', 'faz-cookie-manager' ),
+						'gvlVersion'               => __( 'GVL Version: ', 'faz-cookie-manager' ),
+						'gvlVendors'               => __( 'Vendors: ', 'faz-cookie-manager' ),
+						'gvlLastUpdated'           => __( 'Last Updated: ', 'faz-cookie-manager' ),
+						'dbLabel'                  => __( 'Database: ', 'faz-cookie-manager' ),
+						'dbFileInfo'               => __( '{file} ({size} KB) - Last updated: {date}', 'faz-cookie-manager' ),
+						'gvlUpdatedWithMeta'       => __( 'GVL updated: v{version} ({count} vendors)', 'faz-cookie-manager' ),
+						'noGeoipDb'                => __( 'No GeoIP database installed. Enter your license key and click "Update Database".', 'faz-cookie-manager' ),
+					),
+					// GCM page.
+					'gcm'                      => array(
+						'loadFailed'               => __( 'Failed to load GCM settings.', 'faz-cookie-manager' ),
+						'saved'                    => __( 'GCM settings saved successfully.', 'faz-cookie-manager' ),
+						'saveFailed'               => __( 'Failed to save GCM settings.', 'faz-cookie-manager' ),
+					),
+					// Consent logs page.
+					'consentLogs'              => array(
+						'showing'                  => __( 'Showing %1$s\u2013%2$s of %3$s', 'faz-cookie-manager' ),
+						'loadFailed'               => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
+						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
+						'exportOk'                 => __( 'CSV exported successfully.', 'faz-cookie-manager' ),
+						'exportFailed'             => __( 'Failed to export CSV.', 'faz-cookie-manager' ),
+						'prev'                     => __( '← Prev', 'faz-cookie-manager' ),
+						'next'                     => __( 'Next →', 'faz-cookie-manager' ),
+					),
+					// Languages page.
+					'languages'                => array(
+						'loadFailed'               => __( 'Failed to load languages.', 'faz-cookie-manager' ),
+						'noLanguages'              => __( 'No languages selected. Add one below.', 'faz-cookie-manager' ),
+						'atLeastOne'               => __( 'At least one language must be selected.', 'faz-cookie-manager' ),
+						'added'                    => __( 'Added', 'faz-cookie-manager' ),
+						'noResults'                => __( 'No languages found.', 'faz-cookie-manager' ),
+						'removeLanguage'           => __( 'Remove %s', 'faz-cookie-manager' ),
+						'saved'                    => __( 'Languages saved successfully.', 'faz-cookie-manager' ),
+						'saveFailed'               => __( 'Failed to save languages.', 'faz-cookie-manager' ),
+					),
+					// GVL page.
+					'gvl'                      => array(
+						'noData'                   => __( 'No GVL data downloaded yet. Click "Update GVL Now" to download.', 'faz-cookie-manager' ),
+						'loadFailed'               => __( 'Failed to load GVL status.', 'faz-cookie-manager' ),
+						'vendorsLoadFailed'        => __( 'Failed to load vendors. Make sure GVL is downloaded.', 'faz-cookie-manager' ),
+						'noVendors'                => __( 'No vendors found.', 'faz-cookie-manager' ),
+						'vendorDetailFailed'       => __( 'Failed to load vendor details.', 'faz-cookie-manager' ),
+						'pagination'               => __( 'Page %1$d of %2$d (%3$d vendors)', 'faz-cookie-manager' ),
+						'selectedVendor'           => __( 'Selected: %d vendor', 'faz-cookie-manager' ),
+						'selectedVendors'          => __( 'Selected: %d vendors', 'faz-cookie-manager' ),
+						'savedCount'               => __( 'Saved %d vendor(s).', 'faz-cookie-manager' ),
+						'selectionSaved'           => __( 'vendor(s) saved.', 'faz-cookie-manager' ),
+						'selectionSavedWithCount'  => __( 'Saved {count} vendor(s).', 'faz-cookie-manager' ),
+						'selectionFailed'          => __( 'Failed to save selection.', 'faz-cookie-manager' ),
+						'updated'                  => __( 'GVL updated.', 'faz-cookie-manager' ),
+						'updatedWithMeta'          => __( 'GVL updated: v{version} ({count} vendors)', 'faz-cookie-manager' ),
+						'updateFailed'             => __( 'Failed to update GVL.', 'faz-cookie-manager' ),
+						'version'                  => __( 'GVL Version: ', 'faz-cookie-manager' ),
+						'vendors'                  => __( 'Vendors: ', 'faz-cookie-manager' ),
+						'lastUpdated'              => __( 'Last Updated: ', 'faz-cookie-manager' ),
+					),
+					// Import/Export page.
+					'importExport'             => array(
+						'exporting'                => __( 'Exporting...', 'faz-cookie-manager' ),
+						'exportOk'                 => __( 'Settings exported successfully.', 'faz-cookie-manager' ),
+						'exportFailed'             => __( 'Export failed.', 'faz-cookie-manager' ),
+						'invalidJson'              => __( 'Invalid JSON file.', 'faz-cookie-manager' ),
+						'notFazExport'             => __( 'This file is not a FAZ Cookie Manager export.', 'faz-cookie-manager' ),
+						'importConfirm'            => __( 'This will overwrite your current settings. Continue?', 'faz-cookie-manager' ),
+						'importing'                => __( 'Importing...', 'faz-cookie-manager' ),
+						'importOk'                 => __( 'Import completed successfully. Reloading...', 'faz-cookie-manager' ),
+						'importedOk'               => __( 'Settings imported successfully.', 'faz-cookie-manager' ),
+						/* translators: %s: low-level error message surfaced from the import endpoint */
+						'importFailed'             => __( 'Import failed: %s', 'faz-cookie-manager' ),
+					),
+					// Dashboard page.
+					'dashboard'                => array(
+						'selectBothDates'          => __( 'Please select both start and end dates.', 'faz-cookie-manager' ),
+						'startBeforeEnd'           => __( 'Start date must be before end date.', 'faz-cookie-manager' ),
+						'noCategoryData'           => __( 'No category data yet.', 'faz-cookie-manager' ),
+					),
 				),
 			)
 		);
@@ -1021,43 +1180,16 @@ window.wp.apiFetch=apiFetch;
 	}
 
 	/**
-	 * Hide all the unrelated notices from plugin pages.
+	 * Legacy notice handler retained as a no-op for backward compatibility.
 	 *
 	 * @since 3.0.0
 	 * @return void
 	 */
 	public function hide_admin_notices() {
-		if ( empty( $_REQUEST['page'] ) || ! preg_match( '/' . preg_quote( self::ADMIN_SLUG, '/' ) . '/', esc_html( wp_unslash( $_REQUEST['page'] ) ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			return;
-		}
-		global $wp_filter;
-
-		$notices_type = array(
-			'user_admin_notices',
-			'admin_notices',
-			'all_admin_notices',
-		);
-
-		foreach ( $notices_type as $type ) {
-			if ( empty( $wp_filter[ $type ]->callbacks ) || ! is_array( $wp_filter[ $type ]->callbacks ) ) {
-				continue;
-			}
-			foreach ( $wp_filter[ $type ]->callbacks as $priority => $hooks ) {
-				foreach ( $hooks as $name => $arr ) {
-					if ( is_object( $arr['function'] ) && $arr['function'] instanceof \Closure ) {
-						unset( $wp_filter[ $type ]->callbacks[ $priority ][ $name ] );
-						continue;
-					}
-					$class = ! empty( $arr['function'][0] ) && is_object( $arr['function'][0] ) ? strtolower( get_class( $arr['function'][0] ) ) : '';
-					if ( ! empty( $class ) && preg_match( '/^faz/', $class ) ) {
-						continue;
-					}
-					if ( ! empty( $name ) && ! preg_match( '/^faz/', $name ) ) {
-						unset( $wp_filter[ $type ]->callbacks[ $priority ][ $name ] );
-					}
-				}
-			}
-		}
+		// Intentionally left as a no-op.
+		// Plugins should not suppress notices from WordPress core or other
+		// plugins on their own admin screens.
+		return;
 	}
 
 	/**
@@ -1095,6 +1227,35 @@ window.wp.apiFetch=apiFetch;
 		echo '<a href="' . esc_url( $dismiss_url ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
 		echo '<span class="dashicons dashicons-dismiss"></span></a>';
 		echo '</div>';
+	}
+
+	/**
+	 * Display a persistent notice until local cookie definitions are downloaded.
+	 *
+	 * Kept scoped to FAZ admin screens so it does not hijack the wider WordPress
+	 * dashboard. The download itself remains an explicit user action.
+	 *
+	 * @return void
+	 */
+	public function cookie_definitions_notice() {
+		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$defs = \FazCookie\Includes\Cookie_Definitions::get_instance();
+		$meta = $defs->get_meta();
+		if ( $defs->has_definitions() && ( ! isset( $meta['source'] ) || 'bundled' !== $meta['source'] ) ) {
+			return;
+		}
+
+		$url = admin_url( 'admin.php?page=faz-cookie-manager-cookies#faz-cookie-definitions-card' );
+
+		printf(
+			'<div class="notice notice-warning"><p>%s</p><p><a href="%s" class="button button-secondary">%s</a></p></div>',
+			esc_html__( 'Cookie definitions are using the built-in snapshot. Download the latest version from GitHub for improved categorization.', 'faz-cookie-manager' ),
+			esc_url( $url ),
+			esc_html__( 'Update Cookie Definitions', 'faz-cookie-manager' )
+		);
 	}
 
 	/**

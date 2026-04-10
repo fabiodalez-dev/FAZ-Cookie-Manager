@@ -4,6 +4,17 @@
 (function () {
 	'use strict';
 
+	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
+	function __(key, fallback) {
+		var parts = key.split('.');
+		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
+		for (var i = 0; i < parts.length; i++) {
+			if (!obj || typeof obj !== 'object') { return fallback; }
+			obj = obj[parts[i]];
+		}
+		return typeof obj === 'string' ? obj : fallback;
+	}
+
 	var form;
 
 	FAZ.ready(function () {
@@ -17,7 +28,7 @@
 		FAZ.get('gcm').then(function (data) {
 			FAZ.populateForm(form, data);
 		}).catch(function () {
-			FAZ.notify('Failed to load GCM settings', 'error');
+			FAZ.notify(__('gcm.loadFailed', 'Failed to load GCM settings.'), 'error');
 		});
 	}
 
@@ -29,10 +40,10 @@
 
 		FAZ.post('gcm', data).then(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify('GCM settings saved successfully');
+			FAZ.notify(__('gcm.saved', 'GCM settings saved successfully.'));
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify('Failed to save GCM settings', 'error');
+			FAZ.notify(__('gcm.saveFailed', 'Failed to save GCM settings.'), 'error');
 		});
 	}
 

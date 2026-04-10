@@ -4,6 +4,17 @@
 (function () {
 	'use strict';
 
+	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
+	function __(key, fallback) {
+		var parts = key.split('.');
+		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
+		for (var i = 0; i < parts.length; i++) {
+			if (!obj || typeof obj !== 'object') { return fallback; }
+			obj = obj[parts[i]];
+		}
+		return typeof obj === 'string' ? obj : fallback;
+	}
+
 	var currentPage = 1;
 	var perPage = 50;
 	var searchTerm = '';
@@ -47,15 +58,15 @@
 
 			if (data.version && data.version > 0) {
 				var b1 = document.createElement('strong');
-				b1.textContent = 'GVL Version: ';
+				b1.textContent = __('gvl.version', 'GVL Version: ');
 				el.appendChild(b1);
 				el.appendChild(document.createTextNode(data.version + '  |  '));
 				var b2 = document.createElement('strong');
-				b2.textContent = 'Vendors: ';
+				b2.textContent = __('gvl.vendors', 'Vendors: ');
 				el.appendChild(b2);
 				el.appendChild(document.createTextNode(data.vendor_count + '  |  '));
 				var b3 = document.createElement('strong');
-				b3.textContent = 'Last Updated: ';
+				b3.textContent = __('gvl.lastUpdated', 'Last Updated: ');
 				el.appendChild(b3);
 				el.appendChild(document.createTextNode(data.last_updated || 'N/A'));
 
@@ -72,11 +83,11 @@
 					});
 				}
 			} else {
-				el.textContent = 'No GVL data downloaded yet. Click "Update GVL Now" to download.';
+				el.textContent = __('gvl.noData', 'No GVL data downloaded yet. Click "Update GVL Now" to download.');
 			}
 		}).catch(function () {
 			var el = document.getElementById('faz-gvl-meta');
-			if (el) el.textContent = 'Failed to load GVL status.';
+			if (el) el.textContent = __('gvl.loadFailed', 'Failed to load GVL status.');
 		});
 	}
 
@@ -105,7 +116,7 @@
 			renderPagination(data.total || 0, data.pages || 0, data.page || 1);
 		}).catch(function () {
 			var el = document.getElementById('faz-gvl-vendor-list');
-			if (el) el.textContent = 'Failed to load vendors. Make sure GVL is downloaded.';
+			if (el) el.textContent = __('gvl.vendorsLoadFailed', 'Failed to load vendors. Make sure GVL is downloaded.');
 		});
 	}
 
@@ -114,7 +125,7 @@
 		container.textContent = '';
 
 		if (!vendors.length) {
-			container.textContent = 'No vendors found.';
+			container.textContent = __('gvl.noVendors', 'No vendors found.');
 			return;
 		}
 
@@ -234,7 +245,7 @@
 
 		var info = document.createElement('span');
 		info.style.color = 'var(--faz-text-secondary)';
-		info.textContent = 'Page ' + page + ' of ' + pages + ' (' + total + ' vendors)';
+		info.textContent = __('gvl.pagination', 'Page %1$d of %2$d (%3$d vendors)').replace('%1$d', page).replace('%2$d', pages).replace('%3$d', total);
 		container.appendChild(info);
 	}
 
@@ -257,7 +268,7 @@
 
 			alert(lines.join('\n'));
 		}).catch(function () {
-			FAZ.notify('Failed to load vendor details', 'error');
+			FAZ.notify(__('gvl.vendorDetailFailed', 'Failed to load vendor details.'), 'error');
 		});
 	}
 
@@ -279,7 +290,7 @@
 	function updateSelectedCount() {
 		var count = Object.keys(selectedVendors).length;
 		var el = document.getElementById('faz-gvl-selected-count');
-		if (el) el.textContent = 'Selected: ' + count + ' vendor' + (count !== 1 ? 's' : '');
+		if (el) el.textContent = (count !== 1 ? __('gvl.selectedVendors', 'Selected: %d vendors') : __('gvl.selectedVendor', 'Selected: %d vendor')).replace('%d', count);
 	}
 
 	function saveSelection() {
@@ -290,13 +301,13 @@
 		FAZ.post('gvl/selected', { vendor_ids: ids }).then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify('Saved ' + data.count + ' vendor(s)');
+				FAZ.notify(__('gvl.savedCount', 'Saved %d vendor(s).').replace('%d', data.count), 'success');
 			} else {
-				FAZ.notify('Failed to save selection', 'error');
+				FAZ.notify(__('gvl.selectionFailed', 'Failed to save selection.'), 'error');
 			}
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify('Failed to save selection', 'error');
+			FAZ.notify(__('gvl.selectionFailed', 'Failed to save selection.'), 'error');
 		});
 	}
 
@@ -306,15 +317,18 @@
 		FAZ.post('gvl/update').then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify('GVL updated: v' + data.version + ' (' + data.vendor_count + ' vendors)');
+				var updatedMsg = __('gvl.updatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
+					.replace('{version}', String(data.version))
+					.replace('{count}', String(data.vendor_count));
+				FAZ.notify(updatedMsg);
 				loadMeta();
 				loadVendors();
 			} else {
-				FAZ.notify(data.message || 'Failed to update GVL', 'error');
+				FAZ.notify(data.message || __('gvl.updateFailed', 'Failed to update GVL.'), 'error');
 			}
 		}).catch(function (err) {
 			FAZ.btnLoading(btn, false);
-			FAZ.notify((err && err.message) || 'Failed to update GVL', 'error');
+			FAZ.notify((err && err.message) || __('gvl.updateFailed', 'Failed to update GVL.'), 'error');
 		});
 	}
 

@@ -39,6 +39,13 @@ class Placeholder_Builder {
 	);
 
 	/**
+	 * Service IDs that are video platforms (used for aspect-ratio CSS class).
+	 *
+	 * @var array<int,string>
+	 */
+	private static $video_services = array( 'youtube', 'vimeo', 'dailymotion', 'twitch' );
+
+	/**
 	 * Map URL fragments to service identifiers.
 	 *
 	 * @var array<string,string>
@@ -93,8 +100,9 @@ class Placeholder_Builder {
 			? self::$service_icons[ $service_id ]
 			: self::$service_icons['default'];
 
-		$has_thumb = ! empty( $thumbnail_url );
-		$class     = 'faz-placeholder' . ( $has_thumb ? ' faz-placeholder--video' : '' );
+		$has_thumb        = ! empty( $thumbnail_url );
+		$is_video_service = in_array( $service_id, self::$video_services, true );
+		$class            = 'faz-placeholder' . ( ( $has_thumb || $is_video_service ) ? ' faz-placeholder--video' : '' );
 
 		$message = sprintf(
 			/* translators: %s: service name (e.g., "YouTube", "Google Maps") */
@@ -202,18 +210,16 @@ class Placeholder_Builder {
 	}
 
 	/**
-	 * Extract a video thumbnail URL (YouTube only for now — no external API needed).
+	 * Extract a video thumbnail URL.
 	 *
-	 * img.youtube.com is a static CDN that serves no cookies or tracking.
+	 * Remote thumbnails are intentionally disabled so blocked embeds do not
+	 * trigger third-party requests before consent.
 	 *
 	 * @param string $url Video URL or iframe src.
 	 * @return string Thumbnail URL or empty string.
 	 */
 	public static function get_video_thumbnail( $url ) {
-		// YouTube: embed, watch, or short URL.
-		if ( preg_match( '/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|watch\?v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/', $url, $m ) ) {
-			return 'https://img.youtube.com/vi/' . $m[1] . '/hqdefault.jpg';
-		}
+		unset( $url );
 		return '';
 	}
 

@@ -101,6 +101,25 @@ class Cookie_Database {
 			'duration'    => '1 minute',
 			'description' => 'Google Analytics cookie used to throttle request rate.',
 		),
+		// WP Statistics (WordPress plugin — first-party analytics).
+		'wp_statistics_'              => array(
+			'category'    => 'analytics',
+			'duration'    => '1 year',
+			'description' => 'WP Statistics cookie used to track visitor sessions and page views.',
+			'match'       => 'prefix',
+		),
+		// Burst Statistics (WordPress plugin — first-party analytics).
+		'burst_uid'                   => array(
+			'category'    => 'analytics',
+			'duration'    => '365 days',
+			'description' => 'Burst Statistics cookie used to identify unique visitors.',
+		),
+		// Koko Analytics (WordPress plugin — first-party analytics).
+		'_koko_analytics_pages_viewed' => array(
+			'category'    => 'analytics',
+			'duration'    => '24 hours',
+			'description' => 'Koko Analytics cookie used to detect unique visitors and count pages viewed per session.',
+		),
 		'_gac_'                   => array(
 			'category'    => 'analytics',
 			'duration'    => '90 days',

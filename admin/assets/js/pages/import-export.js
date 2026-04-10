@@ -1,6 +1,17 @@
 (function() {
     'use strict';
 
+    // i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
+    function __(key, fallback) {
+        var parts = key.split('.');
+        var obj = (window.fazConfig && window.fazConfig.i18n) || {};
+        for (var i = 0; i < parts.length; i++) {
+            if (!obj || typeof obj !== 'object') { return fallback; }
+            obj = obj[parts[i]];
+        }
+        return typeof obj === 'string' ? obj : fallback;
+    }
+
     var importData = null;
     var exportSvg = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ';
 
@@ -44,7 +55,7 @@
     // --- Export ---
     document.getElementById('faz-export-btn').addEventListener('click', function() {
         this.disabled = true;
-        this.textContent = 'Exporting...';
+        this.textContent = __('importExport.exporting', 'Exporting...');
         var btn = this;
 
         FAZ.get('settings/export').then(function(data) {
@@ -57,7 +68,7 @@
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-            FAZ.notify('Settings exported successfully.', 'success');
+            FAZ.notify(__('importExport.exportOk', 'Settings exported successfully.'), 'success');
             btn.disabled = false;
             btn.textContent = '';
             var temp = document.createElement('span');
@@ -65,7 +76,7 @@
             while (temp.firstChild) btn.appendChild(temp.firstChild);
             btn.appendChild(document.createTextNode('Export Settings'));
         }).catch(function(err) {
-            FAZ.notify('Export failed: ' + (err.message || err), 'error');
+            FAZ.notify(__('importExport.exportFailed', 'Export failed.') + ': ' + (err.message || err), 'error');
             btn.disabled = false;
             btn.textContent = '';
             var temp = document.createElement('span');
@@ -85,7 +96,7 @@
             try {
                 importData = JSON.parse(ev.target.result);
             } catch (err) {
-                FAZ.notify('Invalid JSON file.', 'error');
+                FAZ.notify(__('importExport.invalidJson', 'Invalid JSON file.'), 'error');
                 importData = null;
                 document.getElementById('faz-import-preview').style.display = 'none';
                 document.getElementById('faz-import-btn').disabled = true;
@@ -94,7 +105,7 @@
 
             // Validate structure
             if (!importData.plugin || importData.plugin !== 'faz-cookie-manager') {
-                FAZ.notify('This file is not a FAZ Cookie Manager export.', 'error');
+                FAZ.notify(__('importExport.notFazExport', 'This file is not a FAZ Cookie Manager export.'), 'error');
                 importData = null;
                 document.getElementById('faz-import-preview').style.display = 'none';
                 document.getElementById('faz-import-btn').disabled = true;
@@ -114,21 +125,21 @@
     // --- Import: Apply ---
     document.getElementById('faz-import-btn').addEventListener('click', function() {
         if (!importData) return;
-        if (!confirm('This will overwrite your current settings. Continue?')) return;
+        if (!confirm(__('importExport.importConfirm', 'This will overwrite your current settings. Continue?'))) return;
 
         this.disabled = true;
         var statusEl = document.getElementById('faz-import-status');
         statusEl.style.display = 'block';
-        statusEl.textContent = 'Importing...';
+        statusEl.textContent = __('importExport.importing', 'Importing...');
         statusEl.style.color = 'var(--faz-text-secondary)';
 
         FAZ.post('settings/import', importData).then(function(result) {
-            statusEl.textContent = 'Import completed successfully. Reloading...';
+            statusEl.textContent = __('importExport.importOk', 'Import completed successfully. Reloading...');
             statusEl.style.color = 'var(--faz-success)';
-            FAZ.notify('Settings imported successfully.', 'success');
+            FAZ.notify(__('importExport.importedOk', 'Settings imported successfully.'), 'success');
             setTimeout(function() { window.location.reload(); }, 1500);
         }).catch(function(err) {
-            statusEl.textContent = 'Import failed: ' + (err.message || err);
+            statusEl.textContent = __('importExport.importFailed', 'Import failed: %s').replace('%s', err.message || err);
             statusEl.style.color = 'var(--faz-danger)';
             document.getElementById('faz-import-btn').disabled = false;
         });

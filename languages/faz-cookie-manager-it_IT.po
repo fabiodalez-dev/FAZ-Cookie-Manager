@@ -1699,3 +1699,359 @@ msgstr "Importa / Esporta"
 #: admin/views/base.php:24
 msgid "System Status"
 msgstr "Stato del sistema"
+
+#: admin/class-admin.php (i18n array)
+msgid "total responses"
+msgstr "risposte totali"
+
+msgid "Settings saved successfully."
+msgstr "Impostazioni salvate con successo."
+
+msgid "Failed to save settings."
+msgstr "Salvataggio delle impostazioni non riuscito."
+
+msgid "Failed to load settings."
+msgstr "Caricamento delle impostazioni non riuscito."
+
+msgid "Are you sure you want to delete this?"
+msgstr "Eliminare questo elemento?"
+
+msgid "Delete selected cookie(s)?"
+msgstr "Eliminare i cookie selezionati?"
+
+msgid "Bulk delete failed."
+msgstr "Eliminazione in blocco non riuscita."
+
+msgid "Categories saved."
+msgstr "Categorie salvate."
+
+msgid "Delete all stale"
+msgstr "Elimina tutti gli obsoleti"
+
+msgid "hidden"
+msgstr "nascosti"
+
+msgid "Edit"
+msgstr "Modifica"
+
+msgid "Delete"
+msgstr "Elimina"
+
+msgid "Delete stale"
+msgstr "Elimina obsoleti"
+
+msgid "Cancel"
+msgstr "Annulla"
+
+msgid "Cookie updated."
+msgstr "Cookie aggiornato."
+
+msgid "Cookie added."
+msgstr "Cookie aggiunto."
+
+msgid "Failed to save cookie."
+msgstr "Salvataggio del cookie non riuscito."
+
+#, php-format
+msgid "Delete cookie \"%s\"?"
+msgstr "Eliminare il cookie \"%s\"?"
+
+msgid "Cookie deleted."
+msgstr "Cookie eliminato."
+
+msgid "Failed to delete cookie."
+msgstr "Eliminazione del cookie non riuscita."
+
+msgid "Stale cookie deleted."
+msgstr "Cookie obsoleto eliminato."
+
+msgid "Failed to delete stale cookie."
+msgstr "Eliminazione del cookie obsoleto non riuscita."
+
+msgid "Delete all stale cookies not found in the latest scan?"
+msgstr "Eliminare tutti i cookie obsoleti non trovati nell'ultima scansione?"
+
+msgid "No stale cookies to delete."
+msgstr "Nessun cookie obsoleto da eliminare."
+
+msgid "Failed to delete stale cookies."
+msgstr "Eliminazione dei cookie obsoleti non riuscita."
+
+msgid "Failed to load cookies for stale cleanup."
+msgstr "Caricamento dei cookie per la pulizia degli obsoleti non riuscito."
+
+msgid "Scanning..."
+msgstr "Scansione in corso..."
+
+msgid "Discovering pages..."
+msgstr "Rilevamento delle pagine..."
+
+msgid "Enriching with server scan..."
+msgstr "Arricchimento con scansione lato server..."
+
+msgid "Saving results..."
+msgstr "Salvataggio dei risultati..."
+
+msgid "No cookies to process."
+msgstr "Nessun cookie da elaborare."
+
+msgid "No uncategorized cookies to process."
+msgstr "Nessun cookie non categorizzato da elaborare."
+
+msgid "No cookies could be auto-categorized."
+msgstr "Nessun cookie è stato categorizzato automaticamente."
+
+msgid "Auto-categorize failed."
+msgstr "Categorizzazione automatica non riuscita."
+
+msgid "No definitions downloaded yet. Click \"Update Definitions\" to download."
+msgstr "Nessuna definizione scaricata. Fare clic su \"Aggiorna definizioni\" per scaricarle."
+
+msgid "Could not load definitions status."
+msgstr "Impossibile caricare lo stato delle definizioni."
+
+msgid "Downloading definitions from GitHub..."
+msgstr "Download delle definizioni da GitHub..."
+
+msgid "Definitions updated."
+msgstr "Definizioni aggiornate."
+
+msgid "Update failed."
+msgstr "Aggiornamento non riuscito."
+
+msgid "Update failed. Check your network connection."
+msgstr "Aggiornamento non riuscito. Verificare la connessione di rete."
+
+msgid "— Select —"
+msgstr "— Seleziona —"
+
+msgid "rule(s) incomplete — fill in both pattern and category."
+msgstr "regola/e incompleta/e — compilare sia il pattern che la categoria."
+
+msgid "Custom rules saved."
+msgstr "Regole personalizzate salvate."
+
+msgid "Failed to save custom rules."
+msgstr "Salvataggio delle regole personalizzate non riuscito."
+
+msgid "No templates available."
+msgstr "Nessun modello disponibile."
+
+msgid "No patterns or cookies in template."
+msgstr "Nessun pattern o cookie nel modello."
+
+msgid "not found — cookies not added."
+msgstr "non trovato — cookie non aggiunti."
+
+msgid "Failed to create cookies from template."
+msgstr "Creazione dei cookie dal modello non riuscita."
+
+msgid "Failed to load templates."
+msgstr "Caricamento dei modelli non riuscito."
+
+msgid "Failed to load banner settings."
+msgstr "Caricamento delle impostazioni del banner non riuscito."
+
+msgid "Banner settings saved."
+msgstr "Impostazioni del banner salvate."
+
+msgid "Failed to save banner settings."
+msgstr "Salvataggio delle impostazioni del banner non riuscito."
+
+msgid "GVL updated."
+msgstr "GVL aggiornata."
+
+msgid "Failed to update GVL."
+msgstr "Aggiornamento della GVL non riuscito."
+
+msgid "Please enter a MaxMind license key first."
+msgstr "Inserire prima una chiave di licenza MaxMind."
+
+msgid "GeoIP database updated successfully."
+msgstr "Database GeoIP aggiornato con successo."
+
+msgid "Failed to update database."
+msgstr "Aggiornamento del database non riuscito."
+
+msgid "No GVL data downloaded yet. Click \"Update GVL Now\" to download."
+msgstr "Nessun dato GVL scaricato. Fare clic su \"Aggiorna GVL ora\" per scaricarli."
+
+msgid "No GVL data available."
+msgstr "Nessun dato GVL disponibile."
+
+msgid "GVL Version: "
+msgstr "Versione GVL: "
+
+msgid "Vendors: "
+msgstr "Fornitori: "
+
+msgid "Last Updated: "
+msgstr "Ultimo aggiornamento: "
+
+msgid "Database: "
+msgstr "Database: "
+
+msgid "No GeoIP database installed. Enter your license key and click \"Update Database\"."
+msgstr "Nessun database GeoIP installato. Inserire la chiave di licenza e fare clic su \"Aggiorna database\"."
+
+msgid "Failed to load GCM settings."
+msgstr "Caricamento delle impostazioni GCM non riuscito."
+
+msgid "GCM settings saved successfully."
+msgstr "Impostazioni GCM salvate con successo."
+
+msgid "Failed to save GCM settings."
+msgstr "Salvataggio delle impostazioni GCM non riuscito."
+
+msgid "Failed to load consent logs."
+msgstr "Caricamento dei registri di consenso non riuscito."
+
+msgid "No consent logs found."
+msgstr "Nessun registro di consenso trovato."
+
+msgid "CSV exported successfully."
+msgstr "CSV esportato con successo."
+
+msgid "Failed to export CSV."
+msgstr "Esportazione CSV non riuscita."
+
+msgid "← Prev"
+msgstr "← Prec"
+
+msgid "Next →"
+msgstr "Succ →"
+
+msgid "Failed to load languages."
+msgstr "Caricamento delle lingue non riuscito."
+
+msgid "No languages selected. Add one below."
+msgstr "Nessuna lingua selezionata. Aggiungerne una qui sotto."
+
+msgid "At least one language must be selected."
+msgstr "È necessario selezionare almeno una lingua."
+
+msgid "Added"
+msgstr "Aggiunta"
+
+msgid "No languages found."
+msgstr "Nessuna lingua trovata."
+
+msgid "Languages saved successfully."
+msgstr "Lingue salvate con successo."
+
+msgid "Failed to save languages."
+msgstr "Salvataggio delle lingue non riuscito."
+
+msgid "Failed to load GVL status."
+msgstr "Caricamento dello stato GVL non riuscito."
+
+msgid "Failed to load vendors. Make sure GVL is downloaded."
+msgstr "Caricamento dei fornitori non riuscito. Verificare che la GVL sia stata scaricata."
+
+msgid "No vendors found."
+msgstr "Nessun fornitore trovato."
+
+msgid "Failed to load vendor details."
+msgstr "Caricamento dei dettagli del fornitore non riuscito."
+
+msgid "vendor(s) saved."
+msgstr "fornitore/i salvato/i."
+
+msgid "Failed to save selection."
+msgstr "Salvataggio della selezione non riuscito."
+
+msgid "Exporting..."
+msgstr "Esportazione in corso..."
+
+msgid "Settings exported successfully."
+msgstr "Impostazioni esportate con successo."
+
+msgid "Export failed."
+msgstr "Esportazione non riuscita."
+
+msgid "Invalid JSON file."
+msgstr "File JSON non valido."
+
+msgid "This file is not a FAZ Cookie Manager export."
+msgstr "Questo file non è un'esportazione di FAZ Cookie Manager."
+
+msgid "This will overwrite your current settings. Continue?"
+msgstr "Questa operazione sovrascriverà le impostazioni correnti. Continuare?"
+
+msgid "Importing..."
+msgstr "Importazione in corso..."
+
+msgid "Import completed successfully. Reloading..."
+msgstr "Importazione completata con successo. Ricaricamento..."
+
+msgid "Settings imported successfully."
+msgstr "Impostazioni importate con successo."
+
+msgid "Please select both start and end dates."
+msgstr "Selezionare sia la data di inizio che quella di fine."
+
+msgid "Start date must be before end date."
+msgstr "La data di inizio deve essere precedente alla data di fine."
+
+msgid "No category data yet."
+msgstr "Nessun dato per categoria ancora disponibile."
+
+msgid "Hidden from frontend"
+msgstr "Nascosto dal frontend"
+
+msgid "Server busy, retrying in %ds..."
+msgstr "Server occupato, nuovo tentativo tra %ds..."
+
+msgid "Scanning 0/%d pages..."
+msgstr "Scansione 0/%d pagine..."
+
+msgid "e.g. custom-tracker.com/script.js"
+msgstr "es. custom-tracker.com/script.js"
+
+msgid "Added %1$d rules from %2$s (saved)"
+msgstr "Aggiunte %1$d regole da %2$s (salvate)"
+
+msgid "All cookies from %s already exist"
+msgstr "Tutti i cookie da %s esistono già"
+
+msgid "Preset applied: %s"
+msgstr "Preset applicato: %s"
+
+msgid "Showing %1$s–%2$s of %3$s"
+msgstr "Visualizzazione %1$s–%2$s di %3$s"
+
+msgid "Remove %s"
+msgstr "Rimuovi %s"
+
+msgid "Page %1$d of %2$d (%3$d vendors)"
+msgstr "Pagina %1$d di %2$d (%3$d fornitori)"
+
+msgid "Selected: %d vendor"
+msgstr "Selezionato: %d fornitore"
+
+msgid "Selected: %d vendors"
+msgstr "Selezionati: %d fornitori"
+
+msgid "Saved %d vendor(s)."
+msgstr "Salvati %d fornitore/i."
+
+msgid "Import failed: %s"
+msgstr "Importazione non riuscita: %s"
+
+msgid "Vendor not found"
+msgstr "Fornitore non trovato"
+
+msgid "No cookies provided."
+msgstr "Nessun cookie fornito."
+
+msgid "No cookie IDs provided."
+msgstr "Nessun ID cookie fornito."
+
+msgid "Status copied to clipboard!"
+msgstr "Stato copiato negli appunti!"
+
+msgid "Search vendors..."
+msgstr "Cerca fornitori..."
+
+msgid "Search vendors"
+msgstr "Cerca fornitori"

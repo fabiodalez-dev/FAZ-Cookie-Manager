@@ -42,7 +42,7 @@ async function gotoResilient(page: Page, url: string): Promise<void> {
   throw lastError;
 }
 
-async function completeAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
+export async function completeAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
 	const loginPath = getWpLoginPath();
   await gotoResilient(page, `${wpBaseURL}${loginPath}`);
 

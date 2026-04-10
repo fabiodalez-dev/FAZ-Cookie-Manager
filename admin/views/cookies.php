@@ -103,7 +103,7 @@ defined( 'ABSPATH' ) || exit;
 	</div>
 
 	<!-- Cookie Definitions (Open Cookie Database) -->
-	<div class="faz-card" style="margin-top:16px;">
+	<div class="faz-card" id="faz-cookie-definitions-card" style="margin-top:16px;">
 		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Cookie Definitions', 'faz-cookie-manager' ); ?></h3>
 			<div class="faz-page-header-actions">

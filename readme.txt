@@ -8,15 +8,15 @@ Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-The only cookie consent plugin you need. 100% free, zero cloud dependencies, no subscriptions. Built to help with GDPR, CCPA, ePrivacy, and IAB TCF v2.3 consent workflows.
+Free cookie consent with GDPR, CCPA, ePrivacy, Google Consent Mode v2, and IAB TCF v2.3. No cloud required.
 
 == Description ==
 
 **Tired of cookie consent plugins that lock essential features behind paywalls, require cloud accounts, or send your visitors' data to third-party servers?**
 
-FAZ Cookie Manager is a WordPress plugin that gives you everything you need to make your site compliant with international privacy regulations -- completely free, with no strings attached.
+FAZ Cookie Manager is a WordPress plugin that helps you implement cookie consent and privacy workflows for international regulations -- completely free, with no strings attached.
 
-No account to create. No cloud service to connect. No "premium" plan to unlock basic features like consent logging or geo-targeting. Everything runs on your own server, and you own all your data.
+No account to create. The plugin requires no cloud service connection. Basic features like consent logging and geo-targeting are included -- no premium plan needed. Core consent features run on your own server, and you own all your data.
 
 = Why FAZ Cookie Manager? =
 
@@ -31,15 +31,17 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 * **Script blocking** -- Tag any script with `data-faz-tag` to block it until the right category is accepted.
 * **Microsoft UET/Clarity** -- Consent integration for Microsoft advertising and analytics tools.
 * **Revisit consent widget** -- Floating button lets visitors change their preferences anytime.
-* **Fully accessible** -- Keyboard navigation (Tab, Enter, Escape), WCAG compliant, mobile responsive.
+* **Accessibility-focused** -- Keyboard navigation (Tab, Enter, Escape), screen-reader support, mobile responsive.
 
-= Compliance covered =
+= Helps with these frameworks =
+
+This plugin assists consent and privacy workflows. It does not itself create, provide, or guarantee legal compliance, and you remain responsible for the final configuration for your site and jurisdiction.
 
 * **GDPR** (EU General Data Protection Regulation) -- Opt-in consent, granular categories, right to withdraw
 * **CCPA / CPRA** (California Consumer Privacy Act) -- "Do Not Sell or Share" opt-out link
-* **ePrivacy Directive** (EU Cookie Law) -- No cookies before consent, script blocking
-* **Italian Garante Privacy** -- Cookie expiry capped at 6 months, proper consent recording
-* **EDPB Guidelines** -- Scroll does not equal consent, no pre-checked categories, equal button prominence
+* **ePrivacy Directive** (EU Cookie Law) -- Consent-based script blocking support
+* **Italian Garante Privacy** -- 6-month consent expiry setting and consent logging controls
+* **EDPB Guidelines** -- No scroll-as-consent, no pre-checked categories, equal button prominence options
 * **LGPD** (Brazil General Data Protection Law) -- Consent-based model
 * **POPIA** (South Africa Protection of Personal Information Act) -- Opt-in consent
 
@@ -51,7 +53,69 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 4. Enable Google Consent Mode or IAB TCF if you use advertising tools
 5. Monitor consent analytics on the dashboard
 
-All data stays on your WordPress database. No tracking, no cloud dependencies. The only external calls are to GitHub (Open Cookie Database updates) and ip-api.com (optional geolocation fallback).
+Core banner functionality runs on your WordPress site. Optional update/download features may contact GitHub, IAB Europe, MaxMind, or the AMP CDN depending on which features you enable and use.
+
+== External Services ==
+
+= GitHub / Raw GitHubusercontent (Open Cookie Database) =
+
+Used to refresh the built-in cookie definitions snapshot for the optional auto-categorize feature.
+
+Triggered when: you click the definitions update action in the Cookies screen.
+
+Data sent: your server IP address and standard HTTP request headers.
+
+Service URLs:
+* https://raw.githubusercontent.com/fabiodalez-dev/Open-Cookie-Database/master/open-cookie-database.json
+
+Terms of Service / Privacy Policy:
+* https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
+* https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement
+
+= IAB Europe / vendor-list.consensu.org =
+
+Used to download the Global Vendor List and purpose translations for the optional IAB TCF feature.
+
+Triggered when: you manually update the vendor list, and weekly while IAB TCF is enabled.
+
+Data sent: your server IP address and standard HTTP request headers.
+
+Service URLs:
+* https://vendor-list.consensu.org/v3/vendor-list.json
+* https://vendor-list.consensu.org/v3/purposes-en.json
+
+Privacy Policy:
+* https://iabeurope.eu/privacy-policy/
+
+= MaxMind =
+
+Used to download the GeoLite2 Country database for optional geo-targeting.
+
+Triggered when: you enter a MaxMind license key in Settings and start the database download.
+
+Data sent: your server IP address, the license key you provide, and standard HTTP request headers.
+
+Service URL:
+* https://download.maxmind.com/app/geoip_download
+
+Terms of Service / Privacy Policy:
+* https://www.maxmind.com/en/terms-of-use
+* https://www.maxmind.com/en/privacy-policy
+
+= AMP Project CDN =
+
+Used only on AMP pages when the AMP consent integration is active, to load the official `amp-consent` component required by AMP.
+
+Triggered when: an AMP page renders the AMP consent banner.
+
+Data sent: the visitor IP address and standard browser request data to the AMP CDN.
+
+Service URL:
+* https://cdn.ampproject.org/v0/amp-consent-0.1.js
+
+Documentation / Privacy:
+* https://amp.dev/documentation/components/amp-consent
+* https://policies.google.com/privacy
 
 == Installation ==
 
@@ -65,7 +129,7 @@ All data stays on your WordPress database. No tracking, no cloud dependencies. T
 
 = Does this plugin require a cloud account or subscription? =
 
-No. FAZ Cookie Manager is 100% self-hosted. There are no cloud services, no API keys, no accounts to create, and no paid tiers. All features are available from day one.
+No required cloud account or subscription is needed. Core consent features run locally, while some optional refresh/download features can contact documented third-party services such as GitHub, IAB Europe, MaxMind, or AMP infrastructure.
 
 = Is it really free? What's the catch? =
 
@@ -77,7 +141,7 @@ Yes. The plugin sends all 7 consent signals (`ad_storage`, `analytics_storage`, 
 
 = Does the banner block cookies before consent? =
 
-Yes. Any script tagged with `data-faz-tag="category-name"` is blocked until the visitor grants consent for that category. This ensures full ePrivacy Directive compliance.
+Yes. Any script tagged with `data-faz-tag="category-name"` is blocked until the visitor grants consent for that category. This helps you implement consent-based blocking for ePrivacy/GDPR workflows.
 
 = How does the cookie scanner work? =
 
@@ -103,17 +167,30 @@ Yes. The banner supports full keyboard navigation (Tab, Enter, Escape), proper A
 
 Yes. The consent banner is rendered via JavaScript from a cached template, so it works with all major caching plugins (WP Super Cache, W3 Total Cache, LiteSpeed Cache, etc.).
 
+= Does the plugin send any data home or collect telemetry? =
+
+No. The plugin contains no telemetry, no analytics beacon, and no "phone home". Dashboard numbers are computed locally from your own `wp_faz_pageviews` and `wp_faz_consent_logs` tables. Every outbound request that *can* happen is documented in the "External services" section and is gated behind an explicit admin action.
+
+= Where is the source of the bundled minified JavaScript? =
+
+The only minified files we ship are `frontend/js/gcm.min.js` and `frontend/js/tcf-cmp.min.js`. The full, unminified sources live next to them as `gcm.js` and `tcf-cmp.js`, and the build command `npm run build:min` rebuilds them with `terser`. No obfuscation is used.
+
+= Does uninstalling the plugin remove my data? =
+
+By default, no — your consent logs, banner configuration and categories stay in the database so you can reinstall without losing work. To wipe everything on uninstall, enable **Settings → General → Remove all data on uninstall** or define `FAZ_REMOVE_ALL_DATA` as `true` in `wp-config.php` before deleting the plugin.
+
 == Screenshots ==
 
-1. **Cookie consent banner** -- GDPR-compliant banner with Customize, Reject All, and Accept All buttons. Appears on first visit, fully responsive.
-2. **Dashboard** -- Analytics overview with pageviews chart, consent distribution (accept/reject rates), and quick links to all sections.
-3. **Cookie Banner editor** -- Customize layout, position, theme, regulation type (GDPR/CCPA/both), with live preview on the right side. Includes tabs for Content, Colours, Buttons, Preference Center, and Advanced settings.
-4. **Cookies management** -- View all detected cookies organized by category (Necessary, Functional, Analytics, Performance, Advertisement). Edit, delete, or add cookies manually. Includes Open Cookie Database integration with 2,242 cookie definitions.
-5. **Cookie scanner** -- Built-in browser-based scanner with multiple scan depths: Quick (10 pages), Standard (100 pages), Deep (1,000 pages), or Full scan. No external service required.
-6. **Consent Logs** -- Complete audit trail of every visitor's consent decision. Shows consent ID, status, categories accepted/rejected, anonymized IP, and page URL. Filter, search, and export to CSV.
-7. **Google Consent Mode v2** -- Configure all 7 consent signal types with default/granted states. Includes Google Additional Consent Mode (GACM) for ad technology provider IDs. Advanced settings for URL passthrough and ads data redaction.
-8. **Languages** -- Select from 180+ languages to translate the banner. Set a default language and add as many as you need. Banner text adapts automatically to visitor's browser language.
-9. **Settings** -- Global controls: enable/disable banner, exclude specific pages, configure consent log retention, set scanner limits, enable Microsoft UET/Clarity consent APIs, and toggle IAB TCF v2.3 support.
+1. **Cookie consent banner on the frontend** -- GDPR-ready banner in the bottom-left corner with "Customize", "Reject All" and equal-weight "Accept All" buttons. Shown only on the first visit until the visitor makes a choice.
+2. **Preference center** -- Category-level opt-in modal. Necessary cookies are always active; every other category (Functional, Analytics, Uncategorized, Marketing) is opt-in by default, with a clear description for each.
+3. **Admin dashboard** -- Overview of pageviews, banner impressions, accept rate and reject rate, with a 7/30/365-day pageviews chart and consent distribution.
+4. **Banner editor** -- Configure layout, position, colours, copy and behaviour with a live in-iframe preview. Ships with GDPR Strict, High Contrast and Light Minimal design presets.
+5. **Cookies management** -- Review and edit cookie categories, run the built-in scanner, and browse the bundled Open Cookie Database with 1,000+ definitions.
+6. **IAB TCF v2.3 Global Vendor List** -- Browse the bundled GVL, filter by purpose, and select which vendors your site works with. Full Transparency and Consent Framework v2.3 support, no cloud required.
+7. **Consent logs** -- Local, tamper-resistant audit trail of every visitor consent: status, categories, hashed IP, URL and timestamp. Filter, search and export to CSV for DPIA / audits.
+8. **Google Consent Mode v2** -- Default vs. granted state for `ad_storage`, `analytics_storage`, `ad_user_data`, `ad_personalization`, `functionality_storage`, `personalization_storage` and `security_storage`. Works with GTM and gtag.
+9. **Languages** -- Manage active languages and the default banner language. Works alongside WPML / Polylang; Italian and Dutch translations ship out of the box.
+10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
 
