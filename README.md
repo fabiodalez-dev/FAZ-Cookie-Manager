@@ -451,6 +451,23 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.10.0
+- **German (de_DE) translation** — ships `languages/faz-cookie-manager-de_DE.po` and `.mo` covering `[faz_cookie_policy]`, `[faz_cookie_table]`, cookie category names and common banner labels. Fixes the gooloo.de user report where the Cookie Policy shortcode stayed in English on a German-only site because the plugin had no `de_DE.mo` to load.
+- **Admin JavaScript i18n infrastructure** — 128 localized keys exposed via `fazConfig.i18n.*`, organized in 8 namespaces (cookies, banner, settings, GCM, consent logs, languages, GVL, import/export, dashboard). Every admin page JS now uses a shared `__(key, fallback)` helper.
+- **WordPress.org submission assets** — new `.wordpress-org/` directory with 10 publish-ready screenshots (banner, preference center, dashboard, banner editor, cookies, IAB TCF GVL, consent logs, GCM, languages, settings), a full `PUBLISHING-GUIDE.md` covering the submission checklist, SVN workflow, asset sizing and reviewer Q&A, plus a reproducible Playwright capture script at `scripts/capture-wporg-screenshots.mjs`.
+- **New FAQ entries** in `readme.txt`: telemetry, minified JS source and data removal on uninstall — the three questions wp.org reviewers always ask.
+- **`.distignore` / release ZIP hardening** — excludes `.wordpress-org/`, `assets/`, `composer.json`, `composer.lock`, `tsconfig.json`. Distribution ZIP shrunk from 7.0 MB to 5.6 MB (of which ~2.7 MB is the intentional bundled Open Cookie Database).
+- **Fix: cookie definitions metadata normalization** — `Cookie_Definitions::get_meta()` now merges stored meta over a defaults array, so legacy installs upgrading from < 1.9 without the `source` field no longer send the UI down the wrong "downloaded vs. bundled" branch.
+- **Fix: `META_KEY` autoload flag** — `update_option( self::META_KEY, …, false )` matches the `OPTION_KEY` pattern, keeping metadata out of the autoload bucket.
+- **Fix: `importFailed` i18n string** — now contains the `%s` placeholder expected by `import-export.js`, so the actual error detail is surfaced instead of being silently swallowed by `String.replace('%s', …)`.
+- **Fix: GVL admin page fully localized** — 8 previously hardcoded English strings in `admin/views/gvl.php` (heading, buttons, aria labels, placeholder, "All purposes", "Select all on this page", "Save Selection") are now wrapped with `esc_html_e` / `esc_attr_e`.
+- **Fix: GVL REST API error message** — `'vendor_ids must be an array.'` is now translatable via `__()`.
+- **Fix: JS i18n payload** — replaced 128 `esc_html__()` calls inside the `fazConfig.i18n` array with plain `__()`. HTML-escaped strings like `&quot;` were leaking into the UI because JS `.textContent` and `FAZ.notify()` don't interpret HTML entities.
+- **Fix: fully localized `gvl.js` and `settings.js` templates** — "Saved N vendor(s)", "GVL updated vX (N vendors)" and "DB file (size) — Last updated: date" lines (previously mixed English fragments with localized strings).
+- **Test: new E2E regression for the gooloo.de scenario** — sets `WPLANG=de_DE`, creates a page with `[faz_cookie_policy]`, asserts German strings render (`Was sind Cookies`, `Notwendige Cookies`, `Cookies verwalten`) and the English fallbacks do **not**. Canary for future regressions if anyone deletes `de_DE.mo` by mistake.
+- **Test: E2E teardown hardening** — `pr-regression.spec.ts` WPLANG restore uses the shared `completeAdminLogin` helper and `WP_ADMIN_USER`/`WP_ADMIN_PASS` env variables instead of hardcoded `admin`/`admin`.
+- **7 rounds of CodeRabbit review addressed**.
+
 ### 1.9.2
 - **Fix: language settings controller** — settings API no longer re-injects the default language into the selected list on every read, fully fixing the "English always comes back" bug for non-English sites
 

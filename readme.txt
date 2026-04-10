@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.9.2
+Stable tag: 1.10.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,19 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.10.0 =
+* New: German (de_DE) translation — covers [faz_cookie_policy], [faz_cookie_table], cookie category names and common banner labels. Fixes a gooloo.de user report where the Cookie Policy shortcode stayed in English on a de_DE site because no de_DE .mo file was bundled.
+* New: Admin JavaScript i18n infrastructure — 128 localized keys exposed via fazConfig.i18n.*, organized in 8 namespaces (cookies, banner, settings, GCM, consent logs, languages, GVL, import/export, dashboard).
+* New: WordPress.org submission assets — 10 publish-ready screenshots, PUBLISHING-GUIDE.md with the full submission/SVN workflow, Playwright capture script.
+* New: FAQ entries on telemetry ("Does the plugin send any data home?"), minified JS source ("Where is the source of the bundled minified JavaScript?") and data removal on uninstall.
+* Fix: Cookie definitions metadata normalization — legacy installs upgrading from < 1.9 no longer send the UI down the wrong "downloaded vs bundled" branch.
+* Fix: META_KEY now stored with autoload=false, keeping metadata out of the autoload bucket.
+* Fix: importFailed i18n string now contains %s so the actual error detail is surfaced instead of being swallowed by String.replace.
+* Fix: GVL admin page fully localized — 8 previously hardcoded strings converted to esc_html_e / esc_attr_e.
+* Fix: GVL REST API error message "vendor_ids must be an array." is now translatable.
+* Fix: JS i18n payload uses __() instead of esc_html__() so HTML entities no longer leak into the UI.
+* Test: New E2E regression for the gooloo.de scenario — sets WPLANG=de_DE, creates a page with [faz_cookie_policy], asserts German strings render and English fallbacks do not.
 
 = 1.9.2 =
 * Fix: Settings API no longer re-injects default language into selected list on every read
