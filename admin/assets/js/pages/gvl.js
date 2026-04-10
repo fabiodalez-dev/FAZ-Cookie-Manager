@@ -317,7 +317,10 @@
 		FAZ.post('gvl/update').then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify(__('gvl.updated', 'GVL updated.') + ': v' + data.version + ' (' + data.vendor_count + ' vendors)');
+				var updatedMsg = __('gvl.updatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
+					.replace('{version}', String(data.version))
+					.replace('{count}', String(data.vendor_count));
+				FAZ.notify(updatedMsg);
 				loadMeta();
 				loadVendors();
 			} else {

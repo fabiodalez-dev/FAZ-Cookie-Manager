@@ -155,7 +155,10 @@
 				b.textContent = __('settings.dbLabel', 'Database: ');
 				el.appendChild(b);
 				el.appendChild(document.createTextNode(
-					data.database.file + ' (' + sizeKB + ' KB) - Last updated: ' + data.database.modified
+					__('settings.dbFileInfo', '{file} ({size} KB) - Last updated: {date}')
+						.replace('{file}', data.database.file)
+						.replace('{size}', sizeKB)
+						.replace('{date}', data.database.modified)
 				));
 			} else {
 				el.textContent = __('settings.noGeoipDb', 'No GeoIP database installed. Enter your license key and click "Update Database".');
@@ -200,7 +203,10 @@
 		FAZ.post('gvl/update').then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
-				FAZ.notify(__('settings.gvlUpdated', 'GVL updated.') + ': v' + data.version + ' (' + data.vendor_count + ' vendors)');
+				var gvlMsg = __('settings.gvlUpdatedWithMeta', 'GVL updated: v{version} ({count} vendors)')
+					.replace('{version}', String(data.version))
+					.replace('{count}', String(data.vendor_count));
+				FAZ.notify(gvlMsg);
 				loadGvlStatus();
 			} else {
 				FAZ.notify(data.message || __('settings.gvlFailed', 'Failed to update GVL.'), 'error');
