@@ -6,6 +6,17 @@
 (function () {
 	'use strict';
 
+	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
+	function __(key, fallback) {
+		var parts = key.split('.');
+		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
+		for (var i = 0; i < parts.length; i++) {
+			if (!obj || typeof obj !== 'object') { return fallback; }
+			obj = obj[parts[i]];
+		}
+		return typeof obj === 'string' ? obj : fallback;
+	}
+
 	var currentFilter = { days: 7, from: null, to: null };
 	var themeCache = null;
 
@@ -49,11 +60,11 @@
 				var to = toEl ? toEl.value : '';
 
 				if (!from || !to) {
-					FAZ.notify('Please select both start and end dates.', 'error');
+					FAZ.notify(__('dashboard.selectBothDates', 'Please select both start and end dates.'), 'error');
 					return;
 				}
 				if (from > to) {
-					FAZ.notify('Start date must be before end date.', 'error');
+					FAZ.notify(__('dashboard.startBeforeEnd', 'Start date must be before end date.'), 'error');
 					return;
 				}
 
@@ -438,7 +449,7 @@
 				if (!hasCats) {
 					var emptyP = document.createElement('p');
 					emptyP.style.color = 'var(--faz-text-muted)';
-					emptyP.textContent = 'No category data yet.';
+					emptyP.textContent = __('dashboard.noCategoryData', 'No category data yet.');
 					catContainer.appendChild(emptyP);
 				}
 			}

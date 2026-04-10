@@ -5,6 +5,17 @@
 (function () {
 	'use strict';
 
+	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
+	function __(key, fallback) {
+		var parts = key.split('.');
+		var obj = (window.fazConfig && window.fazConfig.i18n) || {};
+		for (var i = 0; i < parts.length; i++) {
+			if (!obj || typeof obj !== 'object') { return fallback; }
+			obj = obj[parts[i]];
+		}
+		return typeof obj === 'string' ? obj : fallback;
+	}
+
 	var page = 1;
 	var perPage = 15;
 	var totalPages = 1;
@@ -81,7 +92,7 @@
 			td.colSpan = 6;
 			td.className = 'faz-text-center faz-text-muted';
 			td.style.padding = '40px';
-			td.textContent = 'Failed to load consent logs.';
+			td.textContent = __('consentLogs.loadFailed', 'Failed to load consent logs.');
 			tr.appendChild(td);
 			tbody.appendChild(tr);
 		});
@@ -97,7 +108,7 @@
 			td.colSpan = 6;
 			td.className = 'faz-text-center faz-text-muted';
 			td.style.padding = '40px';
-			td.textContent = 'No consent logs found.';
+			td.textContent = __('consentLogs.noLogs', 'No consent logs found.');
 			tr.appendChild(td);
 			tbody.appendChild(tr);
 			document.getElementById('faz-log-footer').style.display = 'none';
@@ -202,7 +213,7 @@
 		// Prev button
 		var prev = document.createElement('button');
 		prev.className = 'faz-btn faz-btn-sm faz-btn-outline';
-		prev.textContent = '\u2190 Prev';
+		prev.textContent = __('consentLogs.prev', '← Prev');
 		prev.disabled = page <= 1;
 		prev.addEventListener('click', function () { page--; loadLogs(); });
 		container.appendChild(prev);
@@ -229,7 +240,7 @@
 		// Next button
 		var next = document.createElement('button');
 		next.className = 'faz-btn faz-btn-sm faz-btn-outline';
-		next.textContent = 'Next \u2192';
+		next.textContent = __('consentLogs.next', 'Next →');
 		next.disabled = page >= totalPages;
 		next.addEventListener('click', function () { page++; loadLogs(); });
 		container.appendChild(next);
@@ -275,10 +286,10 @@
 				link.click();
 				document.body.removeChild(link);
 				URL.revokeObjectURL(link.href);
-				FAZ.notify('CSV exported successfully');
+				FAZ.notify(__('consentLogs.exportOk', 'CSV exported successfully.'));
 			})
 			.catch(function () {
-				FAZ.notify('Failed to export CSV', 'error');
+				FAZ.notify(__('consentLogs.exportFailed', 'Failed to export CSV.'), 'error');
 			});
 	}
 
