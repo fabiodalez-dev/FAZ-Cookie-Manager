@@ -167,17 +167,30 @@ Yes. The banner supports full keyboard navigation (Tab, Enter, Escape), proper A
 
 Yes. The consent banner is rendered via JavaScript from a cached template, so it works with all major caching plugins (WP Super Cache, W3 Total Cache, LiteSpeed Cache, etc.).
 
+= Does the plugin send any data home or collect telemetry? =
+
+No. The plugin contains no telemetry, no analytics beacon, and no "phone home". Dashboard numbers are computed locally from your own `wp_faz_pageviews` and `wp_faz_consent_logs` tables. Every outbound request that *can* happen is documented in the "External services" section and is gated behind an explicit admin action.
+
+= Where is the source of the bundled minified JavaScript? =
+
+The only minified files we ship are `frontend/js/gcm.min.js` and `frontend/js/tcf-cmp.min.js`. The full, unminified sources live next to them as `gcm.js` and `tcf-cmp.js`, and the build command `npm run build:min` rebuilds them with `terser`. No obfuscation is used.
+
+= Does uninstalling the plugin remove my data? =
+
+By default, no — your consent logs, banner configuration and categories stay in the database so you can reinstall without losing work. To wipe everything on uninstall, enable **Settings → General → Remove all data on uninstall** or define `FAZ_REMOVE_ALL_DATA` as `true` in `wp-config.php` before deleting the plugin.
+
 == Screenshots ==
 
-1. **Cookie consent banner** -- Consent banner with Customize, Reject All, and Accept All buttons. Appears on first visit, fully responsive.
-2. **Dashboard** -- Analytics overview with pageviews chart, consent distribution (accept/reject rates), and quick links to all sections.
-3. **Cookie Banner editor** -- Customize layout, position, theme, regulation type (GDPR/CCPA/both), with live preview on the right side. Includes tabs for Content, Colours, Buttons, Preference Center, and Advanced settings.
-4. **Cookies management** -- View all detected cookies organized by category (Necessary, Functional, Analytics, Performance, Advertisement). Edit, delete, or add cookies manually. Includes Open Cookie Database integration with 2,242 cookie definitions.
-5. **Cookie scanner** -- Built-in browser-based scanner with multiple scan depths: Quick (10 pages), Standard (100 pages), Deep (1,000 pages), or Full scan. No external service required.
-6. **Consent Logs** -- Complete audit trail of every visitor's consent decision. Shows consent ID, status, categories accepted/rejected, anonymized IP, and page URL. Filter, search, and export to CSV.
-7. **Google Consent Mode v2** -- Configure all 7 consent signal types with default/granted states. Includes Google Additional Consent Mode (GACM) for ad technology provider IDs. Advanced settings for URL passthrough and ads data redaction.
-8. **Languages** -- Select from 180+ languages to translate the banner. Set a default language and add as many as you need. Banner text adapts automatically to visitor's browser language.
-9. **Settings** -- Global controls: enable/disable banner, exclude specific pages, configure consent log retention, set scanner limits, enable Microsoft UET/Clarity consent APIs, and toggle IAB TCF v2.3 support.
+1. **Cookie consent banner on the frontend** -- GDPR-ready banner in the bottom-left corner with "Customize", "Reject All" and equal-weight "Accept All" buttons. Shown only on the first visit until the visitor makes a choice.
+2. **Preference center** -- Category-level opt-in modal. Necessary cookies are always active; every other category (Functional, Analytics, Uncategorized, Marketing) is opt-in by default, with a clear description for each.
+3. **Admin dashboard** -- Overview of pageviews, banner impressions, accept rate and reject rate, with a 7/30/365-day pageviews chart and consent distribution.
+4. **Banner editor** -- Configure layout, position, colours, copy and behaviour with a live in-iframe preview. Ships with GDPR Strict, High Contrast and Light Minimal design presets.
+5. **Cookies management** -- Review and edit cookie categories, run the built-in scanner, and browse the bundled Open Cookie Database with 1,000+ definitions.
+6. **IAB TCF v2.3 Global Vendor List** -- Browse the bundled GVL, filter by purpose, and select which vendors your site works with. Full Transparency and Consent Framework v2.3 support, no cloud required.
+7. **Consent logs** -- Local, tamper-resistant audit trail of every visitor consent: status, categories, hashed IP, URL and timestamp. Filter, search and export to CSV for DPIA / audits.
+8. **Google Consent Mode v2** -- Default vs. granted state for `ad_storage`, `analytics_storage`, `ad_user_data`, `ad_personalization`, `functionality_storage`, `personalization_storage` and `security_storage`. Works with GTM and gtag.
+9. **Languages** -- Manage active languages and the default banner language. Works alongside WPML / Polylang; Italian and Dutch translations ship out of the box.
+10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
 

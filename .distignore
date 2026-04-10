@@ -7,6 +7,7 @@
 .githooks/
 .gitignore
 .playwright-mcp/
+.wordpress-org/
 .distignore
 docs/
 node_modules/
