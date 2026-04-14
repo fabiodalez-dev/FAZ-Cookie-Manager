@@ -126,11 +126,20 @@ class Gcm_Settings extends Store {
 	 * @return void
 	 */
 	public function update( $data ) {
-		$settings = get_option( 'faz_gcm_settings', $this->data );
-		if ( empty( $settings ) ) {
-			$settings = $this->data;
+		$stored = get_option( 'faz_gcm_settings', array() );
+		if ( ! is_array( $stored ) ) {
+			$stored = array();
 		}
-		$settings = self::sanitize( $data, $settings );
+		// Merge stored values onto the canonical defaults so any keys added
+		// to get_defaults() in newer plugin versions (e.g.
+		// non_personalized_ads_fallback in 1.11.0) are visible to the
+		// sanitize iteration even on installs that never persisted them.
+		// Without this, sanitize() iterates the *stored* array as its keyset
+		// and silently drops new keys included in the POST payload.
+		$base = wp_parse_args( $stored, $this->data );
+		// Apply incoming changes on top, then sanitize against canonical defaults.
+		$merged   = wp_parse_args( (array) $data, $base );
+		$settings = self::sanitize( $merged, $this->data );
 		update_option( 'faz_gcm_settings', $settings );
 		do_action( 'faz_after_update_settings', $settings );
 	}
