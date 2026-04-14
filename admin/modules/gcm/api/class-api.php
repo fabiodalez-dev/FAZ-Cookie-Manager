@@ -103,7 +103,7 @@ class Api extends Rest_Controller {
 					}
 				)
 			);
-			$boolean_keys = array( 'status', 'ads_data_redaction', 'url_passthrough', 'gacm_enabled', 'non_personalized_ads_fallback' );
+			$boolean_keys = array( 'status', 'ads_data_redaction', 'url_passthrough', 'gacm_enabled' );
 			foreach ( $properties_keys as $key ) {
 				if ( ! $request->has_param( $key ) ) {
 					continue;
@@ -168,11 +168,6 @@ class Api extends Rest_Controller {
 				'gacm_provider_ids' => array(
 					'description' => __( 'GACM provider IDs (comma-separated).', 'faz-cookie-manager' ),
 					'type'        => 'string',
-					'context'     => array( 'view', 'edit' ),
-				),
-				'non_personalized_ads_fallback' => array(
-					'description' => __( 'Serve non-personalized ads when marketing consent is denied.', 'faz-cookie-manager' ),
-					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 			),

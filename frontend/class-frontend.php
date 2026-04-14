@@ -726,11 +726,6 @@ class Frontend {
 			'_shortCodes'   => $this->prepare_shortcodes( $banner->get_settings() ),
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
-			// Consent revision: when the admin bumps this, returning visitors
-			// with a lower revision in their cookie are treated as having no
-			// consent, and the banner is shown again. See Settings →
-			// "Invalidate all consents".
-			'_consentRevision' => isset( $settings['general']['consent_revision'] ) ? max( 1, absint( $settings['general']['consent_revision'] ) ) : 1,
 		);
 		// Merge DB-based providers with Known_Providers for client-side blocking.
 		$valid_categories = $this->get_valid_category_slugs();
@@ -970,16 +965,6 @@ class Frontend {
 				}
 			}
 		}
-
-		// Paid Memberships Pro integration: exempted members bypass the
-		// banner entirely. The integration sets the consent cookie server-
-		// side on `init` so script blocking also becomes a no-op for them.
-		if ( class_exists( '\\FazCookie\\Includes\\Integrations\\Paid_Memberships_Pro' )
-			&& \FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->is_current_user_exempted()
-		) {
-			return true;
-		}
-
 		return false;
 	}
 

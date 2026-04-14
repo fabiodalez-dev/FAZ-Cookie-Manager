@@ -28,38 +28,7 @@
 		if (geoBtn) geoBtn.addEventListener('click', updateGeoDb);
 		var gvlBtn = document.getElementById('faz-gvl-update');
 		if (gvlBtn) gvlBtn.addEventListener('click', updateGvl);
-		var invalidateBtn = document.getElementById('faz-invalidate-consents');
-		if (invalidateBtn) invalidateBtn.addEventListener('click', invalidateConsents);
 	});
-
-	/**
-	 * Bump the server-side consent revision. Returning visitors with a stored
-	 * cookie carrying a lower revision will be shown the banner again on
-	 * their next visit. This is a one-way action from the visitor's point of
-	 * view: once bumped, the only way to "restore" a visitor's prior consent
-	 * is for them to re-consent (or for the admin to manually lower the
-	 * revision via the REST API — not exposed in the UI on purpose).
-	 */
-	function invalidateConsents() {
-		var btn = document.getElementById('faz-invalidate-consents');
-		var message = __(
-			'settings.invalidateConfirm',
-			'Show the cookie banner to ALL returning visitors on their next visit? This cannot be undone from the UI.'
-		);
-		if (!window.confirm(message)) return;
-
-		FAZ.btnLoading(btn, true);
-		FAZ.post('settings/invalidate-consents', {}).then(function (resp) {
-			FAZ.btnLoading(btn, false);
-			var rev = resp && typeof resp.consent_revision !== 'undefined' ? resp.consent_revision : null;
-			var input = form.querySelector('input[data-path="general.consent_revision"]');
-			if (input && rev !== null) input.value = rev;
-			FAZ.notify(__('settings.invalidateOk', 'All consents invalidated. Banner will reappear for returning visitors.'));
-		}).catch(function () {
-			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('settings.invalidateFail', 'Failed to invalidate consents.'), 'error');
-		});
-	}
 
 	function loadSettings() {
 		FAZ.get('settings').then(function (data) {
@@ -76,12 +45,6 @@
 			// Target domains comes as array, convert to newline-separated text
 			if (data.consent_forwarding && Array.isArray(data.consent_forwarding.target_domains)) {
 				data.consent_forwarding.target_domains = data.consent_forwarding.target_domains.join('\n');
-			}
-			// PMP exempt levels: array of IDs -> comma-separated string for the input field.
-			if (data.integrations && data.integrations.paid_memberships_pro
-				&& Array.isArray(data.integrations.paid_memberships_pro.exempt_levels)) {
-				data.integrations.paid_memberships_pro.exempt_levels =
-					data.integrations.paid_memberships_pro.exempt_levels.join(', ');
 			}
 			FAZ.populateForm(form, data);
 			populateTargetRegions(data);

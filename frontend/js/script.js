@@ -57,36 +57,11 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
         prev[key] = value;
         return prev;
     }, {});
-
-// Consent revision check: if the admin has bumped the server-side revision
-// (via Settings → "Invalidate all consents") and the stored cookie has a
-// lower revision (or none at all), discard the stored consent so the banner
-// is shown again. Cookies from plugin versions < 1.11.0 have no `rev` key
-// and are therefore always treated as valid to avoid breaking upgrades —
-// they are only invalidated once the admin explicitly bumps the revision.
-const _fazServerRevision = _fazStore && typeof _fazStore._consentRevision === "number"
-    ? _fazStore._consentRevision
-    : 1;
-const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);
-const _fazConsentInvalidated =
-    _fazServerRevision > 1 &&
-    (isNaN(_fazStoredRevision) || _fazStoredRevision < _fazServerRevision);
-if (_fazConsentInvalidated) {
-    // Wipe the entries that gate the banner so showBanner() logic triggers.
-    // We keep `consentid` so cross-session analytics can still correlate if
-    // the visitor re-consents.
-    ["consent", "action"].forEach((k) => { fazcookieConsentMap[k] = ""; });
-    _fazStore._categories.forEach(({ slug }) => { fazcookieConsentMap[slug] = ""; });
-}
-
 ["consentid", "consent", "action"]
     .concat(_fazStore._categories.map(({ slug }) => slug))
     .forEach((item) =>
         ref._fazConsentStore.set(item, fazcookieConsentMap[item] || "")
     );
-// Always track the revision currently in effect so next _fazSetInStore()
-// persists it into the cookie.
-ref._fazConsentStore.set("rev", String(_fazServerRevision));
 // Restore per-service consent keys (svc.service-id) from existing cookie.
 if (_fazStore._perServiceConsent && _fazStore._services) {
     _fazStore._services.forEach(function(svc) {

@@ -16,10 +16,10 @@
  * Plugin Name:       FAZ Cookie Manager
  * Plugin URI:        https://github.com/fabiodalez-dev/faz-cookie-manager
  * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
- * Version:           1.11.0
+ * Version:           1.10.2
  * Requires at least: 5.0
  * Tested up to:      6.8
- * Stable tag:        1.11.0
+ * Stable tag:        1.10.2
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro
  * Author URI:        https://fabiodalez.it/
@@ -52,7 +52,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'FAZ_VERSION', '1.11.0' );
+define( 'FAZ_VERSION', '1.10.2' );
 define( 'FAZ_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'FAZ_PLUGIN_BASEPATH', plugin_dir_path( __FILE__ ) );
 define( 'FAZ_PLUGIN_FILENAME', __FILE__ );
@@ -199,11 +199,6 @@ add_action( 'wp_initialize_site', function( $new_site ) {
 
 $faz_loader = new \FazCookie\Includes\CLI();
 $faz_loader->run();
-
-// Paid Memberships Pro integration (optional — no-op if PMP is not active).
-// Registered after the core CLI loader so Frontend can query it during
-// its own "is banner disabled" checks.
-\FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->register_hooks();
 
 // Register WP-CLI commands.
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
