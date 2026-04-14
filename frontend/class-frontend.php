@@ -232,7 +232,7 @@ class Frontend {
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = ''; // Always load non-minified (no build tooling).
 				$gcm_handle = $this->plugin_name . '-gcm';
-				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array(), $this->version, false );
+				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 
 			// IAB TCF v2.3 CMP stub (when IAB is enabled in settings).
@@ -445,7 +445,9 @@ class Frontend {
 		if ( true === $this->settings->is_connected() || true === faz_disable_banner() || is_admin() ) {
 			return;
 		}
-		if ( $this->is_banner_disabled_by_settings() ) {
+		// Use the wider UI-suppressed check: if the banner UI is hidden (e.g.
+		// for PMP-exempt members), the placeholder CSS is unnecessary.
+		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
 		// AMP pages use <amp-consent> — skip regular inline styles.
@@ -465,7 +467,9 @@ class Frontend {
 		if ( true === $this->settings->is_connected() || true === faz_disable_banner() ) {
 			return;
 		}
-		if ( $this->is_banner_disabled_by_settings() ) {
+		// Banner template is render-only — suppress for PMP-exempt members
+		// (script.js / gcm.js still load via enqueue_scripts above).
+		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
 		if ( ! faz_is_front_end_request() ) {
@@ -641,7 +645,9 @@ class Frontend {
 		if ( ! $this->template || true === faz_disable_banner() ) {
 			return;
 		}
-		if ( $this->is_banner_disabled_by_settings() ) {
+		// Banner HTML is the actual visible UI — suppress for PMP-exempt
+		// members so they never see the consent dialog.
+		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
 		// AMP pages use <amp-consent> — skip regular banner template.
@@ -971,9 +977,29 @@ class Frontend {
 			}
 		}
 
-		// Paid Memberships Pro integration: exempted members bypass the
-		// banner entirely. The integration sets the consent cookie server-
-		// side on `init` so script blocking also becomes a no-op for them.
+		return false;
+	}
+
+	/**
+	 * Check whether the visible banner UI (template HTML + CSS) should be
+	 * suppressed for the current request.
+	 *
+	 * Wider net than `is_banner_disabled_by_settings()`: also covers the
+	 * Paid Memberships Pro integration where exempted members must NOT see
+	 * the banner, even though all the consent bootstrap (script.js, gcm.js,
+	 * tcf-cmp.js) still needs to load so GCM can read the auto-granted
+	 * cookie and emit the right `consent` signals to AdSense / GTM.
+	 *
+	 * Use this for banner-rendering hooks. Use
+	 * `is_banner_disabled_by_settings()` for script enqueuing.
+	 *
+	 * @return boolean
+	 */
+	protected function is_banner_ui_suppressed() {
+		if ( $this->is_banner_disabled_by_settings() ) {
+			return true;
+		}
+
 		if ( class_exists( '\\FazCookie\\Includes\\Integrations\\Paid_Memberships_Pro' )
 			&& \FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->is_current_user_exempted()
 		) {
@@ -1712,7 +1738,7 @@ class Frontend {
 		if ( null !== $this->blocked_categories_cache ) {
 			return $this->blocked_categories_cache;
 		}
-		$consent = isset( $_COOKIE['fazcookie-consent'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) ) : '';
+		$consent = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
 		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
 		$blocked = array();
 
@@ -1764,7 +1790,7 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 
-		$consent = isset( $_COOKIE['fazcookie-consent'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) ) : '';
+		$consent = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
 		if ( empty( $consent ) ) {
 			return $this->service_consent_cache;
 		}

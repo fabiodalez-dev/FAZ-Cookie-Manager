@@ -67,11 +67,18 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
 const _fazServerRevision = _fazStore && typeof _fazStore._consentRevision === "number"
     ? _fazStore._consentRevision
     : 1;
+const _fazHasConsentCookie = typeof currentCookieMap["fazcookie-consent"] === "string"
+    && currentCookieMap["fazcookie-consent"] !== "";
 const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);
 const _fazConsentInvalidated =
+    _fazHasConsentCookie &&
     _fazServerRevision > 1 &&
     (isNaN(_fazStoredRevision) || _fazStoredRevision < _fazServerRevision);
 if (_fazConsentInvalidated) {
+    // Delete all consent-tracking cookies immediately so later scripts in the
+    // same page load (GCM, TCF, consent forwarding) do not keep reading the
+    // stale state.
+    ["fazcookie-consent", "fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
     // Wipe the entries that gate the banner so showBanner() logic triggers.
     // We keep `consentid` so cross-session analytics can still correlate if
     // the visitor re-consents.
@@ -88,7 +95,7 @@ if (_fazConsentInvalidated) {
 // persists it into the cookie.
 ref._fazConsentStore.set("rev", String(_fazServerRevision));
 // Restore per-service consent keys (svc.service-id) from existing cookie.
-if (_fazStore._perServiceConsent && _fazStore._services) {
+if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._services) {
     _fazStore._services.forEach(function(svc) {
         const svcKey = "svc." + svc.id;
         if (fazcookieConsentMap[svcKey]) {

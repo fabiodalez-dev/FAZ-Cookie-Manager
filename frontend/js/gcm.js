@@ -109,17 +109,36 @@ if (initialCookieObj) {
     }
 }
 
-function parseConsentCookie() {
+function parseConsentCookieParts() {
     var raw = getCookieValues("fazcookie-consent")[0];
     if (!raw || typeof raw !== "string") return null;
-    var parsed = raw.split(",").reduce(function (acc, curr) {
-        var kv = curr.trim().split(":");
-        if (kv.length !== 2) return acc;
-        var key = kv[0].trim();
+    return raw.split(",").reduce(function (acc, curr) {
+        var trimmed = curr.trim();
+        var sepIdx = trimmed.lastIndexOf(":");
+        if (sepIdx === -1) return acc;
+        var key = trimmed.substring(0, sepIdx).trim();
         if (!key) return acc;
-        acc[key] = getConsentStateForCategory(kv[1].trim());
+        acc[key] = trimmed.substring(sepIdx + 1).trim();
         return acc;
     }, {});
+}
+
+function isConsentCookieStale(parsed) {
+    if (!parsed) return false;
+    var config = window._fazConfig || {};
+    var serverRevision = typeof config._consentRevision === "number"
+        ? config._consentRevision
+        : 1;
+    var storedRevision = parseInt(parsed.rev, 10);
+    return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
+}
+
+function parseConsentCookie() {
+    var parsed = parseConsentCookieParts();
+    if (!parsed || isConsentCookieStale(parsed)) return null;
+    Object.keys(parsed).forEach(function(key) {
+        parsed[key] = getConsentStateForCategory(parsed[key]);
+    });
     // Backward compat: accept old "advertisement" key as alias for "marketing".
     if (!parsed.marketing && parsed.advertisement) {
         parsed.marketing = parsed.advertisement;

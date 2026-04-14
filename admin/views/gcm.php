@@ -113,7 +113,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Serve non-personalized ads when consent is denied', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help">
-					<?php esc_html_e( 'When a visitor rejects marketing cookies, keep ad_storage = granted but ad_user_data and ad_personalization = denied. This lets AdSense serve non-personalized ads (no profiling) so publishers still earn revenue. Compliant with GDPR and Google policies.', 'faz-cookie-manager' ); ?>
+					<?php esc_html_e( 'When a visitor rejects marketing cookies, keep ad_storage = granted but ad_user_data and ad_personalization = denied. This lets AdSense serve non-personalized ads (no profiling). Review your legal basis, disclosures, and Google AdSense configuration before enabling it.', 'faz-cookie-manager' ); ?>
 				</div>
 			</div>
 		</div>

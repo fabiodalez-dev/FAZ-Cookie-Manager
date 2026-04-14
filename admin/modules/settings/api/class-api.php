@@ -803,9 +803,16 @@ class Api extends Rest_Controller {
 		$current      = isset( $general['consent_revision'] ) ? absint( $general['consent_revision'] ) : 1;
 		$next         = max( 1, $current + 1 );
 
-		$all                            = $settings_obj->get();
+		$all                                = $settings_obj->get();
 		$all['general']['consent_revision'] = $next;
 		$settings_obj->update( $all );
+
+		// Re-read the persisted revision: Settings::sanitize_option('consent_revision')
+		// caps the value at 999999, so the stored revision can be lower than what
+		// we computed above when the counter is approaching the ceiling. The API
+		// must report what was actually saved, not what we tried to save.
+		$persisted = $settings_obj->get( 'general' );
+		$saved     = isset( $persisted['consent_revision'] ) ? absint( $persisted['consent_revision'] ) : 1;
 
 		// Clear banner template cache so any frontend data depending on the
 		// revision is regenerated on next request.
@@ -816,7 +823,7 @@ class Api extends Rest_Controller {
 		return rest_ensure_response(
 			array(
 				'success'          => true,
-				'consent_revision' => $next,
+				'consent_revision' => $saved,
 			)
 		);
 	}

@@ -78,26 +78,46 @@
 	var cmpLoaded   = true;
 	var displayOpen = false;
 
+	function readConsentCookiePairs() {
+		var match = document.cookie.match(/fazcookie-consent=([^;]+)/);
+		if (!match) return null;
+
+		return match[1].split(",").reduce(function(acc, pair) {
+			var trimmed = pair.trim();
+			var sepIdx = trimmed.lastIndexOf(":");
+			if (sepIdx === -1) return acc;
+			var key = trimmed.substring(0, sepIdx).trim();
+			if (!key) return acc;
+			acc[key] = trimmed.substring(sepIdx + 1).trim();
+			return acc;
+		}, {});
+	}
+
+	function isConsentCookieStale(pairs) {
+		if (!pairs) return false;
+		var config = window._fazConfig || {};
+		var serverRevision = typeof config._consentRevision === "number"
+			? config._consentRevision
+			: 1;
+		var storedRevision = parseInt(pairs.rev, 10);
+		return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
+	}
+
 	/**
 	 * Read the FAZ consent cookie and return a category→boolean map.
 	 */
 	function readConsent() {
 		var consent = { necessary: true };
-		var match   = document.cookie.match(/fazcookie-consent=([^;]+)/);
-		if (!match) return consent;
+		var pairs = readConsentCookiePairs();
+		if (!pairs || isConsentCookieStale(pairs)) return consent;
 
-		var pairs = match[1].split(",");
-		for (var i = 0; i < pairs.length; i++) {
-			var kv = pairs[i].split(":");
-			if (kv.length === 2) {
-				var key = kv[0].trim();
-				var val = kv[1].trim();
-				if (key === "necessary" || key === "functional" || key === "analytics" ||
-					key === "performance" || key === "marketing" || key === "advertisement") {
-					consent[key === "advertisement" ? "marketing" : key] = val === "yes";
-				}
+		Object.keys(pairs).forEach(function(key) {
+			var val = pairs[key];
+			if (key === "necessary" || key === "functional" || key === "analytics" ||
+				key === "performance" || key === "marketing" || key === "advertisement") {
+				consent[key === "advertisement" ? "marketing" : key] = val === "yes";
 			}
-		}
+		});
 		return consent;
 	}
 
@@ -106,6 +126,9 @@
 	 * Format: fazVendorConsent=1:yes,2:no,5:yes
 	 */
 	function readVendorConsent() {
+		var consentPairs = readConsentCookiePairs();
+		if (!consentPairs || isConsentCookieStale(consentPairs)) return {};
+
 		var vendorConsent = {};
 		var match = document.cookie.match(/fazVendorConsent=([^;]+)/);
 		if (!match) return vendorConsent;
@@ -602,16 +625,9 @@
 	// On page load, if user has previously given explicit consent, set euconsent-v2 cookie.
 	// Check for action=yes in the consent cookie to ensure this was a real user action.
 	function hasUserAction() {
-		var match = document.cookie.match(/fazcookie-consent=([^;]+)/);
-		if (!match) return false;
-		var pairs = match[1].split(",");
-		for (var i = 0; i < pairs.length; i++) {
-			var kv = pairs[i].split(":");
-			if (kv.length === 2 && kv[0].trim() === "action") {
-				return kv[1].trim() === "yes";
-			}
-		}
-		return false;
+		var pairs = readConsentCookiePairs();
+		if (!pairs || isConsentCookieStale(pairs)) return false;
+		return pairs.action === "yes";
 	}
 
 	if (hasUserAction()) {

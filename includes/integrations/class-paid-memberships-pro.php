@@ -58,10 +58,9 @@ class Paid_Memberships_Pro {
 	 * when PMP is not installed (the hooks simply short-circuit).
 	 */
 	public function register_hooks() {
-		// Set the consent cookie early so the frontend JS and any other
-		// consent-aware code on the page see the visitor as "fully
-		// consented" on their very first pageload as a member.
-		add_action( 'init', array( $this, 'maybe_set_consent_cookie' ), 5 );
+		// Keep the consent cookie in sync with the current exemption state
+		// before frontend PHP/JS and GCM/TCF read it on the page.
+		add_action( 'init', array( $this, 'sync_consent_cookie' ), 5 );
 	}
 
 	/**
@@ -140,41 +139,92 @@ class Paid_Memberships_Pro {
 	}
 
 	/**
-	 * Set the `fazcookie-consent` cookie with all categories granted for
-	 * exempted users who do not yet have a valid cookie. Does not overwrite
-	 * an existing cookie — members keep their previously expressed
-	 * preferences if they ever set any (e.g. before becoming a member).
+	 * Keep consent-tracking cookies aligned with the user's current PMP
+	 * exemption state.
+	 *
+	 * Exempted members must persist an allow-all consent cookie so server-side
+	 * blocking, client-side banner logic, GCM and TCF all read the same state
+	 * during the current page load. Visitors who are no longer exempted must
+	 * not retain a stale auto-granted cookie from a previous membership state.
 	 */
-	public function maybe_set_consent_cookie() {
-		if ( headers_sent() ) {
-			return;
-		}
+	public function sync_consent_cookie() {
+		$current_cookie    = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
+		$is_auto_granted   = function_exists( 'faz_is_auto_granted_consent_cookie' ) ? faz_is_auto_granted_consent_cookie( $current_cookie ) : false;
+		$has_vendor_cookie = ! empty( $_COOKIE['fazVendorConsent'] );
+		$has_tcf_cookie    = ! empty( $_COOKIE['euconsent-v2'] );
+
 		if ( ! $this->is_current_user_exempted() ) {
+			if ( $is_auto_granted && function_exists( 'faz_clear_consent_tracking_cookies' ) ) {
+				faz_clear_consent_tracking_cookies();
+			}
 			return;
 		}
-		// Do not clobber a cookie the user set themselves.
-		if ( ! empty( $_COOKIE['fazcookie-consent'] ) ) {
+
+		$desired_cookie = $this->build_exempted_consent_cookie_value( $current_cookie );
+		$needs_refresh  = $current_cookie !== $desired_cookie || $has_vendor_cookie || $has_tcf_cookie;
+		if ( ! $needs_refresh ) {
 			return;
+		}
+
+		if ( function_exists( 'faz_expire_browser_cookie' ) ) {
+			faz_expire_browser_cookie( 'fazVendorConsent' );
+			faz_expire_browser_cookie( 'euconsent-v2' );
+		}
+		$this->set_consent_cookie( $desired_cookie );
+
+		/**
+		 * Fires after the PMP integration auto-grants consent for a member.
+		 *
+		 * @param int   $user_id     Current user ID.
+		 * @param array $parts       Cookie parts that were set.
+		 */
+		do_action( 'faz_pmp_consent_auto_granted', get_current_user_id(), explode( ',', $desired_cookie ) );
+	}
+
+	/**
+	 * Build the consent cookie value used for exempted members.
+	 *
+	 * @param string $existing_cookie Current valid consent cookie, if any.
+	 * @return string
+	 */
+	private function build_exempted_consent_cookie_value( $existing_cookie = '' ) {
+		$parsed     = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie( $existing_cookie ) : array();
+		$consent_id = isset( $parsed['consentid'] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) $parsed['consentid'] ) : '';
+		if ( '' === $consent_id ) {
+			$consent_id = $this->generate_consent_id();
 		}
 
 		$categories = $this->get_category_slugs();
 		$parts      = array(
 			'action:yes',
 			'consent:accepted',
-			'consentid:' . $this->generate_consent_id(),
+			'consentid:' . $consent_id,
 		);
 		foreach ( $categories as $slug ) {
 			$parts[] = $slug . ':yes';
 		}
-		// Preserve the current server-side consent revision so this
-		// auto-accept isn't immediately invalidated on next page load.
+
 		$settings = new Settings();
 		$revision = $settings->get( 'general', 'consent_revision' );
 		$revision = is_numeric( $revision ) ? max( 1, absint( $revision ) ) : 1;
 		$parts[]  = 'rev:' . $revision;
+		$parts[]  = 'source:pmp';
 
-		$value  = implode( ',', $parts );
+		return implode( ',', $parts );
+	}
+
+	/**
+	 * Persist the consent cookie for exempted members.
+	 *
+	 * @param string $value Cookie payload.
+	 * @return void
+	 */
+	private function set_consent_cookie( $value ) {
 		$expiry = time() + ( 180 * DAY_IN_SECONDS );
+		if ( function_exists( 'faz_set_browser_cookie' ) ) {
+			faz_set_browser_cookie( 'fazcookie-consent', $value, $expiry );
+			return;
+		}
 
 		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
 		setcookie(
@@ -189,17 +239,7 @@ class Paid_Memberships_Pro {
 				'samesite' => 'Lax',
 			)
 		);
-		// Make the cookie visible to the current request too (frontend PHP
-		// code reads $_COOKIE to decide whether to skip the banner).
 		$_COOKIE['fazcookie-consent'] = $value;
-
-		/**
-		 * Fires after the PMP integration auto-grants consent for a member.
-		 *
-		 * @param int   $user_id     Current user ID.
-		 * @param array $parts       Cookie parts that were set.
-		 */
-		do_action( 'faz_pmp_consent_auto_granted', get_current_user_id(), $parts );
 	}
 
 	/**
