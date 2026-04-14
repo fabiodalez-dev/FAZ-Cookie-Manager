@@ -2,6 +2,22 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.11.0] — 2026-04-14
+
+### Added
+- **Non-personalized ads fallback for Google Consent Mode** — new setting in `GCM → Advanced` that, when a visitor denies marketing consent, keeps `ad_storage = granted` while forcing `ad_user_data` and `ad_personalization` to `denied`. This is the configuration Google AdSense requires to serve *non-personalized* ads (no profiling, no identifiers) to visitors who reject the banner, so publishers still earn revenue on those pageviews. Disabled by default to preserve the previous behavior; admins enable it explicitly. See [Google AdSense docs](https://support.google.com/adsense/answer/13554116). Previously all three signals were tied to the same `marketing` flag, which left AdSense with `ad_storage = denied` and therefore unable to serve any ad.
+- **Force re-consent (consent versioning)** — new `Settings → Force re-consent` card with an "Invalidate all consents" button. Clicking it bumps `faz_settings.general.consent_revision` on the server. The frontend stores the current revision in the `fazcookie-consent` cookie as `rev:N`; when the server revision is higher than the one stored in the cookie, the visitor is treated as having no consent and the banner reappears on their next pageview. Useful after changing AdSense/GTM settings or adding new tracking services — the user report was literally "I changed AdSense settings, now ads only load after a manual re-consent." Existing cookies from versions < 1.11.0 have no `rev` key and are NOT invalidated automatically on upgrade — they are only invalidated once the admin explicitly clicks the button.
+- **Paid Memberships Pro integration (Pay-or-Accept / PUR model)** — new `Settings → Paid Memberships Pro integration` card (visible only when PMP is installed). Admin configures a comma-separated list of PMP level IDs; members of those levels bypass the cookie banner entirely and have consent auto-granted across all categories. The consent cookie is set server-side on `init` via a new `FazCookie\Includes\Integrations\Paid_Memberships_Pro` class. The integration is no-op when PMP is not active. Auto-granted cookies include the current `consent_revision`, so the force-reconsent button still invalidates them correctly. Third-party code can override the exemption via the `faz_pmp_user_exempted` filter.
+
+### Fixed
+- **GCM race condition on revisit** — for returning visitors whose consent cookie already exists, `gcm.js` now emits `gtag("consent", "default", ...)` with the final granted states parsed from the cookie, instead of the previous sequence `default denied → update granted`. This removes the transient window in which ad tags (AdSense, GTM) could fire their first request while consent was still `denied` because the update hadn't arrived yet. Fixes the user report "ads don't load on revisit, only after a couple of refreshes or a manual re-accept."
+- **Default `wait_for_update` incoherence** — the admin UI showed `value="500"` (5 hundred ms) as the default, but the PHP defaults had `2000`. New installations got 2000 ms (safer but slower), admins who saved the page once got 500 ms. Aligned both to 500 ms, which matches the default in the admin UI and is Google's recommended minimum.
+
+### Internal
+- New `includes/integrations/` directory for third-party plugin integrations (classes autoloaded as `FazCookie\Includes\Integrations\*`).
+- `Settings::get_excludes()` now includes `exempt_levels` so PMP level IDs round-trip through save/load without being dropped.
+- `Settings::sanitize_option( 'consent_revision' )` bounded to `[1, 999999]`; `'exempt_levels'` accepts both arrays and comma-separated strings from the UI.
+
 ## [1.10.2] — 2026-04-10
 
 ### Fixed

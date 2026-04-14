@@ -38,11 +38,15 @@ class Gcm_Settings extends Store {
 					'regions' => 'All',
 				)
 			),
-			'wait_for_update' => 2000,
+			'wait_for_update' => 500,
 			'url_passthrough' => false,
 			'ads_data_redaction' => false,
 			'gacm_enabled' => false,
 			'gacm_provider_ids' => '',
+			// When true and marketing consent is denied, serve non-personalized ads:
+			// ad_storage = granted, but ad_user_data / ad_personalization = denied.
+			// See https://support.google.com/adsense/answer/13554116
+			'non_personalized_ads_fallback' => false,
 		);
 	}
 
@@ -160,6 +164,7 @@ class Gcm_Settings extends Store {
 			case 'url_passthrough':
 			case 'ads_data_redaction':
 			case 'gacm_enabled':
+			case 'non_personalized_ads_fallback':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'wait_for_update':

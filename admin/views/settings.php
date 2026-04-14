@@ -351,6 +351,58 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<?php if ( \FazCookie\Includes\Integrations\Paid_Memberships_Pro::is_pmp_active() ) : ?>
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Paid Memberships Pro integration', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
+				<?php echo wp_kses_post( __( 'Implement a "Pay-or-Accept" model: logged-in members on selected PMP levels are automatically exempted from the cookie banner and have consent granted for all categories. Free visitors continue to see the standard banner and consent flow.', 'faz-cookie-manager' ) ); ?>
+			</p>
+			<p style="margin:0 0 12px;padding:10px 12px;border-radius:6px;background:var(--faz-bg-secondary);color:var(--faz-text-secondary);font-size:13px;">
+				<strong><?php esc_html_e( 'Legal note:', 'faz-cookie-manager' ); ?></strong>
+				<?php esc_html_e( 'Disclose this behavior clearly in your Terms of Service and Privacy Policy. The Pay-or-Accept model is legal in the EU only when the payment is a genuine alternative to consent (EDPB Opinion 08/2024) — paying members must not be forced to accept tracking, they are instead exempted from needing to.', 'faz-cookie-manager' ); ?>
+			</p>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="integrations.paid_memberships_pro.enabled">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable PMP integration', 'faz-cookie-manager' ); ?></span>
+				</label>
+			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Exempt membership level IDs', 'faz-cookie-manager' ); ?></label>
+				<input type="text" class="faz-input" data-path="integrations.paid_memberships_pro.exempt_levels" placeholder="<?php esc_attr_e( 'e.g. 2, 3, 5', 'faz-cookie-manager' ); ?>" style="max-width:300px;">
+				<div class="faz-help">
+					<?php echo wp_kses_post( __( 'Comma-separated PMP level IDs whose members should be exempted. Find level IDs in <strong>Memberships → Settings → Levels</strong>. Leave empty to disable exemption.', 'faz-cookie-manager' ) ); ?>
+				</div>
+			</div>
+		</div>
+	</div>
+	<?php endif; ?>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Force re-consent', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
+				<?php echo wp_kses_post( __( 'Show the cookie banner again to all returning visitors. Useful when you change which cookies or services are used on your site (e.g. new AdSense tags, added analytics) and want prior visitors to renew their consent before those services run.', 'faz-cookie-manager' ) ); ?>
+			</p>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Current consent revision', 'faz-cookie-manager' ); ?></label>
+				<div style="display:flex;align-items:center;gap:12px;">
+					<input type="number" class="faz-input faz-input-sm" data-path="general.consent_revision" readonly style="width:100px;background:var(--faz-bg-secondary);">
+					<button class="faz-btn faz-btn-secondary" id="faz-invalidate-consents" type="button">
+						<?php esc_html_e( 'Invalidate all consents', 'faz-cookie-manager' ); ?>
+					</button>
+				</div>
+				<div class="faz-help"><?php esc_html_e( 'Visitors whose stored consent has a lower revision will see the banner again on their next visit. This does not affect the current page load.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
 	<div style="margin-top:8px;">
 		<button class="faz-btn faz-btn-primary" id="faz-settings-save"><?php esc_html_e( 'Save Settings', 'faz-cookie-manager' ); ?></button>
 	</div>

@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.10.2
+Stable tag: 1.11.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,13 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.11.0 =
+* New: Non-personalized ads fallback for Google Consent Mode (GCM → Advanced). When a visitor denies marketing consent, keep `ad_storage = granted` while forcing `ad_user_data` and `ad_personalization` to `denied` — the Google-sanctioned configuration for serving non-personalized ads to visitors who reject the banner. Publishers still earn revenue on those pageviews. Disabled by default; admins enable it explicitly.
+* New: Force re-consent (Settings → Force re-consent). "Invalidate all consents" button bumps a server-side revision counter; returning visitors whose stored cookie carries a lower revision see the banner again on their next visit. Useful after adding new ad/analytics services or tightening your cookie policy.
+* New: Paid Memberships Pro integration (Settings → Paid Memberships Pro integration, visible only when PMP is active). Select comma-separated level IDs whose members are exempted from the banner and auto-granted consent across all categories — the "Pay-or-Accept" (PUR) model. Non-paying visitors are unaffected. No-op when PMP is not installed.
+* Fix: GCM race condition on revisit — returning visitors with a saved consent cookie now see `gtag("consent", "default", …)` emitted directly with their granted states, removing the brief denied→granted window during which AdSense/GTM could fire the first request with ads blocked.
+* Fix: `wait_for_update` default aligned between admin UI (500 ms) and PHP defaults (previously 2000 ms) — the UI number now matches what new installations actually use.
 
 = 1.10.2 =
 * Fix: preference center text colour on sites with a dark theme (follow-up to #57). The 1.10.1 fix for the transparent background exposed a pre-existing issue: several rules inside the preference center used `color: inherit`, which on dark-theme host sites inherited a light text colour from `body`, producing unreadable "light on white" text. Locked the text colour to `var(--faz-detail-color, #212121)` on the preference center, preference, header, footer wrapper, body wrapper and description paragraphs. The default is dark regardless of host theme, and users can still override the colour from the banner editor because the CSS variable is fed from the stored banner config.
