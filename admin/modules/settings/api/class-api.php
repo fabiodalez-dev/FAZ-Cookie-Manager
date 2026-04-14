@@ -622,10 +622,22 @@ class Api extends Rest_Controller {
 	public function import_settings( $request ) {
 		global $wpdb;
 
+		// Defensive output buffering: import touches WP core APIs (`$wpdb`,
+		// `update_option`, `delete_transient`) that can emit deprecation
+		// notices on PHP 8.1+ when the host environment has `display_errors`
+		// enabled (the PHP built-in dev server defaults to STDOUT). Any
+		// stray output before `rest_ensure_response` would corrupt the JSON
+		// content-type and break clients that parse the body. Capturing
+		// here gives us a guaranteed-clean response regardless of the
+		// surrounding PHP/WP version. Errors are still logged when
+		// WP_DEBUG_LOG is enabled — only their *display* is suppressed.
+		ob_start();
+
 		$data = $request->get_json_params();
 
 		// Validate export file identifier.
 		if ( empty( $data['plugin'] ) || 'faz-cookie-manager' !== $data['plugin'] ) {
+			ob_end_clean();
 			return new WP_Error( 'invalid_export', __( 'Invalid export file.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 
@@ -698,6 +710,7 @@ class Api extends Rest_Controller {
 			}
 			if ( $banner_failed ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				ob_end_clean();
 				return new WP_Error( 'import_banners_failed', __( 'Failed to import banners. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 			}
 			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -731,6 +744,7 @@ class Api extends Rest_Controller {
 			}
 			if ( $cat_failed ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				ob_end_clean();
 				return new WP_Error( 'import_categories_failed', __( 'Failed to import categories. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 			}
 			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -766,6 +780,7 @@ class Api extends Rest_Controller {
 			}
 			if ( $cookie_failed ) {
 				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				ob_end_clean();
 				return new WP_Error( 'import_cookies_failed', __( 'Failed to import cookies. Transaction rolled back.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 			}
 			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -779,6 +794,11 @@ class Api extends Rest_Controller {
 		if ( ! empty( $imported ) ) {
 			faz_clear_banner_template_cache();
 		}
+
+		// Discard any output captured during the import (deprecation
+		// notices, third-party plugin warnings) so the JSON response is
+		// clean. See ob_start() at the top of this method.
+		ob_end_clean();
 
 		return rest_ensure_response( array(
 			'success'  => true,

@@ -148,6 +148,34 @@ if ( ! function_exists( 'faz_define_constants' ) ) {
 
 faz_define_constants();
 
+/**
+ * Prevent stray PHP output (deprecation notices, third-party plugin warnings)
+ * from corrupting REST API responses.
+ *
+ * Some hosting environments — notably the PHP built-in dev server used in our
+ * E2E test suite — ship with `display_errors = STDOUT`. When a deprecation
+ * fires during request bootstrap (e.g. WP core's `preg_replace()` call in
+ * `class-wpdb.php` under PHP 8.1+), the warning text is written directly to
+ * the response body BEFORE WordPress's REST server sets the `Content-Type:
+ * application/json` header. The result: clients receive an HTML-prefixed
+ * payload that fails JSON.parse and triggers `Cannot modify header
+ * information` warnings on subsequent header() calls.
+ *
+ * Detection is intentionally cheap (string lookup on REQUEST_URI) so we can
+ * run before any WordPress code is loaded — `REST_REQUEST` is not yet
+ * defined at this point. We only suppress *display*, not logging: errors
+ * still go to debug.log when WP_DEBUG_LOG is on, so this hides nothing
+ * from developers who actively look at the log.
+ */
+if ( isset( $_SERVER['REQUEST_URI'] ) && function_exists( 'ini_set' ) ) {
+	$faz_uri = (string) $_SERVER['REQUEST_URI']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- read-only string lookup, never echoed
+	if ( false !== strpos( $faz_uri, '/wp-json/' ) || false !== strpos( $faz_uri, 'rest_route=' ) ) {
+		// phpcs:ignore WordPress.PHP.IniSet -- needed before WP loads to silence pre-bootstrap deprecations
+		@ini_set( 'display_errors', '0' );
+	}
+	unset( $faz_uri );
+}
+
 require_once FAZ_PLUGIN_BASEPATH . 'class-autoloader.php';
 
 $autoloader = new \FazCookie\Autoloader();

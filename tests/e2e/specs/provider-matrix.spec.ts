@@ -448,6 +448,20 @@ test.describe('Provider matrix scan and blocking', () => {
 
     expect(await blockedMatrixScriptCount(page)).toBe(0);
 
+    // Each provider script sets its cookies synchronously and then fires a
+    // fire-and-forget `fetch('/faz-e2e-provider-collect/<id>', { method: POST })`
+    // whose response we don't await. `waitForCookie` only proves the script
+    // executed; it does NOT prove the collector hit has been processed
+    // server-side. Without an explicit wait, faster providers (GA, FB)
+    // race the slower ones (Stripe, Hubspot) and `readProviderMatrixHits`
+    // can return an incomplete map. Poll the option until Stripe — the
+    // slowest of the four — shows up, with a generous timeout so the test
+    // is stable on slow CI runners.
+    await expect.poll(
+      () => readProviderMatrixHits()['stripe'] ?? 0,
+      { timeout: 10_000, intervals: [200, 500, 1000] },
+    ).toBeGreaterThanOrEqual(1);
+
     const hits = readProviderMatrixHits();
     expect(hits['ga-monsterinsights']).toBeGreaterThanOrEqual(1);
     expect(hits['facebook-pixel']).toBeGreaterThanOrEqual(1);

@@ -41,7 +41,22 @@ async function importSettings(page: Page, nonce: string, data: Record<string, un
     data,
   });
   expect(response.status(), `Import failed with status ${response.status()}`).toBe(200);
-  return response.json();
+
+  // The PHP built-in dev server (used in our local E2E setup) ships with
+  // `display_errors=STDOUT`, which prints PHP deprecation notices directly
+  // into the HTTP response body BEFORE WordPress can set
+  // `Content-Type: application/json`. Production environments (Apache /
+  // Nginx + PHP-FPM) almost always have `display_errors=0`, so the response
+  // is clean JSON there. To keep the test stable across both, parse the
+  // body manually and skip any HTML/deprecation prefix that may precede
+  // the JSON object. If no JSON is present, throw with the raw body so
+  // the failure message is actionable.
+  const body = await response.text();
+  const jsonStart = body.indexOf('{');
+  if (jsonStart === -1) {
+    throw new Error(`Import response did not contain JSON. Raw body:\n${body}`);
+  }
+  return JSON.parse(body.slice(jsonStart));
 }
 
 async function getCategories(page: Page, nonce: string) {
