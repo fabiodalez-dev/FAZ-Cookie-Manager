@@ -52,39 +52,61 @@ function setConsentInitStates(consentData) {
 gtag("set", "ads_data_redaction", !!data.ads_data_redaction);
 gtag("set", "url_passthrough", !!data.url_passthrough);
 
-for (var index = 0; index < regionSettings.length; index++) {
-    var regionSetting = regionSettings[index];
-    if (!regionSetting || typeof regionSetting !== "object") continue;
-    var consentRegionData = {
-        ad_storage: regionSetting.marketing || regionSetting.advertisement,
-        analytics_storage: regionSetting.analytics,
-        functionality_storage: regionSetting.functional,
-        personalization_storage: regionSetting.functional,
-        security_storage: regionSetting.necessary,
-        ad_user_data: regionSetting.ad_user_data,
-        ad_personalization: regionSetting.ad_personalization
-    };
-    var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
-    var regionsToSetFor = regionsRaw
-        .split(",")
-        .map(function (region) { return region.trim(); })
-        .filter(function (region) { return region; });
-    if (regionsToSetFor.length > 0 && regionsToSetFor[0].toLowerCase() !== "all")
-        consentRegionData.region = regionsToSetFor;
-    else setDefaultSetting = false;
-    setConsentInitStates(consentRegionData);
-}
+// IMPORTANT: we must parse the consent cookie BEFORE emitting any consent
+// defaults. If the visitor already consented in a previous session, we emit
+// `consent default` directly with their granted states instead of the classic
+// `default denied -> update granted` pair. This removes a race window where
+// ad tags (AdSense, GTM) can fire the first request while consent is still
+// "denied" because the update has not been processed yet.
+//
+// Order matters:
+//   1. parseConsentCookie() -> read cookie synchronously
+//   2a. if cookie present -> emit consent default with granted states (once)
+//   2b. if cookie absent  -> emit region-specific denied defaults (legacy path)
+var initialCookieObj = parseConsentCookie();
 
-if (setDefaultSetting) {
-    setConsentInitStates({
-      ad_storage: "denied",
-      analytics_storage: "denied",
-      functionality_storage: "denied",
-      personalization_storage: "denied",
-      security_storage: "granted",
-      ad_user_data: "denied",
-      ad_personalization: "denied"
-    });
+if (initialCookieObj) {
+    // Returning visitor with saved consent: skip region defaults and emit the
+    // final state directly. buildConsentState() handles the non-personalized
+    // ads fallback when applicable.
+    setConsentInitStates(buildConsentState(initialCookieObj));
+} else {
+    // First-time visitor (or cookie expired/cleared): emit region-specific
+    // defaults as configured by the admin.
+    for (var index = 0; index < regionSettings.length; index++) {
+        var regionSetting = regionSettings[index];
+        if (!regionSetting || typeof regionSetting !== "object") continue;
+        var consentRegionData = {
+            ad_storage: regionSetting.marketing || regionSetting.advertisement,
+            analytics_storage: regionSetting.analytics,
+            functionality_storage: regionSetting.functional,
+            personalization_storage: regionSetting.functional,
+            security_storage: regionSetting.necessary,
+            ad_user_data: regionSetting.ad_user_data,
+            ad_personalization: regionSetting.ad_personalization
+        };
+        var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
+        var regionsToSetFor = regionsRaw
+            .split(",")
+            .map(function (region) { return region.trim(); })
+            .filter(function (region) { return region; });
+        if (regionsToSetFor.length > 0 && regionsToSetFor[0].toLowerCase() !== "all")
+            consentRegionData.region = regionsToSetFor;
+        else setDefaultSetting = false;
+        setConsentInitStates(consentRegionData);
+    }
+
+    if (setDefaultSetting) {
+        setConsentInitStates({
+          ad_storage: "denied",
+          analytics_storage: "denied",
+          functionality_storage: "denied",
+          personalization_storage: "denied",
+          security_storage: "granted",
+          ad_user_data: "denied",
+          ad_personalization: "denied"
+        });
+    }
 }
 
 function parseConsentCookie() {
@@ -112,8 +134,17 @@ function parseConsentCookie() {
 }
 
 function buildConsentState(cookieObj) {
+    // Non-personalized ads fallback: when enabled and the user has denied
+    // marketing consent, keep ad_storage = "granted" (so AdSense can serve
+    // non-personalized ads and preserve frequency capping) while keeping
+    // ad_user_data and ad_personalization = "denied".
+    // See https://support.google.com/adsense/answer/13554116
+    var adStorage = cookieObj.marketing;
+    if (data.non_personalized_ads_fallback && cookieObj.marketing === "denied") {
+        adStorage = "granted";
+    }
     return {
-        ad_storage: cookieObj.marketing,
+        ad_storage: adStorage,
         analytics_storage: cookieObj.analytics,
         functionality_storage: cookieObj.functional,
         personalization_storage: cookieObj.functional,
@@ -127,11 +158,9 @@ function updateConsentState(consentState) {
     gtag("consent", "update", consentState);
 }
 
-// Apply consent from cookie on page load.
-var cookieObj = parseConsentCookie();
-if (cookieObj) {
-    updateConsentState(buildConsentState(cookieObj));
-}
+// NOTE: consent default has already been emitted above with the correct
+// granted/denied states (from cookie when present, or region defaults
+// otherwise). We only need to handle live consent changes below.
 
 // Re-apply on consent changes (banner interaction).
 document.addEventListener("fazcookie_consent_update", function () {
@@ -170,7 +199,7 @@ function setAdditionalConsent(consentObj) {
 
 // Apply GACM on page load if enabled.
 if (data.gacm_enabled && data.gacm_provider_ids) {
-    setAdditionalConsent(cookieObj);
+    setAdditionalConsent(initialCookieObj);
 }
 
 })();

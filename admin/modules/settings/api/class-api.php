@@ -167,6 +167,17 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/invalidate-consents',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'invalidate_consents' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
 	}
 	/**
 	 * Get a collection of items.
@@ -773,6 +784,41 @@ class Api extends Rest_Controller {
 			'success'  => true,
 			'imported' => $imported,
 		) );
+	}
+
+	/**
+	 * Invalidate all stored visitor consents by bumping the consent revision.
+	 *
+	 * Visitors whose stored cookie carries a revision lower than the new value
+	 * will be treated as not having consented yet, and the banner will be
+	 * shown again on their next page load. Existing scripts already loaded
+	 * on the current page are not affected.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function invalidate_consents( $request ) {
+		$settings_obj = new Settings();
+		$general      = $settings_obj->get( 'general' );
+		$current      = isset( $general['consent_revision'] ) ? absint( $general['consent_revision'] ) : 1;
+		$next         = max( 1, $current + 1 );
+
+		$all                            = $settings_obj->get();
+		$all['general']['consent_revision'] = $next;
+		$settings_obj->update( $all );
+
+		// Clear banner template cache so any frontend data depending on the
+		// revision is regenerated on next request.
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
+
+		return rest_ensure_response(
+			array(
+				'success'          => true,
+				'consent_revision' => $next,
+			)
+		);
 	}
 
 	/**
