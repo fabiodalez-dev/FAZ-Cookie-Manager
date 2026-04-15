@@ -151,8 +151,18 @@ faz_define_constants();
 /**
  * Return the cookie domain used by FAZ consent cookies.
  *
- * Mirrors Frontend::get_cookie_domain() so server-side writes/deletes hit the
- * same scope as the client-side cookie helpers.
+ * Single source of truth for cookie scope. Returns "" when subdomain sharing
+ * is disabled (cookie stays on the exact host), or ".registrable-domain"
+ * when enabled — with public-suffix awareness so ".co.uk", ".com.au", etc.
+ * round-trip to three labels instead of two. Every server-side write/delete
+ * (faz_set_browser_cookie, faz_expire_browser_cookie, cookie shredding) and
+ * the `_rootDomain` value exposed to the frontend JS via wp_localize_script
+ * go through here, so `setcookie()` and `document.cookie = ...` always hit
+ * the same scope.
+ *
+ * Applies the `faz_cookie_domain` filter exactly once, which is why
+ * Frontend::get_cookie_domain() is now a thin wrapper calling this helper
+ * directly (do NOT re-apply the filter at the call site).
  *
  * @return string
  */

@@ -929,57 +929,23 @@ class Frontend {
 		return $store;
 	}
 	/**
-	 * Return cookie domain
+	 * Return cookie domain.
+	 *
+	 * Thin wrapper around the global faz_get_cookie_domain() helper so the
+	 * scope used for client-side localization (`_rootDomain` on _fazStore)
+	 * stays byte-for-byte identical to the scope used server-side by
+	 * faz_set_browser_cookie() / faz_expire_browser_cookie(). The underlying
+	 * helper already reads `faz_settings.banner_control.subdomain_sharing`,
+	 * parses home_url() with the public-suffix awareness this method used
+	 * to re-implement, and applies the `faz_cookie_domain` filter — so we
+	 * just delegate. Kept as a public method to preserve the call sites
+	 * that receive a Frontend instance (e.g. `$this->get_cookie_domain()`
+	 * inside the cookie-shredding path).
 	 *
 	 * @return string
 	 */
 	public function get_cookie_domain() {
-		$domain = '';
-		$subdomain = $this->settings->get( 'banner_control', 'subdomain_sharing' );
-		if ( $subdomain ) {
-			$parsed = wp_parse_url( home_url() );
-			$host   = isset( $parsed['host'] ) ? $parsed['host'] : '';
-			$parts  = explode( '.', $host );
-			$count  = count( $parts );
-
-			// Multi-level public suffixes (co.uk, com.au, etc.) need 3 labels
-			// to form a valid registrable domain. Taking only 2 labels would
-			// give ".co.uk" which browsers reject as a public suffix.
-			$multi_level_tlds = array(
-				'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'net.uk',
-				'com.au', 'net.au', 'org.au', 'edu.au',
-				'co.nz', 'net.nz', 'org.nz',
-				'co.jp', 'or.jp', 'ne.jp',
-				'co.kr', 'or.kr',
-				'co.in', 'net.in', 'org.in',
-				'co.za', 'org.za', 'web.za',
-				'com.br', 'net.br', 'org.br',
-				'com.cn', 'net.cn', 'org.cn',
-				'com.hk', 'org.hk',
-				'com.my', 'net.my', 'org.my',
-				'com.sg', 'net.sg', 'org.sg',
-				'com.tw', 'net.tw', 'org.tw',
-				'co.id', 'or.id', 'web.id',
-				'com.mx', 'org.mx',
-				'co.il',
-				'com.tr', 'org.tr',
-			);
-
-			$is_multi = false;
-			if ( $count >= 3 ) {
-				$last_two = implode( '.', array_slice( $parts, -2 ) );
-				$is_multi = in_array( $last_two, $multi_level_tlds, true );
-			}
-
-			if ( $is_multi && $count > 3 ) {
-				$domain = '.' . implode( '.', array_slice( $parts, -3 ) );
-			} elseif ( ! $is_multi && $count > 2 ) {
-				$domain = '.' . implode( '.', array_slice( $parts, -2 ) );
-			} elseif ( ! empty( $host ) ) {
-				$domain = '.' . $host;
-			}
-		}
-		return apply_filters( 'faz_cookie_domain', $domain );
+		return faz_get_cookie_domain();
 	}
 
 	/**
