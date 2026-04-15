@@ -497,7 +497,13 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 			expect(consentCookie, 'Exempt member must receive an auto-granted cookie server-side').toBeTruthy();
 			const parsed = parseConsentCookieValue(decodeURIComponent(consentCookie!.value));
 			expect(parsed.action, 'Cookie must record an implicit user action').toBe('yes');
-			expect(parsed.consent).toBe('accepted');
+			// The consent token MUST be "yes" (not "accepted" or any other
+			// human-readable label): script.js `_fazUnblock()` and the CCPA
+			// opt-out checkbox both gate on `consent === "yes"`, so a PMP
+			// auto-grant that used a different string would be server-side
+			// accepted but client-side script-blocked — the exact silent
+			// failure mode this assertion exists to prevent.
+			expect(parsed.consent, 'consent must be "yes" to match the token script.js expects').toBe('yes');
 			expect(parsed.source, 'Cookie must be tagged as sourced from PMP').toBe('pmp');
 
 			// Downgrade: clear the mock level, reload, verify the cookie
