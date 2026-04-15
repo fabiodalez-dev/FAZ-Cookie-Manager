@@ -157,11 +157,28 @@ class Paid_Memberships_Pro {
 
 		if ( ! $this->is_current_user_exempted() ) {
 			// Only tear down consent tracking when the current main consent
-			// cookie was auto-granted by the PMP integration. Standard
-			// visitors can legitimately carry fazVendorConsent /
-			// euconsent-v2 after an explicit banner interaction; clearing the
-			// whole consent state merely because those cookies exist causes an
-			// infinite re-consent loop on every page load.
+			// cookie was auto-granted by the PMP integration (i.e. it carries
+			// `source:pmp`). Standard visitors can legitimately carry
+			// fazVendorConsent / euconsent-v2 after an explicit banner
+			// interaction; clearing the whole consent state merely because
+			// those cookies exist would hit any non-exempt visitor who has
+			// ever interacted with the TCF CMP, producing an infinite
+			// re-consent loop on every pageload (fazVendorConsent is
+			// re-created → next pageload clears everything → banner shown
+			// again → user re-accepts → fazVendorConsent re-created → …).
+			//
+			// There is a known narrow edge case that this conservative
+			// branch does not cover: an ex-member whose PMP auto-granted
+			// `fazcookie-consent` has already expired (so `$is_auto_granted`
+			// is false) but who still carries `fazVendorConsent` /
+			// `euconsent-v2` from the exempt period. Broadening the
+			// condition to also fire when those vendor cookies exist would
+			// wipe the legitimate cookies of every other non-exempt visitor
+			// — a much larger regression than the residual vendor state on
+			// a specific minority path. Not fixing this here is a deliberate
+			// trade-off; the proper fix would require tagging vendor/TCF
+			// cookies as "sourced from PMP" at write time, which is out of
+			// scope for the 1.11.x line.
 			if ( $is_auto_granted && function_exists( 'faz_clear_consent_tracking_cookies' ) ) {
 				faz_clear_consent_tracking_cookies();
 			}

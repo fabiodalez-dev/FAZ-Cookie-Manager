@@ -2670,6 +2670,14 @@ window.addEventListener('message', function(event) {
         if (typeof consent !== 'string' || consent.length > 2048) return;
         if (!/^[A-Za-z0-9._:+/=\-]+(,[A-Za-z0-9._:+/=\-]+)*$/.test(consent)) return;
 
+        // Clear any vendor/TCF cookies the recipient domain may have from
+        // a previous (possibly more permissive) choice. Without this, a
+        // cross-domain forward that downgrades the consent state would
+        // overwrite only fazcookie-consent, and the stale fazVendorConsent
+        // or euconsent-v2 would resurface after the reload — producing an
+        // inconsistent state where the main cookie says "deny marketing"
+        // but TCF vendors are still flagged as consented.
+        ["fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
         // Apply forwarded consent cookie.
         ref._fazSetCookie('fazcookie-consent', consent, _fazStore._expiry || 180);
         // Reload to apply the forwarded consent state.

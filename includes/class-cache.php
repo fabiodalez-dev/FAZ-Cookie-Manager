@@ -101,14 +101,18 @@ class Cache {
 	}
 
 	/**
-	 * Delete cache group
+	 * Delete cache group.
+	 *
+	 * Alias of {@see self::invalidate_cache_group()} — both mutate the
+	 * prefix seed so the next lookup misses everything previously cached.
+	 * Kept as a separate symbol because older call sites (and third-party
+	 * extensions) reference it by name.
 	 *
 	 * @param string $group Cache group name.
 	 * @return void
 	 */
 	public static function delete_cache( $group ) {
-		wp_cache_set( 'faz_' . $group . '_cache_prefix', microtime(), $group );
-		self::reset_prefix_cache( $group );
+		self::invalidate_cache_group( $group );
 	}
 	/**
 	 * Get cache from either transient or object cache.

@@ -2,6 +2,38 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.11.1] — 2026-04-15
+
+This release ships **four critical fixes** on top of the 1.11.0 publisher-revenue work, plus a new Czech translation. **Upgrade strongly recommended** for anyone running 1.11.0 in production — two of the fixes were reported by a live publisher (gooloo.de) and affect every visitor's consent persistence.
+
+### Fixed
+
+- **Consent persistence on revisit (every reload shows the banner)** — the `fazcookie-consent` cookie was written without URL-encoding, so on the next pageview `document.cookie` served a string whose `,` and `:` separators were lost in the naive splitter. The client-side parser then produced an empty map, no `rev` was extracted, and `isConsentCookieStale()` treated the cookie as stale every time — wiping it and re-showing the banner. Fixed by URL-encoding on write (`_fazSetCookie`) and decoding with a second-pass parser on read. Cross-domain consent forwarding and the forwarded-consent regex were adjusted to accept base64 (`+`, `/`, `=`) characters in the consentid. Reported by nkoffiziell (gooloo.de).
+- **PMP `exempt_levels` setting not persisting (critical)** — admins entering `"2, 3"` in the PMP card and clicking Save saw the field reset to empty on the next pageload. `Settings::sanitize()` was coercing every non-array value to `[]` BEFORE `sanitize_option('exempt_levels')` had a chance to parse the CSV string. Fixed by dispatching excluded keys (including `exempt_levels`) to their per-key handler first. Without this fix the entire Paid Memberships Pro integration was silently non-functional. Reported by nkoffiziell.
+- **Non-personalized ads fallback: region defaults now force `ad_user_data = denied` and `ad_personalization = denied`** — when NPA was active and the region config forced `ad_storage` to `granted`, the other two signals still inherited whatever the stored region value said, so the initial GCM `consent default` could emit a more permissive state than the post-"reject all" state. Aligned the region-default emission with `buildConsentState()` so NPA's promise ("no profiling upstream") holds even before the visitor interacts with the banner.
+- **PMP auto-grant cookie used the wrong consent token** — the cookie wrote `consent:accepted`, but `script.js::_fazUnblock()` and the CCPA opt-out checkbox both gate on `consent === "yes"`. The result: PMP-exempt members had their scripts server-side-unblocked but client-side-re-blocked, silently defeating the exemption. Fixed by writing `consent:yes`. A regression assertion pinned the exact literal so a future rename can't reintroduce the bug.
+- **GCM consent-update listener: `setAdditionalConsent(null)` no longer fires during a stale-revision window** — when the admin bumps `consent_revision`, `parseConsentCookie()` transiently returns `null`; the old code would still call `setAdditionalConsent(null)` and clobber the live GACM provider list with `"1~"` (empty). Now skipped alongside `updateConsentState()`.
+- **Settings page race condition** — if `loadSettings()`'s GET resolved AFTER `invalidateConsents()` bumped `consent_revision`, the form silently reverted the counter, and a subsequent Save would persist the stale revision. Added a monotonic `settingsRequestId` guard so late responses are discarded.
+- **Cross-domain consent forwarding: regex now accepts base64** — the old allowlist (`[a-zA-Z0-9._:\-]+`) rejected `+`, `/`, `=` characters that legitimately appear in base64 consentids and forwarded TCF strings. Forwarded consents from multi-domain setups were being silently dropped.
+- **Cross-domain consent forwarding: recipient now clears stale vendor/TCF cookies before applying the forwarded state** — the receiver overwrote only `fazcookie-consent`, so a recipient domain that had previously stored `fazVendorConsent` or `euconsent-v2` from a more permissive choice would resurface that state after the reload, producing a contradictory combination ("deny marketing" in the main cookie but TCF vendors still flagged as consented). Now explicitly deletes those two cookies before writing the forwarded consent.
+- **`wca.js` and `microsoft-consent.js` requested `.min.js` that does not exist** — those two scripts are not part of the `build:min` pipeline, but `enqueue_scripts()` reused the `$suffix` computed for `script.js`. On any install where `script.min.js` existed, WordPress Consent API and Microsoft UET/Clarity consent integration 404'd. Fixed by computing the suffix per-file (falls back to the source when no minified file exists).
+- **PMP auto-grant cookie included internal/admin categories** — `get_category_slugs()` returned every category from the DB, including the `wordpress-internal` bucket (wp-settings-*, wordpress_logged_in_*, wp_test_cookie) and invisible categories. These cookies are admin/auth only and must never appear in a visitor's consent record. Now filters with the same logic used by `Frontend::get_cookie_groups()`.
+- **Changelog wording on NPA fallback was misleading** — the 1.11.0 entry claimed NPA provides "no profiling, no identifiers". With `ad_storage = granted`, Google can still read/write advertising identifiers for frequency capping and fraud detection. Rewritten to describe what actually changes (no profiling signals upstream) without overstating the privacy posture.
+
+### Added
+
+- **Czech (cs_CZ) translation** — 441 fully translated strings covering the frontend banner, cookie categories, admin UI, and `[faz_cookie_policy]` / `[faz_cookie_table]` shortcodes. Ships as `languages/faz-cookie-manager-cs_CZ.po` and `.mo`. Contributed by Vaclav.
+- **readme.txt Upgrade Notice for 1.11.0** — highlights the consent-behavior changes (consent versioning, NPA fallback, PMP integration) at the WordPress.org upgrade prompt, so admins see the important items before upgrading.
+
+### Refactored
+
+- **`faz_get_cookie_domain()` is now the single source of truth for cookie scope** — `Frontend::get_cookie_domain()` is a thin wrapper that delegates to the global helper. The public-suffix-aware TLD list (30+ entries for `.co.uk`, `.com.au`, `.co.jp`, …) previously lived in two places; any future tweak would have had to land in both or client-side writes and server-side writes would have silently disagreed on scope. The `faz_cookie_domain` filter is still applied exactly once.
+
+### Contributors
+
+- **Vaclav** — Czech (cs_CZ) translation
+- **nkoffiziell (gooloo.de)** — production bug reports that drove three of the fixes above
+
 ## [1.11.0] — 2026-04-14
 
 ### Added
