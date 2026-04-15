@@ -416,7 +416,12 @@ class Frontend {
 		}
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';
-			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $suffix . '.js', array(), $this->version, false );
+			// Compute the suffix per-file: wca.js and microsoft-consent.js
+			// are not in the build:min pipeline, so reusing the $suffix
+			// computed for script.js would produce URLs like wca.min.js
+			// that 404 on any install where script.min.js exists.
+			$wca_suffix = $this->get_script_suffix( 'js/wca' );
+			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'const _fazGsk = true;', 'before' );
 			}
@@ -426,7 +431,8 @@ class Frontend {
 		$ms_clarity = (bool) $this->settings->get( 'microsoft', 'clarity_consent' );
 		if ( $ms_uet || $ms_clarity ) {
 			$ms_handle = $this->plugin_name . '-microsoft-consent';
-			wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $suffix . '.js', array(), $this->version, false );
+			$ms_suffix = $this->get_script_suffix( 'js/microsoft-consent' );
+			wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array(), $this->version, false );
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
 			}

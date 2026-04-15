@@ -374,6 +374,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 
 == Upgrade Notice ==
 
+= 1.11.0 =
+Consent versioning, non-personalized ads fallback for Google Consent Mode, and an optional Paid Memberships Pro integration. Review Settings → Force re-consent and GCM → Advanced after upgrade; existing cookies remain valid until you click "Invalidate all consents".
+
 = 1.9.2 =
 Fixes the "English always comes back" language bug. Clear caches after upgrading.
 

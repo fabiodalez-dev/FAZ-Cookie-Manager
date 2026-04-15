@@ -16,6 +16,11 @@
 	}
 
 	var form;
+	// Monotonic counter used to ignore stale loadSettings() responses that
+	// resolve AFTER a newer action (e.g. invalidateConsents) has already
+	// mutated the form. Each loadSettings() captures the current token and
+	// only applies its payload if the token still matches at resolution time.
+	var settingsRequestId = 0;
 
 	FAZ.ready(function () {
 		form = document.getElementById('faz-settings');
@@ -54,6 +59,9 @@
 			var rev = resp && typeof resp.consent_revision !== 'undefined' ? resp.consent_revision : null;
 			var input = form.querySelector('input[data-path="general.consent_revision"]');
 			if (input && rev !== null) input.value = rev;
+			// Invalidate any in-flight loadSettings() so its stale payload
+			// cannot overwrite the revision we just bumped.
+			settingsRequestId++;
 			FAZ.notify(__('settings.invalidateOk', 'All consents invalidated. Banner will reappear for returning visitors.'));
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
@@ -62,7 +70,9 @@
 	}
 
 	function loadSettings() {
+		var requestId = ++settingsRequestId;
 		FAZ.get('settings').then(function (data) {
+			if (requestId !== settingsRequestId) return;
 			// Excluded pages comes as array, convert to newline-separated text
 			if (data.banner_control && Array.isArray(data.banner_control.excluded_pages)) {
 				data.banner_control.excluded_pages = data.banner_control.excluded_pages.join('\n');

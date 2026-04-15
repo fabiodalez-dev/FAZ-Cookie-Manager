@@ -2658,9 +2658,17 @@ window.addEventListener('message', function(event) {
 
     if (event.data && event.data.type === 'faz_consent_forward' && event.data.consent) {
         // Validate consent string format and length before writing to cookie.
+        // The charset must stay in lockstep with faz_parse_consent_cookie()
+        // (PHP) and the cookie writer: key:value pairs joined by ",", where
+        // value can be base64 (e.g. future vendor-specific payloads, TCF
+        // consent strings forwarded across domains) — base64 uses A-Za-z0-9
+        // plus "+", "/" and "=" padding, and the consentid itself can be
+        // base64. Allowing those characters here does not widen the attack
+        // surface: the overall payload is still bounded (length cap above)
+        // and written verbatim as a cookie value, not interpreted as HTML.
         var consent = event.data.consent;
         if (typeof consent !== 'string' || consent.length > 2048) return;
-        if (!/^[a-zA-Z0-9._:\-]+(,[a-zA-Z0-9._:\-]+)*$/.test(consent)) return;
+        if (!/^[A-Za-z0-9._:+/=\-]+(,[A-Za-z0-9._:+/=\-]+)*$/.test(consent)) return;
 
         // Apply forwarded consent cookie.
         ref._fazSetCookie('fazcookie-consent', consent, _fazStore._expiry || 180);

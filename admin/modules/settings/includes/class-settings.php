@@ -237,13 +237,18 @@ class Settings extends Store {
 		$excludes = self::get_excludes();
 		foreach ( $defaults as $key => $data ) {
 			$value = isset( $settings[ $key ] ) ? $settings[ $key ] : $data;
-			// If the default is an array but the stored value isn't, use the default.
-			if ( is_array( $data ) && ! is_array( $value ) ) {
-				$value = $data;
-			}
+			// Excluded keys handle their own coercion in sanitize_option() —
+			// e.g. `exempt_levels` accepts a comma-separated string from the
+			// admin UI and normalizes to an array of IDs. Running the
+			// "array default but non-array value" override below would wipe
+			// the string before sanitize_option() ever sees it.
 			if ( in_array( $key, $excludes, true ) ) {
 				$result[ $key ] = self::sanitize_option( $key, $value );
 				continue;
+			}
+			// If the default is an array but the stored value isn't, use the default.
+			if ( is_array( $data ) && ! is_array( $value ) ) {
+				$value = $data;
 			}
 			if ( is_array( $value ) ) {
 				$result[ $key ] = self::sanitize( $value, $data );

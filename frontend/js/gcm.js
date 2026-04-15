@@ -85,8 +85,16 @@ if (initialCookieObj) {
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
-        var regionAdStorage = regionSetting.marketing || regionSetting.advertisement;
-        if (npFallback && regionAdStorage === "denied") {
+        var marketingState = regionSetting.marketing || regionSetting.advertisement || "denied";
+        var regionAdStorage = marketingState;
+        // When NPA fallback is active and marketing is denied, keep ad_storage
+        // "granted" (so AdSense can serve non-personalized ads) but force
+        // ad_user_data and ad_personalization to "denied" — no profiling, no
+        // user data sent upstream. Mirrors buildConsentState() so the initial
+        // region default is byte-for-byte identical to the post-"reject all"
+        // state emitted after the banner is dismissed.
+        var forceNpa = npFallback && marketingState === "denied";
+        if (forceNpa) {
             regionAdStorage = "granted";
         }
         var consentRegionData = {
@@ -95,8 +103,8 @@ if (initialCookieObj) {
             functionality_storage: regionSetting.functional,
             personalization_storage: regionSetting.functional,
             security_storage: regionSetting.necessary,
-            ad_user_data: regionSetting.ad_user_data,
-            ad_personalization: regionSetting.ad_personalization
+            ad_user_data: forceNpa ? "denied" : regionSetting.ad_user_data,
+            ad_personalization: forceNpa ? "denied" : regionSetting.ad_personalization
         };
         var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
         var regionsToSetFor = regionsRaw
@@ -203,9 +211,15 @@ function updateConsentState(consentState) {
 // Re-apply on consent changes (banner interaction).
 document.addEventListener("fazcookie_consent_update", function () {
     var updated = parseConsentCookie();
-    if (updated) {
-        updateConsentState(buildConsentState(updated));
+    if (!updated) {
+        // parseConsentCookie() returns null when the cookie is stale (server
+        // bumped consent_revision since it was written) or malformed. In that
+        // window there is nothing actionable to push to gtag: leave the
+        // previous consent state untouched and skip GACM too, otherwise we
+        // would clobber the live provider list with "1~" (empty).
+        return;
     }
+    updateConsentState(buildConsentState(updated));
     // Also update GACM additional consent string if enabled.
     if (data.gacm_enabled && data.gacm_provider_ids) {
         setAdditionalConsent(updated);

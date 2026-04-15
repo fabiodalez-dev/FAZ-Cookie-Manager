@@ -203,9 +203,17 @@ class Paid_Memberships_Pro {
 		}
 
 		$categories = $this->get_category_slugs();
+		// IMPORTANT: `consent:yes` is the only token recognized by script.js
+		// (_fazUnblock guard at ~line 1400) and by the CCPA opt-out checkbox
+		// (~line 2217). Using any other string here — e.g. `consent:accepted`,
+		// which would look equally valid to a human reader — would leave every
+		// `data-faz-tag` script blocked on the client side even though our
+		// server-side output buffer has already rewritten them, meaning
+		// PMP-exempt members would never actually see analytics / marketing
+		// scripts fire. Keep this aligned with frontend/js/script.js.
 		$parts      = array(
 			'action:yes',
-			'consent:accepted',
+			'consent:yes',
 			'consentid:' . $consent_id,
 		);
 		foreach ( $categories as $slug ) {
@@ -276,7 +284,20 @@ class Paid_Memberships_Pro {
 		$slugs      = array();
 		foreach ( $categories as $category_data ) {
 			$category = new Cookie_Categories( $category_data );
-			$slugs[]  = $category->get_slug();
+			// Skip categories the banner itself would hide: invisible
+			// categories and the `wordpress-internal` bucket (wp-settings-*,
+			// wordpress_logged_in_*, etc.). Those cookies are set by WP for
+			// admin/auth purposes and never appear in the frontend consent
+			// UI, so declaring consent for them in a visitor-facing cookie
+			// would be noise at best and a compliance mismatch at worst.
+			// Mirrors Frontend::get_cookie_groups().
+			if ( false === $category->get_visibility() ) {
+				continue;
+			}
+			if ( 'wordpress-internal' === $category->get_slug() ) {
+				continue;
+			}
+			$slugs[] = $category->get_slug();
 		}
 		$slugs = array_values( array_filter( array_map( 'sanitize_key', $slugs ) ) );
 		if ( empty( $slugs ) ) {
