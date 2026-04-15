@@ -60,6 +60,25 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
         return prev;
     }, {});
 
+if (currentCookieMap["fazcookie-consent"]) {
+    try {
+        Object.assign(
+            fazcookieConsentMap,
+            decodeURIComponent(currentCookieMap["fazcookie-consent"])
+                .split(",")
+                .reduce((prev, curr) => {
+                    if (!curr) return prev;
+                    const sepIdx = curr.indexOf(":");
+                    if (sepIdx === -1) return prev;
+                    const key = curr.substring(0, sepIdx);
+                    const value = curr.substring(sepIdx + 1);
+                    prev[key] = value;
+                    return prev;
+                }, {})
+        );
+    } catch (_unused) { /* raw legacy cookie, keep original parse */ }
+}
+
 // Consent revision check: if the admin has bumped the server-side revision
 // (via Settings → "Invalidate all consents") and the stored cookie has a
 // lower revision (or none at all), discard the stored consent so the banner
@@ -146,7 +165,8 @@ ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDom
     const toSetTime =
         days === 0 ? 0 : date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
     const secure = location.protocol === 'https:' ? ' Secure;' : '';
-    document.cookie = `${name}=${value}; expires=${new Date(
+    const cookieValue = name === "fazcookie-consent" ? encodeURIComponent(value) : value;
+    document.cookie = `${name}=${cookieValue}; expires=${new Date(
         toSetTime
     ).toUTCString()}; path=/;${domain}; SameSite=Lax;${secure}`;
 }
@@ -1910,8 +1930,8 @@ function _fazAfterConsent() {
     // Cross-domain consent forwarding: send consent to configured target domains.
     if (_fazStore._consentForwarding && _fazStore._consentForwarding.enabled) {
         var targets = _fazStore._consentForwarding.targets || [];
-        var consentMatch = document.cookie.match(/fazcookie-consent=([^;]+)/);
-        if (consentMatch && targets.length > 0) {
+        var consentValue = ref._fazGetCookie('fazcookie-consent');
+        if (consentValue && targets.length > 0) {
             targets.forEach(function(targetUrl) {
                 if (!_fazIsAllowedScheme(targetUrl)) return;
                 var iframe = document.createElement('iframe');
@@ -1922,7 +1942,7 @@ function _fazAfterConsent() {
                     try {
                         iframe.contentWindow.postMessage({
                             type: 'faz_consent_forward',
-                            consent: consentMatch[1]
+                            consent: consentValue
                         }, new URL(targetUrl).origin);
                     } catch(e) { /* cross-origin error — ignore */ }
                     setTimeout(function() { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
@@ -2643,9 +2663,7 @@ window.addEventListener('message', function(event) {
         if (!/^[a-zA-Z0-9._:\-]+(,[a-zA-Z0-9._:\-]+)*$/.test(consent)) return;
 
         // Apply forwarded consent cookie.
-        var d = new Date();
-        d.setTime(d.getTime() + (_fazStore._expiry || 180) * 24 * 60 * 60 * 1000);
-        document.cookie = 'fazcookie-consent=' + consent + '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax';
+        ref._fazSetCookie('fazcookie-consent', consent, _fazStore._expiry || 180);
         // Reload to apply the forwarded consent state.
         window.location.reload();
     }

@@ -162,7 +162,7 @@ class Frontend {
 			return;
 		}
 
-		$suffix = ''; // Always load non-minified JS.
+		$suffix = $this->get_script_suffix( 'js/script' );
 		if ( false === $this->settings->is_connected() ) {
 			if ( ! $this->template ) {
 				return;
@@ -230,7 +230,7 @@ class Frontend {
 				$gcm      = $this->get_gcm_data();
 				$gcm_json = wp_json_encode( $gcm );
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
-				$gcm_suffix = ''; // Always load non-minified (no build tooling).
+				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $this->plugin_name . '-gcm';
 				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
@@ -242,7 +242,7 @@ class Frontend {
 				// Handles 'ping' directly so pre-CMP callers get a valid response.
 				$tcf_stub = 'if(typeof window.__tcfapi!=="function"){var a=[];window.__tcfapi=function(cmd,ver,cb){if(cmd==="ping"){cb({gdprApplies:undefined,cmpLoaded:false,cmpStatus:"stub",displayStatus:"hidden",apiVersion:"2.3"},true);return;}a.push(arguments);};window.__tcfapi.a=a;}';
 				wp_add_inline_script( $script_handle, $tcf_stub, 'before' );
-				$tcf_suffix = ''; // Always load non-minified (no build tooling).
+				$tcf_suffix = $this->get_script_suffix( 'js/tcf-cmp' );
 				$tcf_handle = $script_handle . '-tcf-cmp';
 				wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 
@@ -368,19 +368,19 @@ class Frontend {
 						'token'   => $hmac_token,
 					)
 				);
-				$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
-					"var d=e.detail||{};" .
-					"if(!d.action||d.action==='init')return;" .
-					"if(typeof _fazConsentLog==='undefined')return;" .
-					"fetch(_fazConsentLog.restUrl,{" .
-						"method:'POST'," .
-						"headers:{'Content-Type':'application/json'}," .
-						"body:JSON.stringify({" .
-							"consent_id:(function(){var m=document.cookie.match(/consentid:([^,;]+)/);return m?m[1]:''})()," .
-							"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
-							"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
-							"url:window.location.href," .
-							"token:_fazConsentLog.token" .
+					$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
+						"var d=e.detail||{};" .
+						"if(!d.action||d.action==='init')return;" .
+						"if(typeof _fazConsentLog==='undefined')return;" .
+						"fetch(_fazConsentLog.restUrl,{" .
+							"method:'POST'," .
+							"headers:{'Content-Type':'application/json'}," .
+							"body:JSON.stringify({" .
+								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
+								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
+								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
+								"url:window.location.href," .
+								"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .
 				"});";
@@ -434,6 +434,25 @@ class Frontend {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftClarity = true;', 'before' );
 			}
 		}
+	}
+
+	/**
+	 * Return the script suffix to use for frontend assets.
+	 *
+	 * Production loads `.min.js` when available. Development keeps the
+	 * readable source when SCRIPT_DEBUG is enabled or when no minified file
+	 * has been generated yet.
+	 *
+	 * @param string $asset_base Relative path without extension/min suffix.
+	 * @return string
+	 */
+	private function get_script_suffix( $asset_base ) {
+		if ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
+			return '';
+		}
+
+		$minified_path = plugin_dir_path( __FILE__ ) . $asset_base . '.min.js';
+		return file_exists( $minified_path ) ? '.min' : '';
 	}
 
 	/**

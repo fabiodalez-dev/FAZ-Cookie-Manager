@@ -30,6 +30,7 @@ import {
 	setOption,
 	deleteOption,
 	wp,
+	wpEval,
 } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
@@ -103,7 +104,13 @@ async function driveConsent(page: Page, choice: 'all' | 'reject', expectedMarket
 	await page.waitForFunction((expected) => {
 		const raw = document.cookie.split(';').find((c) => c.trim().startsWith('fazcookie-consent='));
 		if (!raw) return false;
-		const value = raw.split('=').slice(1).join('=');
+		const encodedValue = raw.split('=').slice(1).join('=');
+		let value = encodedValue;
+		try {
+			value = decodeURIComponent(encodedValue);
+		} catch {
+			value = encodedValue;
+		}
 		return (
 			/(?:^|,)action:yes(?:,|$)/.test(value) &&
 			new RegExp(`(?:^|,)marketing:${expected}(?:,|$)`).test(value)
@@ -124,7 +131,7 @@ async function rejectAllOnFrontend(page: Page): Promise<void> {
 function parseConsentCookieValue(raw: string): Record<string, string> {
 	return raw.split(',').reduce<Record<string, string>>((acc, pair) => {
 		const trimmed = pair.trim();
-		const idx = trimmed.lastIndexOf(':');
+		const idx = trimmed.indexOf(':');
 		if (idx === -1) return acc;
 		const k = trimmed.substring(0, idx).trim();
 		if (!k) return acc;
@@ -175,6 +182,113 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 		} finally {
 			// Teardown — restore original revision so other tests aren't affected.
 			await updateSettings(page, nonce, { general: { consent_revision: originalRevision } });
+			await visitor.close();
+		}
+	});
+
+	test('R1b: visitor who re-consents after invalidation keeps consent on the next reload when IAB/TCF is enabled', async ({ page, context, loginAsAdmin }) => {
+		await loginAsAdmin(page);
+		await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+		const nonce = await getAdminNonce(page);
+		const before = await getSettings(page, nonce);
+		const originalRevision = Number(before.general?.consent_revision ?? 1);
+		const originalIab = before.iab ?? { enabled: false };
+
+		const visitor = await context.browser()?.newContext({ baseURL: WP_BASE });
+		if (!visitor) throw new Error('Could not create visitor context');
+		try {
+			await updateSettings(page, nonce, {
+				iab: {
+					...originalIab,
+					enabled: true,
+				},
+			});
+
+			const visitorPage = await visitor.newPage();
+			await acceptAllOnFrontend(visitorPage);
+			await visitorPage.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+
+			const invalidateResp = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/settings/invalidate-consents`, {
+				headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+				data: {},
+			});
+			expect(invalidateResp.status()).toBe(200);
+			const invalidateBody = await invalidateResp.json();
+			expect(invalidateBody.consent_revision).toBeGreaterThan(originalRevision);
+
+			await visitorPage.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
+			const bannerVisibleAfterInvalidate = await visitorPage.locator('#faz-consent, [data-faz-tag="notice"]').first().isVisible({ timeout: 5_000 }).catch(() => false);
+			expect(bannerVisibleAfterInvalidate, 'Banner must reappear once after consent invalidation').toBe(true);
+
+			await driveConsent(visitorPage, 'all', 'yes');
+			await visitorPage.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+
+			await visitorPage.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
+			const bannerVisibleAfterReaccept = await visitorPage.locator('#faz-consent, [data-faz-tag="notice"]').first().isVisible({ timeout: 5_000 }).catch(() => false);
+			expect(
+				bannerVisibleAfterReaccept,
+				'After re-consenting at the new revision, the banner must stay hidden on the next reload',
+			).toBe(false);
+
+			const consentCookie = (await visitor.cookies()).find((c) => c.name === 'fazcookie-consent');
+			expect(consentCookie, 'Visitor should still have a consent cookie after re-accepting').toBeTruthy();
+			const parsed = parseConsentCookieValue(decodeURIComponent(consentCookie!.value));
+			expect(parsed.action, 'Saved consent must remain marked as an explicit user action').toBe('yes');
+			expect(Number(parsed.rev), 'Saved consent must keep the bumped revision').toBe(Number(invalidateBody.consent_revision));
+		} finally {
+			await updateSettings(page, nonce, {
+				general: { consent_revision: originalRevision },
+				iab: originalIab,
+			});
+			await visitor.close();
+		}
+	});
+
+	test('Audit: consent logging keeps the original consentid when the consent cookie is percent-encoded', async ({ page, context, loginAsAdmin }) => {
+		await loginAsAdmin(page);
+		await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+		const nonce = await getAdminNonce(page);
+		const before = await getSettings(page, nonce);
+		const originalConsentLogs = before.consent_logs ?? { status: false };
+
+		wpEval('global $wpdb; $table = $wpdb->prefix . "faz_consent_logs"; $wpdb->query( "DELETE FROM {$table}" ); echo "ok";');
+
+		const visitor = await context.browser()?.newContext({ baseURL: WP_BASE });
+		if (!visitor) throw new Error('Could not create visitor context');
+		try {
+			await updateSettings(page, nonce, {
+				consent_logs: {
+					...originalConsentLogs,
+					status: true,
+				},
+			});
+
+			const visitorPage = await visitor.newPage();
+			await acceptAllOnFrontend(visitorPage);
+
+			const consentCookie = (await visitor.cookies()).find((c) => c.name === 'fazcookie-consent');
+			expect(consentCookie, 'Visitor should have a consent cookie after accepting').toBeTruthy();
+			const parsedCookie = parseConsentCookieValue(decodeURIComponent(consentCookie!.value));
+			expect(parsedCookie.consentid, 'Consent cookie should expose consentid').toBeTruthy();
+
+			await expect.poll(() => {
+				const raw = wpEval(
+					'global $wpdb; ' +
+					'$table = $wpdb->prefix . "faz_consent_logs"; ' +
+					'$row = $wpdb->get_row( "SELECT consent_id FROM {$table} ORDER BY log_id DESC LIMIT 1", ARRAY_A ); ' +
+					'echo wp_json_encode( $row ? $row : array() );'
+				);
+				const row = raw ? JSON.parse(raw) as { consent_id?: string } : {};
+				return row.consent_id ?? '';
+			}, {
+				timeout: 10_000,
+				message: 'Consent logger should persist the consentid from the browser cookie',
+			}).toBe(parsedCookie.consentid);
+		} finally {
+			await updateSettings(page, nonce, {
+				consent_logs: originalConsentLogs,
+			});
+			wpEval('global $wpdb; $table = $wpdb->prefix . "faz_consent_logs"; $wpdb->query( "DELETE FROM {$table}" ); echo "ok";');
 			await visitor.close();
 		}
 	});

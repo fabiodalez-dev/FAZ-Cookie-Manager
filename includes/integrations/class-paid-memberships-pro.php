@@ -154,14 +154,13 @@ class Paid_Memberships_Pro {
 		$has_tcf_cookie    = ! empty( $_COOKIE['euconsent-v2'] );
 
 		if ( ! $this->is_current_user_exempted() ) {
-			// Clear not only when a stale auto-granted consent cookie exists,
-			// but also when vendor-level (fazVendorConsent) or IAB TCF
-			// (euconsent-v2) cookies are still around from a previous
-			// exempt state. Leaving those behind would let downstream
-			// scripts believe the user has granted vendor-specific consent
-			// they never actually expressed post-downgrade.
-			$has_stale_state = $is_auto_granted || $has_vendor_cookie || $has_tcf_cookie;
-			if ( $has_stale_state && function_exists( 'faz_clear_consent_tracking_cookies' ) ) {
+			// Only tear down consent tracking when the current main consent
+			// cookie was auto-granted by the PMP integration. Standard
+			// visitors can legitimately carry fazVendorConsent /
+			// euconsent-v2 after an explicit banner interaction; clearing the
+			// whole consent state merely because those cookies exist causes an
+			// infinite re-consent loop on every page load.
+			if ( $is_auto_granted && function_exists( 'faz_clear_consent_tracking_cookies' ) ) {
 				faz_clear_consent_tracking_cookies();
 			}
 			return;

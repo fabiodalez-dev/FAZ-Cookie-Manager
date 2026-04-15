@@ -212,9 +212,16 @@ function faz_get_cookie_domain() {
  * @return string
  */
 function faz_get_consent_cookie_value() {
-	return isset( $_COOKIE['fazcookie-consent'] )
-		? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) )
-		: '';
+	if ( ! isset( $_COOKIE['fazcookie-consent'] ) ) {
+		return '';
+	}
+
+	$cookie = wp_unslash( $_COOKIE['fazcookie-consent'] );
+	if ( is_string( $cookie ) && false !== strpos( $cookie, '%' ) ) {
+		$cookie = rawurldecode( $cookie );
+	}
+
+	return sanitize_text_field( (string) $cookie );
 }
 
 /**

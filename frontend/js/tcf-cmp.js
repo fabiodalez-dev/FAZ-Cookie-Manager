@@ -81,8 +81,12 @@
 	function readConsentCookiePairs() {
 		var match = document.cookie.match(/fazcookie-consent=([^;]+)/);
 		if (!match) return null;
+		var value = match[1];
+		try {
+			value = decodeURIComponent(value);
+		} catch (_unused) { /* raw legacy cookie */ }
 
-		return match[1].split(",").reduce(function(acc, pair) {
+		return value.split(",").reduce(function(acc, pair) {
 			var trimmed = pair.trim();
 			// Match PHP's faz_parse_consent_cookie() which splits on the
 			// FIRST colon via explode(':', $pair, 2). Using lastIndexOf here
