@@ -28,15 +28,7 @@ class Gcm_Settings extends Store {
 		return array(
 			'status' => false,
 			'default_settings' => array(
-				array(
-					'analytics' => 'denied',
-					'marketing' => 'denied',
-					'functional' => 'denied',
-					'necessary' => 'granted',
-					'ad_user_data' => 'denied',
-					'ad_personalization' => 'denied',
-					'regions' => 'All',
-				)
+				self::get_default_settings_entry(),
 			),
 			'wait_for_update' => 500,
 			'url_passthrough' => false,
@@ -90,6 +82,13 @@ class Gcm_Settings extends Store {
 			'analytics', 'marketing', 'functional', 'necessary',
 		);
 		$allowed_values = array( 'granted', 'denied' );
+		$default_entry  = self::get_default_settings_entry();
+		$aliases        = array(
+			'analytics'  => 'analytics_storage',
+			'marketing'  => 'ad_storage',
+			'functional' => 'functionality_storage',
+			'necessary'  => 'security_storage',
+		);
 
 		$sanitized = array();
 		foreach ( $settings as $entry ) {
@@ -114,10 +113,51 @@ class Gcm_Settings extends Store {
 				// Unknown keys are silently dropped.
 			}
 			if ( ! empty( $clean ) ) {
-				$sanitized[] = $clean;
+				foreach ( $aliases as $legacy_key => $storage_key ) {
+					if ( isset( $clean[ $legacy_key ] ) && ! isset( $clean[ $storage_key ] ) ) {
+						$clean[ $storage_key ] = $clean[ $legacy_key ];
+					} elseif ( isset( $clean[ $storage_key ] ) && ! isset( $clean[ $legacy_key ] ) ) {
+						$clean[ $legacy_key ] = $clean[ $storage_key ];
+					}
+				}
+				if ( isset( $clean['functionality_storage'] ) && ! isset( $clean['personalization_storage'] ) ) {
+					$clean['personalization_storage'] = $clean['functionality_storage'];
+				} elseif ( isset( $clean['personalization_storage'] ) && ! isset( $clean['functionality_storage'] ) ) {
+					$clean['functionality_storage'] = $clean['personalization_storage'];
+				}
+				if ( isset( $clean['personalization_storage'] ) && ! isset( $clean['functional'] ) ) {
+					$clean['functional'] = $clean['personalization_storage'];
+				}
+				$sanitized[] = wp_parse_args( $clean, $default_entry );
 			}
 		}
 		return $sanitized;
+	}
+
+	/**
+	 * Return the canonical consent defaults for a single region entry.
+	 *
+	 * Includes both the legacy FAZ category keys used by the current admin/UI
+	 * flow and the GCM v2 storage keys so older installs and API-driven
+	 * updates cannot drop newly introduced consent signals.
+	 *
+	 * @return array
+	 */
+	public static function get_default_settings_entry() {
+		return array(
+			'ad_storage'              => 'denied',
+			'analytics_storage'       => 'denied',
+			'ad_user_data'            => 'denied',
+			'ad_personalization'      => 'denied',
+			'functionality_storage'   => 'denied',
+			'personalization_storage' => 'denied',
+			'security_storage'        => 'granted',
+			'analytics'               => 'denied',
+			'marketing'               => 'denied',
+			'functional'              => 'denied',
+			'necessary'               => 'granted',
+			'regions'                 => 'All',
+		);
 	}
 	/**
 	 * Update settings to database.

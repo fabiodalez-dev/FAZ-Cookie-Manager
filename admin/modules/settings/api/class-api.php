@@ -862,15 +862,9 @@ class Api extends Rest_Controller {
 			if ( '' === $value ) {
 				return wp_json_encode( $default );
 			}
-			// Cheap check: JSON always starts with one of these after
-			// trimming. If the decode round-trips, the value was already
-			// JSON-encoded and we must NOT re-encode.
-			$trimmed = ltrim( $value );
-			if ( '' !== $trimmed && in_array( $trimmed[0], array( '{', '[', '"' ), true ) ) {
-				$decoded = json_decode( $value, true );
-				if ( null !== $decoded || 'null' === $trimmed ) {
-					return $value;
-				}
+			json_decode( $value, true );
+			if ( JSON_ERROR_NONE === json_last_error() ) {
+				return $value;
 			}
 			return wp_json_encode( $value );
 		}

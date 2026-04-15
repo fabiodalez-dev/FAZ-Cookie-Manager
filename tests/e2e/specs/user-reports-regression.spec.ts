@@ -376,6 +376,11 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 		const visitor = await context.browser()?.newContext({ baseURL: WP_BASE });
 		if (!visitor) throw new Error('Could not create visitor context');
 		try {
+			const settings = await getSettings(page, nonce);
+			const currentRevisionRaw = Number(settings.general?.consent_revision ?? 1);
+			const currentRevision = Number.isFinite(currentRevisionRaw) && currentRevisionRaw > 0 ? currentRevisionRaw : 1;
+			const visitorBaseURL = new URL(WP_BASE);
+
 			// Pre-seed the consent cookie directly on the visitor context.
 			// Rationale: the scenario under test is specifically "a visitor
 			// who already has a saved consent on revisit" — we don't need
@@ -395,17 +400,17 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 				'performance:yes',
 				'uncategorized:yes',
 				'marketing:yes',
-				'rev:1',
+				`rev:${currentRevision}`,
 			].join(',');
 			await visitor.addCookies([
 				{
 					name: 'fazcookie-consent',
 					value: preBaked,
-					domain: 'localhost',
+					domain: visitorBaseURL.hostname,
 					path: '/',
 					expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 180, // 180 days
 					httpOnly: false,
-					secure: false,
+					secure: visitorBaseURL.protocol === 'https:',
 					sameSite: 'Lax',
 				},
 			]);

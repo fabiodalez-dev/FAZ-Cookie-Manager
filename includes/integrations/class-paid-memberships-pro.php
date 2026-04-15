@@ -22,6 +22,8 @@
 
 namespace FazCookie\Includes\Integrations;
 
+use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
+use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -270,14 +272,17 @@ class Paid_Memberships_Pro {
 	 * @return array
 	 */
 	private function get_category_slugs() {
-		global $wpdb;
-		$table = $wpdb->prefix . 'faz_cookie_categories';
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
-		$rows  = $wpdb->get_col( "SELECT slug FROM {$table}" );
-		if ( empty( $rows ) || ! is_array( $rows ) ) {
+		$categories = Category_Controller::get_instance()->get_items();
+		$slugs      = array();
+		foreach ( $categories as $category_data ) {
+			$category = new Cookie_Categories( $category_data );
+			$slugs[]  = $category->get_slug();
+		}
+		$slugs = array_values( array_filter( array_map( 'sanitize_key', $slugs ) ) );
+		if ( empty( $slugs ) ) {
 			// Fallback to the default GDPR category set.
 			return array( 'necessary', 'analytics', 'functional', 'marketing', 'performance' );
 		}
-		return array_values( array_filter( array_map( 'sanitize_key', $rows ) ) );
+		return $slugs;
 	}
 }
