@@ -358,11 +358,11 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 		<div class="faz-card-body">
 			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
-				<?php echo wp_kses_post( __( 'Implement a "Pay-or-Accept" model: logged-in members on selected PMP levels are automatically exempted from the cookie banner and have consent granted for all categories. Free visitors continue to see the standard banner and consent flow.', 'faz-cookie-manager' ) ); ?>
+				<?php echo wp_kses_post( __( 'Implement a "Pay-or-Accept" model: logged-in members on selected PMP levels skip the cookie banner and have consent <strong>programmatically recorded as granted for all categories</strong> via a server-side cookie. Marketing, analytics, functional and other non-necessary scripts will run for them without an explicit banner interaction. Free visitors continue to see the standard banner and consent flow.', 'faz-cookie-manager' ) ); ?>
 			</p>
 			<p style="margin:0 0 12px;padding:10px 12px;border-radius:6px;background:var(--faz-bg-secondary);color:var(--faz-text-secondary);font-size:13px;">
 				<strong><?php esc_html_e( 'Legal note:', 'faz-cookie-manager' ); ?></strong>
-				<?php esc_html_e( 'Disclose this behavior clearly in your Terms of Service and Privacy Policy. The Pay-or-Accept model is legal in the EU only when the payment is a genuine alternative to consent (EDPB Opinion 08/2024) — paying members must not be forced to accept tracking, they are instead exempted from needing to.', 'faz-cookie-manager' ); ?>
+				<?php esc_html_e( 'Because this option grants consent on behalf of the member (it does not merely hide the banner), you must disclose it clearly in your Terms of Service, Privacy Policy, and at the point of subscription so the membership fee is understood as a genuine alternative to giving consent (EDPB Opinion 08/2024). Members must remain able to revoke or adjust their consent at any time via the standard revisit widget.', 'faz-cookie-manager' ); ?>
 			</p>
 			<div class="faz-form-group">
 				<label class="faz-toggle">

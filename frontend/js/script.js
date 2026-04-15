@@ -50,7 +50,9 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
     .split(",")
     .reduce((prev, curr) => {
         if (!curr) return prev;
-        const sepIdx = curr.lastIndexOf(":");
+        // Match PHP's faz_parse_consent_cookie() which uses
+        // explode(':', $pair, 2) — first colon is the separator.
+        const sepIdx = curr.indexOf(":");
         if (sepIdx === -1) return prev;
         const key = curr.substring(0, sepIdx);
         const value = curr.substring(sepIdx + 1);

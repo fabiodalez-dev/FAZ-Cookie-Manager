@@ -127,7 +127,11 @@ function parseConsentCookieParts() {
     if (!raw || typeof raw !== "string") return null;
     return raw.split(",").reduce(function (acc, curr) {
         var trimmed = curr.trim();
-        var sepIdx = trimmed.lastIndexOf(":");
+        // Match PHP's faz_parse_consent_cookie() which uses
+        // explode(':', $pair, 2) — split on the FIRST colon, not the last,
+        // so values containing colons (e.g. a future "source:pmp:L2" token)
+        // round-trip consistently between server and client.
+        var sepIdx = trimmed.indexOf(":");
         if (sepIdx === -1) return acc;
         var key = trimmed.substring(0, sepIdx).trim();
         if (!key) return acc;

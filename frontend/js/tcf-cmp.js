@@ -84,7 +84,10 @@
 
 		return match[1].split(",").reduce(function(acc, pair) {
 			var trimmed = pair.trim();
-			var sepIdx = trimmed.lastIndexOf(":");
+			// Match PHP's faz_parse_consent_cookie() which splits on the
+			// FIRST colon via explode(':', $pair, 2). Using lastIndexOf here
+			// would diverge for any value containing a colon.
+			var sepIdx = trimmed.indexOf(":");
 			if (sepIdx === -1) return acc;
 			var key = trimmed.substring(0, sepIdx).trim();
 			if (!key) return acc;
