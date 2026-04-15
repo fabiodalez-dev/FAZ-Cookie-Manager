@@ -681,9 +681,9 @@ class Api extends Rest_Controller {
 					'name'           => sanitize_text_field( $banner['name'] ?? '' ),
 					'slug'           => sanitize_text_field( $banner['slug'] ?? '' ),
 					'status'         => absint( $banner['status'] ?? 0 ),
-					'settings'       => wp_json_encode( $safe_settings ),
+					'settings'       => $this->encode_json_column( $safe_settings, array() ),
 					'banner_default' => absint( $banner['banner_default'] ?? 0 ),
-					'contents'       => wp_json_encode( $safe_contents ),
+					'contents'       => $this->encode_json_column( $safe_contents, array() ),
 				);
 
 				if ( $existing ) {
@@ -714,15 +714,15 @@ class Api extends Rest_Controller {
 			$cat_failed = false;
 			foreach ( $data['categories'] as $cat ) {
 				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-					'category_id'      => absint( $cat['category_id'] ?? 0 ),
-					'name'             => wp_json_encode( $cat['name'] ?? array() ),
-					'slug'             => sanitize_text_field( $cat['slug'] ?? '' ),
-					'description'      => wp_json_encode( $cat['description'] ?? array() ),
-					'prior_consent'    => absint( $cat['prior_consent'] ?? 0 ),
-					'visibility'       => absint( $cat['visibility'] ?? 1 ),
-					'priority'         => absint( $cat['priority'] ?? 0 ),
+					'category_id'        => absint( $cat['category_id'] ?? 0 ),
+					'name'               => $this->encode_json_column( $cat['name'] ?? null, array() ),
+					'slug'               => sanitize_text_field( $cat['slug'] ?? '' ),
+					'description'        => $this->encode_json_column( $cat['description'] ?? null, array() ),
+					'prior_consent'      => absint( $cat['prior_consent'] ?? 0 ),
+					'visibility'         => absint( $cat['visibility'] ?? 1 ),
+					'priority'           => absint( $cat['priority'] ?? 0 ),
 					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 0 ),
-					'meta'             => isset( $cat['meta'] ) ? wp_json_encode( $cat['meta'] ) : null,
+					'meta'               => array_key_exists( 'meta', $cat ) ? $this->encode_json_column( $cat['meta'], array() ) : null,
 				) );
 				if ( false === $result ) {
 					$cat_failed = true;
@@ -750,14 +750,14 @@ class Api extends Rest_Controller {
 					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
 					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
 					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
-					'description' => wp_json_encode( $cookie['description'] ?? '' ),
+					'description' => $this->encode_json_column( $cookie['description'] ?? null, '' ),
 					'duration'    => sanitize_text_field( $cookie['duration'] ?? '' ),
 					'domain'      => sanitize_text_field( $cookie['domain'] ?? '' ),
 					'category'    => absint( $cookie['category'] ?? 0 ),
 					'type'        => sanitize_text_field( $cookie['type'] ?? '' ),
 					'discovered'  => absint( $cookie['discovered'] ?? 0 ),
 					'url_pattern' => sanitize_text_field( $cookie['url_pattern'] ?? '' ),
-					'meta'        => isset( $cookie['meta'] ) ? wp_json_encode( $cookie['meta'] ) : null,
+					'meta'        => array_key_exists( 'meta', $cookie ) ? $this->encode_json_column( $cookie['meta'], array() ) : null,
 				) );
 				if ( false === $result ) {
 					$cookie_failed = true;
@@ -826,6 +826,55 @@ class Api extends Rest_Controller {
 				'consent_revision' => $saved,
 			)
 		);
+	}
+
+	/**
+	 * Encode a value for storage in a JSON column without re-encoding
+	 * values that were exported as strings.
+	 *
+	 * The export endpoint decodes JSON fields (categories.name, cookies.meta,
+	 * etc.) into native arrays/objects, but legacy exports — and third-party
+	 * export tooling — may pass them back through as already-encoded JSON
+	 * strings. Blindly calling `wp_json_encode()` on a string re-wraps it
+	 * (`"[]"` becomes `"\"[]\""`, then `"\"\\\"[]\\\"\""`, etc.). Under
+	 * repeated import/export round-trips the string doubles every cycle
+	 * until it hits the MEDIUMTEXT / MEDIUMBLOB ceiling (16 MB), which
+	 * then makes every cache-population `SELECT *` from that table return
+	 * ~100 MB of payload — the exact path that produced a 40 GB debug.log
+	 * for one of our users.
+	 *
+	 * Contract:
+	 *   - array/object → json_encode it.
+	 *   - string that is valid JSON → keep as-is.
+	 *   - string that is NOT valid JSON → json_encode it (new storage).
+	 *   - empty/null → json_encode of the provided default.
+	 *
+	 * @param mixed $value   Raw import payload fragment for a JSON column.
+	 * @param mixed $default Value to substitute when `$value` is null.
+	 * @return string|null JSON string ready for insertion, or null when the
+	 *                    caller explicitly wants a NULL column value.
+	 */
+	private function encode_json_column( $value, $default = array() ) {
+		if ( null === $value ) {
+			return null;
+		}
+		if ( is_string( $value ) ) {
+			if ( '' === $value ) {
+				return wp_json_encode( $default );
+			}
+			// Cheap check: JSON always starts with one of these after
+			// trimming. If the decode round-trips, the value was already
+			// JSON-encoded and we must NOT re-encode.
+			$trimmed = ltrim( $value );
+			if ( '' !== $trimmed && in_array( $trimmed[0], array( '{', '[', '"' ), true ) ) {
+				$decoded = json_decode( $value, true );
+				if ( null !== $decoded || 'null' === $trimmed ) {
+					return $value;
+				}
+			}
+			return wp_json_encode( $value );
+		}
+		return wp_json_encode( $value );
 	}
 
 	/**
