@@ -73,11 +73,24 @@ if (initialCookieObj) {
 } else {
     // First-time visitor (or cookie expired/cleared): emit region-specific
     // defaults as configured by the admin.
+    //
+    // If the non-personalized ads fallback is enabled, ad_storage stays
+    // "granted" by default so AdSense can serve non-personalized ads even
+    // before the visitor interacts with the banner. ad_user_data and
+    // ad_personalization keep the admin-configured region value (typically
+    // "denied") so no profiling happens pre-consent. This matches
+    // buildConsentState() so the initial state is consistent with the
+    // state emitted on "reject all".
+    var npFallback = !!data.non_personalized_ads_fallback;
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
+        var regionAdStorage = regionSetting.marketing || regionSetting.advertisement;
+        if (npFallback && regionAdStorage === "denied") {
+            regionAdStorage = "granted";
+        }
         var consentRegionData = {
-            ad_storage: regionSetting.marketing || regionSetting.advertisement,
+            ad_storage: regionAdStorage,
             analytics_storage: regionSetting.analytics,
             functionality_storage: regionSetting.functional,
             personalization_storage: regionSetting.functional,
@@ -98,7 +111,7 @@ if (initialCookieObj) {
 
     if (setDefaultSetting) {
         setConsentInitStates({
-          ad_storage: "denied",
+          ad_storage: npFallback ? "granted" : "denied",
           analytics_storage: "denied",
           functionality_storage: "denied",
           personalization_storage: "denied",
@@ -126,9 +139,11 @@ function parseConsentCookieParts() {
 function isConsentCookieStale(parsed) {
     if (!parsed) return false;
     var config = window._fazConfig || {};
-    var serverRevision = typeof config._consentRevision === "number"
-        ? config._consentRevision
-        : 1;
+    // wp_localize_script often stringifies numeric values ("1" instead of 1),
+    // so we can't rely on typeof === "number". Coerce and fall back to 1.
+    var serverRevisionRaw = config && config._consentRevision;
+    var serverRevision = parseInt(serverRevisionRaw, 10);
+    if (isNaN(serverRevision) || serverRevision < 1) serverRevision = 1;
     var storedRevision = parseInt(parsed.rev, 10);
     return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
 }

@@ -64,9 +64,14 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
 // is shown again. Cookies from plugin versions < 1.11.0 have no `rev` key
 // and are therefore always treated as valid to avoid breaking upgrades —
 // they are only invalidated once the admin explicitly bumps the revision.
-const _fazServerRevision = _fazStore && typeof _fazStore._consentRevision === "number"
-    ? _fazStore._consentRevision
-    : 1;
+// wp_localize_script frequently stringifies integers (depending on the
+// underlying json encoder and PHP int→string coercion), so do not trust
+// `typeof === "number"` here. Coerce explicitly and fall back to 1.
+const _fazServerRevisionRaw = _fazStore && _fazStore._consentRevision;
+const _fazServerRevisionParsed = parseInt(_fazServerRevisionRaw, 10);
+const _fazServerRevision = isNaN(_fazServerRevisionParsed) || _fazServerRevisionParsed < 1
+    ? 1
+    : _fazServerRevisionParsed;
 const _fazHasConsentCookie = typeof currentCookieMap["fazcookie-consent"] === "string"
     && currentCookieMap["fazcookie-consent"] !== "";
 const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);

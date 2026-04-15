@@ -467,9 +467,14 @@ class Frontend {
 		if ( true === $this->settings->is_connected() || true === faz_disable_banner() ) {
 			return;
 		}
-		// Banner template is render-only — suppress for PMP-exempt members
-		// (script.js / gcm.js still load via enqueue_scripts above).
-		if ( $this->is_banner_ui_suppressed() ) {
+		// NOTE: We deliberately do NOT check is_banner_ui_suppressed() here.
+		// load_banner() populates $this->template, which enqueue_scripts()
+		// depends on to register script.js / gcm.js / tcf-cmp.js. PMP-exempt
+		// members must still receive those bootstrap scripts so GCM can fire
+		// the auto-granted consent signals to AdSense / GTM — only the
+		// visible banner HTML (insert_styles, banner_html) gets suppressed,
+		// and those two hooks check is_banner_ui_suppressed() themselves.
+		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
 		if ( ! faz_is_front_end_request() ) {

@@ -96,9 +96,10 @@
 	function isConsentCookieStale(pairs) {
 		if (!pairs) return false;
 		var config = window._fazConfig || {};
-		var serverRevision = typeof config._consentRevision === "number"
-			? config._consentRevision
-			: 1;
+		// Coerce because wp_localize_script may stringify integers.
+		var serverRevisionRaw = config && config._consentRevision;
+		var serverRevision = parseInt(serverRevisionRaw, 10);
+		if (isNaN(serverRevision) || serverRevision < 1) serverRevision = 1;
 		var storedRevision = parseInt(pairs.rev, 10);
 		return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
 	}

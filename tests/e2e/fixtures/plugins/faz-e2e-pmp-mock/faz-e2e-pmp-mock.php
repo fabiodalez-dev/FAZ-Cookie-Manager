@@ -50,8 +50,10 @@ if ( ! function_exists( 'pmpro_hasMembershipLevel' ) ) {
 			return false;
 		}
 
+		// At this point $mine is non-empty; mirror PMP's real behaviour of
+		// "user has any level" when the caller doesn't constrain the set.
 		if ( empty( $requested ) ) {
-			return ! empty( $mine );
+			return true;
 		}
 
 		return count( array_intersect( $mine, $requested ) ) > 0;

@@ -167,8 +167,20 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 			const visitorPage = await visitor.newPage();
 			// Act — visitor rejects all marketing (click "Reject All").
 			await rejectAllOnFrontend(visitorPage);
-			// Give gcm.js a tick to finish processing the consent update event.
-			await visitorPage.waitForTimeout(300);
+			// Wait for GCM to settle (either the fallback-friendly default emitted
+			// at page load, or a subsequent consent update from the banner click).
+			// Both cases produce an `ad_storage: "granted"` entry when the
+			// non-personalized ads fallback is enabled and marketing is denied.
+			await visitorPage.waitForFunction(() => {
+				const dlName = (window as unknown as { fazSettings?: { dataLayerName?: string } }).fazSettings?.dataLayerName || 'dataLayer';
+				const dl = (window as unknown as Record<string, unknown[]>)[dlName] ?? [];
+				return (dl as Array<Record<number, unknown>>).some((entry) => {
+					if (!entry || typeof entry !== 'object') return false;
+					if (entry[0] !== 'consent') return false;
+					const payload = entry[2] as Record<string, string> | undefined;
+					return !!payload && payload.ad_storage === 'granted';
+				});
+			}, undefined, { timeout: 5_000 });
 
 			// After a reject, GCM must emit an `update` call with the
 			// non-personalized combination. Walk dataLayer and merge to find
