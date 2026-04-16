@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.11.1
+Stable tag: 1.11.2
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,13 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.11.2 =
+* Fix: preference center invisible on dark design presets — all 5 presets now include full modal color palettes (background, text, buttons, toggle states).
+* Fix: TypeError crash on ChromeOS and PMP-exempt members — null guard in `_fazRenderBanner()` prevents crash when the banner template element is absent.
+* Fix: `applyDesignPreset()` deep-replaces preference center and optout popup config — the old cherry-pick missed toggle states.
+* Fix: `const` → `var` in WP Consent API inline script for broader browser compatibility.
+* Fix: removed `#000000` → transparent skip in template CSS — High Contrast preset buttons now render as intended black.
 
 = 1.11.1 =
 * **Critical fix**: banner reappearing on every page load — the consent cookie was written without URL-encoding, so the re-read couldn't extract `rev` and the stale-check wiped the cookie every time. URL-encode on write, two-pass decode on read. Reported by a live publisher running 1.11.0.
@@ -387,6 +394,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.11.2 =
+Fixes invisible preference center on dark presets, TypeError crash on ChromeOS/PMP-exempt members, and High Contrast preset button colors. Recommended for all 1.11.x installations.
 
 = 1.11.1 =
 Critical fix release — addresses two production-impacting bugs in 1.11.0 (banner reappearing on every page load, PMP `exempt_levels` setting not persisting) plus nine smaller fixes and a new Czech translation. Strongly recommended for all 1.11.0 installations.

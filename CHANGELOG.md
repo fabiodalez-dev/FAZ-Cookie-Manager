@@ -2,6 +2,22 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.11.2] — 2026-04-16
+
+### Fixed
+- **Preference center invisible on dark presets** — all 5 design presets (CCPA Simple, Dark Professional, GDPR Strict, High Contrast, Light Minimal) now include full `preferenceCenter`, `categoryPreview` and `optoutPopup` color palettes. Previously only the banner bar (`notice`) was styled; the preference center modal inherited defaults that produced invisible text and buttons on dark themes. Follows the CookieYes upstream `theme.json` structure.
+- **TypeError crash on ChromeOS / PMP-exempt members** — `_fazRenderBanner()` now guards against a missing `#fazBannerTemplate` element. PMP-exempt members have `script.js` loaded (for GCM consent signals) but `banner_html()` suppresses the template element — the unguarded `template.innerHTML` threw "Cannot read properties of null". Reported by nkoffiziell (gooloo.de, ChromeOS).
+- **`applyDesignPreset()` now deep-replaces `preferenceCenter` and `optoutPopup`** — the previous cherry-pick approach missed `toggle.states` and left stale values from prior presets.
+- **`const _fazGsk = true;` → `var`** — the WP Consent API inline script used ES6 `const` which runs before the main script loads; a syntax error there would prevent the entire chain from executing on edge-case browsers.
+- **Removed `#000000` → transparent skip in template CSS** — `<input type="color">` stores `#000000` when no transparent option exists, but design presets like High Contrast intentionally use `#000000` for buttons. The skip was producing blue defaults instead of black.
+
+### Internal
+- `applyDesignPreset()` in `banner.js` syncs `categoryPreview`, `preferenceCenter` and `optoutPopup` from preset config. Uses `applyPresetSection()` with structural-key preservation (`status`, `tag`, `meta`).
+- `normalizeBannerConfig()` ensures the preference center toggle config is consistent on banner load.
+- `get_default_config_type()` in `class-banner.php` picks the correct law-specific defaults (GDPR vs CCPA) for sanitization.
+- E2E: `pr61-regression.spec.ts` — 6 regression tests covering preset application, transparent button handling, PMP+GCM no-crash, missing template guard, and WP Consent API compatibility.
+- E2E: `a11y.spec.ts` — `beforeAll` resets banner to box/bottom-left via `wpEval()` for test isolation; focus trap test marked `fixme(#62)`.
+
 ## [1.11.1] — 2026-04-15
 
 This release ships **four critical fixes** on top of the 1.11.0 publisher-revenue work, plus a new Czech translation. **Upgrade strongly recommended** for anyone running 1.11.0 in production — two of the fixes were reported by a live publisher (gooloo.de) and affect every visitor's consent persistence.

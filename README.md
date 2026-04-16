@@ -451,6 +451,14 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.11.2
+- **Fix: preference center invisible on dark design presets** — all 5 presets now include full `preferenceCenter`, `categoryPreview` and `optoutPopup` color palettes (background, text, buttons, toggle states). Previously only the banner bar was styled.
+- **Fix: TypeError crash on ChromeOS / PMP-exempt members** — `_fazRenderBanner()` null guard prevents crash when the banner template element is absent (PMP-exempt members, empty cache).
+- **Fix: `applyDesignPreset()` deep-replaces preference center and optout popup config** — the old cherry-pick missed toggle states and left stale values across preset switches.
+- **Fix: `const _fazGsk = true;` → `var`** for broader browser compatibility in the WP Consent API inline script.
+- **Fix: removed `#000000` → transparent skip in template CSS** — High Contrast preset buttons now render as black instead of falling back to the default blue.
+- **Internal: `normalizeBannerConfig()`, law-specific sanitization defaults, 6 new E2E regression tests.**
+
 ### 1.11.1
 - **Fix: banner reappears on every page load (critical)** — the `fazcookie-consent` cookie was written without URL-encoding, so on the next pageview the naive `document.cookie` splitter lost the `,` and `:` separators, `rev` couldn't be extracted, and `isConsentCookieStale()` wiped the cookie every time. URL-encode on write, two-pass decode on read. Reported by a live publisher running 1.11.0 in production.
 - **Fix: PMP `exempt_levels` setting didn't persist (critical)** — `Settings::sanitize()` was coercing the CSV input `"2, 3"` to `[]` before `sanitize_option()` could parse it. Excluded keys are now dispatched to their per-key handler first. Without this fix the entire Paid Memberships Pro integration was silently non-functional.
