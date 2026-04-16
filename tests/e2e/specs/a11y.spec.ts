@@ -9,12 +9,16 @@ import { wpEval } from '../utils/wp-env';
 test.beforeAll(async () => {
   wpEval(`
     global $wpdb;
-    $row = $wpdb->get_row("SELECT settings FROM {$wpdb->prefix}faz_banners WHERE banner_id = 1");
+    $row = $wpdb->get_row("SELECT banner_id, settings FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 ORDER BY banner_id ASC LIMIT 1");
     if ($row) {
       $s = json_decode($row->settings, true);
       $s['settings']['type'] = 'box';
       $s['settings']['position'] = 'bottom-left';
-      $wpdb->update($wpdb->prefix . 'faz_banners', array('settings' => wp_json_encode($s)), array('banner_id' => 1));
+      $wpdb->update(
+        $wpdb->prefix . 'faz_banners',
+        array('settings' => wp_json_encode($s)),
+        array('banner_id' => (int) $row->banner_id)
+      );
     }
     delete_option('faz_banner_template');
   `);
