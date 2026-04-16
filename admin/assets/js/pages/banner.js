@@ -655,28 +655,17 @@
 		}
 		if (cpSaveBtns['border-color']) setColorPair('faz-b-catprev-save-border', cpSaveBtns['border-color']);
 
-		// Preference center colours (no form inputs — write directly to config)
+		// Preference center colours (no form inputs — write directly to config).
+		// Deep-clone the entire subtree so toggle states, poweredBy, and any
+		// future keys are carried over. Replaces instead of merging to avoid
+		// stale branches from a previously applied preset leaking through.
 		if (c.preferenceCenter && bannerData && bannerData.properties && bannerData.properties.config) {
-			var pc = c.preferenceCenter;
-			ensureObj(bannerData.properties, 'config.preferenceCenter');
-			var cfgPC = bannerData.properties.config.preferenceCenter;
-			if (pc.styles) cfgPC.styles = JSON.parse(JSON.stringify(pc.styles));
-			if (pc.elements) {
-				if (!cfgPC.elements) cfgPC.elements = {};
-				if (pc.elements.title) cfgPC.elements.title = JSON.parse(JSON.stringify(pc.elements.title));
-				if (pc.elements.description) cfgPC.elements.description = JSON.parse(JSON.stringify(pc.elements.description));
-				if (pc.elements.categories) cfgPC.elements.categories = JSON.parse(JSON.stringify(pc.elements.categories));
-				if (pc.elements.buttons) cfgPC.elements.buttons = JSON.parse(JSON.stringify(pc.elements.buttons));
-			}
+			bannerData.properties.config.preferenceCenter = JSON.parse(JSON.stringify(c.preferenceCenter));
 		}
 
-		// Optout popup colours (no form inputs — write directly to config)
+		// Optout popup colours — same deep-replace strategy.
 		if (c.optoutPopup && bannerData && bannerData.properties && bannerData.properties.config) {
-			ensureObj(bannerData.properties, 'config.optoutPopup');
-			bannerData.properties.config.optoutPopup = Object.assign(
-				bannerData.properties.config.optoutPopup,
-				JSON.parse(JSON.stringify(c.optoutPopup))
-			);
+			bannerData.properties.config.optoutPopup = JSON.parse(JSON.stringify(c.optoutPopup));
 		}
 
 		// Re-init color pickers so swatches update
