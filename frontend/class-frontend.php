@@ -423,7 +423,7 @@ class Frontend {
 			$wca_suffix = $this->get_script_suffix( 'js/wca' );
 			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
 			if ( true === $this->is_gsk_enabled() ) {
-				wp_add_inline_script( $handle, 'const _fazGsk = true;', 'before' );
+				wp_add_inline_script( $handle, 'var _fazGsk = true;', 'before' );
 			}
 			wp_enqueue_script( $handle );
 		}
