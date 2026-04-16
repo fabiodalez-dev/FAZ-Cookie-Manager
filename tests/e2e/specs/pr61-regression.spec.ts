@@ -337,6 +337,13 @@ test.describe.serial('PR #61 regressions', () => {
 		const originalActive = listActivePlugins();
 		ensureFixturePlugin('faz-e2e-pmp-mock');
 
+		// Declare outside the try so the finally block can access them
+		// for rollback even when the test fails mid-flight.
+		let settingsNonce = '';
+		let gcmNonce = '';
+		let beforeSettings: any = null;
+		let beforeGcm: any = null;
+
 		try {
 			try {
 				wp(['plugin', 'activate', 'google-site-kit']);
@@ -348,12 +355,12 @@ test.describe.serial('PR #61 regressions', () => {
 
 			await loginAsAdmin(page);
 			await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
-			const settingsNonce = await getAdminNonce(page);
-			const beforeSettings = await getSettings(page, settingsNonce);
+			settingsNonce = await getAdminNonce(page);
+			beforeSettings = await getSettings(page, settingsNonce);
 
 			await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-gcm`, { waitUntil: 'domcontentloaded' });
-			const gcmNonce = await getAdminNonce(page);
-			const beforeGcm = await getGcmSettings(page, gcmNonce);
+			gcmNonce = await getAdminNonce(page);
+			beforeGcm = await getGcmSettings(page, gcmNonce);
 
 			await updateSettings(page, settingsNonce, {
 				integrations: {
@@ -407,13 +414,17 @@ test.describe.serial('PR #61 regressions', () => {
 		} finally {
 			// Restore settings even on test failure so the serial suite
 			// does not start subsequent tests from a dirty state.
-			await updateSettings(page, settingsNonce, {
-				integrations: beforeSettings.integrations ?? { paid_memberships_pro: { enabled: false, exempt_levels: [] } },
-			}).catch(() => { /* best-effort */ });
-			await updateGcmSettings(page, gcmNonce, {
-				status: beforeGcm.status ?? false,
-				non_personalized_ads_fallback: beforeGcm.non_personalized_ads_fallback ?? false,
-			}).catch(() => { /* best-effort */ });
+			if (beforeSettings && settingsNonce) {
+				await updateSettings(page, settingsNonce, {
+					integrations: beforeSettings.integrations ?? { paid_memberships_pro: { enabled: false, exempt_levels: [] } },
+				}).catch(() => { /* best-effort */ });
+			}
+			if (beforeGcm && gcmNonce) {
+				await updateGcmSettings(page, gcmNonce, {
+					status: beforeGcm.status ?? false,
+					non_personalized_ads_fallback: beforeGcm.non_personalized_ads_fallback ?? false,
+				}).catch(() => { /* best-effort */ });
+			}
 			deleteOption('faz_e2e_pmp_mock_levels');
 			restorePlugins(originalActive);
 		}
