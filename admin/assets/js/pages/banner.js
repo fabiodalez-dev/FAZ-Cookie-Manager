@@ -633,6 +633,52 @@
 			}
 		}
 
+		// Category preview colours (form inputs exist)
+		var catPrev = (c.categoryPreview && c.categoryPreview.elements) || {};
+		if (catPrev.title && catPrev.title.styles) {
+			setColorPair('faz-b-catprev-label', catPrev.title.styles.color);
+		}
+		var cpToggle = catPrev.toggle || {};
+		if (cpToggle.states) {
+			if (cpToggle.states.active && cpToggle.states.active.styles) {
+				setColorPair('faz-b-catprev-toggle-active', cpToggle.states.active.styles['background-color']);
+			}
+			if (cpToggle.states.inactive && cpToggle.states.inactive.styles) {
+				setColorPair('faz-b-catprev-toggle-inactive', cpToggle.states.inactive.styles['background-color']);
+			}
+		}
+		var cpSaveBtns = (catPrev.buttons && catPrev.buttons.elements && catPrev.buttons.elements.save && catPrev.buttons.elements.save.styles) || {};
+		if (cpSaveBtns.color) setColorPair('faz-b-catprev-save-text', cpSaveBtns.color);
+		if (cpSaveBtns['background-color']) {
+			var bg = cpSaveBtns['background-color'];
+			setColorPair('faz-b-catprev-save-bg', bg === 'transparent' ? '#FFFFFF' : bg);
+		}
+		if (cpSaveBtns['border-color']) setColorPair('faz-b-catprev-save-border', cpSaveBtns['border-color']);
+
+		// Preference center colours (no form inputs — write directly to config)
+		if (c.preferenceCenter && bannerData && bannerData.properties && bannerData.properties.config) {
+			var pc = c.preferenceCenter;
+			ensureObj(bannerData.properties, 'config.preferenceCenter');
+			var cfgPC = bannerData.properties.config.preferenceCenter;
+			if (pc.styles) cfgPC.styles = JSON.parse(JSON.stringify(pc.styles));
+			if (pc.elements) {
+				if (!cfgPC.elements) cfgPC.elements = {};
+				if (pc.elements.title) cfgPC.elements.title = JSON.parse(JSON.stringify(pc.elements.title));
+				if (pc.elements.description) cfgPC.elements.description = JSON.parse(JSON.stringify(pc.elements.description));
+				if (pc.elements.categories) cfgPC.elements.categories = JSON.parse(JSON.stringify(pc.elements.categories));
+				if (pc.elements.buttons) cfgPC.elements.buttons = JSON.parse(JSON.stringify(pc.elements.buttons));
+			}
+		}
+
+		// Optout popup colours (no form inputs — write directly to config)
+		if (c.optoutPopup && bannerData && bannerData.properties && bannerData.properties.config) {
+			ensureObj(bannerData.properties, 'config.optoutPopup');
+			bannerData.properties.config.optoutPopup = Object.assign(
+				bannerData.properties.config.optoutPopup,
+				JSON.parse(JSON.stringify(c.optoutPopup))
+			);
+		}
+
 		// Re-init color pickers so swatches update
 		FAZ.initColorPickers();
 

@@ -987,6 +987,11 @@ function _fazSetCheckBoxAriaLabel(boxElem, isChecked, formattedLabel, isCCPA = f
  */
 function _fazRenderBanner() {
     const template = document.getElementById('fazBannerTemplate');
+    // Guard: the template element is absent when banner_html() was suppressed
+    // (e.g. PMP-exempt members who still get script.js for GCM signals) or
+    // when the banner template cache is empty. Without this check the next
+    // line throws "Cannot read properties of null (reading 'innerHTML')".
+    if (!template) return;
     const templateHtml = template.innerHTML;
     const doc = new DOMParser().parseFromString(templateHtml, 'text/html');
     _fazSetFooterShadow(doc);
