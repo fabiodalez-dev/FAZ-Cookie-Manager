@@ -561,7 +561,8 @@ test.describe('P1 fix: per-service cookie shredding', () => {
         // Plant a fake Hotjar cookie
         document.cookie = '_hjid=test123;path=/';
         // Set consent: all categories yes, but svc.hotjar denied
-        document.cookie = 'fazcookie-consent=necessary:yes,analytics:yes,marketing:yes,svc.hotjar:no;path=/';
+        const consent = 'necessary:yes,analytics:yes,marketing:yes,svc.hotjar:no';
+        document.cookie = `fazcookie-consent=${encodeURIComponent(consent)};path=/`;
       });
 
       // Reload — PHP shredding should delete _hjid on the server side

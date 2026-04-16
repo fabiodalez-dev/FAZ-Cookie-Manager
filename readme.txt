@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.10.2
+Stable tag: 1.11.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -189,10 +189,31 @@ By default, no — your consent logs, banner configuration and categories stay i
 6. **IAB TCF v2.3 Global Vendor List** -- Browse the bundled GVL, filter by purpose, and select which vendors your site works with. Full Transparency and Consent Framework v2.3 support, no cloud required.
 7. **Consent logs** -- Local, tamper-resistant audit trail of every visitor consent: status, categories, hashed IP, URL and timestamp. Filter, search and export to CSV for DPIA / audits.
 8. **Google Consent Mode v2** -- Default vs. granted state for `ad_storage`, `analytics_storage`, `ad_user_data`, `ad_personalization`, `functionality_storage`, `personalization_storage` and `security_storage`. Works with GTM and gtag.
-9. **Languages** -- Manage active languages and the default banner language. Works alongside WPML / Polylang; Italian and Dutch translations ship out of the box.
+9. **Languages** -- Manage active languages and the default banner language. Works alongside WPML / Polylang; Italian, Dutch, German, French and Czech translations ship out of the box.
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.11.1 =
+* **Critical fix**: banner reappearing on every page load — the consent cookie was written without URL-encoding, so the re-read couldn't extract `rev` and the stale-check wiped the cookie every time. URL-encode on write, two-pass decode on read. Reported by a live publisher running 1.11.0.
+* **Critical fix**: PMP `exempt_levels` setting didn't persist — the settings sanitizer coerced the CSV input to an empty array before the per-key handler could parse it. Without this fix the entire Paid Memberships Pro integration was silently non-functional.
+* Fix: Non-personalized ads fallback also forces `ad_user_data` / `ad_personalization` to `denied` in the region-default code path, aligning with the post-"reject all" state.
+* Fix: PMP auto-grant cookie now writes `consent:yes` (the token `script.js::_fazUnblock()` gates on) instead of `consent:accepted`, so exempt members get their scripts actually unblocked client-side.
+* Fix: `setAdditionalConsent(null)` no longer fires during the stale-revision window — would otherwise clobber the live GACM provider list.
+* Fix: Settings page race condition between `loadSettings()` and `invalidateConsents()` — bumped revision is no longer reverted by a late-arriving GET.
+* Fix: Cross-domain consent forwarding regex accepts base64 (`+`, `/`, `=`) so forwarded consentids aren't silently dropped.
+* Fix: `wca.js` and `microsoft-consent.js` requested `.min.js` files that don't exist on the installation, 404'ing the WP Consent API and Microsoft UET/Clarity integrations. Suffix is now computed per-file.
+* Fix: PMP auto-grant cookie filters internal/admin categories (`wordpress-internal`, invisible ones) so they don't leak into a visitor's consent record.
+* Fix: changelog wording on NPA fallback clarified — `ad_storage = granted` still allows advertising identifiers for frequency capping/fraud detection; what NPA removes is profiling and ad-user-data signals.
+* New: Czech (cs_CZ) translation — 441 fully translated strings contributed by Vaclav.
+* Refactor: `faz_get_cookie_domain()` is now the single source of truth; `Frontend::get_cookie_domain()` delegates. No more TLD-list drift between server-side writes and client-side localization.
+
+= 1.11.0 =
+* New: Non-personalized ads fallback for Google Consent Mode (GCM → Advanced). When a visitor denies marketing consent, keep `ad_storage = granted` while forcing `ad_user_data` and `ad_personalization` to `denied` — the Google-sanctioned configuration for serving non-personalized ads to visitors who reject the banner. Publishers still earn revenue on those pageviews. Disabled by default; admins enable it explicitly.
+* New: Force re-consent (Settings → Force re-consent). "Invalidate all consents" button bumps a server-side revision counter; returning visitors whose stored cookie carries a lower revision see the banner again on their next visit. Useful after adding new ad/analytics services or tightening your cookie policy.
+* New: Paid Memberships Pro integration (Settings → Paid Memberships Pro integration, visible only when PMP is active). Select comma-separated level IDs whose members are exempted from the banner and auto-granted consent across all categories — the "Pay-or-Accept" (PUR) model. Non-paying visitors are unaffected. No-op when PMP is not installed.
+* Fix: GCM race condition on revisit — returning visitors with a saved consent cookie now see `gtag("consent", "default", …)` emitted directly with their granted states, removing the brief denied→granted window during which AdSense/GTM could fire the first request with ads blocked.
+* Fix: `wait_for_update` default aligned between admin UI (500 ms) and PHP defaults (previously 2000 ms) — the UI number now matches what new installations actually use.
 
 = 1.10.2 =
 * Fix: preference center text colour on sites with a dark theme (follow-up to #57). The 1.10.1 fix for the transparent background exposed a pre-existing issue: several rules inside the preference center used `color: inherit`, which on dark-theme host sites inherited a light text colour from `body`, producing unreadable "light on white" text. Locked the text colour to `var(--faz-detail-color, #212121)` on the preference center, preference, header, footer wrapper, body wrapper and description paragraphs. The default is dark regardless of host theme, and users can still override the colour from the banner editor because the CSS variable is fed from the stored banner config.
@@ -366,6 +387,12 @@ By default, no — your consent logs, banner configuration and categories stay i
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.11.1 =
+Critical fix release — addresses two production-impacting bugs in 1.11.0 (banner reappearing on every page load, PMP `exempt_levels` setting not persisting) plus nine smaller fixes and a new Czech translation. Strongly recommended for all 1.11.0 installations.
+
+= 1.11.0 =
+Consent versioning, non-personalized ads fallback for Google Consent Mode, and an optional Paid Memberships Pro integration. Review Settings → Force re-consent and GCM → Advanced after upgrade; existing cookies remain valid until you click "Invalidate all consents".
 
 = 1.9.2 =
 Fixes the "English always comes back" language bug. Clear caches after upgrading.

@@ -82,6 +82,11 @@ class Settings extends Store {
 			),
 			'general'      => array(
 				'remove_data_on_uninstall' => false,
+				// Consent revision counter. Incremented manually by the admin
+				// via the "Invalidate all consents" button. Returning visitors
+				// whose stored consent has a lower revision will see the banner
+				// again. Starts at 1 so any value >=1 is valid.
+				'consent_revision'         => 1,
 			),
 			'scanner'      => array(
 				'max_pages'       => 20,
@@ -145,6 +150,22 @@ class Settings extends Store {
 				'enabled' => false,
 				'min_age' => 16,
 			),
+			// Integrations with third-party plugins. Each integration is
+			// effectively no-op if its host plugin is not active.
+			'integrations'      => array(
+				'paid_memberships_pro' => array(
+					// Master toggle. Feature only activates when enabled AND
+					// the PMP plugin is active on the site.
+					'enabled'        => false,
+					// Comma-separated list of PMP level IDs (stored as an
+					// array of integers) whose members are exempted from the
+					// cookie banner and whose consent is auto-granted across
+					// all categories. This is the "Pay-or-Accept" (PUR)
+					// branch: paying subscribers skip the banner, free
+					// visitors keep the standard consent flow.
+					'exempt_levels'  => array(),
+				),
+			),
 		);
 
 	}
@@ -187,6 +208,7 @@ class Settings extends Store {
 			'target_regions',
 			'target_domains',
 			'whitelist_patterns',
+			'exempt_levels',
 		);
 	}
 	/**
@@ -215,13 +237,18 @@ class Settings extends Store {
 		$excludes = self::get_excludes();
 		foreach ( $defaults as $key => $data ) {
 			$value = isset( $settings[ $key ] ) ? $settings[ $key ] : $data;
-			// If the default is an array but the stored value isn't, use the default.
-			if ( is_array( $data ) && ! is_array( $value ) ) {
-				$value = $data;
-			}
+			// Excluded keys handle their own coercion in sanitize_option() —
+			// e.g. `exempt_levels` accepts a comma-separated string from the
+			// admin UI and normalizes to an array of IDs. Running the
+			// "array default but non-array value" override below would wipe
+			// the string before sanitize_option() ever sees it.
 			if ( in_array( $key, $excludes, true ) ) {
 				$result[ $key ] = self::sanitize_option( $key, $value );
 				continue;
+			}
+			// If the default is an array but the stored value isn't, use the default.
+			if ( is_array( $data ) && ! is_array( $value ) ) {
+				$value = $data;
 			}
 			if ( is_array( $value ) ) {
 				$result[ $key ] = self::sanitize( $value, $data );
@@ -270,6 +297,11 @@ class Settings extends Store {
 			case 'max_pages':
 				$value = absint( $value );
 				break;
+			case 'consent_revision':
+				// Revision counter: always >= 1. Bounded upper limit to avoid
+				// accidental huge values from corrupted input.
+				$value = max( 1, min( 999999, absint( $value ) ) );
+				break;
 			case 'retention':
 				$value = max( 1, min( 120, absint( $value ) ) );
 				break;
@@ -292,6 +324,19 @@ class Settings extends Store {
 				}, $value ), function ( $item ) {
 					return '' !== $item;
 				} ) );
+				break;
+			case 'exempt_levels':
+				// Accept either an array of IDs or a comma-separated string
+				// (admin UI submits the latter). Normalize to a deduplicated
+				// array of positive integers.
+				if ( is_string( $value ) ) {
+					$value = array_map( 'trim', explode( ',', $value ) );
+				}
+				if ( ! is_array( $value ) ) {
+					$value = array();
+					break;
+				}
+				$value = array_values( array_unique( array_filter( array_map( 'absint', $value ) ) ) );
 				break;
 			case 'custom_rules':
 				$allowed_categories = array( 'analytics', 'marketing', 'functional', 'performance' );

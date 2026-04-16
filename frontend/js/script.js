@@ -50,20 +50,78 @@ const fazcookieConsentMap = (currentCookieMap["fazcookie-consent"] || "")
     .split(",")
     .reduce((prev, curr) => {
         if (!curr) return prev;
-        const sepIdx = curr.lastIndexOf(":");
+        // Match PHP's faz_parse_consent_cookie() which uses
+        // explode(':', $pair, 2) — first colon is the separator.
+        const sepIdx = curr.indexOf(":");
         if (sepIdx === -1) return prev;
         const key = curr.substring(0, sepIdx);
         const value = curr.substring(sepIdx + 1);
         prev[key] = value;
         return prev;
     }, {});
+
+if (currentCookieMap["fazcookie-consent"]) {
+    try {
+        Object.assign(
+            fazcookieConsentMap,
+            decodeURIComponent(currentCookieMap["fazcookie-consent"])
+                .split(",")
+                .reduce((prev, curr) => {
+                    if (!curr) return prev;
+                    const sepIdx = curr.indexOf(":");
+                    if (sepIdx === -1) return prev;
+                    const key = curr.substring(0, sepIdx);
+                    const value = curr.substring(sepIdx + 1);
+                    prev[key] = value;
+                    return prev;
+                }, {})
+        );
+    } catch (_unused) { /* raw legacy cookie, keep original parse */ }
+}
+
+// Consent revision check: if the admin has bumped the server-side revision
+// (via Settings → "Invalidate all consents") and the stored cookie has a
+// lower revision (or none at all), discard the stored consent so the banner
+// is shown again. Cookies from plugin versions < 1.11.0 have no `rev` key
+// and are therefore always treated as valid to avoid breaking upgrades —
+// they are only invalidated once the admin explicitly bumps the revision.
+// wp_localize_script frequently stringifies integers (depending on the
+// underlying json encoder and PHP int→string coercion), so do not trust
+// `typeof === "number"` here. Coerce explicitly and fall back to 1.
+const _fazServerRevisionRaw = _fazStore && _fazStore._consentRevision;
+const _fazServerRevisionParsed = parseInt(_fazServerRevisionRaw, 10);
+const _fazServerRevision = isNaN(_fazServerRevisionParsed) || _fazServerRevisionParsed < 1
+    ? 1
+    : _fazServerRevisionParsed;
+const _fazHasConsentCookie = typeof currentCookieMap["fazcookie-consent"] === "string"
+    && currentCookieMap["fazcookie-consent"] !== "";
+const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);
+const _fazConsentInvalidated =
+    _fazHasConsentCookie &&
+    _fazServerRevision > 1 &&
+    (isNaN(_fazStoredRevision) || _fazStoredRevision < _fazServerRevision);
+if (_fazConsentInvalidated) {
+    // Delete all consent-tracking cookies immediately so later scripts in the
+    // same page load (GCM, TCF, consent forwarding) do not keep reading the
+    // stale state.
+    ["fazcookie-consent", "fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
+    // Wipe the entries that gate the banner so showBanner() logic triggers.
+    // We keep `consentid` so cross-session analytics can still correlate if
+    // the visitor re-consents.
+    ["consent", "action"].forEach((k) => { fazcookieConsentMap[k] = ""; });
+    _fazStore._categories.forEach(({ slug }) => { fazcookieConsentMap[slug] = ""; });
+}
+
 ["consentid", "consent", "action"]
     .concat(_fazStore._categories.map(({ slug }) => slug))
     .forEach((item) =>
         ref._fazConsentStore.set(item, fazcookieConsentMap[item] || "")
     );
+// Always track the revision currently in effect so next _fazSetInStore()
+// persists it into the cookie.
+ref._fazConsentStore.set("rev", String(_fazServerRevision));
 // Restore per-service consent keys (svc.service-id) from existing cookie.
-if (_fazStore._perServiceConsent && _fazStore._services) {
+if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._services) {
     _fazStore._services.forEach(function(svc) {
         const svcKey = "svc." + svc.id;
         if (fazcookieConsentMap[svcKey]) {
@@ -107,7 +165,8 @@ ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDom
     const toSetTime =
         days === 0 ? 0 : date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
     const secure = location.protocol === 'https:' ? ' Secure;' : '';
-    document.cookie = `${name}=${value}; expires=${new Date(
+    const cookieValue = name === "fazcookie-consent" ? encodeURIComponent(value) : value;
+    document.cookie = `${name}=${cookieValue}; expires=${new Date(
         toSetTime
     ).toUTCString()}; path=/;${domain}; SameSite=Lax;${secure}`;
 }
@@ -1871,8 +1930,8 @@ function _fazAfterConsent() {
     // Cross-domain consent forwarding: send consent to configured target domains.
     if (_fazStore._consentForwarding && _fazStore._consentForwarding.enabled) {
         var targets = _fazStore._consentForwarding.targets || [];
-        var consentMatch = document.cookie.match(/fazcookie-consent=([^;]+)/);
-        if (consentMatch && targets.length > 0) {
+        var consentValue = ref._fazGetCookie('fazcookie-consent');
+        if (consentValue && targets.length > 0) {
             targets.forEach(function(targetUrl) {
                 if (!_fazIsAllowedScheme(targetUrl)) return;
                 var iframe = document.createElement('iframe');
@@ -1883,7 +1942,7 @@ function _fazAfterConsent() {
                     try {
                         iframe.contentWindow.postMessage({
                             type: 'faz_consent_forward',
-                            consent: consentMatch[1]
+                            consent: consentValue
                         }, new URL(targetUrl).origin);
                     } catch(e) { /* cross-origin error — ignore */ }
                     setTimeout(function() { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 1000);
@@ -2599,14 +2658,28 @@ window.addEventListener('message', function(event) {
 
     if (event.data && event.data.type === 'faz_consent_forward' && event.data.consent) {
         // Validate consent string format and length before writing to cookie.
+        // The charset must stay in lockstep with faz_parse_consent_cookie()
+        // (PHP) and the cookie writer: key:value pairs joined by ",", where
+        // value can be base64 (e.g. future vendor-specific payloads, TCF
+        // consent strings forwarded across domains) — base64 uses A-Za-z0-9
+        // plus "+", "/" and "=" padding, and the consentid itself can be
+        // base64. Allowing those characters here does not widen the attack
+        // surface: the overall payload is still bounded (length cap above)
+        // and written verbatim as a cookie value, not interpreted as HTML.
         var consent = event.data.consent;
         if (typeof consent !== 'string' || consent.length > 2048) return;
-        if (!/^[a-zA-Z0-9._:\-]+(,[a-zA-Z0-9._:\-]+)*$/.test(consent)) return;
+        if (!/^[A-Za-z0-9._:+/=\-]+(,[A-Za-z0-9._:+/=\-]+)*$/.test(consent)) return;
 
+        // Clear any vendor/TCF cookies the recipient domain may have from
+        // a previous (possibly more permissive) choice. Without this, a
+        // cross-domain forward that downgrades the consent state would
+        // overwrite only fazcookie-consent, and the stale fazVendorConsent
+        // or euconsent-v2 would resurface after the reload — producing an
+        // inconsistent state where the main cookie says "deny marketing"
+        // but TCF vendors are still flagged as consented.
+        ["fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
         // Apply forwarded consent cookie.
-        var d = new Date();
-        d.setTime(d.getTime() + (_fazStore._expiry || 180) * 24 * 60 * 60 * 1000);
-        document.cookie = 'fazcookie-consent=' + consent + '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax';
+        ref._fazSetCookie('fazcookie-consent', consent, _fazStore._expiry || 180);
         // Reload to apply the forwarded consent state.
         window.location.reload();
     }

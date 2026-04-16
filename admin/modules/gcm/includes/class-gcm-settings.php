@@ -28,21 +28,17 @@ class Gcm_Settings extends Store {
 		return array(
 			'status' => false,
 			'default_settings' => array(
-				array(
-					'analytics' => 'denied',
-					'marketing' => 'denied',
-					'functional' => 'denied',
-					'necessary' => 'granted',
-					'ad_user_data' => 'denied',
-					'ad_personalization' => 'denied',
-					'regions' => 'All',
-				)
+				self::get_default_settings_entry(),
 			),
-			'wait_for_update' => 2000,
+			'wait_for_update' => 500,
 			'url_passthrough' => false,
 			'ads_data_redaction' => false,
 			'gacm_enabled' => false,
 			'gacm_provider_ids' => '',
+			// When true and marketing consent is denied, serve non-personalized ads:
+			// ad_storage = granted, but ad_user_data / ad_personalization = denied.
+			// See https://support.google.com/adsense/answer/13554116
+			'non_personalized_ads_fallback' => false,
 		);
 	}
 
@@ -86,6 +82,13 @@ class Gcm_Settings extends Store {
 			'analytics', 'marketing', 'functional', 'necessary',
 		);
 		$allowed_values = array( 'granted', 'denied' );
+		$default_entry  = self::get_default_settings_entry();
+		$aliases        = array(
+			'analytics'  => 'analytics_storage',
+			'marketing'  => 'ad_storage',
+			'functional' => 'functionality_storage',
+			'necessary'  => 'security_storage',
+		);
 
 		$sanitized = array();
 		foreach ( $settings as $entry ) {
@@ -110,10 +113,51 @@ class Gcm_Settings extends Store {
 				// Unknown keys are silently dropped.
 			}
 			if ( ! empty( $clean ) ) {
-				$sanitized[] = $clean;
+				foreach ( $aliases as $legacy_key => $storage_key ) {
+					if ( isset( $clean[ $legacy_key ] ) && ! isset( $clean[ $storage_key ] ) ) {
+						$clean[ $storage_key ] = $clean[ $legacy_key ];
+					} elseif ( isset( $clean[ $storage_key ] ) && ! isset( $clean[ $legacy_key ] ) ) {
+						$clean[ $legacy_key ] = $clean[ $storage_key ];
+					}
+				}
+				if ( isset( $clean['functionality_storage'] ) && ! isset( $clean['personalization_storage'] ) ) {
+					$clean['personalization_storage'] = $clean['functionality_storage'];
+				} elseif ( isset( $clean['personalization_storage'] ) && ! isset( $clean['functionality_storage'] ) ) {
+					$clean['functionality_storage'] = $clean['personalization_storage'];
+				}
+				if ( isset( $clean['personalization_storage'] ) && ! isset( $clean['functional'] ) ) {
+					$clean['functional'] = $clean['personalization_storage'];
+				}
+				$sanitized[] = wp_parse_args( $clean, $default_entry );
 			}
 		}
 		return $sanitized;
+	}
+
+	/**
+	 * Return the canonical consent defaults for a single region entry.
+	 *
+	 * Includes both the legacy FAZ category keys used by the current admin/UI
+	 * flow and the GCM v2 storage keys so older installs and API-driven
+	 * updates cannot drop newly introduced consent signals.
+	 *
+	 * @return array
+	 */
+	public static function get_default_settings_entry() {
+		return array(
+			'ad_storage'              => 'denied',
+			'analytics_storage'       => 'denied',
+			'ad_user_data'            => 'denied',
+			'ad_personalization'      => 'denied',
+			'functionality_storage'   => 'denied',
+			'personalization_storage' => 'denied',
+			'security_storage'        => 'granted',
+			'analytics'               => 'denied',
+			'marketing'               => 'denied',
+			'functional'              => 'denied',
+			'necessary'               => 'granted',
+			'regions'                 => 'All',
+		);
 	}
 	/**
 	 * Update settings to database.
@@ -122,11 +166,20 @@ class Gcm_Settings extends Store {
 	 * @return void
 	 */
 	public function update( $data ) {
-		$settings = get_option( 'faz_gcm_settings', $this->data );
-		if ( empty( $settings ) ) {
-			$settings = $this->data;
+		$stored = get_option( 'faz_gcm_settings', array() );
+		if ( ! is_array( $stored ) ) {
+			$stored = array();
 		}
-		$settings = self::sanitize( $data, $settings );
+		// Merge stored values onto the canonical defaults so any keys added
+		// to get_defaults() in newer plugin versions (e.g.
+		// non_personalized_ads_fallback in 1.11.0) are visible to the
+		// sanitize iteration even on installs that never persisted them.
+		// Without this, sanitize() iterates the *stored* array as its keyset
+		// and silently drops new keys included in the POST payload.
+		$base = wp_parse_args( $stored, $this->data );
+		// Apply incoming changes on top, then sanitize against canonical defaults.
+		$merged   = wp_parse_args( (array) $data, $base );
+		$settings = self::sanitize( $merged, $this->data );
 		update_option( 'faz_gcm_settings', $settings );
 		do_action( 'faz_after_update_settings', $settings );
 	}
@@ -160,6 +213,7 @@ class Gcm_Settings extends Store {
 			case 'url_passthrough':
 			case 'ads_data_redaction':
 			case 'gacm_enabled':
+			case 'non_personalized_ads_fallback':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'wait_for_update':

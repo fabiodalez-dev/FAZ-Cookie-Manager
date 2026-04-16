@@ -103,20 +103,19 @@ class Api extends Rest_Controller {
 					}
 				)
 			);
-			$boolean_keys = array( 'status', 'ads_data_redaction', 'url_passthrough', 'gacm_enabled' );
 			foreach ( $properties_keys as $key ) {
 				if ( ! $request->has_param( $key ) ) {
 					continue;
 				}
 				$value = $request[ $key ];
-				if ( in_array( $key, $boolean_keys, true ) ) {
+				if ( isset( $properties[ $key ]['type'] ) && 'boolean' === $properties[ $key ]['type'] ) {
 					$data[ $key ] = faz_sanitize_bool( $value );
 				} elseif ( 'wait_for_update' === $key ) {
 					$data[ $key ] = absint( $value );
 				} elseif ( 'default_settings' === $key ) {
 					$data[ $key ] = is_array( $value ) ? Gcm_Settings::sanitize_default_settings( $value ) : array();
 				} else {
-					$data[ $key ] = sanitize_text_field( $value );
+					$data[ $key ] = Gcm_Settings::sanitize_option( $key, $value );
 				}
 			}
 		}
@@ -168,6 +167,11 @@ class Api extends Rest_Controller {
 				'gacm_provider_ids' => array(
 					'description' => __( 'GACM provider IDs (comma-separated).', 'faz-cookie-manager' ),
 					'type'        => 'string',
+					'context'     => array( 'view', 'edit' ),
+				),
+				'non_personalized_ads_fallback' => array(
+					'description' => __( 'Serve non-personalized ads when marketing consent is denied.', 'faz-cookie-manager' ),
+					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
 			),

@@ -162,7 +162,7 @@ class Frontend {
 			return;
 		}
 
-		$suffix = ''; // Always load non-minified JS.
+		$suffix = $this->get_script_suffix( 'js/script' );
 		if ( false === $this->settings->is_connected() ) {
 			if ( ! $this->template ) {
 				return;
@@ -230,9 +230,9 @@ class Frontend {
 				$gcm      = $this->get_gcm_data();
 				$gcm_json = wp_json_encode( $gcm );
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
-				$gcm_suffix = ''; // Always load non-minified (no build tooling).
+				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $this->plugin_name . '-gcm';
-				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array(), $this->version, false );
+				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 
 			// IAB TCF v2.3 CMP stub (when IAB is enabled in settings).
@@ -242,7 +242,7 @@ class Frontend {
 				// Handles 'ping' directly so pre-CMP callers get a valid response.
 				$tcf_stub = 'if(typeof window.__tcfapi!=="function"){var a=[];window.__tcfapi=function(cmd,ver,cb){if(cmd==="ping"){cb({gdprApplies:undefined,cmpLoaded:false,cmpStatus:"stub",displayStatus:"hidden",apiVersion:"2.3"},true);return;}a.push(arguments);};window.__tcfapi.a=a;}';
 				wp_add_inline_script( $script_handle, $tcf_stub, 'before' );
-				$tcf_suffix = ''; // Always load non-minified (no build tooling).
+				$tcf_suffix = $this->get_script_suffix( 'js/tcf-cmp' );
 				$tcf_handle = $script_handle . '-tcf-cmp';
 				wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
 
@@ -368,19 +368,19 @@ class Frontend {
 						'token'   => $hmac_token,
 					)
 				);
-				$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
-					"var d=e.detail||{};" .
-					"if(!d.action||d.action==='init')return;" .
-					"if(typeof _fazConsentLog==='undefined')return;" .
-					"fetch(_fazConsentLog.restUrl,{" .
-						"method:'POST'," .
-						"headers:{'Content-Type':'application/json'}," .
-						"body:JSON.stringify({" .
-							"consent_id:(function(){var m=document.cookie.match(/consentid:([^,;]+)/);return m?m[1]:''})()," .
-							"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
-							"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
-							"url:window.location.href," .
-							"token:_fazConsentLog.token" .
+					$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
+						"var d=e.detail||{};" .
+						"if(!d.action||d.action==='init')return;" .
+						"if(typeof _fazConsentLog==='undefined')return;" .
+						"fetch(_fazConsentLog.restUrl,{" .
+							"method:'POST'," .
+							"headers:{'Content-Type':'application/json'}," .
+							"body:JSON.stringify({" .
+								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
+								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
+								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
+								"url:window.location.href," .
+								"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .
 				"});";
@@ -416,7 +416,12 @@ class Frontend {
 		}
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';
-			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $suffix . '.js', array(), $this->version, false );
+			// Compute the suffix per-file: wca.js and microsoft-consent.js
+			// are not in the build:min pipeline, so reusing the $suffix
+			// computed for script.js would produce URLs like wca.min.js
+			// that 404 on any install where script.min.js exists.
+			$wca_suffix = $this->get_script_suffix( 'js/wca' );
+			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'const _fazGsk = true;', 'before' );
 			}
@@ -426,7 +431,8 @@ class Frontend {
 		$ms_clarity = (bool) $this->settings->get( 'microsoft', 'clarity_consent' );
 		if ( $ms_uet || $ms_clarity ) {
 			$ms_handle = $this->plugin_name . '-microsoft-consent';
-			wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $suffix . '.js', array(), $this->version, false );
+			$ms_suffix = $this->get_script_suffix( 'js/microsoft-consent' );
+			wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array(), $this->version, false );
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
 			}
@@ -434,6 +440,25 @@ class Frontend {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftClarity = true;', 'before' );
 			}
 		}
+	}
+
+	/**
+	 * Return the script suffix to use for frontend assets.
+	 *
+	 * Production loads `.min.js` when available. Development keeps the
+	 * readable source when SCRIPT_DEBUG is enabled or when no minified file
+	 * has been generated yet.
+	 *
+	 * @param string $asset_base Relative path without extension/min suffix.
+	 * @return string
+	 */
+	private function get_script_suffix( $asset_base ) {
+		if ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
+			return '';
+		}
+
+		$minified_path = plugin_dir_path( __FILE__ ) . $asset_base . '.min.js';
+		return file_exists( $minified_path ) ? '.min' : '';
 	}
 
 	/**
@@ -445,7 +470,9 @@ class Frontend {
 		if ( true === $this->settings->is_connected() || true === faz_disable_banner() || is_admin() ) {
 			return;
 		}
-		if ( $this->is_banner_disabled_by_settings() ) {
+		// Use the wider UI-suppressed check: if the banner UI is hidden (e.g.
+		// for PMP-exempt members), the placeholder CSS is unnecessary.
+		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
 		// AMP pages use <amp-consent> — skip regular inline styles.
@@ -465,6 +492,13 @@ class Frontend {
 		if ( true === $this->settings->is_connected() || true === faz_disable_banner() ) {
 			return;
 		}
+		// NOTE: We deliberately do NOT check is_banner_ui_suppressed() here.
+		// load_banner() populates $this->template, which enqueue_scripts()
+		// depends on to register script.js / gcm.js / tcf-cmp.js. PMP-exempt
+		// members must still receive those bootstrap scripts so GCM can fire
+		// the auto-granted consent signals to AdSense / GTM — only the
+		// visible banner HTML (insert_styles, banner_html) gets suppressed,
+		// and those two hooks check is_banner_ui_suppressed() themselves.
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
@@ -641,7 +675,9 @@ class Frontend {
 		if ( ! $this->template || true === faz_disable_banner() ) {
 			return;
 		}
-		if ( $this->is_banner_disabled_by_settings() ) {
+		// Banner HTML is the actual visible UI — suppress for PMP-exempt
+		// members so they never see the consent dialog.
+		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
 		// AMP pages use <amp-consent> — skip regular banner template.
@@ -726,6 +762,11 @@ class Frontend {
 			'_shortCodes'   => $this->prepare_shortcodes( $banner->get_settings() ),
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
+			// Consent revision: when the admin bumps this, returning visitors
+			// with a lower revision in their cookie are treated as having no
+			// consent, and the banner is shown again. See Settings →
+			// "Invalidate all consents".
+			'_consentRevision' => isset( $settings['general']['consent_revision'] ) ? max( 1, absint( $settings['general']['consent_revision'] ) ) : 1,
 		);
 		// Merge DB-based providers with Known_Providers for client-side blocking.
 		$valid_categories = $this->get_valid_category_slugs();
@@ -888,57 +929,23 @@ class Frontend {
 		return $store;
 	}
 	/**
-	 * Return cookie domain
+	 * Return cookie domain.
+	 *
+	 * Thin wrapper around the global faz_get_cookie_domain() helper so the
+	 * scope used for client-side localization (`_rootDomain` on _fazStore)
+	 * stays byte-for-byte identical to the scope used server-side by
+	 * faz_set_browser_cookie() / faz_expire_browser_cookie(). The underlying
+	 * helper already reads `faz_settings.banner_control.subdomain_sharing`,
+	 * parses home_url() with the public-suffix awareness this method used
+	 * to re-implement, and applies the `faz_cookie_domain` filter — so we
+	 * just delegate. Kept as a public method to preserve the call sites
+	 * that receive a Frontend instance (e.g. `$this->get_cookie_domain()`
+	 * inside the cookie-shredding path).
 	 *
 	 * @return string
 	 */
 	public function get_cookie_domain() {
-		$domain = '';
-		$subdomain = $this->settings->get( 'banner_control', 'subdomain_sharing' );
-		if ( $subdomain ) {
-			$parsed = wp_parse_url( home_url() );
-			$host   = isset( $parsed['host'] ) ? $parsed['host'] : '';
-			$parts  = explode( '.', $host );
-			$count  = count( $parts );
-
-			// Multi-level public suffixes (co.uk, com.au, etc.) need 3 labels
-			// to form a valid registrable domain. Taking only 2 labels would
-			// give ".co.uk" which browsers reject as a public suffix.
-			$multi_level_tlds = array(
-				'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'net.uk',
-				'com.au', 'net.au', 'org.au', 'edu.au',
-				'co.nz', 'net.nz', 'org.nz',
-				'co.jp', 'or.jp', 'ne.jp',
-				'co.kr', 'or.kr',
-				'co.in', 'net.in', 'org.in',
-				'co.za', 'org.za', 'web.za',
-				'com.br', 'net.br', 'org.br',
-				'com.cn', 'net.cn', 'org.cn',
-				'com.hk', 'org.hk',
-				'com.my', 'net.my', 'org.my',
-				'com.sg', 'net.sg', 'org.sg',
-				'com.tw', 'net.tw', 'org.tw',
-				'co.id', 'or.id', 'web.id',
-				'com.mx', 'org.mx',
-				'co.il',
-				'com.tr', 'org.tr',
-			);
-
-			$is_multi = false;
-			if ( $count >= 3 ) {
-				$last_two = implode( '.', array_slice( $parts, -2 ) );
-				$is_multi = in_array( $last_two, $multi_level_tlds, true );
-			}
-
-			if ( $is_multi && $count > 3 ) {
-				$domain = '.' . implode( '.', array_slice( $parts, -3 ) );
-			} elseif ( ! $is_multi && $count > 2 ) {
-				$domain = '.' . implode( '.', array_slice( $parts, -2 ) );
-			} elseif ( ! empty( $host ) ) {
-				$domain = '.' . $host;
-			}
-		}
-		return apply_filters( 'faz_cookie_domain', $domain );
+		return faz_get_cookie_domain();
 	}
 
 	/**
@@ -965,6 +972,36 @@ class Frontend {
 				}
 			}
 		}
+
+		return false;
+	}
+
+	/**
+	 * Check whether the visible banner UI (template HTML + CSS) should be
+	 * suppressed for the current request.
+	 *
+	 * Wider net than `is_banner_disabled_by_settings()`: also covers the
+	 * Paid Memberships Pro integration where exempted members must NOT see
+	 * the banner, even though all the consent bootstrap (script.js, gcm.js,
+	 * tcf-cmp.js) still needs to load so GCM can read the auto-granted
+	 * cookie and emit the right `consent` signals to AdSense / GTM.
+	 *
+	 * Use this for banner-rendering hooks. Use
+	 * `is_banner_disabled_by_settings()` for script enqueuing.
+	 *
+	 * @return boolean
+	 */
+	protected function is_banner_ui_suppressed() {
+		if ( $this->is_banner_disabled_by_settings() ) {
+			return true;
+		}
+
+		if ( class_exists( '\\FazCookie\\Includes\\Integrations\\Paid_Memberships_Pro' )
+			&& \FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->is_current_user_exempted()
+		) {
+			return true;
+		}
+
 		return false;
 	}
 
@@ -1697,7 +1734,7 @@ class Frontend {
 		if ( null !== $this->blocked_categories_cache ) {
 			return $this->blocked_categories_cache;
 		}
-		$consent = isset( $_COOKIE['fazcookie-consent'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) ) : '';
+		$consent = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
 		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
 		$blocked = array();
 
@@ -1749,7 +1786,7 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 
-		$consent = isset( $_COOKIE['fazcookie-consent'] ) ? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) ) : '';
+		$consent = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
 		if ( empty( $consent ) ) {
 			return $this->service_consent_cache;
 		}

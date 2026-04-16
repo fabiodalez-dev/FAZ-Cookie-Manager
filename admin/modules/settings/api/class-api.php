@@ -167,6 +167,17 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/invalidate-consents',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'invalidate_consents' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
 	}
 	/**
 	 * Get a collection of items.
@@ -670,9 +681,9 @@ class Api extends Rest_Controller {
 					'name'           => sanitize_text_field( $banner['name'] ?? '' ),
 					'slug'           => sanitize_text_field( $banner['slug'] ?? '' ),
 					'status'         => absint( $banner['status'] ?? 0 ),
-					'settings'       => wp_json_encode( $safe_settings ),
+					'settings'       => $this->encode_json_column( $safe_settings, array() ),
 					'banner_default' => absint( $banner['banner_default'] ?? 0 ),
-					'contents'       => wp_json_encode( $safe_contents ),
+					'contents'       => $this->encode_json_column( $safe_contents, array() ),
 				);
 
 				if ( $existing ) {
@@ -703,15 +714,15 @@ class Api extends Rest_Controller {
 			$cat_failed = false;
 			foreach ( $data['categories'] as $cat ) {
 				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-					'category_id'      => absint( $cat['category_id'] ?? 0 ),
-					'name'             => wp_json_encode( $cat['name'] ?? array() ),
-					'slug'             => sanitize_text_field( $cat['slug'] ?? '' ),
-					'description'      => wp_json_encode( $cat['description'] ?? array() ),
-					'prior_consent'    => absint( $cat['prior_consent'] ?? 0 ),
-					'visibility'       => absint( $cat['visibility'] ?? 1 ),
-					'priority'         => absint( $cat['priority'] ?? 0 ),
+					'category_id'        => absint( $cat['category_id'] ?? 0 ),
+					'name'               => $this->encode_json_column( $cat['name'] ?? null, array() ),
+					'slug'               => sanitize_text_field( $cat['slug'] ?? '' ),
+					'description'        => $this->encode_json_column( $cat['description'] ?? null, array() ),
+					'prior_consent'      => absint( $cat['prior_consent'] ?? 0 ),
+					'visibility'         => absint( $cat['visibility'] ?? 1 ),
+					'priority'           => absint( $cat['priority'] ?? 0 ),
 					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 0 ),
-					'meta'             => isset( $cat['meta'] ) ? wp_json_encode( $cat['meta'] ) : null,
+					'meta'               => array_key_exists( 'meta', $cat ) ? $this->encode_json_column( $cat['meta'], array() ) : null,
 				) );
 				if ( false === $result ) {
 					$cat_failed = true;
@@ -739,14 +750,14 @@ class Api extends Rest_Controller {
 					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
 					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
 					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
-					'description' => wp_json_encode( $cookie['description'] ?? '' ),
+					'description' => $this->encode_json_column( $cookie['description'] ?? null, '' ),
 					'duration'    => sanitize_text_field( $cookie['duration'] ?? '' ),
 					'domain'      => sanitize_text_field( $cookie['domain'] ?? '' ),
 					'category'    => absint( $cookie['category'] ?? 0 ),
 					'type'        => sanitize_text_field( $cookie['type'] ?? '' ),
 					'discovered'  => absint( $cookie['discovered'] ?? 0 ),
 					'url_pattern' => sanitize_text_field( $cookie['url_pattern'] ?? '' ),
-					'meta'        => isset( $cookie['meta'] ) ? wp_json_encode( $cookie['meta'] ) : null,
+					'meta'        => array_key_exists( 'meta', $cookie ) ? $this->encode_json_column( $cookie['meta'], array() ) : null,
 				) );
 				if ( false === $result ) {
 					$cookie_failed = true;
@@ -773,6 +784,91 @@ class Api extends Rest_Controller {
 			'success'  => true,
 			'imported' => $imported,
 		) );
+	}
+
+	/**
+	 * Invalidate all stored visitor consents by bumping the consent revision.
+	 *
+	 * Visitors whose stored cookie carries a revision lower than the new value
+	 * will be treated as not having consented yet, and the banner will be
+	 * shown again on their next page load. Existing scripts already loaded
+	 * on the current page are not affected.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function invalidate_consents( $request ) {
+		$settings_obj = new Settings();
+		$general      = $settings_obj->get( 'general' );
+		$current      = isset( $general['consent_revision'] ) ? absint( $general['consent_revision'] ) : 1;
+		$next         = max( 1, $current + 1 );
+
+		$all                                = $settings_obj->get();
+		$all['general']['consent_revision'] = $next;
+		$settings_obj->update( $all );
+
+		// Re-read the persisted revision: Settings::sanitize_option('consent_revision')
+		// caps the value at 999999, so the stored revision can be lower than what
+		// we computed above when the counter is approaching the ceiling. The API
+		// must report what was actually saved, not what we tried to save.
+		$persisted = $settings_obj->get( 'general' );
+		$saved     = isset( $persisted['consent_revision'] ) ? absint( $persisted['consent_revision'] ) : 1;
+
+		// Clear banner template cache so any frontend data depending on the
+		// revision is regenerated on next request.
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
+
+		return rest_ensure_response(
+			array(
+				'success'          => true,
+				'consent_revision' => $saved,
+			)
+		);
+	}
+
+	/**
+	 * Encode a value for storage in a JSON column without re-encoding
+	 * values that were exported as strings.
+	 *
+	 * The export endpoint decodes JSON fields (categories.name, cookies.meta,
+	 * etc.) into native arrays/objects, but legacy exports — and third-party
+	 * export tooling — may pass them back through as already-encoded JSON
+	 * strings. Blindly calling `wp_json_encode()` on a string re-wraps it
+	 * (`"[]"` becomes `"\"[]\""`, then `"\"\\\"[]\\\"\""`, etc.). Under
+	 * repeated import/export round-trips the string doubles every cycle
+	 * until it hits the MEDIUMTEXT / MEDIUMBLOB ceiling (16 MB), which
+	 * then makes every cache-population `SELECT *` from that table return
+	 * ~100 MB of payload — the exact path that produced a 40 GB debug.log
+	 * for one of our users.
+	 *
+	 * Contract:
+	 *   - array/object → json_encode it.
+	 *   - string that is valid JSON → keep as-is.
+	 *   - string that is NOT valid JSON → json_encode it (new storage).
+	 *   - empty/null → json_encode of the provided default.
+	 *
+	 * @param mixed $value   Raw import payload fragment for a JSON column.
+	 * @param mixed $default Value to substitute when `$value` is null.
+	 * @return string|null JSON string ready for insertion, or null when the
+	 *                    caller explicitly wants a NULL column value.
+	 */
+	private function encode_json_column( $value, $default = array() ) {
+		if ( null === $value ) {
+			return null;
+		}
+		if ( is_string( $value ) ) {
+			if ( '' === $value ) {
+				return wp_json_encode( $default );
+			}
+			json_decode( $value, true );
+			if ( JSON_ERROR_NONE === json_last_error() ) {
+				return $value;
+			}
+			return wp_json_encode( $value );
+		}
+		return wp_json_encode( $value );
 	}
 
 	/**
