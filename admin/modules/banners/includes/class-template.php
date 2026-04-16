@@ -420,12 +420,6 @@ class Template {
 				if ( ! empty( $styles ) ) {
 					foreach ( $styles as $property => $value ) {
 						if ( '' !== $value ) {
-							// Skip #000000 backgrounds — artifact of HTML <input type="color">
-							// which cannot represent 'transparent'. Template CSS provides
-							// correct defaults (transparent for outline buttons).
-							if ( 'background-color' === $property && '#000000' === $value ) {
-								continue;
-							}
 							$safe_tag = preg_replace( '/[^a-zA-Z0-9\-_]/', '-', $tag );
 							$css_vars[ '--faz-' . $safe_tag . '-' . $property ] = $value;
 						}
@@ -559,4 +553,3 @@ class Template {
 		);
 	}
 }
-

@@ -212,11 +212,12 @@
 		}
 	}
 
-	function loadBanner() {
-		FAZ.get('banners/' + bannerId).then(function (data) {
-			bannerData = data;
-			populateSettings();
-			populateContents(currentLang);
+		function loadBanner() {
+			FAZ.get('banners/' + bannerId).then(function (data) {
+				bannerData = data;
+				normalizeBannerConfig(bannerData.properties);
+				populateSettings();
+				populateContents(currentLang);
 			// Init color pickers after populating values
 			FAZ.initColorPickers();
 			// Filter position options for current type
@@ -294,7 +295,7 @@
 		var catSave = (catPreview.buttons && catPreview.buttons.elements && catPreview.buttons.elements.save && catPreview.buttons.elements.save.styles) || {};
 		setColor('faz-b-catprev-save-text', catSave.color || '#1863DC');
 		var catSaveBg = catSave['background-color'] || 'transparent';
-		setColor('faz-b-catprev-save-bg', catSaveBg === 'transparent' ? '#FFFFFF' : catSaveBg);
+		setColor('faz-b-catprev-save-bg', catSaveBg);
 		setColor('faz-b-catprev-save-border', catSave['border-color'] || '#1863DC');
 
 		// Button toggles
@@ -510,7 +511,7 @@
 		var cpSave = (catPrev.buttons && catPrev.buttons.elements && catPrev.buttons.elements.save && catPrev.buttons.elements.save.styles) || {};
 		setColor('faz-b-catprev-save-text', cpSave.color || '#1863DC');
 		var cpSaveBg = cpSave['background-color'] || 'transparent';
-		setColor('faz-b-catprev-save-bg', cpSaveBg === 'transparent' ? '#FFFFFF' : cpSaveBg);
+		setColor('faz-b-catprev-save-bg', cpSaveBg);
 		setColor('faz-b-catprev-save-border', cpSave['border-color'] || '#1863DC');
 
 		// Re-init color pickers (update swatch display)
@@ -633,6 +634,40 @@
 			}
 		}
 
+		// Category preview colours (form inputs exist)
+		var catPrev = (c.categoryPreview && c.categoryPreview.elements) || {};
+		if (catPrev.title && catPrev.title.styles) {
+			setColorPair('faz-b-catprev-label', catPrev.title.styles.color);
+		}
+		var cpToggle = catPrev.toggle || {};
+		if (cpToggle.states) {
+			if (cpToggle.states.active && cpToggle.states.active.styles) {
+				setColorPair('faz-b-catprev-toggle-active', cpToggle.states.active.styles['background-color']);
+			}
+			if (cpToggle.states.inactive && cpToggle.states.inactive.styles) {
+				setColorPair('faz-b-catprev-toggle-inactive', cpToggle.states.inactive.styles['background-color']);
+			}
+		}
+		var cpSaveBtns = (catPrev.buttons && catPrev.buttons.elements && catPrev.buttons.elements.save && catPrev.buttons.elements.save.styles) || {};
+		if (cpSaveBtns.color) setColorPair('faz-b-catprev-save-text', cpSaveBtns.color);
+		if (cpSaveBtns['background-color']) setColorPair('faz-b-catprev-save-bg', cpSaveBtns['background-color']);
+		if (cpSaveBtns['border-color']) setColorPair('faz-b-catprev-save-border', cpSaveBtns['border-color']);
+
+		if (c.preferenceCenter && bannerData && bannerData.properties) {
+			applyPresetSection('preferenceCenter', c.preferenceCenter, [
+				'elements.closeButton',
+				'elements.poweredBy'
+			]);
+		}
+
+		if (c.optoutPopup && bannerData && bannerData.properties) {
+			applyPresetSection('optoutPopup', c.optoutPopup, [
+				'elements.closeButton',
+				'elements.gpcOption',
+				'elements.poweredBy'
+			]);
+		}
+
 		// Re-init color pickers so swatches update
 		FAZ.initColorPickers();
 
@@ -657,6 +692,89 @@
 			hexEl.value = value;
 		}
 	}
+
+	function applyPresetSection(sectionKey, source, preservePaths) {
+		if (!source || !bannerData || !bannerData.properties) return;
+		ensureObj(bannerData.properties, 'config');
+		var current = bannerData.properties.config[sectionKey] || {};
+		var next = cloneJson(source);
+		preserveStructuralKeys(next, current);
+		(preservePaths || []).forEach(function (path) {
+			preserveMissingBranch(next, current, path);
+		});
+		if (sectionKey === 'preferenceCenter') {
+			syncPreferenceCenterToggle(next, current);
+		}
+		bannerData.properties.config[sectionKey] = next;
+	}
+
+	function cloneJson(value) {
+		return JSON.parse(JSON.stringify(value));
+	}
+
+	function isPlainObject(value) {
+		return !!value && typeof value === 'object' && !Array.isArray(value);
+	}
+
+	function preserveStructuralKeys(target, source) {
+		if (!isPlainObject(target) || !isPlainObject(source)) return;
+		['status', 'tag', 'type'].forEach(function (key) {
+			if (source[key] !== undefined && target[key] === undefined) {
+				target[key] = source[key];
+			}
+		});
+		if (source.meta !== undefined && target.meta === undefined) {
+			target.meta = cloneJson(source.meta);
+		}
+		Object.keys(target).forEach(function (key) {
+			if (key === 'styles') return;
+			if (isPlainObject(target[key]) && isPlainObject(source[key])) {
+				preserveStructuralKeys(target[key], source[key]);
+			}
+		});
+	}
+
+	function preserveMissingBranch(target, source, path) {
+		if (!isPlainObject(target) || !isPlainObject(source)) return;
+		var existing = getPathValue(source, path);
+		if (!isPlainObject(existing) || getPathValue(target, path) !== undefined) return;
+		setPathValue(target, path, cloneJson(existing));
+	}
+
+	function getPathValue(obj, path) {
+		return String(path || '').split('.').reduce(function (acc, key) {
+			return acc && acc[key] !== undefined ? acc[key] : undefined;
+		}, obj);
+	}
+
+	function setPathValue(obj, path, value) {
+		var parts = String(path || '').split('.');
+		var ref = obj;
+		for (var i = 0; i < parts.length - 1; i++) {
+			var key = parts[i];
+			if (!isPlainObject(ref[key])) ref[key] = {};
+			ref = ref[key];
+		}
+		ref[parts[parts.length - 1]] = value;
+	}
+
+		function syncPreferenceCenterToggle(section, current) {
+			if (!isPlainObject(section)) return;
+			var presetToggle = getPathValue(section, 'elements.categories.elements.toggle');
+		if (!isPlainObject(presetToggle)) return;
+		if (!isPlainObject(section.toggle)) section.toggle = {};
+		if (isPlainObject(current && current.toggle)) {
+			preserveStructuralKeys(section.toggle, current.toggle);
+		}
+			if (presetToggle.states !== undefined) {
+				section.toggle.states = cloneJson(presetToggle.states);
+			}
+		}
+
+		function normalizeBannerConfig(props) {
+			if (!props || !props.config || !props.config.preferenceCenter) return;
+			syncPreferenceCenterToggle(props.config.preferenceCenter, props.config.preferenceCenter);
+		}
 
 	// ── Sync form → bannerData (used by save and live preview) ──
 
@@ -787,10 +905,11 @@
 		if (!props.behaviours.respectGPC) props.behaviours.respectGPC = {};
 		props.behaviours.respectGPC.status = isChecked('faz-b-gpc-toggle');
 
-		// Custom CSS
-		if (!props.meta) props.meta = {};
-		props.meta.customCSS = getVal('faz-b-custom-css') || '';
-	}
+			// Custom CSS
+			if (!props.meta) props.meta = {};
+			props.meta.customCSS = getVal('faz-b-custom-css') || '';
+			normalizeBannerConfig(props);
+		}
 
 	// ── Save ──
 
@@ -809,10 +928,11 @@
 			contents: bannerData.contents,
 		};
 
-		FAZ.put('banners/' + bannerId, payload).then(function (updated) {
-			bannerData = updated;
-			FAZ.btnLoading(btn, false);
-			FAZ.notify(__('banner.saved', 'Banner settings saved.'));
+			FAZ.put('banners/' + bannerId, payload).then(function (updated) {
+				bannerData = updated;
+				normalizeBannerConfig(bannerData.properties);
+				FAZ.btnLoading(btn, false);
+				FAZ.notify(__('banner.saved', 'Banner settings saved.'));
 			refreshPreview();
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);

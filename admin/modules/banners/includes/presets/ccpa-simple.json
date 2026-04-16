@@ -42,6 +42,118 @@
                     }
                 }
             }
+        },
+        "preferenceCenter": {
+            "styles": {
+                "color": "#cbd5e1",
+                "background-color": "#1e293b",
+                "border-color": "#334155"
+            },
+            "elements": {
+                "title": { "styles": { "color": "#f1f5f9" } },
+                "description": { "styles": { "color": "#94a3b8" } },
+                "categories": {
+                    "elements": {
+                        "title": { "styles": { "color": "#e2e8f0" } },
+                        "description": { "styles": { "color": "#94a3b8" } },
+                        "toggle": {
+                            "states": {
+                                "active": { "styles": { "background-color": "#f59e0b" } },
+                                "inactive": { "styles": { "background-color": "#475569" } },
+                                "alwaysActive": { "styles": { "background-color": "#f59e0b" } }
+                            }
+                        }
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "accept": {
+                            "styles": {
+                                "color": "#1e293b",
+                                "background-color": "#f59e0b",
+                                "border-color": "#f59e0b"
+                            }
+                        },
+                        "reject": {
+                            "styles": {
+                                "color": "#e2e8f0",
+                                "background-color": "transparent",
+                                "border-color": "#475569"
+                            }
+                        },
+                        "save": {
+                            "styles": {
+                                "color": "#e2e8f0",
+                                "background-color": "transparent",
+                                "border-color": "#475569"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "categoryPreview": {
+            "elements": {
+                "title": { "styles": { "color": "#e2e8f0" } },
+                "toggle": {
+                    "states": {
+                        "active": { "styles": { "background-color": "#f59e0b" } },
+                        "inactive": { "styles": { "background-color": "#475569" } },
+                        "alwaysActive": { "styles": { "background-color": "#f59e0b" } }
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "save": {
+                            "styles": {
+                                "color": "#e2e8f0",
+                                "background-color": "transparent",
+                                "border-color": "#475569"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "optoutPopup": {
+            "styles": {
+                "color": "#cbd5e1",
+                "background-color": "#1e293b",
+                "border-color": "#334155"
+            },
+            "elements": {
+                "title": { "styles": { "color": "#f1f5f9" } },
+                "description": { "styles": { "color": "#94a3b8" } },
+                "optOption": {
+                    "elements": {
+                        "toggle": {
+                            "states": {
+                                "active": { "styles": { "background-color": "#f59e0b" } },
+                                "inactive": { "styles": { "background-color": "#475569" } }
+                            }
+                        },
+                        "title": { "styles": { "color": "#e2e8f0" } }
+                    }
+                },
+                "buttons": {
+                    "elements": {
+                        "confirm": {
+                            "styles": {
+                                "color": "#1e293b",
+                                "background-color": "#f59e0b",
+                                "border-color": "#f59e0b"
+                            }
+                        },
+                        "cancel": {
+                            "styles": {
+                                "color": "#e2e8f0",
+                                "background-color": "transparent",
+                                "border-color": "#475569"
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

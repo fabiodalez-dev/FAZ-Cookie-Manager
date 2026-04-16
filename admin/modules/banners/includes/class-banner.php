@@ -151,7 +151,8 @@ class Banner extends Store {
 	public function set_settings( $data ) {
 		$key = 'settings';
 		if ( array_key_exists( $key, $this->data ) ) {
-			$data               = self::sanitize_settings( array( $this, 'sanitize_option' ), $data, $this->controller->get_default_configs() );
+			$default_type       = self::get_default_config_type( $data );
+			$data               = self::sanitize_settings( array( $this, 'sanitize_option' ), $data, $this->controller->get_default_configs( $default_type ) );
 			$this->data[ $key ] = $data;
 		}
 	}
@@ -212,10 +213,25 @@ class Banner extends Store {
 		if ( array_key_exists( $key, $this->data ) ) {
 			$settings = ( is_string( $this->data[ $key ] ) ) ? json_decode( $this->data[ $key ], true ) : $this->data[ $key ];
 			if ( is_array( $settings ) ) {
-				$settings = self::sanitize_settings( array( $this, 'sanitize_option' ), $settings, $this->controller->get_default_configs() );
+				$default_type = self::get_default_config_type( $settings );
+				$settings     = self::sanitize_settings( array( $this, 'sanitize_option' ), $settings, $this->controller->get_default_configs( $default_type ) );
 			}
 		}
 		return $settings;
+	}
+
+	/**
+	 * Pick the matching default config tree for sanitization.
+	 *
+	 * Partial admin payloads must be backfilled from the correct law-specific
+	 * defaults, otherwise CCPA banners can silently inherit GDPR-only flags.
+	 *
+	 * @param array $settings Banner settings payload.
+	 * @return string
+	 */
+	private static function get_default_config_type( $settings ) {
+		$law = isset( $settings['settings']['applicableLaw'] ) ? sanitize_key( $settings['settings']['applicableLaw'] ) : 'gdpr';
+		return 'ccpa' === $law ? 'ccpa' : 'gdpr';
 	}
 
 	/**
