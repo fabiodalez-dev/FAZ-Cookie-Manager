@@ -404,14 +404,16 @@ test.describe.serial('PR #61 regressions', () => {
 			expect(allErrors).not.toContain('Cannot read properties of null');
 			expect(allErrors).not.toContain("reading 'innerHTML'");
 
+		} finally {
+			// Restore settings even on test failure so the serial suite
+			// does not start subsequent tests from a dirty state.
 			await updateSettings(page, settingsNonce, {
 				integrations: beforeSettings.integrations ?? { paid_memberships_pro: { enabled: false, exempt_levels: [] } },
-			});
+			}).catch(() => { /* best-effort */ });
 			await updateGcmSettings(page, gcmNonce, {
 				status: beforeGcm.status ?? false,
 				non_personalized_ads_fallback: beforeGcm.non_personalized_ads_fallback ?? false,
-			});
-		} finally {
+			}).catch(() => { /* best-effort */ });
 			deleteOption('faz_e2e_pmp_mock_levels');
 			restorePlugins(originalActive);
 		}
