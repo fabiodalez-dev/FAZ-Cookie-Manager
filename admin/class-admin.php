@@ -269,7 +269,7 @@ class Admin {
 		}
 		wp_dequeue_script( 'wp-api-fetch' );
 		wp_deregister_script( 'wp-api-fetch' );
-		wp_register_script( 'wp-api-fetch', false, array(), false, true );
+		wp_register_script( 'wp-api-fetch', false, array(), FAZ_VERSION, true );
 	}
 
 	/**
@@ -541,10 +541,14 @@ window.wp.apiFetch=apiFetch;
 						'allCookies'               => __( 'All Cookies', 'faz-cookie-manager' ),
 						'hidden'                   => __( 'hidden', 'faz-cookie-manager' ),
 						'hiddenFromFrontend'       => __( 'Hidden from frontend', 'faz-cookie-manager' ),
+						/* translators: %d: number of seconds until retry */
 						'serverBusyRetrying'       => __( 'Server busy, retrying in %ds...', 'faz-cookie-manager' ),
+						/* translators: %d: total number of pages to scan */
 						'scanningPages'            => __( 'Scanning 0/%d pages...', 'faz-cookie-manager' ),
 						'rulePlaceholder'          => __( 'e.g. custom-tracker.com/script.js', 'faz-cookie-manager' ),
+						/* translators: %1$d: number of rules added, %2$s: template name */
 						'rulesAdded'               => __( 'Added %1$d rules from %2$s (saved)', 'faz-cookie-manager' ),
+						/* translators: %s: template name */
 						'allCookiesExist'          => __( 'All cookies from %s already exist', 'faz-cookie-manager' ),
 						'noCookiesFound'           => __( 'No cookies found.', 'faz-cookie-manager' ),
 						'edit'                     => __( 'Edit', 'faz-cookie-manager' ),
@@ -555,6 +559,7 @@ window.wp.apiFetch=apiFetch;
 						'cookieUpdated'            => __( 'Cookie updated.', 'faz-cookie-manager' ),
 						'cookieAdded'              => __( 'Cookie added.', 'faz-cookie-manager' ),
 						'cookieSaveFailed'         => __( 'Failed to save cookie.', 'faz-cookie-manager' ),
+						/* translators: %s: cookie name */
 						'cookieDeleteConfirm'      => __( 'Delete cookie "%s"?', 'faz-cookie-manager' ),
 						'cookieDeleted'            => __( 'Cookie deleted.', 'faz-cookie-manager' ),
 						'cookieDeleteFailed'       => __( 'Failed to delete cookie.', 'faz-cookie-manager' ),
@@ -592,6 +597,7 @@ window.wp.apiFetch=apiFetch;
 					),
 					// Banner page.
 					'banner'                   => array(
+						/* translators: %s: preset name */
 						'presetApplied'            => __( 'Preset applied: %s', 'faz-cookie-manager' ),
 						'loadFailed'               => __( 'Failed to load banner settings.', 'faz-cookie-manager' ),
 						'saved'                    => __( 'Banner settings saved.', 'faz-cookie-manager' ),
@@ -625,6 +631,7 @@ window.wp.apiFetch=apiFetch;
 					),
 					// Consent logs page.
 					'consentLogs'              => array(
+						/* translators: %1$s: start index, %2$s: end index, %3$s: total entries */
 						'showing'                  => __( 'Showing %1$s\u2013%2$s of %3$s', 'faz-cookie-manager' ),
 						'loadFailed'               => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
@@ -640,6 +647,7 @@ window.wp.apiFetch=apiFetch;
 						'atLeastOne'               => __( 'At least one language must be selected.', 'faz-cookie-manager' ),
 						'added'                    => __( 'Added', 'faz-cookie-manager' ),
 						'noResults'                => __( 'No languages found.', 'faz-cookie-manager' ),
+						/* translators: %s: language name */
 						'removeLanguage'           => __( 'Remove %s', 'faz-cookie-manager' ),
 						'saved'                    => __( 'Languages saved successfully.', 'faz-cookie-manager' ),
 						'saveFailed'               => __( 'Failed to save languages.', 'faz-cookie-manager' ),
@@ -651,9 +659,13 @@ window.wp.apiFetch=apiFetch;
 						'vendorsLoadFailed'        => __( 'Failed to load vendors. Make sure GVL is downloaded.', 'faz-cookie-manager' ),
 						'noVendors'                => __( 'No vendors found.', 'faz-cookie-manager' ),
 						'vendorDetailFailed'       => __( 'Failed to load vendor details.', 'faz-cookie-manager' ),
+						/* translators: %1$d: current page, %2$d: total pages, %3$d: total vendor count */
 						'pagination'               => __( 'Page %1$d of %2$d (%3$d vendors)', 'faz-cookie-manager' ),
+						/* translators: %d: number of selected vendors (singular) */
 						'selectedVendor'           => __( 'Selected: %d vendor', 'faz-cookie-manager' ),
+						/* translators: %d: number of selected vendors (plural) */
 						'selectedVendors'          => __( 'Selected: %d vendors', 'faz-cookie-manager' ),
+						/* translators: %d: number of vendors saved */
 						'savedCount'               => __( 'Saved %d vendor(s).', 'faz-cookie-manager' ),
 						'selectionSaved'           => __( 'vendor(s) saved.', 'faz-cookie-manager' ),
 						'selectionSavedWithCount'  => __( 'Saved {count} vendor(s).', 'faz-cookie-manager' ),
@@ -1438,7 +1450,7 @@ window.wp.apiFetch=apiFetch;
 			printf(
 				/* translators: %d: number of consent interactions in last 30 days */
 				esc_html__( '%d consent interactions in the last 30 days.', 'faz-cookie-manager' ),
-				$total
+				absint( $total )
 			);
 			?>
 			<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager' ) ); ?>"><?php esc_html_e( 'View details', 'faz-cookie-manager' ); ?></a>

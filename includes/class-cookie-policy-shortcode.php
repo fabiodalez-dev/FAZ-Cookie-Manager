@@ -45,7 +45,7 @@ class Cookie_Policy_Shortcode {
 		$show_table = 'yes' === $atts['show_table'];
 
 		// Enqueue inline styles for the policy page.
-		wp_register_style( 'faz-cookie-policy', false );
+		wp_register_style( 'faz-cookie-policy', false, array(), FAZ_VERSION );
 		wp_enqueue_style( 'faz-cookie-policy' );
 		wp_add_inline_style( 'faz-cookie-policy', '
 .faz-cookie-policy { max-width: 800px; line-height: 1.7; }

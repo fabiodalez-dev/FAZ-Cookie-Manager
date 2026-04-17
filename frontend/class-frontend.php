@@ -124,6 +124,15 @@ class Frontend {
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
+
+		// WP 5.7+ exposes wp_inline_script_tag for inline scripts added via
+		// wp_add_inline_script(). Using this filter catches them BEFORE the
+		// output buffer, giving a cleaner block (the browser never sees the
+		// original script in the source). The OB remains active as a catch-all
+		// for scripts injected outside the WP enqueue system. On WP < 5.7
+		// the filter simply does not exist, so add_filter is a safe no-op
+		// and the OB handles everything.
+		add_filter( 'wp_inline_script_tag', array( $this, 'filter_inline_script_tag' ), 10, 3 );
 		add_action( 'send_headers', array( $this, 'shred_non_consented_cookies' ) );
 
 		// Content-level blocking (defense-in-depth — runs before output buffer).
@@ -479,6 +488,7 @@ class Frontend {
 		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS inside <style> tag, no user input.
 		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
 			. Placeholder_Builder::get_css()
 			. '</style>';
@@ -1973,9 +1983,9 @@ class Frontend {
 	 * @return string Modified attributes string.
 	 */
 	private function set_script_type_plain( $attrs ) {
-		if ( preg_match( '/type\s*=\s*["\']([^"\']*)["\']/', $attrs, $tm ) ) {
+		if ( preg_match( '/type\s*=\s*["\']([^"\']*)["\']/i', $attrs, $tm ) ) {
 			$original = $tm[1];
-			$attrs    = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/', 'type="text/plain"', $attrs );
+			$attrs    = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/i', 'type="text/plain"', $attrs );
 			// Preserve non-default types (e.g. "module") so JS can restore them.
 			if ( 'text/plain' !== $original && 'text/javascript' !== $original && '' !== $original ) {
 				$attrs .= ' data-faz-original-type="' . esc_attr( $original ) . '"';
@@ -2557,6 +2567,107 @@ class Frontend {
 					if ( false === strpos( $tag, 'data-faz-category' ) ) {
 						$tag = str_replace( '<script ', '<script data-faz-category="' . esc_attr( $category ) . '" ', $tag );
 					}
+				}
+				break;
+			}
+		}
+		return $tag;
+	}
+
+	/**
+	 * Filter inline scripts added via wp_add_inline_script() (WP 5.7+).
+	 *
+	 * The `wp_inline_script_tag` filter was introduced in WordPress 5.7.
+	 * On older versions the filter does not exist and the output buffer
+	 * catches inline scripts instead. When the filter IS available, it
+	 * provides a cleaner interception point: the browser never sees the
+	 * original script in the page source (vs. OB which replaces it after
+	 * the entire page is buffered).
+	 *
+	 * The filter signature changed across WP versions:
+	 *   WP 5.7-6.2: ( $tag, $id )           — 2 args
+	 *   WP 6.3+:    ( $tag, $id, $handle )   — 3 args (handle = enqueue handle)
+	 *
+	 * We register with 3 args and default $handle to '' for WP < 6.3.
+	 *
+	 * @param string $tag    Full <script>…</script> tag with inline content.
+	 * @param string $id     The script ID attribute value.
+	 * @param string $handle The WP enqueue handle (WP 6.3+, '' otherwise).
+	 * @return string Modified tag (type="text/plain" + data-faz-category when blocked).
+	 */
+	public function filter_inline_script_tag( $tag, $id, $handle = '' ) {
+		if ( is_admin() ) {
+			return $tag;
+		}
+		if ( ! $this->template ) {
+			return $tag;
+		}
+		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return $tag;
+		}
+		// Extract attributes and inline content separately so the whitelist
+		// only matches against attributes (same policy as the OB path in
+		// process_script_tag, which passes $attrs to is_whitelisted).
+		// Matching against the full $tag would let any inline script that
+		// mentions a whitelist token (e.g. "jquery", "wp-includes/") in its
+		// body bypass blocking — a false-positive risk for third-party
+		// analytics/marketing snippets.
+		$attrs   = '';
+		$content = '';
+		if ( preg_match( '/<script([^>]*)>(.*?)<\/script>/s', $tag, $match ) ) {
+			$attrs   = $match[1];
+			$content = $match[2];
+		}
+
+		// Never block our own inline scripts (match on attributes + handle only).
+		if ( $this->is_whitelisted( $attrs . ' ' . $handle . ' ' . $id, '' ) ) {
+			return $tag;
+		}
+		// Skip if already blocked by another mechanism.
+		if ( false !== strpos( $attrs, 'data-faz-category' ) ) {
+			return $tag;
+		}
+
+		$providers = $this->get_provider_category_map();
+		if ( empty( $providers ) ) {
+			return $tag;
+		}
+
+		foreach ( $providers as $pattern => $category ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			// Match against handle, id, tag attributes, and inline content.
+			if (
+				( '' !== $handle && false !== stripos( $handle, $pattern ) ) ||
+				( '' !== $id && false !== stripos( $id, $pattern ) ) ||
+				false !== stripos( $tag, $pattern ) ||
+				false !== stripos( $content, $pattern )
+			) {
+				$blocked = $this->get_blocked_categories();
+				$should_block = in_array( $category, $blocked, true );
+
+				// Per-service consent override.
+				$svc_blocked = $this->check_per_service_blocking( $tag, $content );
+				if ( false === $svc_blocked ) {
+					$should_block = false;
+				} elseif ( true === $svc_blocked ) {
+					$should_block = true;
+				}
+
+				if ( $should_block ) {
+					$tag = preg_replace_callback(
+						'/<script\b([^>]*)>/i',
+						function ( $mm ) use ( $category ) {
+							$new_attrs = $this->set_script_type_plain( $mm[1] );
+							if ( false === strpos( $new_attrs, 'data-faz-category' ) ) {
+								$new_attrs .= ' data-faz-category="' . esc_attr( $category ) . '"';
+							}
+							return '<script' . $new_attrs . '>';
+						},
+						$tag,
+						1
+					);
 				}
 				break;
 			}
