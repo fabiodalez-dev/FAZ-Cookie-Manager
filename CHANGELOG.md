@@ -2,6 +2,20 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.11.3] — 2026-04-17
+
+### Added
+- **WP 5.7+ `wp_inline_script_tag` filter** — inline scripts added via `wp_add_inline_script()` are now intercepted before the output buffer, so the browser never sees the original executable tag in the page source. Backward compatible: on WP < 5.7 the filter does not exist and the OB catches everything as before.
+- **Returning visitor unblock retry** — `_fazUnblock()` now runs at multiple delays (250ms, 1s, 2s) plus on the `load` event for returning visitors with stored consent. Scripts blocked server-side by the PHP output buffer are restored even when the initial unblock pass fires before late-rendered or deferred DOM nodes are present.
+
+### Fixed
+- **WordPress Plugin Check compliance** — resolved all errors flagged by the official Plugin Check tool: `OutputNotEscaped` (5 instances: `$total`, `$site_name`, exception messages in MMDB reader), `MissingTranslatorsComment` (12 `__()` calls with placeholders), `NoExplicitVersion` (2 `wp_register_script`/`wp_register_style` calls). The `Placeholder_Builder::get_css()` false positive is suppressed with an inline phpcs:ignore.
+- **Inline script whitelist bypass** — `filter_inline_script_tag()` was passing the full `$tag` (including inline body) to `is_whitelisted()`, so any tracking snippet mentioning a whitelist token (e.g. "jquery", "wp-includes") in its body would bypass blocking. Now only passes tag attributes + handle + id, matching the OB path.
+- **`_fazBuildRestoredScript()` helper** — extracted duplicated script-cloning logic from `_fazUnblockServerSide()` into a shared function. Handles `src`, inline content, data-URI decoding, attribute copying, and original-type restoration in one place.
+
+### Internal
+- E2E: `inline-script-filter.spec.ts` — 3 tests covering blocked-before-consent, unblocked-after-accept, and returning-visitor scenarios. Mu-plugin scoped to `?faz_inline_probe` requests to prevent cross-spec contamination.
+
 ## [1.11.2] — 2026-04-16
 
 ### Fixed

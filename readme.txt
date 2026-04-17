@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.11.2
+Stable tag: 1.11.3
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,13 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.11.3 =
+* New: WP 5.7+ `wp_inline_script_tag` filter intercepts inline scripts before the output buffer for cleaner blocking. Backward compatible with WP < 5.7.
+* New: returning visitor unblock retry — blocked scripts are restored at multiple delays + on `load` event, fixing late-rendered content for returning visitors.
+* Fix: WordPress Plugin Check compliance — all `OutputNotEscaped`, `MissingTranslatorsComment`, and `NoExplicitVersion` errors resolved for wp.org submission.
+* Fix: inline script whitelist bypass — `is_whitelisted()` no longer matches against inline script body content.
+* Refactor: `_fazBuildRestoredScript()` deduplicates script-cloning logic.
 
 = 1.11.2 =
 * Fix: preference center invisible on dark design presets — all 5 presets now include full modal color palettes (background, text, buttons, toggle states).
@@ -397,6 +404,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 
 = 1.11.2 =
 Fixes invisible preference center on dark presets, TypeError crash on ChromeOS/PMP-exempt members, and High Contrast preset button colors. Recommended for all 1.11.x installations.
+
+= 1.11.3 =
+WP 5.7+ inline script filter, Plugin Check compliance for wp.org submission, and returning-visitor unblock retry. Recommended before wp.org submission.
 
 = 1.11.1 =
 Critical fix release — addresses two production-impacting bugs in 1.11.0 (banner reappearing on every page load, PMP `exempt_levels` setting not persisting) plus nine smaller fixes and a new Czech translation. Strongly recommended for all 1.11.0 installations.

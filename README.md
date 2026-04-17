@@ -451,6 +451,13 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.11.3
+- **New: WP 5.7+ `wp_inline_script_tag` filter** — intercepts inline scripts added via `wp_add_inline_script()` before the output buffer. Backward compatible (WP < 5.7 uses the OB fallback).
+- **New: returning visitor unblock retry** — `_fazUnblock()` retries at multiple delays (250ms, 1s, 2s) + load event so late-rendered blocked scripts are always restored.
+- **Fix: WordPress Plugin Check errors** — resolved all `OutputNotEscaped`, `MissingTranslatorsComment`, and `NoExplicitVersion` findings for wp.org submission compliance.
+- **Fix: inline script whitelist bypass** — `is_whitelisted()` now checks only tag attributes, not the inline body.
+- **Refactor: `_fazBuildRestoredScript()` helper** — deduplicated script-cloning logic from `_fazUnblockServerSide()`.
+
 ### 1.11.2
 - **Fix: preference center invisible on dark design presets** — all 5 presets now include full `preferenceCenter`, `categoryPreview` and `optoutPopup` color palettes (background, text, buttons, toggle states). Previously only the banner bar was styled.
 - **Fix: TypeError crash on ChromeOS / PMP-exempt members** — `_fazRenderBanner()` null guard prevents crash when the banner template element is absent (PMP-exempt members, empty cache).
