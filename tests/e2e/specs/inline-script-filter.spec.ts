@@ -27,6 +27,12 @@ const MU_PLUGIN_CODE = `<?php
  * Description: Injects a google-analytics-pattern inline script for E2E testing.
  */
 add_action('wp_enqueue_scripts', function() {
+    // Only inject on requests that carry the probe query param so other
+    // spec files running in parallel against the same WP instance never
+    // see this inline script (prevents cross-spec contamination).
+    if ( ! isset( $_GET['faz_inline_probe'] ) ) {
+        return;
+    }
     // Register a dummy handle and attach an inline script that contains
     // a known provider pattern (googletagmanager.com). The FAZ inline
     // script filter should detect the pattern and block it.
@@ -134,7 +140,11 @@ test.describe.serial('WP 5.7+ inline script blocking', () => {
 				() => (window as any).__fazE2EInlineExecuted === true,
 				undefined,
 				{ timeout: 10_000 }
-			).catch(async () => {
+			).catch(async (err: Error) => {
+				// Only handle TimeoutError (in-place unblock didn't fire).
+				// Rethrow anything else (page closed, navigation error, etc.)
+				// so real failures aren't masked.
+				if (err.name !== 'TimeoutError') throw err;
 				await page.waitForFunction(() => document.cookie.includes('fazcookie-consent'), undefined, {
 					timeout: 5_000,
 				});
