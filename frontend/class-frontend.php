@@ -2604,24 +2604,32 @@ class Frontend {
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $tag;
 		}
-		// Never block our own inline scripts.
-		if ( $this->is_whitelisted( $tag, '' ) ) {
+		// Extract attributes and inline content separately so the whitelist
+		// only matches against attributes (same policy as the OB path in
+		// process_script_tag, which passes $attrs to is_whitelisted).
+		// Matching against the full $tag would let any inline script that
+		// mentions a whitelist token (e.g. "jquery", "wp-includes/") in its
+		// body bypass blocking — a false-positive risk for third-party
+		// analytics/marketing snippets.
+		$attrs   = '';
+		$content = '';
+		if ( preg_match( '/<script([^>]*)>(.*?)<\/script>/s', $tag, $match ) ) {
+			$attrs   = $match[1];
+			$content = $match[2];
+		}
+
+		// Never block our own inline scripts (match on attributes + handle only).
+		if ( $this->is_whitelisted( $attrs . ' ' . $handle . ' ' . $id, '' ) ) {
 			return $tag;
 		}
 		// Skip if already blocked by another mechanism.
-		if ( false !== strpos( $tag, 'data-faz-category' ) ) {
+		if ( false !== strpos( $attrs, 'data-faz-category' ) ) {
 			return $tag;
 		}
 
 		$providers = $this->get_provider_category_map();
 		if ( empty( $providers ) ) {
 			return $tag;
-		}
-
-		// Extract the inline script content for pattern matching.
-		$content = '';
-		if ( preg_match( '/<script[^>]*>(.*?)<\/script>/s', $tag, $match ) ) {
-			$content = $match[1];
 		}
 
 		foreach ( $providers as $pattern => $category ) {
