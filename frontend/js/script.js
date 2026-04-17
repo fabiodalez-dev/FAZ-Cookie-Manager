@@ -335,6 +335,16 @@ function _fazInitOperations() {
         _fazSetConsentID();
     } else {
         _fazRemoveBanner();
+        // Returning visitors with a stored "consent:yes" cookie still need the
+        // bootstrap unblock pass for server-side blocked scripts/iframes.
+        // Delay the restore pass so later synchronous DOM mutations cannot
+        // remove the restored nodes before they get a chance to execute.
+        [250, 1000, 2000].forEach((delay) => {
+            window.setTimeout(_fazUnblock, delay);
+        });
+        if (document.readyState !== 'complete') {
+            window.addEventListener('load', _fazUnblock, { once: true });
+        }
     }
 }
 function _fazPreviewEnabled() {
@@ -1451,6 +1461,83 @@ function _fazIsAllowedScheme(url) {
     return scheme === 'http' || scheme === 'https';
 }
 
+function _fazBuildRestoredScript(script, extraSkipAttributes) {
+    var scriptSrc = script.getAttribute('src') || script.src;
+    var clone = scriptSrc
+        ? _fazCreateElementBackup.call(document, 'script')
+        : document.createElement('script');
+    var origType = script.getAttribute('data-faz-original-type');
+    var skip = (extraSkipAttributes || []).concat([
+        'type',
+        'src',
+        'data-faz-category',
+        'data-faz-original-type',
+    ]);
+
+    clone.type = origType || 'text/javascript';
+
+    for (var i = 0; i < script.attributes.length; i++) {
+        var attr = script.attributes[i];
+        if (skip.indexOf(attr.name) !== -1) continue;
+        clone.setAttribute(attr.name, attr.value);
+    }
+
+    if (scriptSrc) {
+        if (scriptSrc.indexOf('data:') === 0) {
+            try {
+                clone.textContent = decodeURIComponent(scriptSrc.split(',').slice(1).join(','));
+            } catch (_e) {
+                clone.src = scriptSrc;
+            }
+        } else {
+            clone.src = scriptSrc;
+        }
+    } else {
+        var inlineText = script.textContent || '';
+        if (inlineText.trim() && /^\s*\{/.test(inlineText) && /\}\s*$/.test(inlineText)) {
+            try {
+                JSON.parse(inlineText);
+                return null;
+            } catch (_e) { /* not JSON, continue */ }
+        }
+        clone.textContent = inlineText;
+    }
+
+    return clone;
+}
+
+function _fazRestoreInlineScript(script, extraRemoveAttributes) {
+    var inlineText = script.textContent || '';
+    var origType = script.getAttribute('data-faz-original-type');
+    var removeAttrs = (extraRemoveAttributes || []).concat([
+        'data-faz-category',
+        'data-faz-original-type',
+    ]);
+
+    if (script.getAttribute('data-faz-executed') === '1') {
+        return;
+    }
+
+    script.setAttribute('type', origType || 'text/javascript');
+    removeAttrs.forEach(function (attrName) {
+        script.removeAttribute(attrName);
+    });
+    script.setAttribute('data-faz-executed', '1');
+
+    if (inlineText.trim() && /^\s*\{/.test(inlineText) && /\}\s*$/.test(inlineText)) {
+        try {
+            JSON.parse(inlineText);
+            return;
+        } catch (_e) { /* not JSON, continue */ }
+    }
+
+    try {
+        (0, eval)(inlineText);
+    } catch (error) {
+        console.error(error);
+    }
+}
+
 /**
  * Re-enable resources that were blocked server-side via PHP output buffering.
  *
@@ -1467,37 +1554,12 @@ function _fazUnblockServerSide() {
             var category = script.getAttribute("data-faz-category")
                 || (script.getAttribute("data-fazcookie") || "").replace("fazcookie-", "");
             if (_fazIsCategoryToBeBlocked(category)) return;
-            var clone = _fazCreateElementBackup.call(document, "script");
-            var origType = script.getAttribute("data-faz-original-type");
-            clone.type = origType || "text/javascript";
-            // Copy attributes before src so integrity/crossorigin/nonce are set for SRI/CSP.
-            for (var i = 0; i < script.attributes.length; i++) {
-                var attr = script.attributes[i];
-                if (attr.name === "type" || attr.name === "src" || attr.name === "data-faz-category" || attr.name === "data-faz-original-type") continue;
-                clone.setAttribute(attr.name, attr.value);
+            if (!(script.getAttribute('src') || script.src)) {
+                _fazRestoreInlineScript(script);
+                return;
             }
-            var scriptSrc = script.getAttribute('src') || script.src;
-            if (scriptSrc) {
-                // data: URIs cannot be loaded as external script src in most
-                // browsers; decode and execute as inline content instead.
-                if (scriptSrc.indexOf('data:') === 0) {
-                    try {
-                        clone.textContent = decodeURIComponent(scriptSrc.split(',').slice(1).join(','));
-                    } catch (_e) {
-                        clone.src = scriptSrc;
-                    }
-                } else {
-                    clone.src = scriptSrc;
-                }
-            } else {
-                var inlineText = script.textContent || '';
-                // Skip inline scripts that are pure JSON/data (not executable JS).
-                // These are often WooCommerce config blocks with type="application/json".
-                if (inlineText.trim() && /^\s*\{/.test(inlineText) && /\}\s*$/.test(inlineText)) {
-                    try { JSON.parse(inlineText); return; } catch (_e) { /* not JSON, continue */ }
-                }
-                clone.textContent = inlineText;
-            }
+            var clone = _fazBuildRestoredScript(script);
+            if (!clone) return;
             if (script.parentNode) script.parentNode.replaceChild(clone, script);
         });
 
@@ -1527,16 +1589,12 @@ function _fazUnblockServerSide() {
             });
             // Restore blocked scripts inside the template content.
             fragment.querySelectorAll('script[type="text/plain"][data-faz-category]').forEach(function (script) {
-                var clone = _fazCreateElementBackup.call(document, "script");
-                var origType = script.getAttribute("data-faz-original-type");
-                clone.type = origType || "text/javascript";
-                for (var i = 0; i < script.attributes.length; i++) {
-                    var attr = script.attributes[i];
-                    if (attr.name === "type" || attr.name === "src" || attr.name === "data-faz-category" || attr.name === "data-faz-original-type") continue;
-                    clone.setAttribute(attr.name, attr.value);
+                if (!(script.getAttribute('src') || script.src)) {
+                    _fazRestoreInlineScript(script);
+                    return;
                 }
-                if (script.src) clone.src = script.src;
-                else clone.textContent = script.textContent;
+                var clone = _fazBuildRestoredScript(script);
+                if (!clone) return;
                 script.parentNode.replaceChild(clone, script);
             });
             // Replace placeholder with restored content.
@@ -1594,16 +1652,12 @@ function _fazUnblockServerSide() {
             if (_fazIsCategoryToBeBlocked(waitCat)) return;
             if (script.getAttribute("data-faz-loaded")) return;
             script.setAttribute("data-faz-loaded", "1");
-            var clone = _fazCreateElementBackup.call(document, "script");
-            var origType = script.getAttribute("data-faz-original-type");
-            clone.type = origType || "text/javascript";
-            for (var i = 0; i < script.attributes.length; i++) {
-                var attr = script.attributes[i];
-                if (attr.name === "type" || attr.name === "src" || attr.name === "data-faz-waitfor" || attr.name === "data-faz-loaded" || attr.name === "data-faz-original-type") continue;
-                clone.setAttribute(attr.name, attr.value);
+            if (!(script.getAttribute('src') || script.src)) {
+                _fazRestoreInlineScript(script, ['data-faz-waitfor', 'data-faz-loaded']);
+                return;
             }
-            if (script.src) clone.src = script.src;
-            else clone.textContent = script.textContent;
+            var clone = _fazBuildRestoredScript(script, ['data-faz-waitfor', 'data-faz-loaded']);
+            if (!clone) return;
             script.parentNode.replaceChild(clone, script);
         });
 
