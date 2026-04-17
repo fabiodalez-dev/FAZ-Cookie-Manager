@@ -488,6 +488,7 @@ class Frontend {
 		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS inside <style> tag, no user input.
 		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
 			. Placeholder_Builder::get_css()
 			. '</style>';
@@ -1982,9 +1983,9 @@ class Frontend {
 	 * @return string Modified attributes string.
 	 */
 	private function set_script_type_plain( $attrs ) {
-		if ( preg_match( '/type\s*=\s*["\']([^"\']*)["\']/', $attrs, $tm ) ) {
+		if ( preg_match( '/type\s*=\s*["\']([^"\']*)["\']/i', $attrs, $tm ) ) {
 			$original = $tm[1];
-			$attrs    = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/', 'type="text/plain"', $attrs );
+			$attrs    = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/i', 'type="text/plain"', $attrs );
 			// Preserve non-default types (e.g. "module") so JS can restore them.
 			if ( 'text/plain' !== $original && 'text/javascript' !== $original && '' !== $original ) {
 				$attrs .= ' data-faz-original-type="' . esc_attr( $original ) . '"';
@@ -2655,19 +2656,18 @@ class Frontend {
 				}
 
 				if ( $should_block ) {
-					// Replace type with text/plain, preserving the original.
-					if ( preg_match( '/type\s*=\s*[\'"]([^\'"]*)[\'"]/', $tag, $type_match ) ) {
-						$original_type = $type_match[1];
-						$tag = preg_replace( '/type\s*=\s*[\'"][^\'"]*[\'"]/', 'type="text/plain"', $tag, 1 );
-						if ( 'text/plain' !== $original_type && 'text/javascript' !== $original_type ) {
-							$tag = str_replace( '<script ', '<script data-faz-original-type="' . esc_attr( $original_type ) . '" ', $tag );
-						}
-					} else {
-						$tag = str_replace( '<script ', '<script type="text/plain" ', $tag );
-					}
-					if ( false === strpos( $tag, 'data-faz-category' ) ) {
-						$tag = str_replace( '<script ', '<script data-faz-category="' . esc_attr( $category ) . '" ', $tag );
-					}
+					$tag = preg_replace_callback(
+						'/<script\b([^>]*)>/i',
+						function ( $mm ) use ( $category ) {
+							$new_attrs = $this->set_script_type_plain( $mm[1] );
+							if ( false === strpos( $new_attrs, 'data-faz-category' ) ) {
+								$new_attrs .= ' data-faz-category="' . esc_attr( $category ) . '"';
+							}
+							return '<script' . $new_attrs . '>';
+						},
+						$tag,
+						1
+					);
 				}
 				break;
 			}
