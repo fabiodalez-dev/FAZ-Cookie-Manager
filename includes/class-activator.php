@@ -338,6 +338,12 @@ class Activator {
 		}
 		self::install_all_tables();
 		self::maybe_update_db();
+		// Always clear the banner template cache on version upgrades so new
+		// CSS rules, shortcodes, and template HTML take effect immediately.
+		// Without this, users upgrading across multiple versions (e.g. 1.8 →
+		// 1.11.x) keep a stale cached template that may lack CSS for new
+		// elements like the inline SVG revisit icon.
+		faz_clear_banner_template_cache();
 		update_option( 'faz_version', FAZ_VERSION );
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
