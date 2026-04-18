@@ -488,9 +488,8 @@ class Frontend {
 		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS inside <style> tag, no user input.
 		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
-			. Placeholder_Builder::get_css()
+			. wp_kses( Placeholder_Builder::get_css(), array() )
 			. '</style>';
 	}
 	/**

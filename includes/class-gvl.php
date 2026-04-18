@@ -342,11 +342,12 @@ class Gvl {
 		}
 		$bytes = file_put_contents( $tmp_path, $content, LOCK_EX ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		if ( false === $bytes ) {
-			@unlink( $tmp_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			wp_delete_file( $tmp_path );
 			return false;
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- atomic move inside uploads dir.
 		if ( ! rename( $tmp_path, $path ) ) {
-			@unlink( $tmp_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			wp_delete_file( $tmp_path );
 			return false;
 		}
 		return true;

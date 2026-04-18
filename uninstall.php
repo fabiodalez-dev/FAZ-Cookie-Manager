@@ -136,17 +136,20 @@ if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 				);
 				foreach ( $iterator as $node ) {
 					if ( $node->isDir() ) {
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
 						@rmdir( $node->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					} else {
-						@unlink( $node->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+						wp_delete_file( $node->getPathname() );
 					}
 				}
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
 				@rmdir( $gvl_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				// Remove parent directory if empty.
 				$parent_dir = dirname( $gvl_dir );
 				if ( is_dir( $parent_dir ) ) {
 					$entries = @scandir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					if ( is_array( $entries ) && 2 === count( $entries ) ) {
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
 						@rmdir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					}
 				}

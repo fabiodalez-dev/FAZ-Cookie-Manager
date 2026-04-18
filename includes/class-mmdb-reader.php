@@ -222,7 +222,7 @@ class Mmdb_Reader {
 	private function read_record( $pointer ) {
 		$min_pointer = $this->node_count + self::SEPARATOR_SIZE;
 		if ( $pointer < $min_pointer ) {
-			throw new \RuntimeException( 'Invalid MMDB data pointer: ' . $pointer );
+			throw new \RuntimeException( 'Invalid MMDB data pointer: ' . esc_html( $pointer ) );
 		}
 		$data_offset = $pointer - $this->node_count - self::SEPARATOR_SIZE;
 		$abs_offset  = $this->data_section_start + $data_offset;
@@ -239,7 +239,7 @@ class Mmdb_Reader {
 	 */
 	private function decode( &$offset, $depth = 0 ) {
 		if ( $depth > self::MAX_DECODE_DEPTH ) {
-			throw new \RuntimeException( 'MMDB decode exceeded maximum depth of ' . self::MAX_DECODE_DEPTH );
+			throw new \RuntimeException( 'MMDB decode exceeded maximum depth of ' . esc_html( self::MAX_DECODE_DEPTH ) );
 		}
 		$this->assert_bytes_available( $offset, 1 );
 		$ctrl = ord( $this->data[ $offset ] );

@@ -248,7 +248,7 @@ class Controller {
 		} else {
 			$count_sql = "SELECT COUNT(*) FROM {$table} WHERE 1=1"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
-		$total = (int) $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$total = (int) $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 
 		// Get items.
 		$per_page = absint( $args['per_page'] );
@@ -380,7 +380,7 @@ class Controller {
 		} else {
 			$query = "SELECT * FROM {$table} WHERE 1=1 ORDER BY created_at DESC"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
-		$items = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$items = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 
 		if ( ! is_array( $items ) ) {
 			$items = array();

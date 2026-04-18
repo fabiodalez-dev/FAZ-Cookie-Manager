@@ -18,7 +18,7 @@
  * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
  * Version:           1.11.3
  * Requires at least: 5.0
- * Tested up to:      6.8
+ * Tested up to:      6.9
  * Stable tag:        1.11.3
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro
@@ -27,7 +27,6 @@
  * License URI:       https://www.gnu.org/licenses/gpl-3.0.html
  * Text Domain:       faz-cookie-manager
  * Domain Path:       /languages
- * Update URI:        false
  */
 
 /*

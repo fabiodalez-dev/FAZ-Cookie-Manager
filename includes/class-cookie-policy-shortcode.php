@@ -66,13 +66,13 @@ class Cookie_Policy_Shortcode {
 		<h2><?php esc_html_e( 'What Are Cookies', 'faz-cookie-manager' ); ?></h2>
 		<p><?php
 			/* translators: %s: site name */
-			printf( esc_html__( 'Cookies are small text files that are placed on your device when you visit %s. They are widely used to make websites work more efficiently, as well as to provide information to the website owners.', 'faz-cookie-manager' ), $site_name );
+			printf( esc_html__( 'Cookies are small text files that are placed on your device when you visit %s. They are widely used to make websites work more efficiently, as well as to provide information to the website owners.', 'faz-cookie-manager' ), esc_html( $site_name ) );
 		?></p>
 
 		<h2><?php esc_html_e( 'How We Use Cookies', 'faz-cookie-manager' ); ?></h2>
 		<p><?php
 			/* translators: %s: site name */
-			printf( esc_html__( '%s uses cookies for several purposes, including:', 'faz-cookie-manager' ), $site_name );
+			printf( esc_html__( '%s uses cookies for several purposes, including:', 'faz-cookie-manager' ), esc_html( $site_name ) );
 		?></p>
 		<ul>
 			<li><strong><?php esc_html_e( 'Necessary cookies', 'faz-cookie-manager' ); ?></strong> — <?php esc_html_e( 'These cookies are essential for the website to function properly. They enable basic functions like page navigation, access to secure areas, and shopping cart functionality. The website cannot function properly without these cookies.', 'faz-cookie-manager' ); ?></li>

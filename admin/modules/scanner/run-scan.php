@@ -16,6 +16,7 @@ $mode    = isset( $argv[2] ) ? $argv[2] : '20';
 
 $resolved = realpath( $abspath );
 if ( false === $resolved || ! file_exists( $resolved . '/wp-load.php' ) ) {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- CLI script writing to STDERR.
 	fwrite( STDERR, "WordPress installation not found at: {$abspath}\n" );
 	exit( 1 );
 }
