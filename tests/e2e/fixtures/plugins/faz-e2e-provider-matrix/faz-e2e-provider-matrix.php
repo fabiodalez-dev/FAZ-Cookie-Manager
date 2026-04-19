@@ -397,7 +397,7 @@ final class Faz_E2E_Provider_Matrix {
 				'cookie'   => array( '_scid', 'sc_at' ),
 			),
 			'custom-unknown'     => array(
-				'category' => 'analytics',
+				'category' => 'performance',
 				'cookie'   => array( '_faz_custom_provider' ),
 			),
 		);

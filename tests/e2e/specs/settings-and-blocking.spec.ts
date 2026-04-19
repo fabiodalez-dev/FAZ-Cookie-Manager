@@ -120,6 +120,7 @@ test.describe('Settings reflection and secure script blocking', () => {
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
     const initialState = await page.evaluate(() => {
+      _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
       window.__fazDataUriExecuted = 0;
       const payload = btoa('window.__fazDataUriExecuted=(window.__fazDataUriExecuted||0)+1;');
       const script = document.createElement('script');

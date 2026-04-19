@@ -19,10 +19,14 @@ const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
 type SettingsPayload = Record<string, any>;
 type CategoryConsentState = Record<string, boolean>;
 
+// Stripe is excluded from this matrix because it is always-whitelisted as a
+// payment gateway (get_always_allowed_gateway_patterns). Testing Stripe
+// blocking here would always fail — and it should, because blocking payment
+// scripts breaks checkout. Functional category blocking is still tested via
+// the settings-and-blocking spec using data-faz-tag inline scripts.
 const OBSERVED_CATEGORY_PROVIDERS = [
   { slug: 'analytics', cookieName: '_ga', hitKey: 'ga-monsterinsights' },
   { slug: 'marketing', cookieName: '_fbp', hitKey: 'facebook-pixel' },
-  { slug: 'functional', cookieName: '__stripe_mid', hitKey: 'stripe' },
   { slug: 'performance', cookieName: '_faz_custom_provider', hitKey: 'custom-unknown' },
 ] as const;
 

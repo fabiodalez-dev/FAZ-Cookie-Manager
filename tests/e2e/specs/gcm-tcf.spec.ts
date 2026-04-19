@@ -134,6 +134,10 @@ test.describe('GCM and IAB TCF behavior', () => {
 
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+      await page.evaluate(() => {
+        _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
+      });
+      await page.waitForFunction(() => typeof window.__tcfapi === 'function', undefined, { timeout: 5_000 });
 
       const initial = await page.evaluate(async () => {
         if (typeof window.__tcfapi !== 'function') {
