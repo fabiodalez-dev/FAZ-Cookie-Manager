@@ -1563,7 +1563,7 @@ class Known_Providers {
 			/* ── WooCommerce Order Attribution ────────────── */
 			'woocommerce-attribution' => array(
 				'label'    => 'WooCommerce Order Attribution',
-				'category' => 'necessary',
+				'category' => 'analytics',
 				'patterns' => array(
 					'wc-order-attribution',
 				),

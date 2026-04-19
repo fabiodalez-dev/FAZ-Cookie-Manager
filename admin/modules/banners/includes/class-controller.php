@@ -102,7 +102,9 @@ class Controller extends Base_Controller {
 			contents longtext NOT NULL,
 			date_created datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			date_modified datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-			PRIMARY KEY (banner_id)
+			PRIMARY KEY (banner_id),
+			KEY slug (slug),
+			KEY status (status)
 	) $collate;
 	";
 		return $tables;

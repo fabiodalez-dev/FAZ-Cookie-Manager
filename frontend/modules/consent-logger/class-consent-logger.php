@@ -68,6 +68,14 @@ class Consent_Logger {
 						'type'              => 'string',
 						'sanitize_callback' => 'esc_url_raw',
 					),
+					'banner_slug' => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'policy_revision' => array(
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					),
 				),
 			)
 		);
@@ -110,7 +118,7 @@ class Consent_Logger {
 		// The consent_id check prevents replaying the same consent_id from different IPs.
 		$consent_id   = $request->get_param( 'consent_id' );
 		$consent_key  = 'faz_consent_' . substr( md5( $consent_id ?? '' ), 0, 8 );
-		if ( faz_throttle_request( 'faz_consent_ip' ) || faz_throttle_request( $consent_key ) ) {
+		if ( faz_throttle_request( 'faz_consent_ip', 10 ) || faz_throttle_request( $consent_key, 300 ) ) {
 			error_log( '[FAZ Cookie Manager] Consent log throttled for consent_id: ' . sanitize_text_field( $consent_id ?? '' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			return rest_ensure_response( array( 'throttled' => true ) );
 		}
@@ -120,6 +128,8 @@ class Consent_Logger {
 			'status'     => $request->get_param( 'status' ),
 			'categories' => $request->get_param( 'categories' ),
 			'url'        => $request->get_param( 'url' ),
+			'banner_slug' => $request->get_param( 'banner_slug' ),
+			'policy_revision' => $request->get_param( 'policy_revision' ),
 		);
 
 		$result = Controller::get_instance()->log_consent( $data );

@@ -289,14 +289,67 @@ class Category_Controller extends Base_Controller {
 	 */
 	public function delete_item( $object ) {
 		global $wpdb;
+		$category_id = $object->get_id();
+		$fallback_id = $this->get_fallback_category_id( $category_id );
+		if ( $fallback_id ) {
+			$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prefix . 'faz_cookies',
+				array( 'category' => $fallback_id ),
+				array( 'category' => $category_id ),
+				array( '%d' ),
+				array( '%d' )
+			);
+		} else {
+			$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prefix . 'faz_cookies',
+				array( 'category' => $category_id ),
+				array( '%d' )
+			);
+		}
 		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookie_categories',
 			array(
-				'category_id' => $object->get_id(),
+				'category_id' => $category_id,
 			)
 		);
 		$this->delete_cache();
+		Cookie_Controller::get_instance()->delete_cache();
 		do_action( 'faz_after_update_cookie_category' );
+	}
+
+	/**
+	 * Pick a fallback category for cookies when deleting a category.
+	 *
+	 * Prefer "uncategorized", then "necessary", then the first remaining category.
+	 *
+	 * @param int $deleted_category_id Category being deleted.
+	 * @return int
+	 */
+	private function get_fallback_category_id( $deleted_category_id ) {
+		$categories = $this->get_item_from_db();
+		$fallbacks  = array(
+			'uncategorized' => 0,
+			'necessary'     => 0,
+			'first'         => 0,
+		);
+
+		foreach ( $categories as $category ) {
+			$prepared = $this->prepare_item( $category );
+			if ( empty( $prepared ) || (int) $prepared->category_id === (int) $deleted_category_id ) {
+				continue;
+			}
+			if ( ! $fallbacks['first'] ) {
+				$fallbacks['first'] = (int) $prepared->category_id;
+			}
+			if ( 'uncategorized' === $prepared->slug ) {
+				$fallbacks['uncategorized'] = (int) $prepared->category_id;
+			}
+			if ( 'necessary' === $prepared->slug ) {
+				$fallbacks['necessary'] = (int) $prepared->category_id;
+			}
+		}
+
+		return $fallbacks['uncategorized'] ?: $fallbacks['necessary'] ?: $fallbacks['first'];
 	}
 
 	/**

@@ -41,7 +41,7 @@ class Controller {
 	 *
 	 * @var string
 	 */
-	private $db_version = '1.0';
+	private $db_version = '1.1';
 
 	/**
 	 * Return the current instance of the class
@@ -95,6 +95,8 @@ class Controller {
 			ip_hash varchar(64) DEFAULT '',
 			user_agent text,
 			url varchar(500) DEFAULT '',
+			banner_slug varchar(190) DEFAULT '',
+			policy_revision bigint(20) NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (log_id),
 			KEY idx_consent_id (consent_id),
@@ -119,6 +121,61 @@ class Controller {
 			return '';
 		}
 		return hash( 'sha256', $ip . wp_salt() );
+	}
+
+	/**
+	 * Hash the user agent so the raw fingerprint is not stored in the database.
+	 *
+	 * @param string $user_agent Raw user agent string.
+	 * @return string
+	 */
+	private function hash_user_agent( $user_agent ) {
+		if ( empty( $user_agent ) ) {
+			return '';
+		}
+
+		return hash( 'sha256', $user_agent . wp_salt( 'auth' ) );
+	}
+
+	/**
+	 * Drop query string and fragment before persisting a consent log URL.
+	 *
+	 * @param string $url URL to sanitize.
+	 * @return string
+	 */
+	private function sanitize_log_url( $url ) {
+		$url = esc_url_raw( (string) $url );
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$parts = wp_parse_url( $url );
+		if ( false === $parts || ! is_array( $parts ) ) {
+			return '';
+		}
+
+		$sanitized = '';
+		if ( ! empty( $parts['scheme'] ) ) {
+			$sanitized .= $parts['scheme'] . '://';
+		}
+		if ( ! empty( $parts['user'] ) ) {
+			$sanitized .= $parts['user'];
+			if ( ! empty( $parts['pass'] ) ) {
+				$sanitized .= ':' . $parts['pass'];
+			}
+			$sanitized .= '@';
+		}
+		if ( ! empty( $parts['host'] ) ) {
+			$sanitized .= $parts['host'];
+		}
+		if ( ! empty( $parts['port'] ) ) {
+			$sanitized .= ':' . absint( $parts['port'] );
+		}
+		if ( ! empty( $parts['path'] ) ) {
+			$sanitized .= $parts['path'];
+		}
+
+		return $sanitized;
 	}
 
 	/**
@@ -151,9 +208,11 @@ class Controller {
 		$consent_id = ! empty( $data['consent_id'] ) ? sanitize_text_field( $data['consent_id'] ) : $this->generate_consent_id();
 		$status     = isset( $data['status'] ) ? sanitize_text_field( $data['status'] ) : 'partial';
 		$categories = isset( $data['categories'] ) ? $data['categories'] : array();
-		$url        = isset( $data['url'] ) ? esc_url_raw( $data['url'] ) : '';
-		$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+		$url        = isset( $data['url'] ) ? $this->sanitize_log_url( $data['url'] ) : '';
+		$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? $this->hash_user_agent( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) ) : '';
 		$ip_hash    = $this->hash_ip( $this->get_visitor_ip() );
+		$banner_slug = isset( $data['banner_slug'] ) ? sanitize_title( $data['banner_slug'] ) : '';
+		$policy_revision = isset( $data['policy_revision'] ) ? max( 1, absint( $data['policy_revision'] ) ) : 1;
 
 		if ( is_array( $categories ) || is_object( $categories ) ) {
 			$categories = wp_json_encode( $categories );
@@ -168,9 +227,11 @@ class Controller {
 				'ip_hash'    => $ip_hash,
 				'user_agent' => $user_agent,
 				'url'        => $url,
+				'banner_slug' => $banner_slug,
+				'policy_revision' => $policy_revision,
 				'created_at' => current_time( 'mysql' ),
 			),
-			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' )
 		);
 
 		if ( false === $result ) {
@@ -184,6 +245,8 @@ class Controller {
 			'log_id'     => $wpdb->insert_id,
 			'consent_id' => $consent_id,
 			'status'     => $status,
+			'banner_slug' => $banner_slug,
+			'policy_revision' => $policy_revision,
 			'created_at' => current_time( 'mysql' ),
 		);
 	}
@@ -392,7 +455,7 @@ class Controller {
 		}
 
 		// CSV header row.
-		fputcsv( $output, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent', 'URL', 'Created At' ) );
+		fputcsv( $output, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ) );
 
 		foreach ( $items as $item ) {
 			fputcsv(
@@ -407,6 +470,8 @@ class Controller {
 						$item['ip_hash'],
 						$item['user_agent'],
 						$item['url'],
+						isset( $item['banner_slug'] ) ? $item['banner_slug'] : '',
+						isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
 						$item['created_at'],
 					)
 				)

@@ -423,7 +423,7 @@ function _fazAddPositionClass() {
     const container = notice.closest('.faz-consent-container');
     if (!container) return false;
 
-    container.setAttribute("aria-label", "We value your privacy");
+    container.setAttribute("aria-label", _fazTranslate("privacy_region_label", "We value your privacy"));
     container.setAttribute("role", "region");
 
     const type = _fazStore._bannerConfig.settings.type;
@@ -487,12 +487,7 @@ function _fazAddPreferenceCenterClass() {
 
     // Ensure ARIA attributes are always present on the preference center div
     const preferenceCenter = modal.querySelector('.faz-preference-center');
-    if (preferenceCenter) {
-        preferenceCenter.setAttribute('role', 'dialog');
-        preferenceCenter.setAttribute('aria-modal', 'true');
-        const ariaLabel = _fazGetLaw() === 'ccpa' ? 'Opt-out Preferences' : 'Customise Consent Preferences';
-        preferenceCenter.setAttribute('aria-label', ariaLabel);
-    }
+    _fazSetPreferenceCenterAccessibility(preferenceCenter);
 }
 
 /**
@@ -733,12 +728,7 @@ function _fazShowPreferenceCenter() {
     // Ensure ARIA attributes are always present on the preference center div
     if (element) {
         const preferenceCenter = element.querySelector('.faz-preference-center');
-        if (preferenceCenter) {
-            preferenceCenter.setAttribute('role', 'dialog');
-            preferenceCenter.setAttribute('aria-modal', 'true');
-            const ariaLabel = _fazGetLaw() === 'ccpa' ? 'Opt-out Preferences' : 'Customise Consent Preferences';
-            preferenceCenter.setAttribute('aria-label', ariaLabel);
-        }
+        _fazSetPreferenceCenterAccessibility(preferenceCenter);
     }
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
 
@@ -750,10 +740,7 @@ function _fazShowPreferenceCenter() {
     }
 
     // Move focus into the preference center for keyboard/screen reader users.
-    if (element) {
-        var focusTarget = element.querySelector('button, [tabindex]:not([tabindex="-1"]), input, a');
-        if (focusTarget) focusTarget.focus();
-    }
+    _fazFocusIntoElement(element);
 }
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
@@ -763,12 +750,7 @@ function _fazTogglePreferenceCenter() {
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
     if (isPushdown) {
         const preferenceCenter = element.querySelector('.faz-preference-center');
-        if (preferenceCenter) {
-            preferenceCenter.setAttribute('role', 'dialog');
-            preferenceCenter.setAttribute('aria-modal', 'true');
-            const ariaLabel = _fazGetLaw() === 'ccpa' ? 'Opt-out Preferences' : 'Customise Consent Preferences';
-            preferenceCenter.setAttribute('aria-label', ariaLabel);
-        }
+        _fazSetPreferenceCenterAccessibility(preferenceCenter);
         _fazToggleAriaExpandStatus("=settings-button");
     } else {
         if (!isOpen) {
@@ -780,8 +762,16 @@ function _fazTogglePreferenceCenter() {
         }
     }
     if (ref._fazGetFromStore("action")) _fazShowRevisit();
-    const origin = _fazStore._preferenceOriginTag;
-    origin && _fazSetFocus(origin)
+    if (isOpen) {
+        const origin = _fazStore._preferenceOriginTag;
+        origin && _fazSetFocus(origin);
+        if (_fazStore._prefTriggerElement) {
+            _fazStore._prefTriggerElement.focus();
+            _fazStore._prefTriggerElement = null;
+        }
+    } else {
+        _fazFocusIntoElement(element);
+    }
 }
 function _fazGetPreferenceClass() {
     // Pushdown (expand) only works for classic/full-width; box falls back to popup modal
@@ -804,6 +794,7 @@ function _fazShowRevisit() {
 }
 function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;
+    _fazStore._prefTriggerElement = document.activeElement;
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
     if (isPushdown) {
         _fazTogglePreferenceCenter();
@@ -816,9 +807,9 @@ function _fazGetFocusableElements(element) {
     if (!wrapperElement) return [];
     const focussableElements = Array.from(
         wrapperElement.querySelectorAll(
-            'a:not([disabled]), button:not([disabled]), [tabindex]:not([disabled]):not([tabindex="-1"])'
+            'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])'
         )
-    ).filter((element) => !element.closest('.faz-hidden'));
+    ).filter((element) => !element.closest('.faz-hidden') && !element.hasAttribute('hidden'));
     if (focussableElements.length <= 0) return [];
     return [
         focussableElements[0],
@@ -827,14 +818,10 @@ function _fazGetFocusableElements(element) {
 }
 function _fazLoopFocus() {
     const activeLaw = _fazGetLaw();
-    const bannerType = _fazGetType();
-    // Classic/pushdown banners also need focus trapping on their preference wrapper.
-    if (bannerType === "popup" || bannerType === "box" ) {
-        const [firstElementBanner, lastElementBanner] =
-            _fazGetFocusableElements("notice");
-        _fazAttachFocusLoop(firstElementBanner, lastElementBanner, true);
-        _fazAttachFocusLoop(lastElementBanner, firstElementBanner);
-    }
+    const [firstElementBanner, lastElementBanner] =
+        _fazGetFocusableElements("notice");
+    _fazAttachFocusLoop(firstElementBanner, lastElementBanner, true);
+    _fazAttachFocusLoop(lastElementBanner, firstElementBanner);
     const [firstElementPopup, lastElementPopup] = _fazGetFocusableElements(
         activeLaw === "ccpa" ? "optout-popup" : "detail"
     );
@@ -1042,11 +1029,35 @@ function _fazRenderBanner() {
  * @returns {string}
  */
 function _fazTranslate(key, fallback) {
+    if (_fazStore._i18n && typeof _fazStore._i18n[key] === 'string' && _fazStore._i18n[key]) {
+        return _fazStore._i18n[key];
+    }
     if (_fazStore._shortCodes) {
         var found = _fazStore._shortCodes.find(function(s) { return s.key === 'faz_' + key; });
         if (found && found.content) return found.content;
     }
     return fallback;
+}
+
+function _fazGetPreferenceCenterAriaLabel() {
+    return _fazGetLaw() === 'ccpa'
+        ? _fazTranslate('optout_preferences_label', 'Opt-out Preferences')
+        : _fazTranslate('customise_consent_preferences_label', 'Customise Consent Preferences');
+}
+
+function _fazSetPreferenceCenterAccessibility(preferenceCenter) {
+    if (!preferenceCenter) return;
+    preferenceCenter.setAttribute('role', 'dialog');
+    preferenceCenter.setAttribute('aria-modal', 'true');
+    preferenceCenter.setAttribute('aria-label', _fazGetPreferenceCenterAriaLabel());
+}
+
+function _fazFocusIntoElement(element) {
+    if (!element) return;
+    var focusTarget = element.querySelector(
+        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusTarget) focusTarget.focus();
 }
 
 /**
@@ -1423,17 +1434,13 @@ function _fazUnblock() {
             try {
                 if (_fazShouldBlockProvider(node.src)) return true;
                 if (node.nodeName.toLowerCase() === "script") {
-                    const scriptNode = document.createElement("script");
-                    scriptNode.src = node.src;
-                    scriptNode.type = "text/javascript";
+                    const scriptNode = _fazBuildRestoredScript(node);
+                    if (!scriptNode) return false;
                     document[position].appendChild(scriptNode);
                 } else {
                     const frame = document.getElementById(uniqueID);
                     if (!frame) return false;
-                    const iframe = document.createElement("iframe");
-                    iframe.src = node.src;
-                    iframe.width = frame.offsetWidth;
-                    iframe.height = frame.offsetHeight;
+                    const iframe = _fazBuildRestoredIframe(node, frame);
                     frame.parentNode.insertBefore(iframe, frame);
                     frame.parentNode.removeChild(frame);
                 }
@@ -1501,6 +1508,29 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
             } catch (_e) { /* not JSON, continue */ }
         }
         clone.textContent = inlineText;
+    }
+
+    return clone;
+}
+
+function _fazBuildRestoredIframe(iframe, placeholder) {
+    var clone = document.createElement('iframe');
+    var iframeSrc = iframe.getAttribute('src') || iframe.src;
+
+    for (var i = 0; i < iframe.attributes.length; i++) {
+        var attr = iframe.attributes[i];
+        if (attr.name === 'src') continue;
+        clone.setAttribute(attr.name, attr.value);
+    }
+
+    if (iframeSrc) {
+        clone.src = iframeSrc;
+    }
+    if (!clone.hasAttribute('width') && placeholder && placeholder.offsetWidth) {
+        clone.width = placeholder.offsetWidth;
+    }
+    if (!clone.hasAttribute('height') && placeholder && placeholder.offsetHeight) {
+        clone.height = placeholder.offsetHeight;
     }
 
     return clone;
@@ -2353,7 +2383,7 @@ function _fazRenderServiceToggles() {
             checkbox.className = 'faz-service-toggle';
             checkbox.setAttribute('data-service', service.id);
             checkbox.setAttribute('data-category', service.category);
-            checkbox.setAttribute('aria-label', _fazTranslate('service_consent', 'Service consent') + ': ' + service.label);
+            checkbox.setAttribute('aria-label', _fazTranslate('service_consent_label', 'Service consent') + ': ' + service.label);
 
             // Determine checked state: explicit service consent > category consent.
             var svcConsent = ref._fazGetFromStore('svc.' + service.id);
@@ -2485,7 +2515,7 @@ function _fazRenderVendorSection() {
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.id = 'fazVendorSwitch' + vendor.id;
-        cb.setAttribute('aria-label', 'Vendor consent: ' + vendor.name);
+        cb.setAttribute('aria-label', _fazTranslate('vendor_consent_label', 'Vendor consent') + ': ' + vendor.name);
         cb.checked = existingConsent[vendor.id] === true;
         switchWrap.appendChild(cb);
         header.appendChild(switchWrap);

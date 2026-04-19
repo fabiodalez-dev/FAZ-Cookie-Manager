@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:min": "terser frontend/js/script.js -c -m -o frontend/js/script.min.js && terser frontend/js/tcf-cmp.js -c -m -o frontend/js/tcf-cmp.min.js && terser frontend/js/gcm.js -c -m -o frontend/js/gcm.min.js",
+    "build:min": "terser frontend/js/script.js -c -m -o frontend/js/script.min.js && terser frontend/js/tcf-cmp.js -c -m -o frontend/js/tcf-cmp.min.js && terser frontend/js/gcm.js -c -m -o frontend/js/gcm.min.js && terser frontend/js/a11y.js -c -m -o frontend/js/a11y.min.js",
     "full-test-codex": "playwright test -c tests/e2e/playwright.config.ts tests/e2e/specs/full-test-codex.spec.ts",
     "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",
     "test:e2e:headed": "playwright test -c tests/e2e/playwright.config.ts --headed",

@@ -98,6 +98,7 @@ class Frontend {
 	private $whitelist_cache          = null;
 	private $service_consent_cache    = null;
 	private $pattern_service_cache    = null;
+	private $settings_option_cache    = null;
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -156,7 +157,7 @@ class Frontend {
 			return;
 		}
 		// Skip banner for search engine bots (configurable via Settings).
-		$bot_settings = get_option( 'faz_settings' );
+		$bot_settings = $this->get_faz_settings();
 		if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
 			if ( faz_is_bot() ) {
 				return;
@@ -185,7 +186,7 @@ class Frontend {
 				if ( '' !== $custom_css ) {
 					// Strip dangerous CSS patterns that could be used for data exfiltration.
 					$custom_css = wp_strip_all_tags( $custom_css );
-					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*javascript|behavior\s*:|\\\\-moz-binding|@import/i', $custom_css ) ) {
+					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)|behavior\s*:|\\\\-moz-binding|@import/i', $custom_css ) ) {
 						$custom_css = '';
 					}
 					$css .= $custom_css;
@@ -193,7 +194,7 @@ class Frontend {
 			}
 
 			// Ad-blocker compatibility: use generic handle/var names to avoid filter lists.
-			$faz_settings = get_option( 'faz_settings' );
+			$faz_settings = $this->get_faz_settings();
 			$alt_asset = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 			$config_var    = $alt_asset ? '_fazCfg' : '_fazConfig';
@@ -320,7 +321,7 @@ class Frontend {
 			}
 
 			// Load settings once for pageview tracking and consent logging checks.
-			$faz_settings = get_option( 'faz_settings' );
+			$faz_settings = $this->get_faz_settings();
 
 			// Pageview and banner interaction tracking (opt-in via Settings).
 			$pv_tracking = isset( $faz_settings['pageview_tracking'] ) && true === $faz_settings['pageview_tracking'];
@@ -373,8 +374,10 @@ class Frontend {
 					$script_handle,
 					'_fazConsentLog',
 					array(
-						'restUrl' => rest_url( 'faz/v1/consent' ),
-						'token'   => $hmac_token,
+						'restUrl'        => rest_url( 'faz/v1/consent' ),
+						'token'          => $hmac_token,
+						'bannerSlug'     => $this->banner ? $this->banner->get_slug() : '',
+						'policyRevision' => isset( $faz_settings['general']['consent_revision'] ) ? max( 1, absint( $faz_settings['general']['consent_revision'] ) ) : 1,
 					)
 				);
 					$inline_js = "document.addEventListener('fazcookie_consent_update',function(e){" .
@@ -389,6 +392,8 @@ class Frontend {
 								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
 								"url:window.location.href," .
+								"banner_slug:_fazConsentLog.bannerSlug||''," .
+								"policy_revision:_fazConsentLog.policyRevision||1," .
 								"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .
@@ -400,8 +405,9 @@ class Frontend {
 			// In ad-blocker mode (alt_asset) the plugin path contains "cookie" which
 			// can match filter lists, so we inline the script to avoid blocking.
 			$a11y_handle = $script_handle . '-a11y';
+			$a11y_suffix = $this->get_script_suffix( 'js/a11y' );
 			if ( $alt_asset ) {
-				$a11y_path = plugin_dir_path( __FILE__ ) . 'js/a11y.js';
+				$a11y_path = plugin_dir_path( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js';
 				wp_register_script( $a11y_handle, false, array( $script_handle ), $this->version, true );
 				wp_enqueue_script( $a11y_handle );
 				if ( file_exists( $a11y_path ) ) {
@@ -409,7 +415,7 @@ class Frontend {
 					wp_add_inline_script( $a11y_handle, file_get_contents( $a11y_path ) );
 				}
 			} else {
-				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y.js', array( $script_handle ), $this->version, true );
+				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
 			}
 			// Pass translatable checkbox label templates — {name} is replaced in JS.
 			wp_localize_script(
@@ -468,6 +474,22 @@ class Frontend {
 
 		$minified_path = plugin_dir_path( __FILE__ ) . $asset_base . '.min.js';
 		return file_exists( $minified_path ) ? '.min' : '';
+	}
+
+	/**
+	 * Return the raw faz_settings option with per-request memoization.
+	 *
+	 * @return array
+	 */
+	private function get_faz_settings() {
+		if ( null === $this->settings_option_cache ) {
+			$this->settings_option_cache = get_option( 'faz_settings', array() );
+			if ( ! is_array( $this->settings_option_cache ) ) {
+				$this->settings_option_cache = array();
+			}
+		}
+
+		return $this->settings_option_cache;
 	}
 
 	/**
@@ -586,7 +608,7 @@ class Frontend {
 	 * @return bool True if the banner should NOT be shown.
 	 */
 	private function is_geo_banner_disabled() {
-		$faz_geo_settings = get_option( 'faz_settings' );
+		$faz_geo_settings = $this->get_faz_settings();
 		if ( empty( $faz_geo_settings['geolocation']['geo_targeting'] ) ) {
 			return false;
 		}
@@ -642,6 +664,8 @@ class Frontend {
 				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
 				// EEA.
 				'IS', 'LI', 'NO',
+				// UK kept here for consistency with Geolocation::$eu_countries and UK GDPR handling.
+				'GB',
 			),
 			'uk' => array( 'GB' ),
 			'us' => array( 'US' ),
@@ -749,7 +773,7 @@ class Frontend {
 		if ( ! $this->banner ) {
 			return;
 		}
-		$settings        = get_option( 'faz_settings' );
+		$settings        = $this->get_faz_settings();
 		$banner          = $this->banner;
 		$banner_settings = $banner->get_settings();
 
@@ -769,6 +793,13 @@ class Frontend {
 			'_logConsent'   => isset( $settings['consent_logs']['status'] ) && true === $settings['consent_logs']['status'] ? true : false,
 			'_tags'         => $this->prepare_tags(),
 			'_shortCodes'   => $this->prepare_shortcodes( $banner->get_settings() ),
+			'_i18n'         => array(
+				'privacy_region_label'                  => __( 'We value your privacy', 'faz-cookie-manager' ),
+				'optout_preferences_label'              => __( 'Opt-out Preferences', 'faz-cookie-manager' ),
+				'customise_consent_preferences_label'   => __( 'Customise Consent Preferences', 'faz-cookie-manager' ),
+				'service_consent_label'                 => __( 'Service consent', 'faz-cookie-manager' ),
+				'vendor_consent_label'                  => __( 'Vendor consent', 'faz-cookie-manager' ),
+			),
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
 			// Consent revision: when the admin bumps this, returning visitors
@@ -807,7 +838,18 @@ class Frontend {
 		// 4. Developer filter.
 		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
 
-		// On WooCommerce checkout/cart pages, remove payment gateway patterns
+		// Some payment SDKs are required outside checkout too (e.g. Stripe express buttons).
+		$always_allowed_gateways = $this->get_always_allowed_gateway_patterns();
+		foreach ( array_keys( $this->providers ) as $pattern ) {
+			foreach ( $always_allowed_gateways as $allowed_pattern ) {
+				if ( false !== stripos( $pattern, $allowed_pattern ) ) {
+					unset( $this->providers[ $pattern ] );
+					break;
+				}
+			}
+		}
+
+		// On WooCommerce checkout/cart pages, remove the remaining payment gateway patterns
 		// from client-side blocking so JS interceptors don't break payments.
 		if ( $this->is_wc_checkout_or_cart() ) {
 			$gateway_whitelist = $this->get_payment_gateway_whitelist();
@@ -1077,7 +1119,7 @@ class Frontend {
 	 * client-side MutationObserver cannot intercept.
 	 */
 	public function start_output_buffer() {
-		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+		if ( ( is_admin() && ! wp_doing_ajax() ) || wp_doing_cron() ) {
 			return;
 		}
 		if ( ! $this->template ) {
@@ -1125,6 +1167,17 @@ class Frontend {
 		$providers = $this->get_provider_category_map();
 		if ( empty( $providers ) ) {
 			return $html;
+		}
+
+		$old_backtrack = ini_get( 'pcre.backtrack_limit' );
+		$old_recursion = ini_get( 'pcre.recursion_limit' );
+		$current_backtrack = (int) $old_backtrack;
+		$current_recursion = (int) $old_recursion;
+		if ( $current_backtrack > 0 && $current_backtrack < 1000000 ) {
+			@ini_set( 'pcre.backtrack_limit', '1000000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		}
+		if ( $current_recursion > 0 && $current_recursion < 100000 ) {
+			@ini_set( 'pcre.recursion_limit', '100000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 		}
 
 		// preg_replace_callback returns null on PCRE error (e.g. backtrack limit
@@ -1225,6 +1278,13 @@ class Frontend {
 		if ( $pcre_failed ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			error_log( 'FAZ Cookie Manager: PCRE error in output buffer — script blocking skipped. Consider raising pcre.backtrack_limit (current: ' . ini_get( 'pcre.backtrack_limit' ) . ').' );
+		}
+
+		if ( false !== $old_backtrack && '' !== $old_backtrack ) {
+			@ini_set( 'pcre.backtrack_limit', (string) $old_backtrack ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		}
+		if ( false !== $old_recursion && '' !== $old_recursion ) {
+			@ini_set( 'pcre.recursion_limit', (string) $old_recursion ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
 		}
 
 		return $html;
@@ -1389,8 +1449,8 @@ class Frontend {
 		$full    = $m[0];
 		$content = $m[1];
 
-		// Only process if the noscript contains an <img> with a known provider.
-		if ( false === strpos( $content, '<img' ) ) {
+		// Only process if the noscript contains a blockable fallback resource.
+		if ( false === strpos( $content, '<img' ) && false === strpos( $content, '<iframe' ) ) {
 			return $full;
 		}
 
@@ -1410,9 +1470,9 @@ class Frontend {
 			}
 		}
 
-		// Block by replacing img src → data-faz-src inside the noscript.
-		$blocked_content = preg_replace( '/(<img\b[^>]*)(^|\s)src\s*=/i', '$1$2data-faz-src=', $content );
-		$blocked_content = preg_replace( '/(<img\b)/', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_content );
+		// Block tracking fallback resources by replacing src → data-faz-src inside the noscript.
+		$blocked_content = preg_replace( '/(<(?:img|iframe)\b[^>]*)(^|\s)src\s*=/i', '$1$2data-faz-src=', $content );
+		$blocked_content = preg_replace( '/(<(?:img|iframe)\b)/i', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_content );
 		return str_replace( $content, $blocked_content, $full );
 	}
 
@@ -1466,16 +1526,74 @@ class Frontend {
 	 */
 	private function is_whitelisted( $attrs, $content ) {
 		$whitelist = $this->get_whitelist();
+		$attr_values = array_filter(
+			array(
+				$this->extract_tag_attr( $attrs, 'src' ),
+				$this->extract_tag_attr( $attrs, 'href' ),
+				$this->extract_tag_attr( $attrs, 'id' ),
+				$this->extract_tag_attr( $attrs, 'class' ),
+			)
+		);
 
-		// Match against tag attributes only (src, id, class, etc.) to prevent
-		// tracking scripts from bypassing the block by including whitelist
-		// keywords in their inline content.
 		foreach ( $whitelist as $pattern ) {
-			if ( false !== stripos( $attrs, $pattern ) ) {
-				return true;
+			foreach ( $attr_values as $value ) {
+				if ( $this->matches_whitelist_pattern( $value, $pattern ) ) {
+					return true;
+				}
 			}
 		}
+
 		return false;
+	}
+
+	/**
+	 * Extract a quoted attribute value from a tag attribute string.
+	 *
+	 * @param string $attrs Tag attributes.
+	 * @param string $name  Attribute name.
+	 * @return string
+	 */
+	private function extract_tag_attr( $attrs, $name ) {
+		if ( preg_match( '/\b' . preg_quote( $name, '/' ) . '\s*=\s*["\']([^"\']+)["\']/i', $attrs, $matches ) ) {
+			return $matches[1];
+		}
+
+		return '';
+	}
+
+	/**
+	 * Match a single attribute value against a whitelist pattern.
+	 *
+	 * URL/path patterns are matched only against normalized src/href values.
+	 * Bare handle-like patterns are matched only against ID/class values.
+	 *
+	 * @param string $value   Attribute value.
+	 * @param string $pattern Whitelist pattern.
+	 * @return bool
+	 */
+	private function matches_whitelist_pattern( $value, $pattern ) {
+		$value   = trim( (string) $value );
+		$pattern = trim( (string) $pattern );
+		if ( '' === $value || '' === $pattern ) {
+			return false;
+		}
+
+		$is_url_pattern = false !== strpos( $pattern, '/' ) || false !== strpos( $pattern, '.' );
+		if ( $is_url_pattern ) {
+			$parsed = wp_parse_url( $value );
+			if ( false !== $parsed && is_array( $parsed ) ) {
+				$host = isset( $parsed['host'] ) ? strtolower( $parsed['host'] ) : '';
+				$path = isset( $parsed['path'] ) ? ltrim( strtolower( $parsed['path'] ), '/' ) : '';
+				$normalized = $host . ( $path ? '/' . $path : '' );
+				$path_only   = ltrim( strtolower( $value ), '/' );
+				$needle      = ltrim( strtolower( $pattern ), '/' );
+				return false !== strpos( $normalized, $needle ) || false !== strpos( $path_only, $needle );
+			}
+
+			return false !== strpos( ltrim( strtolower( $value ), '/' ), ltrim( strtolower( $pattern ), '/' ) );
+		}
+
+		return false !== stripos( $value, $pattern );
 	}
 
 	/**
@@ -1572,7 +1690,6 @@ class Frontend {
 
 		// ── WooCommerce essential scripts ──
 		$whitelist = array_merge( $whitelist, array(
-			'wc-order-attribution',
 			'woocommerce/assets/js/',
 			'wc-cart-fragments',
 			'wc-checkout',
@@ -1617,9 +1734,10 @@ class Frontend {
 				'woocommerce-smallscreen',
 				'woocommerce-general',
 			) );
+			$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
 
 			// On checkout/cart pages, also whitelist payment gateway scripts
-			// (PayPal SDK, Stripe.js, etc.) — they are necessary for purchases.
+			// (PayPal SDK, Mollie, Klarna, etc.) — they are necessary for purchases.
 			if ( $this->is_wc_checkout_or_cart() ) {
 				$whitelist = array_merge( $whitelist, $this->get_payment_gateway_whitelist() );
 			}
@@ -1632,7 +1750,7 @@ class Frontend {
 		}
 
 		// Merge user-defined whitelist patterns from Settings → Script Blocking.
-		$faz_settings_wl = get_option( 'faz_settings' );
+		$faz_settings_wl = $this->get_faz_settings();
 		$user_patterns   = isset( $faz_settings_wl['script_blocking']['whitelist_patterns'] )
 			? array_filter( array_map( 'sanitize_text_field', (array) $faz_settings_wl['script_blocking']['whitelist_patterns'] ) )
 			: array();
@@ -1651,6 +1769,27 @@ class Frontend {
 		);
 
 		return $this->whitelist_cache;
+	}
+
+	/**
+	 * Return payment SDK patterns that must never be blocked on the storefront.
+	 *
+	 * Stripe can appear on product/cart/account flows outside checkout (express
+	 * buttons, saved cards, payment-request widgets), so keep it globally allowed.
+	 *
+	 * @return string[]
+	 */
+	private function get_always_allowed_gateway_patterns() {
+		return apply_filters(
+			'faz_always_allowed_gateway_patterns',
+			array(
+				'js.stripe.com',
+				'm.stripe.network',
+				'wc-stripe-',
+				'stripe-payment',
+				'stripe-upe',
+			)
+		);
 	}
 
 	/**
@@ -1693,12 +1832,6 @@ class Frontend {
 			'ppcp-gateway',
 			'ppcp-webhooks',
 			'PayPalCommerceGateway',
-			// Stripe.
-			'js.stripe.com',
-			'm.stripe.network',
-			'wc-stripe-',
-			'stripe-payment',
-			'stripe-upe',
 			// Mollie.
 			'mollie-payments',
 			'plugins/mollie-payments-for-woocommerce/',
@@ -1789,7 +1922,7 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 		$this->service_consent_cache = array();
-		$settings    = get_option( 'faz_settings', array() );
+		$settings    = $this->get_faz_settings();
 		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( ! $per_service ) {
 			return $this->service_consent_cache;
@@ -1915,7 +2048,7 @@ class Frontend {
 
 		// 3. Admin custom blocking rules (Settings → Script Blocking).
 		// Custom rules CAN override built-in providers (admin intent takes priority).
-		$settings     = get_option( 'faz_settings', array() );
+		$settings     = $this->get_faz_settings();
 		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
 		foreach ( $custom_rules as $rule ) {
 			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
@@ -1962,6 +2095,25 @@ class Frontend {
 			$url = $sm[1];
 		}
 
+		// data: URI handling — decode the payload and treat it as inline
+		// content for pattern matching. A data: script src has no domain so
+		// URL-based patterns can never match; the only way to classify it
+		// is to inspect the encoded content itself. This lets us block
+		// data:text/javascript,ga('send','pageview') by matching the "ga("
+		// pattern, while leaving legitimate data: URIs (bundler output, SVG
+		// runners) untouched when they don't match any known provider.
+		// No other major CMP does this — Complianz, CookieYes, Borlabs, and
+		// Cookiebot all silently skip data: URIs. We do better.
+		if ( '' !== $url && strpos( $url, 'data:' ) === 0 ) {
+			$decoded_payload = $this->decode_data_uri_payload( $url );
+			if ( '' !== $decoded_payload ) {
+				// Replace the URL with the decoded payload for matching.
+				// The original URL carries no useful domain/path information.
+				$url     = '';
+				$content = $decoded_payload;
+			}
+		}
+
 		$haystack = $url . ' ' . $content;
 
 		foreach ( $providers as $pattern => $category ) {
@@ -1973,6 +2125,45 @@ class Frontend {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Decode the payload portion of a data: URI.
+	 *
+	 * Supports both plain (`data:text/javascript,code`) and base64
+	 * (`data:text/javascript;base64,Y29kZQ==`) variants.
+	 *
+	 * @param string $uri Full data: URI string.
+	 * @return string Decoded payload, or '' on failure.
+	 */
+	private function decode_data_uri_payload( $uri ) {
+		// Strip the "data:" prefix.
+		$rest = substr( $uri, 5 );
+		if ( false === $rest || '' === $rest ) {
+			return '';
+		}
+
+		$comma_pos = strpos( $rest, ',' );
+		if ( false === $comma_pos ) {
+			return '';
+		}
+
+		$meta    = substr( $rest, 0, $comma_pos );
+		$payload = substr( $rest, $comma_pos + 1 );
+
+		if ( false === $payload || '' === $payload ) {
+			return '';
+		}
+
+		// Check for base64 encoding.
+		if ( false !== stripos( $meta, ';base64' ) ) {
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding data: URI payload for provider matching, not obfuscation.
+			$decoded = base64_decode( $payload, true );
+			return false !== $decoded ? $decoded : '';
+		}
+
+		// Plain-text data: URI — URL-decode the payload.
+		return rawurldecode( $payload );
 	}
 
 	/**
@@ -2041,12 +2232,13 @@ class Frontend {
 			if ( 'wordpress-internal' === $category->get_slug() ) {
 				continue;
 			}
+			$cookies = $this->prepare_frontend_cookies( $category->get_cookies(), $category->get_slug() );
 			$cookie_groups[] = array(
 				'name'           => $category->get_name( faz_current_language() ),
 				'slug'           => $category->get_slug(),
 				'isNecessary'    => 'necessary' === $category->get_slug() ? true : false,
 				'ccpaDoNotSell'  => $category->get_sell_personal_data(),
-				'cookies'        => $this->get_cookies( $category ),
+				'cookies'        => $cookies,
 				'active'         => true,
 				'defaultConsent' => array(
 					'gdpr' => $category->get_prior_consent(),
@@ -2055,6 +2247,45 @@ class Frontend {
 			);
 		}
 		return $cookie_groups;
+	}
+
+	/**
+	 * Prepare preloaded cookie rows for frontend output and provider indexing.
+	 *
+	 * @param array  $items    Raw/prepared cookie rows.
+	 * @param string $cat_slug Category slug.
+	 * @return array
+	 */
+	private function prepare_frontend_cookies( $items, $cat_slug ) {
+		$cookies = array();
+		foreach ( (array) $items as $item ) {
+			if ( is_array( $item ) ) {
+				$item = (object) $item;
+			}
+			if ( ! is_object( $item ) ) {
+				continue;
+			}
+			$name = isset( $item->name ) ? $item->name : '';
+			if ( self::is_wp_internal_cookie( $name ) ) {
+				continue;
+			}
+			$provider = isset( $item->url_pattern ) ? (string) $item->url_pattern : '';
+			$cookies[] = array(
+				'cookieID' => $name,
+				'domain'   => isset( $item->domain ) ? $item->domain : '',
+				'provider' => $provider,
+			);
+			if ( '' !== $provider && 'necessary' !== $cat_slug ) {
+				if ( ! isset( $this->providers[ $provider ] ) ) {
+					$this->providers[ $provider ] = array();
+				}
+				if ( ! in_array( $cat_slug, $this->providers[ $provider ], true ) ) {
+					$this->providers[ $provider ][] = $cat_slug;
+				}
+			}
+		}
+
+		return $cookies;
 	}
 	/**
 	 * Get cookies by category
@@ -2065,6 +2296,10 @@ class Frontend {
 	public function get_cookies( $category = null ) {
 		if ( ! $category instanceof \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories ) {
 			return array();
+		}
+		$preloaded = $category->get_cookies();
+		if ( ! empty( $preloaded ) ) {
+			return $this->prepare_frontend_cookies( $preloaded, $category->get_slug() );
 		}
 		$cookies  = array();
 		$cat_slug = $category->get_slug();
