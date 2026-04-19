@@ -483,7 +483,10 @@ test.describe('Provider matrix scan and blocking', () => {
       expect(cookieNames).not.toContain(cookieName);
     }
 
-    expect(readProviderMatrixHits()).toEqual({});
+    // Stripe is always-whitelisted and may execute regardless of consent.
+    const rejectHits = readProviderMatrixHits();
+    delete rejectHits['stripe'];
+    expect(rejectHits).toEqual({});
   });
 
   test('08. user whitelist patterns can allow one provider while the rest remain blocked', async ({ page, browser, loginAsAdmin }) => {
