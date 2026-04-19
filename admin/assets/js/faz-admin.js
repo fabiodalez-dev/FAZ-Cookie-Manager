@@ -324,7 +324,7 @@
 		var data = {};
 		container.querySelectorAll('[data-path]').forEach(function (el) {
 			var conditionalWrap = el.closest('[data-show-if]');
-			if (el.disabled || el.type === 'hidden' || el.hidden || el.closest('.faz-hidden')) {
+			if (el.disabled || el.hidden || el.closest('.faz-hidden')) {
 				return;
 			}
 			if (conditionalWrap && window.getComputedStyle(conditionalWrap).display === 'none') {

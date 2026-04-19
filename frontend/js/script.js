@@ -1377,21 +1377,27 @@ document.createElement = (...args) => {
 function _fazMutationObserver(mutations) {
     for (const { addedNodes } of mutations) {
         for (const node of addedNodes) {
+            const nodeSrc = node && typeof node.getAttribute === "function"
+                ? (node.getAttribute("src") || node.src || "")
+                : (node && node.src ? node.src : "");
             if (
-                !node.src ||
+                !nodeSrc ||
                 !node.nodeName ||
                 !["script", "iframe"].includes(node.nodeName.toLowerCase())
             )
                 continue;
             try {
-                const urlToParse = node.src.startsWith("//")
-                    ? `${window.location.protocol}${node.src}`
-                    : node.src;
-                const { hostname, pathname } = new URL(urlToParse);
-                const cleanedHostname = _fazCleanHostName(`${hostname}${pathname}`);
-                _fazAddProviderToList(node, cleanedHostname);
-                if (_fazIsUserWhitelisted(node.src)) continue;
-                if (!_fazShouldBlockProvider(cleanedHostname)) continue;
+                let blockingTarget = nodeSrc;
+                if (!/^data:/i.test(nodeSrc)) {
+                    const urlToParse = nodeSrc.startsWith("//")
+                        ? `${window.location.protocol}${nodeSrc}`
+                        : nodeSrc;
+                    const { hostname, pathname } = new URL(urlToParse);
+                    blockingTarget = _fazCleanHostName(`${hostname}${pathname}`);
+                    _fazAddProviderToList(node, blockingTarget);
+                }
+                if (_fazIsUserWhitelisted(nodeSrc)) continue;
+                if (!_fazShouldBlockProvider(blockingTarget)) continue;
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);
@@ -1432,7 +1438,10 @@ function _fazUnblock() {
     _fazStore._backupNodes = _fazStore._backupNodes.filter(
         ({ position, node, uniqueID }) => {
             try {
-                if (_fazShouldBlockProvider(node.src)) return true;
+                var nodeSrc = (node && typeof node.getAttribute === "function")
+                    ? (node.getAttribute("src") || node.src || "")
+                    : (node && node.src ? node.src : "");
+                if (_fazShouldBlockProvider(nodeSrc)) return true;
                 if (node.nodeName.toLowerCase() === "script") {
                     const scriptNode = _fazBuildRestoredScript(node);
                     if (!scriptNode) return false;
@@ -1490,10 +1499,11 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
     }
 
     if (scriptSrc) {
-        if (scriptSrc.indexOf('data:') === 0) {
-            try {
-                clone.textContent = decodeURIComponent(scriptSrc.split(',').slice(1).join(','));
-            } catch (_e) {
+        if (/^data:/i.test(scriptSrc)) {
+            var decodedScript = _fazDecodeDataUriPayload(scriptSrc);
+            if (decodedScript) {
+                clone.textContent = decodedScript;
+            } else {
                 clone.src = scriptSrc;
             }
         } else {
@@ -1584,8 +1594,17 @@ function _fazUnblockServerSide() {
             var category = script.getAttribute("data-faz-category")
                 || (script.getAttribute("data-fazcookie") || "").replace("fazcookie-", "");
             if (_fazIsCategoryToBeBlocked(category)) return;
-            if (!(script.getAttribute('src') || script.src)) {
+            var scriptSrc = script.getAttribute('src') || script.src || '';
+            if (!scriptSrc) {
                 _fazRestoreInlineScript(script);
+                return;
+            }
+            if (/^data:/i.test(scriptSrc)) {
+                var decodedInline = _fazDecodeDataUriPayload(scriptSrc);
+                if (!decodedInline) return;
+                script.removeAttribute('src');
+                script.textContent = decodedInline;
+                _fazRestoreInlineScript(script, ['src', 'data-fazcookie']);
                 return;
             }
             var clone = _fazBuildRestoredScript(script);
@@ -1739,6 +1758,54 @@ function _fazCleanHostName(name) {
     return name.replace(/^www./, "");
 }
 
+var _fazDataUriDecodeMaxBytes = 65536;
+function _fazCanInspectDataUriMeta(meta) {
+    if (typeof meta !== "string") return true;
+    var mediaType = meta.split(";")[0].trim().toLowerCase();
+    if (!mediaType) return true;
+    if (mediaType.indexOf("text/") === 0) return true;
+    if (
+        mediaType === "application/javascript" ||
+        mediaType === "application/x-javascript" ||
+        mediaType === "application/ecmascript" ||
+        mediaType === "image/svg+xml"
+    ) return true;
+    if (mediaType.indexOf("javascript") !== -1 || mediaType.indexOf("ecmascript") !== -1) return true;
+    return mediaType.slice(-4) === "+xml";
+}
+
+function _fazDecodeDataUriPayload(uri) {
+    if (typeof uri !== "string" || !/^data:/i.test(uri)) return "";
+    var commaIndex = uri.indexOf(",");
+    if (commaIndex === -1) return "";
+
+    var meta = uri.substring(5, commaIndex);
+    var payload = uri.substring(commaIndex + 1);
+    if (!payload || !_fazCanInspectDataUriMeta(meta)) return "";
+    if (_fazDataUriDecodeMaxBytes > 0 && payload.length > _fazDataUriDecodeMaxBytes) return "";
+
+    try {
+        var decoded = meta.toLowerCase().indexOf(";base64") !== -1
+            ? atob(payload)
+            : decodeURIComponent(payload);
+        if (_fazDataUriDecodeMaxBytes > 0 && decoded.length > _fazDataUriDecodeMaxBytes) return "";
+        return decoded;
+    } catch (_unused) {
+        return "";
+    }
+}
+
+function _fazGetProviderMatchTarget(target) {
+    if (!target || typeof target !== "string") return "";
+    if (/^data:/i.test(target)) return _fazDecodeDataUriPayload(target);
+    return target;
+}
+
+function _fazHasProviderBoundary(target, index) {
+    if (index <= 0) return true;
+    return /[\/\.\:\s"'`=;,(<{\[]/.test(target.charAt(index - 1));
+}
+
 function _fazIsCategoryToBeBlocked(category) {
     const cookieValue = ref._fazGetFromStore(category);
     return (
@@ -1770,16 +1837,14 @@ function _fazGetPatternServiceMap() {
 
 function _fazShouldBlockProvider(formattedRE) {
     if (!formattedRE || typeof formattedRE !== "string") return false;
+    var matchTarget = _fazGetProviderMatchTarget(formattedRE);
+    if (!matchTarget) return false;
     if (!_fazStore._providersToBlock || !_fazStore._providersToBlock.length) return false;
     const provider = _fazStore._providersToBlock.find(({ re }) => {
         if (!re) return false;
-        var idx = formattedRE.indexOf(re);
+        var idx = matchTarget.indexOf(re);
         if (idx === -1) return false;
-        // Boundary check: character before must be empty, /, . or protocol separator.
-        if (idx > 0) {
-            var before = formattedRE.charAt(idx - 1);
-            if (before !== '/' && before !== '.' && before !== ':') return false;
-        }
+        if (!_fazHasProviderBoundary(matchTarget, idx)) return false;
         return true;
     });
     if (!provider) return false;

@@ -289,10 +289,13 @@ class Category_Controller extends Base_Controller {
 	 */
 	public function delete_item( $object ) {
 		global $wpdb;
-		$category_id = $object->get_id();
+		$category_id = absint( $object->get_id() );
+		if ( ! $category_id ) {
+			return;
+		}
 		$fallback_id = $this->get_fallback_category_id( $category_id );
 		if ( $fallback_id ) {
-			$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$cookie_result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prefix . 'faz_cookies',
 				array( 'category' => $fallback_id ),
 				array( 'category' => $category_id ),
@@ -300,18 +303,25 @@ class Category_Controller extends Base_Controller {
 				array( '%d' )
 			);
 		} else {
-			$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$cookie_result = $wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prefix . 'faz_cookies',
 				array( 'category' => $category_id ),
 				array( '%d' )
 			);
 		}
-		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( false === $cookie_result ) {
+			return;
+		}
+		$deleted = $wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookie_categories',
 			array(
 				'category_id' => $category_id,
-			)
+			),
+			array( '%d' )
 		);
+		if ( false === $deleted ) {
+			return;
+		}
 		$this->delete_cache();
 		Cookie_Controller::get_instance()->delete_cache();
 		do_action( 'faz_after_update_cookie_category' );

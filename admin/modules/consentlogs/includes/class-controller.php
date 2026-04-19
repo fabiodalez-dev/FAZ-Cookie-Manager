@@ -158,13 +158,6 @@ class Controller {
 		if ( ! empty( $parts['scheme'] ) ) {
 			$sanitized .= $parts['scheme'] . '://';
 		}
-		if ( ! empty( $parts['user'] ) ) {
-			$sanitized .= $parts['user'];
-			if ( ! empty( $parts['pass'] ) ) {
-				$sanitized .= ':' . $parts['pass'];
-			}
-			$sanitized .= '@';
-		}
 		if ( ! empty( $parts['host'] ) ) {
 			$sanitized .= $parts['host'];
 		}

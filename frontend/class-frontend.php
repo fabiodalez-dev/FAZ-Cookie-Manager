@@ -186,7 +186,7 @@ class Frontend {
 				if ( '' !== $custom_css ) {
 					// Strip dangerous CSS patterns that could be used for data exfiltration.
 					$custom_css = wp_strip_all_tags( $custom_css );
-					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)|behavior\s*:|\\\\-moz-binding|@import/i', $custom_css ) ) {
+					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)|behavior\s*:|-moz-binding|@import/i', $custom_css ) ) {
 						$custom_css = '';
 					}
 					$css .= $custom_css;
@@ -384,6 +384,7 @@ class Frontend {
 						"var d=e.detail||{};" .
 						"if(!d.action||d.action==='init')return;" .
 						"if(typeof _fazConsentLog==='undefined')return;" .
+						"var safeUrl=(function(){try{var current=new URL(window.location.href);return current.origin+current.pathname}catch(err){var origin=window.location.origin||(window.location.protocol+'//'+window.location.host);return origin+(window.location.pathname||'')}})();" .
 						"fetch(_fazConsentLog.restUrl,{" .
 							"method:'POST'," .
 							"headers:{'Content-Type':'application/json'}," .
@@ -391,7 +392,7 @@ class Frontend {
 								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
 								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
 								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
-								"url:window.location.href," .
+								"url:safeUrl," .
 								"banner_slug:_fazConsentLog.bannerSlug||''," .
 								"policy_revision:_fazConsentLog.policyRevision||1," .
 								"token:_fazConsentLog.token" .
@@ -620,6 +621,7 @@ class Frontend {
 			apply_filters( 'faz_trust_cf_ipcountry_header', false )
 			&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
 			&& preg_match( '/^[A-Z]{2}$/', sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) )
+			&& 'XX' !== sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) )
 		) {
 			$country = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
 		}
@@ -1119,7 +1121,7 @@ class Frontend {
 	 * client-side MutationObserver cannot intercept.
 	 */
 	public function start_output_buffer() {
-		if ( ( is_admin() && ! wp_doing_ajax() ) || wp_doing_cron() ) {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
 			return;
 		}
 		if ( ! $this->template ) {
@@ -1450,7 +1452,7 @@ class Frontend {
 		$content = $m[1];
 
 		// Only process if the noscript contains a blockable fallback resource.
-		if ( false === strpos( $content, '<img' ) && false === strpos( $content, '<iframe' ) ) {
+		if ( false === stripos( $content, '<img' ) && false === stripos( $content, '<iframe' ) ) {
 			return $full;
 		}
 
@@ -1471,7 +1473,7 @@ class Frontend {
 		}
 
 		// Block tracking fallback resources by replacing src → data-faz-src inside the noscript.
-		$blocked_content = preg_replace( '/(<(?:img|iframe)\b[^>]*)(^|\s)src\s*=/i', '$1$2data-faz-src=', $content );
+		$blocked_content = preg_replace( '/(<(?:img|iframe)\b[^>]*)(\s)src\s*=/i', '$1$2data-faz-src=', $content );
 		$blocked_content = preg_replace( '/(<(?:img|iframe)\b)/i', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_content );
 		return str_replace( $content, $blocked_content, $full );
 	}
@@ -1720,6 +1722,7 @@ class Frontend {
 			'plugins/classic-editor/',
 			'plugins/shortcodes-ultimate/',
 		) );
+		$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
 
 		// ── WooCommerce core infrastructure ──
 		if ( class_exists( 'WooCommerce', false ) ) {
@@ -1734,8 +1737,6 @@ class Frontend {
 				'woocommerce-smallscreen',
 				'woocommerce-general',
 			) );
-			$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
-
 			// On checkout/cart pages, also whitelist payment gateway scripts
 			// (PayPal SDK, Mollie, Klarna, etc.) — they are necessary for purchases.
 			if ( $this->is_wc_checkout_or_cart() ) {
@@ -1982,12 +1983,9 @@ class Frontend {
 			return null;
 		}
 
-		$pattern_map = $this->get_pattern_service_map();
-		$haystack    = '';
-		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/', $attrs, $sm ) ) {
-			$haystack = $sm[1];
-		}
-		$haystack .= ' ' . $content;
+		$pattern_map   = $this->get_pattern_service_map();
+		$match_context = $this->get_provider_match_context( $attrs, $content );
+		$haystack      = $match_context['haystack'];
 
 		foreach ( $pattern_map as $pattern => $service_id ) {
 			if ( empty( $pattern ) ) {
@@ -2003,6 +2001,38 @@ class Frontend {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Build a normalized haystack for provider and per-service matching.
+	 *
+	 * If src/href points to a supported data: URI, decode the payload and
+	 * treat it as inline content so provider/service patterns can match.
+	 *
+	 * @param string $attrs   Tag attributes string.
+	 * @param string $content Inline content associated with the tag.
+	 * @return array
+	 */
+	private function get_provider_match_context( $attrs, $content ) {
+		$url = '';
+		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/', $attrs, $sm ) ) {
+			$url = $sm[1];
+		}
+
+		$normalized_content = (string) $content;
+		if ( '' !== $url && 0 === stripos( $url, 'data:' ) ) {
+			$decoded_payload = $this->decode_data_uri_payload( $url );
+			if ( '' !== $decoded_payload ) {
+				$url                = '';
+				$normalized_content = trim( $decoded_payload . ' ' . $normalized_content );
+			}
+		}
+
+		return array(
+			'url'      => $url,
+			'content'  => $normalized_content,
+			'haystack' => trim( $url . ' ' . $normalized_content ),
+		);
 	}
 
 	/**
@@ -2089,32 +2119,8 @@ class Frontend {
 	 * @return string|false Matched category slug or false.
 	 */
 	private function match_script_to_provider( $attrs, $content, $providers ) {
-		// Extract src or href if present (link tags use href, scripts use src).
-		$url = '';
-		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/', $attrs, $sm ) ) {
-			$url = $sm[1];
-		}
-
-		// data: URI handling — decode the payload and treat it as inline
-		// content for pattern matching. A data: script src has no domain so
-		// URL-based patterns can never match; the only way to classify it
-		// is to inspect the encoded content itself. This lets us block
-		// data:text/javascript,ga('send','pageview') by matching the "ga("
-		// pattern, while leaving legitimate data: URIs (bundler output, SVG
-		// runners) untouched when they don't match any known provider.
-		// No other major CMP does this — Complianz, CookieYes, Borlabs, and
-		// Cookiebot all silently skip data: URIs. We do better.
-		if ( '' !== $url && strpos( $url, 'data:' ) === 0 ) {
-			$decoded_payload = $this->decode_data_uri_payload( $url );
-			if ( '' !== $decoded_payload ) {
-				// Replace the URL with the decoded payload for matching.
-				// The original URL carries no useful domain/path information.
-				$url     = '';
-				$content = $decoded_payload;
-			}
-		}
-
-		$haystack = $url . ' ' . $content;
+		$match_context = $this->get_provider_match_context( $attrs, $content );
+		$haystack      = $match_context['haystack'];
 
 		foreach ( $providers as $pattern => $category ) {
 			if ( empty( $pattern ) ) {
@@ -2137,6 +2143,8 @@ class Frontend {
 	 * @return string Decoded payload, or '' on failure.
 	 */
 	private function decode_data_uri_payload( $uri ) {
+		$max_payload_bytes = (int) apply_filters( 'faz_data_uri_decode_max_bytes', 65536 );
+
 		// Strip the "data:" prefix.
 		$rest = substr( $uri, 5 );
 		if ( false === $rest || '' === $rest ) {
@@ -2154,16 +2162,58 @@ class Frontend {
 		if ( false === $payload || '' === $payload ) {
 			return '';
 		}
+		if ( ! $this->is_inspectable_data_uri_meta( $meta ) ) {
+			return '';
+		}
+		if ( $max_payload_bytes > 0 && strlen( $payload ) > $max_payload_bytes ) {
+			return '';
+		}
 
 		// Check for base64 encoding.
 		if ( false !== stripos( $meta, ';base64' ) ) {
 			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding data: URI payload for provider matching, not obfuscation.
 			$decoded = base64_decode( $payload, true );
-			return false !== $decoded ? $decoded : '';
+			if ( false === $decoded ) {
+				return '';
+			}
+			if ( $max_payload_bytes > 0 && strlen( $decoded ) > $max_payload_bytes ) {
+				return '';
+			}
+			return $decoded;
 		}
 
 		// Plain-text data: URI — URL-decode the payload.
-		return rawurldecode( $payload );
+		$decoded = rawurldecode( $payload );
+		if ( $max_payload_bytes > 0 && strlen( $decoded ) > $max_payload_bytes ) {
+			return '';
+		}
+		return $decoded;
+	}
+
+	/**
+	 * Only inspect text/script-like data: URIs for provider matching.
+	 *
+	 * @param string $meta data: URI metadata before the first comma.
+	 * @return bool
+	 */
+	private function is_inspectable_data_uri_meta( $meta ) {
+		$parts      = explode( ';', (string) $meta );
+		$media_type = strtolower( trim( $parts[0] ) );
+
+		if ( '' === $media_type ) {
+			return true;
+		}
+		if ( 0 === strpos( $media_type, 'text/' ) ) {
+			return true;
+		}
+		if ( false !== strpos( $media_type, 'javascript' ) || false !== strpos( $media_type, 'ecmascript' ) ) {
+			return true;
+		}
+		if ( 'image/svg+xml' === $media_type ) {
+			return true;
+		}
+
+		return strlen( $media_type ) > 4 && '+xml' === substr( $media_type, -4 );
 	}
 
 	/**

@@ -114,4 +114,52 @@ test.describe('Settings reflection and secure script blocking', () => {
     expect(afterUnblockState.blockedScripts).toBe(0);
     expect(afterUnblockState.consentSet).toBe(true);
   });
+
+  test('data: base64 analytics scripts stay blocked before consent and execute after accept', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+
+    const initialState = await page.evaluate(() => {
+      window.__fazDataUriExecuted = 0;
+      const payload = btoa('window.__fazDataUriExecuted=(window.__fazDataUriExecuted||0)+1;');
+      const script = document.createElement('script');
+      script.id = 'faz-data-uri-probe';
+      script.setAttribute('data-fazcookie', 'fazcookie-analytics');
+      script.src = 'data:text/javascript;base64,' + payload;
+      document.head.appendChild(script);
+
+      const probe = document.getElementById('faz-data-uri-probe');
+      return {
+        executed: window.__fazDataUriExecuted || 0,
+        exists: !!probe,
+        type: probe ? probe.getAttribute('type') : null,
+      };
+    });
+
+    expect(initialState.executed).toBe(0);
+    expect(initialState.exists).toBe(true);
+    expect(initialState.type).toBe('javascript/blocked');
+
+    const accepted = await clickFirstVisible(page, [
+      '[data-faz-tag="accept-button"] button',
+      '[data-faz-tag="accept-button"]',
+      '.faz-btn-accept',
+    ]);
+    expect(accepted).toBeTruthy();
+
+    await page.waitForFunction(() => window.__fazDataUriExecuted === 1, undefined, { timeout: 5_000 });
+
+    const restoredState = await page.evaluate(() => {
+      const scripts = Array.from(document.scripts).filter((script) =>
+        (script.textContent || '').includes('__fazDataUriExecuted')
+      );
+      return {
+        executed: window.__fazDataUriExecuted || 0,
+        restoredScripts: scripts.length,
+      };
+    });
+
+    expect(restoredState.executed).toBe(1);
+    expect(restoredState.restoredScripts).toBeGreaterThan(0);
+  });
 });

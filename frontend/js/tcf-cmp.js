@@ -343,7 +343,7 @@
 	/**
 	 * Encode the TC string (core segment + DisclosedVendors).
 	 */
-	function encodeTcString(purposeConsent, sfOptins) {
+	function encodeTcString(purposeConsent, sfOptins, refreshLastUpdated) {
 		var bits = [];
 		var vendorConsent = buildVendorConsent(purposeConsent);
 		var purposeLI     = buildPurposeLI(purposeConsent);
@@ -353,7 +353,13 @@
 		var now = Math.round(Date.now() / 100);
 		var existingTimestamps = readTcTimestamps();
 		var created = existingTimestamps && existingTimestamps.created ? existingTimestamps.created : now;
-		var lastUpdated = now < created ? created : now;
+		var lastUpdated = existingTimestamps && existingTimestamps.lastUpdated ? existingTimestamps.lastUpdated : created;
+		if (lastUpdated < created) {
+			lastUpdated = created;
+		}
+		if (refreshLastUpdated) {
+			lastUpdated = now < created ? created : now;
+		}
 
 		pushBits(bits, TCF_VERSION, 6);
 		pushBits(bits, created, 36);
@@ -447,12 +453,12 @@
 	}
 
 	function clearEuconsentCookie() {
-		var domain = "";
-		if (window._fazConfig && window._fazConfig._rootDomain) {
-			domain = ";domain=" + window._fazConfig._rootDomain;
-		}
 		var secure = location.protocol === "https:" ? ";Secure" : "";
-		document.cookie = "euconsent-v2=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/" + domain + ";SameSite=Lax" + secure;
+		var expired = "euconsent-v2=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+		document.cookie = expired + ";SameSite=Lax" + secure;
+		if (window._fazConfig && window._fazConfig._rootDomain) {
+			document.cookie = expired + ";domain=" + window._fazConfig._rootDomain + ";SameSite=Lax" + secure;
+		}
 	}
 
 	function shouldPersistTcCookie(purposeConsent, vendorConsent, purposeLI, sfOptins) {
@@ -541,7 +547,7 @@
 		var sf       = buildSpecialFeatureOptins(consent);
 		var vendorConsent = buildVendorConsent(purposes);
 		var purposeLI = buildPurposeLI(purposes);
-		var tcStr    = encodeTcString(purposes, sf);
+		var tcStr    = encodeTcString(purposes, sf, eventStatus === "useractioncomplete");
 
 		// Only write euconsent-v2 after user action, not during initial banner display.
 		if (eventStatus === "useractioncomplete") {
