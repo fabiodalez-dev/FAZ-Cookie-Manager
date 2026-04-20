@@ -116,6 +116,7 @@ test.describe('Settings reflection and secure script blocking', () => {
   });
 
   test('data: base64 analytics scripts stay blocked before consent and execute after accept', async ({ page }) => {
+    await page.context().clearCookies();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 

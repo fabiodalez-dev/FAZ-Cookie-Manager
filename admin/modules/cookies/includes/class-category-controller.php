@@ -294,6 +294,11 @@ class Category_Controller extends Base_Controller {
 			return;
 		}
 		$fallback_id = $this->get_fallback_category_id( $category_id );
+		if ( null === $fallback_id ) {
+			return;
+		}
+
+		$transaction_started = false !== $wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		if ( $fallback_id ) {
 			$cookie_result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prefix . 'faz_cookies',
@@ -310,6 +315,9 @@ class Category_Controller extends Base_Controller {
 			);
 		}
 		if ( false === $cookie_result ) {
+			if ( $transaction_started ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
 			return;
 		}
 		$deleted = $wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -320,7 +328,13 @@ class Category_Controller extends Base_Controller {
 			array( '%d' )
 		);
 		if ( false === $deleted ) {
+			if ( $transaction_started ) {
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
 			return;
+		}
+		if ( $transaction_started ) {
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 		$this->delete_cache();
 		Cookie_Controller::get_instance()->delete_cache();
@@ -333,17 +347,17 @@ class Category_Controller extends Base_Controller {
 	 * Prefer "uncategorized", then "necessary", then the first remaining category.
 	 *
 	 * @param int $deleted_category_id Category being deleted.
-	 * @return int
+	 * @return int|null
 	 */
 	private function get_fallback_category_id( $deleted_category_id ) {
 		global $wpdb;
 		$rows = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			"SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories WHERE category_id <> %d",
+			"SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories WHERE category_id <> %d ORDER BY category_id ASC",
 			absint( $deleted_category_id )
 		) );
 
-		if ( null === $rows ) {
-			return 0; // Query error — don't delete cookies.
+		if ( ! is_array( $rows ) ) {
+			return null; // Query error — don't delete cookies.
 		}
 		if ( empty( $rows ) ) {
 			return 0; // No other categories.

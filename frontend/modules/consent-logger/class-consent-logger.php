@@ -118,12 +118,13 @@ class Consent_Logger {
 		// The consent_id check prevents replaying the same consent_id from different IPs.
 		$consent_id           = $request->get_param( 'consent_id' );
 		$sanitized_consent_id = sanitize_text_field( (string) ( $consent_id ?? '' ) );
-		$consent_key          = 'faz_consent_' . substr( md5( $consent_id ?? '' ), 0, 8 );
-		if ( faz_throttle_request( 'faz_consent_ip', 10 ) || faz_throttle_request( $consent_key, 300 ) ) {
-			$consent_hash = '' !== $sanitized_consent_id
-				? substr( hash_hmac( 'sha256', $sanitized_consent_id, wp_salt( 'auth' ) ), 0, 12 )
-				: 'empty';
-			error_log( '[FAZ Cookie Manager] Consent log throttled for consent_hash: ' . $consent_hash ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		$is_ip_throttled      = faz_throttle_request( 'faz_consent_ip', 10 );
+		$is_consent_throttled = false;
+		if ( '' !== $sanitized_consent_id ) {
+			$consent_key          = 'faz_consent_' . substr( md5( $sanitized_consent_id ), 0, 8 );
+			$is_consent_throttled = faz_throttle_request( $consent_key, 300 );
+		}
+		if ( $is_ip_throttled || $is_consent_throttled ) {
 			return rest_ensure_response( array( 'throttled' => true ) );
 		}
 

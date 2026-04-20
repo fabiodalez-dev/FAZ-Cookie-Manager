@@ -115,6 +115,14 @@ test.describe('GCM and IAB TCF behavior', () => {
     const originalSettings = JSON.parse(
       wpEval(`echo wp_json_encode( get_option( 'faz_settings', array() ) );`)
     ) as Record<string, unknown>;
+    const originalBannerTemplate = JSON.parse(
+      wpEval(`
+        echo wp_json_encode( array(
+          'exists' => false !== get_option( 'faz_banner_template', false ),
+          'value'  => get_option( 'faz_banner_template', null ),
+        ) );
+      `)
+    ) as { exists: boolean; value: unknown };
 
     // Use a fresh browser context so consent cookies from prior serial tests
     // cannot leak into this test's consent state.
@@ -137,6 +145,7 @@ test.describe('GCM and IAB TCF behavior', () => {
         delete_option( 'faz_banner_template' );
       `);
 
+      await freshContext.clearCookies();
       await freshPage.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(freshPage.locator('[data-faz-tag="notice"]')).toBeVisible();
       await freshPage.evaluate(() => {
@@ -220,12 +229,19 @@ test.describe('GCM and IAB TCF behavior', () => {
       }));
       expect(rejectedState.euconsentPresent).toBe(false);
     } finally {
+      await freshContext.clearCookies();
       await freshContext.close();
       const encodedSettings = JSON.stringify(originalSettings);
+      const encodedBannerTemplate = JSON.stringify(originalBannerTemplate);
       wpEval(`
         $restored = json_decode( wp_unslash( ${JSON.stringify(encodedSettings)} ), true );
         update_option( 'faz_settings', is_array( $restored ) ? $restored : array() );
-        delete_option( 'faz_banner_template' );
+        $banner_snapshot = json_decode( wp_unslash( ${JSON.stringify(encodedBannerTemplate)} ), true );
+        if ( is_array( $banner_snapshot ) && ! empty( $banner_snapshot['exists'] ) ) {
+          update_option( 'faz_banner_template', $banner_snapshot['value'] );
+        } else {
+          delete_option( 'faz_banner_template' );
+        }
       `);
     }
   });

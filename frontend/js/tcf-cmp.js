@@ -310,6 +310,19 @@
 	}
 
 	/**
+	 * Build all derived consent artifacts once so callers can reuse them.
+	 */
+	function buildConsentArtifacts(purposeConsent) {
+		var vendorConsent = buildVendorConsent(purposeConsent);
+		var purposeLI     = buildPurposeLI(purposeConsent);
+		return {
+			vendorConsent: vendorConsent,
+			purposeLI:     purposeLI,
+			vendorLI:      buildVendorLI(purposeLI)
+		};
+	}
+
+	/**
 	 * Encode the DisclosedVendors segment from selected vendor IDs.
 	 * SegmentType=1 (3 bits) + MaxVendorId (16 bits) + IsRangeEncoding=0 (1 bit) + bitfield
 	 */
@@ -343,11 +356,12 @@
 	/**
 	 * Encode the TC string (core segment + DisclosedVendors).
 	 */
-	function encodeTcString(purposeConsent, sfOptins, refreshLastUpdated) {
+	function encodeTcString(purposeConsent, sfOptins, refreshLastUpdated, derived) {
 		var bits = [];
-		var vendorConsent = buildVendorConsent(purposeConsent);
-		var purposeLI     = buildPurposeLI(purposeConsent);
-		var vendorLI      = buildVendorLI(purposeLI);
+		var artifacts      = derived || buildConsentArtifacts(purposeConsent);
+		var vendorConsent  = artifacts.vendorConsent;
+		var purposeLI      = artifacts.purposeLI;
+		var vendorLI       = artifacts.vendorLI;
 
 		// Deciseconds since Unix epoch (Jan 1, 1970) per IAB TCF spec.
 		var now = Math.round(Date.now() / 100);
@@ -480,10 +494,11 @@
 	/**
 	 * Build the TCData object returned by getTCData / addEventListener.
 	 */
-	function buildTCData(purposeConsent, sfOptins, tcString, listenerIdVal) {
-		var vendorConsent = buildVendorConsent(purposeConsent);
-		var purposeLI     = buildPurposeLI(purposeConsent);
-		var vendorLI      = buildVendorLI(purposeLI);
+	function buildTCData(purposeConsent, sfOptins, tcString, listenerIdVal, derived) {
+		var artifacts     = derived || buildConsentArtifacts(purposeConsent);
+		var vendorConsent = artifacts.vendorConsent;
+		var purposeLI     = artifacts.purposeLI;
+		var vendorLI      = artifacts.vendorLI;
 
 		// Build vendor consent/LI objects with string keys.
 		var vcObj = {};
@@ -545,9 +560,10 @@
 		var consent  = readConsent();
 		var purposes = buildPurposeConsent(consent);
 		var sf       = buildSpecialFeatureOptins(consent);
-		var vendorConsent = buildVendorConsent(purposes);
-		var purposeLI = buildPurposeLI(purposes);
-		var tcStr    = encodeTcString(purposes, sf, eventStatus === "useractioncomplete");
+		var derived  = buildConsentArtifacts(purposes);
+		var vendorConsent = derived.vendorConsent;
+		var purposeLI = derived.purposeLI;
+		var tcStr    = encodeTcString(purposes, sf, eventStatus === "useractioncomplete", derived);
 
 		// Only write euconsent-v2 after user action, not during initial banner display.
 		if (eventStatus === "useractioncomplete") {
@@ -561,7 +577,7 @@
 		for (var id in listeners) {
 			if (!listeners.hasOwnProperty(id)) continue;
 			var entry = listeners[id];
-			var data  = buildTCData(purposes, sf, tcStr, parseInt(id, 10));
+			var data  = buildTCData(purposes, sf, tcStr, parseInt(id, 10), derived);
 			data.eventStatus = eventStatus || "tcloaded";
 			try { entry.callback(data, true); } catch (_unused) { /* ignore listener error */ }
 		}
@@ -595,8 +611,9 @@
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfGet = buildSpecialFeatureOptins(consent);
-				tcStr    = encodeTcString(purposes, sfGet);
-				data     = buildTCData(purposes, sfGet, tcStr);
+				var derivedGet = buildConsentArtifacts(purposes);
+				tcStr    = encodeTcString(purposes, sfGet, false, derivedGet);
+				data     = buildTCData(purposes, sfGet, tcStr, undefined, derivedGet);
 				data.eventStatus = "tcloaded";
 				callback(data, true);
 				break;
@@ -607,8 +624,9 @@
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfAdd = buildSpecialFeatureOptins(consent);
-				tcStr    = encodeTcString(purposes, sfAdd);
-				data     = buildTCData(purposes, sfAdd, tcStr, listenerId);
+				var derivedAdd = buildConsentArtifacts(purposes);
+				tcStr    = encodeTcString(purposes, sfAdd, false, derivedAdd);
+				data     = buildTCData(purposes, sfAdd, tcStr, listenerId, derivedAdd);
 				data.eventStatus = "tcloaded";
 				callback(data, true);
 				break;
@@ -722,10 +740,11 @@
 		var existingConsent = readConsent();
 		var purposes = buildPurposeConsent(existingConsent);
 		var sfInit   = buildSpecialFeatureOptins(existingConsent);
-		var purposeLI = buildPurposeLI(purposes);
-		var vendorConsent = buildVendorConsent(purposes);
+		var derivedInit = buildConsentArtifacts(purposes);
+		var purposeLI = derivedInit.purposeLI;
+		var vendorConsent = derivedInit.vendorConsent;
 		if (shouldPersistTcCookie(purposes, vendorConsent, purposeLI, sfInit)) {
-			var tcStr = encodeTcString(purposes, sfInit);
+			var tcStr = encodeTcString(purposes, sfInit, false, derivedInit);
 			setEuconsentCookie(tcStr);
 		} else {
 			clearEuconsentCookie();

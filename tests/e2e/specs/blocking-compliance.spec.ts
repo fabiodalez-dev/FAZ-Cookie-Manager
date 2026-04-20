@@ -15,6 +15,7 @@ import {
 } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const IS_PHP_BUILT_IN_E2E = (process.env.FAZ_E2E_SERVER ?? 'php-built-in').toLowerCase() === 'php-built-in';
 
 type SettingsPayload = Record<string, any>;
 type CategoryConsentState = Record<string, boolean>;
@@ -23,23 +24,17 @@ type CategoryConsentState = Record<string, boolean>;
 // payment gateway (get_always_allowed_gateway_patterns). Testing Stripe
 // blocking here would always fail — and it should, because blocking payment
 // scripts breaks checkout.
-//
-// No functional provider is included in this matrix for the same reason: the
-// only fixture provider categorised as functional (Stripe) is whitelisted.
-// Functional category blocking is independently verified in the
-// settings-and-blocking spec (settings-and-blocking.spec.ts) via data-faz-tag
-// inline scripts, which exercises the category toggle without needing a
-// third-party provider fixture.
 const OBSERVED_CATEGORY_PROVIDERS = [
   { slug: 'analytics', cookieName: '_ga', hitKey: 'ga-monsterinsights' },
   { slug: 'marketing', cookieName: '_fbp', hitKey: 'facebook-pixel' },
   { slug: 'performance', cookieName: '_faz_custom_provider', hitKey: 'custom-unknown' },
+  { slug: 'functional', cookieName: '_faz_custom_functional', hitKey: 'custom-functional' },
 ] as const;
 
-const PERFORMANCE_RULE = {
-  category: 'performance',
-  pattern: 'faz-lab-custom-provider.js',
-};
+const CUSTOM_RULES = [
+  { category: 'performance', pattern: 'faz-lab-custom-provider.js' },
+  { category: 'functional', pattern: 'faz-lab-custom-functional.js' },
+];
 
 function buildConsentCombinations(categories: string[]): CategoryConsentState[] {
   const combinations: CategoryConsentState[] = [];
@@ -62,15 +57,18 @@ function formatConsentState(state: CategoryConsentState): string {
     .join(', ');
 }
 
-function withPerformanceRule(scriptBlocking: SettingsPayload | undefined): SettingsPayload {
+function withCustomRules(scriptBlocking: SettingsPayload | undefined): SettingsPayload {
   const currentRules = Array.isArray(scriptBlocking?.custom_rules) ? scriptBlocking.custom_rules : [];
-  const hasPerformanceRule = currentRules.some(
-    (rule: any) => rule?.category === PERFORMANCE_RULE.category && rule?.pattern === PERFORMANCE_RULE.pattern,
-  );
+  const merged = [...currentRules];
+  for (const rule of CUSTOM_RULES) {
+    if (!merged.some((r: any) => r?.category === rule.category && r?.pattern === rule.pattern)) {
+      merged.push(rule);
+    }
+  }
 
   return {
     ...(scriptBlocking ?? {}),
-    custom_rules: hasPerformanceRule ? currentRules : [...currentRules, PERFORMANCE_RULE],
+    custom_rules: merged,
   };
 }
 
@@ -286,7 +284,7 @@ test.describe('Blocking compliance coverage', () => {
 
     try {
       await postSettings(page, nonce, {
-        script_blocking: withPerformanceRule(original.script_blocking),
+        script_blocking: withCustomRules(original.script_blocking),
       });
 
       const combinations = buildConsentCombinations(OBSERVED_CATEGORY_PROVIDERS.map((entry) => entry.slug));
@@ -361,7 +359,7 @@ test.describe('Blocking compliance coverage', () => {
 
     try {
       await postSettings(page, nonce, {
-        script_blocking: withPerformanceRule(original.script_blocking),
+        script_blocking: withCustomRules(original.script_blocking),
       });
 
       enableProviderMatrixCustomScenario();
@@ -520,17 +518,15 @@ test.describe('Blocking compliance coverage', () => {
     }
   });
 
-  // FIXME: depends on is_singular() resolving correctly for the fixture page;
-  // the PHP built-in dev server does not always resolve it, so matrix scripts
-  // are never injected. Works on Apache/nginx.
-  test.fixme('script blocking excluded pages keep the banner visible but bypass scripts and network gating', async ({ page, loginAsAdmin }) => {
+  test('script blocking excluded pages keep the banner visible but bypass scripts and network gating', async ({ page, loginAsAdmin }) => {
+    test.skip(IS_PHP_BUILT_IN_E2E, 'Fixture page is_singular() is unreliable on the PHP built-in server.');
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await getSettings(page, nonce);
 
     try {
       await postSettings(page, nonce, {
         script_blocking: {
-          ...withPerformanceRule(original.script_blocking),
+          ...withCustomRules(original.script_blocking),
           excluded_pages: [matrixPagePattern],
         },
       });
@@ -580,7 +576,7 @@ test.describe('Blocking compliance coverage', () => {
           ...(original.banner_control ?? {}),
           excluded_pages: [String(matrixPageId)],
         },
-        script_blocking: withPerformanceRule(original.script_blocking),
+        script_blocking: withCustomRules(original.script_blocking),
       });
 
       enableProviderMatrixCustomScenario();

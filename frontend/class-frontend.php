@@ -99,6 +99,7 @@ class Frontend {
 	private $service_consent_cache    = null;
 	private $pattern_service_cache    = null;
 	private $settings_option_cache    = null;
+	private $always_allowed_cache     = null;
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -841,13 +842,9 @@ class Frontend {
 		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
 
 		// Some payment SDKs are required outside checkout too (e.g. Stripe express buttons).
-		$always_allowed_gateways = $this->get_always_allowed_gateway_patterns();
 		foreach ( array_keys( $this->providers ) as $pattern ) {
-			foreach ( $always_allowed_gateways as $allowed_pattern ) {
-				if ( false !== stripos( $pattern, $allowed_pattern ) ) {
-					unset( $this->providers[ $pattern ] );
-					break;
-				}
+			if ( $this->is_always_allowed_gateway_pattern( $pattern ) ) {
+				unset( $this->providers[ $pattern ] );
 			}
 		}
 
@@ -1556,7 +1553,7 @@ class Frontend {
 	 * @return string
 	 */
 	private function extract_tag_attr( $attrs, $name ) {
-		if ( preg_match( '/\b' . preg_quote( $name, '/' ) . '\s*=\s*["\']([^"\']+)["\']/i', $attrs, $matches ) ) {
+		if ( preg_match( '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*["\']([^"\']+)["\']/i', $attrs, $matches ) ) {
 			return $matches[1];
 		}
 
@@ -1791,8 +1788,43 @@ class Frontend {
 				'stripe-upe',
 			)
 		);
-		// Filter out empty strings to prevent stripos from matching everything.
-		return array_filter( array_map( 'trim', (array) $patterns ) );
+		if ( ! is_array( $patterns ) ) {
+			$patterns = array( $patterns );
+		}
+
+		return array_values(
+			array_filter(
+				array_map( 'trim', array_map( 'strval', $patterns ) ),
+				function ( $pattern ) {
+					return '' !== $pattern;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Check if a provider pattern is always allowed on the storefront.
+	 *
+	 * @param string $pattern Provider pattern to check.
+	 * @return bool
+	 */
+	private function is_always_allowed_gateway_pattern( $pattern ) {
+		$pattern = trim( (string) $pattern );
+		if ( '' === $pattern ) {
+			return false;
+		}
+
+		if ( null === $this->always_allowed_cache ) {
+			$this->always_allowed_cache = $this->get_always_allowed_gateway_patterns();
+		}
+
+		foreach ( $this->always_allowed_cache as $allowed_pattern ) {
+			if ( false !== stripos( $pattern, $allowed_pattern ) || false !== stripos( $allowed_pattern, $pattern ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -2099,11 +2131,8 @@ class Frontend {
 
 		// 5. Remove always-allowed gateway patterns (e.g. Stripe on checkout).
 		foreach ( array_keys( $map ) as $p ) {
-			foreach ( $this->get_always_allowed_gateway_patterns() as $allowed ) {
-				if ( false !== stripos( $p, $allowed ) || false !== stripos( $allowed, $p ) ) {
-					unset( $map[ $p ] );
-					break;
-				}
+			if ( $this->is_always_allowed_gateway_pattern( $p ) ) {
+				unset( $map[ $p ] );
 			}
 		}
 
@@ -2331,14 +2360,14 @@ class Frontend {
 			if ( ! is_object( $item ) ) {
 				continue;
 			}
-			$name = isset( $item->name ) ? sanitize_text_field( $item->name ) : '';
+			$name = isset( $item->name ) ? sanitize_text_field( (string) $item->name ) : '';
 			if ( self::is_wp_internal_cookie( $name ) ) {
 				continue;
 			}
-			$provider = isset( $item->url_pattern ) ? sanitize_text_field( $item->url_pattern ) : '';
+			$provider = isset( $item->url_pattern ) ? sanitize_text_field( (string) $item->url_pattern ) : '';
 			$cookies[] = array(
 				'cookieID' => $name,
-				'domain'   => isset( $item->domain ) ? sanitize_text_field( $item->domain ) : '',
+				'domain'   => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
 				'provider' => $provider,
 			);
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {

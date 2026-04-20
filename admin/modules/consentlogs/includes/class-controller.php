@@ -108,8 +108,9 @@ class Controller {
 		dbDelta( $sql );
 
 		// Migrate legacy plaintext user_agent values to hashed form.
+		$migration_ok = true;
 		if ( version_compare( $installed_version, '1.1', '<' ) ) {
-			$wpdb->query(
+			$result = $wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$table_name}
 					 SET user_agent = LOWER(SHA2(CONCAT(user_agent, %s), 256))
@@ -119,9 +120,14 @@ class Controller {
 					'^[0-9a-f]{64}$'
 				)
 			); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( false === $result ) {
+				$migration_ok = false;
+			}
 		}
 
-		update_option( 'faz_consent_logs_db_version', $this->db_version );
+		if ( $migration_ok ) {
+			update_option( 'faz_consent_logs_db_version', $this->db_version );
+		}
 	}
 
 	/**
@@ -172,6 +178,7 @@ class Controller {
 		if ( ! empty( $parts['scheme'] ) ) {
 			$sanitized .= $parts['scheme'] . '://';
 		}
+		// Deliberately omit user:pass — never persist credentials in logs.
 		if ( ! empty( $parts['host'] ) ) {
 			$sanitized .= $parts['host'];
 		}

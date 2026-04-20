@@ -723,13 +723,12 @@ function _fazHidePreferenceCenter() {
 function _fazShowPreferenceCenter() {
     _fazStore._prefTriggerElement = document.activeElement;
     const element = _fazGetPreferenceCenter();
-    element && element.classList.add(_fazGetPreferenceClass());
+    if (!element) return;
+    element.classList.add(_fazGetPreferenceClass());
 
     // Ensure ARIA attributes are always present on the preference center div
-    if (element) {
-        const preferenceCenter = element.querySelector('.faz-preference-center');
-        _fazSetPreferenceCenterAccessibility(preferenceCenter);
-    }
+    const preferenceCenter = element.querySelector('.faz-preference-center');
+    _fazSetPreferenceCenterAccessibility(preferenceCenter);
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
 
     if (!isPushdown) {
@@ -742,8 +741,7 @@ function _fazShowPreferenceCenter() {
     // Move focus into the preference center for keyboard/screen reader users.
     // Target the inner .faz-preference-center so we don't focus a banner button
     // when pushdown mode embeds preferences inside the consent bar wrapper.
-    var prefCenter = element.querySelector('.faz-preference-center');
-    _fazFocusIntoElement(prefCenter || element);
+    _fazFocusIntoElement(preferenceCenter || element);
 }
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
@@ -773,7 +771,8 @@ function _fazTogglePreferenceCenter() {
             _fazStore._prefTriggerElement = null;
         }
     } else {
-        _fazFocusIntoElement(element);
+        const prefCenter = element.querySelector('.faz-preference-center');
+        _fazFocusIntoElement(prefCenter || element);
     }
 }
 function _fazGetPreferenceClass() {
@@ -1057,7 +1056,10 @@ function _fazSetPreferenceCenterAccessibility(preferenceCenter) {
 
 function _fazFocusIntoElement(element) {
     if (!element) return;
-    var focusTarget = element.querySelector(
+    var root = element.classList && element.classList.contains('faz-preference-center')
+        ? element
+        : (element.querySelector('.faz-preference-center') || element);
+    var focusTarget = root.querySelector(
         'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
     );
     if (focusTarget) focusTarget.focus();
@@ -1895,8 +1897,12 @@ function _fazIsUserWhitelisted(url) {
     if (typeof url !== "string") return false;
     var wl = _fazStore._userWhitelist;
     if (!Array.isArray(wl) || !wl.length) return false;
+    var rawTarget = url.toLowerCase();
+    var decodedTarget = String(_fazGetProviderMatchTarget(url) || url).toLowerCase();
     for (var i = 0; i < wl.length; i++) {
-        if (typeof wl[i] === "string" && wl[i] && url.indexOf(wl[i]) !== -1) return true;
+        if (typeof wl[i] !== "string" || !wl[i]) continue;
+        var needle = wl[i].toLowerCase();
+        if (rawTarget.indexOf(needle) !== -1 || decodedTarget.indexOf(needle) !== -1) return true;
     }
     return false;
 }

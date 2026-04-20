@@ -25,6 +25,7 @@ import {
 } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const IS_PHP_BUILT_IN_E2E = (process.env.FAZ_E2E_SERVER ?? 'php-built-in').toLowerCase() === 'php-built-in';
 
 type SettingsPayload = Record<string, any>;
 type ScanCookie = { name: string; domain?: string; category?: string };
@@ -423,20 +424,12 @@ test.describe('Provider matrix scan and blocking', () => {
     }
   });
 
-  // FIXME: flaky on PHP built-in server — is_singular() does not resolve
-  // correctly for the fixture page, so the matrix plugin's render_matrix()
-  // never fires and no provider scripts are emitted. Works on Apache/nginx.
-  test.fixme('05. pre-consent the blocker stops matrix provider scripts and no matrix cookies are set', async ({ page }) => {
+  test('05. pre-consent the blocker stops matrix provider scripts and no matrix cookies are set', async ({ page }) => {
+    test.skip(IS_PHP_BUILT_IN_E2E, 'Fixture page is_singular() is unreliable on the PHP built-in server.');
     await gotoFrontend(page, matrixUrl);
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    // The matrix page injects ~7 provider scripts. At least 4 must be blocked
-    // pre-consent (some may be whitelisted as necessary or payment-gateway).
-    // Threshold lowered: the exact count depends on which providers the
-    // OB recognises from the matrix fixture URLs. At least 1 must be blocked
-    // (the TikTok pixel is always caught). Higher counts depend on the
-    // server's ability to resolve is_singular() for the fixture page.
-    expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(1);
+    expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(3);
 
     const cookieNames = await browserCookieNames(page);
     for (const cookieName of ['_ga', '_fbp', '__stripe_mid', 'hubspotutk', '_ttp']) {
@@ -467,18 +460,13 @@ test.describe('Provider matrix scan and blocking', () => {
     expect(hits['stripe']).toBeGreaterThanOrEqual(1);
   });
 
-  // FIXME: same is_singular limitation as test 05 — fixture page on PHP
-  // built-in server doesn't inject matrix scripts reliably.
-  test.fixme('07. reject all keeps the matrix scripts blocked and prevents cookie creation', async ({ page }) => {
+  test('07. reject all keeps the matrix scripts blocked and prevents cookie creation', async ({ page }) => {
+    test.skip(IS_PHP_BUILT_IN_E2E, 'Fixture page is_singular() is unreliable on the PHP built-in server.');
     await gotoFrontend(page, matrixUrl);
     await rejectAll(page);
     await page.waitForTimeout(1000);
 
-    // Threshold lowered: the exact count depends on which providers the
-    // OB recognises from the matrix fixture URLs. At least 1 must be blocked
-    // (the TikTok pixel is always caught). Higher counts depend on the
-    // server's ability to resolve is_singular() for the fixture page.
-    expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(1);
+    expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(3);
 
     const cookieNames = await browserCookieNames(page);
     for (const cookieName of ['_ga', '_fbp', '__stripe_mid', 'hubspotutk']) {
@@ -669,12 +657,18 @@ test.describe('Provider matrix scan and blocking', () => {
   // to avoid breaking Stripe express buttons, Apple Pay, etc. The test verifies
   // this design decision rather than expecting Stripe to be blocked.
   test('15. Stripe is always-allowed even on non-checkout pages', async ({ page }) => {
+    resetProviderMatrixState();
     await gotoFrontend(page, matrixUrl);
 
-    // Stripe script should execute (always-allowed) even without consent.
-    // It may or may not set __stripe_mid depending on the page context,
-    // but its hit counter should show it ran.
-    const hits = readProviderMatrixHits();
-    expect(hits['stripe'] ?? 0).toBeGreaterThanOrEqual(0); // Script ran or was not injected by fixture
+    // Stripe script must execute (always-allowed) even without consent.
+    await expect
+      .poll(() => readProviderMatrixHits().stripe ?? 0, {
+        timeout: 10_000,
+        message: 'Stripe should have executed on a non-checkout page (always-allowed).',
+      })
+      .toBeGreaterThanOrEqual(1);
+
+    // Verify it was NOT blocked (no type="text/plain" on Stripe scripts).
+    expect(await page.locator('script[type="text/plain"][src*="js.stripe.com"]').count()).toBe(0);
   });
 });
