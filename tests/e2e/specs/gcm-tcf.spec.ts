@@ -111,10 +111,15 @@ test.describe('GCM and IAB TCF behavior', () => {
     expect(tcf.ping.apiVersion).toBe('2.3');
   });
 
-  test('TCF preserves timestamps on getTCData and clears euconsent-v2 after reject', async ({ page }) => {
+  test('TCF preserves timestamps on getTCData and clears euconsent-v2 after reject', async ({ page, browser }) => {
     const originalSettings = JSON.parse(
       wpEval(`echo wp_json_encode( get_option( 'faz_settings', array() ) );`)
     ) as Record<string, unknown>;
+
+    // Use a fresh browser context so consent cookies from prior serial tests
+    // cannot leak into this test's consent state.
+    const freshContext = await browser.newContext();
+    const freshPage = await freshContext.newPage();
 
     try {
       wpEval(`
@@ -132,14 +137,14 @@ test.describe('GCM and IAB TCF behavior', () => {
         delete_option( 'faz_banner_template' );
       `);
 
-      await page.goto('/', { waitUntil: 'domcontentloaded' });
-      await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
-      await page.evaluate(() => {
+      await freshPage.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(freshPage.locator('[data-faz-tag="notice"]')).toBeVisible();
+      await freshPage.evaluate(() => {
         _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
       });
-      await page.waitForFunction(() => typeof window.__tcfapi === 'function', undefined, { timeout: 5_000 });
+      await freshPage.waitForFunction(() => typeof window.__tcfapi === 'function', undefined, { timeout: 5_000 });
 
-      const initial = await page.evaluate(async () => {
+      const initial = await freshPage.evaluate(async () => {
         if (typeof window.__tcfapi !== 'function') {
           return { available: false };
         }
@@ -155,16 +160,16 @@ test.describe('GCM and IAB TCF behavior', () => {
       expect(initial.ping.cmpStatus).toBe('loaded');
       expect(initial.ping.apiVersion).toBe('2.3');
 
-      const accepted = await clickFirstVisible(page, [
+      const accepted = await clickFirstVisible(freshPage, [
         '[data-faz-tag="accept-button"] button',
         '[data-faz-tag="accept-button"]',
         '.faz-btn-accept',
       ]);
       expect(accepted).toBeTruthy();
 
-      await page.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+      await freshPage.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
 
-      const acceptedState = await page.evaluate(async () => {
+      const acceptedState = await freshPage.evaluate(async () => {
         const getTcData = () =>
           new Promise((resolve) => {
             window.__tcfapi('getTCData', 2, (data) => resolve(data));
@@ -193,14 +198,14 @@ test.describe('GCM and IAB TCF behavior', () => {
       expect(firstTs).toEqual(cookieTs);
       expect(secondTs).toEqual(cookieTs);
 
-      await page.evaluate(() => {
+      await freshPage.evaluate(() => {
         if (typeof window.revisitFazConsent === 'function') {
           window.revisitFazConsent();
         }
       });
-      await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+      await expect(freshPage.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-      const rejected = await clickFirstVisible(page, [
+      const rejected = await clickFirstVisible(freshPage, [
         '[data-faz-tag="reject-button"] button',
         '[data-faz-tag="reject-button"]',
         '.faz-btn-reject',
@@ -208,13 +213,14 @@ test.describe('GCM and IAB TCF behavior', () => {
       ]);
       expect(rejected).toBeTruthy();
 
-      await page.waitForFunction(() => !document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+      await freshPage.waitForFunction(() => !document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
 
-      const rejectedState = await page.evaluate(() => ({
+      const rejectedState = await freshPage.evaluate(() => ({
         euconsentPresent: document.cookie.includes('euconsent-v2='),
       }));
       expect(rejectedState.euconsentPresent).toBe(false);
     } finally {
+      await freshContext.close();
       const encodedSettings = JSON.stringify(originalSettings);
       wpEval(`
         $restored = json_decode( wp_unslash( ${JSON.stringify(encodedSettings)} ), true );

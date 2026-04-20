@@ -22,8 +22,14 @@ type CategoryConsentState = Record<string, boolean>;
 // Stripe is excluded from this matrix because it is always-whitelisted as a
 // payment gateway (get_always_allowed_gateway_patterns). Testing Stripe
 // blocking here would always fail — and it should, because blocking payment
-// scripts breaks checkout. Functional category blocking is still tested via
-// the settings-and-blocking spec using data-faz-tag inline scripts.
+// scripts breaks checkout.
+//
+// No functional provider is included in this matrix for the same reason: the
+// only fixture provider categorised as functional (Stripe) is whitelisted.
+// Functional category blocking is independently verified in the
+// settings-and-blocking spec (settings-and-blocking.spec.ts) via data-faz-tag
+// inline scripts, which exercises the category toggle without needing a
+// third-party provider fixture.
 const OBSERVED_CATEGORY_PROVIDERS = [
   { slug: 'analytics', cookieName: '_ga', hitKey: 'ga-monsterinsights' },
   { slug: 'marketing', cookieName: '_fbp', hitKey: 'facebook-pixel' },

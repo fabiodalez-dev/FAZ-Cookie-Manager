@@ -2027,6 +2027,10 @@ class Frontend {
 			if ( '' !== $decoded_payload ) {
 				$url                = '';
 				$normalized_content = trim( $decoded_payload . ' ' . $normalized_content );
+			} else {
+				// Decode failed — clear the raw data URI so the encoded blob
+				// is not matched against provider patterns in the haystack.
+				$url = '';
 			}
 		}
 
