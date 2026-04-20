@@ -1187,7 +1187,7 @@ class Frontend {
 		$pcre_failed = false;
 
 		// 1. Block <script> tags.
-		if ( false !== strpos( $html, '<script' ) ) {
+		if ( false !== stripos( $html, '<script' ) ) {
 			$result = preg_replace_callback(
 				'#<script\b([^>]*)>(.*?)</script>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
@@ -1203,7 +1203,7 @@ class Frontend {
 		}
 
 		// 2. Block <iframe> tags (YouTube, Facebook, Maps, etc.).
-		if ( false !== strpos( $html, '<iframe' ) ) {
+		if ( false !== stripos( $html, '<iframe' ) ) {
 			$result = preg_replace_callback(
 				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
@@ -1219,7 +1219,7 @@ class Frontend {
 		}
 
 		// 3. Block tracking pixel <img> inside <noscript> (Meta Pixel, etc.).
-		if ( false !== strpos( $html, '<noscript' ) ) {
+		if ( false !== stripos( $html, '<noscript' ) ) {
 			$result = preg_replace_callback(
 				'#<noscript\b[^>]*>(.*?)</noscript>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
@@ -1235,7 +1235,7 @@ class Frontend {
 		}
 
 		// 4. Block <link rel="stylesheet"> (Google Fonts, Adobe Fonts, etc.).
-		if ( false !== strpos( $html, '<link' ) ) {
+		if ( false !== stripos( $html, '<link' ) ) {
 			$result = preg_replace_callback(
 				'#<link\b([^>]*rel\s*=\s*["\']stylesheet["\'][^>]*)/?>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
@@ -1251,7 +1251,7 @@ class Frontend {
 		}
 
 		// 5. Block <script data-faz-waitfor="category"> (deferred dependency scripts).
-		if ( false !== strpos( $html, 'data-faz-waitfor' ) ) {
+		if ( false !== stripos( $html, 'data-faz-waitfor' ) ) {
 			$result = preg_replace_callback(
 				'#<script\b([^>]*data-faz-waitfor\s*=\s*["\']([^"\']+)["\'][^>]*)>(.*?)</script>#is',
 				function ( $m ) use ( $blocked_categories ) {
@@ -2049,7 +2049,7 @@ class Frontend {
 	 */
 	private function get_provider_match_context( $attrs, $content ) {
 		$url = '';
-		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/i', $attrs, $sm ) ) {
+		if ( preg_match( '/(?:^|\s)(?:src|href)\s*=\s*["\']([^"\']+)["\']/i', $attrs, $sm ) ) {
 			$url = $sm[1];
 		}
 
@@ -2216,6 +2216,11 @@ class Frontend {
 
 		// Check for base64 encoding.
 		if ( false !== stripos( $meta, ';base64' ) ) {
+			// Percent-decode first for RFC 2397 conformance (e.g. %3D → =).
+			$payload = rawurldecode( $payload );
+			if ( $max_payload_bytes > 0 && strlen( $payload ) > $max_payload_bytes ) {
+				return '';
+			}
 			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- decoding data: URI payload for provider matching, not obfuscation.
 			$decoded = base64_decode( $payload, true );
 			if ( false === $decoded ) {
@@ -3208,7 +3213,7 @@ class Frontend {
 		// Block <script> tags in content.
 		// Fail-secure: on PCRE error, strip scripts entirely rather than serving
 		// them unblocked, which would violate consent requirements.
-		if ( false !== strpos( $content, '<script' ) ) {
+		if ( false !== stripos( $content, '<script' ) ) {
 			$result = preg_replace_callback(
 				'#<script\b([^>]*)>(.*?)</script>#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
@@ -3225,7 +3230,7 @@ class Frontend {
 		}
 
 		// Block <iframe> tags in content.
-		if ( false !== strpos( $content, '<iframe' ) ) {
+		if ( false !== stripos( $content, '<iframe' ) ) {
 			$result = preg_replace_callback(
 				'#<iframe\b([^>]*)(?:>(.*?)</iframe>|/>)#is',
 				function ( $m ) use ( $providers, $blocked_categories ) {
