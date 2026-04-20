@@ -1531,10 +1531,11 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
 function _fazBuildRestoredIframe(iframe, placeholder) {
     var clone = document.createElement('iframe');
     var iframeSrc = iframe.getAttribute('src') || iframe.src;
+    var skip = { 'src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
 
     for (var i = 0; i < iframe.attributes.length; i++) {
         var attr = iframe.attributes[i];
-        if (attr.name === 'src') continue;
+        if (skip[attr.name]) continue;
         clone.setAttribute(attr.name, attr.value);
     }
 
@@ -1790,9 +1791,21 @@ function _fazDecodeDataUriPayload(uri) {
     if (_fazDataUriDecodeMaxBytes > 0 && payload.length > _fazDataUriDecodeMaxBytes) return "";
 
     try {
-        var decoded = meta.toLowerCase().indexOf(";base64") !== -1
-            ? atob(payload)
-            : decodeURIComponent(payload);
+        var decoded;
+        if (meta.toLowerCase().indexOf(";base64") !== -1) {
+            var binary = atob(payload);
+            if (typeof TextDecoder !== "undefined") {
+                var bytes = new Uint8Array(binary.length);
+                for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) & 0xff;
+                decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+            } else {
+                decoded = decodeURIComponent(binary.split("").map(function (c) {
+                    return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(""));
+            }
+        } else {
+            decoded = decodeURIComponent(payload);
+        }
         if (_fazDataUriDecodeMaxBytes > 0 && decoded.length > _fazDataUriDecodeMaxBytes) return "";
         return decoded;
     } catch (_unused) {

@@ -337,10 +337,14 @@ class Category_Controller extends Base_Controller {
 	 */
 	private function get_fallback_category_id( $deleted_category_id ) {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare(
+		$rows = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			"SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories WHERE category_id <> %d",
 			absint( $deleted_category_id )
-		) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		) );
+
+		if ( empty( $rows ) ) {
+			return 0;
+		}
 
 		$fallbacks = array(
 			'uncategorized' => 0,

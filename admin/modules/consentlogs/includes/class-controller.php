@@ -109,7 +109,16 @@ class Controller {
 
 		// Migrate legacy plaintext user_agent values to hashed form.
 		if ( version_compare( $installed_version, '1.1', '<' ) ) {
-			$wpdb->query( "UPDATE {$table_name} SET user_agent = LOWER(SHA2(CONCAT(user_agent, '" . esc_sql( wp_salt( 'auth' ) ) . "'), 256)) WHERE user_agent <> '' AND CHAR_LENGTH(user_agent) <> 64" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table_name}
+					 SET user_agent = LOWER(SHA2(CONCAT(user_agent, %s), 256))
+					 WHERE user_agent <> ''
+					 AND user_agent NOT REGEXP %s",
+					wp_salt( 'auth' ),
+					'^[0-9a-f]{64}$'
+				)
+			); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
 
 		update_option( 'faz_consent_logs_db_version', $this->db_version );

@@ -462,7 +462,7 @@
 	}
 
 	function shouldPersistTcCookie(purposeConsent, vendorConsent, purposeLI, sfOptins) {
-		for (var p = 2; p <= 24; p++) {
+		for (var p = 2; p <= MAX_PURPOSE; p++) {
 			if (purposeConsent[String(p)]) return true;
 		}
 		for (var vid in vendorConsent) {
