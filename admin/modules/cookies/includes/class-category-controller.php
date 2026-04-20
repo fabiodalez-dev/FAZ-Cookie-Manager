@@ -299,6 +299,9 @@ class Category_Controller extends Base_Controller {
 		}
 
 		$transaction_started = false !== $wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! $transaction_started ) {
+			return;
+		}
 		if ( $fallback_id ) {
 			$cookie_result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prefix . 'faz_cookies',
@@ -315,9 +318,7 @@ class Category_Controller extends Base_Controller {
 			);
 		}
 		if ( false === $cookie_result ) {
-			if ( $transaction_started ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			}
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return;
 		}
 		$deleted = $wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -328,13 +329,12 @@ class Category_Controller extends Base_Controller {
 			array( '%d' )
 		);
 		if ( false === $deleted ) {
-			if ( $transaction_started ) {
-				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			}
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			return;
 		}
-		if ( $transaction_started ) {
-			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return;
 		}
 		$this->delete_cache();
 		Cookie_Controller::get_instance()->delete_cache();

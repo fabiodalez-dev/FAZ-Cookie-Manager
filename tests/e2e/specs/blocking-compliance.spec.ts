@@ -395,7 +395,7 @@ test.describe('Blocking compliance coverage', () => {
 
       await savePreferences(page);
       await waitForCookie(page, '_ga');
-      await waitForCookie(page, '__stripe_mid');
+      await waitForCookie(page, '_faz_custom_functional');
       await page.waitForTimeout(750);
 
       const consent = await getConsentCookie(page.context());
@@ -420,7 +420,7 @@ test.describe('Blocking compliance coverage', () => {
 
       const cookieNames = await browserCookieNames(page);
       expect(cookieNames).toContain('_ga');
-      expect(cookieNames).toContain('__stripe_mid');
+      expect(cookieNames).toContain('_faz_custom_functional');
       expect(cookieNames).not.toContain('_fbp');
       expect(cookieNames).not.toContain('_faz_custom_provider');
 
@@ -429,7 +429,7 @@ test.describe('Blocking compliance coverage', () => {
 
       const cookieNamesAfterReload = await browserCookieNames(page);
       expect(cookieNamesAfterReload).toContain('_ga');
-      expect(cookieNamesAfterReload).toContain('__stripe_mid');
+      expect(cookieNamesAfterReload).toContain('_faz_custom_functional');
       expect(cookieNamesAfterReload).not.toContain('_fbp');
       expect(cookieNamesAfterReload).not.toContain('_faz_custom_provider');
     } finally {
@@ -537,7 +537,7 @@ test.describe('Blocking compliance coverage', () => {
 
       await waitForCookie(page, '_ga');
       await waitForCookie(page, '_fbp');
-      await waitForCookie(page, '__stripe_mid');
+      await waitForCookie(page, '_faz_custom_functional');
       await waitForCookie(page, '_faz_custom_provider');
 
       await page.waitForTimeout(750);
@@ -589,7 +589,7 @@ test.describe('Blocking compliance coverage', () => {
 
       await waitForCookie(page, '_ga');
       await waitForCookie(page, '_fbp');
-      await waitForCookie(page, '__stripe_mid');
+      await waitForCookie(page, '_faz_custom_functional');
       await waitForCookie(page, '_faz_custom_provider');
     } finally {
       await postSettings(page, nonce, {

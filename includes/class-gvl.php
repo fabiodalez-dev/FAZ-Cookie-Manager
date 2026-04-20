@@ -336,7 +336,7 @@ class Gvl {
 		}
 
 		$path     = $dir . sanitize_file_name( $filename );
-		$tmp_path = wp_tempnam( $path );
+		$tmp_path = wp_tempnam( basename( $path ), $dir );
 		if ( ! $tmp_path ) {
 			return false;
 		}

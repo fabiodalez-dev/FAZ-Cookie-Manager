@@ -1830,9 +1830,11 @@ function _fazGetProviderMatchTarget(target) {
     return target;
 }
 
-function _fazHasProviderBoundary(target, index) {
-    if (index <= 0) return true;
-    return /[\/\.\:\s"'`=;,(<{\[]/.test(target.charAt(index - 1));
+function _fazHasProviderBoundary(target, index, length) {
+    if (index > 0 && !/[\/\.\:\s"'`=;,(<{\[]/.test(target.charAt(index - 1))) return false;
+    var afterPos = index + length;
+    if (afterPos < target.length && !/[\/\.\:\?\#\s"'=;,&)<}\]]/.test(target.charAt(afterPos))) return false;
+    return true;
 }
 
 function _fazIsCategoryToBeBlocked(category) {
@@ -1875,7 +1877,7 @@ function _fazShouldBlockProvider(formattedRE) {
         var needle = String(re).toLowerCase();
         var idx = normalizedTarget.indexOf(needle);
         if (idx === -1) return false;
-        if (!_fazHasProviderBoundary(matchTarget, idx)) return false;
+        if (!_fazHasProviderBoundary(matchTarget, idx, needle.length)) return false;
         return true;
     });
     if (!provider) return false;

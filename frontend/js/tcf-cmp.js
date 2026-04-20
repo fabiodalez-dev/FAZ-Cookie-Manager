@@ -607,7 +607,7 @@
 				}, true);
 				break;
 
-			case "getTCData":
+			case "getTCData": {
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfGet = buildSpecialFeatureOptins(consent);
@@ -617,8 +617,9 @@
 				data.eventStatus = "tcloaded";
 				callback(data, true);
 				break;
+			}
 
-			case "addEventListener":
+			case "addEventListener": {
 				listenerId++;
 				listeners[listenerId] = { callback: callback };
 				consent  = readConsent();
@@ -630,6 +631,7 @@
 				data.eventStatus = "tcloaded";
 				callback(data, true);
 				break;
+			}
 
 			case "removeEventListener":
 				if (parameter && listeners[parameter]) {

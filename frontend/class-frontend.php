@@ -1547,15 +1547,21 @@ class Frontend {
 	}
 
 	/**
-	 * Extract a quoted attribute value from a tag attribute string.
+	 * Extract an attribute value from a tag attribute string.
+	 *
+	 * Supports double-quoted, single-quoted, and unquoted HTML5 attribute values.
 	 *
 	 * @param string $attrs Tag attributes.
 	 * @param string $name  Attribute name.
 	 * @return string
 	 */
 	private function extract_tag_attr( $attrs, $name ) {
-		if ( preg_match( '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*["\']([^"\']+)["\']/i', $attrs, $matches ) ) {
-			return $matches[1];
+		if ( preg_match( '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $attrs, $matches ) ) {
+			for ( $i = 1; $i <= 3; $i++ ) {
+				if ( isset( $matches[ $i ] ) && '' !== $matches[ $i ] ) {
+					return $matches[ $i ];
+				}
+			}
 		}
 
 		return '';
