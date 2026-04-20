@@ -342,8 +342,11 @@ class Category_Controller extends Base_Controller {
 			absint( $deleted_category_id )
 		) );
 
+		if ( null === $rows ) {
+			return 0; // Query error — don't delete cookies.
+		}
 		if ( empty( $rows ) ) {
-			return 0;
+			return 0; // No other categories.
 		}
 
 		$fallbacks = array(

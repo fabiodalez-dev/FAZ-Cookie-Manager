@@ -740,7 +740,10 @@ function _fazShowPreferenceCenter() {
     }
 
     // Move focus into the preference center for keyboard/screen reader users.
-    _fazFocusIntoElement(element);
+    // Target the inner .faz-preference-center so we don't focus a banner button
+    // when pushdown mode embeds preferences inside the consent bar wrapper.
+    var prefCenter = element.querySelector('.faz-preference-center');
+    _fazFocusIntoElement(prefCenter || element);
 }
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();

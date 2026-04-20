@@ -1781,7 +1781,7 @@ class Frontend {
 	 * @return string[]
 	 */
 	private function get_always_allowed_gateway_patterns() {
-		return apply_filters(
+		$patterns = apply_filters(
 			'faz_always_allowed_gateway_patterns',
 			array(
 				'js.stripe.com',
@@ -1791,6 +1791,8 @@ class Frontend {
 				'stripe-upe',
 			)
 		);
+		// Filter out empty strings to prevent stripos from matching everything.
+		return array_filter( array_map( 'trim', (array) $patterns ) );
 	}
 
 	/**
@@ -2325,14 +2327,14 @@ class Frontend {
 			if ( ! is_object( $item ) ) {
 				continue;
 			}
-			$name = isset( $item->name ) ? $item->name : '';
+			$name = isset( $item->name ) ? sanitize_text_field( $item->name ) : '';
 			if ( self::is_wp_internal_cookie( $name ) ) {
 				continue;
 			}
-			$provider = isset( $item->url_pattern ) ? (string) $item->url_pattern : '';
+			$provider = isset( $item->url_pattern ) ? sanitize_text_field( $item->url_pattern ) : '';
 			$cookies[] = array(
 				'cookieID' => $name,
-				'domain'   => isset( $item->domain ) ? $item->domain : '',
+				'domain'   => isset( $item->domain ) ? sanitize_text_field( $item->domain ) : '',
 				'provider' => $provider,
 			);
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {
@@ -2371,9 +2373,9 @@ class Frontend {
 				continue;
 			}
 			$cookies[] = array(
-				'cookieID' => $cookie->get_name(),
-				'domain'   => $cookie->get_domain(),
-				'provider' => $cookie->get_url_pattern(),
+				'cookieID' => sanitize_text_field( $cookie->get_name() ),
+				'domain'   => sanitize_text_field( $cookie->get_domain() ),
+				'provider' => sanitize_text_field( $cookie->get_url_pattern() ),
 			);
 			$provider  = $cookie->get_url_pattern();
 			if ( '' !== $provider && 'necessary' !== $cat_slug ) {
