@@ -336,26 +336,29 @@ class Category_Controller extends Base_Controller {
 	 * @return int
 	 */
 	private function get_fallback_category_id( $deleted_category_id ) {
-		$categories = $this->get_item_from_db();
-		$fallbacks  = array(
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories WHERE category_id <> %d",
+			absint( $deleted_category_id )
+		) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+
+		$fallbacks = array(
 			'uncategorized' => 0,
 			'necessary'     => 0,
 			'first'         => 0,
 		);
 
-		foreach ( $categories as $category ) {
-			$prepared = $this->prepare_item( $category );
-			if ( empty( $prepared ) || (int) $prepared->category_id === (int) $deleted_category_id ) {
-				continue;
-			}
+		foreach ( $rows as $row ) {
+			$id   = (int) $row->category_id;
+			$slug = $row->slug;
 			if ( ! $fallbacks['first'] ) {
-				$fallbacks['first'] = (int) $prepared->category_id;
+				$fallbacks['first'] = $id;
 			}
-			if ( 'uncategorized' === $prepared->slug ) {
-				$fallbacks['uncategorized'] = (int) $prepared->category_id;
+			if ( 'uncategorized' === $slug ) {
+				$fallbacks['uncategorized'] = $id;
 			}
-			if ( 'necessary' === $prepared->slug ) {
-				$fallbacks['necessary'] = (int) $prepared->category_id;
+			if ( 'necessary' === $slug ) {
+				$fallbacks['necessary'] = $id;
 			}
 		}
 

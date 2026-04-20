@@ -186,7 +186,7 @@ class Frontend {
 				if ( '' !== $custom_css ) {
 					// Strip dangerous CSS patterns that could be used for data exfiltration.
 					$custom_css = wp_strip_all_tags( $custom_css );
-					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)|behavior\s*:|-moz-binding|@import/i', $custom_css ) ) {
+					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)\s*:|behavior\s*:|-moz-binding|@import/i', $custom_css ) ) {
 						$custom_css = '';
 					}
 					$css .= $custom_css;
@@ -2015,7 +2015,7 @@ class Frontend {
 	 */
 	private function get_provider_match_context( $attrs, $content ) {
 		$url = '';
-		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/', $attrs, $sm ) ) {
+		if ( preg_match( '/(?:src|href)\s*=\s*["\']([^"\']+)["\']/i', $attrs, $sm ) ) {
 			$url = $sm[1];
 		}
 
@@ -2090,6 +2090,16 @@ class Frontend {
 
 		// 4. Developer filter (allows code-level custom rules).
 		$map = apply_filters( 'faz_blocking_rules', $map );
+
+		// 5. Remove always-allowed gateway patterns (e.g. Stripe on checkout).
+		foreach ( array_keys( $map ) as $p ) {
+			foreach ( $this->get_always_allowed_gateway_patterns() as $allowed ) {
+				if ( false !== stripos( $p, $allowed ) || false !== stripos( $allowed, $p ) ) {
+					unset( $map[ $p ] );
+					break;
+				}
+			}
+		}
 
 		$this->provider_map_cache = $map;
 		return $map;

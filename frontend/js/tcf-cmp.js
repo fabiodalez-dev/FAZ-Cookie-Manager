@@ -650,6 +650,11 @@
 	// Install the __tcfapi function
 	window.__tcfapi = tcfapi;
 
+	// Mark CMP as loaded BEFORE processing the queue so that
+	// 'ping' commands executed from the queue see the correct status.
+	cmpLoaded = true;
+	cmpStatus = "loaded";
+
 	// Process the command queue
 	for (var q = 0; q < pendingQueue.length; q++) {
 		if (Array.isArray(pendingQueue[q])) {
@@ -712,9 +717,6 @@
 		if (!pairs || isConsentCookieStale(pairs)) return false;
 		return pairs.action === "yes";
 	}
-
-	cmpLoaded = true;
-	cmpStatus = "loaded";
 
 	if (hasUserAction()) {
 		var existingConsent = readConsent();

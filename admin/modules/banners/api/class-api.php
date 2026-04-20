@@ -392,7 +392,7 @@ class Api extends Rest_Controller {
 		}
 
 		$custom_css = wp_strip_all_tags( $custom_css );
-		if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)|behavior\s*:|-moz-binding|@import/i', $custom_css ) ) {
+		if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)\s*:|behavior\s*:|-moz-binding|@import/i', $custom_css ) ) {
 			return '';
 		}
 

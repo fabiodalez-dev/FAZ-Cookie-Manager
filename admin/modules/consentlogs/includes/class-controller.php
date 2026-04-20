@@ -107,6 +107,11 @@ class Controller {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
 
+		// Migrate legacy plaintext user_agent values to hashed form.
+		if ( version_compare( $installed_version, '1.1', '<' ) ) {
+			$wpdb->query( "UPDATE {$table_name} SET user_agent = LOWER(SHA2(CONCAT(user_agent, '" . esc_sql( wp_salt( 'auth' ) ) . "'), 256)) WHERE user_agent <> '' AND CHAR_LENGTH(user_agent) <> 64" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL
+		}
+
 		update_option( 'faz_consent_logs_db_version', $this->db_version );
 	}
 

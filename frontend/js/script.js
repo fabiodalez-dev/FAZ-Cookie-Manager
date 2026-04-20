@@ -1438,6 +1438,11 @@ function _fazUnblock() {
     _fazStore._backupNodes = _fazStore._backupNodes.filter(
         ({ position, node, uniqueID }) => {
             try {
+                var nodeCategory = node && typeof node.getAttribute === "function"
+                    ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
+                    : "";
+                nodeCategory = nodeCategory.replace("fazcookie-", "");
+                if (nodeCategory && _fazIsCategoryToBeBlocked(nodeCategory)) return true;
                 var nodeSrc = (node && typeof node.getAttribute === "function")
                     ? (node.getAttribute("src") || node.src || "")
                     : (node && node.src ? node.src : "");
@@ -1840,9 +1845,11 @@ function _fazShouldBlockProvider(formattedRE) {
     var matchTarget = _fazGetProviderMatchTarget(formattedRE);
     if (!matchTarget) return false;
     if (!_fazStore._providersToBlock || !_fazStore._providersToBlock.length) return false;
+    var normalizedTarget = matchTarget.toLowerCase();
     const provider = _fazStore._providersToBlock.find(({ re }) => {
         if (!re) return false;
-        var idx = matchTarget.indexOf(re);
+        var needle = String(re).toLowerCase();
+        var idx = normalizedTarget.indexOf(needle);
         if (idx === -1) return false;
         if (!_fazHasProviderBoundary(matchTarget, idx)) return false;
         return true;
