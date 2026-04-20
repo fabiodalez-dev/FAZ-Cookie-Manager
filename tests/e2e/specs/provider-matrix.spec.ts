@@ -432,7 +432,8 @@ test.describe('Provider matrix scan and blocking', () => {
     expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(3);
 
     const cookieNames = await browserCookieNames(page);
-    for (const cookieName of ['_ga', '_fbp', '__stripe_mid', 'hubspotutk', '_ttp']) {
+    // __stripe_mid excluded: Stripe is always-allowed and may set cookies pre-consent.
+    for (const cookieName of ['_ga', '_fbp', 'hubspotutk', '_ttp']) {
       expect(cookieNames).not.toContain(cookieName);
     }
 

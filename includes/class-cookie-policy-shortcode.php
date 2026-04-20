@@ -40,7 +40,7 @@ class Cookie_Policy_Shortcode {
 			'faz_cookie_policy'
 		);
 
-		$site_name  = esc_html( $atts['site_name'] );
+		$site_name  = $atts['site_name'];
 		$contact    = sanitize_email( $atts['contact'] );
 		$show_table = 'yes' === $atts['show_table'];
 

@@ -7,11 +7,13 @@
  * @package FAZ_Cookie_Manager
  */
 
+// CLI-only guard — unconditional regardless of ABSPATH state.
+if ( php_sapi_name() !== 'cli' ) {
+	exit( 'CLI only.' );
+}
+
 if ( ! defined( 'ABSPATH' ) ) {
-	// This file is invoked from CLI only — it bootstraps WordPress itself.
-	if ( php_sapi_name() !== 'cli' ) {
-		exit( 'CLI only.' );
-	}
+	// Will be defined below after locating wp-load.php.
 }
 
 $abspath = isset( $argv[1] ) ? rtrim( $argv[1], '/' ) . '/' : '';

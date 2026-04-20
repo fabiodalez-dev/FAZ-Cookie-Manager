@@ -1402,7 +1402,11 @@ function _fazMutationObserver(mutations) {
                     _fazAddProviderToList(node, blockingTarget);
                 }
                 if (_fazIsUserWhitelisted(nodeSrc)) continue;
-                if (!_fazShouldBlockProvider(blockingTarget)) continue;
+                // For data: URIs, also check explicit category markers (data-fazcookie/data-faz-category).
+                var hasCategoryMarker = node.getAttribute && (
+                    node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category")
+                );
+                if (!hasCategoryMarker && !_fazShouldBlockProvider(blockingTarget)) continue;
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);
@@ -1798,6 +1802,8 @@ function _fazDecodeDataUriPayload(uri) {
     try {
         var decoded;
         if (meta.toLowerCase().indexOf(";base64") !== -1) {
+            // Percent-decode first (e.g. %3D → =) for RFC 2397 conformance.
+            try { payload = decodeURIComponent(payload); } catch (_e) { /* already clean */ }
             var binary = atob(payload);
             if (typeof TextDecoder !== "undefined") {
                 var bytes = new Uint8Array(binary.length);
