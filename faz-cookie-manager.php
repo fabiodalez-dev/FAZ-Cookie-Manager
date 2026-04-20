@@ -86,38 +86,8 @@ function faz_set_default_language() {
  * @param array $response Upgrade response data.
  * @return void
  */
-function faz_upgrade_notice( $data, $response ) {
-	if ( isset( $data['upgrade_notice'] ) ) {
-		add_action( 'admin_print_footer_scripts', 'faz_upgrade_notice_js' );
-		$msg = str_replace( array( '<p>', '</p>' ), array( '<div>', '</div>' ), $data['upgrade_notice'] );
-		echo '<style type="text/css">
-        #faz-cookie-manager-update .update-message p:last-child{ display:none;}     
-        #faz-cookie-manager-update ul{ list-style:disc; margin-left:30px;}
-        .faz-upgrade-notice{ padding-left:30px;}
-        </style>
-        <div class="update-message faz-upgrade-notice"><div style="color: #f56e28;">' . esc_html__( 'Please make sure the cache is cleared after each plugin update especially if you have minified JS and/or CSS files.', 'faz-cookie-manager' ) . '</div>' . wp_kses_post( wpautop( $msg ) ) . '</div>';
-	}
-}
-
-/**
- * Javascript for handling upgrade notice.
- *
- * @return void
- */
-function faz_upgrade_notice_js() {     ?>
-		<script>
-			( function( $ ){
-				var update_dv=$( '#faz-cookie-manager-update ');
-				update_dv.find('.faz-upgrade-notice').next('p').remove();
-				update_dv.find('a.update-link:eq(0)').click(function(){
-					$('.faz-upgrade-notice').remove();
-				});
-			})( jQuery );
-		</script>
-		<?php
-}
-
-add_action( 'in_plugin_update_message-' . FAZ_PLUGIN_BASENAME, 'faz_upgrade_notice', 10, 2 );
+// Upgrade notices are rendered by WordPress.org via readme.txt "Upgrade Notice"
+// section. No custom update handler required.
 
 //declare compliance with WP Consent API
 add_filter( "wp_consent_api_registered_".FAZ_PLUGIN_BASENAME, '__return_true' );
@@ -225,12 +195,12 @@ function faz_get_consent_cookie_value() {
 		return '';
 	}
 
-	$cookie = wp_unslash( $_COOKIE['fazcookie-consent'] );
-	if ( is_string( $cookie ) && false !== strpos( $cookie, '%' ) ) {
-		$cookie = rawurldecode( $cookie );
+	$raw = sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) );
+	if ( false !== strpos( $raw, '%' ) ) {
+		$raw = rawurldecode( $raw );
 	}
 
-	return sanitize_text_field( (string) $cookie );
+	return sanitize_text_field( $raw );
 }
 
 /**

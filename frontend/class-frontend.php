@@ -512,8 +512,9 @@ class Frontend {
 		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
 		}
+		$placeholder_css = wp_strip_all_tags( Placeholder_Builder::get_css() );
 		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
-			. wp_kses( Placeholder_Builder::get_css(), array() )
+			. $placeholder_css // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS stripped of all tags; esc_html() would break selectors.
 			. '</style>';
 	}
 	/**

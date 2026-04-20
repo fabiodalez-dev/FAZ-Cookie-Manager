@@ -38,6 +38,20 @@ $force_remove_all = defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_
 if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 
 	/**
+	 * Remove an empty directory using WP_Filesystem when available.
+	 *
+	 * @param string $dir Directory path.
+	 * @return bool
+	 */
+	function faz_uninstall_rmdir( $dir ) {
+		global $wp_filesystem;
+		if ( $wp_filesystem && is_callable( array( $wp_filesystem, 'rmdir' ) ) ) {
+			return $wp_filesystem->rmdir( $dir );
+		}
+		return @rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir,WordPress.PHP.NoSilencedErrors.Discouraged
+	}
+
+	/**
 	 * Clean up all plugin data for the current site.
 	 *
 	 * @since 1.7.0
@@ -136,21 +150,18 @@ if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 				);
 				foreach ( $iterator as $node ) {
 					if ( $node->isDir() ) {
-						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
-						@rmdir( $node->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+						faz_uninstall_rmdir( $node->getPathname() );
 					} else {
 						wp_delete_file( $node->getPathname() );
 					}
 				}
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
-				@rmdir( $gvl_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				faz_uninstall_rmdir( $gvl_dir );
 				// Remove parent directory if empty.
 				$parent_dir = dirname( $gvl_dir );
 				if ( is_dir( $parent_dir ) ) {
 					$entries = @scandir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					if ( is_array( $entries ) && 2 === count( $entries ) ) {
-						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
-						@rmdir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+						faz_uninstall_rmdir( $parent_dir );
 					}
 				}
 			}

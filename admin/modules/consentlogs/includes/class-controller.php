@@ -321,11 +321,11 @@ class Controller {
 
 		// Count total — always use prepare() even when $values is empty.
 		if ( ! empty( $values ) ) {
-			$count_sql = $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_clause}", $values ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_clause}", $values ) );
 		} else {
-			$count_sql = "SELECT COUNT(*) FROM {$table} WHERE 1=1"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE 1=1" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		}
-		$total = (int) $wpdb->get_var( $count_sql ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 
 		// Get items.
 		$per_page = absint( $args['per_page'] );

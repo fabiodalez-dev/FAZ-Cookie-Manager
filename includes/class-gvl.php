@@ -345,12 +345,26 @@ class Gvl {
 			wp_delete_file( $tmp_path );
 			return false;
 		}
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- atomic move inside uploads dir.
-		if ( ! rename( $tmp_path, $path ) ) {
+		if ( ! self::move_file( $tmp_path, $path ) ) {
 			wp_delete_file( $tmp_path );
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Move a file using WP_Filesystem when available, falling back to rename().
+	 *
+	 * @param string $source      Source path.
+	 * @param string $destination Destination path.
+	 * @return bool
+	 */
+	private static function move_file( $source, $destination ) {
+		global $wp_filesystem;
+		if ( $wp_filesystem && is_callable( array( $wp_filesystem, 'move' ) ) ) {
+			return $wp_filesystem->move( $source, $destination, true );
+		}
+		return rename( $source, $destination ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename
 	}
 
 	/**
