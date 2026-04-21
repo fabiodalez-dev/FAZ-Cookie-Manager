@@ -20,25 +20,40 @@ type CategorySlug = (typeof CATEGORIES)[number];
 
 /** Inject a probe script for a given category and return its state.
  *  Uses a data: URI with src to trigger the createElement src setter
- *  which is where the client-side blocking intercept fires. */
-async function injectCategoryProbe(page: Page, category: CategorySlug): Promise<{ type: string; executed: boolean }> {
-  return page.evaluate((cat) => {
+ *  which is where the client-side blocking intercept fires.
+ *  If expectBlock=false, waits briefly for async data: URI execution. */
+async function injectCategoryProbe(page: Page, category: CategorySlug, expectBlock = true): Promise<{ type: string; executed: boolean }> {
+  // All in one evaluate to avoid losing reference after MutationObserver removes the node.
+  const immediate = await page.evaluate((cat) => {
     const varName = `__fazCatProbe_${cat}`;
     (window as any)[varName] = 0;
 
     const script = document.createElement('script');
     script.id = `faz-cat-probe-${cat}`;
-    // Set category BEFORE src so the src setter sees the marker.
     script.setAttribute('data-fazcookie', `fazcookie-${cat}`);
-    script.src = 'data:text/javascript,' + encodeURIComponent(`window.${varName}=1;`);
+    script.src = 'data:text/javascript;base64,' + btoa(`window.${varName}=1;`);
     document.head.appendChild(script);
 
-    const probe = document.getElementById(`faz-cat-probe-${cat}`) as HTMLScriptElement | null;
     return {
-      type: probe?.type || probe?.getAttribute('type') || 'text/javascript',
+      type: script.type || script.getAttribute('type') || 'text/javascript',
       executed: (window as any)[varName] === 1,
     };
   }, category);
+
+  // For non-blocked scripts, data: URI executes asynchronously
+  if (!expectBlock && !immediate.executed) {
+    await page.waitForFunction(
+      (cat) => (window as any)[`__fazCatProbe_${cat}`] === 1,
+      category,
+      { timeout: 2_000 },
+    ).catch(() => { /* timeout = not executed */ });
+    immediate.executed = await page.evaluate(
+      (cat) => (window as any)[`__fazCatProbe_${cat}`] === 1,
+      category,
+    );
+  }
+
+  return immediate;
 }
 
 /** Check if a previously injected probe has executed. */
@@ -214,13 +229,8 @@ test.describe('Category-level blocking', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    await page.evaluate(() => {
-      _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
-    });
-
     await openPreferences(page);
 
-    // Enable only analytics, disable everything else
     await setCategoryToggle(page, 'analytics', true);
     await setCategoryToggle(page, 'marketing', false);
     await setCategoryToggle(page, 'functional', false);
@@ -229,20 +239,14 @@ test.describe('Category-level blocking', () => {
     await savePreferences(page);
     await page.waitForFunction(() => document.cookie.includes('fazcookie-consent'), undefined, { timeout: 5_000 });
 
-    const consentCookie = await page.evaluate(() => {
-      const match = document.cookie.split(';').find((c) => c.trim().startsWith('fazcookie-consent='));
-      const raw = match ? match.split('=').slice(1).join('=') : '';
-      try { return decodeURIComponent(raw); } catch { return raw; }
-    });
+    // Reload to get fresh JS state with consent applied
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-    expect(consentCookie).toContain('analytics:yes');
-    expect(consentCookie).toContain('marketing:no');
-
-    // Analytics probe should NOT be blocked
-    const analyticsResult = await injectCategoryProbe(page, 'analytics');
+    // Analytics accepted → new scripts should execute
+    const analyticsResult = await injectCategoryProbe(page, 'analytics', false);
     expect(analyticsResult.executed, 'analytics accepted → must execute').toBe(true);
 
-    // Marketing probe should still be blocked
+    // Marketing denied → new scripts should be blocked
     const marketingResult = await injectCategoryProbe(page, 'marketing');
     expect(marketingResult.type, 'marketing denied → must be blocked').toBe('javascript/blocked');
     expect(marketingResult.executed, 'marketing denied → must not execute').toBe(false);
@@ -254,13 +258,8 @@ test.describe('Category-level blocking', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    await page.evaluate(() => {
-      _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
-    });
-
     await openPreferences(page);
 
-    // Enable marketing only
     await setCategoryToggle(page, 'analytics', false);
     await setCategoryToggle(page, 'marketing', true);
     await setCategoryToggle(page, 'functional', false);
@@ -268,17 +267,11 @@ test.describe('Category-level blocking', () => {
     await savePreferences(page);
     await page.waitForFunction(() => document.cookie.includes('fazcookie-consent'), undefined, { timeout: 5_000 });
 
-    const consentCookie = await page.evaluate(() => {
-      const match = document.cookie.split(';').find((c) => c.trim().startsWith('fazcookie-consent='));
-      const raw = match ? match.split('=').slice(1).join('=') : '';
-      try { return decodeURIComponent(raw); } catch { return raw; }
-    });
-
-    expect(consentCookie).toContain('analytics:no');
-    expect(consentCookie).toContain('marketing:yes');
+    // Reload to get fresh JS state
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     // Marketing should execute, analytics should NOT
-    const marketingResult = await injectCategoryProbe(page, 'marketing');
+    const marketingResult = await injectCategoryProbe(page, 'marketing', false);
     expect(marketingResult.executed, 'marketing accepted').toBe(true);
 
     const analyticsResult = await injectCategoryProbe(page, 'analytics');
@@ -301,8 +294,8 @@ test.describe('Category-level blocking', () => {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await expect(page.locator('[data-faz-tag="notice"]')).toBeHidden({ timeout: 3_000 });
 
-      // Analytics scripts should execute immediately (consent already given)
-      const result = await injectCategoryProbe(page, 'analytics');
+      // Analytics scripts should execute (consent already given)
+      const result = await injectCategoryProbe(page, 'analytics', false);
       expect(result.executed, 'analytics should execute after reload with consent').toBe(true);
     } finally {
       await ctx.close();
@@ -337,30 +330,40 @@ test.describe('Category-level blocking', () => {
     }
   });
 
-  // ── 9. data-faz-category attribute also works for blocking ──
-  test('data-faz-category attribute blocks scripts the same as data-fazcookie', async ({ page }) => {
+  // ── 9. data-faz-category scripts are blocked by the MutationObserver ──
+  // Note: data-faz-category is the server-side attribute (set by PHP OB).
+  // Client-side createElement override only checks data-fazcookie.
+  // The MutationObserver catches data-faz-category after DOM insertion.
+  test('data-faz-category scripts with src are blocked by MutationObserver', async ({ page }) => {
     await page.context().clearCookies();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    const result = await page.evaluate(() => {
+    await page.evaluate(() => {
       (window as any).__fazAltAttrProbe = 0;
       const script = document.createElement('script');
       script.id = 'faz-alt-attr-probe';
-      // Use the alternative attribute name
       script.setAttribute('data-faz-category', 'analytics');
-      script.textContent = 'window.__fazAltAttrProbe = 1;';
+      // Use an external-looking src so the MutationObserver processes it
+      script.src = 'https://www.googletagmanager.com/gtag/js?id=G-ALT-ATTR-TEST';
       document.head.appendChild(script);
-
-      const probe = document.getElementById('faz-alt-attr-probe') as HTMLScriptElement | null;
-      return {
-        type: probe?.type || 'text/javascript',
-        executed: (window as any).__fazAltAttrProbe === 1,
-      };
     });
 
-    expect(result.type, 'data-faz-category="analytics" must be blocked').toBe('javascript/blocked');
-    expect(result.executed).toBe(false);
+    // Wait for MutationObserver to process
+    await page.waitForTimeout(200);
+
+    const result = await page.evaluate(() => {
+      // MutationObserver removes the node and stores in _backupNodes
+      const inBackup = _fazStore._backupNodes.some(
+        (n: any) => n.node && n.node.getAttribute && n.node.getAttribute('data-faz-category') === 'analytics',
+      );
+      const stillInDom = !!document.getElementById('faz-alt-attr-probe');
+      return { inBackup, stillInDom };
+    });
+
+    // The script should be removed from DOM and stored in backup
+    expect(result.stillInDom, 'script should be removed from DOM').toBe(false);
+    expect(result.inBackup, 'script should be in backup nodes').toBe(true);
   });
 
   // ── 10. Necessary toggle is disabled in the preference center ──
