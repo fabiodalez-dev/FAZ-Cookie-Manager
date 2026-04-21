@@ -451,7 +451,7 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
       const analyticsScript = document.createElement('script');
       analyticsScript.id = 'faz-probe-analytics';
       analyticsScript.setAttribute('data-fazcookie', 'fazcookie-analytics');
-      analyticsScript.textContent = '(window as any).__fazAnalyticsProbeExecuted = true;';
+      analyticsScript.textContent = 'window.__fazAnalyticsProbeExecuted = true;';
       document.head.appendChild(analyticsScript);
 
       const stripe = document.getElementById('faz-probe-stripe') as HTMLScriptElement | null;

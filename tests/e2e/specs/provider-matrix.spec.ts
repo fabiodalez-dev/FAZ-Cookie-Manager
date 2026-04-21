@@ -658,6 +658,7 @@ test.describe('Provider matrix scan and blocking', () => {
   // to avoid breaking Stripe express buttons, Apple Pay, etc. The test verifies
   // this design decision rather than expecting Stripe to be blocked.
   test('15. Stripe is always-allowed even on non-checkout pages', async ({ page }) => {
+    test.skip(IS_PHP_BUILT_IN_E2E, 'Fixture page is_singular() is unreliable on the PHP built-in server.');
     resetProviderMatrixState();
     await gotoFrontend(page, matrixUrl);
 

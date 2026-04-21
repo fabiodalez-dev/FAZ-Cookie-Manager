@@ -1060,7 +1060,7 @@ function _fazFocusIntoElement(element) {
         ? element
         : (element.querySelector('.faz-preference-center') || element);
     var focusTarget = root.querySelector(
-        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
     );
     if (focusTarget) focusTarget.focus();
 }
@@ -1394,12 +1394,16 @@ function _fazMutationObserver(mutations) {
             try {
                 let blockingTarget = nodeSrc;
                 if (!/^data:/i.test(nodeSrc)) {
-                    const urlToParse = nodeSrc.startsWith("//")
-                        ? `${window.location.protocol}${nodeSrc}`
-                        : nodeSrc;
-                    const { hostname, pathname } = new URL(urlToParse);
-                    blockingTarget = _fazCleanHostName(`${hostname}${pathname}`);
-                    _fazAddProviderToList(node, blockingTarget);
+                    try {
+                        const urlToParse = nodeSrc.startsWith("//")
+                            ? `${window.location.protocol}${nodeSrc}`
+                            : nodeSrc;
+                        const { hostname, pathname } = new URL(urlToParse, window.location.href);
+                        blockingTarget = _fazCleanHostName(`${hostname}${pathname}`);
+                        _fazAddProviderToList(node, blockingTarget);
+                    } catch (_parseErr) {
+                        blockingTarget = nodeSrc;
+                    }
                 }
                 if (_fazIsUserWhitelisted(nodeSrc)) continue;
                 var rawCategory = node.getAttribute

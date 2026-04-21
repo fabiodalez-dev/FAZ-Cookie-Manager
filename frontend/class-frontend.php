@@ -2055,9 +2055,9 @@ class Frontend {
 	 * @return array
 	 */
 	private function get_provider_match_context( $attrs, $content ) {
-		$url = '';
-		if ( preg_match( '/(?:^|\s)(?:src|href)\s*=\s*["\']([^"\']+)["\']/i', $attrs, $sm ) ) {
-			$url = $sm[1];
+		$url = $this->extract_tag_attr( $attrs, 'src' );
+		if ( '' === $url ) {
+			$url = $this->extract_tag_attr( $attrs, 'href' );
 		}
 
 		$normalized_content = (string) $content;

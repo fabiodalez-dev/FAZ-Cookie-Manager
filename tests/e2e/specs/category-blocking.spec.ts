@@ -344,8 +344,9 @@ test.describe('Category-level blocking', () => {
       const script = document.createElement('script');
       script.id = 'faz-alt-attr-probe';
       script.setAttribute('data-faz-category', 'analytics');
-      // Use an external-looking src so the MutationObserver processes it
-      script.src = 'https://www.googletagmanager.com/gtag/js?id=G-ALT-ATTR-TEST';
+      // Use a neutral URL not in the provider matrix so this tests
+      // category-marker blocking, not provider-pattern blocking.
+      script.src = location.origin + '/faz-e2e-neutral-category-probe.js';
       document.head.appendChild(script);
     });
 
