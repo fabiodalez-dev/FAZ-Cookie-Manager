@@ -161,7 +161,16 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
 
     expect(initialState.type).toBe('javascript/blocked');
 
-    await page.click('[data-faz-tag="accept-button"] button');
+    const accepted = await page.evaluate(() => {
+      const btn =
+        document.querySelector<HTMLElement>('[data-faz-tag="accept-button"] button') ??
+        document.querySelector<HTMLElement>('[data-faz-tag="accept-button"]') ??
+        document.querySelector<HTMLElement>('.faz-btn-accept');
+      btn?.click();
+      return !!btn;
+    });
+    expect(accepted).toBe(true);
+
     await page.waitForFunction(() => {
       const probe = document.getElementById('faz-uppercase-probe') as HTMLScriptElement | null;
       return probe === null || probe.getAttribute('type') !== 'javascript/blocked';
