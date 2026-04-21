@@ -7,7 +7,11 @@
  * @package FAZ_Cookie_Manager
  */
 
-// CLI-only guard — unconditional regardless of ABSPATH state.
+// Satisfy Plugin Check's direct-access guard (ABSPATH is defined below after locating WP).
+if ( ! defined( 'ABSPATH' ) && php_sapi_name() !== 'cli' ) {
+	exit;
+}
+// CLI-only guard — unconditional.
 if ( php_sapi_name() !== 'cli' ) {
 	exit( 'CLI only.' );
 }
