@@ -45,6 +45,14 @@ if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 	 */
 	function faz_uninstall_rmdir( $dir ) {
 		global $wp_filesystem;
+		if ( ! $wp_filesystem && defined( 'ABSPATH' ) ) {
+			if ( ! function_exists( 'WP_Filesystem' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+			}
+			if ( function_exists( 'WP_Filesystem' ) ) {
+				WP_Filesystem();
+			}
+		}
 		if ( $wp_filesystem && is_callable( array( $wp_filesystem, 'rmdir' ) ) ) {
 			return $wp_filesystem->rmdir( $dir );
 		}
@@ -151,18 +159,22 @@ if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 				if ( ! is_dir( $plugin_upload_dir ) ) {
 					continue;
 				}
-				$iterator = new \RecursiveIteratorIterator(
-					new \RecursiveDirectoryIterator( $plugin_upload_dir, \RecursiveDirectoryIterator::SKIP_DOTS ),
-					\RecursiveIteratorIterator::CHILD_FIRST
-				);
-				foreach ( $iterator as $node ) {
-					if ( $node->isDir() ) {
-						faz_uninstall_rmdir( $node->getPathname() );
-					} else {
-						wp_delete_file( $node->getPathname() );
+				try {
+					$iterator = new \RecursiveIteratorIterator(
+						new \RecursiveDirectoryIterator( $plugin_upload_dir, \RecursiveDirectoryIterator::SKIP_DOTS ),
+						\RecursiveIteratorIterator::CHILD_FIRST
+					);
+					foreach ( $iterator as $node ) {
+						if ( $node->isDir() ) {
+							faz_uninstall_rmdir( $node->getPathname() );
+						} else {
+							wp_delete_file( $node->getPathname() );
+						}
 					}
+					faz_uninstall_rmdir( $plugin_upload_dir );
+				} catch ( \Throwable $e ) {
+					error_log( 'FAZ uninstall: failed to remove ' . $plugin_upload_dir . ' — ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				}
-				faz_uninstall_rmdir( $plugin_upload_dir );
 			}
 		} catch ( \Throwable $e ) {
 			error_log( 'Failed to delete FAZ Cookie Manager plugin data! ' . $e->getMessage() ); //phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log

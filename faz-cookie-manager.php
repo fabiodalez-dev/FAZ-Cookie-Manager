@@ -79,13 +79,6 @@ function faz_set_default_language() {
 	return substr( $default, 0, 2 );
 }
 
-/**
- * Add an upgrade notice whenever an update is available.
- *
- * @param array $data Upgrade data.
- * @param array $response Upgrade response data.
- * @return void
- */
 // Upgrade notices are rendered by WordPress.org via readme.txt "Upgrade Notice"
 // section. No custom update handler required.
 
@@ -195,7 +188,7 @@ function faz_get_consent_cookie_value() {
 		return '';
 	}
 
-	$raw = sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) );
+	$raw = wp_unslash( (string) $_COOKIE['fazcookie-consent'] );
 	if ( false !== strpos( $raw, '%' ) ) {
 		$raw = rawurldecode( $raw );
 	}

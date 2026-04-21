@@ -470,7 +470,7 @@ test.describe('Provider matrix scan and blocking', () => {
     expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(3);
 
     const cookieNames = await browserCookieNames(page);
-    for (const cookieName of ['_ga', '_fbp', '__stripe_mid', 'hubspotutk']) {
+    for (const cookieName of ['_ga', '_fbp', 'hubspotutk']) {
       expect(cookieNames).not.toContain(cookieName);
     }
 

@@ -1402,11 +1402,12 @@ function _fazMutationObserver(mutations) {
                     _fazAddProviderToList(node, blockingTarget);
                 }
                 if (_fazIsUserWhitelisted(nodeSrc)) continue;
-                // For data: URIs, also check explicit category markers (data-fazcookie/data-faz-category).
-                var hasCategoryMarker = node.getAttribute && (
-                    node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category")
-                );
-                if (!hasCategoryMarker && !_fazShouldBlockProvider(blockingTarget)) continue;
+                var rawCategory = node.getAttribute
+                    ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
+                    : "";
+                var nodeCategory = rawCategory.replace("fazcookie-", "");
+                var shouldBlockByCategory = nodeCategory && _fazIsCategoryToBeBlocked(nodeCategory);
+                if (!shouldBlockByCategory && !_fazShouldBlockProvider(blockingTarget)) continue;
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);

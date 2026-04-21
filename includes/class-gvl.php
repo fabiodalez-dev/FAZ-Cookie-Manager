@@ -362,7 +362,12 @@ class Gvl {
 	private static function move_file( $source, $destination ) {
 		global $wp_filesystem;
 		if ( $wp_filesystem && is_callable( array( $wp_filesystem, 'move' ) ) ) {
-			return $wp_filesystem->move( $source, $destination, true );
+			if ( $wp_filesystem->move( $source, $destination, true ) ) {
+				return true;
+			}
+			if ( ! file_exists( $source ) ) {
+				return false;
+			}
 		}
 		return rename( $source, $destination ); // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename
 	}

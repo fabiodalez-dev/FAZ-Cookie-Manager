@@ -12,16 +12,12 @@ if ( php_sapi_name() !== 'cli' ) {
 	exit( 'CLI only.' );
 }
 
-if ( ! defined( 'ABSPATH' ) ) {
-	// Will be defined below after locating wp-load.php.
-}
-
 $abspath = isset( $argv[1] ) ? rtrim( $argv[1], '/' ) . '/' : '';
 $mode    = isset( $argv[2] ) ? $argv[2] : '20';
 
 $resolved = realpath( $abspath );
 if ( false === $resolved || ! file_exists( $resolved . '/wp-load.php' ) ) {
-	error_log( "WordPress installation not found at: {$abspath}" ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+	fwrite( STDERR, "WordPress installation not found at: {$abspath}\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 	exit( 1 );
 }
 $abspath = rtrim( $resolved, '/' ) . '/';
