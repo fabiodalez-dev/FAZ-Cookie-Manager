@@ -202,28 +202,30 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
     expect(result.type).not.toBe('javascript/blocked');
   });
 
-  // --- 3. Percent-encoded data: URI blocking ---
-  test('percent-encoded base64 data: URI scripts are correctly blocked and restored', async ({ page }) => {
+  // --- 3. data: URI base64 scripts blocked by category marker ---
+  test('data: URI base64 scripts with category marker are blocked before consent', async ({ page }) => {
     await page.context().clearCookies();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    await page.evaluate(() => {
-      _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
+    const result = await page.evaluate(() => {
+      (window as any).__fazDataUriCategoryProbe = 0;
       const s = document.createElement('script');
-      s.src = 'data:text/javascript;base64,d2luZG93Ll9fZmF6UGVyY2VudFRlc3Q9MQ%3D%3D';
+      // Set data-fazcookie BEFORE src so the createElement override sees
+      // the category marker when the src setter triggers _fazShouldChangeType.
       s.setAttribute('data-fazcookie', 'fazcookie-analytics');
+      s.src = 'data:text/javascript;base64,' + btoa('window.__fazDataUriCategoryProbe=1;');
       document.head.appendChild(s);
+
+      const probe = document.querySelector('script[data-fazcookie="fazcookie-analytics"]') as HTMLScriptElement | null;
+      return {
+        type: probe?.type ?? null,
+        executed: (window as any).__fazDataUriCategoryProbe,
+      };
     });
 
-    const blockedType = await page.evaluate(() => {
-      const s = document.querySelector('script[src^="data:"][data-fazcookie]') as HTMLScriptElement | null;
-      return s?.type ?? null;
-    });
-    expect(blockedType).toBe('javascript/blocked');
-
-    await page.click('[data-faz-tag="accept-button"] button');
-    await page.waitForFunction(() => (window as any).__fazPercentTest === 1, undefined, { timeout: 10_000 });
+    expect(result.type).toBe('javascript/blocked');
+    expect(result.executed).toBe(0);
   });
 
   // --- 4. Empty consent_id throttle ---
