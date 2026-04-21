@@ -426,11 +426,17 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
     await page.locator('[data-faz-tag="settings-button"]').first().click();
     await expect(page.locator('.faz-preference-center')).toBeVisible();
 
-    const focusIsInside = await page.evaluate(() => {
-      const pref = document.querySelector('.faz-preference-center');
-      return pref !== null && pref.contains(document.activeElement);
-    });
-    expect(focusIsInside).toBe(true);
+    // Focus may take a frame to move after animation — poll briefly.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const pref = document.querySelector('.faz-preference-center');
+            return pref !== null && pref.contains(document.activeElement);
+          }),
+        { timeout: 3_000 },
+      )
+      .toBe(true);
 
     await page.locator('[data-faz-tag="detail-close"]').first().click();
     await expect(page.locator('.faz-preference-center')).toBeHidden();

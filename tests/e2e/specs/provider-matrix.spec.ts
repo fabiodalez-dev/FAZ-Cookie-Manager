@@ -448,7 +448,9 @@ test.describe('Provider matrix scan and blocking', () => {
 
   test('06. accept all unblocks the matrix scripts and emits representative cookies and hits', async ({ page }) => {
     test.skip(IS_PHP_BUILT_IN_E2E, 'Fixture page is_singular() is unreliable on the PHP built-in server.');
+    await page.context().clearCookies();
     await gotoFrontend(page, matrixUrl);
+    await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible({ timeout: 10_000 });
     await acceptAll(page);
 
     await waitForCookie(page, '_ga');
