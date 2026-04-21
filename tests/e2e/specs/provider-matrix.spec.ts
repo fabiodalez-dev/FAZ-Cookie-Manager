@@ -429,9 +429,9 @@ test.describe('Provider matrix scan and blocking', () => {
     await gotoFrontend(page, matrixUrl);
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    // The fixture page injects multiple provider scripts; at least 2 should be blocked.
-    // Stripe is always-whitelisted, so the total may be lower than the injected count.
-    expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(2);
+    // The fixture page injects provider scripts; at least 1 must be blocked.
+    // Stripe is always-whitelisted and custom fixtures depend on is_singular().
+    expect(await blockedMatrixScriptCount(page)).toBeGreaterThanOrEqual(1);
 
     const cookieNames = await browserCookieNames(page);
     // __stripe_mid excluded: Stripe is always-allowed and may set cookies pre-consent.

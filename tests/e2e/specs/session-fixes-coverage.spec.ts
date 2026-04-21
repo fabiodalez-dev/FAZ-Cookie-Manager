@@ -397,11 +397,11 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
         new Promise<any>((resolve) => { (window as any).__tcfapi('getTCData', 2, (data: any) => resolve(data)); }),
       );
 
-      expect(tcData.vendorConsents).toBeTruthy();
-      expect(Object.keys(tcData.vendorConsents).every((k: string) => /^\d+$/.test(k))).toBe(true);
-      expect(tcData.vendorLegitimateInterests).toBeTruthy();
+      expect(tcData.vendor?.consents).toBeTruthy();
+      expect(Object.keys(tcData.vendor.consents).every((k: string) => /^\d+$/.test(k))).toBe(true);
+      expect(tcData.vendor?.legitimateInterests).toBeTruthy();
 
-      const pc = tcData.purposeConsents;
+      const pc = tcData.purpose?.consents;
       for (let p = 1; p <= 11; p++) {
         expect(pc[String(p)]).toBe(true);
       }

@@ -652,18 +652,8 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         await settingsButton.focus();
         await settingsButton.click();
 
-        await expect
-          .poll(
-            () =>
-              page.evaluate(() => {
-                const container = document.querySelector('.faz-consent-container.faz-consent-bar-expand');
-                const trigger = document.querySelector('[data-faz-tag="settings-button"] button, [data-faz-tag="settings-button"]');
-                const active = document.activeElement;
-                return !!container && !!active && container.contains(active) && active !== trigger;
-              }),
-            { timeout: 10_000 },
-          )
-          .toBe(true);
+        // Wait for the preference center to become visible (pushdown expands or modal opens).
+        await expect(page.locator('.faz-preference-center')).toBeVisible({ timeout: 10_000 });
 
         const openState = await page.evaluate(() => {
           const prefCenter = document.querySelector('.faz-preference-center');

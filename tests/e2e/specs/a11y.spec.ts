@@ -156,37 +156,35 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
   test('Escape key closes the modal when focus is inside it', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+
+    // Disable reload so ESC doesn't trigger a navigation that destroys context.
+    await page.evaluate(() => {
+      _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
+    });
+
     await page.locator('[data-faz-tag="settings-button"]').first().click();
 
-    // The preference center element may be .faz-modal or [data-faz-tag="detail"] depending on banner type.
-    const modal = page.locator('.faz-modal');
-    const detail = page.locator('[data-faz-tag="detail"]');
-    const prefCenter = (await modal.count()) > 0 ? modal : detail;
+    const prefCenter = page.locator('.faz-preference-center');
     await expect(prefCenter).toBeVisible({ timeout: 5_000 });
 
-    // Focus any button inside the preference center so the ESC listener fires.
-    const btn = prefCenter.locator('button').first();
-    if (await btn.count()) {
-      await btn.focus();
-    } else {
-      await page.locator('.faz-preference-center button').first().focus();
-    }
+    // Focus a button inside so the ESC listener fires from within.
+    await prefCenter.locator('button').first().focus();
     await page.keyboard.press('Escape');
 
-    // After ESC, the preference center should close.
+    // After ESC, the preference center should close (hidden or class removed).
     await expect
       .poll(
         () =>
           page.evaluate(() => {
             const m = document.querySelector('.faz-modal');
-            // If .faz-modal exists, it should no longer have faz-modal-open.
             if (m && m.classList.contains('faz-modal-open')) return false;
-            // If there's no .faz-modal, check the detail panel visibility.
-            if (!m) {
-              const d = document.querySelector('[data-faz-tag="detail"]') as HTMLElement | null;
-              if (d) {
-                const style = window.getComputedStyle(d);
-                if (style.display !== 'none' && style.visibility !== 'hidden') return false;
+            const pc = document.querySelector('.faz-preference-center') as HTMLElement | null;
+            if (pc) {
+              const style = window.getComputedStyle(pc);
+              if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                // Check if parent container lost the expand class
+                const container = pc.closest('.faz-consent-container');
+                if (container && container.classList.contains('faz-consent-bar-expand')) return false;
               }
             }
             return true;

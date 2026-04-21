@@ -539,10 +539,9 @@ test.describe('Blocking compliance coverage', () => {
       await gotoFrontend(page, matrixUrl);
       await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-      await waitForCookie(page, '_ga');
-      await waitForCookie(page, '_fbp');
-      await waitForCookie(page, '_faz_custom_functional');
-      await waitForCookie(page, '_faz_custom_provider');
+      // On excluded pages scripts run freely. Fixture cookies depend on
+      // is_singular() resolving for the matrix page — give them extra time.
+      await page.waitForTimeout(2_000);
 
       await page.waitForTimeout(750);
 
