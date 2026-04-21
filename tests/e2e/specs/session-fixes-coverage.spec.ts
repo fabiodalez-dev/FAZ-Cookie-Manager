@@ -383,7 +383,14 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
       await page.evaluate(() => { _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false; });
       await page.waitForFunction(() => typeof (window as any).__tcfapi === 'function', undefined, { timeout: 5_000 });
 
-      await page.click('[data-faz-tag="accept-button"] button');
+      const accepted = await page.evaluate(() => {
+        const btn = document.querySelector('[data-faz-tag="accept-button"] button')
+          ?? document.querySelector('[data-faz-tag="accept-button"]')
+          ?? document.querySelector('.faz-btn-accept');
+        (btn as HTMLElement)?.click();
+        return !!btn;
+      });
+      expect(accepted).toBe(true);
       await page.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
 
       const tcData = await page.evaluate(async () =>

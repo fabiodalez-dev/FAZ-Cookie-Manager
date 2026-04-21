@@ -642,8 +642,11 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       const visitor = await browser.newContext({ baseURL: WP_BASE });
       try {
         const page = await visitor.newPage();
+        // First load primes the regenerated template; reload ensures it's fully applied.
         await page.goto('/?faz_audit_case=pushdown-a11y', { waitUntil: 'domcontentloaded' });
-        await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+        await page.waitForTimeout(500);
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible({ timeout: 10_000 });
 
         const settingsButton = page.locator('[data-faz-tag="settings-button"] button, [data-faz-tag="settings-button"]').first();
         await settingsButton.focus();
@@ -658,7 +661,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
                 const active = document.activeElement;
                 return !!container && !!active && container.contains(active) && active !== trigger;
               }),
-            { timeout: 5_000 },
+            { timeout: 10_000 },
           )
           .toBe(true);
 

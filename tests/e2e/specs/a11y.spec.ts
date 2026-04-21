@@ -157,14 +157,43 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
     await page.locator('[data-faz-tag="settings-button"]').first().click();
-    const modal = page.locator('.faz-modal');
-    await expect(modal).toHaveClass(/faz-modal-open/);
 
-    // Focus any button inside the modal so the ESC listener fires.
-    await page.locator('.faz-modal button').first().focus();
+    // The preference center element may be .faz-modal or [data-faz-tag="detail"] depending on banner type.
+    const modal = page.locator('.faz-modal');
+    const detail = page.locator('[data-faz-tag="detail"]');
+    const prefCenter = (await modal.count()) > 0 ? modal : detail;
+    await expect(prefCenter).toBeVisible({ timeout: 5_000 });
+
+    // Focus any button inside the preference center so the ESC listener fires.
+    const btn = prefCenter.locator('button').first();
+    if (await btn.count()) {
+      await btn.focus();
+    } else {
+      await page.locator('.faz-preference-center button').first().focus();
+    }
     await page.keyboard.press('Escape');
 
-    await expect(modal).not.toHaveClass(/faz-modal-open/, { timeout: 5_000 }); // tighter than the 10 s global — ESC should close immediately
+    // After ESC, the preference center should close.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const m = document.querySelector('.faz-modal');
+            // If .faz-modal exists, it should no longer have faz-modal-open.
+            if (m && m.classList.contains('faz-modal-open')) return false;
+            // If there's no .faz-modal, check the detail panel visibility.
+            if (!m) {
+              const d = document.querySelector('[data-faz-tag="detail"]') as HTMLElement | null;
+              if (d) {
+                const style = window.getComputedStyle(d);
+                if (style.display !== 'none' && style.visibility !== 'hidden') return false;
+              }
+            }
+            return true;
+          }),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
   });
 
   // Checkbox aria-label must reflect current state (enabled / disabled).

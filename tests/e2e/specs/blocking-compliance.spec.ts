@@ -122,7 +122,11 @@ async function openPreferenceCenter(page: Page): Promise<void> {
     '.faz-btn-customize',
   ]);
   expect(opened).toBeTruthy();
-  await expect(page.locator('.faz-modal.faz-modal-open [data-faz-tag="detail"]')).toBeVisible();
+  // The preference center may be inside .faz-modal (popup) or embedded (pushdown/classic).
+  const modal = page.locator('.faz-modal.faz-modal-open [data-faz-tag="detail"]');
+  const fallback = page.locator('[data-faz-tag="detail"]');
+  const target = (await modal.count()) > 0 ? modal : fallback;
+  await expect(target).toBeVisible({ timeout: 10_000 });
 }
 
 async function savePreferences(page: Page): Promise<void> {

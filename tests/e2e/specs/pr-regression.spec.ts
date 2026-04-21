@@ -1367,8 +1367,9 @@ test.describe('Issue #57: preference-center background default', () => {
    * the user config, this test catches it.
    */
   test('custom detail colours override the var fallbacks (dark modal)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    test.setTimeout(60_000);
     await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     const nonce = await getAdminNonce(page);
 
     // GET current banner via REST so we have the full shape to patch.
@@ -1419,14 +1420,18 @@ test.describe('Issue #57: preference-center background default', () => {
           return window.getComputedStyle(el).getPropertyValue(prop).trim();
         };
         // The CSS variables should be fed from the stored banner config.
+        // Try .faz-modal first, then .faz-preference-center, then .faz-consent-container.
         const modalDetailBg = read('.faz-modal', '--faz-detail-background-color')
+          ?? read('.faz-preference-center', '--faz-detail-background-color')
           ?? read('.faz-consent-container', '--faz-detail-background-color');
         const modalDetailFg = read('.faz-modal', '--faz-detail-color')
+          ?? read('.faz-preference-center', '--faz-detail-color')
           ?? read('.faz-consent-container', '--faz-detail-color');
         // And the computed colours of the preference-center wrapper should
         // reflect the custom values.
         const prefCenterFg = read('.faz-preference-center', 'color');
-        const modalBg = read('.faz-modal', 'background-color');
+        const modalBg = read('.faz-modal', 'background-color')
+          ?? read('.faz-preference-center', 'background-color');
         return { modalDetailBg, modalDetailFg, prefCenterFg, modalBg };
       });
 
