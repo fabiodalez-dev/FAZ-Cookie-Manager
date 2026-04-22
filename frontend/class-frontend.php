@@ -2306,8 +2306,13 @@ class Frontend {
 	 * @return bool
 	 */
 	public static function is_wp_internal_cookie( $name ) {
-		// Exact matches.
-		if ( 'wordpress_test_cookie' === $name ) {
+		// Exact matches — infrastructure cookies that are never consent-relevant.
+		$exact = array(
+			'wordpress_test_cookie',
+			'_lscache_vary',       // LiteSpeed Cache page-cache key.
+			'lscache_vary',        // LiteSpeed Cache (alt name).
+		);
+		if ( in_array( $name, $exact, true ) ) {
 			return true;
 		}
 		// Prefix matches (these have dynamic suffixes like hashes or user IDs).
@@ -2317,6 +2322,7 @@ class Frontend {
 			'wp-settings-',
 			'wp-settings-time-',
 			'wp-postpass_',
+			'_litespeed_',         // LiteSpeed Cache internal.
 		);
 		foreach ( $prefixes as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
