@@ -2,6 +2,67 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.12.0] — 2026-04-22
+
+### Security & Blocking
+- **data: URI scripts** decoded and content-matched against provider patterns (PHP + JS)
+- `strpos` → `stripos` in all OB guard checks — uppercase HTML tags now processed
+- `extract_tag_attr` supports unquoted HTML5 attributes and rejects `data-src` confusion
+- Provider boundary check validates character **after** match (prevents suffix false positives)
+- `rawurldecode()` before `base64_decode()` for percent-encoded data: URI payloads (PHP + JS)
+- Cookie consent value: `sanitize_text_field()` now runs after `rawurldecode()` (was stripping delimiters)
+- MutationObserver: `_fazIsCategoryToBeBlocked()` replaces loose attribute presence check
+- Relative URL resolution via `new URL(urlToParse, window.location.href)` in MutationObserver
+
+### Consent Logging
+- Empty `consent_id` no longer triggers global 300s throttle collision
+- `sanitize_log_url()` deliberately omits `user:pass@host` credentials
+- `db_version` only bumped when UA hash migration succeeds
+- Consent log schema: `banner_slug` and `policy_revision` columns added
+- Throttle: 10s/IP + 300s/consent_id dual guardrail
+
+### TCF / IAB v2.3
+- `buildConsentArtifacts()` computes derived consent data once per call
+- Purpose 1 gated on `purposeOneTreatment`
+- `euconsent-v2` cleared on consent withdrawal
+- `cmpStatus` lifecycle: `loading` → `loaded`
+- Switch case variables wrapped in block braces (Biome lint)
+
+### Accessibility
+- Focus trap extended to `input`, `select`, `textarea`, `summary`
+- `_fazFocusIntoElement` includes `summary` in focusable selector
+- Pushdown toggle moves focus on open/close
+- `aria-label` localized on preference center
+
+### Performance
+- `faz_settings` memoized per-request
+- `faz_current_language()` static cache
+- N+1 cookie queries eliminated (batch load)
+- `always_allowed_cache` property avoids redundant `apply_filters` in loop
+- `a11y.min.js` generated
+
+### Database & Migrations
+- Banner table indexes (`slug`, `status`) via migration 3.4.1
+- Category deletion uses DB transactions with ROLLBACK on failure
+- `get_fallback_category_id` returns `null` on query error (not 0)
+
+### WordPress Plugin Check
+- All ERRORS resolved (escaping, WP_Filesystem, ABSPATH guards)
+- `run-scan.php` excluded from wp.org ZIP (CLI bootstrap pattern incompatible with checker)
+
+### Geo & Misc
+- CF-IPCountry trust unified via `faz_trust_cf_ipcountry_header` filter (default: false)
+- GB added to EU country list
+- `wp_tempnam()` uses destination dir for atomic GVL file move
+- Uninstall cleans both `faz-cookie-manager/` and `fazcookie/` upload directories
+
+### Tests
+- New `category-blocking.spec.ts` — 10 tests covering all category consent scenarios
+- New `session-fixes-coverage.spec.ts` — 10 tests for session fix verification
+- New `pr-2026-04-19-audit.spec.ts` — 15 tests for audit finding regressions
+- New fixture plugin `faz-e2e-audit-lab` for performance and geo probes
+- 208+ E2E tests passing on nginx + php-fpm
+
 ## [1.11.3] — 2026-04-17
 
 ### Added

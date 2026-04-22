@@ -451,6 +451,18 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.12.0
+- **Security audit**: closed all findings from 20-agent code audit (H2-H5, M1-M28)
+- **data: URI blocking**: decoded payload matched against provider patterns (PHP + JS)
+- **Uppercase HTML tags**: `strpos` → `stripos` in output buffer guards
+- **Consent logging**: throttle fix for empty consent_id, URL credential stripping, UA hashing
+- **TCF/IAB v2.3**: `buildConsentArtifacts`, Purpose 1 treatment, euconsent-v2 cleanup
+- **Accessibility**: extended focus trap, summary support, localized aria-labels
+- **Performance**: `faz_settings` memoized, N+1 eliminated, `faz_current_language()` cached
+- **Plugin Check**: 0 ERRORS — all escaping, WP_Filesystem, and ABSPATH issues resolved
+- **Tests**: 35+ new E2E tests (category blocking, audit regressions, session fixes)
+- **DB migration 3.4.1**: banner table indexes for existing installs
+
 ### 1.11.3
 - **New: WP 5.7+ `wp_inline_script_tag` filter** — intercepts inline scripts added via `wp_add_inline_script()` before the output buffer. Backward compatible (WP < 5.7 uses the OB fallback).
 - **New: returning visitor unblock retry** — `_fazUnblock()` retries at multiple delays (250ms, 1s, 2s) + load event so late-rendered blocked scripts are always restored.
