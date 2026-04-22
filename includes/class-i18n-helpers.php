@@ -77,12 +77,30 @@ if ( ! function_exists( 'faz_i18n_is_multilingual' ) ) {
 
 if ( ! function_exists( 'faz_current_language' ) ) {
 	/**
-	 * Returns the current language code of the site
+	 * Returns the current language code of the site.
+	 *
+	 * IMPORTANT: this function is cache-safe. When no URL-based multilingual
+	 * plugin is active (WPML, Polylang, TranslatePress, Weglot), the function
+	 * returns the site's default language rather than parsing the visitor's
+	 * Accept-Language header. Accept-Language parsing on the server would
+	 * contaminate full-page/CDN caches with the first visitor's language and
+	 * serve it to everyone else (see GitHub issue #67).
+	 *
+	 * Browser-based language detection still happens, but client-side in
+	 * script.js using `navigator.languages`. The JS reads
+	 * `_fazStore._availableLanguages` and `_fazStore._browserDetect`, performs
+	 * the match, and — if the detected language differs from the cacheable one
+	 * the server picked — fetches the banner in the correct language through
+	 * the REST API and swaps the DOM before the banner is shown.
 	 *
 	 * @return string
 	 */
-	function faz_current_language() {
+	function faz_current_language( $reset_cache = false ) {
 		static $cached = null;
+		if ( true === $reset_cache ) {
+			$cached = null;
+			return '';
+		}
 		if ( null !== $cached ) {
 			return $cached;
 		}
@@ -116,8 +134,10 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 				$current_language = faz_default_language();
 			}
 		} else {
-			// No multilingual plugin — detect from browser Accept-Language header.
-			$current_language = faz_detect_browser_language();
+			// No URL-based multilingual plugin — fall back to the site default
+			// so that the rendered HTML stays cacheable. The browser-preferred
+			// language is resolved client-side in script.js.
+			$current_language = faz_default_language();
 		}
 		$map              = faz_get_lang_map();
 		$current_language = isset( $map[ $current_language ] ) ? $map[ $current_language ] : $current_language;
@@ -126,6 +146,44 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 		}
 		$cached = apply_filters( 'faz_current_language', $current_language );
 		return $cached;
+	}
+}
+
+if ( ! function_exists( 'faz_browser_detect_enabled' ) ) {
+	/**
+	 * Whether the client-side JS should perform browser-language detection.
+	 *
+	 * Returns true when no URL-based multilingual plugin is active AND the
+	 * admin has selected at least two languages. When this is true,
+	 * `_fazStore._browserDetect` is exposed to the frontend and script.js
+	 * reads `navigator.languages`, matches against the selected languages,
+	 * and fetches the banner in the matching language if it differs from the
+	 * server-rendered (cacheable) default.
+	 *
+	 * Site owners with aggressive CDN configurations can short-circuit
+	 * detection entirely by returning false via the
+	 * `faz_disable_browser_language_detection` filter.
+	 *
+	 * @return bool
+	 */
+	function faz_browser_detect_enabled() {
+		if ( faz_i18n_is_multilingual() ) {
+			return false;
+		}
+		if ( count( faz_selected_languages() ) < 2 ) {
+			return false;
+		}
+		/**
+		 * Filter to disable client-side browser-language detection.
+		 *
+		 * Returning true forces the banner to always use the default language.
+		 *
+		 * @param bool $disabled Defaults to false (detection enabled).
+		 */
+		if ( true === apply_filters( 'faz_disable_browser_language_detection', false ) ) {
+			return false;
+		}
+		return true;
 	}
 }
 

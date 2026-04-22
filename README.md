@@ -287,10 +287,45 @@ Detects visitor country for geo-targeted banner display:
 
 - **11 bundled languages**: English, German, French, Italian, Spanish, Polish, Portuguese (PT + BR), Hungarian, Finnish, Dutch
 - **180+ selectable languages** in the admin configuration
-- **Browser language detection**: Parses `Accept-Language` header with quality factor sorting
-- **Plugin integration**: Polylang and WPML auto-detected
+- **Browser language detection**: resolved client-side from `navigator.languages` so full-page/CDN caches cannot serve the wrong language to visitors (see below)
+- **Plugin integration**: Polylang, WPML, TranslatePress, Weglot auto-detected (URL-based, always cache-safe)
 - **Per-language banner content**: Separate title, description, button text per language
 - **RTL auto-detection**: Arabic, Hebrew, Persian, Kurdish, Urdu
+
+#### Full-page cache and CDN compatibility
+
+When **no URL-based multilingual plugin** (WPML/Polylang/TranslatePress/Weglot)
+is installed and **two or more languages** are selected in the admin, the
+banner HTML is rendered server-side in the **site default language** so it
+stays safe to cache. A `Vary: Accept-Language` response header is emitted for
+caches that honour it, and the banner is swapped client-side via
+`GET /wp-json/faz/v1/banner/{lang}` when the visitor's browser prefers a
+different selected language.
+
+Recommended cache configuration:
+
+- **Cloudflare (APO / Cache Everything / Cache Rules)**: `Vary` alone is not
+  sufficient in these modes. Either keep banner pages off "Cache Everything",
+  or add a Cache Rule that includes `Accept-Language` in the cache key for
+  the affected pages.
+- **LiteSpeed Cache**: enable **Cache by language** (Cache → Advanced) or
+  exclude banner-bearing pages from HTML caching.
+- **WP Rocket**: enable **Cache by language** under Advanced Rules.
+- **nginx fastcgi_cache / page caches**: add `$http_accept_language` to the
+  cache key.
+
+Escape hatch — disable browser detection entirely (banner always served in
+the site default language):
+
+```php
+add_filter( 'faz_disable_browser_language_detection', '__return_true' );
+```
+
+Disable only the `Vary` header (keep client-side detection active):
+
+```php
+add_filter( 'faz_send_vary_header', '__return_false' );
+```
 
 ### Shortcodes
 

@@ -491,10 +491,138 @@ function _fazAddPreferenceCenterClass() {
 }
 
 /**
+ * Resolve the visitor's preferred language from navigator.languages and
+ * return the closest match in `available`. Mirrors the PHP logic in
+ * faz_detect_browser_language() but runs client-side so full-page/CDN
+ * caches cannot poison the choice. See GitHub issue #67.
+ *
+ * @param {string[]} available Selected plugin languages (e.g. ["en","it"]).
+ * @param {Object}   langMap   Code normalization map (e.g. {"pt-pt":"pt"}).
+ * @returns {string|null} Matched language or null if no match was found.
+ */
+function _fazResolveBrowserLanguage(available, langMap) {
+    if (!Array.isArray(available) || available.length < 2) return null;
+    if (typeof navigator === 'undefined') return null;
+    var preferred = Array.isArray(navigator.languages) && navigator.languages.length
+        ? navigator.languages
+        : (navigator.language ? [navigator.language] : []);
+    if (!preferred.length) return null;
+    var map = (langMap && typeof langMap === 'object') ? langMap : {};
+    for (var i = 0; i < preferred.length; i++) {
+        var code = String(preferred[i] || '').toLowerCase();
+        if (!code) continue;
+        var normalized = Object.prototype.hasOwnProperty.call(map, code) ? map[code] : code;
+        if (available.indexOf(normalized) !== -1) return normalized;
+        var base = code.split('-')[0];
+        var baseNorm = Object.prototype.hasOwnProperty.call(map, base) ? map[base] : base;
+        if (available.indexOf(baseNorm) !== -1) return baseNorm;
+    }
+    return null;
+}
+
+/**
+ * Fetch the banner payload for a language from the REST endpoint.
+ * Aborts after `timeoutMs` so a slow network never delays the banner.
+ *
+ * @param {string} endpoint Base URL of /faz/v1/banner/.
+ * @param {string} lang     Target language code.
+ * @param {number} timeoutMs Abort threshold in milliseconds.
+ * @returns {Promise<Object|null>}
+ */
+function _fazFetchBannerForLanguage(endpoint, lang, timeoutMs) {
+    if (!endpoint || !lang) return Promise.resolve(null);
+    var url = endpoint.replace(/\/+$/, '') + '/' + encodeURIComponent(lang);
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = (controller && timeoutMs > 0)
+        ? window.setTimeout(function () { controller.abort(); }, timeoutMs)
+        : null;
+    return fetch(url, {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json' },
+        signal: controller ? controller.signal : undefined
+    }).then(function (res) {
+        if (timer) window.clearTimeout(timer);
+        if (!res.ok) return null;
+        return res.json();
+    }).catch(function () {
+        if (timer) window.clearTimeout(timer);
+        return null;
+    });
+}
+
+/**
+ * Swap the banner template HTML, shortCodes, categories and i18n strings
+ * with the payload returned by the REST endpoint. Must run before
+ * _fazRenderBanner() parses the template.
+ *
+ * The banner HTML is stored inside a `<script type="text/template">`
+ * element and originates from a wp_kses-sanitised PHP render; writing it
+ * via textContent preserves the exact same content contract as the
+ * server-initial render (which uses echo wp_kses inside the same tag).
+ *
+ * @param {Object} payload Response body from /faz/v1/banner/{lang}.
+ */
+function _fazApplyBannerPayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    if (payload.language) _fazStore._language = payload.language;
+    if (Array.isArray(payload.shortCodes)) _fazStore._shortCodes = payload.shortCodes;
+    if (Array.isArray(payload.categories)) {
+        // Preserve status/isSelected flags from the original _categories when
+        // the REST payload does not provide them, so consent defaults are
+        // not reset by a language swap.
+        var original = Array.isArray(_fazStore._categories) ? _fazStore._categories : [];
+        var bySlug = {};
+        original.forEach(function (c) { if (c && c.slug) bySlug[c.slug] = c; });
+        _fazStore._categories = payload.categories.map(function (c) {
+            var prev = (c && c.slug && bySlug[c.slug]) ? bySlug[c.slug] : {};
+            return Object.assign({}, prev, c);
+        });
+    }
+    if (payload.i18n && typeof payload.i18n === 'object') {
+        _fazStore._i18n = Object.assign({}, _fazStore._i18n || {}, payload.i18n);
+    }
+    if (typeof payload.html === 'string' && payload.html !== '') {
+        var tpl = document.getElementById('fazBannerTemplate');
+        if (tpl) tpl.textContent = payload.html;
+    }
+}
+
+/**
+ * Run client-side language detection when the server could not reliably
+ * pick a language (no URL-based multilingual plugin). If the detected
+ * language differs from the server-rendered default, fetch the matching
+ * banner payload and swap it into the DOM before the banner renders.
+ *
+ * Bounded by `timeoutMs` so the banner is never delayed indefinitely.
+ *
+ * @returns {Promise<void>}
+ */
+async function _fazMaybeSwapLanguage() {
+    // wp_localize_script stringifies booleans: true becomes "1", false
+    // becomes "". Treat the field as a truthy flag so the JS works with
+    // whatever wire format ends up in the page.
+    if (!_fazStore || !_fazStore._browserDetect) return;
+    var available = Array.isArray(_fazStore._availableLanguages) ? _fazStore._availableLanguages : [];
+    if (available.length < 2) return;
+    var langMap = (_fazStore._languageMap && typeof _fazStore._languageMap === 'object') ? _fazStore._languageMap : {};
+    var detected = _fazResolveBrowserLanguage(available, langMap);
+    if (!detected || detected === _fazStore._language) return;
+    if (!_fazStore._bannerEndpoint) return;
+    try {
+        var payload = await _fazFetchBannerForLanguage(_fazStore._bannerEndpoint, detected, 500);
+        if (payload) _fazApplyBannerPayload(payload);
+    } catch (err) {
+        // Silent degrade: if the swap fails we just render the default.
+    }
+}
+
+/**
  * Initialize the plugin operations.
  */
 async function _fazInit() {
     try {
+        await _fazMaybeSwapLanguage();
         _fazInitOperations();
         _fazRemoveAllDeadCookies();
         _fazWatchBannerElement();
