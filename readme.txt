@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.12.0
+Stable tag: 1.12.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html

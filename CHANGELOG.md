@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.12.1] — 2026-04-22
+
+### Fixed
+- Added LiteSpeed Cache cookies (`_lscache_vary`, `lscache_vary`, `_litespeed_*`) to the internal cookie whitelist so they are not shown in the frontend banner or flagged as non-technical.
+
 ## [1.12.0] — 2026-04-22
 
 ### Security & Blocking

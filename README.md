@@ -451,6 +451,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.12.1
+- **Fix**: LiteSpeed Cache cookies (`_lscache_vary`, `_litespeed_*`) added to internal whitelist
+
 ### 1.12.0
 - **Security audit**: closed all findings from 20-agent code audit (H2-H5, M1-M28)
 - **data: URI blocking**: decoded payload matched against provider patterns (PHP + JS)
