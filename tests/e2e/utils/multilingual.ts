@@ -75,15 +75,26 @@ export async function restoreLanguages(page: Page, snapshot: LanguagesSnapshot):
  * Override navigator.language / navigator.languages for every document
  * opened in the given context. Must be called before `page.goto` so the
  * override is in place when script.js reads the property.
+ *
+ * An empty `languages` array is a no-op: real browsers always expose
+ * `navigator.language` as a non-empty string, so we refuse to install an
+ * override that would make it `undefined` and break any consumer that
+ * treats the value as a string.
  */
 export async function emulateNavigatorLanguages(
   context: BrowserContext,
   languages: string[],
 ): Promise<void> {
+  if (!Array.isArray(languages) || languages.length === 0) {
+    return;
+  }
   await context.addInitScript((langs: string[]) => {
     try {
       Object.defineProperty(navigator, 'languages', { get: () => langs, configurable: true });
-      Object.defineProperty(navigator, 'language', { get: () => langs[0], configurable: true });
+      // Defensive: `langs[0] ?? ''` guarantees a string even if the array
+      // is mutated or ends up empty somehow at read time. Mirrors the real
+      // navigator.language contract, which is always a string.
+      Object.defineProperty(navigator, 'language', { get: () => langs[0] ?? '', configurable: true });
     } catch (e) {
       // Some platforms lock these properties — tests must treat this as a
       // silent no-op and fall back to whatever the runtime exposes.
