@@ -133,10 +133,15 @@ class Template {
 	/**
 	 * Constructor function
 	 *
-	 * @param object|false $banner Banner object.
+	 * @param object|false $banner   Banner object.
+	 * @param string|null  $language Optional explicit language override. When
+	 *                               omitted, falls back to faz_current_language().
+	 *                               Used by the REST banner endpoint to render
+	 *                               the template in a visitor-specific language
+	 *                               without touching the request-level cache.
 	 */
-	public function __construct( $banner = false ) {
-		$this->language = faz_current_language();
+	public function __construct( $banner = false, $language = null ) {
+		$this->language = ( is_string( $language ) && '' !== $language ) ? $language : faz_current_language();
 		if ( $banner ) {
 			$this->banner     = $banner;
 			$this->properties = $banner->get_settings();

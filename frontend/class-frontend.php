@@ -17,6 +17,7 @@ use FazCookie\Admin\Modules\Banners\Includes\Controller;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
+use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
 use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Gvl;
 use FazCookie\Includes\Known_Providers;
@@ -114,6 +115,7 @@ class Frontend {
 		$this->settings = new Settings();
 		$this->gcm_settings = new Gcm_Settings();
 		new Consent_Logger();
+		new Banner_Rest();
 		new Cookie_Table_Shortcode();
 		new Cookie_Policy_Shortcode();
 		new AMP_Consent();
@@ -136,6 +138,7 @@ class Frontend {
 		// and the OB handles everything.
 		add_filter( 'wp_inline_script_tag', array( $this, 'filter_inline_script_tag' ), 10, 3 );
 		add_action( 'send_headers', array( $this, 'shred_non_consented_cookies' ) );
+		add_action( 'send_headers', array( $this, 'send_vary_header' ) );
 
 		// Content-level blocking (defense-in-depth — runs before output buffer).
 		add_filter( 'the_content', array( $this, 'filter_content_blocking' ), 1000 );
@@ -806,6 +809,18 @@ class Frontend {
 			),
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
+			// Client-side language detection (see includes/class-i18n-helpers.php
+			// and GitHub issue #67). When _browserDetect is true, script.js
+			// parses navigator.languages, matches against _availableLanguages,
+			// and — if different from _language — fetches the banner in the
+			// detected language via the REST endpoint and swaps the DOM before
+			// the banner is shown. This keeps the server-rendered HTML
+			// cacheable by CDNs/full-page caches.
+			'_availableLanguages' => faz_selected_languages(),
+			'_defaultLanguage'    => faz_default_language(),
+			'_languageMap'        => function_exists( 'faz_get_lang_map' ) ? faz_get_lang_map() : array(),
+			'_browserDetect'      => function_exists( 'faz_browser_detect_enabled' ) ? faz_browser_detect_enabled() : false,
+			'_bannerEndpoint'     => esc_url_raw( rest_url( 'faz/v1/banner/' ) ),
 			// Consent revision: when the admin bumps this, returning visitors
 			// with a lower revision in their cookie are treated as having no
 			// consent, and the banner is shown again. See Settings →
@@ -3078,6 +3093,48 @@ class Frontend {
 			}
 		}
 		return $tag;
+	}
+
+	/**
+	 * Emit `Vary: Accept-Language` when the banner language is server-resolved
+	 * from the Accept-Language header.
+	 *
+	 * Caches and CDNs that honour Vary will then key the cached response by
+	 * Accept-Language, preventing the first visitor's language from being
+	 * served to everyone else. When a URL-based multilingual plugin
+	 * (WPML/Polylang/TranslatePress/Weglot) is active, browser detection is
+	 * not used, so the header is not needed.
+	 *
+	 * @return void
+	 */
+	public function send_vary_header() {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+			return;
+		}
+		if ( headers_sent() ) {
+			return;
+		}
+		if ( true === faz_disable_banner() ) {
+			return;
+		}
+		// Only relevant when the server falls back to Accept-Language parsing.
+		if ( faz_i18n_is_multilingual() ) {
+			return;
+		}
+		if ( count( faz_selected_languages() ) < 2 ) {
+			return;
+		}
+		/**
+		 * Short-circuit the Vary header emission.
+		 *
+		 * @param bool $enabled Whether to emit the header. Defaults to true.
+		 */
+		if ( false === apply_filters( 'faz_send_vary_header', true ) ) {
+			return;
+		}
+
+		// Preserve any previously set Vary tokens (e.g. Cookie added elsewhere).
+		header( 'Vary: Accept-Language', false );
 	}
 
 	/**
