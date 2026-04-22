@@ -1,6 +1,42 @@
 import { expect, test } from '../fixtures/wp-fixture';
+import { clickFirstVisible } from '../utils/ui';
+import { wpEval } from '../utils/wp-env';
+
+function parseCookieConsentTcString(tcString: string | undefined | null): { created: number; lastUpdated: number } | null {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const core = (tcString || '').split('.')[0];
+  if (!core) {
+    return null;
+  }
+
+  const bits: number[] = [];
+  for (const ch of core) {
+    const value = chars.indexOf(ch);
+    if (value === -1) {
+      return null;
+    }
+    for (let bit = 5; bit >= 0; bit -= 1) {
+      bits.push((value >> bit) & 1);
+    }
+  }
+
+  const readBits = (offset: number, length: number): number => {
+    let value = 0;
+    for (let i = 0; i < length; i += 1) {
+      value = (value * 2) + (bits[offset + i] || 0);
+    }
+    return value;
+  };
+
+  return {
+    created: readBits(6, 36),
+    lastUpdated: readBits(42, 36),
+  };
+}
 
 test.describe('GCM and IAB TCF behavior', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test('GCM default consent is denied when feature is enabled', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
@@ -73,5 +109,140 @@ test.describe('GCM and IAB TCF behavior', () => {
     expect(tcf.ping.cmpLoaded).toBeTruthy();
     expect(typeof tcf.ping.gdprApplies).toBe('boolean');
     expect(tcf.ping.apiVersion).toBe('2.3');
+  });
+
+  test('TCF preserves timestamps on getTCData and clears euconsent-v2 after reject', async ({ page, browser }) => {
+    const originalSettings = JSON.parse(
+      wpEval(`echo wp_json_encode( get_option( 'faz_settings', array() ) );`)
+    ) as Record<string, unknown>;
+    const originalBannerTemplate = JSON.parse(
+      wpEval(`
+        echo wp_json_encode( array(
+          'exists' => false !== get_option( 'faz_banner_template', false ),
+          'value'  => get_option( 'faz_banner_template', null ),
+        ) );
+      `)
+    ) as { exists: boolean; value: unknown };
+
+    // Use a fresh browser context so consent cookies from prior serial tests
+    // cannot leak into this test's consent state.
+    const freshContext = await browser.newContext();
+    const freshPage = await freshContext.newPage();
+
+    try {
+      wpEval(`
+        $s = get_option( 'faz_settings', array() );
+        if ( ! is_array( $s ) ) {
+          $s = array();
+        }
+        if ( empty( $s['iab'] ) || ! is_array( $s['iab'] ) ) {
+          $s['iab'] = array();
+        }
+        $s['iab']['enabled'] = true;
+        $s['iab']['cmp_id'] = 123;
+        $s['iab']['purpose_one_treatment'] = false;
+        update_option( 'faz_settings', $s );
+        delete_option( 'faz_banner_template' );
+      `);
+
+      await freshContext.clearCookies();
+      await freshPage.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(freshPage.locator('[data-faz-tag="notice"]')).toBeVisible();
+      await freshPage.evaluate(() => {
+        _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
+      });
+      await freshPage.waitForFunction(() => typeof window.__tcfapi === 'function', undefined, { timeout: 5_000 });
+
+      const initial = await freshPage.evaluate(async () => {
+        if (typeof window.__tcfapi !== 'function') {
+          return { available: false };
+        }
+        const ping = await new Promise((resolve) => {
+          window.__tcfapi('ping', 2, (data) => resolve(data));
+        });
+        return { available: true, ping };
+      });
+
+      expect(initial.available).toBe(true);
+      expect(initial.ping).toBeTruthy();
+      expect(initial.ping.cmpLoaded).toBeTruthy();
+      expect(initial.ping.cmpStatus).toBe('loaded');
+      expect(initial.ping.apiVersion).toBe('2.3');
+
+      const accepted = await clickFirstVisible(freshPage, [
+        '[data-faz-tag="accept-button"] button',
+        '[data-faz-tag="accept-button"]',
+        '.faz-btn-accept',
+      ]);
+      expect(accepted).toBeTruthy();
+
+      await freshPage.waitForFunction(() => document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+
+      const acceptedState = await freshPage.evaluate(async () => {
+        const getTcData = () =>
+          new Promise((resolve) => {
+            window.__tcfapi('getTCData', 2, (data) => resolve(data));
+          });
+        const readCookieTc = () => document.cookie.match(/euconsent-v2=([^;]+)/)?.[1] || '';
+
+        const cookieTc = readCookieTc();
+        const first = await getTcData();
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        const second = await getTcData();
+
+        return {
+          cookieTc,
+          firstTc: first?.tcString || '',
+          secondTc: second?.tcString || '',
+        };
+      });
+
+      const cookieTs = parseCookieConsentTcString(acceptedState.cookieTc);
+      const firstTs = parseCookieConsentTcString(acceptedState.firstTc);
+      const secondTs = parseCookieConsentTcString(acceptedState.secondTc);
+
+      expect(cookieTs).not.toBeNull();
+      expect(firstTs).not.toBeNull();
+      expect(secondTs).not.toBeNull();
+      expect(firstTs).toEqual(cookieTs);
+      expect(secondTs).toEqual(cookieTs);
+
+      await freshPage.evaluate(() => {
+        if (typeof window.revisitFazConsent === 'function') {
+          window.revisitFazConsent();
+        }
+      });
+      await expect(freshPage.locator('[data-faz-tag="notice"]')).toBeVisible();
+
+      const rejected = await clickFirstVisible(freshPage, [
+        '[data-faz-tag="reject-button"] button',
+        '[data-faz-tag="reject-button"]',
+        '.faz-btn-reject',
+        '[data-faz-tag="close-button"]',
+      ]);
+      expect(rejected).toBeTruthy();
+
+      await freshPage.waitForFunction(() => !document.cookie.includes('euconsent-v2='), undefined, { timeout: 5_000 });
+
+      const rejectedState = await freshPage.evaluate(() => ({
+        euconsentPresent: document.cookie.includes('euconsent-v2='),
+      }));
+      expect(rejectedState.euconsentPresent).toBe(false);
+    } finally {
+      await freshContext.clearCookies();
+      await freshContext.close();
+      const encodedSettings = JSON.stringify(originalSettings);
+      const encodedBannerTemplate = JSON.stringify(originalBannerTemplate);
+      wpEval(`
+        $restored = json_decode( wp_unslash( ${JSON.stringify(encodedSettings)} ), true );
+        update_option( 'faz_settings', is_array( $restored ) ? $restored : array() );
+        $banner_snapshot = json_decode( wp_unslash( ${JSON.stringify(encodedBannerTemplate)} ), true );
+        if ( is_array( $banner_snapshot ) && ! empty( $banner_snapshot['exists'] ) ) {
+          update_option( 'faz_banner_template', $banner_snapshot['value'] );
+        } else {
+          delete_option( 'faz_banner_template' );
+        }
+      `);
+    }
   });
 });

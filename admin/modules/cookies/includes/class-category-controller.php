@@ -289,14 +289,101 @@ class Category_Controller extends Base_Controller {
 	 */
 	public function delete_item( $object ) {
 		global $wpdb;
-		$wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$category_id = absint( $object->get_id() );
+		if ( ! $category_id ) {
+			return;
+		}
+		$fallback_id = $this->get_fallback_category_id( $category_id );
+		if ( null === $fallback_id ) {
+			return;
+		}
+
+		$transaction_started = false !== $wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( ! $transaction_started ) {
+			return;
+		}
+		if ( $fallback_id ) {
+			$cookie_result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prefix . 'faz_cookies',
+				array( 'category' => $fallback_id ),
+				array( 'category' => $category_id ),
+				array( '%d' ),
+				array( '%d' )
+			);
+		} else {
+			$cookie_result = $wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prefix . 'faz_cookies',
+				array( 'category' => $category_id ),
+				array( '%d' )
+			);
+		}
+		if ( false === $cookie_result ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return;
+		}
+		$deleted = $wpdb->delete( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookie_categories',
 			array(
-				'category_id' => $object->get_id(),
-			)
+				'category_id' => $category_id,
+			),
+			array( '%d' )
 		);
+		if ( false === $deleted ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return;
+		}
+		if ( false === $wpdb->query( 'COMMIT' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			return;
+		}
 		$this->delete_cache();
+		Cookie_Controller::get_instance()->delete_cache();
 		do_action( 'faz_after_update_cookie_category' );
+	}
+
+	/**
+	 * Pick a fallback category for cookies when deleting a category.
+	 *
+	 * Prefer "uncategorized", then "necessary", then the first remaining category.
+	 *
+	 * @param int $deleted_category_id Category being deleted.
+	 * @return int|null
+	 */
+	private function get_fallback_category_id( $deleted_category_id ) {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			"SELECT category_id, slug FROM {$wpdb->prefix}faz_cookie_categories WHERE category_id <> %d ORDER BY category_id ASC",
+			absint( $deleted_category_id )
+		) );
+
+		if ( ! is_array( $rows ) ) {
+			return null; // Query error — don't delete cookies.
+		}
+		if ( empty( $rows ) ) {
+			return 0; // No other categories.
+		}
+
+		$fallbacks = array(
+			'uncategorized' => 0,
+			'necessary'     => 0,
+			'first'         => 0,
+		);
+
+		foreach ( $rows as $row ) {
+			$id   = (int) $row->category_id;
+			$slug = $row->slug;
+			if ( ! $fallbacks['first'] ) {
+				$fallbacks['first'] = $id;
+			}
+			if ( 'uncategorized' === $slug ) {
+				$fallbacks['uncategorized'] = $id;
+			}
+			if ( 'necessary' === $slug ) {
+				$fallbacks['necessary'] = $id;
+			}
+		}
+
+		return $fallbacks['uncategorized'] ?: $fallbacks['necessary'] ?: $fallbacks['first'];
 	}
 
 	/**

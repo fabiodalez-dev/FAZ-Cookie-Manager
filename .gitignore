@@ -28,6 +28,7 @@ phpstan-bootstrap.php
 
 # Release docs (local only)
 release.md
+report.md
 
 # Playwright
 .playwright-mcp/

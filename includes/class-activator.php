@@ -57,6 +57,9 @@ class Activator {
 		'3.4.0' => array(
 			'update_db_340',
 		),
+		'3.4.1' => array(
+			'update_db_341',
+		),
 	);
 	/**
 	 * Return the current instance of the class
@@ -542,6 +545,21 @@ class Activator {
 					$banner->save();
 				}
 			}
+		}
+	}
+
+	/**
+	 * Force dbDelta to re-run on the banners table so new indexes are applied.
+	 *
+	 * @since 3.4.1
+	 * @return void
+	 */
+	public static function update_db_341() {
+		delete_option( 'faz_banners_table_version' );
+
+		$controller_class = 'FazCookie\Admin\Modules\Banners\Includes\Controller';
+		if ( class_exists( $controller_class ) ) {
+			$controller_class::get_instance()->install_tables();
 		}
 	}
 

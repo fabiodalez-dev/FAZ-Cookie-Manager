@@ -7,8 +7,11 @@
  * @package FAZ_Cookie_Manager
  */
 
-if ( php_sapi_name() !== 'cli' ) {
-	exit( 'CLI only.' );
+if ( ! defined( 'ABSPATH' ) ) {
+	// CLI bootstrap — ABSPATH will be defined below after locating wp-load.php.
+	if ( php_sapi_name() !== 'cli' ) {
+		exit;
+	}
 }
 
 $abspath = isset( $argv[1] ) ? rtrim( $argv[1], '/' ) . '/' : '';
@@ -16,8 +19,7 @@ $mode    = isset( $argv[2] ) ? $argv[2] : '20';
 
 $resolved = realpath( $abspath );
 if ( false === $resolved || ! file_exists( $resolved . '/wp-load.php' ) ) {
-	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- CLI script writing to STDERR.
-	fwrite( STDERR, "WordPress installation not found at: {$abspath}\n" );
+	fwrite( STDERR, "WordPress installation not found at: {$abspath}\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
 	exit( 1 );
 }
 $abspath = rtrim( $resolved, '/' ) . '/';

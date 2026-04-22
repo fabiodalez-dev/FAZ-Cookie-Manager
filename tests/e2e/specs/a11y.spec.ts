@@ -156,15 +156,42 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
   test('Escape key closes the modal when focus is inside it', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
-    await page.locator('[data-faz-tag="settings-button"]').first().click();
-    const modal = page.locator('.faz-modal');
-    await expect(modal).toHaveClass(/faz-modal-open/);
 
-    // Focus any button inside the modal so the ESC listener fires.
-    await page.locator('.faz-modal button').first().focus();
+    // Disable reload so ESC doesn't trigger a navigation that destroys context.
+    await page.evaluate(() => {
+      _fazStore._bannerConfig.behaviours.reloadBannerOnAccept = false;
+    });
+
+    await page.locator('[data-faz-tag="settings-button"]').first().click();
+
+    const prefCenter = page.locator('.faz-preference-center');
+    await expect(prefCenter).toBeVisible({ timeout: 5_000 });
+
+    // Focus a button inside so the ESC listener fires from within.
+    await prefCenter.locator('button').first().focus();
     await page.keyboard.press('Escape');
 
-    await expect(modal).not.toHaveClass(/faz-modal-open/, { timeout: 5_000 }); // tighter than the 10 s global — ESC should close immediately
+    // After ESC, the preference center should close (hidden or class removed).
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const m = document.querySelector('.faz-modal');
+            if (m && m.classList.contains('faz-modal-open')) return false;
+            const pc = document.querySelector('.faz-preference-center') as HTMLElement | null;
+            if (pc) {
+              const style = window.getComputedStyle(pc);
+              if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                // Check if parent container lost the expand class
+                const container = pc.closest('.faz-consent-container');
+                if (container && container.classList.contains('faz-consent-bar-expand')) return false;
+              }
+            }
+            return true;
+          }),
+        { timeout: 5_000 },
+      )
+      .toBe(true);
   });
 
   // Checkbox aria-label must reflect current state (enabled / disabled).

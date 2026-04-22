@@ -179,6 +179,10 @@ final class Faz_E2E_Provider_Matrix {
 					$this->build_script_url( 'custom-unknown', 'faz-lab-custom-provider.js' ),
 					'custom-unknown'
 				);
+				$this->print_script_src(
+					$this->build_script_url( 'custom-functional', 'faz-lab-custom-functional.js' ),
+					'custom-functional'
+				);
 			}
 
 			return;
@@ -397,8 +401,12 @@ final class Faz_E2E_Provider_Matrix {
 				'cookie'   => array( '_scid', 'sc_at' ),
 			),
 			'custom-unknown'     => array(
-				'category' => 'analytics',
+				'category' => 'performance',
 				'cookie'   => array( '_faz_custom_provider' ),
+			),
+			'custom-functional'  => array(
+				'category' => 'functional',
+				'cookie'   => array( '_faz_custom_functional' ),
 			),
 		);
 	}

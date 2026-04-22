@@ -75,8 +75,43 @@
 	// Event listeners
 	var listeners   = {};
 	var listenerId  = 0;
-	var cmpLoaded   = true;
+	var cmpLoaded   = false;
+	var cmpStatus   = "loading";
 	var displayOpen = false;
+
+	function base64urlToBits(str) {
+		var bits = [];
+		for (var i = 0; i < str.length; i++) {
+			var value = BASE64URL.indexOf(str.charAt(i));
+			if (value === -1) return null;
+			for (var bit = 5; bit >= 0; bit--) {
+				bits.push((value >> bit) & 1);
+			}
+		}
+		return bits;
+	}
+
+	function readBits(bits, offset, length) {
+		var value = 0;
+		for (var i = 0; i < length; i++) {
+			value = (value * 2) + (bits[offset + i] || 0);
+		}
+		return value;
+	}
+
+	function readTcTimestamps() {
+		var match = document.cookie.match(/euconsent-v2=([^;]+)/);
+		if (!match) return null;
+		var coreSegment = match[1].split(".")[0];
+		if (!coreSegment) return null;
+		var bits = base64urlToBits(coreSegment);
+		if (!bits || bits.length < 78) return null;
+		if (readBits(bits, 0, 6) !== TCF_VERSION) return null;
+		return {
+			created: readBits(bits, 6, 36),
+			lastUpdated: readBits(bits, 42, 36)
+		};
+	}
 
 	function readConsentCookiePairs() {
 		var match = document.cookie.match(/fazcookie-consent=([^;]+)/);
@@ -160,7 +195,6 @@
 		for (var p = 1; p <= MAX_PURPOSE; p++) {
 			purposes[String(p)] = false;
 		}
-		purposes["1"] = !!categoryConsent.necessary;
 
 		for (var cat in CATEGORY_TO_PURPOSES) {
 			if (!CATEGORY_TO_PURPOSES.hasOwnProperty(cat)) continue;
@@ -171,6 +205,7 @@
 				}
 			}
 		}
+		purposes["1"] = PURPOSE_ONE_TREATMENT ? false : !!categoryConsent.necessary;
 		return purposes;
 	}
 
@@ -275,6 +310,19 @@
 	}
 
 	/**
+	 * Build all derived consent artifacts once so callers can reuse them.
+	 */
+	function buildConsentArtifacts(purposeConsent) {
+		var vendorConsent = buildVendorConsent(purposeConsent);
+		var purposeLI     = buildPurposeLI(purposeConsent);
+		return {
+			vendorConsent: vendorConsent,
+			purposeLI:     purposeLI,
+			vendorLI:      buildVendorLI(purposeLI)
+		};
+	}
+
+	/**
 	 * Encode the DisclosedVendors segment from selected vendor IDs.
 	 * SegmentType=1 (3 bits) + MaxVendorId (16 bits) + IsRangeEncoding=0 (1 bit) + bitfield
 	 */
@@ -308,18 +356,28 @@
 	/**
 	 * Encode the TC string (core segment + DisclosedVendors).
 	 */
-	function encodeTcString(purposeConsent, sfOptins) {
+	function encodeTcString(purposeConsent, sfOptins, refreshLastUpdated, derived) {
 		var bits = [];
-		var vendorConsent = buildVendorConsent(purposeConsent);
-		var purposeLI     = buildPurposeLI(purposeConsent);
-		var vendorLI      = buildVendorLI(purposeLI);
+		var artifacts      = derived || buildConsentArtifacts(purposeConsent);
+		var vendorConsent  = artifacts.vendorConsent;
+		var purposeLI      = artifacts.purposeLI;
+		var vendorLI       = artifacts.vendorLI;
 
 		// Deciseconds since Unix epoch (Jan 1, 1970) per IAB TCF spec.
-		var created = Math.round(Date.now() / 100);
+		var now = Math.round(Date.now() / 100);
+		var existingTimestamps = readTcTimestamps();
+		var created = existingTimestamps && existingTimestamps.created ? existingTimestamps.created : now;
+		var lastUpdated = existingTimestamps && existingTimestamps.lastUpdated ? existingTimestamps.lastUpdated : created;
+		if (lastUpdated < created) {
+			lastUpdated = created;
+		}
+		if (refreshLastUpdated) {
+			lastUpdated = now < created ? created : now;
+		}
 
 		pushBits(bits, TCF_VERSION, 6);
 		pushBits(bits, created, 36);
-		pushBits(bits, created, 36);
+		pushBits(bits, lastUpdated, 36);
 		pushBits(bits, CMP_ID, 12);
 		pushBits(bits, CMP_VERSION, 12);
 		pushBits(bits, 1, 6); // ConsentScreen
@@ -408,13 +466,39 @@
 		document.cookie = "euconsent-v2=" + tcString + ";expires=" + date.toUTCString() + ";path=/" + domain + ";SameSite=Lax" + secure;
 	}
 
+	function clearEuconsentCookie() {
+		var secure = location.protocol === "https:" ? ";Secure" : "";
+		var expired = "euconsent-v2=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+		document.cookie = expired + ";SameSite=Lax" + secure;
+		if (window._fazConfig && window._fazConfig._rootDomain) {
+			document.cookie = expired + ";domain=" + window._fazConfig._rootDomain + ";SameSite=Lax" + secure;
+		}
+	}
+
+	function shouldPersistTcCookie(purposeConsent, vendorConsent, purposeLI, sfOptins) {
+		for (var p = 2; p <= MAX_PURPOSE; p++) {
+			if (purposeConsent[String(p)]) return true;
+		}
+		for (var vid in vendorConsent) {
+			if (vendorConsent.hasOwnProperty(vid) && vendorConsent[vid]) return true;
+		}
+		for (var pli in purposeLI) {
+			if (purposeLI.hasOwnProperty(pli) && purposeLI[pli]) return true;
+		}
+		for (var sf in (sfOptins || {})) {
+			if ((sfOptins || {}).hasOwnProperty(sf) && sfOptins[sf]) return true;
+		}
+		return false;
+	}
+
 	/**
 	 * Build the TCData object returned by getTCData / addEventListener.
 	 */
-	function buildTCData(purposeConsent, sfOptins, tcString, listenerIdVal) {
-		var vendorConsent = buildVendorConsent(purposeConsent);
-		var purposeLI     = buildPurposeLI(purposeConsent);
-		var vendorLI      = buildVendorLI(purposeLI);
+	function buildTCData(purposeConsent, sfOptins, tcString, listenerIdVal, derived) {
+		var artifacts     = derived || buildConsentArtifacts(purposeConsent);
+		var vendorConsent = artifacts.vendorConsent;
+		var purposeLI     = artifacts.purposeLI;
+		var vendorLI      = artifacts.vendorLI;
 
 		// Build vendor consent/LI objects with string keys.
 		var vcObj = {};
@@ -441,7 +525,7 @@
 			tcString:            tcString,
 			listenerId:          listenerIdVal || undefined,
 			eventStatus:         "tcloaded",
-			cmpStatus:           "loaded",
+			cmpStatus:           cmpStatus,
 			isServiceSpecific:   true,
 			useNonStandardTexts: false,
 			purposeOneTreatment: PURPOSE_ONE_TREATMENT,
@@ -476,17 +560,24 @@
 		var consent  = readConsent();
 		var purposes = buildPurposeConsent(consent);
 		var sf       = buildSpecialFeatureOptins(consent);
-		var tcStr    = encodeTcString(purposes, sf);
+		var derived  = buildConsentArtifacts(purposes);
+		var vendorConsent = derived.vendorConsent;
+		var purposeLI = derived.purposeLI;
+		var tcStr    = encodeTcString(purposes, sf, eventStatus === "useractioncomplete", derived);
 
 		// Only write euconsent-v2 after user action, not during initial banner display.
 		if (eventStatus === "useractioncomplete") {
-			setEuconsentCookie(tcStr);
+			if (shouldPersistTcCookie(purposes, vendorConsent, purposeLI, sf)) {
+				setEuconsentCookie(tcStr);
+			} else {
+				clearEuconsentCookie();
+			}
 		}
 
 		for (var id in listeners) {
 			if (!listeners.hasOwnProperty(id)) continue;
 			var entry = listeners[id];
-			var data  = buildTCData(purposes, sf, tcStr, parseInt(id, 10));
+			var data  = buildTCData(purposes, sf, tcStr, parseInt(id, 10), derived);
 			data.eventStatus = eventStatus || "tcloaded";
 			try { entry.callback(data, true); } catch (_unused) { /* ignore listener error */ }
 		}
@@ -506,7 +597,7 @@
 				callback({
 					gdprApplies:       (typeof cfg.gdprApplies !== "undefined") ? !!cfg.gdprApplies : true,
 					cmpLoaded:         cmpLoaded,
-					cmpStatus:         "loaded",
+					cmpStatus:         cmpStatus,
 					displayStatus:     displayOpen ? "visible" : "hidden",
 					apiVersion:        "2.3",
 					cmpVersion:        CMP_VERSION,
@@ -516,27 +607,31 @@
 				}, true);
 				break;
 
-			case "getTCData":
+			case "getTCData": {
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfGet = buildSpecialFeatureOptins(consent);
-				tcStr    = encodeTcString(purposes, sfGet);
-				data     = buildTCData(purposes, sfGet, tcStr);
+				var derivedGet = buildConsentArtifacts(purposes);
+				tcStr    = encodeTcString(purposes, sfGet, false, derivedGet);
+				data     = buildTCData(purposes, sfGet, tcStr, undefined, derivedGet);
 				data.eventStatus = "tcloaded";
 				callback(data, true);
 				break;
+			}
 
-			case "addEventListener":
+			case "addEventListener": {
 				listenerId++;
 				listeners[listenerId] = { callback: callback };
 				consent  = readConsent();
 				purposes = buildPurposeConsent(consent);
 				var sfAdd = buildSpecialFeatureOptins(consent);
-				tcStr    = encodeTcString(purposes, sfAdd);
-				data     = buildTCData(purposes, sfAdd, tcStr, listenerId);
+				var derivedAdd = buildConsentArtifacts(purposes);
+				tcStr    = encodeTcString(purposes, sfAdd, false, derivedAdd);
+				data     = buildTCData(purposes, sfAdd, tcStr, listenerId, derivedAdd);
 				data.eventStatus = "tcloaded";
 				callback(data, true);
 				break;
+			}
 
 			case "removeEventListener":
 				if (parameter && listeners[parameter]) {
@@ -574,6 +669,11 @@
 
 	// Install the __tcfapi function
 	window.__tcfapi = tcfapi;
+
+	// Mark CMP as loaded BEFORE processing the queue so that
+	// 'ping' commands executed from the queue see the correct status.
+	cmpLoaded = true;
+	cmpStatus = "loaded";
 
 	// Process the command queue
 	for (var q = 0; q < pendingQueue.length; q++) {
@@ -642,8 +742,15 @@
 		var existingConsent = readConsent();
 		var purposes = buildPurposeConsent(existingConsent);
 		var sfInit   = buildSpecialFeatureOptins(existingConsent);
-		var tcStr    = encodeTcString(purposes, sfInit);
-		setEuconsentCookie(tcStr);
+		var derivedInit = buildConsentArtifacts(purposes);
+		var purposeLI = derivedInit.purposeLI;
+		var vendorConsent = derivedInit.vendorConsent;
+		if (shouldPersistTcCookie(purposes, vendorConsent, purposeLI, sfInit)) {
+			var tcStr = encodeTcString(purposes, sfInit, false, derivedInit);
+			setEuconsentCookie(tcStr);
+		} else {
+			clearEuconsentCookie();
+		}
 	}
 
 })();

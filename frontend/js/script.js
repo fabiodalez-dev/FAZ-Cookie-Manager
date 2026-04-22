@@ -423,7 +423,7 @@ function _fazAddPositionClass() {
     const container = notice.closest('.faz-consent-container');
     if (!container) return false;
 
-    container.setAttribute("aria-label", "We value your privacy");
+    container.setAttribute("aria-label", _fazTranslate("privacy_region_label", "We value your privacy"));
     container.setAttribute("role", "region");
 
     const type = _fazStore._bannerConfig.settings.type;
@@ -487,12 +487,7 @@ function _fazAddPreferenceCenterClass() {
 
     // Ensure ARIA attributes are always present on the preference center div
     const preferenceCenter = modal.querySelector('.faz-preference-center');
-    if (preferenceCenter) {
-        preferenceCenter.setAttribute('role', 'dialog');
-        preferenceCenter.setAttribute('aria-modal', 'true');
-        const ariaLabel = _fazGetLaw() === 'ccpa' ? 'Opt-out Preferences' : 'Customise Consent Preferences';
-        preferenceCenter.setAttribute('aria-label', ariaLabel);
-    }
+    _fazSetPreferenceCenterAccessibility(preferenceCenter);
 }
 
 /**
@@ -728,18 +723,12 @@ function _fazHidePreferenceCenter() {
 function _fazShowPreferenceCenter() {
     _fazStore._prefTriggerElement = document.activeElement;
     const element = _fazGetPreferenceCenter();
-    element && element.classList.add(_fazGetPreferenceClass());
+    if (!element) return;
+    element.classList.add(_fazGetPreferenceClass());
 
     // Ensure ARIA attributes are always present on the preference center div
-    if (element) {
-        const preferenceCenter = element.querySelector('.faz-preference-center');
-        if (preferenceCenter) {
-            preferenceCenter.setAttribute('role', 'dialog');
-            preferenceCenter.setAttribute('aria-modal', 'true');
-            const ariaLabel = _fazGetLaw() === 'ccpa' ? 'Opt-out Preferences' : 'Customise Consent Preferences';
-            preferenceCenter.setAttribute('aria-label', ariaLabel);
-        }
-    }
+    const preferenceCenter = element.querySelector('.faz-preference-center');
+    _fazSetPreferenceCenterAccessibility(preferenceCenter);
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
 
     if (!isPushdown) {
@@ -750,10 +739,9 @@ function _fazShowPreferenceCenter() {
     }
 
     // Move focus into the preference center for keyboard/screen reader users.
-    if (element) {
-        var focusTarget = element.querySelector('button, [tabindex]:not([tabindex="-1"]), input, a');
-        if (focusTarget) focusTarget.focus();
-    }
+    // Target the inner .faz-preference-center so we don't focus a banner button
+    // when pushdown mode embeds preferences inside the consent bar wrapper.
+    _fazFocusIntoElement(preferenceCenter || element);
 }
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
@@ -763,12 +751,7 @@ function _fazTogglePreferenceCenter() {
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
     if (isPushdown) {
         const preferenceCenter = element.querySelector('.faz-preference-center');
-        if (preferenceCenter) {
-            preferenceCenter.setAttribute('role', 'dialog');
-            preferenceCenter.setAttribute('aria-modal', 'true');
-            const ariaLabel = _fazGetLaw() === 'ccpa' ? 'Opt-out Preferences' : 'Customise Consent Preferences';
-            preferenceCenter.setAttribute('aria-label', ariaLabel);
-        }
+        _fazSetPreferenceCenterAccessibility(preferenceCenter);
         _fazToggleAriaExpandStatus("=settings-button");
     } else {
         if (!isOpen) {
@@ -780,8 +763,17 @@ function _fazTogglePreferenceCenter() {
         }
     }
     if (ref._fazGetFromStore("action")) _fazShowRevisit();
-    const origin = _fazStore._preferenceOriginTag;
-    origin && _fazSetFocus(origin)
+    if (isOpen) {
+        const origin = _fazStore._preferenceOriginTag;
+        origin && _fazSetFocus(origin);
+        if (_fazStore._prefTriggerElement) {
+            _fazStore._prefTriggerElement.focus();
+            _fazStore._prefTriggerElement = null;
+        }
+    } else {
+        const prefCenter = element.querySelector('.faz-preference-center');
+        _fazFocusIntoElement(prefCenter || element);
+    }
 }
 function _fazGetPreferenceClass() {
     // Pushdown (expand) only works for classic/full-width; box falls back to popup modal
@@ -804,6 +796,7 @@ function _fazShowRevisit() {
 }
 function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;
+    _fazStore._prefTriggerElement = document.activeElement;
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
     if (isPushdown) {
         _fazTogglePreferenceCenter();
@@ -816,9 +809,9 @@ function _fazGetFocusableElements(element) {
     if (!wrapperElement) return [];
     const focussableElements = Array.from(
         wrapperElement.querySelectorAll(
-            'a:not([disabled]), button:not([disabled]), [tabindex]:not([disabled]):not([tabindex="-1"])'
+            'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])'
         )
-    ).filter((element) => !element.closest('.faz-hidden'));
+    ).filter((element) => !element.closest('.faz-hidden') && !element.hasAttribute('hidden'));
     if (focussableElements.length <= 0) return [];
     return [
         focussableElements[0],
@@ -827,14 +820,10 @@ function _fazGetFocusableElements(element) {
 }
 function _fazLoopFocus() {
     const activeLaw = _fazGetLaw();
-    const bannerType = _fazGetType();
-    // Classic/pushdown banners also need focus trapping on their preference wrapper.
-    if (bannerType === "popup" || bannerType === "box" ) {
-        const [firstElementBanner, lastElementBanner] =
-            _fazGetFocusableElements("notice");
-        _fazAttachFocusLoop(firstElementBanner, lastElementBanner, true);
-        _fazAttachFocusLoop(lastElementBanner, firstElementBanner);
-    }
+    const [firstElementBanner, lastElementBanner] =
+        _fazGetFocusableElements("notice");
+    _fazAttachFocusLoop(firstElementBanner, lastElementBanner, true);
+    _fazAttachFocusLoop(lastElementBanner, firstElementBanner);
     const [firstElementPopup, lastElementPopup] = _fazGetFocusableElements(
         activeLaw === "ccpa" ? "optout-popup" : "detail"
     );
@@ -1042,11 +1031,38 @@ function _fazRenderBanner() {
  * @returns {string}
  */
 function _fazTranslate(key, fallback) {
+    if (_fazStore._i18n && typeof _fazStore._i18n[key] === 'string' && _fazStore._i18n[key]) {
+        return _fazStore._i18n[key];
+    }
     if (_fazStore._shortCodes) {
         var found = _fazStore._shortCodes.find(function(s) { return s.key === 'faz_' + key; });
         if (found && found.content) return found.content;
     }
     return fallback;
+}
+
+function _fazGetPreferenceCenterAriaLabel() {
+    return _fazGetLaw() === 'ccpa'
+        ? _fazTranslate('optout_preferences_label', 'Opt-out Preferences')
+        : _fazTranslate('customise_consent_preferences_label', 'Customise Consent Preferences');
+}
+
+function _fazSetPreferenceCenterAccessibility(preferenceCenter) {
+    if (!preferenceCenter) return;
+    preferenceCenter.setAttribute('role', 'dialog');
+    preferenceCenter.setAttribute('aria-modal', 'true');
+    preferenceCenter.setAttribute('aria-label', _fazGetPreferenceCenterAriaLabel());
+}
+
+function _fazFocusIntoElement(element) {
+    if (!element) return;
+    var root = element.classList && element.classList.contains('faz-preference-center')
+        ? element
+        : (element.querySelector('.faz-preference-center') || element);
+    var focusTarget = root.querySelector(
+        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusTarget) focusTarget.focus();
 }
 
 /**
@@ -1366,21 +1382,36 @@ document.createElement = (...args) => {
 function _fazMutationObserver(mutations) {
     for (const { addedNodes } of mutations) {
         for (const node of addedNodes) {
+            const nodeSrc = node && typeof node.getAttribute === "function"
+                ? (node.getAttribute("src") || node.src || "")
+                : (node && node.src ? node.src : "");
             if (
-                !node.src ||
+                !nodeSrc ||
                 !node.nodeName ||
                 !["script", "iframe"].includes(node.nodeName.toLowerCase())
             )
                 continue;
             try {
-                const urlToParse = node.src.startsWith("//")
-                    ? `${window.location.protocol}${node.src}`
-                    : node.src;
-                const { hostname, pathname } = new URL(urlToParse);
-                const cleanedHostname = _fazCleanHostName(`${hostname}${pathname}`);
-                _fazAddProviderToList(node, cleanedHostname);
-                if (_fazIsUserWhitelisted(node.src)) continue;
-                if (!_fazShouldBlockProvider(cleanedHostname)) continue;
+                let blockingTarget = nodeSrc;
+                if (!/^data:/i.test(nodeSrc)) {
+                    try {
+                        const urlToParse = nodeSrc.startsWith("//")
+                            ? `${window.location.protocol}${nodeSrc}`
+                            : nodeSrc;
+                        const { hostname, pathname } = new URL(urlToParse, window.location.href);
+                        blockingTarget = _fazCleanHostName(`${hostname}${pathname}`);
+                        _fazAddProviderToList(node, blockingTarget);
+                    } catch (_parseErr) {
+                        blockingTarget = nodeSrc;
+                    }
+                }
+                if (_fazIsUserWhitelisted(nodeSrc)) continue;
+                var rawCategory = node.getAttribute
+                    ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
+                    : "";
+                var nodeCategory = rawCategory.replace("fazcookie-", "");
+                var shouldBlockByCategory = nodeCategory && _fazIsCategoryToBeBlocked(nodeCategory);
+                if (!shouldBlockByCategory && !_fazShouldBlockProvider(blockingTarget)) continue;
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);
@@ -1421,19 +1452,23 @@ function _fazUnblock() {
     _fazStore._backupNodes = _fazStore._backupNodes.filter(
         ({ position, node, uniqueID }) => {
             try {
-                if (_fazShouldBlockProvider(node.src)) return true;
+                var nodeCategory = node && typeof node.getAttribute === "function"
+                    ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
+                    : "";
+                nodeCategory = nodeCategory.replace("fazcookie-", "");
+                if (nodeCategory && _fazIsCategoryToBeBlocked(nodeCategory)) return true;
+                var nodeSrc = (node && typeof node.getAttribute === "function")
+                    ? (node.getAttribute("src") || node.src || "")
+                    : (node && node.src ? node.src : "");
+                if (_fazShouldBlockProvider(nodeSrc)) return true;
                 if (node.nodeName.toLowerCase() === "script") {
-                    const scriptNode = document.createElement("script");
-                    scriptNode.src = node.src;
-                    scriptNode.type = "text/javascript";
+                    const scriptNode = _fazBuildRestoredScript(node);
+                    if (!scriptNode) return false;
                     document[position].appendChild(scriptNode);
                 } else {
                     const frame = document.getElementById(uniqueID);
                     if (!frame) return false;
-                    const iframe = document.createElement("iframe");
-                    iframe.src = node.src;
-                    iframe.width = frame.offsetWidth;
-                    iframe.height = frame.offsetHeight;
+                    const iframe = _fazBuildRestoredIframe(node, frame);
                     frame.parentNode.insertBefore(iframe, frame);
                     frame.parentNode.removeChild(frame);
                 }
@@ -1483,10 +1518,11 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
     }
 
     if (scriptSrc) {
-        if (scriptSrc.indexOf('data:') === 0) {
-            try {
-                clone.textContent = decodeURIComponent(scriptSrc.split(',').slice(1).join(','));
-            } catch (_e) {
+        if (/^data:/i.test(scriptSrc)) {
+            var decodedScript = _fazDecodeDataUriPayload(scriptSrc);
+            if (decodedScript) {
+                clone.textContent = decodedScript;
+            } else {
                 clone.src = scriptSrc;
             }
         } else {
@@ -1501,6 +1537,30 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
             } catch (_e) { /* not JSON, continue */ }
         }
         clone.textContent = inlineText;
+    }
+
+    return clone;
+}
+
+function _fazBuildRestoredIframe(iframe, placeholder) {
+    var clone = document.createElement('iframe');
+    var iframeSrc = iframe.getAttribute('src') || iframe.src;
+    var skip = { 'src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
+
+    for (var i = 0; i < iframe.attributes.length; i++) {
+        var attr = iframe.attributes[i];
+        if (skip[attr.name]) continue;
+        clone.setAttribute(attr.name, attr.value);
+    }
+
+    if (iframeSrc) {
+        clone.src = iframeSrc;
+    }
+    if (!clone.hasAttribute('width') && placeholder && placeholder.offsetWidth) {
+        clone.width = placeholder.offsetWidth;
+    }
+    if (!clone.hasAttribute('height') && placeholder && placeholder.offsetHeight) {
+        clone.height = placeholder.offsetHeight;
     }
 
     return clone;
@@ -1554,8 +1614,17 @@ function _fazUnblockServerSide() {
             var category = script.getAttribute("data-faz-category")
                 || (script.getAttribute("data-fazcookie") || "").replace("fazcookie-", "");
             if (_fazIsCategoryToBeBlocked(category)) return;
-            if (!(script.getAttribute('src') || script.src)) {
+            var scriptSrc = script.getAttribute('src') || script.src || '';
+            if (!scriptSrc) {
                 _fazRestoreInlineScript(script);
+                return;
+            }
+            if (/^data:/i.test(scriptSrc)) {
+                var decodedInline = _fazDecodeDataUriPayload(scriptSrc);
+                if (!decodedInline) return;
+                script.removeAttribute('src');
+                script.textContent = decodedInline;
+                _fazRestoreInlineScript(script, ['src', 'data-fazcookie']);
                 return;
             }
             var clone = _fazBuildRestoredScript(script);
@@ -1709,6 +1778,70 @@ function _fazCleanHostName(name) {
     return name.replace(/^www./, "");
 }
 
+var _fazDataUriDecodeMaxBytes = 65536;
+function _fazCanInspectDataUriMeta(meta) {
+    if (typeof meta !== "string") return true;
+    var mediaType = meta.split(";")[0].trim().toLowerCase();
+    if (!mediaType) return true;
+    if (mediaType.indexOf("text/") === 0) return true;
+    if (
+        mediaType === "application/javascript" ||
+        mediaType === "application/x-javascript" ||
+        mediaType === "application/ecmascript" ||
+        mediaType === "image/svg+xml"
+    ) return true;
+    if (mediaType.indexOf("javascript") !== -1 || mediaType.indexOf("ecmascript") !== -1) return true;
+    return mediaType.slice(-4) === "+xml";
+}
+
+function _fazDecodeDataUriPayload(uri) {
+    if (typeof uri !== "string" || !/^data:/i.test(uri)) return "";
+    var commaIndex = uri.indexOf(",");
+    if (commaIndex === -1) return "";
+
+    var meta = uri.substring(5, commaIndex);
+    var payload = uri.substring(commaIndex + 1);
+    if (!payload || !_fazCanInspectDataUriMeta(meta)) return "";
+    if (_fazDataUriDecodeMaxBytes > 0 && payload.length > _fazDataUriDecodeMaxBytes) return "";
+
+    try {
+        var decoded;
+        if (meta.toLowerCase().indexOf(";base64") !== -1) {
+            // Percent-decode first (e.g. %3D → =) for RFC 2397 conformance.
+            try { payload = decodeURIComponent(payload); } catch (_e) { /* already clean */ }
+            var binary = atob(payload);
+            if (typeof TextDecoder !== "undefined") {
+                var bytes = new Uint8Array(binary.length);
+                for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) & 0xff;
+                decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+            } else {
+                decoded = decodeURIComponent(binary.split("").map(function (c) {
+                    return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(""));
+            }
+        } else {
+            decoded = decodeURIComponent(payload);
+        }
+        if (_fazDataUriDecodeMaxBytes > 0 && decoded.length > _fazDataUriDecodeMaxBytes) return "";
+        return decoded;
+    } catch (_unused) {
+        return "";
+    }
+}
+
+function _fazGetProviderMatchTarget(target) {
+    if (!target || typeof target !== "string") return "";
+    if (/^data:/i.test(target)) return _fazDecodeDataUriPayload(target);
+    return target;
+}
+
+function _fazHasProviderBoundary(target, index, length) {
+    if (index > 0 && !/[\/\.\:\s"'`=;,(<{\[]/.test(target.charAt(index - 1))) return false;
+    var afterPos = index + length;
+    if (afterPos < target.length && !/[\/\.\:\?\#\s"'=;,&)<}\]]/.test(target.charAt(afterPos))) return false;
+    return true;
+}
+
 function _fazIsCategoryToBeBlocked(category) {
     const cookieValue = ref._fazGetFromStore(category);
     return (
@@ -1740,16 +1873,16 @@ function _fazGetPatternServiceMap() {
 
 function _fazShouldBlockProvider(formattedRE) {
     if (!formattedRE || typeof formattedRE !== "string") return false;
+    var matchTarget = _fazGetProviderMatchTarget(formattedRE);
+    if (!matchTarget) return false;
     if (!_fazStore._providersToBlock || !_fazStore._providersToBlock.length) return false;
+    var normalizedTarget = matchTarget.toLowerCase();
     const provider = _fazStore._providersToBlock.find(({ re }) => {
         if (!re) return false;
-        var idx = formattedRE.indexOf(re);
+        var needle = String(re).toLowerCase();
+        var idx = normalizedTarget.indexOf(needle);
         if (idx === -1) return false;
-        // Boundary check: character before must be empty, /, . or protocol separator.
-        if (idx > 0) {
-            var before = formattedRE.charAt(idx - 1);
-            if (before !== '/' && before !== '.' && before !== ':') return false;
-        }
+        if (!_fazHasProviderBoundary(matchTarget, idx, needle.length)) return false;
         return true;
     });
     if (!provider) return false;
@@ -1777,8 +1910,12 @@ function _fazIsUserWhitelisted(url) {
     if (typeof url !== "string") return false;
     var wl = _fazStore._userWhitelist;
     if (!Array.isArray(wl) || !wl.length) return false;
+    var rawTarget = url.toLowerCase();
+    var decodedTarget = String(_fazGetProviderMatchTarget(url) || url).toLowerCase();
     for (var i = 0; i < wl.length; i++) {
-        if (typeof wl[i] === "string" && wl[i] && url.indexOf(wl[i]) !== -1) return true;
+        if (typeof wl[i] !== "string" || !wl[i]) continue;
+        var needle = wl[i].toLowerCase();
+        if (rawTarget.indexOf(needle) !== -1 || decodedTarget.indexOf(needle) !== -1) return true;
     }
     return false;
 }
@@ -2353,7 +2490,7 @@ function _fazRenderServiceToggles() {
             checkbox.className = 'faz-service-toggle';
             checkbox.setAttribute('data-service', service.id);
             checkbox.setAttribute('data-category', service.category);
-            checkbox.setAttribute('aria-label', _fazTranslate('service_consent', 'Service consent') + ': ' + service.label);
+            checkbox.setAttribute('aria-label', _fazTranslate('service_consent_label', 'Service consent') + ': ' + service.label);
 
             // Determine checked state: explicit service consent > category consent.
             var svcConsent = ref._fazGetFromStore('svc.' + service.id);
@@ -2485,7 +2622,7 @@ function _fazRenderVendorSection() {
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.id = 'fazVendorSwitch' + vendor.id;
-        cb.setAttribute('aria-label', 'Vendor consent: ' + vendor.name);
+        cb.setAttribute('aria-label', _fazTranslate('vendor_consent_label', 'Vendor consent') + ': ' + vendor.name);
         cb.checked = existingConsent[vendor.id] === true;
         switchWrap.appendChild(cb);
         header.appendChild(switchWrap);

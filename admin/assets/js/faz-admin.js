@@ -323,6 +323,13 @@
 	FAZ.serializeForm = function (container) {
 		var data = {};
 		container.querySelectorAll('[data-path]').forEach(function (el) {
+			var conditionalWrap = el.closest('[data-show-if]');
+			if (el.disabled || el.hidden || el.closest('.faz-hidden')) {
+				return;
+			}
+			if (conditionalWrap && window.getComputedStyle(conditionalWrap).display === 'none') {
+				return;
+			}
 			var path = el.dataset.path;
 			var val;
 			if (el.type === 'checkbox') {

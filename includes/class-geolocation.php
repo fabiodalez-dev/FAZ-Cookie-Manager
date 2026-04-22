@@ -103,7 +103,7 @@ class Geolocation {
 	 */
 	private static function detect_country( $ip ) {
 		// 1. Cloudflare CF-IPCountry header.
-		if ( ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
 			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
 				return $code;

@@ -38,6 +38,28 @@ $force_remove_all = defined( 'FAZ_REMOVE_ALL_DATA' ) && true === FAZ_REMOVE_ALL_
 if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 
 	/**
+	 * Remove an empty directory using WP_Filesystem when available.
+	 *
+	 * @param string $dir Directory path.
+	 * @return bool
+	 */
+	function faz_uninstall_rmdir( $dir ) {
+		global $wp_filesystem;
+		if ( ! $wp_filesystem && defined( 'ABSPATH' ) ) {
+			if ( ! function_exists( 'WP_Filesystem' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+			}
+			if ( function_exists( 'WP_Filesystem' ) ) {
+				WP_Filesystem();
+			}
+		}
+		if ( $wp_filesystem && is_callable( array( $wp_filesystem, 'rmdir' ) ) ) {
+			return $wp_filesystem->rmdir( $dir );
+		}
+		return @rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir,WordPress.PHP.NoSilencedErrors.Discouraged
+	}
+
+	/**
 	 * Clean up all plugin data for the current site.
 	 *
 	 * @since 1.7.0
@@ -126,32 +148,32 @@ if ( $force_remove_all || faz_should_remove_on_uninstall() || is_multisite() ) {
 				delete_option( $variant );
 			}
 
-			// Remove GVL files (recursive to handle dotfiles and subdirectories).
-			$upload_dir = wp_upload_dir( null, false );
-			$gvl_dir    = trailingslashit( $upload_dir['basedir'] ) . 'faz-cookie-manager/gvl';
-			if ( is_dir( $gvl_dir ) ) {
-				$iterator = new \RecursiveIteratorIterator(
-					new \RecursiveDirectoryIterator( $gvl_dir, \RecursiveDirectoryIterator::SKIP_DOTS ),
-					\RecursiveIteratorIterator::CHILD_FIRST
-				);
-				foreach ( $iterator as $node ) {
-					if ( $node->isDir() ) {
-						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
-						@rmdir( $node->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-					} else {
-						wp_delete_file( $node->getPathname() );
-					}
+			// Remove plugin upload directories (recursive to handle dotfiles and subdirectories).
+			$upload_dir  = wp_upload_dir( null, false );
+			$upload_base = trailingslashit( $upload_dir['basedir'] );
+			$upload_dirs = array(
+				$upload_base . 'faz-cookie-manager',
+				$upload_base . 'fazcookie',
+			);
+			foreach ( $upload_dirs as $plugin_upload_dir ) {
+				if ( ! is_dir( $plugin_upload_dir ) ) {
+					continue;
 				}
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
-				@rmdir( $gvl_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				// Remove parent directory if empty.
-				$parent_dir = dirname( $gvl_dir );
-				if ( is_dir( $parent_dir ) ) {
-					$entries = @scandir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-					if ( is_array( $entries ) && 2 === count( $entries ) ) {
-						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- uninstall cleanup of uploads subdir.
-						@rmdir( $parent_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				try {
+					$iterator = new \RecursiveIteratorIterator(
+						new \RecursiveDirectoryIterator( $plugin_upload_dir, \RecursiveDirectoryIterator::SKIP_DOTS ),
+						\RecursiveIteratorIterator::CHILD_FIRST
+					);
+					foreach ( $iterator as $node ) {
+						if ( $node->isDir() ) {
+							faz_uninstall_rmdir( $node->getPathname() );
+						} else {
+							wp_delete_file( $node->getPathname() );
+						}
 					}
+					faz_uninstall_rmdir( $plugin_upload_dir );
+				} catch ( \Throwable $e ) {
+					error_log( 'FAZ uninstall: failed to remove ' . $plugin_upload_dir . ' — ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				}
 			}
 		} catch ( \Throwable $e ) {
