@@ -177,6 +177,11 @@ class Banner_Rest {
 		// Categories with names/descriptions resolved in the target language.
 		$categories = $this->build_categories_payload( $lang );
 
+		// Build the i18n payload BEFORE restoring the locale — otherwise
+		// __( '...', 'faz-cookie-manager' ) would resolve against the
+		// original locale and the REST response would mix languages.
+		$i18n = $this->build_i18n_payload();
+
 		// Restore original state before responding.
 		$banner->set_language( $orig_banner_lang );
 		remove_filter( 'faz_current_language', $filter, 1 );
@@ -191,7 +196,7 @@ class Banner_Rest {
 			'styles'     => $styles,
 			'shortCodes' => $short_codes,
 			'categories' => $categories,
-			'i18n'       => $this->build_i18n_payload(),
+			'i18n'       => $i18n,
 		);
 
 		$response = new WP_REST_Response( $payload, 200 );
@@ -202,10 +207,12 @@ class Banner_Rest {
 	}
 
 	/**
-	 * Build the `shortCodes` payload reproducing the subset used by script.js.
+	 * Build the `shortCodes` payload for the REST banner response.
 	 *
-	 * Mirrors the minimal set Frontend::prepare_shortcodes exposes. Only the
-	 * keys the client actually reads are included to keep the payload small.
+	 * Must stay in sync with Frontend::prepare_shortcodes(): script.js looks
+	 * up entries by `key` (faz_readmore, faz_show_desc, faz_category_toggle_
+	 * label, faz_optout_option_title, …) and a partial list would leave some
+	 * labels stuck in the server-default language after a swap.
 	 *
 	 * @param object     $banner              Active banner.
 	 * @param Shortcodes $shortcodes_instance Fresh shortcodes instance.
@@ -226,6 +233,16 @@ class Banner_Rest {
 			$attributes['target'] = '_blank';
 		}
 
+		$simple_entry = static function ( $key, $tag = '' ) {
+			return array(
+				'key'        => $key,
+				'content'    => do_shortcode( '[' . $key . ']' ),
+				'tag'        => $tag,
+				'status'     => true,
+				'attributes' => array(),
+			);
+		};
+
 		$codes = array(
 			array(
 				'key'        => 'faz_readmore',
@@ -234,34 +251,20 @@ class Banner_Rest {
 				'status'     => isset( $readmore['status'] ) && true === $readmore['status'],
 				'attributes' => $attributes,
 			),
-			array(
-				'key'        => 'faz_show_desc',
-				'content'    => do_shortcode( '[faz_show_desc]' ),
-				'tag'        => 'show-desc-button',
-				'status'     => true,
-				'attributes' => array(),
-			),
-			array(
-				'key'        => 'faz_hide_desc',
-				'content'    => do_shortcode( '[faz_hide_desc]' ),
-				'tag'        => 'hide-desc-button',
-				'status'     => true,
-				'attributes' => array(),
-			),
-			array(
-				'key'        => 'faz_optout_show_desc',
-				'content'    => do_shortcode( '[faz_optout_show_desc]' ),
-				'tag'        => 'optout-show-desc-button',
-				'status'     => true,
-				'attributes' => array(),
-			),
-			array(
-				'key'        => 'faz_optout_hide_desc',
-				'content'    => do_shortcode( '[faz_optout_hide_desc]' ),
-				'tag'        => 'optout-hide-desc-button',
-				'status'     => true,
-				'attributes' => array(),
-			),
+			$simple_entry( 'faz_show_desc', 'show-desc-button' ),
+			$simple_entry( 'faz_hide_desc', 'hide-desc-button' ),
+			$simple_entry( 'faz_optout_show_desc', 'optout-show-desc-button' ),
+			$simple_entry( 'faz_optout_hide_desc', 'optout-hide-desc-button' ),
+			$simple_entry( 'faz_category_toggle_label' ),
+			$simple_entry( 'faz_enable_category_label' ),
+			$simple_entry( 'faz_disable_category_label' ),
+			$simple_entry( 'faz_video_placeholder' ),
+			$simple_entry( 'faz_enable_optout_label' ),
+			$simple_entry( 'faz_disable_optout_label' ),
+			$simple_entry( 'faz_optout_toggle_label' ),
+			$simple_entry( 'faz_optout_option_title' ),
+			$simple_entry( 'faz_optout_close_label' ),
+			$simple_entry( 'faz_preference_close_label' ),
 		);
 
 		unset( $shortcodes_instance ); // keep the variable referenced so lints do not complain.

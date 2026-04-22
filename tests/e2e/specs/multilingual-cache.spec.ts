@@ -84,6 +84,16 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
     expect(itFirst.status()).toBe(200);
     expect(enFirst.status()).toBe(200);
 
+    // Vary: Accept-Language must be emitted whenever browser detection is
+    // active so shared caches (Cloudflare, LiteSpeed, WP Rocket, …) key
+    // variants per language when they honour the header. This asserts the
+    // complementary half of the PR — the body is cacheable AND the
+    // downstream cache knows it should segment by Accept-Language.
+    const itVary = (itFirst.headers().vary ?? '').toLowerCase();
+    const enVary = (enFirst.headers().vary ?? '').toLowerCase();
+    expect(itVary).toContain('accept-language');
+    expect(enVary).toContain('accept-language');
+
     const itLang = extractLanguage(await itFirst.text());
     const enLang = extractLanguage(await enFirst.text());
 
@@ -125,7 +135,10 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
     const page = await context.newPage();
 
     await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
-    await waitForBannerReady(page);
+    // Wait deterministically for the async swap to finish — passing the
+    // target language makes the poll settle only after _fazStore._language
+    // has been rewritten, not just after the script has loaded.
+    await waitForBannerReady(page, 3000, target);
 
     const cfg = await readFazConfig(page);
     expect(cfg).not.toBeNull();
@@ -146,7 +159,10 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
     const page = await context.newPage();
 
     await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
-    await waitForBannerReady(page);
+    // For the fallback path the expected language is the default — the
+    // swap should be a no-op so waiting for SUITE_DEFAULT confirms both
+    // that the script ran and that nothing rewrote _language.
+    await waitForBannerReady(page, 3000, SUITE_DEFAULT);
 
     const cfg = await readFazConfig(page);
     expect(cfg).not.toBeNull();

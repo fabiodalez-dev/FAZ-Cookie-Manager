@@ -131,17 +131,27 @@ export async function fetchBannerPayload(
 }
 
 /**
- * Wait until script.js has finished its async language-swap dance. The
- * swap resolves inside _fazInit (awaited before _fazInitOperations), so by
- * the time the banner is visible in the DOM the swap is guaranteed to
- * have completed. This helper provides a short additional grace period
- * for slower CI.
+ * Wait until script.js has settled on a language.
+ *
+ * When `expectedLanguage` is provided the poll waits for _fazStore._language
+ * to match — this removes the race where _fazConfig already exists (because
+ * the localized script loaded) but the async REST swap in _fazMaybeSwapLanguage
+ * has not yet rewritten _language. When omitted the poll only waits for
+ * _fazConfig to be populated; callers that don't need swap determinism can
+ * still use the helper unchanged.
  */
-export async function waitForBannerReady(page: Page, timeoutMs = 3000): Promise<void> {
-  await page.waitForFunction(() => {
-    const cfg = (window as any)._fazConfig;
-    return !!cfg && typeof cfg._language === 'string';
-  }, null, { timeout: timeoutMs });
-  // Give the swap a microtask cycle after DOM is ready.
-  await page.waitForTimeout(150);
+export async function waitForBannerReady(
+  page: Page,
+  timeoutMs = 3000,
+  expectedLanguage?: string,
+): Promise<void> {
+  await page.waitForFunction(
+    (lang: string | null) => {
+      const cfg = (window as any)._fazConfig;
+      if (!cfg || typeof cfg._language !== 'string') return false;
+      return !lang || cfg._language === lang;
+    },
+    expectedLanguage ?? null,
+    { timeout: timeoutMs },
+  );
 }

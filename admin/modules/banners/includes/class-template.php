@@ -141,7 +141,12 @@ class Template {
 	 *                               without touching the request-level cache.
 	 */
 	public function __construct( $banner = false, $language = null ) {
-		$this->language = ( is_string( $language ) && '' !== $language ) ? $language : faz_current_language();
+		// Normalise the language override before using it as an option-array
+		// key. Callers (e.g. the REST controller) already validate against
+		// faz_selected_languages(), but defence-in-depth: we sanitise here
+		// so every entry point is safe.
+		$language       = is_string( $language ) ? trim( sanitize_text_field( $language ) ) : '';
+		$this->language = '' !== $language ? $language : faz_current_language();
 		if ( $banner ) {
 			$this->banner     = $banner;
 			$this->properties = $banner->get_settings();

@@ -3096,14 +3096,16 @@ class Frontend {
 	}
 
 	/**
-	 * Emit `Vary: Accept-Language` when the banner language is server-resolved
-	 * from the Accept-Language header.
+	 * Emit `Vary: Accept-Language` when client-side browser-language detection
+	 * is active.
 	 *
-	 * Caches and CDNs that honour Vary will then key the cached response by
-	 * Accept-Language, preventing the first visitor's language from being
-	 * served to everyone else. When a URL-based multilingual plugin
+	 * Caches and CDNs that honour Vary can then key the cached response by
+	 * Accept-Language. When a URL-based multilingual plugin
 	 * (WPML/Polylang/TranslatePress/Weglot) is active, browser detection is
-	 * not used, so the header is not needed.
+	 * not used, so the header is not needed. The emission follows
+	 * faz_browser_detect_enabled() so the two escape hatches
+	 * (faz_disable_browser_language_detection and the plugin/language checks)
+	 * stay consistent — disabling detection also stops cache fragmentation.
 	 *
 	 * @return void
 	 */
@@ -3117,11 +3119,11 @@ class Frontend {
 		if ( true === faz_disable_banner() ) {
 			return;
 		}
-		// Only relevant when the server falls back to Accept-Language parsing.
-		if ( faz_i18n_is_multilingual() ) {
-			return;
-		}
-		if ( count( faz_selected_languages() ) < 2 ) {
+		// Only relevant when client-side browser-language detection is active.
+		// faz_browser_detect_enabled() already covers: (a) no URL-based
+		// multilingual plugin, (b) 2+ languages selected, and (c) the
+		// faz_disable_browser_language_detection filter escape hatch.
+		if ( ! function_exists( 'faz_browser_detect_enabled' ) || ! faz_browser_detect_enabled() ) {
 			return;
 		}
 		/**
