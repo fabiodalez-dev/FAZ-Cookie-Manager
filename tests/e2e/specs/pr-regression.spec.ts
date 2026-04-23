@@ -7,6 +7,7 @@
  */
 import { completeAdminLogin, expect, test } from '../fixtures/wp-fixture';
 import { getWpLoginPath } from '../utils/wp-auth';
+import { wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
 const WP_ADMIN_USER = process.env.WP_ADMIN_USER ?? 'admin';
@@ -79,6 +80,26 @@ test.describe('PR #44: i18n cookie save', () => {
 
   let cookieId: number | null = null;
   let originalLanguages: Record<string, unknown> | null = null;
+
+  test.beforeAll(async () => {
+    // Prior runs that crashed before the afterAll teardown leave behind
+    // `_faz_test_i18n` rows in `wp_faz_cookies`; the test asserts
+    // `toHaveCount(1)` on the row locator, so any leftover rows break it.
+    // Wipe them here and invalidate the `cookies` cache group (the row
+    // list is also cached in `_transient_faz_transient_*_all`, which
+    // survives direct $wpdb deletes — same caveat as the #75 fix).
+    wpEval(`
+      global $wpdb;
+      $wpdb->query( $wpdb->prepare(
+        "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name = %s",
+        '_faz_test_i18n'
+      ) );
+      if ( class_exists( '\\\\FazCookie\\\\Includes\\\\Cache' ) ) {
+        \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
+        \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'category' );
+      }
+    `);
+  });
 
   test('manual add from admin modal saves duration/description under the plugin default language', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
