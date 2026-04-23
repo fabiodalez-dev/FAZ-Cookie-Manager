@@ -426,7 +426,10 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
     await page.locator('[data-faz-tag="settings-button"]').first().click();
     await expect(page.locator('.faz-preference-center')).toBeVisible();
 
-    // Focus may take a frame to move after animation — poll briefly.
+    // Focus may take several frames to move after the CSS transition on
+    // .faz-preference-center completes. Poll generously so slow CI
+    // workers or single-threaded dev servers don't false-fail without
+    // masking a regression where focus never moves.
     await expect
       .poll(
         () =>
@@ -434,7 +437,7 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
             const pref = document.querySelector('.faz-preference-center');
             return pref !== null && pref.contains(document.activeElement);
           }),
-        { timeout: 3_000 },
+        { timeout: 10_000 },
       )
       .toBe(true);
 
