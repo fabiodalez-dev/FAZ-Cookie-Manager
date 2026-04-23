@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Banners\Includes\Controller as Banner_Controller;
 use FazCookie\Admin\Modules\Banners\Includes\Template as Banner_Template;
 use FazCookie\Frontend\Modules\Shortcodes\Shortcodes;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
+use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -294,26 +295,33 @@ class Banner_Rest {
 		if ( empty( $categories ) || ! is_array( $categories ) ) {
 			return $out;
 		}
-		foreach ( $categories as $category ) {
-			if ( ! is_object( $category ) ) {
+		foreach ( $categories as $category_data ) {
+			if ( ! is_object( $category_data ) ) {
 				continue;
 			}
-			$name = method_exists( $category, 'get_name' ) ? $category->get_name( $lang ) : '';
-			$desc = method_exists( $category, 'get_description' ) ? $category->get_description( $lang ) : '';
-			$slug = method_exists( $category, 'get_slug' ) ? $category->get_slug() : '';
+			$category = new Cookie_Categories( $category_data );
+			if ( false === $category->get_visibility() ) {
+				continue;
+			}
+			$slug = $category->get_slug();
+			if ( 'wordpress-internal' === $slug ) {
+				continue;
+			}
 
-			$entry = array(
-				'slug'        => $slug,
-				'name'        => $name,
-				'description' => $desc,
+			$out[] = array(
+				'id'             => $category->get_id(),
+				'name'           => $category->get_name( $lang ),
+				'slug'           => $slug,
+				'description'    => $category->get_description( $lang ),
+				'isNecessary'    => 'necessary' === $slug,
+				'ccpaDoNotSell'  => $category->get_sell_personal_data(),
+				'cookies'        => $this->build_category_cookies_payload( $category->get_cookies() ),
+				'active'         => true,
+				'defaultConsent' => array(
+					'gdpr' => $category->get_prior_consent(),
+					'ccpa' => 'necessary' === $slug || false === $category->get_sell_personal_data(),
+				),
 			);
-			if ( method_exists( $category, 'get_id' ) ) {
-				$entry['id'] = $category->get_id();
-			}
-			if ( method_exists( $category, 'is_necessary' ) ) {
-				$entry['isNecessary'] = (bool) $category->is_necessary();
-			}
-			$out[] = $entry;
 		}
 		/**
 		 * Filter the banner REST categories payload.
@@ -322,6 +330,34 @@ class Banner_Rest {
 		 * @param string $lang Language code.
 		 */
 		return apply_filters( 'faz_banner_rest_categories', $out, $lang );
+	}
+
+	/**
+	 * Build the category cookie payload consumed by script.js.
+	 *
+	 * @param array $items Raw/prepared cookie rows.
+	 * @return array
+	 */
+	protected function build_category_cookies_payload( $items ) {
+		$cookies = array();
+		foreach ( (array) $items as $item ) {
+			if ( is_array( $item ) ) {
+				$item = (object) $item;
+			}
+			if ( ! is_object( $item ) ) {
+				continue;
+			}
+			$name = isset( $item->name ) ? sanitize_text_field( (string) $item->name ) : '';
+			if ( \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
+				continue;
+			}
+			$cookies[] = array(
+				'cookieID' => $name,
+				'domain'   => isset( $item->domain ) ? sanitize_text_field( (string) $item->domain ) : '',
+				'provider' => isset( $item->url_pattern ) ? sanitize_text_field( (string) $item->url_pattern ) : '',
+			);
+		}
+		return $cookies;
 	}
 
 	/**

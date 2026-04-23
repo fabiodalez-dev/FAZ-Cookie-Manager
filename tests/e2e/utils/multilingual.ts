@@ -19,7 +19,14 @@ export type FazConfigShape = {
   _bannerEndpoint: string;
   _languageMap?: Record<string, string>;
   _shortCodes?: Array<{ key: string; content: string; tag: string }>;
-  _categories?: Array<{ slug: string; name?: string; description?: string }>;
+  _categories?: Array<{
+    slug: string;
+    name?: string;
+    description?: string;
+    isNecessary?: boolean;
+    cookies?: Array<{ cookieID: string; domain: string; provider: string }>;
+    defaultConsent?: { gdpr: boolean; ccpa: boolean };
+  }>;
   _i18n?: Record<string, string>;
 };
 
