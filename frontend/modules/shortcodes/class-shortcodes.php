@@ -95,24 +95,77 @@ class Shortcodes {
 		$this->template   = $template;
 		$this->properties = $settings;
 		$this->law        = $banner->get_law();
-		// Load contents for the current language, falling back to English,
-		// then to the bundled en.json defaults for any empty fields.
+		// Load contents for the current language with a fallback chain that
+		// preserves translations whenever possible:
+		//
+		//   en.json (bundled)
+		//   ← {lang}.json (bundled, if it exists for $this->language)
+		//   ← DB contents[en]
+		//   ← DB contents[$this->language]
+		//
+		// Without the {lang}.json layer a banner whose DB contents[de]
+		// only partially overrides the defaults (e.g. description in
+		// German but title left empty) would fall back to the English
+		// en.json strings for every missing key — producing the
+		// "Wir verwenden Cookies..." / "We value your privacy" mix
+		// reported by the German-only regression test.
 		$lang_contents = isset( $contents[ $this->language ] ) ? $contents[ $this->language ] : array();
 		$en_contents   = isset( $contents['en'] ) ? $contents['en'] : array();
+		$contents_dir  = dirname( dirname( dirname( __DIR__ ) ) ) . '/admin/modules/banners/includes/contents';
 
-		// Merge: current language ← English DB ← en.json defaults.
-		$defaults_file = dirname( dirname( dirname( __DIR__ ) ) ) . '/admin/modules/banners/includes/contents/en.json';
-		$defaults      = array();
-		if ( file_exists( $defaults_file ) ) {
-			$json = faz_read_json_file( $defaults_file );
-			if ( ! empty( $json[ $this->law ] ) ) {
-				$defaults = $json[ $this->law ];
-			} elseif ( ! empty( $json['gdpr'] ) ) {
-				$defaults = $json['gdpr'];
+		$law     = $this->law;
+		$extract = function ( $json ) use ( $law ) {
+			if ( ! is_array( $json ) ) {
+				return array();
+			}
+			if ( ! empty( $json[ $law ] ) ) {
+				return $json[ $law ];
+			}
+			if ( ! empty( $json['gdpr'] ) ) {
+				return $json['gdpr'];
+			}
+			return array();
+		};
+
+		$defaults_en = array();
+		$defaults_en_file = $contents_dir . '/en.json';
+		if ( file_exists( $defaults_en_file ) ) {
+			$defaults_en = $extract( faz_read_json_file( $defaults_en_file ) );
+		}
+
+		$defaults_lang = array();
+		if ( '' !== $this->language && 'en' !== $this->language ) {
+			$safe_lang          = sanitize_file_name( $this->language );
+			$defaults_lang_file = $contents_dir . '/' . $safe_lang . '.json';
+			if ( file_exists( $defaults_lang_file ) ) {
+				$defaults_lang = $extract( faz_read_json_file( $defaults_lang_file ) );
 			}
 		}
 
-		$this->contents = $this->merge_contents_deep( $defaults, $en_contents, $lang_contents );
+		// Subtle but important: when the admin selects a new non-English
+		// language the plugin's legacy seed code copied the English
+		// en.json defaults into `contents[$lang]` verbatim. Those values
+		// are indistinguishable from genuine customisations in the DB —
+		// but they ARE byte-identical to the values in the bundled
+		// en.json. Treat those keys as unmodified inherited defaults so
+		// the bundled `{lang}.json` translations win, while still
+		// honouring keys where the admin has actually overridden the
+		// English default from the banner settings UI.
+		//
+		// (We diff against the bundled en.json rather than DB[en],
+		// because on fresh installs contents[en] is often empty — the
+		// admin never visited the banner editor — yet contents[de] still
+		// carries the English seed and would otherwise leak through.)
+		$lang_custom = ( 'en' === $this->language )
+			? $lang_contents
+			: $this->strip_inherited_defaults( $lang_contents, $defaults_en );
+
+		$this->contents = $this->merge_contents_deep(
+			$defaults_en,
+			$defaults_lang,
+			$en_contents,
+			$lang_custom
+		);
 		$this->load_shortcodes();
 		$this->init();
 	}
@@ -133,6 +186,42 @@ class Shortcodes {
 	 * @param array ...$layers Content arrays ordered from lowest to highest priority.
 	 * @return array Merged contents.
 	 */
+	/**
+	 * Recursively drop keys from $subject whose value is identical to the
+	 * matching key in $reference. The remaining tree therefore contains
+	 * only the real admin customisations, not the English defaults the
+	 * seed flow previously copied into every language slot.
+	 *
+	 * @param array $subject   Current-language DB contents (possibly polluted
+	 *                         with English defaults).
+	 * @param array $reference English DB contents acting as the "is this
+	 *                         actually a customisation?" baseline.
+	 * @return array Only the real per-key overrides from $subject.
+	 */
+	private function strip_inherited_defaults( $subject, $reference ) {
+		if ( ! is_array( $subject ) || ! is_array( $reference ) ) {
+			return is_array( $subject ) ? $subject : array();
+		}
+		$out = array();
+		foreach ( $subject as $key => $value ) {
+			if ( ! array_key_exists( $key, $reference ) ) {
+				$out[ $key ] = $value;
+				continue;
+			}
+			if ( is_array( $value ) && is_array( $reference[ $key ] ) ) {
+				$nested = $this->strip_inherited_defaults( $value, $reference[ $key ] );
+				if ( ! empty( $nested ) ) {
+					$out[ $key ] = $nested;
+				}
+				continue;
+			}
+			if ( $value !== $reference[ $key ] ) {
+				$out[ $key ] = $value;
+			}
+		}
+		return $out;
+	}
+
 	private function merge_contents_deep( ...$layers ) {
 		$result = array();
 		foreach ( $layers as $layer ) {
