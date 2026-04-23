@@ -3,6 +3,24 @@ import { getWpLoginPath } from '../utils/wp-auth';
 
 type ConsentMap = Record<string, string>;
 
+/**
+ * Worker-scoped credential bundle.
+ *
+ * Worker scope is required because Playwright's `test.beforeAll` /
+ * `test.afterAll` hooks cannot receive test-scoped fixtures; previously
+ * each spec re-read `process.env.WP_BASE_URL` / `WP_ADMIN_USER` /
+ * `WP_ADMIN_PASS` / `FAZ_PLUGIN_DEPLOY_PATH` with duplicated defaults.
+ * Centralising the resolution here keeps the defaults in one place and
+ * lets future changes (random ports, token auth, docker URLs) land
+ * without touching every spec.
+ */
+export type WpCreds = {
+  baseURL: string;
+  adminUser: string;
+  adminPass: string;
+  deployPath: string | null;
+};
+
 type WPFixtures = {
   wpBaseURL: string;
   adminUser: string;
@@ -11,6 +29,10 @@ type WPFixtures = {
   getConsentCookie: (context: BrowserContext) => Promise<{ name: string; value: string } | undefined>;
   parseConsentCookie: (raw: string) => ConsentMap;
   getNonTechnicalCookies: (context: BrowserContext) => Promise<Array<{ name: string; value: string }>>;
+};
+
+type WPWorkerFixtures = {
+  wpCreds: WpCreds;
 };
 
 const TECHNICAL_COOKIE_RE = [
@@ -82,17 +104,29 @@ export async function completeAdminLogin(page: Page, wpBaseURL: string, adminUse
   throw new Error(`WordPress admin login failed. URL=${page.url()} error=${loginError ?? 'n/a'}`);
 }
 
-export const test = base.extend<WPFixtures>({
-  wpBaseURL: async ({}, use) => { // biome-ignore lint/style/noEmptyPattern: Playwright fixture API requires destructured first argument
-    await use(process.env.WP_BASE_URL ?? 'http://localhost:9998');
+export const test = base.extend<WPFixtures, WPWorkerFixtures>({
+  wpCreds: [
+    async ({}, use) => { // biome-ignore lint/style/noEmptyPattern: Playwright fixture API requires destructured first argument
+      await use({
+        baseURL: process.env.WP_BASE_URL ?? 'http://localhost:9998',
+        adminUser: process.env.WP_ADMIN_USER ?? 'admin',
+        adminPass: process.env.WP_ADMIN_PASS ?? 'admin',
+        deployPath: process.env.FAZ_PLUGIN_DEPLOY_PATH ?? null,
+      });
+    },
+    { scope: 'worker' },
+  ],
+
+  wpBaseURL: async ({ wpCreds }, use) => {
+    await use(wpCreds.baseURL);
   },
 
-  adminUser: async ({}, use) => { // biome-ignore lint/style/noEmptyPattern: Playwright fixture API requires destructured first argument
-    await use(process.env.WP_ADMIN_USER ?? 'admin');
+  adminUser: async ({ wpCreds }, use) => {
+    await use(wpCreds.adminUser);
   },
 
-  adminPass: async ({}, use) => { // biome-ignore lint/style/noEmptyPattern: Playwright fixture API requires destructured first argument
-    await use(process.env.WP_ADMIN_PASS ?? 'admin');
+  adminPass: async ({ wpCreds }, use) => {
+    await use(wpCreds.adminPass);
   },
 
   loginAsAdmin: async ({ wpBaseURL, adminUser, adminPass }, use) => {
