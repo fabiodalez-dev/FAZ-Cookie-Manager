@@ -622,7 +622,17 @@ async function _fazMaybeSwapLanguage() {
  */
 async function _fazInit() {
     try {
-        await _fazMaybeSwapLanguage();
+        try {
+            await _fazMaybeSwapLanguage();
+        } finally {
+            // Deterministic marker so tests can wait for the client-side
+            // language-swap decision instead of sleeping on a fixed timeout.
+            // Settled regardless of outcome (no-op / swapped / failed) so
+            // callers never race an unresolved promise.
+            if (_fazStore && typeof _fazStore === 'object') {
+                _fazStore._swapResolved = true;
+            }
+        }
         _fazInitOperations();
         _fazRemoveAllDeadCookies();
         _fazWatchBannerElement();

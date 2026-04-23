@@ -34,32 +34,24 @@ const SUITE_DEFAULT = 'en';
 test.describe.serial('Issue #67 — multilingual banner', () => {
   let snapshot: LanguagesSnapshot | null = null;
 
-  test.beforeAll(async ({ browser }) => {
-    // Provision the suite's language configuration once. Using the raw
-    // `completeAdminLogin` helper keeps the provisioning outside of the
-    // per-test fixture scope (loginAsAdmin is test-scoped only).
-    const wpBaseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
-    const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
-    const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';
-
+  test.beforeAll(async ({ browser, wpCreds }) => {
+    // Provision the suite's language configuration once. The worker-scoped
+    // `wpCreds` fixture centralises URL + credentials resolution so we no
+    // longer duplicate `process.env.WP_*` fallback defaults across specs.
     const context = await browser.newContext();
     const page = await context.newPage();
-    await completeAdminLogin(page, wpBaseURL, adminUser, adminPass);
-    await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    await completeAdminLogin(page, wpCreds.baseURL, wpCreds.adminUser, wpCreds.adminPass);
+    await page.goto(`${wpCreds.baseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     snapshot = await setSelectedLanguages(page, SUITE_SELECTED, SUITE_DEFAULT);
     await context.close();
   });
 
-  test.afterAll(async ({ browser }) => {
+  test.afterAll(async ({ browser, wpCreds }) => {
     if (!snapshot) return;
-    const wpBaseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
-    const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
-    const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';
-
     const context = await browser.newContext();
     const page = await context.newPage();
-    await completeAdminLogin(page, wpBaseURL, adminUser, adminPass);
-    await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    await completeAdminLogin(page, wpCreds.baseURL, wpCreds.adminUser, wpCreds.adminPass);
+    await page.goto(`${wpCreds.baseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     await restoreLanguages(page, snapshot);
     await context.close();
   });
