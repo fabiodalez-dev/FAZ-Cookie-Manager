@@ -321,7 +321,33 @@ test.describe('Blocking compliance coverage', () => {
               }
             }
 
-            await visitorPage.waitForTimeout(750);
+            // Deterministic wait: the provider scripts fire their collect
+            // fetches asynchronously. A fixed 750ms was enough on the old
+            // php -S stack with a single concurrent script, but under the
+            // nginx+PHP-FPM topology — where up to 13 provider scripts
+            // race their fetches in parallel — occasional iterations
+            // observe a hit-count of 0 for a provider whose fetch was
+            // still in flight. Poll until every granted provider's hit is
+            // visible (or 5s elapses, which would indicate a real bug).
+            const expectedHitKeys = OBSERVED_CATEGORY_PROVIDERS
+              .filter((p) => consentState[p.slug])
+              .map((p) => p.hitKey);
+            if (expectedHitKeys.length > 0) {
+              await expect
+                .poll(
+                  () => {
+                    const current = readProviderMatrixHits();
+                    return expectedHitKeys.every((key) => (current[key] ?? 0) >= 1);
+                  },
+                  { timeout: 5_000, message: `Waiting for provider-matrix hits: ${expectedHitKeys.join(', ')}` },
+                )
+                .toBe(true);
+            } else {
+              // No granted providers — short sleep to let any erroneously
+              // fired fetches land so the "must-not-execute" assertions
+              // below can still catch leaks.
+              await visitorPage.waitForTimeout(750);
+            }
 
             const cookieNames = await browserCookieNames(visitorPage);
             const hits = readProviderMatrixHits();

@@ -98,19 +98,50 @@ final class Faz_E2E_Provider_Matrix {
 		$key  = is_string( $path ) ? substr( $path, strpos( $path, '/faz-e2e-provider-collect/' ) + 25 ) : '';
 		$key  = ltrim( (string) $key, '/' );
 
-		$hits = get_option( self::HITS_OPTION, array() );
-		if ( ! is_array( $hits ) ) {
-			$hits = array();
-		}
-
 		if ( '' !== $key ) {
-			$hits[ $key ] = isset( $hits[ $key ] ) ? absint( $hits[ $key ] ) + 1 : 1;
-			update_option( self::HITS_OPTION, $hits, false );
+			$this->increment_hit( $key );
 		}
 
 		status_header( 204 );
 		header( 'Cache-Control: no-store, max-age=0' );
 		exit;
+	}
+
+	/**
+	 * Atomically increment a hit counter.
+	 *
+	 * On nginx + PHP-FPM several provider scripts fire their collect
+	 * fetches in parallel, so multiple PHP workers race each other on
+	 * `update_option( HITS_OPTION )`. Without a lock the classic
+	 * read-modify-write pattern silently drops increments (worker B's
+	 * read misses worker A's pending write, then B's write clobbers A).
+	 * Use an exclusive file lock to serialise the option update so every
+	 * increment is observed.
+	 *
+	 * @param string $key Hit key to increment.
+	 * @return void
+	 */
+	private function increment_hit( $key ) {
+		$lock_path = sys_get_temp_dir() . '/faz-e2e-provider-matrix.lock';
+		$lock_fp   = @fopen( $lock_path, 'c' );
+		$locked    = false;
+		if ( $lock_fp ) {
+			$locked = @flock( $lock_fp, LOCK_EX );
+		}
+
+		$hits = get_option( self::HITS_OPTION, array() );
+		if ( ! is_array( $hits ) ) {
+			$hits = array();
+		}
+		$hits[ $key ] = isset( $hits[ $key ] ) ? absint( $hits[ $key ] ) + 1 : 1;
+		update_option( self::HITS_OPTION, $hits, false );
+
+		if ( $locked && $lock_fp ) {
+			@flock( $lock_fp, LOCK_UN );
+		}
+		if ( $lock_fp ) {
+			@fclose( $lock_fp );
+		}
 	}
 
 	/**
@@ -121,18 +152,14 @@ final class Faz_E2E_Provider_Matrix {
 	 */
 	public function collect_hit( $request ) {
 		$path = sanitize_text_field( (string) $request->get_param( 'path' ) );
-		$hits = get_option( self::HITS_OPTION, array() );
-
-		if ( ! is_array( $hits ) ) {
-			$hits = array();
+		if ( '' !== $path ) {
+			$this->increment_hit( $path );
 		}
 
-		$hits[ $path ] = isset( $hits[ $path ] ) ? absint( $hits[ $path ] ) + 1 : 1;
-		update_option( self::HITS_OPTION, $hits, false );
-
+		$hits = get_option( self::HITS_OPTION, array() );
 		return new \WP_REST_Response(
 			array(
-				'hits' => $hits[ $path ],
+				'hits' => is_array( $hits ) && isset( $hits[ $path ] ) ? (int) $hits[ $path ] : 0,
 				'ok'   => true,
 				'path' => $path,
 			),
