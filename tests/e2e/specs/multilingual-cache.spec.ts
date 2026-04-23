@@ -158,8 +158,12 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
     await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
     // Wait deterministically for the async swap to finish — passing the
     // target language makes the poll settle only after _fazStore._language
-    // has been rewritten, not just after the script has loaded.
-    await waitForBannerReady(page, 3000, target);
+    // has been rewritten, not just after the script has loaded. 10s is
+    // generous enough that a slow REST round-trip (PHP-FPM spinning up,
+    // first-render template regeneration, or CI under load) does not
+    // produce a false-fail while still catching real regressions where
+    // the swap never happens.
+    await waitForBannerReady(page, 10_000, target);
 
     const cfg = await readFazConfig(page);
     expect(cfg).not.toBeNull();

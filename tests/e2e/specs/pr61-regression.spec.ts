@@ -132,10 +132,13 @@ async function getBanner(page: Page, nonce: string, id = 1): Promise<BannerPaylo
 }
 
 async function updateBanner(page: Page, nonce: string, id: number, payload: BannerPayload) {
-	const response = await page.request.put(`${WP_BASE}/?rest_route=/faz/v1/banners/${id}`, {
+	// `?rest_route=` + PUT returns 405 on nginx/Apache/php -S. POST with
+	// X-HTTP-Method-Override: PUT is the standard WP REST workaround.
+	const response = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/banners/${id}`, {
 		headers: {
 			'Content-Type': 'application/json',
 			'X-WP-Nonce': nonce,
+			'X-HTTP-Method-Override': 'PUT',
 		},
 		data: payload,
 	});

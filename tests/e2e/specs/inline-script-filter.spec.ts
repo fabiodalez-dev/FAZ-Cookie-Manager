@@ -66,6 +66,18 @@ function removeMuPlugin(): void {
 }
 
 async function seedAcceptAllConsent(context: BrowserContext): Promise<void> {
+	// Read the current consent_revision from the FAZ settings instead of
+	// hardcoding `rev:1`. When another spec has bumped the revision (e.g.
+	// via "Invalidate all consents") a seeded cookie with `rev:1` is stale
+	// and script.js discards it, reshowing the banner and causing the
+	// returning-visitor inline-script assertion to hang.
+	const revRaw = wpEval(
+		'$s = get_option("faz_settings", array()); ' +
+		'$r = isset($s["general"]["consent_revision"]) ? (int) $s["general"]["consent_revision"] : 1; ' +
+		'echo $r > 0 ? $r : 1;'
+	);
+	const parsedRev = parseInt((revRaw ?? '').toString().trim(), 10);
+	const rev = Number.isFinite(parsedRev) && parsedRev > 0 ? parsedRev : 1;
 	await context.addCookies([
 		{
 			name: 'fazcookie-consent',
@@ -81,7 +93,7 @@ async function seedAcceptAllConsent(context: BrowserContext): Promise<void> {
 				'performance:yes',
 				'uncategorized:yes',
 				'marketing:yes',
-				'rev:1',
+				`rev:${rev}`,
 			].join(','),
 		},
 	]);
