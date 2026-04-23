@@ -37,15 +37,11 @@ const SUITE_DEFAULT = 'en';
 test.describe.serial('Multilingual edge cases', () => {
   let snapshot: LanguagesSnapshot | null = null;
 
-  test.beforeAll(async ({ browser, request }) => {
-    const wpBaseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
-    const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
-    const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';
-
+  test.beforeAll(async ({ browser, request, wpCreds }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await completeAdminLogin(page, wpBaseURL, adminUser, adminPass);
-    await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    await completeAdminLogin(page, wpCreds.baseURL, wpCreds.adminUser, wpCreds.adminPass);
+    await page.goto(`${wpCreds.baseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     snapshot = await setSelectedLanguages(page, SUITE_SELECTED, SUITE_DEFAULT);
     await context.close();
 
@@ -55,21 +51,17 @@ test.describe.serial('Multilingual edge cases', () => {
     // Without this a per-test `goto` can race the regeneration and see a
     // stale config for a handful of ms, which was the exact failure mode
     // observed for the send_vary_header assertion during the first pass.
-    await request.get(wpBaseURL, {
+    await request.get(wpCreds.baseURL, {
       headers: { 'Accept-Language': 'en-US,en;q=0.9' },
     });
   });
 
-  test.afterAll(async ({ browser }) => {
+  test.afterAll(async ({ browser, wpCreds }) => {
     if (!snapshot) return;
-    const wpBaseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
-    const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
-    const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';
-
     const context = await browser.newContext();
     const page = await context.newPage();
-    await completeAdminLogin(page, wpBaseURL, adminUser, adminPass);
-    await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    await completeAdminLogin(page, wpCreds.baseURL, wpCreds.adminUser, wpCreds.adminPass);
+    await page.goto(`${wpCreds.baseURL}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     await restoreLanguages(page, snapshot);
     await context.close();
   });
@@ -128,8 +120,19 @@ test.describe.serial('Multilingual edge cases', () => {
     });
     await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
     await waitForBannerReady(page, 10_000);
-    // Give the async swap a beat to fire if it was going to.
-    await page.waitForTimeout(750);
+    // Deterministic wait: _fazInit() resolves `_fazStore._swapResolved` in
+    // a `finally` block the moment `_fazMaybeSwapLanguage` settles (either
+    // a no-op or a completed fetch+apply). `_fazStore` is an alias of
+    // `window._fazConfig` inside script.js (line 4), so the flag is read
+    // back through `window._fazConfig._swapResolved`. Polling this marker
+    // instead of sleeping ensures slow CI runners can never pass the
+    // assertion by racing an unresolved REST fetch — if the swap fired,
+    // it already populated `bannerFetches` by the time the marker flips.
+    await page.waitForFunction(
+      () => (window as unknown as { _fazConfig?: { _swapResolved?: boolean } })._fazConfig?._swapResolved === true,
+      null,
+      { timeout: 5_000 },
+    );
     expect(bannerFetches, 'no banner REST fetch expected when language already matches').toHaveLength(0);
     await context.close();
   });
