@@ -40,3 +40,13 @@ playwright-report/
 plan.md
 cookie-banner-compliance-checklist.md
 .claude/
+
+# Knowledge graphs (local analysis, not tracked)
+graphify-out/
+.code-review-graph/
+.serena/
+.symdex/
+*.graphml
+*.canvas
+obsidian/
+raw/
