@@ -47,7 +47,33 @@ class Known_Providers {
 			return $cached;
 		}
 		$data = json_decode( $json, true );
-		$cached = is_array( $data ) ? $data : array();
+		if ( ! is_array( $data ) ) {
+			$cached = array();
+			return $cached;
+		}
+
+		// Defensive schema check: drop malformed entries instead of handing
+		// them to callers that assume `category` is a string and `patterns`
+		// is a non-empty array. Without this, a single hand-edited typo in
+		// the JSON would surface as PHP notices deep inside output-buffer
+		// blocking.
+		$cached = array();
+		foreach ( $data as $service_id => $service ) {
+			if (
+				! is_string( $service_id )
+				|| ! is_array( $service )
+				|| empty( $service['category'] )
+				|| ! is_string( $service['category'] )
+				|| empty( $service['patterns'] )
+				|| ! is_array( $service['patterns'] )
+			) {
+				continue;
+			}
+			if ( empty( $service['cookies'] ) || ! is_array( $service['cookies'] ) ) {
+				$service['cookies'] = array();
+			}
+			$cached[ $service_id ] = $service;
+		}
 		return $cached;
 	}
 

@@ -48,5 +48,5 @@ graphify-out/
 .symdex/
 *.graphml
 *.canvas
-obsidian/
-raw/
+/obsidian/
+/raw/

@@ -392,7 +392,7 @@
     },
     "google-recaptcha": {
         "label": "Google reCAPTCHA",
-        "category": "necessary",
+        "category": "functional",
         "patterns": [
             "google.com/recaptcha",
             "gstatic.com/recaptcha",
@@ -1369,7 +1369,7 @@
     },
     "wpforms": {
         "label": "WPForms",
-        "category": "necessary",
+        "category": "functional",
         "patterns": [
             "wpforms-recaptcha",
             "wpforms-hcaptcha"
@@ -1596,7 +1596,7 @@
     },
     "ninja-forms-recaptcha": {
         "label": "Ninja Forms reCAPTCHA",
-        "category": "necessary",
+        "category": "functional",
         "patterns": [
             "nf-google-recaptcha"
         ],

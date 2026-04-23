@@ -29,7 +29,7 @@ Baseline generated on **2026-04-23** via `code-review-graph` MCP
 
 Before editing any of the 3 core classes above, rerun:
 
-```
+```text
 mcp__code-review-graph__get_impact_radius_tool
   changed_files=["frontend/class-frontend.php"]   # or the file you're editing
   max_depth=2
