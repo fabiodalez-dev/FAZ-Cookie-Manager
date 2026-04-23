@@ -115,6 +115,19 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
       });
       expect(Array.isArray(body.shortCodes)).toBe(true);
       expect(Array.isArray(body.categories)).toBe(true);
+      expect(body.categories.length).toBeGreaterThan(0);
+      for (const category of body.categories) {
+        expect(typeof category.slug).toBe('string');
+        expect(category.slug.length).toBeGreaterThan(0);
+        expect(typeof category.name).toBe('string');
+        expect(typeof category.description).toBe('string');
+        expect(typeof category.isNecessary).toBe('boolean');
+        expect(Array.isArray(category.cookies)).toBe(true);
+        expect(category.defaultConsent).toMatchObject({
+          gdpr: expect.any(Boolean),
+          ccpa: expect.any(Boolean),
+        });
+      }
       expect(typeof body.i18n).toBe('object');
       bodies[lang] = body;
     }
@@ -133,6 +146,14 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
     const context = await browser.newContext();
     await emulateNavigatorLanguages(context, [`${target}-XX`, target, SUITE_DEFAULT]);
     const page = await context.newPage();
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', (error) => {
+      pageErrors.push(error.message);
+    });
 
     await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
     // Wait deterministically for the async swap to finish — passing the
@@ -146,6 +167,25 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
     // Core assertion: the JS pipeline picked up the emulated preference
     // and rewrote _fazStore._language to the detected language.
     expect(cfg!._language).toBe(target);
+    expect(cfg!._categories?.length).toBeGreaterThan(0);
+    expect(cfg!._categories?.every((category) => (
+      typeof category.slug === 'string'
+      && category.slug.length > 0
+      && !!category.defaultConsent
+      && typeof category.defaultConsent.gdpr === 'boolean'
+      && typeof category.defaultConsent.ccpa === 'boolean'
+      && Array.isArray(category.cookies)
+    ))).toBe(true);
+    await expect(page.locator('#faz-consent')).toBeVisible();
+    await page.waitForTimeout(500);
+    const fatalRuntimeErrors = [
+      ...pageErrors,
+      ...consoleErrors.filter((text) => (
+        /TypeError|ReferenceError/.test(text)
+        || text.includes('/frontend/js/script')
+      )),
+    ];
+    expect(fatalRuntimeErrors).toEqual([]);
 
     await context.close();
   });
