@@ -425,6 +425,60 @@ if ( ! function_exists( 'faz_i18n_term_language' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_wp_locale' ) ) {
+	/**
+	 * Map a plugin language code (e.g. "de", "pt-br") to a WordPress locale
+	 * (e.g. "de_DE", "pt_BR"). Falls back to the input when no mapping exists.
+	 *
+	 * Single source of truth used both by the REST banner endpoint and the
+	 * initial server-side banner render. Without it the initial render would
+	 * call `__( '...', 'faz-cookie-manager' )` against the WP-installed
+	 * locale (e.g. en_US) even when the plugin's configured default is a
+	 * different language — producing a cached banner template with English
+	 * strings under a `[de]` cache key.
+	 *
+	 * Override via the `faz_wp_locale_from_language` filter.
+	 *
+	 * @param string $lang Plugin language code.
+	 * @return string WordPress locale code.
+	 */
+	function faz_wp_locale( $lang ) {
+		$map = array(
+			'en'    => 'en_US',
+			'it'    => 'it_IT',
+			'de'    => 'de_DE',
+			'fr'    => 'fr_FR',
+			'es'    => 'es_ES',
+			'pt'    => 'pt_PT',
+			'pt-br' => 'pt_BR',
+			'nl'    => 'nl_NL',
+			'pl'    => 'pl_PL',
+			'ru'    => 'ru_RU',
+			'cs'    => 'cs_CZ',
+			'sk'    => 'sk_SK',
+			'hu'    => 'hu_HU',
+			'ro'    => 'ro_RO',
+			'bg'    => 'bg_BG',
+			'hr'    => 'hr',
+			'el'    => 'el',
+			'tr'    => 'tr_TR',
+			'sv'    => 'sv_SE',
+			'no'    => 'nb_NO',
+			'da'    => 'da_DK',
+			'fi'    => 'fi',
+			'zh'    => 'zh_CN',
+			'ja'    => 'ja',
+			'ko'    => 'ko_KR',
+			'ar'    => 'ar',
+			'he'    => 'he_IL',
+			'uk'    => 'uk',
+			'sr'    => 'sr_RS',
+		);
+		$locale = isset( $map[ $lang ] ) ? $map[ $lang ] : $lang;
+		return apply_filters( 'faz_wp_locale_from_language', $locale, $lang );
+	}
+}
+
 if ( ! function_exists( 'faz_clear_banner_template_cache' ) ) {
 	/**
 	 * Clear all banner template cache variants.

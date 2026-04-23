@@ -379,47 +379,14 @@ class Banner_Rest {
 
 	/**
 	 * Convert a plugin language code (e.g. "it", "pt-br") to a WordPress locale
-	 * (e.g. "it_IT", "pt_BR"). Falls back to the input when no mapping exists.
-	 *
-	 * Users can override or extend the mapping via the
-	 * `faz_wp_locale_from_language` filter.
+	 * (e.g. "it_IT", "pt_BR"). Thin wrapper over the shared `faz_wp_locale()`
+	 * helper so both the REST endpoint and the initial server-side banner
+	 * render resolve locales from a single source of truth.
 	 *
 	 * @param string $lang Plugin language code.
 	 * @return string
 	 */
 	protected function language_to_wp_locale( $lang ) {
-		$map = array(
-			'en'    => 'en_US',
-			'it'    => 'it_IT',
-			'de'    => 'de_DE',
-			'fr'    => 'fr_FR',
-			'es'    => 'es_ES',
-			'pt'    => 'pt_PT',
-			'pt-br' => 'pt_BR',
-			'nl'    => 'nl_NL',
-			'pl'    => 'pl_PL',
-			'ru'    => 'ru_RU',
-			'cs'    => 'cs_CZ',
-			'sk'    => 'sk_SK',
-			'hu'    => 'hu_HU',
-			'ro'    => 'ro_RO',
-			'bg'    => 'bg_BG',
-			'hr'    => 'hr',
-			'el'    => 'el',
-			'tr'    => 'tr_TR',
-			'sv'    => 'sv_SE',
-			'no'    => 'nb_NO',
-			'da'    => 'da_DK',
-			'fi'    => 'fi',
-			'zh'    => 'zh_CN',
-			'ja'    => 'ja',
-			'ko'    => 'ko_KR',
-			'ar'    => 'ar',
-			'he'    => 'he_IL',
-			'uk'    => 'uk',
-			'sr'    => 'sr_RS',
-		);
-		$locale = isset( $map[ $lang ] ) ? $map[ $lang ] : $lang;
-		return apply_filters( 'faz_wp_locale_from_language', $locale, $lang );
+		return faz_wp_locale( $lang );
 	}
 }

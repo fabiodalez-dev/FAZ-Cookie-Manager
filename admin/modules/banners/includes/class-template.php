@@ -177,6 +177,20 @@ class Template {
 	 * @return void
 	 */
 	public function generate() {
+		// Switch WP locale to the banner's target language *before* any
+		// `__( '...', 'faz-cookie-manager' )` runs inside prepare_html() or
+		// the shortcode registration below. Without this, a site with WP
+		// locale en_US and faz_settings.languages.default=de would cache a
+		// banner template under the `[de]` key that still contains English
+		// strings like "We value your privacy" — because gettext resolves
+		// against the runtime locale, not the plugin's language setting.
+		// See GitHub issue tracking banner German-only regression.
+		$locale_switched = false;
+		$target_locale   = function_exists( 'faz_wp_locale' ) ? faz_wp_locale( $this->language ) : '';
+		if ( $target_locale && function_exists( 'switch_to_locale' ) && $target_locale !== get_locale() ) {
+			$locale_switched = switch_to_locale( $target_locale );
+		}
+
 		$settings    = isset( $this->properties['settings'] ) ? $this->properties['settings'] : array();
 		$this->id    = isset( $settings['versionID'] ) ? $settings['versionID'] : 'default';
 		$this->type  = isset( $settings['type'] ) ? $settings['type'] : 'box';
@@ -222,6 +236,14 @@ class Template {
 
 		if ( false === $this->is_preview() ) {
 			$this->update();
+		}
+
+		// Pair the earlier switch_to_locale(). Restoring inside generate()
+		// (not in __construct) keeps the scope minimal: only the template
+		// generation path sees the alternate locale, so admin menu strings,
+		// REST responses, etc. are not affected.
+		if ( $locale_switched && function_exists( 'restore_previous_locale' ) ) {
+			restore_previous_locale();
 		}
 	}
 
