@@ -178,6 +178,30 @@ export function resetProviderMatrixState(): void {
   deleteOption('faz_e2e_provider_matrix_hits');
   setOption('faz_e2e_provider_matrix_woo_enabled', 'no');
   setOption('faz_e2e_provider_matrix_custom_enabled', 'no');
+  // Remove stale cookie-DB rows for fixture-emitted cookies. Prior scanner runs
+  // discover these cookies and default them to `uncategorized` — which the
+  // plugin then shreds on any page load where `uncategorized=no`, breaking the
+  // matrix test's expectation that `functional=yes` keeps `_faz_custom_functional`.
+  // The custom fixture scripts (category=functional|performance) are always
+  // re-emitted on demand, so deleting the DB row is safe — it simply lets the
+  // real-time script blocker decide what to do with the cookie based on the
+  // current custom_rule mapping, not the stale auto-discovered category.
+  //
+  // We also invalidate the `cookies` controller cache (serialized into
+  // `_transient_faz_cookies_transient_prefix`) so subsequent page loads don't
+  // re-read the stale row from cache.
+  wpEval(`
+    global $wpdb;
+    $wpdb->query( $wpdb->prepare(
+      "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name IN ( %s, %s )",
+      '_faz_custom_functional',
+      '_faz_custom_provider'
+    ) );
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'category' );
+    }
+  `);
 }
 
 export function enableProviderMatrixWooScenario(): void {
