@@ -898,6 +898,34 @@ class Frontend {
 			: array();
 		$store['_userWhitelist'] = $user_whitelist;
 
+		$whitelisted_cookie_patterns = array();
+		if ( ! empty( $user_whitelist ) ) {
+			foreach ( $known as $service ) {
+				if ( 'necessary' === $service['category'] || empty( $service['cookies'] ) || empty( $service['patterns'] ) ) {
+					continue;
+				}
+				if ( ! in_array( $service['category'], $valid_categories, true ) ) {
+					continue;
+				}
+				$service_whitelisted = false;
+				foreach ( $service['patterns'] as $pattern ) {
+					foreach ( $user_whitelist as $allowed ) {
+						if ( '' !== $allowed && ( false !== stripos( $pattern, $allowed ) || false !== stripos( $allowed, $pattern ) ) ) {
+							$service_whitelisted = true;
+							break 2;
+						}
+					}
+				}
+				if ( ! $service_whitelisted ) {
+					continue;
+				}
+				foreach ( $service['cookies'] as $cookie_pattern ) {
+					$whitelisted_cookie_patterns[] = sanitize_text_field( $cookie_pattern );
+				}
+			}
+		}
+		$store['_whitelistedCookiePatterns'] = array_values( array_unique( $whitelisted_cookie_patterns ) );
+
 		// Cookie-to-category map for client-side cookie cleanup on consent revocation.
 		$cookie_category_map = array();
 		$known_cookies = Known_Providers::get_cookie_map();

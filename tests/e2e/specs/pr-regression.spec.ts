@@ -94,7 +94,7 @@ test.describe('PR #44: i18n cookie save', () => {
         "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name = %s",
         '_faz_test_i18n'
       ) );
-      if ( class_exists( '\\\\FazCookie\\\\Includes\\\\Cache' ) ) {
+      if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
         \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
         \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'category' );
       }

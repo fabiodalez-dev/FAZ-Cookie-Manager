@@ -339,7 +339,11 @@ test.describe('Blocking compliance coverage', () => {
                     const current = readProviderMatrixHits();
                     return expectedHitKeys.every((key) => (current[key] ?? 0) >= 1);
                   },
-                  { timeout: 5_000, message: `Waiting for provider-matrix hits: ${expectedHitKeys.join(', ')}` },
+                  {
+                    intervals: [200, 400, 800],
+                    timeout: 5_000,
+                    message: `Waiting for provider-matrix hits: ${expectedHitKeys.join(', ')}`,
+                  },
                 )
                 .toBe(true);
             } else {

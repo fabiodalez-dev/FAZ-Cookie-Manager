@@ -54,8 +54,11 @@ export async function fazApiPut<T>(page: Page, nonce: string, route: string, dat
 }
 
 export async function fazApiDelete(page: Page, nonce: string, route: string): Promise<{ status: number }> {
-  const response = await page.request.delete(`${WP_BASE}/?rest_route=/faz/v1/${route}`, {
-    headers: { 'X-WP-Nonce': nonce },
+  const response = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/${route}`, {
+    headers: {
+      'X-HTTP-Method-Override': 'DELETE',
+      'X-WP-Nonce': nonce,
+    },
     timeout: API_TIMEOUT_MS,
   });
   return { status: response.status() };

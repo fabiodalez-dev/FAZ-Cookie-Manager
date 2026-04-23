@@ -140,6 +140,23 @@ function parseConsentCookieValue(raw: string): Record<string, string> {
 	}, {});
 }
 
+function clearConsentLogState(): void {
+	wpEval(`
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_consent_logs';
+		$wpdb->query( "DELETE FROM {$table}" );
+		$wpdb->query(
+			"DELETE FROM {$wpdb->options}
+			WHERE option_name LIKE '_transient_faz_consent_%'
+			OR option_name LIKE '_transient_timeout_faz_consent_%'"
+		);
+		if ( function_exists( 'wp_cache_flush' ) ) {
+			wp_cache_flush();
+		}
+		echo 'ok';
+	`);
+}
+
 test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 
 	/* ─────────────────────────────────────────────────────────────────
@@ -251,7 +268,7 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 		const before = await getSettings(page, nonce);
 		const originalConsentLogs = before.consent_logs ?? { status: false };
 
-		wpEval('global $wpdb; $table = $wpdb->prefix . "faz_consent_logs"; $wpdb->query( "DELETE FROM {$table}" ); echo "ok";');
+		clearConsentLogState();
 
 		const visitor = await context.browser()?.newContext({ baseURL: WP_BASE });
 		if (!visitor) throw new Error('Could not create visitor context');
@@ -288,7 +305,7 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 			await updateSettings(page, nonce, {
 				consent_logs: originalConsentLogs,
 			});
-			wpEval('global $wpdb; $table = $wpdb->prefix . "faz_consent_logs"; $wpdb->query( "DELETE FROM {$table}" ); echo "ok";');
+			clearConsentLogState();
 			await visitor.close();
 		}
 	});

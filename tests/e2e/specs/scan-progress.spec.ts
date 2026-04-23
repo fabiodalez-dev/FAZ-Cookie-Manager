@@ -26,9 +26,18 @@ test.describe('Scan progress UI', () => {
 			try { localStorage.removeItem('faz_scan_fingerprint'); } catch (_) {}
 		});
 
-		// Set up response interception — URL uses rest_route query param on dev server.
+		// Set up response interception. Plain permalinks use encoded rest_route;
+		// pretty permalinks use /wp-json/.
 		const discoverPromise = page.waitForResponse(
-			(resp) => resp.url().includes('scans%2Fdiscover') && resp.status() === 200
+			(resp) => {
+				if (resp.status() !== 200) {
+					return false;
+				}
+				const decoded = decodeURIComponent(resp.url());
+				return decoded.includes('rest_route=/faz/v1/scans/discover')
+					|| decoded.includes('/wp-json/faz/v1/scans/discover')
+					|| resp.url().includes('scans%2Fdiscover');
+			}
 		);
 
 		// Open dropdown and click "Standard scan (100 pages)".

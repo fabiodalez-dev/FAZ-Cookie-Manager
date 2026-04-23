@@ -128,6 +128,20 @@ final class Faz_E2E_Provider_Matrix {
 		if ( $lock_fp ) {
 			$locked = @flock( $lock_fp, LOCK_EX );
 		}
+		if ( ! $locked ) {
+			error_log(
+				sprintf(
+					'[faz-e2e-provider-matrix] increment_hit aborted for key "%s"; unable to acquire lock "%s" (%s).',
+					$key,
+					$lock_path,
+					$lock_fp ? 'flock failed' : 'fopen failed'
+				)
+			);
+			if ( $lock_fp ) {
+				@fclose( $lock_fp );
+			}
+			return;
+		}
 
 		$hits = get_option( self::HITS_OPTION, array() );
 		if ( ! is_array( $hits ) ) {

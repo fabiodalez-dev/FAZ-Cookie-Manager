@@ -434,13 +434,6 @@ function _fazSetInitialState() {
         else responseCategories.accepted.push(category.slug);
         ref._fazSetInStore(`${category.slug}`, valueToSet);
     }
-    // Set initial per-service consent (all "no" = blocked before consent, matching category).
-    if (_fazStore._perServiceConsent && _fazStore._services) {
-        _fazStore._services.forEach(function(svc) {
-            var catValue = ref._fazGetFromStore(svc.category);
-            ref._fazSetInStore("svc." + svc.id, catValue || "no");
-        });
-    }
     _fazUnblock();
     _fazFireEvent(responseCategories);
 }
@@ -1035,6 +1028,7 @@ function _fazRemoveDeadCookies({ cookies }) {
     for (const { cookieID, domain } of cookies) {
         // Never delete the plugin's own consent-mechanism cookies.
         if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
+        if (_fazIsCookieWhitelisted(cookieID)) continue;
         if (currentCookieMap[cookieID])
             [domain, ""].forEach((cookieDomain) =>
                 ref._fazSetCookie(cookieID, "", 0, cookieDomain)
@@ -1233,7 +1227,22 @@ function _fazFocusIntoElement(element) {
     var focusTarget = root.querySelector(
         'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
     );
-    if (focusTarget) focusTarget.focus();
+    if (!focusTarget) {
+        if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
+        focusTarget = root;
+    }
+    focusTarget.focus();
+    window.requestAnimationFrame(function () {
+        if (!root.contains(document.activeElement)) focusTarget.focus();
+    });
+    window.setTimeout(function () {
+        if (!root.contains(document.activeElement)) focusTarget.focus();
+    }, 50);
+    [150, 350, 750].forEach(function (delay) {
+        window.setTimeout(function () {
+            if (!root.contains(document.activeElement)) focusTarget.focus();
+        }, delay);
+    });
 }
 
 /**
@@ -1360,6 +1369,7 @@ function _fazAcceptCookies(choice = "all") {
     }
     const activeLaw = _fazGetLaw();
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
+    _fazClearStoredServiceConsent();
 
     ref._fazSetInStore("action", "yes");
     if (activeLaw === 'gdpr') {
@@ -1388,23 +1398,7 @@ function _fazAcceptCookies(choice = "all") {
     }
     // Handle per-service consent.
     if (_fazStore._perServiceConsent && _fazStore._services) {
-        _fazStore._services.forEach(function(svc) {
-            var svcKey = "svc." + svc.id;
-            if (choice === "all") {
-                ref._fazSetInStore(svcKey, "yes");
-            } else if (choice === "reject") {
-                ref._fazSetInStore(svcKey, "no");
-            } else if (choice === "custom") {
-                var svcToggle = document.querySelector('.faz-service-toggle[data-service="' + svc.id + '"]');
-                if (svcToggle) {
-                    ref._fazSetInStore(svcKey, svcToggle.checked ? "yes" : "no");
-                } else {
-                    // No toggle found — follow category consent.
-                    var catConsent = ref._fazGetFromStore(svc.category);
-                    ref._fazSetInStore(svcKey, catConsent || "no");
-                }
-            }
-        });
+        _fazStoreCustomServiceConsent(choice);
     }
 
     // Handle IAB vendor consent.
@@ -1413,6 +1407,41 @@ function _fazAcceptCookies(choice = "all") {
     _fazUnblock();
     _fazFireEvent(responseCategories);
     return true;
+}
+
+function _fazClearStoredServiceConsent() {
+    if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return;
+    var keys = [];
+    ref._fazConsentStore.forEach(function(value, key) {
+        if (typeof key === 'string' && key.indexOf('svc.') === 0) keys.push(key);
+    });
+    keys.forEach(function(key) {
+        ref._fazConsentStore.delete(key);
+    });
+}
+
+function _fazStoreCustomServiceConsent(choice) {
+    if (choice !== "custom") return;
+    var togglesByCategory = {};
+    document.querySelectorAll('.faz-service-toggle[data-service][data-category]').forEach(function(toggle) {
+        var category = toggle.getAttribute('data-category');
+        if (!category) return;
+        if (!togglesByCategory[category]) togglesByCategory[category] = [];
+        togglesByCategory[category].push(toggle);
+    });
+    Object.keys(togglesByCategory).forEach(function(category) {
+        var catConsent = ref._fazGetFromStore(category) || "no";
+        var toggles = togglesByCategory[category];
+        var hasOverride = toggles.some(function(toggle) {
+            return (toggle.checked ? "yes" : "no") !== catConsent;
+        });
+        if (!hasOverride) return;
+        toggles.forEach(function(toggle) {
+            var serviceId = toggle.getAttribute('data-service');
+            if (!serviceId) return;
+            ref._fazSetInStore("svc." + serviceId, toggle.checked ? "yes" : "no");
+        });
+    });
 }
 function _fazSetShowMoreLess() {
     const activeLaw = _fazGetLaw();
@@ -1521,8 +1550,11 @@ document.createElement = (...args) => {
                 return createdElement.getAttribute("src");
             },
             set: function (value) {
-                if (_fazShouldChangeType(createdElement, value))
+                if (_fazShouldChangeType(createdElement, value)) {
                     originalSetAttribute("type", "javascript/blocked");
+                } else if (createdElement.getAttribute("type") === "javascript/blocked") {
+                    originalSetAttribute("type", "text/javascript");
+                }
                 originalSetAttribute("src", value);
                 return true;
             },
@@ -1544,8 +1576,8 @@ document.createElement = (...args) => {
         if (name === "type" || name === "src")
             return (createdElement[name] = value);
         originalSetAttribute(name, value);
-        if (name === "data-fazcookie" && !_fazShouldChangeType(createdElement))
-            originalSetAttribute("type", "text/javascript");
+        if (name === "data-fazcookie")
+            originalSetAttribute("type", _fazShouldChangeType(createdElement) ? "javascript/blocked" : "text/javascript");
     };
     return createdElement;
 };
@@ -2390,6 +2422,7 @@ function _fazCleanupRevokedCookies() {
 
         // Never delete the plugin's own cookies.
         if (protectedCookies.indexOf(cookieName) !== -1) continue;
+        if (_fazIsCookieWhitelisted(cookieName)) continue;
 
         var shouldDelete = false;
 
@@ -2435,6 +2468,15 @@ function _fazCookieNameMatches(name, pattern) {
     var escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
     var regex = new RegExp("^" + escaped + "$");
     return regex.test(name);
+}
+
+function _fazIsCookieWhitelisted(name) {
+    var patterns = _fazStore._whitelistedCookiePatterns;
+    if (!Array.isArray(patterns) || !patterns.length) return false;
+    for (var i = 0; i < patterns.length; i++) {
+        if (typeof patterns[i] === "string" && _fazCookieNameMatches(name, patterns[i])) return true;
+    }
+    return false;
 }
 
 function _fazAttachNoticeStyles() {

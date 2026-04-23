@@ -174,7 +174,11 @@ export function disableLabFlags(): void {
   setOption('faz_e2e_woo_lab_enabled', 'no');
 }
 
-export function resetProviderMatrixState(): void {
+type ProviderMatrixResetOptions = {
+  clearFixtureCustomRules?: boolean;
+};
+
+export function resetProviderMatrixState(options: ProviderMatrixResetOptions = {}): void {
   deleteOption('faz_e2e_provider_matrix_hits');
   setOption('faz_e2e_provider_matrix_woo_enabled', 'no');
   setOption('faz_e2e_provider_matrix_custom_enabled', 'no');
@@ -197,9 +201,23 @@ export function resetProviderMatrixState(): void {
       '_faz_custom_functional',
       '_faz_custom_provider'
     ) );
+    $clear_fixture_custom_rules = ${options.clearFixtureCustomRules ? 'true' : 'false'};
+    $settings = get_option( 'faz_settings', array() );
+    if ( $clear_fixture_custom_rules && is_array( $settings ) && isset( $settings['script_blocking']['custom_rules'] ) && is_array( $settings['script_blocking']['custom_rules'] ) ) {
+      $fixture_patterns = array( 'faz-lab-custom-provider.js', 'faz-lab-custom-functional.js' );
+      $settings['script_blocking']['custom_rules'] = array_values( array_filter(
+        $settings['script_blocking']['custom_rules'],
+        static function ( $rule ) use ( $fixture_patterns ) {
+          $pattern = is_array( $rule ) && isset( $rule['pattern'] ) ? (string) $rule['pattern'] : '';
+          return ! in_array( $pattern, $fixture_patterns, true );
+        }
+      ) );
+      update_option( 'faz_settings', $settings, false );
+    }
     if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
       \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
       \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'category' );
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
     }
   `);
 }
