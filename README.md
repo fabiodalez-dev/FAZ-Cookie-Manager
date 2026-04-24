@@ -486,6 +486,13 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.2
+- **Fix**: GDPR Strict preset "Customize" button (light-blue text on dark-blue background) — the `classic` template CSS had `color: #1863dc` hardcoded instead of reading the preset's `--faz-settings-button-color`, and `border-color` pointed at the text-colour variable instead of its own. Pattern now matches the other template variants.
+- **Fix**: banner invisible on LiteSpeed Guest Mode installs — added the missing `litespeed_optm_gm_js_exc` filter so Guest Mode's separate JS exclude list also recognises our scripts; first-visit paint restored on Guest-Mode-enabled sites.
+- **Fix**: alt-asset mode (`faz-fw` alias) children (`faz-fw-gcm`, `faz-fw-tcf-cmp`, `faz-fw-a11y`) now correctly tagged with the cache-plugin opt-out attributes; 1.13.1 missed them because the handle list was hardcoded.
+- **Fix**: `litespeed_optm_js_delay_inc` scrubbing now path-anchored (`plugins/faz-cookie-manager/`) so third-party integration entries are never collaterally removed.
+- **New**: `faz_auto_exclude_cache_plugins` filter for site admins who want to disable the automatic cache-plugin exclusion block (default `true`).
+
 ### 1.13.1
 - **Auto-exclude FAZ scripts from cache plugins' Delay JS** — LiteSpeed Cache, WP Rocket, Autoptimize, SG Optimizer, Hummingbird, Cloudflare Rocket Loader and W3 Total Cache all default to deferring every JS file until first user interaction, which kept the consent banner dormant on page load and let trackers fire the moment the user scrolled. The plugin now adds `data-no-defer data-no-optimize data-no-minify data-cfasync="false" data-ao-skip` to every FAZ `<script>` and hooks the matching pattern-based exclude filters so admins no longer need to configure a thing.
 

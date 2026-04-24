@@ -266,16 +266,21 @@ test.describe('CodeRabbit PR #79 omnibus', () => {
     await loginAsAdmin(page);
     const nonce = await openAdminSettings(page);
 
-    // (a) Sanity: a native PUT to `?rest_route=…` returns 405 on this
-    //     stack. If this ever stops being true, the override workaround
-    //     is no longer necessary and we can drop it — but until then,
-    //     exercising the raw PUT here documents the reason fazApiPut
-    //     uses POST in the first place.
+    // (a) Sanity: a native PUT to `?rest_route=…` produces a non-2xx
+    //     error on most stacks — nginx rejects with 405 at the
+    //     webserver layer, Apache forwards the request to WP which
+    //     then rejects with 401/403 on auth/permission (the Playwright
+    //     `request` context doesn't carry the admin session). Any of
+    //     those means "the native PUT path is not reliably usable",
+    //     which is the reason `fazApiPut` routes through POST+override
+    //     in the first place. A 2xx would mean the workaround is
+    //     unnecessary on this stack, which is also valid — we let the
+    //     next assertion carry the real signal.
     const rawPut = await request.put(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
       headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
       data: { ping: 'omnibus-raw' },
     });
-    expect([200, 405]).toContain(rawPut.status());
+    expect([200, 401, 403, 405]).toContain(rawPut.status());
 
     // (b) The helper must succeed where the raw PUT could not. Assert
     //     the response shape is { status, data } and that the status is

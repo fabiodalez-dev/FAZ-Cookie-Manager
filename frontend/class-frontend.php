@@ -129,28 +129,44 @@ class Frontend {
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
 
-		// Run *after* `filter_script_loader_tag` (priority 20 > 10) to tag
-		// our own scripts with opt-out hints for cache/optimization plugins.
-		// Consent banners MUST run before third-party trackers, so defer /
-		// delay / combine optimisations on FAZ assets would defeat the whole
-		// plugin (a LiteSpeed-delayed banner appears only after the first
-		// user interaction, by which point ad/analytics scripts released by
-		// the same interaction have already fired).
-		add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
+		// Auto-exclusion from cache/optimization plugins' defer + delay +
+		// combine + minify features. Consent banners MUST run before
+		// third-party trackers, so those optimisations on FAZ assets
+		// would defeat the whole plugin (a LiteSpeed-delayed banner
+		// appears only after the first user interaction, by which point
+		// ad/analytics scripts released by the same interaction have
+		// already fired).
+		//
+		// Opt-out via filter: a site admin deliberately running FAZ
+		// through their cache plugin's JS delay (e.g. for an A/B test)
+		// can disable this block with:
+		//     add_filter( 'faz_auto_exclude_cache_plugins', '__return_false' );
+		if ( apply_filters( 'faz_auto_exclude_cache_plugins', true ) ) {
+			// Run *after* `filter_script_loader_tag` (priority 20 > 10)
+			// so we don't tag a tag we may have already re-typed to
+			// `text/plain`.
+			add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
 
-		// LiteSpeed Cache pattern-based exclude lists (belt-and-suspenders
-		// in case the tag attribute ever gets stripped by a future LS release).
-		add_filter( 'litespeed_optm_js_defer_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
-		add_filter( 'litespeed_optm_js_delay_inc', array( $this, 'litespeed_exclude_own_scripts_from_include' ) );
-		add_filter( 'litespeed_optimize_js_excludes', array( $this, 'litespeed_exclude_own_scripts' ) );
+			// LiteSpeed Cache pattern-based exclude lists
+			// (belt-and-suspenders in case the tag attribute ever gets
+			// stripped by a future LS release).
+			add_filter( 'litespeed_optm_js_defer_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
+			add_filter( 'litespeed_optm_js_delay_inc', array( $this, 'litespeed_exclude_own_scripts_from_include' ) );
+			add_filter( 'litespeed_optimize_js_excludes', array( $this, 'litespeed_exclude_own_scripts' ) );
+			// Guest Mode delays EVERY JS regardless of the regular exclude
+			// lists above — it has its own separate list. Without this our
+			// consent banner stays hidden until the visitor interacts with
+			// the page, which breaks first-visit compliance.
+			add_filter( 'litespeed_optm_gm_js_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
 
-		// WP Rocket exclude helpers — same intent.
-		add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );
-		add_filter( 'rocket_delay_js_exclusions', array( $this, 'rocket_exclude_own_scripts' ) );
-		add_filter( 'rocket_minify_excluded_external_js', array( $this, 'rocket_exclude_own_scripts' ) );
+			// WP Rocket exclude helpers — same intent.
+			add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );
+			add_filter( 'rocket_delay_js_exclusions', array( $this, 'rocket_exclude_own_scripts' ) );
+			add_filter( 'rocket_minify_excluded_external_js', array( $this, 'rocket_exclude_own_scripts' ) );
 
-		// Autoptimize exclude helper.
-		add_filter( 'autoptimize_filter_js_exclude', array( $this, 'autoptimize_exclude_own_scripts' ) );
+			// Autoptimize exclude helper.
+			add_filter( 'autoptimize_filter_js_exclude', array( $this, 'autoptimize_exclude_own_scripts' ) );
+		}
 
 		// WP 5.7+ exposes wp_inline_script_tag for inline scripts added via
 		// wp_add_inline_script(). Using this filter catches them BEFORE the
@@ -2970,26 +2986,38 @@ class Frontend {
 	/**
 	 * Return the list of script handles owned by this plugin.
 	 *
-	 * The handles are derived from `$this->plugin_name` so alternative
-	 * asset paths (`faz-fw`) are handled too. Kept as an instance method
-	 * to stay in sync with whatever base name the bootstrap passes in.
+	 * Detect whether a registered script handle belongs to this plugin.
 	 *
-	 * @return string[]
+	 * Uses prefix matching rather than a hardcoded suffix list so the
+	 * check stays correct when:
+	 *  - the bootstrap passes a different base name (e.g. a rebrand);
+	 *  - the admin enables the "Alternative asset path" mode, which
+	 *    aliases the main handle to `faz-fw` and derives its children
+	 *    as `faz-fw-gcm`, `faz-fw-tcf-cmp`, `faz-fw-a11y`;
+	 *  - a future release registers a new sub-handle (e.g.
+	 *    `faz-cookie-manager-stripe-sdk`) without this helper needing
+	 *    to grow a new entry.
+	 *
+	 * @param string $handle Registered script handle.
+	 * @return bool
 	 */
-	private function get_own_script_handles() {
+	private function is_own_script_handle( $handle ) {
+		if ( ! is_string( $handle ) || '' === $handle ) {
+			return false;
+		}
 		$base = (string) $this->plugin_name;
 		if ( '' === $base ) {
 			$base = 'faz-cookie-manager';
 		}
-		return array(
-			$base,
-			$base . '-gcm',
-			$base . '-tcf-cmp',
-			$base . '-a11y',
-			$base . '-wca',
-			$base . '-microsoft-consent',
-			'faz-fw',
-		);
+		// Match `<base>` and `<base>-*`, plus the alt-asset `faz-fw`
+		// family and its children.
+		if ( $handle === $base || 0 === strpos( $handle, $base . '-' ) ) {
+			return true;
+		}
+		if ( 'faz-fw' === $handle || 0 === strpos( $handle, 'faz-fw-' ) ) {
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -3017,10 +3045,10 @@ class Frontend {
 	 * @return string
 	 */
 	public function tag_own_scripts_nooptimize( $tag, $handle ) {
-		if ( is_admin() || ! is_string( $handle ) || '' === $handle ) {
+		if ( is_admin() ) {
 			return $tag;
 		}
-		if ( ! in_array( $handle, $this->get_own_script_handles(), true ) ) {
+		if ( ! $this->is_own_script_handle( $handle ) ) {
 			return $tag;
 		}
 		$hints = ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"';
@@ -3088,16 +3116,19 @@ class Frontend {
 	 * @return mixed
 	 */
 	public function litespeed_exclude_own_scripts_from_include( $includes ) {
+		// Path-anchored so third-party plugins whose own entry happens
+		// to contain the substring "faz-cookie-manager" (e.g. a companion
+		// plugin named `my-integration-faz-cookie-manager-compat.js`) are
+		// NOT accidentally scrubbed from the admin's include list.
+		$matcher = static function ( $v ) {
+			return is_string( $v ) && false === strpos( $v, 'plugins/faz-cookie-manager/' );
+		};
 		if ( is_array( $includes ) ) {
-			return array_values( array_filter( $includes, static function ( $v ) {
-				return is_string( $v ) && false === strpos( $v, 'faz-cookie-manager' );
-			} ) );
+			return array_values( array_filter( $includes, $matcher ) );
 		}
 		if ( is_string( $includes ) ) {
 			$lines = preg_split( '/[\r\n]+/', $includes );
-			$lines = array_values( array_filter( (array) $lines, static function ( $v ) {
-				return is_string( $v ) && false === strpos( $v, 'faz-cookie-manager' );
-			} ) );
+			$lines = array_values( array_filter( (array) $lines, $matcher ) );
 			return implode( "\n", $lines );
 		}
 		return $includes;

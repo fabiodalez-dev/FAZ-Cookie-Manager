@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.1
+Stable tag: 1.13.2
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,38 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.2 =
+* Fix: GDPR Strict preset "Customize" button unreadable (light-blue text on dark-blue background) — classic template CSS hardcoded `color: #1863dc` instead of reading the preset's `--faz-settings-button-color` variable.
+* Fix: consent banner invisible on LiteSpeed Guest Mode installs — added the missing `litespeed_optm_gm_js_exc` filter so Guest Mode's separate JS exclude list also recognises our scripts.
+* Fix: alt-asset mode (`faz-fw` alias) children (`faz-fw-gcm`, `faz-fw-tcf-cmp`, `faz-fw-a11y`) now correctly tagged with the cache-plugin opt-out attributes.
+* Fix: `litespeed_optm_js_delay_inc` scrubbing now path-anchored (`plugins/faz-cookie-manager/`) so third-party integration entries are never collaterally removed.
+* New: `faz_auto_exclude_cache_plugins` filter for admins who want to disable the automatic cache-plugin exclusion block.
+
+= 1.13.1 =
+* New: auto-exclude FAZ scripts from cache/optimization plugins' Delay JS. Every FAZ `<script>` now carries `data-no-defer`, `data-no-optimize`, `data-no-minify`, `data-cfasync="false"` and `data-ao-skip`, and the matching pattern-based exclude filters are hooked for LiteSpeed Cache, WP Rocket, Autoptimize, SG Optimizer, Hummingbird, Cloudflare Rocket Loader and W3 Total Cache. Fixes the "banner only appears on second tap" reports from publishers using those plugins.
+
+= 1.13.0 =
+* Fix: per-service consent cookie stays under the browser's 4 KB limit (issue #80). Previously a ~160-service install dropped every "Save My Preferences" click because the oversized cookie write was silently discarded.
+* Fix: scanner `discover_urls` places recently-modified pages in the priority bucket (issue #78) so freshly-edited posts aren't skipped by the client-side early-stop threshold.
+* Fix: server-side cookie shredder honours the frontend whitelist on every request, not just the first page load.
+* Fix: whitelist pattern match is unidirectional with a 3-character minimum guard — entering `"js"` or `"com"` no longer whitelists nearly every provider.
+* Fix: preference center focus-retry timers cancelled on close (no more focus theft after rapid open/close).
+* Fix: dynamic scripts preserve their original `type` attribute (`module`, etc.) through the block/unblock round-trip.
+
+= 1.12.1 =
+* Fix: LiteSpeed Cache cookies (`_lscache_vary`, `_litespeed_*`) added to the internal whitelist so they're not shredded by the server-side cookie cleanup.
+
+= 1.12.0 =
+* Security audit: closed all findings from a 20-agent code audit (H2-H5, M1-M28).
+* data: URI blocking — decoded payload matched against provider patterns on both PHP and JS sides.
+* Uppercase HTML tag handling in output buffer guards (`strpos` → `stripos`).
+* Consent logging: throttle fix for empty consent_id, URL credential stripping, UA hashing.
+* TCF/IAB v2.3: `buildConsentArtifacts`, Purpose 1 treatment, euconsent-v2 cleanup.
+* Accessibility: extended focus trap, summary support, localized aria-labels.
+* Performance: `faz_settings` memoized, N+1 queries eliminated, `faz_current_language()` cached.
+* Plugin Check: 0 ERRORS — all escaping, WP_Filesystem, and ABSPATH issues resolved.
+* DB migration 3.4.1: banner table indexes for existing installs.
 
 = 1.11.3 =
 * New: WP 5.7+ `wp_inline_script_tag` filter intercepts inline scripts before the output buffer for cleaner blocking. Backward compatible with WP < 5.7.
