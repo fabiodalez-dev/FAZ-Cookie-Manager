@@ -1,6 +1,7 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
 import { getWpLoginPath } from '../utils/wp-auth';
+import { fazApiPut } from '../utils/faz-api';
 
 /* ─── Helpers ──────────────────────────────────────────────── */
 
@@ -20,22 +21,14 @@ async function getBanner(page: Page, nonce: string, id = 1) {
 }
 
 async function updateBanner(page: Page, nonce: string, id: number, payload: Record<string, unknown>) {
-  // WordPress `?rest_route=...` only routes GET and POST cleanly — native
-  // PUT/DELETE over that query-string form returns 405 on most webservers
-  // (nginx+PHP-FPM, Apache without mod_rewrite tweaks, php -S). The
-  // universally supported workaround is POST + `X-HTTP-Method-Override`
-  // which WP REST parses to the real verb. See
-  // https://developer.wordpress.org/rest-api/using-the-rest-api/global-parameters/#method-override
-  const r = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/banners/${id}`, {
-    headers: {
-      'X-WP-Nonce': nonce,
-      'Content-Type': 'application/json',
-      'X-HTTP-Method-Override': 'PUT',
-    },
-    data: payload,
-  });
-  expect(r.status(), `Banner update failed: ${r.status()}`).toBe(200);
-  return r.json();
+  // Delegate to the shared `fazApiPut` helper, which issues POST with
+  // `X-HTTP-Method-Override: PUT` — native PUT over `?rest_route=…` returns
+  // 405 on several common stacks (php -S, some nginx configs, Apache without
+  // mod_rewrite tweaks). Keeping the override logic in one place prevents
+  // drift with the other REST helpers.
+  const result = await fazApiPut<unknown>(page, nonce, `banners/${id}`, payload);
+  expect(result.status, `Banner update failed: ${result.status}`).toBe(200);
+  return result.data;
 }
 
 /** Open a fresh visitor page (no cookies/session).

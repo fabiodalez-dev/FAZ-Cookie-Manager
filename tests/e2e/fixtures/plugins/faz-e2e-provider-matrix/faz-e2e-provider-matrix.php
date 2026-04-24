@@ -119,7 +119,8 @@ final class Faz_E2E_Provider_Matrix {
 	 * increment is observed.
 	 *
 	 * @param string $key Hit key to increment.
-	 * @return void
+	 * @return int The new count for this key (0 if the lock couldn't be
+	 *             acquired and the increment was skipped).
 	 */
 	private function increment_hit( $key ) {
 		$lock_path = sys_get_temp_dir() . '/faz-e2e-provider-matrix.lock';
@@ -140,7 +141,7 @@ final class Faz_E2E_Provider_Matrix {
 			if ( $lock_fp ) {
 				@fclose( $lock_fp );
 			}
-			return;
+			return 0;
 		}
 
 		$hits = get_option( self::HITS_OPTION, array() );
@@ -149,6 +150,7 @@ final class Faz_E2E_Provider_Matrix {
 		}
 		$hits[ $key ] = isset( $hits[ $key ] ) ? absint( $hits[ $key ] ) + 1 : 1;
 		update_option( self::HITS_OPTION, $hits, false );
+		$new_count = (int) $hits[ $key ];
 
 		if ( $locked && $lock_fp ) {
 			@flock( $lock_fp, LOCK_UN );
@@ -156,6 +158,8 @@ final class Faz_E2E_Provider_Matrix {
 		if ( $lock_fp ) {
 			@fclose( $lock_fp );
 		}
+
+		return $new_count;
 	}
 
 	/**
@@ -165,15 +169,19 @@ final class Faz_E2E_Provider_Matrix {
 	 * @return \WP_REST_Response
 	 */
 	public function collect_hit( $request ) {
-		$path = sanitize_text_field( (string) $request->get_param( 'path' ) );
+		$path      = sanitize_text_field( (string) $request->get_param( 'path' ) );
+		$new_count = 0;
 		if ( '' !== $path ) {
-			$this->increment_hit( $path );
+			// Use the count returned from inside the lock so the response
+			// reflects the value that was actually persisted; a second
+			// `get_option()` here would be outside the critical section and
+			// could read a stale value if another worker races the same path.
+			$new_count = $this->increment_hit( $path );
 		}
 
-		$hits = get_option( self::HITS_OPTION, array() );
 		return new \WP_REST_Response(
 			array(
-				'hits' => is_array( $hits ) && isset( $hits[ $path ] ) ? (int) $hits[ $path ] : 0,
+				'hits' => $new_count,
 				'ok'   => true,
 				'path' => $path,
 			),

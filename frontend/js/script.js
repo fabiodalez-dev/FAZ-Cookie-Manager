@@ -866,6 +866,10 @@ function _fazHidePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
     element && element.classList.remove(_fazGetPreferenceClass());
 
+    // Cancel any in-flight focus retries from the just-closed panel so they
+    // can't steal focus back from the trigger element below.
+    _fazCancelPreferenceFocusRetries();
+
     // ARIA attributes remain always present - only aria-expanded on settings button changes
     // The modal relationship is permanent, only visibility changes
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
@@ -1232,17 +1236,61 @@ function _fazFocusIntoElement(element) {
         focusTarget = root;
     }
     focusTarget.focus();
-    window.requestAnimationFrame(function () {
+
+    // Cancel any pending retries from a previous open/close cycle — otherwise
+    // a late callback from an earlier open can steal focus away from the
+    // restored trigger element after _fazHidePreferenceCenter() already ran.
+    _fazCancelPreferenceFocusRetries();
+    _fazStore._preferenceFocusRetries = { raf: null, timeouts: [] };
+    var tracker = _fazStore._preferenceFocusRetries;
+
+    // Every retry first checks that the panel is still in the open state
+    // (by re-querying the "currently active preference center" via the same
+    // selector the hide path toggles). If closed, the callback is a no-op.
+    var retry = function () {
+        if (!_fazIsPreferenceCenterOpen(root)) return;
         if (!root.contains(document.activeElement)) focusTarget.focus();
+    };
+
+    tracker.raf = window.requestAnimationFrame(retry);
+    [50, 150, 350, 750].forEach(function (delay) {
+        tracker.timeouts.push(window.setTimeout(retry, delay));
     });
-    window.setTimeout(function () {
-        if (!root.contains(document.activeElement)) focusTarget.focus();
-    }, 50);
-    [150, 350, 750].forEach(function (delay) {
-        window.setTimeout(function () {
-            if (!root.contains(document.activeElement)) focusTarget.focus();
-        }, delay);
-    });
+}
+
+/**
+ * Check whether the preference center that owns `root` is still the active
+ * (visible) one. `_fazGetPreferenceCenter()` returns the current wrapper,
+ * and the open-state class is applied to that wrapper by
+ * `_fazShowPreferenceCenter`. If we've since closed, the class is gone and
+ * any in-flight focus retry from the previous open can be discarded.
+ */
+function _fazIsPreferenceCenterOpen(root) {
+    if (!root) return false;
+    var wrapper = _fazGetPreferenceCenter();
+    if (!wrapper) return false;
+    // The retry root may be the inner .faz-preference-center or its wrapper;
+    // check containment in both directions.
+    if (wrapper !== root && !wrapper.contains(root) && !root.contains(wrapper)) {
+        return false;
+    }
+    return wrapper.classList.contains(_fazGetPreferenceClass());
+}
+
+/**
+ * Clear any pending RAF / setTimeout callbacks scheduled by
+ * _fazFocusIntoElement so they can't fire after the panel has been hidden.
+ */
+function _fazCancelPreferenceFocusRetries() {
+    var tracker = _fazStore._preferenceFocusRetries;
+    if (!tracker) return;
+    if (tracker.raf !== null && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(tracker.raf);
+    }
+    if (Array.isArray(tracker.timeouts)) {
+        tracker.timeouts.forEach(function (id) { window.clearTimeout(id); });
+    }
+    _fazStore._preferenceFocusRetries = null;
 }
 
 /**
@@ -1544,6 +1592,28 @@ document.createElement = (...args) => {
     const createdElement = _fazCreateElementBackup.call(document, ...args);
     if (createdElement.nodeName.toLowerCase() !== "script") return createdElement;
     const originalSetAttribute = createdElement.setAttribute.bind(createdElement);
+
+    // Snapshot the original type into data-faz-original-type the first time
+    // we're about to clobber it with "javascript/blocked", so developer-set
+    // values like type="module" can be restored on unblock. If nothing was
+    // saved, fall back to "text/javascript" which matches classic script
+    // semantics. Mirrors the server-side approach used by
+    // _fazBuildRestoredScript / _fazRestoreInlineScript.
+    function rememberOriginalType() {
+        var current = createdElement.getAttribute("type");
+        if (
+            current &&
+            current !== "javascript/blocked" &&
+            !createdElement.getAttribute("data-faz-original-type")
+        ) {
+            originalSetAttribute("data-faz-original-type", current);
+        }
+    }
+    function restoreOriginalType() {
+        var saved = createdElement.getAttribute("data-faz-original-type");
+        originalSetAttribute("type", saved || "text/javascript");
+    }
+
     Object.defineProperties(createdElement, {
         src: {
             get: function () {
@@ -1551,9 +1621,10 @@ document.createElement = (...args) => {
             },
             set: function (value) {
                 if (_fazShouldChangeType(createdElement, value)) {
+                    rememberOriginalType();
                     originalSetAttribute("type", "javascript/blocked");
                 } else if (createdElement.getAttribute("type") === "javascript/blocked") {
-                    originalSetAttribute("type", "text/javascript");
+                    restoreOriginalType();
                 }
                 originalSetAttribute("src", value);
                 return true;
@@ -1564,10 +1635,20 @@ document.createElement = (...args) => {
                 return createdElement.getAttribute("type");
             },
             set: function (value) {
-                value = _fazShouldChangeType(createdElement)
-                    ? "javascript/blocked"
-                    : value;
-                originalSetAttribute("type", value);
+                if (_fazShouldChangeType(createdElement)) {
+                    // Writer's own value is being intercepted — save it as
+                    // the "original" before we substitute the blocked type.
+                    if (
+                        value &&
+                        value !== "javascript/blocked" &&
+                        !createdElement.getAttribute("data-faz-original-type")
+                    ) {
+                        originalSetAttribute("data-faz-original-type", value);
+                    }
+                    originalSetAttribute("type", "javascript/blocked");
+                } else {
+                    originalSetAttribute("type", value);
+                }
                 return true;
             },
         },
@@ -1576,8 +1657,14 @@ document.createElement = (...args) => {
         if (name === "type" || name === "src")
             return (createdElement[name] = value);
         originalSetAttribute(name, value);
-        if (name === "data-fazcookie")
-            originalSetAttribute("type", _fazShouldChangeType(createdElement) ? "javascript/blocked" : "text/javascript");
+        if (name === "data-fazcookie") {
+            if (_fazShouldChangeType(createdElement)) {
+                rememberOriginalType();
+                originalSetAttribute("type", "javascript/blocked");
+            } else {
+                restoreOriginalType();
+            }
+        }
     };
     return createdElement;
 };

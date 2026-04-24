@@ -39,9 +39,15 @@ export async function fazApiPost<T>(page: Page, nonce: string, route: string, da
 }
 
 export async function fazApiPut<T>(page: Page, nonce: string, route: string, data: Record<string, unknown>): Promise<FazApiResponse<T>> {
-  const response = await page.request.put(`${WP_BASE}/?rest_route=/faz/v1/${route}`, {
+  // Mirror `fazApiDelete`: POST + X-HTTP-Method-Override. The
+  // `?rest_route=` endpoint returns 405 on a native PUT under several
+  // common HTTP stacks (php -S, some nginx configs, Apache with certain
+  // mod_rewrite setups). WordPress's REST server honours the override
+  // header transparently, so this path is the portable one.
+  const response = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/${route}`, {
     headers: {
       'Content-Type': 'application/json',
+      'X-HTTP-Method-Override': 'PUT',
       'X-WP-Nonce': nonce,
     },
     data,

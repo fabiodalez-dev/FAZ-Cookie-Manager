@@ -99,9 +99,18 @@ function mergeFixtureCustomRules(currentRules: any[] | undefined): any[] {
 }
 
 function clearConsentLogState(): void {
+	// Table name goes into the query via string interpolation because
+	// `$wpdb->prepare()` has no placeholder for table identifiers. Validate
+	// the computed name against a strict allowlist before the DELETE so any
+	// future refactor that corrupts `$wpdb->prefix` fails loudly instead of
+	// silently running an unexpected query.
 	wpEval(`
 		global $wpdb;
 		$table = $wpdb->prefix . 'faz_consent_logs';
+		if ( ! preg_match( '/^[a-zA-Z0-9_]+$/', $table ) || $table !== $wpdb->prefix . 'faz_consent_logs' ) {
+			echo 'refused: unexpected table name ' . $table;
+			return;
+		}
 		$wpdb->query( "DELETE FROM {$table}" );
 		$wpdb->query(
 			"DELETE FROM {$wpdb->options}

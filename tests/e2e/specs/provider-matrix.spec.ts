@@ -601,7 +601,12 @@ test.describe('Provider matrix scan and blocking', () => {
   test('13. per-service consent can allow Google Analytics while keeping Clarity blocked', async ({ page, browser, loginAsAdmin }) => {
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await getSettings(page, nonce);
-    const revision = String(Math.max(1, Number(original.general?.consent_revision ?? 1)));
+    // Defensive parse: same pattern as inline-script-filter.spec.ts. Without
+    // it, a non-numeric consent_revision (e.g. stringified "abc") produces
+    // rev:NaN in the seeded cookie and the frontend invalidates it, silently
+    // turning this into a first-visit test instead of a returning visitor.
+    const parsedRevision = parseInt(String(original.general?.consent_revision ?? 1).trim(), 10);
+    const revision = String(Number.isFinite(parsedRevision) && parsedRevision > 0 ? parsedRevision : 1);
 
     try {
       await postSettings(page, nonce, {
