@@ -11,6 +11,7 @@ import {
 	setOption,
 	wp,
 } from '../utils/wp-env';
+import { fazApiPut } from '../utils/faz-api';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
 const REPO_ROOT = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
@@ -132,17 +133,12 @@ async function getBanner(page: Page, nonce: string, id = 1): Promise<BannerPaylo
 }
 
 async function updateBanner(page: Page, nonce: string, id: number, payload: BannerPayload) {
-	// `?rest_route=` + PUT returns 405 on nginx/Apache/php -S. POST with
-	// X-HTTP-Method-Override: PUT is the standard WP REST workaround.
-	const response = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/banners/${id}`, {
-		headers: {
-			'Content-Type': 'application/json',
-			'X-WP-Nonce': nonce,
-			'X-HTTP-Method-Override': 'PUT',
-		},
-		data: payload,
-	});
-	expect(response.status()).toBe(200);
+	// Delegate to `fazApiPut`, which already issues POST with
+	// `X-HTTP-Method-Override: PUT` — native PUT over `?rest_route=…`
+	// returns 405 on nginx/Apache/php -S. Keeping the workaround in one
+	// place prevents drift with the other REST helpers.
+	const result = await fazApiPut<unknown>(page, nonce, `banners/${id}`, payload as Record<string, unknown>);
+	expect(result.status).toBe(200);
 }
 
 async function saveBanner(page: Page) {

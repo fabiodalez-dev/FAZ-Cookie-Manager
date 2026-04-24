@@ -434,13 +434,6 @@ function _fazSetInitialState() {
         else responseCategories.accepted.push(category.slug);
         ref._fazSetInStore(`${category.slug}`, valueToSet);
     }
-    // Set initial per-service consent (all "no" = blocked before consent, matching category).
-    if (_fazStore._perServiceConsent && _fazStore._services) {
-        _fazStore._services.forEach(function(svc) {
-            var catValue = ref._fazGetFromStore(svc.category);
-            ref._fazSetInStore("svc." + svc.id, catValue || "no");
-        });
-    }
     _fazUnblock();
     _fazFireEvent(responseCategories);
 }
@@ -873,6 +866,10 @@ function _fazHidePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
     element && element.classList.remove(_fazGetPreferenceClass());
 
+    // Cancel any in-flight focus retries from the just-closed panel so they
+    // can't steal focus back from the trigger element below.
+    _fazCancelPreferenceFocusRetries();
+
     // ARIA attributes remain always present - only aria-expanded on settings button changes
     // The modal relationship is permanent, only visibility changes
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
@@ -1035,6 +1032,7 @@ function _fazRemoveDeadCookies({ cookies }) {
     for (const { cookieID, domain } of cookies) {
         // Never delete the plugin's own consent-mechanism cookies.
         if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
+        if (_fazIsCookieWhitelisted(cookieID)) continue;
         if (currentCookieMap[cookieID])
             [domain, ""].forEach((cookieDomain) =>
                 ref._fazSetCookie(cookieID, "", 0, cookieDomain)
@@ -1233,7 +1231,66 @@ function _fazFocusIntoElement(element) {
     var focusTarget = root.querySelector(
         'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
     );
-    if (focusTarget) focusTarget.focus();
+    if (!focusTarget) {
+        if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '-1');
+        focusTarget = root;
+    }
+    focusTarget.focus();
+
+    // Cancel any pending retries from a previous open/close cycle — otherwise
+    // a late callback from an earlier open can steal focus away from the
+    // restored trigger element after _fazHidePreferenceCenter() already ran.
+    _fazCancelPreferenceFocusRetries();
+    _fazStore._preferenceFocusRetries = { raf: null, timeouts: [] };
+    var tracker = _fazStore._preferenceFocusRetries;
+
+    // Every retry first checks that the panel is still in the open state
+    // (by re-querying the "currently active preference center" via the same
+    // selector the hide path toggles). If closed, the callback is a no-op.
+    var retry = function () {
+        if (!_fazIsPreferenceCenterOpen(root)) return;
+        if (!root.contains(document.activeElement)) focusTarget.focus();
+    };
+
+    tracker.raf = window.requestAnimationFrame(retry);
+    [50, 150, 350, 750].forEach(function (delay) {
+        tracker.timeouts.push(window.setTimeout(retry, delay));
+    });
+}
+
+/**
+ * Check whether the preference center that owns `root` is still the active
+ * (visible) one. `_fazGetPreferenceCenter()` returns the current wrapper,
+ * and the open-state class is applied to that wrapper by
+ * `_fazShowPreferenceCenter`. If we've since closed, the class is gone and
+ * any in-flight focus retry from the previous open can be discarded.
+ */
+function _fazIsPreferenceCenterOpen(root) {
+    if (!root) return false;
+    var wrapper = _fazGetPreferenceCenter();
+    if (!wrapper) return false;
+    // The retry root may be the inner .faz-preference-center or its wrapper;
+    // check containment in both directions.
+    if (wrapper !== root && !wrapper.contains(root) && !root.contains(wrapper)) {
+        return false;
+    }
+    return wrapper.classList.contains(_fazGetPreferenceClass());
+}
+
+/**
+ * Clear any pending RAF / setTimeout callbacks scheduled by
+ * _fazFocusIntoElement so they can't fire after the panel has been hidden.
+ */
+function _fazCancelPreferenceFocusRetries() {
+    var tracker = _fazStore._preferenceFocusRetries;
+    if (!tracker) return;
+    if (tracker.raf !== null && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(tracker.raf);
+    }
+    if (Array.isArray(tracker.timeouts)) {
+        tracker.timeouts.forEach(function (id) { window.clearTimeout(id); });
+    }
+    _fazStore._preferenceFocusRetries = null;
 }
 
 /**
@@ -1360,6 +1417,7 @@ function _fazAcceptCookies(choice = "all") {
     }
     const activeLaw = _fazGetLaw();
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
+    _fazClearStoredServiceConsent();
 
     ref._fazSetInStore("action", "yes");
     if (activeLaw === 'gdpr') {
@@ -1388,23 +1446,7 @@ function _fazAcceptCookies(choice = "all") {
     }
     // Handle per-service consent.
     if (_fazStore._perServiceConsent && _fazStore._services) {
-        _fazStore._services.forEach(function(svc) {
-            var svcKey = "svc." + svc.id;
-            if (choice === "all") {
-                ref._fazSetInStore(svcKey, "yes");
-            } else if (choice === "reject") {
-                ref._fazSetInStore(svcKey, "no");
-            } else if (choice === "custom") {
-                var svcToggle = document.querySelector('.faz-service-toggle[data-service="' + svc.id + '"]');
-                if (svcToggle) {
-                    ref._fazSetInStore(svcKey, svcToggle.checked ? "yes" : "no");
-                } else {
-                    // No toggle found — follow category consent.
-                    var catConsent = ref._fazGetFromStore(svc.category);
-                    ref._fazSetInStore(svcKey, catConsent || "no");
-                }
-            }
-        });
+        _fazStoreCustomServiceConsent(choice);
     }
 
     // Handle IAB vendor consent.
@@ -1413,6 +1455,41 @@ function _fazAcceptCookies(choice = "all") {
     _fazUnblock();
     _fazFireEvent(responseCategories);
     return true;
+}
+
+function _fazClearStoredServiceConsent() {
+    if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return;
+    var keys = [];
+    ref._fazConsentStore.forEach(function(value, key) {
+        if (typeof key === 'string' && key.indexOf('svc.') === 0) keys.push(key);
+    });
+    keys.forEach(function(key) {
+        ref._fazConsentStore.delete(key);
+    });
+}
+
+function _fazStoreCustomServiceConsent(choice) {
+    if (choice !== "custom") return;
+    var togglesByCategory = {};
+    document.querySelectorAll('.faz-service-toggle[data-service][data-category]').forEach(function(toggle) {
+        var category = toggle.getAttribute('data-category');
+        if (!category) return;
+        if (!togglesByCategory[category]) togglesByCategory[category] = [];
+        togglesByCategory[category].push(toggle);
+    });
+    Object.keys(togglesByCategory).forEach(function(category) {
+        var catConsent = ref._fazGetFromStore(category) || "no";
+        var toggles = togglesByCategory[category];
+        var hasOverride = toggles.some(function(toggle) {
+            return (toggle.checked ? "yes" : "no") !== catConsent;
+        });
+        if (!hasOverride) return;
+        toggles.forEach(function(toggle) {
+            var serviceId = toggle.getAttribute('data-service');
+            if (!serviceId) return;
+            ref._fazSetInStore("svc." + serviceId, toggle.checked ? "yes" : "no");
+        });
+    });
 }
 function _fazSetShowMoreLess() {
     const activeLaw = _fazGetLaw();
@@ -1515,14 +1592,40 @@ document.createElement = (...args) => {
     const createdElement = _fazCreateElementBackup.call(document, ...args);
     if (createdElement.nodeName.toLowerCase() !== "script") return createdElement;
     const originalSetAttribute = createdElement.setAttribute.bind(createdElement);
+
+    // Snapshot the original type into data-faz-original-type the first time
+    // we're about to clobber it with "javascript/blocked", so developer-set
+    // values like type="module" can be restored on unblock. If nothing was
+    // saved, fall back to "text/javascript" which matches classic script
+    // semantics. Mirrors the server-side approach used by
+    // _fazBuildRestoredScript / _fazRestoreInlineScript.
+    function rememberOriginalType() {
+        var current = createdElement.getAttribute("type");
+        if (
+            current &&
+            current !== "javascript/blocked" &&
+            !createdElement.getAttribute("data-faz-original-type")
+        ) {
+            originalSetAttribute("data-faz-original-type", current);
+        }
+    }
+    function restoreOriginalType() {
+        var saved = createdElement.getAttribute("data-faz-original-type");
+        originalSetAttribute("type", saved || "text/javascript");
+    }
+
     Object.defineProperties(createdElement, {
         src: {
             get: function () {
                 return createdElement.getAttribute("src");
             },
             set: function (value) {
-                if (_fazShouldChangeType(createdElement, value))
+                if (_fazShouldChangeType(createdElement, value)) {
+                    rememberOriginalType();
                     originalSetAttribute("type", "javascript/blocked");
+                } else if (createdElement.getAttribute("type") === "javascript/blocked") {
+                    restoreOriginalType();
+                }
                 originalSetAttribute("src", value);
                 return true;
             },
@@ -1532,10 +1635,20 @@ document.createElement = (...args) => {
                 return createdElement.getAttribute("type");
             },
             set: function (value) {
-                value = _fazShouldChangeType(createdElement)
-                    ? "javascript/blocked"
-                    : value;
-                originalSetAttribute("type", value);
+                if (_fazShouldChangeType(createdElement)) {
+                    // Writer's own value is being intercepted — save it as
+                    // the "original" before we substitute the blocked type.
+                    if (
+                        value &&
+                        value !== "javascript/blocked" &&
+                        !createdElement.getAttribute("data-faz-original-type")
+                    ) {
+                        originalSetAttribute("data-faz-original-type", value);
+                    }
+                    originalSetAttribute("type", "javascript/blocked");
+                } else {
+                    originalSetAttribute("type", value);
+                }
                 return true;
             },
         },
@@ -1544,8 +1657,14 @@ document.createElement = (...args) => {
         if (name === "type" || name === "src")
             return (createdElement[name] = value);
         originalSetAttribute(name, value);
-        if (name === "data-fazcookie" && !_fazShouldChangeType(createdElement))
-            originalSetAttribute("type", "text/javascript");
+        if (name === "data-fazcookie") {
+            if (_fazShouldChangeType(createdElement)) {
+                rememberOriginalType();
+                originalSetAttribute("type", "javascript/blocked");
+            } else {
+                restoreOriginalType();
+            }
+        }
     };
     return createdElement;
 };
@@ -2390,6 +2509,7 @@ function _fazCleanupRevokedCookies() {
 
         // Never delete the plugin's own cookies.
         if (protectedCookies.indexOf(cookieName) !== -1) continue;
+        if (_fazIsCookieWhitelisted(cookieName)) continue;
 
         var shouldDelete = false;
 
@@ -2435,6 +2555,15 @@ function _fazCookieNameMatches(name, pattern) {
     var escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
     var regex = new RegExp("^" + escaped + "$");
     return regex.test(name);
+}
+
+function _fazIsCookieWhitelisted(name) {
+    var patterns = _fazStore._whitelistedCookiePatterns;
+    if (!Array.isArray(patterns) || !patterns.length) return false;
+    for (var i = 0; i < patterns.length; i++) {
+        if (typeof patterns[i] === "string" && _fazCookieNameMatches(name, patterns[i])) return true;
+    }
+    return false;
 }
 
 function _fazAttachNoticeStyles() {

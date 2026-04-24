@@ -79,7 +79,14 @@ export function deactivatePluginsExcept(allowedSlugs: string[]): void {
   if (extraActive.length === 0) {
     return;
   }
-  wp(['plugin', 'deactivate', ...extraActive]);
+  for (const slug of extraActive) {
+    try {
+      wp(['plugin', 'deactivate', slug]);
+    } catch {
+      // Test teardowns should be resilient when a fixture plugin was already
+      // removed or auto-deactivated earlier in the flow.
+    }
+  }
 }
 
 export function activatePlugins(slugs: string[]): void {
@@ -174,10 +181,52 @@ export function disableLabFlags(): void {
   setOption('faz_e2e_woo_lab_enabled', 'no');
 }
 
-export function resetProviderMatrixState(): void {
+type ProviderMatrixResetOptions = {
+  clearFixtureCustomRules?: boolean;
+};
+
+export function resetProviderMatrixState(options: ProviderMatrixResetOptions = {}): void {
   deleteOption('faz_e2e_provider_matrix_hits');
   setOption('faz_e2e_provider_matrix_woo_enabled', 'no');
   setOption('faz_e2e_provider_matrix_custom_enabled', 'no');
+  // Remove stale cookie-DB rows for fixture-emitted cookies. Prior scanner runs
+  // discover these cookies and default them to `uncategorized` — which the
+  // plugin then shreds on any page load where `uncategorized=no`, breaking the
+  // matrix test's expectation that `functional=yes` keeps `_faz_custom_functional`.
+  // The custom fixture scripts (category=functional|performance) are always
+  // re-emitted on demand, so deleting the DB row is safe — it simply lets the
+  // real-time script blocker decide what to do with the cookie based on the
+  // current custom_rule mapping, not the stale auto-discovered category.
+  //
+  // We also invalidate the `cookies` controller cache (serialized into
+  // `_transient_faz_cookies_transient_prefix`) so subsequent page loads don't
+  // re-read the stale row from cache.
+  wpEval(`
+    global $wpdb;
+    $wpdb->query( $wpdb->prepare(
+      "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name IN ( %s, %s )",
+      '_faz_custom_functional',
+      '_faz_custom_provider'
+    ) );
+    $clear_fixture_custom_rules = ${options.clearFixtureCustomRules ? 'true' : 'false'};
+    $settings = get_option( 'faz_settings', array() );
+    if ( $clear_fixture_custom_rules && is_array( $settings ) && isset( $settings['script_blocking']['custom_rules'] ) && is_array( $settings['script_blocking']['custom_rules'] ) ) {
+      $fixture_patterns = array( 'faz-lab-custom-provider.js', 'faz-lab-custom-functional.js' );
+      $settings['script_blocking']['custom_rules'] = array_values( array_filter(
+        $settings['script_blocking']['custom_rules'],
+        static function ( $rule ) use ( $fixture_patterns ) {
+          $pattern = is_array( $rule ) && isset( $rule['pattern'] ) ? (string) $rule['pattern'] : '';
+          return ! in_array( $pattern, $fixture_patterns, true );
+        }
+      ) );
+      update_option( 'faz_settings', $settings, false );
+    }
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'categories' );
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+    }
+  `);
 }
 
 export function enableProviderMatrixWooScenario(): void {

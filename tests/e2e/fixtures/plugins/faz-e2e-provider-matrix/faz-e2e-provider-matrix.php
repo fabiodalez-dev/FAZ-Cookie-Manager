@@ -98,19 +98,68 @@ final class Faz_E2E_Provider_Matrix {
 		$key  = is_string( $path ) ? substr( $path, strpos( $path, '/faz-e2e-provider-collect/' ) + 25 ) : '';
 		$key  = ltrim( (string) $key, '/' );
 
-		$hits = get_option( self::HITS_OPTION, array() );
-		if ( ! is_array( $hits ) ) {
-			$hits = array();
-		}
-
 		if ( '' !== $key ) {
-			$hits[ $key ] = isset( $hits[ $key ] ) ? absint( $hits[ $key ] ) + 1 : 1;
-			update_option( self::HITS_OPTION, $hits, false );
+			$this->increment_hit( $key );
 		}
 
 		status_header( 204 );
 		header( 'Cache-Control: no-store, max-age=0' );
 		exit;
+	}
+
+	/**
+	 * Atomically increment a hit counter.
+	 *
+	 * On nginx + PHP-FPM several provider scripts fire their collect
+	 * fetches in parallel, so multiple PHP workers race each other on
+	 * `update_option( HITS_OPTION )`. Without a lock the classic
+	 * read-modify-write pattern silently drops increments (worker B's
+	 * read misses worker A's pending write, then B's write clobbers A).
+	 * Use an exclusive file lock to serialise the option update so every
+	 * increment is observed.
+	 *
+	 * @param string $key Hit key to increment.
+	 * @return int The new count for this key (0 if the lock couldn't be
+	 *             acquired and the increment was skipped).
+	 */
+	private function increment_hit( $key ) {
+		$lock_path = sys_get_temp_dir() . '/faz-e2e-provider-matrix.lock';
+		$lock_fp   = @fopen( $lock_path, 'c' );
+		$locked    = false;
+		if ( $lock_fp ) {
+			$locked = @flock( $lock_fp, LOCK_EX );
+		}
+		if ( ! $locked ) {
+			error_log(
+				sprintf(
+					'[faz-e2e-provider-matrix] increment_hit aborted for key "%s"; unable to acquire lock "%s" (%s).',
+					$key,
+					$lock_path,
+					$lock_fp ? 'flock failed' : 'fopen failed'
+				)
+			);
+			if ( $lock_fp ) {
+				@fclose( $lock_fp );
+			}
+			return 0;
+		}
+
+		$hits = get_option( self::HITS_OPTION, array() );
+		if ( ! is_array( $hits ) ) {
+			$hits = array();
+		}
+		$hits[ $key ] = isset( $hits[ $key ] ) ? absint( $hits[ $key ] ) + 1 : 1;
+		update_option( self::HITS_OPTION, $hits, false );
+		$new_count = (int) $hits[ $key ];
+
+		if ( $locked && $lock_fp ) {
+			@flock( $lock_fp, LOCK_UN );
+		}
+		if ( $lock_fp ) {
+			@fclose( $lock_fp );
+		}
+
+		return $new_count;
 	}
 
 	/**
@@ -120,19 +169,19 @@ final class Faz_E2E_Provider_Matrix {
 	 * @return \WP_REST_Response
 	 */
 	public function collect_hit( $request ) {
-		$path = sanitize_text_field( (string) $request->get_param( 'path' ) );
-		$hits = get_option( self::HITS_OPTION, array() );
-
-		if ( ! is_array( $hits ) ) {
-			$hits = array();
+		$path      = sanitize_text_field( (string) $request->get_param( 'path' ) );
+		$new_count = 0;
+		if ( '' !== $path ) {
+			// Use the count returned from inside the lock so the response
+			// reflects the value that was actually persisted; a second
+			// `get_option()` here would be outside the critical section and
+			// could read a stale value if another worker races the same path.
+			$new_count = $this->increment_hit( $path );
 		}
-
-		$hits[ $path ] = isset( $hits[ $path ] ) ? absint( $hits[ $path ] ) + 1 : 1;
-		update_option( self::HITS_OPTION, $hits, false );
 
 		return new \WP_REST_Response(
 			array(
-				'hits' => $hits[ $path ],
+				'hits' => $new_count,
 				'ok'   => true,
 				'path' => $path,
 			),

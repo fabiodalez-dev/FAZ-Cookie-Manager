@@ -516,6 +516,7 @@ test.describe('Provider matrix scan and blocking', () => {
   });
 
   test('09. custom blocking rules can stop an unknown local provider signature', async ({ page, browser, loginAsAdmin }) => {
+    resetProviderMatrixState({ clearFixtureCustomRules: true });
     enableProviderMatrixCustomScenario();
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await getSettings(page, nonce);
@@ -600,6 +601,12 @@ test.describe('Provider matrix scan and blocking', () => {
   test('13. per-service consent can allow Google Analytics while keeping Clarity blocked', async ({ page, browser, loginAsAdmin }) => {
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await getSettings(page, nonce);
+    // Defensive parse: same pattern as inline-script-filter.spec.ts. Without
+    // it, a non-numeric consent_revision (e.g. stringified "abc") produces
+    // rev:NaN in the seeded cookie and the frontend invalidates it, silently
+    // turning this into a first-visit test instead of a returning visitor.
+    const parsedRevision = parseInt(String(original.general?.consent_revision ?? 1).trim(), 10);
+    const revision = String(Number.isFinite(parsedRevision) && parsedRevision > 0 ? parsedRevision : 1);
 
     try {
       await postSettings(page, nonce, {
@@ -612,11 +619,13 @@ test.describe('Provider matrix scan and blocking', () => {
       const visitor = await browser.newContext({ baseURL: WP_BASE });
       try {
         await setConsentCookie(visitor, matrixUrl, {
+          action: 'custom',
           analytics: 'yes',
           consent: 'yes',
           functional: 'no',
           marketing: 'no',
           necessary: 'yes',
+          rev: revision,
           'svc.clarity': 'no',
           'svc.google-analytics': 'yes',
         });

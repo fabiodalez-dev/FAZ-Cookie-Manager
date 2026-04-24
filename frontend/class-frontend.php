@@ -898,6 +898,8 @@ class Frontend {
 			: array();
 		$store['_userWhitelist'] = $user_whitelist;
 
+		$store['_whitelistedCookiePatterns'] = $this->compute_whitelisted_cookie_patterns( $user_whitelist, $valid_categories );
+
 		// Cookie-to-category map for client-side cookie cleanup on consent revocation.
 		$cookie_category_map = array();
 		$known_cookies = Known_Providers::get_cookie_map();
@@ -2178,6 +2180,71 @@ class Frontend {
 	}
 
 	/**
+	 * Build the set of cookie patterns owned by services the user has
+	 * whitelisted (Settings → Script Blocking → whitelist_patterns).
+	 *
+	 * Used both by `get_store_data()` to populate
+	 * `_whitelistedCookiePatterns` for the frontend network interceptors,
+	 * AND by `shred_non_consented_cookies()` so the server-side shredder
+	 * on `send_headers` doesn't delete cookies that the frontend whitelist
+	 * intentionally allows to persist. Keeping a single helper prevents
+	 * the two layers from drifting out of sync.
+	 *
+	 * Matching is intentionally one-directional with a minimum needle
+	 * length: "the service pattern contains the user's whitelist token".
+	 * Short or empty tokens (e.g. the admin pastes "js" or "com") would
+	 * otherwise whitelist practically every provider. The two-pound-three
+	 * minimum matches the behaviour documented for the frontend
+	 * `_fazIsUserWhitelisted()` consumer.
+	 *
+	 * @param string[] $user_whitelist   Sanitised patterns from settings.
+	 * @param string[] $valid_categories Category slugs that exist in this install.
+	 * @return string[] Unique cookie-name patterns to skip on shred/interceptor.
+	 */
+	private function compute_whitelisted_cookie_patterns( $user_whitelist, $valid_categories ) {
+		if ( empty( $user_whitelist ) ) {
+			return array();
+		}
+
+		$patterns = array();
+		$known    = Known_Providers::get_all();
+
+		foreach ( $known as $service ) {
+			if ( 'necessary' === $service['category']
+				|| empty( $service['cookies'] )
+				|| empty( $service['patterns'] )
+			) {
+				continue;
+			}
+			if ( ! in_array( $service['category'], $valid_categories, true ) ) {
+				continue;
+			}
+
+			$service_whitelisted = false;
+			foreach ( $service['patterns'] as $pattern ) {
+				foreach ( $user_whitelist as $allowed ) {
+					if ( '' === $allowed || strlen( $allowed ) < 3 ) {
+						continue;
+					}
+					if ( false !== stripos( $pattern, $allowed ) ) {
+						$service_whitelisted = true;
+						break 2;
+					}
+				}
+			}
+			if ( ! $service_whitelisted ) {
+				continue;
+			}
+
+			foreach ( $service['cookies'] as $cookie_pattern ) {
+				$patterns[] = sanitize_text_field( $cookie_pattern );
+			}
+		}
+
+		return array_values( array_unique( $patterns ) );
+	}
+
+	/**
 	 * Check if a <script> tag (by src or inline content) matches a known provider.
 	 *
 	 * @param string $attrs   The tag's attribute string.
@@ -3190,6 +3257,20 @@ class Frontend {
 		$shared_domain     = ltrim( (string) $this->get_cookie_domain(), '.' );
 		$domain_candidates = array_values( array_unique( array_filter( array( $current_host, $shared_domain ) ) ) );
 
+		// Whitelist short-circuit: cookies belonging to services the admin
+		// has whitelisted (Settings → Script Blocking → whitelist_patterns)
+		// must survive `send_headers` shredding too, otherwise the frontend
+		// whitelist is only honored on the first page load and is silently
+		// neutralized on every subsequent request.
+		$settings                    = $this->get_faz_settings();
+		$user_whitelist              = isset( $settings['script_blocking']['whitelist_patterns'] )
+			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
+			: array();
+		$whitelisted_cookie_patterns = $this->compute_whitelisted_cookie_patterns(
+			$user_whitelist,
+			$this->get_valid_category_slugs()
+		);
+
 		foreach ( array_keys( $_COOKIE ) as $name ) {
 			$should_shred = false;
 
@@ -3209,6 +3290,17 @@ class Frontend {
 				foreach ( $svc_cookie_map as $pattern => $svc_id ) {
 					if ( $this->cookie_name_matches( $name, $pattern ) ) {
 						$should_shred = true;
+						break;
+					}
+				}
+			}
+
+			// Honor the frontend whitelist after category/service decisions:
+			// a whitelisted service overrides both.
+			if ( $should_shred && ! empty( $whitelisted_cookie_patterns ) ) {
+				foreach ( $whitelisted_cookie_patterns as $wl_pattern ) {
+					if ( $this->cookie_name_matches( $name, $wl_pattern ) ) {
+						$should_shred = false;
 						break;
 					}
 				}

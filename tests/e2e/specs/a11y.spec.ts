@@ -20,7 +20,15 @@ test.beforeAll(async () => {
         array('banner_id' => (int) $row->banner_id)
       );
     }
-    delete_option('faz_banner_template');
+    if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+      faz_clear_banner_template_cache();
+    } else {
+      delete_option( 'faz_banner_template' );
+    }
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'banner_template' );
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+    }
   `);
 });
 

@@ -26,10 +26,25 @@ test.describe('Scan progress UI', () => {
 			try { localStorage.removeItem('faz_scan_fingerprint'); } catch (_) {}
 		});
 
-		// Set up response interception — URL uses rest_route query param on dev server.
-		const discoverPromise = page.waitForResponse(
-			(resp) => resp.url().includes('scans%2Fdiscover') && resp.status() === 200
-		);
+		// Set up response interception. Plain permalinks use encoded
+		// `rest_route=`; pretty permalinks use `/wp-json/`. We used to also
+		// reject non-200 responses here, but that buried real error statuses
+		// (409/500/403 on nonce expiry) under a timeout instead of surfacing
+		// them — the predicate now matches on URL shape only, so errors fail
+		// fast with a useful response. `decodeURIComponent` throws on
+		// malformed %-sequences; guard it so one bad URL in the stream
+		// doesn't break the whole wait.
+		const discoverPromise = page.waitForResponse((resp) => {
+			if (resp.request().method() === 'OPTIONS') return false;
+			let decoded = resp.url();
+			try {
+				decoded = decodeURIComponent(decoded);
+			} catch (_e) {
+				// Fallback to the raw URL if it contains a malformed escape.
+			}
+			return decoded.includes('rest_route=/faz/v1/scans/discover')
+				|| decoded.includes('/wp-json/faz/v1/scans/discover');
+		});
 
 		// Open dropdown and click "Standard scan (100 pages)".
 		await page.click('#faz-scan-btn');
