@@ -176,7 +176,15 @@ async function runQuickScan(page: Parameters<typeof openCookiesPage>[0], depth =
   });
 
   const discoverPromise = page.waitForResponse(
-    (response) => response.status() === 200 && decodeUrl(response.url()).includes('rest_route=/faz/v1/scans/discover'),
+    (response) => {
+      if (response.status() !== 200) return false;
+      const decoded = decodeUrl(response.url());
+      // Pretty permalinks emit `/wp-json/faz/v1/scans/discover` while the
+      // legacy plain permalink format emits `?rest_route=/faz/v1/scans/discover`.
+      // Match either so the test is permalink-setup agnostic.
+      return decoded.includes('rest_route=/faz/v1/scans/discover')
+        || decoded.includes('/wp-json/faz/v1/scans/discover');
+    },
   );
 
   await page.locator('#faz-scan-btn').click();

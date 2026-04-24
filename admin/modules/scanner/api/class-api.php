@@ -356,17 +356,34 @@ class Api extends Rest_Controller {
 		$current_fingerprint = $this->controller->get_scan_fingerprint( $max_pages );
 		$incremental         = false;
 
+		// Priority URLs (home + posts modified in the last 7 days) need to be
+		// in both the scan queue AND the `priority_urls` bucket that the
+		// client-side scanner exempts from early stop. If they only land in
+		// the regular `urls` bucket, a freshly-modified page can sit past
+		// position ~20 in the list and be skipped when the early-stop
+		// counter trips. Compute the base once so we don't pay the WP_Query
+		// twice per request.
+		$priority_base = $this->controller->get_priority_urls( $max_pages );
+
 		if ( ! empty( $fingerprint ) && ! empty( $current_fingerprint ) && $fingerprint === $current_fingerprint ) {
 			// Nothing changed — return only priority URLs.
-			$urls        = $this->controller->get_priority_urls( $max_pages );
+			$urls        = $priority_base;
 			$incremental = true;
 		} else {
 			$urls = $this->controller->discover_pages_from_db( $max_pages );
 		}
 
-		// WooCommerce-aware priority URLs (shop, product, cart, checkout, my-account).
-		// These are scanned first and exempt from early stop in the JS scanner.
-		$priority_urls = array_values( array_unique( $this->controller->discover_woocommerce_urls() ) );
+		// WooCommerce-aware priority URLs (shop, product, cart, checkout,
+		// my-account) plus recently-modified posts. These are scanned first
+		// and exempt from early stop in the JS scanner.
+		$priority_urls = array_values(
+			array_unique(
+				array_merge(
+					$priority_base,
+					$this->controller->discover_woocommerce_urls()
+				)
+			)
+		);
 
 		return rest_ensure_response(
 			array(
