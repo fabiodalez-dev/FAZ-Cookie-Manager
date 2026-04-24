@@ -223,7 +223,7 @@ export function resetProviderMatrixState(options: ProviderMatrixResetOptions = {
     }
     if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
       \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
-      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'category' );
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'categories' );
       \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
     }
   `);

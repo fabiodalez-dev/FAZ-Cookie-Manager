@@ -96,7 +96,7 @@ test.describe('PR #44: i18n cookie save', () => {
       ) );
       if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
         \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
-        \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'category' );
+        \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'categories' );
       }
     `);
   });
