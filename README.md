@@ -486,6 +486,15 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.0
+- **Fix (#80)**: per-service consent cookie stays under the browser's 4 KB limit — `_fazSetInStore` omits `svc.<id>` entries whose value matches the category (the frontend loader already falls back to the category when absent). Previously a ~160-service install made every "Save My Preferences" click a no-op because the oversized write was silently dropped.
+- **Fix (#78)**: scanner `discover_urls` places recently-modified pages in `priority_urls` so they're exempt from the client-side early-stop threshold — freshly-edited posts could previously be skipped on large sites.
+- **Fix**: `shred_non_consented_cookies()` honours the frontend whitelist payload (was only respected on the first page load, then neutralized on every `send_headers`).
+- **Fix**: whitelist pattern match is unidirectional with a minimum-length guard — entering `"js"` or `"com"` no longer whitelists nearly every provider.
+- **Fix**: preference center focus-retry timers are cancelled on close (no more focus theft after rapid open/close).
+- **Fix**: dynamic scripts preserve their original `type` (`module`, etc.) through the block/unblock round-trip via `data-faz-original-type`.
+- **Internal**: provider-matrix fixture serialises hit increments under `flock`, `fazApiPut` uses `X-HTTP-Method-Override` for nginx/Apache/php -S portability, permalink-agnostic scanner discover predicate, deduped `get_priority_urls` WP_Query.
+
 ### 1.12.1
 - **Fix**: LiteSpeed Cache cookies (`_lscache_vary`, `_litespeed_*`) added to internal whitelist
 

@@ -2,6 +2,24 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.0] — 2026-04-24
+
+### Fixed
+- **Per-service consent cookie oversized (#80)** — on installs with the default shipped service catalog (~160 services) the `fazcookie-consent` cookie grew to ~5.4 KB URL-encoded, past the 4 KB per-cookie limit every major browser enforces. The browser silently discarded every save, so enabling `banner_control.per_service_consent` effectively made "Save My Preferences" a no-op — the next request always saw the pre-choice snapshot. `_fazSetInStore` now omits `svc.<id>` entries whose value matches the category consent; the frontend loader already falls back to the category when the entry is absent, so the contract is preserved and the cookie stays well under the limit (~1 KB in practice).
+- **Scanner misses freshly-modified pages (#78)** — `discover_urls` now places recently-modified posts (home + posts modified in the last 7 days, the same set returned by `get_priority_urls()`) in the `priority_urls` bucket, which the client-side scanner exempts from early-stop. Previously they landed in the regular `urls` queue and could be skipped when the 20-consecutive-no-findings threshold fired before reaching their position. Also deduplicates the `get_priority_urls()` WP_Query across the incremental and full-scan branches.
+- **Server-side cookie shredder now honours the frontend whitelist** — `shred_non_consented_cookies()` was deleting cookies belonging to whitelisted services on every subsequent `send_headers`, so the `_whitelistedCookiePatterns` frontend payload was only respected on the first page load. Extracted a single-source-of-truth helper (`compute_whitelisted_cookie_patterns`) shared by the frontend store and the server-side shredder.
+- **Whitelist pattern match is unidirectional with a minimum-length guard** — `stripos($pattern, $allowed) || stripos($allowed, $pattern)` previously whitelisted nearly every provider if an admin entered `"js"` or `"com"`. Narrowed to `stripos($pattern, $allowed)` with a three-character minimum on the needle.
+- **Preference center focus retries now stop on close** — the RAF + `setTimeout(50/150/350/750ms)` retry chain queued by `_fazFocusIntoElement` kept running after `_fazHidePreferenceCenter`, occasionally stealing focus back from the restored trigger element. A tracker on `_fazConfig._preferenceFocusRetries` is now cancelled by the hide path.
+- **Dynamic scripts preserve their original `type`** — scripts created with `type="module"` (or any other executable type) were being forced back to `text/javascript` when unblocked. The setters now snapshot the original type into `data-faz-original-type` before writing `javascript/blocked` and restore from it on unblock, mirroring the server-side approach in `_fazBuildRestoredScript` / `_fazRestoreInlineScript`.
+
+### Internal
+- **Provider-matrix fixture serialises hit increments under flock** — parallel PHP-FPM workers were silently dropping increments on the classic `get_option()` → `update_option()` read-modify-write; now wrapped in `flock(LOCK_EX)` with a diagnostic `error_log` when the lock can't be acquired. `increment_hit()` returns the in-lock count to `collect_hit()` so the response `hits` field never reports a stale value.
+- **REST PUT helper uses `X-HTTP-Method-Override`** — `fazApiPut` mirrors `fazApiDelete` (POST + override header) to stay portable across nginx/Apache/php -S where native PUT over `?rest_route=…` returns 405. Duplicated `updateBanner` helpers in spec files consolidated to delegate.
+- **E2E scanner discover predicate is permalink-agnostic** — the `waitForResponse` filter now matches both `?rest_route=/faz/v1/scans/discover` and `/wp-json/faz/v1/scans/discover`, and guards `decodeURIComponent` against malformed percent-escapes.
+- **Scanner API `get_priority_urls` is computed once** per `discover_urls` request instead of twice, removing a redundant WP_Query with `date_query` over every public post type.
+- **Test stability**: `resetProviderMatrixState()` purges stale `_faz_custom_*` cookie rows (and their cache-group transient) so the matrix test's `functional=yes` iteration no longer races the shredder on auto-discovered `uncategorized` entries. PR #44 i18n suite wipes leftover `_faz_test_i18n` rows in `beforeAll`.
+- Omnibus coverage spec pins each of the above fixes at the contract level so regressions surface immediately.
+
 ## [1.12.1] — 2026-04-22
 
 ### Fixed
