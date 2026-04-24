@@ -79,7 +79,14 @@ export function deactivatePluginsExcept(allowedSlugs: string[]): void {
   if (extraActive.length === 0) {
     return;
   }
-  wp(['plugin', 'deactivate', ...extraActive]);
+  for (const slug of extraActive) {
+    try {
+      wp(['plugin', 'deactivate', slug]);
+    } catch {
+      // Test teardowns should be resilient when a fixture plugin was already
+      // removed or auto-deactivated earlier in the flow.
+    }
+  }
 }
 
 export function activatePlugins(slugs: string[]): void {
