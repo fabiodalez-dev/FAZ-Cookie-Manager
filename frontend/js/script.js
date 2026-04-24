@@ -31,10 +31,43 @@ ref._fazGetFromStore = function (key) {
 
 ref._fazSetInStore = function (key, value) {
     ref._fazConsentStore.set(key, value);
-    let cookieStringArray = [];
-    for (const [key, value] of ref._fazConsentStore) {
-        cookieStringArray.push(`${key}:${value}`);
+
+    // Build a service-id → category-slug map so we can skip redundant
+    // `svc.<id>:<category-value>` entries below. On installs with many
+    // registered services (the default shipped catalog has ~160), the
+    // fully-serialized consent cookie can exceed the 4 KB per-cookie
+    // limit enforced by every major browser — at which point the browser
+    // silently discards every subsequent write and the visitor's consent
+    // choices never reach the frontend on reload. Persisting only the
+    // service entries whose value *diverges* from their category keeps
+    // the cookie under the limit while preserving the fallback contract
+    // already used by the frontend (an absent `svc.<id>` entry inherits
+    // the category consent — see `_fazUpdateServiceToggleStates` and
+    // `_fazShouldBlockProvider`).
+    const svcCatMap = {};
+    if (_fazStore && Array.isArray(_fazStore._services)) {
+        _fazStore._services.forEach(function (svc) {
+            if (svc && svc.id) svcCatMap[svc.id] = svc.category;
+        });
     }
+
+    let cookieStringArray = [];
+    for (const [k, v] of ref._fazConsentStore) {
+        if (typeof k === 'string' && k.indexOf('svc.') === 0) {
+            const svcId = k.substring(4);
+            const cat = svcCatMap[svcId];
+            if (cat) {
+                const catValue = ref._fazConsentStore.get(cat);
+                // Category exists in store AND service value matches it —
+                // the entry is redundant, drop it. The frontend loader
+                // already falls back to the category when `svc.<id>` is
+                // absent from the cookie.
+                if (typeof catValue === 'string' && catValue === v) continue;
+            }
+        }
+        cookieStringArray.push(`${k}:${v}`);
+    }
+
     const scriptExpiry =
         _fazStore && _fazStore._expiry
             ? _fazStore._expiry
