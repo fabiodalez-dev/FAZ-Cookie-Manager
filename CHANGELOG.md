@@ -2,6 +2,18 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.2] — 2026-04-24
+
+### Fixed
+- **Alt-asset mode handles now protected from cache-plugin optimisation.** The 1.13.1 `tag_own_scripts_nooptimize` filter used a hardcoded handle list that included `faz-fw` (the main script alias used when "Alternative asset path" is enabled) but not its siblings `faz-fw-gcm`, `faz-fw-tcf-cmp`, `faz-fw-a11y`. On installs running alt-asset mode, those children were silently re-eligible for LiteSpeed / WP Rocket / Autoptimize defer+delay+combine, which undoes the 1.13.1 fix for TCF and GCM specifically. Replaced the hardcoded list with a prefix-matching helper (`is_own_script_handle()`) that covers every handle starting with `$this->plugin_name` or `faz-fw` without needing a manual update when a new handle is added in a future release.
+- **`litespeed_optm_js_delay_inc` scrubbing now path-anchored.** The include-list filter hook was removing any entry containing the literal substring `faz-cookie-manager`, which could collaterally drop a third-party integration entry (e.g. `my-plugin-faz-cookie-manager-compat.js`) the admin had intentionally added. Match now anchored to `plugins/faz-cookie-manager/`, which only matches the plugin's own script paths.
+
+### Added
+- **`faz_auto_exclude_cache_plugins` filter** as an opt-out hatch. Site admins who deliberately want FAZ scripts to go through their cache plugin's JS delay/defer/combine pipelines (e.g. for a performance A/B test) can now disable the whole auto-exclusion block with `add_filter( 'faz_auto_exclude_cache_plugins', '__return_false' );`. Default remains `true` — nothing changes for existing installs.
+
+### Review
+- Post-merge review of PR #83 by internal tooling (CodeRabbit was rate-limited at merge time) flagged these three issues. The WP Rocket regex pattern finding was investigated and determined to be a false positive — WP Rocket wraps exclude patterns with `#...#` delimiters, so the `/` characters in `/wp-content/plugins/faz-cookie-manager/(.*)` are safe.
+
 ## [1.13.1] — 2026-04-24
 
 ### Fixed
