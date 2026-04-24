@@ -500,7 +500,17 @@ test.describe('Blocking compliance coverage', () => {
 
       const parsed = parseConsentCookie(consent!.value);
       expect(parsed.analytics).toBe('yes');
-      expect(parsed['svc.google-analytics']).toBe('yes');
+      // `svc.<id>` entries are stored only when they diverge from the
+      // category consent — the frontend's per-service loader falls back
+      // to the category when an explicit entry is absent (see
+      // `_fazUpdateServiceToggleStates` / `_fazShouldBlockProvider`).
+      // Clarity is explicitly denied inside an accepted category, so it
+      // must be present as `no`; Google Analytics aligns with its
+      // category (`yes`) and may therefore be either explicit `yes` or
+      // omitted, both of which resolve to "allowed" on reload. Keeping
+      // the cookie minimal this way is what lets installs with large
+      // service catalogs stay under the browser's 4 KB cookie limit.
+      expect(['yes', undefined]).toContain(parsed['svc.google-analytics']);
       expect(parsed['svc.clarity']).toBe('no');
 
       const cookieNames = await browserCookieNames(page);
