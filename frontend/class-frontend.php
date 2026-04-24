@@ -153,6 +153,11 @@ class Frontend {
 			add_filter( 'litespeed_optm_js_defer_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
 			add_filter( 'litespeed_optm_js_delay_inc', array( $this, 'litespeed_exclude_own_scripts_from_include' ) );
 			add_filter( 'litespeed_optimize_js_excludes', array( $this, 'litespeed_exclude_own_scripts' ) );
+			// Guest Mode delays EVERY JS regardless of the regular exclude
+			// lists above — it has its own separate list. Without this our
+			// consent banner stays hidden until the visitor interacts with
+			// the page, which breaks first-visit compliance.
+			add_filter( 'litespeed_optm_gm_js_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
 
 			// WP Rocket exclude helpers — same intent.
 			add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );

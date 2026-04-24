@@ -159,9 +159,18 @@ function setDefaultBannerLayout(layout: { position?: string; preferenceCenterTyp
     global $wpdb;
     $layout = json_decode( base64_decode( '${payload}' ), true );
     $table = $wpdb->prefix . 'faz_banners';
+    // Prior test runs can flip `banner_default` off on every row (the
+    // admin "make default" action clears the flag on the previously-
+    // default banner without a replacement guarantee). If no default
+    // banner exists, promote the lowest-id row so this helper stays
+    // idempotent regardless of leftover state.
     $row = $wpdb->get_row( "SELECT banner_id, settings FROM {$table} WHERE banner_default = 1 ORDER BY banner_id ASC LIMIT 1" );
     if ( ! $row ) {
-      throw new Exception( 'Default banner not found.' );
+      $row = $wpdb->get_row( "SELECT banner_id, settings FROM {$table} ORDER BY banner_id ASC LIMIT 1" );
+      if ( ! $row ) {
+        throw new Exception( 'No banner rows found in ' . $table . '.' );
+      }
+      $wpdb->update( $table, array( 'banner_default' => 1 ), array( 'banner_id' => (int) $row->banner_id ), array( '%d' ), array( '%d' ) );
     }
     $settings = json_decode( $row->settings, true );
     if ( ! is_array( $settings ) ) {
