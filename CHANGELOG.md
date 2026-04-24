@@ -2,6 +2,13 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.1] — 2026-04-24
+
+### Fixed
+- **Auto-exclude the plugin's own scripts from cache/optimization plugins.** LiteSpeed Cache's "Delay JS" (and the equivalent feature in WP Rocket / Autoptimize / SG Optimizer / Hummingbird / W3 Total Cache) defaults to holding every JS file back until the first user interaction. For a consent banner this is a critical regression: the banner — and the `document.createElement` interceptor that blocks third-party trackers pre-consent — stays dormant on page load, and when the user finally scrolls/taps, the optimizer releases every deferred script at once, so ad and analytics scripts execute alongside the banner instead of being gated by it. On `fabiodalez.it` this presented as "banner appears only after clicking"; on `gooloo.de` it presented as "ads flow in only on the second tap". Both were the same LiteSpeed delay behaviour, not a plugin bug, but the plugin now opts itself out by default so admins don't have to configure anything.
+  - `script_loader_tag` now adds `data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"` to every `<script>` emitted for a FAZ handle (main, gcm, tcf-cmp, a11y, wca, microsoft-consent, faz-fw). These are the opt-out attributes recognised by LiteSpeed Cache, WP Rocket, Autoptimize, SG Optimizer, Hummingbird, Cloudflare Rocket Loader and W3 Total Cache.
+  - Belt-and-suspenders hooks on `litespeed_optm_js_defer_exc`, `litespeed_optm_js_delay_inc`, `litespeed_optimize_js_excludes`, `rocket_exclude_defer_js`, `rocket_delay_js_exclusions`, `rocket_minify_excluded_external_js`, `autoptimize_filter_js_exclude` add the `plugins/faz-cookie-manager/` path pattern to each plugin's exclude list and scrub our path from LiteSpeed's include-based Delay JS list, covering the case where a future cache-plugin release changes attribute support.
+
 ## [1.13.0] — 2026-04-24
 
 ### Fixed

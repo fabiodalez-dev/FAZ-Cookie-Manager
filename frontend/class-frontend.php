@@ -129,6 +129,29 @@ class Frontend {
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
 
+		// Run *after* `filter_script_loader_tag` (priority 20 > 10) to tag
+		// our own scripts with opt-out hints for cache/optimization plugins.
+		// Consent banners MUST run before third-party trackers, so defer /
+		// delay / combine optimisations on FAZ assets would defeat the whole
+		// plugin (a LiteSpeed-delayed banner appears only after the first
+		// user interaction, by which point ad/analytics scripts released by
+		// the same interaction have already fired).
+		add_filter( 'script_loader_tag', array( $this, 'tag_own_scripts_nooptimize' ), 20, 2 );
+
+		// LiteSpeed Cache pattern-based exclude lists (belt-and-suspenders
+		// in case the tag attribute ever gets stripped by a future LS release).
+		add_filter( 'litespeed_optm_js_defer_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
+		add_filter( 'litespeed_optm_js_delay_inc', array( $this, 'litespeed_exclude_own_scripts_from_include' ) );
+		add_filter( 'litespeed_optimize_js_excludes', array( $this, 'litespeed_exclude_own_scripts' ) );
+
+		// WP Rocket exclude helpers — same intent.
+		add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );
+		add_filter( 'rocket_delay_js_exclusions', array( $this, 'rocket_exclude_own_scripts' ) );
+		add_filter( 'rocket_minify_excluded_external_js', array( $this, 'rocket_exclude_own_scripts' ) );
+
+		// Autoptimize exclude helper.
+		add_filter( 'autoptimize_filter_js_exclude', array( $this, 'autoptimize_exclude_own_scripts' ) );
+
 		// WP 5.7+ exposes wp_inline_script_tag for inline scripts added via
 		// wp_add_inline_script(). Using this filter catches them BEFORE the
 		// output buffer, giving a cleaner block (the browser never sees the
@@ -2944,6 +2967,174 @@ class Frontend {
 	 * @param string $src    Script source URL.
 	 * @return string Modified tag.
 	 */
+	/**
+	 * Return the list of script handles owned by this plugin.
+	 *
+	 * The handles are derived from `$this->plugin_name` so alternative
+	 * asset paths (`faz-fw`) are handled too. Kept as an instance method
+	 * to stay in sync with whatever base name the bootstrap passes in.
+	 *
+	 * @return string[]
+	 */
+	private function get_own_script_handles() {
+		$base = (string) $this->plugin_name;
+		if ( '' === $base ) {
+			$base = 'faz-cookie-manager';
+		}
+		return array(
+			$base,
+			$base . '-gcm',
+			$base . '-tcf-cmp',
+			$base . '-a11y',
+			$base . '-wca',
+			$base . '-microsoft-consent',
+			'faz-fw',
+		);
+	}
+
+	/**
+	 * Inject opt-out hints into our own `<script>` tags so cache /
+	 * optimisation plugins leave them alone. A deferred or delayed
+	 * consent banner defeats the plugin's purpose: the banner (and the
+	 * `_fazCreateElementBackup` interceptor that blocks third-party
+	 * trackers pre-consent) must run at page load, not at first user
+	 * interaction — otherwise ads and analytics scripts released by the
+	 * same interaction get to execute alongside the banner.
+	 *
+	 * The attributes below are recognised by the major plugins:
+	 *   - `data-no-defer`        — LiteSpeed Cache, Hummingbird, SG Optimizer
+	 *   - `data-no-optimize`     — LiteSpeed Cache, WP Rocket, W3 Total Cache
+	 *   - `data-no-minify`       — WP Rocket
+	 *   - `data-cfasync="false"` — Autoptimize, Cloudflare Rocket Loader
+	 *   - `data-ao-skip`         — Autoptimize
+	 *
+	 * Priority 20 ensures this runs after our own `filter_script_loader_tag`
+	 * (priority 10) so we don't tag a script we may have re-typed to
+	 * `text/plain`.
+	 *
+	 * @param string $tag    Full `<script>` tag.
+	 * @param string $handle Registered script handle.
+	 * @return string
+	 */
+	public function tag_own_scripts_nooptimize( $tag, $handle ) {
+		if ( is_admin() || ! is_string( $handle ) || '' === $handle ) {
+			return $tag;
+		}
+		if ( ! in_array( $handle, $this->get_own_script_handles(), true ) ) {
+			return $tag;
+		}
+		$hints = ' data-no-defer="1" data-no-optimize="1" data-no-minify="1" data-cfasync="false" data-ao-skip="1"';
+		// `script_loader_tag` receives the *composite* markup for this
+		// handle — the external `<script src>` PLUS any inline before/after
+		// snippets registered via `wp_add_inline_script()` concatenated in
+		// a single string. Tag every opening `<script>` in the blob
+		// (excluding ones we have already neutralised to `text/plain` or
+		// that already carry the hints from a prior filter pass).
+		$new_tag = preg_replace_callback(
+			'#<script\b([^>]*?)(/?)>#i',
+			function ( $m ) use ( $hints ) {
+				$attrs = $m[1];
+				// Skip blocked scripts and idempotent re-runs.
+				if ( false !== strpos( $attrs, 'type="text/plain"' ) || false !== strpos( $attrs, "type='text/plain'" ) ) {
+					return $m[0];
+				}
+				if ( false !== strpos( $attrs, 'data-no-defer' ) ) {
+					return $m[0];
+				}
+				return '<script' . $attrs . $hints . $m[2] . '>';
+			},
+			$tag
+		);
+		return is_string( $new_tag ) ? $new_tag : $tag;
+	}
+
+	/**
+	 * LiteSpeed Cache filter callback — add our plugin's path fragment
+	 * to whatever exclude list LiteSpeed is assembling (defer / delay /
+	 * generic JS optimize). Pattern-matched against script `src`, so
+	 * `plugins/faz-cookie-manager/` matches every asset the plugin
+	 * enqueues regardless of the registered handle. Used as a fallback
+	 * in case the `data-no-defer` tag attribute ever stops being honoured
+	 * by a future LiteSpeed release.
+	 *
+	 * @param mixed $excludes Pattern list (array or newline-joined string).
+	 * @return mixed
+	 */
+	public function litespeed_exclude_own_scripts( $excludes ) {
+		$pattern = 'plugins/faz-cookie-manager/';
+		if ( is_string( $excludes ) ) {
+			if ( false !== strpos( $excludes, $pattern ) ) {
+				return $excludes;
+			}
+			return trim( $excludes . "\n" . $pattern );
+		}
+		if ( ! is_array( $excludes ) ) {
+			$excludes = array();
+		}
+		if ( ! in_array( $pattern, $excludes, true ) ) {
+			$excludes[] = $pattern;
+		}
+		return $excludes;
+	}
+
+	/**
+	 * LiteSpeed `Delay JS` *include* list: it's the opposite semantic —
+	 * when configured, ONLY listed patterns are delayed. If an admin set
+	 * it, we must make sure our scripts are NOT in it, otherwise we
+	 * would be delayed again. Remove any entry that matches our plugin
+	 * path.
+	 *
+	 * @param mixed $includes Pattern list.
+	 * @return mixed
+	 */
+	public function litespeed_exclude_own_scripts_from_include( $includes ) {
+		if ( is_array( $includes ) ) {
+			return array_values( array_filter( $includes, static function ( $v ) {
+				return is_string( $v ) && false === strpos( $v, 'faz-cookie-manager' );
+			} ) );
+		}
+		if ( is_string( $includes ) ) {
+			$lines = preg_split( '/[\r\n]+/', $includes );
+			$lines = array_values( array_filter( (array) $lines, static function ( $v ) {
+				return is_string( $v ) && false === strpos( $v, 'faz-cookie-manager' );
+			} ) );
+			return implode( "\n", $lines );
+		}
+		return $includes;
+	}
+
+	/**
+	 * WP Rocket exclude callback — same pattern-based approach.
+	 *
+	 * @param array $excludes Existing exclude patterns.
+	 * @return array
+	 */
+	public function rocket_exclude_own_scripts( $excludes ) {
+		if ( ! is_array( $excludes ) ) {
+			$excludes = array();
+		}
+		$pattern = '/wp-content/plugins/faz-cookie-manager/(.*)';
+		if ( ! in_array( $pattern, $excludes, true ) ) {
+			$excludes[] = $pattern;
+		}
+		return $excludes;
+	}
+
+	/**
+	 * Autoptimize exclude callback — accepts a comma-separated string.
+	 *
+	 * @param string $excludes Comma-joined exclusion list.
+	 * @return string
+	 */
+	public function autoptimize_exclude_own_scripts( $excludes ) {
+		$pattern = 'faz-cookie-manager';
+		$excludes = is_string( $excludes ) ? $excludes : '';
+		if ( false !== strpos( $excludes, $pattern ) ) {
+			return $excludes;
+		}
+		return '' === $excludes ? $pattern : rtrim( $excludes, ', ' ) . ', ' . $pattern;
+	}
+
 	public function filter_script_loader_tag( $tag, $handle, $src ) {
 		if ( is_admin() ) {
 			return $tag;
