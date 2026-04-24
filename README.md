@@ -486,6 +486,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.1
+- **Auto-exclude FAZ scripts from cache plugins' Delay JS** — LiteSpeed Cache, WP Rocket, Autoptimize, SG Optimizer, Hummingbird, Cloudflare Rocket Loader and W3 Total Cache all default to deferring every JS file until first user interaction, which kept the consent banner dormant on page load and let trackers fire the moment the user scrolled. The plugin now adds `data-no-defer data-no-optimize data-no-minify data-cfasync="false" data-ao-skip` to every FAZ `<script>` and hooks the matching pattern-based exclude filters so admins no longer need to configure a thing.
+
 ### 1.13.0
 - **Fix (#80)**: per-service consent cookie stays under the browser's 4 KB limit — `_fazSetInStore` omits `svc.<id>` entries whose value matches the category (the frontend loader already falls back to the category when absent). Previously a ~160-service install made every "Save My Preferences" click a no-op because the oversized write was silently dropped.
 - **Fix (#78)**: scanner `discover_urls` places recently-modified pages in `priority_urls` so they're exempt from the client-side early-stop threshold — freshly-edited posts could previously be skipped on large sites.
