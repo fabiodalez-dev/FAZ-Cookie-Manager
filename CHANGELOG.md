@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.4] — 2026-04-26
+
+### Fixed
+- **`wp_localize_script` and translations payloads were left un-tagged on the page.** The 1.13.1/1.13.2/1.13.3 cache opt-out work hooked `script_loader_tag`, which only fires for enqueued `<script src>` blobs (and the before/after inline payloads concatenated with them). The localize payload (`{handle}-js-extra`, e.g. `faz-cookie-manager-a11y-js-extra`) and the translation payload (`{handle}-js-translations`) take a separate code path inside core: `WP_Scripts::print_extra_script()` → `wp_print_inline_script_tag()` → `wp_get_inline_script_tag()`, which applies its own filter — `wp_inline_script_attributes` — to the attributes array before serialising. Without a hook on that filter, those inline tags shipped without the 5 opt-out attrs and a delay-aware optimizer (LiteSpeed Guest Mode in particular) was re-typing them to `type="litespeed/javascript"`. Visible on `fabiodalez.it` for the `faz-cookie-manager-a11y-js-extra` payload during the 1.13.3 live smoke. The localized config is static data, not executable logic, so this never broke the banner — but it left a guarantee gap that the script-tag policy was supposed to close everywhere. Added the missing hook; the fix is additive (no impact on installs that aren't using LiteSpeed Guest Mode).
+
 ## [1.13.3] — 2026-04-26
 
 ### Fixed

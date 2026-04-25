@@ -159,6 +159,16 @@ class Frontend {
 			// the page, which breaks first-visit compliance.
 			add_filter( 'litespeed_optm_gm_js_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
 
+			// `-js-extra` (wp_localize_script payload) and `-js-translations`
+			// inline tags do NOT travel through `script_loader_tag` — they
+			// are emitted by core via `wp_get_inline_script_tag()`, which
+			// reads its attributes from the `wp_inline_script_attributes`
+			// filter. Without this hook those tags reach the page without
+			// our 5 cache opt-out attrs, and a delay-aware optimizer (e.g.
+			// LiteSpeed Guest Mode) re-types them to `litespeed/javascript`,
+			// stranding the localized config until first user interaction.
+			add_filter( 'wp_inline_script_attributes', array( $this, 'tag_own_inline_attributes_nooptimize' ), 10, 2 );
+
 			// WP Rocket exclude helpers — same intent.
 			add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );
 			add_filter( 'rocket_delay_js_exclusions', array( $this, 'rocket_exclude_own_scripts' ) );
@@ -3074,6 +3084,67 @@ class Frontend {
 			$tag
 		);
 		return is_string( $new_tag ) ? $new_tag : $tag;
+	}
+
+	/**
+	 * Inject the cache opt-out hints into core's `wp_get_inline_script_tag()`
+	 * attribute pipeline.
+	 *
+	 * `script_loader_tag` only fires for enqueued `<script src>` blobs (and
+	 * the before/after inlines concatenated with them). The payloads emitted
+	 * by `wp_localize_script()` (`{handle}-js-extra`) and translations
+	 * (`{handle}-js-translations`) take a *different* path: core calls
+	 * `wp_print_inline_script_tag()` → `wp_get_inline_script_tag()`, which
+	 * applies the `wp_inline_script_attributes` filter to its `$attributes`
+	 * array and serialises the result. So those tags never see our
+	 * `tag_own_scripts_nooptimize()` filter and ship without the 5 opt-out
+	 * data-* attrs — leaving them eligible for LiteSpeed Guest Mode delay,
+	 * which strands the localized config under `type="litespeed/javascript"`
+	 * until first user interaction.
+	 *
+	 * The filter signature is `( $attributes, $data )`. We:
+	 *   - require an `id` attribute (every WP inline tag has one);
+	 *   - peel the `-js-extra|-js-translations|-js-before|-js-after` suffix
+	 *     to recover the registered handle;
+	 *   - skip if it isn't ours (`is_own_script_handle`);
+	 *   - skip if another mechanism has already neutralised the tag to
+	 *     `text/plain` (pre-consent blocking path);
+	 *   - else add the same 5 hints `tag_own_scripts_nooptimize` adds.
+	 *
+	 * @param array  $attributes Key-value pairs for the inline `<script>` tag.
+	 * @param string $data       Inline JavaScript content (unused).
+	 * @return array Modified attributes.
+	 */
+	public function tag_own_inline_attributes_nooptimize( $attributes, $data = '' ) { // phpcs:ignore VariableAnalysis.CodeAnalysis.VariableAnalysis.UnusedVariable
+		unset( $data );
+		if ( is_admin() || ! is_array( $attributes ) ) {
+			return $attributes;
+		}
+		$id = isset( $attributes['id'] ) ? (string) $attributes['id'] : '';
+		if ( '' === $id ) {
+			return $attributes;
+		}
+		$handle = preg_replace( '/-js-(extra|translations|before|after)$/', '', $id );
+		if ( $handle === $id || ! is_string( $handle ) ) {
+			// No matching suffix — not a WP-managed inline-script id we own.
+			return $attributes;
+		}
+		if ( ! $this->is_own_script_handle( $handle ) ) {
+			return $attributes;
+		}
+		// Skip if pre-consent blocking has already neutralised the tag.
+		if ( isset( $attributes['type'] ) && 'text/plain' === $attributes['type'] ) {
+			return $attributes;
+		}
+		// Idempotent: don't double-set if a parallel mechanism already added them.
+		if ( ! isset( $attributes['data-no-defer'] ) ) {
+			$attributes['data-no-defer']    = '1';
+			$attributes['data-no-optimize'] = '1';
+			$attributes['data-no-minify']   = '1';
+			$attributes['data-cfasync']     = 'false';
+			$attributes['data-ao-skip']     = '1';
+		}
+		return $attributes;
 	}
 
 	/**

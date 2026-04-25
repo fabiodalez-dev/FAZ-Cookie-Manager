@@ -486,6 +486,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.4
+- **Fix**: `wp_localize_script` / translation payloads (`{handle}-js-extra`, `{handle}-js-translations`) for FAZ scripts now also carry the 5 cache opt-out attrs. Those inline tags don't travel through `script_loader_tag`; added a hook on `wp_inline_script_attributes` (WP 5.7+) so the cache-plugin opt-out applies to them too. Closes a guarantee gap that LiteSpeed Guest Mode was exposing.
+
 ### 1.13.3
 - **Fix**: banner invisible on first paint when LiteSpeed Cache *Delay JS* had a hand-added entry mentioning `faz-cookie-manager` without the full `wp-content/plugins/` prefix — the 1.13.2 path-anchored scrubber was strict-anchored and skipped those entries; 1.13.3 also matches `faz-cookie-manager` as a complete token while still leaving third-party companion names like `my-integration-faz-cookie-manager-compat.js` untouched. Reported by gooloo.de.
 
