@@ -3116,12 +3116,36 @@ class Frontend {
 	 * @return mixed
 	 */
 	public function litespeed_exclude_own_scripts_from_include( $includes ) {
-		// Path-anchored so third-party plugins whose own entry happens
-		// to contain the substring "faz-cookie-manager" (e.g. a companion
-		// plugin named `my-integration-faz-cookie-manager-compat.js`) are
-		// NOT accidentally scrubbed from the admin's include list.
+		// Two-phase match so that entries an admin added by hand (just
+		// the bare token `faz-cookie-manager`, or a relative path like
+		// `faz-cookie-manager/frontend/js/script.min.js` without the
+		// `wp-content/plugins/` prefix) are scrubbed too — that's the
+		// 1.13.0 / 1.13.1 behaviour gooloo.de relied on, and 1.13.2
+		// accidentally regressed by being strictly path-anchored.
+		//
+		// At the same time we keep the post-CodeRabbit guard against
+		// false-positives: a third-party companion entry such as
+		// `my-integration-faz-cookie-manager-compat.js` must NOT be
+		// dropped — `faz-cookie-manager` appears there only as a
+		// substring of a larger token, not as a token of its own.
+		//
+		// Strategy: keep the entry if neither rule fires.
+		//   1. Reject if the entry contains the literal absolute path
+		//      `plugins/faz-cookie-manager/`.
+		//   2. Reject if `faz-cookie-manager` appears as a complete
+		//      token — i.e. preceded by start-of-string / `/` / `=`
+		//      AND followed by end-of-string / `/` / `.`.
 		$matcher = static function ( $v ) {
-			return is_string( $v ) && false === strpos( $v, 'plugins/faz-cookie-manager/' );
+			if ( ! is_string( $v ) ) {
+				return true;
+			}
+			if ( false !== strpos( $v, 'plugins/faz-cookie-manager/' ) ) {
+				return false;
+			}
+			if ( preg_match( '#(^|[/=])faz-cookie-manager($|[/.])#', $v ) ) {
+				return false;
+			}
+			return true;
 		};
 		if ( is_array( $includes ) ) {
 			return array_values( array_filter( $includes, $matcher ) );

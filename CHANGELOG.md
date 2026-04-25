@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.3] — 2026-04-26
+
+### Fixed
+- **Consent banner invisible on first paint when LiteSpeed Cache "Delay JS" had a hand-added entry referencing `faz-cookie-manager` without the full `wp-content/plugins/` prefix.** The 1.13.2 post-review fix (`litespeed_exclude_own_scripts_from_include`) made the scrubber strictly path-anchored to `plugins/faz-cookie-manager/` to stop it from collaterally dropping a third-party companion entry whose name happens to contain `faz-cookie-manager` as a substring. That fix was correct in spirit but too narrow in practice: site admins who had previously added a naked-handle entry like `faz-cookie-manager` or `faz-cookie-manager/frontend/js/script.min.js` (without the `wp-content/plugins/` prefix) to LiteSpeed's *Delay JS Include* list before installing the plugin were silently regressed — those entries were no longer scrubbed, LiteSpeed kept delaying the consent banner's `script.min.js`, and the banner never rendered until the visitor's first interaction. Reproduced and reported on `gooloo.de`. The 1.13.3 matcher uses two phases: keep the path-anchored substring check (so `plugins/faz-cookie-manager/` always wins), AND additionally drop entries where `faz-cookie-manager` appears as a complete token (preceded by start-of-string / `/` / `=` AND followed by end-of-string / `/` / `.`). Third-party companions like `my-integration-faz-cookie-manager-compat.js` still match `faz-cookie-manager` only as an internal substring, so they remain in the admin's list — the original CodeRabbit-flagged regression is NOT re-introduced.
+
 ## [1.13.2] — 2026-04-24
 
 ### Fixed

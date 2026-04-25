@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.2
+Stable tag: 1.13.3
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.3 =
+* Fix: banner invisible on first paint when LiteSpeed Cache "Delay JS" had a hand-added entry mentioning `faz-cookie-manager` without the full `wp-content/plugins/...` prefix. The 1.13.2 path-anchored scrubber was strict-anchored and skipped those entries; 1.13.3 also matches `faz-cookie-manager` as a complete token, while still leaving third-party companion names like `my-integration-faz-cookie-manager-compat.js` untouched. Reported by gooloo.de.
 
 = 1.13.2 =
 * Fix: GDPR Strict preset "Customize" button unreadable (light-blue text on dark-blue background) — classic template CSS hardcoded `color: #1863dc` instead of reading the preset's `--faz-settings-button-color` variable.

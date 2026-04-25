@@ -486,6 +486,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.3
+- **Fix**: banner invisible on first paint when LiteSpeed Cache *Delay JS* had a hand-added entry mentioning `faz-cookie-manager` without the full `wp-content/plugins/` prefix — the 1.13.2 path-anchored scrubber was strict-anchored and skipped those entries; 1.13.3 also matches `faz-cookie-manager` as a complete token while still leaving third-party companion names like `my-integration-faz-cookie-manager-compat.js` untouched. Reported by gooloo.de.
+
 ### 1.13.2
 - **Fix**: GDPR Strict preset "Customize" button (light-blue text on dark-blue background) — the `classic` template CSS had `color: #1863dc` hardcoded instead of reading the preset's `--faz-settings-button-color`, and `border-color` pointed at the text-colour variable instead of its own. Pattern now matches the other template variants.
 - **Fix**: banner invisible on LiteSpeed Guest Mode installs — added the missing `litespeed_optm_gm_js_exc` filter so Guest Mode's separate JS exclude list also recognises our scripts; first-visit paint restored on Guest-Mode-enabled sites.
