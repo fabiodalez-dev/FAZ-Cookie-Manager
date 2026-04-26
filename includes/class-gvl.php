@@ -335,8 +335,20 @@ class Gvl {
 			file_put_contents( $index, "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		}
 
-		$path     = $dir . sanitize_file_name( $filename );
-		$tmp_path = wp_tempnam( basename( $path ), $dir );
+		$path = $dir . sanitize_file_name( $filename );
+		// `wp_tempnam()` lives in wp-admin/includes/file.php which is NOT
+		// auto-loaded on REST requests (only inside the admin screen).
+		// The "Update GVL Now" button in the plugin settings hits a REST
+		// endpoint, so without this the call fatals with
+		// "undefined function FazCookie\Includes\wp_tempnam()" — PHP first
+		// resolves the unqualified name in the current namespace.
+		// The leading `\` forces global lookup so the correct function is
+		// found once the file has been loaded. Reported in issue #85
+		// (vvvamik, WP 6.9.4 + PHP 8.4.17).
+		if ( ! function_exists( 'wp_tempnam' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		$tmp_path = \wp_tempnam( basename( $path ), $dir );
 		if ( ! $tmp_path ) {
 			return false;
 		}

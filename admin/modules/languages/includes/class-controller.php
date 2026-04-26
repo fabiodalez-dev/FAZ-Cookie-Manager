@@ -284,9 +284,17 @@ class Controller {
             wp_mkdir_p( $upload_dir );
         }
 
-        //download file
-        $tmpfile  = download_url( $src, $timeout = 25 );
-        $file     = $upload_dir . basename( $src );
+        // download file — `download_url()` lives in wp-admin/includes/file.php
+        // which is NOT auto-loaded on REST requests (only inside the admin
+        // screen). Without this guard the call fatals with
+        // "undefined function FazCookie\Admin\Modules\...\download_url()"
+        // because PHP resolves the unqualified name in the current namespace
+        // first. Matches the wp_tempnam() defensive pattern in class-gvl.php.
+        if ( ! function_exists( 'download_url' ) ) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+        $tmpfile = \download_url( $src, 25 );
+        $file    = $upload_dir . basename( $src );
 
         //check for errors
         if ( !is_wp_error( $tmpfile ) ) {

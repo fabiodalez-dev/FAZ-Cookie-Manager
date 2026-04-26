@@ -231,9 +231,18 @@ class Placeholder_Builder {
 	 * @return string Minified CSS.
 	 */
 	public static function get_css() {
-		return '.faz-placeholder{position:relative;width:100%;min-height:200px;background:#f5f5f5;border:1px solid #dee2e6;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;margin:16px 0}'
+		return '.faz-placeholder{position:relative;width:100%;min-width:280px;min-height:200px;background:#f5f5f5;border:1px solid #dee2e6;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;margin:16px 0}'
 			. '.faz-placeholder *{box-sizing:border-box}'
-			. '.faz-placeholder--video{aspect-ratio:16/9;min-height:0}'
+			/* `min-height: 200px` (kept from the base rule) is the floor; */
+			/* `aspect-ratio: 16/9` applies on top so the placeholder gets a */
+			/* video-shaped height when its container provides a real width. */
+			/* The previous `min-height: 0` collapsed the placeholder to */
+			/* zero height when the host page-builder wrapper had `width: */
+			/* auto` and no flex/grid context to compute width from (Bricks */
+			/* Builder native Video element wraps the iframe in a flex */
+			/* container that collapses once we replace the iframe with our */
+			/* div). Reported in issue #87. */
+			. '.faz-placeholder--video{aspect-ratio:16/9}'
 			. '.faz-placeholder-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(4px) brightness(.7)}'
 			. '.faz-placeholder .faz-placeholder-overlay{position:relative;z-index:1;text-align:center;padding:32px 24px;color:#495057;max-width:400px}'
 			. '.faz-placeholder--video .faz-placeholder-overlay{color:#fff;background:rgba(0,0,0,.6);border-radius:12px;padding:28px 36px;backdrop-filter:blur(4px)}'
