@@ -188,6 +188,7 @@ function faz_get_consent_cookie_value() {
 		return '';
 	}
 
+	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw cookie is fully sanitized via sanitize_text_field() on the return statement below; the wp_unslash() + rawurldecode() steps must run BEFORE sanitize_text_field() because the cookie is URL-encoded by the JS writer (see _fazSetInStore in frontend/js/script.js).
 	$raw = wp_unslash( (string) $_COOKIE['fazcookie-consent'] );
 	if ( false !== strpos( $raw, '%' ) ) {
 		$raw = rawurldecode( $raw );

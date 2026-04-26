@@ -210,6 +210,7 @@ class Categories_API extends API_Controller {
 			$code = (int) $e->getCode();
 			$http = ( $code >= 400 && $code < 600 ) ? $code : 500;
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- already gated behind WP_DEBUG; this catches an unexpected REST exception path and only writes to the debug log.
 				error_log( sprintf( 'FazCookie bulk error: %s (code: %d)', $e->getMessage(), $code ) );
 			}
 			return new WP_Error( 'fazcookie_bulk_error', __( 'Bulk operation failed.', 'faz-cookie-manager' ), array( 'status' => $http ) );

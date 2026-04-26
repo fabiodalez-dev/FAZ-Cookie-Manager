@@ -320,7 +320,10 @@ class Controller {
 				if ( file_exists( $bundled ) ) {
 					$dest_dir = $this->get_upload_path( 'languages/banners/' );
 					if ( ! @copy( $bundled, $dest_dir . $safe_lang . '.json' ) ) {
-						error_log( 'FazCookie: failed to copy translation file for language ' . $safe_lang );
+						if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+							// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- gated behind WP_DEBUG; non-fatal warning, copy() returning false is rare and worth knowing about during development.
+							error_log( 'FazCookie: failed to copy translation file for language ' . $safe_lang );
+						}
 					}
 				}
 			}
