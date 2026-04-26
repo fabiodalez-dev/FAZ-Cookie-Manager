@@ -486,6 +486,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.5
+- **New**: Matomo (Piwik) blocker template — selectable as an analytics tool in Cookies → Blocker Templates. Covers self-hosted Matomo, Matomo Cloud, and Matomo Tag Manager, plus the full `_pk_*`, `MATOMO_SESSID`, and `mtm_consent*` cookie family. (Matomo was already auto-detected by the runtime script blocker; this just exposes the entry in the admin picker so it's discoverable.)
+
 ### 1.13.4
 - **Fix**: `wp_localize_script` / translation payloads (`{handle}-js-extra`, `{handle}-js-translations`) for FAZ scripts now also carry the 5 cache opt-out attrs. Those inline tags don't travel through `script_loader_tag`; added a hook on `wp_inline_script_attributes` (WP 5.7+) so the cache-plugin opt-out applies to them too. Closes a guarantee gap that LiteSpeed Guest Mode was exposing.
 

@@ -1,0 +1,15 @@
+{
+    "id": "matomo",
+    "name": "Matomo (Piwik)",
+    "description": "Blocks Matomo Analytics (formerly Piwik) — self-hosted and Matomo Cloud — including Matomo Tag Manager. Covers the matomo.js / piwik.js trackers and the matomo.php / piwik.php tracking endpoint.",
+    "category": "analytics",
+    "patterns": [
+        "matomo.js",
+        "piwik.js",
+        "matomo.php",
+        "piwik.php",
+        "cdn.matomo.cloud/container_",
+        "MatomoTagManager"
+    ],
+    "cookies": ["_pk_id.*", "_pk_ses.*", "_pk_ref.*", "_pk_cvar.*", "_pk_hsr.*", "_pk_testcookie.*", "_pk_uid", "MATOMO_SESSID", "mtm_consent", "mtm_consent_removed", "mtm_cookie_consent"]
+}

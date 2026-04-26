@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.5] — 2026-04-26
+
+### Added
+- **Matomo (Piwik) blocker template.** A user on a fresh 1.13.4 install asked for Matomo to be selectable as an analytics tool in the blocker-templates picker. Matomo's tracker was already auto-detected by the script blocker (via `Known_Providers`) and its cookies were already auto-categorised as analytics (via `Known_Providers` + Open Cookie Database), so the privacy contract was never broken — but the template wasn't visible in the admin's "select an analytics tool to block" picker, which made the integration discovery-unfriendly. Added `admin/modules/cookies/includes/blocker-templates/matomo.json`. The new entry covers self-hosted Matomo and Matomo Cloud, including Matomo Tag Manager, the legacy Piwik names, the `matomo.php` / `piwik.php` tracking endpoint, and the full `_pk_*`, `MATOMO_SESSID`, `mtm_consent*` cookie family. The blocker templates list grows from 10 to 11 (`F21: blocker templates REST endpoint returns 10+ templates` continues to pass).
+
 ## [1.13.4] — 2026-04-26
 
 ### Fixed

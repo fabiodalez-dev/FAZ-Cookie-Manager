@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.4
+Stable tag: 1.13.5
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.5 =
+* New: Matomo (formerly Piwik) is now available as a blocker template in Cookies → Blocker Templates. Covers self-hosted and Matomo Cloud, including Matomo Tag Manager, the matomo.js / piwik.js trackers, the matomo.php / piwik.php tracking endpoint, and all `_pk_*`, `MATOMO_SESSID`, and `mtm_consent*` cookies. Requested by a user on the back of a successful 1.13.4 install.
 
 = 1.13.4 =
 * Fix: `wp_localize_script` payloads (`{handle}-js-extra`) and translation tags (`{handle}-js-translations`) for FAZ scripts now also carry the 5 cache opt-out attributes. Those inline tags do not travel through `script_loader_tag` so the 1.13.1 / 1.13.2 / 1.13.3 attribute injection missed them, and a delay-aware optimizer (LiteSpeed Guest Mode in particular) re-typed them to `litespeed/javascript`. Added a hook on `wp_inline_script_attributes` (WP 5.7+) that recognises our handle prefix and injects the same 5 hints.
