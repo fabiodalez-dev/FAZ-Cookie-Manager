@@ -152,7 +152,17 @@ test.describe.serial('v1.7.0 deep flows', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
 
     const templates = page.locator('#faz-blocker-templates > button');
-    const googleAnalyticsCard = templates.filter({ hasText: 'Google Analytics' });
+    // Anchor on the card *name* element (`.faz-template-card-name`) so we
+    // match only the canonical "Google Analytics" template — not other
+    // Google-* templates whose auto-generated description happens to
+    // contain the substring "google analytics" case-insensitively (e.g.
+    // Site Kit by Google → "Blocks Site Kit by Google analytics tracking…").
+    // Playwright's `hasText` is a case-insensitive substring match by
+    // default; switching to a regex with a `$`-anchored, name-only locator
+    // gives the exact match the test originally intended.
+    const googleAnalyticsCard = templates.filter({
+      has: page.locator('.faz-template-card-name', { hasText: /^Google Analytics$/ }),
+    });
 
     await expect(googleAnalyticsCard).toHaveCount(1);
     await expect(googleAnalyticsCard).toBeVisible();
