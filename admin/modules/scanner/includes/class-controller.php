@@ -1268,11 +1268,10 @@ class Controller {
 		$post_types_values = array_values( $post_types );
 		$placeholders      = implode( ',', array_fill( 0, count( $post_types_values ), '%s' ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- {$wpdb->posts} is the WP-core posts table; {$placeholders} is a server-built string of "%s,%s,..." matching count($post_types_values), all bound by prepare(). Scanner fingerprint must reflect live post state, so caching defeats its purpose.
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- dynamic placeholder count
-				"SELECT COUNT(*) as cnt, MAX(post_modified_gmt) as latest FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ({$placeholders})",
+				"SELECT COUNT(*) as cnt, MAX(post_modified_gmt) as latest FROM {$wpdb->posts} WHERE post_status = 'publish' AND post_type IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 				$post_types_values
 			)
 		);

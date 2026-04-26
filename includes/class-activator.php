@@ -583,7 +583,9 @@ class Activator {
 		}
 		global $wpdb;
 		$table = $wpdb->prefix . 'faz_cookie_categories';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path; result is meaningful only at this moment and must not be cached.
 		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) === $table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot data migration write to the plugin's custom `faz_cookie_categories` table; runs only on activation and is invalidated by Cache::invalidate_cache_group when the controller next reads the row.
 			$wpdb->update(
 				$table,
 				array( 'prior_consent' => 0 ),
@@ -605,10 +607,11 @@ class Activator {
 		}
 		global $wpdb;
 		$table = $wpdb->prefix . 'faz_banners';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
 		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) !== $table ) {
 			return;
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is $wpdb->prefix constant.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_banners" (escaped via esc_sql); one-time read inside the activation/upgrade migration runner — caching would defeat the purpose.
 		$rows = $wpdb->get_results( "SELECT banner_id, settings FROM `" . esc_sql( $table ) . "`" );
 		foreach ( $rows as $row ) {
 			$settings = json_decode( $row->settings, true );
@@ -629,6 +632,7 @@ class Activator {
 				$changed = true;
 			}
 			if ( $changed ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to the custom faz_banners table; row identifier is the integer banner_id we just selected, value is JSON-encoded with `%s`. Cache is invalidated below by faz_clear_banner_template_cache().
 				$wpdb->update(
 					$table,
 					array( 'settings' => wp_json_encode( $settings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ),
@@ -657,10 +661,11 @@ class Activator {
 		}
 		global $wpdb;
 		$table = $wpdb->prefix . 'faz_banners';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
 		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) !== $table ) {
 			return;
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table is $wpdb->prefix constant.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_banners" (escaped via esc_sql); one-time read inside an activation-only migration that rewrites a stored URL prefix.
 		$rows = $wpdb->get_results( "SELECT banner_id, settings FROM `" . esc_sql( $table ) . "`" );
 		$old_suffix = '/faz-cookie-manager/cookie.png';
 		$new_suffix = '/faz-cookie-manager/frontend/images/cookie.png';
@@ -678,6 +683,7 @@ class Activator {
 					$new_suffix,
 					$url
 				);
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to the custom faz_banners table; banner_id comes from the SELECT just above. Cache invalidated by faz_clear_banner_template_cache() at the end of this function.
 				$wpdb->update(
 					$table,
 					array( 'settings' => wp_json_encode( $settings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ),
@@ -713,16 +719,20 @@ class Activator {
 
 		global $wpdb;
 		$table   = $wpdb->prefix . 'faz_cookie_categories';
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (no user input); slug is bound via prepare(%s); one-shot migration query.
 		$old_id  = $wpdb->get_var( $wpdb->prepare( "SELECT category_id FROM {$table} WHERE slug = %s LIMIT 1", 'advertisement' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- same as above.
 		$new_id  = $wpdb->get_var( $wpdb->prepare( "SELECT category_id FROM {$table} WHERE slug = %s LIMIT 1", 'marketing' ) );
 
 		// 1. Rename or merge category slug.
 		if ( $old_id && ! $new_id ) {
 			// Simple rename.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write; slug literal, table is plugin-prefix.
 			$wpdb->update( $table, array( 'slug' => 'marketing' ), array( 'slug' => 'advertisement' ) );
 		} elseif ( $old_id && $new_id ) {
 			// Both exist — reassign cookies from old to new, then delete legacy row.
 			$cookies_table = $wpdb->prefix . 'faz_cookies';
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write; both old_id and new_id come from SELECTs above, $cookies_table is prefix+literal.
 			$updated = $wpdb->update(
 				$cookies_table,
 				array( 'category' => (int) $new_id ),
@@ -734,6 +744,7 @@ class Activator {
 				// Update failed — abort to avoid orphaning cookies.
 				return;
 			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration delete; category_id from SELECT.
 			$deleted = $wpdb->delete( $table, array( 'category_id' => (int) $old_id ), array( '%d' ) );
 			if ( false === $deleted ) {
 				return;
@@ -741,6 +752,7 @@ class Activator {
 		}
 
 		// 2. Fix display name: rename "Advertisement" → "Marketing" in all languages.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal; slug is bound via prepare(%s); migration-only read.
 		$name_json = $wpdb->get_var( $wpdb->prepare( "SELECT name FROM {$table} WHERE slug = %s LIMIT 1", 'marketing' ) );
 		if ( $name_json ) {
 			$names = json_decode( $name_json, true );
@@ -753,6 +765,7 @@ class Activator {
 					}
 				}
 				if ( $changed ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write; values JSON-encoded.
 					$wpdb->update( $table, array( 'name' => wp_json_encode( $names ) ), array( 'slug' => 'marketing' ) );
 				}
 			}
@@ -828,6 +841,7 @@ class Activator {
 
 		// Get detected cookie domains from the database.
 		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot read of cookie domains during the post-scan IAB-vendor coverage check; values change on every scan so caching would mask the answer.
 		$detected_domains = $wpdb->get_col(
 			"SELECT DISTINCT domain FROM {$wpdb->prefix}faz_cookies WHERE domain != '' AND discovered = 1"
 		);

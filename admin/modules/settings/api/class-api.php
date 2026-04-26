@@ -541,8 +541,9 @@ class Api extends Rest_Controller {
 		}
 
 		// Banners.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Settings export endpoint; $wpdb->prefix + literal plugin table, no user input. Export is one-shot — caching irrelevant.
 		$banners = $wpdb->get_results(
-			"SELECT * FROM {$wpdb->prefix}faz_banners", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			"SELECT * FROM {$wpdb->prefix}faz_banners",
 			ARRAY_A
 		);
 		if ( is_array( $banners ) ) {
@@ -558,8 +559,9 @@ class Api extends Rest_Controller {
 		}
 
 		// Cookie categories.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Settings export endpoint; $wpdb->prefix + literal plugin table, no user input.
 		$categories = $wpdb->get_results(
-			"SELECT * FROM {$wpdb->prefix}faz_cookie_categories", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			"SELECT * FROM {$wpdb->prefix}faz_cookie_categories",
 			ARRAY_A
 		);
 		if ( is_array( $categories ) ) {
@@ -580,8 +582,9 @@ class Api extends Rest_Controller {
 
 		// Cookies — decode JSON fields so they export as structured data
 		// (matching categories above) and avoid double-encoding on re-import.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Settings export endpoint; $wpdb->prefix + literal plugin table, no user input.
 		$cookies = $wpdb->get_results(
-			"SELECT * FROM {$wpdb->prefix}faz_cookies", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			"SELECT * FROM {$wpdb->prefix}faz_cookies",
 			ARRAY_A
 		);
 		if ( is_array( $cookies ) ) {
@@ -666,6 +669,7 @@ class Api extends Rest_Controller {
 				if ( ! $banner_id ) {
 					continue;
 				}
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $banner_id absint()-ed and bound via prepare(%d). Existence probe inside the import transaction — caching would mask the just-imported state.
 				$existing = $wpdb->get_var( $wpdb->prepare(
 					"SELECT banner_id FROM {$table} WHERE banner_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					$banner_id
@@ -710,7 +714,8 @@ class Api extends Rest_Controller {
 		if ( isset( $data['categories'] ) && is_array( $data['categories'] ) ) {
 			$table = $wpdb->prefix . 'faz_cookie_categories';
 			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix + literal "faz_cookie_categories"; full-table TRUNCATE-equivalent used to replace the categories table with the imported set, inside an explicit transaction.
+			$wpdb->query( "DELETE FROM {$table}" );
 			$cat_failed = false;
 			foreach ( $data['categories'] as $cat ) {
 				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -743,7 +748,8 @@ class Api extends Rest_Controller {
 		if ( isset( $data['cookies'] ) && is_array( $data['cookies'] ) ) {
 			$table = $wpdb->prefix . 'faz_cookies';
 			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->query( "DELETE FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix + literal "faz_cookies"; full-table replace inside an explicit transaction for the import.
+			$wpdb->query( "DELETE FROM {$table}" );
 			$cookie_failed = false;
 			foreach ( $data['cookies'] as $cookie ) {
 				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery

@@ -24,9 +24,11 @@ if ( false === $table_info ) {
 	$table_info = array();
 	foreach ( $tables as $t ) {
 		$full   = $wpdb->prefix . $t;
-		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- system-status table existence probe; bound via prepare(%s). Result cached at the function level via the transient set after this loop.
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $full ) );
 		if ( $exists ) {
-			$row = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $full is $wpdb->prefix + an allowlisted plugin-table suffix from the foreach above. Result transient-cached after the loop.
+			$row = $wpdb->get_row( "SELECT COUNT(*) as cnt FROM {$full}" );
 			$table_info[ $t ] = $row ? absint( $row->cnt ) : 0;
 		} else {
 			$table_info[ $t ] = -1; // table missing

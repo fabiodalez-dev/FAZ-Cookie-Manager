@@ -110,6 +110,7 @@ class Controller {
 		// Migrate legacy plaintext user_agent values to hashed form.
 		$migration_ok = true;
 		if ( version_compare( $installed_version, '1.1', '<' ) ) {
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- one-shot data migration in the activation/upgrade path; $table_name is $wpdb->prefix + literal "faz_consent_logs"; the salt and regex are bound via prepare(%s).
 			$result = $wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$table_name}
@@ -119,7 +120,8 @@ class Controller {
 					wp_salt( 'auth' ),
 					'^[0-9a-f]{64}$'
 				)
-			); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			);
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
 			if ( false === $result ) {
 				$migration_ok = false;
 			}
@@ -232,6 +234,7 @@ class Controller {
 			$categories = wp_json_encode( $categories );
 		}
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- consent log writes by design must not be cached; every visitor consent action produces a fresh row.
 		$result = $wpdb->insert(
 			$this->get_table_name(),
 			array(
@@ -321,10 +324,11 @@ class Controller {
 
 		// Count total — always use prepare() even when $values is empty.
 		if ( ! empty( $values ) ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $where_clause is built from a server-controlled allowlist of column names + bound %s/%d placeholders, all user values flow through $values which prepare() binds. Stats query — caching would mask near-real-time admin dashboard.
 			$total = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE {$where_clause}", $values ) );
 		} else {
-			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE 1=1" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix + literal; literal WHERE 1=1 has no user input. Stats query — caching would mask near-real-time data.
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE 1=1" );
 		}
 
 		// Get items.
@@ -333,7 +337,8 @@ class Controller {
 
 		$query = "SELECT * FROM {$table} WHERE {$where_clause} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
 		$query_values = array_merge( $values, array( $per_page, $offset ) );
-		$items = $wpdb->get_results( $wpdb->prepare( $query, $query_values ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query is built from plugin-prefix $table, allowlisted $orderby/$order, and a $where_clause assembled from allowlisted column names + %s/%d placeholders; all user input flows through $query_values which prepare() binds. Caching would mask admin-dashboard listing freshness.
+		$items = $wpdb->get_results( $wpdb->prepare( $query, $query_values ), ARRAY_A );
 
 		if ( ! is_array( $items ) ) {
 			$items = array();
@@ -366,6 +371,7 @@ class Controller {
 		global $wpdb;
 
 		$table = $this->get_table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $consent_id is bound via prepare(%s). Caching would mask post-write reads from the same request.
 		$item  = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT * FROM {$table} WHERE consent_id = %s ORDER BY created_at DESC LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
@@ -397,6 +403,7 @@ class Controller {
 		global $wpdb;
 
 		$table = $this->get_table_name();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; literal GROUP BY status query has no user input. Aggregate refreshed on every request — caching would defeat the purpose.
 		$results = $wpdb->get_results(
 			"SELECT status, COUNT(*) as count FROM {$table} GROUP BY status", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			ARRAY_A
@@ -453,11 +460,14 @@ class Controller {
 		$where_clause = implode( ' AND ', $where );
 
 		if ( ! empty( $values ) ) {
-			$query = $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_clause} ORDER BY created_at DESC", $values ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $where_clause is built from a closed allowlist of column names + %s/%d placeholders, all user values flow through $values which prepare() binds.
+			$query = $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_clause} ORDER BY created_at DESC", $values );
 		} else {
-			$query = "SELECT * FROM {$table} WHERE 1=1 ORDER BY created_at DESC"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix + literal; literal "WHERE 1=1" has no user input.
+			$query = "SELECT * FROM {$table} WHERE 1=1 ORDER BY created_at DESC";
 		}
-		$items = $wpdb->get_results( $query, ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query produced by the prepare() block above (or a literal-only fallback). CSV export — must reflect live data.
+		$items = $wpdb->get_results( $query, ARRAY_A );
 
 		if ( ! is_array( $items ) ) {
 			$items = array();
@@ -539,6 +549,8 @@ class Controller {
 		// how created_at is stored (via current_time('mysql') in log_consent).
 		$cutoff = gmdate( 'Y-m-d H:i:s', strtotime( '-' . $days . ' days', strtotime( current_time( 'mysql' ) ) ) );
 
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- The three queries below all read from the plugin-prefix custom $table with $cutoff bound via prepare(%s); they power the admin dashboard's live aggregate and must not be cached.
+
 		// Daily consent breakdown.
 		$daily = $wpdb->get_results(
 			$wpdb->prepare(
@@ -550,7 +562,7 @@ class Controller {
 				 FROM {$table}
 				 WHERE created_at >= %s
 				 GROUP BY DATE(created_at)
-				 ORDER BY date ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				 ORDER BY date ASC",
 				$cutoff
 			),
 			ARRAY_A
@@ -568,7 +580,7 @@ class Controller {
 						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
 						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
 				 FROM {$table}
-				 WHERE created_at >= %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				 WHERE created_at >= %s",
 				$cutoff
 			),
 			ARRAY_A
@@ -588,11 +600,12 @@ class Controller {
 			$wpdb->prepare(
 				"SELECT categories FROM {$table}
 				 WHERE created_at >= %s
-				 AND categories IS NOT NULL AND categories != ''", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				 AND categories IS NOT NULL AND categories != ''",
 				$cutoff
 			),
 			ARRAY_A
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		$cat_counts = array();
 		if ( is_array( $category_rows ) ) {
@@ -635,6 +648,7 @@ class Controller {
 		$months   = absint( $months );
 		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention cleanup writes — caching irrelevant for DELETE.
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$table} WHERE created_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared

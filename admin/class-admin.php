@@ -1413,6 +1413,7 @@ window.wp.apiFetch=apiFetch;
 			$table  = $wpdb->prefix . 'faz_consent_logs';
 			$cutoff = date_i18n( 'Y-m-d H:i:s', current_time( 'timestamp' ) - 30 * DAY_IN_SECONDS ); // phpcs:ignore WordPress.DateTime.CurrentTimeTimestamp.Requested
 
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). The result IS cached — see set_transient() below — and the transient is consulted at the top of this function; the get_row() only runs on a cache miss.
 			$stats = $wpdb->get_row(
 				$wpdb->prepare(
 					"SELECT COUNT(*) as total,
@@ -1420,11 +1421,12 @@ window.wp.apiFetch=apiFetch;
 							SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
 							SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
 					 FROM {$table}
-					 WHERE created_at >= %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					 WHERE created_at >= %s",
 					$cutoff
 				),
 				ARRAY_A
 			);
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
 			set_transient( 'faz_dashboard_widget_stats', $stats, 5 * MINUTE_IN_SECONDS );
 		}
 

@@ -100,8 +100,8 @@ class WP_CLI_Commands {
 			$settings['geolocation']['maxmind_license_key'] = '';
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$banners = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}faz_banners", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WP-CLI export runs once on demand; $wpdb->prefix + literal table name, no user input. Caching irrelevant.
+		$banners = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}faz_banners", ARRAY_A );
 		if ( is_array( $banners ) ) {
 			foreach ( $banners as &$b ) {
 				if ( isset( $b['settings'] ) ) {
@@ -114,8 +114,8 @@ class WP_CLI_Commands {
 			unset( $b );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$categories = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}faz_cookie_categories", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WP-CLI export runs once on demand; $wpdb->prefix + literal table name, no user input.
+		$categories = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}faz_cookie_categories", ARRAY_A );
 		if ( is_array( $categories ) ) {
 			foreach ( $categories as &$c ) {
 				if ( isset( $c['name'] ) ) {
@@ -128,8 +128,8 @@ class WP_CLI_Commands {
 			unset( $c );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$cookies = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}faz_cookies", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- WP-CLI export runs once on demand; $wpdb->prefix + literal table name, no user input.
+		$cookies = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}faz_cookies", ARRAY_A );
 		if ( is_array( $cookies ) ) {
 			foreach ( $cookies as &$ck ) {
 				if ( isset( $ck['description'] ) ) {
@@ -274,7 +274,7 @@ class WP_CLI_Commands {
 		$gcm_settings = get_option( 'faz_gcm_settings' );
 
 		// Table names are trusted ($wpdb->prefix is set by WordPress core).
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- WP-CLI status command; $wpdb->prefix + literal plugin table names, no user input. Caching irrelevant for an on-demand status read.
 		$banner_count   = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_banners" );
 		$cookie_count   = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookies" );
 		$category_count = $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories" );

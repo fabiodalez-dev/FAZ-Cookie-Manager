@@ -125,6 +125,7 @@ class Controller {
 			$event_type = 'pageview';
 		}
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- pageview writes by design must not be cached; every visitor pageview produces a fresh row.
 		$result = $wpdb->insert(
 			$this->get_table_name(),
 			array(
@@ -185,16 +186,19 @@ class Controller {
 		$table = $this->get_table_name();
 		list( $date_clause, $date_params ) = $this->build_date_clause( $days, $from, $to );
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $date_clause is built by build_date_clause() which returns either an empty string or "AND created_at BETWEEN %s AND %s" with $date_params holding the bound values.
 		$sql = "SELECT DATE(created_at) as date, COUNT(*) as views
 			FROM {$table}
 			WHERE event_type = 'pageview' {$date_clause}
 			GROUP BY DATE(created_at)
-			ORDER BY date ASC"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ORDER BY date ASC";
 
 		if ( ! empty( $date_params ) ) {
-			$results = $wpdb->get_results( $wpdb->prepare( $sql, $date_params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql built above with bind-only placeholders; $date_params holds the values prepare() binds. Live admin analytics — caching would mask near-real-time data.
+			$results = $wpdb->get_results( $wpdb->prepare( $sql, $date_params ), ARRAY_A );
 		} else {
-			$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql produced above with no user input ($date_clause empty in this branch). Live admin analytics.
+			$results = $wpdb->get_results( $sql, ARRAY_A );
 		}
 
 		$total_views = 0;
@@ -234,15 +238,18 @@ class Controller {
 		$table = $this->get_table_name();
 		list( $date_clause, $date_params ) = $this->build_date_clause( $days, $from, $to );
 
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $date_clause is built by build_date_clause() with bind-only placeholders.
 		$sql = "SELECT event_type, COUNT(*) as count
 			FROM {$table}
 			WHERE event_type LIKE 'banner%%' {$date_clause}
-			GROUP BY event_type"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			GROUP BY event_type";
 
 		if ( ! empty( $date_params ) ) {
-			$results = $wpdb->get_results( $wpdb->prepare( $sql, $date_params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql with bind-only placeholders; $date_params bound by prepare(). Live admin analytics.
+			$results = $wpdb->get_results( $wpdb->prepare( $sql, $date_params ), ARRAY_A );
 		} else {
-			$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql with no user input ($date_clause empty). Live admin analytics.
+			$results = $wpdb->get_results( $sql, ARRAY_A );
 		}
 
 		$stats = array(
@@ -277,17 +284,19 @@ class Controller {
 		$days    = absint( $days );
 		$cutoff  = gmdate( 'Y-m-d', strtotime( "-{$days} days" ) );
 
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Live admin analytics — caching would mask near-real-time data.
 		$results = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT DATE(created_at) as date, event_type, COUNT(*) as count
 				FROM {$table}
 				WHERE created_at >= %s
 				GROUP BY DATE(created_at), event_type
-				ORDER BY date ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				ORDER BY date ASC",
 				$cutoff
 			),
 			ARRAY_A
 		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		$daily = array();
 		if ( is_array( $results ) ) {
@@ -327,6 +336,7 @@ class Controller {
 		$months   = absint( $months );
 		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). DELETE write — caching irrelevant.
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$table} WHERE created_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared

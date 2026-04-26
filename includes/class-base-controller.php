@@ -348,7 +348,8 @@ abstract class Base_Controller {
 			if ( ! $this->table_exist() ) {
 				return false;
 			}
-			$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table_name comes from $this->get_tables() which returns plugin-prefix + literal names. Used during install/upgrade to detect missing default rows; caching would mask the missing-data state.
+			$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
 			if ( $count > 0 ) {
 				return true;
 			} else {
