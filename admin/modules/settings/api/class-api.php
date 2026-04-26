@@ -232,6 +232,7 @@ class Api extends Rest_Controller {
 		$filter_data = $this->sanitize_filter_data( $filter_data );
 
 		// Apply the WordPress filter
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- $filter_name is pre-validated above against an allowlist (the function returns a WP_Error 'invalid_filter_name' on any unmatched name); only known plugin filter names ever reach this line.
 		$result = apply_filters( $filter_name, $filter_data );
 
 		// If filter returns false, it means navigation should be prevented

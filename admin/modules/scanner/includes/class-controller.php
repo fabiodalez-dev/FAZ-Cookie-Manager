@@ -304,6 +304,7 @@ class Controller {
 	 */
 	public function run_scan( $max_pages = 20 ) {
 		// Scanning makes many HTTP requests; prevent PHP timeout.
+		// phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.NoSilencedErrors -- scanner crawls 20-1000 URLs over wp_remote_get; PHP default max_execution_time (30s) consistently truncates the run on medium-sized sites. 5-minute window is the standard pattern for long-running plugin batch jobs (importers, scanners). Suppressed @ — read-only access on hardened hosts where set_time_limit is disabled returns false silently rather than emitting a warning.
 		@set_time_limit( 300 );
 
 		$logger = Scanner_Logger::get_instance();

@@ -1240,10 +1240,10 @@ class Frontend {
 		$current_backtrack = (int) $old_backtrack;
 		$current_recursion = (int) $old_recursion;
 		if ( $current_backtrack > 0 && $current_backtrack < 1000000 ) {
-			@ini_set( 'pcre.backtrack_limit', '1000000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			@ini_set( 'pcre.backtrack_limit', '1000000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- raise PCRE limits temporarily so preg_replace_callback over very large HTML (page builders like Bricks easily produce >1MB DOM blobs) doesn't fail with "backtrack limit exceeded" and silently drop script blocking. Bound increase, current value preserved and never lowered.
 		}
 		if ( $current_recursion > 0 && $current_recursion < 100000 ) {
-			@ini_set( 'pcre.recursion_limit', '100000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			@ini_set( 'pcre.recursion_limit', '100000' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- same rationale as the backtrack_limit raise above; needed to keep the script-blocking regex pass safe on very large pages.
 		}
 
 		// preg_replace_callback returns null on PCRE error (e.g. backtrack limit
@@ -1347,10 +1347,10 @@ class Frontend {
 		}
 
 		if ( false !== $old_backtrack && '' !== $old_backtrack ) {
-			@ini_set( 'pcre.backtrack_limit', (string) $old_backtrack ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			@ini_set( 'pcre.backtrack_limit', (string) $old_backtrack ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the original PCRE backtrack_limit value captured before the script-blocking pass (paired with the temporary raise above).
 		}
 		if ( false !== $old_recursion && '' !== $old_recursion ) {
-			@ini_set( 'pcre.recursion_limit', (string) $old_recursion ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+			@ini_set( 'pcre.recursion_limit', (string) $old_recursion ); // phpcs:ignore WordPress.PHP.NoSilencedErrors,Squiz.PHP.DiscouragedFunctions.Discouraged -- restoring the original PCRE recursion_limit value (paired with the temporary raise above).
 		}
 
 		return $html;
