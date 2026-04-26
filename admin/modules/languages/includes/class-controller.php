@@ -277,7 +277,6 @@ class Controller {
 	}
 
 	public function download( $src ) {
-        require_once( ABSPATH . 'wp-admin/includes/file.php' );
         $upload_dir = $this->get_upload_path('languages/banners/');
 
         if ( ! file_exists( $upload_dir ) ) {
