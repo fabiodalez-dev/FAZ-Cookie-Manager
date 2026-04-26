@@ -266,27 +266,67 @@ test.describe('CodeRabbit PR #79 omnibus', () => {
     await loginAsAdmin(page);
     const nonce = await openAdminSettings(page);
 
-    // (a) Sanity: a native PUT to `?rest_route=…` produces a non-2xx
-    //     error on most stacks — nginx rejects with 405 at the
-    //     webserver layer, Apache forwards the request to WP which
-    //     then rejects with 401/403 on auth/permission (the Playwright
-    //     `request` context doesn't carry the admin session). Any of
-    //     those means "the native PUT path is not reliably usable",
-    //     which is the reason `fazApiPut` routes through POST+override
-    //     in the first place. A 2xx would mean the workaround is
-    //     unnecessary on this stack, which is also valid — we let the
-    //     next assertion carry the real signal.
-    const rawPut = await request.put(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
-      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
-      data: { ping: 'omnibus-raw' },
-    });
-    expect([200, 401, 403, 405]).toContain(rawPut.status());
+    // Both probes below issue authenticated UPDATE requests against the
+    // banner-1 REST endpoint with a body that does NOT carry `status` or
+    // `default`. The REST controller's sanitiser fills the missing keys
+    // from the per-law defaults, which means the banner row is rewritten
+    // with `status=0, banner_default=0` as a side effect of asserting
+    // the HTTP-layer contract. Subsequent specs that rely on a default
+    // active banner (css-custom-properties, frontend-consent, …) then
+    // see no `[data-faz-tag="notice"]` and timeout. Snapshot the row
+    // here and restore it in `finally` so the test stays leak-free.
+    const beforeRow = wpEval(`
+      global $wpdb;
+      $r = $wpdb->get_row( "SELECT status, banner_default FROM {$wpdb->prefix}faz_banners WHERE banner_id = 1", ARRAY_A );
+      echo wp_json_encode( $r ?: array() );
+    `).trim();
+    const before = beforeRow ? (JSON.parse(beforeRow) as { status?: number; banner_default?: number }) : {};
 
-    // (b) The helper must succeed where the raw PUT could not. Assert
-    //     the response shape is { status, data } and that the status is
-    //     NOT the 405 the native path returns.
-    const helperResult = await fazApiPut<any>(page, nonce, 'banners/1', { ping: 'omnibus-helper' });
-    expect(helperResult.status, 'fazApiPut via POST+override must not be 405').not.toBe(405);
+    try {
+      // (a) Sanity: a native PUT to `?rest_route=…` produces a non-2xx
+      //     error on most stacks — nginx rejects with 405 at the
+      //     webserver layer, Apache forwards the request to WP which
+      //     then rejects with 401/403 on auth/permission (the Playwright
+      //     `request` context doesn't carry the admin session). Any of
+      //     those means "the native PUT path is not reliably usable",
+      //     which is the reason `fazApiPut` routes through POST+override
+      //     in the first place. A 2xx would mean the workaround is
+      //     unnecessary on this stack, which is also valid — we let the
+      //     next assertion carry the real signal.
+      const rawPut = await request.put(`${WP_BASE}/?rest_route=/faz/v1/banners/1`, {
+        headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
+        data: { ping: 'omnibus-raw' },
+      });
+      expect([200, 401, 403, 405]).toContain(rawPut.status());
+
+      // (b) The helper must succeed where the raw PUT could not. Assert
+      //     the response shape is { status, data } and that the status is
+      //     NOT the 405 the native path returns.
+      const helperResult = await fazApiPut<any>(page, nonce, 'banners/1', { ping: 'omnibus-helper' });
+      expect(helperResult.status, 'fazApiPut via POST+override must not be 405').not.toBe(405);
+    } finally {
+      const status = typeof before.status === 'number' ? before.status : 1;
+      const def = typeof before.banner_default === 'number' ? before.banner_default : 1;
+      // Restore the row AND invalidate the controller-level cache that
+      // `update_item()` would normally bump. Without the cache flush the
+      // banners object-cache + transient pair stays pinned to the
+      // status=0 snapshot taken during the PUT, and every subsequent
+      // visitor request sees `get_active_banner() === false` even though
+      // the DB row is correct again.
+      wpEval(`
+        global $wpdb;
+        $wpdb->update(
+          "{$wpdb->prefix}faz_banners",
+          array( 'status' => ${status}, 'banner_default' => ${def} ),
+          array( 'banner_id' => 1 ),
+          array( '%d', '%d' ),
+          array( '%d' )
+        );
+        if ( class_exists( '\\\\FazCookie\\\\Admin\\\\Modules\\\\Banners\\\\Includes\\\\Controller' ) ) {
+          \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+        }
+      `);
+    }
   });
 
   /**
