@@ -1,0 +1,14 @@
+{
+    "id": "addtoany",
+    "name": "AddToAny",
+    "description": "Blocks AddToAny embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "static.addtoany.com",
+        "addtoany.com/menu",
+        "a2a_config",
+        "addtoany-core",
+        "addtoany-jquery"
+    ],
+    "cookies": []
+}

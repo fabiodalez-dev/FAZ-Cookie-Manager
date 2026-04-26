@@ -1,0 +1,18 @@
+{
+    "id": "jetpack-stats",
+    "name": "Jetpack Stats",
+    "description": "Blocks Jetpack Stats analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "pixel.wp.com",
+        "stats.wp.com",
+        "jetpack_stats",
+        "stats.wp.com/e-",
+        "stats.wp.com/w.js"
+    ],
+    "cookies": [
+        "tk_ai",
+        "tk_qs",
+        "tk_or"
+    ]
+}

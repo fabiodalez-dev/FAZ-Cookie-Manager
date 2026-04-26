@@ -1,0 +1,11 @@
+{
+    "id": "wp_recipe_maker",
+    "name": "WP Recipe Maker",
+    "description": "Blocks WP Recipe Maker embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "wp-recipe-maker/dist/",
+        "wprm-recipe-"
+    ],
+    "cookies": []
+}

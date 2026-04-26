@@ -1,0 +1,16 @@
+{
+    "id": "zoho",
+    "name": "Zoho",
+    "description": "Blocks Zoho marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "salesiq.zoho.com",
+        "js.zohostatic.com",
+        "css.zohostatic.com",
+        "zoho.com/salesiq"
+    ],
+    "cookies": [
+        "zsiqchat",
+        "zia_*"
+    ]
+}

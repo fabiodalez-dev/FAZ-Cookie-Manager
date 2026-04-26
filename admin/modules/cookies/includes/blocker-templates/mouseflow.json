@@ -1,0 +1,15 @@
+{
+    "id": "mouseflow",
+    "name": "Mouseflow",
+    "description": "Blocks Mouseflow analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.mouseflow.com",
+        "o2.mouseflow.com",
+        "mouseflow.com/projects/"
+    ],
+    "cookies": [
+        "mf_user",
+        "mf_*"
+    ]
+}

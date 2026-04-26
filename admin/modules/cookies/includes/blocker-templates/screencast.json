@@ -1,0 +1,10 @@
+{
+    "id": "screencast",
+    "name": "Screencast",
+    "description": "Blocks Screencast embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "screencast.com"
+    ],
+    "cookies": []
+}

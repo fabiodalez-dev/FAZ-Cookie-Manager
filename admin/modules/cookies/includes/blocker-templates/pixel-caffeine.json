@@ -1,0 +1,11 @@
+{
+    "id": "pixel-caffeine",
+    "name": "Pixel Caffeine",
+    "description": "Blocks Pixel Caffeine marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "aepc-pixel-events",
+        "aepc_pixel"
+    ],
+    "cookies": []
+}

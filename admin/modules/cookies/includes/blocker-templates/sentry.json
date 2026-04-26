@@ -1,0 +1,12 @@
+{
+    "id": "sentry",
+    "name": "Sentry",
+    "description": "Blocks Sentry embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "browser.sentry-cdn.com",
+        "sentry.io/api/",
+        "Sentry.init("
+    ],
+    "cookies": []
+}

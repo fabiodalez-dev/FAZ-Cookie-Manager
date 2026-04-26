@@ -1,0 +1,12 @@
+{
+    "id": "soundcloud",
+    "name": "SoundCloud",
+    "description": "Blocks SoundCloud embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "w.soundcloud.com",
+        "api.soundcloud.com",
+        "soundcloud.com/player"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,17 @@
+{
+    "id": "snapchat",
+    "name": "Snapchat Pixel",
+    "description": "Blocks Snapchat Pixel marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "sc-static.net/scevent.min.js",
+        "snapchat.com",
+        "snaptr(",
+        "tr.snapchat.com"
+    ],
+    "cookies": [
+        "_scid",
+        "_scid_r",
+        "sc_at"
+    ]
+}

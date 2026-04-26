@@ -1,0 +1,12 @@
+{
+    "id": "calendly",
+    "name": "Calendly",
+    "description": "Blocks Calendly embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "assets.calendly.com",
+        "calendly.com/assets/external",
+        "calendly.com/widget"
+    ],
+    "cookies": []
+}

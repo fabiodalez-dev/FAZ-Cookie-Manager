@@ -1,0 +1,11 @@
+{
+    "id": "adobe-fonts",
+    "name": "Adobe Fonts (Typekit)",
+    "description": "Blocks Adobe Fonts (Typekit) embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "use.typekit.net",
+        "p.typekit.net"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,20 @@
+{
+    "id": "pixelyoursite",
+    "name": "PixelYourSite",
+    "description": "Blocks PixelYourSite marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "pixelyoursite",
+        "pixelyoursite/dist",
+        "pixelyoursite-pro/dist",
+        "pys.js",
+        "pys-js-extra",
+        "pysOptions"
+    ],
+    "cookies": [
+        "pys_session_limit",
+        "pys_first_visit",
+        "pys_landing_page",
+        "last_pysTrafficSA"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "id": "custom-facebook-feed",
+    "name": "Custom Facebook Feed",
+    "description": "Blocks Custom Facebook Feed marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "cffscripts",
+        "cfflinkhashtags",
+        "custom-facebook-feed"
+    ],
+    "cookies": []
+}

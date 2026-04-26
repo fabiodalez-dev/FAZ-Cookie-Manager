@@ -1,0 +1,19 @@
+{
+    "id": "clicky",
+    "name": "Clicky Analytics",
+    "description": "Blocks Clicky Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "static.getclicky.com",
+        "in.getclicky.com",
+        "clicky_site_ids",
+        "clicky.init("
+    ],
+    "cookies": [
+        "_jsuid",
+        "clicky_olark",
+        "_eventqueue",
+        "_referrer_og",
+        "_utm_og"
+    ]
+}

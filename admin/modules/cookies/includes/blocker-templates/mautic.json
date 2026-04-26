@@ -1,0 +1,16 @@
+{
+    "id": "mautic",
+    "name": "Mautic",
+    "description": "Blocks Mautic marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "MauticTrackingObject",
+        "mautic.js",
+        "mtracking.gif"
+    ],
+    "cookies": [
+        "mtc_id",
+        "mtc_sid",
+        "mautic_device_id"
+    ]
+}

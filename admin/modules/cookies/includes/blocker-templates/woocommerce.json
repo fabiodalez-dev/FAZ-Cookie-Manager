@@ -1,0 +1,12 @@
+{
+    "id": "woocommerce",
+    "name": "WooCommerce",
+    "description": "Blocks WooCommerce analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "wc-tracks-",
+        "woocommerce-google-analytics-integration",
+        "wcTracks.recordEvent"
+    ],
+    "cookies": []
+}

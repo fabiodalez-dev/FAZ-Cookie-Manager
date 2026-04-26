@@ -1,0 +1,20 @@
+{
+    "id": "microsoft-ads",
+    "name": "Microsoft Advertising (Bing UET)",
+    "description": "Blocks Microsoft Advertising (Bing UET) marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "bat.bing.com",
+        "bat.bing.com/bat.js",
+        "UET tag helper",
+        "uetq",
+        "uetTag"
+    ],
+    "cookies": [
+        "_uetsid",
+        "_uetsid_exp",
+        "_uetvid",
+        "_uetvid_exp",
+        "MUID"
+    ]
+}

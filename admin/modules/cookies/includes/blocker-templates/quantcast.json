@@ -1,0 +1,15 @@
+{
+    "id": "quantcast",
+    "name": "Quantcast",
+    "description": "Blocks Quantcast marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "quantserve.com",
+        "quantcount.com",
+        "edge.quantserve.com"
+    ],
+    "cookies": [
+        "__qca",
+        "mc"
+    ]
+}

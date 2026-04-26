@@ -1,0 +1,13 @@
+{
+    "id": "drip",
+    "name": "Drip",
+    "description": "Blocks Drip marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "tag.getdrip.com",
+        "api.getdrip.com"
+    ],
+    "cookies": [
+        "_drip_client_*"
+    ]
+}

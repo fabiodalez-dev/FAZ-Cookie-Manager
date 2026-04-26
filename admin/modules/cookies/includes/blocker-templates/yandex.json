@@ -1,0 +1,21 @@
+{
+    "id": "yandex",
+    "name": "Yandex Metrica",
+    "description": "Blocks Yandex Metrica analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "mc.yandex.ru",
+        "metrika.yandex.ru",
+        "cdn.jsdelivr.net/npm/yandex-metrica-watch",
+        "ym(document",
+        "Ya.Metrika"
+    ],
+    "cookies": [
+        "_ym_uid",
+        "_ym_d",
+        "_ym_isad",
+        "_ym_visorc",
+        "yandexuid",
+        "yabs-sid"
+    ]
+}

@@ -1,0 +1,16 @@
+{
+    "id": "crazy-egg",
+    "name": "Crazy Egg",
+    "description": "Blocks Crazy Egg analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "script.crazyegg.com",
+        "dnn506yrbagrg.cloudfront.net"
+    ],
+    "cookies": [
+        "is_returning",
+        "_ceir",
+        "_CEFT",
+        "cebs"
+    ]
+}

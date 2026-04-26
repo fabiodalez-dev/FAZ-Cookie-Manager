@@ -1,0 +1,14 @@
+{
+    "id": "lucky-orange",
+    "name": "Lucky Orange",
+    "description": "Blocks Lucky Orange analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "luckyorange.com",
+        "d10lpsik1i8c69.cloudfront.net"
+    ],
+    "cookies": [
+        "_lo_uid",
+        "_lo_v"
+    ]
+}

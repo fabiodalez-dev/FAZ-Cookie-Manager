@@ -1,0 +1,13 @@
+{
+    "id": "marketo",
+    "name": "Marketo",
+    "description": "Blocks Marketo marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "munchkin.marketo.net",
+        "Munchkin.init("
+    ],
+    "cookies": [
+        "_mkto_trk"
+    ]
+}

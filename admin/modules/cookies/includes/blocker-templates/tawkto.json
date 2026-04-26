@@ -1,0 +1,17 @@
+{
+    "id": "tawkto",
+    "name": "Tawk.to",
+    "description": "Blocks Tawk.to embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "embed.tawk.to",
+        "va.tawk.to",
+        "Tawk_API",
+        "Tawk_LoadStart"
+    ],
+    "cookies": [
+        "TawkConnectionTime",
+        "__tawkuuid",
+        "tawk-*"
+    ]
+}

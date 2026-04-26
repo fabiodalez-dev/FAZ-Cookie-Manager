@@ -1,0 +1,17 @@
+{
+    "id": "fullstory",
+    "name": "FullStory",
+    "description": "Blocks FullStory analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "fullstory.com/s/fs.js",
+        "edge.fullstory.com",
+        "rs.fullstory.com",
+        "_fs_namespace",
+        "FS.identify("
+    ],
+    "cookies": [
+        "_fs_uid",
+        "fs_uid"
+    ]
+}

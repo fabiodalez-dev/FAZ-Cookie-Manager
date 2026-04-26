@@ -1,0 +1,10 @@
+{
+    "id": "reverbnation",
+    "name": "ReverbNation",
+    "description": "Blocks ReverbNation embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "reverbnation.com"
+    ],
+    "cookies": []
+}

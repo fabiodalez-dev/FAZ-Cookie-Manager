@@ -1,0 +1,14 @@
+{
+    "id": "stripe",
+    "name": "Stripe",
+    "description": "Blocks Stripe embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "js.stripe.com",
+        "m.stripe.network"
+    ],
+    "cookies": [
+        "__stripe_mid",
+        "__stripe_sid"
+    ]
+}

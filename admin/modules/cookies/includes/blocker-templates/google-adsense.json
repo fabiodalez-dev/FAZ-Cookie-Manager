@@ -1,0 +1,13 @@
+{
+    "id": "google-adsense",
+    "name": "Google AdSense",
+    "description": "Blocks Google AdSense marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "pagead2.googlesyndication.com/pagead/js/adsbygoogle.js",
+        "adsbygoogle",
+        "adsbygoogle.push(",
+        "google_ad_client"
+    ],
+    "cookies": []
+}

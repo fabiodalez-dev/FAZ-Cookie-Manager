@@ -1,0 +1,15 @@
+{
+    "id": "smartlook",
+    "name": "Smartlook",
+    "description": "Blocks Smartlook analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "rec.smartlook.com",
+        "web-sdk.smartlook.com",
+        "smartlook("
+    ],
+    "cookies": [
+        "SL_C_*",
+        "SL_L_*"
+    ]
+}

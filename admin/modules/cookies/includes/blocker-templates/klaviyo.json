@@ -1,0 +1,15 @@
+{
+    "id": "klaviyo",
+    "name": "Klaviyo",
+    "description": "Blocks Klaviyo marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "static.klaviyo.com",
+        "a.klaviyo.com",
+        "klaviyo.js",
+        "_learnq.push("
+    ],
+    "cookies": [
+        "__kla_id"
+    ]
+}

@@ -1,0 +1,15 @@
+{
+    "id": "heap",
+    "name": "Heap Analytics",
+    "description": "Blocks Heap Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.heapanalytics.com",
+        "heapanalytics.com/js/",
+        "heap.load("
+    ],
+    "cookies": [
+        "_hp2_id.*",
+        "_hp2_ses_props.*"
+    ]
+}

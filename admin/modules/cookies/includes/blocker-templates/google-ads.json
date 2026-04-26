@@ -1,0 +1,24 @@
+{
+    "id": "google-ads",
+    "name": "Google Ads",
+    "description": "Blocks Google Ads marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "googleadservices.com/pagead/conversion",
+        "googleadservices.com/pagead",
+        "googlesyndication.com",
+        "pagead2.googlesyndication.com",
+        "adservice.google.com",
+        "google_ads",
+        "google_conversion",
+        "googleads",
+        "doubleclick.net",
+        "securepubads.g.doubleclick.net"
+    ],
+    "cookies": [
+        "_gcl_au",
+        "_gcl_aw",
+        "IDE",
+        "test_cookie"
+    ]
+}

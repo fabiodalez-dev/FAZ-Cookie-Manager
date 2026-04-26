@@ -1,0 +1,15 @@
+{
+    "id": "slimstat",
+    "name": "SlimStat Analytics",
+    "description": "Blocks SlimStat Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "wp-slimstat",
+        "wp_slimstat",
+        "slimstat",
+        "SlimStatParams"
+    ],
+    "cookies": [
+        "slimstat_tracking_code"
+    ]
+}

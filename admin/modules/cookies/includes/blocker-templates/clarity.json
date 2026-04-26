@@ -1,0 +1,15 @@
+{
+    "id": "clarity",
+    "name": "Microsoft Clarity",
+    "description": "Blocks Microsoft Clarity analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "clarity.ms",
+        "clarity.ms/tag/"
+    ],
+    "cookies": [
+        "_clsk",
+        "_clck",
+        "CLID"
+    ]
+}

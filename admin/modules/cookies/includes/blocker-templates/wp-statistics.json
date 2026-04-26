@@ -1,0 +1,11 @@
+{
+    "id": "wp-statistics",
+    "name": "WP Statistics",
+    "description": "Blocks WP Statistics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "wp-statistics/assets/js/",
+        "wp_statistics_"
+    ],
+    "cookies": []
+}

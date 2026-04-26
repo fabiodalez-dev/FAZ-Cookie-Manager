@@ -1,0 +1,13 @@
+{
+    "id": "newrelic",
+    "name": "New Relic",
+    "description": "Blocks New Relic analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "js-agent.newrelic.com",
+        "bam.nr-data.net",
+        "NREUM",
+        "newrelic.info"
+    ],
+    "cookies": []
+}

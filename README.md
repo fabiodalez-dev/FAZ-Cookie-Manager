@@ -486,6 +486,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.6
+- **New**: blocker-template parity with `Known_Providers`. Every provider the runtime already auto-blocks (143 services — Google Analytics, Adobe, Plausible, Clarity, Mixpanel, Segment, Stripe, Mailchimp, Klaviyo, HubSpot, Pinterest, Snapchat, Reddit, Outbrain, Yandex, etc.) now appears in WP Admin → Cookies → "Add from template". The picker grows from 11 to 142. Privacy contract unchanged — this is a UI-discovery fix.
+- **Internal**: the 131 new templates were generated from `includes/data/known-providers.json` so admin picker and runtime blocker stay in sync.
+
 ### 1.13.5
 - **New**: Matomo (Piwik) blocker template — selectable as an analytics tool in Cookies → Blocker Templates. Covers self-hosted Matomo, Matomo Cloud, and Matomo Tag Manager, plus the full `_pk_*`, `MATOMO_SESSID`, and `mtm_consent*` cookie family. (Matomo was already auto-detected by the runtime script blocker; this just exposes the entry in the admin picker so it's discoverable.)
 

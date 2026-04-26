@@ -1,0 +1,15 @@
+{
+    "id": "convert",
+    "name": "Convert",
+    "description": "Blocks Convert analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn-3.convertexperiments.com",
+        "convert.com/js/"
+    ],
+    "cookies": [
+        "_conv_v",
+        "_conv_s",
+        "_conv_r"
+    ]
+}

@@ -1,0 +1,14 @@
+{
+    "id": "instagram",
+    "name": "Instagram Embed",
+    "description": "Blocks Instagram Embed marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "instagram.com/embed",
+        "cdninstagram.com",
+        "instawidget.net",
+        "plugins/instagram-feed/js/",
+        "plugins/instagram-feed-pro/js/"
+    ],
+    "cookies": []
+}

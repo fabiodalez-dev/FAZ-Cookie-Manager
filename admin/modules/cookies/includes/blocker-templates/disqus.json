@@ -1,0 +1,15 @@
+{
+    "id": "disqus",
+    "name": "Disqus",
+    "description": "Blocks Disqus embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "disqus.com",
+        "disquscdn.com",
+        ".disqus.com/embed.js"
+    ],
+    "cookies": [
+        "disqus_unique",
+        "__jid"
+    ]
+}

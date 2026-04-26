@@ -1,0 +1,12 @@
+{
+    "id": "sourcebuster",
+    "name": "Sourcebuster",
+    "description": "Blocks Sourcebuster analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "sourcebuster-js"
+    ],
+    "cookies": [
+        "sbjs_*"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "id": "trustpilot",
+    "name": "Trustpilot",
+    "description": "Blocks Trustpilot marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "widget.trustpilot.com",
+        "invitejs.trustpilot.com",
+        "tp.srtk.net"
+    ],
+    "cookies": []
+}

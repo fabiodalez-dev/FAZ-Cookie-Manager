@@ -1,0 +1,15 @@
+{
+    "id": "pardot",
+    "name": "Pardot (Salesforce)",
+    "description": "Blocks Pardot (Salesforce) marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "pi.pardot.com",
+        "pardot.com/pd.js",
+        "go.pardot.com"
+    ],
+    "cookies": [
+        "pardot",
+        "visitor_id*-hash"
+    ]
+}

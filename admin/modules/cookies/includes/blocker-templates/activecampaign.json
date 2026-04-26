@@ -1,0 +1,12 @@
+{
+    "id": "activecampaign",
+    "name": "ActiveCampaign",
+    "description": "Blocks ActiveCampaign marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "trackcmp.net",
+        "actcampaign.com",
+        "activehosted.com/f/embed.php"
+    ],
+    "cookies": []
+}

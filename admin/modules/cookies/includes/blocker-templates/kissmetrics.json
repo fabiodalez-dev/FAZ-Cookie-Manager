@@ -1,0 +1,16 @@
+{
+    "id": "kissmetrics",
+    "name": "Kissmetrics",
+    "description": "Blocks Kissmetrics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "i.kissmetrics.com",
+        "_kmq",
+        "scripts.kissmetrics.com"
+    ],
+    "cookies": [
+        "km_ai",
+        "km_vs",
+        "km_ni"
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "id": "livechat",
+    "name": "LiveChat",
+    "description": "Blocks LiveChat embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "cdn.livechatinc.com/tracking.js"
+    ],
+    "cookies": []
+}

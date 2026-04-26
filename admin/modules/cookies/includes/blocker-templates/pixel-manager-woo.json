@@ -1,0 +1,19 @@
+{
+    "id": "pixel-manager-woo",
+    "name": "Pixel Manager for WooCommerce",
+    "description": "Blocks Pixel Manager for WooCommerce marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "pixel-manager-pro-for-woocommerce",
+        "pixel-manager-for-woocommerce",
+        "pixel-tag-manager-for-woocommerce",
+        "woocommerce-conversion-tracking",
+        "woocommerce-google-adwords-conversion-tracking-tag",
+        "wpmDataLayer",
+        "pmwDataLayer",
+        "_pmwq",
+        "wpm-frontend",
+        "window.wpm"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,15 @@
+{
+    "id": "sumo",
+    "name": "Sumo",
+    "description": "Blocks Sumo marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "sumo.com/sumo.js",
+        "load.sumo.com",
+        "load.sumome.com"
+    ],
+    "cookies": [
+        "__smToken",
+        "__smListBuilderToken"
+    ]
+}

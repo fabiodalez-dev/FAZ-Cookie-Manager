@@ -1,0 +1,13 @@
+{
+    "id": "google_gpt",
+    "name": "Google Publisher Tag (GPT)",
+    "description": "Blocks Google Publisher Tag (GPT) marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "securepubads.g.doubleclick.net",
+        "pagead2.googlesyndication.com/tag",
+        "googletag.cmd.push",
+        "googletag.enableServices"
+    ],
+    "cookies": []
+}

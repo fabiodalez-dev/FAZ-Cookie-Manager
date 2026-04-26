@@ -1,0 +1,13 @@
+{
+    "id": "wordfence",
+    "name": "Wordfence",
+    "description": "Recognises Wordfence as a necessary integration (security, anti-spam, or core site function) — listed here so the admin can manage its rule, not to imply it should be blocked by default.",
+    "category": "necessary",
+    "patterns": [
+        "wordfence/assets/js/",
+        "wfLogHumanRan"
+    ],
+    "cookies": [
+        "wfvt_*"
+    ]
+}

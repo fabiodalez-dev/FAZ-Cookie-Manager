@@ -1,0 +1,17 @@
+{
+    "id": "dailymotion",
+    "name": "Dailymotion",
+    "description": "Blocks Dailymotion marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "dailymotion.com/embed",
+        "geo.dailymotion.com",
+        "api.dmcdn.net"
+    ],
+    "cookies": [
+        "dmvk",
+        "ts",
+        "v1st",
+        "usprivacy"
+    ]
+}

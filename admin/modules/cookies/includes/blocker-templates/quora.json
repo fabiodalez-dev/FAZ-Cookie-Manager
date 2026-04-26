@@ -1,0 +1,11 @@
+{
+    "id": "quora",
+    "name": "Quora Pixel",
+    "description": "Blocks Quora Pixel marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "a.quora.com/qevents.js",
+        "qp("
+    ],
+    "cookies": []
+}

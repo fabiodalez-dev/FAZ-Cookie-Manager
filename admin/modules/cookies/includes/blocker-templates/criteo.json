@@ -1,0 +1,23 @@
+{
+    "id": "criteo",
+    "name": "Criteo",
+    "description": "Blocks Criteo marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "static.criteo.net",
+        "dynamic.criteo.com",
+        "dis.criteo.com",
+        "sslwidget.criteo.com",
+        "criteo.com/js/",
+        "criteo_q",
+        "Criteo.events.push"
+    ],
+    "cookies": [
+        "cto_bundle",
+        "cto_bidid",
+        "cto_tld_test",
+        "cto_writetest",
+        "cto_lwid",
+        "criteo_write_test"
+    ]
+}

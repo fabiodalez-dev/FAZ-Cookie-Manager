@@ -1,0 +1,10 @@
+{
+    "id": "elementor",
+    "name": "Elementor",
+    "description": "Blocks Elementor embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "elementor/assets/lib/share-link"
+    ],
+    "cookies": []
+}

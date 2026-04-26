@@ -1,0 +1,14 @@
+{
+    "id": "mailchimp",
+    "name": "Mailchimp",
+    "description": "Blocks Mailchimp marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "chimpstatic.com",
+        "list-manage.com",
+        "mc.us",
+        "mailchimp-for-wp",
+        "mc4wp"
+    ],
+    "cookies": []
+}

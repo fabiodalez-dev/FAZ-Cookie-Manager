@@ -1,0 +1,12 @@
+{
+    "id": "videopress",
+    "name": "VideoPress",
+    "description": "Blocks VideoPress embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "videopress.com/embed",
+        "videopress.com/videopress-iframe.js",
+        "video.wordpress.com"
+    ],
+    "cookies": []
+}

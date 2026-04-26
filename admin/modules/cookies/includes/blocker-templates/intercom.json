@@ -1,0 +1,17 @@
+{
+    "id": "intercom",
+    "name": "Intercom",
+    "description": "Blocks Intercom marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "widget.intercom.io",
+        "js.intercomcdn.com",
+        "api-iam.intercom.io",
+        "Intercom(",
+        "intercomSettings"
+    ],
+    "cookies": [
+        "intercom-session-*",
+        "intercom-id-*"
+    ]
+}

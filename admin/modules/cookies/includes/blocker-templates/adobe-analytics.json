@@ -1,0 +1,29 @@
+{
+    "id": "adobe-analytics",
+    "name": "Adobe Analytics",
+    "description": "Blocks Adobe Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "adobedtm.com",
+        "omtrdc.net",
+        "demdex.net",
+        "2o7.net",
+        "assets.adobedtm.com",
+        "adobedtm.com/launch-",
+        "s_code.js",
+        "AppMeasurement.js",
+        "AppMeasurement",
+        "s.t()"
+    ],
+    "cookies": [
+        "s_cc",
+        "s_sq",
+        "s_vi",
+        "s_fid",
+        "AMCV_*",
+        "AMCVS_*",
+        "s_ecid",
+        "demdex",
+        "dpm"
+    ]
+}

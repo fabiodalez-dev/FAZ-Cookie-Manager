@@ -1,0 +1,13 @@
+{
+    "id": "koko-analytics",
+    "name": "Koko Analytics",
+    "description": "Blocks Koko Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "wp-content/plugins/koko-analytics/",
+        "koko-analytics-collect.js"
+    ],
+    "cookies": [
+        "_koko_analytics_pages_viewed"
+    ]
+}

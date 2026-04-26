@@ -1,0 +1,14 @@
+{
+    "id": "amplitude",
+    "name": "Amplitude",
+    "description": "Blocks Amplitude analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.amplitude.com",
+        "api.amplitude.com",
+        "amplitude.getInstance("
+    ],
+    "cookies": [
+        "amplitude_id_*"
+    ]
+}

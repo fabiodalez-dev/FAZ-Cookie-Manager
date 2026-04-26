@@ -1,0 +1,20 @@
+{
+    "id": "pinterest",
+    "name": "Pinterest Tag",
+    "description": "Blocks Pinterest Tag marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "s.pinimg.com/ct/core.js",
+        "assets.pinterest.com",
+        "ct.pinterest.com",
+        "pintrk(",
+        "pintrk (",
+        "pinterest-for-woocommerce",
+        "add-pinterest-conversion-tags",
+        "pinmarklet.js"
+    ],
+    "cookies": [
+        "_pin_unauth",
+        "_pinterest_ct_ua"
+    ]
+}

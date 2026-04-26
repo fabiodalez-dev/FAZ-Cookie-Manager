@@ -2,6 +2,15 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.6] — 2026-04-26
+
+### Added
+- **Blocker-template parity with the runtime detection layer.** The plugin's runtime script blocker (driven by `Known_Providers`) covers 143 third-party services out of the box — Google Analytics, Adobe Analytics, Plausible, Microsoft Clarity, Mixpanel, Segment, Stripe, Mailchimp, Klaviyo, HubSpot, Pinterest, Snapchat, Reddit, Quora, Outbrain, Taboola, Yandex Metrica, Baidu Analytics, OneTrust, and 124 more. Until 1.13.5 only 11 of those were exposed in the admin's "Add from template" picker, so an admin running, say, Plausible or Microsoft Clarity had no in-UI affordance to manage their rule even though the runtime was already blocking them silently. 1.13.6 closes the gap: every `Known_Providers` entry now ships a matching blocker-template JSON, auto-derived from the same source of truth (label, category, URL patterns, cookies). The picker grows from 11 to 142 (Matomo Tag Manager and Facebook are merged into the existing matomo / meta-pixel templates respectively to avoid duplicates).
+- **Single source of truth.** The 131 new templates were generated programmatically from `includes/data/known-providers.json` so the admin picker can never drift from the runtime block list. If a future release adds a new provider to Known_Providers it should also drop a matching template under `admin/modules/cookies/includes/blocker-templates/`; the same generator script can be re-run.
+
+### Notes
+- The privacy contract is unchanged. Sites that didn't use any of these providers see no behaviour difference. Sites that did use them already had their cookies auto-categorised and their scripts auto-blocked — the new templates only make them visible in the admin so admins can review or override the rule. The `F21: blocker templates REST endpoint returns 10+ templates` regression continues to pass (now 142).
+
 ## [1.13.5] — 2026-04-26
 
 ### Added

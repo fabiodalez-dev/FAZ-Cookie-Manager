@@ -1,0 +1,14 @@
+{
+    "id": "twitch",
+    "name": "Twitch",
+    "description": "Blocks Twitch marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "player.twitch.tv",
+        "embed.twitch.tv",
+        "clips.twitch.tv"
+    ],
+    "cookies": [
+        "twitch.lohp.countryCode"
+    ]
+}

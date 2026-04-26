@@ -1,0 +1,14 @@
+{
+    "id": "pendo",
+    "name": "Pendo",
+    "description": "Blocks Pendo analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.pendo.io",
+        "pendo.io/agent/",
+        "pendo.initialize("
+    ],
+    "cookies": [
+        "_pendo_*"
+    ]
+}

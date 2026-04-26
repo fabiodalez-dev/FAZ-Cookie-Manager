@@ -1,0 +1,16 @@
+{
+    "id": "cj_affiliate",
+    "name": "CJ Affiliate",
+    "description": "Blocks CJ Affiliate marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "emjcd.com",
+        "ftjcfx.com",
+        "tqlkg.com",
+        "anrdoezrs.net",
+        "dpbolvw.net",
+        "jdoqocy.com",
+        "kqzyfj.com"
+    ],
+    "cookies": []
+}

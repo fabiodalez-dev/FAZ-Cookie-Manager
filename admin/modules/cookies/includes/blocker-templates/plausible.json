@@ -1,0 +1,12 @@
+{
+    "id": "plausible",
+    "name": "Plausible Analytics",
+    "description": "Blocks Plausible Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "plausible.io/js/",
+        "plausible.io/api/event",
+        "plausible-analytics"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,14 @@
+{
+    "id": "optimizely",
+    "name": "Optimizely",
+    "description": "Blocks Optimizely analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.optimizely.com",
+        "optimizely.com/js/"
+    ],
+    "cookies": [
+        "optimizelyEndUserId",
+        "optimizelySegments"
+    ]
+}

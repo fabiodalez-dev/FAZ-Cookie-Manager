@@ -1,0 +1,10 @@
+{
+    "id": "tidio",
+    "name": "Tidio Chat",
+    "description": "Blocks Tidio Chat embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "code.tidio.co"
+    ],
+    "cookies": []
+}

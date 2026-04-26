@@ -1,0 +1,12 @@
+{
+    "id": "freshchat",
+    "name": "Freshdesk / Freshchat",
+    "description": "Blocks Freshdesk / Freshchat embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "wchat.freshchat.com",
+        "snippets.freshdesk.com",
+        "assets.freshdesk.com"
+    ],
+    "cookies": []
+}

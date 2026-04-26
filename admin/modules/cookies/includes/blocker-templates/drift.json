@@ -1,0 +1,16 @@
+{
+    "id": "drift",
+    "name": "Drift",
+    "description": "Blocks Drift marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "js.driftt.com",
+        "drift.com",
+        "driftt.com"
+    ],
+    "cookies": [
+        "drift_aid",
+        "drift_aaid",
+        "driftt_aid"
+    ]
+}

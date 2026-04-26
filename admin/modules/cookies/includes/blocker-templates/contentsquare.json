@@ -1,0 +1,19 @@
+{
+    "id": "contentsquare",
+    "name": "Contentsquare",
+    "description": "Blocks Contentsquare analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "t.contentsquare.net",
+        "contentsquare.com",
+        "contentsquare.net/tag",
+        "_uxa.push"
+    ],
+    "cookies": [
+        "_cs_c",
+        "_cs_id",
+        "_cs_s",
+        "_cs_mk",
+        "_cs_same_site"
+    ]
+}

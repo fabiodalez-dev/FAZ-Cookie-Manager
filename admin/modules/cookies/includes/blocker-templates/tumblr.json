@@ -1,0 +1,11 @@
+{
+    "id": "tumblr",
+    "name": "Tumblr",
+    "description": "Blocks Tumblr marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "assets.tumblr.com",
+        "tumblr.com/share"
+    ],
+    "cookies": []
+}

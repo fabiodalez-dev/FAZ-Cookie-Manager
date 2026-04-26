@@ -1,0 +1,12 @@
+{
+    "id": "paypal",
+    "name": "PayPal",
+    "description": "Blocks PayPal embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "www.paypal.com/tagmanager/pptm.js",
+        "www.paypalobjects.com/api/checkout.js",
+        "paypal.com/sdk/js"
+    ],
+    "cookies": []
+}

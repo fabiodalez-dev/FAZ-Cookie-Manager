@@ -1,0 +1,10 @@
+{
+    "id": "simple-share-buttons",
+    "name": "Simple Share Buttons",
+    "description": "Blocks Simple Share Buttons marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "ssba-sharethis"
+    ],
+    "cookies": []
+}

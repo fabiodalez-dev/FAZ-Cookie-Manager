@@ -1,0 +1,15 @@
+{
+    "id": "addthis",
+    "name": "AddThis",
+    "description": "Blocks AddThis marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "addthis.com",
+        "addthis_widget.js",
+        "s7.addthis.com"
+    ],
+    "cookies": [
+        "__atuvc",
+        "__atuvs"
+    ]
+}

@@ -1,0 +1,14 @@
+{
+    "id": "wistia",
+    "name": "Wistia",
+    "description": "Blocks Wistia marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "fast.wistia.com",
+        "fast.wistia.net",
+        "embedwistia-a.akamaihd.net"
+    ],
+    "cookies": [
+        "wistia"
+    ]
+}

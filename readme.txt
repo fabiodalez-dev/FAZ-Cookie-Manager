@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.5
+Stable tag: 1.13.6
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -193,6 +193,10 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.6 =
+* New: blocker-template parity with the runtime detection layer. Every provider already auto-detected by `Known_Providers` (143 of them — Google Analytics, Adobe, Plausible, Microsoft Clarity, Mixpanel, Segment, Stripe, Mailchimp, Klaviyo, HubSpot, Pinterest, Snapchat, Reddit, Quora, Outbrain, Taboola, Yandex Metrica, Baidu Analytics, etc.) now appears in WP Admin → FAZ Cookie Manager → Cookies → "Add from template". Previously only 11 templates were exposed in the admin picker; the runtime always blocked them all, but admins couldn't see them in the picker. Discovery-friendly without changing the privacy contract.
+* Internal: 131 generated blocker-template JSONs auto-derived from `includes/data/known-providers.json` (single source of truth). Each template inherits the provider's `label`, `category`, `patterns`, and `cookies`.
 
 = 1.13.5 =
 * New: Matomo (formerly Piwik) is now available as a blocker template in Cookies → Blocker Templates. Covers self-hosted and Matomo Cloud, including Matomo Tag Manager, the matomo.js / piwik.js trackers, the matomo.php / piwik.php tracking endpoint, and all `_pk_*`, `MATOMO_SESSID`, and `mtm_consent*` cookies. Requested by a user on the back of a successful 1.13.4 install.

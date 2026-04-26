@@ -1,0 +1,11 @@
+{
+    "id": "jivochat",
+    "name": "JivoChat",
+    "description": "Blocks JivoChat embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "code.jivosite.com",
+        "jivosite.com/widget"
+    ],
+    "cookies": []
+}

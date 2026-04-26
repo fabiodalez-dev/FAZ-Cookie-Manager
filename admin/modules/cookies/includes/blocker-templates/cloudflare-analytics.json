@@ -1,0 +1,11 @@
+{
+    "id": "cloudflare-analytics",
+    "name": "Cloudflare Web Analytics",
+    "description": "Blocks Cloudflare Web Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "static.cloudflareinsights.com/beacon.min.js",
+        "cloudflareinsights.com"
+    ],
+    "cookies": []
+}

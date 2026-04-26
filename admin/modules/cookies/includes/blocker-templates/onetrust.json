@@ -1,0 +1,16 @@
+{
+    "id": "onetrust",
+    "name": "OneTrust",
+    "description": "Blocks OneTrust embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "cdn.cookielaw.org",
+        "optanon.blob.core.windows.net",
+        "cookie-cdn.cookiepro.com",
+        "OptanonConsent"
+    ],
+    "cookies": [
+        "OptanonConsent",
+        "OptanonAlertBoxClosed"
+    ]
+}

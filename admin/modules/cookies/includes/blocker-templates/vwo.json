@@ -1,0 +1,18 @@
+{
+    "id": "vwo",
+    "name": "VWO",
+    "description": "Blocks VWO analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "dev.visualwebsiteoptimizer.com",
+        "wingify.com",
+        "vwo_code",
+        "VWO.push("
+    ],
+    "cookies": [
+        "_vis_opt_*",
+        "_vwo_uuid*",
+        "_vwo_ds",
+        "_vwo_sn"
+    ]
+}

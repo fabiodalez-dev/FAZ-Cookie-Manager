@@ -1,0 +1,10 @@
+{
+    "id": "animoto",
+    "name": "Animoto",
+    "description": "Blocks Animoto embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "animoto.com"
+    ],
+    "cookies": []
+}

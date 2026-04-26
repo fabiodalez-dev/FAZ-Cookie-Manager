@@ -1,0 +1,10 @@
+{
+    "id": "ted",
+    "name": "TED",
+    "description": "Blocks TED embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "embed.ted.com"
+    ],
+    "cookies": []
+}

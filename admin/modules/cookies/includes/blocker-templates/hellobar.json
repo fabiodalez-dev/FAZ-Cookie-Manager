@@ -1,0 +1,11 @@
+{
+    "id": "hellobar",
+    "name": "Hello Bar",
+    "description": "Blocks Hello Bar marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "my.hellobar.com",
+        "cdn.hellobar.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "hubspot-leadin",
+    "name": "HubSpot LeadIn",
+    "description": "Blocks HubSpot LeadIn marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "leadin-script-loader-js",
+        "leadin-scriptloader-js",
+        "hs-script-loader"
+    ],
+    "cookies": []
+}

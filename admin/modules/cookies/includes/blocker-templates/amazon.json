@@ -1,0 +1,13 @@
+{
+    "id": "amazon",
+    "name": "Amazon",
+    "description": "Blocks Amazon marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "amazon-adsystem.com",
+        "assoc-amazon.com",
+        "rcm-na.amazon-adsystem.com",
+        "ws-na.amazon-adsystem.com"
+    ],
+    "cookies": []
+}

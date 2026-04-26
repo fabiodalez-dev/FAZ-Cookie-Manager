@@ -1,0 +1,15 @@
+{
+    "id": "sharethis",
+    "name": "ShareThis",
+    "description": "Blocks ShareThis marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "sharethis.com",
+        "platform-api.sharethis.com",
+        "sharethis.com/js/",
+        "count-server.sharethis.com"
+    ],
+    "cookies": [
+        "__unam"
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "id": "cloudup",
+    "name": "Cloudup",
+    "description": "Blocks Cloudup embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "cloudup.com"
+    ],
+    "cookies": []
+}

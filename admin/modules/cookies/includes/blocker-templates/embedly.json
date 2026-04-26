@@ -1,0 +1,12 @@
+{
+    "id": "embedly",
+    "name": "Embedly",
+    "description": "Blocks Embedly embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "embedly.com",
+        "embed.ly",
+        "cdn.embedly.com"
+    ],
+    "cookies": []
+}

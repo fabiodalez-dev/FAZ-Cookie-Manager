@@ -1,0 +1,10 @@
+{
+    "id": "slideshare",
+    "name": "SlideShare",
+    "description": "Blocks SlideShare embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "slideshare.net"
+    ],
+    "cookies": []
+}

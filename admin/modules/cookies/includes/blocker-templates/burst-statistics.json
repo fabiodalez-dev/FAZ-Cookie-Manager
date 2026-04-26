@@ -1,0 +1,20 @@
+{
+    "id": "burst-statistics",
+    "name": "Burst Statistics",
+    "description": "Blocks Burst Statistics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "burst-frontend",
+        "burst-statistics",
+        "burst-cookieless",
+        "burst.min.js",
+        "burst_uid",
+        "burst-time-tracking-script",
+        "burst-tracking-script",
+        "window.burst"
+    ],
+    "cookies": [
+        "burst_uid",
+        "burst_*"
+    ]
+}

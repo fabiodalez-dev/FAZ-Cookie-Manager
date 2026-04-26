@@ -1,0 +1,15 @@
+{
+    "id": "convertkit",
+    "name": "ConvertKit",
+    "description": "Blocks ConvertKit marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "f.convertkit.com",
+        "convertkit.com/js",
+        "app.convertkit.com"
+    ],
+    "cookies": [
+        "ck_subscriber_id",
+        "_ck_visitor"
+    ]
+}

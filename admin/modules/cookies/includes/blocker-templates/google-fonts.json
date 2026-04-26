@@ -1,0 +1,11 @@
+{
+    "id": "google-fonts",
+    "name": "Google Fonts",
+    "description": "Blocks Google Fonts embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "fonts.googleapis.com",
+        "fonts.gstatic.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,11 @@
+{
+    "id": "skimlinks",
+    "name": "Skimlinks",
+    "description": "Blocks Skimlinks marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "s.skimresources.com",
+        "r.skimresources.com"
+    ],
+    "cookies": []
+}

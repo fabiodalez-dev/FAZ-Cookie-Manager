@@ -1,0 +1,17 @@
+{
+    "id": "olark",
+    "name": "Olark",
+    "description": "Blocks Olark embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "static.olark.com",
+        "olark.com/jw",
+        "olark.identify"
+    ],
+    "cookies": [
+        "hblid",
+        "olfsk",
+        "wcsid",
+        "_okglobalid_*"
+    ]
+}

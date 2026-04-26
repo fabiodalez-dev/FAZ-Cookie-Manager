@@ -1,0 +1,12 @@
+{
+    "id": "polldaddy",
+    "name": "Crowdsignal (Polldaddy)",
+    "description": "Blocks Crowdsignal (Polldaddy) embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "polldaddy.com",
+        "crowdsignal.com",
+        "survey.fm"
+    ],
+    "cookies": []
+}

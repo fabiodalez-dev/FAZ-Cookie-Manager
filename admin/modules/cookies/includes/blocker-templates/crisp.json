@@ -1,0 +1,15 @@
+{
+    "id": "crisp",
+    "name": "Crisp Chat",
+    "description": "Blocks Crisp Chat embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "client.crisp.chat",
+        "settings.crisp.chat",
+        "$crisp",
+        "CRISP_WEBSITE_ID"
+    ],
+    "cookies": [
+        "crisp-client/*"
+    ]
+}

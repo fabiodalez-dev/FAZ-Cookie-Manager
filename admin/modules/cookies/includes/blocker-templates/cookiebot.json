@@ -1,0 +1,14 @@
+{
+    "id": "cookiebot",
+    "name": "Cookiebot",
+    "description": "Blocks Cookiebot embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "consent.cookiebot.com",
+        "consentcdn.cookiebot.com"
+    ],
+    "cookies": [
+        "CookieConsent",
+        "CookieConsentBulkTicket"
+    ]
+}

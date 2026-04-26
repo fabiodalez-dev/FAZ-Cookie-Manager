@@ -1,0 +1,15 @@
+{
+    "id": "baidu_analytics",
+    "name": "Baidu Analytics",
+    "description": "Blocks Baidu Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "hm.baidu.com",
+        "tongji.baidu.com"
+    ],
+    "cookies": [
+        "Hm_lvt_*",
+        "Hm_lpvt_*",
+        "BAIDUID"
+    ]
+}

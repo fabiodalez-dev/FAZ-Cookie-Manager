@@ -1,0 +1,16 @@
+{
+    "id": "posthog",
+    "name": "PostHog",
+    "description": "Blocks PostHog analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "app.posthog.com",
+        "us.posthog.com",
+        "eu.posthog.com",
+        "posthog-js",
+        "posthog.init("
+    ],
+    "cookies": [
+        "ph_*"
+    ]
+}

@@ -1,0 +1,17 @@
+{
+    "id": "google-optimize",
+    "name": "Google Optimize",
+    "description": "Blocks Google Optimize analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "googleoptimize.com/optimize.js",
+        "google-optimize"
+    ],
+    "cookies": [
+        "_gaexp",
+        "_opt_awcid",
+        "_opt_awmid",
+        "_opt_awgid",
+        "_opt_utmc"
+    ]
+}

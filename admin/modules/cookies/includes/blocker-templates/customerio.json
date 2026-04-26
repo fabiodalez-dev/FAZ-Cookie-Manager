@@ -1,0 +1,15 @@
+{
+    "id": "customerio",
+    "name": "Customer.io",
+    "description": "Blocks Customer.io marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "assets.customer.io",
+        "track.customer.io",
+        "customerioforms.com"
+    ],
+    "cookies": [
+        "_cio",
+        "_cioanonid"
+    ]
+}

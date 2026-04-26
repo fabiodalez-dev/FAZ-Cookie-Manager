@@ -1,0 +1,15 @@
+{
+    "id": "optinmonster",
+    "name": "OptinMonster",
+    "description": "Blocks OptinMonster marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "a.optinmonster.com",
+        "optinmonster",
+        "api.opmnstr.com",
+        "optinmonster-"
+    ],
+    "cookies": [
+        "om-*"
+    ]
+}

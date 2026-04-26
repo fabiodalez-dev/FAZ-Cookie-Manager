@@ -1,0 +1,14 @@
+{
+    "id": "usercentrics",
+    "name": "Usercentrics",
+    "description": "Blocks Usercentrics embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "app.usercentrics.eu",
+        "usercentrics.eu/sdk"
+    ],
+    "cookies": [
+        "uc_settings",
+        "uc_user_interaction"
+    ]
+}

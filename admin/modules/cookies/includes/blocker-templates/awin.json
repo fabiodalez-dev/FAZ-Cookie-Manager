@@ -1,0 +1,14 @@
+{
+    "id": "awin",
+    "name": "Awin (Zanox)",
+    "description": "Blocks Awin (Zanox) marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "dwin1.com",
+        "dwin2.com",
+        "awin1.com"
+    ],
+    "cookies": [
+        "aw*"
+    ]
+}

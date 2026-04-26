@@ -1,0 +1,11 @@
+{
+    "id": "smash-balloon-instagram",
+    "name": "Smash Balloon Instagram Feed",
+    "description": "Blocks Smash Balloon Instagram Feed marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "sb_instagram_scripts",
+        "sb-instagram"
+    ],
+    "cookies": []
+}

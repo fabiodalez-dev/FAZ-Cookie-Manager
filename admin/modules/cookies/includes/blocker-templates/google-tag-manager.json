@@ -1,0 +1,26 @@
+{
+    "id": "google-tag-manager",
+    "name": "Google Tag Manager",
+    "description": "Blocks Google Tag Manager analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "googletagmanager.com/gtm.js",
+        "googletagmanager.com/gtm",
+        "googletagmanager.com/ns.html",
+        "gtm.start",
+        "gtm4wp",
+        "gtmkit",
+        "gtm4wp-",
+        "zeeker-gtm",
+        "dataLayer.push({",
+        "google_tag_manager",
+        "easy-google-tag-manager",
+        "google-tag-manager-integration-for-woocommerce",
+        "server-side-tracking-via-gtm",
+        "conversion-pixel-and-tracking-tag-manager",
+        "conversion-pixel-tracking-tag-manager",
+        "tracking-and-consent-manager",
+        "wp-full-picture"
+    ],
+    "cookies": []
+}

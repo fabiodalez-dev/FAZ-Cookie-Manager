@@ -1,0 +1,12 @@
+{
+    "id": "fathom",
+    "name": "Fathom Analytics",
+    "description": "Blocks Fathom Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.usefathom.com",
+        "usefathom.com/script.js",
+        "fathom-analytics"
+    ],
+    "cookies": []
+}

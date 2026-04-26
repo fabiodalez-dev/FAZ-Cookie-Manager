@@ -1,0 +1,18 @@
+{
+    "id": "taboola",
+    "name": "Taboola",
+    "description": "Blocks Taboola marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "cdn.taboola.com",
+        "trc.taboola.com",
+        "nr.taboola.com",
+        "_tfa.push",
+        "_taboola"
+    ],
+    "cookies": [
+        "t_gid",
+        "t_pt_gid",
+        "taboola_usg"
+    ]
+}

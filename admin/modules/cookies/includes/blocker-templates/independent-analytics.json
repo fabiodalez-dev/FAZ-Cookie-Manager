@@ -1,0 +1,14 @@
+{
+    "id": "independent-analytics",
+    "name": "Independent Analytics",
+    "description": "Blocks Independent Analytics analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "independent-analytics",
+        "iawp-",
+        "iawp-javascript",
+        "iawp-layout-javascript",
+        "window.IAWP"
+    ],
+    "cookies": []
+}

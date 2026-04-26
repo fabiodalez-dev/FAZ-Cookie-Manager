@@ -1,0 +1,12 @@
+{
+    "id": "imgur",
+    "name": "Imgur",
+    "description": "Blocks Imgur embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "imgur.com/a/",
+        "imgur.com/gallery/",
+        "s.imgur.com"
+    ],
+    "cookies": []
+}

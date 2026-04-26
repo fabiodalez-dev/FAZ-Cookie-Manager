@@ -1,0 +1,17 @@
+{
+    "id": "logrocket",
+    "name": "LogRocket",
+    "description": "Blocks LogRocket analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.logrocket.io",
+        "cdn.lr-ingest.io",
+        "cdn.lr-in.com",
+        "LogRocket.init("
+    ],
+    "cookies": [
+        "_lr_tabs_*",
+        "_lr_env_*",
+        "LogRocket"
+    ]
+}

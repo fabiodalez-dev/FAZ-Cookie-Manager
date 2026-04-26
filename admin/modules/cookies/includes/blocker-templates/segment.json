@@ -1,0 +1,18 @@
+{
+    "id": "segment",
+    "name": "Segment",
+    "description": "Blocks Segment analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.segment.com/analytics.js",
+        "cdn.segment.io",
+        "api.segment.io",
+        "analytics.load(",
+        "analytics.track("
+    ],
+    "cookies": [
+        "ajs_anonymous_id",
+        "ajs_user_id",
+        "ajs_group_id"
+    ]
+}

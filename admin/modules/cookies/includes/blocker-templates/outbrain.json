@@ -1,0 +1,11 @@
+{
+    "id": "outbrain",
+    "name": "Outbrain",
+    "description": "Blocks Outbrain marketing pixels, conversion tracking, and ad-targeting cookies.",
+    "category": "marketing",
+    "patterns": [
+        "widgets.outbrain.com",
+        "outbrain.com/outbrain.js"
+    ],
+    "cookies": []
+}

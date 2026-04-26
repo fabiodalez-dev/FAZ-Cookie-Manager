@@ -1,0 +1,17 @@
+{
+    "id": "zendesk",
+    "name": "Zendesk",
+    "description": "Blocks Zendesk embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "static.zdassets.com",
+        "ekr.zdassets.com",
+        "zendesk.com/embeddable",
+        "zopim.com"
+    ],
+    "cookies": [
+        "__zlcmid",
+        "__zldp",
+        "__zlcprivacy"
+    ]
+}

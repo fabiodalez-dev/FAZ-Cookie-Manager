@@ -1,0 +1,14 @@
+{
+    "id": "spotify",
+    "name": "Spotify",
+    "description": "Blocks Spotify embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "open.spotify.com/embed",
+        "embed.spotify.com"
+    ],
+    "cookies": [
+        "sp_t",
+        "sp_landing"
+    ]
+}

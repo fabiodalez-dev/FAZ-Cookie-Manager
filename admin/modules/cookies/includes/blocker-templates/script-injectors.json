@@ -1,0 +1,22 @@
+{
+    "id": "script-injectors",
+    "name": "Header/Footer and Snippet Injectors",
+    "description": "Blocks Header/Footer and Snippet Injectors embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "wpcode",
+        "insert-headers-and-footers",
+        "header-footer-code-manager",
+        "head-footer-code",
+        "ht-script",
+        "custom-css-js",
+        "simple-custom-css-and-js",
+        "code-snippets",
+        "woody",
+        "insert-php",
+        "ad-inserter",
+        "cm-header-footer-script-loader",
+        "tag-manager-header-body-and-footer"
+    ],
+    "cookies": []
+}

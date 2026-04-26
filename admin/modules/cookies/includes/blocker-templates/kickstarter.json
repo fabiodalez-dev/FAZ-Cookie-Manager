@@ -1,0 +1,10 @@
+{
+    "id": "kickstarter",
+    "name": "Kickstarter",
+    "description": "Blocks Kickstarter embeds, widgets, or third-party content until consent is granted.",
+    "category": "functional",
+    "patterns": [
+        "kickstarter.com"
+    ],
+    "cookies": []
+}

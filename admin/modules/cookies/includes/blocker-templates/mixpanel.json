@@ -1,0 +1,16 @@
+{
+    "id": "mixpanel",
+    "name": "Mixpanel",
+    "description": "Blocks Mixpanel analytics tracking, page-view collection, and session data.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.mxpnl.com",
+        "api-js.mixpanel.com",
+        "api.mixpanel.com",
+        "mixpanel.init(",
+        "mixpanel.track("
+    ],
+    "cookies": [
+        "mp_*_mixpanel"
+    ]
+}
