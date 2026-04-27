@@ -2471,9 +2471,13 @@ class Frontend {
 			// posts a comment with name/email/url remembered. Strictly
 			// necessary for the "remember me" comments UX and not used
 			// for cross-site tracking.
+			//
+			// The single `comment_author_` prefix already covers all three
+			// core variants (`comment_author_{HASH}`,
+			// `comment_author_email_{HASH}`, `comment_author_url_{HASH}`)
+			// because the loop below uses `0 === strpos($name, $prefix)`,
+			// which is a leading-substring match.
 			'comment_author_',
-			'comment_author_email_',
-			'comment_author_url_',
 		);
 		foreach ( $prefixes as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
