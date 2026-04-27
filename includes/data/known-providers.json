@@ -1146,7 +1146,7 @@
     },
     "gravatar": {
         "label": "Gravatar",
-        "category": "functional",
+        "category": "necessary",
         "patterns": [
             "gravatar.com/avatar",
             "secure.gravatar.com",
