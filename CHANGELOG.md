@@ -2,6 +2,33 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.7] — 2026-04-27
+
+### Fixed
+
+- **Issue #85 — GVL update fatal `Call to undefined function FazCookie\…\wp_tempnam()` on the REST endpoint.** `wp_tempnam()` lives in `wp-admin/includes/file.php`, which is *not* auto-loaded outside the admin context. The caller in `includes/class-gvl.php` is namespaced (`FazCookie\Includes`), so an unqualified `wp_tempnam()` resolved in the local namespace and fataled. Fix: lazy `require_once ABSPATH . 'wp-admin/includes/file.php'` + call the global name explicitly as `\wp_tempnam(...)`. Same fix shape applied to `download_url()` in `admin/modules/languages/includes/class-controller.php`.
+- **Issue #87 — Bricks Builder Video element collapsed to zero height when its YouTube iframe was blocked pending consent.** The placeholder used `min-height: 0` on the video variant which fought the parent's `aspect-ratio` and the inner `<iframe>`'s `height: 100%`. Removed `min-height: 0` from `.faz-placeholder--video`; scoped the `min-width: min(280px, 100%)` floor only to the video variant — the responsive `min()` form prevents horizontal overflow on narrow viewports (CodeRabbit nitpick).
+- **Gooloo regression — wpDiscuz comments "completely disfigured" on FAZ 1.13.6 + wpDiscuz 7.6.54 + LiteSpeed + Divi.** Real cause: the `Gravatar` entry in `includes/data/known-providers.json` mapped to category `functional`. Visitors who rejected "functional" had each `<img src="https://secure.gravatar.com/avatar/…">` (used by wpDiscuz, Disqus, JetPack Comments, and WordPress core) replaced with the 200-px-tall `.faz-placeholder` div, blowing up the comment thread. Gravatar avatars set no cookies, are loaded via a hash of the commenter's email (no cross-site tracking), and are part of the WordPress core comment UX — recategorise to `necessary` (Art. 5(3) ePrivacy *strictly necessary* for the user-requested service of posting a comment). Mirrored in `admin/modules/cookies/includes/blocker-templates/gravatar.json` for admin-UX coherence.
+- **Defence in depth** for the bug above: added `wpdiscuz_nonce_*` and `comment_author_*` to the `is_wp_internal_cookie()` allowlist in `frontend/class-frontend.php`. The single `comment_author_` prefix already covers the three core variants (`comment_author_{HASH}`, `comment_author_email_{HASH}`, `comment_author_url_{HASH}`) since the matcher uses `0 === strpos(...)` — CodeRabbit nitpick: dropped the redundant `comment_author_email_` and `comment_author_url_` entries that were no-ops, with a comment documenting the implicit coverage.
+
+### Changed (wp.org compliance pass)
+
+Address the WordPress.org plugin directory AUTOPREREVIEW feedback ahead of submission. Each item is technically equivalent to the previous behaviour or strictly more compliant; no user-facing regressions.
+
+- **`$_COOKIE` sanitization visible at access-line.** `faz-cookie-manager.php::faz_get_consent_cookie_value()` now wraps `wp_unslash()` with `sanitize_text_field()` on the same line as the `$_COOKIE` access. `rawurldecode()` runs on the already-sanitized payload, then `sanitize_text_field()` is re-applied as defence-in-depth.
+- **`load_plugin_textdomain()` body removed.** WordPress 4.6+ auto-loads the textdomain. The method signature stays (a documented no-op) so the loader registration in `class-cli.php` still resolves.
+- **4× `__( $variable, ... )` calls in cookie-table shortcode replaced with verbatim returns.** xgettext cannot extract from variables.
+- **8 of 10 flagged inline `<script>` / `<style>` blocks migrated to `wp_enqueue_*` / `wp_add_inline_*`:**
+  - `admin/views/system-status.php` style → appended to `admin/assets/css/faz-admin.css`.
+  - `admin/views/system-status.php` script → new `admin/assets/js/pages/system-status.js`.
+  - `admin/views/cookies.php` script → appended to existing `admin/assets/js/pages/cookies.js`. 6 strings moved into `fazConfig.i18n.cookies.*`.
+  - `admin/views/languages.php` script → `wp_add_inline_script('faz-page-languages', ...)`.
+  - `includes/class-cookie-table-shortcode.php` style → new `frontend/css/cookie-table-shortcode.css`.
+- **3 residuals stay inline with `phpcs:ignore` + a written technical justification**: ClassicPress wp-api-fetch polyfill, `<script type="text/template">` inert HTML banner template, AMP `<amp-consent>` runtime, and the iframe-shell critical CSS in `banner-preview-frame.php`.
+- **`_faz_first_time_install` site-transient renamed to `faz_first_time_install`** with migration in `Activator::check_for_upgrade()` and fallback read in `faz_first_time_install()`.
+- **`permission_callback => __return_true` on three public REST routes** carries explanatory block-comments documenting HMAC origin tokens + per-IP rate limiting + strict `sanitize_callback`.
+- **`readme.txt` "External Services"** gained a "Note on third-party domain strings" subsection clarifying that `js.stripe.com`, `connect.facebook.net`, `cdn.jsdelivr.net`, `unpkg.com` are *blocking-detection patterns* (config), not outbound HTTP calls.
+
 ## [1.13.6] — 2026-04-26
 
 ### Added
