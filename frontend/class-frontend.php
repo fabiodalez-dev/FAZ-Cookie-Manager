@@ -2447,13 +2447,33 @@ class Frontend {
 			return true;
 		}
 		// Prefix matches (these have dynamic suffixes like hashes or user IDs).
+		// These are *technical* / strictly-necessary cookies — CSRF nonces,
+		// session anti-tampering tokens, page-cache keys — that must NEVER
+		// be shredded server-side or exposed in the consent banner. If they
+		// were, the corresponding plugin would emit AJAX calls with stale
+		// or missing nonces and `wp_verify_nonce()` would fail with 403,
+		// breaking the feature entirely.
 		$prefixes = array(
 			'wordpress_logged_in_',
 			'wordpress_sec_',
 			'wp-settings-',
 			'wp-settings-time-',
 			'wp-postpass_',
-			'_litespeed_',         // LiteSpeed Cache internal.
+			'_litespeed_',          // LiteSpeed Cache internal.
+			// wpDiscuz — comments/AJAX nonce. Without this prefix in the
+			// allowlist, rejecting the "uncategorized" category would
+			// shred the nonce server-side and the next comment-submit
+			// AJAX call would 403, completely breaking comments.
+			// Reported on gooloo.de (FAZ 1.13.6 + wpDiscuz 7.6.5 +
+			// LiteSpeed + Divi).
+			'wpdiscuz_nonce_',
+			// WordPress core comment-author cookies. Set when a visitor
+			// posts a comment with name/email/url remembered. Strictly
+			// necessary for the "remember me" comments UX and not used
+			// for cross-site tracking.
+			'comment_author_',
+			'comment_author_email_',
+			'comment_author_url_',
 		);
 		foreach ( $prefixes as $prefix ) {
 			if ( 0 === strpos( $name, $prefix ) ) {
