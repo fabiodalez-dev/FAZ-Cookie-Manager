@@ -1670,8 +1670,36 @@ document.createElement = (...args) => {
 };
 
 function _fazMutationObserver(mutations) {
-    for (const { addedNodes } of mutations) {
-        for (const node of addedNodes) {
+    // Collect every <script>/<iframe> introduced by this batch of mutations.
+    // We MUST descend into added subtrees: page builders (Bricks Builder,
+    // Elementor, Divi, WPBakery) and lightbox plugins routinely insert a
+    // wrapper element whose addedNode itself is a <div> — the actual
+    // <iframe> or <script> we need to gate sits *inside* that wrapper.
+    // Iterating only the top-level addedNodes (the original behaviour)
+    // missed those subtrees entirely, so a YouTube embed dropped into a
+    // `.bricks-video` wrapper played without ever being intercepted and
+    // no consent placeholder was ever shown. Reported as #87.
+    var nodesToProcess = [];
+    for (var mi = 0; mi < mutations.length; mi++) {
+        var added = mutations[mi].addedNodes;
+        for (var ai = 0; ai < added.length; ai++) {
+            var n = added[ai];
+            if (!n || n.nodeType !== 1) continue; // ELEMENT_NODE only
+            var tag = (n.nodeName || '').toLowerCase();
+            if (tag === 'script' || tag === 'iframe') {
+                nodesToProcess.push(n);
+            } else if (typeof n.querySelectorAll === 'function') {
+                // Descend: pick up <script[src]> / <iframe[src]> nested
+                // inside the inserted wrapper.
+                var nested = n.querySelectorAll('script[src], iframe[src]');
+                for (var ni = 0; ni < nested.length; ni++) {
+                    nodesToProcess.push(nested[ni]);
+                }
+            }
+        }
+    }
+
+    for (const node of nodesToProcess) {
             const nodeSrc = node && typeof node.getAttribute === "function"
                 ? (node.getAttribute("src") || node.src || "")
                 : (node && node.src ? node.src : "");
@@ -1728,7 +1756,6 @@ function _fazMutationObserver(mutations) {
                     uniqueID,
                 });
             } catch (_unused) { /* node backup failed, skip */ }
-        }
     }
 }
 
