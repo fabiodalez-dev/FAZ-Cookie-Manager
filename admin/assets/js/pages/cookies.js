@@ -1832,3 +1832,120 @@
 	}
 
 })();
+
+/* ─────────────────────────────────────────────────────────────────
+ * Shortcode copy buttons + scanner debug-log actions.
+ *
+ * Migrated out of admin/views/cookies.php (where it lived as an
+ * inline <script>) so the file complies with the WordPress.org
+ * "use wp_enqueue commands" guideline.
+ *
+ * Localized strings come from `fazConfig.i18n.cookies.*` — see the
+ * `wp_localize_script()` registration in admin/class-admin.php.
+ * ───────────────────────────────────────────────────────────────── */
+(function () {
+	'use strict';
+
+	function _t( key, fallback ) {
+		var i18n = ( window.fazConfig && window.fazConfig.i18n && window.fazConfig.i18n.cookies ) || {};
+		return i18n[ key ] || fallback;
+	}
+
+	function copyToClipboard( sourceId, successMsg ) {
+		var src = document.getElementById( sourceId );
+		if ( ! src ) {
+			return;
+		}
+		var text = src.textContent;
+		if ( navigator.clipboard && navigator.clipboard.writeText ) {
+			navigator.clipboard.writeText( text ).then( function () {
+				if ( window.FAZ && window.FAZ.notify ) { window.FAZ.notify( successMsg ); }
+			} );
+			return;
+		}
+		// Fallback for older browsers or insecure contexts.
+		var range = document.createRange();
+		range.selectNodeContents( src );
+		var sel = window.getSelection();
+		sel.removeAllRanges();
+		sel.addRange( range );
+		try {
+			document.execCommand( 'copy' );
+			if ( window.FAZ && window.FAZ.notify ) { window.FAZ.notify( successMsg ); }
+		} catch ( e ) {}
+	}
+
+	var copyShortcodeBtn = document.getElementById( 'faz-copy-shortcode' );
+	if ( copyShortcodeBtn ) {
+		copyShortcodeBtn.addEventListener( 'click', function () {
+			copyToClipboard( 'faz-shortcode-text', _t( 'shortcodeCopied', 'Shortcode copied!' ) );
+		} );
+	}
+
+	var copyPolicyBtn = document.getElementById( 'faz-copy-policy-shortcode' );
+	if ( copyPolicyBtn ) {
+		copyPolicyBtn.addEventListener( 'click', function () {
+			copyToClipboard( 'faz-policy-shortcode', _t( 'shortcodeCopied', 'Shortcode copied!' ) );
+		} );
+	}
+
+	// Scanner Debug Log — show buttons + attach listeners only if debug mode is enabled.
+	if ( window.FAZ && typeof window.FAZ.get === 'function' ) {
+		window.FAZ.get( 'settings' ).then( function ( settings ) {
+			if ( ! ( settings && settings.scanner && settings.scanner.debug_mode ) ) {
+				return;
+			}
+
+			var actionsEl = document.getElementById( 'faz-debug-log-actions' );
+			if ( actionsEl ) {
+				actionsEl.style.display = '';
+			}
+
+			var dlBtn = document.getElementById( 'faz-download-debug-log' );
+			if ( dlBtn ) {
+				dlBtn.addEventListener( 'click', function () {
+					window.FAZ.get( 'scans/debug-log' ).then( function ( res ) {
+						if ( ! res || ! res.log ) {
+							if ( window.FAZ.notify ) {
+								window.FAZ.notify( _t( 'noScanLogs', 'No scan logs available.' ), 'warning' );
+							}
+							return;
+						}
+						var blob = new Blob( [ res.log ], { type: 'text/plain' } );
+						var url  = URL.createObjectURL( blob );
+						var a    = document.createElement( 'a' );
+						a.href     = url;
+						a.download = 'faz-scanner-debug-' + new Date().toISOString().slice( 0, 10 ) + '.log';
+						document.body.appendChild( a );
+						a.click();
+						document.body.removeChild( a );
+						URL.revokeObjectURL( url );
+					} ).catch( function () {
+						if ( window.FAZ.notify ) {
+							window.FAZ.notify( _t( 'debugLogDownloadFailed', 'Failed to download debug log.' ), 'error' );
+						}
+					} );
+				} );
+			}
+
+			var clearBtn = document.getElementById( 'faz-clear-debug-log' );
+			if ( clearBtn ) {
+				clearBtn.addEventListener( 'click', function () {
+					var confirmMsg = _t( 'clearDebugLogsConfirm', 'Clear all scanner debug logs?' );
+					if ( ! window.confirm( confirmMsg ) ) {
+						return;
+					}
+					window.FAZ.del( 'scans/debug-log' ).then( function () {
+						if ( window.FAZ.notify ) {
+							window.FAZ.notify( _t( 'debugLogsCleared', 'Debug logs cleared.' ) );
+						}
+					} ).catch( function () {
+						if ( window.FAZ.notify ) {
+							window.FAZ.notify( _t( 'debugLogsClearFailed', 'Failed to clear debug logs.' ), 'error' );
+						}
+					} );
+				} );
+			}
+		} ).catch( function () {} );
+	}
+}() );

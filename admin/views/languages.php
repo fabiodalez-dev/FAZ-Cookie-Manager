@@ -58,6 +58,14 @@ foreach ( $all_languages as $name => $code ) {
 	</div>
 </div>
 
-<script>
-	window.fazAllLanguages = <?php echo wp_json_encode( $lang_map ); ?>;
-</script>
+<?php
+// Pass the full ISO-code → language-name map to admin/assets/js/pages/
+// languages.js via wp_add_inline_script() so the file complies with
+// the WordPress.org "use wp_enqueue commands" guideline. The page-
+// specific JS handle is registered in class-admin.php::enqueue_scripts().
+wp_add_inline_script(
+	'faz-page-languages',
+	'window.fazAllLanguages = ' . wp_json_encode( $lang_map ) . ';',
+	'before'
+);
+?>

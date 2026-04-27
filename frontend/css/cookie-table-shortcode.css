@@ -1,0 +1,94 @@
+/**
+ * Styles for [faz_cookie_table] shortcode output.
+ *
+ * Enqueued conditionally by includes/class-cookie-table-shortcode.php
+ * the first time the shortcode renders on a page.
+ */
+
+.faz-cookie-table-wrap {
+	margin: 1.5em 0;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.faz-cookie-table-heading {
+	margin: 0 0 1em;
+	font-size: 1.3em;
+}
+
+.faz-cookie-table-category {
+	margin: 1.5em 0 .5em;
+	font-size: 1.1em;
+	border-bottom: 2px solid #e2e8f0;
+	padding-bottom: .3em;
+}
+
+.faz-cookie-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 1em;
+}
+
+.faz-cookie-table th,
+.faz-cookie-table td {
+	padding: 8px 12px;
+	text-align: left;
+	border: 1px solid #e2e8f0;
+	vertical-align: top;
+}
+
+.faz-cookie-table th {
+	background: #f8fafc;
+	font-weight: 600;
+	font-size: 13px;
+	white-space: nowrap;
+}
+
+.faz-cookie-table td {
+	font-size: 13px;
+}
+
+.faz-cookie-table tbody tr:nth-child(even) {
+	background: #fafbfc;
+}
+
+.faz-cookie-table-empty {
+	color: #64748b;
+	font-style: italic;
+}
+
+@media (max-width: 600px) {
+	.faz-cookie-table,
+	.faz-cookie-table thead,
+	.faz-cookie-table tbody,
+	.faz-cookie-table th,
+	.faz-cookie-table td,
+	.faz-cookie-table tr {
+		display: block;
+	}
+
+	.faz-cookie-table thead {
+		display: none;
+	}
+
+	.faz-cookie-table td {
+		border: none;
+		border-bottom: 1px solid #e2e8f0;
+		padding: 6px 12px;
+	}
+
+	.faz-cookie-table td:before {
+		content: attr(data-label);
+		font-weight: 600;
+		display: block;
+		margin-bottom: 2px;
+		font-size: 12px;
+		color: #64748b;
+	}
+
+	.faz-cookie-table tr {
+		border: 1px solid #e2e8f0;
+		margin-bottom: 8px;
+		border-radius: 4px;
+	}
+}
