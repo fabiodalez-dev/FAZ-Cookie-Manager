@@ -2,7 +2,7 @@
     "id": "gravatar",
     "name": "Gravatar",
     "description": "Blocks Gravatar embeds, widgets, or third-party content until consent is granted.",
-    "category": "functional",
+    "category": "necessary",
     "patterns": [
         "gravatar.com/avatar",
         "secure.gravatar.com",
