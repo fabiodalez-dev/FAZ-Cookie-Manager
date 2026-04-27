@@ -803,6 +803,14 @@ class Frontend {
 			}
 		}
 
+		// `<script type="text/template">` is the W3C-recommended way to
+		// embed inert HTML templates in the page (browsers do NOT execute
+		// it — `type` is not `text/javascript` or `module`). The banner
+		// frontend mounts this template into the DOM at runtime via
+		// `_fazInjectBannerHtml()` in script.js. wp_enqueue_script()
+		// cannot model this: there is no JS to load, only an HTML payload
+		// that must appear inline so the renderer finds it synchronously.
+		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- inert HTML template (type=text/template is non-executable); see comment above.
 		echo '<script id="fazBannerTemplate" type="text/template">';
 		echo wp_kses( $html, faz_allowed_html() );
 		echo '</script>';

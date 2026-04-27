@@ -1822,3 +1822,16 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 		min-width: 0;
 	}
 }
+
+/* ── System Status page (admin/views/system-status.php) ─────────── */
+.faz-status-table { width: 100%; border-collapse: collapse; }
+.faz-status-table td {
+	padding: 6px 12px;
+	border-bottom: 1px solid var(--faz-border);
+	font-size: 13px;
+}
+.faz-status-table td:first-child {
+	font-weight: 600;
+	width: 40%;
+	color: var(--faz-text-secondary);
+}

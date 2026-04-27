@@ -443,7 +443,22 @@ window.wp.apiFetch=apiFetch;
 			wp_json_encode( $nonce )
 		);
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- trusted polyfill source.
+		// We cannot use wp_add_inline_script() here because:
+		//   1. The polyfill must attach to the wp-api-fetch handle, which on
+		//      ClassicPress is registered with src=false (stub) — see
+		//      `register_polyfill_stub_for_classicpress()` at the top of
+		//      this class.
+		//   2. ClassicPress 1.x is forked from WordPress 4.9, which does
+		//      NOT emit inline scripts for handles whose registered src is
+		//      false; the inline payload would be silently dropped.
+		// This early-print runs only when both `faz_is_admin_page()` AND
+		// `$this->is_classicpress()` are true, so it never executes on
+		// modern WordPress (where wp-api-fetch ships natively).
+		// $polyfill is built entirely from constants (the IIFE template) and
+		// two wp_json_encode()'d server values (REST URL, nonce) — there is
+		// no untrusted input to escape.
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- ClassicPress 1.x polyfill, trusted server-built source. wp_add_inline_script() is not viable; see block comment above.
+		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- See block comment above; ClassicPress stub-handle limitation.
 		echo '<script>' . $polyfill . '</script>';
 	}
 
@@ -696,6 +711,19 @@ window.wp.apiFetch=apiFetch;
 						'selectBothDates'          => __( 'Please select both start and end dates.', 'faz-cookie-manager' ),
 						'startBeforeEnd'           => __( 'Start date must be before end date.', 'faz-cookie-manager' ),
 						'noCategoryData'           => __( 'No category data yet.', 'faz-cookie-manager' ),
+					),
+					// System Status page.
+					'systemStatus'             => array(
+						'copied'                   => __( 'Status copied to clipboard!', 'faz-cookie-manager' ),
+					),
+					// Cookies page (shortcode copy + scanner debug log).
+					'cookies'                  => array(
+						'shortcodeCopied'          => __( 'Shortcode copied!', 'faz-cookie-manager' ),
+						'noScanLogs'               => __( 'No scan logs available.', 'faz-cookie-manager' ),
+						'debugLogDownloadFailed'   => __( 'Failed to download debug log.', 'faz-cookie-manager' ),
+						'clearDebugLogsConfirm'    => __( 'Clear all scanner debug logs?', 'faz-cookie-manager' ),
+						'debugLogsCleared'         => __( 'Debug logs cleared.', 'faz-cookie-manager' ),
+						'debugLogsClearFailed'     => __( 'Failed to clear debug logs.', 'faz-cookie-manager' ),
 					),
 				),
 			)

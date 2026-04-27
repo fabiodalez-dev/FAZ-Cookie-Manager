@@ -385,12 +385,25 @@ class Activator {
 	/**
 	 * Set a temporary flag during the first time installation.
 	 *
+	 * The transient name was renamed `_faz_first_time_install` →
+	 * `faz_first_time_install` to satisfy the wp.org "Use Prefixes"
+	 * guideline (a leading underscore counts as a 1-character prefix).
+	 * Migrate the legacy name on the same call so installs upgrading
+	 * mid-flight don't lose the flag.
+	 *
 	 * @return void
 	 */
 	public static function check_for_upgrade() {
+		// Migration: copy legacy transient onto the new name and delete it.
+		$legacy = get_site_transient( '_faz_first_time_install' );
+		if ( false !== $legacy ) {
+			set_site_transient( 'faz_first_time_install', $legacy, 30 );
+			delete_site_transient( '_faz_first_time_install' );
+		}
+
 		if ( false === get_option( 'faz_settings', false ) ) {
-			if ( false === get_site_transient( '_faz_first_time_install' ) ) {
-				set_site_transient( '_faz_first_time_install', true, 30 );
+			if ( false === get_site_transient( 'faz_first_time_install' ) ) {
+				set_site_transient( 'faz_first_time_install', true, 30 );
 			}
 		}
 	}

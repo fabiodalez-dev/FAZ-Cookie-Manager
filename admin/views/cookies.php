@@ -227,78 +227,11 @@ defined( 'ABSPATH' ) || exit;
 <!-- Hidden iframe container for browser-based cookie scanning -->
 <div id="faz-scan-frame" style="display:none;position:absolute;left:-9999px;"></div>
 
-<script>
-document.getElementById('faz-copy-shortcode').addEventListener('click', function() {
-	var text = document.getElementById('faz-shortcode-text').textContent;
-	if (navigator.clipboard) {
-		navigator.clipboard.writeText(text).then(function() {
-			FAZ.notify('<?php echo esc_js( __( 'Shortcode copied!', 'faz-cookie-manager' ) ); ?>');
-		});
-	} else {
-		var range = document.createRange();
-		range.selectNodeContents(document.getElementById('faz-shortcode-text'));
-		var sel = window.getSelection();
-		sel.removeAllRanges();
-		sel.addRange(range);
-		document.execCommand('copy');
-		FAZ.notify('<?php echo esc_js( __( 'Shortcode copied!', 'faz-cookie-manager' ) ); ?>');
-	}
-});
-document.getElementById('faz-copy-policy-shortcode').addEventListener('click', function() {
-	var text = document.getElementById('faz-policy-shortcode').textContent;
-	if (navigator.clipboard) {
-		navigator.clipboard.writeText(text).then(function() {
-			FAZ.notify('<?php echo esc_js( __( 'Shortcode copied!', 'faz-cookie-manager' ) ); ?>');
-		});
-	} else {
-		var range = document.createRange();
-		range.selectNodeContents(document.getElementById('faz-policy-shortcode'));
-		var sel = window.getSelection();
-		sel.removeAllRanges();
-		sel.addRange(range);
-		document.execCommand('copy');
-		FAZ.notify('<?php echo esc_js( __( 'Shortcode copied!', 'faz-cookie-manager' ) ); ?>');
-	}
-});
-
-/* Scanner Debug Log — show buttons and attach listeners only if debug mode is enabled */
-(function() {
-	FAZ.get('settings').then(function(settings) {
-		if (!(settings && settings.scanner && settings.scanner.debug_mode)) return;
-
-		var actionsEl = document.getElementById('faz-debug-log-actions');
-		if (actionsEl) actionsEl.style.display = '';
-
-		var dlBtn = document.getElementById('faz-download-debug-log');
-		if (dlBtn) dlBtn.addEventListener('click', function() {
-			FAZ.get('scans/debug-log').then(function(res) {
-				if (!res || !res.log) {
-					FAZ.notify('<?php echo esc_js( __( 'No scan logs available.', 'faz-cookie-manager' ) ); ?>', 'warning');
-					return;
-				}
-				var blob = new Blob([res.log], { type: 'text/plain' });
-				var url  = URL.createObjectURL(blob);
-				var a    = document.createElement('a');
-				a.href     = url;
-				a.download = 'faz-scanner-debug-' + new Date().toISOString().slice(0,10) + '.log';
-				document.body.appendChild(a);
-				a.click();
-				document.body.removeChild(a);
-				URL.revokeObjectURL(url);
-			}).catch(function() {
-				FAZ.notify('<?php echo esc_js( __( 'Failed to download debug log.', 'faz-cookie-manager' ) ); ?>', 'error');
-			});
-		});
-
-		var clearBtn = document.getElementById('faz-clear-debug-log');
-		if (clearBtn) clearBtn.addEventListener('click', function() {
-			if (!confirm('<?php echo esc_js( __( 'Clear all scanner debug logs?', 'faz-cookie-manager' ) ); ?>')) return;
-			FAZ.del('scans/debug-log').then(function() {
-				FAZ.notify('<?php echo esc_js( __( 'Debug logs cleared.', 'faz-cookie-manager' ) ); ?>');
-			}).catch(function() {
-				FAZ.notify('<?php echo esc_js( __( 'Failed to clear debug logs.', 'faz-cookie-manager' ) ); ?>', 'error');
-			});
-		});
-	}).catch(function() {});
-})();
-</script>
+<?php
+/*
+ * Page-specific behaviour (shortcode-copy buttons + scanner debug log
+ * actions) lives in admin/assets/js/pages/cookies.js — automatically
+ * enqueued by class-admin.php::enqueue_scripts() when the current view
+ * is "cookies". Localized strings: fazConfig.i18n.cookies.*.
+ */
+?>

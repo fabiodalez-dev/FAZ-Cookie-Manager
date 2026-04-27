@@ -31,7 +31,21 @@ if ( class_exists( 'DOMDocument' ) ) {
 	<meta name="robots" content="noindex,nofollow,noarchive">
 	<title><?php esc_html_e( 'Banner Preview', 'faz-cookie-manager' ); ?></title>
 	<?php echo $faz_head_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- buffered wp_head markup is already escaped by core/theme APIs. ?>
-	<style id="faz-banner-preview-frame-shell">
+	<?php
+	/*
+	 * Critical CSS for the iframe shell — must be inline.
+	 *
+	 * This file renders the *entire* HTML document for the banner-preview
+	 * iframe (note the standalone `<!doctype html><html><head>` above).
+	 * Routing this CSS through wp_enqueue_style() would require a second
+	 * HTTP round-trip per preview load, during which the iframe body
+	 * would render at zero height (no min-height: 100vh on body) and
+	 * cause a visible FOUC + layout snap before the banner mounts. The
+	 * style is small, self-contained, and only declares layout glue for
+	 * the preview shell — it does not exist anywhere else in the plugin.
+	 */
+	?>
+	<style id="faz-banner-preview-frame-shell"><?php // phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- critical CSS for the iframe document shell; see comment above. ?>
 		html,
 		body {
 			margin: 0;

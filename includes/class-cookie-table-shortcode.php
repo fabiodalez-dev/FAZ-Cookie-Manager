@@ -91,8 +91,13 @@ class Cookie_Table_Shortcode {
 			return '';
 		}
 		if ( is_string( $value ) ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $value, 'faz-cookie-manager' );
+			// Dynamic value comes from the user's banner config (DB), not from
+			// a hard-coded literal — translation strings extractors (xgettext
+			// / Plugin Check) cannot pick this up, and forwarding a variable
+			// to __() is a no-op unless the runtime catalogue happens to
+			// contain a key matching the runtime value. Returning the value
+			// verbatim is the documented Plugin Directory expectation.
+			return $value;
 		}
 		if ( ! is_array( $value ) ) {
 			return '';
@@ -116,18 +121,20 @@ class Cookie_Table_Shortcode {
 		if ( '' !== $default_value && $default_value !== $stock_default ) {
 			return $default_value;
 		}
-		// Stock value: try .po/.mo translation as last resort.
+		// Stock value: dynamic strings sourced from user-edited banner
+		// config or from the WP locale-keyed array. The translation parser
+		// cannot extract from variable arguments (see comment above), so we
+		// return the value verbatim instead of routing it through __() —
+		// the per-language array already contains the desired translation
+		// for the requested locale.
 		if ( '' !== $current_value ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $current_value, 'faz-cookie-manager' );
+			return $current_value;
 		}
 		if ( '' !== $wp_value ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $wp_value, 'faz-cookie-manager' );
+			return $wp_value;
 		}
 		if ( '' !== $default_value ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $default_value, 'faz-cookie-manager' );
+			return $default_value;
 		}
 		foreach ( $value as $entry ) {
 			if ( '' !== $entry ) {
@@ -261,30 +268,34 @@ class Cookie_Table_Shortcode {
 			$ordered[ $cid ] = $items;
 		}
 
+		// Enqueue the shortcode-specific stylesheet exactly once per page
+		// load. Using wp_enqueue_style() (instead of an inline <style> tag)
+		// satisfies the WordPress.org "use wp_enqueue commands" guideline
+		// and lets caching plugins / minifiers process the CSS like any
+		// other registered style.
+		if ( ! self::$css_output ) {
+			self::$css_output = true;
+
+			$plugin_url     = defined( 'FAZ_PLUGIN_URL' ) ? FAZ_PLUGIN_URL : plugin_dir_url( dirname( __FILE__ ) );
+			$css_relative   = 'frontend/css/cookie-table-shortcode.css';
+			$css_path       = ( defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : plugin_dir_path( dirname( __FILE__ ) ) ) . $css_relative;
+			$css_version    = defined( 'FAZ_VERSION' ) ? FAZ_VERSION : false;
+			if ( file_exists( $css_path ) ) {
+				$css_version = filemtime( $css_path );
+			}
+
+			wp_register_style(
+				'faz-cookie-table-shortcode',
+				$plugin_url . $css_relative,
+				array(),
+				$css_version
+			);
+			wp_enqueue_style( 'faz-cookie-table-shortcode' );
+		}
+
 		// Build HTML.
 		ob_start();
-		if ( ! self::$css_output ) :
-			self::$css_output = true;
 		?>
-		<style>
-		.faz-cookie-table-wrap{margin:1.5em 0;font-size:14px;line-height:1.5;}
-		.faz-cookie-table-heading{margin:0 0 1em;font-size:1.3em;}
-		.faz-cookie-table-category{margin:1.5em 0 .5em;font-size:1.1em;border-bottom:2px solid #e2e8f0;padding-bottom:.3em;}
-		.faz-cookie-table{width:100%;border-collapse:collapse;margin-bottom:1em;}
-		.faz-cookie-table th,.faz-cookie-table td{padding:8px 12px;text-align:left;border:1px solid #e2e8f0;vertical-align:top;}
-		.faz-cookie-table th{background:#f8fafc;font-weight:600;font-size:13px;white-space:nowrap;}
-		.faz-cookie-table td{font-size:13px;}
-		.faz-cookie-table tbody tr:nth-child(even){background:#fafbfc;}
-		.faz-cookie-table-empty{color:#64748b;font-style:italic;}
-		@media(max-width:600px){
-			.faz-cookie-table,.faz-cookie-table thead,.faz-cookie-table tbody,.faz-cookie-table th,.faz-cookie-table td,.faz-cookie-table tr{display:block;}
-			.faz-cookie-table thead{display:none;}
-			.faz-cookie-table td{border:none;border-bottom:1px solid #e2e8f0;padding:6px 12px;}
-			.faz-cookie-table td:before{content:attr(data-label);font-weight:600;display:block;margin-bottom:2px;font-size:12px;color:#64748b;}
-			.faz-cookie-table tr{border:1px solid #e2e8f0;margin-bottom:8px;border-radius:4px;}
-		}
-		</style>
-		<?php endif; ?>
 		<div class="faz-cookie-table-wrap">
 		<?php if ( ! empty( $atts['heading'] ) ) : ?>
 			<h3 class="faz-cookie-table-heading"><?php echo esc_html( $atts['heading'] ); ?></h3>

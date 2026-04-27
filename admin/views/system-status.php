@@ -141,33 +141,16 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 
 </div>
 
-<style>
-.faz-status-table { width:100%; border-collapse:collapse; }
-.faz-status-table td { padding:6px 12px; border-bottom:1px solid var(--faz-border); font-size:13px; }
-.faz-status-table td:first-child { font-weight:600; width:40%; color:var(--faz-text-secondary); }
-</style>
-
-<script>
-document.getElementById('faz-copy-status').addEventListener('click', function() {
-	var text = 'FAZ Cookie Manager — System Status\n' + '='.repeat(50) + '\n\n';
-	document.querySelectorAll('#faz-system-status .faz-card').forEach(function(card) {
-		var heading = card.querySelector('.faz-card-header h3');
-		if (heading) text += heading.textContent + '\n' + '-'.repeat(30) + '\n';
-		var table = card.querySelector('.faz-status-table');
-		if (table) {
-			table.querySelectorAll('tr').forEach(function(row) {
-				var cells = row.querySelectorAll('td');
-				if (cells.length >= 2) {
-					text += cells[0].textContent.trim() + ': ' + cells[1].textContent.trim() + '\n';
-				}
-			});
-		}
-		var list = card.querySelector('div[style*="line-height"]');
-		if (list) text += list.textContent.trim().replace(/\n\s+/g, '\n') + '\n';
-		text += '\n';
-	});
-	navigator.clipboard.writeText(text).then(function() {
-		FAZ.notify('<?php echo esc_js( __( 'Status copied to clipboard!', 'faz-cookie-manager' ) ); ?>', 'success');
-	});
-});
-</script>
+<?php
+/*
+ * Page-specific styles live in admin/assets/css/faz-admin.css under the
+ * "System Status page" block — automatically enqueued for every FAZ
+ * admin page.
+ *
+ * Page-specific behaviour lives in admin/assets/js/pages/system-status.js —
+ * automatically enqueued by class-admin.php::enqueue_scripts() when the
+ * current page view is "system-status". The localized "Status copied"
+ * string is registered in the same enqueue block under
+ * fazConfig.i18n.systemStatus.copied.
+ */
+?>
