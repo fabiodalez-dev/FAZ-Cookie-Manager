@@ -141,10 +141,23 @@ if ( ! function_exists( 'faz_first_time_install' ) ) {
 	/**
 	 * Check if the plugin is activated for the first time.
 	 *
+	 * Reads the new `faz_first_time_install` transient (4-char `faz_` prefix
+	 * compliant with the wp.org "Use Prefixes" guideline), and falls back to
+	 * the legacy `_faz_first_time_install` for installs that activated under
+	 * earlier plugin versions and have not yet hit class-activator.php (where
+	 * the legacy name is migrated on the next activation).
+	 *
 	 * @return boolean
 	 */
 	function faz_first_time_install() {
-		return (bool) get_site_transient( '_faz_first_time_install' ) || (bool) get_option( 'faz_first_time_activated_plugin' );
+		if ( (bool) get_site_transient( 'faz_first_time_install' ) ) {
+			return true;
+		}
+		// Legacy fallback — pre-prefix-rename installs.
+		if ( (bool) get_site_transient( '_faz_first_time_install' ) ) {
+			return true;
+		}
+		return (bool) get_option( 'faz_first_time_activated_plugin' );
 	}
 }
 
