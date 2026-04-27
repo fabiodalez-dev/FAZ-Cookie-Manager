@@ -2580,36 +2580,97 @@ function _fazFindCheckBoxValue(id = "") {
     });
 }
 
-function _fazAddPlaceholder(htmlElm, uniqueID) {
-    const shortCodeData = _fazStore._shortCodes.find(
-        (code) => code.key === 'faz_video_placeholder'
+function _fazAddPlaceholder(htmlElm, uniqueID, retriesLeft) {
+    // Resolve a usable size for the placeholder from a chain of fallbacks:
+    //   1. The iframe's own offsetWidth/offsetHeight (the original behaviour).
+    //   2. An ancestor wrapper that already has a measured box. Page builders
+    //      (Bricks, Elementor, Divi) commonly stage a video element inside
+    //      `<div class="bricks-video">` or similar with `aspect-ratio: 16/9`
+    //      and no explicit width/height on the iframe itself — the iframe's
+    //      own metrics are still 0 at MutationObserver time, but the parent
+    //      wrapper already has a layout.
+    //   3. requestAnimationFrame retry — defer one or two frames so the
+    //      browser finishes layout before we measure.
+    //   4. Last resort: inject the placeholder anyway with the CSS-defined
+    //      `min-height: 200px` floor so visitors always see SOMETHING they
+    //      can click, instead of an empty wrapper.
+    //
+    // Reported on Bricks Builder + WP 6.9 by issue #87 / 3DRZ — see
+    // frontend/includes/class-placeholder-builder.php for the CSS that
+    // makes the last-resort fallback usable.
+    var maxRetries = 3;
+    var attempt    = (typeof retriesLeft === 'number') ? retriesLeft : maxRetries;
+
+    var width  = htmlElm.offsetWidth;
+    var height = htmlElm.offsetHeight;
+
+    if (width === 0 || height === 0) {
+        // (2) Walk up to 4 ancestors looking for a measured box.
+        var probe = htmlElm.parentElement;
+        var hops  = 0;
+        while (probe && hops < 4 && (width === 0 || height === 0)) {
+            if (probe.offsetWidth > 0) width  = probe.offsetWidth;
+            if (probe.offsetHeight > 0) height = probe.offsetHeight;
+            probe = probe.parentElement;
+            hops++;
+        }
+    }
+
+    if ((width === 0 || height === 0) && attempt > 0) {
+        // (3) Defer to next frame and retry — layout may not be settled yet.
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(function () {
+                _fazAddPlaceholder(htmlElm, uniqueID, attempt - 1);
+            });
+        } else {
+            setTimeout(function () {
+                _fazAddPlaceholder(htmlElm, uniqueID, attempt - 1);
+            }, 16);
+        }
+        return;
+    }
+
+    var shortCodeData = _fazStore._shortCodes.find(
+        function (code) { return code.key === 'faz_video_placeholder'; }
     );
-    const videoPlaceHolderDataCode = shortCodeData.content;
-    const { offsetWidth, offsetHeight } = htmlElm;
-    if (offsetWidth === 0 || offsetHeight === 0) return;
+    if (!shortCodeData) return;
+    var videoPlaceHolderDataCode = shortCodeData.content;
+
     // Insert placeholder via DOM nodes instead of insertAdjacentHTML.
     // The HTML is a PHP wp_kses-sanitized shortcode template.
     var placeholderNodes = _fazParseHTML(
         `${videoPlaceHolderDataCode}`.replace("[UNIQUEID]", uniqueID)
     );
+    if (!htmlElm.parentNode) return;
     htmlElm.parentNode.insertBefore(placeholderNodes, htmlElm);
-    const addedNode = document.getElementById(uniqueID);
-    addedNode.style.width = `${offsetWidth}px`;
-    addedNode.style.height = `${offsetHeight}px`;
-    const innerTextElement = document.querySelector(
+    var addedNode = document.getElementById(uniqueID);
+    if (!addedNode) return;
+
+    // (4) Last-resort sizing: if every fallback returned 0, leave inline
+    // width/height OFF and let the CSS floor (`min-height: 200px` on
+    // `.faz-placeholder`, `aspect-ratio: 16/9` on `.faz-placeholder--video`)
+    // do the work — that is the only way the visitor still sees the
+    // "Cookie required" call-to-action when the source iframe was given
+    // no measurable size by its page builder.
+    if (width > 0)  addedNode.style.width  = `${width}px`;
+    if (height > 0) addedNode.style.height = `${height}px`;
+
+    var innerTextElement = document.querySelector(
         `#${uniqueID} .video-placeholder-text-normal`
     );
-    innerTextElement.classList.add('faz-hidden');
-    const youtubeID = _fazGetYoutubeID(htmlElm.src);
+    if (innerTextElement) innerTextElement.classList.add('faz-hidden');
+    var youtubeID = _fazGetYoutubeID(htmlElm.src || '');
     if (!youtubeID) return;
     addedNode.classList.replace(
         "video-placeholder-normal",
         "video-placeholder-youtube"
     );
-    innerTextElement.classList.replace(
-        "video-placeholder-text-normal",
-        "video-placeholder-text-youtube"
-    );
+    if (innerTextElement) {
+        innerTextElement.classList.replace(
+            "video-placeholder-text-normal",
+            "video-placeholder-text-youtube"
+        );
+    }
 }
 function _fazGetYoutubeID(src) {
     const match = src.match(
