@@ -2607,27 +2607,41 @@ function _fazFindCheckBoxValue(id = "") {
     });
 }
 
-function _fazAddPlaceholder(htmlElm, uniqueID, retriesLeft) {
-    // Resolve a usable size for the placeholder from a chain of fallbacks:
-    //   1. The iframe's own offsetWidth/offsetHeight (the original behaviour).
-    //   2. An ancestor wrapper that already has a measured box. Page builders
-    //      (Bricks, Elementor, Divi) commonly stage a video element inside
-    //      `<div class="bricks-video">` or similar with `aspect-ratio: 16/9`
-    //      and no explicit width/height on the iframe itself — the iframe's
-    //      own metrics are still 0 at MutationObserver time, but the parent
-    //      wrapper already has a layout.
-    //   3. requestAnimationFrame retry — defer one or two frames so the
-    //      browser finishes layout before we measure.
-    //   4. Last resort: inject the placeholder anyway with the CSS-defined
-    //      `min-height: 200px` floor so visitors always see SOMETHING they
-    //      can click, instead of an empty wrapper.
+function _fazAddPlaceholder(htmlElm, uniqueID) {
+    // Inject the consent placeholder for a blocked iframe, sized via a
+    // fallback chain to survive page-builder wrappers that don't give
+    // the iframe explicit dimensions.
     //
-    // Reported on Bricks Builder + WP 6.9 by issue #87 / 3DRZ — see
-    // frontend/includes/class-placeholder-builder.php for the CSS that
-    // makes the last-resort fallback usable.
-    var maxRetries = 3;
-    var attempt    = (typeof retriesLeft === 'number') ? retriesLeft : maxRetries;
-
+    // CRITICAL: the insert MUST happen synchronously on this call,
+    // because _fazMutationObserver calls `node.remove()` on the iframe
+    // immediately after this function returns (same tick). If we
+    // deferred the insert to a requestAnimationFrame, the iframe would
+    // be detached from the DOM before our retry runs and the
+    // `parentNode` guard would silently swallow the placeholder —
+    // exactly the empty-wrapper regression we're trying to fix.
+    //
+    // Sizing fallbacks (synchronous, in order):
+    //   1. The iframe's own offsetWidth/offsetHeight.
+    //   2. An ancestor wrapper that already has a measured box. Page
+    //      builders (Bricks `.brxe-video`, Elementor
+    //      `.elementor-video-wrapper`, Divi `.et_pb_video`) stage video
+    //      elements inside a wrapper with `aspect-ratio: 16/9` and no
+    //      explicit width/height on the iframe itself — the iframe's
+    //      own metrics are 0 at MutationObserver time, but the wrapper
+    //      already has a layout.
+    //   3. CSS floor — if both (1) and (2) returned 0, inject with NO
+    //      inline width/height and let `min-height: 200px` /
+    //      `aspect-ratio: 16/9` from the placeholder CSS take over so
+    //      the visitor always sees the call-to-action.
+    //
+    // After the synchronous insert we ALSO schedule one
+    // requestAnimationFrame to remeasure: if layout settles in the
+    // next frame and the iframe (still backed up by the observer in
+    // _fazStore._backupNodes) reports a non-zero box, we update the
+    // placeholder's inline width/height for a pixel-perfect fit. The
+    // rAF only updates an existing placeholder; it never inserts.
+    //
+    // Reported on Bricks Builder + WP 6.9 by issue #87 / 3DRZ.
     var width  = htmlElm.offsetWidth;
     var height = htmlElm.offsetHeight;
 
@@ -2641,20 +2655,6 @@ function _fazAddPlaceholder(htmlElm, uniqueID, retriesLeft) {
             probe = probe.parentElement;
             hops++;
         }
-    }
-
-    if ((width === 0 || height === 0) && attempt > 0) {
-        // (3) Defer to next frame and retry — layout may not be settled yet.
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(function () {
-                _fazAddPlaceholder(htmlElm, uniqueID, attempt - 1);
-            });
-        } else {
-            setTimeout(function () {
-                _fazAddPlaceholder(htmlElm, uniqueID, attempt - 1);
-            }, 16);
-        }
-        return;
     }
 
     var shortCodeData = _fazStore._shortCodes.find(
@@ -2673,14 +2673,38 @@ function _fazAddPlaceholder(htmlElm, uniqueID, retriesLeft) {
     var addedNode = document.getElementById(uniqueID);
     if (!addedNode) return;
 
-    // (4) Last-resort sizing: if every fallback returned 0, leave inline
-    // width/height OFF and let the CSS floor (`min-height: 200px` on
-    // `.faz-placeholder`, `aspect-ratio: 16/9` on `.faz-placeholder--video`)
-    // do the work — that is the only way the visitor still sees the
-    // "Cookie required" call-to-action when the source iframe was given
-    // no measurable size by its page builder.
+    // (3) Synchronous sizing — if width/height are both > 0 we can pin
+    // the placeholder to the exact iframe/ancestor box; otherwise we
+    // leave inline sizing OFF and let the CSS floor own the layout.
     if (width > 0)  addedNode.style.width  = `${width}px`;
     if (height > 0) addedNode.style.height = `${height}px`;
+
+    // Post-insert layout-settled remeasure: at MutationObserver time
+    // page builders may not have finished layout yet. Re-read the
+    // iframe's own metrics on the next frame and tighten the placeholder
+    // size if they have improved. This ONLY mutates style on the
+    // already-inserted placeholder; it never re-runs the insert path.
+    if ((width === 0 || height === 0) && typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function () {
+            // Look up by id — addedNode is captured in closure but the
+            // placeholder is the source of truth in the DOM.
+            var ph = document.getElementById(uniqueID);
+            if (!ph) return;
+            // Re-measure: the original iframe is detached by now (the
+            // observer removed it after we returned), so probe the
+            // ancestor chain again starting from the placeholder's own
+            // parent — same chain that staged the iframe.
+            var pw = 0;
+            var ph2 = ph.parentElement;
+            var hops2 = 0;
+            while (ph2 && hops2 < 4 && (pw === 0)) {
+                if (ph2.offsetWidth > 0)  pw = ph2.offsetWidth;
+                ph2 = ph2.parentElement;
+                hops2++;
+            }
+            if (pw > 0 && !ph.style.width)  ph.style.width  = `${pw}px`;
+        });
+    }
 
     var innerTextElement = document.querySelector(
         `#${uniqueID} .video-placeholder-text-normal`
