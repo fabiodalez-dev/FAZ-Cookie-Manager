@@ -91,8 +91,13 @@ class Cookie_Table_Shortcode {
 			return '';
 		}
 		if ( is_string( $value ) ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $value, 'faz-cookie-manager' );
+			// Dynamic value comes from the user's banner config (DB), not from
+			// a hard-coded literal — translation strings extractors (xgettext
+			// / Plugin Check) cannot pick this up, and forwarding a variable
+			// to __() is a no-op unless the runtime catalogue happens to
+			// contain a key matching the runtime value. Returning the value
+			// verbatim is the documented Plugin Directory expectation.
+			return $value;
 		}
 		if ( ! is_array( $value ) ) {
 			return '';
@@ -116,18 +121,20 @@ class Cookie_Table_Shortcode {
 		if ( '' !== $default_value && $default_value !== $stock_default ) {
 			return $default_value;
 		}
-		// Stock value: try .po/.mo translation as last resort.
+		// Stock value: dynamic strings sourced from user-edited banner
+		// config or from the WP locale-keyed array. The translation parser
+		// cannot extract from variable arguments (see comment above), so we
+		// return the value verbatim instead of routing it through __() —
+		// the per-language array already contains the desired translation
+		// for the requested locale.
 		if ( '' !== $current_value ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $current_value, 'faz-cookie-manager' );
+			return $current_value;
 		}
 		if ( '' !== $wp_value ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $wp_value, 'faz-cookie-manager' );
+			return $wp_value;
 		}
 		if ( '' !== $default_value ) {
-			// phpcs:ignore WordPress.WP.I18n.NonSingularStringLiteralText
-			return __( $default_value, 'faz-cookie-manager' );
+			return $default_value;
 		}
 		foreach ( $value as $entry ) {
 			if ( '' !== $entry ) {

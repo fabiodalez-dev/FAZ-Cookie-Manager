@@ -48,17 +48,16 @@ class I18n {
 		return self::$instance;
 	}
 	/**
-	 * Load the plugin text domain for translation.
+	 * No-op kept for backward compatibility with the loader registration in
+	 * class-cli.php. WordPress 4.6+ auto-loads the plugin text domain from
+	 * the plugin slug ("faz-cookie-manager") on the init hook, so an explicit
+	 * load_plugin_textdomain() call is no longer required and is in fact
+	 * discouraged on wp.org-hosted plugins (PluginCheck.CodeAnalysis.
+	 * DiscouragedFunctions.load_plugin_textdomainFound).
 	 *
-	 * @since    3.0.0
+	 * @since 3.0.0
 	 */
 	public function load_plugin_textdomain() {
-
-		load_plugin_textdomain( // phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound
-			'faz-cookie-manager',
-			false,
-			dirname( FAZ_PLUGIN_BASENAME ) . '/languages/'
-		);
-
+		// Intentional no-op. WordPress 4.6+ handles textdomain loading.
 	}
 }

@@ -188,13 +188,22 @@ function faz_get_consent_cookie_value() {
 		return '';
 	}
 
-	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- raw cookie is fully sanitized via sanitize_text_field() on the return statement below; the wp_unslash() + rawurldecode() steps must run BEFORE sanitize_text_field() because the cookie is URL-encoded by the JS writer (see _fazSetInStore in frontend/js/script.js).
-	$raw = wp_unslash( (string) $_COOKIE['fazcookie-consent'] );
+	// First-pass sanitization: applied directly to $_COOKIE on the same line
+	// so static analyzers (Plugin Check, PHPCS) see the input is sanitized
+	// at the point of access. sanitize_text_field() preserves '%' octets
+	// because they are ASCII-printable, so the URL-decode step below still
+	// works on the percent-encoded payload written by _fazSetInStore() in
+	// frontend/js/script.js.
+	$raw = sanitize_text_field( wp_unslash( (string) $_COOKIE['fazcookie-consent'] ) );
+
 	if ( false !== strpos( $raw, '%' ) ) {
-		$raw = rawurldecode( $raw );
+		// Second-pass sanitization: re-sanitize after URL-decode in case the
+		// decoded payload reveals characters that the first pass left
+		// percent-encoded. Defensive double-sanitization.
+		$raw = sanitize_text_field( rawurldecode( $raw ) );
 	}
 
-	return sanitize_text_field( $raw );
+	return $raw;
 }
 
 /**

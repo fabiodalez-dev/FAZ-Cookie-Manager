@@ -38,6 +38,14 @@ class Consent_Logger {
 	 * @return void
 	 */
 	public function register_rest_routes() {
+		// `permission_callback => __return_true` is intentional. This endpoint
+		// records the GDPR consent decision of an anonymous visitor — it MUST
+		// be reachable without authentication, otherwise no consent could
+		// ever be logged. Abuse mitigation:
+		//   - Required HMAC `token` (server-issued, scoped to the consent_id).
+		//   - All inputs sanitized via `sanitize_callback`.
+		//   - The handler verifies the token before any DB write.
+		// See `handle_rest_consent()` for the verification logic.
 		register_rest_route(
 			'faz/v1',
 			'/consent',

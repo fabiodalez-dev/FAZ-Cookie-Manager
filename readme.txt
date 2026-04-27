@@ -117,6 +117,15 @@ Documentation / Privacy:
 * https://amp.dev/documentation/components/amp-consent
 * https://policies.google.com/privacy
 
+= Note on third-party domain strings inside the plugin codebase =
+
+The plugin source includes several third-party domain names (e.g. `js.stripe.com`, `connect.facebook.net`, `cdn.jsdelivr.net`, `unpkg.com`, `googletagmanager.com`, etc.) as **string patterns** for two purposes:
+
+1. **Script-blocking detection patterns** — used to identify analytics, advertising, and tracking scripts that the *site administrator's other plugins* may inject, so we can block them until the visitor has given consent. The plugin itself does **not** load any of these scripts.
+2. **Whitelist defaults** — domains such as `unpkg.com/`, `cdn.jsdelivr.net/`, `fonts.googleapis.com/`, `www.google.com/recaptcha/api`, etc. are seeded as default *whitelist* entries so the script blocker leaves them alone unless the admin explicitly removes them. They are configuration data, not outbound HTTP calls.
+
+The only outbound HTTP requests this plugin makes are the four documented above (Open Cookie Database, IAB GVL, MaxMind, AMP CDN). All four are gated behind explicit administrator action or an enabled feature.
+
 == Installation ==
 
 1. Upload the `faz-cookie-manager` folder to `/wp-content/plugins/`

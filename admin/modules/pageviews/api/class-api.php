@@ -57,6 +57,16 @@ class Api extends Rest_Controller {
 	 */
 	public function register_routes() {
 		// Public: record a pageview or banner event.
+		// `permission_callback => __return_true` is intentional. This endpoint
+		// is consumed by anonymous frontend visitors (the only audience for
+		// pageview / banner-interaction tracking), so a logged-in capability
+		// check would defeat its purpose. Abuse mitigation lives at the
+		// callback layer instead:
+		//   - Required HMAC `token` (signed server-side, scoped to a session
+		//     id) — see `record_event()` validation.
+		//   - Per-IP rate limiting via transient counter.
+		//   - Strict `sanitize_callback` on every input field.
+		// Same shape as wp/v2/comments POST when "anyone can comment" is on.
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base,

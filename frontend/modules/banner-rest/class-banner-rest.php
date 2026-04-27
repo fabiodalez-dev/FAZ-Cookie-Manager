@@ -50,6 +50,14 @@ class Banner_Rest {
 	 * @return void
 	 */
 	public function register_routes() {
+		// `permission_callback => __return_true` is intentional and required.
+		// This endpoint serves the cached, language-localised consent banner
+		// HTML/JSON to anonymous frontend visitors — they need it BEFORE they
+		// can grant or deny consent, so any capability check would prevent
+		// the banner from ever rendering for new visitors. The endpoint is
+		// strictly read-only (GET), returns no PII, and the `lang` parameter
+		// is doubly validated (sanitize_callback + validate_callback) against
+		// a strict regex of lowercase ASCII / digits / dashes.
 		register_rest_route(
 			'faz/v1',
 			'/banner/(?P<lang>[a-z0-9-]+)',
