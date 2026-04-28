@@ -81,7 +81,6 @@ class Admin {
 		add_action( 'admin_init', array( $this, 'load_plugin' ) );
 		add_action( 'activated_plugin', array( $this, 'handle_activation_redirect' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'deregister_api_fetch' ), 0 );
-		add_action( 'admin_head', array( $this, 'print_api_fetch_polyfill' ), 0 );
 		add_filter( 'admin_body_class', array( $this, 'admin_body_classes' ) );
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
 		add_action( 'admin_notices', array( $this, 'cookie_definitions_notice' ) );
@@ -269,7 +268,34 @@ class Admin {
 		}
 		wp_dequeue_script( 'wp-api-fetch' );
 		wp_deregister_script( 'wp-api-fetch' );
-		wp_register_script( 'wp-api-fetch', false, array(), FAZ_VERSION, true );
+
+		// Re-register the `wp-api-fetch` handle so it points at our static
+		// polyfill file (admin/assets/js/cp-api-fetch-polyfill.js). The
+		// nonce + REST URL the polyfill needs are passed via
+		// `wp_localize_script()` as the `fazApiFetchConfig` global, so the
+		// JS file itself is fully static and cacheable. Loaded in the
+		// document head (`$in_footer = false`) so any consumer that calls
+		// `wp.apiFetch(...)` early in the page lifecycle still works.
+		wp_register_script(
+			'wp-api-fetch',
+			plugin_dir_url( __FILE__ ) . 'assets/js/cp-api-fetch-polyfill.js',
+			array(),
+			FAZ_VERSION,
+			false
+		);
+		wp_localize_script(
+			'wp-api-fetch',
+			'fazApiFetchConfig',
+			array(
+				'restUrl' => rest_url(),
+				'nonce'   => wp_create_nonce( 'wp_rest' ),
+			)
+		);
+		// Enqueue immediately on FAZ admin pages so the polyfill is on the
+		// page even when no other plugin script declares it as a
+		// dependency. Other handles that already list `wp-api-fetch` as a
+		// dep will get it via dependency resolution as before.
+		wp_enqueue_script( 'wp-api-fetch' );
 	}
 
 	/**
@@ -284,182 +310,23 @@ class Admin {
 	}
 
 	/**
-	 * Print wp.apiFetch polyfill for ClassicPress.
+	 * Legacy entrypoint — superseded by `deregister_api_fetch()`.
 	 *
-	 * Mirrors the WordPress 5.x wp-api-fetch API surface so that all admin
-	 * JS works identically on ClassicPress without the broken native bundle.
-	 *
-	 * Hooked to admin_head at priority 0 so it runs before any script that
-	 * depends on wp.apiFetch. We echo directly because ClassicPress (WP 4.9
-	 * fork) does not output inline scripts for handles with no source URL.
+	 * Kept only as a no-op so any third-party code that grabbed the public
+	 * method reference through an action callback list does not crash. The
+	 * polyfill is now delivered as a static JS file (cp-api-fetch-polyfill.js)
+	 * registered against the `wp-api-fetch` handle in `deregister_api_fetch()`,
+	 * which removes the previous inline `<script>` echo (WordPress.Security.
+	 * EscapeOutput.OutputNotEscaped error in Plugin Check) and lets browser
+	 * caches and cache plugins handle the file like any other admin asset.
 	 *
 	 * @return void
 	 */
 	public function print_api_fetch_polyfill() {
-		if ( false === faz_is_admin_page() || ! $this->is_classicpress() ) {
-			return;
-		}
-		$nonce    = wp_create_nonce( 'wp_rest' );
-		$rest_url = rest_url();
-
-		$polyfill = sprintf(
-			'(function(root,nonce){
-"use strict";
-var middlewares=[];
-function registerMiddleware(m){middlewares.unshift(m);}
-var fetchHandler=defaultFetchHandler;
-function defaultFetchHandler(options){
-var parse=options.parse!==false;
-return window.fetch(options.url,options).then(function(response){
-if(!parse){return response;}
-return response.text().then(function(text){
-var data;
-try{data=text?JSON.parse(text):null;}catch(e){data=null;}
-if(!response.ok){
-var err=Object.assign(
-new Error(data&&data.message?data.message:"Unknown error"),
-{code:"unknown_error",data:{status:response.status}},
-data||{}
-);
-return Promise.reject(err);
-}
-return {__fazParsed:true,data:data,headers:{get:function(h){return response.headers.get(h);}}};
-});
-});
-}
-function runMiddleware(idx,options){
-if(idx>=middlewares.length){
-var req=Object.assign({},options);
-if(req.data&&!req.body&&!(req.data instanceof window.FormData)){
-req.body=JSON.stringify(req.data);
-}
-return fetchHandler(req);
-}
-return middlewares[idx](options,function(next){return runMiddleware(idx+1,next);});
-}
-function apiFetch(options){return runMiddleware(0,options);}
-function createRootURLMiddleware(rootURL){
-return function(options,next){
-var opts=Object.assign({},options);
-if(opts.path!==undefined&&opts.url===undefined){
-opts.url=rootURL.replace(/\/+$/,"")+"/"+opts.path.replace(/^\/+/,"");
-delete opts.path;
-}
-return next(opts);
-};
-}
-function createNonceMiddleware(initialNonce){
-var currentNonce=initialNonce;
-var middleware=function(options,next){
-var opts=Object.assign({},options);
-opts.headers=Object.assign({},opts.headers);
-if(currentNonce&&!opts.headers["X-WP-Nonce"]){
-opts.headers["X-WP-Nonce"]=currentNonce;
-}
-return next(opts).then(function(result){
-if(result&&result.headers&&typeof result.headers.get==="function"){
-var fresh=result.headers.get("X-WP-Nonce");
-if(fresh){currentNonce=fresh;}
-}
-return (result&&result.__fazParsed)?result.data:result;
-});
-};
-middleware.nonce=currentNonce;
-return middleware;
-}
-function createPreloadingMiddleware(preloadedData){
-var cache=Object.assign({},preloadedData);
-return function(options,next){
-var method=(options.method||"GET").toUpperCase();
-if(method!=="GET"){return next(options);}
-var key=options.path||(options.url||"");
-if(Object.prototype.hasOwnProperty.call(cache,key)){
-var cached=cache[key];
-delete cache[key];
-if(options.parse===false){
-return Promise.resolve(
-new window.Response(JSON.stringify(cached.body),{
-status:200,
-headers:new window.Headers(cached.headers||{})
-})
-);
-}
-return Promise.resolve(cached.body);
-}
-return next(options);
-};
-}
-var mediaUploadMiddleware=function(options,next){
-var opts=Object.assign({},options);
-if(opts.data instanceof window.FormData){
-opts.body=opts.data;
-opts.headers=Object.assign({},opts.headers);
-delete opts.headers["Content-Type"];
-delete opts.data;
-}
-return next(opts);
-};
-var fetchAllMiddleware=function(options,next){
-if(options.parse!==false){return next(options);}
-return next(options).then(function(response){
-var total=parseInt(
-(response.headers&&response.headers.get("X-WP-TotalPages"))||"1",10
-);
-if(isNaN(total)||total<=1){return response;}
-var pages=[response.json()];
-var base=(options.path||"").replace(/([?&])page=[^&]*/g,"").replace(/\?$/,"");
-for(var p=2;p<=total;p++){
-var sep=base.indexOf("?")>-1?"&":"?";
-pages.push(apiFetch(Object.assign({},options,{
-path:base+sep+"page="+p,
-parse:true
-})));
-}
-return Promise.all(pages).then(function(results){
-return [].concat.apply([],results);
-});
-});
-};
-registerMiddleware(function(options,next){
-var opts=Object.assign({},options);
-if(opts.data&&!(opts.data instanceof window.FormData)){
-opts.headers=Object.assign({"Content-Type":"application/json"},opts.headers||{});
-}
-return next(opts);
-});
-registerMiddleware(createNonceMiddleware(nonce));
-registerMiddleware(createRootURLMiddleware(root));
-apiFetch.use=registerMiddleware;
-apiFetch.setFetchHandler=function(h){fetchHandler=h;};
-apiFetch.createRootURLMiddleware=createRootURLMiddleware;
-apiFetch.createNonceMiddleware=createNonceMiddleware;
-apiFetch.createPreloadingMiddleware=createPreloadingMiddleware;
-apiFetch.fetchAllMiddleware=fetchAllMiddleware;
-apiFetch.mediaUploadMiddleware=mediaUploadMiddleware;
-window.wp=window.wp||{};
-window.wp.apiFetch=apiFetch;
-}(%s,%s));',
-			wp_json_encode( $rest_url ),
-			wp_json_encode( $nonce )
-		);
-
-		// We cannot use wp_add_inline_script() here because:
-		//   1. The polyfill must attach to the wp-api-fetch handle, which on
-		//      ClassicPress is registered with src=false (stub) — see
-		//      `register_polyfill_stub_for_classicpress()` at the top of
-		//      this class.
-		//   2. ClassicPress 1.x is forked from WordPress 4.9, which does
-		//      NOT emit inline scripts for handles whose registered src is
-		//      false; the inline payload would be silently dropped.
-		// This early-print runs only when both `faz_is_admin_page()` AND
-		// `$this->is_classicpress()` are true, so it never executes on
-		// modern WordPress (where wp-api-fetch ships natively).
-		// $polyfill is built entirely from constants (the IIFE template) and
-		// two wp_json_encode()'d server values (REST URL, nonce) — there is
-		// no untrusted input to escape.
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- ClassicPress 1.x polyfill, trusted server-built source. wp_add_inline_script() is not viable; see block comment above.
-		// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedScript -- See block comment above; ClassicPress stub-handle limitation.
-		echo '<script>' . $polyfill . '</script>';
+		// Intentional no-op. Keep until at least one major release after
+		// 1.13.8 to allow downstream code that hooked this method to shift
+		// to the new flow without sudden `do_action` failures.
+		return;
 	}
 
 	/**
@@ -500,7 +367,10 @@ window.wp.apiFetch=apiFetch;
 			true
 		);
 
-		// ClassicPress polyfill is printed directly in admin_head — see print_api_fetch_polyfill().
+		// ClassicPress wp.apiFetch polyfill is delivered as a static file
+		// (`admin/assets/js/cp-api-fetch-polyfill.js`) re-registered against
+		// the `wp-api-fetch` handle in `deregister_api_fetch()`. Loaded in
+		// the head, before any consumer.
 
 		// Localize config data for JS.
 		wp_localize_script(

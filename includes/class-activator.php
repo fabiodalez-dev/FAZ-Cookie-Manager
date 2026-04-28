@@ -348,8 +348,84 @@ class Activator {
 		// elements like the inline SVG revisit icon.
 		faz_clear_banner_template_cache();
 		update_option( 'faz_version', FAZ_VERSION );
+		// Invalidate page caches so visitors immediately see the new
+		// `_fazConfig`/banner-template payload — without this step the
+		// cached HTML keeps embedding the previous version's localized
+		// data and our fixes don't reach end-users until the cache
+		// expires (or until they manually purge). See `purge_page_caches()`
+		// for the matrix of supported cache plugins.
+		self::purge_page_caches();
 		do_action( 'faz_after_activate', FAZ_VERSION );
 		self::update_db_version();
+	}
+
+	/**
+	 * Best-effort full-cache purge across the most common WordPress cache
+	 * stacks. Called on every plugin version bump (and again on full
+	 * activation) so visitors get a fresh HTML payload that embeds the
+	 * up-to-date `_fazConfig` localize block.
+	 *
+	 * Each plugin is detected by a stable public symbol (action/filter
+	 * /function) so this method never crashes if the cache plugin is
+	 * absent. CDN edges (Cloudflare, Bunny, KeyCDN, etc.) are NOT touched
+	 * here — those need API credentials we do not own; admins running a
+	 * CDN should also purge it manually after a FAZ upgrade.
+	 *
+	 * @since 1.13.9
+	 * @return void
+	 */
+	public static function purge_page_caches() {
+		// LiteSpeed Cache.
+		if ( defined( 'LSCWP_V' ) ) {
+			do_action( 'litespeed_purge_all', 'FAZ Cookie Manager upgrade' );
+		}
+		// WP Rocket.
+		if ( function_exists( 'rocket_clean_domain' ) ) {
+			rocket_clean_domain();
+		}
+		// W3 Total Cache.
+		if ( function_exists( 'w3tc_flush_all' ) ) {
+			w3tc_flush_all();
+		}
+		// WP Super Cache.
+		if ( function_exists( 'wp_cache_clear_cache' ) ) {
+			wp_cache_clear_cache();
+		}
+		// Cache Enabler.
+		if ( has_action( 'cache_enabler_clear_complete_cache' ) ) {
+			do_action( 'cache_enabler_clear_complete_cache' );
+		}
+		// SG Optimizer.
+		if ( function_exists( 'sg_cachepress_purge_cache' ) ) {
+			sg_cachepress_purge_cache();
+		}
+		// Hummingbird (Cache module).
+		if ( has_action( 'wphb_clear_page_cache' ) ) {
+			do_action( 'wphb_clear_page_cache' );
+		}
+		// Breeze (Cloudways).
+		if ( class_exists( 'Breeze_PurgeCache' ) ) {
+			\Breeze_PurgeCache::breeze_cache_flush();
+		}
+		// Autoptimize (CSS/JS cache, not page cache, but still relevant).
+		if ( class_exists( 'autoptimizeCache' ) && method_exists( 'autoptimizeCache', 'clearall' ) ) {
+			\autoptimizeCache::clearall();
+		}
+		// WP-Optimize.
+		if ( class_exists( 'WP_Optimize' ) && function_exists( 'wpo_cache_flush' ) ) {
+			wpo_cache_flush();
+		}
+		// Comet Cache.
+		if ( class_exists( '\\WebSharks\\CometCache\\Classes\\Plugin' ) ) {
+			$comet = \WebSharks\CometCache\Classes\Plugin::class;
+			if ( method_exists( $comet, 'wipeCache' ) ) {
+				$comet::wipeCache();
+			}
+		}
+		// Generic WP object cache (Memcached, Redis via the drop-in).
+		if ( function_exists( 'wp_cache_flush' ) ) {
+			wp_cache_flush();
+		}
 	}
 
 	/**

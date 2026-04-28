@@ -2,6 +2,30 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.9] — 2026-04-28
+
+### Fixed
+
+- **Plugin Check ERROR `WordPress.Security.EscapeOutput.OutputNotEscaped` on `admin/class-admin.php:462`.** The ClassicPress wp.apiFetch polyfill was emitted as `echo '<script>' . $polyfill . '</script>';` in `admin_head`. Even with a `phpcs:ignore` line the wp.org Plugin Check classifier still flags the line as ERROR (not warning) because the standalone Plugin Check scanner is stricter than vanilla PHPCS. Resolved by extracting the polyfill into a static file at `admin/assets/js/cp-api-fetch-polyfill.js` and registering it against the `wp-api-fetch` handle via `wp_register_script()` + `wp_enqueue_script()`. The REST URL and CSRF nonce the polyfill needs are passed in via `wp_localize_script('wp-api-fetch', 'fazApiFetchConfig', [...])`. Behaviour-equivalent: same polyfill, same load timing (head, before any consumer of `wp.apiFetch`), same ClassicPress-only gate. Side benefits: the file is now browser-cacheable and cache-plugin-aware. The legacy `print_api_fetch_polyfill()` method is kept as a documented no-op so any third-party callback list referencing it does not crash.
+
+### Added
+
+- **Automatic page-cache invalidation on every plugin upgrade.** Until 1.13.9, after a FAZ update site admins had to manually purge their page cache (LiteSpeed, WP Rocket, etc.) before visitors would receive the updated `_fazConfig` localize block in the rendered HTML — until then, cached pages kept embedding the previous version's data. Reported on gooloo.de (Bunny + LSCache) and on fabiodalez.it during the 1.13.7 → 1.13.8 deploy. `Activator::install()` now invokes `Activator::purge_page_caches()` right after `update_option('faz_version', FAZ_VERSION)`, so the purge is atomic with the version bump. Best-effort detection across:
+  - LiteSpeed Cache (`do_action('litespeed_purge_all', ...)`)
+  - WP Rocket (`rocket_clean_domain()`)
+  - W3 Total Cache (`w3tc_flush_all()`)
+  - WP Super Cache (`wp_cache_clear_cache()`)
+  - Cache Enabler (`cache_enabler_clear_complete_cache` action)
+  - SG Optimizer (`sg_cachepress_purge_cache()`)
+  - Hummingbird (`wphb_clear_page_cache` action)
+  - Breeze / Cloudways (`Breeze_PurgeCache::breeze_cache_flush()`)
+  - Autoptimize (`autoptimizeCache::clearall()`)
+  - WP-Optimize (`wpo_cache_flush()`)
+  - Comet Cache (`Plugin::wipeCache()`)
+  - Generic WP object cache (Memcached/Redis drop-ins via `wp_cache_flush()`)
+
+  Each backend is detected via a stable public symbol (function/action/class) so the method silently no-ops when a given plugin is not active. **CDN edges (Cloudflare, Bunny, KeyCDN) are intentionally NOT touched** — those need API credentials the plugin does not own; admins running a CDN should still purge it manually after a FAZ upgrade. The hook chain runs only on `Activator::install()`, which fires when `check_version()` detects a `faz_version` option mismatch — i.e. exactly once per upgrade, never on every page load.
+
 ## [1.13.8] — 2026-04-28
 
 ### Fixed (issue #87 — Bricks Builder support, three follow-up cases)

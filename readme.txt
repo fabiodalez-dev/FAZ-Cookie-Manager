@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.8
+Stable tag: 1.13.9
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -202,6 +202,10 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.9 =
+* Fix: Plugin Check `WordPress.Security.EscapeOutput.OutputNotEscaped` ERROR on `admin/class-admin.php:462` resolved. The ClassicPress wp.apiFetch polyfill is no longer echoed as `<script>$polyfill</script>` in `admin_head`; it now ships as a static file (`admin/assets/js/cp-api-fetch-polyfill.js`) registered against the `wp-api-fetch` handle, with the REST URL + nonce passed via `wp_localize_script()` as `fazApiFetchConfig`. Same behaviour, zero inline echo, browser-cacheable.
+* New: automatic page-cache invalidation on every plugin upgrade. `Activator::install()` now fires `Activator::purge_page_caches()` right after the version bump so visitors immediately see the up-to-date `_fazConfig` localize block — no more manual "purge LiteSpeed / Bunny / WP Rocket" step after each FAZ update. Best-effort detection across LiteSpeed Cache, WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, SG Optimizer, Hummingbird, Breeze (Cloudways), Autoptimize, WP-Optimize, and Comet Cache. CDN edges (Cloudflare, Bunny, KeyCDN) still need a manual purge — those need API credentials we do not own.
 
 = 1.13.8 =
 * Fix (#87): Bricks Builder Video element placeholder no longer collapses. The iframe inside `.brxe-video` (with `aspect-ratio: 16/9` + no explicit width/height) gets a consent CTA injected synchronously, even when its `offsetWidth` is still 0 at MutationObserver time.
@@ -466,6 +470,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.13.9 =
+Plugin Check ERROR resolved (ClassicPress wp.apiFetch polyfill now ships as a static JS file instead of an inline echo) and automatic page-cache invalidation on plugin upgrade across LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, SG Optimizer, Hummingbird, Breeze, Autoptimize, WP-Optimize, and Comet Cache. Recommended for everyone — especially if you've ever had to manually purge cache after a FAZ update.
 
 = 1.13.8 =
 Bricks Builder support — fixes the Video element placeholder collapse, intercepts the Bricks Container Video Lightbox click before it can open YouTube/Vimeo without consent, and suppresses the consent banner inside the Bricks visual editor (?bricks=run / ?bricks_preview). Recommended for any site running the Bricks theme.

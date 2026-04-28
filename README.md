@@ -486,6 +486,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.9
+- **Fix**: Plugin Check `WordPress.Security.EscapeOutput.OutputNotEscaped` ERROR on `admin/class-admin.php:462` resolved. The ClassicPress wp.apiFetch polyfill no longer echoes `<script>$polyfill</script>` in `admin_head`; it ships as a static file (`admin/assets/js/cp-api-fetch-polyfill.js`) registered against the `wp-api-fetch` handle, with REST URL + nonce passed via `wp_localize_script('fazApiFetchConfig', ...)`. Behaviour-equivalent, zero inline echo, browser-cacheable.
+- **New**: automatic page-cache invalidation on every plugin upgrade — `Activator::install()` fires `Activator::purge_page_caches()` after the version bump so visitors immediately see the up-to-date `_fazConfig` localize block. Best-effort across LiteSpeed Cache, WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, SG Optimizer, Hummingbird, Breeze, Autoptimize, WP-Optimize, Comet Cache, and the WP object cache (Memcached/Redis). CDN edges still require a manual purge.
+
 ### 1.13.8
 - **Fix (#87) — Bricks Builder Video element**: the iframe inside `.brxe-video` (with `aspect-ratio: 16/9` + no explicit width/height on the iframe) now gets a consent placeholder injected synchronously, even when the iframe's `offsetWidth`/`Height` are still 0 at MutationObserver time. The CSS floor (`min-height: 200px`, `aspect-ratio: 16/9` on `.faz-placeholder--video`) takes over when no measurement is available, so the visitor always sees the call-to-action.
 - **Fix (#87) — Bricks lightbox-link case**: capture-phase document-level click interceptor in `script.js` catches `<a class="bricks-lightbox" data-pswp-video-url="…">` (and the equivalent Elementor Pro / Divi shapes). If the URL points at a known video host (youtube.com, youtu.be, vimeo.com, dailymotion, wistia, twitch — covering the WATCH-style URLs lightbox links carry, not just the EMBED form Known_Providers indexes) and the visitor hasn't granted the matching category, the click is `preventDefault`'d before the page-builder listener runs and a placeholder is injected inline.
