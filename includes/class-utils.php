@@ -225,12 +225,30 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 	 */
 	function faz_disable_banner() {
 		global $wp_customize;
-		if ( isset( $_GET['et_fb'] ) || ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		|| isset( $_GET['elementor-preview'] ) || isset( $_POST['cs_preview_state'] ) || isset( $wp_customize ) //phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.NonceVerification.Missing
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended,WordPress.Security.NonceVerification.Missing
+		if ( isset( $_GET['et_fb'] ) || ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED )
+		|| isset( $_GET['elementor-preview'] )
+		|| isset( $_POST['cs_preview_state'] )
+		|| isset( $wp_customize )
 		|| ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) )
 		{
 			return true;
 		}
+		// Bricks Builder visual editor (?bricks=run) and its preview iframe
+		// (?bricks_preview / ?_bricksmode). Bricks renders its layout outside
+		// the_content filter, so the banner template would otherwise paint
+		// on top of the editor canvas and block element clicks. Reported on
+		// gooloo.de (#87 follow-up).
+		if ( ( isset( $_GET['bricks'] ) && 'run' === $_GET['bricks'] )
+			|| isset( $_GET['bricks_preview'] )
+			|| isset( $_GET['_bricksmode'] )
+			|| ( function_exists( 'bricks_is_builder' ) && bricks_is_builder() )
+			|| ( function_exists( 'bricks_is_builder_main' ) && bricks_is_builder_main() )
+			|| ( function_exists( 'bricks_is_builder_iframe' ) && bricks_is_builder_iframe() ) )
+		{
+			return true;
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended,WordPress.Security.NonceVerification.Missing
 		// Scanner mode: disable banner and blocking so the scanner iframe
 		// can detect third-party scripts and the cookies they set.
 		// Only works for logged-in admins to prevent abuse.
