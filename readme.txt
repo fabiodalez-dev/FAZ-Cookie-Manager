@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.7
+Stable tag: 1.13.8
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -202,6 +202,17 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.8 =
+* Fix (#87): Bricks Builder Video element placeholder no longer collapses. The iframe inside `.brxe-video` (with `aspect-ratio: 16/9` + no explicit width/height) gets a consent CTA injected synchronously, even when its `offsetWidth` is still 0 at MutationObserver time.
+* Fix (#87): Bricks Container Video Lightbox click — capture-phase document-level click interceptor catches `<a class="bricks-lightbox" data-pswp-video-url="…">` (plus Elementor Pro / Divi equivalents) and prevents the modal from opening when the video host is gated behind unconsented categories. A placeholder is injected inline.
+* Fix (#87): consent banner no longer paints over the Bricks visual editor — `faz_disable_banner()` recognises `?bricks=run`, `?bricks_preview`, `?_bricksmode`, and the Bricks helper functions.
+
+= 1.13.7 =
+* Fix (#85): GVL update no longer triggers a fatal `Call to undefined function FazCookie\…\wp_tempnam()` on the REST endpoint. Lazy-load `wp-admin/includes/file.php` and call `\wp_tempnam()` from the global namespace.
+* Fix (#87): Bricks Builder Video element placeholder CSS — removed `min-height: 0` from `.faz-placeholder--video`, scoped `min-width: min(280px, 100%)` to the video variant only.
+* Fix (Gooloo regression): Gravatar recategorised from `functional` to `necessary` so visitor-rejected functional consent no longer replaces every wpDiscuz / Disqus / WP-core comment avatar with a 200-px-tall placeholder. As defence in depth, `wpdiscuz_nonce_*` and `comment_author_*` added to the `is_wp_internal_cookie()` allowlist.
+* wp.org compliance pass ahead of plugin directory submission: $_COOKIE sanitization visible at access-line, `load_plugin_textdomain()` documented no-op (auto since WP 4.6), 4× `__($variable, …)` calls replaced with verbatim returns, 8 of 10 inline `<script>`/`<style>` migrated to `wp_enqueue_*` / `wp_add_inline_*` (3 residuals carry phpcs:ignore + technical justification), `_faz_first_time_install` site-transient renamed to `faz_first_time_install` with migration, three public REST routes carry explanatory block-comments documenting the HMAC-token + rate-limit security model.
 
 = 1.13.6 =
 * New: blocker-template parity with the runtime detection layer. Every provider already auto-detected by `Known_Providers` (143 of them — Google Analytics, Adobe, Plausible, Microsoft Clarity, Mixpanel, Segment, Stripe, Mailchimp, Klaviyo, HubSpot, Pinterest, Snapchat, Reddit, Quora, Outbrain, Taboola, Yandex Metrica, Baidu Analytics, etc.) now appears in WP Admin → FAZ Cookie Manager → Cookies → "Add from template". Previously only 11 templates were exposed in the admin picker; the runtime always blocked them all, but admins couldn't see them in the picker. Discovery-friendly without changing the privacy contract.
@@ -455,6 +466,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.13.8 =
+Bricks Builder support — fixes the Video element placeholder collapse, intercepts the Bricks Container Video Lightbox click before it can open YouTube/Vimeo without consent, and suppresses the consent banner inside the Bricks visual editor (?bricks=run / ?bricks_preview). Recommended for any site running the Bricks theme.
 
 = 1.11.2 =
 Fixes invisible preference center on dark presets, TypeError crash on ChromeOS/PMP-exempt members, and High Contrast preset button colors. Recommended for all 1.11.x installations.

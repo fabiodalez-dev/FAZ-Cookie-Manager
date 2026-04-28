@@ -2,6 +2,23 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.8] — 2026-04-28
+
+### Fixed (issue #87 — Bricks Builder support, three follow-up cases)
+
+- **Bricks Video element placeholder.** The iframe inside `<div class="brxe-video">` (which uses `aspect-ratio: 16/9` and `width: 100%` with no explicit width/height on the iframe itself) had `offsetWidth`/`Height` of 0 at MutationObserver time, and the original `_fazAddPlaceholder()` early-returned in that case — leaving the wrapper empty with no consent CTA.
+  - `_fazMutationObserver` now descends into added subtrees with `querySelectorAll('script[src], iframe[src]')`, catching `<iframe>` nested inside page-builder wrappers (Bricks `.brxe-video`, Elementor `.elementor-video-wrapper`, Divi `.et_pb_video`).
+  - `_fazAddPlaceholder()` always inserts the placeholder **synchronously** on the first call (before the calling site's `node.remove()` can detach the iframe). A 4-step sizing fallback chain — iframe metrics → ancestor walk (4 hops) → CSS floor (`min-height: 200px`, `aspect-ratio: 16/9`) → optional `requestAnimationFrame` remeasure — guarantees a visible CTA in every shape we have seen so far.
+- **Bricks lightbox-link click interception.** Bricks Container with `tag=a` + Video Lightbox emits `<a class="bricks-lightbox" href="https://youtube.com/watch?v=…" data-pswp-video-url="…">`; the iframe is only injected into the PhotoSwipe modal AFTER the click. We now run a capture-phase document-level click handler that walks up to 6 ancestors looking for the lightbox-link signal (`data-pswp-video-url`, `data-elementor-lightbox-video`, Divi `.et_pb_lightbox_video`, plus generic `data-video-url`/`data-youtube`/`data-vimeo`). Either a strict Known_Providers pattern match OR a host-based fallback (youtube.com / youtu.be / vimeo.com / dailymotion / wistia / twitch — covering the WATCH-style URL the lightbox link actually carries, not just the EMBED form indexed by Known_Providers) is enough to gate the click. On block: `preventDefault()` + `stopImmediatePropagation()` BEFORE Bricks' own listener, the URL is copied onto `data-faz-src` for the existing unblock path, and the standard `.faz-placeholder` CTA is injected inline.
+- **Banner suppression in WP admin / Bricks visual editor.** `faz_disable_banner()` in `includes/class-utils.php` now recognises the three Bricks 2.x editor signals (`$_GET['bricks']='run'`, `$_GET['bricks_preview']`, `$_GET['_bricksmode']`) plus the helper functions `bricks_is_builder()`, `bricks_is_builder_main()`, `bricks_is_builder_iframe()` when the theme is active. The banner pipeline (DOM render, `_fazConfig` localize, script blocker) fully shuts down on those routes, so the consent banner no longer paints over the Bricks editor canvas and blocks element clicks.
+
+### Tests
+
+- `tests/e2e/bricks-iframe-repro.mjs` — synthetic Bricks-shape iframe injection with `offsetWidth=0` at observer time. Asserts the placeholder is injected.
+- `tests/e2e/bricks-real-post.mjs` — visits a WP post containing a real `<div class="brxe-video"><iframe src="youtube.com/embed/…"></iframe></div>` with **Bricks 2.3.4 active as the theme**. Asserts the placeholder is injected and the YouTube iframe is removed.
+- `tests/e2e/bricks-lightbox-and-admin.mjs` — synthesises a `<a class="bricks-lightbox" data-pswp-video-url="…">` link, dispatches a click, asserts the page-builder listener never ran and a placeholder was injected. Plus a WP-CLI `wp eval` that calls `faz_disable_banner()` with `$_GET['bricks']='run'` and asserts it returns true.
+- Full suite still 255 passed / 0 failed (29 minutes, Playwright 1.58.2).
+
 ## [1.13.7] — 2026-04-27
 
 ### Fixed

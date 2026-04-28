@@ -486,6 +486,11 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.8
+- **Fix (#87) — Bricks Builder Video element**: the iframe inside `.brxe-video` (with `aspect-ratio: 16/9` + no explicit width/height on the iframe) now gets a consent placeholder injected synchronously, even when the iframe's `offsetWidth`/`Height` are still 0 at MutationObserver time. The CSS floor (`min-height: 200px`, `aspect-ratio: 16/9` on `.faz-placeholder--video`) takes over when no measurement is available, so the visitor always sees the call-to-action.
+- **Fix (#87) — Bricks lightbox-link case**: capture-phase document-level click interceptor in `script.js` catches `<a class="bricks-lightbox" data-pswp-video-url="…">` (and the equivalent Elementor Pro / Divi shapes). If the URL points at a known video host (youtube.com, youtu.be, vimeo.com, dailymotion, wistia, twitch — covering the WATCH-style URLs lightbox links carry, not just the EMBED form Known_Providers indexes) and the visitor hasn't granted the matching category, the click is `preventDefault`'d before the page-builder listener runs and a placeholder is injected inline.
+- **Fix (#87) — Banner showing in WP admin / Bricks editor**: `faz_disable_banner()` now recognises Bricks 2.x editor signals (`?bricks=run`, `?bricks_preview`, `?_bricksmode`) and the helper functions `bricks_is_builder()`, `bricks_is_builder_main()`, `bricks_is_builder_iframe()`. The banner pipeline no longer paints over the Bricks visual editor or admin routes.
+
 ### 1.13.7
 - **Fix (#85)**: GVL update no longer triggers a fatal `Call to undefined function FazCookie\…\wp_tempnam()` on the REST endpoint. The function lives in `wp-admin/includes/file.php`, which is not auto-loaded outside the admin context, and the namespaced caller resolved the unqualified name in the local namespace. Now `\wp_tempnam()` (global) is called and the file is `require_once`'d on demand. Same fix shape applied to `download_url()` in the languages controller.
 - **Fix (#87)**: Bricks Builder Video element no longer collapses to zero height when the YouTube iframe is blocked pending consent. `.faz-placeholder--video` keeps its `aspect-ratio: 16/9` and uses `min-width: min(280px, 100%)` so it stays usable on narrow viewports without overflowing.
