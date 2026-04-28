@@ -154,18 +154,31 @@ if (!postId || !postLink) {
   // We hit the REST banner endpoint with the param spoofed via X-FAZ-Test
   // header — the endpoint won't render in this case if disable kicks in.
   console.log('  testing faz_disable_banner() PHP logic via WP-CLI eval...');
-  try {
-    const { execFileSync } = await import('node:child_process');
-    const wpPath = process.env.WP_PATH || '/Users/fabio/Sites/faz-test';
-    const checkPHP = `
+  // CodeRabbit nitpick on PR #91: don't fall back to a hardcoded developer-
+  // machine path for the WP-CLI root. WP_PATH must be supplied explicitly so
+  // CI / other dev environments either run the check or skip it loudly,
+  // never fail silently against the wrong WordPress install.
+  const wpPath = process.env.WP_PATH;
+  if (!wpPath) {
+    console.log('  WP_PATH not set — skipping PHP-level faz_disable_banner() check.');
+    console.log('  Re-run with: WP_PATH=/path/to/wordpress node tests/e2e/bricks-lightbox-and-admin.mjs');
+  } else {
+    try {
+      const { execFileSync } = await import('node:child_process');
+      const checkPHP = `
 $_GET['bricks'] = 'run';
 echo faz_disable_banner() ? 'TRUE' : 'FALSE';
 `;
-    const out = execFileSync('wp', ['eval', checkPHP, '--path=' + wpPath, '--skip-themes'], { encoding: 'utf8' }).trim();
-    if (out.endsWith('TRUE')) pass('faz_disable_banner() returns true on ?bricks=run (PHP-level)');
-    else fail('faz_disable_banner() returns true on ?bricks=run', 'got: ' + out);
-  } catch (e) {
-    console.log('  WP-CLI eval skipped:', e.message.slice(0, 200));
+      const out = execFileSync('wp', ['eval', checkPHP, '--path=' + wpPath, '--skip-themes'], { encoding: 'utf8' }).trim();
+      if (out.endsWith('TRUE')) pass('faz_disable_banner() returns true on ?bricks=run (PHP-level)');
+      else fail('faz_disable_banner() returns true on ?bricks=run', 'got: ' + out);
+    } catch (e) {
+      // Surfaces real failures (wp-cli missing, plugin not loaded, syntax error)
+      // rather than swallowing them as a silent skip. We still don't `fail()`
+      // here because the visit-based assertions above are the authoritative
+      // signal — this is a belt-and-braces extra check.
+      console.log('  WP-CLI eval failed (not skipped):', e.message.slice(0, 200));
+    }
   }
 }
 
