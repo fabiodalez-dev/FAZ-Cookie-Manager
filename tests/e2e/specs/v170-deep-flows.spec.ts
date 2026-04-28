@@ -7,8 +7,16 @@ import { expect, test } from '../fixtures/wp-fixture';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
 const DEPLOY_PATH = process.env.FAZ_PLUGIN_DEPLOY_PATH ?? '';
+// WP_PATH resolution order:
+//   1. WP_PATH env var (explicit, preferred)
+//   2. Inferred from FAZ_PLUGIN_DEPLOY_PATH (the deploy target's grandparent
+//      is the WordPress root: <wp-root>/wp-content/plugins/faz-cookie-manager/)
+//   3. Empty — the WP-CLI fallback at canRunWpCli() will then return false
+//      and every test guarded by `test.skip(!canRunWpCli(), …)` skips with
+//      a message, instead of silently running against a hardcoded developer
+//      path on CI.
 const WP_PATH = process.env.WP_PATH
-  ?? (DEPLOY_PATH ? dirname(dirname(dirname(DEPLOY_PATH))) : '/Users/fabio/Sites/faz-test');
+  ?? (DEPLOY_PATH ? dirname(dirname(dirname(DEPLOY_PATH))) : '');
 
 let skipPluginsArgCache: string | null = null;
 

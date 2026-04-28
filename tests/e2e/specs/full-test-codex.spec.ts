@@ -31,7 +31,22 @@ type InstallResult = {
   details: string[];
 };
 
-const WP_PATH = process.env.WP_PATH ?? '/Users/fabio/Sites/faz-test';
+// WP_PATH resolution: explicit env var only — we don't fall back to a
+// developer-machine path. The constant may be the empty string at module
+// load (so other specs sharing this file's process aren't crashed), but
+// any wp-cli call inside the spec validates it and throws a clear error
+// before issuing the call.
+const WP_PATH = process.env.WP_PATH ?? '';
+
+function requireWpPath(): string {
+  if (!WP_PATH) {
+    throw new Error(
+      'WP_PATH env var is required for full-test-codex.spec.ts. ' +
+      'Re-run with: WP_PATH=/path/to/wordpress npm run test:e2e'
+    );
+  }
+  return WP_PATH;
+}
 const WP_LOGIN_PATH = getWpLoginPath();
 const FULL_TEST_CODEX_REPORT = process.env.FULL_TEST_CODEX_REPORT
   ?? resolve(process.cwd(), 'tests/e2e/reports/full-test-codex-report.json');
@@ -96,7 +111,7 @@ const TARGETS: Target[] = TARGET_CONFIGS.map((target, index) => ({
 }));
 
 function runWp(args: string[]): CommandResult {
-  const fullArgs = [...args, `--path=${WP_PATH}`, '--skip-plugins', '--skip-themes'];
+  const fullArgs = [...args, `--path=${requireWpPath()}`, '--skip-plugins', '--skip-themes'];
   try {
     const stdout = execFileSync('wp', fullArgs, {
       encoding: 'utf8',

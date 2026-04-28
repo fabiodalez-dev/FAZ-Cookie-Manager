@@ -3,7 +3,19 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const WP_PATH = process.env.WP_PATH ?? '/Users/fabio/Sites/faz-test';
+// WP_PATH must be supplied explicitly by the caller. We deliberately do
+// NOT fall back to a developer-machine path: a wrong fallback would let
+// every WP-CLI call below run against the wrong WordPress install on
+// CI / other contributors' machines, producing failures that look like
+// real product bugs.
+//
+// Resolution is **lazy** — the constant exposes the env value (or an
+// empty string), and the actual "WP_PATH must be set" enforcement
+// lives in `assertWpPath()`, which runs only when a wp-cli call
+// actually fires. This lets specs that import other helpers from this
+// module (e.g. `SCAN_LAB_PAGE_SLUGS`) load on machines where WP_PATH
+// is intentionally unset, without crashing the whole Playwright run.
+export const WP_PATH = process.env.WP_PATH ?? '';
 
 const UTILS_DIR = dirname(fileURLToPath(import.meta.url));
 const WP_PLUGIN_DIR = join(WP_PATH, 'wp-content', 'plugins');
@@ -28,6 +40,13 @@ export const SCAN_LAB_PAGE_SLUGS = [
 export const PROVIDER_MATRIX_PAGE_SLUG = 'faz-provider-matrix';
 
 function assertWpPath(): void {
+  if (!WP_PATH) {
+    throw new Error(
+      'WP_PATH env var is required for the E2E utils to call wp-cli. ' +
+      'Re-run the suite with `WP_PATH=/path/to/wordpress npm run test:e2e` ' +
+      '(or whatever script wraps Playwright on your environment).'
+    );
+  }
   if (!existsSync(WP_PATH)) {
     throw new Error(`WP_PATH does not exist: ${WP_PATH}`);
   }

@@ -7,7 +7,23 @@ the [WordPress.org plugin directory](https://wordpress.org/plugins/).
 >
 > - A wordpress.org account (the `fabiodalez` contributor slug).
 > - `svn` installed locally (`brew install subversion`).
-> - The plugin code in `/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/` clean on the `main` branch.
+> - The plugin code in `${PROJECT_ROOT}/faz-cookie-manager/` clean on the `main` branch.
+
+> **Path placeholders.** Every command below references two location
+> placeholders so this guide is portable across machines:
+>
+> - `${PROJECT_ROOT}` — the directory that contains the `faz-cookie-manager/`
+>   working tree (e.g. `~/Code/Cookie Crawler` on a contributor's laptop, or
+>   `/srv/build/cookie-crawler` in CI).
+> - `${WP_TEST_ROOT}` — the WordPress install used for the live smoke step
+>   in §5 (the path WP-CLI talks to). On a typical local-by-flywheel /
+>   Local-WP / Valet-Pro setup this is something like
+>   `~/Sites/faz-test/`.
+>
+> Either export both values in your shell before copy-pasting (e.g.
+> `export PROJECT_ROOT=~/Code/Cookie\ Crawler` /
+> `export WP_TEST_ROOT=~/Sites/faz-test`) or hand-substitute the placeholders
+> in your own paste — the rest of the guide assumes they resolve correctly.
 
 ---
 
@@ -73,7 +89,7 @@ The plugin uses a `.distignore` file to exclude dev artefacts. To build a clean
 ZIP locally (mirroring what the WP.org SVN deploy will ship):
 
 ```bash
-cd "/Users/fabio/Documents/GitHub/Cookie Crawler"
+cd "${PROJECT_ROOT}"
 rsync -a --delete \
   --exclude-from='faz-cookie-manager/.distignore' \
   faz-cookie-manager/ \
@@ -128,15 +144,15 @@ cd ~/Sites/faz-cookie-manager-svn
 
 # 1. Sync trunk with the clean ZIP content.
 rsync -a --delete \
-  --exclude-from="/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/.distignore" \
-  "/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/" \
+  --exclude-from="${PROJECT_ROOT}/faz-cookie-manager/.distignore" \
+  "${PROJECT_ROOT}/faz-cookie-manager/" \
   trunk/
 
 # 2. Copy screenshots + banner + icon into assets/.
 mkdir -p assets
-cp "/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/.wordpress-org/"screenshot-*.png assets/
-cp "/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/.wordpress-org/"banner-*.png assets/ 2>/dev/null || true
-cp "/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/.wordpress-org/"icon-*.png assets/ 2>/dev/null || true
+cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"screenshot-*.png assets/
+cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"banner-*.png assets/ 2>/dev/null || true
+cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"icon-*.png assets/ 2>/dev/null || true
 
 # 3. Create a tag from trunk.
 svn cp trunk tags/1.9.2
@@ -162,12 +178,12 @@ NEW_VERSION=1.9.3
 
 # Sync new code into trunk.
 rsync -a --delete \
-  --exclude-from="/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/.distignore" \
-  "/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/" \
+  --exclude-from="${PROJECT_ROOT}/faz-cookie-manager/.distignore" \
+  "${PROJECT_ROOT}/faz-cookie-manager/" \
   trunk/
 
 # Refresh screenshots if they changed.
-cp "/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/.wordpress-org/"screenshot-*.png assets/
+cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"screenshot-*.png assets/
 
 # Tag and commit.
 svn cp trunk "tags/${NEW_VERSION}"
@@ -206,8 +222,8 @@ From the repo root:
 # Make sure the test site is running and the plugin is deployed.
 rsync -av --delete \
   --exclude tests --exclude test-results --exclude node_modules \
-  "/Users/fabio/Documents/GitHub/Cookie Crawler/faz-cookie-manager/" \
-  "/Users/fabio/Sites/faz-test/wp-content/plugins/faz-cookie-manager/"
+  "${PROJECT_ROOT}/faz-cookie-manager/" \
+  "${WP_TEST_ROOT}/wp-content/plugins/faz-cookie-manager/"
 
 WP_BASE_URL=http://localhost:9998 \
 WP_ADMIN_USER=admin WP_ADMIN_PASS=admin \

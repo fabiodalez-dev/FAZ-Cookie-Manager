@@ -25,9 +25,9 @@ users, they only exist to be copied into the plugin's SVN `assets/` directory.
 # 1. Deploy current plugin to the local test site.
 rsync -a --delete \
   --exclude tests --exclude test-results --exclude node_modules \
-  ./ /Users/fabio/Sites/faz-test/wp-content/plugins/faz-cookie-manager/
+  ./ ${WP_TEST_ROOT}/wp-content/plugins/faz-cookie-manager/
 
-# 2. Capture (requires http://localhost:9998 to be serving /Users/fabio/Sites/faz-test).
+# 2. Capture (requires http://localhost:9998 to be serving ${WP_TEST_ROOT}).
 WP_BASE_URL=http://localhost:9998 \
 WP_ADMIN_USER=admin WP_ADMIN_PASS=admin \
 node scripts/capture-wporg-screenshots.mjs
