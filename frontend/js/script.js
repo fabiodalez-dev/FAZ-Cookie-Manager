@@ -3292,3 +3292,140 @@ window.addEventListener('message', function(event) {
         window.location.reload();
     }
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// Click-time interceptor for page-builder lightbox links
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Some page builders ship a "lightbox" link variant that embeds a video
+// inside a modal opened on click. The video URL is materialised into the
+// DOM only AFTER the click — meaning at page-render time there is no
+// `<iframe>` for the MutationObserver to gate. By the time the iframe
+// appears in the modal, the user has already seen content load and the
+// privacy contract is broken.
+//
+// Known shapes:
+//   • Bricks Builder        — `<a class="bricks-lightbox" data-pswp-video-url="...">`
+//   • Elementor Pro Lightbox — `<a class="elementor-clickable" data-elementor-lightbox-video="...">`
+//   • Divi video lightbox    — `<a class="et_pb_lightbox_video" href="...">` (when href is YouTube/Vimeo)
+//   • Generic data-attribute fallback — anything with `data-video-url` / `data-youtube` / `data-vimeo`
+//
+// We intercept the click in CAPTURE phase so we run before the page
+// builder's own listener. If the URL would be blocked by an unconsented
+// category, preventDefault() and surface an inline placeholder under
+// the link.
+function _fazExtractLightboxUrl(el) {
+    if (!el || el.nodeType !== 1) return '';
+    var attrs = [
+        'data-pswp-video-url',           // Bricks
+        'data-elementor-lightbox-video', // Elementor Pro
+        'data-video-url',                // generic
+        'data-youtube',                  // generic / themes
+        'data-vimeo',                    // generic / themes
+        'data-src',                      // some lightbox plugins
+    ];
+    for (var i = 0; i < attrs.length; i++) {
+        var v = el.getAttribute(attrs[i]);
+        if (v) return v;
+    }
+    // Bricks lightbox without explicit data-pswp-video-url: href IS the video.
+    if (el.classList && el.classList.contains('bricks-lightbox')) {
+        return el.getAttribute('href') || '';
+    }
+    // Divi lightbox: the href on .et_pb_lightbox_video is the video URL.
+    if (el.classList && el.classList.contains('et_pb_lightbox_video')) {
+        return el.getAttribute('href') || '';
+    }
+    return '';
+}
+
+// Host-based fallback for the lightbox interceptor: Known_Providers maps
+// `youtube.com/embed` (the iframe URL the lightbox eventually inserts),
+// not the WATCH-style URL the lightbox link itself carries
+// (`youtube.com/watch?v=…`, `youtu.be/<id>`, `vimeo.com/<id>`). For the
+// click intercept we therefore match by HOST, not path — the modal will
+// inject an embed-style iframe a moment later, but we want to block the
+// modal-open BEFORE that iframe ever exists.
+function _fazIsKnownVideoUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    var hosts = [
+        'youtube.com', 'www.youtube.com', 'youtu.be',
+        'youtube-nocookie.com', 'www.youtube-nocookie.com',
+        'vimeo.com', 'www.vimeo.com', 'player.vimeo.com',
+        'dailymotion.com', 'www.dailymotion.com', 'dai.ly',
+        'wistia.com', 'fast.wistia.net', 'fast.wistia.com',
+        'twitch.tv', 'www.twitch.tv', 'player.twitch.tv',
+    ];
+    try {
+        var u = new URL(url, window.location.href);
+        return hosts.indexOf(u.hostname) !== -1;
+    } catch (_e) {
+        return hosts.some(function (h) { return url.indexOf(h) !== -1; });
+    }
+}
+
+document.addEventListener('click', function (event) {
+    // Walk up to find the closest lightbox-link candidate. We deliberately
+    // DON'T limit to <a> — Bricks Container can be `tag=a` but other
+    // builders use `<button>` or `<div>` with the same data attrs.
+    var node = event.target;
+    var hops = 0;
+    var match = null;
+    while (node && hops < 6) {
+        if (node.nodeType === 1) {
+            var url = _fazExtractLightboxUrl(node);
+            if (url) {
+                match = { el: node, url: url };
+                break;
+            }
+        }
+        node = node.parentElement;
+        hops++;
+    }
+    if (!match) return;
+
+    // Resolve which category the URL would belong to via the same
+    // helper the MutationObserver uses for blocked iframes.
+    var blockingTarget = match.url;
+    try {
+        var u = new URL(match.url, window.location.href);
+        blockingTarget = _fazCleanHostName(u.hostname + u.pathname);
+    } catch (_e) { /* keep raw URL */ }
+
+    if (_fazIsUserWhitelisted(match.url)) return;
+
+    // Known_Providers patterns target the EMBED URL (e.g. youtube.com/embed),
+    // but lightbox links carry the WATCH URL (youtube.com/watch?v=…). We
+    // therefore accept either signal: the strict pattern match OR a known
+    // video host. A host match alone is enough — the lightbox will load an
+    // iframe from that host and the gate is the visitor's marketing-category
+    // consent (the same category Known_Providers maps these providers to).
+    var blockedByPattern = _fazShouldBlockProvider(blockingTarget);
+    var blockedByHost    = _fazIsKnownVideoUrl(match.url) && _fazIsCategoryToBeBlocked('marketing');
+    if (!blockedByPattern && !blockedByHost) return;
+
+    // Block the lightbox open.
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+        event.stopImmediatePropagation();
+    }
+
+    // Mark the link so the user understands why nothing happened, and
+    // so the iframe injected by the lightbox (if it ever runs) is also
+    // gated by the existing `data-faz-src` rewrite path on unblock.
+    if (!match.el.dataset.fazLightboxIntercepted) {
+        match.el.dataset.fazLightboxIntercepted = '1';
+        match.el.setAttribute('data-faz-src', match.url);
+        // Best-effort visual hint: surface the standard placeholder
+        // INSIDE the link so the user sees the consent CTA. The
+        // existing CSS floor (`min-height: 200px`,
+        // `aspect-ratio: 16/9` on `.faz-placeholder--video`) makes it
+        // usable even when the link itself has odd dimensions.
+        try {
+            var uniqueID = 'faz-lightbox-' + Math.random().toString(36).slice(2, 10);
+            _fazAddPlaceholder(match.el, uniqueID);
+        } catch (_pe) { /* placeholder injection is best-effort */ }
+    }
+}, true /* capture phase — beats the page-builder listener */);
+
