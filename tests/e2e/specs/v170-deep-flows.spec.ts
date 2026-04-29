@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
@@ -265,7 +264,17 @@ test.describe.serial('v1.7.0 deep flows', () => {
     expect(statusRows.some((row) => row.Key === 'Plugin Version')).toBeTruthy();
     expect(statusRows.some((row) => row.Key === 'Banner Enabled')).toBeTruthy();
 
-    const tmpDir = mkdtempSync(join(tmpdir(), 'faz-cli-e2e-'));
+    // `wp faz export` is scoped to wp_upload_dir() since 1.13.11 (wp.org
+    // compliance: "plugins must not write outside wp_upload_dir()"). Use
+    // a tmp dir INSIDE the WordPress uploads root so the absolute-path
+    // argument validates. Falls back to the legacy os.tmpdir() if
+    // WP_PATH is unavailable, which only matters for `faz import`
+    // (import has no path restriction).
+    const uploadsExportsRoot = join(WP_PATH, 'wp-content', 'uploads', 'faz-cookie-manager', 'exports');
+    if (!existsSync(uploadsExportsRoot)) {
+      execFileSync('mkdir', ['-p', uploadsExportsRoot], { stdio: 'ignore' });
+    }
+    const tmpDir = mkdtempSync(join(uploadsExportsRoot, 'cli-e2e-'));
     const baselineFile = join(tmpDir, 'baseline.json');
     const importFile = join(tmpDir, 'modified.json');
 

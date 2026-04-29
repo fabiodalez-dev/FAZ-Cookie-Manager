@@ -591,8 +591,22 @@ test.describe('v1.7.0 features', () => {
     }
   });
 
-  // 29. Issue #37: Custom CSS saves and renders
-  test('F29: custom CSS saves in banner settings and appears on frontend (issue #37)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+  // 29. Issue #37 — Custom CSS field REMOVED in 1.13.11.
+  //
+  // The Banner → Custom CSS textarea was removed for wp.org compliance
+  // ("plugins must not allow arbitrary code insertion"). The original
+  // test used to fill the textarea, save, and assert the CSS appeared
+  // on the frontend; that flow is now impossible by design.
+  //
+  // This test is now a regression test that the feature stays gone:
+  //   - the `#faz-b-custom-css` textarea must NOT be present in the
+  //     Banner editor admin page,
+  //   - the frontend must NOT inject any `customCSS` marker even if
+  //     a row with `meta.customCSS` is left in the DB from before the
+  //     1.13.11 upgrade (downgrade safety: data preserved, render
+  //     suppressed).
+  // Migration path for users: use Customizer → Additional CSS instead.
+  test('F29: custom CSS field is removed from Banner editor and frontend (issue #37 — feature removed in 1.13.11 for wp.org compliance)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
     await loginAsAdmin(page);
 
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
@@ -601,56 +615,25 @@ test.describe('v1.7.0 features', () => {
       return el && el.value !== '';
     }, { timeout: 10_000 });
 
-    // Switch to Advanced tab and set custom CSS
-    await page.click('#faz-banner-tabs button[data-tab="advanced"]');
-    await page.waitForSelector('#tab-advanced.active', { timeout: 5_000 });
+    // The Custom CSS textarea must not exist anywhere on the banner editor.
+    expect(await page.locator('#faz-b-custom-css').count()).toBe(0);
+    // Defense-in-depth: also assert no Advanced-tab "Custom CSS" card.
+    expect(await page.getByRole('heading', { name: /custom css/i }).count()).toBe(0);
 
-    const testCSS = '.faz-test-custom-css-marker { color: red; }';
-    await page.fill('#faz-b-custom-css', testCSS);
-
-    // Save
-    const saveResponse = page.waitForResponse(
-      (r) => r.url().includes('banners') && !r.url().includes('preview') &&
-        (r.request().method() === 'PUT' || r.request().method() === 'POST'),
-      { timeout: 30_000 },
-    );
-    await page.click('#faz-b-save');
-    const resp = await saveResponse;
-    expect(resp.status()).toBe(200);
-
-    // Reload and verify persistence
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => {
-      const el = document.getElementById('faz-b-type') as HTMLSelectElement;
-      return el && el.value !== '';
-    }, { timeout: 10_000 });
-    await page.click('#faz-banner-tabs button[data-tab="advanced"]');
-    await page.waitForSelector('#tab-advanced.active', { timeout: 5_000 });
-
-    const savedCSS = await page.inputValue('#faz-b-custom-css');
-    expect(savedCSS).toContain('faz-test-custom-css-marker');
-
-    // Check frontend has the custom CSS
+    // Frontend must not inject any test marker — even if a stale
+    // meta.customCSS row exists in the DB, the renderer no longer
+    // outputs it. Smoke this by opening the homepage in a fresh
+    // context (no consent cookie) and verifying the absence of any
+    // `.faz-test-custom-css-marker` artefact in the document.
     const ctx = await browser.newContext({ baseURL: wpBaseURL });
     const visitor = await ctx.newPage();
     try {
       await visitor.goto('/', { waitUntil: 'domcontentloaded' });
       const html = await visitor.content();
-      expect(html).toContain('faz-test-custom-css-marker');
+      expect(html).not.toContain('faz-test-custom-css-marker');
     } finally {
       await ctx.close();
     }
-
-    // Clean up — remove the custom CSS
-    await page.click('#faz-banner-tabs button[data-tab="advanced"]');
-    await page.fill('#faz-b-custom-css', '');
-    const cleanupResponse = page.waitForResponse(
-      (r) => r.url().includes('banners') && !r.url().includes('preview') &&
-        (r.request().method() === 'PUT' || r.request().method() === 'POST'),
-      { timeout: 15_000 },
-    );
-    await page.click('#faz-b-save');
-    await cleanupResponse;
   });
 
   // 30. Issue #38: Category names editable from admin
