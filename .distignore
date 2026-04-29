@@ -1,18 +1,35 @@
+# wp.org-shape ZIP exclude list. Must stay in sync with `release.md::COMMON_EXCLUDES`
+# plus the wp.org-only excludes (run-scan.php, cp-api-fetch-polyfill.js).
+# See release.md for the dual-ZIP build flow.
+
+# VCS / dotfiles
 .coderabbit.yaml
 .claude/
+.code-review-graph/
 .DS_Store
 .env*
 .git/
+.gitattributes
 .github/
 .githooks/
 .gitignore
+.playwright-cli/
 .playwright-mcp/
+.serena/
 .wordpress-org/
 .distignore
+
+# Dev artifacts
 assets/
+biome.json
+CHANGELOG.md
+CLAUDE.md
 composer.json
 composer.lock
+cookie-banner-compliance-checklist.md
 docs/
+eslint.config.mjs
+graphify-out/
 node_modules/
 package.json
 package-lock.json
@@ -20,14 +37,21 @@ phpstan.neon
 phpstan-bootstrap.php
 plan.md
 release.md
+report.md
 README.md
-CHANGELOG.md
 scripts/
 social-preview.png
 test-results/
 tests/
 tsconfig.json
 vendor/
+
+# Runtime / wp.org-only excludes
+admin/modules/scanner/run-scan.php
+admin/assets/js/cp-api-fetch-polyfill.js
+languages/*.po~
+languages/messages.mo
+
+# Misc
 *.log
 *.zip
-eslint.config.mjs

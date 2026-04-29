@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.9
+Stable tag: 1.13.10
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -202,6 +202,10 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.10 =
+* Fix: Plugin Check `library_core_files` ERROR on `admin/assets/js/cp-api-fetch-polyfill.js` resolved. The polyfill structurally re-implements `wp-includes/js/dist/api-fetch.js` (so Plugin Check fingerprints it as a duplicate of a WordPress core library) but is needed only on ClassicPress 1.x, where the bundled WP 4.9-era `wp-api-fetch` lacks `createRootURLMiddleware`. The wp.org-distribution ZIP now excludes the polyfill via `.distignore` (it ships only in the GitHub `-full` release ZIP for ClassicPress users); `class-admin.php::deregister_api_fetch()` carries a `file_exists()` guard so the wp.org build is a graceful no-op when the file is absent. WordPress users see no functional change — the native `wp-api-fetch` was already winning the dependency resolution.
+* Build: `.distignore` realigned to `release.md::COMMON_EXCLUDES` (added `.code-review-graph/`, `graphify-out/`, `.serena/`, `phpstan-bootstrap.php`, `report.md`, `CLAUDE.md`, `cookie-banner-compliance-checklist.md`, `biome.json`, `.gitattributes`, `.playwright-cli/`, `languages/*.po~`, `languages/messages.mo`). Prior drift between `.distignore` and the actual `zip` build flow caused dev artefacts to leak into past wp.org submissions.
 
 = 1.13.9 =
 * Fix: Plugin Check `WordPress.Security.EscapeOutput.OutputNotEscaped` ERROR on `admin/class-admin.php:462` resolved. The ClassicPress wp.apiFetch polyfill is no longer echoed as `<script>$polyfill</script>` in `admin_head`; it now ships as a static file (`admin/assets/js/cp-api-fetch-polyfill.js`) registered against the `wp-api-fetch` handle, with the REST URL + nonce passed via `wp_localize_script()` as `fazApiFetchConfig`. Same behaviour, zero inline echo, browser-cacheable.
@@ -471,11 +475,14 @@ By default, no — your consent logs, banner configuration and categories stay i
 
 == Upgrade Notice ==
 
+= 1.13.10 =
+Final wp.org submission build. Plugin Check `library_core_files` ERROR on the ClassicPress polyfill resolved (file moved to GitHub-full ZIP only). `.distignore` realigned to release flow.
+
 = 1.13.9 =
-Plugin Check ERROR resolved (ClassicPress wp.apiFetch polyfill now ships as a static JS file instead of an inline echo) and automatic page-cache invalidation on plugin upgrade across LiteSpeed, WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, SG Optimizer, Hummingbird, Breeze, Autoptimize, WP-Optimize, and Comet Cache. Recommended for everyone — especially if you've ever had to manually purge cache after a FAZ update.
+Plugin Check ERROR resolved (ClassicPress wp.apiFetch polyfill ships as static JS file) plus automatic page-cache invalidation on upgrade for 11 cache plugins (LiteSpeed, WP Rocket, W3 Total Cache, etc.). Recommended for everyone.
 
 = 1.13.8 =
-Bricks Builder support — fixes the Video element placeholder collapse, intercepts the Bricks Container Video Lightbox click before it can open YouTube/Vimeo without consent, and suppresses the consent banner inside the Bricks visual editor (?bricks=run / ?bricks_preview). Recommended for any site running the Bricks theme.
+Bricks Builder support — Video element placeholder collapse fixed, Bricks Container Video Lightbox click intercepted before YouTube/Vimeo opens without consent, banner suppressed in Bricks visual editor. Recommended for any site on Bricks.
 
 = 1.11.2 =
 Fixes invisible preference center on dark presets, TypeError crash on ChromeOS/PMP-exempt members, and High Contrast preset button colors. Recommended for all 1.11.x installations.

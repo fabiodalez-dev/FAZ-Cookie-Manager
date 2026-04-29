@@ -266,6 +266,21 @@ class Admin {
 		if ( false === faz_is_admin_page() || ! $this->is_classicpress() ) {
 			return;
 		}
+
+		// The polyfill file ships only in the GitHub-full release ZIP. The
+		// wp.org variant excludes it because Plugin Check fingerprints it as
+		// `library_core_files` (it re-implements `wp-includes/js/dist/api-fetch.js`).
+		// On the wp.org build, a ClassicPress visitor reaching this point
+		// has the native (WP 4.9-era) `wp-api-fetch` already enqueued by
+		// core — leaving it in place is the least-bad outcome (admin pages
+		// that depend on `createRootURLMiddleware` will degrade, but the
+		// rest of the admin keeps working). ClassicPress users who need the
+		// full FAZ admin experience should grab the GitHub `-full` ZIP.
+		$polyfill_path = plugin_dir_path( __FILE__ ) . 'assets/js/cp-api-fetch-polyfill.js';
+		if ( ! file_exists( $polyfill_path ) ) {
+			return;
+		}
+
 		wp_dequeue_script( 'wp-api-fetch' );
 		wp_deregister_script( 'wp-api-fetch' );
 

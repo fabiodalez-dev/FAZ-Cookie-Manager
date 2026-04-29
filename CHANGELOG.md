@@ -2,6 +2,17 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.10] — 2026-04-29
+
+### Fixed
+
+- **Plugin Check ERROR `library_core_files` on `admin/assets/js/cp-api-fetch-polyfill.js`.** Plugin Check fingerprints the file as a structural re-implementation of `wp-includes/js/dist/api-fetch.js` (it is — by design — the polyfill recreates `createRootURLMiddleware`, `createNonceMiddleware`, `createPreloadingMiddleware`, `mediaUploadMiddleware`, `fetchAllMiddleware`, `apiFetch.use`, `apiFetch.setFetchHandler`). The polyfill is needed only on ClassicPress 1.x (forked from WP 4.9, whose `wp-api-fetch` lacks `createRootURLMiddleware` introduced in WP 5.x). On WordPress.org-distributed WordPress the native `wp-api-fetch` is loaded and the polyfill is never enqueued — pure dead weight. Resolved by **excluding the file from the wp.org-shape ZIP** (extends the dual-ZIP pattern already used for `admin/modules/scanner/run-scan.php`); the GitHub `-full` release ZIP keeps it for ClassicPress users. `class-admin.php::deregister_api_fetch()` now carries a `file_exists()` guard so the wp.org build is a graceful no-op when the polyfill file is absent — ClassicPress users on the wp.org ZIP get the native (WP 4.9-era) `wp-api-fetch` left in place; admin pages depending on `createRootURLMiddleware` degrade, the rest of the admin keeps working. ClassicPress users who need the full FAZ admin experience grab the GitHub `-full` ZIP.
+
+### Build
+
+- **`.distignore` realigned to `release.md::COMMON_EXCLUDES`.** Prior drift between `.distignore` and the actual `zip` build flow caused a number of dev artefacts (`.code-review-graph/`, `graphify-out/`, `.serena/`, `phpstan-bootstrap.php`, `report.md`, `CLAUDE.md`, `cookie-banner-compliance-checklist.md`, `biome.json`, `.gitattributes`, `.playwright-cli/`, `languages/*.po~`, `languages/messages.mo`) to potentially leak into wp.org submissions when the SVN deploy used the `wp dist-archive` flow (which reads `.distignore`) instead of the inline `zip` flow in `release.md`. Both flows now produce byte-equivalent ZIPs.
+- **`release.md` updated** to document the second wp.org-only exclusion (the polyfill) alongside the existing `run-scan.php` exclusion. Sanity-check block extended to verify both files are absent from the wp.org variant and present in the GitHub `-full` variant.
+
 ## [1.13.9] — 2026-04-28
 
 ### Fixed
