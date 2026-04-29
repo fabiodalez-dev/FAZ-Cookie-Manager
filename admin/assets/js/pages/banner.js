@@ -323,9 +323,9 @@
 		setChecked('faz-b-reload-toggle', b.reloadBannerOnAccept && b.reloadBannerOnAccept.status);
 		setChecked('faz-b-gpc-toggle', b.respectGPC && b.respectGPC.status);
 
-		// Custom CSS
-		var meta = props.meta || {};
-		setVal('faz-b-custom-css', meta.customCSS || '');
+		// Custom CSS field removed from the admin UI in 1.13.11 for wp.org
+		// compliance. Legacy values stay in props.meta.customCSS but no
+		// textarea exposes them; see admin/views/banner.php.
 
 		// Brand logo
 		var brandLogo = (config.notice && config.notice.elements && config.notice.elements.brandLogo) || {};
@@ -905,9 +905,10 @@
 		if (!props.behaviours.respectGPC) props.behaviours.respectGPC = {};
 		props.behaviours.respectGPC.status = isChecked('faz-b-gpc-toggle');
 
-			// Custom CSS
+			// Custom CSS field removed from the admin UI in 1.13.11 for
+			// wp.org compliance — we no longer write props.meta.customCSS
+			// from the editor. Legacy DB values are preserved but inert.
 			if (!props.meta) props.meta = {};
-			props.meta.customCSS = getVal('faz-b-custom-css') || '';
 			normalizeBannerConfig(props);
 		}
 

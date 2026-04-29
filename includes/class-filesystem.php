@@ -59,14 +59,14 @@ class Filesystem {
 			remove_filter( 'request_filesystem_credentials', array( $this, 'request_filesystem_credentials' ) );
 		}
 
-		// Set the permission constants if not already set.
-		if ( ! defined( 'FS_CHMOD_DIR' ) ) {
-			define( 'FS_CHMOD_DIR', 0755 );
-		}
-
-		if ( ! defined( 'FS_CHMOD_FILE' ) ) {
-			define( 'FS_CHMOD_FILE', 0644 );
-		}
+		// Note: we no longer define `FS_CHMOD_DIR` / `FS_CHMOD_FILE` from
+		// here. Removed in 1.13.11 for wp.org compliance ("plugins must
+		// not change global behaviour"). WordPress core falls back to
+		// 0755 / 0644 internally when those constants are unset, which is
+		// the same value we used to set, so the runtime behaviour is
+		// identical for any environment that doesn't already define them.
+		// Hosts that need different permissions can still set the
+		// constants in `wp-config.php` and we'll honour them.
 
 		return $wp_filesystem;
 	}

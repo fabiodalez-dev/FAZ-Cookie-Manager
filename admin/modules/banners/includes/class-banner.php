@@ -443,7 +443,13 @@ class Banner extends Store {
 				$value = faz_sanitize_color( $value );
 				break;
 			case 'customCSS':
-				// Preserve newlines/special chars for CSS — strip HTML tags only.
+				// customCSS field removed from the admin UI in 1.13.11 for
+				// wp.org compliance ("plugins must not allow arbitrary code
+				// insertion"). The case is kept so legacy DB rows survive
+				// sanitize_meta_field() unchanged, but the value is never
+				// rendered (see frontend/class-frontend.php and
+				// admin/modules/banners/api/class-api.php for the inert
+				// render path).
 				$value = is_scalar( $value ) ? wp_strip_all_tags( (string) $value ) : '';
 				break;
 			default:

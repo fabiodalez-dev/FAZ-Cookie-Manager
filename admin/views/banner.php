@@ -535,16 +535,6 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		</div>
 
-		<div class="faz-card">
-			<div class="faz-card-header"><h3><?php esc_html_e( 'Custom CSS', 'faz-cookie-manager' ); ?></h3></div>
-			<div class="faz-card-body">
-				<div class="faz-form-group">
-					<label><?php esc_html_e( 'Additional CSS for the banner', 'faz-cookie-manager' ); ?></label>
-					<textarea class="faz-textarea faz-textarea-code" id="faz-b-custom-css" rows="6" placeholder=".faz-consent-container { /* your styles */ }"></textarea>
-					<div class="faz-help"><?php esc_html_e( 'CSS applied only to the cookie banner.', 'faz-cookie-manager' ); ?></div>
-				</div>
-			</div>
-		</div>
 	</div>
 
 	<!-- Bottom spacer: room for the fixed preview + save bar -->

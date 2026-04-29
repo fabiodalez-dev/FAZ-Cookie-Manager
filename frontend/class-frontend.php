@@ -232,19 +232,12 @@ class Frontend {
 			}
 			$css = $this->get_boosted_css();
 
-			// Append user-defined custom CSS from Banner → Advanced tab.
-			if ( $this->banner ) {
-				$banner_settings = $this->banner->get_settings();
-				$custom_css = isset( $banner_settings['meta']['customCSS'] ) ? trim( $banner_settings['meta']['customCSS'] ) : '';
-				if ( '' !== $custom_css ) {
-					// Strip dangerous CSS patterns that could be used for data exfiltration.
-					$custom_css = wp_strip_all_tags( $custom_css );
-					if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)\s*:|behavior\s*:|-moz-binding|@import/i', $custom_css ) ) {
-						$custom_css = '';
-					}
-					$css .= $custom_css;
-				}
-			}
+			// Custom CSS (banner.meta.customCSS) is no longer rendered on
+			// the frontend — removed in 1.13.11 for wp.org compliance
+			// ("plugins must not allow arbitrary code insertion"). Existing
+			// values remain in the database for downgrade safety but are
+			// inert. Use Customizer → Additional CSS (built-in WordPress)
+			// and target `.faz-consent-container`, `.faz-modal`, etc.
 
 			// Ad-blocker compatibility: use generic handle/var names to avoid filter lists.
 			$faz_settings = $this->get_faz_settings();
@@ -1209,7 +1202,63 @@ class Frontend {
 		if ( $this->is_blocking_disabled_for_page() ) {
 			return;
 		}
+
+		/*
+		 * Output-buffer-with-callback pattern (intentional, no explicit close).
+		 *
+		 * `ob_start()` is invoked here with a callback (`process_output_buffer`)
+		 * and is intentionally NOT closed elsewhere via `ob_end_flush()` /
+		 * `ob_get_clean()`: that's exactly how the WordPress core
+		 * "template_redirect → buffered final render" pattern works (and how
+		 * caching/optimisation plugins like LiteSpeed Cache, WP Rocket,
+		 * Autoptimize, and Cloudflare APO all hook into the output).
+		 *
+		 * PHP automatically flushes any open output buffer at request shutdown
+		 * (in reverse open order), invoking each callback exactly once with
+		 * the buffered HTML. Calling `ob_end_flush()` ourselves would ALSO
+		 * fire the callback, but earlier than necessary — it would force any
+		 * downstream filter (e.g. AMP transformer, page-cache writers) to
+		 * receive a partially-finalised document and would risk
+		 * double-execution of the callback if some other plugin then closes
+		 * the buffer again.
+		 *
+		 * The shutdown safety-net registered below is purely belt-and-braces:
+		 * if a hostile environment somehow lost the auto-flush (e.g.
+		 * `error_reporting(0)` + a fatal in another shutdown handler), this
+		 * forces the callback to run.
+		 */
 		ob_start( array( $this, 'process_output_buffer' ) );
+		register_shutdown_function( array( $this, 'flush_output_buffer_on_shutdown' ) );
+	}
+
+	/**
+	 * Belt-and-braces buffer flusher invoked at request shutdown.
+	 *
+	 * PHP normally auto-flushes any output buffer left open at shutdown,
+	 * so this is a safety net for environments where the auto-flush is
+	 * disabled or pre-empted by another shutdown handler. We only flush
+	 * if our buffer is still on top of the stack (verified via
+	 * `ob_list_handlers()`) so we never close someone else's buffer.
+	 *
+	 * @since 1.13.11
+	 * @return void
+	 */
+	public function flush_output_buffer_on_shutdown() {
+		if ( 0 === ob_get_level() ) {
+			return;
+		}
+		$handlers = ob_list_handlers();
+		$top      = end( $handlers );
+		if ( false === $top ) {
+			return;
+		}
+		// Match either the static class-prefixed string or the array form
+		// PHP records depending on how the callback was registered.
+		if ( false === strpos( (string) $top, 'process_output_buffer' ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_ob_end_flush -- safety net for the buffer we opened ourselves; only fires when the same handler is still on top of the stack.
+		@ob_end_flush();
 	}
 
 	/**

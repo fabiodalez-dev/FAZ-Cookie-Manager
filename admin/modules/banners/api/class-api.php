@@ -372,31 +372,11 @@ class Api extends Rest_Controller {
 			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
 			. '}';
 
-		$custom_css = $this->sanitize_preview_custom_css(
-			isset( $settings['meta']['customCSS'] ) ? $settings['meta']['customCSS'] : ''
-		);
-
-		return $css_reset . $css . $css_fixes . $custom_css;
-	}
-
-	/**
-	 * Sanitize banner custom CSS for preview output.
-	 *
-	 * @param string $custom_css Raw custom CSS.
-	 * @return string
-	 */
-	private function sanitize_preview_custom_css( $custom_css ) {
-		$custom_css = trim( (string) $custom_css );
-		if ( '' === $custom_css ) {
-			return '';
-		}
-
-		$custom_css = wp_strip_all_tags( $custom_css );
-		if ( preg_match( '/expression\s*\(|url\s*\(\s*["\']?\s*(?:javascript|data)\s*:|behavior\s*:|-moz-binding|@import/i', $custom_css ) ) {
-			return '';
-		}
-
-		return $custom_css;
+		// Custom CSS (banner.meta.customCSS) preview output removed in
+		// 1.13.11 for wp.org compliance — see frontend/class-frontend.php
+		// for the public-side equivalent. Existing DB values remain but
+		// are inert in both contexts.
+		return $css_reset . $css . $css_fixes;
 	}
 
 	/**

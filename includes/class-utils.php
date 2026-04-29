@@ -389,7 +389,7 @@ if ( ! function_exists( 'faz_is_bot' ) ) {
 		if ( ! isset( $_SERVER['HTTP_USER_AGENT'] ) ) {
 			return false;
 		}
-		$ua = wp_unslash( $_SERVER['HTTP_USER_AGENT'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$ua = sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) );
 		$bot_patterns = array(
 			'Googlebot', 'Bingbot', 'Slurp', 'DuckDuckBot', 'Baiduspider',
 			'YandexBot', 'facebot', 'ia_archiver', 'Twitterbot', 'LinkedInBot',

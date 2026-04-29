@@ -156,10 +156,52 @@ class WP_CLI_Commands {
 			'cookies'      => $cookies ? $cookies : array(),
 		);
 
-		$file = isset( $args[0] ) ? $args[0] : 'faz-settings-' . gmdate( 'Y-m-d' ) . '.json';
 		$json = wp_json_encode( $export, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE );
 
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- CLI context, no WP_Filesystem needed.
+		// Resolve the destination path. By default, write to
+		// `wp_upload_dir()/faz-cookie-manager/exports/faz-settings-YYYY-MM-DD.json`,
+		// creating the directory if needed. If the user passed an explicit
+		// path on the command line, it must be either:
+		//   - a bare filename (treated as relative to the default exports
+		//     directory above), or
+		//   - an absolute path that resolves inside `wp_upload_dir()`.
+		// Any other path is rejected — wp.org compliance ("plugins must
+		// not write outside allowed locations").
+		$upload         = wp_upload_dir( null, false );
+		$exports_base   = trailingslashit( $upload['basedir'] ) . 'faz-cookie-manager/exports';
+		if ( ! is_dir( $exports_base ) ) {
+			wp_mkdir_p( $exports_base );
+		}
+		$default_name   = 'faz-settings-' . gmdate( 'Y-m-d' ) . '.json';
+		$requested_path = isset( $args[0] ) ? (string) $args[0] : '';
+		$file           = '';
+		if ( '' === $requested_path ) {
+			$file = trailingslashit( $exports_base ) . $default_name;
+		} elseif ( false === strpos( $requested_path, '/' ) && false === strpos( $requested_path, DIRECTORY_SEPARATOR ) ) {
+			// Bare filename — append to the default exports directory.
+			$file = trailingslashit( $exports_base ) . sanitize_file_name( $requested_path );
+		} else {
+			// Caller passed a (possibly relative) path. Resolve it and
+			// confirm the result lives inside `wp_upload_dir()`.
+			$resolved      = wp_normalize_path( $requested_path );
+			$abs_target    = '/' === substr( $resolved, 0, 1 ) || preg_match( '#^[A-Za-z]:[/\\\\]#', $resolved )
+				? $resolved
+				: trailingslashit( $exports_base ) . $resolved;
+			$abs_target    = wp_normalize_path( $abs_target );
+			$uploads_root  = wp_normalize_path( trailingslashit( $upload['basedir'] ) );
+			if ( 0 !== strpos( $abs_target, $uploads_root ) ) {
+				WP_CLI::error( 'Refusing to write outside wp_upload_dir() (' . $uploads_root . '). Pass a bare filename to use the default exports/ directory, or an absolute path inside uploads.' );
+				return;
+			}
+			// Ensure parent directory exists.
+			$parent_dir = dirname( $abs_target );
+			if ( ! is_dir( $parent_dir ) ) {
+				wp_mkdir_p( $parent_dir );
+			}
+			$file = $abs_target;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- CLI context, target path validated above to live inside wp_upload_dir().
 		if ( false === file_put_contents( $file, $json ) ) {
 			WP_CLI::error( "Failed to write to {$file}" );
 			return;

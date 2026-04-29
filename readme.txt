@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.10
+Stable tag: 1.13.11
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -202,6 +202,13 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.11 =
+* Removed: arbitrary CSS insertion via the Banner → Custom CSS field. The textarea is gone from the admin UI, the API preview no longer renders it, and the public frontend no longer injects it. Existing values stay in the database for downgrade safety but are inert in both contexts. To customise the consent banner appearance, use **Customizer → Additional CSS** (a built-in WordPress feature) and target `.faz-consent-container`, `.faz-modal`, etc. — wp.org compliance ("plugins must not allow arbitrary code insertion").
+* Security: `$_SERVER['HTTP_USER_AGENT']` in `faz_is_bot()` now wrapped with `sanitize_text_field( wp_unslash( … ) )` at the access line (was `wp_unslash()` only with a `phpcs:ignore`). Visible to static analysers.
+* Compliance: `class-filesystem.php` no longer issues `define('FS_CHMOD_DIR', 0755)` / `define('FS_CHMOD_FILE', 0644)` globally. WordPress core uses the same defaults internally when those constants are unset, so runtime behaviour is unchanged for any environment that doesn't already set them.
+* Compliance: `wp faz export` (WP-CLI) now defaults to `wp_upload_dir()/faz-cookie-manager/exports/faz-settings-YYYY-MM-DD.json`. A bare filename argument is appended to that directory; an absolute path argument must resolve inside `wp_upload_dir()` or the command is rejected — no more arbitrary filesystem writes.
+* Compliance: `frontend/class-frontend.php::start_blocking_buffer()` carries an explanatory block-comment for the `ob_start()` callback pattern (PHP auto-flushes at shutdown, no explicit `ob_end_flush()` needed) and now also registers a belt-and-braces `register_shutdown_function()` safety-net that triggers the callback only if our handler is still on top of the buffer stack.
 
 = 1.13.10 =
 * Fix: Plugin Check `library_core_files` ERROR on `admin/assets/js/cp-api-fetch-polyfill.js` resolved. The polyfill structurally re-implements `wp-includes/js/dist/api-fetch.js` (so Plugin Check fingerprints it as a duplicate of a WordPress core library) but is needed only on ClassicPress 1.x, where the bundled WP 4.9-era `wp-api-fetch` lacks `createRootURLMiddleware`. The wp.org-distribution ZIP now excludes the polyfill via `.distignore` (it ships only in the GitHub `-full` release ZIP for ClassicPress users); `class-admin.php::deregister_api_fetch()` carries a `file_exists()` guard so the wp.org build is a graceful no-op when the file is absent. WordPress users see no functional change — the native `wp-api-fetch` was already winning the dependency resolution.
@@ -474,6 +481,9 @@ By default, no — your consent logs, banner configuration and categories stay i
 * Self-hosted cookie scanner and consent logging
 
 == Upgrade Notice ==
+
+= 1.13.11 =
+wp.org round-2 compliance pass. Custom CSS field removed from the Banner editor (use Customizer → Additional CSS instead); $_SERVER sanitization, FS_CHMOD globals, WP-CLI export path, and ob_start callback all hardened.
 
 = 1.13.10 =
 Final wp.org submission build. Plugin Check `library_core_files` ERROR on the ClassicPress polyfill resolved (file moved to GitHub-full ZIP only). `.distignore` realigned to release flow.

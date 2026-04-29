@@ -2,6 +2,26 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.11] — 2026-04-29
+
+### Removed (breaking for one feature)
+
+- **Banner → Custom CSS field eliminated.** The textarea in the Banner editor that let admins paste arbitrary CSS into `meta.customCSS` is gone, the REST API preview no longer renders that field, and the public frontend no longer injects it into the document `<style>` block. Plugin Review Team flagged it as "arbitrary code insertion" — the wp.org compliance baseline does not permit plugins to ship a free-form CSS textarea even with sanitisation, since the same UX surface (with the same selectors) is provided by the WordPress core **Customizer → Additional CSS** screen. Existing `meta.customCSS` values stay in the `wp_faz_banners` table for downgrade safety but are inert in both the admin preview and on the live frontend. Migration path for users who relied on this: copy the saved CSS over to Customizer → Additional CSS and target `.faz-consent-container`, `.faz-modal`, `.faz-preference-wrapper`, etc. directly (no scoping changes needed — the banner injects those exact selectors).
+
+### Security / hardening
+
+- **`$_SERVER['HTTP_USER_AGENT']` access-line sanitised.** `includes/class-utils.php::faz_is_bot()` now does `sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) )` at the assignment line; the `phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized` annotation is gone. The UA value is then passed downstream to the public `apply_filters('faz_is_bot', $is_bot, $ua)` hook, so we want third-party `faz_is_bot` listeners to receive an already-cleaned string.
+- **`FS_CHMOD_DIR` / `FS_CHMOD_FILE` global `define()`s removed.** `includes/class-filesystem.php` previously issued `define('FS_CHMOD_DIR', 0755)` and `define('FS_CHMOD_FILE', 0644)` (guarded with `! defined()`, but still global state). Plugin Review Team flagged this as "changes global behaviour". WordPress core falls back to those exact octal values internally when the constants are unset, so removing the `define()`s is behaviour-preserving on every host that doesn't override them, and now we no longer compete with site owners or other plugins that legitimately want to set different permissions.
+
+### WP-CLI
+
+- **`wp faz export <path>` is now scoped to `wp_upload_dir()`.** Default output directory is `wp_upload_dir()/faz-cookie-manager/exports/faz-settings-YYYY-MM-DD.json` (auto-created). Bare-filename arguments (e.g. `wp faz export my-backup.json`) are appended to that directory after `sanitize_file_name()`. Absolute-path arguments are accepted ONLY if they normalise inside `wp_upload_dir()`; otherwise the command rejects with `WP_CLI::error( 'Refusing to write outside wp_upload_dir() …' )`. Plugin Review Team flagged the prior unrestricted `file_put_contents( $args[0], $json )` as "saving data outside the plugin/uploads sandbox".
+
+### Documentation / safety nets
+
+- **`frontend/class-frontend.php::start_blocking_buffer()` `ob_start()` callback pattern documented.** A block-comment now explains why we don't pair the `ob_start( [ $this, 'process_output_buffer' ] )` with an explicit `ob_end_flush()` / `ob_get_clean()` in the same logical flow — that's the WordPress core `template_redirect → buffered final render` pattern, where PHP itself flushes the buffer at request shutdown and invokes our callback exactly once. Calling `ob_end_flush()` ourselves would either fire the callback prematurely or risk double-execution if a downstream cache plugin then opens/closes the buffer.
+- A belt-and-braces `register_shutdown_function( [ $this, 'flush_output_buffer_on_shutdown' ] )` is now also registered. The shutdown handler verifies (via `ob_list_handlers()`) that our handler is still on top of the output-buffer stack before flushing — so we never close someone else's buffer if a third-party plugin pushed one above ours.
+
 ## [1.13.10] — 2026-04-29
 
 ### Fixed
