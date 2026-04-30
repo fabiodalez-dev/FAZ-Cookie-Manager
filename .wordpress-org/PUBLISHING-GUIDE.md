@@ -115,81 +115,153 @@ unzip -l /tmp/faz-cookie-manager.zip | grep -E "(tests/|node_modules|\.git|\.log
 
 ---
 
-## 2. SVN workflow (after approval)
+## 2. SVN workflow (after approval) — STAGED, never publish straight to `trunk/`
 
 Once the plugin is approved, you get an SVN URL
-(`https://plugins.svn.wordpress.org/faz-cookie-manager/`) with three
+(`https://plugins.svn.wordpress.org/faz-cookie-manager/`) with three top-level
 directories:
 
 ```
 faz-cookie-manager/
 ├── trunk/       ← latest in-development code, used by the directory page
 ├── tags/
-│   ├── 1.9.2/   ← frozen copy for each released version
+│   ├── 1.13.11/ ← frozen copy of each released version
 │   └── …
 └── assets/      ← banner / icon / screenshots (NOT shipped to users)
 ```
 
-### 2.1 Checkout
+> **🛑 Hard rule: never run `rsync … trunk/` followed by `svn ci` in the same
+> shot.** wp.org ships whatever is in `trunk/` (filtered by `Stable tag:` in
+> readme.txt) to every active install. A typo in a path or a stale local file
+> bleeds into production within the next 12-hour `wp_update_plugins` cron.
+>
+> Always go through a **local staging directory + diff review + atomic
+> apply**. Concretely:
+>
+> 1. Build the wp.org-shape ZIP from your clean `main` (release.md §3) — the
+>    ZIP is the canonical source of truth; the SVN trunk is just a copy of
+>    its extracted contents.
+> 2. Extract that ZIP into a **staging directory outside the SVN checkout**
+>    (e.g. `~/Sites/faz-cookie-manager-svn-stage/`).
+> 3. `diff -r staging/ trunk/` and inspect the change set: file count, size,
+>    new/removed paths, suspicious deltas (anything outside the documented
+>    release scope is a red flag).
+> 4. Only after the diff is clean, `rsync` staging → SVN `trunk/`, `svn cp`
+>    trunk → `tags/{version}`, then `svn ci` in a single atomic commit.
+>
+> The `scripts/svn-release.sh` helper in the repo automates exactly this
+> flow — see §2.4 below.
+
+### 2.1 One-time setup
 
 ```bash
+# Install SVN (macOS).
+brew install subversion
+
+# Generate an SVN-specific password at:
+#   https://wordpress.org/profile/security/
+# (NOT the wordpress.org account password — a separate token.)
+
+# Probe auth + cache the password in the macOS Keychain on first call.
+svn ls https://plugins.svn.wordpress.org/faz-cookie-manager/ \
+  --username fabiodalez \
+  --password '<svn_password_token>' \
+  --non-interactive
+
+# Subsequent calls don't need --username/--password — the Keychain serves them.
+
+# Checkout the SVN repo into ~/Sites/faz-cookie-manager-svn (separate from the
+# git working tree at ${PROJECT_ROOT}/faz-cookie-manager/).
 cd ~/Sites
 svn co https://plugins.svn.wordpress.org/faz-cookie-manager/ faz-cookie-manager-svn
 ```
 
-### 2.2 First release (1.9.2)
+### 2.2 First release (1.13.11) — staged flow
 
 ```bash
-cd ~/Sites/faz-cookie-manager-svn
+VERSION=1.13.11
+PROJECT_ROOT="/Users/fabio/Documents/GitHub/Cookie Crawler"
+SVN_DIR="${HOME}/Sites/faz-cookie-manager-svn"
+STAGE_DIR="${HOME}/Sites/faz-cookie-manager-svn-stage"
 
-# 1. Sync trunk with the clean ZIP content.
+# ── Step 1. Build the wp.org-shape ZIP from a clean main checkout.
+# (See release.md §3 — produces faz-cookie-manager-${VERSION}.zip in
+# ${PROJECT_ROOT}/.)
+
+# ── Step 2. Extract the ZIP into the staging dir (NOT directly into trunk).
+rm -rf "${STAGE_DIR}"
+mkdir -p "${STAGE_DIR}"
+unzip -q "${PROJECT_ROOT}/faz-cookie-manager-${VERSION}.zip" -d "${STAGE_DIR}"
+# Result: ${STAGE_DIR}/faz-cookie-manager/ (the ZIP's top-level folder).
+
+# ── Step 3. Diff staging vs current trunk and review the delta.
+cd "${SVN_DIR}"
+svn up
+diff -rq "${STAGE_DIR}/faz-cookie-manager/" trunk/ | head -50
+echo
+echo "Stats:"
+echo "  Staging files:  $(find ${STAGE_DIR}/faz-cookie-manager -type f | wc -l)"
+echo "  Staging size:   $(du -sh ${STAGE_DIR}/faz-cookie-manager | cut -f1)"
+echo "  Trunk files:    $(find trunk -type f -not -path '*/.svn/*' | wc -l)"
+# REVIEW the diff manually. Anything unexpected → stop and investigate.
+
+# ── Step 4. Apply: sync staging → trunk, copy → tag, single commit.
 rsync -a --delete \
-  --exclude-from="${PROJECT_ROOT}/faz-cookie-manager/.distignore" \
-  "${PROJECT_ROOT}/faz-cookie-manager/" \
+  --exclude='.svn' \
+  "${STAGE_DIR}/faz-cookie-manager/" \
   trunk/
 
-# 2. Copy screenshots + banner + icon into assets/.
+# Copy screenshots / banner / icon into assets/.
 mkdir -p assets
 cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"screenshot-*.png assets/
 cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"banner-*.png assets/ 2>/dev/null || true
 cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"icon-*.png assets/ 2>/dev/null || true
 
-# 3. Create a tag from trunk.
-svn cp trunk tags/1.9.2
+# Create the tag (atomic copy of trunk's working state).
+svn cp trunk "tags/${VERSION}"
 
-# 4. Add every new file and commit.
-svn add --force trunk assets tags/1.9.2
+# Stage all SVN changes (add new, remove deleted).
+svn add --force trunk assets "tags/${VERSION}"
 svn status | grep '^!' | awk '{print $2}' | xargs -I{} svn rm {}
-svn ci -m "Release 1.9.2"
+
+# Sanity preview.
+svn status | head -30
+echo "Total SVN changes staged: $(svn status | wc -l)"
+
+# Atomic commit (trunk + tag + assets in one go).
+svn ci -m "Release ${VERSION}" --username fabiodalez
 ```
 
-SVN credentials are the same as your wordpress.org login. The commit may take a
-few minutes to propagate to the plugin page.
+SVN credentials are cached in macOS Keychain after the §2.1 probe. The commit
+may take 5–30 minutes to propagate to https://wordpress.org/plugins/faz-cookie-manager.
 
 ### 2.3 Subsequent releases
 
-For every future release:
+Identical to §2.2 with a new `VERSION`. The helper script in §2.4 automates
+the whole flow including the diff/confirm gate.
+
+### 2.4 Automated staged-release script
+
+`scripts/svn-release.sh` (in the repo root) wraps §2.2 with:
+- Mandatory `--version=X.Y.Z` flag.
+- Pre-flight check that `faz-cookie-manager-X.Y.Z.zip` exists in
+  `${PROJECT_ROOT}/`.
+- Pre-flight check that the `Stable tag:` in `readme.txt` matches `X.Y.Z`.
+- Fresh staging extraction in `~/Sites/faz-cookie-manager-svn-stage/`.
+- `diff -rq` summary + interactive `[y/N]` confirmation gate before any
+  rsync into `trunk/`.
+- Automatic `svn add --force` of new files + `svn rm` of deleted files.
+- `svn ci` only if the user explicitly confirms a second time at the commit
+  prompt.
 
 ```bash
-cd ~/Sites/faz-cookie-manager-svn
-svn up
-
-NEW_VERSION=1.9.3
-
-# Sync new code into trunk.
-rsync -a --delete \
-  --exclude-from="${PROJECT_ROOT}/faz-cookie-manager/.distignore" \
-  "${PROJECT_ROOT}/faz-cookie-manager/" \
-  trunk/
-
-# Refresh screenshots if they changed.
-cp "${PROJECT_ROOT}/faz-cookie-manager/.wordpress-org/"screenshot-*.png assets/
-
-# Tag and commit.
-svn cp trunk "tags/${NEW_VERSION}"
-svn add --force trunk assets "tags/${NEW_VERSION}"
-svn ci -m "Release ${NEW_VERSION}"
+scripts/svn-release.sh --version=1.13.11
+# → runs all of §2.2 with two confirmation gates (post-diff and pre-commit).
 ```
+
+Use the manual flow (§2.2) only when the script flags something unusual or
+when you need to deviate (e.g. assets-only update without a code release —
+in that case touch only `assets/` and skip the trunk/tag steps).
 
 Remember to bump:
 - `Stable tag:` in `readme.txt`
