@@ -37,7 +37,9 @@ report.md
 # is the local SVN deploy runbook (kept off the public history).
 # blueprint.json is tracked (wp.org Playground Live Preview — SVN assets/).
 .wordpress-org/*
-!.wordpress-org/blueprint.json
+!.wordpress-org/blueprints/
+.wordpress-org/blueprints/*
+!.wordpress-org/blueprints/blueprint.json
 
 # Playwright
 .playwright-mcp/
