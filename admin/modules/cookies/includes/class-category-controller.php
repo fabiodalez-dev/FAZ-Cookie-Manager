@@ -293,8 +293,22 @@ class Category_Controller extends Base_Controller {
 		if ( ! $category_id ) {
 			return;
 		}
+		// When called from the REST API, the object has only set_id() — get_loaded()
+		// is false because read() was never called. In that case fetch the slug
+		// directly so the protection check below still works correctly.
 		if ( method_exists( $object, 'get_loaded' ) && ! $object->get_loaded() ) {
-			return;
+			$row = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					"SELECT slug FROM {$wpdb->prefix}faz_cookie_categories WHERE category_id = %d",
+					$category_id
+				)
+			);
+			if ( ! $row ) {
+				return;
+			}
+			$slug = sanitize_text_field( $row->slug );
+		} else {
+			$slug = (string) $object->get_slug();
 		}
 
 		// Protect built-in non-removable categories. The `necessary` and
@@ -304,7 +318,6 @@ class Category_Controller extends Base_Controller {
 		// non-disableable invariant on the frontend banner. Refuse at
 		// the controller layer — REST callers receive a clear error
 		// instead of a 200 with stale state.
-		$slug = (string) $object->get_slug();
 		if ( in_array( $slug, array( 'necessary', 'uncategorized' ), true ) ) {
 			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery -- defensive no-op if no transaction is open.
 			throw new \RuntimeException(
