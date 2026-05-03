@@ -152,12 +152,15 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
 
     // Extract the _fazAddPlaceholder body (from its definition to the next
     // top-level function) and assert the call is present.
+    // Use an open-paren check so the assertion passes regardless of whether
+    // _fazSetPlaceHolder is called with no args or with a container argument
+    // (CodeRabbit scoped the query to addedNode to prevent duplicate listeners).
     const fnMatch = src.match(/function _fazAddPlaceholder\([\s\S]*?\nfunction /);
     expect(fnMatch, 'could not locate _fazAddPlaceholder in source').not.toBeNull();
     expect(
       fnMatch![0],
       '_fazAddPlaceholder must call _fazSetPlaceHolder() for dynamic placeholders',
-    ).toContain('_fazSetPlaceHolder()');
+    ).toContain('_fazSetPlaceHolder(');
   });
 
   test('dynamically-injected Vimeo iframe shows visible placeholder text (non-YouTube provider)', async ({ browser }) => {
