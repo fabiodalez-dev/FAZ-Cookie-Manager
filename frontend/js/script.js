@@ -2722,6 +2722,7 @@ function _fazAddPlaceholder(htmlElm, uniqueID) {
             "video-placeholder-text-youtube"
         );
     }
+    _fazSetPlaceHolder();
 }
 function _fazGetYoutubeID(src) {
     const match = src.match(
