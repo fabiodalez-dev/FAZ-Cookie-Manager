@@ -24,6 +24,8 @@ const WP_CLI_ENV = {
   ...process.env,
   WP_CLI_PHP_ARGS: '-d error_reporting=E_ERROR -d display_errors=0',
 };
+const WP_CLI_TIMEOUT_ENV = Number(process.env.WP_CLI_TIMEOUT_MS);
+const WP_CLI_TIMEOUT_MS = Number.isFinite(WP_CLI_TIMEOUT_ENV) && WP_CLI_TIMEOUT_ENV > 0 ? WP_CLI_TIMEOUT_ENV : 30_000;
 
 export const SCAN_LAB_PAGE_SLUGS = [
   'faz-lab-js-basic',
@@ -54,11 +56,21 @@ function assertWpPath(): void {
 
 export function wp(args: string[]): string {
   assertWpPath();
-  return execFileSync('wp', [`--path=${WP_PATH}`, ...args], {
-    encoding: 'utf8',
-    env: WP_CLI_ENV,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
+  try {
+    return execFileSync('wp', [`--path=${WP_PATH}`, ...args], {
+      encoding: 'utf8',
+      env: WP_CLI_ENV,
+      killSignal: 'SIGTERM',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: WP_CLI_TIMEOUT_MS,
+    }).trim();
+  } catch (error) {
+    const command = ['wp', `--path=${WP_PATH}`, ...args].join(' ');
+    if (error instanceof Error) {
+      error.message = `WP-CLI command failed or timed out after ${WP_CLI_TIMEOUT_MS}ms: ${command}\n${error.message}`;
+    }
+    throw error;
+  }
 }
 
 export function wpEval(code: string): string {

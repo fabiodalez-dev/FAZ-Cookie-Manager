@@ -293,6 +293,9 @@ class Category_Controller extends Base_Controller {
 		if ( ! $category_id ) {
 			return;
 		}
+		if ( method_exists( $object, 'get_loaded' ) && ! $object->get_loaded() ) {
+			return;
+		}
 
 		// Protect built-in non-removable categories. The `necessary` and
 		// `uncategorized` slugs are referenced by the consent flow and the

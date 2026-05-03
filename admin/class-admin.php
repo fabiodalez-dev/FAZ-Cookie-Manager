@@ -494,6 +494,12 @@ class Admin {
 						'templateCatNotFound'      => __( 'not found — cookies not added.', 'faz-cookie-manager' ),
 						'templateCookiesFailed'    => __( 'Failed to create cookies from template.', 'faz-cookie-manager' ),
 						'templateLoadFailed'       => __( 'Failed to load templates.', 'faz-cookie-manager' ),
+						'shortcodeCopied'          => __( 'Shortcode copied!', 'faz-cookie-manager' ),
+						'noScanLogs'               => __( 'No scan logs available.', 'faz-cookie-manager' ),
+						'debugLogDownloadFailed'   => __( 'Failed to download debug log.', 'faz-cookie-manager' ),
+						'clearDebugLogsConfirm'    => __( 'Clear all scanner debug logs?', 'faz-cookie-manager' ),
+						'debugLogsCleared'         => __( 'Debug logs cleared.', 'faz-cookie-manager' ),
+						'debugLogsClearFailed'     => __( 'Failed to clear debug logs.', 'faz-cookie-manager' ),
 					),
 					// Banner page.
 					'banner'                   => array(
@@ -600,15 +606,6 @@ class Admin {
 					// System Status page.
 					'systemStatus'             => array(
 						'copied'                   => __( 'Status copied to clipboard!', 'faz-cookie-manager' ),
-					),
-					// Cookies page (shortcode copy + scanner debug log).
-					'cookies'                  => array(
-						'shortcodeCopied'          => __( 'Shortcode copied!', 'faz-cookie-manager' ),
-						'noScanLogs'               => __( 'No scan logs available.', 'faz-cookie-manager' ),
-						'debugLogDownloadFailed'   => __( 'Failed to download debug log.', 'faz-cookie-manager' ),
-						'clearDebugLogsConfirm'    => __( 'Clear all scanner debug logs?', 'faz-cookie-manager' ),
-						'debugLogsCleared'         => __( 'Debug logs cleared.', 'faz-cookie-manager' ),
-						'debugLogsClearFailed'     => __( 'Failed to clear debug logs.', 'faz-cookie-manager' ),
 					),
 				),
 			)
