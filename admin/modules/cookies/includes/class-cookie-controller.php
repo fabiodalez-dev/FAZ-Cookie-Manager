@@ -324,7 +324,8 @@ class Cookie_Controller extends Base_Controller {
 			$wpdb->prefix . 'faz_cookies',
 			array(
 				'cookie_id' => $object->get_id(),
-			)
+			),
+			array( '%d' )
 		);
 		$this->delete_cache();
 		do_action( 'faz_after_update_cookie' );

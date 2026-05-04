@@ -7,6 +7,9 @@
  *    (commit 365a7ac)
  * 3. Dynamic video placeholder text kept faz-hidden after MutationObserver injection
  *    (commit e8be2b2, refs #87)
+ * 4. faz_get_cookie_domain() returned a malformed suffix for IP-addressed sites
+ *    (commit 7184be5) — consent cookie must be set correctly on 127.0.0.1
+ * 5. REST PUT category must not wipe unspecified fields (partial update, commit 9563859)
  */
 import { expect, test } from '../fixtures/wp-fixture';
 
@@ -190,7 +193,9 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
         document.body.appendChild(iframe);
       });
 
-      await page.waitForTimeout(1_500);
+      // Poll for the placeholder instead of a fixed sleep — avoids both
+      // false negatives on slow machines and wasted time on fast ones.
+      await page.waitForSelector('[data-faz-tag="video-placeholder"]', { timeout: 5_000 }).catch(() => {});
 
       const placeholderCount = await page.locator('[data-faz-tag="video-placeholder"]').count();
 
@@ -242,8 +247,8 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
         document.body.appendChild(iframe);
       });
 
-      // Allow time for the MutationObserver + async placeholder injection.
-      await page.waitForTimeout(1_500);
+      // Poll for the placeholder instead of a fixed sleep.
+      await page.waitForSelector('[data-faz-tag="video-placeholder"]', { timeout: 5_000 }).catch(() => {});
 
       const placeholderCount = await page.locator('[data-faz-tag="video-placeholder"]').count();
 
@@ -268,5 +273,159 @@ test.describe('PR #92 — TinyMCE restore + REST DELETE + video placeholder', ()
     } finally {
       await ctx.close();
     }
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 4. IP address cookie domain fix (commit 7184be5)
+  //    faz_get_cookie_domain() now returns '' for IP hosts so the browser
+  //    receives a host-only cookie (no Domain= attribute) instead of a
+  //    malformed suffix like '.0.1' that silently kills setcookie().
+  // ──────────────────────────────────────────────────────────────────────────
+
+  test('consent cookie is set correctly on an IP-addressed site', async ({ browser }) => {
+    // The test site runs at 127.0.0.1:9998.  Before the fix, setcookie()
+    // received domain='.0.1' and the browser discarded it — no consent cookie
+    // was ever written, so every page load re-showed the banner.
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+
+    try {
+      await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
+
+      // If the banner accept button is not present the environment has already
+      // granted consent (or disabled the banner) — skip rather than fail.
+      const acceptBtn = page.locator('[data-faz-tag="accept-button"]');
+      const hasBanner = await acceptBtn.count();
+      if (hasBanner === 0) {
+        test.skip();
+        return;
+      }
+
+      await acceptBtn.first().click();
+
+      // Give the PHP setcookie() call time to propagate via the Set-Cookie
+      // response header on the next navigation — reload to flush cookies.
+      await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
+
+      const cookies = await ctx.cookies();
+      const consent = cookies.find((c) => c.name === 'fazcookie-consent');
+
+      expect(consent, 'fazcookie-consent must exist after accepting on IP-addressed site').toBeDefined();
+
+      // Playwright returns the raw cookie value which WordPress URL-encodes
+      // (colons and commas become %3A / %2C). Decode before asserting.
+      const decodedValue = decodeURIComponent(consent!.value);
+      expect(
+        decodedValue,
+        'consent cookie value must record action:yes',
+      ).toContain('action:yes');
+
+      // RFC 6265 §4.1.2.3: domain attribute MUST NOT be an IP address.
+      // Playwright reports domain='' when the Set-Cookie header omits Domain=,
+      // and domain='127.0.0.1' when the server sends the literal IP.
+      // Either is acceptable; a suffix like '.0.1' or '.127.0.0.1' is not.
+      if (consent!.domain) {
+        expect(
+          consent!.domain,
+          'cookie domain must not be a malformed IP suffix',
+        ).not.toMatch(/^\.\d+(\.\d+)*$/);
+      }
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 5. REST PUT category — partial update must not wipe unspecified fields
+  //    (commit 9563859 — prepare_item_for_database() now calls get_data_from_db()
+  //    before applying request fields, so untouched fields are preserved)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  test('REST PUT category preserves slug and description when only name is updated', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await page.waitForFunction(
+      () => Boolean((window as { fazConfig?: { api?: { nonce?: string } } }).fazConfig?.api?.nonce),
+      { timeout: 15_000 },
+    );
+    const nonce = await page.evaluate(
+      () => (window as { fazConfig?: { api?: { nonce?: string } } }).fazConfig?.api?.nonce ?? '',
+    );
+
+    if (!nonce) {
+      test.skip();
+      return;
+    }
+
+    const ts = Date.now();
+    const originalSlug = `put-regression-pr92-${ts}`;
+    const originalDesc = 'Original description — must survive a name-only PUT';
+
+    // 1. Create the category with known slug + description.
+    const created = await page.request.post(`${WP_BASE}/wp-json/faz/v1/cookies/categories`, {
+      headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
+      data: {
+        name: { en: `PUT regression PR92 ${ts}` },
+        slug: originalSlug,
+        description: { en: originalDesc },
+        prior_consent: false,
+      },
+    });
+
+    if (created.status() === 403 || created.status() === 401) {
+      test.skip();
+      return;
+    }
+
+    expect(created.ok(), `Category creation returned ${created.status()}`).toBe(true);
+    const createdBody = (await created.json()) as Record<string, unknown>;
+    const categoryId = createdBody?.id as number;
+    expect(typeof categoryId, 'created category must have a numeric ID').toBe('number');
+
+    // 2. PUT with only the name changed — slug and description intentionally omitted.
+    const updated = await page.request.put(
+      `${WP_BASE}/wp-json/faz/v1/cookies/categories/${categoryId}`,
+      {
+        headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
+        data: { name: { en: `PUT regression PR92 ${ts} — RENAMED` } },
+      },
+    );
+
+    // A 4xx/5xx here means the endpoint itself is broken — surface it.
+    expect(updated.ok(), `Category PUT returned ${updated.status()}`).toBe(true);
+
+    // 3. GET the category and verify the unchanged fields survived.
+    const fetched = await page.request.get(
+      `${WP_BASE}/wp-json/faz/v1/cookies/categories/${categoryId}`,
+      { headers: { 'X-WP-Nonce': nonce } },
+    );
+    expect(fetched.ok(), 'GET after PUT must succeed').toBe(true);
+
+    const fetchedBody = (await fetched.json()) as Record<string, unknown>;
+
+    // Slug must be unchanged — before the fix, prepare_item_for_database()
+    // started from a blank object so omitting slug in the PUT body caused the
+    // controller to overwrite the DB row with an empty slug.
+    expect(
+      fetchedBody?.slug,
+      'slug must be preserved after a name-only PUT',
+    ).toBe(originalSlug);
+
+    // Description must also survive.
+    const desc = (fetchedBody?.description as Record<string, string> | undefined)?.en ?? '';
+    expect(
+      desc,
+      'description must be preserved after a name-only PUT',
+    ).toBe(originalDesc);
+
+    // Cleanup — best-effort, failure here must not mask the assertion above.
+    await page.request.delete(
+      `${WP_BASE}/wp-json/faz/v1/cookies/categories/${categoryId}`,
+      { headers: { 'X-WP-Nonce': nonce } },
+    ).catch(() => {});
   });
 });
