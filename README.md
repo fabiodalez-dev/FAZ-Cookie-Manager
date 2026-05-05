@@ -494,6 +494,12 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 ## Changelog
 
+### 1.13.16
+- **Fix**: Inline scripts referencing tracker domains in config data (Rank Math) incorrectly triggered script blocking — URL-fragment patterns now matched only against `src` attribute, not inline content.
+- **Fix**: `faz-skip` CSS class bypass used substring match (`stripos`), so `faz-skipper` would also bypass blocking. Fixed with whitespace-delimited token matching.
+- **Fix**: CodeQL prototype pollution guard added to `setPath()` in E2E test utility.
+- **CI**: Plugin Check workflow supports manual runs; root-level PNG/JPG excluded from ZIP variants via wildcard.
+
 ### 1.13.15
 - **Fix**: TinyMCE editors restored for Notice/Preference Description in banner admin (`wp_editor()` was accidentally replaced with bare `<textarea>`).
 - **Fix**: REST DELETE category was a silent no-op when `get_loaded()` was false; REST PUT wiped unspecified fields; `Cookie_Controller::delete_item()` missing `$where_format`.

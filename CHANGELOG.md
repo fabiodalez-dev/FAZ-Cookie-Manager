@@ -2,6 +2,27 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.16] — 2026-05-05
+
+### Fixed
+
+- **Inline script false positive (Rank Math pattern)** — `match_script_to_provider()` and `check_per_service_blocking()` now distinguish URL-fragment patterns (containing `.` or `/`) from code-signature patterns. URL-fragment patterns are matched only against the `src` attribute, not against inline script content, preventing Rank Math config JSON (and similar) from triggering tracker-domain blocks.
+- **`faz-skip` bypass matched as substring** — `stripos($class_attr, 'faz-skip')` would also match `faz-skipper` and similar classes. Fixed with whitespace-delimited token matching (`preg_split + in_array`).
+- **CodeQL prototype pollution** — `setPath()` in the E2E test utility (`settings-options-matrix.spec.ts`) now guards against `__proto__`, `constructor`, and `prototype` path segments.
+- **Brittle Clarity assertion** — `toContainEqual(['consent'])` upgraded to `toContainEqual(expect.arrayContaining(['consent']))` so extra call arguments do not break the assertion.
+- **Playwright `locator.first()` called multiple times** — extracted to `const first` in `readUiValue()` to avoid redundant DOM queries.
+- **Unpreflixed global variables in `uninstall.php`** — Plugin Check flagged `$force_remove_all`, `$offset`, `$batch`, `$site_ids`, `$site_id` as unprefixed. All renamed to `$faz_*`.
+- **Mixed CRLF/LF line endings** in `admin/views/banner.php` — normalized to LF.
+
+### Added
+
+- **10 E2E tests** in `settings-options-matrix.spec.ts` and `settings-options-behavior.spec.ts` covering `faz-skip` bypass, per-service blocking, and settings matrix validation.
+
+### CI
+
+- **Plugin Check workflow** now supports manual runs via `workflow_dispatch` trigger.
+- **Root-level PNG/JPG files excluded** from both ZIP variants — wildcard `*.png` / `*.jpg` patterns replace the previous per-filename exclusion, preventing dev screenshot PNGs from bloating the archive.
+
 ## [1.13.15] — 2026-05-04
 
 ### Fixed

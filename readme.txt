@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.15
+Stable tag: 1.13.16
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -207,6 +207,19 @@ By default, no — your consent logs, banner configuration and categories stay i
 10. **Settings** -- Global controls: enable/disable the banner, exclude specific pages, cross-domain consent forwarding, hide from bots, GTM dataLayer events, consent log retention and scanner limits.
 
 == Changelog ==
+
+= 1.13.16 =
+* Fix: Inline scripts referencing tracker domains in config data (e.g. Rank Math) incorrectly triggered script blocking — URL-fragment patterns now matched only against the `src` attribute, not inline content.
+* Fix: `faz-skip` CSS class bypass used substring match, so `faz-skipper` would also bypass blocking. Fixed with whitespace-delimited token matching.
+* Fix: Unpreflixed global variables in `uninstall.php` renamed to `$faz_*` (Plugin Check compliance).
+* CI: Plugin Check workflow supports manual runs; root-level PNG/JPG excluded from ZIP via wildcard patterns.
+
+= 1.13.15 =
+* Fix: TinyMCE editors restored for Notice/Preference Description in banner admin.
+* Fix: REST DELETE category was a silent no-op when the row was not loaded first; REST PUT wiped unspecified fields when starting from blank object.
+* Fix: Dynamic video placeholder (`_fazAddPlaceholder`) did not call `_fazSetPlaceHolder()` for non-YouTube providers.
+* Fix: `faz_get_cookie_domain()` returned malformed IP suffix for sites accessed via IP address; now returns `''` (host-only cookie) per RFC 6265.
+* Added: 9 E2E regression tests covering all fixed areas.
 
 = 1.13.14 =
 * Fix: Fatal error on WordPress Playground — `maybe_create_table()` was called synchronously from the `ConsentLogs\Includes\Controller` constructor during plugin loading. In Playground's WASM environment the WordPress loading order differs and `wp_salt()` (from `pluggable.php`) is not yet available at that point, causing a fatal "Call to undefined function wp_salt()". Fixed by deferring table-creation to the `plugins_loaded` hook and guarding the `wp_salt()` call with `function_exists()`.
