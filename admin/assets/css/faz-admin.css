@@ -1685,13 +1685,17 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 }
 
 #faz-settings {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 24px;
-	align-items: start;
+	columns: 2;
+	column-gap: 24px;
+}
+#faz-settings > .faz-card {
+	break-inside: avoid;
+	margin-bottom: 24px;
+}
+#faz-settings > .faz-card:last-child {
+	margin-bottom: 0;
 }
 
-#faz-settings > .faz-card:last-child,
 #faz-system-status > .faz-card:last-child {
 	grid-column: 1 / -1;
 }
@@ -1791,7 +1795,9 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 }
 
 @media (max-width: 960px) {
-	#faz-settings,
+	#faz-settings {
+		columns: 1;
+	}
 	#faz-system-status {
 		grid-template-columns: 1fr;
 	}

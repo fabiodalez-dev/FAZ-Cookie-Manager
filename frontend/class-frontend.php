@@ -1663,6 +1663,12 @@ class Frontend {
 	 * @return bool
 	 */
 	private function is_whitelisted( $attrs, $content ) {
+		// Built-in escape hatch: class="faz-skip" bypasses blocking without any settings entry.
+		$class_attr = $this->extract_tag_attr( $attrs, 'class' );
+		if ( '' !== $class_attr && false !== stripos( $class_attr, 'faz-skip' ) ) {
+			return true;
+		}
+
 		$whitelist = $this->get_whitelist();
 		$attr_values = array_filter(
 			array(

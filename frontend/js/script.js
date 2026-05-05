@@ -1724,6 +1724,7 @@ function _fazMutationObserver(mutations) {
                     }
                 }
                 if (_fazIsUserWhitelisted(nodeSrc)) continue;
+                if (node.classList && node.classList.contains('faz-skip')) continue;
                 var rawCategory = node.getAttribute
                     ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
                     : "";
@@ -2237,6 +2238,7 @@ function _fazIsUserWhitelisted(url) {
     return false;
 }
 function _fazShouldChangeType(element, src) {
+    if (element.classList && element.classList.contains('faz-skip')) return false;
     var url = src ? src : element.src;
     if (_fazIsUserWhitelisted(url)) return false;
     return (

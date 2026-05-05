@@ -203,4 +203,33 @@ test.describe('Settings reflection and secure script blocking', () => {
     expect(result.type, 'inline config script with tracker URLs in data must not be blocked').not.toBe('text/plain');
     expect(result.category, 'data-faz-category must not be set on a non-tracker inline script').toBeNull();
   });
+
+  test('scripts with class="faz-skip" are never blocked regardless of content', async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const result = await page.evaluate(() => {
+      // Inject a script with faz-skip + data-fazcookie="fazcookie-analytics".
+      // Without faz-skip, data-fazcookie alone would cause the JS intercept to block it.
+      // With faz-skip, the script must execute unconditionally.
+      window.__fazSkipProbeExecuted = false;
+      const script = document.createElement('script');
+      script.id = 'faz-skip-probe';
+      script.className = 'faz-skip';
+      script.setAttribute('data-fazcookie', 'fazcookie-analytics');
+      script.textContent = 'window.__fazSkipProbeExecuted = true;';
+      document.head.appendChild(script);
+
+      const probe = document.getElementById('faz-skip-probe');
+      return {
+        exists: !!probe,
+        type: probe ? probe.getAttribute('type') : null,
+        executed: window.__fazSkipProbeExecuted,
+      };
+    });
+
+    expect(result.exists).toBe(true);
+    expect(result.type, 'faz-skip overrides data-fazcookie — script must not be blocked').not.toBe('javascript/blocked');
+    expect(result.executed, 'faz-skip script must execute immediately').toBe(true);
+  });
 });

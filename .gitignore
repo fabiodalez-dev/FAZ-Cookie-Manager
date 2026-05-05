@@ -19,6 +19,11 @@ debug.log
 # Build artifacts
 *.zip
 
+# Screenshots (regenerated locally — never commit)
+*.png
+*.jpg
+*.jpeg
+
 # Composer vendor (install via composer install)
 vendor/
 
