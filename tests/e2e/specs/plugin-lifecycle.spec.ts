@@ -131,7 +131,15 @@ test.describe.serial('Plugin lifecycle', () => {
       return res.json();
     }, wpBaseURL);
     expect(Array.isArray(categoriesAfter)).toBeTruthy();
-    expect(categoriesAfter!.length).toBe(categoryCountBefore);
+    // Activation may restore previously-deleted required categories (e.g.
+    // wordpress-internal), so the count can be >= the pre-deactivation count.
+    expect(categoriesAfter!.length).toBeGreaterThanOrEqual(categoryCountBefore);
+    // All slugs that existed before must still be present after reactivation.
+    const slugsBefore = new Set(categoriesBefore!.map((c: { slug?: string }) => c.slug).filter(Boolean));
+    const slugsAfter  = new Set(categoriesAfter!.map((c: { slug?: string }) => c.slug).filter(Boolean));
+    for (const slug of slugsBefore) {
+      expect(slugsAfter.has(slug), `Category slug "${slug}" lost after reactivation`).toBe(true);
+    }
 
     // --- Verify admin pages load ---
     await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager`, { waitUntil: 'domcontentloaded' });

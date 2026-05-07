@@ -64,6 +64,17 @@ test.afterAll(() => {
 
 test.describe('[faz_do_not_sell] CCPA opt-out form', () => {
 
+  // Pre-accept the consent banner so it does not cover the form or trap Tab focus.
+  test.beforeEach(async ({ page }) => {
+    await page.context().addCookies([{
+      name:     'fazcookie-consent',
+      value:    'consentid%3Ae2e-ccpa-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A5',
+      domain:   '127.0.0.1',
+      path:     '/',
+      sameSite: 'Lax',
+    }]);
+  });
+
   test('CCPA-01: form renders with default title and submit button', async ({ page }) => {
     await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
     const wrap = page.locator('.faz-dnsmpi-wrap');

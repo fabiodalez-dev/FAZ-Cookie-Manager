@@ -341,6 +341,11 @@ class Activator {
 		}
 		self::install_all_tables();
 		self::maybe_update_db();
+		// Ensure required default categories always exist, even on re-activation
+		// after a file-only delete (uninstall.php not called). These calls are
+		// idempotent — they no-op when the category already exists.
+		self::ensure_uncategorized_category();
+		self::ensure_wordpress_internal_category();
 		// Always clear the banner template cache on version upgrades so new
 		// CSS rules, shortcodes, and template HTML take effect immediately.
 		// Without this, users upgrading across multiple versions (e.g. 1.8 →
