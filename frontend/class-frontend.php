@@ -3389,7 +3389,7 @@ class Frontend {
 		if ( ! is_array( $excluded ) ) {
 			$excluded = array();
 		}
-		foreach ( array( '_fazConfig', '_fazCfg', '_fazGcm' ) as $needle ) {
+		foreach ( array( '_fazConfig', '_fazCfg', '_fazGcm', '_fazTcfConfig' ) as $needle ) {
 			if ( ! in_array( $needle, $excluded, true ) ) {
 				$excluded[] = $needle;
 			}
