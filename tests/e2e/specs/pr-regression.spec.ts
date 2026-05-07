@@ -710,6 +710,25 @@ test.describe('P3 fix: scanner uses default language', () => {
 
 test.describe('Blocker template end-to-end flow', () => {
 
+  test.beforeAll(() => {
+    // Remove orphaned cookies left by previous test runs (cookies whose
+    // category ID no longer exists in wp_faz_cookie_categories). Without
+    // this cleanup the "all cookies have a valid category" integrity check
+    // below fails on any reused test environment.
+    wpEval(`
+      global $wpdb;
+      $orphan_ids = $wpdb->get_col( "SELECT c.cookie_id FROM {$wpdb->prefix}faz_cookies c LEFT JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id WHERE cat.category_id IS NULL" );
+      if ( ! empty( $orphan_ids ) ) {
+        $ids = implode( ',', array_map( 'intval', $orphan_ids ) );
+        $wpdb->query( "DELETE FROM {$wpdb->prefix}faz_cookies WHERE cookie_id IN ($ids)" );
+      }
+      if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+        \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'cookies' );
+        \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'categories' );
+      }
+    `);
+  });
+
   test('applying a blocker template creates cookies in the DB with correct category', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
