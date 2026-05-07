@@ -154,8 +154,9 @@ class Paid_Memberships_Pro {
 		$is_auto_granted   = function_exists( 'faz_is_auto_granted_consent_cookie' ) ? faz_is_auto_granted_consent_cookie( $current_cookie ) : false;
 		$has_vendor_cookie = ! empty( $_COOKIE['fazVendorConsent'] );
 		$has_tcf_cookie    = ! empty( $_COOKIE['euconsent-v2'] );
+		$is_exempted       = $this->is_current_user_exempted();
 
-		if ( ! $this->is_current_user_exempted() ) {
+		if ( ! $is_exempted ) {
 			// Only tear down consent tracking when the current main consent
 			// cookie was auto-granted by the PMP integration (i.e. it carries
 			// `source:pmp`). Standard visitors can legitimately carry
