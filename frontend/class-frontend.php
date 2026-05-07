@@ -173,6 +173,7 @@ class Frontend {
 			add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );
 			add_filter( 'rocket_delay_js_exclusions', array( $this, 'rocket_exclude_own_scripts' ) );
 			add_filter( 'rocket_minify_excluded_external_js', array( $this, 'rocket_exclude_own_scripts' ) );
+			add_filter( 'rocket_defer_inline_exclusions', array( $this, 'rocket_exclude_own_inline' ) );
 
 			// Autoptimize exclude helper.
 			add_filter( 'autoptimize_filter_js_exclude', array( $this, 'autoptimize_exclude_own_scripts' ) );
@@ -3376,6 +3377,24 @@ class Frontend {
 			$excludes[] = $pattern;
 		}
 		return $excludes;
+	}
+
+	/**
+	 * WP Rocket inline-content exclude callback — same pattern-based approach.
+	 *
+	 * @param array $excluded Existing inline-content exclusion patterns.
+	 * @return array
+	 */
+	public function rocket_exclude_own_inline( $excluded ) {
+		if ( ! is_array( $excluded ) ) {
+			$excluded = array();
+		}
+		foreach ( array( '_fazConfig', '_fazCfg', '_fazGcm' ) as $needle ) {
+			if ( ! in_array( $needle, $excluded, true ) ) {
+				$excluded[] = $needle;
+			}
+		}
+		return $excluded;
 	}
 
 	/**
