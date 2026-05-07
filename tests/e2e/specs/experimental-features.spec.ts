@@ -1,0 +1,441 @@
+/**
+ * E2E tests for experimental shortcodes introduced in the feat/experimental-features branch.
+ *
+ * Covers:
+ *   - [faz_do_not_sell]  — CCPA "Do Not Sell My Personal Information" opt-out form (tests 1-12)
+ *   - [faz_dsar_form]    — GDPR Data Subject Access Request form (tests 13-25)
+ *
+ * Setup: two WordPress pages are created in beforeAll via WP-CLI and torn down
+ * in afterAll.  The pages use the plugin shortcodes as their entire content.
+ */
+
+import { expect } from '@playwright/test';
+import { test } from '../fixtures/wp-fixture';
+import { upsertPage, wp, wpEval } from '../utils/wp-env';
+
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+
+const CCPA_SLUG = 'faz-e2e-do-not-sell';
+const DSAR_SLUG = 'faz-e2e-dsar-form';
+
+function getPermalink(slug: string): string {
+  return wpEval(`
+    $page = get_page_by_path( '${slug}', OBJECT, 'page' );
+    echo $page ? get_permalink( $page->ID ) : '';
+  `).trim();
+}
+
+function deleteDsarPosts(): void {
+  wpEval(`
+    $posts = get_posts( array( 'post_type' => 'faz_dsar', 'numberposts' => -1, 'post_status' => 'private' ) );
+    foreach ( $posts as $post ) { wp_delete_post( $post->ID, true ); }
+  `);
+}
+
+function clearOptoutLogs(): void {
+  wpEval(`
+    global $wpdb;
+    $wpdb->delete( $wpdb->prefix . 'faz_consent_logs', array( 'status' => 'dnsmpi_optout' ), array( '%s' ) );
+  `);
+}
+
+let ccpaUrl = '';
+let dsarUrl = '';
+
+// ─── Suite setup ─────────────────────────────────────────────────────────────
+
+test.beforeAll(() => {
+  upsertPage(CCPA_SLUG, 'FAZ E2E Do Not Sell', '[faz_do_not_sell]');
+  upsertPage(DSAR_SLUG, 'FAZ E2E DSAR Form', '[faz_dsar_form]');
+  ccpaUrl = getPermalink(CCPA_SLUG);
+  dsarUrl = getPermalink(DSAR_SLUG);
+
+  if (!ccpaUrl || !dsarUrl) {
+    throw new Error(`Could not resolve permalinks. ccpaUrl=${ccpaUrl} dsarUrl=${dsarUrl}. Ensure pretty permalinks are enabled.`);
+  }
+});
+
+test.afterAll(() => {
+  deleteDsarPosts();
+  clearOptoutLogs();
+});
+
+// ─── [faz_do_not_sell] ───────────────────────────────────────────────────────
+
+test.describe('[faz_do_not_sell] CCPA opt-out form', () => {
+
+  test('CCPA-01: form renders with default title and submit button', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    const wrap = page.locator('.faz-dnsmpi-wrap');
+    await expect(wrap).toBeVisible();
+    await expect(wrap.locator('h3')).toContainText('Do Not Sell My Personal Information');
+    await expect(wrap.locator('button[type="submit"].faz-dnsmpi-btn')).toBeVisible();
+  });
+
+  test('CCPA-02: form renders with custom title and button via attributes', async ({ page }) => {
+    upsertPage('faz-e2e-do-not-sell-custom', 'FAZ E2E CCPA Custom', '[faz_do_not_sell title="Opt Out Now" button="Submit My Request"]');
+    const customUrl = getPermalink('faz-e2e-do-not-sell-custom');
+    await page.goto(customUrl, { waitUntil: 'domcontentloaded' });
+    const wrap = page.locator('.faz-dnsmpi-wrap');
+    await expect(wrap.locator('h3')).toContainText('Opt Out Now');
+    await expect(wrap.locator('button[type="submit"]')).toContainText('Submit My Request');
+  });
+
+  test('CCPA-03: form contains hidden action and nonce fields', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    const form = page.locator('.faz-dnsmpi-form');
+    await expect(form.locator('input[name="action"][value="faz_dnsmpi_optout"]')).toBeAttached();
+    await expect(form.locator('input[name="nonce"]')).toBeAttached();
+    const nonce = await form.locator('input[name="nonce"]').getAttribute('value');
+    expect(nonce).toBeTruthy();
+    expect(nonce!.length).toBeGreaterThan(5);
+  });
+
+  test('CCPA-04: submit button is enabled before submission', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    const btn = page.locator('.faz-dnsmpi-btn');
+    await expect(btn).toBeEnabled();
+  });
+
+  test('CCPA-05: successful form submission shows success notice', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('.faz-dnsmpi-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean; data?: { message?: string } };
+    expect(json.success).toBe(true);
+    const notice = page.locator('.faz-dnsmpi-notice.success');
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('opt-out');
+  });
+
+  test('CCPA-06: after successful submission the form is hidden', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('.faz-dnsmpi-btn').click(),
+    ]);
+    await expect(page.locator('.faz-dnsmpi-form')).toBeHidden();
+  });
+
+  test('CCPA-07: opt-out cookie is set after submission', async ({ page, context }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('.faz-dnsmpi-btn').click(),
+    ]);
+    const cookies = await context.cookies(WP_BASE);
+    const optout = cookies.find((c) => c.name === 'fazcookie-dnsmpi');
+    expect(optout).toBeDefined();
+    expect(optout!.value).toBe('1');
+    expect(optout!.expires).toBeGreaterThan(Date.now() / 1000 + 86400 * 364);
+  });
+
+  test('CCPA-08: visitor with opt-out cookie sees confirmation instead of form', async ({ page, context }) => {
+    await context.addCookies([{
+      name: 'fazcookie-dnsmpi',
+      value: '1',
+      url: WP_BASE,
+    }]);
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.faz-dnsmpi-form')).not.toBeAttached();
+    await expect(page.locator('.faz-dnsmpi-notice.success')).toBeVisible();
+  });
+
+  test('CCPA-09: request with tampered (empty) nonce is rejected', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="nonce"]').evaluate((el: HTMLInputElement) => { el.value = 'invalid-nonce'; });
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('.faz-dnsmpi-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean };
+    expect(json.success).toBe(false);
+  });
+
+  test('CCPA-10: button is disabled while request is in flight', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    const btn = page.locator('.faz-dnsmpi-btn');
+    const responsePromise = page.waitForResponse('**/admin-ajax.php');
+    await btn.click();
+    await expect(btn).toBeDisabled();
+    await responsePromise;
+  });
+
+  test('CCPA-11: form is responsive at 375px viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    const wrap = page.locator('.faz-dnsmpi-wrap');
+    await expect(wrap).toBeVisible();
+    const box = await wrap.boundingBox();
+    expect(box).toBeTruthy();
+    expect(box!.width).toBeLessThanOrEqual(375);
+  });
+
+  test('CCPA-12: submit button is reachable via keyboard Tab + Enter', async ({ page }) => {
+    await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('.faz-dnsmpi-wrap').click();
+    await page.keyboard.press('Tab');
+    const focused = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.className ?? '');
+    expect(focused).toContain('faz-dnsmpi-btn');
+  });
+
+});
+
+// ─── [faz_dsar_form] ─────────────────────────────────────────────────────────
+
+test.describe('[faz_dsar_form] GDPR DSAR form', () => {
+
+  test('DSAR-01: form renders with all required fields visible', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    const form = page.locator('.faz-dsar-form');
+    await expect(form).toBeVisible();
+    await expect(form.locator('input[name="dsar_name"]')).toBeVisible();
+    await expect(form.locator('input[name="dsar_email"]')).toBeVisible();
+    await expect(form.locator('select[name="dsar_type"]')).toBeVisible();
+    await expect(form.locator('textarea[name="dsar_message"]')).toBeVisible();
+  });
+
+  test('DSAR-02: dropdown contains all 6 GDPR right options', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    const select = page.locator('select[name="dsar_type"]');
+    const options = await select.locator('option[value]').all();
+    const values = await Promise.all(options.map((o) => o.getAttribute('value')));
+    const expected = ['access', 'erasure', 'portability', 'rectify', 'restrict', 'object'];
+    for (const v of expected) {
+      expect(values).toContain(v);
+    }
+  });
+
+  test('DSAR-03: form contains hidden action and nonce fields', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    const form = page.locator('.faz-dsar-form');
+    await expect(form.locator('input[name="action"][value="faz_dsar_submit"]')).toBeAttached();
+    const nonce = await form.locator('input[name="nonce"]').getAttribute('value');
+    expect(nonce).toBeTruthy();
+    expect(nonce!.length).toBeGreaterThan(5);
+  });
+
+  test('DSAR-04: honeypot field is present in DOM but visually hidden', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    const hp = page.locator('.faz-dsar-honeypot');
+    await expect(hp).toBeAttached();
+    await expect(hp).toBeHidden();
+    await expect(hp.locator('input[name="faz_hp_name"]')).toBeAttached();
+  });
+
+  test('DSAR-05: custom button label via attribute is reflected in DOM', async ({ page }) => {
+    upsertPage('faz-e2e-dsar-custom', 'FAZ E2E DSAR Custom', '[faz_dsar_form button="Submit My Request"]');
+    const customUrl = getPermalink('faz-e2e-dsar-custom');
+    await page.goto(customUrl, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('button.faz-dsar-btn')).toContainText('Submit My Request');
+  });
+
+  test('DSAR-06: submitting empty form shows client-side validation error', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('button.faz-dsar-btn').click();
+    const notice = page.locator('.faz-dsar-notice.error');
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('required');
+  });
+
+  test('DSAR-07: missing name triggers validation error without AJAX call', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_email"]').fill('test@example.com');
+    await page.locator('select[name="dsar_type"]').selectOption('access');
+    let ajaxFired = false;
+    page.on('request', (req) => { if (req.url().includes('admin-ajax.php')) { ajaxFired = true; } });
+    await page.locator('button.faz-dsar-btn').click();
+    await expect(page.locator('.faz-dsar-notice.error')).toBeVisible();
+    expect(ajaxFired).toBe(false);
+  });
+
+  test('DSAR-08: missing email triggers validation error without AJAX call', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_name"]').fill('Test User');
+    await page.locator('select[name="dsar_type"]').selectOption('erasure');
+    let ajaxFired = false;
+    page.on('request', (req) => { if (req.url().includes('admin-ajax.php')) { ajaxFired = true; } });
+    await page.locator('button.faz-dsar-btn').click();
+    await expect(page.locator('.faz-dsar-notice.error')).toBeVisible();
+    expect(ajaxFired).toBe(false);
+  });
+
+  test('DSAR-09: missing request type triggers validation error without AJAX call', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_name"]').fill('Test User');
+    await page.locator('input[name="dsar_email"]').fill('test@example.com');
+    let ajaxFired = false;
+    page.on('request', (req) => { if (req.url().includes('admin-ajax.php')) { ajaxFired = true; } });
+    await page.locator('button.faz-dsar-btn').click();
+    await expect(page.locator('.faz-dsar-notice.error')).toBeVisible();
+    expect(ajaxFired).toBe(false);
+  });
+
+  test('DSAR-10: successful submission shows success notice', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_name"]').fill('Jane Doe');
+    await page.locator('input[name="dsar_email"]').fill('jane@example.com');
+    await page.locator('select[name="dsar_type"]').selectOption('access');
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean; data?: { message?: string } };
+    expect(json.success).toBe(true);
+    const notice = page.locator('.faz-dsar-notice.success');
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText('30 days');
+  });
+
+  test('DSAR-11: after successful submission the form is hidden', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_name"]').fill('John Smith');
+    await page.locator('input[name="dsar_email"]').fill('john@example.com');
+    await page.locator('select[name="dsar_type"]').selectOption('erasure');
+    await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    await expect(page.locator('.faz-dsar-form')).toBeHidden();
+  });
+
+  test('DSAR-12: successful submission creates a faz_dsar private post', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    const email = `e2e-${Date.now()}@example.com`;
+    await page.locator('input[name="dsar_name"]').fill('E2E Tester');
+    await page.locator('input[name="dsar_email"]').fill(email);
+    await page.locator('select[name="dsar_type"]').selectOption('portability');
+    await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    const found = wpEval(`
+      $posts = get_posts( array( 'post_type' => 'faz_dsar', 'numberposts' => 5, 'post_status' => 'private', 'orderby' => 'date', 'order' => 'DESC' ) );
+      $found = false;
+      foreach ( $posts as $p ) {
+        if ( get_post_meta( $p->ID, '_dsar_email', true ) === ${JSON.stringify(email)} ) {
+          $found = true; break;
+        }
+      }
+      echo $found ? 'yes' : 'no';
+    `).trim();
+    expect(found).toBe('yes');
+  });
+
+  test('DSAR-13: request with tampered nonce is rejected server-side', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="nonce"]').evaluate((el: HTMLInputElement) => { el.value = 'bad-nonce-value'; });
+    await page.locator('input[name="dsar_name"]').fill('Hacker');
+    await page.locator('input[name="dsar_email"]').fill('hacker@example.com');
+    await page.locator('select[name="dsar_type"]').selectOption('access');
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean };
+    expect(json.success).toBe(false);
+  });
+
+  test('DSAR-14: honeypot field filled by bot causes server rejection', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="faz_hp_name"]').evaluate((el: HTMLInputElement) => { el.value = 'bot-content'; });
+    await page.locator('input[name="dsar_name"]').fill('Bot User');
+    await page.locator('input[name="dsar_email"]').fill('bot@example.com');
+    await page.locator('select[name="dsar_type"]').selectOption('erasure');
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean };
+    expect(json.success).toBe(false);
+  });
+
+  test('DSAR-15: optional message textarea accepts and submits content', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_name"]').fill('Detail User');
+    await page.locator('input[name="dsar_email"]').fill('detail@example.com');
+    await page.locator('select[name="dsar_type"]').selectOption('rectify');
+    await page.locator('textarea[name="dsar_message"]').fill('Please correct my date of birth.');
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean };
+    expect(json.success).toBe(true);
+  });
+
+  test('DSAR-16: form is responsive at 375px viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    const form = page.locator('.faz-dsar-wrap');
+    await expect(form).toBeVisible();
+    const box = await form.boundingBox();
+    expect(box).toBeTruthy();
+    expect(box!.width).toBeLessThanOrEqual(375);
+  });
+
+  test('DSAR-17: all form fields reachable via keyboard Tab navigation', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_name"]').click();
+    const fieldNames = ['dsar_name', 'dsar_email', 'dsar_type', 'dsar_message'];
+    for (const name of fieldNames) {
+      const focused = await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.name ?? '');
+      expect(focused).toBe(name);
+      await page.keyboard.press('Tab');
+    }
+  });
+
+  test('DSAR-18: invalid request type is rejected server-side', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_name"]').fill('Attacker');
+    await page.locator('input[name="dsar_email"]').fill('attacker@example.com');
+    await page.locator('select[name="dsar_type"]').evaluate((el: HTMLSelectElement) => {
+      const opt = document.createElement('option');
+      opt.value = 'DROP TABLE';
+      opt.text = 'Injection';
+      el.appendChild(opt);
+      el.value = 'DROP TABLE';
+    });
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean };
+    expect(json.success).toBe(false);
+  });
+
+  test('DSAR-19: each of the 6 request types submits successfully', async ({ page }) => {
+    const types = ['access', 'erasure', 'portability', 'rectify', 'restrict', 'object'];
+    for (const type of types) {
+      await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+      await page.locator('input[name="dsar_name"]').fill('Loop Tester');
+      await page.locator('input[name="dsar_email"]').fill(`loop-${type}@example.com`);
+      await page.locator('select[name="dsar_type"]').selectOption(type);
+      const [response] = await Promise.all([
+        page.waitForResponse('**/admin-ajax.php'),
+        page.locator('button.faz-dsar-btn').click(),
+      ]);
+      const json = await response.json() as { success: boolean };
+      expect(json.success, `Request type "${type}" should succeed`).toBe(true);
+    }
+  });
+
+  test('DSAR-20: server rejects invalid email address format', async ({ page }) => {
+    await page.goto(dsarUrl, { waitUntil: 'domcontentloaded' });
+    await page.locator('input[name="dsar_email"]').evaluate((el: HTMLInputElement) => {
+      el.removeAttribute('type');
+    });
+    await page.locator('input[name="dsar_name"]').fill('Bad Email User');
+    await page.locator('input[name="dsar_email"]').fill('not-an-email');
+    await page.locator('select[name="dsar_type"]').selectOption('access');
+    const [response] = await Promise.all([
+      page.waitForResponse('**/admin-ajax.php'),
+      page.locator('button.faz-dsar-btn').click(),
+    ]);
+    const json = await response.json() as { success: boolean };
+    expect(json.success).toBe(false);
+  });
+
+});
