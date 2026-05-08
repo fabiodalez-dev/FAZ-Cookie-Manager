@@ -208,6 +208,13 @@ class DSAR_Shortcode {
 			wp_send_json_error( __( 'Submission rejected.', 'faz-cookie-manager' ) );
 		}
 
+		// Rate limiting: one submission per IP per 60 seconds.
+		$rl_key = 'faz_dsar_rl_' . substr( $this->hash_ip(), 0, 16 );
+		if ( false !== get_transient( $rl_key ) ) {
+			wp_send_json_error( __( 'Too many requests. Please wait before submitting again.', 'faz-cookie-manager' ) );
+		}
+		set_transient( $rl_key, 1, 60 );
+
 		$name    = isset( $_POST['dsar_name'] ) ? sanitize_text_field( wp_unslash( $_POST['dsar_name'] ) ) : '';
 		$email   = isset( $_POST['dsar_email'] ) ? sanitize_email( wp_unslash( $_POST['dsar_email'] ) ) : '';
 		$type    = isset( $_POST['dsar_type'] ) ? sanitize_key( wp_unslash( $_POST['dsar_type'] ) ) : '';
@@ -301,13 +308,26 @@ class DSAR_Shortcode {
 			);
 		}
 
+		// Strip CR/LF to prevent SMTP header injection via the name field.
+		$safe_name = str_replace( array( "\r", "\n" ), '', $name );
+
 		wp_mail(
 			$admin_email,
 			/* translators: 1: site name, 2: request type */
 			sprintf( __( '[%1$s] Data Subject Request: %2$s', 'faz-cookie-manager' ), $site_name, $type_label ),
 			$body,
-			array( 'Reply-To: ' . $name . ' <' . $email . '>' )
+			array( 'Reply-To: ' . $safe_name . ' <' . $email . '>' )
 		);
+	}
+
+	/**
+	 * Return a salted hash of the visitor's IP address.
+	 *
+	 * @return string
+	 */
+	private function hash_ip() {
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		return hash_hmac( 'sha256', $ip, wp_salt( 'auth' ) );
 	}
 
 	/**

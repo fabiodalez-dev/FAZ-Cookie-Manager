@@ -134,6 +134,13 @@ class Do_Not_Sell_Shortcode {
 			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ) );
 		}
 
+		// Rate limiting: one submission per IP per 60 seconds.
+		$rl_key = 'faz_dnsmpi_rl_' . substr( $this->hash_ip(), 0, 16 );
+		if ( false !== get_transient( $rl_key ) ) {
+			wp_send_json_error( __( 'Too many requests. Please wait before submitting again.', 'faz-cookie-manager' ) );
+		}
+		set_transient( $rl_key, 1, 60 );
+
 		$ip_hash = $this->hash_ip();
 		$this->log_optout( $ip_hash );
 		$this->set_optout_cookie();
@@ -162,7 +169,7 @@ class Do_Not_Sell_Shortcode {
 			array(
 				'consent_id'      => 'dnsmpi-' . bin2hex( random_bytes( 8 ) ),
 				'status'          => self::STATUS_FIELD,
-				'categories'      => null,
+				'categories'      => '',
 				'ip_hash'         => $ip_hash,
 				'user_agent'      => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
 				'url'             => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '',
@@ -184,7 +191,7 @@ class Do_Not_Sell_Shortcode {
 			'path'     => COOKIEPATH,
 			'domain'   => COOKIE_DOMAIN,
 			'secure'   => is_ssl(),
-			'httponly' => false,
+			'httponly' => true,
 			'samesite' => 'Lax',
 		) );
 	}

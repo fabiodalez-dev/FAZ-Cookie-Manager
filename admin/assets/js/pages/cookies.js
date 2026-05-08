@@ -568,6 +568,9 @@
 				input = document.createElement('textarea');
 				input.className = 'faz-textarea';
 				input.rows = 3;
+				if (f.path === 'opt_in_script' || f.path === 'opt_out_script') {
+					input.maxLength = 10000;
+				}
 			} else {
 				input = document.createElement('input');
 				input.type = f.type;

@@ -198,6 +198,11 @@ class Frontend {
 		add_filter( 'widget_text', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'widget_block_content', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'embed_oembed_html', array( $this, 'filter_oembed_blocking' ), 1000, 2 );
+
+		// Invalidate the cookie-scripts transient whenever a cookie is saved or deleted.
+		add_action( 'faz_after_update_cookie', function() {
+			delete_transient( 'faz_cookie_scripts_map' );
+		} );
 	}
 
 	/**
@@ -965,36 +970,41 @@ class Frontend {
 
 		// Per-cookie opt-in/opt-out scripts grouped by category slug.
 		// Only populated when at least one cookie has a script defined.
-		global $wpdb;
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- both tables are $wpdb->prefix + plugin-literal; LIKE filter limits the result set to rows with scripts; result is used only for inline JS config, not rendered as HTML.
-		$script_rows = $wpdb->get_results(
-			"SELECT c.meta, cat.slug AS category_slug
-			 FROM {$wpdb->prefix}faz_cookies c
-			 INNER JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id
-			 WHERE c.meta LIKE '%opt_in_script%' OR c.meta LIKE '%opt_out_script%'"
-		);
-		// phpcs:enable
-		if ( ! empty( $script_rows ) ) {
+		// Result is cached in a transient (12h) and invalidated on cookie saves.
+		$cookie_scripts = get_transient( 'faz_cookie_scripts_map' );
+		if ( false === $cookie_scripts ) {
+			global $wpdb;
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- both tables are $wpdb->prefix + plugin-literal; LIKE filter limits the result set to rows with scripts; result is used only for inline JS config, not rendered as HTML.
+			$script_rows = $wpdb->get_results(
+				"SELECT c.meta, cat.slug AS category_slug
+				 FROM {$wpdb->prefix}faz_cookies c
+				 INNER JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id
+				 WHERE c.meta LIKE '%opt_in_script%' OR c.meta LIKE '%opt_out_script%'"
+			);
+			// phpcs:enable
 			$cookie_scripts = array();
-			foreach ( $script_rows as $row ) {
-				$meta     = json_decode( $row->meta, true );
-				$cat_slug = sanitize_key( $row->category_slug );
-				if ( ! is_array( $meta ) || ! $cat_slug ) {
-					continue;
-				}
-				if ( ! isset( $cookie_scripts[ $cat_slug ] ) ) {
-					$cookie_scripts[ $cat_slug ] = array( 'opt_in' => array(), 'opt_out' => array() );
-				}
-				if ( ! empty( $meta['opt_in_script'] ) ) {
-					$cookie_scripts[ $cat_slug ]['opt_in'][] = (string) $meta['opt_in_script'];
-				}
-				if ( ! empty( $meta['opt_out_script'] ) ) {
-					$cookie_scripts[ $cat_slug ]['opt_out'][] = (string) $meta['opt_out_script'];
+			if ( ! empty( $script_rows ) ) {
+				foreach ( $script_rows as $row ) {
+					$meta     = json_decode( $row->meta, true );
+					$cat_slug = sanitize_key( $row->category_slug );
+					if ( ! is_array( $meta ) || ! $cat_slug ) {
+						continue;
+					}
+					if ( ! isset( $cookie_scripts[ $cat_slug ] ) ) {
+						$cookie_scripts[ $cat_slug ] = array( 'opt_in' => array(), 'opt_out' => array() );
+					}
+					if ( ! empty( $meta['opt_in_script'] ) ) {
+						$cookie_scripts[ $cat_slug ]['opt_in'][] = (string) $meta['opt_in_script'];
+					}
+					if ( ! empty( $meta['opt_out_script'] ) ) {
+						$cookie_scripts[ $cat_slug ]['opt_out'][] = (string) $meta['opt_out_script'];
+					}
 				}
 			}
-			if ( ! empty( $cookie_scripts ) ) {
-				$store['_cookieScripts'] = $cookie_scripts;
-			}
+			set_transient( 'faz_cookie_scripts_map', $cookie_scripts, HOUR_IN_SECONDS * 12 );
+		}
+		if ( ! empty( $cookie_scripts ) ) {
+			$store['_cookieScripts'] = $cookie_scripts;
 		}
 
 		// Age gate (GDPR Art. 8).

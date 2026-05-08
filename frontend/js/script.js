@@ -2408,7 +2408,8 @@ function _fazAfterConsent() {
         window.dataLayer.push(consentData);
     }
 
-    // Execute per-cookie opt-in/opt-out scripts for categories that changed state.
+    // Scripts run before cookie cleanup intentionally: opt-out scripts read the
+    // cookie value to pass user IDs to third parties before local deletion.
     _fazExecuteConsentScripts(_fazCategoriesBeforeConsent);
 
     // Clean up cookies from categories/services the user has not consented to.
@@ -2647,8 +2648,12 @@ function _fazRunScript(code) {
         var el = document.createElement('script');
         el.textContent = code;
         document.head.appendChild(el);
+        // Remove immediately after execution — script is one-shot; keeping it in the
+        // DOM would expose admin-authored code to browser DevTools inspection.
         document.head.removeChild(el);
     } catch (e) {
+        // CSP note: sites with script-src without 'unsafe-inline' will block this
+        // silently. Admins must add 'unsafe-inline' or a nonce allowlist to their CSP.
         // Swallowed — admin script errors must not interrupt the consent flow.
     }
 }
