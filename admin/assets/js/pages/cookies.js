@@ -552,8 +552,8 @@
 			{ label: 'Domain', path: 'domain', type: 'text' },
 			{ label: 'Duration', path: 'duration', type: 'text', placeholder: 'e.g. 1 year' },
 			{ label: 'Description', path: 'description', type: 'textarea' },
-			{ label: 'Opt-in Script (runs when category is accepted)', path: 'opt_in_script', type: 'textarea', placeholder: '// JS executed on consent accept\n// e.g. gtag("event", "consent_granted");' },
-			{ label: 'Opt-out Script (runs when category is rejected/revoked)', path: 'opt_out_script', type: 'textarea', placeholder: '// JS executed on consent reject or revoke' },
+			{ label: __('cookies.optInScriptLabel', 'Opt-in Script (runs when category is accepted)'), path: 'opt_in_script', type: 'textarea', placeholder: __('cookies.optInScriptPlaceholder', '// JS executed on consent accept\n// e.g. gtag("event", "consent_granted");') },
+			{ label: __('cookies.optOutScriptLabel', 'Opt-out Script (runs when category is rejected/revoked)'), path: 'opt_out_script', type: 'textarea', placeholder: __('cookies.optOutScriptPlaceholder', '// JS executed on consent reject or revoke') },
 		];
 
 		fields.forEach(function (f) {
@@ -583,7 +583,7 @@
 			if (f.path === 'opt_in_script' || f.path === 'opt_out_script') {
 				var scriptNotice = document.createElement('p');
 				scriptNotice.style.cssText = 'font-size:11px;color:#888;margin:4px 0 0;';
-				scriptNotice.textContent = 'Note: code entered here is included in the page source and visible to all visitors.';
+				scriptNotice.textContent = __('cookies.scriptNotice', 'Note: code entered here is included in the page source and visible to all visitors.');
 				group.appendChild(scriptNotice);
 			}
 			form.appendChild(group);

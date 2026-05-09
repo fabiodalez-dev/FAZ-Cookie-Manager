@@ -1418,11 +1418,15 @@ function _fazAcceptCookies(choice = "all") {
 
     // Snapshot accepted categories before updating consent, so _fazAfterConsent
     // can detect revocations (executed JS cannot be unloaded — needs page reload).
-    _fazCategoriesBeforeConsent = [];
-    var _cats = _fazStore._categories || [];
-    for (var _ci = 0; _ci < _cats.length; _ci++) {
-        if (_cats[_ci].slug !== 'necessary' && !_fazIsCategoryToBeBlocked(_cats[_ci].slug)) {
-            _fazCategoriesBeforeConsent.push(_cats[_ci].slug);
+    // Skip if _fazAcceptCategory already pre-populated the snapshot before its
+    // store mutation — overwriting here would corrupt the before/after diff.
+    if (_fazCategoriesBeforeConsent === null) {
+        _fazCategoriesBeforeConsent = [];
+        var _cats = _fazStore._categories || [];
+        for (var _ci = 0; _ci < _cats.length; _ci++) {
+            if (_cats[_ci].slug !== 'necessary' && !_fazIsCategoryToBeBlocked(_cats[_ci].slug)) {
+                _fazCategoriesBeforeConsent.push(_cats[_ci].slug);
+            }
         }
     }
     const activeLaw = _fazGetLaw();
@@ -3434,6 +3438,16 @@ function _fazSaveVendorConsent(choice) {
  */
 window._fazAcceptCategory = function (categorySlug) {
     var matched = false;
+    // Snapshot the currently-accepted categories BEFORE mutating the store so
+    // _fazAcceptCookies can detect which categories are truly newly accepted.
+    // _fazAcceptCookies skips its own snapshot when this is already populated.
+    _fazCategoriesBeforeConsent = [];
+    var _preCats = _fazStore._categories || [];
+    for (var _pi = 0; _pi < _preCats.length; _pi++) {
+        if (_preCats[_pi].slug !== 'necessary' && !_fazIsCategoryToBeBlocked(_preCats[_pi].slug)) {
+            _fazCategoriesBeforeConsent.push(_preCats[_pi].slug);
+        }
+    }
     for (const cat of _fazStore._categories) {
         if (cat.slug === categorySlug && !cat.isNecessary) {
             matched = true;
@@ -3449,11 +3463,16 @@ window._fazAcceptCategory = function (categorySlug) {
             break;
         }
     }
-    if (!matched) return;
+    if (!matched) {
+        _fazCategoriesBeforeConsent = null;
+        return;
+    }
     _fazAcceptCookies("custom");
     _fazRemoveBanner();
     _fazHidePreferenceCenter();
     _fazAfterConsent();
+    // Reset so the next direct call to _fazAcceptCookies takes a fresh snapshot.
+    _fazCategoriesBeforeConsent = null;
 };
 
 window.getFazConsent = function () {

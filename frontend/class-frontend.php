@@ -976,13 +976,18 @@ class Frontend {
 		$cookie_scripts = get_transient( 'faz_cookie_scripts_map' );
 		if ( false === $cookie_scripts ) {
 			global $wpdb;
-			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- both tables are $wpdb->prefix + plugin-literal; LIKE filter limits the result set to rows with scripts; result is used only for inline JS config, not rendered as HTML.
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery -- custom tables; result used only for inline JS config, not rendered as HTML.
 			$script_rows = $wpdb->get_results(
-				"SELECT c.meta, cat.slug AS category_slug
-				 FROM {$wpdb->prefix}faz_cookies c
-				 INNER JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id
-				 WHERE c.meta LIKE '%opt_in_script%' OR c.meta LIKE '%opt_out_script%'
-				 LIMIT 500"
+				$wpdb->prepare(
+					"SELECT c.meta, cat.slug AS category_slug
+					 FROM {$wpdb->prefix}faz_cookies c
+					 INNER JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id
+					 WHERE c.meta LIKE %s OR c.meta LIKE %s
+					 LIMIT %d",
+					'%opt_in_script%',
+					'%opt_out_script%',
+					500
+				)
 			);
 			// phpcs:enable
 			$cookie_scripts = array();

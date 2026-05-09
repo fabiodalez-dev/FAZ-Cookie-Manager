@@ -461,7 +461,7 @@ test.describe('Per-cookie opt-in/out consent scripts', () => {
     });
     try {
       const res = await adminPage.request.get(
-        `${wpBaseURL}/?rest_route=/faz/v1/cookies/${tmpId}`,
+        `${wpBaseURL}/?rest_route=/faz/v1/cookies/${tmpId}&context=edit`,
         { headers: { 'X-WP-Nonce': nonce } },
       );
       const body = await res.json() as Record<string, unknown>;

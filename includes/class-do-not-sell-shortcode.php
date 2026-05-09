@@ -144,19 +144,25 @@ class Do_Not_Sell_Shortcode {
 			);
 		}
 
-		// Rate limiting: one submission per IP per 60 seconds.
-		// wp_cache_add is atomic on persistent object caches (Redis/Memcached);
-		// the transient provides durability across PHP workers on non-cached installs.
-		$rl_key = 'faz_dnsmpi_rl_' . substr( $this->hash_ip(), 0, 16 );
-		if ( false !== get_transient( $rl_key ) || ! wp_cache_add( $rl_key, 1, 'faz_rate_limit', 60 ) ) {
+		// Rate limiting: atomic DB-backed lock via add_option (MySQL INSERT IGNORE),
+		// plus a transient for the 60-second durability window.
+		$rl_key   = 'faz_dnsmpi_rl_'   . substr( $this->hash_ip(), 0, 16 );
+		$lock_key = 'faz_dnsmpi_lock_' . substr( $this->hash_ip(), 0, 16 );
+
+		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
 			wp_send_json_error( __( 'Too many requests. Please wait before submitting again.', 'faz-cookie-manager' ) );
+			return;
 		}
+		// Lock acquired — write durability transient, then process and release.
 		set_transient( $rl_key, 1, 60 );
 
 		$ip_hash = $this->hash_ip();
 		$this->log_optout( $ip_hash );
 		$this->set_optout_cookie();
 		$this->notify_admin( $ip_hash );
+
+		// Release DB lock; transient maintains the ongoing 60-second throttle.
+		delete_option( $lock_key );
 
 		wp_send_json_success(
 			array(

@@ -372,11 +372,16 @@ class Cookies_API extends API_Controller {
 	 * @param mixed $value Raw input value.
 	 * @return string
 	 */
-	public static function sanitize_script_field( $value ) {
+	public static function sanitize_script_field( $value, $request, $param ) {
 		if ( ! current_user_can( 'unfiltered_html' ) ) {
-			// Return empty string so the field is written as '' rather than
-			// the raw JS; Cookie::set_meta() will merge this into the JSON.
-			// Admins that lack unfiltered_html should not be able to inject JS.
+			// User may not save arbitrary JS — return the currently-stored value
+			// so the field is preserved rather than silently cleared on save.
+			$id = absint( $request['id'] );
+			if ( $id ) {
+				$cookie = new Cookie( $id );
+				$meta   = $cookie->get_meta();
+				return isset( $meta[ $param ] ) ? (string) $meta[ $param ] : '';
+			}
 			return '';
 		}
 		return (string) $value;

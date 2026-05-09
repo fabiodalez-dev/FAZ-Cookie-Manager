@@ -155,7 +155,7 @@ class DSAR_Shortcode {
 
 				<button type="submit" class="faz-dsar-btn"><?php echo esc_html( $atts['button'] ); ?></button>
 			</form>
-			<div class="faz-dsar-notice" style="display:none;"></div>
+			<div class="faz-dsar-notice" style="display:none;" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></div>
 		</div>
 
 		<script>
@@ -201,11 +201,13 @@ class DSAR_Shortcode {
 						btn.disabled = false;
 					}
 					notice.style.display = 'block';
+					notice.focus();
 				})
 				.catch(function(){
 					notice.className = 'faz-dsar-notice error';
 					notice.textContent = errMsg;
 					notice.style.display = 'block';
+					notice.focus();
 					btn.disabled = false;
 				});
 			});
@@ -271,7 +273,9 @@ class DSAR_Shortcode {
 
 		$post_id = $this->store_request( $name, $email, $type, $message );
 		if ( ! $post_id ) {
-			// DB error — do NOT arm the rate-limit so the user can retry.
+			// DB error — roll back the IP rate-limit so the user can retry immediately.
+			delete_transient( $rl_key );
+			wp_cache_delete( $rl_key, 'faz_rate_limit' );
 			wp_send_json_error( __( 'We could not record your request due to a server error. Please try again.', 'faz-cookie-manager' ) );
 			return;
 		}
