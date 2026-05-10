@@ -16,7 +16,6 @@
 
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/wp-fixture';
-import type { Page } from '@playwright/test';
 import { upsertPage, wpEval } from '../utils/wp-env';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -51,13 +50,6 @@ function clearRateLimitTransients(): void {
     global $wpdb;
     $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_faz_dsar_rl_%' OR option_name LIKE '_transient_faz_dnsmpi_rl_%'");
   `);
-}
-
-async function getAdminNonce(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const cfg = (window as Record<string, unknown> & { fazConfig?: { api?: { nonce?: string } } }).fazConfig;
-    return cfg?.api?.nonce ?? '';
-  });
 }
 
 // ─── Suite setup ─────────────────────────────────────────────────────────────
@@ -277,21 +269,9 @@ test.describe('CCPA opt-out — data quality fix', () => {
 test.describe('REST API — opt_in/opt_out_script maxLength enforcement', () => {
   test.describe.configure({ mode: 'serial' });
 
-  let adminPage: Page;
-  let nonce: string;
-  let baseURL = '';
   let analyticsCatId = 0;
 
-  test.beforeAll(async ({ browser, wpBaseURL, loginAsAdmin }) => {
-    baseURL = wpBaseURL;
-    adminPage = await browser.newPage();
-    await loginAsAdmin(adminPage);
-    await adminPage.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, {
-      waitUntil: 'domcontentloaded',
-    });
-    nonce = await getAdminNonce(adminPage);
-    // Resolve the analytics category ID dynamically so the test works even if
-    // categories have been recreated with different auto-increment IDs.
+  test.beforeAll(() => {
     analyticsCatId = parseInt(
       wpEval(`
         global $wpdb;
@@ -307,48 +287,49 @@ test.describe('REST API — opt_in/opt_out_script maxLength enforcement', () => 
     expect(analyticsCatId, 'analytics category must exist in DB').toBeGreaterThan(0);
   });
 
-  test.afterAll(async () => {
-    await adminPage.close();
-  });
-
-  test('REST-ML-01: opt_in_script longer than 10 000 chars is rejected with 400', async () => {
-    const tooLong = 'x'.repeat(10_001);
-    const res = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/cookies`, {
-      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-      data: {
-        name:           '_faz_ml_test',
-        slug:           '_faz_ml_test',
-        domain:         '127.0.0.1',
-        category:       analyticsCatId,
-        duration:       { en: 'session' },
-        description:    { en: 'maxLength test' },
-        opt_in_script:  tooLong,
-        opt_out_script: '',
-      },
-    });
+  test('REST-ML-01: opt_in_script longer than 10 000 chars is rejected with 400', () => {
+    // Use rest_do_request to exercise the full WP REST validation stack
+    // (permission check + schema maxLength validation) without browser auth.
+    const raw = wpEval(`
+      wp_set_current_user(1);
+      $nonce   = wp_create_nonce('wp_rest');
+      $request = new WP_REST_Request('POST', '/faz/v1/cookies');
+      $request->set_header('X-WP-Nonce', $nonce);
+      $request['name']          = '_faz_ml_test';
+      $request['slug']          = '_faz_ml_test';
+      $request['domain']        = '127.0.0.1';
+      $request['category']      = ${analyticsCatId};
+      $request['duration']      = array('en' => 'session');
+      $request['description']   = array('en' => 'maxLength test');
+      $request['opt_in_script'] = str_repeat('x', 10001);
+      $response = rest_do_request($request);
+      echo $response->get_status();
+    `);
     expect(
-      res.status(),
+      parseInt(raw.trim(), 10),
       'REST must reject opt_in_script > 10 000 chars with HTTP 400',
     ).toBe(400);
   });
 
-  test('REST-ML-02: opt_out_script longer than 10 000 chars is rejected with 400', async () => {
-    const tooLong = 'x'.repeat(10_001);
-    const res = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/cookies`, {
-      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-      data: {
-        name:           '_faz_ml_test2',
-        slug:           '_faz_ml_test2',
-        domain:         '127.0.0.1',
-        category:       analyticsCatId,
-        duration:       { en: 'session' },
-        description:    { en: 'maxLength test 2' },
-        opt_in_script:  '',
-        opt_out_script: tooLong,
-      },
-    });
+  test('REST-ML-02: opt_out_script longer than 10 000 chars is rejected with 400', () => {
+    const raw = wpEval(`
+      wp_set_current_user(1);
+      $nonce   = wp_create_nonce('wp_rest');
+      $request = new WP_REST_Request('POST', '/faz/v1/cookies');
+      $request->set_header('X-WP-Nonce', $nonce);
+      $request['name']           = '_faz_ml_test2';
+      $request['slug']           = '_faz_ml_test2';
+      $request['domain']         = '127.0.0.1';
+      $request['category']       = ${analyticsCatId};
+      $request['duration']       = array('en' => 'session');
+      $request['description']    = array('en' => 'maxLength test 2');
+      $request['opt_in_script']  = '';
+      $request['opt_out_script'] = str_repeat('x', 10001);
+      $response = rest_do_request($request);
+      echo $response->get_status();
+    `);
     expect(
-      res.status(),
+      parseInt(raw.trim(), 10),
       'REST must reject opt_out_script > 10 000 chars with HTTP 400',
     ).toBe(400);
   });
@@ -359,21 +340,9 @@ test.describe('REST API — opt_in/opt_out_script maxLength enforcement', () => 
 test.describe('_cookieScripts transient cache invalidation', () => {
   test.describe.configure({ mode: 'serial' });
 
-  let adminPage: Page;
-  let nonce: string;
-  let baseURL = '';
   let testCookieId = 0;
 
-  test.beforeAll(async ({ browser, wpBaseURL, loginAsAdmin }) => {
-    baseURL = wpBaseURL;
-    adminPage = await browser.newPage();
-    await loginAsAdmin(adminPage);
-    await adminPage.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, {
-      waitUntil: 'domcontentloaded',
-    });
-    nonce = await getAdminNonce(adminPage);
-
-    // Resolve the analytics category ID dynamically to avoid hardcoding.
+  test.beforeAll(() => {
     const analyticsCatId = parseInt(
       wpEval(`
         global $wpdb;
@@ -388,32 +357,51 @@ test.describe('_cookieScripts transient cache invalidation', () => {
     );
     expect(analyticsCatId, 'analytics category must exist in the DB').toBeGreaterThan(0);
 
-    // Create a cookie with an opt_in_script so _cookieScripts is non-empty.
-    const res = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/cookies`, {
-      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-      data: {
-        name:           '_faz_cache_test',
-        slug:           '_faz_cache_test',
-        domain:         '127.0.0.1',
-        category:       analyticsCatId,
-        duration:       { en: 'session' },
-        description:    { en: 'cache test cookie' },
-        opt_in_script:  "window._fazCacheE2E = true;",
-        opt_out_script: '',
-      },
-    });
-    const body = await res.json() as Record<string, unknown>;
-    testCookieId = typeof body.id === 'number' ? body.id : 0;
+    // Insert the test cookie directly via WP-CLI (avoids browser auth complexity).
+    // Double-stringify produces a PHP string literal so PHP doesn't mis-parse {…}.
+    const durationPhp = JSON.stringify(JSON.stringify({ en: 'session' }));
+    const metaPhp = JSON.stringify(JSON.stringify({ opt_in_script: 'window._fazCacheE2E = true;' }));
+
+    const raw = wpEval(`
+      global $wpdb;
+      $now = current_time('mysql');
+      $wpdb->insert(
+        "{$wpdb->prefix}faz_cookies",
+        array(
+          'name'          => '_faz_cache_test',
+          'slug'          => '_faz_cache_test',
+          'description'   => '',
+          'duration'      => ${durationPhp},
+          'domain'        => '127.0.0.1',
+          'category'      => ${analyticsCatId},
+          'type'          => '',
+          'discovered'    => 0,
+          'meta'          => ${metaPhp},
+          'date_created'  => $now,
+          'date_modified' => $now,
+        ),
+        array('%s','%s','%s','%s','%s','%d','%s','%d','%s','%s','%s')
+      );
+      echo $wpdb->insert_id;
+    `);
+    testCookieId = parseInt(raw.trim(), 10);
+    expect(testCookieId, 'test cookie must have been created').toBeGreaterThan(0);
+    // Ensure the scripts-map transient is cleared so the new cookie is visible.
+    wpEval(`delete_transient('faz_cookie_scripts_map');`);
   });
 
-  test.afterAll(async () => {
+  test.afterAll(() => {
     if (testCookieId) {
-      await adminPage.request.delete(`${baseURL}/?rest_route=/faz/v1/cookies/${testCookieId}`, {
-        headers: { 'X-WP-Nonce': nonce },
-      });
+      wpEval(`
+        global $wpdb;
+        $wpdb->delete(
+          "{$wpdb->prefix}faz_cookies",
+          array('cookie_id' => ${testCookieId}),
+          array('%d')
+        );
+      `);
     }
     wpEval(`delete_transient('faz_cookie_scripts_map');`);
-    await adminPage.close();
   });
 
   test('CACHE-01: _cookieScripts is rebuilt from DB after transient deletion', async ({ page, wpBaseURL }) => {

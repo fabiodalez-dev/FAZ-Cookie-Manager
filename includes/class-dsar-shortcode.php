@@ -38,6 +38,56 @@ class DSAR_Shortcode {
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_submit' ) );
+		// Enqueue the submit handler early so it runs even when a page builder
+		// (e.g. Bricks) renders the shortcode HTML client-side after page load.
+		// Inline <script> tags injected via innerHTML are silently ignored by
+		// browsers, so the handler must live in a separately-enqueued file.
+		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
+	}
+
+	/**
+	 * Enqueue the DSAR form JS on every frontend page.
+	 *
+	 * The submit handler uses a delegated listener and is a no-op when the
+	 * page contains no .faz-dsar-form element, so the cost on non-DSAR pages
+	 * is a single HTTP request for a ~1 KB file.
+	 *
+	 * Unconditional enqueue is intentional: page builders (e.g. Bricks) may
+	 * render the shortcode HTML client-side after page load. In that scenario
+	 * has_shortcode($post->post_content, ...) is unreliable because the current
+	 * post may be a builder template rather than the actual page post.
+	 */
+	public function maybe_enqueue_assets() {
+		if ( is_admin() ) {
+			return;
+		}
+		$this->enqueue_dsar_assets();
+	}
+
+	/**
+	 * Register, localize, and enqueue the DSAR submit handler script.
+	 * Safe to call multiple times — registration is guarded against duplicates.
+	 */
+	private function enqueue_dsar_assets() {
+		if ( ! wp_script_is( 'faz-dsar-form', 'registered' ) ) {
+			wp_register_script(
+				'faz-dsar-form',
+				FAZ_PLUGIN_URL . 'frontend/js/faz-dsar.js',
+				array(),
+				FAZ_VERSION,
+				true
+			);
+			wp_localize_script(
+				'faz-dsar-form',
+				'fazDsarConfig',
+				array(
+					'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+					'errMsg'  => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
+					'reqMsg'  => __( 'Please fill in all required fields.', 'faz-cookie-manager' ),
+				)
+			);
+		}
+		wp_enqueue_script( 'faz-dsar-form' );
 	}
 
 	/**
@@ -61,6 +111,7 @@ class DSAR_Shortcode {
 					'delete_post'        => 'manage_options',
 					'edit_posts'         => 'manage_options',
 					'edit_others_posts'  => 'manage_options',
+					'edit_private_posts' => 'manage_options',
 					'delete_posts'       => 'manage_options',
 					'publish_posts'      => 'manage_options',
 					'read_private_posts' => 'manage_options',
@@ -71,6 +122,16 @@ class DSAR_Shortcode {
 				'show_in_rest'    => false,
 			)
 		);
+
+		// Mapping singular post capabilities (edit_post, delete_post, read_post) to
+		// 'manage_options' with map_meta_cap => true causes WordPress to register
+		// 'manage_options' in the global $post_type_meta_caps table. This makes
+		// map_meta_cap() treat 'manage_options' as a meta-cap that requires a post ID,
+		// returning 'do_not_allow' when no ID is supplied — breaking all admin pages
+		// that check current_user_can('manage_options'). Remove the entry to restore
+		// 'manage_options' as a primitive capability.
+		global $post_type_meta_caps;
+		unset( $post_type_meta_caps['manage_options'] );
 	}
 
 	/**
@@ -85,6 +146,7 @@ class DSAR_Shortcode {
 			'faz_dsar_form'
 		);
 
+		$this->enqueue_dsar_assets();
 		wp_register_style( 'faz-dsar', false, array(), FAZ_VERSION );
 		wp_enqueue_style( 'faz-dsar' );
 		wp_add_inline_style( 'faz-dsar', '
@@ -157,62 +219,6 @@ class DSAR_Shortcode {
 			</form>
 			<div class="faz-dsar-notice" style="display:none;" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></div>
 		</div>
-
-		<script>
-		(function(){
-			var wrap   = document.getElementById(<?php echo wp_json_encode( $id ); ?>);
-			if ( ! wrap ) return;
-			var form   = wrap.querySelector('.faz-dsar-form');
-			var notice = wrap.querySelector('.faz-dsar-notice');
-			var ajaxUrl = <?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>;
-			var errMsg  = <?php echo wp_json_encode( __( 'An error occurred. Please try again.', 'faz-cookie-manager' ) ); ?>;
-
-			form.addEventListener('submit', function(e){
-				e.preventDefault();
-				var name  = form.querySelector('[name="dsar_name"]').value.trim();
-				var email = form.querySelector('[name="dsar_email"]').value.trim();
-				var type  = form.querySelector('[name="dsar_type"]').value;
-
-				if ( ! name || ! email || ! type ) {
-					notice.className = 'faz-dsar-notice error';
-					notice.textContent = <?php echo wp_json_encode( __( 'Please fill in all required fields.', 'faz-cookie-manager' ) ); ?>;
-					notice.style.display = 'block';
-					return;
-				}
-
-				var btn = form.querySelector('button');
-				btn.disabled = true;
-				notice.style.display = 'none';
-
-				fetch(ajaxUrl, {
-					method: 'POST',
-					credentials: 'same-origin',
-					body: new FormData(form)
-				})
-				.then(function(r){ return r.json(); })
-				.then(function(res){
-					if ( res.success ) {
-						form.style.display = 'none';
-						notice.className = 'faz-dsar-notice success';
-						notice.textContent = res.data.message;
-					} else {
-						notice.className = 'faz-dsar-notice error';
-						notice.textContent = res.data || errMsg;
-						btn.disabled = false;
-					}
-					notice.style.display = 'block';
-					notice.focus();
-				})
-				.catch(function(){
-					notice.className = 'faz-dsar-notice error';
-					notice.textContent = errMsg;
-					notice.style.display = 'block';
-					notice.focus();
-					btn.disabled = false;
-				});
-			});
-		})();
-		</script>
 		<?php
 		return ob_get_clean();
 	}

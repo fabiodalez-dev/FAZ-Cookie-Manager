@@ -30,34 +30,66 @@ const DSAR_SLUG = 'faz-e2e-pr96-dsar';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
-async function getAdminNonce(page: Page): Promise<string> {
-  return page.evaluate(
-    () =>
-      (window as Record<string, unknown> & { fazConfig?: { api?: { nonce?: string } } })
-        .fazConfig?.api?.nonce ?? '',
-  );
+type FazWindow = Record<string, unknown> & { fazConfig?: { api?: { nonce?: string } } };
+
+// ── WP-CLI cookie helpers (no browser, no auth) ───────────────────────────────
+
+interface CookiePayload {
+  name: string;
+  slug: string;
+  domain: string;
+  category: number;
+  duration: Record<string, string>;
+  opt_in_script?: string;
+  opt_out_script?: string;
 }
 
-async function createTestCookie(
-  page: Page,
-  nonce: string,
-  baseURL: string,
-  payload: Record<string, unknown>,
-): Promise<number> {
-  const res = await page.request.post(`${baseURL}/?rest_route=/faz/v1/cookies`, {
-    headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-    data: payload,
-  });
-  const body = (await res.json()) as Record<string, unknown>;
-  const id = typeof body.id === 'number' ? body.id : 0;
-  expect(id, `createTestCookie failed — response: ${JSON.stringify(body)}`).toBeGreaterThan(0);
+/** Insert a cookie row directly via WP-CLI. Returns the new cookie_id. */
+function createTestCookie(payload: CookiePayload): number {
+  const meta: Record<string, string> = {};
+  if (payload.opt_in_script)  meta.opt_in_script  = payload.opt_in_script;
+  if (payload.opt_out_script) meta.opt_out_script = payload.opt_out_script;
+
+  // Double-stringify produces a PHP double-quoted string literal, e.g.
+  // "{\"en\":\"session\"}" — prevents PHP from mis-parsing {…} as a code block.
+  const durationPhp = JSON.stringify(JSON.stringify(payload.duration));
+  const metaPhp     = JSON.stringify(JSON.stringify(meta));
+
+  const raw = wpEval(`
+    global $wpdb;
+    $now = current_time( 'mysql' );
+    $wpdb->insert(
+      "{$wpdb->prefix}faz_cookies",
+      array(
+        'name'          => ${JSON.stringify(payload.name)},
+        'slug'          => ${JSON.stringify(payload.slug)},
+        'description'   => '',
+        'duration'      => ${durationPhp},
+        'domain'        => ${JSON.stringify(payload.domain)},
+        'category'      => ${payload.category},
+        'type'          => '',
+        'discovered'    => 0,
+        'meta'          => ${metaPhp},
+        'date_created'  => $now,
+        'date_modified' => $now,
+      ),
+      array( '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s' )
+    );
+    echo $wpdb->insert_id;
+  `);
+  const id = parseInt(raw.trim(), 10);
+  expect(id, `createTestCookie failed for '${payload.name}'`).toBeGreaterThan(0);
   return id;
 }
 
-async function deleteTestCookie(page: Page, nonce: string, baseURL: string, id: number): Promise<void> {
-  await page.request.delete(`${baseURL}/?rest_route=/faz/v1/cookies/${id}`, {
-    headers: { 'X-WP-Nonce': nonce },
-  });
+/** Delete a cookie row directly via WP-CLI. */
+function deleteTestCookie(id: number): void {
+  if (!id) return;
+  wpEval(`
+    global $wpdb;
+    $wpdb->delete( "{$wpdb->prefix}faz_cookies", array( 'cookie_id' => ${id} ), array( '%d' ) );
+    delete_transient( 'faz_cookie_scripts_map' );
+  `);
 }
 
 /** Resolve the analytics category_id from the DB (dynamic to survive fixture resets). */
@@ -123,13 +155,14 @@ function clearRateLimitState(): void {
 
 /** Seed a consent cookie that skips the banner without accepting any optional category. */
 async function seedConsentAllNo(page: Page): Promise<void> {
+  const rev = parseInt(wpEval("echo faz_get_consent_revision();").trim(), 10) || 1;
   await page.context().addCookies([
     {
       name: 'fazcookie-consent',
       value:
-        'consentid%3Ae2e-pr96-no%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes' +
-        '%2Cfunctional%3Ano%2Canalytics%3Ano%2Cperformance%3Ano' +
-        '%2Cuncategorized%3Ano%2Cmarketing%3Ano%2Crev%3A5',
+        `consentid%3Ae2e-pr96-no%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes` +
+        `%2Cfunctional%3Ano%2Canalytics%3Ano%2Cperformance%3Ano` +
+        `%2Cuncategorized%3Ano%2Cmarketing%3Ano%2Crev%3A${rev}`,
       domain: '127.0.0.1',
       path: '/',
       sameSite: 'Lax',
@@ -139,13 +172,17 @@ async function seedConsentAllNo(page: Page): Promise<void> {
 
 /** Seed a consent cookie that accepts everything (banner bypassed). */
 async function seedConsentAllYes(page: Page): Promise<void> {
+  // Read the server-side consent revision so PHP's stale-cookie check does not
+  // delete the cookie we inject (faz_maybe_invalidate_stale_consent_cookie runs
+  // on every 'init' and deletes any cookie whose rev < server revision).
+  const rev = parseInt(wpEval("echo faz_get_consent_revision();").trim(), 10) || 1;
   await page.context().addCookies([
     {
       name: 'fazcookie-consent',
       value:
-        'consentid%3Ae2e-pr96-yes%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes' +
-        '%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes' +
-        '%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A5',
+        `consentid%3Ae2e-pr96-yes%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes` +
+        `%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes` +
+        `%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
       domain: '127.0.0.1',
       path: '/',
       sameSite: 'Lax',
@@ -160,23 +197,12 @@ async function seedConsentAllYes(page: Page): Promise<void> {
 test.describe('REST API — opt_in/opt_out_script context restriction', () => {
   test.describe.configure({ mode: 'serial' });
 
-  let adminPage: Page;
-  let nonce: string;
   let testCookieId = 0;
 
-  test.beforeAll(async ({ browser, wpBaseURL, loginAsAdmin }) => {
-    adminPage = await browser.newPage();
-    await loginAsAdmin(adminPage);
-    await adminPage.goto(
-      `${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`,
-      { waitUntil: 'domcontentloaded' },
-    );
-    nonce = await getAdminNonce(adminPage);
-
+  test.beforeAll(() => {
     const catId = getAnalyticsCategoryId();
     expect(catId, 'analytics category must exist in DB').toBeGreaterThan(0);
-
-    testCookieId = await createTestCookie(adminPage, nonce, wpBaseURL, {
+    testCookieId = createTestCookie({
       name:           '_faz_pr96_ctx',
       slug:           '_faz_pr96_ctx',
       domain:         '127.0.0.1',
@@ -187,9 +213,9 @@ test.describe('REST API — opt_in/opt_out_script context restriction', () => {
     });
   });
 
-  test.afterAll(async ({ wpBaseURL }) => {
-    if (testCookieId) await deleteTestCookie(adminPage, nonce, wpBaseURL, testCookieId);
-    await adminPage.close();
+  test.afterAll(() => {
+    deleteTestCookie(testCookieId);
+    testCookieId = 0;
   });
 
   test('REST-CTX-01: opt_in_script absent from unauthenticated GET (default view context)', async ({
@@ -211,16 +237,29 @@ test.describe('REST API — opt_in/opt_out_script context restriction', () => {
   });
 
   test('REST-CTX-02: opt_in_script present with admin nonce and context=edit', async ({
-    wpBaseURL,
+    page, wpBaseURL, loginAsAdmin,
   }) => {
-    const res = await adminPage.request.get(
-      `${wpBaseURL}/?rest_route=/faz/v1/cookies/${testCookieId}&context=edit`,
-      { headers: { 'X-WP-Nonce': nonce } },
-    );
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(typeof body.opt_in_script).toBe('string');
-    expect(body.opt_in_script).toBe('window._fazPR96Ctx = 1;');
-    expect(body.opt_out_script).toBe('window._fazPR96CtxOut = 1;');
+    await loginAsAdmin(page);
+    await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+
+    const { status, body, nonceLen } = await page.evaluate(async (cookieId: number) => {
+      const w = window as FazWindow;
+      const nonce = w.fazConfig?.api?.nonce ?? '';
+      const res = await fetch(`/?rest_route=/faz/v1/cookies/${cookieId}&context=edit`, {
+        method: 'GET',
+        headers: { 'X-WP-Nonce': nonce },
+        credentials: 'same-origin',
+      });
+      const body = await res.json().catch(() => null);
+      return { status: res.status, body, nonceLen: nonce.length };
+    }, testCookieId);
+
+    expect(nonceLen, 'fazConfig.api.nonce must be non-empty').toBeGreaterThan(0);
+    expect(status, `authenticated GET must return 200 (body: ${JSON.stringify(body)})`).toBe(200);
+    const b = body as Record<string, unknown>;
+    expect(typeof b.opt_in_script, 'opt_in_script must be a string with context=edit').toBe('string');
+    expect(b.opt_in_script).toBe('window._fazPR96Ctx = 1;');
+    expect(b.opt_out_script).toBe('window._fazPR96CtxOut = 1;');
   });
 });
 
@@ -231,23 +270,12 @@ test.describe('REST API — opt_in/opt_out_script context restriction', () => {
 test.describe('_fazAcceptCategory — opt_in_script fires for newly accepted category', () => {
   test.describe.configure({ mode: 'serial' });
 
-  let adminPage: Page;
-  let nonce: string;
   let testCookieId = 0;
 
-  test.beforeAll(async ({ browser, wpBaseURL, loginAsAdmin }) => {
-    adminPage = await browser.newPage();
-    await loginAsAdmin(adminPage);
-    await adminPage.goto(
-      `${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`,
-      { waitUntil: 'domcontentloaded' },
-    );
-    nonce = await getAdminNonce(adminPage);
-
+  test.beforeAll(() => {
     const catId = getAnalyticsCategoryId();
     expect(catId, 'analytics category must exist in DB').toBeGreaterThan(0);
-
-    testCookieId = await createTestCookie(adminPage, nonce, wpBaseURL, {
+    testCookieId = createTestCookie({
       name:          '_faz_pr96_accept_cat',
       slug:          '_faz_pr96_accept_cat',
       domain:        '127.0.0.1',
@@ -255,14 +283,13 @@ test.describe('_fazAcceptCategory — opt_in_script fires for newly accepted cat
       duration:      { en: 'session' },
       opt_in_script: 'window._fazPR96AcceptCatFired = (window._fazPR96AcceptCatFired || 0) + 1;',
     });
-
-    // Invalidate the scripts-map cache so the new cookie is picked up.
+    // Invalidate the scripts-map cache so the new cookie is picked up on the frontend.
     wpEval(`delete_transient('faz_cookie_scripts_map');`);
   });
 
-  test.afterAll(async ({ wpBaseURL }) => {
-    if (testCookieId) await deleteTestCookie(adminPage, nonce, wpBaseURL, testCookieId);
-    await adminPage.close();
+  test.afterAll(() => {
+    deleteTestCookie(testCookieId);
+    testCookieId = 0;
   });
 
   test('ACC-CAT-01: _fazAcceptCategory() fires opt_in_script for newly accepted category', async ({
@@ -488,21 +515,11 @@ test.describe('DSAR CPT — capability mapping', () => {
 test.describe('Scripts map cache — invalidated on category update', () => {
   test.describe.configure({ mode: 'serial' });
 
-  let adminPage: Page;
-  let nonce: string;
   let catCookieId = 0;
 
-  test.beforeAll(async ({ browser, wpBaseURL, loginAsAdmin }) => {
-    adminPage = await browser.newPage();
-    await loginAsAdmin(adminPage);
-    await adminPage.goto(
-      `${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`,
-      { waitUntil: 'domcontentloaded' },
-    );
-    nonce = await getAdminNonce(adminPage);
-
+  test.beforeAll(() => {
     const catId = getAnalyticsCategoryId();
-    catCookieId = await createTestCookie(adminPage, nonce, wpBaseURL, {
+    catCookieId = createTestCookie({
       name:          '_faz_pr96_cache_inv',
       slug:          '_faz_pr96_cache_inv',
       domain:        '127.0.0.1',
@@ -512,13 +529,13 @@ test.describe('Scripts map cache — invalidated on category update', () => {
     });
   });
 
-  test.afterAll(async ({ wpBaseURL }) => {
-    if (catCookieId) await deleteTestCookie(adminPage, nonce, wpBaseURL, catCookieId);
-    await adminPage.close();
+  test.afterAll(() => {
+    deleteTestCookie(catCookieId);
+    catCookieId = 0;
   });
 
   test('CACHE-INV-01: faz_cookie_scripts_map transient is deleted after category update', async ({
-    page, wpBaseURL,
+    page, wpBaseURL, loginAsAdmin,
   }) => {
     // 1. Warm up the scripts-map transient by loading the frontend.
     await seedConsentAllYes(page);
@@ -528,28 +545,35 @@ test.describe('Scripts map cache — invalidated on category update', () => {
       { timeout: 10_000 },
     );
 
-    // Verify the transient was actually created.
-    const before = wpEval(`echo get_transient('faz_cookie_scripts_map') !== false ? 'exists' : 'gone';`).trim();
-    // The transient may or may not be populated depending on whether the scripts map
-    // path ran on this page load — only assert invalidation after the category update.
+    // 2. Update the analytics category via REST API using browser auth.
+    await loginAsAdmin(page);
+    await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
 
-    // 2. Update the analytics category via REST to trigger faz_after_update_cookie_category.
-    const analyticsCatId = getAnalyticsCategoryId();
-    const catRes = await adminPage.request.get(
-      `${wpBaseURL}/?rest_route=/faz/v1/categories/${analyticsCatId}&context=edit`,
-      { headers: { 'X-WP-Nonce': nonce } },
-    );
-    expect(catRes.status()).toBe(200);
-    const cat = (await catRes.json()) as Record<string, unknown>;
-
-    const updateRes = await adminPage.request.post(
-      `${wpBaseURL}/?rest_route=/faz/v1/categories/${analyticsCatId}`,
-      {
-        headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-        data: { ...cat, description: { en: 'PR96 cache invalidation test' } },
+    // Wait for fazConfig.api.nonce to be populated.
+    await page.waitForFunction(
+      () => {
+        const w = window as FazWindow;
+        return typeof w.fazConfig?.api?.nonce === 'string' && (w.fazConfig.api.nonce?.length ?? 0) > 0;
       },
+      { timeout: 10_000 },
     );
-    expect(updateRes.status(), 'category update should succeed').toBe(200);
+
+    const analyticsCatId = getAnalyticsCategoryId();
+    const { updateStatus, nonceLen, errorBody } = await page.evaluate(async (catId: number) => {
+      const w = window as FazWindow;
+      const nonce = w.fazConfig?.api?.nonce ?? '';
+      const res = await fetch(`/?rest_route=/faz/v1/cookies/categories/${catId}`, {
+        method: 'POST',
+        headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: { en: 'PR96 cache invalidation test' } }),
+        credentials: 'same-origin',
+      });
+      const errorBody = res.ok ? null : await res.json().catch(() => null);
+      return { updateStatus: res.status, nonceLen: nonce.length, errorBody };
+    }, analyticsCatId);
+
+    expect(nonceLen, 'fazConfig.api.nonce must be non-empty').toBeGreaterThan(0);
+    expect(updateStatus, `category update should succeed (body: ${JSON.stringify(errorBody)})`).toBe(200);
 
     // 3. The faz_cookie_scripts_map transient must be gone.
     const after = wpEval(`echo get_transient('faz_cookie_scripts_map') === false ? 'gone' : 'exists';`).trim();
