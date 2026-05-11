@@ -74,11 +74,13 @@ test.afterAll(() => {
 });
 
 // Pre-accept the consent banner so it doesn't interfere with form tests.
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, wpBaseURL }) => {
+  const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
+  const domain = new URL(wpBaseURL).hostname;
   await page.context().addCookies([{
     name:     'fazcookie-consent',
-    value:    'consentid%3Ae2e-sqf%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A5',
-    domain:   '127.0.0.1',
+    value:    `consentid%3Ae2e-sqf%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
+    domain,
     path:     '/',
     sameSite: 'Lax',
   }]);

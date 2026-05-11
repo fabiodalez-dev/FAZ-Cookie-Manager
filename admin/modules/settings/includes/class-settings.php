@@ -64,11 +64,6 @@ class Settings extends Store {
 				'url'       => get_site_url(),
 				'installed' => time(),
 			),
-			'account'      => array(
-				'connected' => false,
-				'status'    => false,
-				'plan'      => '',
-			),
 			'consent_logs' => array(
 				'status'    => true,
 				'retention' => 12,
@@ -270,7 +265,6 @@ class Settings extends Store {
 	 */
 	public static function sanitize_option( $option, $value ) {
 		switch ( $option ) {
-			case 'connected':
 			case 'status':
 			case 'subdomain_sharing':
 			case 'uet_consent_mode':
@@ -447,23 +441,6 @@ class Settings extends Store {
 		return $this->get( 'site', 'url' );
 	}
 
-	/**
-	 * Always returns 'ultimate' plan for local mode.
-	 *
-	 * @return mixed
-	 */
-	public function get_plan() {
-		return $this->get( 'account', 'plan' );
-	}
-
-	/**
-	 * Always returns false — local mode, no cloud connection.
-	 *
-	 * @return boolean
-	 */
-	public function is_connected() {
-		return false;
-	}
 
 	/**
 	 * Get consent log status

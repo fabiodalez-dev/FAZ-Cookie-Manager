@@ -68,14 +68,4 @@ class Controller {
 		);
 	}
 
-	public function get_plans() {
-		return array(
-			'plan' => 'ultimate',
-			'name' => 'Ultimate',
-		);
-	}
-
-	public function get_currencies() {
-		return array();
-	}
 }

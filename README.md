@@ -361,7 +361,7 @@ If the visitor already has the opt-out cookie, the form is replaced with a confi
 | `title` | `Do Not Sell My Personal Information` | Heading above the form |
 | `button` | `Submit Opt-Out Request` | Submit button label |
 
-```
+```text
 [faz_do_not_sell title="Opt Out" button="Submit Request"]
 ```
 

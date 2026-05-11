@@ -84,10 +84,12 @@ async function waitForConsentCookie(page: Page): Promise<void> {
 
 /** Pre-seed a consent cookie so the banner does not block interactions. */
 async function setConsentCookie(page: Page, wpBaseURL: string): Promise<void> {
+  const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
+  const domain = new URL(wpBaseURL).hostname;
   await page.context().addCookies([{
     name:     'fazcookie-consent',
-    value:    'consentid%3Ae2e-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A5',
-    domain:   '127.0.0.1',
+    value:    `consentid%3Ae2e-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
+    domain,
     path:     '/',
     sameSite: 'Lax',
   }]);

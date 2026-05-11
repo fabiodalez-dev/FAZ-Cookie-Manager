@@ -296,11 +296,10 @@ test.describe('Provider matrix scan and blocking', () => {
   test.setTimeout(300_000);
 
   let matrixUrl = '';
-  let deactivatedPlugins: string[] = [];
+  let initialActivePlugins: string[] = [];
 
   test.beforeAll(async () => {
-    const allowed = new Set(['faz-cookie-manager', 'faz-e2e-provider-matrix', 'faz-e2e-scan-lab', 'faz-e2e-woo-lab', 'woocommerce']);
-    deactivatedPlugins = listActivePlugins().filter((slug) => !allowed.has(slug));
+    initialActivePlugins = listActivePlugins();
     deactivatePluginsExcept([
       'faz-cookie-manager',
       'faz-e2e-provider-matrix',
@@ -317,8 +316,15 @@ test.describe('Provider matrix scan and blocking', () => {
   });
 
   test.afterAll(async () => {
-    if (deactivatedPlugins.length > 0) {
-      activatePlugins(deactivatedPlugins);
+    // Restore the exact set of plugins that were active before this suite ran.
+    const currentlyActive = new Set(listActivePlugins());
+    const toActivate = initialActivePlugins.filter((slug) => !currentlyActive.has(slug));
+    const toDeactivate = [...currentlyActive].filter((slug) => !initialActivePlugins.includes(slug));
+    if (toActivate.length > 0) {
+      activatePlugins(toActivate);
+    }
+    if (toDeactivate.length > 0) {
+      deactivatePluginsExcept(initialActivePlugins);
     }
   });
 

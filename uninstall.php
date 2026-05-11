@@ -150,6 +150,20 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				delete_option( $option_name );
 			}
 
+			// Clean up Do Not Sell / DSAR atomic lock options (created by add_option,
+			// not set_transient, so the _transient_faz% LIKE above misses them).
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$faz_lock_keys = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+					$wpdb->esc_like( 'faz_dnsmpi_lock_' ) . '%',
+					$wpdb->esc_like( 'faz_dsar_lock_' ) . '%'
+				)
+			);
+			foreach ( $faz_lock_keys as $faz_lock_key ) {
+				delete_option( $faz_lock_key );
+			}
+
 			// Also delete any language-suffixed banner template variants
 			// (e.g. faz_banner_template_en, faz_banner_template_it).
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching

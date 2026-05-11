@@ -108,7 +108,7 @@ export const test = base.extend<WPFixtures, WPWorkerFixtures>({
   wpCreds: [
     async ({}, use) => { // biome-ignore lint/style/noEmptyPattern: Playwright fixture API requires destructured first argument
       await use({
-        baseURL: process.env.WP_BASE_URL ?? 'http://localhost:9998',
+        baseURL: process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998',
         adminUser: process.env.WP_ADMIN_USER ?? 'admin',
         adminPass: process.env.WP_ADMIN_PASS ?? 'admin',
         deployPath: process.env.FAZ_PLUGIN_DEPLOY_PATH ?? null,

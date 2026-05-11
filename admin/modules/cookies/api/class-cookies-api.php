@@ -180,7 +180,7 @@ class Cookies_API extends API_Controller {
 				'id'            => array(
 					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
 					'type'        => 'integer',
-					'context'     => array( 'view' ),
+					'context'     => array( 'view', 'edit' ),
 					'readonly'    => true,
 				),
 				'date_created'  => array(
@@ -300,7 +300,8 @@ class Cookies_API extends API_Controller {
 				$cookie->set_duration( $item['duration'] );
 			}
 			$cookie->save();
-			$updated[] = $cookie->get_prepared_data();
+			$response  = $this->prepare_item_for_response( $cookie, $request );
+			$updated[] = $this->prepare_response_for_collection( $response );
 		}
 
 		do_action( 'faz_after_update_cookie' );

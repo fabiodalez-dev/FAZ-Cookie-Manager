@@ -195,10 +195,7 @@ test.describe('P1-D — close button absent when reject button is present', () =
 
     const rejectBtn = await page.$('[data-faz-tag="reject-button"]');
     if (!rejectBtn) {
-      test.info().annotations.push({
-        type: 'skip-reason',
-        description: 'reject-button not found in DOM — banner may be hidden or law is not GDPR',
-      });
+      test.skip(true, 'reject-button not found in DOM — banner may be hidden or law is not GDPR');
       return;
     }
 

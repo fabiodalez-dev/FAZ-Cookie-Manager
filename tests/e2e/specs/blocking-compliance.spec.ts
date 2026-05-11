@@ -91,7 +91,7 @@ async function postSettings(page: Page, nonce: string, payload: SettingsPayload)
 }
 
 async function gotoFrontend(page: Page, url: string): Promise<void> {
-  await page.goto(url, { waitUntil: 'commit' });
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.locator('body').waitFor({ state: 'visible' });
 }
 

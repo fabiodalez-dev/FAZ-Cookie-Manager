@@ -204,6 +204,8 @@ class Frontend {
 			delete_transient( 'faz_cookie_scripts_map' );
 		};
 		add_action( 'faz_after_update_cookie', $invalidate_scripts_map );
+		add_action( 'faz_after_create_cookie', $invalidate_scripts_map );
+		add_action( 'faz_after_delete_cookie', $invalidate_scripts_map );
 		add_action( 'faz_after_update_cookie_category', $invalidate_scripts_map );
 	}
 
@@ -237,8 +239,7 @@ class Frontend {
 		}
 
 		$suffix = $this->get_script_suffix( 'js/script' );
-		if ( false === $this->settings->is_connected() ) {
-			if ( ! $this->template ) {
+		if ( ! $this->template ) {
 				return;
 			}
 			$css = $this->get_boosted_css();
@@ -293,7 +294,7 @@ class Frontend {
 				$gcm_json = wp_json_encode( $gcm );
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
-				$gcm_handle = $this->plugin_name . '-gcm';
+				$gcm_handle = $script_handle . '-gcm';
 				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 
@@ -481,7 +482,6 @@ class Frontend {
 					'checkboxDisabled' => __( '{name} disabled, enable {name}', 'faz-cookie-manager' ),
 				)
 			);
-		}
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';
 			// Compute the suffix per-file: wca.js and microsoft-consent.js
@@ -551,7 +551,7 @@ class Frontend {
 	 * @return void
 	 */
 	public function insert_styles() {
-		if ( true === $this->settings->is_connected() || true === faz_disable_banner() || is_admin() ) {
+		if ( true === faz_disable_banner() || is_admin() ) {
 			return;
 		}
 		// Use the wider UI-suppressed check: if the banner UI is hidden (e.g.
@@ -574,7 +574,7 @@ class Frontend {
 	 * @return void
 	 */
 	public function load_banner() {
-		if ( true === $this->settings->is_connected() || true === faz_disable_banner() ) {
+		if ( true === faz_disable_banner() ) {
 			return;
 		}
 		// NOTE: We deliberately do NOT check is_banner_ui_suppressed() here.
@@ -2833,7 +2833,7 @@ class Frontend {
 			?? array();
 		$data['config']['categoryPreview']['status']  = $config['categoryPreview']['status'] ?? false;
 		$data['config']['categoryPreview']['toggle']  = $config['categoryPreview']['elements']['toggle'] ?? array();
-		$data['config']['videoPlaceholder']['status'] = $config['videoPlaceholder']['status'] ?? false;
+		$data['config']['videoPlaceholder']['status'] = $config['videoPlaceholder']['status'] ?? true;
 		$data['config']['videoPlaceholder']['styles'] = array_merge( $config['videoPlaceholder']['styles'] ?? array(), $config['videoPlaceholder']['elements']['title']['styles'] ?? array() );
 		$data['config']['readMore']                   = $config['notice']['elements']['buttons']['elements']['readMore'] ?? array();
 		$data['config']['showMore']                    = $config['accessibilityOverrides']['elements']['preferenceCenter']['elements']['showMore'] ?? array();
@@ -3221,6 +3221,10 @@ class Frontend {
 			return true;
 		}
 		if ( 'faz-fw' === $handle || 0 === strpos( $handle, 'faz-fw-' ) ) {
+			return true;
+		}
+		// Shortcode-specific handles that don't carry the plugin-name prefix.
+		if ( 'faz-dsar-form' === $handle ) {
 			return true;
 		}
 		return false;

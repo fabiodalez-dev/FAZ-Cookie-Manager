@@ -98,7 +98,6 @@ class CLI {
 		$this->define_admin_hooks();
 		$this->define_public_hooks();
 		$this->register_blocks();
-		$this->init_license();
 		$this->register_privacy_hooks();
 
 	}
@@ -297,14 +296,4 @@ class CLI {
 		});
 	}
 
-	/**
-	 * Inititialize the license.
-	 *
-	 * @return void
-	 */
-	public function init_license() {
-		if ( ! defined( 'FAZ_CLOUD_REQUEST' ) ) {
-			define( 'FAZ_CLOUD_REQUEST', false );
-		}
-	}
 }

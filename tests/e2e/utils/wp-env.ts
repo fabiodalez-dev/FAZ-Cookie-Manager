@@ -124,7 +124,23 @@ export function activatePlugins(slugs: string[]): void {
   if (slugs.length === 0) {
     return;
   }
-  wp(['plugin', 'activate', ...slugs]);
+  // Activate one at a time so that:
+  // 1. Each call finishes well within the 30-second WP-CLI timeout (a single
+  //    plugin activates in ~1 s; batching 30+ plugins in one call can exceed it).
+  // 2. Dependency order is respected — sort WooCommerce first so plugins that
+  //    depend on it (e.g. Kliken, Meta for WooCommerce) activate after it.
+  const sorted = [...slugs].sort((a, b) => {
+    if (a === 'woocommerce') return -1;
+    if (b === 'woocommerce') return 1;
+    return 0;
+  });
+  for (const slug of sorted) {
+    try {
+      wp(['plugin', 'activate', slug]);
+    } catch {
+      // Non-fatal during test teardown (e.g. plugin removed, dependency missing).
+    }
+  }
 }
 
 export function setOption(optionName: string, value: string): void {

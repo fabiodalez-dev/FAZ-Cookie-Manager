@@ -57,12 +57,14 @@
 				form.style.display = 'none';
 				if (notice) {
 					notice.className   = 'faz-dsar-notice success';
-					notice.textContent = res.data.message;
+					var msg = (res.data && typeof res.data === 'object') ? res.data.message : res.data;
+					notice.textContent = (typeof msg === 'string' && msg) ? msg : errMsg;
 				}
 			} else {
 				if (notice) {
 					notice.className   = 'faz-dsar-notice error';
-					notice.textContent = res.data || errMsg;
+					var errData = (res.data && typeof res.data === 'object') ? res.data.message : res.data;
+					notice.textContent = (typeof errData === 'string' && errData) ? errData : errMsg;
 				}
 				if (btn) { btn.disabled = false; }
 			}

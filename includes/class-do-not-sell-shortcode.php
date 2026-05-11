@@ -31,6 +31,45 @@ class Do_Not_Sell_Shortcode {
 		add_shortcode( 'faz_do_not_sell', array( $this, 'render' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
+		// Enqueue the submit handler unconditionally: page builders may inject
+		// shortcode HTML client-side, so has_shortcode() is unreliable.
+		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
+	}
+
+	/**
+	 * Enqueue DNSMPI assets on every frontend page.
+	 */
+	public function maybe_enqueue_assets() {
+		if ( is_admin() ) {
+			return;
+		}
+		$this->enqueue_dnsmpi_assets();
+	}
+
+	/**
+	 * Register and enqueue the DNSMPI form handler script.
+	 */
+	private function enqueue_dnsmpi_assets() {
+		if ( ! wp_script_is( 'faz-dnsmpi-form', 'registered' ) ) {
+			wp_register_script(
+				'faz-dnsmpi-form',
+				FAZ_PLUGIN_URL . 'frontend/js/faz-dnsmpi.js',
+				array(),
+				FAZ_VERSION,
+				true
+			);
+			wp_localize_script(
+				'faz-dnsmpi-form',
+				'fazDnsmpiConfig',
+				array(
+					'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
+					'successMsg' => __( 'Your opt-out request has been received. We will not sell your personal information.', 'faz-cookie-manager' ),
+					'errMsg'     => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
+					'netMsg'     => __( 'Network error. Please try again.', 'faz-cookie-manager' ),
+				)
+			);
+		}
+		wp_enqueue_script( 'faz-dnsmpi-form' );
 	}
 
 	/**
@@ -61,11 +100,12 @@ class Do_Not_Sell_Shortcode {
 		' );
 
 		$nonce = wp_create_nonce( self::AJAX_ACTION );
-		$id    = 'faz-dnsmpi-' . wp_rand( 1000, 9999 );
+
+		$this->enqueue_dnsmpi_assets();
 
 		ob_start();
 		?>
-		<div class="faz-dnsmpi-wrap" id="<?php echo esc_attr( $id ); ?>">
+		<div class="faz-dnsmpi-wrap">
 			<h3><?php echo esc_html( $atts['title'] ); ?></h3>
 
 			<?php if ( $already_opted_out ) : ?>
@@ -82,48 +122,6 @@ class Do_Not_Sell_Shortcode {
 				<div class="faz-dnsmpi-notice" style="display:none;"></div>
 			<?php endif; ?>
 		</div>
-
-		<script>
-		(function(){
-			var wrap = document.getElementById(<?php echo wp_json_encode( $id ); ?>);
-			if ( ! wrap ) return;
-			var form    = wrap.querySelector('.faz-dnsmpi-form');
-			var notice  = wrap.querySelector('.faz-dnsmpi-notice');
-			if ( ! form ) return;
-
-			form.addEventListener('submit', function(e){
-				e.preventDefault();
-				var btn = form.querySelector('button');
-				btn.disabled = true;
-				var data = new FormData(form);
-				fetch('<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>', {
-					method: 'POST',
-					credentials: 'same-origin',
-					body: data
-				})
-				.then(function(r){ return r.json(); })
-				.then(function(res){
-					form.style.display = 'none';
-					notice.style.display = 'block';
-					if ( res.success ) {
-						notice.className = 'faz-dnsmpi-notice success';
-						notice.textContent = res.data.message;
-					} else {
-						notice.className = 'faz-dnsmpi-notice error';
-						notice.textContent = res.data || <?php echo wp_json_encode( __( 'An error occurred. Please try again.', 'faz-cookie-manager' ) ); ?>;
-						btn.disabled = false;
-						form.style.display = 'block';
-					}
-				})
-				.catch(function(){
-					btn.disabled = false;
-					notice.className = 'faz-dnsmpi-notice error';
-					notice.textContent = <?php echo wp_json_encode( __( 'Network error. Please try again.', 'faz-cookie-manager' ) ); ?>;
-					notice.style.display = 'block';
-				});
-			});
-		})();
-		</script>
 		<?php
 		return ob_get_clean();
 	}
@@ -156,13 +154,16 @@ class Do_Not_Sell_Shortcode {
 		// Lock acquired — write durability transient, then process and release.
 		set_transient( $rl_key, 1, 60 );
 
-		$ip_hash = $this->hash_ip();
-		$this->log_optout( $ip_hash );
-		$this->set_optout_cookie();
-		$this->notify_admin( $ip_hash );
-
-		// Release DB lock; transient maintains the ongoing 60-second throttle.
-		delete_option( $lock_key );
+		try {
+			$ip_hash = $this->hash_ip();
+			$this->log_optout( $ip_hash );
+			$this->set_optout_cookie();
+			$this->notify_admin( $ip_hash );
+		} finally {
+			// Release DB lock regardless of success or exception; the transient
+			// maintains the ongoing 60-second throttle window.
+			delete_option( $lock_key );
+		}
 
 		wp_send_json_success(
 			array(

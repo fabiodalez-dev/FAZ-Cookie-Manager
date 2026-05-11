@@ -97,6 +97,7 @@ class Cookie extends Store {
 	 * @return void
 	 */
 	public function set_data( $data ) {
+		$this->decoded_meta = null;
 		if ( isset( $data->cookie_id ) ) {
 			$this->set_multi_item_data(
 				array(

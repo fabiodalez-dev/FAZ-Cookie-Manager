@@ -24,6 +24,9 @@ trait IP_Hasher {
 	 */
 	private function hash_ip() {
 		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+		if ( '' === $ip ) {
+			$ip = 'no-ip';
+		}
 		return hash_hmac( 'sha256', $ip, wp_salt( 'auth' ) );
 	}
 }

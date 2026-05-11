@@ -28,16 +28,23 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
   let altAssetWasEnabled = false;
 
   test.beforeAll(async () => {
-    const result = wpEval(`
-      $s = get_option( 'faz_settings', array() );
-      $was = ! empty( $s['banner_control']['alternative_asset_path'] );
-      if ( $was ) {
-        $s['banner_control']['alternative_asset_path'] = false;
-        update_option( 'faz_settings', $s );
+    try {
+      const result = wpEval(`
+        $s = get_option( 'faz_settings', array() );
+        $was = ! empty( $s['banner_control']['alternative_asset_path'] );
+        if ( $was ) {
+          $s['banner_control']['alternative_asset_path'] = false;
+          update_option( 'faz_settings', $s );
+        }
+        echo $was ? '1' : '0';
+      `).trim();
+      if (result !== '0' && result !== '1') {
+        throw new Error(`Unexpected wpEval result: ${JSON.stringify(result)}`);
       }
-      echo $was ? '1' : '0';
-    `).trim();
-    altAssetWasEnabled = result === '1';
+      altAssetWasEnabled = result === '1';
+    } catch (err) {
+      throw new Error(`beforeAll wpEval failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   });
 
   test.afterAll(async () => {

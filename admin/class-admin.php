@@ -1302,7 +1302,10 @@ class Admin {
 		add_filter(
 			'rest_pre_serve_request',
 			function ( $served, $result, $request ) {
-				if ( 0 === strpos( $request->get_route(), '/faz/v1' ) ) {
+				$route = $request->get_route();
+				// Exclude /faz/v1/banner/* — those routes set their own
+				// Cache-Control: public, max-age=300 for CDN caching.
+				if ( 0 === strpos( $route, '/faz/v1' ) && 0 !== strpos( $route, '/faz/v1/banner' ) ) {
 					header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 					header( 'Pragma: no-cache' );
 					header( 'X-LiteSpeed-Cache-Control: no-cache' );

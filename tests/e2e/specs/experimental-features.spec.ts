@@ -43,6 +43,12 @@ function clearRateLimitTransients(): void {
   wpEval(`
     global $wpdb;
     $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_faz_dsar_rl_%' OR option_name LIKE '_transient_faz_dnsmpi_rl_%'" );
+    // Also evict from object-cache backends (Redis/Memcached) if active.
+    if ( function_exists( 'wp_cache_flush_group' ) ) {
+      wp_cache_flush_group( 'transient' );
+    } elseif ( function_exists( 'wp_cache_flush' ) ) {
+      wp_cache_flush();
+    }
   `);
 }
 
@@ -65,6 +71,7 @@ test.beforeAll(() => {
 test.afterAll(() => {
   deleteDsarPosts();
   clearOptoutLogs();
+  clearRateLimitTransients();
 });
 
 // ─── [faz_do_not_sell] ───────────────────────────────────────────────────────
@@ -75,9 +82,10 @@ test.describe('[faz_do_not_sell] CCPA opt-out form', () => {
   // Also clear any stale rate-limit transients so submission tests don't block each other.
   test.beforeEach(async ({ page }) => {
     clearRateLimitTransients();
+    const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
     await page.context().addCookies([{
       name:     'fazcookie-consent',
-      value:    'consentid%3Ae2e-ccpa-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A5',
+      value:    `consentid%3Ae2e-ccpa-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
       domain:   '127.0.0.1',
       path:     '/',
       sameSite: 'Lax',
@@ -215,9 +223,10 @@ test.describe('[faz_dsar_form] GDPR DSAR form', () => {
   // Also clear any stale rate-limit transients so submission tests don't block each other.
   test.beforeEach(async ({ page }) => {
     clearRateLimitTransients();
+    const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
     await page.context().addCookies([{
       name:     'fazcookie-consent',
-      value:    'consentid%3Ae2e-dsar-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A5',
+      value:    `consentid%3Ae2e-dsar-test%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
       domain:   '127.0.0.1',
       path:     '/',
       sameSite: 'Lax',

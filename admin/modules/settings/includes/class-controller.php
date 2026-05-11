@@ -80,13 +80,11 @@ class Controller {
 	 * @return array
 	 */
 	public function prepare_data() {
-		$settings = new Settings();
 		$data     = array();
 		$item     = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->get_active_item();
 		$banner   = new \FazCookie\Admin\Modules\Banners\Includes\Banner( $item );
 		/** General Settings */
 		$data['settings']   = array(
-			'plan'       => $settings->get_plan(),
 			'domain'     => home_url(),
 			'consentLog' => array(
 				'status' => true,
@@ -224,40 +222,6 @@ class Controller {
 				'name'  => '',
 				'email' => '',
 			),
-			'plan'           => array(
-				'id'          => '',
-				'slug'        => 'ultimate',
-				'name'        => 'Ultimate',
-				'currency'    => 'USD',
-				'description' => __( 'Ultimate Plan (Local)', 'faz-cookie-manager' ),
-				'scan_limit'  => '10000',
-				'log_limit'   => 100000,
-				'features'    => array(
-					'multi_law'                     => true,
-					'custom_css'                    => true,
-					'custom_branding'               => true,
-					'config_geo_rules'              => true,
-					'max_free_websites'             => 999,
-					'remove_powered_by'             => true,
-					'popup_layout'                  => true,
-					'schedule_scan'                 => true,
-					'static_ip_scan'                => true,
-					'respect_gpc'                   => true,
-					'hide_banner_on_specific_pages' => true,
-					'iab'                           => true,
-					'gacm_support'                  => true,
-					'revisit_custom_branding'       => true,
-					'scan_behind_login'             => true,
-					'subdomain_consent_sharing'     => true,
-					'multi_user_management'         => true,
-					'gcm_support'                   => true,
-					'policy_generators'             => true,
-					'renew_user_consent'            => true,
-					'do_not_track_support'          => true,
-					'automatic_cookie_blocking'     => true,
-					'advanced_customisation'        => true,
-				),
-			),
 			'banners'        => array(
 				'status'          => \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->check_status(),
 				'laws'            => 'gdpr',
@@ -288,28 +252,6 @@ class Controller {
 				'limit'    => 0,
 				'exceeded' => false,
 				'ends_at'  => '',
-			),
-			'website'        => array(
-				'status'               => 'active',
-				'is_trial'             => false,
-				'isInOptoutTrial'      => false,
-				'isInReverseTrial'     => false,
-				'isInOptinTrial'       => false,
-				'is_trial_experiment'  => false,
-				'trial_ends_at'        => '',
-				'ends_in'              => 0,
-				'is_trial_with_card'   => false,
-				'grace_period_ends_at' => '',
-				'payment_status'       => true,
-				'hasPaymentMethod'     => true,
-				'selected_plan'        => 'ultimate',
-				'canStartOptoutTrial'  => false,
-			),
-			'overage'        => array(
-				'applicable'         => false,
-				'enabled'            => false,
-				'is_after_rollout'   => false,
-				'overage_view_count' => 0,
 			),
 		);
 	}

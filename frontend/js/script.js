@@ -744,12 +744,18 @@ function _fazRegisterListeners() {
     _fazAttachListener("=revisit-consent", () => _revisitFazConsent());
     _fazAttachListener("=optout-close", () => _fazHidePreferenceCenter());
 
-    // Escape key closes the preference center / optout popup.
+    // Escape key closes the preference center / optout popup, or the banner
+    // itself when focus is inside it (keyboard accessibility requirement).
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         var pref = _fazGetPreferenceCenter();
         if (pref && pref.classList.contains(_fazGetPreferenceClass())) {
             _fazHidePreferenceCenter();
+            return;
+        }
+        var banner = _fazGetBanner();
+        if (banner && banner.contains(document.activeElement)) {
+            _fazHideBanner();
         }
     });
 }
@@ -1421,6 +1427,9 @@ function _fazAcceptCookies(choice = "all") {
     // Age gate check (GDPR Art. 8): only on accept/partial, never on reject.
     if (choice !== 'reject' && _fazStore._ageGate && _fazStore._ageGate.enabled) {
         if (!sessionStorage.getItem('faz_age_verified')) {
+            // Write an intermediate cookie so callers can detect that consent
+            // is pending age verification (action is set but not finalised).
+            ref._fazSetInStore('action', 'age-gate');
             _fazShowAgeGate(choice);
             return false;
         }
@@ -2520,42 +2529,48 @@ function _fazAfterConsent() {
 
     // Best-effort cleanup of IndexedDB databases and Cache Storage entries
     // that belong to blocked tracking providers (e.g. Mixpanel, PWA trackers).
-    // Both APIs are async and non-blocking; failures are silently swallowed.
+    // Returns a Promise so callers can await completion before reloading.
     // Note: _fazExtractEndpoint is scoped inside _fazNetworkInterceptors, so we
     // use a local helper that mirrors its normalisation logic.
-    (function _fazCleanupStorageAPIs() {
+    var _storageCleanupPromise = (function _fazCleanupStorageAPIs() {
         function _fazHostFromString(s) {
             try {
                 var url = (s.indexOf('://') === -1) ? 'https://' + s : s.replace(/^wss?:\/\//i, 'https://');
                 return _fazCleanHostName(new URL(url).hostname);
             } catch (e) { return ''; }
         }
+        var cleanupTasks = [];
         // IndexedDB: supported in all modern browsers; `databases()` returns a
         // list of {name, version} objects. Names are app-specific (not always
         // domain-based), so this catches well-known patterns only.
         if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
-            indexedDB.databases().then(function (dbs) {
-                dbs.forEach(function (db) {
-                    if (!db || !db.name) return;
-                    var ep = _fazHostFromString(db.name);
-                    if (ep && _fazShouldBlockProvider(ep)) {
-                        indexedDB.deleteDatabase(db.name);
-                    }
-                });
-            }).catch(function () {});
+            cleanupTasks.push(
+                indexedDB.databases().then(function (dbs) {
+                    dbs.forEach(function (db) {
+                        if (!db || !db.name) return;
+                        var ep = _fazHostFromString(db.name);
+                        if (ep && _fazShouldBlockProvider(ep)) {
+                            indexedDB.deleteDatabase(db.name);
+                        }
+                    });
+                }).catch(function () {})
+            );
         }
         // Cache Storage (Service Worker caches): cache names are arbitrary strings
         // set by the SW; we try to match them against the provider list.
         if (typeof caches !== 'undefined' && typeof caches.keys === 'function') {
-            caches.keys().then(function (names) {
-                names.forEach(function (name) {
-                    var ep = _fazHostFromString(name);
-                    if (ep && _fazShouldBlockProvider(ep)) {
-                        caches.delete(name);
-                    }
-                });
-            }).catch(function () {});
+            cleanupTasks.push(
+                caches.keys().then(function (names) {
+                    names.forEach(function (name) {
+                        var ep = _fazHostFromString(name);
+                        if (ep && _fazShouldBlockProvider(ep)) {
+                            caches.delete(name);
+                        }
+                    });
+                }).catch(function () {})
+            );
         }
+        return Promise.all(cleanupTasks);
     })();
 
     // Detect category revocation: executed JavaScript cannot be unloaded,
@@ -2574,7 +2589,7 @@ function _fazAfterConsent() {
     _fazUnblockServerSide();
 
     if (svcRevoked || revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
-        window.location.reload();
+        _storageCleanupPromise.then(function() { window.location.reload(); });
         return;
     }
 
@@ -2613,6 +2628,9 @@ function _fazAfterConsent() {
             });
         }
     }
+
+    // Reset snapshot so the next consent action starts with a clean diff.
+    _fazCategoriesBeforeConsent = null;
 }
 
 /**
@@ -2731,6 +2749,8 @@ function _fazCleanupRevokedCookies() {
             for (var si = 0; si < storage.length; si++) {
                 var key = storage.key(si);
                 if (!key) continue;
+                // Never shred internal plugin session keys regardless of user-defined patterns.
+                if (key === 'faz_age_verified') continue;
                 if (_fazIsCookieWhitelisted(key)) continue;
                 var del = false;
                 if (hasCategoryMap) {
@@ -3458,9 +3478,11 @@ window._fazAcceptCategory = function (categorySlug) {
             _fazCategoriesBeforeConsent.push(_preCats[_pi].slug);
         }
     }
+    var categorySlugToRollback = null;
     for (const cat of _fazStore._categories) {
         if (cat.slug === categorySlug && !cat.isNecessary) {
             matched = true;
+            categorySlugToRollback = cat.slug;
             ref._fazSetInStore(cat.slug, "yes");
             // Sync checkbox so _fazAcceptCookies("custom") reads the correct state.
             var cb = document.getElementById("fazSwitch" + cat.slug);
@@ -3477,7 +3499,20 @@ window._fazAcceptCategory = function (categorySlug) {
         _fazCategoriesBeforeConsent = null;
         return;
     }
-    _fazAcceptCookies("custom");
+    if (_fazAcceptCookies("custom") === false) {
+        // Age gate blocked the accept — rollback store and UI to original state.
+        if (categorySlugToRollback) {
+            ref._fazSetInStore(categorySlugToRollback, "no");
+            var cbR = document.getElementById("fazSwitch" + categorySlugToRollback);
+            if (cbR) cbR.checked = false;
+            var cbDirectR = document.getElementById("fazCategoryDirect" + categorySlugToRollback);
+            if (cbDirectR) cbDirectR.checked = false;
+            document.querySelectorAll('.faz-service-toggle[data-category="' + categorySlugToRollback + '"]')
+                .forEach(function(svcToggle) { svcToggle.checked = false; });
+        }
+        _fazCategoriesBeforeConsent = null;
+        return;
+    }
     _fazRemoveBanner();
     _fazHidePreferenceCenter();
     _fazAfterConsent();

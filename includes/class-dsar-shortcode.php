@@ -268,28 +268,37 @@ class DSAR_Shortcode {
 			wp_send_json_error( __( 'Your message is too long. Please limit it to 5,000 characters.', 'faz-cookie-manager' ) );
 		}
 
-		// Rate limiting: one submission per IP per 60 seconds — checked after all
-		// input validation so an invalid payload doesn't consume the user's token.
-		// wp_cache_add is atomic on persistent object caches (Redis/Memcached);
-		// the transient provides durability across PHP workers on non-cached installs.
-		$rl_key = 'faz_dsar_rl_' . substr( $this->hash_ip(), 0, 16 );
-		if ( false !== get_transient( $rl_key ) || ! wp_cache_add( $rl_key, 1, 'faz_rate_limit', 60 ) ) {
-			wp_send_json_error( __( 'Too many requests. Please wait before submitting again.', 'faz-cookie-manager' ) );
-		}
-		set_transient( $rl_key, 1, 60 );
+		// Rate limiting: atomic DB-backed lock via add_option (MySQL INSERT IGNORE),
+		// plus a transient for the 60-second durability window. On installs without
+		// a persistent object cache (the majority), wp_cache_add is not inter-process
+		// atomic, so add_option is required to prevent concurrent bypass.
+		$rl_key   = 'faz_dsar_rl_'   . substr( $this->hash_ip(), 0, 16 );
+		$lock_key = 'faz_dsar_lock_' . substr( $this->hash_ip(), 0, 16 );
 
-		$post_id = $this->store_request( $name, $email, $type, $message );
-		if ( ! $post_id ) {
-			// DB error — roll back the IP rate-limit so the user can retry immediately.
-			delete_transient( $rl_key );
-			wp_cache_delete( $rl_key, 'faz_rate_limit' );
-			wp_send_json_error( __( 'We could not record your request due to a server error. Please try again.', 'faz-cookie-manager' ) );
+		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+			wp_send_json_error( __( 'Too many requests. Please wait before submitting again.', 'faz-cookie-manager' ) );
 			return;
 		}
+		// Lock acquired — write durability transient, then process and release.
+		set_transient( $rl_key, 1, 60 );
 
-		set_transient( $email_rl_key, 1, HOUR_IN_SECONDS );
-		$this->notify_admin( $name, $email, $type, $message, $post_id, $admin_email );
-		$this->send_confirmation( $name, $email, $type );
+		try {
+			$post_id = $this->store_request( $name, $email, $type, $message );
+			if ( ! $post_id ) {
+				// DB error — roll back rate-limit so the user can retry immediately.
+				delete_transient( $rl_key );
+				wp_send_json_error( __( 'We could not record your request due to a server error. Please try again.', 'faz-cookie-manager' ) );
+				return;
+			}
+
+			set_transient( $email_rl_key, 1, HOUR_IN_SECONDS );
+			$this->notify_admin( $name, $email, $type, $message, $post_id, $admin_email );
+			$this->send_confirmation( $name, $email, $type );
+		} finally {
+			// Release DB lock regardless of success or exception; the transient
+			// maintains the ongoing 60-second throttle window.
+			delete_option( $lock_key );
+		}
 
 		wp_send_json_success(
 			array(
@@ -370,15 +379,16 @@ class DSAR_Shortcode {
 			);
 		}
 
-		// Strip CRLF and angle brackets to prevent SMTP header injection.
-		$safe_name = str_replace( array( "\r", "\n", '<', '>', '"' ), '', $name );
+		// Strip CRLF and angle brackets to prevent SMTP header injection via name or email.
+		$safe_name  = str_replace( array( "\r", "\n", '<', '>', '"' ), '', $name );
+		$safe_email = str_replace( array( "\r", "\n" ), '', $email );
 
 		wp_mail(
 			$admin_email,
 			/* translators: 1: site name, 2: request type */
 			sprintf( __( '[%1$s] Data Subject Request: %2$s', 'faz-cookie-manager' ), $site_name, $type_label ),
 			$body,
-			array( 'Reply-To: ' . $safe_name . ' <' . $email . '>' )
+			array( 'Reply-To: ' . $safe_name . ' <' . $safe_email . '>' )
 		);
 	}
 
