@@ -3224,7 +3224,7 @@ class Frontend {
 			return true;
 		}
 		// Shortcode-specific handles that don't carry the plugin-name prefix.
-		if ( 'faz-dsar-form' === $handle ) {
+		if ( 'faz-dsar-form' === $handle || 'faz-dnsmpi-form' === $handle ) {
 			return true;
 		}
 		return false;

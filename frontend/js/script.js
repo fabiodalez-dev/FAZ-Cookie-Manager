@@ -372,7 +372,16 @@ function _fazInitOperations() {
     // #faz-consent exists in the DOM when CSS custom properties are set.
     _fazAttachShortCodeStyles();
     _fazSetShowMoreLess();
-    if (!ref._fazGetFromStore("action") || _fazPreviewEnabled()) {
+    // Defensive: a prior buggy build wrote action:age-gate into the persistent
+    // fazcookie-consent cookie before the visitor had actually consented.
+    // Treat that residual value as "no consent yet" so the banner re-appears
+    // for these users on the next visit instead of being suppressed for the
+    // remainder of the 180-day cookie TTL.
+    var _fazStoredAction = ref._fazGetFromStore("action");
+    if (_fazStoredAction === 'age-gate') {
+        _fazStoredAction = null;
+    }
+    if (!_fazStoredAction || _fazPreviewEnabled()) {
         _fazShowBanner();
         _fazSetInitialState();
         // Do NOT call _fazSetConsentID() here — the consentid is a stable
@@ -1427,9 +1436,15 @@ function _fazAcceptCookies(choice = "all") {
     // Age gate check (GDPR Art. 8): only on accept/partial, never on reject.
     if (choice !== 'reject' && _fazStore._ageGate && _fazStore._ageGate.enabled) {
         if (!sessionStorage.getItem('faz_age_verified')) {
-            // Write an intermediate cookie so callers can detect that consent
-            // is pending age verification (action is set but not finalised).
-            ref._fazSetInStore('action', 'age-gate');
+            // Use sessionStorage (not the persistent fazcookie-consent cookie)
+            // to flag that age verification is in progress. Writing
+            // action:age-gate to the 180-day cookie before the user has
+            // actually consented would persist across reloads — if the visitor
+            // abandoned the modal, the bootstrap "action exists, skip banner"
+            // check would suppress the banner forever. sessionStorage is
+            // scoped to the current tab/session, so abandoning the gate has
+            // no lingering effect.
+            try { sessionStorage.setItem('faz_age_gate_pending', '1'); } catch (e) {}
             _fazShowAgeGate(choice);
             return false;
         }

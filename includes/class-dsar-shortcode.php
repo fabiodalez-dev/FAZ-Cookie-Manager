@@ -287,6 +287,12 @@ class DSAR_Shortcode {
 			if ( ! $post_id ) {
 				// DB error — roll back rate-limit so the user can retry immediately.
 				delete_transient( $rl_key );
+				// Release the DB lock BEFORE wp_send_json_error(): wp_send_json_error()
+				// calls wp_die() which calls exit(), and PHP `finally` blocks are NOT
+				// executed when exit() terminates the script. Without this explicit
+				// release, the lock would persist until manual admin intervention,
+				// permanently locking out the originating IP from future submissions.
+				delete_option( $lock_key );
 				wp_send_json_error( __( 'We could not record your request due to a server error. Please try again.', 'faz-cookie-manager' ) );
 				return;
 			}
