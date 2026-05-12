@@ -391,7 +391,7 @@ Supported request types: Right of Access (Art. 15), Right to Erasure (Art. 17), 
 |-----------|---------|-------------|
 | `button` | `Send Request` | Submit button label |
 
-```
+```text
 [faz_dsar_form button="Send Request"]
 ```
 

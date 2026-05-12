@@ -2571,13 +2571,24 @@ function _fazAfterConsent() {
         if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
             cleanupTasks.push(
                 indexedDB.databases().then(function (dbs) {
+                    var dbDeleteTasks = [];
                     dbs.forEach(function (db) {
                         if (!db || !db.name) return;
                         var ep = _fazHostFromString(db.name);
                         if (ep && _fazShouldBlockProvider(ep)) {
-                            indexedDB.deleteDatabase(db.name);
+                            dbDeleteTasks.push(new Promise(function (resolve) {
+                                try {
+                                    var req = indexedDB.deleteDatabase(db.name);
+                                    req.onsuccess = resolve;
+                                    req.onerror = resolve;
+                                    req.onblocked = resolve;
+                                } catch (e) {
+                                    resolve();
+                                }
+                            }));
                         }
                     });
+                    return Promise.all(dbDeleteTasks);
                 }).catch(function () {})
             );
         }
@@ -2586,12 +2597,14 @@ function _fazAfterConsent() {
         if (typeof caches !== 'undefined' && typeof caches.keys === 'function') {
             cleanupTasks.push(
                 caches.keys().then(function (names) {
+                    var cacheDeleteTasks = [];
                     names.forEach(function (name) {
                         var ep = _fazHostFromString(name);
                         if (ep && _fazShouldBlockProvider(ep)) {
-                            caches.delete(name);
+                            cacheDeleteTasks.push(caches.delete(name).catch(function () {}));
                         }
                     });
+                    return Promise.all(cacheDeleteTasks);
                 }).catch(function () {})
             );
         }
@@ -2880,10 +2893,32 @@ function _fazFindCheckBoxValue(id = "") {
     const elementsToCheck = id
         ? [`fazSwitch`, `fazCategoryDirect`]
         : [`fazCCPAOptOut`];
-    return elementsToCheck.some((key) => {
-        const checkBox = document.getElementById(`${key}${id}`);
-        return checkBox && checkBox.checked;
-    });
+    const anyExist = elementsToCheck.some((key) => document.getElementById(`${key}${id}`));
+    if (anyExist) {
+        return elementsToCheck.some((key) => {
+            const checkBox = document.getElementById(`${key}${id}`);
+            return checkBox && checkBox.checked;
+        });
+    }
+    // Fallback when the banner / preference center are NOT rendered (e.g.,
+    // _fazAcceptCategory() invoked programmatically from a click-to-consent
+    // iframe placeholder while the visitor already has consent:yes,action:yes).
+    // In that path no checkboxes exist in the DOM, so without a fallback the
+    // previous code collapsed every category back to `no` regardless of what
+    // _fazAcceptCategory had just written to the store — silently undoing the
+    // API call.
+    //
+    // Two distinct fallbacks based on the call site:
+    //   - id !== "" (GDPR category check, line ~1497): read the current store
+    //     state for that category slug.
+    //   - id === "" (CCPA opt-out check, lines 448 / 1477 / 1488): read the
+    //     current `consent` store value — semantically that's whether the
+    //     visitor has consented to sale of personal data, which is what the
+    //     CCPA opt-out checkbox represents when present.
+    if (id) {
+        return ref._fazGetFromStore && ref._fazGetFromStore(id) === "yes";
+    }
+    return !!(ref._fazGetFromStore && ref._fazGetFromStore("consent") === "yes");
 }
 
 function _fazAddPlaceholder(htmlElm, uniqueID) {
