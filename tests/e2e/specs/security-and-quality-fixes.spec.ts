@@ -49,6 +49,12 @@ function clearRateLimitTransients(): void {
   wpEval(`
     global $wpdb;
     $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_faz_dsar_rl_%' OR option_name LIKE '_transient_faz_dnsmpi_rl_%'");
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'faz_dsar_lock_%' OR option_name LIKE 'faz_dnsmpi_lock_%'");
+    if ( function_exists( 'wp_cache_flush_group' ) ) {
+      wp_cache_flush_group( 'transient' );
+    } elseif ( function_exists( 'wp_cache_flush' ) ) {
+      wp_cache_flush();
+    }
   `);
 }
 

@@ -638,23 +638,23 @@ test.describe('Per-cookie opt-in/out consent scripts', () => {
     await updateCookie(adminPage, nonce, baseURL, testCookieId, {
       opt_in_script: "INVALID SYNTAX {{{{{{",
     });
+    try {
+      await page.context().clearCookies();
+      await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
 
-    await page.context().clearCookies();
-    await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+      // Should not throw — consent should complete normally.
+      await acceptAll(page);
+      await waitForConsentCookie(page);
 
-    // Should not throw — consent should complete normally.
-    await acceptAll(page);
-    await waitForConsentCookie(page);
-
-    // Banner should be gone (consent was recorded despite script error).
-    const banner = page.locator('[data-faz-tag="notice"]');
-    const bannerVisible = await banner.isVisible().catch(() => false);
-    expect(bannerVisible, 'banner should be hidden after accept despite script error').toBe(false);
-
-    // Restore working script.
-    await updateCookie(adminPage, nonce, baseURL, testCookieId, {
-      opt_in_script: "window._fazE2EOptIn = (window._fazE2EOptIn || 0) + 1;",
-    });
+      // Banner should be gone (consent was recorded despite script error).
+      const banner = page.locator('[data-faz-tag="notice"]');
+      const bannerVisible = await banner.isVisible().catch(() => false);
+      expect(bannerVisible, 'banner should be hidden after accept despite script error').toBe(false);
+    } finally {
+      await updateCookie(adminPage, nonce, baseURL, testCookieId, {
+        opt_in_script: "window._fazE2EOptIn = (window._fazE2EOptIn || 0) + 1;",
+      });
+    }
   });
 
   // ── Admin UI ───────────────────────────────────────────────────────────

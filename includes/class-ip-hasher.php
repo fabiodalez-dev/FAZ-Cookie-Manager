@@ -24,7 +24,7 @@ trait IP_Hasher {
 	 */
 	private function hash_ip() {
 		$ip = \faz_resolve_client_ip();
-		if ( '' === $ip ) {
+		if ( empty( $ip ) ) {
 			// Group missing-IP requests intentionally without hashing an empty string.
 			$ip = 'no-ip';
 		}

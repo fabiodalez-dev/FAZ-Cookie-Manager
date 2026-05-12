@@ -266,11 +266,11 @@ test.describe('Regression checks for applied bug fixes', () => {
       try {
         const page = await ctx.newPage();
 
-        // Route a localhost URL that contains the Facebook provider pattern in its path.
-        // FAZ's network interceptor uses substring matching, so this will be detected.
+        // Route a real provider host. The route should never be hit when FAZ
+        // blocks sendBeacon by provider host before the request reaches network.
         let beaconReachedNetwork = false;
-        const beaconUrl = `${wpBaseURL}/faz-regression-beacon/connect.facebook.net/en_US/fbevents.js`;
-        await page.route('**/faz-regression-beacon/**', (route) => {
+        const beaconUrl = 'https://connect.facebook.net/en_US/fbevents.js';
+        await page.route('https://connect.facebook.net/**', (route) => {
           beaconReachedNetwork = true;
           route.abort();
         });

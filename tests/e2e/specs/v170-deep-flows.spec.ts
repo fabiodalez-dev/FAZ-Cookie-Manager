@@ -176,7 +176,7 @@ test.describe.serial('v1.7.0 deep flows', () => {
 
     const rules = page.locator('#faz-custom-rules-body tr');
     // Wait for the custom-rules AJAX to settle before counting baseline.
-    await page.locator('#faz-custom-rules-body').waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+    await page.locator('#faz-custom-rules-body').waitFor({ state: 'visible', timeout: 10_000 });
     const initialCount = await rules.count();
 
     await googleAnalyticsCard.click();

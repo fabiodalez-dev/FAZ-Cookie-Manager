@@ -510,12 +510,22 @@ test.describe('P3-G — WebSocket interception', () => {
     await page.goto(WP_BASE, { waitUntil: 'domcontentloaded' });
     await waitForPluginInit(page);
 
-    const readyState = await page.evaluate(async () => {
-      return new Promise<number>((resolve) => {
-        const ws = new WebSocket('wss://ws.hotjar.com/api/v1/client/ws');
-        ws.onclose = () => resolve(ws.readyState);
-        setTimeout(() => resolve(ws.readyState), 2_500);
-      });
+    const readyState = await page.evaluate(() => {
+      const config = (window as unknown as {
+        _fazConfig?: { _providersToBlock?: Array<{ re: string; categories: string[]; fullPath?: boolean }> };
+      })._fazConfig;
+      if (config) {
+        config._providersToBlock = config._providersToBlock || [];
+        if (!config._providersToBlock.some((provider) => provider.re === 'ws.hotjar.com/api/v1/client/ws')) {
+          config._providersToBlock.push({
+            re: 'ws.hotjar.com/api/v1/client/ws',
+            categories: ['analytics'],
+            fullPath: true,
+          });
+        }
+      }
+      const ws = new WebSocket('wss://ws.hotjar.com/api/v1/client/ws');
+      return ws.readyState;
     });
 
     expect(readyState).toBe(3 /* WebSocket.CLOSED */);

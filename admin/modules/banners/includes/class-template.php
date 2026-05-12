@@ -438,7 +438,7 @@ class Template {
 				// constitutes a recognised dark pattern (ambiguità multipla scelta).
 				if ( 'close-button' === $tag ) {
 					$reject_cfg     = faz_array_search( $configs, 'tag', 'reject-button' );
-					$reject_enabled = ! $reject_cfg || ! isset( $reject_cfg['status'] ) || true === $reject_cfg['status'];
+					$reject_enabled = $reject_cfg && isset( $reject_cfg['status'] ) && true === $reject_cfg['status'];
 					if ( $reject_enabled ) {
 						$element->parentNode->removeChild( $element ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
 						continue;

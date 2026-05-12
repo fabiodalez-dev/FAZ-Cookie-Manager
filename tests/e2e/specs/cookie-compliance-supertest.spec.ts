@@ -319,7 +319,7 @@ test.describe.serial('Cookie compliance supertest', () => {
     const currentActive = listActivePlugins();
     const toActivate = initialActivePlugins.filter((slug) => !currentActive.includes(slug));
     if (toActivate.length > 0) {
-      activatePlugins(toActivate);
+      activatePlugins(toActivate, { tolerateFailures: true });
     }
     deactivatePluginsExcept(initialActivePlugins);
   });

@@ -78,7 +78,7 @@
 				form.style.display = 'none';
 				if (notice) {
 					notice.className   = 'faz-dsar-notice success';
-					notice.textContent = payloadMessage || errMsg;
+					notice.textContent = payloadMessage || config.successMsg || 'Request sent successfully.';
 				}
 			} else {
 				if (notice) {

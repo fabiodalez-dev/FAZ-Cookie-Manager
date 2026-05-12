@@ -379,7 +379,10 @@ class Cookies_API extends API_Controller {
 	 * API (see WP_REST_Posts_Controller::sanitize_post_statuses).
 	 *
 	 * @param mixed $value Raw input value.
+	 * @param WP_REST_Request $request Request object required by the REST API signature.
+	 * @param string $param Parameter name required by the REST API signature.
 	 * @return string|WP_Error
+	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
 	 */
 	public static function sanitize_script_field( $value, $request, $param ) {
 		// Allow saves with empty script fields regardless of capability. The

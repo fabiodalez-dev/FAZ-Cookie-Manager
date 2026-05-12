@@ -287,7 +287,7 @@ test.describe('Blocking compliance coverage', () => {
 
   test.afterAll(async () => {
     if (deactivatedPlugins.length > 0) {
-      activatePlugins(deactivatedPlugins);
+      activatePlugins(deactivatedPlugins, { tolerateFailures: true });
     }
   });
 

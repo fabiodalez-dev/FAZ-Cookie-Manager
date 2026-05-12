@@ -321,7 +321,7 @@ test.describe('Provider matrix scan and blocking', () => {
     const toActivate = initialActivePlugins.filter((slug) => !currentlyActive.has(slug));
     const toDeactivate = [...currentlyActive].filter((slug) => !initialActivePlugins.includes(slug));
     if (toActivate.length > 0) {
-      activatePlugins(toActivate);
+      activatePlugins(toActivate, { tolerateFailures: true });
     }
     if (toDeactivate.length > 0) {
       deactivatePluginsExcept(initialActivePlugins);

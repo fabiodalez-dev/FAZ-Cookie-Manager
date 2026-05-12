@@ -380,6 +380,7 @@ function _fazInitOperations() {
     var _fazStoredAction = ref._fazGetFromStore("action");
     if (_fazStoredAction === 'age-gate') {
         _fazStoredAction = null;
+        ref._fazConsentStore.set("action", "");
     }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
         _fazShowBanner();

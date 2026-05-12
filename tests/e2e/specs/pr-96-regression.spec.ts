@@ -154,8 +154,9 @@ function clearRateLimitState(): void {
 }
 
 /** Seed a consent cookie that skips the banner without accepting any optional category. */
-async function seedConsentAllNo(page: Page): Promise<void> {
+async function seedConsentAllNo(page: Page, baseURL = WP_BASE): Promise<void> {
   const rev = parseInt(wpEval("echo faz_get_consent_revision();").trim(), 10) || 1;
+  const domain = new URL(baseURL).hostname;
   await page.context().addCookies([
     {
       name: 'fazcookie-consent',
@@ -163,7 +164,7 @@ async function seedConsentAllNo(page: Page): Promise<void> {
         `consentid%3Ae2e-pr96-no%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes` +
         `%2Cfunctional%3Ano%2Canalytics%3Ano%2Cperformance%3Ano` +
         `%2Cuncategorized%3Ano%2Cmarketing%3Ano%2Crev%3A${rev}`,
-      domain: '127.0.0.1',
+      domain,
       path: '/',
       sameSite: 'Lax',
     },
@@ -171,11 +172,12 @@ async function seedConsentAllNo(page: Page): Promise<void> {
 }
 
 /** Seed a consent cookie that accepts everything (banner bypassed). */
-async function seedConsentAllYes(page: Page): Promise<void> {
+async function seedConsentAllYes(page: Page, baseURL = WP_BASE): Promise<void> {
   // Read the server-side consent revision so PHP's stale-cookie check does not
   // delete the cookie we inject (faz_maybe_invalidate_stale_consent_cookie runs
   // on every 'init' and deletes any cookie whose rev < server revision).
   const rev = parseInt(wpEval("echo faz_get_consent_revision();").trim(), 10) || 1;
+  const domain = new URL(baseURL).hostname;
   await page.context().addCookies([
     {
       name: 'fazcookie-consent',
@@ -183,7 +185,7 @@ async function seedConsentAllYes(page: Page): Promise<void> {
         `consentid%3Ae2e-pr96-yes%2Cconsent%3Ayes%2Caction%3Ayes%2Cnecessary%3Ayes` +
         `%2Cfunctional%3Ayes%2Canalytics%3Ayes%2Cperformance%3Ayes` +
         `%2Cuncategorized%3Ayes%2Cmarketing%3Ayes%2Crev%3A${rev}`,
-      domain: '127.0.0.1',
+      domain,
       path: '/',
       sameSite: 'Lax',
     },

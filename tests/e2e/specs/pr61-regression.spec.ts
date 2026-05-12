@@ -274,7 +274,7 @@ function captureRuntimeErrors(page: Page) {
 
 function restorePlugins(originalActive: string[]) {
 	deactivatePluginsExcept(originalActive);
-	activatePlugins(originalActive);
+	activatePlugins(originalActive, { tolerateFailures: true });
 }
 
 test.describe.serial('PR #61 regressions', () => {

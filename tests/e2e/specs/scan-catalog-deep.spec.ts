@@ -311,7 +311,7 @@ test.describe('Deep scan and catalog flows', () => {
     // beforeAll budget so cleanup always completes.
     test.setTimeout(180_000);
     if (deactivatedPlugins.length > 0) {
-      activatePlugins(deactivatedPlugins);
+      activatePlugins(deactivatedPlugins, { tolerateFailures: true });
     }
     disableLabFlags();
     resetScanState();

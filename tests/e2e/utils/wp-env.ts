@@ -120,7 +120,8 @@ export function deactivatePluginsExcept(allowedSlugs: string[]): void {
   }
 }
 
-export function activatePlugins(slugs: string[]): void {
+export function activatePlugins(slugs: string[], options: { tolerateFailures?: boolean } = {}): void {
+  const tolerateFailures = options.tolerateFailures ?? false;
   if (slugs.length === 0) {
     return;
   }
@@ -137,8 +138,12 @@ export function activatePlugins(slugs: string[]): void {
   for (const slug of sorted) {
     try {
       wp(['plugin', 'activate', slug]);
-    } catch {
-      // Non-fatal during test teardown (e.g. plugin removed, dependency missing).
+    } catch (error) {
+      const message = error instanceof Error ? error.stack || error.message : String(error);
+      console.error(`Failed to activate plugin "${slug}": ${message}`);
+      if (!tolerateFailures) {
+        throw error;
+      }
     }
   }
 }

@@ -373,6 +373,7 @@ class Category_Controller extends Base_Controller {
 		$this->delete_cache();
 		Cookie_Controller::get_instance()->delete_cache();
 		do_action( 'faz_after_update_cookie_category' );
+		do_action( 'faz_after_delete_cookie_category' );
 	}
 
 	/**

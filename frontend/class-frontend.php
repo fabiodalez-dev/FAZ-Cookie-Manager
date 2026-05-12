@@ -207,6 +207,7 @@ class Frontend {
 		add_action( 'faz_after_create_cookie', $invalidate_scripts_map );
 		add_action( 'faz_after_delete_cookie', $invalidate_scripts_map );
 		add_action( 'faz_after_update_cookie_category', $invalidate_scripts_map );
+		add_action( 'faz_after_delete_cookie_category', $invalidate_scripts_map );
 	}
 
 	/**
@@ -3224,8 +3225,10 @@ class Frontend {
 			return true;
 		}
 		// Shortcode-specific handles that don't carry the plugin-name prefix.
-		if ( 'faz-dsar-form' === $handle || 'faz-dnsmpi-form' === $handle ) {
-			return true;
+		foreach ( array( 'faz-dsar-form', 'faz-dnsmpi-form' ) as $owned_handle ) {
+			if ( $handle === $owned_handle || 0 === strpos( $handle, $owned_handle . '-' ) ) {
+				return true;
+			}
 		}
 		return false;
 	}

@@ -8,6 +8,25 @@
 (function () {
 	'use strict';
 
+	function getConfig() {
+		return window.fazDnsmpiConfig || {};
+	}
+
+	function normalizeMessage(payload, fallback) {
+		if (payload && typeof payload === 'object' && payload.message) {
+			return String(payload.message);
+		}
+		if (typeof payload === 'string' && payload) {
+			return payload;
+		}
+		if (payload && typeof payload === 'object') {
+			try {
+				return JSON.stringify(payload);
+			} catch (e) {}
+		}
+		return fallback || 'An error occurred. Please try again.';
+	}
+
 	function handleSubmit(e) {
 		var form = e.target;
 		if (!form || !form.classList.contains('faz-dnsmpi-form')) return;
@@ -20,8 +39,20 @@
 		if (btn) btn.disabled = true;
 		if (btn) btn.setAttribute('aria-busy', 'true');
 
+		var config = getConfig();
+		if (!config.ajaxUrl) {
+			if (btn) btn.disabled = false;
+			if (btn) btn.setAttribute('aria-busy', 'false');
+			if (notice) {
+				notice.className = 'faz-dnsmpi-notice error';
+				notice.textContent = normalizeMessage('', config.errMsg);
+				notice.style.display = 'block';
+			}
+			return;
+		}
+
 		var data = new FormData(form);
-		fetch(fazDnsmpiConfig.ajaxUrl, {
+		fetch(config.ajaxUrl, {
 			method: 'POST',
 			credentials: 'same-origin',
 			body: data,
@@ -33,13 +64,13 @@
 					if (res.success) {
 						notice.className = 'faz-dnsmpi-notice success';
 						notice.textContent =
-							res.data && res.data.message ? res.data.message : fazDnsmpiConfig.successMsg;
+							normalizeMessage(res.data, config.successMsg || 'Request submitted successfully.');
 						form.style.display = 'none';
 						notice.tabIndex = -1;
 						notice.focus();
 					} else {
 						notice.className = 'faz-dnsmpi-notice error';
-						notice.textContent = res.data || fazDnsmpiConfig.errMsg;
+						notice.textContent = normalizeMessage(res.data, config.errMsg);
 						form.style.display = 'block';
 						if (btn) btn.disabled = false;
 						if (btn) btn.setAttribute('aria-busy', 'false');
@@ -52,7 +83,7 @@
 				form.style.display = 'block';
 				if (notice) {
 					notice.className = 'faz-dnsmpi-notice error';
-					notice.textContent = fazDnsmpiConfig.netMsg;
+					notice.textContent = normalizeMessage('', getConfig().netMsg);
 					notice.style.display = 'block';
 				}
 			});

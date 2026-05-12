@@ -409,15 +409,13 @@ test.describe('v1.7.0 features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    // Capture the real pre-test value before touching anything.
     const original = await getSettings(page, nonce);
-
-    // Ensure we start from a known state (another test may have left it true)
-    await updateSettings(page, nonce, { pageview_tracking: false });
-    const before = await getSettings(page, nonce);
-    expect(before.pageview_tracking).toBe(false);
-
     try {
+      // Ensure we start from a known state (another test may have left it true)
+      await updateSettings(page, nonce, { pageview_tracking: false });
+      const before = await getSettings(page, nonce);
+      expect(before.pageview_tracking).toBe(false);
+
       // Enable and check frontend
       await updateSettings(page, nonce, { pageview_tracking: true });
 
@@ -430,24 +428,23 @@ test.describe('v1.7.0 features', () => {
       } finally {
         await ctx.close();
       }
-    } finally {
+
       // Bring back the disabled state for the negative assertion below.
       await updateSettings(page, nonce, { pageview_tracking: false });
-    }
 
-    // Verify disabled state (should match original)
-    const ctx2 = await page.context().browser()!.newContext({ baseURL: WP_BASE });
-    const p2 = await ctx2.newPage();
-    try {
-      await p2.goto('/', { waitUntil: 'domcontentloaded' });
-      const hasPvConfig2 = await p2.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
-      expect(hasPvConfig2).toBe(false);
+      // Verify disabled state (should match original)
+      const ctx2 = await page.context().browser()!.newContext({ baseURL: WP_BASE });
+      const p2 = await ctx2.newPage();
+      try {
+        await p2.goto('/', { waitUntil: 'domcontentloaded' });
+        const hasPvConfig2 = await p2.evaluate(() => typeof (window as any)._fazPageviewConfig !== 'undefined');
+        expect(hasPvConfig2).toBe(false);
+      } finally {
+        await ctx2.close();
+      }
     } finally {
-      await ctx2.close();
+      await updateSettings(page, nonce, { pageview_tracking: original.pageview_tracking });
     }
-
-    // Final restore to the real pre-test value (cross-suite safety).
-    await updateSettings(page, nonce, { pageview_tracking: original.pageview_tracking });
   });
 
   // 20. System Status Page
