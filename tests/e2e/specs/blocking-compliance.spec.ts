@@ -257,11 +257,19 @@ test.describe('Blocking compliance coverage', () => {
   let matrixPageId = 0;
   let matrixPagePattern = '';
   let iframeLabUrl = '';
-  let deactivatedPlugins: string[] = [];
+  // Snapshot of every active plugin at the moment the suite starts.
+  // The afterAll restores this exact set so co-running test files
+  // that depend on third-party plugins (cache adapters, analytics
+  // sniffers, etc.) see the same environment they did before. A
+  // prior refactor renamed this from `deactivatedPlugins` (filter of
+  // pre-snapshot minus allowlist) to `initialActivePlugins` (full
+  // snapshot) and updated the afterAll but forgot to rename the
+  // declaration here — that's why the afterAll was throwing
+  // `ReferenceError: initialActivePlugins is not defined`.
+  let initialActivePlugins: string[] = [];
 
   test.beforeAll(async () => {
-    const allowed = new Set(['faz-cookie-manager', 'faz-e2e-provider-matrix', 'faz-e2e-scan-lab']);
-    deactivatedPlugins = listActivePlugins().filter((slug) => !allowed.has(slug));
+    initialActivePlugins = listActivePlugins();
     deactivatePluginsExcept([
       'faz-cookie-manager',
       'faz-e2e-provider-matrix',
@@ -286,9 +294,14 @@ test.describe('Blocking compliance coverage', () => {
   });
 
   test.afterAll(async () => {
-    if (deactivatedPlugins.length > 0) {
-      activatePlugins(deactivatedPlugins, { tolerateFailures: true });
+    const currentlyActive = new Set(listActivePlugins());
+    const toActivate = initialActivePlugins.filter((slug) => !currentlyActive.has(slug));
+
+    if (toActivate.length > 0) {
+      activatePlugins(toActivate, { tolerateFailures: true });
     }
+    // Deactivate everything that wasn't originally active.
+    deactivatePluginsExcept(initialActivePlugins);
   });
 
   test.beforeEach(async () => {

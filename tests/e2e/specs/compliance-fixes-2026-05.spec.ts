@@ -236,6 +236,27 @@ test.describe('P1-B — cross-domain forwarding security guards', () => {
         const m = document.cookie.split(';').find((c) => c.trim().startsWith('fazcookie-consent='));
         return m ?? '';
       });
+
+    // cookieBefore is captured but NOT asserted to be non-empty: since
+    // the ePrivacy Art. 5(3) compliance fix at frontend/js/script.js:388
+    // (the inline comment reads "Do NOT call _fazSetConsentID() here —
+    // the consentid is a stable 32-char random tracker written into
+    // fazcookie-consent. Generating it before the user acts creates a
+    // persistent fingerprint before consent"), the plugin deliberately
+    // defers writing the consent cookie until the first user action.
+    // On a fresh page load with no prior decision, `cookieBefore` is
+    // therefore the empty string — that is the compliant state, not a
+    // regression.
+    //
+    // The invariant this test must actually guard is "an unsolicited
+    // forwarded message does not bestow consent." We assert that on
+    // the cookieAfter snapshot directly:
+    //   (1) cookieAfter equals cookieBefore (no mutation), AND
+    //   (2) cookieAfter does NOT carry `action:yes` (the forwarded
+    //       payload must not have silently smuggled a consent decision
+    //       in).
+    // (2) is the real strengthening — it catches the silent-fingerprint
+    // failure mode even when both reads land on the empty string.
     const cookieBefore = await readFazCookie();
 
     await page.evaluate(() => {
@@ -252,7 +273,8 @@ test.describe('P1-B — cross-domain forwarding security guards', () => {
 
     await page.waitForTimeout(300);
     const cookieAfter = await readFazCookie();
-    expect(cookieAfter).toBe(cookieBefore);
+    expect(cookieAfter, 'forwarded message without action:yes must not mutate fazcookie-consent').toBe(cookieBefore);
+    expect(cookieAfter, 'forwarded message must NOT bestow action:yes').not.toMatch(/action:yes/);
   });
 
   test('05 — forwarded message is ignored when local user already took action', async ({ page }) => {
