@@ -565,10 +565,10 @@
 		var canEditScripts = !!(window.fazConfig && window.fazConfig.canEditScripts);
 
 		var fields = [
-			{ label: 'Cookie Name', path: 'name', type: 'text' },
-			{ label: 'Domain', path: 'domain', type: 'text' },
-			{ label: 'Duration', path: 'duration', type: 'text', placeholder: 'e.g. 1 year' },
-			{ label: 'Description', path: 'description', type: 'textarea' },
+			{ label: __('cookies.nameLabel', 'Cookie Name'), path: 'name', type: 'text' },
+			{ label: __('cookies.domainLabel', 'Domain'), path: 'domain', type: 'text' },
+			{ label: __('cookies.durationLabel', 'Duration'), path: 'duration', type: 'text', placeholder: __('cookies.durationPlaceholder', 'e.g. 1 year') },
+			{ label: __('cookies.descriptionLabel', 'Description'), path: 'description', type: 'textarea' },
 		];
 
 		// Only expose opt-in/opt-out script fields to users with the

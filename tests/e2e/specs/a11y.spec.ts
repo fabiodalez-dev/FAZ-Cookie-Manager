@@ -138,17 +138,32 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
     await expect(banner).toHaveAttribute('aria-labelledby', 'faz-banner-title');
   });
 
-  // ESC closes the banner without requiring a mouse click.
-  test('Escape key closes the banner when focus is inside it', async ({ page }) => {
+  // ESC must NOT dismiss the banner without a recorded consent decision.
+  //
+  // Inverted from the original Escape-closes-banner shape: 1.13.17
+  // finding F024 removed the Escape→_fazHideBanner branch because it
+  // let visitors silently dismiss the consent banner without ever
+  // choosing accept or reject — the EDPB has explicitly flagged that
+  // pattern as a dark pattern (April 2022 cookie-banner task-force
+  // report). Banner-level Escape handling is therefore forbidden;
+  // preference-center close-on-Escape (next test in this file) is
+  // still required for keyboard a11y on the modal overlay.
+  test('Escape key does NOT dismiss the banner without a consent decision (F024)', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     const banner = page.locator('.faz-consent-container');
     await expect(banner).toBeVisible();
 
-    // Focus a button inside the notice element (child of .faz-consent-container).
     await page.locator('[data-faz-tag="notice"] button').first().focus();
     await page.keyboard.press('Escape');
+    await page.waitForTimeout(300); // give any side-effect time to settle
 
-    await expect(banner).toBeHidden({ timeout: 5_000 }); // tighter than the 10 s global — ESC should close immediately
+    await expect(banner, 'banner must remain visible after Escape (EDPB dark-pattern guard)').toBeVisible();
+
+    const fazConsent = await page.evaluate(() => {
+      const m = document.cookie.split(';').find((c) => c.trim().startsWith('fazcookie-consent='));
+      return m ?? null;
+    });
+    expect(fazConsent, 'fazcookie-consent must NOT be written by an Escape press').toBeNull();
   });
 
   // Modal preference center must carry aria-labelledby pointing to its title.

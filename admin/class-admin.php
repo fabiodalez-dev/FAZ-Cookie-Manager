@@ -436,6 +436,16 @@ class Admin {
 					'confirmDelete'            => __( 'Are you sure you want to delete this?', 'faz-cookie-manager' ),
 					// Cookies page.
 					'cookies'                  => array(
+						// Cookie modal field labels (issue #97 — these used to be
+						// hardcoded English in admin/assets/js/pages/cookies.js;
+						// 1.13.17 wraps them through __() so they participate in
+						// the same translation pipeline as the opt-in / opt-out
+						// script labels rendered alongside them).
+						'nameLabel'                => __( 'Cookie Name', 'faz-cookie-manager' ),
+						'domainLabel'              => __( 'Domain', 'faz-cookie-manager' ),
+						'durationLabel'            => __( 'Duration', 'faz-cookie-manager' ),
+						'durationPlaceholder'      => __( 'e.g. 1 year', 'faz-cookie-manager' ),
+						'descriptionLabel'         => __( 'Description', 'faz-cookie-manager' ),
 						'bulkDeleteConfirm'        => __( 'Delete selected cookie(s)?', 'faz-cookie-manager' ),
 						'bulkDeleteFailed'         => __( 'Bulk delete failed.', 'faz-cookie-manager' ),
 						'categoriesSaved'          => __( 'Categories saved.', 'faz-cookie-manager' ),
