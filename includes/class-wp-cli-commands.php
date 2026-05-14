@@ -299,6 +299,15 @@ class WP_CLI_Commands {
 			}
 		}
 
+		// Track stripped script meta keys so operators see why fields silently
+		// disappeared during import. Hooked from
+		// Cookies_API::sanitize_meta_for_current_user via faz_meta_script_keys_stripped.
+		$script_strip_counter = 0;
+		$strip_listener       = function() use ( &$script_strip_counter ) {
+			$script_strip_counter++;
+		};
+		add_action( 'faz_meta_script_keys_stripped', $strip_listener );
+
 		// Reuse the REST import logic via an internal request.
 		$request = new \WP_REST_Request( 'POST', '/faz/v1/settings/import' );
 		$request->set_body( $json );
@@ -306,9 +315,29 @@ class WP_CLI_Commands {
 		$request->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
 		$response = rest_do_request( $request );
 
+		remove_action( 'faz_meta_script_keys_stripped', $strip_listener );
+
 		if ( $response->is_error() ) {
 			WP_CLI::error( 'Import failed: ' . $response->as_error()->get_error_message() );
 			return;
+		}
+
+		// Warn the operator if any opt_in_script / opt_out_script values were
+		// stripped because the current user lacks the unfiltered_html
+		// capability (multisite site-admin, non-super-admin import context).
+		// Script fields are admin-only by design — see
+		// Cookies_API::sanitize_meta_for_current_user.
+		if ( $script_strip_counter > 0 && ! current_user_can( 'unfiltered_html' ) ) {
+			WP_CLI::warning( sprintf(
+				/* translators: %d: number of meta entries that had script fields stripped during import. */
+				_n(
+					'Script meta field(s) (opt_in_script/opt_out_script) were stripped from %d imported entry because the current user lacks the unfiltered_html capability. Re-run as a super-admin to preserve script fields.',
+					'Script meta field(s) (opt_in_script/opt_out_script) were stripped from %d imported entries because the current user lacks the unfiltered_html capability. Re-run as a super-admin to preserve script fields.',
+					$script_strip_counter,
+					'faz-cookie-manager'
+				),
+				$script_strip_counter
+			) );
 		}
 
 		$result = $response->get_data();

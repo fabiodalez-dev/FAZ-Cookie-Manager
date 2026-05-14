@@ -16,6 +16,7 @@ use FazCookie\Includes\Rest_Controller;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Settings\Includes\Controller;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
+use FazCookie\Admin\Modules\Cookies\Api\Cookies_API;
 use FazCookie\Includes\Notice;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -719,7 +720,14 @@ class Api extends Rest_Controller {
 			$wpdb->query( "DELETE FROM {$table}" );
 			$cat_failed = false;
 			foreach ( $data['categories'] as $cat ) {
-				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				// Capability-aware sanitisation of meta blobs: callers without
+				// unfiltered_html (e.g. multisite site-admins, WP-CLI run as
+				// non-super-admin) cannot smuggle opt_in_script /
+				// opt_out_script through the import payload. This is the
+				// single source of truth shared with the REST per-field
+				// gate and the bulk_update endpoint.
+				$cat_meta = array_key_exists( 'meta', $cat ) ? Cookies_API::sanitize_meta_for_current_user( $cat['meta'] ) : null;
+				$result   = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					'category_id'        => absint( $cat['category_id'] ?? 0 ),
 					'name'               => $this->encode_json_column( $cat['name'] ?? null, array() ),
 					'slug'               => sanitize_text_field( $cat['slug'] ?? '' ),
@@ -728,7 +736,7 @@ class Api extends Rest_Controller {
 					'visibility'         => absint( $cat['visibility'] ?? 1 ),
 					'priority'           => absint( $cat['priority'] ?? 0 ),
 					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 0 ),
-					'meta'               => array_key_exists( 'meta', $cat ) ? $this->encode_json_column( $cat['meta'], array() ) : null,
+					'meta'               => array_key_exists( 'meta', $cat ) ? $this->encode_json_column( $cat_meta, array() ) : null,
 				) );
 				if ( false === $result ) {
 					$cat_failed = true;
@@ -753,7 +761,12 @@ class Api extends Rest_Controller {
 			$wpdb->query( "DELETE FROM {$table}" );
 			$cookie_failed = false;
 			foreach ( $data['cookies'] as $cookie ) {
-				$result = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				// Capability-aware meta sanitisation — see categories branch
+				// above. opt_in_script / opt_out_script are stripped when the
+				// importing user lacks unfiltered_html, closing the stored-XSS
+				// surface F040 identified.
+				$cookie_meta = array_key_exists( 'meta', $cookie ) ? Cookies_API::sanitize_meta_for_current_user( $cookie['meta'] ) : null;
+				$result      = $wpdb->insert( $table, array( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					'cookie_id'   => absint( $cookie['cookie_id'] ?? 0 ),
 					'name'        => sanitize_text_field( $cookie['name'] ?? '' ),
 					'slug'        => sanitize_text_field( $cookie['slug'] ?? '' ),
@@ -764,7 +777,7 @@ class Api extends Rest_Controller {
 					'type'        => sanitize_text_field( $cookie['type'] ?? '' ),
 					'discovered'  => absint( $cookie['discovered'] ?? 0 ),
 					'url_pattern' => sanitize_text_field( $cookie['url_pattern'] ?? '' ),
-					'meta'        => array_key_exists( 'meta', $cookie ) ? $this->encode_json_column( $cookie['meta'], array() ) : null,
+					'meta'        => array_key_exists( 'meta', $cookie ) ? $this->encode_json_column( $cookie_meta, array() ) : null,
 				) );
 				if ( false === $result ) {
 					$cookie_failed = true;

@@ -420,10 +420,25 @@ class Cookie extends Store {
 	/**
 	 * Set meta data
 	 *
-	 * @param array $data Meta data array.
+	 * Defence-in-depth: routes through the capability-aware sanitiser
+	 * (\FazCookie\Admin\Modules\Cookies\Api\Cookies_API::sanitize_meta_for_current_user)
+	 * so any internal write path — including REST handlers, settings import,
+	 * migrations — cannot silently smuggle raw JS into opt_in_script /
+	 * opt_out_script for callers below the unfiltered_html capability gate.
+	 *
+	 * Skips when running outside a WordPress request context (e.g. unit tests
+	 * before WP bootstrap) where capability functions are unavailable.
+	 *
+	 * @param array|string $data Meta data array (or JSON-encoded string).
 	 * @return void
 	 */
 	public function set_meta( $data ) {
+		if (
+			is_callable( array( '\\FazCookie\\Admin\\Modules\\Cookies\\Api\\Cookies_API', 'sanitize_meta_for_current_user' ) )
+			&& function_exists( 'current_user_can' )
+		) {
+			$data = \FazCookie\Admin\Modules\Cookies\Api\Cookies_API::sanitize_meta_for_current_user( $data );
+		}
 		$this->set_object_data( 'meta', $data );
 		$this->decoded_meta = null;
 	}

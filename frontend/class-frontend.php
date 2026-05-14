@@ -999,40 +999,7 @@ class Frontend {
 		// Result is cached in a transient (12h) and invalidated on cookie saves.
 		$cookie_scripts = get_transient( 'faz_cookie_scripts_map' );
 		if ( false === $cookie_scripts ) {
-			global $wpdb;
-			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery -- custom tables; result used only for inline JS config, not rendered as HTML.
-			$script_rows = $wpdb->get_results(
-				$wpdb->prepare(
-					"SELECT c.meta, cat.slug AS category_slug
-					 FROM {$wpdb->prefix}faz_cookies c
-					 INNER JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id
-					 WHERE c.meta LIKE %s OR c.meta LIKE %s
-					 LIMIT %d",
-					'%opt_in_script%',
-					'%opt_out_script%',
-					500
-				)
-			);
-			// phpcs:enable
-			$cookie_scripts = array();
-			if ( ! empty( $script_rows ) ) {
-				foreach ( $script_rows as $row ) {
-					$meta     = json_decode( $row->meta, true );
-					$cat_slug = sanitize_key( $row->category_slug );
-					if ( ! is_array( $meta ) || ! $cat_slug ) {
-						continue;
-					}
-					if ( ! isset( $cookie_scripts[ $cat_slug ] ) ) {
-						$cookie_scripts[ $cat_slug ] = array( 'opt_in' => array(), 'opt_out' => array() );
-					}
-					if ( ! empty( $meta['opt_in_script'] ) ) {
-						$cookie_scripts[ $cat_slug ]['opt_in'][] = (string) $meta['opt_in_script'];
-					}
-					if ( ! empty( $meta['opt_out_script'] ) ) {
-						$cookie_scripts[ $cat_slug ]['opt_out'][] = (string) $meta['opt_out_script'];
-					}
-				}
-			}
+			$cookie_scripts = $this->build_cookie_scripts_map();
 			set_transient( 'faz_cookie_scripts_map', $cookie_scripts, HOUR_IN_SECONDS * 12 );
 		}
 		if ( ! empty( $cookie_scripts ) ) {
@@ -1121,6 +1088,108 @@ class Frontend {
 
 		return $store;
 	}
+
+	/**
+	 * Build the per-cookie opt-in/opt-out script map grouped by category slug.
+	 *
+	 * Replaces a previously unbounded LIKE+LIMIT 500 query that silently
+	 * dropped rows beyond the cap. The new shape:
+	 *   - paged ORDER BY cookie_id, 1000 rows per page (stable, deterministic)
+	 *   - hard ceiling of 10,000 rows (defends against runaway tables)
+	 *   - LIKE patterns anchored on the JSON KEY form (`"opt_in_script":`)
+	 *     to eliminate false positives where the literal string appears
+	 *     inside a description or comment
+	 *   - error_log() warning if the ceiling is hit so publishers can see
+	 *     it in the PHP error log instead of silently losing scripts.
+	 *
+	 * Result is cached by the caller in a 12h transient and invalidated
+	 * on cookie saves / category renames (see Cookies module hooks).
+	 *
+	 * @return array<string, array{opt_in: string[], opt_out: string[]}>
+	 */
+	private function build_cookie_scripts_map() {
+		global $wpdb;
+
+		$cookie_scripts = array();
+		$max_rows       = 10000; // hard ceiling to bound worst-case scans
+		$page_size      = 1000;
+		$last_id        = 0;
+		$scanned        = 0;
+		$ceiling_hit    = false;
+
+		// LIKE patterns anchored on the JSON-key form (`"opt_in_script":"...`)
+		// so a description containing the literal text "opt_in_script" cannot
+		// false-positive into the result set. json_decode() below remains the
+		// authoritative parser; LIKE only narrows the rows we have to decode.
+		$like_opt_in  = '%"opt_in_script":"%';
+		$like_opt_out = '%"opt_out_script":"%';
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom tables, table-prefix interpolation only; values bound via $wpdb->prepare(); result used only for inline JS config, not rendered as HTML; outer transient provides caching.
+		do {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT c.cookie_id, c.meta, cat.slug AS category_slug
+					 FROM {$wpdb->prefix}faz_cookies c
+					 INNER JOIN {$wpdb->prefix}faz_cookie_categories cat ON c.category = cat.category_id
+					 WHERE c.cookie_id > %d
+					   AND ( c.meta LIKE %s OR c.meta LIKE %s )
+					 ORDER BY c.cookie_id ASC
+					 LIMIT %d",
+					$last_id,
+					$like_opt_in,
+					$like_opt_out,
+					$page_size
+				)
+			);
+
+			if ( empty( $rows ) ) {
+				break;
+			}
+
+			foreach ( $rows as $row ) {
+				$last_id = (int) $row->cookie_id;
+				++$scanned;
+
+				$meta     = json_decode( $row->meta, true );
+				$cat_slug = sanitize_key( $row->category_slug );
+				if ( ! is_array( $meta ) || ! $cat_slug ) {
+					continue;
+				}
+				if ( ! isset( $cookie_scripts[ $cat_slug ] ) ) {
+					$cookie_scripts[ $cat_slug ] = array( 'opt_in' => array(), 'opt_out' => array() );
+				}
+				if ( ! empty( $meta['opt_in_script'] ) ) {
+					$cookie_scripts[ $cat_slug ]['opt_in'][] = (string) $meta['opt_in_script'];
+				}
+				if ( ! empty( $meta['opt_out_script'] ) ) {
+					$cookie_scripts[ $cat_slug ]['opt_out'][] = (string) $meta['opt_out_script'];
+				}
+
+				if ( $scanned >= $max_rows ) {
+					$ceiling_hit = true;
+					break 2;
+				}
+			}
+		} while ( count( $rows ) === $page_size );
+		// phpcs:enable
+
+		if ( $ceiling_hit ) {
+			// Surface truncation in PHP error log so publishers can detect
+			// the cap was reached and act (split categories, prune unused
+			// cookies, etc.). Intentionally not a user-facing notice — this
+			// runs on every front-end page render path.
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log(
+				sprintf(
+					'[faz-cookie-manager] build_cookie_scripts_map: hit hard ceiling of %d rows; additional cookies with opt_in_script/opt_out_script were NOT loaded. Review wp_faz_cookies size.',
+					$max_rows
+				)
+			);
+		}
+
+		return $cookie_scripts;
+	}
+
 	/**
 	 * Return cookie domain.
 	 *

@@ -22,15 +22,19 @@ class Do_Not_Sell_Shortcode {
 
 	use IP_Hasher;
 
-	const AJAX_ACTION  = 'faz_dnsmpi_optout';
-	const COOKIE_NAME  = 'fazcookie-dnsmpi';
-	const COOKIE_DAYS  = 365;
-	const STATUS_FIELD = 'dnsmpi_optout';
+	const AJAX_ACTION    = 'faz_dnsmpi_optout';
+	const RESCIND_ACTION = 'faz_dnsmpi_rescind';
+	const COOKIE_NAME    = 'fazcookie-dnsmpi';
+	const COOKIE_DAYS    = 365;
+	const STATUS_FIELD   = 'dnsmpi_optout';
+	const STATUS_RESCIND = 'dns_rescinded';
 
 	public function __construct() {
 		add_shortcode( 'faz_do_not_sell', array( $this, 'render' ) );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( $this, 'handle_optout' ) );
+		add_action( 'wp_ajax_' . self::RESCIND_ACTION, array( $this, 'handle_rescind' ) );
+		add_action( 'wp_ajax_nopriv_' . self::RESCIND_ACTION, array( $this, 'handle_rescind' ) );
 		// Enqueue the submit handler unconditionally: page builders may inject
 		// shortcode HTML client-side, so has_shortcode() is unreliable.
 		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_assets' ) );
@@ -62,10 +66,12 @@ class Do_Not_Sell_Shortcode {
 				'faz-dnsmpi-form',
 				'fazDnsmpiConfig',
 				array(
-					'ajaxUrl'    => admin_url( 'admin-ajax.php' ),
-					'successMsg' => __( 'Your opt-out request has been received. We will not sell your personal information.', 'faz-cookie-manager' ),
-					'errMsg'     => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
-					'netMsg'     => __( 'Network error. Please try again.', 'faz-cookie-manager' ),
+					'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
+					'rescindAction'  => self::RESCIND_ACTION,
+					'successMsg'     => __( 'Your opt-out request has been received. We will not sell your personal information.', 'faz-cookie-manager' ),
+					'rescindSuccess' => __( 'Your opt-out has been withdrawn. You may submit a new request at any time.', 'faz-cookie-manager' ),
+					'errMsg'         => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
+					'netMsg'         => __( 'Network error. Please try again.', 'faz-cookie-manager' ),
 				)
 			);
 		}
@@ -96,10 +102,13 @@ class Do_Not_Sell_Shortcode {
 .faz-dnsmpi-notice.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
 .faz-dnsmpi-notice.error   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 .faz-dnsmpi-btn { background: #1863DC; color: #fff; border: none; padding: 10px 22px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.faz-dnsmpi-btn:focus,
+.faz-dnsmpi-btn:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; box-shadow: 0 0 0 4px #0d3a82; }
 .faz-dnsmpi-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 		' );
 
-		$nonce = wp_create_nonce( self::AJAX_ACTION );
+		$nonce         = wp_create_nonce( self::AJAX_ACTION );
+		$rescind_nonce = wp_create_nonce( self::RESCIND_ACTION );
 
 		$this->enqueue_dnsmpi_assets();
 
@@ -112,6 +121,13 @@ class Do_Not_Sell_Shortcode {
 				<div class="faz-dnsmpi-notice success">
 					<?php esc_html_e( 'You have already submitted an opt-out request. We will not sell your personal information.', 'faz-cookie-manager' ); ?>
 				</div>
+				<p><?php esc_html_e( 'Changed your mind? You can withdraw your opt-out at any time.', 'faz-cookie-manager' ); ?></p>
+				<form class="faz-dnsmpi-rescind-form">
+					<input type="hidden" name="action" value="<?php echo esc_attr( self::RESCIND_ACTION ); ?>">
+					<input type="hidden" name="nonce"  value="<?php echo esc_attr( $rescind_nonce ); ?>">
+					<button type="submit" class="faz-dnsmpi-btn faz-dnsmpi-rescind-btn"><?php esc_html_e( 'Withdraw opt-out / opt back in', 'faz-cookie-manager' ); ?></button>
+				</form>
+				<div class="faz-dnsmpi-notice" role="status" aria-live="polite" aria-atomic="true" style="display:none;"></div>
 			<?php else : ?>
 				<p><?php esc_html_e( 'As a US resident in a state with applicable privacy laws, you have the right to opt out of the sale of your personal information. Submit the form below to exercise this right.', 'faz-cookie-manager' ); ?></p>
 				<form class="faz-dnsmpi-form">
@@ -175,6 +191,48 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
+	 * AJAX handler to rescind a previous CCPA opt-out (opt back in).
+	 *
+	 * Required by CCPA 1798.135(c): consumers must be able to opt back in
+	 * after exercising their right to opt out of the sale of personal data.
+	 */
+	public function handle_rescind() {
+		if ( ! check_ajax_referer( self::RESCIND_ACTION, 'nonce', false ) ) {
+			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ) );
+			return;
+		}
+
+		// Idempotency: if the opt-out cookie is already absent, nothing to do.
+		$has_optout_cookie = isset( $_COOKIE[ self::COOKIE_NAME ] ) && '1' === $_COOKIE[ self::COOKIE_NAME ];
+
+		// Rate limiting: atomic DB-backed lock plus 60-second transient window.
+		$rl_key   = 'faz_dnsmpi_rsc_rl_'   . substr( $this->hash_ip(), 0, 16 );
+		$lock_key = 'faz_dnsmpi_rsc_lock_' . substr( $this->hash_ip(), 0, 16 );
+
+		if ( false !== get_transient( $rl_key ) || ! add_option( $lock_key, 1, '', 'no' ) ) {
+			wp_send_json_error( __( 'Too many requests. Please wait 1 minute before submitting again.', 'faz-cookie-manager' ) );
+			return;
+		}
+		set_transient( $rl_key, 1, 60 );
+
+		try {
+			$this->clear_optout_cookie();
+			if ( $has_optout_cookie ) {
+				$ip_hash = $this->hash_ip();
+				$this->log_rescind( $ip_hash );
+			}
+		} finally {
+			delete_option( $lock_key );
+		}
+
+		wp_send_json_success(
+			array(
+				'message' => __( 'Your opt-out has been withdrawn. You may submit a new request at any time.', 'faz-cookie-manager' ),
+			)
+		);
+	}
+
+	/**
 	 * Log the opt-out to the consent_logs table.
 	 */
 	private function log_optout( $ip_hash ) {
@@ -219,6 +277,58 @@ class Do_Not_Sell_Shortcode {
 			'httponly' => true,
 			'samesite' => 'Lax',
 		) );
+	}
+
+	/**
+	 * Clear the opt-out cookie by setting an expired empty value.
+	 *
+	 * Used when the visitor exercises their right to rescind the CCPA
+	 * opt-out (1798.135(c)). Also unsets the live $_COOKIE entry so that
+	 * subsequent calls within the same PHP process see the cleared state.
+	 */
+	private function clear_optout_cookie() {
+		setcookie( self::COOKIE_NAME, '', array(
+			'expires'  => time() - 3600,
+			'path'     => '/',
+			'domain'   => '',
+			'secure'   => is_ssl(),
+			'httponly' => true,
+			'samesite' => 'Lax',
+		) );
+		if ( isset( $_COOKIE[ self::COOKIE_NAME ] ) ) {
+			unset( $_COOKIE[ self::COOKIE_NAME ] );
+		}
+	}
+
+	/**
+	 * Log the rescind (opt-back-in) to the consent_logs table.
+	 *
+	 * Mirrors log_optout() but uses STATUS_RESCIND so admins can audit
+	 * both sides of the CCPA opt-out / opt-back-in lifecycle.
+	 */
+	private function log_rescind( $ip_hash ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_consent_logs';
+
+		if ( ! $this->table_exists( $table ) ) {
+			return;
+		}
+
+		$wpdb->insert(
+			$table,
+			array(
+				'consent_id'      => 'dnsmpi-rsc-' . bin2hex( random_bytes( 8 ) ),
+				'status'          => self::STATUS_RESCIND,
+				'categories'      => '',
+				'ip_hash'         => $ip_hash,
+				'user_agent'      => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
+				'url'             => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '',
+				'banner_slug'     => '',
+				'policy_revision' => 1,
+				'created_at'      => current_time( 'mysql' ),
+			),
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' )
+		);
 	}
 
 	/**

@@ -29,12 +29,15 @@
 
 	function handleSubmit(e) {
 		var form = e.target;
-		if (!form || !form.classList.contains('faz-dnsmpi-form')) return;
+		if (!form) return;
+		var isOptout  = form.classList && form.classList.contains('faz-dnsmpi-form');
+		var isRescind = form.classList && form.classList.contains('faz-dnsmpi-rescind-form');
+		if (!isOptout && !isRescind) return;
 		e.preventDefault();
 
 		var wrap = form.parentElement;
 		if (!wrap) return;
-		var notice = wrap.querySelector('.faz-dnsmpi-notice');
+		var notice = wrap.querySelector('.faz-dnsmpi-notice:not(.success)') || wrap.querySelector('.faz-dnsmpi-notice');
 		var btn = form.querySelector('button');
 		if (btn) btn.disabled = true;
 		if (btn) btn.setAttribute('aria-busy', 'true');
@@ -52,6 +55,10 @@
 		}
 
 		var data = new FormData(form);
+		var successFallback = isRescind
+			? (config.rescindSuccess || 'Your opt-out has been withdrawn.')
+			: (config.successMsg || 'Request submitted successfully.');
+
 		fetch(config.ajaxUrl, {
 			method: 'POST',
 			credentials: 'same-origin',
@@ -63,11 +70,16 @@
 					notice.style.display = 'block';
 					if (res.success) {
 						notice.className = 'faz-dnsmpi-notice success';
-						notice.textContent =
-							normalizeMessage(res.data, config.successMsg || 'Request submitted successfully.');
+						notice.textContent = normalizeMessage(res.data, successFallback);
 						form.style.display = 'none';
 						notice.tabIndex = -1;
 						notice.focus();
+						// Rescind succeeded — reload so the page re-renders the opt-out
+						// form (server-side state changed: cookie cleared). Delay so
+						// screen readers can announce the success notice first.
+						if (isRescind) {
+							setTimeout(function () { window.location.reload(); }, 800);
+						}
 					} else {
 						notice.className = 'faz-dnsmpi-notice error';
 						notice.textContent = normalizeMessage(res.data, config.errMsg);

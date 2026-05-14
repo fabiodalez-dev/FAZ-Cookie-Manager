@@ -754,18 +754,17 @@ function _fazRegisterListeners() {
     _fazAttachListener("=revisit-consent", () => _revisitFazConsent());
     _fazAttachListener("=optout-close", () => _fazHidePreferenceCenter());
 
-    // Escape key closes the preference center / optout popup, or the banner
-    // itself when focus is inside it (keyboard accessibility requirement).
+    // Escape key closes the preference center / optout popup only.
+    // The main banner itself must NOT be dismissible via Escape without a
+    // recorded consent choice — hiding it would mislead users into believing
+    // they had dismissed it permanently while leaving them with no recorded
+    // consent. Per EDPB guidance, the banner remains visible until the user
+    // makes an explicit accept / reject / save choice.
     document.addEventListener('keydown', function(e) {
         if (e.key !== 'Escape') return;
         var pref = _fazGetPreferenceCenter();
         if (pref && pref.classList.contains(_fazGetPreferenceClass())) {
             _fazHidePreferenceCenter();
-            return;
-        }
-        var banner = _fazGetBanner();
-        if (banner && banner.contains(document.activeElement)) {
-            _fazHideBanner();
         }
     });
 }

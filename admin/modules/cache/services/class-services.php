@@ -33,7 +33,10 @@ abstract class Services {
 	public function load_hooks() {
 		add_action( 'faz_after_update_banner', array( $this, 'clear_cache' ), 10, 1 );
 		add_action( 'faz_after_update_cookie', array( $this, 'clear_cache' ) );
+		add_action( 'faz_after_create_cookie', array( $this, 'clear_cache' ) );
+		add_action( 'faz_after_delete_cookie', array( $this, 'clear_cache' ) );
 		add_action( 'faz_after_update_cookie_category', array( $this, 'clear_cache' ) );
+		add_action( 'faz_after_delete_cookie_category', array( $this, 'clear_cache' ) );
 		add_action( 'faz_after_update_settings', array( $this, 'clear_cache' ), 10, 1 );
 		add_action( 'faz_after_activate', array( $this, 'clear_cache' ) );
 		add_action( 'faz_clear_cache', array( $this, 'clear_cache' ) );

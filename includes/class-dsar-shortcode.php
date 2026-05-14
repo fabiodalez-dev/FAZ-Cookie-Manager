@@ -174,6 +174,8 @@ class DSAR_Shortcode {
 .faz-dsar-wrap textarea { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
 .faz-dsar-wrap textarea { min-height: 100px; resize: vertical; }
 .faz-dsar-wrap .faz-dsar-btn { background: #1863DC; color: #fff; border: none; padding: 10px 22px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.faz-dsar-wrap .faz-dsar-btn:focus,
+.faz-dsar-wrap .faz-dsar-btn:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; box-shadow: 0 0 0 4px #0d3a82; }
 .faz-dsar-wrap .faz-dsar-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .faz-dsar-notice { padding: 12px 16px; border-radius: 6px; margin-top: 12px; }
 .faz-dsar-notice.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
@@ -212,17 +214,17 @@ class DSAR_Shortcode {
 
 				<div class="faz-dsar-field">
 					<label for="<?php echo esc_attr( $id ); ?>-name"><?php esc_html_e( 'Full Name', 'faz-cookie-manager' ); ?> *</label>
-					<input type="text" id="<?php echo esc_attr( $id ); ?>-name" name="dsar_name" required autocomplete="name">
+					<input type="text" id="<?php echo esc_attr( $id ); ?>-name" name="dsar_name" required aria-required="true" autocomplete="name">
 				</div>
 
 				<div class="faz-dsar-field">
 					<label for="<?php echo esc_attr( $id ); ?>-email"><?php esc_html_e( 'Email Address', 'faz-cookie-manager' ); ?> *</label>
-					<input type="email" id="<?php echo esc_attr( $id ); ?>-email" name="dsar_email" required autocomplete="email">
+					<input type="email" id="<?php echo esc_attr( $id ); ?>-email" name="dsar_email" required aria-required="true" autocomplete="email">
 				</div>
 
 				<div class="faz-dsar-field">
 					<label for="<?php echo esc_attr( $id ); ?>-type"><?php esc_html_e( 'Request Type', 'faz-cookie-manager' ); ?> *</label>
-					<select id="<?php echo esc_attr( $id ); ?>-type" name="dsar_type" required>
+					<select id="<?php echo esc_attr( $id ); ?>-type" name="dsar_type" required aria-required="true">
 						<option value=""><?php esc_html_e( '— Select a request type —', 'faz-cookie-manager' ); ?></option>
 						<?php foreach ( $request_types as $val => $label ) : ?>
 							<option value="<?php echo esc_attr( $val ); ?>"><?php echo esc_html( $label ); ?></option>

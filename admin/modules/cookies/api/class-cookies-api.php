@@ -279,6 +279,12 @@ class Cookies_API extends API_Controller {
 	/**
 	 * Bulk update cookies (e.g., change category for multiple cookies at once).
 	 *
+	 * Iterates the item schema dynamically so every editable property is
+	 * honoured — mirroring API_Controller::prepare_item_for_database — rather
+	 * than hardcoding a subset of fields. Script fields (opt_in_script,
+	 * opt_out_script) flow through sanitize_script_field so the unfiltered_html
+	 * capability gate is enforced symmetrically with single-item updates.
+	 *
 	 * @param \WP_REST_Request $request Request with 'cookies' array.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
@@ -286,6 +292,17 @@ class Cookies_API extends API_Controller {
 		$items = $request->get_param( 'cookies' );
 		if ( ! is_array( $items ) || empty( $items ) ) {
 			return new \WP_Error( 'invalid_data', __( 'No cookies provided.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+
+		$schema     = $this->get_item_schema();
+		$properties = isset( $schema['properties'] ) && is_array( $schema['properties'] ) ? $schema['properties'] : array();
+		// Editable property keys = every schema property that is not readonly.
+		$editable_keys = array();
+		foreach ( $properties as $key => $property ) {
+			if ( isset( $property['readonly'] ) && true === $property['readonly'] ) {
+				continue;
+			}
+			$editable_keys[] = $key;
 		}
 
 		$updated = array();
@@ -298,15 +315,32 @@ class Cookies_API extends API_Controller {
 			if ( ! $cookie->get_loaded() ) {
 				continue;
 			}
-			if ( isset( $item['category'] ) ) {
-				$cookie->set_category( absint( $item['category'] ) );
+
+			foreach ( $editable_keys as $key ) {
+				// Partial-update semantics: only override fields explicitly present.
+				if ( ! array_key_exists( $key, $item ) ) {
+					continue;
+				}
+				$value = $item[ $key ];
+
+				// Capability-aware sanitisation for raw-JS fields. Reuse the
+				// same gate the single-item schema uses so callers without
+				// unfiltered_html cannot silently smuggle scripts through
+				// the bulk endpoint.
+				if ( 'opt_in_script' === $key || 'opt_out_script' === $key ) {
+					$sanitised = self::sanitize_script_field( $value, $request, $key );
+					if ( is_wp_error( $sanitised ) ) {
+						return $sanitised;
+					}
+					$value = $sanitised;
+				}
+
+				$setter = "set_{$key}";
+				if ( is_callable( array( $cookie, $setter ) ) ) {
+					$cookie->{$setter}( $value );
+				}
 			}
-			if ( isset( $item['description'] ) ) {
-				$cookie->set_description( $item['description'] );
-			}
-			if ( isset( $item['duration'] ) ) {
-				$cookie->set_duration( $item['duration'] );
-			}
+
 			$cookie->save();
 			$response  = $this->prepare_item_for_response( $cookie, $request );
 			$updated[] = $this->prepare_response_for_collection( $response );
@@ -402,6 +436,66 @@ class Cookies_API extends API_Controller {
 			);
 		}
 		return (string) $value;
+	}
+
+	/**
+	 * Capability-aware sanitiser for an entire cookie/category meta array.
+	 *
+	 * Strips script keys (opt_in_script, opt_out_script) when the current user
+	 * lacks `unfiltered_html`. This is the single source of truth for every
+	 * write path into wp_faz_cookies.meta / wp_faz_cookie_categories.meta —
+	 * REST per-field updates, bulk update, settings import, WP-CLI import, and
+	 * internal Cookie::set_meta() defence-in-depth all route through it.
+	 *
+	 * Unlike sanitize_script_field which returns a WP_Error on cap failure
+	 * (suitable for an inline schema sanitize_callback), this helper silently
+	 * unsets script keys so bulk write paths (import) do not abort the entire
+	 * payload over a single privileged field; the caller may emit a warning
+	 * when keys are stripped (see WP-CLI import).
+	 *
+	 * @param mixed $meta Raw meta data; expected to be an associative array or
+	 *                    JSON-encoded string. Non-array values pass through.
+	 * @return array|mixed Sanitised meta (array) when input was array/JSON, or
+	 *                     the original value when input was not coercible.
+	 */
+	public static function sanitize_meta_for_current_user( $meta ) {
+		if ( current_user_can( 'unfiltered_html' ) ) {
+			return $meta;
+		}
+
+		$decoded = $meta;
+		$was_json_string = false;
+		if ( is_string( $meta ) ) {
+			$tentative = json_decode( $meta, true );
+			if ( is_array( $tentative ) ) {
+				$decoded = $tentative;
+				$was_json_string = true;
+			}
+		}
+
+		if ( ! is_array( $decoded ) ) {
+			return $meta;
+		}
+
+		$stripped = false;
+		foreach ( array( 'opt_in_script', 'opt_out_script' ) as $script_key ) {
+			if ( array_key_exists( $script_key, $decoded ) && '' !== (string) $decoded[ $script_key ] ) {
+				unset( $decoded[ $script_key ] );
+				$stripped = true;
+			}
+		}
+
+		// Allow callers to detect stripping (e.g. WP-CLI import warnings).
+		if ( $stripped ) {
+			/**
+			 * Fires when script meta keys are stripped due to missing
+			 * unfiltered_html capability. Hooked by WP-CLI commands to surface
+			 * a warning. Side-effect-free for normal users.
+			 */
+			do_action( 'faz_meta_script_keys_stripped' );
+		}
+
+		return $was_json_string ? wp_json_encode( $decoded ) : $decoded;
 	}
 
 } // End the class.
