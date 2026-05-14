@@ -1475,6 +1475,32 @@ class Frontend {
 		// so site owners can diagnose and raise pcre.backtrack_limit if needed.
 		$pcre_failed = false;
 
+		// Block tracking pixel <img> inside <noscript> FIRST — BEFORE the stash.
+		// Meta Pixel, GA, Adobe Analytics etc. embed `<img>` beacons inside
+		// `<noscript>` blocks for JS-disabled visitors; those still need to be
+		// consent-gated server-side. process_noscript_tag rewrites the
+		// `<noscript>` block's inner content (img src → data-faz-src + data-faz-
+		// category) but preserves the enclosing `<noscript>` wrapper, so the
+		// stash pass below still finds the (now-processed) block and protects
+		// it from the iframe filter. Running this BEFORE the stash keeps the
+		// matcher's `<noscript>` lookup productive — the original placement
+		// AFTER the stash made this step dead code because every `<noscript>`
+		// had already been replaced with a `__FAZ_NOSCRIPT_STASH_N__` marker.
+		if ( false !== stripos( $html, '<noscript' ) ) {
+			$result = preg_replace_callback(
+				'#<noscript\b[^>]*>(.*?)</noscript>#is',
+				function ( $m ) use ( $providers, $blocked_categories ) {
+					return $this->process_noscript_tag( $m, $providers, $blocked_categories );
+				},
+				$html
+			);
+			if ( null === $result ) {
+				$pcre_failed = true;
+			} else {
+				$html = $result;
+			}
+		}
+
 		// Stash <noscript> blocks BEFORE running the script/iframe/link filters.
 		// <noscript> content only renders when JS is disabled; visitors with JS
 		// (>99% case) never see it. Without stashing, an iframe wrapped in
@@ -1484,6 +1510,8 @@ class Frontend {
 		// by document.querySelector. The phantom collides with
 		// `_fazAddPlaceholder()` placeholders for legitimate dynamic iframes
 		// and breaks any `.first()`-style locator. Restore after all filters.
+		// (The tracking-pixel pass above runs FIRST so its noscript matcher is
+		// not defeated by the markers this stash introduces.)
 		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
 			$stash_result = preg_replace_callback(
@@ -1534,21 +1562,9 @@ class Frontend {
 			}
 		}
 
-		// 3. Block tracking pixel <img> inside <noscript> (Meta Pixel, etc.).
-		if ( false !== stripos( $html, '<noscript' ) ) {
-			$result = preg_replace_callback(
-				'#<noscript\b[^>]*>(.*?)</noscript>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_noscript_tag( $m, $providers, $blocked_categories );
-				},
-				$html
-			);
-			if ( null === $result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $result;
-			}
-		}
+		// 3. (Moved above the stash — see "Block tracking pixel <img> inside
+		//     <noscript>" earlier in this method. Keeping the step-number gap
+		//     to avoid renumbering the rest of the pipeline.)
 
 		// 4. Block <link rel="stylesheet"> (Google Fonts, Adobe Fonts, etc.).
 		if ( false !== stripos( $html, '<link' ) ) {
