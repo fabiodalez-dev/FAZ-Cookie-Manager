@@ -87,7 +87,16 @@ test.describe('1.13.18 — wp_localize_script payloads exempt from content-subst
       $blocked = array( 'analytics', 'marketing', 'functional', 'performance' );
 
       $tag = '<script id="trx-mock-js-extra">var TRX_MOCK_STORAGE = {"animate_to_mc4wp_form_submitted":"1"};</script>';
-      preg_match( '/<script([^>]*)>(.*?)<\\/script>/s', $tag, $m );
+
+      // Defensive: if preg_match somehow fails on the hardcoded tag above (it
+      // shouldn't — that would mean someone mutated the literal), fail loud
+      // with REGEX_FAIL rather than passing an empty $m to invokeArgs() and
+      // letting process_script_tag() see undefined indices. The test below
+      // asserts PASSTHROUGH, so a silent failure would mimic the success path.
+      if ( 1 !== preg_match( '/<script([^>]*)>(.*?)<\\/script>/s', $tag, $m ) ) {
+        echo 'REGEX_FAIL';
+        return;
+      }
 
       $result = $method->invokeArgs( $instance, array( $m, $providers, $blocked ) );
       $rewritten = ( false !== strpos( $result, 'type="text/plain"' ) || false !== strpos( $result, 'data-faz-category=' ) );
