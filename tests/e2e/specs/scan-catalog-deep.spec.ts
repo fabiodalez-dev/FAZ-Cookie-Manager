@@ -273,16 +273,24 @@ async function createCookie(
 }
 
 test.describe('Deep scan and catalog flows', () => {
-  // `describe.configure({ timeout })` applies to every test AND every hook in
-  // this describe — replaces the previous pair of `test.setTimeout(180_000)`
-  // calls duplicated inside beforeAll/afterAll which could drift apart.
-  // 300s ≥ 180s required by deactivate/reactivate of ~40 plugins via WP-CLI.
+  // `describe.configure({ timeout })` applies to every TEST in the describe,
+  // and to beforeEach / afterEach hooks — but NOT to beforeAll / afterAll
+  // (see Playwright docs on testGroup.timeout — those two run under the
+  // separate default 45s hook timeout). The first iteration of this file
+  // relied on `describe.configure({timeout:300_000})` to cover the hooks
+  // too, which silently broke when ~40 plugins had to be deactivated /
+  // reactivated via WP-CLI (well over the 45s default). The hook bodies
+  // therefore re-set their own timeout explicitly below, which is what
+  // Playwright actually documents for long-running setup / teardown.
   test.describe.configure({ mode: 'serial', timeout: 300_000 });
 
   let serverLab: ChildProcessWithoutNullStreams | null = null;
   let deactivatedPlugins: string[] = [];
 
   test.beforeAll(async () => {
+    // Deactivating / activating ~40 plugins on the test site via WP-CLI
+    // takes longer than Playwright's default 45s hook timeout — raise it.
+    test.setTimeout(180_000);
     const allowed = new Set(['faz-cookie-manager', 'faz-e2e-provider-matrix', 'faz-e2e-scan-lab', 'faz-e2e-woo-lab', 'woocommerce']);
     deactivatedPlugins = listActivePlugins().filter((slug) => !allowed.has(slug));
     deactivatePluginsExcept([
@@ -307,6 +315,9 @@ test.describe('Deep scan and catalog flows', () => {
   });
 
   test.afterAll(async () => {
+    // Match the beforeAll budget so cleanup always completes — reactivating
+    // ~40 plugins via WP-CLI can take longer than 45s.
+    test.setTimeout(180_000);
     if (deactivatedPlugins.length > 0) {
       activatePlugins(deactivatedPlugins, { tolerateFailures: true });
     }
