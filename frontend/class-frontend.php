@@ -263,7 +263,10 @@ class Frontend {
 			wp_localize_script( $script_handle, $config_var, $this->get_store_data() );
 			if ( $alt_asset ) {
 				// Bridge the alternative config variable to the expected name.
-				wp_add_inline_script( $script_handle, 'window._fazConfig = window._fazCfg;', 'before' );
+				// Never assign `undefined`: if `{handle}-js-extra` is deferred (e.g. LiteSpeed
+				// Guest Mode) this inline can run before `var _fazCfg = …` executes; assigning
+				// `window._fazCfg` then would clobber a later real `_fazConfig` with `undefined`.
+				wp_add_inline_script( $script_handle, 'if(typeof window._fazCfg!==\'undefined\'&&window._fazCfg!==null){window._fazConfig=window._fazCfg;}', 'before' );
 			}
 			// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
 			// Utility rules appended AFTER boost_css_specificity() so they are NOT
@@ -1444,6 +1447,19 @@ class Frontend {
 		// Never block whitelisted scripts.
 		if ( $this->is_whitelisted( $attrs, $content ) ) {
 			return $full;
+		}
+		// Same rationale as `filter_inline_script_tag()`: do not block FAZ's own
+		// `wp_localize_script` output — the JSON body can false-match URL patterns.
+		if ( preg_match( '/\bid\s*=\s*["\']([^"\']+)["\']/i', $attrs, $id_match ) ) {
+			$script_id    = $id_match[1];
+			$extra_suffix = '-js-extra';
+			$extra_len    = strlen( $extra_suffix );
+			if ( strlen( $script_id ) > $extra_len && substr( $script_id, -$extra_len ) === $extra_suffix ) {
+				$bootstrap_handle = substr( $script_id, 0, -$extra_len );
+				if ( $this->is_own_script_handle( $bootstrap_handle ) ) {
+					return $full;
+				}
+			}
 		}
 		// Skip already-blocked scripts.
 		if ( preg_match( '/type\s*=\s*["\']text\/plain["\']/', $attrs ) ) {
@@ -3484,6 +3500,20 @@ class Frontend {
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $tag;
+		}
+		// Never neutralise wp_localize_script payloads (`{handle}-js-extra`) for our own
+		// bootstrap handles. The JSON can mention third-party domains (cookie catalog,
+		// vendor strings) and false-match scanner patterns — which would strand `_fazCfg`
+		// behind `type="text/plain"` while `faz-fw-js-before` / `faz-fw-js-after` still run.
+		if ( is_string( $id ) ) {
+			$extra_suffix = '-js-extra';
+			$extra_len    = strlen( $extra_suffix );
+			if ( strlen( $id ) > $extra_len && substr( $id, -$extra_len ) === $extra_suffix ) {
+				$bootstrap_handle = substr( $id, 0, -$extra_len );
+				if ( $this->is_own_script_handle( $bootstrap_handle ) ) {
+					return $tag;
+				}
+			}
 		}
 		// Extract attributes and inline content separately so the whitelist
 		// only matches against attributes (same policy as the OB path in

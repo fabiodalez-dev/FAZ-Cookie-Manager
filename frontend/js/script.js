@@ -1,6 +1,9 @@
 /**
  * WordPress localize object mapped to a constant.
+ * Merge `_fazCfg` when "Alternative asset path" is on. The PHP bridge can run
+ * before `var _fazCfg = …` in some cache / guest-mode orderings; never rely on it alone.
  */
+window._fazConfig = window._fazConfig ?? window._fazCfg;
 const _fazStore = window._fazConfig;
 
 _fazStore._backupNodes = [];
