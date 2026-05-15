@@ -1665,6 +1665,15 @@ class Frontend {
 		if ( $this->is_own_inline_script_id( $id ) ) {
 			return $full;
 		}
+		// wp_localize_script / wp_set_script_translations payloads carry only
+		// config data or translation strings — never executable tracker code.
+		// Substring matching against their body produces false positives
+		// (e.g. trx_addons emits `animate_to_mc4wp_form_submitted` which
+		// would otherwise match the `mc4wp` MailChimp pattern and crash
+		// the page with `ReferenceError: TRX_ADDONS_STORAGE is not defined`).
+		if ( $this->is_wp_localize_or_translations_inline_id( $id ) ) {
+			return $full;
+		}
 
 		// Never block whitelisted scripts.
 		if ( $this->is_whitelisted( $attrs, $content ) ) {
@@ -3440,6 +3449,51 @@ class Frontend {
 	}
 
 	/**
+	 * Detect inline scripts that carry only config/i18n payload — never tracker code.
+	 *
+	 * WordPress core emits two ID shapes that are guaranteed to be data-only:
+	 *
+	 *   - `<handle>-js-extra`        — `wp_localize_script()` output. Always a
+	 *                                  `var NAME = { … };` assignment. No function
+	 *                                  calls, no network I/O, no tracker pixels.
+	 *   - `<handle>-js-translations` — `wp_set_script_translations()` output.
+	 *                                  Always `wp.i18n.setLocaleData( JSON, domain );`
+	 *                                  reaching only into WP's in-memory i18n store.
+	 *
+	 * Neither shape can host an analytics call. Yet `match_script_to_provider()`
+	 * runs a `stripos( $content, $pattern )` substring match against the body of
+	 * the inline script, which means any localised string or config key that
+	 * incidentally contains a provider name (e.g. trx_addons emits the config key
+	 * `animate_to_mc4wp_form_submitted`, RankMath localises `addtoany`, Yoast
+	 * carries `gtag` in instruction strings) will trigger a false-positive block.
+	 * The block rewrites the tag to `type="text/plain"`, the `var NAME = …`
+	 * assignment never runs, and downstream code that reads the global crashes
+	 * with `ReferenceError: NAME is not defined`.
+	 *
+	 * `-js-before` and `-js-after` are NOT exempted — `wp_add_inline_script()`
+	 * with those positions accepts arbitrary executable code (a third-party
+	 * plugin may legitimately emit a tracker call this way), so they still
+	 * route through the regular provider matcher.
+	 *
+	 * The exemption applies to inline tags from any plugin, not just our own,
+	 * because the convention is enforced by WordPress core: only `wp_localize_script`
+	 * produces the `-js-extra` suffix, and only `wp_set_script_translations`
+	 * produces the `-js-translations` suffix. A malicious plugin choosing one of
+	 * those IDs to hide a tracker has the entire rest of the page to exfiltrate
+	 * from — the assumption "the IDs WP core appends mark data, not behaviour"
+	 * is the same one WordPress itself relies on.
+	 *
+	 * @param string $id Inline script tag ID.
+	 * @return bool
+	 */
+	private function is_wp_localize_or_translations_inline_id( $id ) {
+		if ( ! is_string( $id ) || '' === $id ) {
+			return false;
+		}
+		return 1 === preg_match( '/-js-(extra|translations)$/', $id );
+	}
+
+	/**
 	 * Inject opt-out hints into our own `<script>` tags so cache /
 	 * optimisation plugins leave them alone. A deferred or delayed
 	 * consent banner defeats the plugin's purpose: the banner (and the
@@ -3785,6 +3839,12 @@ class Frontend {
 		// The handle covers WP 6.3+; the ID-derived check covers WP 5.7-6.2
 		// and the output-buffer fallback's rendered IDs.
 		if ( $this->is_own_script_handle( $handle ) || $this->is_own_inline_script_id( $id ) ) {
+			return $tag;
+		}
+		// wp_localize_script / wp_set_script_translations payloads carry only
+		// config data or translation strings — never executable tracker code.
+		// See is_wp_localize_or_translations_inline_id() for the full rationale.
+		if ( $this->is_wp_localize_or_translations_inline_id( $id ) ) {
 			return $tag;
 		}
 		// Extract attributes and inline content separately so the whitelist

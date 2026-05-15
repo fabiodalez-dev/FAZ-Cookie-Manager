@@ -547,21 +547,8 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
-### 1.13.17
-- **Fix**: `dataLayer is not defined` when third-party trackers emit a bare `dataLayer.push()` before GTM bootstraps. Pre-initialised via `wp_add_inline_script('before')`.
-- **Fix**: Cookie category counts stay stale after scan + auto-categorise — every cookie create/update/delete now invalidates the Category controller cache, the banner template, the IAB unmatched-vendors transient, and 10 page-cache adapters.
-- **Fix**: REST `bulk_update` was silently dropping `opt_in_script` / `opt_out_script` — now iterates schema editable fields through the same `sanitize_script_field` capability gate as single-cookie updates.
-- **Fix**: `_cookieScripts` no longer truncates at 500 cookies (paged query, JSON-key-anchored LIKE, 10000-row ceiling).
-- **Fix**: `sanitize_meta_for_current_user` intercepts every write path into `wp_faz_cookies.meta`. Closes a stored-XSS surface for multisite Site Administrators without `unfiltered_html`.
-- **Fix**: Own `wp_localize_script` payloads (`{handle}-js-extra`) can no longer be classified as analytics by the output-buffer blocker. Closes #99 and #101 (reported independently by @Myblueroom).
-- **Fix**: WP Rocket "Load JavaScript deferred" no longer wraps our `_fazConfig` bootstrap payload in a `DOMContentLoaded` callback (which would scope `var _fazConfig` to the callback and break `script.js` with `Cannot set properties of undefined`). New `rocket_defer_inline_exclusions` filter excludes `_fazConfig`, `_fazCfg`, `_fazGcm`, `_fazTcfConfig` from DeferJS wrapping. Closes #95 (thanks @dominikkucharski for the diagnosis and reference patch).
-- **Fix**: `<noscript>`-wrapped iframes injected by page builders (Bricks/Elementor/Divi) no longer become 0x0 phantom placeholders.
-- **Fix**: Escape key no longer dismisses the consent banner without a recorded decision (EDPB dark-pattern). Preference center close-on-Escape preserved.
-- **Added**: `Necessary` selectable in Custom Blocking Rules dropdown.
-- **Added**: Banner-status toggle on the Cookie Banner admin page mirroring Settings → Banner Control.
-- **Added**: CCPA 1798.135(c) compliance — `[faz_do_not_sell]` renders a Withdraw opt-out button + `dns_rescinded` log entry.
-- **Added**: DSAR validation announces errors via `role=alert`, `aria-invalid` per field, focus on first invalid. WCAG 1.4.11 focus indicator on `.faz-dsar-btn` / `.faz-dnsmpi-btn`.
-- **Release**: `scripts/build-release.sh` — scripted 3-way ZIP builder for wp.org / GitHub / ClassicPress Directory. Refs #20.
+### 1.13.18 — 2026-05-15
+- **Fix**: `wp_localize_script` and `wp_set_script_translations` payloads (inline `<script id="*-js-extra">` and `<script id="*-js-translations">`) are no longer false-positively blocked when their body contains a substring that matches a provider pattern. These ID shapes carry only data/i18n strings, never executable tracker code — the prior content-substring matcher would crash third-party plugins whose config keys happened to mention a provider (e.g. trx_addons emits `animate_to_mc4wp_form_submitted`, which matched MailChimp's `mc4wp` and broke the page with `ReferenceError: TRX_ADDONS_STORAGE is not defined`).
 
 ## Translations
 

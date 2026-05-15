@@ -2,6 +2,16 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.13.18] — 2026-05-15
+
+### Fixed
+
+- **`wp_localize_script` and `wp_set_script_translations` payloads no longer trigger false-positive blocking** — inline `<script id="*-js-extra">` and `<script id="*-js-translations">` tags carry only data (config objects or i18n strings), never executable tracker code. The output-buffer / `wp_inline_script_tag` substring matcher would previously rewrite these tags to `type="text/plain"` whenever a config key or translated string incidentally contained a provider name (e.g. trx_addons emits `animate_to_mc4wp_form_submitted`, which substring-matched the `mc4wp` MailChimp pattern and crashed the page with `ReferenceError: TRX_ADDONS_STORAGE is not defined`). Both ID shapes are now exempt in `filter_inline_script_tag()` and the OB fallback `process_script_tag()`. `-js-before` and `-js-after` payloads (which DO accept executable code via `wp_add_inline_script()`) continue to route through the regular provider matcher.
+
+### Tests
+
+- 5 PHP-reflection regression tests in `tests/e2e/specs/v1-13-18-fixes.spec.ts` covering both call sites (filter + OB fallback), both ID suffixes (`-js-extra` and `-js-translations`), and the negative case (`-js-before` still blocked).
+
 ## [1.13.17] — 2026-05-15
 
 ### Fixed
