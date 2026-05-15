@@ -89,7 +89,8 @@ echo "  svn:           $(svn --version --quiet)"
 # 2. ZIP exists
 if [[ ! -f "${ZIP_FILE}" ]]; then
     red "wp.org-shape ZIP not found: ${ZIP_FILE}"
-    red "  Build it first via release.md §3 (this is the wp.org variant — no -full suffix)."
+    red "  Build it first with: scripts/build-release.sh --version=${VERSION}"
+    red "  This is the wp.org variant — no -full suffix and no ClassicPress v-prefix."
     exit 1
 fi
 echo "  ZIP:           ${ZIP_FILE} ($(du -h "${ZIP_FILE}" | cut -f1))"

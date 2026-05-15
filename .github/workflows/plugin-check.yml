@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      # Build a wp.org-shape copy (mirrors the dual-ZIP flow in release.md).
+      # Build a wp.org-shape copy (mirrors scripts/build-release.sh).
       # Excludes run-scan.php because Plugin Check cannot parse its CLI
       # ABSPATH guard, and the file is excluded from the wp.org ZIP anyway.
       - name: Build wp.org-shape plugin copy

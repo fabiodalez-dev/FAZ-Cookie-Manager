@@ -1,6 +1,6 @@
-# wp.org-shape ZIP exclude list. Must stay in sync with `release.md::COMMON_EXCLUDES`
-# plus the wp.org-only excludes (run-scan.php, cp-api-fetch-polyfill.js).
-# See release.md for the dual-ZIP build flow.
+# wp.org-shape ZIP exclude list. Must stay in sync with scripts/build-release.sh
+# COMMON_EXCLUDES plus the wp.org-only excludes (run-scan.php,
+# cp-api-fetch-polyfill.js). See release.md for the release build flow.
 
 # VCS / dotfiles
 .coderabbit.yaml

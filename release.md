@@ -39,16 +39,25 @@ npm run build:min
 
 Regenerates `frontend/js/gcm.min.js` and `frontend/js/tcf-cmp.min.js`.
 
-## 3. Create Release ZIPs (TWO variants — wp.org + GitHub)
+## 3. Create Release ZIPs (THREE variants — wp.org + GitHub + ClassicPress)
 
-We ship **two** ZIPs per release. They differ by exactly two files:
+Build all release archives with the scripted flow:
 
-| Variant | Filename | `run-scan.php` | `cp-api-fetch-polyfill.js` | Audience |
-|---------|----------|---------------:|---------------------------:|----------|
-| **wp.org** | `faz-cookie-manager-{version}.zip` | excluded | excluded | wp.org submission + SVN |
-| **GitHub (full)** | `faz-cookie-manager-{version}-full.zip` | included | included | developers who clone/download the GH release ZIP, ClassicPress users |
+```bash
+cd faz-cookie-manager
+scripts/build-release.sh --version=${VERSION}
+```
 
-**Why two?**
+The script validates `readme.txt` stable tag, the plugin header version, and
+`FAZ_VERSION`, then writes the ZIPs to the parent project directory by default.
+
+| Variant | Filename | `run-scan.php` | `cp-api-fetch-polyfill.js` | `Requires CP` | Audience |
+|---------|----------|---------------:|---------------------------:|--------------:|----------|
+| **wp.org** | `faz-cookie-manager-{version}.zip` | excluded | excluded | no | wp.org submission + SVN |
+| **GitHub (full)** | `faz-cookie-manager-{version}-full.zip` | included | included | no | developers who clone/download the GH release ZIP |
+| **ClassicPress** | `faz-cookie-manager-v{version}.zip` | included | included | yes, injected in staging | ClassicPress Directory |
+
+**Why separate variants?**
 1. **`run-scan.php`** — WordPress Plugin Check cannot parse the `ABSPATH` guard
    pattern used by `admin/modules/scanner/run-scan.php` (a CLI bootstrap script —
    its guard isn't the literal `if ( ! defined( 'ABSPATH' ) ) { exit; }` that
@@ -65,92 +74,17 @@ We ship **two** ZIPs per release. They differ by exactly two files:
    WordPress the native `wp-api-fetch` is loaded and the polyfill is never
    enqueued. `class-admin.php::deregister_api_fetch()` carries a `file_exists()`
    guard so the wp.org build is a graceful no-op when the polyfill is absent.
+3. **ClassicPress Directory asset** — the CP Directory requires a GitHub release
+   asset URL in the form `faz-cookie-manager-v{version}.zip`, expanding to a
+   `faz-cookie-manager/` folder. The CP ZIP is full-featured like the GitHub
+   archive, includes `README.md`, and injects `Requires CP` only in the staged
+   copy so the source tree and wp.org ZIP stay unchanged. Override the minimum
+   CP version with `CP_REQUIRES=1.5 scripts/build-release.sh --version=${VERSION}`
+   if the support baseline changes.
 
-> **Critical:** always delete an existing ZIP with the same name before creating
-> a new one. The `zip -r` command *updates* an existing archive instead of
-> replacing it — deleted files will persist as ghost entries.
-
-```bash
-cd "/Users/fabio/Documents/GitHub/Cookie Crawler"
-VERSION=1.5.0
-
-# Shared exclude list (everything except `run-scan.php` and `cp-api-fetch-polyfill.js`).
-COMMON_EXCLUDES=(
-  -x "faz-cookie-manager/.git/*"
-  -x "faz-cookie-manager/.github/*"
-  -x "faz-cookie-manager/.githooks/*"
-  -x "faz-cookie-manager/.claude/*"
-  -x "faz-cookie-manager/.wordpress-org/*"
-  -x "faz-cookie-manager/.coderabbit.yaml"
-  -x "faz-cookie-manager/.distignore"
-  -x "faz-cookie-manager/assets/*"
-  -x "faz-cookie-manager/node_modules/*"
-  -x "faz-cookie-manager/vendor/*"
-  -x "faz-cookie-manager/tests/*"
-  -x "faz-cookie-manager/test-results/*"
-  -x "faz-cookie-manager/.playwright-mcp/*"
-  -x "faz-cookie-manager/.playwright-cli/*"
-  -x "faz-cookie-manager/.code-review-graph/*"
-  -x "faz-cookie-manager/graphify-out/*"
-  -x "faz-cookie-manager/.serena/*"
-  -x "faz-cookie-manager/.gitignore"
-  -x "faz-cookie-manager/.gitattributes"
-  -x "faz-cookie-manager/.env*"
-  -x "faz-cookie-manager/package*.json"
-  -x "faz-cookie-manager/tsconfig.json"
-  -x "faz-cookie-manager/composer.json"
-  -x "faz-cookie-manager/composer.lock"
-  -x "faz-cookie-manager/phpstan.neon"
-  -x "faz-cookie-manager/phpstan-bootstrap.php"
-  -x "faz-cookie-manager/.DS_Store"
-  -x "faz-cookie-manager/**/.DS_Store"
-  -x "faz-cookie-manager/docs/*"
-  -x "faz-cookie-manager/scripts/*"
-  -x "faz-cookie-manager/social-preview.png"
-  -x "faz-cookie-manager/bricks-placeholder.png"
-  -x "faz-cookie-manager/settings-*.png"
-  -x "faz-cookie-manager/settings-*.jpg"
-  -x "faz-cookie-manager/fabiodalez-*.png"
-  -x "faz-cookie-manager/fabiodalez-*.jpg"
-  -x "faz-cookie-manager/release.md"
-  -x "faz-cookie-manager/plan.md"
-  -x "faz-cookie-manager/eslint.config.mjs"
-  -x "faz-cookie-manager/cookie-banner-compliance-checklist.md"
-  -x "faz-cookie-manager/languages/*.po~"
-  -x "faz-cookie-manager/languages/messages.mo"
-  -x "faz-cookie-manager/biome.json"
-  -x "faz-cookie-manager/CLAUDE.md"
-  -x "faz-cookie-manager/report.md"
-  -x "faz-cookie-manager/README.md"
-  -x "faz-cookie-manager/CHANGELOG.md"
-  -x "faz-cookie-manager/revisit.svg"
-)
-
-# 1) wp.org variant — `run-scan.php` AND `cp-api-fetch-polyfill.js` EXCLUDED.
-rm -f "faz-cookie-manager-${VERSION}.zip"
-zip -r "faz-cookie-manager-${VERSION}.zip" faz-cookie-manager/ \
-  "${COMMON_EXCLUDES[@]}" \
-  -x "faz-cookie-manager/admin/modules/scanner/run-scan.php" \
-  -x "faz-cookie-manager/admin/assets/js/cp-api-fetch-polyfill.js"
-
-# 2) GitHub full variant — both files INCLUDED.
-rm -f "faz-cookie-manager-${VERSION}-full.zip"
-zip -r "faz-cookie-manager-${VERSION}-full.zip" faz-cookie-manager/ \
-  "${COMMON_EXCLUDES[@]}"
-
-# Sanity:
-echo "wp.org variant: should NOT contain run-scan.php"
-unzip -l "faz-cookie-manager-${VERSION}.zip"     | grep -q 'run-scan\.php' && echo "  FAIL"  || echo "  OK"
-echo "wp.org variant: should NOT contain cp-api-fetch-polyfill.js"
-unzip -l "faz-cookie-manager-${VERSION}.zip"     | grep -q 'cp-api-fetch-polyfill\.js' && echo "  FAIL"  || echo "  OK"
-echo "GitHub variant: SHOULD contain run-scan.php"
-unzip -l "faz-cookie-manager-${VERSION}-full.zip" | grep -q 'run-scan\.php' && echo "  OK"   || echo "  FAIL"
-echo "GitHub variant: SHOULD contain cp-api-fetch-polyfill.js"
-unzip -l "faz-cookie-manager-${VERSION}-full.zip" | grep -q 'cp-api-fetch-polyfill\.js' && echo "  OK"   || echo "  FAIL"
-```
-
-> Both variants must be uploaded as assets on the GitHub release. wp.org
+> All variants must be uploaded as assets on the GitHub release. wp.org
 > submission/SVN uses ONLY `faz-cookie-manager-{version}.zip` (no suffix).
+> ClassicPress Directory uses ONLY `faz-cookie-manager-v{version}.zip`.
 
 ### Expected size: ~1.4 MB
 
@@ -185,7 +119,8 @@ gh release create "v${VERSION}" \
 
 gh release upload "v${VERSION}" \
   "../faz-cookie-manager-${VERSION}.zip" \
-  "../faz-cookie-manager-${VERSION}-full.zip"
+  "../faz-cookie-manager-${VERSION}-full.zip" \
+  "../faz-cookie-manager-v${VERSION}.zip"
 ```
 
 ## 5. Deploy to Test Site
