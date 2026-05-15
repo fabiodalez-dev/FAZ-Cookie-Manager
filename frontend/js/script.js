@@ -1,6 +1,9 @@
 /**
  * WordPress localize object mapped to a constant.
  */
+if ( typeof window._fazConfig === 'undefined' && typeof window._fazCfg !== 'undefined' && window._fazCfg !== null ) {
+    window._fazConfig = window._fazCfg;
+}
 const _fazStore = window._fazConfig;
 
 if ( ! _fazStore ) {

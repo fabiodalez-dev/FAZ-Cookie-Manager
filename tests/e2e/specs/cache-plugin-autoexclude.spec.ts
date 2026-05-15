@@ -135,6 +135,56 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
     expect(result.empty).toBe(false);
   });
 
+  test('output-buffer fallback never blocks own wp_localize_script payloads (#100)', async () => {
+    const raw = wpEval(`
+      $fe = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.0' );
+      $r  = new ReflectionClass( $fe );
+
+      // Prove the own-inline guard is independent from the generic whitelist:
+      // a site-level filter or future whitelist change must not allow FAZ's
+      // localized bootstrap payload to be classified as analytics.
+      $wl = $r->getProperty( 'whitelist_cache' );
+      $wl->setAccessible( true );
+      $wl->setValue( $fe, array() );
+
+      $m = $r->getMethod( 'process_script_tag' );
+      $m->setAccessible( true );
+
+      $content = 'var _fazCfg = {"_categories":[{"slug":"analytics"}]}; gtag("config", "G-FAZ-E2E");';
+      $providers = array( 'gtag(' => 'analytics' );
+      $blocked = array( 'analytics' );
+
+      $own_full = '<script id="faz-fw-js-extra">' . $content . '</script>';
+      $own = $m->invoke(
+        $fe,
+        array( $own_full, ' id="faz-fw-js-extra"', $content ),
+        $providers,
+        $blocked
+      );
+
+      $foreign_full = '<script id="third-party-js-extra">' . $content . '</script>';
+      $foreign = $m->invoke(
+        $fe,
+        array( $foreign_full, ' id="third-party-js-extra"', $content ),
+        $providers,
+        $blocked
+      );
+
+      echo wp_json_encode( array(
+        'own_unchanged' => $own === $own_full,
+        'own_blocked' => false !== strpos( $own, 'type="text/plain"' ),
+        'foreign_blocked' => false !== strpos( $foreign, 'type="text/plain"' ),
+        'foreign_category' => false !== strpos( $foreign, 'data-faz-category="analytics"' ),
+      ) );
+    `).trim();
+    const result = JSON.parse(raw) as Record<string, boolean>;
+
+    expect(result.own_unchanged, 'own {handle}-js-extra payload must remain executable').toBe(true);
+    expect(result.own_blocked, 'own localized payload must not be rewritten to text/plain').toBe(false);
+    expect(result.foreign_blocked, 'foreign matching inline script still needs blocking').toBe(true);
+    expect(result.foreign_category, 'foreign blocked script keeps its category marker').toBe(true);
+  });
+
   test('litespeed_exclude_own_scripts_from_include is path-anchored (no false-positive scrub)', async () => {
     const raw = wpEval(`
       $fe = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.0' );

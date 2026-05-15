@@ -1650,6 +1650,11 @@ class Frontend {
 		$content = $m[2];
 		$full    = $m[0];
 
+		$id = $this->extract_tag_attr( $attrs, 'id' );
+		if ( $this->is_own_inline_script_id( $id ) ) {
+			return $full;
+		}
+
 		// Never block whitelisted scripts.
 		if ( $this->is_whitelisted( $attrs, $content ) ) {
 			return $full;
@@ -3402,6 +3407,28 @@ class Frontend {
 	}
 
 	/**
+	 * Detect WP-generated inline script IDs owned by this plugin.
+	 *
+	 * Core appends these suffixes when printing `wp_localize_script()`,
+	 * translations, and before/after inline payloads. The output-buffer
+	 * fallback only sees the rendered `id`, so recover the registered handle
+	 * before applying the own-handle guard.
+	 *
+	 * @param string $id Inline script tag ID.
+	 * @return bool
+	 */
+	private function is_own_inline_script_id( $id ) {
+		if ( ! is_string( $id ) || '' === $id ) {
+			return false;
+		}
+		$handle = preg_replace( '/-js-(extra|translations|before|after)$/', '', $id );
+		if ( $handle === $id || ! is_string( $handle ) ) {
+			return false;
+		}
+		return $this->is_own_script_handle( $handle );
+	}
+
+	/**
 	 * Inject opt-out hints into our own `<script>` tags so cache /
 	 * optimisation plugins leave them alone. A deferred or delayed
 	 * consent banner defeats the plugin's purpose: the banner (and the
@@ -3495,12 +3522,7 @@ class Frontend {
 		if ( '' === $id ) {
 			return $attributes;
 		}
-		$handle = preg_replace( '/-js-(extra|translations|before|after)$/', '', $id );
-		if ( $handle === $id || ! is_string( $handle ) ) {
-			// No matching suffix — not a WP-managed inline-script id we own.
-			return $attributes;
-		}
-		if ( ! $this->is_own_script_handle( $handle ) ) {
+		if ( ! $this->is_own_inline_script_id( $id ) ) {
 			return $attributes;
 		}
 		// Skip if pre-consent blocking has already neutralised the tag.
@@ -3729,9 +3751,9 @@ class Frontend {
 		// whose content includes category slugs like "analytics" — which would otherwise
 		// be matched by the provider pattern and blocked, preventing window._fazConfig
 		// from being defined and crashing the entire banner.
-		// is_own_script_handle() covers the base handle and all -* suffixes (including
-		// the -js-extra suffix that wp_localize_script() appends) plus the faz-fw family.
-		if ( $this->is_own_script_handle( $handle ) || $this->is_own_script_handle( $id ) ) {
+		// The handle covers WP 6.3+; the ID-derived check covers WP 5.7-6.2
+		// and the output-buffer fallback's rendered IDs.
+		if ( $this->is_own_script_handle( $handle ) || $this->is_own_inline_script_id( $id ) ) {
 			return $tag;
 		}
 		// Extract attributes and inline content separately so the whitelist
