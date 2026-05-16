@@ -60,6 +60,9 @@ class Activator {
 		'3.4.1' => array(
 			'update_db_341',
 		),
+		'3.5.0' => array(
+			'update_db_350',
+		),
 	);
 	/**
 	 * Return the current instance of the class
@@ -704,6 +707,57 @@ class Activator {
 		if ( class_exists( $controller_class ) ) {
 			$controller_class::get_instance()->install_tables();
 		}
+	}
+
+	/**
+	 * Add target_countries (JSON array of ISO-3166 alpha-2 codes) and priority
+	 * (int) columns to wp_faz_banners. Backfill existing rows with the
+	 * "match-all" empty array (so the post-upgrade behaviour is identical to
+	 * the single-banner mode) and ensure exactly one banner carries
+	 * banner_default=1 (the fallback row used when no target matches).
+	 *
+	 * Idempotent: the column-add step uses dbDelta which no-ops if the columns
+	 * already exist; the backfill step only touches rows whose target_countries
+	 * is NULL or empty string (i.e. rows the column-add just introduced).
+	 *
+	 * @since 1.13.18
+	 * @return void
+	 */
+	public static function update_db_350() {
+		global $wpdb;
+
+		// 1. Re-run install_tables so dbDelta picks up the new columns
+		//    (`target_countries longtext`, `priority int(11)`).
+		$controller_class = 'FazCookie\Admin\Modules\Banners\Includes\Controller';
+		if ( class_exists( $controller_class ) ) {
+			$controller_class::get_instance()->install_tables();
+		}
+
+		$table = $wpdb->prefix . 'faz_banners';
+
+		// 2. Backfill target_countries on rows that the column-add introduced.
+		//    Empty JSON array '[]' means "match every visitor" — preserves the
+		//    pre-upgrade behaviour where the banner showed to everyone gated
+		//    only by geo_targeting on/off.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal; one-shot migration write; the only literal value is the static JSON token '[]'.
+		$wpdb->query( "UPDATE `{$table}` SET `target_countries` = '[]' WHERE `target_countries` IS NULL OR `target_countries` = ''" );
+
+		// 3. Ensure exactly one banner is the fallback default. If none has
+		//    banner_default=1, promote the first row with status=1 (the
+		//    currently-active banner pre-upgrade) so the new selector still
+		//    finds something to serve when no country matches.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal; one-shot read inside an activation migration.
+		$has_default = (int) $wpdb->get_var( "SELECT COUNT(banner_id) FROM `{$table}` WHERE `banner_default` = 1" );
+		if ( 0 === $has_default ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table is $wpdb->prefix + literal; one-shot read of the currently-active banner id.
+			$active_id = (int) $wpdb->get_var( "SELECT banner_id FROM `{$table}` WHERE `status` = 1 ORDER BY banner_id ASC LIMIT 1" );
+			if ( $active_id > 0 ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to the custom faz_banners table; row identifier is the integer banner_id we just selected.
+				$wpdb->update( $table, array( 'banner_default' => 1 ), array( 'banner_id' => $active_id ), array( '%d' ), array( '%d' ) );
+			}
+		}
+
+		faz_clear_banner_template_cache();
 	}
 
 	/**

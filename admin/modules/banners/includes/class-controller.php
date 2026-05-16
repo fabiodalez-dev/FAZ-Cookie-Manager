@@ -100,11 +100,14 @@ class Controller extends Base_Controller {
 			settings longtext NOT NULL,
 			banner_default int(11) NOT NULL DEFAULT 0,
 			contents longtext NOT NULL,
+			target_countries longtext NOT NULL,
+			priority int(11) NOT NULL DEFAULT 0,
 			date_created datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			date_modified datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			PRIMARY KEY (banner_id),
 			KEY slug (slug),
-			KEY status (status)
+			KEY status (status),
+			KEY priority (priority)
 	) $collate;
 	";
 		return $tables;
