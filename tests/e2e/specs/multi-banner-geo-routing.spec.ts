@@ -34,6 +34,15 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     // Restore every row to its pre-test target_countries / priority / status /
     // banner_default. We don't drop and re-insert because banner_id values must
     // be preserved (frontend caches reference them).
+    //
+    // CRITICAL: also invalidate `faz_banner_template` (the cached server-side
+    // rendered banner HTML) and the geo_targeting setting cache. Without this
+    // step the subsequent tests in the full suite (pr-2026-04-19-audit.spec.ts
+    // TCF flow in particular) get served the LAST banner template rendered
+    // during our GEO-01..GEO-30 mutations — which may not have a category
+    // accordion at all (banner_id=2 / CCPA) — so locators like
+    // #fazCategoryDirectanalytics resolve to 0 elements and the next test
+    // fails for a reason that has nothing to do with its own code.
     wpEval(`
       global $wpdb;
       $rows = json_decode( ${JSON.stringify(snapshot)}, true );
@@ -52,6 +61,12 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
         );
       }
       \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+      // Force the next request to re-render the banner template from the
+      // pristine, restored DB row instead of serving a stale cached blob.
+      if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+        faz_clear_banner_template_cache();
+      }
+      delete_option( 'faz_banner_template' );
     `);
   });
 
