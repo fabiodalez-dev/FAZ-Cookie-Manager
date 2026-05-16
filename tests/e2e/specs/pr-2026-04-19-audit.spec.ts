@@ -812,6 +812,37 @@ test.describe('PR audit regressions (2026-04-19)', () => {
     try {
       configureIab({ enabled: true, purposeOneTreatment: false });
 
+      // Force the active banner into the shape this test depends on:
+      // categoryPreview accordion toggles visible (so `#fazCategoryDirectanalytics`
+      // resolves), and banner type = classic (which embeds the inline
+      // preference center). Without this, an earlier test in the suite
+      // may have left the active banner with a popup/sidebar type whose
+      // preference center hides the per-category toggles — and this test
+      // then fails for setup reasons unrelated to TCF timestamps.
+      // The afterAll(restoreSettingsOption) handles faz_settings; the banner
+      // template option is restored via faz_clear_banner_template_cache at
+      // teardown, so any mutation here is bounded to the test's own run.
+      wpEval(`
+        $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
+        $banner = $controller->get_active_banner();
+        if ( $banner ) {
+          $settings = $banner->get_settings();
+          if ( ! is_array( $settings ) ) { $settings = array(); }
+          if ( ! isset( $settings['settings'] ) || ! is_array( $settings['settings'] ) ) { $settings['settings'] = array(); }
+          $settings['settings']['type'] = 'classic';
+          $settings['settings']['preferenceCenterType'] = 'pushdown';
+          if ( ! isset( $settings['categoryPreview'] ) || ! is_array( $settings['categoryPreview'] ) ) { $settings['categoryPreview'] = array(); }
+          $settings['categoryPreview']['status'] = true;
+          $banner->set_settings( $settings );
+          $banner->save();
+          if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+            faz_clear_banner_template_cache();
+          }
+          delete_option( 'faz_banner_template' );
+          $controller->delete_cache();
+        }
+      `);
+
       const visitor = await browser.newContext({ baseURL: WP_BASE });
       try {
         const page = await visitor.newPage();
