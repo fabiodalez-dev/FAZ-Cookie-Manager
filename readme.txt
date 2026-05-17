@@ -107,6 +107,31 @@ Terms of Service / Privacy Policy:
 * https://www.maxmind.com/en/terms-of-use
 * https://www.maxmind.com/en/privacy-policy
 
+= ip-api.com =
+
+Used as a fallback geolocation lookup for the optional geo-targeting and multi-banner geo-routing features, only when MaxMind is unavailable.
+
+Triggered when: a frontend page renders the banner while geo-targeting / multi-banner geo-routing is enabled AND neither the Cloudflare CF-IPCountry header (opt-in) nor the MaxMind GeoLite2 database produces a result. The visitor's IP is sent to ip-api.com for country resolution; the resolved country code is cached in a transient (hash-keyed by IP) for one hour to avoid repeating the lookup.
+
+Data sent: the visitor's IP address and standard HTTP request headers.
+
+Service URL:
+* http://ip-api.com/json/{ip}?fields=countryCode
+
+Terms of Service / Privacy Policy:
+* https://ip-api.com/docs/legal
+
+= Plugin REST endpoint /faz/v1/banner (public) =
+
+Used by the plugin's own front-end JavaScript (`script.js`) to fetch the per-language / per-country banner payload after the page has loaded. This is an INTERNAL endpoint hosted by the plugin on the same WordPress install — no third-party network call leaves the visitor's browser to a remote service. It is documented here only because the response carries `bannerSlug` and `activeLaw`, two strings that describe which banner profile and which legal regime (gdpr / ccpa) currently applies to the visitor.
+
+Triggered when: the front-end banner script bootstraps on a page that has multi-banner geo-routing active.
+
+Data sent: only what the visitor's browser already sends with any page request to the same origin. The plugin does not forward the request to any remote service.
+
+Service URL:
+* https://{your-site}/wp-json/faz/v1/banner
+
 = AMP Project CDN =
 
 Used only on AMP pages when the AMP consent integration is active, to load the official `amp-consent` component required by AMP.

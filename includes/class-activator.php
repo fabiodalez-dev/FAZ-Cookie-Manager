@@ -743,6 +743,42 @@ class Activator {
 
 		$table = $wpdb->prefix . 'faz_banners';
 
+		// 1a. Safety net for MySQL 8.0 STRICT_TRANS_TABLES installs where
+		//     dbDelta's `longtext NOT NULL` ADD COLUMN can refuse to
+		//     materialise the new columns. Probe information_schema and
+		//     issue an explicit ALTER + NULL-to-default backfill when
+		//     dbDelta silently skipped them. Both columns are checked
+		//     independently so a partial migration is detected.
+		$schema = $wpdb->get_var( 'SELECT DATABASE()' );
+		if ( $schema ) {
+			$tc_exists = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+					$schema,
+					$wpdb->prefix . 'faz_banners',
+					'target_countries'
+				)
+			);
+			if ( 0 === $tc_exists ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot DDL on the plugin's custom table; column type is a fixed literal, no user input.
+				$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `target_countries` longtext NULL" );
+			}
+			$pr_exists = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+					$schema,
+					$wpdb->prefix . 'faz_banners',
+					'priority'
+				)
+			);
+			if ( 0 === $pr_exists ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot DDL; column type + default are fixed literals.
+				$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `priority` int(11) NOT NULL DEFAULT 0" );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot DDL.
+				$wpdb->query( "ALTER TABLE `{$table}` ADD INDEX `priority` (`priority`)" );
+			}
+		}
+
 		// 2. Backfill target_countries on rows that the column-add introduced.
 		//    Empty JSON array '[]' means "match every visitor" — preserves the
 		//    pre-upgrade behaviour where the banner showed to everyone gated

@@ -480,8 +480,21 @@ class Controller extends Base_Controller {
 	 * @return bool
 	 */
 	public function has_country_dependent_banners() {
+		// Memoize via transient — this method runs on every front-end
+		// request once geo-routing is enabled, reading EVERY banner row
+		// each time. On busy installs the per-request DB load was a
+		// real amplifier (F-SEC-04 in the adamsreview report). 5-minute
+		// TTL is short enough that an admin Save-toggling-a-banner
+		// experience stays snappy (delete_cache() below invalidates it
+		// on writes anyway), and long enough that a static page tier
+		// sees this as a near-zero-cost call.
+		$cached = get_transient( 'faz_has_country_dependent_banners' );
+		if ( false !== $cached ) {
+			return (bool) $cached;
+		}
 		$items = $this->get_items();
 		if ( empty( $items ) || ! is_array( $items ) ) {
+			set_transient( 'faz_has_country_dependent_banners', 0, 5 * MINUTE_IN_SECONDS );
 			return false;
 		}
 		foreach ( $items as $item ) {
@@ -490,6 +503,7 @@ class Controller extends Base_Controller {
 				continue;
 			}
 			if ( ! empty( $banner->get_target_countries() ) ) {
+				set_transient( 'faz_has_country_dependent_banners', 1, 5 * MINUTE_IN_SECONDS );
 				return true;
 			}
 			// The ruleSet lives under .settings.ruleSet (see Banner::get_law()
@@ -508,11 +522,27 @@ class Controller extends Base_Controller {
 				}
 				$code = isset( $rule['code'] ) ? strtoupper( (string) $rule['code'] ) : 'ALL';
 				if ( 'ALL' !== $code ) {
+					set_transient( 'faz_has_country_dependent_banners', 1, 5 * MINUTE_IN_SECONDS );
 					return true;
 				}
 			}
 		}
+		set_transient( 'faz_has_country_dependent_banners', 0, 5 * MINUTE_IN_SECONDS );
 		return false;
+	}
+
+	/**
+	 * Invalidate the country-dependent transient on top of the normal
+	 * group-level cache invalidation. Mirrors the cache_group invalidation
+	 * the base class already does; both are needed so a banner save (or
+	 * delete) takes effect on the front-end immediately instead of after
+	 * the 5-minute transient TTL elapses.
+	 *
+	 * @return void
+	 */
+	public function delete_cache() {
+		delete_transient( 'faz_has_country_dependent_banners' );
+		parent::delete_cache();
 	}
 
 	/**

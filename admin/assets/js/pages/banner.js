@@ -17,7 +17,17 @@
 		return typeof obj === 'string' ? obj : fallback;
 	}
 
-	var bannerId = 1; // default banner
+	// Banner the page is currently editing. Read from the ?banner_id= query
+	// string so the multi-banner switcher (1.14.0+) can deep-link to a
+	// specific row. Falls back to 1 (the system-default banner shipped
+	// with every install) when the param is missing or malformed.
+	var bannerId = (function () {
+		try {
+			var match = (window.location.search || '').match(/[?&]banner_id=(\d+)/);
+			var parsed = match ? parseInt(match[1], 10) : NaN;
+			return isFinite(parsed) && parsed > 0 ? parsed : 1;
+		} catch (e) { return 1; }
+	})();
 	var bannerData = null; // full API response
 	var currentLang = 'en';
 	var previewVisible = true;
@@ -227,9 +237,104 @@
 			ensurePreviewFrame(false);
 			// Render live preview
 			refreshPreview();
+			// Multi-banner switcher (1.14.0+) — list every banner row so
+			// the admin can jump between them via ?banner_id=N.
+			populateSwitcher();
 		}).catch(function () {
 			FAZ.notify(__('banner.loadFailed', 'Failed to load banner settings.'), 'error');
 		});
+	}
+
+	// ── Multi-banner switcher (1.14.0+) ─────────────────────────────────
+	// Populates #faz-b-switcher with every banner row, lets the admin
+	// jump between banners via ?banner_id=N, create a new banner cloned
+	// from the current one, and delete the current banner (except the
+	// last remaining row).
+	function populateSwitcher() {
+		var wrap   = document.getElementById('faz-b-switcher');
+		var select = document.getElementById('faz-b-switcher-select');
+		var newBtn = document.getElementById('faz-b-switcher-new');
+		var delBtn = document.getElementById('faz-b-switcher-delete');
+		if (!wrap || !select || !newBtn) return;
+
+		FAZ.get('banners').then(function (data) {
+			var rows = Array.isArray(data) ? data : [];
+			// Hide the entire switcher card when only one banner exists —
+			// keeps the UI clean for single-banner installs (the
+			// overwhelming majority).
+			wrap.style.display = rows.length <= 1 ? 'none' : '';
+			// Always populate (the dropdown stays accurate even for the
+			// edge case where rows.length === 1 and the admin clicks
+			// "+ New banner" to add a second one).
+			while (select.firstChild) { select.removeChild(select.firstChild); }
+			rows.forEach(function (b) {
+				var opt = document.createElement('option');
+				opt.value = String(b.id);
+				var label = b.name || ('Banner #' + b.id);
+				if (Number(b['default']) === 1) label += ' ★'; // ★
+				if (Number(b.status) !== 1) label += ' (' + __('banner.inactive', 'inactive') + ')';
+				opt.textContent = label;
+				if (Number(b.id) === Number(bannerId)) opt.selected = true;
+				select.appendChild(opt);
+			});
+			// Show delete only when there's more than one row AND this
+			// banner isn't the system default — deleting the default would
+			// leave the picker with no fallback row.
+			if (delBtn) {
+				var current = rows.filter(function (b) { return Number(b.id) === Number(bannerId); })[0];
+				var canDelete = rows.length > 1 && current && Number(current['default']) !== 1;
+				delBtn.style.display = canDelete ? '' : 'none';
+			}
+		}).catch(function () { /* network glitch — switcher just doesn't appear */ });
+
+		if (!select.dataset.fazSwitcherBound) {
+			select.addEventListener('change', function () {
+				var target = parseInt(select.value, 10);
+				if (!isFinite(target) || target <= 0 || target === bannerId) return;
+				var base = window.location.href.split('?')[0];
+				var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+				window.location.href = base + '?page=' + encodeURIComponent(page) + '&banner_id=' + target;
+			});
+			select.dataset.fazSwitcherBound = '1';
+		}
+		if (!newBtn.dataset.fazSwitcherBound) {
+			newBtn.addEventListener('click', function () {
+				if (!bannerData) return;
+				if (!window.confirm(__('banner.createConfirm', 'Create a new banner cloned from the current one?'))) return;
+				FAZ.post('banners', {
+					name: (bannerData.name || 'Banner') + ' (copy)',
+					status: false,
+					'default': false,
+					properties: bannerData.properties,
+					contents: bannerData.contents
+				}).then(function (created) {
+					var newId = created && created.id ? Number(created.id) : 0;
+					if (newId <= 0) {
+						FAZ.notify(__('banner.createFailed', 'Failed to create banner.'), 'error');
+						return;
+					}
+					var base = window.location.href.split('?')[0];
+					var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+					window.location.href = base + '?page=' + encodeURIComponent(page) + '&banner_id=' + newId;
+				}).catch(function () {
+					FAZ.notify(__('banner.createFailed', 'Failed to create banner.'), 'error');
+				});
+			});
+			newBtn.dataset.fazSwitcherBound = '1';
+		}
+		if (delBtn && !delBtn.dataset.fazSwitcherBound) {
+			delBtn.addEventListener('click', function () {
+				if (!window.confirm(__('banner.deleteConfirm', 'Delete this banner permanently? This cannot be undone.'))) return;
+				FAZ.del('banners/' + bannerId).then(function () {
+					var base = window.location.href.split('?')[0];
+					var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+					window.location.href = base + '?page=' + encodeURIComponent(page);
+				}).catch(function () {
+					FAZ.notify(__('banner.deleteFailed', 'Failed to delete banner.'), 'error');
+				});
+			});
+			delBtn.dataset.fazSwitcherBound = '1';
+		}
 	}
 
 	// ── Geo Targeting (multi-banner geo-routing, 1.13.18+) ────────────────
@@ -290,6 +395,41 @@
 		if (priorityInput) priorityInput.value = (bannerData.priority != null ? bannerData.priority : 0);
 		var defaultInput = document.getElementById('faz-b-geo-default');
 		if (defaultInput) defaultInput.checked = !!bannerData['default'];
+
+		// Default-flag impact preview. When the admin ticks this toggle on
+		// a banner that's NOT currently the default, list the names of the
+		// peer banners whose default flag the save will clear. Gives the
+		// admin visibility into the destructive side-effect documented in
+		// the help text, before they hit Save.
+		(function bindDefaultImpactPreview() {
+			var toggle = document.getElementById('faz-b-geo-default');
+			var impact = document.getElementById('faz-b-geo-default-impact');
+			if (!toggle || !impact) return;
+			var refresh = function () {
+				if (!toggle.checked) { impact.style.display = 'none'; impact.textContent = ''; return; }
+				FAZ.get('banners').then(function (data) {
+					var rows = Array.isArray(data) ? data : [];
+					var others = rows
+						.filter(function (b) { return Number(b.id) !== Number(bannerId) && Number(b['default']) === 1; })
+						.map(function (b) { return b.name || ('Banner #' + b.id); });
+					if (others.length === 0) {
+						impact.style.display = 'none';
+						impact.textContent = '';
+						return;
+					}
+					impact.textContent = __(
+						'banner.defaultImpact',
+						'Saving will clear the default flag on: '
+					) + others.join(', ') + '.';
+					impact.style.display = '';
+				}).catch(function () { /* network glitch — silent, will be caught on save */ });
+			};
+			refresh();
+			if (!toggle.dataset.fazDefaultImpactBound) {
+				toggle.addEventListener('change', refresh);
+				toggle.dataset.fazDefaultImpactBound = '1';
+			}
+		})();
 	}
 
 	function collectGeoTargeting() {
@@ -429,6 +569,33 @@
 		// (1.14.0+). The flag lives at properties.settings.allowCloseButtonWithReject.
 		var bannerSettings = (bannerData.properties && bannerData.properties.settings) || {};
 		setChecked('faz-b-close-with-reject-toggle', !!bannerSettings.allowCloseButtonWithReject);
+
+		// The sub-toggle is only meaningful when the parent "Show Close Button"
+		// is on — a ticked override on an OFF parent is a no-op that
+		// misleadingly suggests something is active. Bind disabled state to
+		// the parent and re-run the binding any time the parent changes.
+		(function bindCloseSubToggle() {
+			var parent = document.getElementById('faz-b-close-toggle');
+			var sub = document.getElementById('faz-b-close-with-reject');
+			var group = document.getElementById('faz-b-close-with-reject-group');
+			if (!parent || !sub) return;
+			var sync = function () {
+				var enabled = !!parent.checked;
+				sub.disabled = !enabled;
+				if (group) {
+					group.style.opacity = enabled ? '1' : '0.5';
+					group.style.pointerEvents = enabled ? '' : 'none';
+					group.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+				}
+				if (!enabled) sub.checked = false; // can't override when X isn't shown.
+			};
+			sync();
+			// Avoid double-binding on populate re-runs.
+			if (!parent.dataset.fazCloseSubBound) {
+				parent.addEventListener('change', sync);
+				parent.dataset.fazCloseSubBound = '1';
+			}
+		})();
 
 		// Audit table
 		var auditTable = config.auditTable || {};

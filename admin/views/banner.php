@@ -10,6 +10,30 @@ defined( 'ABSPATH' ) || exit;
 
 <div id="faz-banner">
 
+	<!-- Banner switcher — populated by banner.js from /faz/v1/banners. Shown
+	     whenever the install has more than one banner row (multi-banner
+	     geo-routing introduced in 1.14.0). The "+ New banner" button POSTs
+	     a clone of the current banner and reloads the page on the new id.
+	     The active banner_id is taken from the ?banner_id= query string
+	     and falls back to the system-default banner when absent. -->
+	<div id="faz-b-switcher" class="faz-card" style="display:none;margin-bottom:1rem;">
+		<div class="faz-card-body" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+			<label for="faz-b-switcher-select" style="font-weight:500;white-space:nowrap;">
+				<?php esc_html_e( 'Editing banner:', 'faz-cookie-manager' ); ?>
+			</label>
+			<select id="faz-b-switcher-select" class="faz-input" style="min-width:280px;flex:1 1 280px;"></select>
+			<button type="button" class="faz-btn faz-btn-secondary" id="faz-b-switcher-new">
+				+ <?php esc_html_e( 'New banner', 'faz-cookie-manager' ); ?>
+			</button>
+			<button type="button" class="faz-btn faz-btn-secondary" id="faz-b-switcher-delete" style="color:#b91c1c;border-color:#fecaca;display:none;">
+				<?php esc_html_e( 'Delete this banner', 'faz-cookie-manager' ); ?>
+			</button>
+		</div>
+		<div class="faz-help" style="padding:0 1rem .75rem;color:#6b7280;">
+			<?php esc_html_e( 'Each banner has its own content, design, and geo targets. Use multi-banner setups to serve different banners per visitor country (e.g. a GDPR banner to EU visitors and a CCPA-style banner to US visitors).', 'faz-cookie-manager' ); ?>
+		</div>
+	</div>
+
 	<div class="faz-tabs" id="faz-banner-tabs">
 		<button class="faz-tab active" data-tab="general"><?php esc_html_e( 'General', 'faz-cookie-manager' ); ?></button>
 		<button class="faz-tab" data-tab="content"><?php esc_html_e( 'Content', 'faz-cookie-manager' ); ?></button>
@@ -479,26 +503,30 @@ defined( 'ABSPATH' ) || exit;
 						<span><?php esc_html_e( 'Show Close Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 				</div>
-				<div class="faz-form-group" style="margin-left:1.5rem;border-left:2px solid var(--faz-border,#e5e7eb);padding-left:1rem;">
+				<div class="faz-form-group" id="faz-b-close-with-reject-group" style="margin-left:1.5rem;border-left:3px solid #f59e0b;padding:.75rem 1rem;background:#fffbeb;border-radius:0 4px 4px 0;">
 					<label class="faz-toggle" id="faz-b-close-with-reject-toggle">
 						<input type="checkbox" id="faz-b-close-with-reject">
 						<span class="faz-toggle-track"></span>
-						<span><?php esc_html_e( 'Allow Close (X) alongside Reject button', 'faz-cookie-manager' ); ?></span>
+						<span style="font-weight:500;">
+							<span aria-hidden="true" style="margin-right:.35rem;">&#9888;</span><?php esc_html_e( 'Allow Close (X) alongside Reject button', 'faz-cookie-manager' ); ?>
+							<span style="display:inline-block;margin-left:.5rem;padding:.05rem .4rem;font-size:11px;border-radius:3px;background:#92400e;color:#fff;letter-spacing:.5px;text-transform:uppercase;"><?php esc_html_e( 'Non-EU only', 'faz-cookie-manager' ); ?></span>
+						</span>
 					</label>
-					<div class="faz-help" style="margin-top:.4rem;">
+					<div class="faz-help" style="margin-top:.4rem;color:#78350f;">
 						<?php echo wp_kses(
 							sprintf(
 								/* translators: %1$s: EDPB Guidelines link, %2$s: Italian Garante Provvedimento link. */
-								__( 'Off by default. The %1$s and the %2$s identify "X close + labelled Reject on the same banner" as a recognised dark pattern (unequal-weight dismissal paths). Leave OFF for banners served to EU/EEA/UK visitors. Safe to enable on banners targeted at US, Brazil, Canada or Australian traffic where this rule does not apply — typically used together with multi-banner geo-routing (Geo Targeting tab) to keep the X on a CCPA-style banner.', 'faz-cookie-manager' ),
+								__( '<strong>Off by default — keep OFF for EU/EEA/UK visitors.</strong> The %1$s and the %2$s identify "X close + labelled Reject on the same banner" as a recognised dark pattern (unequal-weight dismissal paths). Safe to enable on banners targeted at US, Brazil, Canada or Australian traffic where this rule does not apply — typically used together with multi-banner geo-routing (Geo Targeting tab) to keep the X on a CCPA-style banner.', 'faz-cookie-manager' ),
 								'<a href="https://edpb.europa.eu/system/files/2023-02/edpb_03-2022_guidelines_on_deceptive_design_patterns_in_social_media_platform_interfaces_v2_en.pdf" target="_blank" rel="noopener noreferrer">EDPB Guidelines 03/2022</a>',
 								'<a href="https://www.garanteprivacy.it/web/guest/home/docweb/-/docweb-display/docweb/9677876" target="_blank" rel="noopener noreferrer">Italian Garante Provv. 10 June 2021</a>'
 							),
 							array(
-								'a' => array(
+								'a'      => array(
 									'href'   => array(),
 									'target' => array(),
 									'rel'    => array(),
 								),
+								'strong' => array(),
 							)
 						); ?>
 					</div>
@@ -625,22 +653,58 @@ defined( 'ABSPATH' ) || exit;
 
 	<!-- ─── Tab: Geo Targeting ─────────────────────────────────────── -->
 	<div id="tab-geo" class="faz-tab-panel">
+		<?php
+		// Prerequisite notice: geo-routing silently falls back to "show every
+		// banner to everyone" when neither MaxMind nor Cloudflare CF-IPCountry
+		// is wired up. Surface that to the admin BEFORE they configure target
+		// countries, instead of letting them discover later that the feature
+		// they thought they enabled is a no-op.
+		$faz_geo_settings = get_option( 'faz_settings', array() );
+		$faz_has_maxmind  = ! empty( $faz_geo_settings['geolocation']['maxmind_key'] )
+			|| ( defined( 'FAZ_MAXMIND_DB_PATH' ) && FAZ_MAXMIND_DB_PATH && file_exists( FAZ_MAXMIND_DB_PATH ) );
+		$faz_has_cf       = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		if ( ! $faz_has_maxmind && ! $faz_has_cf ) :
+			?>
+			<div class="faz-card" style="border-left:3px solid #f59e0b;background:#fffbeb;">
+				<div class="faz-card-body" style="color:#78350f;">
+					<strong style="display:block;margin-bottom:.35rem;">
+						<span aria-hidden="true" style="margin-right:.3rem;">&#9888;</span><?php esc_html_e( 'Geo source not configured', 'faz-cookie-manager' ); ?>
+					</strong>
+					<?php
+					echo wp_kses(
+						sprintf(
+							/* translators: %1$s: Settings -> Geolocation link, %2$s: faz_trust_cf_ipcountry_header docs link. */
+							__( 'No country signal is available on this install. Multi-banner geo-routing will resolve every visitor to "unknown" and fall back to your match-all / default banner. Configure %1$s with a MaxMind GeoLite2 key, or enable the %2$s if your site sits behind Cloudflare. Without one of these, the targets you set below have no effect.', 'faz-cookie-manager' ),
+							'<a href="' . esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings#tab-geolocation' ) ) . '">' . esc_html__( 'Settings &raquo; Geolocation', 'faz-cookie-manager' ) . '</a>',
+							'<code>faz_trust_cf_ipcountry_header</code>'
+						),
+						array(
+							'a'    => array( 'href' => array() ),
+							'code' => array(),
+						)
+					);
+					?>
+				</div>
+			</div>
+		<?php endif; ?>
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Region presets', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
-				<p class="faz-help" style="margin-bottom:1rem;">
-					<?php esc_html_e( 'Tick the regions where this banner should be shown. A visitor from any country in the selected regions sees this banner. Leave all unchecked to make this banner match every visitor (fallback / single-banner installs).', 'faz-cookie-manager' ); ?>
-				</p>
-				<div class="faz-form-group" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.5rem;">
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="EU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'EU / EEA (27 + IS, LI, NO)', 'faz-cookie-manager' ); ?></span></label>
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="UK"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United Kingdom', 'faz-cookie-manager' ); ?></span></label>
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="US"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United States', 'faz-cookie-manager' ); ?></span></label>
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CA"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Canada', 'faz-cookie-manager' ); ?></span></label>
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="BR"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Brazil (LGPD)', 'faz-cookie-manager' ); ?></span></label>
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="AU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Australia', 'faz-cookie-manager' ); ?></span></label>
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="JP"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Japan', 'faz-cookie-manager' ); ?></span></label>
-					<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CH"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Switzerland', 'faz-cookie-manager' ); ?></span></label>
-				</div>
+				<fieldset style="border:0;padding:0;margin:0;">
+					<legend class="faz-help" style="margin-bottom:1rem;padding:0;">
+						<?php esc_html_e( 'Tick the regions where this banner should be shown. A visitor from any country in the selected regions sees this banner. Leave all unchecked to make this banner match every visitor (fallback / single-banner installs).', 'faz-cookie-manager' ); ?>
+					</legend>
+					<div class="faz-form-group" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.5rem;">
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="EU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'EU / EEA (27 + IS, LI, NO)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="UK"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United Kingdom', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="US"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United States', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CA"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Canada', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="BR"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Brazil (LGPD)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="AU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Australia', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="JP"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Japan', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CH"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Switzerland', 'faz-cookie-manager' ); ?></span></label>
+					</div>
+				</fieldset>
 			</div>
 		</div>
 
@@ -670,6 +734,7 @@ defined( 'ABSPATH' ) || exit;
 						<span><?php esc_html_e( 'Use this banner as the default fallback', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<div class="faz-help"><?php esc_html_e( 'Shown to visitors from countries no banner targets explicitly. Exactly one banner should be marked as default. Saving this option will clear the flag on every other banner.', 'faz-cookie-manager' ); ?></div>
+					<div id="faz-b-geo-default-impact" class="faz-help" style="display:none;margin-top:.5rem;padding:.5rem .75rem;background:#fef3c7;border-left:3px solid #f59e0b;color:#78350f;border-radius:0 3px 3px 0;"></div>
 				</div>
 			</div>
 		</div>

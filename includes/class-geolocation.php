@@ -153,10 +153,18 @@ class Geolocation {
 			}
 		}
 
-		// 2. Apache mod_geoip.
-		if ( ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) {
+		// 2. Apache mod_geoip — gated by faz_trust_geoip_country_code, mirroring
+		//    the CF-IPCountry opt-in pattern above. On installs that don't
+		//    actually run mod_geoip on Apache, a misconfigured fastcgi_param
+		//    can let a request header pollute $_SERVER['GEOIP_COUNTRY_CODE']
+		//    and silently steer geo-routing. Default false → no behaviour
+		//    change for real mod_geoip installs that opt in explicitly.
+		if (
+			apply_filters( 'faz_trust_geoip_country_code', false )
+			&& ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] )
+		) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) );
-			if ( self::is_valid_country_code( $code ) ) {
+			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
 				return $code;
 			}
 		}
