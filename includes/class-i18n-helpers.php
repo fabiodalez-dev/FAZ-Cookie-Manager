@@ -137,7 +137,28 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 			// No URL-based multilingual plugin — fall back to the site default
 			// so that the rendered HTML stays cacheable. The browser-preferred
 			// language is resolved client-side in script.js.
+			//
+			// Opt-in country→language fallback (1.14.0+): when the admin
+			// has filtered `faz_use_country_language_fallback` to true,
+			// derive the banner language from the visitor's detected
+			// country before falling back to the site default. Lets
+			// installs WITHOUT Polylang/WPML still serve country-localised
+			// banner copy via multi-banner geo-routing — an Italian
+			// visitor on a site with selected langs ["en","it"] sees the
+			// `it` content even though the URL is /en/.
 			$current_language = faz_default_language();
+			if (
+				class_exists( '\\FazCookie\\Includes\\Geolocation' )
+				&& apply_filters( 'faz_use_country_language_fallback', false )
+			) {
+				$country = \FazCookie\Includes\Geolocation::get_visitor_country();
+				if ( ! empty( $country ) ) {
+					$country_lang = faz_country_to_language( $country );
+					if ( ! empty( $country_lang ) && in_array( $country_lang, faz_selected_languages(), true ) ) {
+						$current_language = $country_lang;
+					}
+				}
+			}
 		}
 		$map              = faz_get_lang_map();
 		$current_language = isset( $map[ $current_language ] ) ? $map[ $current_language ] : $current_language;
@@ -146,6 +167,95 @@ if ( ! function_exists( 'faz_current_language' ) ) {
 		}
 		$cached = apply_filters( 'faz_current_language', $current_language );
 		return $cached;
+	}
+}
+
+if ( ! function_exists( 'faz_country_to_language' ) ) {
+	/**
+	 * Map an ISO-3166 alpha-2 country code to its primary ISO-639-1 language
+	 * code. Used by the opt-in country-based language fallback in
+	 * `faz_current_language()` so installs without a URL-based multilingual
+	 * plugin can still serve country-localised banner copy.
+	 *
+	 * The default map covers the regions the plugin's region presets list
+	 * (EU / EEA, UK, US, Canada, Brazil, Switzerland, Japan, Australia) plus
+	 * a handful of common destinations. Officially-multilingual countries
+	 * (CH=de, CA=en, BE=nl, LU=fr, …) pick the most-spoken option; sites
+	 * with a different default can override via the
+	 * `faz_country_to_language` filter.
+	 *
+	 * @since 1.14.0
+	 * @param string $country ISO-3166 alpha-2 country code.
+	 * @return string ISO-639-1 language code, or '' when unmapped.
+	 */
+	function faz_country_to_language( $country ) {
+		$country = is_string( $country ) ? strtoupper( trim( $country ) ) : '';
+		if ( '' === $country ) {
+			return '';
+		}
+		$map = array(
+			// Italian
+			'IT' => 'it', 'SM' => 'it', 'VA' => 'it',
+			// German
+			'DE' => 'de', 'AT' => 'de', 'LI' => 'de', 'CH' => 'de',
+			// French
+			'FR' => 'fr', 'MC' => 'fr', 'BE' => 'fr', 'LU' => 'fr',
+			// Spanish
+			'ES' => 'es', 'MX' => 'es', 'AR' => 'es', 'CL' => 'es', 'CO' => 'es', 'PE' => 'es', 'VE' => 'es', 'UY' => 'es', 'PY' => 'es',
+			// Portuguese
+			'PT' => 'pt', 'BR' => 'pt',
+			// Dutch
+			'NL' => 'nl',
+			// Polish
+			'PL' => 'pl',
+			// Czech / Slovak
+			'CZ' => 'cs', 'SK' => 'sk',
+			// Hungarian
+			'HU' => 'hu',
+			// Romanian
+			'RO' => 'ro',
+			// Greek
+			'GR' => 'el', 'CY' => 'el',
+			// Scandinavian
+			'SE' => 'sv', 'NO' => 'no', 'DK' => 'da', 'FI' => 'fi', 'IS' => 'is',
+			// Baltic
+			'EE' => 'et', 'LV' => 'lv', 'LT' => 'lt',
+			// Slovenian / Croatian / Bulgarian / Maltese
+			'SI' => 'sl', 'HR' => 'hr', 'BG' => 'bg', 'MT' => 'mt',
+			// Irish (English is also official)
+			'IE' => 'en',
+			// English-speaking
+			'GB' => 'en', 'US' => 'en', 'CA' => 'en', 'AU' => 'en', 'NZ' => 'en', 'IN' => 'en', 'ZA' => 'en',
+			// East Asia
+			'JP' => 'ja', 'CN' => 'zh', 'TW' => 'zh', 'HK' => 'zh', 'KR' => 'ko',
+			// Russian / Ukrainian / Turkish / Arabic
+			'RU' => 'ru', 'UA' => 'uk', 'TR' => 'tr',
+			'SA' => 'ar', 'AE' => 'ar', 'EG' => 'ar',
+		);
+		/**
+		 * Filter the country→language map.
+		 *
+		 * Override for installs whose audience does not match the default
+		 * mapping (e.g. a Swiss site whose audience is primarily French
+		 * would return 'fr' for 'CH' instead of the default 'de').
+		 *
+		 * @since 1.14.0
+		 * @param array  $map     Country code → language code map.
+		 * @param string $country The country code being resolved.
+		 */
+		$map = (array) apply_filters( 'faz_country_to_language_map', $map, $country );
+		$lang = isset( $map[ $country ] ) ? (string) $map[ $country ] : '';
+		/**
+		 * Filter the resolved language for a specific country.
+		 *
+		 * Lets callers override individual mappings without re-declaring
+		 * the full map.
+		 *
+		 * @since 1.14.0
+		 * @param string $lang    Resolved language code, '' when unmapped.
+		 * @param string $country The country code being resolved.
+		 */
+		return (string) apply_filters( 'faz_country_to_language', $lang, $country );
 	}
 }
 
