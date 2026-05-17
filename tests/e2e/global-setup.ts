@@ -58,18 +58,25 @@ async function globalSetup(): Promise<void> {
           $s['settings']['type'] = 'box';
           $s['settings']['preferenceCenterType'] = 'popup';
           $s['settings']['allowCloseButtonWithReject'] = false;
-          unset( $s['settings']['target_countries'] );
-          unset( $s['settings']['priority'] );
           $banner->set_settings( $s );
+          // Also reset row-level geo columns (target_countries / priority live
+          // on the wp_faz_banners row, NOT inside settings — earlier code
+          // unset them from settings, which was a no-op).
+          if ( method_exists( $banner, 'set_target_countries' ) ) {
+            $banner->set_target_countries( array() );
+          }
+          if ( method_exists( $banner, 'set_priority' ) ) {
+            $banner->set_priority( 0 );
+          }
           $banner->save();
         }
-        // Remove any non-active banners left by previous multi-banner specs.
-        // Column is banner_id (not id) — primary key from class-activator.
-        $table = $wpdb->prefix . 'faz_banners';
-        $active_id = $banner ? (int) $banner->get_id() : 0;
-        if ( $active_id > 0 ) {
-          $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE banner_id <> %d", $active_id ) );
-        }
+        // Do NOT delete non-active banner rows here. The multi-banner geo-
+        // routing spec presupposes banner_id=2 exists (its tests mutate that
+        // row to target US and assert on the picker output). A blanket DELETE
+        // in global-setup wipes that fixture and the entire GEO suite fails.
+        // Per-spec teardown (CB-OV-10) handles its own secondary banner
+        // cleanup; cross-spec leakage is bounded by each spec's own
+        // beforeAll/afterAll, not by a global blanket DELETE.
         delete_option( 'faz_banner_template' );
         if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
           faz_clear_banner_template_cache();

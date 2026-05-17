@@ -24,6 +24,41 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
   let snapshot: string = '';
 
   test.beforeAll(() => {
+    // Ensure a secondary banner row exists for GEO-01..GEO-30. The suite
+    // mutates banner_id=2 to target US, asserts the picker resolves it,
+    // and restores the row in afterAll. On a fresh install (or after a
+    // CB-OV-10 teardown that deletes its secondary), banner_id=2 simply
+    // doesn't exist — create it from the active banner's shape so the
+    // restore at teardown is a meaningful no-op rather than a row-not-
+    // found that quietly fails GEO-01..GEO-30. Idempotent: skipped when
+    // a second row already exists from a prior run.
+    wpEval(`
+      global $wpdb;
+      $table = $wpdb->prefix . 'faz_banners';
+      $count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+      if ( $count < 2 ) {
+        $active = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
+        if ( $active ) {
+          $now = current_time( 'mysql' );
+          $wpdb->insert(
+            $table,
+            array(
+              'name'             => 'GEO suite secondary',
+              'slug'             => 'geo-suite-secondary',
+              'status'           => 0,
+              'settings'         => wp_json_encode( $active->get_settings() ),
+              'contents'         => wp_json_encode( $active->get_contents() ),
+              'banner_default'   => 0,
+              'target_countries' => wp_json_encode( array() ),
+              'priority'         => 0,
+              'date_created'     => $now,
+              'date_modified'    => $now,
+            )
+          );
+        }
+      }
+    `);
+
     snapshot = wpEval(`
       global $wpdb;
       echo wp_json_encode( $wpdb->get_results( "SELECT * FROM {\$wpdb->prefix}faz_banners" ) );
