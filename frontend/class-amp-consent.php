@@ -344,10 +344,144 @@ class AMP_Consent {
 	/**
 	 * Return the active banner resolved for the current visitor country.
 	 *
+	 * Applies the same two geo guards Frontend::load_banner() uses for the
+	 * classic JS flow so AMP visitors don't see a banner the standard flow
+	 * would have suppressed: (1) global geo-targeting (Settings →
+	 * Geolocation, default_behavior=no_banner outside target_regions);
+	 * (2) per-banner ruleSet (settings.ruleSet entries restricted to
+	 * EU/US/OTHER country sets).
+	 *
 	 * @return \FazCookie\Admin\Modules\Banners\Includes\Banner|false
 	 */
 	private function get_active_banner() {
 		$country = Geolocation::get_visitor_country();
-		return Controller::get_instance()->get_active_banner_for_country( $country );
+
+		// Guard 1 — global geo-targeting from Settings → Geolocation.
+		if ( $this->is_geo_banner_disabled( $country ) ) {
+			return false;
+		}
+
+		$banner = Controller::get_instance()->get_active_banner_for_country( $country );
+		if ( ! $banner ) {
+			return false;
+		}
+
+		// Guard 2 — per-banner ruleSet (matches Frontend::is_geo_blocked()).
+		if ( $this->is_banner_geo_blocked( $banner, $country ) ) {
+			return false;
+		}
+		return $banner;
+	}
+
+	/**
+	 * Mirror of Frontend::is_geo_banner_disabled() for the AMP code path.
+	 *
+	 * Returns true when global geo-targeting is on, default_behavior is
+	 * "no_banner", and the visitor's country is not in target_regions.
+	 *
+	 * @param string $country Visitor country code or '' if unknown.
+	 * @return bool
+	 */
+	private function is_geo_banner_disabled( $country ) {
+		$settings = get_option( 'faz_settings', array() );
+		if ( ! is_array( $settings ) || empty( $settings['geolocation']['geo_targeting'] ) ) {
+			return false;
+		}
+		if ( empty( $country ) ) {
+			return false; // fail-open when country can't be resolved.
+		}
+		$default_behavior = isset( $settings['geolocation']['default_behavior'] )
+			? $settings['geolocation']['default_behavior']
+			: 'show_banner';
+		if ( 'no_banner' !== $default_behavior ) {
+			return false;
+		}
+		$target_regions = isset( $settings['geolocation']['target_regions'] )
+			? (array) $settings['geolocation']['target_regions']
+			: array( 'eu', 'uk' );
+		return ! self::country_in_regions( $country, $target_regions );
+	}
+
+	/**
+	 * Mirror of Frontend::is_geo_blocked() for the AMP code path.
+	 *
+	 * Iterates every ruleSet entry and returns true when no rule matches
+	 * the visitor (the banner would be blocked in the classic flow too).
+	 *
+	 * @param \FazCookie\Admin\Modules\Banners\Includes\Banner $banner  Banner.
+	 * @param string                                           $country Visitor country code.
+	 * @return bool
+	 */
+	private function is_banner_geo_blocked( $banner, $country ) {
+		$settings = $banner->get_settings();
+		$inner    = isset( $settings['settings'] ) && is_array( $settings['settings'] ) ? $settings['settings'] : array();
+		$rules    = isset( $inner['ruleSet'] ) && is_array( $inner['ruleSet'] ) ? $inner['ruleSet'] : array();
+		if ( empty( $rules ) ) {
+			return false;
+		}
+		foreach ( $rules as $rule ) {
+			if ( ! is_array( $rule ) ) {
+				continue;
+			}
+			$code = isset( $rule['code'] ) ? strtoupper( (string) $rule['code'] ) : 'ALL';
+			if ( 'ALL' === $code ) {
+				return false; // ALL matches everyone.
+			}
+			if ( '' === $country ) {
+				continue;
+			}
+			if ( 'EU' === $code && in_array( $country, Geolocation::$eu_countries, true ) ) {
+				return false;
+			}
+			if ( 'US' === $code && 'US' === $country ) {
+				return false;
+			}
+			if ( 'OTHER' === $code ) {
+				$regions = isset( $rule['regions'] ) ? array_map( 'strtoupper', (array) $rule['regions'] ) : array();
+				if ( in_array( $country, $regions, true ) ) {
+					return false;
+				}
+			}
+		}
+		// No rule matched. Fail-open if country was unknown — losing the
+		// geo signal must not silently hide a consent surface.
+		return ! empty( $country );
+	}
+
+	/**
+	 * Compact region-set lookup (mirror of Frontend::is_country_in_regions).
+	 *
+	 * @param string $country_code ISO 3166-1 alpha-2 country code.
+	 * @param array  $regions      List of region keys ('eu', 'uk', 'us', ...) or direct country codes.
+	 * @return bool
+	 */
+	private static function country_in_regions( $country_code, $regions ) {
+		$country_code = strtoupper( $country_code );
+		$region_map   = array(
+			'eu' => array(
+				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
+				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
+				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
+				'IS', 'LI', 'NO', 'GB',
+			),
+			'uk' => array( 'GB' ),
+			'us' => array( 'US' ),
+			'ca' => array( 'CA' ),
+			'br' => array( 'BR' ),
+			'au' => array( 'AU' ),
+			'jp' => array( 'JP' ),
+			'ch' => array( 'CH' ),
+		);
+		foreach ( (array) $regions as $region ) {
+			$region = strtolower( $region );
+			if ( isset( $region_map[ $region ] ) ) {
+				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
+					return true;
+				}
+			} elseif ( strtoupper( $region ) === $country_code ) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

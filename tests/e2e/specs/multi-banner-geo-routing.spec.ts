@@ -24,16 +24,27 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
   let snapshot: string = '';
 
   test.beforeAll(() => {
-    // Ensure banner_id=2 exists for GEO-01..GEO-30. The whole suite uses
-    // hardcoded banner_id=2 in its $wpdb->update() calls. We can't rely on
-    // residual rows from prior runs because the auto_increment counter
+    // STEP 1 — snapshot the DB state BEFORE any mutation. The previous
+    // ordering captured the snapshot after the DELETE/INSERT block below,
+    // which meant rows the cleanup removed could never be re-inserted by
+    // the afterAll restore (leakage). Capturing first preserves every
+    // pre-suite row so the restore at teardown is a true round-trip.
+    snapshot = wpEval(`
+      global $wpdb;
+      echo wp_json_encode( $wpdb->get_results( "SELECT * FROM {\$wpdb->prefix}faz_banners" ) );
+    `).trim();
+
+    // STEP 2 — Ensure banner_id=2 exists for GEO-01..GEO-30. The whole
+    // suite uses hardcoded banner_id=2 in its $wpdb->update() calls. We
+    // can't rely on residual rows because the auto_increment counter
     // drifts (CB-OV-10 created banner_id=2, its teardown DELETEd it, the
-    // next INSERT would land at banner_id=3 — and GEO-01's update(banner_id=2)
-    // would silently affect zero rows).
+    // next INSERT would land at banner_id=3 — and GEO-01's
+    // update(banner_id=2) would silently affect zero rows).
     //
     // Force the canonical shape: drop every non-active banner, reset
     // AUTO_INCREMENT to 2, then INSERT — that row WILL be banner_id=2.
-    // Idempotent under repeat runs.
+    // The afterAll restore below uses DELETE + explicit-id INSERT, so any
+    // row this step deletes is fully recreated from the snapshot.
     wpEval(`
       global $wpdb;
       $table = $wpdb->prefix . 'faz_banners';
@@ -60,53 +71,53 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
         );
       }
     `);
-
-    snapshot = wpEval(`
-      global $wpdb;
-      echo wp_json_encode( $wpdb->get_results( "SELECT * FROM {\$wpdb->prefix}faz_banners" ) );
-    `).trim();
   });
 
   test.afterAll(() => {
-    // Restore every row to its pre-test target_countries / priority / status /
-    // banner_default. We don't drop and re-insert because banner_id values must
-    // be preserved (frontend caches reference them).
+    // Full DELETE + explicit-id re-INSERT from snapshot. The earlier
+    // UPDATE-only restore preserved banner_id but couldn't recreate rows
+    // the beforeAll cleanup had dropped, leaking the deletion across the
+    // rest of the suite. DELETE + re-INSERT with the original banner_id
+    // is the only path that guarantees the post-condition matches the
+    // pre-condition exactly.
     //
-    // CRITICAL: also invalidate `faz_banner_template` (the cached server-side
-    // rendered banner HTML) and the geo_targeting setting cache. Without this
-    // step the subsequent tests in the full suite (pr-2026-04-19-audit.spec.ts
-    // TCF flow in particular) get served the LAST banner template rendered
-    // during our GEO-01..GEO-30 mutations — which may not have a category
-    // accordion at all (banner_id=2 / CCPA) — so locators like
-    // #fazCategoryDirectanalytics resolve to 0 elements and the next test
-    // fails for a reason that has nothing to do with its own code.
+    // CRITICAL: also invalidate `faz_banner_template` (the cached server-
+    // side rendered banner HTML). Without it the next test gets served
+    // the LAST banner template rendered during GEO-01..GEO-30 (which may
+    // be a CCPA layout with no category accordion), and an unrelated
+    // locator like #fazCategoryDirectanalytics resolves to 0 elements.
     wpEval(`
       global $wpdb;
-      $rows = json_decode( ${JSON.stringify(snapshot)}, true );
+      $table = $wpdb->prefix . 'faz_banners';
+      $rows  = json_decode( ${JSON.stringify(snapshot)}, true );
       if ( ! is_array( $rows ) ) { return; }
+      $wpdb->query( "DELETE FROM {$table}" );
+      $max_id = 0;
       foreach ( $rows as $row ) {
         if ( empty( $row['banner_id'] ) ) { continue; }
-        // Include settings + contents in the restore: GEO-30 mutates
-        // settings.ruleSet[0].code on the active banner. Without this row
-        // the change persists across the afterAll and the next run of GEO-20
-        // (or any other test that asserts on the match-all-only baseline)
-        // sees a stale country code.
-        $wpdb->update(
-          $wpdb->prefix . 'faz_banners',
+        $banner_id = (int) $row['banner_id'];
+        if ( $banner_id > $max_id ) { $max_id = $banner_id; }
+        $wpdb->insert(
+          $table,
           array(
+            'banner_id'        => $banner_id,
+            'name'             => isset( $row['name'] ) ? (string) $row['name'] : '',
+            'slug'             => isset( $row['slug'] ) ? (string) $row['slug'] : '',
             'status'           => isset( $row['status'] ) ? (int) $row['status'] : 0,
+            'settings'         => isset( $row['settings'] ) ? (string) $row['settings'] : '',
             'banner_default'   => isset( $row['banner_default'] ) ? (int) $row['banner_default'] : 0,
-            'target_countries' => isset( $row['target_countries'] ) ? $row['target_countries'] : '[]',
+            'contents'         => isset( $row['contents'] ) ? (string) $row['contents'] : '',
+            'target_countries' => isset( $row['target_countries'] ) ? (string) $row['target_countries'] : '[]',
             'priority'         => isset( $row['priority'] ) ? (int) $row['priority'] : 0,
-            'settings'         => isset( $row['settings'] ) ? $row['settings'] : '',
-            'contents'         => isset( $row['contents'] ) ? $row['contents'] : '',
-          ),
-          array( 'banner_id' => (int) $row['banner_id'] )
+            'date_created'     => isset( $row['date_created'] ) ? (string) $row['date_created'] : current_time( 'mysql' ),
+            'date_modified'    => isset( $row['date_modified'] ) ? (string) $row['date_modified'] : current_time( 'mysql' ),
+          )
         );
       }
+      if ( $max_id > 0 ) {
+        $wpdb->query( $wpdb->prepare( "ALTER TABLE {$table} AUTO_INCREMENT = %d", $max_id + 1 ) );
+      }
       \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
-      // Force the next request to re-render the banner template from the
-      // pristine, restored DB row instead of serving a stale cached blob.
       if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
         faz_clear_banner_template_cache();
       }
@@ -674,9 +685,18 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     // faz_trust_cf_ipcountry_header filter — protects from spoofed headers
     // on installs that do not actually sit behind Cloudflare.
     const result = wpEval(`
+      // Establish a baseline WITHOUT the CF header so we know what
+      // get_visitor_country() would naturally resolve to via the fallback
+      // chain (MaxMind / ip-api.com). The "trust OFF → not DE" assertion
+      // was flaky when the fallback genuinely resolved to DE (German
+      // dev box / VPN). Comparing OFF against the baseline is robust:
+      // the contract is "header has no effect", not "result is not DE".
+      unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
+      $baseline = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
+
       $_SERVER['HTTP_CF_IPCOUNTRY'] = 'DE';
 
-      // First: filter OFF → header ignored.
+      // First: filter OFF → header must be ignored, result identical to baseline.
       $off = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
 
       // Then: filter ON → header consumed.
@@ -686,12 +706,12 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
       remove_filter( 'faz_trust_cf_ipcountry_header', $closure, 10 );
 
       unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
-      echo wp_json_encode( array( 'off' => $off, 'on' => $on ) );
+      echo wp_json_encode( array( 'baseline' => $baseline, 'off' => $off, 'on' => $on ) );
     `).trim();
 
     const data = JSON.parse(result);
     expect(data.on, 'with trust filter ON, CF-IPCountry header steers the result').toBe('DE');
-    expect(data.off, "with trust filter OFF, CF-IPCountry must NOT leak through (header spoof-safe by default)").not.toBe('DE');
+    expect(data.off, 'with trust filter OFF, CF-IPCountry header must NOT alter the resolved country (spoof-safe by default)').toBe(data.baseline);
   });
 
   test('GEO-22: Geolocation::get_visitor_country rejects the Cloudflare "XX" placeholder', () => {
@@ -747,6 +767,12 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     // every visitor and the cache layer is left alone.
     const result = wpEval(`
       global $wpdb;
+      // Snapshot faz_settings so the geolocation mutation below doesn't
+      // leak into subsequent tests (GEO-25/26/27 read different geo
+      // shapes; other suite files assume the install-default settings
+      // they backed up themselves).
+      $prev_settings = get_option( 'faz_settings', null );
+
       $wpdb->update( $wpdb->prefix . 'faz_banners',
         array( 'target_countries' => '[]', 'status' => 1, 'banner_default' => 1 ),
         array( 'banner_id' => 1 )
@@ -767,7 +793,19 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
       $ref = new ReflectionClass( $fe );
       $method = $ref->getMethod( 'is_country_dependent_output' );
       $method->setAccessible( true );
-      echo $method->invoke( $fe ) ? 'true' : 'false';
+      $value = $method->invoke( $fe ) ? 'true' : 'false';
+
+      // Restore faz_settings to its pre-test value (or delete if it
+      // didn't exist before). Mirror of the same backup/restore the
+      // pr-2026-04-19-audit spec uses around its faz_settings mutations.
+      if ( null === $prev_settings ) {
+        delete_option( 'faz_settings' );
+      } else {
+        update_option( 'faz_settings', $prev_settings );
+      }
+      \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+
+      echo $value;
     `).trim();
 
     expect(result, "single-banner install with code=ALL must NOT be flagged country-dependent").toBe('false');

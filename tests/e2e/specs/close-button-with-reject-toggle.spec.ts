@@ -150,7 +150,11 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
       $banner->set_settings( $s );
       $banner->save();
 
-      wp_set_current_user( 1 );
+      // Resolve the first administrator dynamically — don't hardcode
+      // user_id=1, which can be brittle on fixtures that start IDs
+      // elsewhere (multisite, imported DB).
+      $admin_ids = get_users( array( 'role' => 'administrator', 'number' => 1, 'fields' => 'ids' ) );
+      wp_set_current_user( ! empty( $admin_ids ) ? (int) $admin_ids[0] : 0 );
       $req = new WP_REST_Request( 'GET', '/faz/v1/banners/' . $banner->get_id() );
       $req->set_param( 'context', 'edit' );
       $res = rest_do_request( $req );
@@ -176,7 +180,9 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
       $bid = $banner->get_id();
       $current = $banner->get_settings();
 
-      wp_set_current_user( 1 );
+      // Resolve administrator dynamically (see CB-OV-05 above).
+      $admin_ids = get_users( array( 'role' => 'administrator', 'number' => 1, 'fields' => 'ids' ) );
+      wp_set_current_user( ! empty( $admin_ids ) ? (int) $admin_ids[0] : 0 );
       $req = new WP_REST_Request( 'PUT', '/faz/v1/banners/' . $bid );
       $req->set_header( 'X-WP-Nonce', wp_create_nonce( 'wp_rest' ) );
       $req->set_param( 'name', $banner->get_name() ?: 'CB-OV-06' );
@@ -355,14 +361,23 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
     // not in a global option.
     const result = wpEval(`
       global $wpdb;
-      $rows = $wpdb->get_results( "SELECT banner_id FROM {$wpdb->prefix}faz_banners ORDER BY banner_id ASC LIMIT 2" );
-      if ( count( $rows ) < 2 ) {
-        // Create a second banner on-the-fly so the test is idempotent
-        // under global-setup's "single banner" cleanup. Mirror the active
-        // banner's shape so the per-banner isolation assertion is
-        // meaningful (same settings shape, just a non-active row).
-        $active = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
-        if ( ! $active ) { echo 'NO_ACTIVE_BANNER'; return; }
+      // Pick A explicitly as the active banner so the test is deterministic
+      // regardless of MySQL row order or auto_increment drift. The legacy
+      // "ORDER BY banner_id ASC LIMIT 2" form could pick an unrelated row
+      // as A on dirty DBs and mutate the wrong banner.
+      $active = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
+      if ( ! $active ) { echo 'NO_ACTIVE_BANNER'; return; }
+      $id_a = (int) $active->get_id();
+
+      // B is "any banner that is NOT A" — query explicitly to avoid the
+      // ORDER BY trap. Create one on the fly when none exists.
+      $id_b = (int) $wpdb->get_var(
+        $wpdb->prepare(
+          "SELECT banner_id FROM {$wpdb->prefix}faz_banners WHERE banner_id <> %d ORDER BY banner_id ASC LIMIT 1",
+          $id_a
+        )
+      );
+      if ( $id_b <= 0 ) {
         $now = current_time( 'mysql' );
         $wpdb->insert(
           $wpdb->prefix . 'faz_banners',
@@ -379,10 +394,8 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
             'date_modified'    => $now,
           )
         );
-        $rows = $wpdb->get_results( "SELECT banner_id FROM {$wpdb->prefix}faz_banners ORDER BY banner_id ASC LIMIT 2" );
+        $id_b = (int) $wpdb->insert_id;
       }
-      $id_a = (int) $rows[0]->banner_id;
-      $id_b = (int) $rows[1]->banner_id;
 
       $a = new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( $id_a );
       $b = new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( $id_b );

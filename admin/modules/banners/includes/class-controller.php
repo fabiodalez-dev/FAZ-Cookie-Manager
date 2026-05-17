@@ -220,13 +220,6 @@ class Controller extends Base_Controller {
 	 */
 	public function update_item( $banner ) {
 		global $wpdb;
-		// Enforce single-default invariant the admin help text promises
-		// ("Saving this option will clear the flag on every other banner").
-		// Without this, multiple banners can simultaneously hold
-		// banner_default=1 and the picker fallback becomes non-deterministic.
-		if ( true === $banner->get_default() ) {
-			$this->clear_default_on_others( $banner->get_id() );
-		}
 		$data = array(
 			'name'             => $banner->get_name(),
 			'slug'             => $banner->get_slug(),
@@ -254,6 +247,12 @@ class Controller extends Base_Controller {
 		);
 		if ( false === $updated ) {
 			return;
+		}
+		// Enforce single-default invariant AFTER the current row's UPDATE
+		// succeeded — clearing peer rows first would leave the DB without
+		// any banner_default=1 if our own UPDATE then failed.
+		if ( true === $banner->get_default() ) {
+			$this->clear_default_on_others( $banner->get_id() );
 		}
 		if ( $updated > 0 ) {
 			$this->delete_cache();

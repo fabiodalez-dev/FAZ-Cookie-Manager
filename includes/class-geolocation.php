@@ -108,7 +108,12 @@ class Geolocation {
 
 		$filtered = (string) apply_filters( 'faz_visitor_country', $country );
 		$filtered = strtoupper( trim( $filtered ) );
-		if ( ! self::is_valid_country_code( $filtered ) ) {
+		// Mirror the CF branch above: 'XX' is the Cloudflare-defined
+		// "anonymous proxy / Tor / unknown" sentinel. A third-party filter
+		// could reintroduce it from a different detection source, and we
+		// must not route it as a real country — is_valid_country_code()
+		// only checks the [A-Z]{2} shape and would accept 'XX'.
+		if ( ! self::is_valid_country_code( $filtered ) || 'XX' === $filtered ) {
 			return '';
 		}
 		return $filtered;

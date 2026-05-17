@@ -151,6 +151,24 @@ function _fazCurrentLaw() {
     }
     return "";
 }
+// Scope-tracking keys live under a `__scope.` prefix to avoid colliding
+// with category slugs (which the admin can rename freely, e.g. a category
+// literally called "banner" or "law"). Without the prefix, the
+// invalidation iterator below would also zero out the category's consent
+// value, and _fazConsentScopeChanged() would compare against the wrong
+// store entry.
+const _FAZ_SCOPE_BANNER_KEY = "__scope.banner";
+const _FAZ_SCOPE_LAW_KEY = "__scope.law";
+function _fazReadScopedCookieValue(key, legacyKey) {
+    // Pre-CR-10-fix cookies wrote the unprefixed key. Honour them on read
+    // so a returning visitor isn't invalidated just because we renamed
+    // the storage slot.
+    return (
+        fazcookieConsentMap[key]
+        || (legacyKey ? fazcookieConsentMap[legacyKey] : "")
+        || ""
+    );
+}
 function _fazConsentScopeChanged() {
     if (!_fazHasConsentCookie || !_fazStore || !_fazStore._geoRouting) return false;
     const currentBannerSlug = _fazCurrentBannerSlug();
@@ -160,9 +178,9 @@ function _fazConsentScopeChanged() {
     // cookie (the populate loop is below this call site). The primary
     // lookup via ref._fazGetFromStore() would always return "" at this
     // point, leaving only the fallback path.
-    const storedBannerSlug = fazcookieConsentMap.banner || "";
-    const storedLaw = fazcookieConsentMap.law || "";
-    // Pre-1.14.0 cookies have no `banner`/`law` keys — treat that as
+    const storedBannerSlug = _fazReadScopedCookieValue(_FAZ_SCOPE_BANNER_KEY, "banner");
+    const storedLaw = _fazReadScopedCookieValue(_FAZ_SCOPE_LAW_KEY, "law");
+    // Pre-1.14.0 cookies have no scope keys — treat that as
     // "upgrade case, no scope info known" and let the existing consent
     // stand. Without this guard, every returning visitor on an install
     // that enables _geoRouting would be invalidated on first page load
@@ -181,8 +199,10 @@ function _fazInvalidateStoredConsent() {
     ["fazcookie-consent", "fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
     // Wipe the entries that gate the banner so showBanner() logic triggers.
     // We keep `consentid` so cross-session analytics can still correlate if
-    // the visitor re-consents.
-    ["consent", "action", "banner", "law"].forEach((k) => {
+    // the visitor re-consents. The __scope.* keys cannot collide with any
+    // category slug (slugs are kebab/snake-case identifiers; the dot is
+    // not a legal character in slug regex), so this list is collision-safe.
+    ["consent", "action", _FAZ_SCOPE_BANNER_KEY, _FAZ_SCOPE_LAW_KEY, "banner", "law"].forEach((k) => {
         fazcookieConsentMap[k] = "";
         ref._fazConsentStore.set(k, "");
     });
@@ -202,11 +222,18 @@ if (_fazConsentInvalidated) {
     _fazInvalidateStoredConsent();
 }
 
-["consentid", "consent", "action", "banner", "law"]
+// Populate the consent store. Scope keys use the __scope. prefix; the
+// legacy unprefixed cookie values are honoured as a fallback at read
+// time via _fazReadScopedCookieValue() so a returning visitor with the
+// older cookie shape is not invalidated by the rename.
+["consentid", "consent", "action", _FAZ_SCOPE_BANNER_KEY, _FAZ_SCOPE_LAW_KEY]
     .concat(_fazStore._categories.map(({ slug }) => slug))
-    .forEach((item) =>
-        ref._fazConsentStore.set(item, fazcookieConsentMap[item] || "")
-    );
+    .forEach((item) => {
+        let value = fazcookieConsentMap[item] || "";
+        if (!value && item === _FAZ_SCOPE_BANNER_KEY) value = fazcookieConsentMap.banner || "";
+        if (!value && item === _FAZ_SCOPE_LAW_KEY) value = fazcookieConsentMap.law || "";
+        ref._fazConsentStore.set(item, value);
+    });
 // Always track the revision currently in effect so next _fazSetInStore()
 // persists it into the cookie.
 ref._fazConsentStore.set("rev", String(_fazServerRevision));
@@ -1550,8 +1577,11 @@ function _fazAcceptCookies(choice = "all") {
     _fazSetConsentID();
 
     ref._fazSetInStore("action", "yes");
-    ref._fazSetInStore("banner", _fazCurrentBannerSlug());
-    ref._fazSetInStore("law", _fazCurrentLaw());
+    // __scope.banner / __scope.law — see _fazConsentScopeChanged header.
+    // Unprefixed "banner"/"law" keys would collide with admin-renameable
+    // category slugs.
+    ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+    ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
     if (activeLaw === 'gdpr') {
         ref._fazSetInStore("consent", choice === "reject" ? "no" : "yes");
     } else {

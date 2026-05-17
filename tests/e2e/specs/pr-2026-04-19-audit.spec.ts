@@ -836,6 +836,12 @@ test.describe('PR audit regressions (2026-04-19)', () => {
 
   test('TCF preserves created timestamp, advances lastUpdated on real changes, and finishes with cmpStatus=loaded', async ({ browser }) => {
     const originalSettings = backupSettingsOption();
+    // Also snapshot the active banner row — the wpEval block below
+    // persists type=classic / preferenceCenterType=pushdown /
+    // categoryPreview.status=true to the DB. Without restoring, the
+    // mutation leaks into subsequent serial tests in the file (and into
+    // other spec files that assume the install-default banner shape).
+    const originalBannerSettings = backupDefaultBannerSettings();
 
     try {
       configureIab({ enabled: true, purposeOneTreatment: false });
@@ -941,6 +947,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         await visitor.close();
       }
     } finally {
+      restoreDefaultBannerSettings(originalBannerSettings);
       restoreSettingsOption(originalSettings);
     }
   });

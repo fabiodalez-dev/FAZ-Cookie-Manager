@@ -784,6 +784,17 @@ class Frontend {
 		$settings  = $this->get_faz_settings();
 		$dependent = false;
 
+		// IAB TCF: _fazTcfConfig.gdprApplies is derived from the visitor
+		// country at render time (Geolocation::is_eu_visitor()). A cached
+		// page served to a non-EU visitor that originally rendered for an
+		// EU visitor would carry gdprApplies=true (or vice versa), which
+		// silently mis-applies TCF consent semantics. Mark the output as
+		// country-dependent whenever IAB is enabled, even with a single
+		// banner and no explicit geo-targeting.
+		if ( ! empty( $settings['iab']['enabled'] ) ) {
+			$dependent = true;
+		}
+
 		if (
 			! empty( $settings['geolocation']['geo_targeting'] )
 			&& isset( $settings['geolocation']['default_behavior'] )

@@ -549,7 +549,7 @@ class Template {
 	/**
 	 * Retrieve stored template.
 	 *
-	 * @return string
+	 * @return array
 	 */
 	public function get_stored() {
 		$stored = get_option( $this->get_cache_key(), array() );

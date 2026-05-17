@@ -229,6 +229,22 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.14.0 =
+* Feature: Multi-banner geo-routing (refs #103). New schema columns `target_countries` and `priority` on `wp_faz_banners` let admins serve different banners per visitor country — e.g. a Reject-mandatory GDPR banner to EU/EEA/UK and a CCPA-style banner with the close (X) button to US visitors, picked automatically by `Controller::get_active_banner_for_country()` from the Cloudflare CF-IPCountry header (opt-in) or MaxMind/ip-api.com fallback.
+* Feature: Per-banner override of the EDPB/Garante close-button dark-pattern auto-hide (`settings.allowCloseButtonWithReject`). Default false preserves the compliance behaviour; opting in is documented as an EU/EEA/UK violation but unblocks non-EU jurisdictions where Accept + Reject + X is legal.
+* Feature: Cache busting for country-dependent output via `DONOTCACHEPAGE`/`DONOTCACHEOBJECT`/`DONOTCACHEDB` constants + `Cache-Control: no-store` + `Vary: CF-IPCountry` (with the trust filter on) so CDNs and full-page caches do not serve the wrong banner to the wrong country.
+* Feature: AMP `<amp-consent>` resolver is now country-aware via `Geolocation::get_visitor_country()` with the same geo guards as the classic JS flow.
+* Feature: Scope-change consent invalidation. Consent cookies now carry `__scope.banner` and `__scope.law` so a visitor that crosses a jurisdiction (CCPA → GDPR) re-prompts instead of inheriting consent from a different legal regime.
+* Fix: `banner_default` mutual-exclusion finally enforced server-side — saving a banner with the default flag clears it on every peer row (matches the admin help text). Without this, more than one banner could simultaneously hold the flag and the fallback picker was non-deterministic.
+* Fix: `Controller::get_active_banner()` preserves its pre-1.14.0 contract for third-party callers. An install with a single status=1, country-targeted, non-default banner now still receives that banner back when the call passes no country.
+* Fix: `has_country_dependent_banners()` and `Frontend::is_geo_blocked()` iterate the entire `ruleSet`, not just the first entry. A ruleSet like `[{code:ALL}, {code:US}]` is now consistently classified between the cache-vary headers and the runtime show/block decision.
+* Fix: `Frontend::send_geo_cache_headers()` gates on `faz_is_front_end_request()` so REST API / heartbeat / sitemap / robots requests no longer trigger the country-dependent DB chain on every poll.
+* Fix: `is_country_dependent_output()` also marks IAB-TCF output as country-dependent (TCF `gdprApplies` is derived from visitor country at render time and must not be served from a shared page cache).
+* Fix: `update_db_350` clears `faz_banners_table_version` before re-running `install_tables()`, so dbDelta actually adds the new `target_countries` + `priority` columns on upgrade.
+* Fix: Geolocation rejects the Cloudflare 'XX' (anonymous proxy / unknown) sentinel both on the CF-IPCountry branch and after the `faz_visitor_country` filter — a third-party filter implementer reintroducing 'XX' no longer leaks it into geo-routing.
+* Fix: `_fazConsentScopeChanged()` no longer invalidates valid pre-1.14.0 consent on the first page load after upgrade. Absent scope keys are treated as "upgrade case, no scope info known" and the existing consent stands.
+* Compatibility: New `Banner::set_target_countries()` / `set_priority()` / `get_target_countries()` / `get_priority()` accessors with normalisation (upper-case, dedup, `^[A-Z]{2}$` validation, non-negative integer clamping). REST schema exposes both fields on `/faz/v1/banners/{id}` with `[A-Z]{2}` pattern validation.
+
 = 1.13.17 =
 * Fix: `dataLayer is not defined` when third-party trackers emit a bare `dataLayer.push()` before GTM bootstraps. Pre-init via `wp_add_inline_script('before')`. Closes wp.org thread "bug-report-datalayer-is-not-defined".
 * Fix: cookie category counts stay stale after scan + auto-categorise — every cookie create/update/delete now invalidates Category controller cache, banner template, IAB unmatched-vendors transient, and 10 page-cache adapters. Closes wp.org thread "bug-report-cookie-categories-not-populated".

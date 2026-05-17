@@ -728,6 +728,14 @@ class Activator {
 
 		// 1. Re-run install_tables so dbDelta picks up the new columns
 		//    (`target_countries longtext`, `priority int(11)`).
+		//    install() calls install_all_tables() BEFORE maybe_update_db(),
+		//    which already set faz_banners_table_version = FAZ_VERSION. By
+		//    the time this migration runs, install_tables()'s version-gate
+		//    (`get_option(...) !== FAZ_VERSION`) is false and dbDelta never
+		//    re-runs — the new columns would never be added. Mirror
+		//    update_db_341() and clear the version option first so
+		//    install_tables() actually invokes dbDelta.
+		delete_option( 'faz_banners_table_version' );
 		$controller_class = 'FazCookie\Admin\Modules\Banners\Includes\Controller';
 		if ( class_exists( $controller_class ) ) {
 			$controller_class::get_instance()->install_tables();
