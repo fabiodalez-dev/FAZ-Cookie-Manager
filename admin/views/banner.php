@@ -683,6 +683,49 @@ defined( 'ABSPATH' ) || exit;
 				</div>
 			</div>
 		<?php endif; ?>
+
+		<!-- In-page guide: explains the split between WHAT-text vs WHERE-target
+		     so admins do not look for "language / Do not sell copy" in the
+		     Geo Targeting tab (they live in the Content tab) and vice versa.
+		     Plus a Brexit / UK-GDPR caveat — EU preset deliberately excludes
+		     GB; UK is its own preset. -->
+		<div class="faz-card" style="border-left:3px solid #0ea5e9;background:#f0f9ff;">
+			<div class="faz-card-body" style="color:#075985;">
+				<strong style="display:block;margin-bottom:.5rem;">
+					<span aria-hidden="true" style="margin-right:.3rem;">&#9432;</span><?php esc_html_e( 'How multi-banner works — quick guide', 'faz-cookie-manager' ); ?>
+				</strong>
+				<ul style="margin:0 0 .5rem 1.25rem;padding:0;line-height:1.6;">
+					<li><?php
+						echo wp_kses(
+							sprintf(
+								/* translators: %1$s: Geo Targeting (tab name), %2$s: Content (tab name). */
+								__( '%1$s (this tab) = <em>WHICH visitors</em> see this banner. Pick countries / regions; the multi-banner picker matches against the visitor\'s detected country. Leave empty to make this banner the universal fallback.', 'faz-cookie-manager' ),
+								'<strong>' . esc_html__( 'Geo Targeting', 'faz-cookie-manager' ) . '</strong>',
+								'<strong>' . esc_html__( 'Content', 'faz-cookie-manager' ) . '</strong>'
+							),
+							array( 'strong' => array(), 'em' => array() )
+						);
+					?></li>
+					<li><?php
+						echo wp_kses(
+							sprintf(
+								/* translators: %1$s: Content (tab name). */
+								__( '%1$s = <em>WHAT the banner says</em> — title, description, button labels, per-language translations. This is where you put law-specific copy: "Não vender minhas informações pessoais" for LGPD (Brazil), "Do not sell or share my personal information" for CCPA/CPRA (California 2024+), German consent text for GDPR-DE, and so on. Same banner row, multiple languages.', 'faz-cookie-manager' ),
+								'<strong>' . esc_html__( 'Content', 'faz-cookie-manager' ) . '</strong>'
+							),
+							array( 'strong' => array(), 'em' => array() )
+						);
+					?></li>
+					<li><?php
+						echo wp_kses(
+							__( '<strong>EU</strong> preset = 27 EU + 3 EEA (Iceland, Liechtenstein, Norway). It does <em>not</em> include the UK — pick the <strong>United Kingdom</strong> preset separately when you want a UK-GDPR variant with different copy. To cover EU+UK with one banner, tick both presets.', 'faz-cookie-manager' ),
+							array( 'strong' => array(), 'em' => array() )
+						);
+					?></li>
+				</ul>
+			</div>
+		</div>
+
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Region presets', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
@@ -692,13 +735,13 @@ defined( 'ABSPATH' ) || exit;
 					</legend>
 					<div class="faz-form-group" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.5rem;">
 						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="EU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'EU / EEA (27 + IS, LI, NO)', 'faz-cookie-manager' ); ?></span></label>
-						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="UK"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United Kingdom', 'faz-cookie-manager' ); ?></span></label>
-						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="US"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United States', 'faz-cookie-manager' ); ?></span></label>
-						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CA"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Canada', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="UK"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United Kingdom (UK-GDPR)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="US"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United States (CCPA / state laws)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CA"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Canada (PIPEDA)', 'faz-cookie-manager' ); ?></span></label>
 						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="BR"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Brazil (LGPD)', 'faz-cookie-manager' ); ?></span></label>
 						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="AU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Australia', 'faz-cookie-manager' ); ?></span></label>
-						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="JP"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Japan', 'faz-cookie-manager' ); ?></span></label>
-						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CH"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Switzerland', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="JP"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Japan (APPI)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CH"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Switzerland (nFADP)', 'faz-cookie-manager' ); ?></span></label>
 					</div>
 				</fieldset>
 			</div>

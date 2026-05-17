@@ -447,14 +447,14 @@
 		var regGrid = document.createElement('div');
 		regGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.4rem;';
 		var REGION_LABELS = {
-			EU: 'EU / EEA (incl. UK)',
-			UK: 'United Kingdom',
+			EU: 'EU / EEA (27 + IS, LI, NO)',
+			UK: 'United Kingdom (UK-GDPR)',
 			US: 'United States',
 			CA: 'Canada',
 			BR: 'Brazil (LGPD)',
 			AU: 'Australia',
 			JP: 'Japan',
-			CH: 'Switzerland'
+			CH: 'Switzerland (nFADP)'
 		};
 		Object.keys(REGION_PRESETS).forEach(function (key) {
 			var lbl = document.createElement('label');
@@ -604,12 +604,19 @@
 		});
 	}
 
-	// ── Geo Targeting (multi-banner geo-routing, 1.13.18+) ────────────────
+	// ── Geo Targeting (multi-banner geo-routing, 1.14.0+) ────────────────
 	//
-	// Region presets group ISO-3166 alpha-2 codes into clickable bundles. The
-	// EU bundle matches the server-side region_map in is_country_in_regions()
-	// so toggling the EU checkbox here produces the same coverage as toggling
-	// it in Settings → Geolocation.
+	// Region presets group ISO-3166 alpha-2 codes into clickable bundles
+	// used by the multi-banner picker.
+	//
+	// EU = 27 EU + 3 EEA (Iceland, Liechtenstein, Norway) — 30 countries,
+	// deliberately WITHOUT GB. UK is a separate preset because UK-GDPR is
+	// a distinct regime and admins that want different copy / cookie text
+	// for UK-vs-EU visitors need to be able to target them independently.
+	// (The legacy server-side region_map in Settings → Geolocation does
+	// include GB in 'eu' for backward compat with installs that only have
+	// the single-banner global geo-targeting setting, but multi-banner
+	// geo-routing keeps the two paradigms separate by design.)
 	var REGION_PRESETS = {
 		EU: ['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO'],
 		UK: ['GB'],
