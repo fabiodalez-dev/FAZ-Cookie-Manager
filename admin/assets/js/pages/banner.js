@@ -262,7 +262,10 @@
 			// Hide the entire switcher card when only one banner exists —
 			// keeps the UI clean for single-banner installs (the
 			// overwhelming majority).
-			wrap.style.display = rows.length <= 1 ? 'none' : '';
+			// 'flex' (not '') so the compact toolbar lays out inline —
+			// the markup uses display:flex via inline style; clearing
+			// the inline property would fall back to block.
+			wrap.style.display = rows.length <= 1 ? 'none' : 'flex';
 			// Always populate (the dropdown stays accurate even for the
 			// edge case where rows.length === 1 and the admin clicks
 			// "+ New banner" to add a second one).
@@ -298,28 +301,7 @@
 			select.dataset.fazSwitcherBound = '1';
 		}
 		if (!newBtn.dataset.fazSwitcherBound) {
-			newBtn.addEventListener('click', function () {
-				if (!bannerData) return;
-				if (!window.confirm(__('banner.createConfirm', 'Create a new banner cloned from the current one?'))) return;
-				FAZ.post('banners', {
-					name: (bannerData.name || 'Banner') + ' (copy)',
-					status: false,
-					'default': false,
-					properties: bannerData.properties,
-					contents: bannerData.contents
-				}).then(function (created) {
-					var newId = created && created.id ? Number(created.id) : 0;
-					if (newId <= 0) {
-						FAZ.notify(__('banner.createFailed', 'Failed to create banner.'), 'error');
-						return;
-					}
-					var base = window.location.href.split('?')[0];
-					var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
-					window.location.href = base + '?page=' + encodeURIComponent(page) + '&banner_id=' + newId;
-				}).catch(function () {
-					FAZ.notify(__('banner.createFailed', 'Failed to create banner.'), 'error');
-				});
-			});
+			newBtn.addEventListener('click', openNewBannerModal);
 			newBtn.dataset.fazSwitcherBound = '1';
 		}
 		if (delBtn && !delBtn.dataset.fazSwitcherBound) {
@@ -335,6 +317,227 @@
 			});
 			delBtn.dataset.fazSwitcherBound = '1';
 		}
+	}
+
+	// ── "+ New banner" modal — collects the minimum info needed to spin
+	// up a meaningful banner row instead of silently cloning the current
+	// one. Asks for: name, applicable law (GDPR/CCPA — drives the default
+	// config seed), optional region presets + custom country codes, optional
+	// priority, optional "use as default fallback" flag.
+	function openNewBannerModal() {
+		var form = document.createElement('div');
+		form.style.cssText = 'display:flex;flex-direction:column;gap:1rem;min-width:480px;';
+
+		// Name
+		var nameWrap = document.createElement('div');
+		var nameLabel = document.createElement('label');
+		nameLabel.textContent = __('banner.new.name', 'Banner name');
+		nameLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var nameInput = document.createElement('input');
+		nameInput.type = 'text';
+		nameInput.className = 'faz-input';
+		nameInput.style.width = '100%';
+		nameInput.placeholder = __('banner.new.namePlaceholder', 'e.g. CCPA US visitors');
+		nameInput.value = __('banner.new.defaultName', 'New banner');
+		nameWrap.appendChild(nameLabel);
+		nameWrap.appendChild(nameInput);
+		form.appendChild(nameWrap);
+
+		// Law
+		var lawWrap = document.createElement('div');
+		var lawLabel = document.createElement('label');
+		lawLabel.textContent = __('banner.new.law', 'Applicable law');
+		lawLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var lawHelp = document.createElement('div');
+		lawHelp.className = 'faz-help';
+		lawHelp.style.cssText = 'margin-bottom:.4rem;';
+		lawHelp.textContent = __('banner.new.lawHelp', 'GDPR seeds an opt-in banner (Accept / Reject required, granular categories). CCPA seeds an opt-out banner (Do Not Sell My Information).');
+		var lawSelect = document.createElement('select');
+		lawSelect.className = 'faz-input';
+		lawSelect.style.width = '100%';
+		[
+			{ value: 'gdpr', label: 'GDPR / ePrivacy (EU, UK, EEA)' },
+			{ value: 'ccpa', label: 'CCPA / CPRA (California, US)' }
+		].forEach(function (opt) {
+			var o = document.createElement('option');
+			o.value = opt.value;
+			o.textContent = opt.label;
+			lawSelect.appendChild(o);
+		});
+		lawWrap.appendChild(lawLabel);
+		lawWrap.appendChild(lawHelp);
+		lawWrap.appendChild(lawSelect);
+		form.appendChild(lawWrap);
+
+		// Region preset chips — quick targets for the new banner. The same
+		// REGION_PRESETS map the Geo Targeting tab uses, so toggling
+		// "EU/EEA" here produces the same target_countries the tab does.
+		var regWrap = document.createElement('div');
+		var regLabel = document.createElement('label');
+		regLabel.textContent = __('banner.new.regions', 'Target regions (optional)');
+		regLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var regHelp = document.createElement('div');
+		regHelp.className = 'faz-help';
+		regHelp.style.cssText = 'margin-bottom:.4rem;';
+		regHelp.textContent = __('banner.new.regionsHelp', 'Tick the regions this banner should target. Leave all unchecked to make this a match-all / fallback banner.');
+		var regGrid = document.createElement('div');
+		regGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.4rem;';
+		var REGION_LABELS = {
+			EU: 'EU / EEA (incl. UK)',
+			UK: 'United Kingdom',
+			US: 'United States',
+			CA: 'Canada',
+			BR: 'Brazil (LGPD)',
+			AU: 'Australia',
+			JP: 'Japan',
+			CH: 'Switzerland'
+		};
+		Object.keys(REGION_PRESETS).forEach(function (key) {
+			var lbl = document.createElement('label');
+			lbl.className = 'faz-toggle';
+			lbl.innerHTML = ''; // build child nodes safely
+			var input = document.createElement('input');
+			input.type = 'checkbox';
+			input.className = 'faz-b-new-region';
+			input.value = key;
+			var track = document.createElement('span');
+			track.className = 'faz-toggle-track';
+			var txt = document.createElement('span');
+			txt.textContent = REGION_LABELS[key] || key;
+			lbl.appendChild(input);
+			lbl.appendChild(track);
+			lbl.appendChild(txt);
+			regGrid.appendChild(lbl);
+		});
+		regWrap.appendChild(regLabel);
+		regWrap.appendChild(regHelp);
+		regWrap.appendChild(regGrid);
+		form.appendChild(regWrap);
+
+		// Custom country codes
+		var customWrap = document.createElement('div');
+		var customLabel = document.createElement('label');
+		customLabel.textContent = __('banner.new.customCountries', 'Additional country codes (optional)');
+		customLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var customInput = document.createElement('input');
+		customInput.type = 'text';
+		customInput.className = 'faz-input';
+		customInput.style.width = '100%';
+		customInput.placeholder = 'NZ, SG, KR';
+		customWrap.appendChild(customLabel);
+		customWrap.appendChild(customInput);
+		form.appendChild(customWrap);
+
+		// Priority + default-fallback (compact row)
+		var rowWrap = document.createElement('div');
+		rowWrap.style.cssText = 'display:flex;gap:1rem;align-items:flex-end;';
+		var prioWrap = document.createElement('div');
+		var prioLabel = document.createElement('label');
+		prioLabel.textContent = __('banner.new.priority', 'Priority');
+		prioLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;font-size:13px;';
+		var prioInput = document.createElement('input');
+		prioInput.type = 'number';
+		prioInput.className = 'faz-input';
+		prioInput.min = '0'; prioInput.max = '9999'; prioInput.step = '1'; prioInput.value = '0';
+		prioInput.style.width = '120px';
+		prioWrap.appendChild(prioLabel);
+		prioWrap.appendChild(prioInput);
+		var defWrap = document.createElement('div');
+		defWrap.style.cssText = 'flex:1;';
+		var defLbl = document.createElement('label');
+		defLbl.className = 'faz-toggle';
+		var defInput = document.createElement('input');
+		defInput.type = 'checkbox';
+		var defTrack = document.createElement('span');
+		defTrack.className = 'faz-toggle-track';
+		var defText = document.createElement('span');
+		defText.textContent = __('banner.new.useAsDefault', 'Use as default fallback');
+		defLbl.appendChild(defInput);
+		defLbl.appendChild(defTrack);
+		defLbl.appendChild(defText);
+		defWrap.appendChild(defLbl);
+		rowWrap.appendChild(prioWrap);
+		rowWrap.appendChild(defWrap);
+		form.appendChild(rowWrap);
+
+		// Footer buttons
+		var footer = document.createElement('div');
+		var cancelBtn = document.createElement('button');
+		cancelBtn.type = 'button';
+		cancelBtn.className = 'faz-btn faz-btn-secondary';
+		cancelBtn.textContent = __('banner.new.cancel', 'Cancel');
+		var createBtn = document.createElement('button');
+		createBtn.type = 'button';
+		createBtn.className = 'faz-btn faz-btn-primary';
+		createBtn.textContent = __('banner.new.create', 'Create banner');
+		footer.appendChild(cancelBtn);
+		footer.appendChild(createBtn);
+
+		var m = FAZ.modal({
+			title: __('banner.new.title', 'Create a new banner'),
+			body: form,
+			footer: footer,
+			size: 'lg'
+		});
+
+		cancelBtn.addEventListener('click', function () { m.close(); });
+
+		createBtn.addEventListener('click', function () {
+			var name = (nameInput.value || '').trim();
+			if (!name) { nameInput.focus(); return; }
+			var law = lawSelect.value === 'ccpa' ? 'ccpa' : 'gdpr';
+
+			// Collect target countries: region preset codes + custom codes,
+			// deduped + normalised by the helper the Geo Targeting tab uses.
+			var targets = [];
+			form.querySelectorAll('.faz-b-new-region:checked').forEach(function (cb) {
+				targets = targets.concat(REGION_PRESETS[cb.value] || []);
+			});
+			if (customInput.value) {
+				targets = targets.concat(customInput.value.split(/[,\s]+/));
+			}
+			targets = normaliseCountryCodes(targets);
+
+			var priority = parseInt(prioInput.value, 10);
+			if (!isFinite(priority) || priority < 0) priority = 0;
+
+			createBtn.disabled = true;
+			cancelBtn.disabled = true;
+			createBtn.textContent = __('banner.new.creating', 'Creating…');
+
+			// Pull the law-appropriate default config so the new banner
+			// starts with sane content/translations/colours instead of an
+			// empty shell.
+			FAZ.get('banners/configs').then(function (configs) {
+				var properties = (configs && configs[law]) ? configs[law] : (bannerData ? bannerData.properties : {});
+				return FAZ.post('banners', {
+					name: name,
+					status: true,
+					'default': !!defInput.checked,
+					properties: properties,
+					contents: bannerData ? bannerData.contents : {},
+					target_countries: targets,
+					priority: priority
+				});
+			}).then(function (created) {
+				var newId = created && created.id ? Number(created.id) : 0;
+				if (newId <= 0) {
+					FAZ.notify(__('banner.new.failed', 'Failed to create banner.'), 'error');
+					createBtn.disabled = false;
+					cancelBtn.disabled = false;
+					createBtn.textContent = __('banner.new.create', 'Create banner');
+					return;
+				}
+				var base = window.location.href.split('?')[0];
+				var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+				window.location.href = base + '?page=' + encodeURIComponent(page) + '&banner_id=' + newId;
+			}).catch(function () {
+				FAZ.notify(__('banner.new.failed', 'Failed to create banner.'), 'error');
+				createBtn.disabled = false;
+				cancelBtn.disabled = false;
+				createBtn.textContent = __('banner.new.create', 'Create banner');
+			});
+		});
 	}
 
 	// ── Geo Targeting (multi-banner geo-routing, 1.13.18+) ────────────────

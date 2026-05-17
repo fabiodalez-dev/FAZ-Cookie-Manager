@@ -16,22 +16,17 @@ defined( 'ABSPATH' ) || exit;
 	     a clone of the current banner and reloads the page on the new id.
 	     The active banner_id is taken from the ?banner_id= query string
 	     and falls back to the system-default banner when absent. -->
-	<div id="faz-b-switcher" class="faz-card" style="display:none;margin-bottom:1rem;">
-		<div class="faz-card-body" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
-			<label for="faz-b-switcher-select" style="font-weight:500;white-space:nowrap;">
-				<?php esc_html_e( 'Editing banner:', 'faz-cookie-manager' ); ?>
-			</label>
-			<select id="faz-b-switcher-select" class="faz-input" style="min-width:280px;flex:1 1 280px;"></select>
-			<button type="button" class="faz-btn faz-btn-secondary" id="faz-b-switcher-new">
-				+ <?php esc_html_e( 'New banner', 'faz-cookie-manager' ); ?>
-			</button>
-			<button type="button" class="faz-btn faz-btn-secondary" id="faz-b-switcher-delete" style="color:#b91c1c;border-color:#fecaca;display:none;">
-				<?php esc_html_e( 'Delete this banner', 'faz-cookie-manager' ); ?>
-			</button>
-		</div>
-		<div class="faz-help" style="padding:0 1rem .75rem;color:#6b7280;">
-			<?php esc_html_e( 'Each banner has its own content, design, and geo targets. Use multi-banner setups to serve different banners per visitor country (e.g. a GDPR banner to EU visitors and a CCPA-style banner to US visitors).', 'faz-cookie-manager' ); ?>
-		</div>
+	<div id="faz-b-switcher" style="display:none;align-items:center;gap:.5rem;margin-bottom:.75rem;font-size:13px;">
+		<label for="faz-b-switcher-select" style="color:#6b7280;white-space:nowrap;">
+			<?php esc_html_e( 'Banner:', 'faz-cookie-manager' ); ?>
+		</label>
+		<select id="faz-b-switcher-select" class="faz-input faz-input-sm" style="width:auto;max-width:240px;padding:.25rem .5rem;font-size:13px;"></select>
+		<button type="button" class="faz-btn faz-btn-sm faz-btn-secondary" id="faz-b-switcher-new" title="<?php esc_attr_e( 'Create a new banner cloned from the current one', 'faz-cookie-manager' ); ?>" style="padding:.25rem .6rem;font-size:13px;line-height:1;">
+			+ <?php esc_html_e( 'New', 'faz-cookie-manager' ); ?>
+		</button>
+		<button type="button" class="faz-btn faz-btn-sm faz-btn-secondary" id="faz-b-switcher-delete" title="<?php esc_attr_e( 'Delete this banner', 'faz-cookie-manager' ); ?>" style="display:none;padding:.25rem .5rem;font-size:13px;line-height:1;color:#b91c1c;border-color:#fecaca;" aria-label="<?php esc_attr_e( 'Delete this banner', 'faz-cookie-manager' ); ?>">
+			&times;
+		</button>
 	</div>
 
 	<div class="faz-tabs" id="faz-banner-tabs">
