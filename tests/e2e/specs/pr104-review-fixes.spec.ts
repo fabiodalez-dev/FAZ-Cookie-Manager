@@ -576,43 +576,53 @@ test.describe.serial('PR104 — P2-1 Frontend::is_geo_blocked iterates every rul
     const result = wpEval(`
       global $wpdb;
       $table = $wpdb->prefix . 'faz_banners';
-      // Write a single-entry US rule via the model (sanitizer allows
-      // single entries) — this is the realistic production shape.
+      // Snapshot original settings BEFORE any mutation so the PHP
+      // try/finally below can restore even if anything throws mid-test
+      // (an exception in is_geo_blocked / Reflection that would
+      // otherwise leave ruleSet=US persisted and contaminate the rest
+      // of the suite).
       $b = new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( ${active} );
-      $s = $b->get_settings();
-      $s['settings']['ruleSet'] = array( array( 'code' => 'US', 'regions' => array() ) );
-      $b->set_settings( $s );
-      $b->save();
+      $original_settings = $b->get_settings();
 
-      $closure_us = function() { return 'US'; };
-      add_filter( 'faz_visitor_country', $closure_us );
-      $fe = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.0' );
-      $fe_ref = new ReflectionClass( $fe );
-      $banner_prop = $fe_ref->getProperty( 'banner' );
-      $banner_prop->setAccessible( true );
-      $banner_prop->setValue( $fe, new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( ${active} ) );
-      $method = $fe_ref->getMethod( 'is_geo_blocked' );
-      $method->setAccessible( true );
-      $blocked_us_single = $method->invoke( $fe );
-      remove_filter( 'faz_visitor_country', $closure_us );
+      try {
+        // Write a single-entry US rule via the model (sanitizer allows
+        // single entries) — this is the realistic production shape.
+        $s = $original_settings;
+        $s['settings']['ruleSet'] = array( array( 'code' => 'US', 'regions' => array() ) );
+        $b->set_settings( $s );
+        $b->save();
 
-      // Now flip the visitor to JP — the same single-entry US rule must block them.
-      $closure_jp = function() { return 'JP'; };
-      add_filter( 'faz_visitor_country', $closure_jp );
-      $banner_prop->setValue( $fe, new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( ${active} ) );
-      $blocked_jp_single = $method->invoke( $fe );
-      remove_filter( 'faz_visitor_country', $closure_jp );
+        $closure_us = function() { return 'US'; };
+        add_filter( 'faz_visitor_country', $closure_us );
+        $fe = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.0' );
+        $fe_ref = new ReflectionClass( $fe );
+        $banner_prop = $fe_ref->getProperty( 'banner' );
+        $banner_prop->setAccessible( true );
+        $banner_prop->setValue( $fe, new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( ${active} ) );
+        $method = $fe_ref->getMethod( 'is_geo_blocked' );
+        $method->setAccessible( true );
+        $blocked_us_single = $method->invoke( $fe );
+        remove_filter( 'faz_visitor_country', $closure_us );
 
-      // Restore the banner's ruleSet to ALL so the rest of the suite
-      // sees a clean state.
-      $s['settings']['ruleSet'] = array( array( 'code' => 'ALL' ) );
-      $b->set_settings( $s );
-      $b->save();
+        // Now flip the visitor to JP — the same single-entry US rule must block them.
+        $closure_jp = function() { return 'JP'; };
+        add_filter( 'faz_visitor_country', $closure_jp );
+        $banner_prop->setValue( $fe, new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( ${active} ) );
+        $blocked_jp_single = $method->invoke( $fe );
+        remove_filter( 'faz_visitor_country', $closure_jp );
 
-      echo wp_json_encode( array(
-        'blocked_us_single' => $blocked_us_single,
-        'blocked_jp_single' => $blocked_jp_single,
-      ) );
+        echo wp_json_encode( array(
+          'blocked_us_single' => $blocked_us_single,
+          'blocked_jp_single' => $blocked_jp_single,
+        ) );
+      } finally {
+        // Always restore the original settings — covers both successful
+        // assertion paths and unexpected exceptions.
+        $b_restore = new \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner( ${active} );
+        $b_restore->set_settings( $original_settings );
+        $b_restore->save();
+        \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+      }
     `).trim();
     const data = JSON.parse(result);
     expect(data.blocked_us_single, 'single-entry US rule does NOT block US visitor').toBe(false);
