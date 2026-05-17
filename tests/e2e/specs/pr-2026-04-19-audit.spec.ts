@@ -407,6 +407,34 @@ test.describe('PR audit regressions (2026-04-19)', () => {
     ensureWooCommerceLabData();
   });
 
+  test.afterAll(() => {
+    // The TCF timestamps spec mutates the active banner into
+    // classic+pushdown and previously did not restore it. Downstream specs
+    // (DSAR-VAL, DSAR-A11Y, DNSMPI-COOKIE) assume the default box+popup
+    // shape, and inheriting classic+pushdown across files cascaded into
+    // double-digit fail counts under full-suite load. Reset to the same
+    // canonical shape global-setup.ts applies at suite start.
+    wpEval(`
+      global $wpdb;
+      $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
+      $banner = $controller->get_active_banner();
+      if ( $banner ) {
+        $s = $banner->get_settings();
+        if ( ! is_array( $s ) ) { $s = array(); }
+        if ( ! isset( $s['settings'] ) || ! is_array( $s['settings'] ) ) { $s['settings'] = array(); }
+        $s['settings']['type'] = 'box';
+        $s['settings']['preferenceCenterType'] = 'popup';
+        $banner->set_settings( $s );
+        $banner->save();
+      }
+      delete_option( 'faz_banner_template' );
+      if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+        faz_clear_banner_template_cache();
+      }
+      $controller->delete_cache();
+    `);
+  });
+
   test('data: URI scripts are blocked when the decoded payload matches a provider signature', async ({ page }) => {
     // Snapshot and clear whitelist_patterns: _fazIsUserWhitelisted() checks the decoded
     // data: URI content too, so if connect.facebook.net is in the whitelist the observer

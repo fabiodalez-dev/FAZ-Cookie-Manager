@@ -23,38 +23,47 @@ import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 
 test.describe.serial('Close button per-banner override vs Garante/EDPB dark-pattern auto-hide', () => {
-  let snapshotSettings = '';
-  let snapshotCloseStatus = '';
-
-  test.beforeAll(() => {
-    // Snapshot the active banner's settings JSON + close-button status so
-    // we can restore both at teardown. The tests mutate both.
-    snapshotSettings = wpEval(`
-      $banner = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
-      echo $banner ? wp_json_encode( $banner->get_settings() ) : '';
-    `).trim();
-    snapshotCloseStatus = wpEval(`
-      $banner = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
-      $s = $banner ? $banner->get_settings() : array();
-      echo isset( $s['config']['notice']['elements']['closeButton']['status'] ) && $s['config']['notice']['elements']['closeButton']['status'] ? '1' : '0';
-    `).trim();
-  });
-
   test.afterAll(() => {
+    // Reset the active banner to the known clean shape applied by
+    // global-setup.ts. Earlier this hook snapshotted whatever state the
+    // banner happened to be in at test start and restored it verbatim — but
+    // if a previous spec already mutated the banner into classic+pushdown,
+    // the snapshot froze the wrong state and later specs in the run
+    // inherited it, cascading into double-digit fail counts. Forcing the
+    // canonical default at teardown keeps the rest of the suite isolated.
     wpEval(`
-      $banner = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
+      global $wpdb;
+      $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
+      $banner = $controller->get_active_banner();
       if ( $banner ) {
-        $restored = json_decode( ${JSON.stringify(snapshotSettings)}, true );
-        if ( is_array( $restored ) ) {
-          $banner->set_settings( $restored );
-          $banner->save();
+        $s = $banner->get_settings();
+        if ( ! is_array( $s ) ) { $s = array(); }
+        if ( ! isset( $s['settings'] ) || ! is_array( $s['settings'] ) ) { $s['settings'] = array(); }
+        $s['settings']['type'] = 'box';
+        $s['settings']['preferenceCenterType'] = 'popup';
+        $s['settings']['allowCloseButtonWithReject'] = false;
+        // Re-enable the close button explicitly so default-on assertions
+        // still hold for downstream specs.
+        if ( ! isset( $s['config']['notice']['elements']['closeButton'] ) || ! is_array( $s['config']['notice']['elements']['closeButton'] ) ) {
+          $s['config']['notice']['elements']['closeButton'] = array();
         }
+        $s['config']['notice']['elements']['closeButton']['status'] = true;
+        $banner->set_settings( $s );
+        $banner->save();
+      }
+      // Remove any secondary banners created by CB-OV-10 / GEO multi-banner
+      // tests so the next spec sees a single-banner install.
+      // Column is banner_id (not id) — PK from class-activator.
+      $table = $wpdb->prefix . 'faz_banners';
+      $active_id = $banner ? (int) $banner->get_id() : 0;
+      if ( $active_id > 0 ) {
+        $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE banner_id <> %d", $active_id ) );
       }
       delete_option( 'faz_banner_template' );
       if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
         faz_clear_banner_template_cache();
       }
-      \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+      $controller->delete_cache();
     `);
   });
 
@@ -347,7 +356,31 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
     const result = wpEval(`
       global $wpdb;
       $rows = $wpdb->get_results( "SELECT banner_id FROM {$wpdb->prefix}faz_banners ORDER BY banner_id ASC LIMIT 2" );
-      if ( count( $rows ) < 2 ) { echo 'INSUFFICIENT_BANNERS'; return; }
+      if ( count( $rows ) < 2 ) {
+        // Create a second banner on-the-fly so the test is idempotent
+        // under global-setup's "single banner" cleanup. Mirror the active
+        // banner's shape so the per-banner isolation assertion is
+        // meaningful (same settings shape, just a non-active row).
+        $active = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
+        if ( ! $active ) { echo 'NO_ACTIVE_BANNER'; return; }
+        $now = current_time( 'mysql' );
+        $wpdb->insert(
+          $wpdb->prefix . 'faz_banners',
+          array(
+            'name'             => 'CB-OV-10 secondary',
+            'slug'             => 'cb-ov-10-secondary',
+            'status'           => 0,
+            'settings'         => wp_json_encode( $active->get_settings() ),
+            'contents'         => wp_json_encode( $active->get_contents() ),
+            'banner_default'   => 0,
+            'target_countries' => wp_json_encode( array() ),
+            'priority'         => 0,
+            'date_created'     => $now,
+            'date_modified'    => $now,
+          )
+        );
+        $rows = $wpdb->get_results( "SELECT banner_id FROM {$wpdb->prefix}faz_banners ORDER BY banner_id ASC LIMIT 2" );
+      }
       $id_a = (int) $rows[0]->banner_id;
       $id_b = (int) $rows[1]->banner_id;
 
@@ -378,8 +411,8 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
       ) );
     `).trim();
 
-    if (result === 'INSUFFICIENT_BANNERS') {
-      test.skip(true, 'Need at least 2 banner rows for the per-banner-isolation check');
+    if (result === 'NO_ACTIVE_BANNER') {
+      test.skip(true, 'Need an active banner to seed the secondary for the isolation check');
       return;
     }
 
