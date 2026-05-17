@@ -407,18 +407,21 @@
 		// Law
 		var lawWrap = document.createElement('div');
 		var lawLabel = document.createElement('label');
-		lawLabel.textContent = __('banner.new.law', 'Applicable law');
+		lawLabel.textContent = __('banner.new.law', 'Consent model');
 		lawLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
 		var lawHelp = document.createElement('div');
 		lawHelp.className = 'faz-help';
 		lawHelp.style.cssText = 'margin-bottom:.4rem;';
-		lawHelp.textContent = __('banner.new.lawHelp', 'GDPR seeds an opt-in banner (Accept / Reject required, granular categories). CCPA seeds an opt-out banner (Do Not Sell My Information).');
+		lawHelp.innerHTML = __(
+			'banner.new.lawHelp',
+			'Pick the legal paradigm, not the country — language, "Do not sell" copy and country targeting live in the Content + Geo Targeting tabs after creation.<br><strong>Opt-in</strong> covers GDPR, UK-GDPR, ePrivacy, LGPD (Brazil), Swiss nFADP, PIPEDA (Canada), KVKK (Turkey) and similar consent-first regimes. <strong>Opt-out</strong> covers CCPA/CPRA (California), Virginia CDPA, Colorado CPA, Connecticut CTDPA, Utah UCPA and other US state laws.'
+		);
 		var lawSelect = document.createElement('select');
 		lawSelect.className = 'faz-input';
 		lawSelect.style.width = '100%';
 		[
-			{ value: 'gdpr', label: 'GDPR / ePrivacy (EU, UK, EEA)' },
-			{ value: 'ccpa', label: 'CCPA / CPRA (California, US)' }
+			{ value: 'gdpr', label: 'Opt-in — GDPR, UK-GDPR, ePrivacy, LGPD, nFADP, PIPEDA, …' },
+			{ value: 'ccpa', label: 'Opt-out — CCPA/CPRA, Virginia, Colorado, Connecticut, Utah, …' }
 		].forEach(function (opt) {
 			var o = document.createElement('option');
 			o.value = opt.value;
