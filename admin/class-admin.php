@@ -1028,6 +1028,37 @@ class Admin {
 	 * @return void
 	 */
 	public function render_page() {
+		// Defensive no-cache headers for every plugin admin page.
+		// Reported on prod (fabiodalez.it 2026-05-18, 1.14.1): after creating
+		// or deleting banners, the admin would still see the previous state.
+		// Root cause: LiteSpeed Cache (and any opportunistic upstream cache —
+		// some cPanel reverse proxies, Cloudflare on misconfigured zones)
+		// occasionally caches /wp-admin/ responses despite WordPress core
+		// emitting nocache headers, because the upstream's cache key ignores
+		// the WordPress cookie set. We re-emit nocache_headers() AND add the
+		// LiteSpeed-specific opt-out (X-LiteSpeed-Cache-Control: no-cache +
+		// the litespeed_control_set_nocache action) so the page never lands
+		// in a shared cache regardless of admin-page caching policy. Same
+		// pattern the frontend uses for country-dependent banners (see
+		// Frontend::send_geo_cache_headers).
+		nocache_headers();
+		if ( ! headers_sent() ) {
+			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0', true );
+			header( 'X-LiteSpeed-Cache-Control: no-cache', true );
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
+			define( 'DONOTCACHEOBJECT', true );
+		}
+		if ( ! defined( 'DONOTCACHEDB' ) ) {
+			define( 'DONOTCACHEDB', true );
+		}
+		// LiteSpeed-specific opt-out trigger — honoured by litespeed-cache
+		// >= 3.x even when admin pages would otherwise be eligible.
+		do_action( 'litespeed_control_set_nocache', 'FAZ Cookie Manager admin page' );
+
 		$this->ensure_pages_loaded();
 		$current_page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : self::ADMIN_SLUG; // phpcs:ignore WordPress.Security.NonceVerification
 
