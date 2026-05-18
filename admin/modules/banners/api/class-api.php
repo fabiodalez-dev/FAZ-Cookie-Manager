@@ -285,15 +285,34 @@ class Api extends Rest_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function delete_item( $request ) {
-		if ( empty( $request['id'] ) ) {
+		global $wpdb;
+		$banner_id = (int) $request['id'];
+		if ( $banner_id <= 0 ) {
 			return new WP_Error(
 				'fazcookie_rest_item_exists',
 				__( 'Invalid banner id', 'faz-cookie-manager' ),
 				array( 'status' => 400 )
 			);
 		}
-		$banner_id = $request['id'];
-		$data      = $this->controller->delete_item( $banner_id );
+		// Existence probe — same pattern as get_item(). Without it, deleting
+		// a phantom id silently returns "0 rows affected" and the admin UI
+		// surfaces it as a generic failure ("Failed to delete banner —
+		// id=4"), even though the banner was simply already gone. Returning
+		// a structured 404 lets the JS distinguish "already deleted —
+		// refresh the page" from "real failure — surface as error".
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+		$exists = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$wpdb->prefix}faz_banners WHERE banner_id = %d",
+			$banner_id
+		) );
+		if ( 0 === $exists ) {
+			return new WP_Error(
+				'fazcookie_rest_invalid_id',
+				__( 'Banner not found.', 'faz-cookie-manager' ),
+				array( 'status' => 404 )
+			);
+		}
+		$data = $this->controller->delete_item( $banner_id );
 		if ( false === $data ) {
 			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to delete banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 		}

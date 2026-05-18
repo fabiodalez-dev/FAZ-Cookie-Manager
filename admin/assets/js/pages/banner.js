@@ -394,14 +394,27 @@
 			delBtn.addEventListener('click', function () {
 				if (!window.confirm(__('banner.deleteConfirm', 'Delete this banner permanently? This cannot be undone.'))) return;
 				delBtn.disabled = true;
+				// Helper: navigate back to the page-without-banner-id so the
+				// editor mounts on the default banner. Used by both the
+				// happy-path post-delete reload and the "already gone"
+				// recovery path triggered by a 404 from a stale tab.
+				var redirectToDefault = function () {
+					var base = window.location.href.split('?')[0];
+					var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+					window.location.href = base + '?page=' + encodeURIComponent(page);
+				};
 				FAZ.del('banners/' + bannerId).then(function (resp) {
 					// REST returns the deleted row count from $wpdb->delete.
-					// 0 means the id didn't match anything — surface that
-					// instead of "succeeding" silently and reloading.
+					// With the 1.14.1+ server-side existence probe a non-
+					// existent id reaches us as a 404 (handled in .catch),
+					// not as 0-affected — so a 0 here means the row was
+					// gone between the probe and the DELETE statement
+					// (race condition on a concurrent admin session). Treat
+					// it as "already deleted" rather than a hard failure.
 					var n = (typeof resp === 'number') ? resp : (resp && typeof resp.deleted === 'number' ? resp.deleted : 1);
 					if (!n) {
-						delBtn.disabled = false;
-						FAZ.notify(__('banner.deleteFailed', 'Failed to delete banner.') + ' (no row affected — id=' + bannerId + ')', 'error');
+						FAZ.notify(__('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
+						setTimeout(redirectToDefault, 700);
 						return;
 					}
 					// Verify with a second GET so we don't reload to a
@@ -414,11 +427,26 @@
 							return;
 						}
 						FAZ.notify(__('banner.deleted', 'Banner deleted.'));
-						var base = window.location.href.split('?')[0];
-						var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
-						window.location.href = base + '?page=' + encodeURIComponent(page);
+						redirectToDefault();
 					});
 				}).catch(function (err) {
+					// "Already gone" path: 404 from the existence probe in
+					// the REST DELETE handler. Happens when the tab is
+					// stale (e.g. another admin already deleted this
+					// banner, or it was the phantom id=2513570-style
+					// orphan left over from the pre-1.14.1 auto-increment
+					// leak). Quiet the error, tell the admin what
+					// happened, reload onto the default banner.
+					var alreadyGone = err && (
+						err.code === 'fazcookie_rest_invalid_id'
+						|| err.code === 'rest_no_route'
+						|| (err.data && err.data.status === 404)
+					);
+					if ( alreadyGone ) {
+						FAZ.notify(__('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
+						setTimeout(redirectToDefault, 700);
+						return;
+					}
 					delBtn.disabled = false;
 					var detail = '';
 					if (err && err.code) detail = ' [' + err.code + ']';
