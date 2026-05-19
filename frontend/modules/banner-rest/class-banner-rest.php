@@ -217,7 +217,23 @@ class Banner_Rest {
 		} else {
 			// Allow CDNs to cache per-language responses for a short TTL. The
 			// payload is deterministic when the selected banner is not country-dependent.
+			//
+			// F111 fix (1.14.3): add Vary: CF-IPCountry when CF
+			// integration is on so the CDN keys cache entries per
+			// country. has_country_dependent_banners() can return a
+			// stale-false during cache-epoch propagation delay (or
+			// between admin sessions that touch country targeting and
+			// the next request); without Vary the CDN could serve a
+			// stale answer composed for one country to a visitor in
+			// another for the full 5-minute TTL. With Vary, a
+			// publisher who toggles country-dependent state mid-window
+			// at worst gets per-country cache entries that all match
+			// the same payload — at best gets isolation when a banner
+			// becomes country-dependent. Cheap insurance.
 			$response->header( 'Cache-Control', 'public, max-age=300' );
+			if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+				$response->header( 'Vary', 'CF-IPCountry' );
+			}
 		}
 		return $response;
 	}

@@ -480,11 +480,18 @@ class AMP_Consent {
 	private static function country_in_regions( $country_code, $regions ) {
 		$country_code = strtoupper( $country_code );
 		$region_map   = array(
+			// F105 fix: align with Frontend::is_country_in_regions which
+			// excludes GB from the 'eu' preset (F008). The pre-fix
+			// divergence meant a publisher with target_regions=['eu']
+			// got different UK-visitor behaviour on AMP pages vs
+			// regular pages — exactly the divergence the F008 fix was
+			// meant to close. UK has its own bucket ('uk' → ['GB']);
+			// UK GDPR is a separate regime.
 			'eu' => array(
 				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
 				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
 				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
-				'IS', 'LI', 'NO', 'GB',
+				'IS', 'LI', 'NO',
 			),
 			'uk' => array( 'GB' ),
 			'us' => array( 'US' ),

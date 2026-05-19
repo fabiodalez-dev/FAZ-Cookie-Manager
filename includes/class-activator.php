@@ -784,19 +784,31 @@ class Activator {
 				// class-controller.php which declares this column NOT NULL
 				// (longtext NOT NULL). The pre-fix safety-net added it as
 				// NULL-able, producing a nullability drift between fresh
-				// installs (NOT NULL) and upgraded installs (NULL-able)
-				// that future dbDelta passes would keep trying to reconcile.
-				// `DEFAULT (JSON_ARRAY())` would be cleaner but isn't
-				// universally supported (MySQL 8.0.13+ / MariaDB 10.2.7+);
-				// fall back to an explicit UPDATE to backfill the
-				// canonical empty-array value after the ALTER.
+				// installs (NOT NULL) and upgraded installs (NULL-able).
+				//
+				// F106 fix (1.14.3): the pre-fix one-shot
+				// `ALTER … ADD COLUMN longtext NOT NULL` (no DEFAULT)
+				// failed on MySQL with sql_mode=STRICT_TRANS_TABLES
+				// (default 5.7+) when the table was non-empty, because
+				// existing rows had no value to populate the new
+				// non-nullable column. Use a 3-step idempotent path:
+				//   1. ADD COLUMN as NULL-able (always succeeds).
+				//   2. UPDATE backfill any NULL with '[]'.
+				//   3. ALTER COLUMN to NOT NULL (now safe — no NULLs).
+				// `longtext NOT NULL DEFAULT '[]'` would be one-shot but
+				// MySQL pre-8.0.13 doesn't support DEFAULT on longtext
+				// at all — strict mode + portability beats elegance.
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter -- one-shot DDL on the plugin's custom table; $table = $wpdb->prefix . 'faz_banners' (no user input), column type is a fixed literal.
-				$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `target_countries` longtext NOT NULL" );
-				// Backfill existing rows with the empty-array JSON so the
-				// NOT NULL constraint is satisfied. Skipped automatically
-				// when the table is empty.
+				$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `target_countries` longtext NULL" );
+				// Backfill any NULL or empty-string rows with the
+				// canonical empty-array value before tightening the
+				// constraint. Skipped automatically when the table is
+				// empty.
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter
-				$wpdb->query( "UPDATE `{$table}` SET `target_countries` = '[]' WHERE `target_countries` = '' OR `target_countries` IS NULL" );
+				$wpdb->query( "UPDATE `{$table}` SET `target_countries` = '[]' WHERE `target_countries` IS NULL OR `target_countries` = ''" );
+				// Now lock down to NOT NULL — every row has a value.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter
+				$wpdb->query( "ALTER TABLE `{$table}` MODIFY COLUMN `target_countries` longtext NOT NULL" );
 			}
 			$pr_exists = (int) $wpdb->get_var(
 				$wpdb->prepare(
@@ -874,6 +886,26 @@ class Activator {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to the custom faz_banners table; row identifier is the integer banner_id we just selected.
 				$wpdb->update( $table, array( 'banner_default' => 1 ), array( 'banner_id' => $fallback_id ), array( '%d' ), array( '%d' ) );
 			}
+		}
+
+		// F103 fix (1.14.3): upgrade-path companion to the
+		// `ENGINE=InnoDB` literal in get_schema(). dbDelta does NOT
+		// migrate existing tables' storage engines — installs that
+		// historically created faz_banners under a MyISAM default
+		// would stay on MyISAM forever, defeating the delete_item
+		// transaction. Probe and ALTER once on this migration.
+		// MyISAM-on-InnoDB-host is rare in 2026 but legacy AWS RDS
+		// parameter groups and customised shared hosts still trip it.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$current_engine = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT `ENGINE` FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s",
+				$wpdb->prefix . 'faz_banners'
+			)
+		);
+		if ( $current_engine && 'InnoDB' !== $current_engine ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter
+			$wpdb->query( "ALTER TABLE `{$table}` ENGINE=InnoDB" );
 		}
 
 		faz_clear_banner_template_cache();

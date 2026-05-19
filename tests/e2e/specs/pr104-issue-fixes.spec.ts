@@ -187,13 +187,16 @@ test.describe('PR104 — #110 Geolocation multi-source consensus', () => {
       remove_filter( 'faz_country_detection_consensus', $require_consensus );
 
       // Scenario E — filter receives the votes payload (verify by capturing).
+      // F109 fix (1.14.3): the filter signature dropped the third
+      // argument entirely. Consensus enforcement doesn't need the IP
+      // (votes carry the country signal); passing it leaked PII to
+      // third-party filter consumers even when hashed.
       $captured = array();
-      $capture = function ( $require, $votes, $ip ) use ( &$captured ) {
+      $capture = function ( $require, $votes ) use ( &$captured ) {
         $captured['votes'] = $votes;
-        $captured['ip']    = $ip;
         return false; // don't enforce
       };
-      add_filter( 'faz_country_detection_consensus', $capture, 10, 3 );
+      add_filter( 'faz_country_detection_consensus', $capture, 10, 2 );
       $rc->invoke( null, '8.8.8.8' );
       remove_filter( 'faz_country_detection_consensus', $capture, 10 );
       $results['captured'] = $captured;
@@ -216,24 +219,20 @@ test.describe('PR104 — #110 Geolocation multi-source consensus', () => {
       r.disagree_with_consensus,
       'consensus filter fail-open returns empty string on disagreement'
     ).toBe('');
-    // Filter signature: 3 args, votes is associative.
+    // Filter signature: 2 args after F109 fix (was 3 with the IP/IP-hash).
     expect(r.captured.votes, 'consensus filter receives the votes map').toMatchObject({
       cf: 'US',
       geoip: 'DE',
     });
-    // F019 fix (1.14.2): third argument was changed from raw IP to a
-    // wp_hash('nonce')-derived HMAC-style hash. Filter consumers can
-    // still correlate detections of the same client (stable per-IP
-    // per-salt) without ever seeing the IP itself. Assert non-empty
-    // hex-ish string instead of raw IP.
+    // F109 fix (1.14.3): the filter no longer receives the IP (raw or
+    // hashed). The visitor IP is PII and consensus enforcement doesn't
+    // need it — the votes map already carries the country signal.
+    // Plugins that genuinely need the IP for their own logic should
+    // hook `faz_visitor_country` instead.
     expect(
       r.captured.ip,
-      'consensus filter receives an HMAC-style hash of the visitor IP (not the raw IP)',
-    ).not.toBe('8.8.8.8');
-    expect(
-      typeof r.captured.ip === 'string' && r.captured.ip.length >= 16,
-      `consensus filter passes a non-empty hash (got: ${JSON.stringify(r.captured.ip)})`,
-    ).toBe(true);
+      'consensus filter no longer exposes the visitor IP (raw or hashed)',
+    ).toBeUndefined();
   });
 });
 

@@ -91,6 +91,19 @@ class Controller extends Base_Controller {
 			$collate = $wpdb->get_charset_collate();
 		}
 
+		// F103 fix: explicitly require InnoDB. delete_item() relies on
+		// row-level locks via START TRANSACTION + SELECT … FOR UPDATE +
+		// COMMIT (the F016 v2 fix). On MyISAM those statements parse
+		// fine but are silent no-ops, leaving the original
+		// check-then-act race in place. dbDelta on existing tables
+		// would otherwise honour the server's `default_storage_engine`
+		// (which can still be MyISAM on legacy hosts, customised AWS
+		// RDS parameter groups, or sites that ran `ALTER TABLE … ENGINE
+		// = MyISAM` for other reasons), so we lock the choice here.
+		// dbDelta on existing tables that are NOT InnoDB does not
+		// auto-migrate them — a separate migration in class-activator
+		// runs `ALTER TABLE … ENGINE=InnoDB` to bring upgraded installs
+		// up to spec.
 		$tables = "
 		CREATE TABLE {$wpdb->prefix}faz_banners (
 			banner_id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -108,7 +121,7 @@ class Controller extends Base_Controller {
 			KEY slug (slug),
 			KEY status (status),
 			KEY priority (priority)
-	) $collate;
+	) ENGINE=InnoDB $collate;
 	";
 		return $tables;
 	}
@@ -206,11 +219,20 @@ class Controller extends Base_Controller {
 		// itself runs clear_default_on_others() (for default=true rows)
 		// AND fires both delete_cache() and do_action(
 		// 'faz_after_update_banner' ) at its tail. Calling them again
-		// here would (a) double-invalidate every cache adapter
-		// (LSCache / WP Rocket purge twice per create) and (b) bump
-		// the cache epoch four times for a single create. The
-		// at-most-one-default invariant is enforced by update_item via
-		// the was_default check it does for free.
+		// here would double-invalidate every cache adapter.
+		//
+		// F108 fix: the save() call routes to update_item() which can
+		// early-return at `if ( false === $updated ) { return; }` —
+		// leaving the row with a raw `name`-only slug, no
+		// clear_default_on_others() call, and no cache invalidation /
+		// listener notification. That's a half-baked-create regression
+		// vs. the pre-fix behaviour where the tail always fired. Detect
+		// the early-return case here and run the cleanup tail
+		// explicitly. We can't add a return value to save() without a
+		// cascading API change, so check the saved-slug state in the
+		// DB to detect whether update_item completed (the slug we
+		// passed in includes `-{id}`; a pre-update-failure row has the
+		// bare name in its slug column).
 		//
 		// We MUST NOT re-read $wpdb->insert_id after save(): downstream
 		// option/transient writes inside the hook chain can pollute
@@ -219,6 +241,24 @@ class Controller extends Base_Controller {
 		// pre-fix this surfaced as banner IDs like 2,513,570 in admin
 		// redirect URLs).
 		$banner->save();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$persisted_slug = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT `slug` FROM `{$wpdb->prefix}faz_banners` WHERE `banner_id` = %d",
+				$id
+			)
+		);
+		if ( $persisted_slug !== $slug ) {
+			// update_item early-returned (UPDATE failed or row vanished
+			// between INSERT and UPDATE). The row exists with a stale
+			// slug; rather than leave a half-baked state, run the same
+			// invariants + notifications the pre-fix tail used to.
+			if ( true === $banner->get_default() ) {
+				$this->clear_default_on_others( $id );
+			}
+			$this->delete_cache();
+			do_action( 'faz_after_update_banner' );
+		}
 	}
 
 	/**
@@ -325,12 +365,14 @@ class Controller extends Base_Controller {
 			)
 		);
 		if ( null === $was_default_raw ) {
-			// Row didn't exist at the start of the transaction. Close it
-			// cleanly and report 0 affected to the caller — the REST
-			// handler turns that into a 404.
+			// F101 fix: do NOT fire faz_after_update_banner on the
+			// not-found return path. The DELETE was a no-op (no row to
+			// purge cache for, no listener event to dispatch), so
+			// triggering LSCache/Rocket purges and the epoch bump here
+			// just wastes CPU on idempotent 404 retries from stale
+			// admin tabs.
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->query( 'COMMIT' );
-			do_action( 'faz_after_update_banner' );
 			return 0;
 		}
 		$was_default = (int) $was_default_raw;
@@ -344,12 +386,21 @@ class Controller extends Base_Controller {
 			$wpdb->query( 'ROLLBACK' );
 			return false;
 		}
+		// F112 fix: promote_fallback_default() inside the SAME
+		// transaction so the (read-other-defaults + UPDATE one-of-them)
+		// pair is also row-locked. The pre-fix had `COMMIT` BEFORE the
+		// fallback promotion, releasing the X-lock and re-introducing a
+		// race window where two concurrent deletes of two different
+		// default banners could each promote the same peer to default
+		// (ending with two default rows). Keeping the work inside the
+		// same transaction extends the lock scope to cover the read+
+		// write of the promoted peer too.
+		if ( $status > 0 && 1 === $was_default ) {
+			$this->promote_fallback_default( $id );
+		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->query( 'COMMIT' );
 		if ( $status > 0 ) {
-			if ( 1 === $was_default ) {
-				$this->promote_fallback_default( $id );
-			}
 			$this->delete_cache();
 		}
 		do_action( 'faz_after_update_banner' );
@@ -606,7 +657,14 @@ class Controller extends Base_Controller {
 		//      under the OLD key expires harmlessly via TTL.
 		// ClassicPress 1.x: wp_cache_get/set + get_option/update_option are
 		// pre-WP 2.x — no compat shim needed.
-		$epoch     = (int) get_option( 'faz_banner_cache_epoch', 0 );
+		// F104 v2 follow-up: read epoch as STRING (delete_cache() now
+		// stores microtime as string, not int). Cast-to-string is safe
+		// for both legacy int values (stored by pre-fix builds) and the
+		// new microtime form — the value only ever appears as a cache-
+		// key suffix, never in arithmetic. Pre-existing int rows on
+		// upgraded installs survive the change because PHP coerces them
+		// to string at concatenation time anyway.
+		$epoch     = (string) get_option( 'faz_banner_cache_epoch', '0' );
 		$cache_key = 'faz_has_country_dependent_banners_v' . $epoch;
 		$cached    = wp_cache_get( $cache_key, 'faz_banners' );
 		if ( false !== $cached ) {
@@ -667,22 +725,28 @@ class Controller extends Base_Controller {
 		// never queried again. Replaces the previous delete_transient
 		// call which only invalidated the local Redis/Memcached node.
 		//
-		// F015 fix: use microtime-based monotonic value instead of $epoch+1
-		// so two concurrent admin sessions can't both compute the same
-		// $next and race to write under the same cache key. The previous
-		// "$epoch + 1" pattern was vulnerable to a write-skew race where
-		// session A's stale answer could overwrite session B's fresh
-		// answer under the same key for the full 5-minute TTL.
-		// microtime(true)*1000 gives sub-millisecond resolution — two
-		// real-world concurrent updates always land on different epochs.
-		$next = (int) ( microtime( true ) * 1000 );
-		// F011 fix: autoload=true (default) keeps the option in WP's
-		// alloptions cache, which IS replicated across nodes by every
-		// object-cache backend that supports wp_cache_set_multiple
-		// (WP 6.0+). The previous autoload=false defeated that path —
-		// non-leader nodes had to round-trip to the DB on every page
-		// load AND missed the updated_option cross-node propagation.
-		update_option( 'faz_banner_cache_epoch', $next, true );
+		// F015 fix (v2 — F104 follow-up): use the microtime STRING (not
+		// a cast-to-int) so the value survives 32-bit PHP. ClassicPress
+		// 1.x still supports 32-bit PHP where PHP_INT_MAX is 2,147,483,647
+		// (≈ 2.1×10⁹). `(int)(microtime(true)*1000)` ≈ 1.75×10¹² today
+		// would silently overflow → every subsequent epoch would collapse
+		// to the same overflowed integer and cache invalidation would
+		// stop working. The cache-key embedding code casts to (string)
+		// regardless, so storing the raw microtime string costs nothing.
+		//
+		// Concurrency: microtime(true) gives sub-millisecond resolution —
+		// two real-world concurrent admin sessions always land on
+		// different epochs, even on shared hosting.
+		$next = (string) microtime( true );
+		// F107 fix: autoload=false (was true in the F011 fix). The
+		// option is written on every banner create/update/delete —
+		// every hot-write would force a full wp_load_alloptions()
+		// rebuild on every node if autoloaded. Cross-node propagation
+		// is achieved via the updated_option action, which fires
+		// regardless of autoload (third-party cache plugins listen to
+		// it). Trading lazy single-DB-hit-per-request reads for
+		// every-save alloptions thrash is net-negative.
+		update_option( 'faz_banner_cache_epoch', $next, false );
 		// Sweep the legacy transient written by pre-fix 1.14.0 builds.
 		// One-shot cleanup; the call is cheap and idempotent.
 		delete_transient( 'faz_has_country_dependent_banners' );

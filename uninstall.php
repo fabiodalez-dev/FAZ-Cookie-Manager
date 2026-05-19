@@ -264,8 +264,9 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 	}
 
 	if ( is_multisite() ) {
-		$faz_offset = 0;
-		$faz_batch  = 100;
+		$faz_offset       = 0;
+		$faz_batch        = 100;
+		$faz_any_opted_in = false; // F102 fix: tracks whether ANY subsite opted in.
 		do {
 			$faz_site_ids = get_sites( array(
 				'fields' => 'ids',
@@ -276,6 +277,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				if ( ! faz_should_remove_on_uninstall( $faz_site_id ) ) {
 					continue;
 				}
+				$faz_any_opted_in = true;
 				switch_to_blog( $faz_site_id );
 				faz_cleanup_site_data();
 				restore_current_blog();
@@ -283,18 +285,26 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 			$faz_offset += $faz_batch;
 		} while ( count( $faz_site_ids ) === $faz_batch );
 
-		// Multisite-network site transients (CodeRabbit review, 1.14.2):
-		// site transients on multisite are stored in wp_sitemeta, NOT in
-		// per-blog wp_options — the faz_cleanup_site_data() loop above
-		// queries wp_options and therefore misses every network-level
-		// site_transient. Sweep them here in one pass on the primary
-		// network — F020 fix: gate this sweep on
-		// faz_should_remove_on_uninstall(0) (network-level / primary
-		// blog id=0 sentinel). Without the gate, a multisite admin who
-		// kept remove_data_on_uninstall=false on every subsite would
-		// still see the FAZ network-level site_transients vanish on
-		// uninstall, violating the data-retention contract.
-		if ( faz_should_remove_on_uninstall( 0 ) ) {
+		// Multisite-network site transients (CodeRabbit review, 1.14.2;
+		// adamsreview F102 fix, 1.14.3): site transients on multisite are
+		// stored in wp_sitemeta, NOT per-blog wp_options — the per-blog
+		// loop above misses them. Sweep them here.
+		//
+		// F102 fix: the prior gate `faz_should_remove_on_uninstall( 0 )`
+		// was semantically wrong — `get_blog_option( 0, … )` falls back
+		// to `get_option()` on whatever blog is current at call time
+		// (typically the primary site, blog_id=1), so it only checked
+		// the primary site's opt-in. A multisite admin who set
+		// remove_data_on_uninstall=true ONLY on a subsite would see
+		// network transients survive — even though the per-blog loop
+		// above ran the cleanup for that subsite.
+		//
+		// Correct semantics: if ANY site in the network opted in to
+		// data removal, the network-level transients also must go (they
+		// would otherwise reference cleaned-up per-blog data and turn
+		// into orphans). Use the $faz_any_opted_in accumulator we
+		// built during the per-blog loop above.
+		if ( $faz_any_opted_in ) {
 			global $wpdb;
 			$faz_sitemeta_prefixes = array(
 				$wpdb->esc_like( '_site_transient_faz' ) . '%',
