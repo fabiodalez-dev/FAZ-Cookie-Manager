@@ -547,8 +547,11 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
-### 1.13.18 — 2026-05-15
-- **Fix**: `wp_localize_script` and `wp_set_script_translations` payloads (inline `<script id="*-js-extra">` and `<script id="*-js-translations">`) are no longer false-positively blocked when their body contains a substring that matches a provider pattern. These ID shapes carry only data/i18n strings, never executable tracker code — the prior content-substring matcher would crash third-party plugins whose config keys happened to mention a provider (e.g. trx_addons emits `animate_to_mc4wp_form_submitted`, which matched MailChimp's `mc4wp` and broke the page with `ReferenceError: TRX_ADDONS_STORAGE is not defined`).
+### 1.14.3 — 2026-05-19
+- **Feature**: Multi-banner geo-routing (closes #103). New `target_countries` and `priority` schema columns on `wp_faz_banners` let admins serve different banners per visitor country — e.g. a Reject-mandatory GDPR banner to EU/EEA/UK and a CCPA-style banner with the close (X) button to US visitors. Routing is owned by `Controller::get_active_banner_for_country()` and reads from Cloudflare `CF-IPCountry` (opt-in) or the MaxMind / ip-api.com fallback chain.
+- **Feature**: Per-banner close-button override (`settings.allowCloseButtonWithReject`), country-aware AMP `<amp-consent>` resolver, scope-change consent invalidation (`__scope.banner` / `__scope.law` keys), missing-banner admin notice with recovery CTA, country-dependent cache busting via `DONOTCACHEPAGE` / `Vary: CF-IPCountry` (with trust filter).
+- **BREAKING**: the `faz_country_detection_consensus` filter now receives 2 arguments (was 3). The third argument (raw IP / `wp_hash()`-derived IP token) has been removed because both forms remained PII-equivalent. Plugins that need the visitor IP should hook `faz_visitor_country` instead.
+- **Fix (review hardening F101–F112, F301–F308, R4-S001–S004 + CodeRabbit#1/#2)**: transactional delete + update_item, InnoDB enforcement on faz_banners + faz_cookies + faz_cookie_categories with upgrade-path migration probe (with per-table partial-failure recovery), cache-poisoning races closed in promote_fallback_default and clear_default_on_others, multisite uninstall sweep gated on per-site opt-in and `FAZ_REMOVE_ALL_DATA`, banner_id pollution fix on REST POST, microsecond-precision cache epoch, empty-category preference-center render.
 
 ## Translations
 

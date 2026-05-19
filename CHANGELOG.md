@@ -2,6 +2,41 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.14.3] — 2026-05-19
+
+### Added
+
+- **Multi-banner geo-routing** (closes #103). New schema columns `target_countries` and `priority` on `wp_faz_banners` let admins serve different banners per visitor country — e.g. a Reject-mandatory GDPR banner to EU/EEA/UK and a CCPA-style banner with the close (X) button to US visitors. Routing is owned by `Controller::get_active_banner_for_country()` and picks up the visitor country from the Cloudflare `CF-IPCountry` header (opt-in via the `faz_trust_cf_ipcountry_header` filter) or the MaxMind / ip-api.com fallback chain.
+- **Per-banner close-button override**: `settings.allowCloseButtonWithReject` toggles the EDPB/Garante dark-pattern auto-hide on a per-banner basis. Default `false` preserves the compliance behaviour; opting in is documented as an EU/EEA/UK violation but unblocks non-EU jurisdictions.
+- **Country-dependent cache busting** via `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` / `DONOTCACHEDB` constants + `Cache-Control: no-store` + `Vary: CF-IPCountry` (with the trust filter on).
+- **Country-aware AMP `<amp-consent>` resolver** via `Geolocation::get_visitor_country()`.
+- **Scope-change consent invalidation**: consent cookies now carry `__scope.banner` and `__scope.law` so a visitor that crosses a jurisdiction (CCPA → GDPR) re-prompts instead of inheriting consent from a different legal regime.
+- **Missing-banner notice** in admin when `?banner_id=…` does not resolve — the editor body is hidden and a recovery CTA points at the install's default banner.
+
+### Changed
+
+- **BREAKING**: the `faz_country_detection_consensus` filter now receives **2 arguments** (`$require_consensus`, `$votes`) instead of the 3 it received in 1.14.0–1.14.2. The third argument (raw IP in 1.14.0, `wp_hash()`-derived IP token in 1.14.2) has been removed because both forms remained PII-equivalent for correlation. Plugins that registered with `add_filter('faz_country_detection_consensus', $cb, 10, 3)` continue to work (PHP silently passes `null` for the missing arg), but the third parameter is now always `null` and should not be relied upon. Plugins that legitimately need the visitor IP should hook `faz_visitor_country` instead, which exposes it for trusted overrides and test fixtures.
+
+### Fixed
+
+- **F101–F112 (adamsreview review#2)**: transactional delete with InnoDB row-lock-promoted fallback default; multisite-aware uninstall sweep that honours per-site opt-in and the `FAZ_REMOVE_ALL_DATA` constant; banner_id pollution fixed by removing the post-save `$wpdb->insert_id` re-read; LSCache `Vary: CF-IPCountry` emitted only when the `faz_trust_cf_ipcountry_header` filter opts in; AMP geo-resolution no longer buckets GB into the `eu` regional set.
+- **F301–F308 + CodeRabbit#1/#2 (adamsreview review#3)**: cache-poisoning race in `promote_fallback_default` closed by moving `delete_cache()` to callers (post-COMMIT); both fallback SELECTs now use `FOR UPDATE` and prefer non-default active peers; `faz_cookies` + `faz_cookie_categories` enforced to InnoDB on install AND migrated on upgrade so settings-import `START TRANSACTION` calls are no longer silent no-ops on legacy MyISAM hosts; uninstall network sweep now also fires under bare `FAZ_REMOVE_ALL_DATA` when `get_sites()` is empty; cache-epoch generation switched to `sprintf('%.6F', microtime(true))` for true microsecond resolution; `create_item` slug-probe attempts a focused UPDATE retry before falling back to the cache-invalidate tail.
+- **R4-S001–S004 (adamsreview review#4)**: `update_item()` now wraps its UPDATE + invariant section in a `START TRANSACTION` so the `FOR UPDATE` lock in `promote_fallback_default` actually serializes (was a no-op under autocommit, leaving the update path with the same race F302 closed for delete); create_item slug-probe runs the invariant tail unconditionally on slug mismatch so a successful focused-UPDATE retry no longer bypasses the at-most-one-default invariant; `clear_default_on_others()` no longer self-flushes the cache (caller's responsibility, mirrors F301); F303 ALTER ENGINE loop now records partial-migration failures in `faz_innodb_migration_pending` instead of silently bumping `db_version` past 1.14.3.
+- **`banner_default` mutual-exclusion** enforced server-side — saving a banner with the default flag clears it on every peer row.
+- **`Controller::get_active_banner()` BC**: an install with a single status=1, country-targeted, non-default banner still receives that banner back when the call passes no country.
+- **`has_country_dependent_banners()` and `Frontend::is_geo_blocked()`** iterate the entire `ruleSet`, not just the first entry.
+- **`Frontend::send_geo_cache_headers()`** gates on `faz_is_front_end_request()` so REST API / heartbeat / sitemap / robots requests no longer trigger the country-dependent DB chain on every poll.
+- **`is_country_dependent_output()`** also marks IAB-TCF output as country-dependent.
+- **`update_db_350`** clears `faz_banners_table_version` before re-running `install_tables()`, so dbDelta actually adds the new `target_countries` + `priority` columns on upgrade.
+- **Geolocation** rejects the Cloudflare 'XX' sentinel on both the CF-IPCountry branch and the `faz_visitor_country` filter return.
+- **`_fazConsentScopeChanged()`** no longer invalidates valid pre-1.14.0 consent on first page load after upgrade.
+- **Preference-center empty-category render** (regression from the audit-list refactor): every visible category renders even when its cookie list is empty.
+- **Empty-state preference-center category wrapper** now matches the populated-state DOM shape (`<div class="faz-table-wrapper">`) for uniform CSS targeting.
+
+### Compatibility
+
+- New `Banner::set_target_countries()` / `set_priority()` / `get_target_countries()` / `get_priority()` accessors with normalisation (upper-case, dedup, `^[A-Z]{2}$` validation, non-negative integer clamping). REST schema exposes both fields on `/faz/v1/banners/{id}` with `[A-Z]{2}` pattern validation.
+
 ## [1.13.18] — 2026-05-15
 
 ### Fixed
