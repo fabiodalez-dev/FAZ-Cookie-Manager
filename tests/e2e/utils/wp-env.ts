@@ -25,6 +25,12 @@ const WP_CLI_ENV = {
   WP_CLI_PHP_ARGS: '-d error_reporting=E_ERROR -d display_errors=0',
 };
 const WP_CLI_TIMEOUT_ENV = Number(process.env.WP_CLI_TIMEOUT_MS);
+// Default 30s. Briefly tried 60s to cushion `wp plugin activate` under
+// suite-wide load (commit 4bb6cef) — that change made things WORSE because
+// downstream tests waited up to 60s for a stuck activation instead of
+// failing fast at 30s, so multi-minute stalls cascaded into 26+ minute
+// test runs (e.g. frontend-consent.spec.ts:5 = 26.9m, DSAR-09 = 32.7m in
+// the v10 suite). Reverted to 30s; fail-fast is the right default.
 const WP_CLI_TIMEOUT_MS = Number.isFinite(WP_CLI_TIMEOUT_ENV) && WP_CLI_TIMEOUT_ENV > 0 ? WP_CLI_TIMEOUT_ENV : 30_000;
 
 export const SCAN_LAB_PAGE_SLUGS = [
@@ -102,6 +108,28 @@ export function listActivePlugins(): string[] {
     .split('\n')
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+export function listActivePluginFiles(): string[] {
+  const raw = wpEval(`echo wp_json_encode( array_values( (array) get_option( 'active_plugins', array() ) ) );`);
+  const parsed = JSON.parse(raw) as unknown;
+  return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+}
+
+export function restoreActivePluginFiles(pluginFiles: string[]): void {
+  const encoded = Buffer.from(JSON.stringify(pluginFiles), 'utf8').toString('base64');
+  wpEval(`
+    $plugins = json_decode( base64_decode( '${encoded}' ), true );
+    if ( ! is_array( $plugins ) ) {
+      $plugins = array();
+    }
+    $plugins = array_values( array_filter( $plugins, function ( $plugin ) {
+      return is_string( $plugin ) && file_exists( WP_PLUGIN_DIR . '/' . $plugin );
+    } ) );
+    update_option( 'active_plugins', $plugins );
+    delete_site_transient( 'update_plugins' );
+    wp_cache_delete( 'plugins', 'plugins' );
+  `);
 }
 
 export function deactivatePluginsExcept(allowedSlugs: string[]): void {

@@ -12,14 +12,14 @@ import {
 } from '../utils/faz-api';
 import { startServerScanLab, stopServerScanLab } from '../utils/server-scan-lab';
 import {
-  activatePlugins,
   deactivatePluginsExcept,
   disableLabFlags,
   enableWooLabScenario,
   ensureFixturePlugin,
   ensureScanLabPages,
   ensureWooCommerceLabData,
-  listActivePlugins,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
   resetScanState,
   setLabToken,
   touchPosts,
@@ -285,14 +285,13 @@ test.describe('Deep scan and catalog flows', () => {
   test.describe.configure({ mode: 'serial', timeout: 300_000 });
 
   let serverLab: ChildProcessWithoutNullStreams | null = null;
-  let deactivatedPlugins: string[] = [];
+  let initialActivePluginFiles: string[] = [];
 
   test.beforeAll(async () => {
     // Deactivating / activating ~40 plugins on the test site via WP-CLI
     // takes longer than Playwright's default 45s hook timeout — raise it.
     test.setTimeout(180_000);
-    const allowed = new Set(['faz-cookie-manager', 'faz-e2e-provider-matrix', 'faz-e2e-scan-lab', 'faz-e2e-woo-lab', 'woocommerce']);
-    deactivatedPlugins = listActivePlugins().filter((slug) => !allowed.has(slug));
+    initialActivePluginFiles = listActivePluginFiles();
     deactivatePluginsExcept([
       'faz-cookie-manager',
       'faz-e2e-provider-matrix',
@@ -315,12 +314,9 @@ test.describe('Deep scan and catalog flows', () => {
   });
 
   test.afterAll(async () => {
-    // Match the beforeAll budget so cleanup always completes — reactivating
-    // ~40 plugins via WP-CLI can take longer than 45s.
+    // Match the beforeAll budget so cleanup always completes.
     test.setTimeout(180_000);
-    if (deactivatedPlugins.length > 0) {
-      activatePlugins(deactivatedPlugins, { tolerateFailures: true });
-    }
+    restoreActivePluginFiles(initialActivePluginFiles);
     disableLabFlags();
     resetScanState();
     await stopServerScanLab(serverLab);

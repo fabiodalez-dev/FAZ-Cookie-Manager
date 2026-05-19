@@ -1,507 +1,508 @@
 {
-    "settings": {
-        "type": "box",
-        "preferenceCenterType": "popup",
-        "position": "bottom-left",
-        "versionID": "6.0.0",
-        "applicableLaw": "ccpa",
-        "templateGroup": "default",
-        "languages": {
-            "default": "en",
-            "selected": [
-                "en"
-            ]
-        },
-        "theme": "light",
-        "customHtml": {
-            "status": false
-        },
-        "consentExpiry": {
-            "status": true,
-            "value": 180
-        },
-        "ruleSet": [
-            {
-                "code": "ALL",
-                "regions": []
-            }
-        ]
+  "settings": {
+    "type": "box",
+    "preferenceCenterType": "popup",
+    "position": "bottom-left",
+    "versionID": "6.0.0",
+    "applicableLaw": "ccpa",
+    "templateGroup": "default",
+    "languages": {
+      "default": "en",
+      "selected": [
+        "en"
+      ]
     },
-    "behaviours": {
-        "reloadBannerOnAccept": {
-            "status": false
+    "theme": "light",
+    "customHtml": {
+      "status": false
+    },
+    "consentExpiry": {
+      "status": true,
+      "value": 180
+    },
+    "ruleSet": [
+      {
+        "code": "ALL",
+        "regions": []
+      }
+    ],
+    "allowCloseButtonWithReject": false
+  },
+  "behaviours": {
+    "reloadBannerOnAccept": {
+      "status": false
+    },
+    "loadAnalyticsByDefault": {
+      "status": false
+    },
+    "animations": {
+      "onLoad": "animate",
+      "onHide": "sticky"
+    },
+    "legacyFunctions": {
+      "accept": {
+        "action": "acceptClose",
+        "newTab": false
+      },
+      "reject": {
+        "action": "rejectClose",
+        "newTab": false
+      },
+      "idle": {
+        "action": "acceptClose",
+        "delay": 1000
+      },
+      "navigation": {
+        "action": "acceptClose"
+      },
+      "pageScroll": {
+        "action": "acceptClose"
+      }
+    },
+    "respectGPC": {
+      "status": false
+    }
+  },
+  "config": {
+    "notice": {
+      "status": true,
+      "tag": "notice",
+      "type": "container",
+      "styles": {
+        "background-color": "#FFFFFF",
+        "border-color": "#F4F4F4"
+      },
+      "elements": {
+        "title": {
+          "type": "text",
+          "tag": "title",
+          "status": true,
+          "styles": {
+            "color": "#212121"
+          }
         },
-        "loadAnalyticsByDefault": {
-            "status": false
+        "description": {
+          "type": "text",
+          "tag": "description",
+          "status": true,
+          "styles": {
+            "color": "#212121"
+          }
         },
-        "animations": {
-            "onLoad": "animate",
-            "onHide": "sticky"
+        "brandLogo": {
+          "status": false,
+          "tag": "brand-logo",
+          "meta": {
+            "url": "#"
+          }
         },
-        "legacyFunctions": {
+        "buttons": {
+          "status": true,
+          "tag": "notice-buttons",
+          "type": "container",
+          "elements": {
             "accept": {
-                "action": "acceptClose",
-                "newTab": false
+              "status": false,
+              "tag": "accept-button",
+              "type": "button",
+              "styles": {
+                "color": "#FFFFFF",
+                "background-color": "#1863DC",
+                "border-color": "#1863DC"
+              }
             },
             "reject": {
-                "action": "rejectClose",
-                "newTab": false
+              "status": false,
+              "tag": "reject-button",
+              "type": "button",
+              "styles": {
+                "color": "#1863DC",
+                "background-color": "transparent",
+                "border-color": "#1863DC"
+              }
             },
-            "idle": {
-                "action": "acceptClose",
-                "delay": 1000
+            "settings": {
+              "status": false,
+              "tag": "settings-button",
+              "type": "button",
+              "styles": {
+                "color": "#1863DC",
+                "background-color": "transparent",
+                "border-color": "#1863DC"
+              }
             },
-            "navigation": {
-                "action": "acceptClose"
+            "readMore": {
+              "status": false,
+              "tag": "readmore-button",
+              "type": "link",
+              "meta": {
+                "noFollow": true,
+                "newTab": true
+              },
+              "styles": {
+                "color": "#1863DC",
+                "background-color": "transparent",
+                "border-color": "transparent"
+              }
             },
-            "pageScroll": {
-                "action": "acceptClose"
+            "donotSell": {
+              "status": true,
+              "tag": "donotsell-button",
+              "type": "button",
+              "styles": {
+                "color": "#1863DC",
+                "background-color": "transparent",
+                "border-color": "transparent"
+              }
             }
+          }
         },
-        "respectGPC": {
-            "status": false
+        "closeButton": {
+          "status": true,
+          "tag": "close-button"
         }
+      }
     },
-    "config": {
-        "notice": {
-            "status": true,
-            "tag": "notice",
-            "type": "container",
-            "styles": {
-                "background-color": "#FFFFFF",
-                "border-color": "#F4F4F4"
-            },
-            "elements": {
-                "title": {
-                    "type": "text",
-                    "tag": "title",
-                    "status": true,
-                    "styles": {
-                        "color": "#212121"
-                    }
-                },
-                "description": {
-                    "type": "text",
-                    "tag": "description",
-                    "status": true,
-                    "styles": {
-                        "color": "#212121"
-                    }
-                },
-                "brandLogo": {
-                    "status": false,
-                    "tag": "brand-logo",
-                    "meta": {
-                        "url": "#"
-                    }
-                },
-                "buttons": {
-                    "status": true,
-                    "tag": "notice-buttons",
-                    "type": "container",
-                    "elements": {
-                        "accept": {
-                            "status": false,
-                            "tag": "accept-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#FFFFFF",
-                                "background-color": "#1863DC",
-                                "border-color": "#1863DC"
-                            }
-                        },
-                        "reject": {
-                            "status": false,
-                            "tag": "reject-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#1863DC",
-                                "background-color": "transparent",
-                                "border-color": "#1863DC"
-                            }
-                        },
-                        "settings": {
-                            "status": false,
-                            "tag": "settings-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#1863DC",
-                                "background-color": "transparent",
-                                "border-color": "#1863DC"
-                            }
-                        },
-                        "readMore": {
-                            "status": false,
-                            "tag": "readmore-button",
-                            "type": "link",
-                            "meta": {
-                                "noFollow": true,
-                                "newTab": true
-                            },
-                            "styles": {
-                                "color": "#1863DC",
-                                "background-color": "transparent",
-                                "border-color": "transparent"
-                            }
-                        },
-                        "donotSell": {
-                            "status": true,
-                            "tag": "donotsell-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#1863DC",
-                                "background-color": "transparent",
-                                "border-color": "transparent"
-                            }
-                        }
-                    }
-                },
-                "closeButton": {
-                    "status": true,
-                    "tag": "close-button"
-                }
-            }
+    "categoryPreview": {
+      "status": false,
+      "type": "container",
+      "tag": "detail-category-preview",
+      "elements": {
+        "title": {
+          "type": "text",
+          "tag": "detail-category-preview-title",
+          "status": true,
+          "styles": {
+            "color": "#212121"
+          }
         },
-        "categoryPreview": {
-            "status": false,
-            "type": "container",
-            "tag": "detail-category-preview",
-            "elements": {
-                "title": {
-                    "type": "text",
-                    "tag": "detail-category-preview-title",
-                    "status": true,
-                    "styles": {
-                        "color": "#212121"
-                    }
-                },
-                "toggle": {
-                    "status": true,
-                    "tag": "detail-category-preview-toggle",
-                    "type": "toggle",
-                    "states": {
-                        "active": {
-                            "styles": {
-                                "background-color": "#1863DC"
-                            }
-                        },
-                        "inactive": {
-                            "styles": {
-                                "background-color": "#D0D5D2"
-                            }
-                        }
-                    }
-                },
-                "buttons": {
-                    "status": true,
-                    "tag": "detail-category-preview-buttons",
-                    "elements": {
-                        "save": {
-                            "status": true,
-                            "tag": "detail-category-preview-save-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#1863DC",
-                                "background-color": "transparent",
-                                "border-color": "#1863DC"
-                            }
-                        }
-                    }
-                }
+        "toggle": {
+          "status": true,
+          "tag": "detail-category-preview-toggle",
+          "type": "toggle",
+          "states": {
+            "active": {
+              "styles": {
+                "background-color": "#1863DC"
+              }
+            },
+            "inactive": {
+              "styles": {
+                "background-color": "#D0D5D2"
+              }
             }
+          }
         },
-        "preferenceCenter": {
-            "status": false,
-            "tag": "detail",
-            "type": "container",
-            "styles": {
-                "color": "#212121",
-                "background-color": "#FFFFFF",
-                "border-color": "#F4F4F4"
-            },
-            "elements": {
-                "title": {
-                    "type": "text",
-                    "tag": "detail-title",
-                    "status": true,
-                    "styles": {
-                        "color": "#212121"
-                    }
-                },
-                "description": {
-                    "type": "text",
-                    "tag": "detail-description",
-                    "status": true,
-                    "styles": {
-                        "color": "#212121"
-                    }
-                },
-                "closeButton": {
-                    "status": true,
-                    "type": "button",
-                    "tag": "detail-close"
-                },
-                "categories": {
-                    "status": true,
-                    "tag": "detail-categories",
-                    "type": "container",
-                    "elements": {
-                        "title": {
-                            "type": "text",
-                            "tag": "detail-category-title",
-                            "status": true,
-                            "styles": {
-                                "color": "#212121"
-                            }
-                        },
-                        "description": {
-                            "type": "text",
-                            "tag": "detail-category-description",
-                            "status": true,
-                            "styles": {
-                                "color": "#212121"
-                            }
-                        },
-                        "toggle": {
-                            "status": true,
-                            "tag": "detail-category-toggle",
-                            "type": "toggle",
-                            "states": {
-                                "active": {
-                                    "styles": {
-                                        "background-color": "#1863DC"
-                                    }
-                                },
-                                "inactive": {
-                                    "styles": {
-                                        "background-color": "#D0D5D2"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "buttons": {
-                    "status": true,
-                    "tag": "detail-buttons",
-                    "type": "container",
-                    "elements": {
-                        "accept": {
-                            "status": true,
-                            "tag": "detail-accept-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#FFFFFF",
-                                "background-color": "#1863DC",
-                                "border-color": "#1863DC"
-                            }
-                        },
-                        "reject": {
-                            "status": true,
-                            "tag": "detail-reject-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#1863DC",
-                                "background-color": "transparent",
-                                "border-color": "#1863DC"
-                            }
-                        },
-                        "save": {
-                            "status": true,
-                            "tag": "detail-save-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#1863DC",
-                                "background-color": "transparent",
-                                "border-color": "#1863DC"
-                            }
-                        }
-                    }
-                },
-                "poweredBy": {
-                    "status": true,
-                    "tag": "detail-powered-by",
-                    "styles": {
-                        "background-color": "#EDEDED",
-                        "color": "#293C5B"
-                    }
-                }
+        "buttons": {
+          "status": true,
+          "tag": "detail-category-preview-buttons",
+          "elements": {
+            "save": {
+              "status": true,
+              "tag": "detail-category-preview-save-button",
+              "type": "button",
+              "styles": {
+                "color": "#1863DC",
+                "background-color": "transparent",
+                "border-color": "#1863DC"
+              }
             }
-        },
-        "optoutPopup": {
-            "status": true,
-            "tag": "optout-popup",
-            "type": "container",
-            "styles": {
-                "color": "#212121",
-                "background-color": "#FFFFFF",
-                "border-color": "#F4F4F4"
-            },
-            "elements": {
-                "title": {
-                    "type": "text",
-                    "tag": "optout-title",
-                    "status": true,
-                    "styles": {
-                        "color": "#212121"
-                    }
-                },
-                "description": {
-                    "type": "text",
-                    "tag": "optout-description",
-                    "status": true,
-                    "styles": {
-                        "color": "#212121"
-                    }
-                },
-                "optOption": {
-                    "status": true,
-                    "tag": "optout-option",
-                    "type": "container",
-                    "elements": {
-                        "toggle": {
-                            "status": true,
-                            "tag": "optout-option-toggle",
-                            "type": "toggle",
-                            "states": {
-                                "active": {
-                                    "styles": {
-                                        "background-color": "#1863dc"
-                                    }
-                                },
-                                "inactive": {
-                                    "styles": {
-                                        "background-color": "#FFFFFF"
-                                    }
-                                }
-                            }
-                        },
-                        "title": {
-                            "type": "text",
-                            "tag": "optout-option-title",
-                            "status": true,
-                            "styles": {
-                                "color": "#212121"
-                            }
-                        }
-                    }
-                },
-                "gpcOption": {
-                    "type": "container",
-                    "tag": "optout-gpc-option",
-                    "status": false,
-                    "elements": {
-                        "description": {
-                            "type": "text",
-                            "tag": "optout-gpc-option-description",
-                            "status": true,
-                            "styles": {
-                                "color": "#212121"
-                            }
-                        }
-                    }
-                },
-                "poweredBy": {
-                    "status": true,
-                    "tag": "optout-powered-by",
-                    "styles": {
-                        "background-color": "#EDEDED",
-                        "color": "#293C5B"
-                    }
-                },
-                "buttons": {
-                    "status": true,
-                    "tag": "optout-buttons",
-                    "type": "container",
-                    "elements": {
-                        "confirm": {
-                            "status": true,
-                            "tag": "optout-confirm-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#f4f4f4",
-                                "background-color": "#1863dc",
-                                "border-color": "#1863dc"
-                            }
-                        },
-                        "cancel": {
-                            "status": true,
-                            "tag": "optout-cancel-button",
-                            "type": "button",
-                            "styles": {
-                                "color": "#858585",
-                                "background-color": "#FFFFFF",
-                                "border-color": "#dedfe0"
-                            }
-                        }
-                    }
-                },
-                "closeButton": {
-                    "status": true,
-                    "tag": "optout-close",
-                    "type": "button"
-                }
-            }
-        },
-        "auditTable": {
-            "status": false,
-            "tag": "audit-table",
-            "type": "table",
-            "meta": {
-                "headers": [
-                    "id",
-                    "duration",
-                    "description"
-                ]
-            },
-            "styles": {
-                "color": "#212121",
-                "background-color": "#f4f4f4",
-                "border-color": "#ebebeb"
-            }
-        },
-        "revisitConsent": {
-            "status": true,
-            "tag": "revisit-consent",
-            "position": "bottom-left",
-            "meta": {
-                "url": "#"
-            },
-            "styles": {
-                "background-color": "#0056A7"
-            },
-            "elements": {
-                "title": {
-                    "type": "text",
-                    "tag": "revisit-consent-title",
-                    "status": true,
-                    "styles": {
-                        "color": "#0056a7"
-                    }
-                }
-            }
-        },
-        "videoPlaceholder": {
-            "status": true,
-            "tag": "video-placeholder",
-            "styles": {
-                "background-color": "#000000",
-                "border-color": "#000000"
-            },
-            "elements": {
-                "title": {
-                    "type": "text",
-                    "tag": "placeholder-title",
-                    "status": true,
-                    "styles": {
-                        "color": "#ffffff"
-                    }
-                }
-            }
+          }
         }
+      }
     },
-    "meta": {
-        "customCSS": "",
-        "customHTML": ""
+    "preferenceCenter": {
+      "status": false,
+      "tag": "detail",
+      "type": "container",
+      "styles": {
+        "color": "#212121",
+        "background-color": "#FFFFFF",
+        "border-color": "#F4F4F4"
+      },
+      "elements": {
+        "title": {
+          "type": "text",
+          "tag": "detail-title",
+          "status": true,
+          "styles": {
+            "color": "#212121"
+          }
+        },
+        "description": {
+          "type": "text",
+          "tag": "detail-description",
+          "status": true,
+          "styles": {
+            "color": "#212121"
+          }
+        },
+        "closeButton": {
+          "status": true,
+          "type": "button",
+          "tag": "detail-close"
+        },
+        "categories": {
+          "status": true,
+          "tag": "detail-categories",
+          "type": "container",
+          "elements": {
+            "title": {
+              "type": "text",
+              "tag": "detail-category-title",
+              "status": true,
+              "styles": {
+                "color": "#212121"
+              }
+            },
+            "description": {
+              "type": "text",
+              "tag": "detail-category-description",
+              "status": true,
+              "styles": {
+                "color": "#212121"
+              }
+            },
+            "toggle": {
+              "status": true,
+              "tag": "detail-category-toggle",
+              "type": "toggle",
+              "states": {
+                "active": {
+                  "styles": {
+                    "background-color": "#1863DC"
+                  }
+                },
+                "inactive": {
+                  "styles": {
+                    "background-color": "#D0D5D2"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "buttons": {
+          "status": true,
+          "tag": "detail-buttons",
+          "type": "container",
+          "elements": {
+            "accept": {
+              "status": true,
+              "tag": "detail-accept-button",
+              "type": "button",
+              "styles": {
+                "color": "#FFFFFF",
+                "background-color": "#1863DC",
+                "border-color": "#1863DC"
+              }
+            },
+            "reject": {
+              "status": true,
+              "tag": "detail-reject-button",
+              "type": "button",
+              "styles": {
+                "color": "#1863DC",
+                "background-color": "transparent",
+                "border-color": "#1863DC"
+              }
+            },
+            "save": {
+              "status": true,
+              "tag": "detail-save-button",
+              "type": "button",
+              "styles": {
+                "color": "#1863DC",
+                "background-color": "transparent",
+                "border-color": "#1863DC"
+              }
+            }
+          }
+        },
+        "poweredBy": {
+          "status": true,
+          "tag": "detail-powered-by",
+          "styles": {
+            "background-color": "#EDEDED",
+            "color": "#293C5B"
+          }
+        }
+      }
+    },
+    "optoutPopup": {
+      "status": true,
+      "tag": "optout-popup",
+      "type": "container",
+      "styles": {
+        "color": "#212121",
+        "background-color": "#FFFFFF",
+        "border-color": "#F4F4F4"
+      },
+      "elements": {
+        "title": {
+          "type": "text",
+          "tag": "optout-title",
+          "status": true,
+          "styles": {
+            "color": "#212121"
+          }
+        },
+        "description": {
+          "type": "text",
+          "tag": "optout-description",
+          "status": true,
+          "styles": {
+            "color": "#212121"
+          }
+        },
+        "optOption": {
+          "status": true,
+          "tag": "optout-option",
+          "type": "container",
+          "elements": {
+            "toggle": {
+              "status": true,
+              "tag": "optout-option-toggle",
+              "type": "toggle",
+              "states": {
+                "active": {
+                  "styles": {
+                    "background-color": "#1863dc"
+                  }
+                },
+                "inactive": {
+                  "styles": {
+                    "background-color": "#FFFFFF"
+                  }
+                }
+              }
+            },
+            "title": {
+              "type": "text",
+              "tag": "optout-option-title",
+              "status": true,
+              "styles": {
+                "color": "#212121"
+              }
+            }
+          }
+        },
+        "gpcOption": {
+          "type": "container",
+          "tag": "optout-gpc-option",
+          "status": false,
+          "elements": {
+            "description": {
+              "type": "text",
+              "tag": "optout-gpc-option-description",
+              "status": true,
+              "styles": {
+                "color": "#212121"
+              }
+            }
+          }
+        },
+        "poweredBy": {
+          "status": true,
+          "tag": "optout-powered-by",
+          "styles": {
+            "background-color": "#EDEDED",
+            "color": "#293C5B"
+          }
+        },
+        "buttons": {
+          "status": true,
+          "tag": "optout-buttons",
+          "type": "container",
+          "elements": {
+            "confirm": {
+              "status": true,
+              "tag": "optout-confirm-button",
+              "type": "button",
+              "styles": {
+                "color": "#f4f4f4",
+                "background-color": "#1863dc",
+                "border-color": "#1863dc"
+              }
+            },
+            "cancel": {
+              "status": true,
+              "tag": "optout-cancel-button",
+              "type": "button",
+              "styles": {
+                "color": "#858585",
+                "background-color": "#FFFFFF",
+                "border-color": "#dedfe0"
+              }
+            }
+          }
+        },
+        "closeButton": {
+          "status": true,
+          "tag": "optout-close",
+          "type": "button"
+        }
+      }
+    },
+    "auditTable": {
+      "status": false,
+      "tag": "audit-table",
+      "type": "table",
+      "meta": {
+        "headers": [
+          "id",
+          "duration",
+          "description"
+        ]
+      },
+      "styles": {
+        "color": "#212121",
+        "background-color": "#f4f4f4",
+        "border-color": "#ebebeb"
+      }
+    },
+    "revisitConsent": {
+      "status": true,
+      "tag": "revisit-consent",
+      "position": "bottom-left",
+      "meta": {
+        "url": "#"
+      },
+      "styles": {
+        "background-color": "#0056A7"
+      },
+      "elements": {
+        "title": {
+          "type": "text",
+          "tag": "revisit-consent-title",
+          "status": true,
+          "styles": {
+            "color": "#0056a7"
+          }
+        }
+      }
+    },
+    "videoPlaceholder": {
+      "status": true,
+      "tag": "video-placeholder",
+      "styles": {
+        "background-color": "#000000",
+        "border-color": "#000000"
+      },
+      "elements": {
+        "title": {
+          "type": "text",
+          "tag": "placeholder-title",
+          "status": true,
+          "styles": {
+            "color": "#ffffff"
+          }
+        }
+      }
     }
+  },
+  "meta": {
+    "customCSS": "",
+    "customHTML": ""
+  }
 }

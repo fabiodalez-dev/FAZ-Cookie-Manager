@@ -12,17 +12,17 @@ import {
   openSettingsPage,
 } from '../utils/faz-api';
 import {
-  activatePlugins,
   deactivatePluginsExcept,
   enableProviderMatrixCustomScenario,
   enableProviderMatrixWooScenario,
   ensureFixturePlugin,
   ensureProviderMatrixPage,
   ensureWooCommerceLabData,
-  listActivePlugins,
+  listActivePluginFiles,
   readProviderMatrixHits,
   readProviderMatrixUrl,
   readWooUrls,
+  restoreActivePluginFiles,
   resetProviderMatrixState,
   wpEval,
 } from '../utils/wp-env';
@@ -296,10 +296,10 @@ test.describe('Provider matrix scan and blocking', () => {
   test.setTimeout(300_000);
 
   let matrixUrl = '';
-  let initialActivePlugins: string[] = [];
+  let initialActivePluginFiles: string[] = [];
 
   test.beforeAll(async () => {
-    initialActivePlugins = listActivePlugins();
+    initialActivePluginFiles = listActivePluginFiles();
     deactivatePluginsExcept([
       'faz-cookie-manager',
       'faz-e2e-provider-matrix',
@@ -316,16 +316,7 @@ test.describe('Provider matrix scan and blocking', () => {
   });
 
   test.afterAll(async () => {
-    // Restore the exact set of plugins that were active before this suite ran.
-    const currentlyActive = new Set(listActivePlugins());
-    const toActivate = initialActivePlugins.filter((slug) => !currentlyActive.has(slug));
-    const toDeactivate = [...currentlyActive].filter((slug) => !initialActivePlugins.includes(slug));
-    if (toActivate.length > 0) {
-      activatePlugins(toActivate, { tolerateFailures: true });
-    }
-    if (toDeactivate.length > 0) {
-      deactivatePluginsExcept(initialActivePlugins);
-    }
+    restoreActivePluginFiles(initialActivePluginFiles);
   });
 
   test.beforeEach(async () => {

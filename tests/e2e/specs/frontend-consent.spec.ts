@@ -1,7 +1,12 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
+import { deactivatePluginsExcept } from '../utils/wp-env';
 
 test.describe('Frontend consent flow', () => {
+  test.beforeAll(() => {
+    deactivatePluginsExcept(['faz-cookie-manager']);
+  });
+
   test('shows banner on first visit and blocks non-technical cookies before consent', async ({ page, getNonTechnicalCookies }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 

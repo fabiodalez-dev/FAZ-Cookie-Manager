@@ -17,7 +17,17 @@
 		return typeof obj === 'string' ? obj : fallback;
 	}
 
-	var bannerId = 1; // default banner
+	// Banner the page is currently editing. Read from the ?banner_id= query
+	// string so the multi-banner switcher (1.14.0+) can deep-link to a
+	// specific row. Falls back to 1 (the system-default banner shipped
+	// with every install) when the param is missing or malformed.
+	var bannerId = (function () {
+		try {
+			var match = (window.location.search || '').match(/[?&]banner_id=(\d+)/);
+			var parsed = match ? parseInt(match[1], 10) : NaN;
+			return isFinite(parsed) && parsed > 0 ? parsed : 1;
+		} catch (e) { return 1; }
+	})();
 	var bannerData = null; // full API response
 	var currentLang = 'en';
 	var previewVisible = true;
@@ -219,6 +229,7 @@
 				normalizeBannerConfig(bannerData.properties);
 				populateSettings();
 				populateContents(currentLang);
+				populateGeoTargeting();
 			// Init color pickers after populating values
 			FAZ.initColorPickers();
 			// Filter position options for current type
@@ -226,9 +237,624 @@
 			ensurePreviewFrame(false);
 			// Render live preview
 			refreshPreview();
-		}).catch(function () {
+			// Multi-banner switcher (1.14.0+) — list every banner row so
+			// the admin can jump between them via ?banner_id=N.
+			populateSwitcher();
+		}).catch(function (err) {
+			// Distinguish "the requested ?banner_id= row doesn't exist" (the
+			// /banners/{id} endpoint returns 404 with code=fazcookie_rest_invalid_id)
+			// from generic load failures (5xx, network). The former is the
+			// common case after a banner deletion or an old bookmark from
+			// before the 1.14.1 auto-increment fix — surface it in-page with
+			// a recoverable CTA instead of a transient toast.
+			var isMissing = !!err && (
+				err.code === 'fazcookie_rest_invalid_id'
+				|| err.code === 'rest_no_route'
+				|| (err.data && err.data.status === 404)
+			);
+			if ( isMissing ) {
+				showMissingBannerNotice(bannerId);
+				return;
+			}
 			FAZ.notify(__('banner.loadFailed', 'Failed to load banner settings.'), 'error');
 		});
+	}
+
+	// Render the "this banner does not exist" notice and hide the editor.
+	// Looks up the actual default banner so the recovery link can deep-link
+	// to a row that exists, instead of guessing id=1.
+	function showMissingBannerNotice(badId) {
+		var notice  = document.getElementById('faz-banner-missing');
+		var body    = document.getElementById('faz-banner-body');
+		var idEl    = document.getElementById('faz-banner-missing-id');
+		var tabs    = document.getElementById('faz-banner-tabs');
+		var switcher = document.getElementById('faz-b-switcher');
+		var cta     = document.getElementById('faz-banner-missing-default');
+		if (!notice) return;
+
+		notice.style.display = '';
+		if (body)    body.style.display = 'none';
+		if (tabs)    tabs.style.display = 'none';
+		if (switcher) switcher.style.display = 'none';
+		if (idEl) idEl.textContent = '#' + String(badId);
+
+		// Build the recovery link. Default target: the existing banner_default=1
+		// row. Falls back to the first available banner. Final fallback: the
+		// page without banner_id so the server-side default kicks in.
+		var base = window.location.href.split('?')[0];
+		var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+		var fallbackUrl = base + '?page=' + encodeURIComponent(page);
+		if (cta) cta.href = fallbackUrl;
+		FAZ.get('banners').then(function (rows) {
+			if (!Array.isArray(rows) || !rows.length) return;
+			var pick = rows.filter(function (b) { return Number(b['default']) === 1; })[0] || rows[0];
+			if (pick && cta) cta.href = fallbackUrl + '&banner_id=' + Number(pick.id);
+		}).catch(function () { /* keep the bare-page fallback */ });
+	}
+
+	// ── Multi-banner switcher (1.14.0+) ─────────────────────────────────
+	// Populates #faz-b-switcher with every banner row, lets the admin
+	// jump between banners via ?banner_id=N, create a new banner cloned
+	// from the current one, and delete the current banner (except the
+	// last remaining row).
+	function populateSwitcher() {
+		var wrap    = document.getElementById('faz-b-switcher');
+		var chips   = document.getElementById('faz-b-switcher-chips');
+		var newBtn  = document.getElementById('faz-b-switcher-new');
+		var delBtn  = document.getElementById('faz-b-switcher-delete');
+		if (!wrap || !chips || !newBtn) return;
+
+		// Build a single chip element. Stored in a local helper so the
+		// render call site stays narrative — we lay out the chip once,
+		// then iterate once and append.
+		function renderChip(b) {
+			var btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = 'faz-switcher-chip';
+			btn.dataset.bannerId = String(b.id);
+			var isActive = Number(b.id) === Number(bannerId);
+			btn.style.padding = '.25rem .65rem';
+			btn.style.fontSize = '13px';
+			btn.style.lineHeight = '1.4';
+			btn.style.borderRadius = '999px';
+			btn.style.border = '1px solid ' + (isActive ? '#1f2937' : '#d1d5db');
+			btn.style.background = isActive ? '#1f2937' : '#fff';
+			btn.style.color = isActive ? '#fff' : '#374151';
+			btn.style.cursor = isActive ? 'default' : 'pointer';
+			btn.style.fontWeight = isActive ? '600' : '400';
+			btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+			var label = b.name || ('Banner #' + b.id);
+			if (Number(b['default']) === 1) label = '★ ' + label;
+			if (Number(b.status) !== 1) label += ' (' + __('banner.inactive', 'inactive') + ')';
+			btn.textContent = label;
+			if (!isActive) {
+				btn.addEventListener('click', function () {
+					var base = window.location.href.split('?')[0];
+					var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+					window.location.href = base + '?page=' + encodeURIComponent(page) + '&banner_id=' + Number(b.id);
+				});
+			}
+			return btn;
+		}
+
+		FAZ.get('banners').then(function (data) {
+			var rows = Array.isArray(data) ? data : [];
+			while (chips.firstChild) { chips.removeChild(chips.firstChild); }
+			rows.forEach(function (b) { chips.appendChild(renderChip(b)); });
+			if (delBtn) {
+				var current = rows.filter(function (b) { return Number(b.id) === Number(bannerId); })[0];
+				var canDelete = rows.length > 1 && current && Number(current['default']) !== 1;
+				delBtn.style.display = canDelete ? '' : 'none';
+			}
+		}).catch(function () { /* network glitch — switcher just doesn't appear */ });
+
+		// In-page rename: the input now lives in the General tab as
+		// #faz-b-name (1.14.1+). Bind once per page load. On commit we PUT
+		// the new name, then re-render the chip row so the visible label
+		// updates without a page reload.
+		var nameIn = document.getElementById('faz-b-name');
+		if (nameIn && !nameIn.dataset.fazNameBound) {
+			var commitName = function () {
+				if (!bannerData) return;
+				var next = (nameIn.value || '').trim();
+				if (!next) { nameIn.value = bannerData.name || ''; return; }
+				if (next === bannerData.name) return;
+				FAZ.put('banners/' + bannerId, {
+					name: next,
+					status: bannerData.status,
+					'default': bannerData['default'],
+					properties: bannerData.properties,
+					contents: bannerData.contents
+				}).then(function () {
+					bannerData.name = next;
+					FAZ.notify(__('banner.renamed', 'Banner renamed.'));
+					// Re-render the chip row so the new name is reflected.
+					populateSwitcher();
+				}).catch(function () {
+					FAZ.notify(__('banner.renameFailed', 'Failed to save the new name.'), 'error');
+					nameIn.value = bannerData.name || '';
+				});
+			};
+			nameIn.addEventListener('blur', commitName);
+			nameIn.addEventListener('keydown', function (e) {
+				if (e.key === 'Enter') { e.preventDefault(); nameIn.blur(); }
+				if (e.key === 'Escape') { nameIn.value = bannerData ? (bannerData.name || '') : ''; nameIn.blur(); }
+			});
+			nameIn.dataset.fazNameBound = '1';
+		}
+		// Seed the in-tab rename input from the loaded bannerData.
+		if (nameIn && bannerData && typeof bannerData.name === 'string') {
+			nameIn.value = bannerData.name;
+		}
+		if (!newBtn.dataset.fazSwitcherBound) {
+			newBtn.addEventListener('click', openNewBannerModal);
+			newBtn.dataset.fazSwitcherBound = '1';
+		}
+		if (delBtn && !delBtn.dataset.fazSwitcherBound) {
+			delBtn.addEventListener('click', function () {
+				if (!window.confirm(__('banner.deleteConfirm', 'Delete this banner permanently? This cannot be undone.'))) return;
+				delBtn.disabled = true;
+				// Helper: navigate back to the page-without-banner-id so the
+				// editor mounts on the default banner. Used by both the
+				// happy-path post-delete reload and the "already gone"
+				// recovery path triggered by a 404 from a stale tab.
+				// CodeRabbit feedback: use location.replace() so the back
+				// button doesn't return to a dead banner_id state.
+				var redirectToDefault = function () {
+					var base = window.location.href.split('?')[0];
+					var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+					window.location.replace(base + '?page=' + encodeURIComponent(page));
+				};
+				// "Already gone" recovery: longer delay than the happy-path
+				// reload so the admin has time to perceive the toast, and
+				// the user can cancel by interacting (mouse/keyboard).
+				// Doubles further when prefers-reduced-motion is set.
+				var redirectWithGrace = function () {
+					var delay = 1500;
+					try {
+						if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+							delay = 2000;
+						}
+					} catch (e) { /* matchMedia unavailable on very old IE; keep default */ }
+					var timer = setTimeout(redirectToDefault, delay);
+					var cancelOnce = function () {
+						clearTimeout(timer);
+						window.removeEventListener('pointermove', cancelOnce);
+						window.removeEventListener('keydown', cancelOnce);
+					};
+					window.addEventListener('pointermove', cancelOnce, { once: true });
+					window.addEventListener('keydown', cancelOnce, { once: true });
+				};
+				FAZ.del('banners/' + bannerId).then(function (resp) {
+					// REST returns the deleted row count from $wpdb->delete.
+					// With the 1.14.1+ server-side existence probe a non-
+					// existent id reaches us as a 404 (handled in .catch),
+					// not as 0-affected — so a 0 here means the row was
+					// gone between the probe and the DELETE statement
+					// (race condition on a concurrent admin session). Treat
+					// it as "already deleted" rather than a hard failure.
+					var n = (typeof resp === 'number') ? resp : (resp && typeof resp.deleted === 'number' ? resp.deleted : 1);
+					if (!n) {
+						FAZ.notify(__('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
+						redirectWithGrace();
+						return;
+					}
+					// Verify with a second GET so we don't reload to a
+					// cached page that still shows the deleted banner.
+					return FAZ.get('banners').then(function (rows) {
+						var still = Array.isArray(rows) && rows.some(function (b) { return Number(b.id) === Number(bannerId); });
+						if (still) {
+							delBtn.disabled = false;
+							FAZ.notify(__('banner.deleteFailed', 'Failed to delete banner.') + ' (server still lists id=' + bannerId + ')', 'error');
+							return;
+						}
+						FAZ.notify(__('banner.deleted', 'Banner deleted.'));
+						redirectToDefault();
+					});
+				}).catch(function (err) {
+					// "Already gone" path: 404 from the existence probe in
+					// the REST DELETE handler. Happens when the tab is
+					// stale (e.g. another admin already deleted this
+					// banner, or it was the phantom id=2513570-style
+					// orphan left over from the pre-1.14.1 auto-increment
+					// leak). Quiet the error, tell the admin what
+					// happened, reload onto the default banner.
+					var alreadyGone = err && (
+						err.code === 'fazcookie_rest_invalid_id'
+						|| err.code === 'rest_no_route'
+						|| (err.data && err.data.status === 404)
+					);
+					if ( alreadyGone ) {
+						FAZ.notify(__('banner.alreadyDeleted', 'This banner was already removed. Reloading…'));
+						redirectWithGrace();
+						return;
+					}
+					delBtn.disabled = false;
+					var detail = '';
+					if (err && err.code) detail = ' [' + err.code + ']';
+					else if (err && err.message) detail = ' [' + err.message + ']';
+					FAZ.notify(__('banner.deleteFailed', 'Failed to delete banner.') + detail, 'error');
+					if (window.console && console.error) console.error('FAZ delete banner failed', err);
+				});
+			});
+			delBtn.dataset.fazSwitcherBound = '1';
+		}
+	}
+
+	// ── "+ New banner" modal — collects the minimum info needed to spin
+	// up a meaningful banner row instead of silently cloning the current
+	// one. Asks for: name, applicable law (GDPR/CCPA — drives the default
+	// config seed), optional region presets + custom country codes, optional
+	// priority, optional "use as default fallback" flag.
+	function openNewBannerModal() {
+		var form = document.createElement('div');
+		form.style.cssText = 'display:flex;flex-direction:column;gap:1rem;min-width:480px;';
+
+		// Name
+		var nameWrap = document.createElement('div');
+		var nameLabel = document.createElement('label');
+		nameLabel.textContent = __('banner.new.name', 'Banner name');
+		nameLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var nameInput = document.createElement('input');
+		nameInput.type = 'text';
+		nameInput.className = 'faz-input';
+		nameInput.style.width = '100%';
+		nameInput.placeholder = __('banner.new.namePlaceholder', 'e.g. CCPA US visitors');
+		nameInput.value = __('banner.new.defaultName', 'New banner');
+		nameWrap.appendChild(nameLabel);
+		nameWrap.appendChild(nameInput);
+		form.appendChild(nameWrap);
+
+		// Law
+		var lawWrap = document.createElement('div');
+		var lawLabel = document.createElement('label');
+		lawLabel.textContent = __('banner.new.law', 'Consent model');
+		lawLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var lawHelp = document.createElement('div');
+		lawHelp.className = 'faz-help';
+		lawHelp.style.cssText = 'margin-bottom:.4rem;';
+		lawHelp.innerHTML = __(
+			'banner.new.lawHelp',
+			'Pick the legal paradigm, not the country — language, "Do not sell" copy and country targeting live in the Content + Geo Targeting tabs after creation.<br><strong>Opt-in</strong> covers GDPR, UK-GDPR, ePrivacy, LGPD (Brazil), Swiss nFADP, PIPEDA (Canada), KVKK (Turkey) and similar consent-first regimes. <strong>Opt-out</strong> covers CCPA/CPRA (California), Virginia CDPA, Colorado CPA, Connecticut CTDPA, Utah UCPA and other US state laws.'
+		);
+		var lawSelect = document.createElement('select');
+		lawSelect.className = 'faz-input';
+		lawSelect.style.width = '100%';
+		[
+			{ value: 'gdpr', label: __('banner.new.lawOptionGdpr', 'Opt-in — GDPR, UK-GDPR, ePrivacy, LGPD, nFADP, PIPEDA, …') },
+			{ value: 'ccpa', label: __('banner.new.lawOptionCcpa', 'Opt-out — CCPA/CPRA, Virginia, Colorado, Connecticut, Utah, …') }
+		].forEach(function (opt) {
+			var o = document.createElement('option');
+			o.value = opt.value;
+			o.textContent = opt.label;
+			lawSelect.appendChild(o);
+		});
+		lawWrap.appendChild(lawLabel);
+		lawWrap.appendChild(lawHelp);
+		lawWrap.appendChild(lawSelect);
+		form.appendChild(lawWrap);
+
+		// Region preset chips — quick targets for the new banner. The same
+		// REGION_PRESETS map the Geo Targeting tab uses, so toggling
+		// "EU/EEA" here produces the same target_countries the tab does.
+		var regWrap = document.createElement('div');
+		var regLabel = document.createElement('label');
+		regLabel.textContent = __('banner.new.regions', 'Target regions (optional)');
+		regLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var regHelp = document.createElement('div');
+		regHelp.className = 'faz-help';
+		regHelp.style.cssText = 'margin-bottom:.4rem;';
+		regHelp.textContent = __('banner.new.regionsHelp', 'Tick the regions this banner should target. Leave all unchecked to make this a match-all / fallback banner.');
+		var regGrid = document.createElement('div');
+		regGrid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:.4rem;';
+		var REGION_LABELS = {
+			EU: __('banner.new.regionEu', 'EU / EEA (27 + IS, LI, NO)'),
+			UK: __('banner.new.regionUk', 'United Kingdom (UK-GDPR)'),
+			US: __('banner.new.regionUs', 'United States'),
+			CA: __('banner.new.regionCa', 'Canada'),
+			BR: __('banner.new.regionBr', 'Brazil (LGPD)'),
+			AU: __('banner.new.regionAu', 'Australia'),
+			JP: __('banner.new.regionJp', 'Japan'),
+			CH: __('banner.new.regionCh', 'Switzerland (nFADP)')
+		};
+		Object.keys(REGION_PRESETS).forEach(function (key) {
+			var lbl = document.createElement('label');
+			lbl.className = 'faz-toggle';
+			lbl.innerHTML = ''; // build child nodes safely
+			var input = document.createElement('input');
+			input.type = 'checkbox';
+			input.className = 'faz-b-new-region';
+			input.value = key;
+			var track = document.createElement('span');
+			track.className = 'faz-toggle-track';
+			var txt = document.createElement('span');
+			txt.textContent = REGION_LABELS[key] || key;
+			lbl.appendChild(input);
+			lbl.appendChild(track);
+			lbl.appendChild(txt);
+			regGrid.appendChild(lbl);
+		});
+		regWrap.appendChild(regLabel);
+		regWrap.appendChild(regHelp);
+		regWrap.appendChild(regGrid);
+		form.appendChild(regWrap);
+
+		// Custom country codes
+		var customWrap = document.createElement('div');
+		var customLabel = document.createElement('label');
+		customLabel.textContent = __('banner.new.customCountries', 'Additional country codes (optional)');
+		customLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;';
+		var customInput = document.createElement('input');
+		customInput.type = 'text';
+		customInput.className = 'faz-input';
+		customInput.style.width = '100%';
+		customInput.placeholder = __('banner.new.customCountriesPlaceholder', 'NZ, SG, KR');
+		customWrap.appendChild(customLabel);
+		customWrap.appendChild(customInput);
+		form.appendChild(customWrap);
+
+		// Priority + default-fallback (compact row)
+		var rowWrap = document.createElement('div');
+		rowWrap.style.cssText = 'display:flex;gap:1rem;align-items:flex-end;';
+		var prioWrap = document.createElement('div');
+		var prioLabel = document.createElement('label');
+		prioLabel.textContent = __('banner.new.priority', 'Priority');
+		prioLabel.style.cssText = 'display:block;font-weight:500;margin-bottom:.25rem;font-size:13px;';
+		var prioInput = document.createElement('input');
+		prioInput.type = 'number';
+		prioInput.className = 'faz-input';
+		prioInput.min = '0'; prioInput.max = '9999'; prioInput.step = '1'; prioInput.value = '0';
+		prioInput.style.width = '120px';
+		prioWrap.appendChild(prioLabel);
+		prioWrap.appendChild(prioInput);
+		var defWrap = document.createElement('div');
+		defWrap.style.cssText = 'flex:1;';
+		var defLbl = document.createElement('label');
+		defLbl.className = 'faz-toggle';
+		var defInput = document.createElement('input');
+		defInput.type = 'checkbox';
+		var defTrack = document.createElement('span');
+		defTrack.className = 'faz-toggle-track';
+		var defText = document.createElement('span');
+		defText.textContent = __('banner.new.useAsDefault', 'Use as default fallback');
+		defLbl.appendChild(defInput);
+		defLbl.appendChild(defTrack);
+		defLbl.appendChild(defText);
+		defWrap.appendChild(defLbl);
+		rowWrap.appendChild(prioWrap);
+		rowWrap.appendChild(defWrap);
+		form.appendChild(rowWrap);
+
+		// Footer buttons
+		var footer = document.createElement('div');
+		var cancelBtn = document.createElement('button');
+		cancelBtn.type = 'button';
+		cancelBtn.className = 'faz-btn faz-btn-secondary';
+		cancelBtn.textContent = __('banner.new.cancel', 'Cancel');
+		var createBtn = document.createElement('button');
+		createBtn.type = 'button';
+		createBtn.className = 'faz-btn faz-btn-primary';
+		createBtn.textContent = __('banner.new.create', 'Create banner');
+		footer.appendChild(cancelBtn);
+		footer.appendChild(createBtn);
+
+		var m = FAZ.modal({
+			title: __('banner.new.title', 'Create a new banner'),
+			body: form,
+			footer: footer,
+			size: 'lg'
+		});
+
+		cancelBtn.addEventListener('click', function () { m.close(); });
+
+		createBtn.addEventListener('click', function () {
+			var name = (nameInput.value || '').trim();
+			if (!name) { nameInput.focus(); return; }
+			var law = lawSelect.value === 'ccpa' ? 'ccpa' : 'gdpr';
+
+			// Collect target countries: region preset codes + custom codes,
+			// deduped + normalised by the helper the Geo Targeting tab uses.
+			var targets = [];
+			form.querySelectorAll('.faz-b-new-region:checked').forEach(function (cb) {
+				targets = targets.concat(REGION_PRESETS[cb.value] || []);
+			});
+			if (customInput.value) {
+				targets = targets.concat(customInput.value.split(/[,\s]+/));
+			}
+			targets = normaliseCountryCodes(targets);
+
+			var priority = parseInt(prioInput.value, 10);
+			if (!isFinite(priority) || priority < 0) priority = 0;
+
+			createBtn.disabled = true;
+			cancelBtn.disabled = true;
+			createBtn.textContent = __('banner.new.creating', 'Creating…');
+
+			// Pull the law-appropriate default config so the new banner
+			// starts with sane content/translations/colours instead of an
+			// empty shell.
+			FAZ.get('banners/configs').then(function (configs) {
+				var properties = (configs && configs[law]) ? configs[law] : (bannerData ? bannerData.properties : {});
+				return FAZ.post('banners', {
+					name: name,
+					status: true,
+					'default': !!defInput.checked,
+					properties: properties,
+					contents: bannerData ? bannerData.contents : {},
+					target_countries: targets,
+					priority: priority
+				});
+			}).then(function (created) {
+				var newId = created && created.id ? Number(created.id) : 0;
+				if (newId <= 0) {
+					FAZ.notify(__('banner.new.failed', 'Failed to create banner.'), 'error');
+					createBtn.disabled = false;
+					cancelBtn.disabled = false;
+					createBtn.textContent = __('banner.new.create', 'Create banner');
+					return;
+				}
+				var base = window.location.href.split('?')[0];
+				var page = (window.location.search.match(/page=([^&]+)/) || [null, 'faz-cookie-manager-banner'])[1];
+				window.location.href = base + '?page=' + encodeURIComponent(page) + '&banner_id=' + newId;
+			}).catch(function () {
+				FAZ.notify(__('banner.new.failed', 'Failed to create banner.'), 'error');
+				createBtn.disabled = false;
+				cancelBtn.disabled = false;
+				createBtn.textContent = __('banner.new.create', 'Create banner');
+			});
+		});
+	}
+
+	// ── Geo Targeting (multi-banner geo-routing, 1.14.0+) ────────────────
+	//
+	// Region presets group ISO-3166 alpha-2 codes into clickable bundles
+	// used by the multi-banner picker.
+	//
+	// EU = 27 EU + 3 EEA (Iceland, Liechtenstein, Norway) — 30 countries,
+	// deliberately WITHOUT GB. UK is a separate preset because UK-GDPR is
+	// a distinct regime and admins that want different copy / cookie text
+	// for UK-vs-EU visitors need to be able to target them independently.
+	// (The legacy server-side region_map in Settings → Geolocation does
+	// include GB in 'eu' for backward compat with installs that only have
+	// the single-banner global geo-targeting setting, but multi-banner
+	// geo-routing keeps the two paradigms separate by design.)
+	var REGION_PRESETS = {
+		EU: ['AT','BE','BG','HR','CY','CZ','DK','EE','FI','FR','DE','GR','HU','IE','IT','LV','LT','LU','MT','NL','PL','PT','RO','SK','SI','ES','SE','IS','LI','NO'],
+		UK: ['GB'],
+		US: ['US'],
+		CA: ['CA'],
+		BR: ['BR'],
+		AU: ['AU'],
+		JP: ['JP'],
+		CH: ['CH']
+	};
+
+	function normaliseCountryCodes(input) {
+		var out = [];
+		var seen = {};
+		var list = Array.isArray(input) ? input : String(input || '').split(/[,\s]+/);
+		for (var i = 0; i < list.length; i++) {
+			var code = String(list[i] || '').trim().toUpperCase();
+			if (/^[A-Z]{2}$/.test(code) && !seen[code]) {
+				seen[code] = true;
+				out.push(code);
+			}
+		}
+		out.sort();
+		return out;
+	}
+
+	function populateGeoTargeting() {
+		if (!bannerData) return;
+		var targets = normaliseCountryCodes(bannerData.target_countries || []);
+		// Region checkboxes: tick a preset only when ALL of its countries are
+		// in the target list. When SOME (but not all) are present, leave the
+		// checkbox unchecked AND set the HTML5 `indeterminate` flag so the
+		// admin sees the partial-match state. collectGeoTargeting() inspects
+		// the same indeterminate flag to avoid re-adding the missing
+		// countries on save — fixes issue #105 (lossy round-trip).
+		// `indeterminate` is purely visual; on user-click the browser clears
+		// it automatically, switching the preset to the explicit "all in"
+		// or "none in" semantic the admin just expressed.
+		var regionInputs = document.querySelectorAll('.faz-b-geo-region');
+		for (var i = 0; i < regionInputs.length; i++) {
+			var key = regionInputs[i].value;
+			var preset = REGION_PRESETS[key] || [];
+			var inSet = preset.filter(function (c) { return targets.indexOf(c) !== -1; });
+			var allIn = preset.length > 0 && inSet.length === preset.length;
+			var someIn = !allIn && inSet.length > 0;
+			regionInputs[i].checked = allIn;
+			regionInputs[i].indeterminate = someIn;
+			// Bind a one-time change handler that flips indeterminate off when
+			// the admin actually clicks the checkbox — the browser does this
+			// natively but explicit is safer across older webview engines.
+			if (!regionInputs[i].dataset.fazTriBound) {
+				regionInputs[i].addEventListener('change', function () { this.indeterminate = false; });
+				regionInputs[i].dataset.fazTriBound = '1';
+			}
+		}
+		// Custom field: codes that are NOT covered by any ticked region
+		// preset AND not covered by any indeterminate-preset partial match
+		// (those countries already represent the admin's manual selection,
+		// so they don't need to be duplicated in the custom field).
+		var coveredByRegion = {};
+		for (var j = 0; j < regionInputs.length; j++) {
+			if (!regionInputs[j].checked) continue;
+			var p = REGION_PRESETS[regionInputs[j].value] || [];
+			for (var k = 0; k < p.length; k++) coveredByRegion[p[k]] = true;
+		}
+		var leftover = targets.filter(function (c) { return !coveredByRegion[c]; });
+		var customInput = document.getElementById('faz-b-geo-custom');
+		if (customInput) customInput.value = leftover.join(', ');
+		// Priority + default flag.
+		var priorityInput = document.getElementById('faz-b-geo-priority');
+		if (priorityInput) priorityInput.value = (bannerData.priority != null ? bannerData.priority : 0);
+		var defaultInput = document.getElementById('faz-b-geo-default');
+		if (defaultInput) defaultInput.checked = !!bannerData['default'];
+
+		// Default-flag impact preview. When the admin ticks this toggle on
+		// a banner that's NOT currently the default, list the names of the
+		// peer banners whose default flag the save will clear. Gives the
+		// admin visibility into the destructive side-effect documented in
+		// the help text, before they hit Save.
+		(function bindDefaultImpactPreview() {
+			var toggle = document.getElementById('faz-b-geo-default');
+			var impact = document.getElementById('faz-b-geo-default-impact');
+			if (!toggle || !impact) return;
+			var refresh = function () {
+				if (!toggle.checked) { impact.style.display = 'none'; impact.textContent = ''; return; }
+				FAZ.get('banners').then(function (data) {
+					var rows = Array.isArray(data) ? data : [];
+					var others = rows
+						.filter(function (b) { return Number(b.id) !== Number(bannerId) && Number(b['default']) === 1; })
+						.map(function (b) { return b.name || ('Banner #' + b.id); });
+					if (others.length === 0) {
+						impact.style.display = 'none';
+						impact.textContent = '';
+						return;
+					}
+					impact.textContent = __(
+						'banner.defaultImpact',
+						'Saving will clear the default flag on: '
+					) + others.join(', ') + '.';
+					impact.style.display = '';
+				}).catch(function () { /* network glitch — silent, will be caught on save */ });
+			};
+			refresh();
+			if (!toggle.dataset.fazDefaultImpactBound) {
+				toggle.addEventListener('change', refresh);
+				toggle.dataset.fazDefaultImpactBound = '1';
+			}
+		})();
+	}
+
+	function collectGeoTargeting() {
+		var collected = [];
+		var regionInputs = document.querySelectorAll('.faz-b-geo-region');
+		for (var i = 0; i < regionInputs.length; i++) {
+			// Tri-state semantics (issue #105): only checked presets
+			// contribute their full country list. Indeterminate presets
+			// (partial-match populated by populateGeoTargeting) stay out —
+			// their already-present countries are in the custom field, so
+			// adding the full preset back would re-introduce the missing
+			// ones the admin had removed.
+			if (!regionInputs[i].checked || regionInputs[i].indeterminate) continue;
+			var preset = REGION_PRESETS[regionInputs[i].value] || [];
+			collected = collected.concat(preset);
+		}
+		var customInput = document.getElementById('faz-b-geo-custom');
+		if (customInput && customInput.value) {
+			collected = collected.concat(customInput.value.split(/[,\s]+/));
+		}
+		var priorityInput = document.getElementById('faz-b-geo-priority');
+		var priority = priorityInput ? parseInt(priorityInput.value, 10) : 0;
+		if (!isFinite(priority) || priority < 0) priority = 0;
+		var defaultInput = document.getElementById('faz-b-geo-default');
+		return {
+			target_countries: normaliseCountryCodes(collected),
+			priority: priority,
+			'default': defaultInput ? !!defaultInput.checked : false
+		};
 	}
 
 	/**
@@ -340,6 +966,44 @@
 
 		var closeBtn = (config.notice && config.notice.elements && config.notice.elements.closeButton) || {};
 		setChecked('faz-b-close-toggle', typeof closeBtn === 'object' ? getStatus(closeBtn) : true);
+
+		// Per-banner override of the Garante/EDPB dark-pattern auto-hide
+		// (1.14.0+). The flag lives at properties.settings.allowCloseButtonWithReject.
+		var bannerSettings = (bannerData.properties && bannerData.properties.settings) || {};
+		setChecked('faz-b-close-with-reject-toggle', !!bannerSettings.allowCloseButtonWithReject);
+
+		// The sub-toggle is only meaningful when the parent "Show Close Button"
+		// is on — a ticked override on an OFF parent is a no-op that
+		// misleadingly suggests something is active. Bind disabled state to
+		// the parent and re-run the binding any time the parent changes.
+		(function bindCloseSubToggle() {
+			// F001 fix: `faz-b-close-toggle` is the wrapping <label>,
+			// not the <input>. Reading `label.checked` returns undefined,
+			// so the sub-toggle was unconditionally disabled regardless
+			// of parent state. Query the underlying checkbox via a
+			// descendant selector so .checked is a real boolean.
+			var parentLabel = document.getElementById('faz-b-close-toggle');
+			var parent = parentLabel ? parentLabel.querySelector('input[type="checkbox"]') : null;
+			var sub = document.getElementById('faz-b-close-with-reject');
+			var group = document.getElementById('faz-b-close-with-reject-group');
+			if (!parent || !sub) return;
+			var sync = function () {
+				var enabled = !!parent.checked;
+				sub.disabled = !enabled;
+				if (group) {
+					group.style.opacity = enabled ? '1' : '0.5';
+					group.style.pointerEvents = enabled ? '' : 'none';
+					group.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+				}
+				if (!enabled) sub.checked = false; // can't override when X isn't shown.
+			};
+			sync();
+			// Avoid double-binding on populate re-runs.
+			if (!parent.dataset.fazCloseSubBound) {
+				parent.addEventListener('change', sync);
+				parent.dataset.fazCloseSubBound = '1';
+			}
+		})();
 
 		// Audit table
 		var auditTable = config.auditTable || {};
@@ -896,6 +1560,11 @@
 		if (typeof props.config.notice.elements.closeButton !== 'object') props.config.notice.elements.closeButton = {};
 		props.config.notice.elements.closeButton.status = isChecked('faz-b-close-toggle');
 
+		// Per-banner override of the Garante/EDPB dark-pattern auto-hide.
+		// Lives under properties.settings so it travels with the banner row.
+		if (!props.settings || typeof props.settings !== 'object') props.settings = {};
+		props.settings.allowCloseButtonWithReject = isChecked('faz-b-close-with-reject-toggle');
+
 		// Brand logo
 		ensureObj(props, 'config.notice.elements.brandLogo');
 		props.config.notice.elements.brandLogo.status = isChecked('faz-b-brandlogo-toggle');
@@ -955,12 +1624,19 @@
 
 		syncFormToBannerData();
 
+		var geo = collectGeoTargeting();
+		bannerData.target_countries = geo.target_countries;
+		bannerData.priority = geo.priority;
+		bannerData['default'] = geo['default'];
+
 		var payload = {
 			name: bannerData.name,
 			status: bannerData.status,
 			'default': bannerData['default'],
 			properties: bannerData.properties,
 			contents: bannerData.contents,
+			target_countries: bannerData.target_countries,
+			priority: bannerData.priority,
 		};
 
 			FAZ.put('banners/' + bannerId, payload).then(function (updated) {

@@ -1,17 +1,17 @@
 import type { BrowserContext, Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
-import { fazApiGet, fazApiPost, openSettingsPage } from '../utils/faz-api';
+import { fazApiGet, fazApiPost, openSettingsPage, type FazApiResponse } from '../utils/faz-api';
 import {
-  activatePlugins,
   deactivatePluginsExcept,
   enableProviderMatrixCustomScenario,
   ensureFixturePlugin,
   ensureProviderMatrixPage,
   ensureScanLabPages,
-  listActivePlugins,
+  listActivePluginFiles,
   readProviderMatrixHits,
   readProviderMatrixUrl,
+  restoreActivePluginFiles,
   resetProviderMatrixState,
   wpEval,
 } from '../utils/wp-env';
@@ -79,14 +79,41 @@ function directCollectUrl(path: string): string {
   return `${WP_BASE}/faz-e2e-provider-collect/${path}`;
 }
 
+// Under suite-wide load `loginAsAdmin` occasionally returns to the test before
+// the WordPress auth cookies have fully propagated into the browser context's
+// request session — the first REST call after the login hands back a 401/403
+// even though the navigation context itself is logged in. Retry once with a
+// short backoff so the session has a chance to settle. The retry is invisible
+// to callers as long as the second attempt succeeds; if both fail the original
+// assertion failure is preserved.
+async function fazApiGetWithRetry<T>(page: Page, nonce: string, route: string): Promise<FazApiResponse<T>> {
+  const first = await fazApiGet<T>(page, nonce, route);
+  if (first.status === 200) return first;
+  if (first.status === 401 || first.status === 403) {
+    await page.waitForTimeout(500);
+    return fazApiGet<T>(page, nonce, route);
+  }
+  return first;
+}
+
+async function fazApiPostWithRetry<T>(page: Page, nonce: string, route: string, data: Record<string, unknown>): Promise<FazApiResponse<T>> {
+  const first = await fazApiPost<T>(page, nonce, route, data);
+  if (first.status === 200) return first;
+  if (first.status === 401 || first.status === 403) {
+    await page.waitForTimeout(500);
+    return fazApiPost<T>(page, nonce, route, data);
+  }
+  return first;
+}
+
 async function getSettings(page: Page, nonce: string): Promise<SettingsPayload> {
-  const response = await fazApiGet<SettingsPayload>(page, nonce, 'settings');
+  const response = await fazApiGetWithRetry<SettingsPayload>(page, nonce, 'settings');
   expect(response.status).toBe(200);
   return response.data;
 }
 
 async function postSettings(page: Page, nonce: string, payload: SettingsPayload): Promise<void> {
-  const response = await fazApiPost<SettingsPayload>(page, nonce, 'settings', payload);
+  const response = await fazApiPostWithRetry<SettingsPayload>(page, nonce, 'settings', payload);
   expect(response.status).toBe(200);
 }
 
@@ -257,19 +284,13 @@ test.describe('Blocking compliance coverage', () => {
   let matrixPageId = 0;
   let matrixPagePattern = '';
   let iframeLabUrl = '';
-  // Snapshot of every active plugin at the moment the suite starts.
-  // The afterAll restores this exact set so co-running test files
-  // that depend on third-party plugins (cache adapters, analytics
-  // sniffers, etc.) see the same environment they did before. A
-  // prior refactor renamed this from `deactivatedPlugins` (filter of
-  // pre-snapshot minus allowlist) to `initialActivePlugins` (full
-  // snapshot) and updated the afterAll but forgot to rename the
-  // declaration here — that's why the afterAll was throwing
-  // `ReferenceError: initialActivePlugins is not defined`.
-  let initialActivePlugins: string[] = [];
+  // Snapshot of every active plugin file at the moment the suite starts.
+  // The afterAll restores the exact option value without firing third-party
+  // activation hooks, which avoids plugin redirects during WP-CLI cleanup.
+  let initialActivePluginFiles: string[] = [];
 
   test.beforeAll(async () => {
-    initialActivePlugins = listActivePlugins();
+    initialActivePluginFiles = listActivePluginFiles();
     deactivatePluginsExcept([
       'faz-cookie-manager',
       'faz-e2e-provider-matrix',
@@ -294,14 +315,7 @@ test.describe('Blocking compliance coverage', () => {
   });
 
   test.afterAll(async () => {
-    const currentlyActive = new Set(listActivePlugins());
-    const toActivate = initialActivePlugins.filter((slug) => !currentlyActive.has(slug));
-
-    if (toActivate.length > 0) {
-      activatePlugins(toActivate, { tolerateFailures: true });
-    }
-    // Deactivate everything that wasn't originally active.
-    deactivatePluginsExcept(initialActivePlugins);
+    restoreActivePluginFiles(initialActivePluginFiles);
   });
 
   test.beforeEach(async () => {

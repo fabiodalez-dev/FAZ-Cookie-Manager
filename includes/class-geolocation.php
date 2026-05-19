@@ -77,6 +77,49 @@ class Geolocation {
 	}
 
 	/**
+	 * Resolve the visitor country with the public filter contract applied.
+	 *
+	 * This is the country signal used for banner selection. It intentionally
+	 * re-validates after `faz_visitor_country` so test fixtures and trusted
+	 * deployments can override the value without letting malformed output route
+	 * into an arbitrary banner bucket.
+	 *
+	 * @since 1.14.0
+	 * @return string Upper-case ISO 3166-1 alpha-2 country code, or empty string.
+	 */
+	public static function get_visitor_country() {
+		$country = '';
+		if (
+			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
+		) {
+			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
+			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
+				$country = $code;
+			}
+		}
+		if ( '' === $country ) {
+			$country = self::get_country();
+		}
+		$country = is_string( $country ) ? strtoupper( trim( $country ) ) : '';
+		if ( ! self::is_valid_country_code( $country ) ) {
+			$country = '';
+		}
+
+		$filtered = (string) apply_filters( 'faz_visitor_country', $country );
+		$filtered = strtoupper( trim( $filtered ) );
+		// Mirror the CF branch above: 'XX' is the Cloudflare-defined
+		// "anonymous proxy / Tor / unknown" sentinel. A third-party filter
+		// could reintroduce it from a different detection source, and we
+		// must not route it as a real country — is_valid_country_code()
+		// only checks the [A-Z]{2} shape and would accept 'XX'.
+		if ( ! self::is_valid_country_code( $filtered ) || 'XX' === $filtered ) {
+			return '';
+		}
+		return $filtered;
+	}
+
+	/**
 	 * Get the client's real IP address.
 	 *
 	 * @return string
@@ -102,19 +145,33 @@ class Geolocation {
 	 * @return string Two-letter country code or empty string.
 	 */
 	private static function detect_country( $ip ) {
+		// Collect every source's vote so we can both (a) return the first
+		// non-empty value (existing priority order) and (b) compare them
+		// for the consensus check below. The associative shape preserves
+		// source attribution for the disagreement log line.
+		$votes = array();
+
 		// 1. Cloudflare CF-IPCountry header.
 		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) && ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
 			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
-				return $code;
+				$votes['cf']  = $code;
 			}
 		}
 
-		// 2. Apache mod_geoip.
-		if ( ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) {
+		// 2. Apache mod_geoip — gated by faz_trust_geoip_country_code, mirroring
+		//    the CF-IPCountry opt-in pattern above. On installs that don't
+		//    actually run mod_geoip on Apache, a misconfigured fastcgi_param
+		//    can let a request header pollute $_SERVER['GEOIP_COUNTRY_CODE']
+		//    and silently steer geo-routing. Default false → no behaviour
+		//    change for real mod_geoip installs that opt in explicitly.
+		if (
+			apply_filters( 'faz_trust_geoip_country_code', false )
+			&& ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] )
+		) {
 			$code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) );
-			if ( self::is_valid_country_code( $code ) ) {
-				return $code;
+			if ( self::is_valid_country_code( $code ) && 'XX' !== $code ) {
+				$votes['geoip'] = $code;
 			}
 		}
 
@@ -124,17 +181,70 @@ class Geolocation {
 			if ( $code ) {
 				$code = strtoupper( $code );
 				if ( self::is_valid_country_code( $code ) ) {
-					return $code;
+					$votes['php_geoip'] = $code;
 				}
 			}
 		}
 
 		// 4. MaxMind GeoLite2 MMDB database (local, no external API calls).
-		$code = self::lookup_mmdb( $ip );
-		if ( ! empty( $code ) ) {
-			return $code;
+		$mmdb = self::lookup_mmdb( $ip );
+		if ( ! empty( $mmdb ) ) {
+			$votes['mmdb'] = $mmdb;
 		}
 
+		// Issue #110 — multi-source disagreement detection.
+		// When ≥2 sources resolved a country and they disagree, log a
+		// debug-level warning (only when WP_DEBUG / WP_DEBUG_LOG is on,
+		// to avoid polluting production logs) AND optionally enforce
+		// consensus via the faz_country_detection_consensus filter.
+		if ( count( $votes ) >= 2 ) {
+			$unique = array_unique( array_values( $votes ) );
+			if ( count( $unique ) > 1 ) {
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG && defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+					$pairs = array();
+					foreach ( $votes as $src => $code ) {
+						$pairs[] = $src . '=' . $code;
+					}
+					error_log( 'FAZ geolocation source disagreement: ' . implode( ', ', $pairs ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				}
+				/**
+				 * Require agreement between detection sources before
+				 * returning a country. When this filter resolves to true
+				 * AND ≥2 sources disagree, detect_country() returns ''
+				 * (the fail-open default — banner is shown to everyone).
+				 * Off by default to preserve the CF-first priority order.
+				 *
+				 * F109 fix (1.14.3): the third argument is gone. The
+				 * F019 attempt to "anonymise" the IP by passing
+				 * `wp_hash($ip, 'nonce')` produced a stable per-salt
+				 * HMAC that filter consumers could still use as a
+				 * persistent identifier — functionally PII-equivalent.
+				 * The consensus-enforcement decision doesn't NEED the
+				 * IP at all: the `$votes` map (CF / geoip / php_geoip /
+				 * mmdb → country code) carries everything needed to
+				 * decide whether to enforce. Plugins that genuinely
+				 * need the IP for their own logic should hook
+				 * `faz_visitor_country` (which already exposes it for
+				 * test fixtures and trusted overrides) rather than
+				 * piggyback on the consensus filter.
+				 *
+				 * @since 1.14.0
+				 * @since 1.14.3 third `$ip` / `$ip_hash` argument removed (F109)
+				 * @param bool   $require_consensus Default false.
+				 * @param array  $votes             Per-source country votes (cf, geoip, php_geoip, mmdb).
+				 */
+				if ( apply_filters( 'faz_country_detection_consensus', false, $votes ) ) {
+					return '';
+				}
+			}
+		}
+
+		// Priority order preserved: CF → GEOIP header → PHP ext → MMDB.
+		foreach ( array( 'cf', 'geoip', 'php_geoip', 'mmdb' ) as $src ) {
+			if ( ! empty( $votes[ $src ] ) ) {
+				return $votes[ $src ];
+			}
+		}
 		return '';
 	}
 

@@ -10,8 +10,38 @@ defined( 'ABSPATH' ) || exit;
 
 <div id="faz-banner">
 
+	<!-- Banner switcher (1.14.1+) — chip-style list of every banner row,
+	     always visible (replaces the collapsed <select> dropdown used in
+	     1.14.0). Populated by banner.js from /faz/v1/banners. Active chip
+	     uses the dark-fill primary state; clicking any other chip
+	     deep-links to its banner_id. The rename input that used to live
+	     here moved into the General tab (less visual noise + clearer
+	     scoping: "I'm editing this banner, here's its name"). -->
+	<div id="faz-b-switcher" style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;font-size:13px;flex-wrap:wrap;">
+		<span style="color:#6b7280;white-space:nowrap;font-weight:500;">
+			<?php esc_html_e( 'Banners:', 'faz-cookie-manager' ); ?>
+		</span>
+		<div id="faz-b-switcher-chips" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;"></div>
+		<button type="button" class="faz-btn faz-btn-sm faz-btn-secondary" id="faz-b-switcher-new" title="<?php esc_attr_e( 'Create a new banner', 'faz-cookie-manager' ); ?>" style="padding:.25rem .6rem;font-size:13px;line-height:1;">
+			+ <?php esc_html_e( 'New', 'faz-cookie-manager' ); ?>
+		</button>
+		<button type="button" class="faz-btn faz-btn-sm faz-btn-secondary" id="faz-b-switcher-delete" title="<?php esc_attr_e( 'Delete this banner', 'faz-cookie-manager' ); ?>" style="display:none;padding:.25rem .5rem;font-size:13px;line-height:1;color:#b91c1c;border-color:#fecaca;" aria-label="<?php esc_attr_e( 'Delete this banner', 'faz-cookie-manager' ); ?>">
+			&times;
+		</button>
+	</div>
+
+	<!--
+	     Tab order (1.14.1+): Geo Targeting promoted to 2nd position so the
+	     "WHO sees this banner" question is answered immediately after the
+	     "is it on/off" toggle, BEFORE the admin starts customising content
+	     and colours for a banner they may not have correctly targeted yet.
+	     Content / Colours / Buttons / Preference Center / Advanced follow
+	     in customisation-frequency order. The data-tab slugs are unchanged
+	     so deep-links (#tab-geo, etc.) keep working.
+	-->
 	<div class="faz-tabs" id="faz-banner-tabs">
 		<button class="faz-tab active" data-tab="general"><?php esc_html_e( 'General', 'faz-cookie-manager' ); ?></button>
+		<button class="faz-tab" data-tab="geo"><?php esc_html_e( 'Geo Targeting', 'faz-cookie-manager' ); ?></button>
 		<button class="faz-tab" data-tab="content"><?php esc_html_e( 'Content', 'faz-cookie-manager' ); ?></button>
 		<button class="faz-tab" data-tab="colours"><?php esc_html_e( 'Colours', 'faz-cookie-manager' ); ?></button>
 		<button class="faz-tab" data-tab="buttons"><?php esc_html_e( 'Buttons', 'faz-cookie-manager' ); ?></button>
@@ -19,8 +49,62 @@ defined( 'ABSPATH' ) || exit;
 		<button class="faz-tab" data-tab="advanced"><?php esc_html_e( 'Advanced', 'faz-cookie-manager' ); ?></button>
 	</div>
 
+	<!--
+	     Missing-banner notice. Shown by banner.js when GET /faz/v1/banners/{id}
+	     returns 404 (i.e. the ?banner_id= in the URL points to a row that no
+	     longer exists — e.g. after a banner deletion or an old bookmark from
+	     before the auto-increment bug fix in 1.14.1). The JS hides the tabs +
+	     editor below it and surfaces a CTA that links back to the default
+	     banner so the admin doesn't see an empty / half-rendered editor.
+	-->
+	<div id="faz-banner-missing" class="faz-card" style="display:none;border-color:#fbbf24;background:#fffbeb;">
+		<div class="faz-card-body" style="display:flex;flex-direction:column;gap:.75rem;">
+			<h3 style="margin:0;color:#92400e;">
+				<?php esc_html_e( 'This banner does not exist', 'faz-cookie-manager' ); ?>
+			</h3>
+			<p style="margin:0;color:#78350f;">
+				<?php
+				printf(
+					/* translators: %s: HTML <code> with the banner id from the URL. */
+					esc_html__( 'Banner ID %s was not found. It may have been deleted, or the link you followed is from an older version of the plugin.', 'faz-cookie-manager' ),
+					'<code id="faz-banner-missing-id" style="background:#fef3c7;padding:.1rem .35rem;border-radius:3px;">—</code>'
+				);
+				?>
+			</p>
+			<div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+				<a href="#" id="faz-banner-missing-default" class="faz-btn faz-btn-primary">
+					<?php esc_html_e( 'Open the default banner', 'faz-cookie-manager' ); ?>
+				</a>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager' ) ); ?>" class="faz-btn faz-btn-secondary">
+					<?php esc_html_e( 'Back to dashboard', 'faz-cookie-manager' ); ?>
+				</a>
+			</div>
+		</div>
+	</div>
+	<div id="faz-banner-body">
+
 	<!-- ─── General ─────────────────────────────────────── -->
 	<div id="tab-general" class="faz-tab-panel active">
+
+		<!--
+		     Banner name (1.14.1+) — moved here from the toolbar input that
+		     used to live inside #faz-b-switcher. The toolbar version was
+		     always visible and edited the *current* banner regardless of
+		     where the admin was on the page, which was confusing when the
+		     install had two banners with the same name. Keeping it here
+		     makes the scoping explicit: this is the name of THE banner
+		     you are currently editing, and you change it from inside its
+		     own General tab.
+		-->
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Banner Name', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-form-group">
+					<input type="text" class="faz-input" id="faz-b-name" placeholder="<?php esc_attr_e( 'e.g. GDPR — EU + UK', 'faz-cookie-manager' ); ?>" maxlength="120" style="max-width:480px;" />
+					<div class="faz-help"><?php esc_html_e( 'Used to tell your banners apart in the switcher above. Not shown to visitors.', 'faz-cookie-manager' ); ?></div>
+				</div>
+			</div>
+		</div>
 
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Banner Status', 'faz-cookie-manager' ); ?></h3></div>
@@ -478,6 +562,34 @@ defined( 'ABSPATH' ) || exit;
 						<span><?php esc_html_e( 'Show Close Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 				</div>
+				<div class="faz-form-group" id="faz-b-close-with-reject-group" style="margin-left:1.5rem;border-left:3px solid #f59e0b;padding:.75rem 1rem;background:#fffbeb;border-radius:0 4px 4px 0;">
+					<label class="faz-toggle" id="faz-b-close-with-reject-toggle">
+						<input type="checkbox" id="faz-b-close-with-reject">
+						<span class="faz-toggle-track"></span>
+						<span style="font-weight:500;">
+							<span aria-hidden="true" style="margin-right:.35rem;">&#9888;</span><?php esc_html_e( 'Allow Close (X) alongside Reject button', 'faz-cookie-manager' ); ?>
+							<span style="display:inline-block;margin-left:.5rem;padding:.05rem .4rem;font-size:11px;border-radius:3px;background:#92400e;color:#fff;letter-spacing:.5px;text-transform:uppercase;"><?php esc_html_e( 'Non-EU only', 'faz-cookie-manager' ); ?></span>
+						</span>
+					</label>
+					<div class="faz-help" style="margin-top:.4rem;color:#78350f;">
+						<?php echo wp_kses(
+							sprintf(
+								/* translators: %1$s: EDPB Guidelines link, %2$s: Italian Garante Provvedimento link. */
+								__( '<strong>Off by default — keep OFF for EU/EEA/UK visitors.</strong> The %1$s and the %2$s identify "X close + labelled Reject on the same banner" as a recognised dark pattern (unequal-weight dismissal paths). Safe to enable on banners targeted at US, Brazil, Canada or Australian traffic where this rule does not apply — typically used together with multi-banner geo-routing (Geo Targeting tab) to keep the X on a CCPA-style banner.', 'faz-cookie-manager' ),
+								'<a href="https://edpb.europa.eu/system/files/2023-02/edpb_03-2022_guidelines_on_deceptive_design_patterns_in_social_media_platform_interfaces_v2_en.pdf" target="_blank" rel="noopener noreferrer">EDPB Guidelines 03/2022</a>',
+								'<a href="https://www.garanteprivacy.it/web/guest/home/docweb/-/docweb-display/docweb/9677876" target="_blank" rel="noopener noreferrer">Italian Garante Provv. 10 June 2021</a>'
+							),
+							array(
+								'a'      => array(
+									'href'   => array(),
+									'target' => array(),
+									'rel'    => array(),
+								),
+								'strong' => array(),
+							)
+						); ?>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -598,6 +710,138 @@ defined( 'ABSPATH' ) || exit;
 
 	</div>
 
+	<!-- ─── Tab: Geo Targeting ─────────────────────────────────────── -->
+	<div id="tab-geo" class="faz-tab-panel">
+		<?php
+		// Prerequisite notice: geo-routing silently falls back to "show every
+		// banner to everyone" when neither MaxMind nor Cloudflare CF-IPCountry
+		// is wired up. Surface that to the admin BEFORE they configure target
+		// countries, instead of letting them discover later that the feature
+		// they thought they enabled is a no-op.
+		$faz_geo_settings = get_option( 'faz_settings', array() );
+		$faz_has_maxmind  = ! empty( $faz_geo_settings['geolocation']['maxmind_key'] )
+			|| ( defined( 'FAZ_MAXMIND_DB_PATH' ) && FAZ_MAXMIND_DB_PATH && file_exists( FAZ_MAXMIND_DB_PATH ) );
+		$faz_has_cf       = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
+		if ( ! $faz_has_maxmind && ! $faz_has_cf ) :
+			?>
+			<div class="faz-card" style="border-left:3px solid #f59e0b;background:#fffbeb;">
+				<div class="faz-card-body" style="color:#78350f;">
+					<strong style="display:block;margin-bottom:.35rem;">
+						<span aria-hidden="true" style="margin-right:.3rem;">&#9888;</span><?php esc_html_e( 'Geo source not configured', 'faz-cookie-manager' ); ?>
+					</strong>
+					<?php
+					echo wp_kses(
+						sprintf(
+							/* translators: %1$s: Settings -> Geolocation link, %2$s: faz_trust_cf_ipcountry_header docs link. */
+							__( 'No country signal is available on this install. Multi-banner geo-routing will resolve every visitor to "unknown" and fall back to your match-all / default banner. Configure %1$s with a MaxMind GeoLite2 key, or enable the %2$s if your site sits behind Cloudflare. Without one of these, the targets you set below have no effect.', 'faz-cookie-manager' ),
+							'<a href="' . esc_url( admin_url( 'admin.php?page=faz-cookie-manager-settings#tab-geolocation' ) ) . '">' . esc_html__( 'Settings &raquo; Geolocation', 'faz-cookie-manager' ) . '</a>',
+							'<code>faz_trust_cf_ipcountry_header</code>'
+						),
+						array(
+							'a'    => array( 'href' => array() ),
+							'code' => array(),
+						)
+					);
+					?>
+				</div>
+			</div>
+		<?php endif; ?>
+
+		<!-- In-page guide: explains the split between WHAT-text vs WHERE-target
+		     so admins do not look for "language / Do not sell copy" in the
+		     Geo Targeting tab (they live in the Content tab) and vice versa.
+		     Plus a Brexit / UK-GDPR caveat — EU preset deliberately excludes
+		     GB; UK is its own preset. -->
+		<div class="faz-card" style="border-left:3px solid #0ea5e9;background:#f0f9ff;">
+			<div class="faz-card-body" style="color:#075985;">
+				<strong style="display:block;margin-bottom:.5rem;">
+					<span aria-hidden="true" style="margin-right:.3rem;">&#9432;</span><?php esc_html_e( 'How multi-banner works — quick guide', 'faz-cookie-manager' ); ?>
+				</strong>
+				<ul style="margin:0 0 .5rem 1.25rem;padding:0;line-height:1.6;">
+					<li><?php
+						echo wp_kses(
+							sprintf(
+								/* translators: %1$s: Geo Targeting (tab name), %2$s: Content (tab name). */
+								__( '%1$s (this tab) = <em>WHICH visitors</em> see this banner. Pick countries / regions; the multi-banner picker matches against the visitor\'s detected country. Leave empty to make this banner the universal fallback.', 'faz-cookie-manager' ),
+								'<strong>' . esc_html__( 'Geo Targeting', 'faz-cookie-manager' ) . '</strong>',
+								'<strong>' . esc_html__( 'Content', 'faz-cookie-manager' ) . '</strong>'
+							),
+							array( 'strong' => array(), 'em' => array() )
+						);
+					?></li>
+					<li><?php
+						echo wp_kses(
+							sprintf(
+								/* translators: %1$s: Content (tab name). */
+								__( '%1$s = <em>WHAT the banner says</em> — title, description, button labels, per-language translations. This is where you put law-specific copy: "Não vender minhas informações pessoais" for LGPD (Brazil), "Do not sell or share my personal information" for CCPA/CPRA (California 2024+), German consent text for GDPR-DE, and so on. Same banner row, multiple languages.', 'faz-cookie-manager' ),
+								'<strong>' . esc_html__( 'Content', 'faz-cookie-manager' ) . '</strong>'
+							),
+							array( 'strong' => array(), 'em' => array() )
+						);
+					?></li>
+					<li><?php
+						echo wp_kses(
+							__( '<strong>EU</strong> preset = 27 EU + 3 EEA (Iceland, Liechtenstein, Norway). It does <em>not</em> include the UK — pick the <strong>United Kingdom</strong> preset separately when you want a UK-GDPR variant with different copy. To cover EU+UK with one banner, tick both presets.', 'faz-cookie-manager' ),
+							array( 'strong' => array(), 'em' => array() )
+						);
+					?></li>
+				</ul>
+			</div>
+		</div>
+
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Region presets', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<fieldset style="border:0;padding:0;margin:0;">
+					<legend class="faz-help" style="margin-bottom:1rem;padding:0;">
+						<?php esc_html_e( 'Tick the regions where this banner should be shown. A visitor from any country in the selected regions sees this banner. Leave all unchecked to make this banner match every visitor (fallback / single-banner installs).', 'faz-cookie-manager' ); ?>
+					</legend>
+					<div class="faz-form-group" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.5rem;">
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="EU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'EU / EEA (27 + IS, LI, NO)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="UK"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United Kingdom (UK-GDPR)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="US"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'United States (CCPA / state laws)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CA"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Canada (PIPEDA)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="BR"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Brazil (LGPD)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="AU"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Australia', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="JP"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Japan (APPI)', 'faz-cookie-manager' ); ?></span></label>
+						<label class="faz-toggle"><input type="checkbox" class="faz-b-geo-region" value="CH"><span class="faz-toggle-track"></span><span><?php esc_html_e( 'Switzerland (nFADP)', 'faz-cookie-manager' ); ?></span></label>
+					</div>
+				</fieldset>
+			</div>
+		</div>
+
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Custom country list', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-form-group">
+					<label for="faz-b-geo-custom"><?php esc_html_e( 'Additional ISO-3166 alpha-2 country codes', 'faz-cookie-manager' ); ?></label>
+					<input type="text" class="faz-input" id="faz-b-geo-custom" placeholder="<?php esc_attr_e( 'e.g. NZ, SG, KR', 'faz-cookie-manager' ); ?>" style="max-width:480px;">
+					<div class="faz-help"><?php esc_html_e( 'Comma-separated, two letters per code. Use this for countries not covered by the region presets above. Codes are normalised to upper-case and deduplicated automatically.', 'faz-cookie-manager' ); ?></div>
+				</div>
+			</div>
+		</div>
+
+		<div class="faz-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Priority & fallback', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-form-group">
+					<label for="faz-b-geo-priority"><?php esc_html_e( 'Priority', 'faz-cookie-manager' ); ?></label>
+					<input type="number" class="faz-input faz-input-sm" id="faz-b-geo-priority" min="0" max="9999" step="1" value="0" style="width:140px;">
+					<div class="faz-help"><?php esc_html_e( 'Tie-breaker when multiple banners target the same country. Higher wins. Default 0.', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-form-group">
+					<label class="faz-toggle" id="faz-b-geo-default-toggle">
+						<input type="checkbox" id="faz-b-geo-default">
+						<span class="faz-toggle-track"></span>
+						<span><?php esc_html_e( 'Use this banner as the default fallback', 'faz-cookie-manager' ); ?></span>
+					</label>
+					<div class="faz-help"><?php esc_html_e( 'Shown to visitors from countries no banner targets explicitly. Exactly one banner should be marked as default. Saving this option will clear the flag on every other banner.', 'faz-cookie-manager' ); ?></div>
+					<div id="faz-b-geo-default-impact" class="faz-help" style="display:none;margin-top:.5rem;padding:.5rem .75rem;background:#fef3c7;border-left:3px solid #f59e0b;color:#78350f;border-radius:0 3px 3px 0;"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
 	<!-- Bottom spacer: room for the fixed preview + save bar -->
 	<div id="faz-b-spacer" style="height:240px;"></div>
 
@@ -626,4 +870,5 @@ defined( 'ABSPATH' ) || exit;
 			<span class="faz-save-status" id="faz-b-status"></span>
 		</div>
 	</div>
+	</div><!-- /#faz-banner-body -->
 </div>

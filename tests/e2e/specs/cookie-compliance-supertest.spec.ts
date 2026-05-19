@@ -5,7 +5,8 @@ import { expect, test } from '../fixtures/wp-fixture';
 import {
   activatePlugins,
   deactivatePluginsExcept,
-  listActivePlugins,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
   upsertPage,
   wp,
   WP_PATH,
@@ -20,7 +21,7 @@ const COMPLIANCE_COOKIE = '_faz_compliance_analytics';
 const COMPLIANCE_SCRIPT = 'faz-e2e-compliance-inline-provider.js';
 const COMPLIANCE_RULE_PATTERN = COMPLIANCE_SCRIPT;
 
-let initialActivePlugins: string[] = [];
+let initialActivePluginFiles: string[] = [];
 let originalSettings = '';
 let originalBannerRow = '';
 let complianceUrl = '';
@@ -305,7 +306,7 @@ test.describe.serial('Cookie compliance supertest', () => {
   test.setTimeout(180_000);
 
   test.beforeAll(() => {
-    initialActivePlugins = listActivePlugins();
+    initialActivePluginFiles = listActivePluginFiles();
     installLocalPlugin();
     deactivatePluginsExcept([PLUGIN_SLUG]);
     activatePlugins([PLUGIN_SLUG]);
@@ -316,12 +317,7 @@ test.describe.serial('Cookie compliance supertest', () => {
 
   test.afterAll(() => {
     restoreState();
-    const currentActive = listActivePlugins();
-    const toActivate = initialActivePlugins.filter((slug) => !currentActive.includes(slug));
-    if (toActivate.length > 0) {
-      activatePlugins(toActivate, { tolerateFailures: true });
-    }
-    deactivatePluginsExcept(initialActivePlugins);
+    restoreActivePluginFiles(initialActivePluginFiles);
   });
 
   test('GDPR cookie rules hold across first visit, reject, accept, and consent revision', async ({

@@ -384,7 +384,7 @@
         "key": "faz_audit_table_empty",
         "type": "data",
         "content": {
-            "container": "<p class=\"faz-empty-cookies-text\">[faz_audit_table_empty_text]</p>"
+            "container": "<div class=\"faz-table-wrapper faz-table-wrapper-empty\"><p class=\"faz-empty-cookies-text\">[faz_audit_table_empty_text]</p></div>"
         },
         "attributes": {},
         "customTag": "",

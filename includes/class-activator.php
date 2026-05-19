@@ -60,6 +60,9 @@ class Activator {
 		'3.4.1' => array(
 			'update_db_341',
 		),
+		'3.5.0' => array(
+			'update_db_350',
+		),
 	);
 	/**
 	 * Return the current instance of the class
@@ -347,6 +350,7 @@ class Activator {
 		if ( true === faz_first_time_install() ) {
 			add_option( 'faz_first_time_activated_plugin', 'true' );
 		}
+		self::ensure_default_settings();
 		self::install_all_tables();
 		self::maybe_update_db();
 		// Ensure required default categories always exist, even on re-activation
@@ -375,6 +379,25 @@ class Activator {
 		// silently skipping the migration forever.
 		update_option( 'faz_version', FAZ_VERSION );
 		self::update_db_version();
+	}
+
+	/**
+	 * Seed default settings during the activation lifecycle on first installs.
+	 *
+	 * The Settings admin module also performs this work when it is loaded, but
+	 * activation can run in contexts where that module is not instantiated
+	 * first (for example WP-CLI or a deferred admin load). The activator owns
+	 * the fresh-install contract, so it must leave faz_settings complete.
+	 *
+	 * @return void
+	 */
+	private static function ensure_default_settings() {
+		if ( true !== faz_first_time_install() || false !== get_option( 'faz_settings', false ) ) {
+			return;
+		}
+
+		$settings = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
+		$settings->update( $settings->get_defaults(), false );
 	}
 
 	/**
@@ -704,6 +727,231 @@ class Activator {
 		if ( class_exists( $controller_class ) ) {
 			$controller_class::get_instance()->install_tables();
 		}
+	}
+
+	/**
+	 * Add target_countries (JSON array of ISO-3166 alpha-2 codes) and priority
+	 * (int) columns to wp_faz_banners. Backfill existing rows with the
+	 * "match-all" empty array (so the post-upgrade behaviour is identical to
+	 * the single-banner mode) and ensure exactly one banner carries
+	 * banner_default=1 (the fallback row used when no target matches).
+	 *
+	 * Idempotent: the column-add step uses dbDelta which no-ops if the columns
+	 * already exist; the backfill step only touches rows whose target_countries
+	 * is NULL or empty string (i.e. rows the column-add just introduced).
+	 *
+	 * @since 1.14.0
+	 * @return void
+	 */
+	public static function update_db_350() {
+		global $wpdb;
+
+		// 1. Re-run install_tables so dbDelta picks up the new columns
+		//    (`target_countries longtext`, `priority int(11)`).
+		//    install() calls install_all_tables() BEFORE maybe_update_db(),
+		//    which already set faz_banners_table_version = FAZ_VERSION. By
+		//    the time this migration runs, install_tables()'s version-gate
+		//    (`get_option(...) !== FAZ_VERSION`) is false and dbDelta never
+		//    re-runs — the new columns would never be added. Mirror
+		//    update_db_341() and clear the version option first so
+		//    install_tables() actually invokes dbDelta.
+		delete_option( 'faz_banners_table_version' );
+		$controller_class = 'FazCookie\Admin\Modules\Banners\Includes\Controller';
+		if ( class_exists( $controller_class ) ) {
+			$controller_class::get_instance()->install_tables();
+		}
+
+		$table = $wpdb->prefix . 'faz_banners';
+
+		// 1a. Safety net for MySQL 8.0 STRICT_TRANS_TABLES installs where
+		//     dbDelta's `longtext NOT NULL` ADD COLUMN can refuse to
+		//     materialise the new columns. Probe information_schema and
+		//     issue an explicit ALTER + NULL-to-default backfill when
+		//     dbDelta silently skipped them. Both columns are checked
+		//     independently so a partial migration is detected.
+		$schema = $wpdb->get_var( 'SELECT DATABASE()' );
+		if ( $schema ) {
+			$tc_exists = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+					$schema,
+					$wpdb->prefix . 'faz_banners',
+					'target_countries'
+				)
+			);
+			if ( 0 === $tc_exists ) {
+				// F002/F009 fix: match the canonical CREATE TABLE schema in
+				// class-controller.php which declares this column NOT NULL
+				// (longtext NOT NULL). The pre-fix safety-net added it as
+				// NULL-able, producing a nullability drift between fresh
+				// installs (NOT NULL) and upgraded installs (NULL-able).
+				//
+				// F106 fix (1.14.3): the pre-fix one-shot
+				// `ALTER … ADD COLUMN longtext NOT NULL` (no DEFAULT)
+				// failed on MySQL with sql_mode=STRICT_TRANS_TABLES
+				// (default 5.7+) when the table was non-empty, because
+				// existing rows had no value to populate the new
+				// non-nullable column. Use a 3-step idempotent path:
+				//   1. ADD COLUMN as NULL-able (always succeeds).
+				//   2. UPDATE backfill any NULL with '[]'.
+				//   3. ALTER COLUMN to NOT NULL (now safe — no NULLs).
+				// `longtext NOT NULL DEFAULT '[]'` would be one-shot but
+				// MySQL pre-8.0.13 doesn't support DEFAULT on longtext
+				// at all — strict mode + portability beats elegance.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter -- one-shot DDL on the plugin's custom table; $table = $wpdb->prefix . 'faz_banners' (no user input), column type is a fixed literal.
+				$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `target_countries` longtext NULL" );
+				// Backfill any NULL or empty-string rows with the
+				// canonical empty-array value before tightening the
+				// constraint. Skipped automatically when the table is
+				// empty.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter
+				$wpdb->query( "UPDATE `{$table}` SET `target_countries` = '[]' WHERE `target_countries` IS NULL OR `target_countries` = ''" );
+				// Now lock down to NOT NULL — every row has a value.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter
+				$wpdb->query( "ALTER TABLE `{$table}` MODIFY COLUMN `target_countries` longtext NOT NULL" );
+			}
+			$pr_exists = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					'SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s',
+					$schema,
+					$wpdb->prefix . 'faz_banners',
+					'priority'
+				)
+			);
+			if ( 0 === $pr_exists ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot DDL; column type + default are fixed literals.
+				$wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN `priority` int(11) NOT NULL DEFAULT 0" );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot DDL.
+				$wpdb->query( "ALTER TABLE `{$table}` ADD INDEX `priority` (`priority`)" );
+			}
+		}
+
+		// 2. Backfill target_countries on rows that the column-add introduced.
+		//    Empty JSON array '[]' means "match every visitor" — preserves the
+		//    pre-upgrade behaviour where the banner showed to everyone gated
+		//    only by geo_targeting on/off.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier is $wpdb->prefix + literal "faz_banners"; values are bound via %s placeholders.
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE `{$table}` SET `target_countries` = %s WHERE `target_countries` IS NULL OR `target_countries` = %s",
+				'[]',
+				''
+			)
+		);
+
+		// 3. Ensure exactly ONE banner is the fallback default.
+		//    Cases handled:
+		//      - 0 defaults → promote the first status=1 row (the currently
+		//        active banner pre-upgrade); if there's no active banner
+		//        either, promote the lowest banner_id so the selector still
+		//        has something to serve.
+		//      - >1 defaults → reset every default flag, then promote a
+		//        single canonical row (same selection rule as above).
+		//        Multiple defaults make the last-resort fallback non-
+		//        deterministic, so this case must be flattened too.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier is $wpdb->prefix + literal "faz_banners"; values are bound via %d placeholder.
+		$has_default = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(banner_id) FROM `{$table}` WHERE `banner_default` = %d",
+				1
+			)
+		);
+		if ( 1 !== $has_default ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier is $wpdb->prefix + literal "faz_banners"; values are bound via %d placeholders.
+			$fallback_id = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT banner_id FROM `{$table}` WHERE `status` = %d ORDER BY banner_id ASC LIMIT %d",
+					1,
+					1
+				)
+			);
+			if ( $fallback_id <= 0 ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier is $wpdb->prefix + literal "faz_banners"; value bound via %d placeholder.
+				$fallback_id = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT banner_id FROM `{$table}` ORDER BY banner_id ASC LIMIT %d",
+						1
+					)
+				);
+			}
+			if ( $fallback_id > 0 ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- table identifier is $wpdb->prefix + literal "faz_banners"; value bound via %d placeholder.
+				$wpdb->query(
+					$wpdb->prepare(
+						"UPDATE `{$table}` SET `banner_default` = %d WHERE `banner_default` <> %d",
+						0,
+						0
+					)
+				);
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to the custom faz_banners table; row identifier is the integer banner_id we just selected.
+				$wpdb->update( $table, array( 'banner_default' => 1 ), array( 'banner_id' => $fallback_id ), array( '%d' ), array( '%d' ) );
+			}
+		}
+
+		// F103 fix (1.14.3) + F303 fix (1.14.4): upgrade-path companion
+		// to the `ENGINE=InnoDB` literals in get_schema(). dbDelta does
+		// NOT migrate existing tables' storage engines — installs that
+		// historically created these tables under a MyISAM default
+		// would stay on MyISAM forever, defeating any START TRANSACTION
+		// the controllers issue against them. MyISAM-on-InnoDB-host is
+		// rare in 2026 but legacy AWS RDS parameter groups and
+		// customised shared hosts still trip it.
+		//
+		// Tables that participate in transactional code paths:
+		// - faz_banners: delete_item() wraps DELETE + promote_fallback
+		// - faz_cookies + faz_cookie_categories: settings import in
+		//   admin/modules/settings/api/class-api.php uses START
+		//   TRANSACTION to wrap multi-row writes.
+		$faz_innodb_tables = array(
+			$wpdb->prefix . 'faz_banners',
+			$wpdb->prefix . 'faz_cookies',
+			$wpdb->prefix . 'faz_cookie_categories',
+		);
+		// R4-S004 fix (1.14.4): track per-table completion so a partial
+		// failure (disk pressure, ROW_FORMAT incompatibility on legacy
+		// MyISAM rows >8KB, lock-wait timeout on a busy table) doesn't
+		// silently bump db_version past 1.14.3 and leave the failed
+		// table stuck on MyISAM forever. We accumulate failures and
+		// the caller (maybe_update_db) can compare the resulting
+		// `faz_innodb_migration_pending` option on the next admin
+		// load to detect incomplete migration and retry.
+		$faz_innodb_failed = array();
+		foreach ( $faz_innodb_tables as $faz_innodb_table ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$current_engine = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT `ENGINE` FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s",
+					$faz_innodb_table
+				)
+			);
+			if ( $current_engine && 'InnoDB' !== $current_engine ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter
+				$alter_result = $wpdb->query( "ALTER TABLE `{$faz_innodb_table}` ENGINE=InnoDB" );
+				if ( false === $alter_result ) {
+					$faz_innodb_failed[] = $faz_innodb_table;
+				}
+			}
+		}
+		if ( ! empty( $faz_innodb_failed ) ) {
+			// Persist the failure list so a re-run of update_db_350 (on
+			// next admin load, since maybe_update_db re-enters per
+			// request) can target only the still-pending tables.
+			// Storing as a non-autoloaded option keeps the hot path lean.
+			update_option( 'faz_innodb_migration_pending', $faz_innodb_failed, false );
+			if ( function_exists( 'error_log' ) ) {
+				error_log( // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					sprintf(
+						'[FAZ Cookie Manager] InnoDB migration failed for: %s — settings-import transactions on these tables will be silent no-ops until the engine is converted.',
+						implode( ', ', $faz_innodb_failed )
+					)
+				);
+			}
+		} else {
+			// Clear any stale pending flag from prior partial runs.
+			delete_option( 'faz_innodb_migration_pending' );
+		}
+
+		faz_clear_banner_template_cache();
 	}
 
 	/**

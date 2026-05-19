@@ -141,28 +141,153 @@ const _fazServerRevision = isNaN(_fazServerRevisionParsed) || _fazServerRevision
     : _fazServerRevisionParsed;
 const _fazHasConsentCookie = typeof currentCookieMap["fazcookie-consent"] === "string"
     && currentCookieMap["fazcookie-consent"] !== "";
-const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);
-const _fazConsentInvalidated =
-    _fazHasConsentCookie &&
-    _fazServerRevision > 1 &&
-    (isNaN(_fazStoredRevision) || _fazStoredRevision < _fazServerRevision);
-if (_fazConsentInvalidated) {
+function _fazCurrentBannerSlug() {
+    return _fazStore && _fazStore._bannerSlug ? String(_fazStore._bannerSlug) : "";
+}
+function _fazCurrentLaw() {
+    if (_fazStore && _fazStore._activeLaw) return String(_fazStore._activeLaw);
+    if (_fazStore && _fazStore._bannerConfig && _fazStore._bannerConfig.settings) {
+        return String(_fazStore._bannerConfig.settings.applicableLaw || "");
+    }
+    return "";
+}
+// Scope-tracking keys live under a `__scope.` prefix to avoid colliding
+// with category slugs (which the admin can rename freely, e.g. a category
+// literally called "banner" or "law"). Without the prefix, the
+// invalidation iterator below would also zero out the category's consent
+// value, and _fazConsentScopeChanged() would compare against the wrong
+// store entry.
+const _FAZ_SCOPE_BANNER_KEY = "__scope.banner";
+const _FAZ_SCOPE_LAW_KEY = "__scope.law";
+// __scope.fp carries an HMAC-style fingerprint of (banner|law) keyed by
+// wp_salt('auth'). Defends against a visitor hand-editing __scope.banner
+// / __scope.law to match the current scope to avoid the re-prompt — they
+// cannot also forge a matching fp without the salt, so the mismatch
+// triggers invalidation. Cosmetic defense-in-depth (the visitor harms
+// only themselves), but cheap to implement once and adds accountability
+// integrity for controllers running in scrutinised compliance contexts.
+const _FAZ_SCOPE_FP_KEY = "__scope.fp";
+function _fazStrictScopeFp() {
+    return !!(_fazStore && _fazStore._strictScopeFp);
+}
+function _fazReadScopedCookieValue(key, legacyKey) {
+    // Pre-CR-10-fix cookies wrote the unprefixed key. Honour them on read
+    // so a returning visitor isn't invalidated just because we renamed
+    // the storage slot — UNLESS the admin has opted into strict-
+    // fingerprint mode (issue #106 / 1.16.0 planned default flip), in
+    // which case the legacy fallback is bypassed and any cookie missing
+    // __scope.fp is treated as an upgrade case (handled below).
+    if (_fazStrictScopeFp()) {
+        return fazcookieConsentMap[key] || "";
+    }
+    const primary = fazcookieConsentMap[key];
+    if (primary) return primary;
+    if (!legacyKey) return "";
+    // F005 fix: the unprefixed legacy keys ("banner", "law") can collide
+    // with a category slug — `sanitize_title()` permits both names. A
+    // returning visitor whose install has a category exactly named
+    // "banner" or "law" would read that category's consent value ("yes"
+    // / "no" / "yes:<timestamp>") here instead of a banner slug. The
+    // scope-change comparison would then ALWAYS fire (e.g. "yes" !=
+    // "gdpr-1"), invalidating the consent cookie on every page load and
+    // re-prompting indefinitely — a serious privacy regression.
+    //
+    // Guard: a real banner slug is a sanitize_title() output of the
+    // banner name (typically "gdpr-1", "ccpa-2", "new-banner-42") and
+    // ALWAYS ends with "-N" where N is the banner_id integer. A
+    // category consent value is "yes" / "no" / "yes:1234567890" or
+    // similar. Reject values that look like category consent values.
+    const legacyValue = fazcookieConsentMap[legacyKey] || "";
+    if (!legacyValue) return "";
+    // Reject pure "yes" / "no" and any value starting with "yes:" / "no:"
+    // (the timestamped form). Banner slugs never match.
+    if (/^(yes|no)(:.*)?$/i.test(legacyValue)) return "";
+    return legacyValue;
+}
+function _fazCurrentScopeFingerprint() {
+    return (_fazStore && typeof _fazStore._scopeFingerprint === 'string') ? _fazStore._scopeFingerprint : "";
+}
+function _fazConsentScopeChanged() {
+    if (!_fazHasConsentCookie || !_fazStore || !_fazStore._geoRouting) return false;
+    const currentBannerSlug = _fazCurrentBannerSlug();
+    const currentLaw = _fazCurrentLaw();
+    // Read directly from fazcookieConsentMap — this function runs at module
+    // init, BEFORE the ref._fazConsentStore Map is populated from the
+    // cookie (the populate loop is below this call site). The primary
+    // lookup via ref._fazGetFromStore() would always return "" at this
+    // point, leaving only the fallback path.
+    const storedBannerSlug = _fazReadScopedCookieValue(_FAZ_SCOPE_BANNER_KEY, "banner");
+    const storedLaw = _fazReadScopedCookieValue(_FAZ_SCOPE_LAW_KEY, "law");
+    const storedFp = fazcookieConsentMap[_FAZ_SCOPE_FP_KEY] || "";
+    const currentFp = _fazCurrentScopeFingerprint();
+    // Strict mode (issue #106): when the admin has opted in via
+    // `faz_strict_scope_fingerprint`, treat a missing __scope.fp as
+    // "no integrity signal" → invalidate so the visitor is re-prompted
+    // with a freshly-signed cookie. Pre-1.14.0 visitors get re-prompted
+    // ONE TIME after enabling strict mode, then never again.
+    if (_fazStrictScopeFp() && !storedFp) return true;
+    // Pre-1.14.0 cookies have no scope keys — treat that as
+    // "upgrade case, no scope info known" and let the existing consent
+    // stand. Without this guard, every returning visitor on an install
+    // that enables _geoRouting would be invalidated on first page load
+    // after upgrade — a UX regression and an unnecessary GDPR-
+    // accountability dent (the prior valid consent gets discarded).
+    if (!storedBannerSlug && !storedLaw && !storedFp) return false;
+    // F-SEC-03 fingerprint check: when the cookie carries __scope.fp AND
+    // the server publishes a fingerprint for the active scope, a
+    // mismatch means either (a) the scope actually changed and the
+    // banner/law check below would catch it anyway, or (b) the cookie
+    // was tampered. Either way, invalidate. When __scope.fp is absent
+    // (legacy pre-fingerprint cookie) we fall back to the banner/law
+    // string compare for backward compatibility.
+    if (storedFp && currentFp && storedFp !== currentFp) return true;
+    return !!(
+        (currentBannerSlug && storedBannerSlug && storedBannerSlug !== currentBannerSlug) ||
+        (currentLaw && storedLaw && storedLaw !== currentLaw)
+    );
+}
+function _fazInvalidateStoredConsent() {
     // Delete all consent-tracking cookies immediately so later scripts in the
     // same page load (GCM, TCF, consent forwarding) do not keep reading the
     // stale state.
     ["fazcookie-consent", "fazVendorConsent", "euconsent-v2"].forEach(_fazDeleteCookie);
     // Wipe the entries that gate the banner so showBanner() logic triggers.
     // We keep `consentid` so cross-session analytics can still correlate if
-    // the visitor re-consents.
-    ["consent", "action"].forEach((k) => { fazcookieConsentMap[k] = ""; });
-    _fazStore._categories.forEach(({ slug }) => { fazcookieConsentMap[slug] = ""; });
+    // the visitor re-consents. The __scope.* keys cannot collide with any
+    // category slug (slugs are kebab/snake-case identifiers; the dot is
+    // not a legal character in slug regex), so this list is collision-safe.
+    ["consent", "action", _FAZ_SCOPE_BANNER_KEY, _FAZ_SCOPE_LAW_KEY, _FAZ_SCOPE_FP_KEY, "banner", "law"].forEach((k) => {
+        fazcookieConsentMap[k] = "";
+        ref._fazConsentStore.set(k, "");
+    });
+    _fazStore._categories.forEach(({ slug }) => {
+        fazcookieConsentMap[slug] = "";
+        ref._fazConsentStore.set(slug, "");
+    });
+    _fazClearStoredServiceConsent();
+}
+const _fazStoredRevision = parseInt(fazcookieConsentMap.rev, 10);
+const _fazConsentRevisionInvalidated =
+    _fazHasConsentCookie &&
+    _fazServerRevision > 1 &&
+    (isNaN(_fazStoredRevision) || _fazStoredRevision < _fazServerRevision);
+const _fazConsentInvalidated = _fazConsentRevisionInvalidated || _fazConsentScopeChanged();
+if (_fazConsentInvalidated) {
+    _fazInvalidateStoredConsent();
 }
 
-["consentid", "consent", "action"]
+// Populate the consent store. Scope keys use the __scope. prefix; the
+// legacy unprefixed cookie values are honoured as a fallback at read
+// time via _fazReadScopedCookieValue() so a returning visitor with the
+// older cookie shape is not invalidated by the rename.
+["consentid", "consent", "action", _FAZ_SCOPE_BANNER_KEY, _FAZ_SCOPE_LAW_KEY, _FAZ_SCOPE_FP_KEY]
     .concat(_fazStore._categories.map(({ slug }) => slug))
-    .forEach((item) =>
-        ref._fazConsentStore.set(item, fazcookieConsentMap[item] || "")
-    );
+    .forEach((item) => {
+        let value = fazcookieConsentMap[item] || "";
+        if (!value && item === _FAZ_SCOPE_BANNER_KEY) value = fazcookieConsentMap.banner || "";
+        if (!value && item === _FAZ_SCOPE_LAW_KEY) value = fazcookieConsentMap.law || "";
+        ref._fazConsentStore.set(item, value);
+    });
 // Always track the revision currently in effect so next _fazSetInStore()
 // persists it into the cookie.
 ref._fazConsentStore.set("rev", String(_fazServerRevision));
@@ -212,9 +337,24 @@ ref._fazSetCookie = function (name, value, days = 0, domain = _fazStore._rootDom
         days === 0 ? 0 : date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
     const secure = location.protocol === 'https:' ? ' Secure;' : '';
     const cookieValue = name === "fazcookie-consent" ? encodeURIComponent(value) : value;
-    document.cookie = `${name}=${cookieValue}; expires=${new Date(
+    const cookieStr = `${name}=${cookieValue}; expires=${new Date(
         toSetTime
     ).toUTCString()}; path=/;${domain}; SameSite=Lax;${secure}`;
+    // Issue #112: warn when the encoded consent cookie grows past 3.5 KB
+    // (browsers enforce a 4 KB per-cookie limit; ~3500 bytes leaves head-
+    // room for the attribute envelope). Triggered by very large category
+    // sets (>40 categories) combined with many active locales. Console-
+    // only — the cookie is still written; this is an observability
+    // signal for the publisher to consider chunking / server-side scope
+    // storage (tracked in issue #112).
+    if (name === "fazcookie-consent" && cookieValue.length > 3500 && typeof console !== "undefined" && console.warn) {
+        console.warn(
+            "[FAZ Cookie Manager] fazcookie-consent cookie is " + cookieValue.length +
+            " bytes (URL-encoded), approaching the 4096-byte browser limit. " +
+            "Consider reducing the active category count or splitting localized banners."
+        );
+    }
+    document.cookie = cookieStr;
 }
 
 function _fazSetConsentID() {
@@ -390,6 +530,10 @@ function _fazInitOperations() {
         // re-confirmed consent — defeating the "treat age-gate as no-
         // consent-yet" semantics the branch is built around.
         _fazClearStoredServiceConsent();
+    }
+    if (_fazStoredAction && _fazConsentScopeChanged()) {
+        _fazInvalidateStoredConsent();
+        _fazStoredAction = null;
     }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
         _fazShowBanner();
@@ -647,6 +791,12 @@ function _fazApplyBannerPayload(payload) {
     if (payload.i18n && typeof payload.i18n === 'object') {
         _fazStore._i18n = Object.assign({}, _fazStore._i18n || {}, payload.i18n);
     }
+    if (payload.bannerSlug) {
+        _fazStore._bannerSlug = String(payload.bannerSlug);
+    }
+    if (payload.activeLaw) {
+        _fazStore._activeLaw = String(payload.activeLaw);
+    }
     if (typeof payload.html === 'string' && payload.html !== '') {
         var tpl = document.getElementById('fazBannerTemplate');
         if (tpl) tpl.textContent = payload.html;
@@ -856,7 +1006,7 @@ function _fazToggleRevisit(force = false) {
     }
 }
 function _fazGetLaw() {
-    return _fazStore._bannerConfig.settings.applicableLaw;
+    return _fazCurrentLaw() || _fazStore._bannerConfig.settings.applicableLaw;
 }
 function _fazGetType() {
     return _fazStore._bannerConfig.settings.type;
@@ -1496,6 +1646,17 @@ function _fazAcceptCookies(choice = "all") {
     _fazSetConsentID();
 
     ref._fazSetInStore("action", "yes");
+    // __scope.banner / __scope.law — see _fazConsentScopeChanged header.
+    // Unprefixed "banner"/"law" keys would collide with admin-renameable
+    // category slugs.
+    ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+    ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+    // __scope.fp — server-side fingerprint of the current scope. See the
+    // header comment near _FAZ_SCOPE_FP_KEY for the tamper-resistance
+    // rationale. Empty when the server didn't publish a fingerprint
+    // (older builds / non-geo-routing installs); the consent cookie
+    // still works, just without the integrity check.
+    ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
     if (activeLaw === 'gdpr') {
         ref._fazSetInStore("consent", choice === "reject" ? "no" : "yes");
     } else {

@@ -3,11 +3,10 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-	deactivatePluginsExcept,
-	activatePlugins,
 	deleteOption,
 	ensureFixturePlugin,
-	listActivePlugins,
+	listActivePluginFiles,
+	restoreActivePluginFiles,
 	setOption,
 	wp,
 } from '../utils/wp-env';
@@ -283,9 +282,8 @@ function captureRuntimeErrors(page: Page) {
 	return { consoleErrors, pageErrors };
 }
 
-function restorePlugins(originalActive: string[]) {
-	deactivatePluginsExcept(originalActive);
-	activatePlugins(originalActive, { tolerateFailures: true });
+function restorePlugins(originalActivePluginFiles: string[]) {
+	restoreActivePluginFiles(originalActivePluginFiles);
 }
 
 test.describe.serial('PR #61 regressions', () => {
@@ -354,7 +352,7 @@ test.describe.serial('PR #61 regressions', () => {
 
 	test('PMP-exempt members do not log template errors and still emit granted GCM consent', async ({ page, loginAsAdmin }) => {
 		test.setTimeout(120_000);
-		const originalActive = listActivePlugins();
+		const originalActive = listActivePluginFiles();
 		ensureFixturePlugin('faz-e2e-pmp-mock');
 
 		// Declare outside the try so the finally block can access them
@@ -452,7 +450,7 @@ test.describe.serial('PR #61 regressions', () => {
 
 	test('frontend survives a missing banner template element without throwing the old TypeError', async ({ page }) => {
 		test.setTimeout(90_000);
-		const originalActive = listActivePlugins();
+		const originalActive = listActivePluginFiles();
 		ensureFixturePlugin('faz-e2e-template-stripper');
 
 		try {
@@ -472,7 +470,7 @@ test.describe.serial('PR #61 regressions', () => {
 
 	test('WP Consent API integration still updates consent after the GSK bootstrap script', async ({ page }) => {
 		test.setTimeout(120_000);
-		const originalActive = listActivePlugins();
+		const originalActive = listActivePluginFiles();
 		ensureFixturePlugin('faz-e2e-wp-consent-api-mock');
 
 		try {

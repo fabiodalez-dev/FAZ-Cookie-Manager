@@ -107,7 +107,7 @@ class Category_Controller extends Base_Controller {
 			date_modified datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			PRIMARY KEY (category_id),
 			UNIQUE KEY slug (slug)
-	  ) $collate;
+	  ) ENGINE=InnoDB $collate;
       ";
 		return $tables;
 	}

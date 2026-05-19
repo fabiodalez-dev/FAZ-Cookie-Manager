@@ -8,7 +8,14 @@ import {
   mkdtempSync,
   rmSync,
 } from 'node:fs';
-import { wp, wpEval, WP_PATH } from '../utils/wp-env';
+import {
+  deactivatePluginsExcept,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+  wp,
+  wpEval,
+  WP_PATH,
+} from '../utils/wp-env';
 
 /**
  * Plugin lifecycle tests — upgrade (deactivate → activate) and fresh install
@@ -289,20 +296,24 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
   let snapshotFazVersion = '';
   let snapshotRemoveDataOnUninstall = false;
   let snapshotCookieScriptsMapPresent = false;
-  let originalActivePluginsBefore: string[] = [];
+  let originalActivePluginFilesBefore: string[] = [];
 
   test.beforeAll(() => {
     // Verify wp-cli is reachable before we touch anything.
     if (!WP_PATH) {
       throw new Error('WP_PATH env var is required for deep-lifecycle tests.');
     }
+    originalActivePluginFilesBefore = listActivePluginFiles();
+    deactivatePluginsExcept([PLUGIN_SLUG]);
+    try {
+      wp(['plugin', 'activate', PLUGIN_SLUG]);
+    } catch (_e) { /* may already be active */ }
     snapshotFazVersion = wpEval(`echo (string) get_option( 'faz_version', '' );`).trim();
     snapshotRemoveDataOnUninstall = wpEval(`
       $s = get_option( 'faz_settings', array() );
       echo ! empty( $s['general']['remove_data_on_uninstall'] ) ? '1' : '0';
     `).trim() === '1';
     snapshotCookieScriptsMapPresent = wpEval(`echo false !== get_transient( 'faz_cookie_scripts_map' ) ? '1' : '0';`).trim() === '1';
-    originalActivePluginsBefore = wp(['plugin', 'list', '--status=active', '--field=name']).split('\n').map((s) => s.trim()).filter(Boolean);
   });
 
   test.afterAll(() => {
@@ -328,12 +339,7 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       $s['general']['remove_data_on_uninstall'] = ${snapshotRemoveDataOnUninstall ? 'true' : 'false'};
       update_option( 'faz_settings', $s );
     `);
-    // Best-effort restore of the third-party plugin set the suite expects.
-    // Don't fail afterAll on a flaky WP-CLI activate (e.g. pixel-manager's
-    // activation_redirect timeout).
-    for (const plugin of originalActivePluginsBefore) {
-      try { wp(['plugin', 'activate', plugin]); } catch (_e) { /* ignore */ }
-    }
+    restoreActivePluginFiles(originalActivePluginFilesBefore);
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -367,11 +373,14 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
         $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}faz_{$t}" );
       }
       // Clean every faz_* option so Activator runs on an empty slate.
-      $opts = $wpdb->get_col( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE 'faz_%'" );
+      $faz_option_prefix = $wpdb->esc_like( 'faz_' ) . '%';
+      $opts = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $faz_option_prefix ) );
       foreach ( $opts as $opt ) { delete_option( $opt ); }
       // Clear scripts-map / banner-template transients so the next install
       // can't pick up stale serialised data.
       delete_transient( 'faz_cookie_scripts_map' );
+      delete_site_transient( 'faz_first_time_install' );
+      delete_site_transient( '_faz_first_time_install' );
       delete_option( 'faz_banner_template' );
     `);
 
@@ -383,7 +392,8 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       foreach ( $tables as $t ) {
         $exist[ $t ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) );
       }
-      $opts_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE 'faz_%'" );
+      $faz_option_prefix = $wpdb->esc_like( 'faz_' ) . '%';
+      $opts_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $faz_option_prefix ) );
       echo wp_json_encode( array( 'tables' => $exist, 'opts_count' => $opts_count ) );
     `).trim()) as { tables: Record<string, boolean>; opts_count: number };
     for (const [tbl, present] of Object.entries(beforeInstall.tables)) {
@@ -555,7 +565,8 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       foreach ( $tables as $t ) {
         $exist[ $t ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) );
       }
-      $opts_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE 'faz_%'" );
+      $faz_option_prefix = $wpdb->esc_like( 'faz_' ) . '%';
+      $opts_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $faz_option_prefix ) );
       echo wp_json_encode( array( 'tables' => $exist, 'opts_count' => $opts_count ) );
     `).trim()) as { tables: Record<string, boolean>; opts_count: number };
     for (const [tbl, present] of Object.entries(stateBefore.tables)) {
@@ -590,7 +601,8 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       foreach ( $tables as $t ) {
         $exist[ $t ] = (bool) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $t ) );
       }
-      $opts_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE 'faz_%'" );
+      $faz_option_prefix = $wpdb->esc_like( 'faz_' ) . '%';
+      $opts_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s", $faz_option_prefix ) );
       // Locks created by Do_Not_Sell_Shortcode / DSAR_Shortcode also live
       // as options, so they must be gone too.
       $lock_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE 'faz_dnsmpi_%' OR option_name LIKE 'faz_dsar_%'" );

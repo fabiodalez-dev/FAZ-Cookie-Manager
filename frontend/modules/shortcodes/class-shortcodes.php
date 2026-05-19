@@ -488,10 +488,18 @@ class Shortcodes {
 			if ( 'wordpress-internal' === $category->get_slug() ) {
 				continue;
 			}
+			// 1.14.3 fix: render every visible category in the preference
+			// center, even when its cookie list is empty. Pre-fix, fresh
+			// installs that hadn't yet run a cookie scan showed an empty
+			// `<div data-faz-tag="detail-categories">` because every
+			// category got skipped here — the banner UI looked broken
+			// even though the categories existed in the DB. The audit-
+			// table shortcode handles empty cookie arrays gracefully via
+			// the audit-table-empty variant ("No cookies to display"),
+			// so dropping this short-circuit just lets users see the
+			// category list + toggle UI immediately after install, with
+			// the cookie listing populating itself when a scan runs.
 			$cookies = $category->get_cookies();
-			if ( empty( $cookies ) ) {
-				continue;
-			}
 			$audit_table = $this->faz_audit_table( $cookies );
 			$description = $category->get_description( $this->language );
 			$name        = $category->get_name( $this->language );

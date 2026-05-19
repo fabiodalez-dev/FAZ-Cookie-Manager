@@ -101,8 +101,9 @@ class Api extends Rest_Controller {
 			array(
 				'args' => array(
 					'id' => array(
-						'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
-						'type'        => 'integer',
+						'description'       => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
 					),
 				),
 				array(
@@ -202,12 +203,51 @@ class Api extends Rest_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function get_item( $request ) {
-		$object = new Banner( (int) $request['id'] );
-		if ( 0 === $object->get_id() ) {
+		$id = (int) $request['id'];
+		if ( $id <= 0 ) {
 			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Invalid ID.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
 		}
-		$data = $this->prepare_item_for_response( $object, $request );
+		// Banner::__construct unconditionally calls set_id( $id ) BEFORE the
+		// DB read, so the legacy `0 === $object->get_id()` check couldn't
+		// catch a non-existent row — pre-1.14.1 this surfaced as
+		// GET /banners/{phantom_id} → 200 with an empty payload. The DB
+		// existence probe lives in banner_exists() so create / get / delete
+		// share a single contract (see CodeRabbit review feedback on the
+		// duplicated COUNT(*) probes — extracted as DRY helper + switched
+		// to EXISTS() for an index-only plan).
+		if ( ! $this->banner_exists( $id ) ) {
+			return new WP_Error( 'fazcookie_rest_invalid_id', __( 'Banner not found.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
+		}
+		$object = new Banner( $id );
+		$data   = $this->prepare_item_for_response( $object, $request );
 		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Cheap existence check for a banner row.
+	 *
+	 * Uses EXISTS(SELECT 1 ...) instead of COUNT(*): MySQL can short-circuit
+	 * on the first match and the optimiser picks an index-only plan on the
+	 * banner_id primary key. Centralises the contract used by get_item() and
+	 * delete_item() so any future tweak (e.g. soft-delete column) lives in
+	 * one place.
+	 *
+	 * @since 1.14.2
+	 * @param int $id Banner ID.
+	 * @return bool
+	 */
+	private function banner_exists( $id ) {
+		$id = (int) $id;
+		if ( $id <= 0 ) {
+			return false;
+		}
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.SlowDBQuery
+		$exists = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT EXISTS(SELECT 1 FROM {$wpdb->prefix}faz_banners WHERE banner_id = %d)",
+			$id
+		) );
+		return 1 === $exists;
 	}
 
 	/**
@@ -267,17 +307,40 @@ class Api extends Rest_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function delete_item( $request ) {
-		if ( empty( $request['id'] ) ) {
+		$banner_id = (int) $request['id'];
+		if ( $banner_id <= 0 ) {
+			// F003 fix: the prior error code 'fazcookie_rest_item_exists'
+			// was semantically inverted for an invalid-id guard. Use the
+			// shared invalid-id code so REST clients can branch on a
+			// consistent error code across get_item / delete_item.
 			return new WP_Error(
-				'fazcookie_rest_item_exists',
+				'fazcookie_rest_invalid_id',
 				__( 'Invalid banner id', 'faz-cookie-manager' ),
 				array( 'status' => 400 )
 			);
 		}
-		$banner_id = $request['id'];
-		$data      = $this->controller->delete_item( $banner_id );
+		// F017 fix: don't probe existence separately before calling
+		// $controller->delete_item(). The two-statement pattern was a
+		// classic check-then-act TOCTOU — between the probe and the
+		// DELETE, another admin session could remove the row, and the
+		// REST response would still claim 200/deleted=1 (since the
+		// controller's own delete now returns the atomic count). By
+		// dropping the probe and trusting the controller's atomic
+		// DELETE ... RETURNING (from F016), we get the right answer in
+		// a single round-trip with zero race window: the controller
+		// returns 0 when the row didn't exist, which we surface as
+		// 404; >0 when it actually deleted something; false on a
+		// driver/SQL error.
+		$data = $this->controller->delete_item( $banner_id );
 		if ( false === $data ) {
 			return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to delete banner.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
+		}
+		if ( 0 === (int) $data ) {
+			return new WP_Error(
+				'fazcookie_rest_invalid_id',
+				__( 'Banner not found.', 'faz-cookie-manager' ),
+				array( 'status' => 404 )
+			);
 		}
 		return rest_ensure_response( $data );
 	}
@@ -544,11 +607,52 @@ class Api extends Rest_Controller {
 	}
 
 	/**
-	 * Load default banner configs
+	 * Load default banner configs.
+	 *
+	 * Per-user rate-limited (issue #111): admins / scripted callers can hit
+	 * this endpoint at most once every `faz_configs_rate_limit_seconds`
+	 * seconds. Default 5s — enough for the "+ New banner" modal to fetch
+	 * the configs on open, fast enough not to interfere with rapid
+	 * back-to-back creates. Override (or disable, returning 0) via the
+	 * filter for staging boxes that hammer the endpoint from CI.
+	 * Compatible with ClassicPress 1.x (transients + filters only).
 	 *
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function get_configs() {
+		$throttle_seconds = (int) apply_filters( 'faz_configs_rate_limit_seconds', 5 );
+		if ( $throttle_seconds > 0 ) {
+			$user_id = get_current_user_id();
+			if ( $user_id > 0 ) {
+				$rl_key  = 'faz_configs_rl_' . $user_id;
+				$last_ts = (int) get_transient( $rl_key );
+				$now     = time();
+				if ( $last_ts > 0 && ( $now - $last_ts ) < $throttle_seconds ) {
+					$retry_after = $throttle_seconds - ( $now - $last_ts );
+					// Build the response directly as WP_REST_Response — going
+					// through `rest_ensure_response( $wp_error )` would return
+					// the WP_Error untouched (rest_ensure_response only wraps
+					// arrays/objects, not WP_Errors), losing the Retry-After
+					// header we need to set on the way out.
+					$resp = new WP_REST_Response(
+						array(
+							'code'    => 'fazcookie_rest_too_many_requests',
+							'message' => __( 'Too many requests. Please slow down.', 'faz-cookie-manager' ),
+							'data'    => array(
+								'status'      => 429,
+								'retry_after' => $retry_after,
+							),
+						),
+						429
+					);
+					$resp->header( 'Retry-After', (string) $retry_after );
+					return $resp;
+				}
+				// Stamp the current second; TTL 60s is generous — even if
+				// the user idles between calls, the transient self-expires.
+				set_transient( $rl_key, $now, 60 );
+			}
+		}
 		$configs = array(
 			'gdpr' => $this->controller->get_default_configs(),
 			'ccpa' => $this->controller->get_default_configs( 'ccpa' ),
@@ -579,13 +683,16 @@ class Api extends Rest_Controller {
 	 */
 	public function get_formatted_item_data( $object ) {
 		return array(
-			'id'         => $object->get_id(),
-			'slug'       => $object->get_slug(),
-			'name'       => $object->get_name(),
-			'status'     => $object->get_status(),
-			'default'    => $object->get_default(),
-			'properties' => $object->get_settings(),
-			'contents'   => $object->get_contents(),
+			'id'               => $object->get_id(),
+			'slug'             => $object->get_slug(),
+			'name'             => $object->get_name(),
+			'status'           => $object->get_status(),
+			'default'          => $object->get_default(),
+			'properties'       => $object->get_settings(),
+			'contents'         => $object->get_contents(),
+			// Multi-banner geo-routing (1.13.18+).
+			'target_countries' => $object->get_target_countries(),
+			'priority'         => $object->get_priority(),
 		);
 	}
 
@@ -603,6 +710,15 @@ class Api extends Rest_Controller {
 		$object->set_status( $request['status'] );
 		$object->set_settings( $request['properties'] );
 		$object->set_contents( $request['contents'] );
+		// Multi-banner geo-routing (1.13.18+). Both fields are optional in the
+		// request — un-supplied means "leave as-is on update / default on
+		// create", so legacy clients that don't send them keep working.
+		if ( isset( $request['target_countries'] ) ) {
+			$object->set_target_countries( $request['target_countries'] );
+		}
+		if ( isset( $request['priority'] ) ) {
+			$object->set_priority( $request['priority'] );
+		}
 		return $object;
 	}
 
@@ -673,9 +789,24 @@ class Api extends Rest_Controller {
 					'type'        => 'object',
 					'context'     => array( 'view', 'edit' ),
 				),
-				'default'       => array(
+				'default'          => array(
 					'description' => __( 'Indicates whether the banner is default or not', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
+					'context'     => array( 'view', 'edit' ),
+				),
+				'target_countries' => array(
+					'description' => __( 'ISO-3166 alpha-2 country codes this banner targets. Empty = match every visitor.', 'faz-cookie-manager' ),
+					'type'        => 'array',
+					'items'       => array(
+						'type'    => 'string',
+						'pattern' => '^[A-Z]{2}$',
+					),
+					'context'     => array( 'view', 'edit' ),
+				),
+				'priority'         => array(
+					'description' => __( 'Tie-break priority when multiple banners target the same country. Higher wins.', 'faz-cookie-manager' ),
+					'type'        => 'integer',
+					'minimum'     => 0,
 					'context'     => array( 'view', 'edit' ),
 				),
 				'date_created'  => array(

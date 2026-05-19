@@ -435,14 +435,25 @@ class Template {
 						continue;
 					}
 				}
-				// Close button: Garante Privacy Provv. 10/06/2021 — hide the X when
-				// the Reject button is present. Two dismissal paths of different visual
-				// weight (X = neutral-looking, Reject = labelled) on the same banner
-				// constitutes a recognised dark pattern (ambiguità multipla scelta).
+				// Close button: Garante Privacy Provv. 10/06/2021 + EDPB Guidelines
+				// 03/2022 — hide the X when the Reject button is present. Two
+				// dismissal paths of different visual weight (X = neutral-looking,
+				// Reject = labelled) on the same banner constitutes a recognised
+				// dark pattern (ambiguità multipla scelta).
+				//
+				// Per-banner opt-out (1.14.0+): the admin can override this on a
+				// single banner by setting settings.allowCloseButtonWithReject =
+				// true. Use case: multi-banner geo-routing serves a CCPA-style
+				// banner to US visitors (where the dark-pattern rule does not
+				// apply) — that banner can keep the X next to Reject without
+				// breaking compliance on the EU-served banner, which keeps the
+				// default behaviour. The flag is per-banner row, so it travels
+				// with the geo-routing config and never affects other banners.
 				if ( 'close-button' === $tag ) {
 					$reject_cfg     = faz_array_search( $configs, 'tag', 'reject-button' );
 					$reject_enabled = $reject_cfg && ( ! isset( $reject_cfg['status'] ) || true === $reject_cfg['status'] );
-					if ( $reject_enabled ) {
+					$allow_override = ! empty( $properties['settings']['allowCloseButtonWithReject'] );
+					if ( $reject_enabled && ! $allow_override ) {
 						$element->parentNode->removeChild( $element ); //phpcs:ignore WordPress.NamingConventions.ValidVariableName
 						continue;
 					}
@@ -518,13 +529,35 @@ class Template {
 	}
 
 	/**
-	 * Retrieve stored template.
+	 * Return the option-array slot for this banner/language template.
+	 *
+	 * Multi-banner geo-routing can render different banners in the same
+	 * language. The stored template therefore needs to be scoped by banner id as
+	 * well as language; otherwise the first rendered `en` banner can be reused
+	 * for every other `en` banner.
 	 *
 	 * @return string
 	 */
+	private function get_storage_key() {
+		$banner_id = ( $this->banner && is_callable( array( $this->banner, 'get_id' ) ) ) ? absint( $this->banner->get_id() ) : 0;
+		if ( $banner_id > 0 ) {
+			return 'banner_' . $banner_id . ':' . $this->language;
+		}
+		return $this->language;
+	}
+
+	/**
+	 * Retrieve stored template.
+	 *
+	 * @return array
+	 */
 	public function get_stored() {
 		$stored = get_option( $this->get_cache_key(), array() );
-		return isset( $stored[ $this->language ] ) ? $stored[ $this->language ] : array();
+		if ( ! is_array( $stored ) ) {
+			return array();
+		}
+		$storage_key = $this->get_storage_key();
+		return isset( $stored[ $storage_key ] ) ? $stored[ $storage_key ] : array();
 	}
 
 	/**
@@ -537,7 +570,7 @@ class Template {
 		$stored    = get_option( $cache_key, array() );
 		$stored    = is_array( $stored ) && ! empty( $stored ) ? $stored : array();
 
-		$stored[ $this->language ] = array(
+		$stored[ $this->get_storage_key() ] = array(
 			'html'   => wp_kses( $this->html, faz_allowed_html() ),
 			'styles' => wp_kses(
 				$this->styles,

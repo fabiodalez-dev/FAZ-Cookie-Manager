@@ -199,6 +199,7 @@ class Frontend {
 		// the filter simply does not exist, so add_filter is a safe no-op
 		// and the OB handles everything.
 		add_filter( 'wp_inline_script_tag', array( $this, 'filter_inline_script_tag' ), 10, 3 );
+		add_action( 'send_headers', array( $this, 'send_geo_cache_headers' ), 0 );
 		add_action( 'send_headers', array( $this, 'shred_non_consented_cookies' ) );
 		add_action( 'send_headers', array( $this, 'send_vary_header' ) );
 
@@ -380,14 +381,14 @@ class Frontend {
 				}
 
 				// gdprApplies: true when visitor is in EU/EEA or country unknown (safe default).
-				$visitor_country = Geolocation::get_country();
-				$gdpr_applies    = empty( $visitor_country ) ? 'true' : ( Geolocation::is_eu() ? 'true' : 'false' );
+				$visitor_country = $this->get_visitor_country();
+				$gdpr_applies    = empty( $visitor_country ) || in_array( $visitor_country, Geolocation::$eu_countries, true );
 
 				// Build TCF config with GVL data if available.
 				$tcf_config = array(
 					'publisherCC'         => $country_code,
 					'consentLanguage'     => $consent_lang,
-					'gdprApplies'         => 'true' === $gdpr_applies,
+					'gdprApplies'         => $gdpr_applies,
 					'cmpId'               => absint( $this->settings->get( 'iab', 'cmp_id' ) ),
 					'purposeOneTreatment' => (bool) $this->settings->get( 'iab', 'purpose_one_treatment' ),
 				);
@@ -642,6 +643,7 @@ class Frontend {
 		if ( ! faz_is_front_end_request() ) {
 			return;
 		}
+		$this->maybe_disable_country_page_cache();
 		// AMP uses <amp-consent>: skip the classic JS banner/runtime.
 		if ( apply_filters( 'faz_is_amp_request', false ) ) {
 			return;
@@ -651,7 +653,16 @@ class Frontend {
 		if ( $this->is_geo_banner_disabled() ) {
 			return;
 		}
-		$this->banner = Controller::get_instance()->get_active_banner();
+		// Multi-banner geo-routing (1.13.18+): pass the visitor's detected
+		// country to the controller so it can pick the right banner profile
+		// (e.g. CCPA-light for US visitors, GDPR-full for EEA visitors). If
+		// the country cannot be resolved or the admin has only configured
+		// one banner with empty target_countries, the picker falls back to
+		// the match-all row or the banner_default=1 row — preserving the
+		// pre-feature behaviour for installs that have not adopted multi-
+		// banner setups.
+		$visitor_country = $this->get_visitor_country();
+		$this->banner    = Controller::get_instance()->get_active_banner_for_country( $visitor_country );
 		if ( false === $this->banner ) {
 			return;
 		}
@@ -674,34 +685,206 @@ class Frontend {
 			return false;
 		}
 		$settings = $this->banner->get_settings();
-		$rules    = isset( $settings['ruleSet'] ) ? $settings['ruleSet'] : array();
+		$inner    = isset( $settings['settings'] ) && is_array( $settings['settings'] ) ? $settings['settings'] : array();
+		$rules    = isset( $inner['ruleSet'] ) && is_array( $inner['ruleSet'] ) ? $inner['ruleSet'] : array();
 		if ( empty( $rules ) ) {
 			return false;
 		}
-		$rule = $rules[0];
-		$code = isset( $rule['code'] ) ? strtoupper( $rule['code'] ) : 'ALL';
 
-		// ALL = show banner worldwide.
-		if ( 'ALL' === $code ) {
-			return false;
+		// Iterate every rule, NOT just $rules[0] — mirrors the iteration in
+		// Controller::has_country_dependent_banners(). The banner is shown
+		// (is_geo_blocked() returns false) when ANY rule matches the
+		// visitor's country; only when no rule matches do we block.
+		// Without this, a ruleSet like [{code:ALL}, {code:US}] would emit
+		// no-cache headers but the runtime check on $rules[0] only would
+		// still let the first rule decide, asymmetrically.
+		$country = $this->get_visitor_country();
+		foreach ( $rules as $rule ) {
+			if ( ! is_array( $rule ) ) {
+				continue;
+			}
+			if ( $this->rule_matches_visitor( $rule, $country ) ) {
+				return false;
+			}
 		}
 
-		$country = Geolocation::get_country();
-		// If we can't detect the country, show the banner (safe default).
+		// No rule matched. Safe default: if we couldn't detect the country
+		// at all, show the banner — losing the geo signal must not silently
+		// hide a consent surface.
 		if ( empty( $country ) ) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Whether $rule (a single ruleSet entry) matches a visitor in $country.
+	 *
+	 * ALL matches any visitor (including '' when country detection failed).
+	 * EU / US / OTHER match against the corresponding region set and require
+	 * a resolved country code; unknown country yields no match for those.
+	 *
+	 * @since 1.14.0
+	 * @param array  $rule    A single entry from settings.ruleSet.
+	 * @param string $country ISO-3166 alpha-2 country code, '' if unknown.
+	 * @return bool
+	 */
+	private function rule_matches_visitor( $rule, $country ) {
+		$code = isset( $rule['code'] ) ? strtoupper( (string) $rule['code'] ) : 'ALL';
+
+		if ( 'ALL' === $code ) {
+			return true;
+		}
+
+		// EU / US / OTHER all need a resolved visitor country to match.
+		if ( '' === $country ) {
 			return false;
 		}
 
 		switch ( $code ) {
 			case 'EU':
-				return ! in_array( $country, Geolocation::$eu_countries, true );
+				return in_array( $country, Geolocation::$eu_countries, true );
 			case 'US':
-				return 'US' !== $country;
+				return 'US' === $country;
 			case 'OTHER':
 				$regions = isset( $rule['regions'] ) ? array_map( 'strtoupper', (array) $rule['regions'] ) : array();
-				return ! in_array( $country, $regions, true );
+				return in_array( $country, $regions, true );
 			default:
 				return false;
+		}
+	}
+
+	/**
+	 * Resolve the visitor's ISO-3166 alpha-2 country code using the same
+	 * detection chain that powers is_geo_banner_disabled():
+	 *
+	 *   1. Cloudflare CF-IPCountry header (only when opted-in via filter).
+	 *   2. MaxMind / ip-api.com fallback through Geolocation::get_country().
+	 *
+	 * Returns '' when the country cannot be resolved (no MaxMind DB, no
+	 * Cloudflare, network errors). Callers must treat '' as "no signal" —
+	 * the banner picker falls back to the match-all / banner_default row.
+	 *
+	 * Filterable via `faz_visitor_country` so test fixtures and edge
+	 * deployments (e.g. always-EU staging) can stub a country deterministically.
+	 *
+	 * @since 1.14.0
+	 * @return string Upper-case 2-letter code or '' if unknown.
+	 */
+	private function get_visitor_country() {
+		return Geolocation::get_visitor_country();
+	}
+
+	/**
+	 * Whether the current frontend response can vary by visitor country.
+	 *
+	 * @return bool
+	 */
+	private function is_country_dependent_output() {
+		$settings  = $this->get_faz_settings();
+		$dependent = false;
+
+		// Country→language fallback (CodeRabbit review, 1.14.2): when the
+		// install has NO URL-based multilingual plugin AND the publisher
+		// opted in via the faz_use_country_language_fallback filter,
+		// faz_current_language() picks the banner language from the
+		// visitor's detected country (an IT visitor sees "it" content on
+		// /en/). A cached HTML response for an EN visitor would then
+		// silently serve the wrong language to an IT visitor. Mark the
+		// output as country-dependent in that combination so the page
+		// cache stays per-country.
+		if (
+			function_exists( 'faz_i18n_is_multilingual' )
+			&& ! faz_i18n_is_multilingual()
+			&& apply_filters( 'faz_use_country_language_fallback', false )
+		) {
+			$dependent = true;
+		}
+
+		// IAB TCF: _fazTcfConfig.gdprApplies is derived from the visitor
+		// country at render time (Geolocation::is_eu_visitor()). A cached
+		// page served to a non-EU visitor that originally rendered for an
+		// EU visitor would carry gdprApplies=true (or vice versa), which
+		// silently mis-applies TCF consent semantics. Mark the output as
+		// country-dependent whenever IAB is enabled, even with a single
+		// banner and no explicit geo-targeting.
+		if ( ! empty( $settings['iab']['enabled'] ) ) {
+			$dependent = true;
+		}
+
+		if (
+			! empty( $settings['geolocation']['geo_targeting'] )
+			&& isset( $settings['geolocation']['default_behavior'] )
+			&& 'no_banner' === $settings['geolocation']['default_behavior']
+		) {
+			$dependent = true;
+		}
+
+		if ( Controller::get_instance()->has_country_dependent_banners() ) {
+			$dependent = true;
+		}
+
+		return (bool) apply_filters( 'faz_country_dependent_banner_output', $dependent, $settings );
+	}
+
+	/**
+	 * Set common page-cache bypass constants for country-dependent banners.
+	 *
+	 * @return void
+	 */
+	private function maybe_disable_country_page_cache() {
+		if ( ! $this->is_country_dependent_output() ) {
+			return;
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+		if ( ! defined( 'DONOTCACHEOBJECT' ) ) {
+			define( 'DONOTCACHEOBJECT', true );
+		}
+		if ( ! defined( 'DONOTCACHEDB' ) ) {
+			define( 'DONOTCACHEDB', true );
+		}
+	}
+
+	/**
+	 * Emit no-cache headers for pages whose banner varies by visitor country.
+	 *
+	 * @return void
+	 */
+	public function send_geo_cache_headers() {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || true === faz_disable_banner() ) {
+			return;
+		}
+		// Match the same scope every other frontend hook in this class uses
+		// (enqueue_scripts gates on faz_is_front_end_request too). Without
+		// this guard send_headers fires on REST API, heartbeat, sitemap,
+		// robots.txt etc., each running the DB-hitting is_country_dependent
+		// chain pointlessly.
+		if ( ! faz_is_front_end_request() ) {
+			return;
+		}
+		// Mirror load_banner()'s gating: when banner_control is off (or any
+		// per-page disable filter trips), the page never renders the banner
+		// payload, so emitting Cache-Control: no-store would penalise the
+		// site's full-page cache for nothing. Same check load_banner() uses
+		// at line 651 — keep them aligned.
+		if ( $this->is_banner_disabled_by_settings() ) {
+			return;
+		}
+		if ( ! $this->is_country_dependent_output() || headers_sent() ) {
+			return;
+		}
+
+		$this->maybe_disable_country_page_cache();
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+		header( 'Pragma: no-cache' );
+		header( 'X-LiteSpeed-Cache-Control: no-cache' );
+		if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+			header( 'Vary: CF-IPCountry', false );
+		}
+		if ( defined( 'LSCWP_V' ) ) {
+			do_action( 'litespeed_control_set_nocache', 'FAZ country-dependent banner' );
 		}
 	}
 
@@ -719,21 +902,7 @@ class Frontend {
 			return false;
 		}
 
-		$country = '';
-		// Try Cloudflare header first (free, no MaxMind needed).
-		// Only trust the header when explicitly opted in via filter and value is valid.
-		if (
-			apply_filters( 'faz_trust_cf_ipcountry_header', false )
-			&& isset( $_SERVER['HTTP_CF_IPCOUNTRY'] )
-			&& preg_match( '/^[A-Z]{2}$/', sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) )
-			&& 'XX' !== sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) )
-		) {
-			$country = sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) );
-		}
-		// Fallback to MaxMind / other detection methods.
-		if ( empty( $country ) ) {
-			$country = Geolocation::get_country();
-		}
+		$country = $this->get_visitor_country();
 
 		if ( ! empty( $country ) ) {
 			$target_regions = isset( $faz_geo_settings['geolocation']['target_regions'] )
@@ -765,14 +934,25 @@ class Frontend {
 		$regions      = is_array( $regions ) ? $regions : (array) $regions;
 
 		$region_map = array(
+			// F008 fix: align with admin/assets/js/pages/banner.js
+			// REGION_PRESETS.EU which deliberately EXCLUDES GB (UK is its
+			// own preset). The pre-fix table included GB for "consistency
+			// with Geolocation::$eu_countries", but that produced a
+			// silent divergence: a publisher selecting "EU" in the admin
+			// (per-banner target_countries) got a 30-country set without
+			// GB; the same publisher's global Settings → Geolocation →
+			// target_regions=eu got a 31-country set with GB. UK has its
+			// own data-protection regime (UK GDPR) and deserves its own
+			// preset — keep the 'uk' bucket as the canonical home for GB.
+			// Geolocation::$eu_countries is a separate concern (lex
+			// generalis EU+UK shorthand for "is this visitor under any
+			// GDPR-class law") and remains unchanged.
 			'eu' => array(
 				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
 				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
 				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
 				// EEA.
 				'IS', 'LI', 'NO',
-				// UK kept here for consistency with Geolocation::$eu_countries and UK GDPR handling.
-				'GB',
 			),
 			'uk' => array( 'GB' ),
 			'us' => array( 'US' ),
@@ -899,7 +1079,32 @@ class Frontend {
 			'_publicURL'    => set_url_scheme( get_site_url() ),
 			'_expiry'       => max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
 			'_categories'   => $this->get_cookie_groups(),
-			'_activeLaw'    => 'gdpr',
+			'_activeLaw'         => $banner->get_law(),
+			'_bannerSlug'        => $banner->get_slug(),
+			'_geoRouting'        => $this->is_country_dependent_output(),
+			// Server-side fingerprint of the active scope, keyed by
+			// wp_salt('auth'). Used by _fazConsentScopeChanged() to detect
+			// cookie tampering: a visitor who hand-edits __scope.banner /
+			// __scope.law to match the current scope cannot also forge a
+			// matching __scope.fp without knowing the salt, so any
+			// tampering attempt invalidates and re-prompts. Truncated to
+			// 32 hex chars — enough collision resistance for an integrity
+			// check, short enough to stay light in the cookie.
+			'_scopeFingerprint'  => substr( wp_hash( $banner->get_slug() . '|' . $banner->get_law(), 'auth' ), 0, 32 ),
+			/**
+			 * Strict-fingerprint mode (issue #106).
+			 *
+			 * When the admin returns true via the
+			 * `faz_strict_scope_fingerprint` filter, the JS scope check
+			 * ignores the legacy unprefixed `banner` / `law` cookie keys
+			 * and requires `__scope.fp` to match the server-published
+			 * fingerprint. Cookies written by pre-1.14.0 / fallback-only
+			 * builds are then treated as invalid scope info → safe
+			 * re-prompt. Default off (back-compat); planned default
+			 * flip in 1.16.0. Compatible with ClassicPress 1.x (uses
+			 * `apply_filters` only, no WP 6.x-only APIs).
+			 */
+			'_strictScopeFp'     => (bool) apply_filters( 'faz_strict_scope_fingerprint', false ),
 			'_rootDomain'   => $this->get_cookie_domain(),
 			'_block'        => true,
 			'_showBanner'   => true,

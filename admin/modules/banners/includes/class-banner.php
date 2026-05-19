@@ -38,14 +38,16 @@ class Banner extends Store {
 	 * @var array
 	 */
 	protected $data = array(
-		'name'          => '',
-		'slug'          => '',
-		'status'        => false,
-		'settings'      => '',
-		'default'       => false,
-		'contents'      => array(),
-		'date_created'  => '',
-		'date_modified' => '',
+		'name'             => '',
+		'slug'             => '',
+		'status'           => false,
+		'settings'         => '',
+		'default'          => false,
+		'contents'         => array(),
+		'target_countries' => array(),
+		'priority'         => 0,
+		'date_created'     => '',
+		'date_modified'    => '',
 	);
 
 	/**
@@ -100,12 +102,14 @@ class Banner extends Store {
 		if ( isset( $data->banner_id ) ) {
 			$this->set_multi_item_data(
 				array(
-					'name'     => $data->name,
-					'slug'     => $data->slug,
-					'status'   => $data->status,
-					'settings' => $data->settings,
-					'contents' => $data->contents,
-					'default'  => $data->banner_default,
+					'name'             => $data->name,
+					'slug'             => $data->slug,
+					'status'           => $data->status,
+					'settings'         => $data->settings,
+					'contents'         => $data->contents,
+					'default'          => $data->banner_default,
+					'target_countries' => isset( $data->target_countries ) ? $data->target_countries : array(),
+					'priority'         => isset( $data->priority ) ? (int) $data->priority : 0,
 				)
 			);
 			$this->set_loaded( true );
@@ -187,6 +191,57 @@ class Banner extends Store {
 		if ( array_key_exists( $key, $this->data ) ) {
 			$this->data[ $key ] = (bool) $default;
 		}
+	}
+
+	/**
+	 * Set the list of country codes this banner targets.
+	 *
+	 * Stored as a normalised array of ISO-3166 alpha-2 codes. An empty array
+	 * means "match every visitor" (the pre-1.13.18 default behaviour).
+	 *
+	 * @since 1.14.0
+	 * @param array|string $countries Array of country codes, or a JSON string.
+	 * @return void
+	 */
+	public function set_target_countries( $countries ) {
+		$key = 'target_countries';
+		if ( ! array_key_exists( $key, $this->data ) ) {
+			return;
+		}
+		if ( is_string( $countries ) ) {
+			$decoded   = json_decode( $countries, true );
+			$countries = is_array( $decoded ) ? $decoded : array();
+		}
+		$countries = is_array( $countries ) ? $countries : array();
+		$normalised = array();
+		foreach ( $countries as $code ) {
+			if ( ! is_string( $code ) ) {
+				continue;
+			}
+			$code = strtoupper( trim( $code ) );
+			if ( 1 === preg_match( '/^[A-Z]{2}$/', $code ) && ! in_array( $code, $normalised, true ) ) {
+				$normalised[] = $code;
+			}
+		}
+		sort( $normalised );
+		$this->data[ $key ] = $normalised;
+	}
+
+	/**
+	 * Set the priority used to break ties when multiple banners target the
+	 * same country. Higher wins.
+	 *
+	 * @since 1.14.0
+	 * @param int $priority Non-negative integer; negative values are clamped to 0.
+	 * @return void
+	 */
+	public function set_priority( $priority = 0 ) {
+		$key = 'priority';
+		if ( ! array_key_exists( $key, $this->data ) ) {
+			return;
+		}
+		$priority = (int) $priority;
+		$this->data[ $key ] = $priority < 0 ? 0 : $priority;
 	}
 	/**
 	 * Set banner status
@@ -282,6 +337,35 @@ class Banner extends Store {
 	 */
 	public function get_status() {
 		return (bool) $this->get_object_data( 'status' );
+	}
+
+	/**
+	 * Get the list of ISO-3166 alpha-2 country codes this banner targets.
+	 *
+	 * An empty array means "match every visitor". The Controller's
+	 * get_active_banner_for_country() consumes this to pick the right banner
+	 * for the visitor's detected country.
+	 *
+	 * @since 1.14.0
+	 * @return array
+	 */
+	public function get_target_countries() {
+		$raw = $this->get_object_data( 'target_countries' );
+		if ( is_string( $raw ) ) {
+			$decoded = json_decode( $raw, true );
+			return is_array( $decoded ) ? $decoded : array();
+		}
+		return is_array( $raw ) ? $raw : array();
+	}
+
+	/**
+	 * Get the tie-break priority for this banner. Higher wins.
+	 *
+	 * @since 1.14.0
+	 * @return int
+	 */
+	public function get_priority() {
+		return (int) $this->get_object_data( 'priority' );
 	}
 
 	/**

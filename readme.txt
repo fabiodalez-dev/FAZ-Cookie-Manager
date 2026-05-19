@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 6.9
-Stable tag: 1.13.18
+Stable tag: 1.14.3
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -107,6 +107,31 @@ Terms of Service / Privacy Policy:
 * https://www.maxmind.com/en/terms-of-use
 * https://www.maxmind.com/en/privacy-policy
 
+= ip-api.com =
+
+Used as a fallback geolocation lookup for the optional geo-targeting and multi-banner geo-routing features, only when MaxMind is unavailable.
+
+Triggered when: a frontend page renders the banner while geo-targeting / multi-banner geo-routing is enabled AND neither the Cloudflare CF-IPCountry header (opt-in) nor the MaxMind GeoLite2 database produces a result. The visitor's IP is sent to ip-api.com for country resolution; the resolved country code is cached in a transient (hash-keyed by IP) for one hour to avoid repeating the lookup.
+
+Data sent: the visitor's IP address and standard HTTP request headers.
+
+Service URL:
+* http://ip-api.com/json/{ip}?fields=countryCode
+
+Terms of Service / Privacy Policy:
+* https://ip-api.com/docs/legal
+
+= Plugin REST endpoint /faz/v1/banner (public) =
+
+Used by the plugin's own front-end JavaScript (`script.js`) to fetch the per-language / per-country banner payload after the page has loaded. This is an INTERNAL endpoint hosted by the plugin on the same WordPress install — no third-party network call leaves the visitor's browser to a remote service. It is documented here only because the response carries `bannerSlug` and `activeLaw`, two strings that describe which banner profile and which legal regime (gdpr / ccpa) currently applies to the visitor.
+
+Triggered when: the front-end banner script bootstraps on a page that has multi-banner geo-routing active.
+
+Data sent: only what the visitor's browser already sends with any page request to the same origin. The plugin does not forward the request to any remote service.
+
+Service URL:
+* https://{your-site}/wp-json/faz/v1/banner
+
 = AMP Project CDN =
 
 Used only on AMP pages when the AMP consent integration is active, to load the official `amp-consent` component required by AMP.
@@ -129,7 +154,34 @@ The plugin source includes several third-party domain names (e.g. `js.stripe.com
 1. **Script-blocking detection patterns** — used to identify analytics, advertising, and tracking scripts that the *site administrator's other plugins* may inject, so we can block them until the visitor has given consent. The plugin itself does **not** load any of these scripts.
 2. **Whitelist defaults** — domains such as `unpkg.com/`, `cdn.jsdelivr.net/`, `fonts.googleapis.com/`, `www.google.com/recaptcha/api`, etc. are seeded as default *whitelist* entries so the script blocker leaves them alone unless the admin explicitly removes them. They are configuration data, not outbound HTTP calls.
 
-The only outbound HTTP requests this plugin makes are the four documented above (Open Cookie Database, IAB GVL, MaxMind, AMP CDN). All four are gated behind explicit administrator action or an enabled feature.
+The only outbound HTTP requests this plugin makes are the five documented above (Open Cookie Database, IAB GVL, MaxMind, ip-api.com fallback, AMP CDN). All five are gated behind explicit administrator action or an enabled feature. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
+
+== Cache Plugin Compatibility ==
+
+When multi-banner geo-routing (1.14.0+) is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
+
+* `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
+* `Pragma: no-cache`
+* `X-LiteSpeed-Cache-Control: no-cache`
+* `Vary: CF-IPCountry` (when the trust filter `faz_trust_cf_ipcountry_header` is enabled)
+* `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
+* `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
+
+= Verified compatible (no extra configuration needed) =
+
+* **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
+* **WP Rocket** — honors `DONOTCACHEPAGE` natively.
+* **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
+* **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
+* **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
+* **Cloudflare APO** — honors the `Cache-Control: no-store` header. With CF in front, also enable the trust filter so the `Vary: CF-IPCountry` header is emitted and CF caches per-country variants instead of bypassing entirely.
+
+= Known limitations =
+
+* **CDNs without origin Cache-Control honoring** (e.g. some legacy CloudFront configurations) — verify the response Cache-Control header reaches the edge. If not, add a CF-IPCountry or country-based cache key rule at the CDN level.
+* **Minor / regional cache plugins** (Comet Cache, Cachify, Swift Performance Lite) — not formally tested. Most still honor `DONOTCACHEPAGE`; verify by inspecting the response Cache-Control on a country-targeted page.
+
+Override the bypass logic per request via the `faz_country_dependent_banner_output` filter (return false to force the cache to ignore the country dimension on a specific URL).
 
 == Installation ==
 
@@ -228,6 +280,31 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.14.3 =
+* **BREAKING**: the `faz_country_detection_consensus` filter now receives **2 arguments** (`$require_consensus`, `$votes`) instead of the 3 it received in 1.14.0–1.14.2. The third argument (raw IP in 1.14.0, `wp_hash()`-derived IP token in 1.14.2) has been removed because both forms remained PII-equivalent for correlation. Plugins that registered with `add_filter('faz_country_detection_consensus', $cb, 10, 3)` will continue to work (PHP silently passes `null` for the missing arg), but the third parameter is now always `null` and should not be relied upon. Plugins that legitimately need the visitor IP should hook `faz_visitor_country` instead, which already exposes it for trusted overrides and test fixtures.
+* Fix (F101–F112, adamsreview review#2): transactional delete with InnoDB row-lock-promoted fallback default; multisite-aware uninstall sweep that honours per-site opt-in and the `FAZ_REMOVE_ALL_DATA` constant; banner_id pollution fixed by removing the post-save `$wpdb->insert_id` re-read; LSCache `Vary: CF-IPCountry` emitted only when the `faz_trust_cf_ipcountry_header` filter opts in; AMP geo-resolution no longer buckets GB into the `eu` regional set.
+* Fix (F301–F308 + CodeRabbit#1#2, adamsreview review#3): cache-poisoning race in `promote_fallback_default` closed by moving `delete_cache()` to callers (post-COMMIT); both fallback SELECTs now use `FOR UPDATE` and prefer non-default active peers; `faz_cookies` + `faz_cookie_categories` enforced to InnoDB on install AND migrated on upgrade so settings-import START TRANSACTION calls are no longer silent no-ops on legacy MyISAM hosts; uninstall network sweep now also fires under bare `FAZ_REMOVE_ALL_DATA` when `get_sites()` is empty; cache epoch generation switched to `sprintf('%.6F', microtime(true))` for true microsecond resolution; create_item slug-probe now attempts a focused UPDATE retry before falling back to the cache-invalidate tail.
+* Fix (R4-S001–S004, adamsreview review#4): `update_item()` now wraps its UPDATE + invariant section in a `START TRANSACTION` so the `FOR UPDATE` lock in `promote_fallback_default` actually serializes (was a no-op under autocommit, leaving the update path with the same race F302 closed for delete); create_item slug-probe runs the invariant tail unconditionally on slug mismatch so a successful focused-UPDATE retry no longer bypasses the at-most-one-default invariant; `clear_default_on_others()` no longer self-flushes the cache (caller's responsibility, mirrors F301); F303 ALTER ENGINE loop now records partial-migration failures in `faz_innodb_migration_pending` instead of silently bumping `db_version` past 1.14.3.
+* Fix: missing-banner notice in admin when `?banner_id=…` does not resolve (deleted row, stale bookmark, phantom redirect) — the editor body is hidden and a recovery CTA points at the install's default banner.
+* Fix: prefcenter renders every visible category even when its cookie list is empty (regression introduced by the audit-list refactor that early-returned on empty cookies).
+* Fix: empty-state preference-center category wrapper now matches the populated-state DOM shape (`<div class="faz-table-wrapper">`) so CSS targeting the table wrapper applies uniformly across empty and populated categories.
+
+= 1.14.0 =
+* Feature: Multi-banner geo-routing (refs #103). New schema columns `target_countries` and `priority` on `wp_faz_banners` let admins serve different banners per visitor country — e.g. a Reject-mandatory GDPR banner to EU/EEA/UK and a CCPA-style banner with the close (X) button to US visitors, picked automatically by `Controller::get_active_banner_for_country()` from the Cloudflare CF-IPCountry header (opt-in) or MaxMind/ip-api.com fallback.
+* Feature: Per-banner override of the EDPB/Garante close-button dark-pattern auto-hide (`settings.allowCloseButtonWithReject`). Default false preserves the compliance behaviour; opting in is documented as an EU/EEA/UK violation but unblocks non-EU jurisdictions where Accept + Reject + X is legal.
+* Feature: Cache busting for country-dependent output via `DONOTCACHEPAGE`/`DONOTCACHEOBJECT`/`DONOTCACHEDB` constants + `Cache-Control: no-store` + `Vary: CF-IPCountry` (with the trust filter on) so CDNs and full-page caches do not serve the wrong banner to the wrong country.
+* Feature: AMP `<amp-consent>` resolver is now country-aware via `Geolocation::get_visitor_country()` with the same geo guards as the classic JS flow.
+* Feature: Scope-change consent invalidation. Consent cookies now carry `__scope.banner` and `__scope.law` so a visitor that crosses a jurisdiction (CCPA → GDPR) re-prompts instead of inheriting consent from a different legal regime.
+* Fix: `banner_default` mutual-exclusion finally enforced server-side — saving a banner with the default flag clears it on every peer row (matches the admin help text). Without this, more than one banner could simultaneously hold the flag and the fallback picker was non-deterministic.
+* Fix: `Controller::get_active_banner()` preserves its pre-1.14.0 contract for third-party callers. An install with a single status=1, country-targeted, non-default banner now still receives that banner back when the call passes no country.
+* Fix: `has_country_dependent_banners()` and `Frontend::is_geo_blocked()` iterate the entire `ruleSet`, not just the first entry. A ruleSet like `[{code:ALL}, {code:US}]` is now consistently classified between the cache-vary headers and the runtime show/block decision.
+* Fix: `Frontend::send_geo_cache_headers()` gates on `faz_is_front_end_request()` so REST API / heartbeat / sitemap / robots requests no longer trigger the country-dependent DB chain on every poll.
+* Fix: `is_country_dependent_output()` also marks IAB-TCF output as country-dependent (TCF `gdprApplies` is derived from visitor country at render time and must not be served from a shared page cache).
+* Fix: `update_db_350` clears `faz_banners_table_version` before re-running `install_tables()`, so dbDelta actually adds the new `target_countries` + `priority` columns on upgrade.
+* Fix: Geolocation rejects the Cloudflare 'XX' (anonymous proxy / unknown) sentinel both on the CF-IPCountry branch and after the `faz_visitor_country` filter — a third-party filter implementer reintroducing 'XX' no longer leaks it into geo-routing.
+* Fix: `_fazConsentScopeChanged()` no longer invalidates valid pre-1.14.0 consent on the first page load after upgrade. Absent scope keys are treated as "upgrade case, no scope info known" and the existing consent stands.
+* Compatibility: New `Banner::set_target_countries()` / `set_priority()` / `get_target_countries()` / `get_priority()` accessors with normalisation (upper-case, dedup, `^[A-Z]{2}$` validation, non-negative integer clamping). REST schema exposes both fields on `/faz/v1/banners/{id}` with `[A-Z]{2}` pattern validation.
 
 = 1.13.18 =
 * Fix: `wp_localize_script` and `wp_set_script_translations` payloads (inline `<script id="*-js-extra">` and `<script id="*-js-translations">`) are no longer false-positively blocked when their body contains a substring that matches a provider pattern. These ID shapes carry only data/i18n strings, never executable tracker code — the prior content-substring matcher would crash third-party plugins whose config keys happened to mention a provider (e.g. trx_addons emits the key `animate_to_mc4wp_form_submitted`, which matched MailChimp's `mc4wp` and broke the page with `ReferenceError: TRX_ADDONS_STORAGE is not defined`). `-js-before` and `-js-after` payloads stay on the regular blocking path.

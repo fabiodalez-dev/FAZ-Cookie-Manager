@@ -407,6 +407,34 @@ test.describe('PR audit regressions (2026-04-19)', () => {
     ensureWooCommerceLabData();
   });
 
+  test.afterAll(() => {
+    // The TCF timestamps spec mutates the active banner into
+    // classic+pushdown and previously did not restore it. Downstream specs
+    // (DSAR-VAL, DSAR-A11Y, DNSMPI-COOKIE) assume the default box+popup
+    // shape, and inheriting classic+pushdown across files cascaded into
+    // double-digit fail counts under full-suite load. Reset to the same
+    // canonical shape global-setup.ts applies at suite start.
+    wpEval(`
+      global $wpdb;
+      $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
+      $banner = $controller->get_active_banner();
+      if ( $banner ) {
+        $s = $banner->get_settings();
+        if ( ! is_array( $s ) ) { $s = array(); }
+        if ( ! isset( $s['settings'] ) || ! is_array( $s['settings'] ) ) { $s['settings'] = array(); }
+        $s['settings']['type'] = 'box';
+        $s['settings']['preferenceCenterType'] = 'popup';
+        $banner->set_settings( $s );
+        $banner->save();
+      }
+      delete_option( 'faz_banner_template' );
+      if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+        faz_clear_banner_template_cache();
+      }
+      $controller->delete_cache();
+    `);
+  });
+
   test('data: URI scripts are blocked when the decoded payload matches a provider signature', async ({ page }) => {
     // Snapshot and clear whitelist_patterns: _fazIsUserWhitelisted() checks the decoded
     // data: URI content too, so if connect.facebook.net is in the whitelist the observer
@@ -808,9 +836,46 @@ test.describe('PR audit regressions (2026-04-19)', () => {
 
   test('TCF preserves created timestamp, advances lastUpdated on real changes, and finishes with cmpStatus=loaded', async ({ browser }) => {
     const originalSettings = backupSettingsOption();
+    // Also snapshot the active banner row — the wpEval block below
+    // persists type=classic / preferenceCenterType=pushdown /
+    // categoryPreview.status=true to the DB. Without restoring, the
+    // mutation leaks into subsequent serial tests in the file (and into
+    // other spec files that assume the install-default banner shape).
+    const originalBannerSettings = backupDefaultBannerSettings();
 
     try {
       configureIab({ enabled: true, purposeOneTreatment: false });
+
+      // Force the active banner into the shape this test depends on:
+      // categoryPreview accordion toggles visible (so `#fazCategoryDirectanalytics`
+      // resolves), and banner type = classic (which embeds the inline
+      // preference center). Without this, an earlier test in the suite
+      // may have left the active banner with a popup/sidebar type whose
+      // preference center hides the per-category toggles — and this test
+      // then fails for setup reasons unrelated to TCF timestamps.
+      // The afterAll(restoreSettingsOption) handles faz_settings; the banner
+      // template option is restored via faz_clear_banner_template_cache at
+      // teardown, so any mutation here is bounded to the test's own run.
+      wpEval(`
+        $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
+        $banner = $controller->get_active_banner();
+        if ( $banner ) {
+          $settings = $banner->get_settings();
+          if ( ! is_array( $settings ) ) { $settings = array(); }
+          if ( ! isset( $settings['settings'] ) || ! is_array( $settings['settings'] ) ) { $settings['settings'] = array(); }
+          $settings['settings']['type'] = 'classic';
+          $settings['settings']['preferenceCenterType'] = 'pushdown';
+          if ( ! isset( $settings['categoryPreview'] ) || ! is_array( $settings['categoryPreview'] ) ) { $settings['categoryPreview'] = array(); }
+          $settings['categoryPreview']['status'] = true;
+          $banner->set_settings( $settings );
+          $banner->save();
+          if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+            faz_clear_banner_template_cache();
+          }
+          delete_option( 'faz_banner_template' );
+          $controller->delete_cache();
+        }
+      `);
 
       const visitor = await browser.newContext({ baseURL: WP_BASE });
       try {
@@ -834,7 +899,10 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         const initialTs = parseTcString(initialTc.tcString);
         expect(initialTs).not.toBeNull();
 
-        await page.waitForTimeout(1200);
+        // TCF lastUpdated has decisecond resolution. Wait past one decisecond
+        // bucket before mutating consent so the new write lands in a strictly
+        // later bucket. 200ms ≥ 2 deciseconds covers wall-clock + JS jitter.
+        await page.waitForTimeout(200);
         await page.evaluate(() => {
           if (typeof window.revisitFazConsent === 'function') {
             window.revisitFazConsent();
@@ -845,25 +913,41 @@ test.describe('PR audit regressions (2026-04-19)', () => {
         await savePreferences(page);
         await page.waitForFunction(() => typeof (window as any).__tcfapi === 'function', undefined, { timeout: 10_000 });
 
-        const updatedTc = await page.evaluate(async () => {
-          const ping = await new Promise<any>((resolve) => {
-            window.__tcfapi('ping', 2, (data: any) => resolve(data));
-          });
-          const tcData = await new Promise<any>((resolve) => {
-            window.__tcfapi('getTCData', 2, (data: any) => resolve(data));
-          });
-          return { ping, tcData };
-        });
+        // Under suite-wide load, the cookie write that backs the new TCString
+        // can race the immediate getTCData read. Poll the value until the
+        // lastUpdated decisecond strictly advances past initial — this is
+        // robust to PHP-FPM stalls, raf coalescing, and decisecond bucket
+        // alignment without relying on a fixed sleep.
+        const initialLast = initialTs?.lastUpdated ?? 0;
+        let updatedTc: { ping: any; tcData: any } | null = null;
+        await expect
+          .poll(
+            async () => {
+              updatedTc = await page.evaluate(
+                async () =>
+                  new Promise<any>((resolve) => {
+                    const pingP = new Promise<any>((r) => window.__tcfapi('ping', 2, r));
+                    const tcDataP = new Promise<any>((r) => window.__tcfapi('getTCData', 2, r));
+                    Promise.all([pingP, tcDataP]).then(([ping, tcData]) => resolve({ ping, tcData }));
+                  }),
+              );
+              const ts = parseTcString(updatedTc!.tcData.tcString);
+              return ts !== null && ts.lastUpdated > initialLast;
+            },
+            { timeout: 10_000 },
+          )
+          .toBe(true);
 
-        const updatedTs = parseTcString(updatedTc.tcData.tcString);
+        const updatedTs = parseTcString(updatedTc!.tcData.tcString);
         expect(updatedTs).not.toBeNull();
-        expect(updatedTc.ping.cmpStatus).toBe('loaded');
+        expect(updatedTc!.ping.cmpStatus).toBe('loaded');
         expect(updatedTs?.created).toBe(initialTs?.created);
         expect((updatedTs?.lastUpdated ?? 0) > (initialTs?.lastUpdated ?? 0)).toBe(true);
       } finally {
         await visitor.close();
       }
     } finally {
+      restoreDefaultBannerSettings(originalBannerSettings);
       restoreSettingsOption(originalSettings);
     }
   });

@@ -95,6 +95,32 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				}
 			}
 
+			// Clean up site transients owned by the plugin. On single-site
+			// installs these are stored in wp_options; the loop below covers
+			// that path. Multisite is handled separately AFTER this per-blog
+			// loop completes (site transients on multisite live in
+			// wp_sitemeta, not in the per-blog options table).
+			$site_transient_prefixes = array(
+				$wpdb->esc_like( '_site_transient_faz' ) . '%',
+				$wpdb->esc_like( '_site_transient_timeout_faz' ) . '%',
+			);
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$site_transient_keys = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+					$site_transient_prefixes[0],
+					$site_transient_prefixes[1]
+				)
+			);
+			foreach ( $site_transient_keys as $site_transient_key ) {
+				if ( 0 === strpos( $site_transient_key, '_site_transient_timeout_' ) ) {
+					$site_transient_key = substr( $site_transient_key, strlen( '_site_transient_timeout_' ) );
+				} elseif ( 0 === strpos( $site_transient_key, '_site_transient_' ) ) {
+					$site_transient_key = substr( $site_transient_key, strlen( '_site_transient_' ) );
+				}
+				delete_site_transient( $site_transient_key );
+			}
+
 			// Delete DSAR request posts — they contain personal data (name, email, request
 			// type) and must be erased on uninstall to honour GDPR Article 17.
 			// Enumerate every status WordPress recognises (including auto-draft and
@@ -190,6 +216,20 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				delete_option( $variant );
 			}
 
+			// Final catch-all for plugin-prefixed options introduced by newer
+			// migrations/caches. When remove_data_on_uninstall is enabled the
+			// explicit contract is to leave no FAZ-owned option behind.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$remaining_faz_options = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s",
+					$wpdb->esc_like( 'faz_' ) . '%'
+				)
+			);
+			foreach ( $remaining_faz_options as $remaining_faz_option ) {
+				delete_option( $remaining_faz_option );
+			}
+
 			// Remove plugin upload directories (recursive to handle dotfiles and subdirectories).
 			$upload_dir  = wp_upload_dir( null, false );
 			$upload_base = trailingslashit( $upload_dir['basedir'] );
@@ -224,8 +264,9 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 	}
 
 	if ( is_multisite() ) {
-		$faz_offset = 0;
-		$faz_batch  = 100;
+		$faz_offset       = 0;
+		$faz_batch        = 100;
+		$faz_any_opted_in = false; // F102 fix: tracks whether ANY subsite opted in.
 		do {
 			$faz_site_ids = get_sites( array(
 				'fields' => 'ids',
@@ -236,12 +277,70 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				if ( ! faz_should_remove_on_uninstall( $faz_site_id ) ) {
 					continue;
 				}
+				$faz_any_opted_in = true;
 				switch_to_blog( $faz_site_id );
 				faz_cleanup_site_data();
 				restore_current_blog();
 			}
 			$faz_offset += $faz_batch;
 		} while ( count( $faz_site_ids ) === $faz_batch );
+
+		// Multisite-network site transients (CodeRabbit review, 1.14.2;
+		// adamsreview F102 fix, 1.14.3): site transients on multisite are
+		// stored in wp_sitemeta, NOT per-blog wp_options — the per-blog
+		// loop above misses them. Sweep them here.
+		//
+		// F102 fix: the prior gate `faz_should_remove_on_uninstall( 0 )`
+		// was semantically wrong — `get_blog_option( 0, … )` falls back
+		// to `get_option()` on whatever blog is current at call time
+		// (typically the primary site, blog_id=1), so it only checked
+		// the primary site's opt-in. A multisite admin who set
+		// remove_data_on_uninstall=true ONLY on a subsite would see
+		// network transients survive — even though the per-blog loop
+		// above ran the cleanup for that subsite.
+		//
+		// Correct semantics: if ANY site in the network opted in to
+		// data removal, the network-level transients also must go (they
+		// would otherwise reference cleaned-up per-blog data and turn
+		// into orphans). Use the $faz_any_opted_in accumulator we
+		// built during the per-blog loop above.
+		//
+		// F304 fix (1.14.4): also honour FAZ_REMOVE_ALL_DATA. The
+		// constant is a wp-config.php override that forces full data
+		// removal regardless of any per-site opt-in. If get_sites()
+		// returns empty (degenerate state — pure-network setup,
+		// mid-teardown ordering, all subsites just deleted), the
+		// per-blog loop never sets $faz_any_opted_in even when the
+		// admin explicitly asked for everything to go. Gate the
+		// network sweep on either source of intent.
+		//
+		// Invariant: the network sweep MUST NOT run unless at least
+		// one source (per-site opt-in OR FAZ_REMOVE_ALL_DATA) has
+		// requested data removal. Flipping this gate would violate
+		// the uninstall privacy contract (CodeRabbit#3).
+		if ( $faz_force_remove_all || $faz_any_opted_in ) {
+			global $wpdb;
+			$faz_sitemeta_prefixes = array(
+				$wpdb->esc_like( '_site_transient_faz' ) . '%',
+				$wpdb->esc_like( '_site_transient_timeout_faz' ) . '%',
+			);
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			$faz_network_transients = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT meta_key FROM {$wpdb->sitemeta} WHERE meta_key LIKE %s OR meta_key LIKE %s",
+					$faz_sitemeta_prefixes[0],
+					$faz_sitemeta_prefixes[1]
+				)
+			);
+			foreach ( $faz_network_transients as $faz_network_transient ) {
+				if ( 0 === strpos( $faz_network_transient, '_site_transient_timeout_' ) ) {
+					$faz_network_transient = substr( $faz_network_transient, strlen( '_site_transient_timeout_' ) );
+				} elseif ( 0 === strpos( $faz_network_transient, '_site_transient_' ) ) {
+					$faz_network_transient = substr( $faz_network_transient, strlen( '_site_transient_' ) );
+				}
+				delete_site_transient( $faz_network_transient );
+			}
+		}
 	} elseif ( faz_should_remove_on_uninstall() ) {
 		faz_cleanup_site_data();
 	}

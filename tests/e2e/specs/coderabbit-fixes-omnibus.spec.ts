@@ -19,7 +19,7 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
 import { fazApiGet, fazApiPost, fazApiPut, getAdminNonce } from '../utils/faz-api';
-import { resetProviderMatrixState, enableProviderMatrixCustomScenario, wpEval } from '../utils/wp-env';
+import { resetProviderMatrixState, enableProviderMatrixCustomScenario, ensureFixturePlugin, wpEval } from '../utils/wp-env';
 import { clickFirstVisible } from '../utils/ui';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
@@ -168,6 +168,7 @@ test.describe('CodeRabbit PR #79 omnibus', () => {
    * (no two requests ever see the same count).
    */
   test('provider-matrix collect_hit returns in-lock count', async ({ request }) => {
+    ensureFixturePlugin('faz-e2e-provider-matrix');
     resetProviderMatrixState();
     enableProviderMatrixCustomScenario();
     try {

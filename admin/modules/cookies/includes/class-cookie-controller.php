@@ -124,7 +124,7 @@ class Cookie_Controller extends Base_Controller {
 			PRIMARY KEY  (cookie_id),
 			KEY category (category),
 			KEY name (name)
-        ) $collate;
+        ) ENGINE=InnoDB $collate;
 	";
 		return $tables;
 	}

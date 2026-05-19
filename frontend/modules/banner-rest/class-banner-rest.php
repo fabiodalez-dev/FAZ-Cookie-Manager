@@ -21,6 +21,7 @@ use FazCookie\Admin\Modules\Banners\Includes\Template as Banner_Template;
 use FazCookie\Frontend\Modules\Shortcodes\Shortcodes;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
+use FazCookie\Includes\Geolocation;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -133,7 +134,9 @@ class Banner_Rest {
 			);
 		}
 
-		$banner = Banner_Controller::get_instance()->get_active_banner();
+		$controller = Banner_Controller::get_instance();
+		$country    = Geolocation::get_visitor_country();
+		$banner     = $controller->get_active_banner_for_country( $country );
 		if ( ! $banner ) {
 			return new WP_Error(
 				'faz_no_banner',
@@ -163,17 +166,10 @@ class Banner_Rest {
 		$orig_banner_lang = $banner->get_language();
 		$banner->set_language( $lang );
 
-		// Build the (possibly cached) template in the requested language.
-		// Template::__construct triggers load() which either generates or
-		// populates the language-specific slot in the faz_banner_template
-		// option. We then read the stored payload directly, avoiding access
-		// to protected props on the Template instance.
-		new Banner_Template( $banner, $lang );
-		$cache_key = apply_filters( 'faz_banner_template_cache_key', 'faz_banner_template' );
-		$stored    = get_option( $cache_key, array() );
-		$entry     = ( is_array( $stored ) && isset( $stored[ $lang ] ) && is_array( $stored[ $lang ] ) ) ? $stored[ $lang ] : array();
-		$html      = isset( $entry['html'] ) ? (string) $entry['html'] : '';
-		$styles    = isset( $entry['styles'] ) ? (string) $entry['styles'] : '';
+		// Build the banner-scoped, language-specific template.
+		$template = new Banner_Template( $banner, $lang );
+		$html     = $template->get_html();
+		$styles   = $template->get_styles();
 
 		// Prepare shortcodes with a fresh instance bound to the language-
 		// switched banner.
@@ -201,6 +197,8 @@ class Banner_Rest {
 
 		$payload = array(
 			'language'   => $lang,
+			'bannerSlug' => $banner->get_slug(),
+			'activeLaw'  => $banner->get_law(),
 			'html'       => $html,
 			'styles'     => $styles,
 			'shortCodes' => $short_codes,
@@ -209,9 +207,34 @@ class Banner_Rest {
 		);
 
 		$response = new WP_REST_Response( $payload, 200 );
-		// Allow CDNs to cache per-language responses for a short TTL. The
-		// payload is deterministic for a given (lang, plugin version) pair.
-		$response->header( 'Cache-Control', 'public, max-age=300' );
+		if ( $controller->has_country_dependent_banners() ) {
+			$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+			$response->header( 'Pragma', 'no-cache' );
+			$response->header( 'X-LiteSpeed-Cache-Control', 'no-cache' );
+			if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+				$response->header( 'Vary', 'CF-IPCountry' );
+			}
+		} else {
+			// Allow CDNs to cache per-language responses for a short TTL. The
+			// payload is deterministic when the selected banner is not country-dependent.
+			//
+			// F111 fix (1.14.3): add Vary: CF-IPCountry when CF
+			// integration is on so the CDN keys cache entries per
+			// country. has_country_dependent_banners() can return a
+			// stale-false during cache-epoch propagation delay (or
+			// between admin sessions that touch country targeting and
+			// the next request); without Vary the CDN could serve a
+			// stale answer composed for one country to a visitor in
+			// another for the full 5-minute TTL. With Vary, a
+			// publisher who toggles country-dependent state mid-window
+			// at worst gets per-country cache entries that all match
+			// the same payload — at best gets isolation when a banner
+			// becomes country-dependent. Cheap insurance.
+			$response->header( 'Cache-Control', 'public, max-age=300' );
+			if ( apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+				$response->header( 'Vary', 'CF-IPCountry' );
+			}
+		}
 		return $response;
 	}
 

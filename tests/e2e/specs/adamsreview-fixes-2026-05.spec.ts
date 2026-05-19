@@ -191,16 +191,16 @@ test.describe('F024 — fazDsarConfig.emailMsg is present and non-empty', () => 
     await page.locator('[name="dsar_type"]').selectOption('access');
 
     await page.locator('.faz-dsar-btn').click();
-    await page.waitForTimeout(150);
 
     const notice = page.locator('.faz-dsar-notice');
+    // Use auto-retrying assertions instead of a fixed waitForTimeout +
+    // textContent read — under suite-wide load the JS handler can take more
+    // than 150ms to populate the notice, which made this test flaky in the
+    // full suite while passing in isolation. toContainText() polls until the
+    // expected text appears (default 10s) and survives slow PHP-FPM responses.
     await expect(notice).toBeVisible();
-
-    const text = (await notice.textContent()) ?? '';
-    // The notice must contain the localized emailMsg from wp_localize_script,
-    // not the JavaScript literal "undefined".
-    expect(text).toContain(expectedEmailMsg);
-    expect(text).not.toContain('undefined');
+    await expect(notice).toContainText(expectedEmailMsg);
+    await expect(notice).not.toContainText('undefined');
 
     expect(blocker.wasCalled(), 'no DSAR submit AJAX call for an email-invalid form').toBe(false);
     await blocker.restore();
@@ -269,15 +269,35 @@ test.describe('F043 — fazDsarConfig.nameLabel / emailLabel / typeLabel are pre
 
     // Submit with all required fields empty → triggers per-field missing list.
     await page.locator('.faz-dsar-btn').click();
-    await page.waitForTimeout(150);
 
-    const text = (await page.locator('.faz-dsar-notice').textContent()) ?? '';
-    expect(text, 'error must not contain "undefined" as a field label (F043)').not.toContain('undefined');
+    // Auto-retrying assertions instead of waitForTimeout + textContent —
+    // see F024 above for the rationale. Under suite-wide load the notice
+    // can take longer than 150ms to populate.
+    const notice = page.locator('.faz-dsar-notice');
+    await expect(notice).toBeVisible();
+
     // At least one of the three localized labels must appear in the error text.
     const labelValues = [labels.nameLabel, labels.emailLabel, labels.typeLabel].filter(Boolean);
     expect(labelValues.length, 'at least one localized label must be supplied by wp_localize_script').toBeGreaterThan(0);
-    const hasLabel = labelValues.some((label) => text.includes(label));
-    expect(hasLabel, `error text must include at least one of the localized labels (got: "${text.trim()}")`).toBe(true);
+
+    // Poll until the FINAL text is populated (localized label present) AND
+    // contains no "undefined". The original ordering ran the `undefined`
+    // check before the poll, so an early-visible notice that later became
+    // "Name, undefined, Type" would still pass — combining both predicates
+    // inside the poll closes that race window.
+    await expect.poll(async () => {
+      const text = (await notice.textContent()) ?? '';
+      const hasLabel = labelValues.some((label) => text.includes(label));
+      return hasLabel && !text.includes('undefined');
+    }, {
+      message: 'error text must include at least one localized label AND must not contain "undefined" (F043)',
+      timeout: 10_000,
+    }).toBe(true);
+
+    // Final asserting snapshot (after the poll has converged) so the
+    // failure mode for "text never converged" is the poll message above
+    // rather than a confusing two-step trace.
+    await expect(notice, 'error must not contain "undefined" as a field label (F043)').not.toContainText('undefined');
 
     expect(blocker.wasCalled(), 'no DSAR submit AJAX call for a validation-failed form').toBe(false);
     await blocker.restore();
