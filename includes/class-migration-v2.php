@@ -93,8 +93,8 @@ class Migration_V2 {
 			'ruleset_id_at_consent' => "VARCHAR(64) NULL DEFAULT NULL",
 			'signal_gpc_received'   => "TINYINT(1) NULL DEFAULT NULL",
 			'signal_dnt_received'   => "TINYINT(1) NULL DEFAULT NULL",
-			'tc_string'             => "VARCHAR(4096) NULL DEFAULT NULL",
-			'gpp_string'            => "VARCHAR(4096) NULL DEFAULT NULL",
+			'tc_string'             => "TEXT NULL DEFAULT NULL",
+			'gpp_string'            => "TEXT NULL DEFAULT NULL",
 		);
 	}
 
@@ -247,8 +247,10 @@ class Migration_V2 {
 		if ( ! preg_match( '/^[a-z_][a-z0-9_]*$/i', $column ) ) {
 			return false;
 		}
-		// Validate ddl shape (type + nullability only; no arbitrary SQL).
-		if ( ! preg_match( '/^[A-Z]+\([0-9]+\) NULL DEFAULT NULL$/', $ddl ) ) {
+		// L1-SP1-S002 fix (1.15.0): accept both sized (VARCHAR(N), TINYINT(1))
+		// and unsized (TEXT) safe DDL shapes. TEXT avoids the 4096-char
+		// truncation risk for large IAB TC/GPP strings.
+		if ( ! preg_match( '/^([A-Z]+\([0-9]+\)|[A-Z]+) NULL DEFAULT NULL$/', $ddl ) ) {
 			return false;
 		}
 

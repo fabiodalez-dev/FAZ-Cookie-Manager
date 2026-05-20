@@ -188,18 +188,29 @@ class Geo_Detector {
 	 * Delegates to the existing geolocation infrastructure rather than
 	 * re-implementing the fallback chain.
 	 *
-	 * @param string $ip Visitor IP.
+	 * @param string $ip Visitor IP (informational — Geolocation::get_country
+	 *                   reads REMOTE_ADDR / CF-Connecting-IP internally).
 	 * @return array{country:string, region:string, source:string}
 	 */
 	private function resolve_via_existing_geolocation( $ip ) {
+		// L2-SP1-S001 fix (1.15.0): use public static get_country(),
+		// not the private static detect_country(). The previous call to
+		// $geo->detect_country() raised a Throwable that was silently
+		// swallowed by the outer try/catch, breaking the entire
+		// ip-api / GeoLite2 fallback chain — every non-CF visitor was
+		// being routed to fallback-gdpr-most-protective regardless of
+		// their real country.
 		$country = '';
 		if ( class_exists( '\\FazCookie\\Includes\\Geolocation' ) ) {
 			try {
-				$geo     = new \FazCookie\Includes\Geolocation();
-				$result  = method_exists( $geo, 'detect_country' ) ? $geo->detect_country() : '';
+				$result  = \FazCookie\Includes\Geolocation::get_country();
 				$country = is_string( $result ) ? strtoupper( $result ) : '';
 			} catch ( \Throwable $e ) {
 				$country = '';
+				if ( function_exists( 'error_log' ) ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					error_log( '[FAZ Cookie Manager] Geolocation::get_country failed: ' . $e->getMessage() );
+				}
 			}
 		}
 		// Region not available from existing Geolocation; left empty.

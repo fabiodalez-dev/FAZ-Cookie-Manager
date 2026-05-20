@@ -108,6 +108,44 @@ class Geo_Routing {
 	}
 
 	/**
+	 * Apply a dot-notation delta into the ruleset array.
+	 *
+	 * Used to materialize admin per-country overrides. The path is
+	 * `signals.cmv2.ad_storage` style; the value replaces whatever
+	 * lives at that path. Missing intermediate keys are NOT created
+	 * (overrides only meaningfully change EXISTING ruleset fields).
+	 *
+	 * Pure function — safe to call repeatedly. Returns the modified
+	 * ruleset; original is not mutated.
+	 *
+	 * Trace: L2-SP1-S004 fix, Q3 override application.
+	 *
+	 * @param array  $ruleset Source ruleset.
+	 * @param string $dot_path Dot-notation key path.
+	 * @param mixed  $value    Scalar / null replacement.
+	 * @return array Modified ruleset.
+	 */
+	public static function apply_delta( $ruleset, $dot_path, $value ) {
+		if ( ! is_array( $ruleset ) || '' === $dot_path ) {
+			return $ruleset;
+		}
+		$parts = explode( '.', $dot_path );
+		// Walk the ruleset path; abort if any intermediate is missing.
+		$ref =& $ruleset;
+		for ( $i = 0; $i < count( $parts ) - 1; $i++ ) {
+			if ( ! is_array( $ref ) || ! array_key_exists( $parts[ $i ], $ref ) ) {
+				return $ruleset;
+			}
+			$ref =& $ref[ $parts[ $i ] ];
+		}
+		$leaf = end( $parts );
+		if ( is_array( $ref ) && array_key_exists( $leaf, $ref ) ) {
+			$ref[ $leaf ] = $value;
+		}
+		return $ruleset;
+	}
+
+	/**
 	 * Get the complete visitor context: geo + ruleset + signals.
 	 *
 	 * Single entry point for consumers (admin UI preview, banner
@@ -160,6 +198,18 @@ class Geo_Routing {
 				// Catalog incomplete (typical during P4/P5 buildout) — load fallback.
 				$ruleset    = $loader->load_ruleset( $loader->get_fallback_id() );
 				$ruleset_id = $loader->get_fallback_id();
+			}
+
+			// L2-SP1-S004 fix (1.15.0): apply per-country delta override
+			// at materialization time. Without this, admins setting
+			// `signals.cmv2.ad_storage=denied` in the override editor
+			// would see the value persisted but never reflected at
+			// runtime — the operator intent would silently no-op.
+			$country = isset( $geo['country'] ) ? $geo['country'] : '';
+			if ( '' !== $country && isset( $overrides[ $country ]['delta'] ) && is_array( $overrides[ $country ]['delta'] ) && is_array( $ruleset ) ) {
+				foreach ( $overrides[ $country ]['delta'] as $dot_path => $value ) {
+					$ruleset = self::apply_delta( $ruleset, (string) $dot_path, $value );
+				}
 			}
 
 			return array(

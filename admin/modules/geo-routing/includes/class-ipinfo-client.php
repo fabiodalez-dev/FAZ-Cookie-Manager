@@ -48,16 +48,14 @@ class Ipinfo_Client {
 			return array( 'vpn' => null, 'source' => 'skip' );
 		}
 
-		// Hash IP for cache key — Constitution VIII / NFR-03.
-		$ip_hash = $this->hash_ip( $ip );
-
-		// Cache hit?
-		$cached = wp_cache_get( $ip_hash, self::CACHE_GROUP );
-		if ( false !== $cached && is_array( $cached ) ) {
-			return array( 'vpn' => $cached['vpn'], 'source' => 'cache' );
-		}
-
-		// Opt-in gate. No opt-in → no call.
+		// L2-SP1-S005 / L1-SP1-S001 fix (1.15.0): opt-in gate MUST run
+		// BEFORE the cache read. Otherwise, after an admin revokes
+		// opt-in, persistent caches (Redis/Memcached) continue serving
+		// previously-cached VPN classifications for up to 24h, violating
+		// Constitution VIII/IX (cross-border data processing must stop
+		// immediately on opt-in revocation). On a default WP install
+		// without persistent cache the gap is per-request only, but the
+		// contract violation in the code is the same regardless.
 		if ( ! $this->is_optin_active() ) {
 			return array( 'vpn' => null, 'source' => 'skip' );
 		}
@@ -65,6 +63,15 @@ class Ipinfo_Client {
 		$api_key = $this->get_api_key();
 		if ( '' === $api_key ) {
 			return array( 'vpn' => null, 'source' => 'skip' );
+		}
+
+		// Hash IP for cache key — Constitution VIII / NFR-03.
+		$ip_hash = $this->hash_ip( $ip );
+
+		// Cache hit (after opt-in confirmed)?
+		$cached = wp_cache_get( $ip_hash, self::CACHE_GROUP );
+		if ( false !== $cached && is_array( $cached ) ) {
+			return array( 'vpn' => $cached['vpn'], 'source' => 'cache' );
 		}
 
 		// Make the call.
