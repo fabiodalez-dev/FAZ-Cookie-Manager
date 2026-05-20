@@ -282,6 +282,14 @@
 				label.style.cssText = 'display:inline-flex;align-items:center;gap:5px;font-size:13px;padding:2px 0;flex:0 0 auto;';
 				var cb = document.createElement('input');
 				cb.type = 'checkbox';
+				// readForm() iterates input[name],select[name],textarea[name] —
+				// without a name the checkbox is skipped and third_party_services
+				// stays empty no matter how many boxes the user ticks. The PHP-
+				// array suffix in the name is cosmetic (readForm uses the
+				// dataset.serviceId branch, not the form value); value mirrors
+				// dataset.serviceId for HTML-form correctness.
+				cb.name = 'third_party_services[]';
+				cb.value = svc.id;
 				cb.dataset.serviceId = svc.id;
 				label.appendChild(cb);
 				label.appendChild(document.createTextNode(svc.label));

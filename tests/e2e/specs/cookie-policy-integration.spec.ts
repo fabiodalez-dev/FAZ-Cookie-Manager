@@ -154,6 +154,84 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     await expect(adminPage.locator('#cp-save-status')).toContainText(/Saved/i);
   });
 
+  test('3b. Third-party service checkboxes round-trip (regression for CodeRabbit #121 finding)', async ({ page, loginAsAdmin }) => {
+    // The expanded ~80-service catalogue (PR #121) added checkboxes that
+    // were initially created without a `name` attribute. readForm() filters
+    // on `input[name],select[name],textarea[name]`, so the checkboxes were
+    // never serialized and third_party_services stayed empty in the saved
+    // option regardless of how many boxes the user ticked. This test pins
+    // the fix: checking 3 services, saving, reloading, then asserting both
+    // (a) the DOM reflects the persisted state and (b) the WP option carries
+    // the expected slugs.
+    await loginAsAdmin(page);
+    const adminPage = page;
+    await adminPage.goto(ADMIN_PAGE, { waitUntil: 'domcontentloaded' });
+
+    // Wait for the renderServicesList() call to populate the list (deferred
+    // until after the initial REST load, like the rest of the form).
+    await adminPage.waitForFunction(
+      () => document.querySelectorAll('#cp-services-list input[type=checkbox]').length > 10,
+      undefined,
+      { timeout: 5000 },
+    );
+
+    // Sanity-check the name attribute is set — the actual fix.
+    const sampleName = await adminPage.evaluate(() =>
+      (document.querySelector('#cp-services-list input[type=checkbox]') as HTMLInputElement | null)?.name,
+    );
+    expect(sampleName, 'each service checkbox must carry a `name` so readForm picks it up').toBe('third_party_services[]');
+
+    // Clear any seeded state from beforeAll, then tick exactly 3 well-known
+    // services covering 3 different group categories (analytics, CDN, anti-bot).
+    await adminPage.evaluate(() => {
+      document.querySelectorAll<HTMLInputElement>('#cp-services-list input[type=checkbox]').forEach((cb) => {
+        cb.checked = false;
+      });
+    });
+    await adminPage.evaluate(() => {
+      const ids = ['matomo', 'cloudfront', 'turnstile'];
+      ids.forEach((id) => {
+        const cb = document.querySelector<HTMLInputElement>(`#cp-services-list input[data-service-id="${id}"]`);
+        if (cb) { cb.checked = true; }
+      });
+    });
+
+    // Save.
+    await adminPage.click('form#faz-cookie-policy-form button[type=submit]');
+    await expect(adminPage.locator('#cp-save-status'), 'save status reports success').toContainText(/Saved/i, { timeout: 5000 });
+
+    // Verify the wp_options row reflects the new selection (cuts through any
+    // client-state echo bug — the DB is the ground truth).
+    const persistedRaw = wpEval(`
+      $opt = get_option('faz_cookie_policy_data', array());
+      echo wp_json_encode( isset($opt['third_party_services']) ? $opt['third_party_services'] : null );
+    `).trim();
+    const persisted = JSON.parse(persistedRaw) as string[] | null;
+    expect(persisted, 'option.third_party_services persisted as a list').toBeInstanceOf(Array);
+    expect(persisted!.sort(), 'exactly the 3 services we ticked').toEqual(['cloudfront', 'matomo', 'turnstile']);
+
+    // Reload and assert writeForm restores the same state.
+    await adminPage.reload({ waitUntil: 'domcontentloaded' });
+    await adminPage.waitForFunction(
+      () => document.querySelectorAll('#cp-services-list input[type=checkbox]:checked').length > 0,
+      undefined,
+      { timeout: 5000 },
+    );
+    const checkedAfterReload = await adminPage.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLInputElement>('#cp-services-list input[type=checkbox]:checked'))
+        .map((cb) => cb.dataset.serviceId || '')
+        .sort(),
+    );
+    expect(checkedAfterReload, 'DOM reflects persisted selection after reload').toEqual(['cloudfront', 'matomo', 'turnstile']);
+
+    // The save above serialised the entire form back to the option (not
+    // just third_party_services), so a partial restore would leave
+    // downstream tests with whatever the form happened to contain.
+    // Reseed the full FAKE_DATA payload to match beforeAll.
+    const restoreJson = JSON.stringify(FAKE_DATA).replace(/'/g, "\\'");
+    wpEval(`update_option('faz_cookie_policy_data', json_decode('${restoreJson}', true));`);
+  });
+
   test('4. Preview button renders policy with disclaimer (no leftover {{...}})', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     const adminPage = page;
