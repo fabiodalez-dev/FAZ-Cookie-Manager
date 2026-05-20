@@ -127,7 +127,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 				</div>
 				<div class="faz-form-group">
 					<label for="cp-privacy-policy-url"><?php esc_html_e( 'Separate Privacy Policy URL (optional)', 'faz-cookie-manager' ); ?></label>
-					<input type="url" id="cp-privacy-policy-url" name="privacy_policy_url" class="faz-input" placeholder="https://example.com/privacy">
+					<input type="url" id="cp-privacy-policy-url" name="privacy_policy_url" class="faz-input" placeholder="<?php echo esc_attr__( 'https://example.com/privacy', 'faz-cookie-manager' ); ?>">
 				</div>
 			</div>
 		</div>

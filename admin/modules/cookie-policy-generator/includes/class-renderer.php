@@ -493,12 +493,26 @@ class Renderer {
 	}
 
 	private static function current_url() {
-		if ( ! isset( $_SERVER['HTTP_HOST'] ) || ! isset( $_SERVER['REQUEST_URI'] ) ) {
+		// SECURITY: do NOT trust $_SERVER['HTTP_HOST'] for the host
+		// component. The Host header is attacker-controlled (think Host
+		// header injection); building the canonical URL of a published
+		// Cookie Policy from it would let an attacker forge the
+		// {{COOKIE_POLICY_URL}} placeholder to point at evil.com even
+		// after esc_url() (which only validates the SHAPE of a URL,
+		// not the hostname). We pull the host from home_url() — that
+		// reads `siteurl` from wp_options, which is admin-controlled
+		// and not derived from the request — and combine it with the
+		// sanitised REQUEST_URI path.
+		if ( ! isset( $_SERVER['REQUEST_URI'] ) ) {
 			return home_url( '/' );
 		}
-		$proto = ( ! empty( $_SERVER['HTTPS'] ) && 'off' !== strtolower( (string) $_SERVER['HTTPS'] ) ) ? 'https' : 'http';
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		return $proto . '://' . (string) $_SERVER['HTTP_HOST'] . (string) $_SERVER['REQUEST_URI'];
+		$request_uri = wp_unslash( (string) $_SERVER['REQUEST_URI'] );
+		// Normalise leading slash and drop any control chars / CR-LF
+		// the request might have smuggled.
+		$request_uri = preg_replace( '/[\x00-\x1F\x7F]/', '', (string) $request_uri );
+		$request_uri = '/' . ltrim( (string) $request_uri, '/' );
+		return home_url( $request_uri );
 	}
 
 	private static function table_exists( $table ) {

@@ -140,6 +140,7 @@ class Cookie_Policy_Api {
 			? $this->sanitize_settings( $body['settings'] )
 			: null;
 
+		$filter = null;
 		if ( $override ) {
 			// Temporarily swap the option so Renderer reads the preview payload.
 			// We use a filter — no DB write happens; pre_option_<key> short-circuits get_option.
@@ -149,14 +150,20 @@ class Cookie_Policy_Api {
 			add_filter( 'pre_option_' . self::OPTION, $filter );
 		}
 
-		$atts = array(
-			'lang'         => isset( $body['lang'] ) ? sanitize_text_field( (string) $body['lang'] ) : '',
-			'jurisdiction' => isset( $body['jurisdiction'] ) ? sanitize_text_field( (string) $body['jurisdiction'] ) : '',
-		);
-		$html = Renderer::render( $atts );
-
-		if ( $override ) {
-			remove_filter( 'pre_option_' . self::OPTION, $filter );
+		// try/finally so a throw inside Renderer::render() (or any filter
+		// down the chain) cannot leave the temporary pre_option_ filter
+		// installed for the rest of the request — that would leak the
+		// preview payload into any subsequent get_option() call.
+		try {
+			$atts = array(
+				'lang'         => isset( $body['lang'] ) ? sanitize_text_field( (string) $body['lang'] ) : '',
+				'jurisdiction' => isset( $body['jurisdiction'] ) ? sanitize_text_field( (string) $body['jurisdiction'] ) : '',
+			);
+			$html = Renderer::render( $atts );
+		} finally {
+			if ( $filter ) {
+				remove_filter( 'pre_option_' . self::OPTION, $filter );
+			}
 		}
 
 		return new WP_REST_Response( array( 'html' => $html ), 200 );
@@ -272,6 +279,12 @@ class Cookie_Policy_Api {
 	/**
 	 * sanitize + trim + length cap. Single-line (sanitize_text_field).
 	 *
+	 * Multibyte-safe: uses mb_strlen / mb_substr so 200/500/5000 character
+	 * caps count CHARACTERS, not bytes — important for company names with
+	 * non-ASCII chars (e.g. "Société Générale" or "São Paulo Café").
+	 * Without this, a byte-cap at 200 could slice a multibyte character in
+	 * half and yield invalid UTF-8.
+	 *
 	 * @param mixed $val
 	 * @param int   $max
 	 * @return string
@@ -282,10 +295,7 @@ class Cookie_Policy_Api {
 		}
 		$v = sanitize_text_field( (string) $val );
 		$v = trim( $v );
-		if ( strlen( $v ) > $max ) {
-			$v = substr( $v, 0, $max );
-		}
-		return $v;
+		return self::clip_chars( $v, $max );
 	}
 
 	/**
@@ -302,8 +312,26 @@ class Cookie_Policy_Api {
 		}
 		$v = sanitize_textarea_field( (string) $val );
 		$v = trim( $v );
+		return self::clip_chars( $v, $max );
+	}
+
+	/**
+	 * UTF-8-aware length cap. Falls back to byte cap when mbstring is
+	 * unavailable (very rare on modern PHP).
+	 *
+	 * @param string $v
+	 * @param int    $max
+	 * @return string
+	 */
+	private static function clip_chars( $v, $max ) {
+		if ( function_exists( 'mb_strlen' ) && function_exists( 'mb_substr' ) ) {
+			if ( mb_strlen( $v, 'UTF-8' ) > $max ) {
+				return mb_substr( $v, 0, $max, 'UTF-8' );
+			}
+			return $v;
+		}
 		if ( strlen( $v ) > $max ) {
-			$v = substr( $v, 0, $max );
+			return substr( $v, 0, $max );
 		}
 		return $v;
 	}

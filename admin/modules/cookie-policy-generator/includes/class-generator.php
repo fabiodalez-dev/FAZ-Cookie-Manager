@@ -273,12 +273,20 @@ class Generator {
 			},
 			$text
 		);
-		// Bold **text**.
-		$text = preg_replace( '/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $text );
-		// Italic *text* (avoiding ** already replaced).
-		$text = preg_replace( '/(?<!\*)\*([^*]+)\*(?!\*)/', '<em>$1</em>', $text );
-		// Inline code `text`.
-		$text = preg_replace( '/`([^`]+)`/', '<code>$1</code>', $text );
+		// Bold/italic/inline-code: route the captured text through esc_html()
+		// so HTML special chars (<, >, &) emitted by a filter or by a
+		// {{PLACEHOLDER}} expansion can't bypass the bold/italic wrapping
+		// and inject markup directly. Defence-in-depth alongside the final
+		// wp_kses_post() pass at the Renderer boundary.
+		$text = preg_replace_callback( '/\*\*([^*]+)\*\*/', function ( $m ) {
+			return '<strong>' . esc_html( $m[1] ) . '</strong>';
+		}, $text );
+		$text = preg_replace_callback( '/(?<!\*)\*([^*]+)\*(?!\*)/', function ( $m ) {
+			return '<em>' . esc_html( $m[1] ) . '</em>';
+		}, $text );
+		$text = preg_replace_callback( '/`([^`]+)`/', function ( $m ) {
+			return '<code>' . esc_html( $m[1] ) . '</code>';
+		}, $text );
 		return $text;
 	}
 

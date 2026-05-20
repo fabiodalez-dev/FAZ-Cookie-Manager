@@ -195,9 +195,14 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     await page.context().clearCookies();
 
     const siteUrl = (process.env.WP_BASE_URL || 'http://127.0.0.1:9998').replace(/\/$/, '');
-    const policyUrl = `${siteUrl}/?page_id=` + (
-      wpEval(`echo (int) get_posts(array('name'=>'cookie-policy-e2e','post_type'=>'page','fields'=>'ids'))[0];`).trim()
-    );
+    // Resolve the seeded page id with explicit guard: indexing [0] on an
+    // empty get_posts() array would yield null and produce
+    // /?page_id= (no id) — an invalid URL that masks the real failure.
+    const pageId = wpEval(
+      `$ids = get_posts(array('name'=>'cookie-policy-e2e','post_type'=>'page','fields'=>'ids')); echo (int) (isset($ids[0]) ? $ids[0] : 0);`,
+    ).trim();
+    expect(pageId, 'cookie-policy-e2e page id seeded by beforeAll').toMatch(/^[1-9]\d*$/);
+    const policyUrl = `${siteUrl}/?page_id=${pageId}`;
 
     await page.goto(policyUrl, { waitUntil: 'domcontentloaded' });
 

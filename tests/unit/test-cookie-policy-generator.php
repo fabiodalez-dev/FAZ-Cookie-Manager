@@ -222,10 +222,14 @@ assert_true(
 	is_string( $traversal_path ) && false === strpos( $traversal_path, '..' ),
 	'Path traversal in $lang rejected at whitelist gate'
 );
-// Verify it landed on the native-lang fallback (en for gdpr).
+// Verify it landed on the native-lang fallback (en for gdpr). Normalise
+// path separators so the test passes on Windows too (where DIRECTORY_SEPARATOR
+// is '\') — the contract is "ends with the gdpr-strict/en.md template",
+// not "uses forward slashes".
+$normalized_traversal = is_string( $traversal_path ) ? str_replace( '\\', '/', $traversal_path ) : '';
 assert_true(
-	is_string( $traversal_path ) && false !== strpos( $traversal_path, '/gdpr-strict/en.md' ),
-	'Invalid $lang falls back to gdpr-strict native lang (en)'
+	'' !== $normalized_traversal && false !== strpos( $normalized_traversal, '/gdpr-strict/en.md' ),
+	'Invalid $lang falls back to gdpr-strict native lang (en) — path normalised for OS independence'
 );
 
 // ---------- Constants ----------

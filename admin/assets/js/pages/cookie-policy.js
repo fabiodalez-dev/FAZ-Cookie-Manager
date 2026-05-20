@@ -59,23 +59,34 @@
 	// ---------- form ↔ settings serialization ----------
 
 	// Dot-path setter: setDeep(obj, "company.name", "ACME").
-	// Blocks prototype-pollution path segments: a malicious data-path attribute
-	// like "__proto__.toString" or "constructor.prototype.x" must NOT be able
-	// to walk up the prototype chain and mutate Object.prototype globally.
-	// We early-return on any segment matching the well-known dangerous keys.
-	var BLOCKED_KEYS = { '__proto__': true, 'prototype': true, 'constructor': true };
+	// Hardened against prototype pollution via three independent guards:
+	//   1. Reject path segments matching the well-known dangerous keys
+	//      (__proto__ / prototype / constructor) BEFORE any property access.
+	//   2. Use Object.prototype.hasOwnProperty.call() to check whether the
+	//      key exists as an own property — never look up the prototype chain.
+	//   3. Create intermediate objects with Object.create(null) so they
+	//      have NO prototype chain at all; mutating their "__proto__" is a
+	//      regular property write that cannot escalate to the global one.
+	// Each layer is sufficient on its own; together they satisfy CodeQL's
+	// "Prototype-polluting function" rule which flags any dynamic assignment
+	// even when guarded by a denylist.
+	function isUnsafeKey(k) {
+		return k === '__proto__' || k === 'prototype' || k === 'constructor';
+	}
 	function setDeep(obj, path, value) {
 		var parts = path.split('.');
 		var cur = obj;
 		for (var i = 0; i < parts.length - 1; i++) {
-			if (BLOCKED_KEYS[parts[i]] === true) { return; }
-			if (typeof cur[parts[i]] !== 'object' || cur[parts[i]] === null) {
-				cur[parts[i]] = {};
+			var key = parts[i];
+			if (isUnsafeKey(key)) { return; }
+			var existing = Object.prototype.hasOwnProperty.call(cur, key) ? cur[key] : undefined;
+			if (typeof existing !== 'object' || existing === null) {
+				cur[key] = Object.create(null);
 			}
-			cur = cur[parts[i]];
+			cur = cur[key];
 		}
 		var last = parts[parts.length - 1];
-		if (BLOCKED_KEYS[last] === true) { return; }
+		if (isUnsafeKey(last)) { return; }
 		cur[last] = value;
 	}
 
@@ -172,20 +183,22 @@
 	function showPreview(html) {
 		var modal = document.getElementById('cp-preview-modal');
 		var content = document.getElementById('cp-preview-content');
-		// Use a sandboxed iframe so the preview HTML cannot reach back into the admin page.
+		// Strongest possible iframe sandbox: empty value disables scripts,
+		// forms, top-navigation, popups AND same-origin privileges. Even if
+		// a future regression slips XSS past the server-side wp_kses_post
+		// boundary, the iframe document cannot reach the admin page DOM,
+		// cookies, or REST nonce — it's a fully isolated null-origin frame.
+		// srcdoc (instead of doc.write) lets us set the content atomically
+		// without needing a setTimeout dance.
 		while (content.firstChild) { content.removeChild(content.firstChild); }
 		var iframe = document.createElement('iframe');
 		iframe.style.cssText = 'width:100%; height:70vh; border:1px solid #ccd0d4; background:#fff;';
-		iframe.setAttribute('sandbox', 'allow-same-origin'); // no scripts, no top navigation
+		iframe.setAttribute('sandbox', ''); // null sandbox — no scripts, no same-origin, no nothing
+		iframe.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><style>' +
+			'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; padding:18px; line-height:1.55;}' +
+			'.faz-cookie-policy-disclaimer{margin-top:24px;padding:12px 14px;background:#fff5d6;border-left:3px solid #d4a017;font-size:13px;}' +
+			'</style></head><body>' + html + '</body></html>';
 		content.appendChild(iframe);
-		// Render after attach so contentWindow exists.
-		setTimeout(function () {
-			var doc = iframe.contentDocument || (iframe.contentWindow && iframe.contentWindow.document);
-			if (!doc) { return; }
-			doc.open();
-			doc.write('<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; padding:18px; line-height:1.55;} .faz-cookie-policy-disclaimer{margin-top:24px;padding:12px 14px;background:#fff5d6;border-left:3px solid #d4a017;font-size:13px;}</style></head><body>' + html + '</body></html>');
-			doc.close();
-		}, 0);
 		modal.hidden = false;
 	}
 
