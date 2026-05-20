@@ -170,7 +170,16 @@ if command -v python3 >/dev/null 2>&1; then
     fi
 fi
 
-# Fallback to ajv-cli.
+# Fallback to ajv-cli. NB: AJV only checks JSON-Schema conformance — it does
+# NOT replicate the Python validator's id-vs-filename warning, so it has no
+# notion of "warnings" to escalate. To honour the --strict contract uniformly,
+# refuse to use the AJV path at all when strict was requested.
+if [[ "$STRICT_MODE" == "yes" ]]; then
+    red "--strict requires the Python validator (warning-aware: id/filename consistency check). AJV fallback cannot enforce equivalent warnings; refusing to proceed."
+    yellow "Install python3 + jsonschema:  pip3 install jsonschema"
+    exit 1
+fi
+
 if run_ajv_validator; then
     green "All rulesets valid (ajv)."
     exit 0
