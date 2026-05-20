@@ -106,4 +106,72 @@ class Geo_Routing {
 	public function get_schema_path() {
 		return __DIR__ . '/schemas/ruleset.schema.json';
 	}
+
+	/**
+	 * Get the complete visitor context: geo + ruleset + signals.
+	 *
+	 * Single entry point for consumers (admin UI preview, banner
+	 * controller integration in P6, REST endpoints) — combines
+	 * Geo_Detector::detect() + Ruleset_Resolver::resolve() +
+	 * Ruleset_Loader::load_ruleset() in one call.
+	 *
+	 * Returns null on any internal failure (consumer falls back to
+	 * the pre-v2 banner selection path — backwards-compatible).
+	 *
+	 * Spec: FR-02 + FR-03 + FR-06 combined.
+	 * Task: T023 (P3 integration, non-invasive)
+	 *
+	 * @param string|null $ip_override Optional explicit IP for testing.
+	 * @return array|null Shape: ['country' => 'IT', 'region' => '',
+	 *                            'vpn' => false, 'source' => 'cf_header',
+	 *                            'ruleset_id' => 'gdpr-strict',
+	 *                            'ruleset' => array $loaded_json_decoded].
+	 */
+	public function get_visitor_context( $ip_override = null ) {
+		// Lazy autoload of the resolver chain (only when consumer calls).
+		$detector_class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Geo_Detector';
+		$loader_class   = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Ruleset_Loader';
+		$resolver_class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Ruleset_Resolver';
+
+		if ( ! class_exists( $detector_class ) || ! class_exists( $loader_class ) || ! class_exists( $resolver_class ) ) {
+			return null;
+		}
+
+		try {
+			$detector = new $detector_class();
+			$loader   = $loader_class::get_instance();
+
+			$geo = $detector->detect( $ip_override );
+
+			$overrides = (array) get_option( 'faz_geo_admin_overrides', array() );
+
+			$ruleset_id = $resolver_class::resolve(
+				isset( $geo['country'] ) ? $geo['country'] : '',
+				isset( $geo['region'] ) ? $geo['region'] : '',
+				isset( $geo['vpn'] ) ? (bool) $geo['vpn'] : false,
+				$overrides,
+				$loader->load_index(),
+				$loader->load_us_regions(),
+				$loader->get_fallback_id()
+			);
+
+			$ruleset = $loader->load_ruleset( $ruleset_id );
+			if ( null === $ruleset ) {
+				// Catalog incomplete (typical during P4/P5 buildout) — load fallback.
+				$ruleset    = $loader->load_ruleset( $loader->get_fallback_id() );
+				$ruleset_id = $loader->get_fallback_id();
+			}
+
+			return array(
+				'country'    => isset( $geo['country'] ) ? $geo['country'] : 'XX',
+				'region'     => isset( $geo['region'] ) ? $geo['region'] : '',
+				'vpn'        => isset( $geo['vpn'] ) ? $geo['vpn'] : null,
+				'source'     => isset( $geo['source'] ) ? $geo['source'] : 'unknown',
+				'ruleset_id' => $ruleset_id,
+				'ruleset'    => $ruleset,
+			);
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+	}
 }
