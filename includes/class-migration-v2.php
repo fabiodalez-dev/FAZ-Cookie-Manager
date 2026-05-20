@@ -345,15 +345,19 @@ class Migration_V2 {
 					$table
 				) );
 			}
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter
-			$result = $wpdb->query(
-				sprintf(
-					'ALTER TABLE `%s` ADD COLUMN `%s` %s',
-					str_replace( '`', '', $table ),
-					$column,
-					$ddl
-				)
+			// Build the fallback ALTER as a separate assignment so the phpcs:ignore
+			// on the $wpdb->query() statement applies cleanly. Same allowlist
+			// guarantees as the primary path above ($table from $wpdb->prefix,
+			// $column from static $allowed, $ddl from regex-validated literals).
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,PluginCheck.Security.DirectDB.UnescapedDBParameter
+			$sql_fallback = sprintf(
+				'ALTER TABLE `%s` ADD COLUMN `%s` %s',
+				str_replace( '`', '', $table ),
+				$column,
+				$ddl
 			);
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange
+			$result = $wpdb->query( $sql_fallback );
 		}
 
 		return false !== $result;
