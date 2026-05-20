@@ -292,6 +292,17 @@ test.describe('PR104 — F-SEC-02 GEOIP_COUNTRY_CODE opt-in filter', () => {
     // is never reached. Force a non-localhost REMOTE_ADDR for the
     // duration of the assertion AND bypass the per-IP transient cache.
     const result = wpEval(`
+      // Defensive cleanup: the dev-only mu-plugin faz-geo-dev-fake-cf
+      // registers __return_true on faz_trust_cf_ipcountry_header AND
+      // injects $_SERVER['HTTP_CF_IPCOUNTRY']='IT' on every request,
+      // which would short-circuit the detection chain before the
+      // GEOIP branch this test verifies. Strip both. We also strip the
+      // GEOIP filter for symmetry (no current dev fixture sets it, but
+      // the assertion needs to observe production default 'false').
+      remove_all_filters( 'faz_trust_cf_ipcountry_header' );
+      remove_all_filters( 'faz_trust_geoip_country_code' );
+      unset( $_SERVER['HTTP_CF_IPCOUNTRY'], $_SERVER['HTTP_CF_REGION_CODE'] );
+
       $_SERVER['REMOTE_ADDR'] = '8.8.8.8';
       // Clear any cached lookup for that IP from previous tests.
       delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );

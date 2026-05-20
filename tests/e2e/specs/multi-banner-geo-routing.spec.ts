@@ -712,12 +712,21 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     // faz_trust_cf_ipcountry_header filter — protects from spoofed headers
     // on installs that do not actually sit behind Cloudflare.
     const result = wpEval(`
+      // The dev-only mu-plugin faz-geo-dev-fake-cf registers
+      // __return_true on faz_trust_cf_ipcountry_header so geo-routing
+      // can be exercised on a localhost install without a real GeoLite2
+      // database. That contaminates the "default OFF" contract this
+      // test verifies — clear callbacks so the assertion observes the
+      // production default (false). Each wp eval invocation is a fresh
+      // PHP process; mutating $wp_filter here does not leak across tests.
+      remove_all_filters( 'faz_trust_cf_ipcountry_header' );
+
       // Establish a baseline WITHOUT the CF header so we know what
       // get_visitor_country() would naturally resolve to via the fallback
-      // chain (MaxMind / ip-api.com). The "trust OFF → not DE" assertion
-      // was flaky when the fallback genuinely resolved to DE (German
-      // dev box / VPN). Comparing OFF against the baseline is robust:
-      // the contract is "header has no effect", not "result is not DE".
+      // chain (MaxMind / ip-api.com). Comparing OFF against the baseline
+      // is robust: the contract is "header has no effect", not
+      // "result is not DE" (the fallback could genuinely resolve to DE
+      // on a German dev box / VPN).
       unset( $_SERVER['HTTP_CF_IPCOUNTRY'] );
       $baseline = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
 

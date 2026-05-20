@@ -136,6 +136,26 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
   });
 
   test('output-buffer fallback never blocks own wp_localize_script payloads (#100)', async () => {
+    // Two-layer contract enforced by is_wp_localize_or_translations_inline_id():
+    //
+    // 1. ANY inline script whose id ends in `-js-extra` or `-js-translations`
+    //    is exempt from substring provider matching, because WordPress core
+    //    only emits those suffixes for `wp_localize_script()` (data payload)
+    //    and `wp_set_script_translations()` (i18n payload) — neither shape
+    //    hosts executable tracker code. This exemption is plugin-agnostic
+    //    by design: trx_addons localises `animate_to_mc4wp_form_submitted`,
+    //    RankMath includes `addtoany`, Yoast carries `gtag` in instruction
+    //    strings — blocking those breaks the host page with a
+    //    `ReferenceError: NAME is not defined`. See the docstring on
+    //    is_wp_localize_or_translations_inline_id() (frontend/class-frontend.php)
+    //    for the full rationale. A malicious plugin abusing this suffix
+    //    to hide a tracker has the entire rest of the page to exfiltrate
+    //    from — the assumption "core appends `-js-extra` to data only" is
+    //    the same one WordPress itself relies on.
+    //
+    // 2. A foreign inline script WITHOUT the `-js-extra` / `-js-translations`
+    //    suffix and carrying a provider hit IS still blocked. This is the
+    //    cross-plugin guard the consent gate must keep enforcing.
     const raw = wpEval(`
       $fe = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.0' );
       $r  = new ReflectionClass( $fe );
@@ -154,6 +174,7 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
       $providers = array( 'gtag(' => 'analytics' );
       $blocked = array( 'analytics' );
 
+      // (1a) own wp_localize_script payload — must pass through unchanged.
       $own_full = '<script id="faz-fw-js-extra">' . $content . '</script>';
       $own = $m->invoke(
         $fe,
@@ -162,27 +183,63 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
         $blocked
       );
 
-      $foreign_full = '<script id="third-party-js-extra">' . $content . '</script>';
-      $foreign = $m->invoke(
+      // (1b) foreign wp_localize_script payload — also exempt, by design
+      // (see docstring): the substring-match provider detector would
+      // otherwise false-positive on data keys that happen to contain a
+      // provider token (the trx_addons / RankMath / Yoast cases the
+      // exemption was widened for).
+      $foreign_localize_full = '<script id="third-party-js-extra">' . $content . '</script>';
+      $foreign_localize = $m->invoke(
         $fe,
-        array( $foreign_full, ' id="third-party-js-extra"', $content ),
+        array( $foreign_localize_full, ' id="third-party-js-extra"', $content ),
+        $providers,
+        $blocked
+      );
+
+      // (2) foreign inline script WITHOUT the core data-payload suffix,
+      // carrying the same provider hit — this one MUST be blocked.
+      // Proves the consent gate still enforces cross-plugin blocking on
+      // genuine inline tracker tags.
+      $foreign_exec_full = '<script id="third-party-tracker">' . $content . '</script>';
+      $foreign_exec = $m->invoke(
+        $fe,
+        array( $foreign_exec_full, ' id="third-party-tracker"', $content ),
         $providers,
         $blocked
       );
 
       echo wp_json_encode( array(
-        'own_unchanged' => $own === $own_full,
-        'own_blocked' => false !== strpos( $own, 'type="text/plain"' ),
-        'foreign_blocked' => false !== strpos( $foreign, 'type="text/plain"' ),
-        'foreign_category' => false !== strpos( $foreign, 'data-faz-category="analytics"' ),
+        'own_unchanged'             => $own === $own_full,
+        'own_blocked'               => false !== strpos( $own, 'type="text/plain"' ),
+        'foreign_localize_unchanged'=> $foreign_localize === $foreign_localize_full,
+        'foreign_localize_blocked'  => false !== strpos( $foreign_localize, 'type="text/plain"' ),
+        'foreign_exec_blocked'      => false !== strpos( $foreign_exec, 'type="text/plain"' ),
+        'foreign_exec_category'     => false !== strpos( $foreign_exec, 'data-faz-category="analytics"' ),
       ) );
     `).trim();
     const result = JSON.parse(raw) as Record<string, boolean>;
 
+    // Layer 1: -js-extra suffix → exempt regardless of origin.
     expect(result.own_unchanged, 'own {handle}-js-extra payload must remain executable').toBe(true);
     expect(result.own_blocked, 'own localized payload must not be rewritten to text/plain').toBe(false);
-    expect(result.foreign_blocked, 'foreign matching inline script still needs blocking').toBe(true);
-    expect(result.foreign_category, 'foreign blocked script keeps its category marker').toBe(true);
+    expect(
+      result.foreign_localize_unchanged,
+      'foreign {handle}-js-extra payload must also remain executable (wp_localize_script convention is plugin-agnostic; substring-match would false-positive on data keys carrying provider names)',
+    ).toBe(true);
+    expect(
+      result.foreign_localize_blocked,
+      'foreign {handle}-js-extra payload must not be rewritten to text/plain',
+    ).toBe(false);
+
+    // Layer 2: foreign inline script WITHOUT the core suffix → still blocked.
+    expect(
+      result.foreign_exec_blocked,
+      'foreign inline script without the -js-extra suffix carrying a provider hit must still be blocked',
+    ).toBe(true);
+    expect(
+      result.foreign_exec_category,
+      'foreign blocked script keeps its category marker',
+    ).toBe(true);
   });
 
   test('litespeed_exclude_own_scripts_from_include is path-anchored (no false-positive scrub)', async () => {
