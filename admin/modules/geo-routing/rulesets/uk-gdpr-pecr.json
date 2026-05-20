@@ -1,0 +1,59 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "id": "uk-gdpr-pecr",
+  "version": "1.0.0",
+  "display_name": "UK GDPR + PECR (ICO)",
+  "law_references": [
+    "Reg. UE 2016/679 (GDPR)",
+    "Dir. 2002/58/CE (ePrivacy) Art. 5(3)",
+    "UK GDPR + PECR 2003 + ICO Cookies guidance 2023"
+  ],
+  "applies_to": {
+    "countries": [
+      "GB"
+    ]
+  },
+  "model": "opt-in",
+  "native_lang": "en",
+  "official_resources_url": [
+    "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/online/cookies-and-similar-technologies/"
+  ],
+  "signals": {
+    "tcf_v22": true,
+    "gpp": {
+      "enabled": false,
+      "section": null
+    },
+    "gpc_honored": true,
+    "gpc_required": false,
+    "dnt_honored": true,
+    "cmv2": {
+      "ad_storage": "denied",
+      "analytics_storage": "denied",
+      "ad_user_data": "denied",
+      "ad_personalization": "denied",
+      "personalization_storage": "denied",
+      "functionality_storage": "granted",
+      "security_storage": "granted"
+    }
+  },
+  "ui": {
+    "equal_weight_buttons": true,
+    "donotsell_link_required": false,
+    "sensitive_separate_optin": false,
+    "revisit_widget_required": true,
+    "default_categories": {
+      "necessary": "granted-locked",
+      "functional": "denied",
+      "analytics": "denied",
+      "marketing": "denied",
+      "profiling": "denied"
+    }
+  },
+  "cross_border_notes": null,
+  "_meta": {
+    "behavior_review_date": "2026-05-20",
+    "next_review_due": "2027-05-20",
+    "notes": "Cookie wall ammesso solo con paywall alternativo"
+  }
+}

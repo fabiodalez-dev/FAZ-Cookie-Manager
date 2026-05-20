@@ -1,0 +1,60 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "id": "gdpr-germany",
+  "version": "1.0.0",
+  "display_name": "GDPR — Germany (TTDSG/TDDDG)",
+  "law_references": [
+    "Reg. UE 2016/679 (GDPR)",
+    "Dir. 2002/58/CE (ePrivacy) Art. 5(3)",
+    "TTDSG §25 (recepimento ePrivacy 5(3))"
+  ],
+  "applies_to": {
+    "countries": [
+      "DE"
+    ]
+  },
+  "model": "opt-in",
+  "native_lang": "de",
+  "official_resources_url": [
+    "https://www.gesetze-im-internet.de/ttdsg/",
+    "https://www.bfdi.bund.de/DE/Buerger/Inhalte/Internetdienste/Cookies.html"
+  ],
+  "signals": {
+    "tcf_v22": true,
+    "gpp": {
+      "enabled": false,
+      "section": null
+    },
+    "gpc_honored": true,
+    "gpc_required": false,
+    "dnt_honored": true,
+    "cmv2": {
+      "ad_storage": "denied",
+      "analytics_storage": "denied",
+      "ad_user_data": "denied",
+      "ad_personalization": "denied",
+      "personalization_storage": "denied",
+      "functionality_storage": "granted",
+      "security_storage": "granted"
+    }
+  },
+  "ui": {
+    "equal_weight_buttons": true,
+    "donotsell_link_required": false,
+    "sensitive_separate_optin": false,
+    "revisit_widget_required": true,
+    "default_categories": {
+      "necessary": "granted-locked",
+      "functional": "denied",
+      "analytics": "denied",
+      "marketing": "denied",
+      "profiling": "denied"
+    }
+  },
+  "cross_border_notes": null,
+  "_meta": {
+    "behavior_review_date": "2026-05-20",
+    "next_review_due": "2027-05-20",
+    "notes": "Specific consent for cross-device tracking"
+  }
+}

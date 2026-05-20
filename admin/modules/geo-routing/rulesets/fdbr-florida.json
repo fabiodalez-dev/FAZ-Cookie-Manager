@@ -1,0 +1,61 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "id": "fdbr-florida",
+  "version": "1.0.0",
+  "display_name": "FDBR — Florida",
+  "law_references": [
+    "State law FL comprehensive privacy",
+    "Aligned with IAB GPP framework"
+  ],
+  "applies_to": {
+    "countries": [
+      "US"
+    ],
+    "regions": [
+      "US-FL"
+    ]
+  },
+  "model": "opt-out-with-sensitive-opt-in",
+  "native_lang": "en",
+  "official_resources_url": [
+    "https://myfloridalegal.com/consumer-protection/digital-bill-of-rights/"
+  ],
+  "signals": {
+    "tcf_v22": false,
+    "gpp": {
+      "enabled": true,
+      "section": "usfl"
+    },
+    "gpc_honored": false,
+    "gpc_required": false,
+    "dnt_honored": false,
+    "cmv2": {
+      "ad_storage": "denied-until-action",
+      "analytics_storage": "denied-until-action",
+      "ad_user_data": "denied-until-action",
+      "ad_personalization": "denied-until-action",
+      "personalization_storage": "granted",
+      "functionality_storage": "granted",
+      "security_storage": "granted"
+    }
+  },
+  "ui": {
+    "equal_weight_buttons": true,
+    "donotsell_link_required": true,
+    "sensitive_separate_optin": true,
+    "revisit_widget_required": true,
+    "default_categories": {
+      "necessary": "granted-locked",
+      "functional": "granted",
+      "analytics": "granted",
+      "marketing": "granted",
+      "profiling": "denied-until-action"
+    }
+  },
+  "cross_border_notes": null,
+  "_meta": {
+    "behavior_review_date": "2026-05-20",
+    "next_review_due": "2027-05-20",
+    "notes": "Only businesses > USD 1B revenue."
+  }
+}

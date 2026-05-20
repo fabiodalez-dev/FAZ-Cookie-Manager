@@ -1,0 +1,60 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "id": "gdpr-italy",
+  "version": "1.0.0",
+  "display_name": "GDPR — Italy (Garante)",
+  "law_references": [
+    "Reg. UE 2016/679 (GDPR)",
+    "Dir. 2002/58/CE (ePrivacy) Art. 5(3)",
+    "Garante Privacy 10/06/2021 linee guida cookie"
+  ],
+  "applies_to": {
+    "countries": [
+      "IT"
+    ]
+  },
+  "model": "opt-in",
+  "native_lang": "it",
+  "official_resources_url": [
+    "https://www.garanteprivacy.it/cookie",
+    "https://www.garanteprivacy.it/home/docweb/-/docweb-display/docweb/9677876"
+  ],
+  "signals": {
+    "tcf_v22": true,
+    "gpp": {
+      "enabled": false,
+      "section": null
+    },
+    "gpc_honored": true,
+    "gpc_required": false,
+    "dnt_honored": true,
+    "cmv2": {
+      "ad_storage": "denied",
+      "analytics_storage": "denied",
+      "ad_user_data": "denied",
+      "ad_personalization": "denied",
+      "personalization_storage": "denied",
+      "functionality_storage": "granted",
+      "security_storage": "granted"
+    }
+  },
+  "ui": {
+    "equal_weight_buttons": true,
+    "donotsell_link_required": false,
+    "sensitive_separate_optin": false,
+    "revisit_widget_required": true,
+    "default_categories": {
+      "necessary": "granted-locked",
+      "functional": "denied",
+      "analytics": "denied",
+      "marketing": "denied",
+      "profiling": "denied"
+    }
+  },
+  "cross_border_notes": null,
+  "_meta": {
+    "behavior_review_date": "2026-05-20",
+    "next_review_due": "2027-05-20",
+    "notes": "Stricter close-X behavior per Garante: X = reject"
+  }
+}

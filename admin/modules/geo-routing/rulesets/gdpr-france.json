@@ -1,0 +1,60 @@
+{
+  "$schema": "../schemas/ruleset.schema.json",
+  "id": "gdpr-france",
+  "version": "1.0.0",
+  "display_name": "GDPR — France (CNIL)",
+  "law_references": [
+    "Reg. UE 2016/679 (GDPR)",
+    "Dir. 2002/58/CE (ePrivacy) Art. 5(3)",
+    "CNIL Délibération 2020-091 + FAQ cookies 2022"
+  ],
+  "applies_to": {
+    "countries": [
+      "FR"
+    ]
+  },
+  "model": "opt-in",
+  "native_lang": "fr",
+  "official_resources_url": [
+    "https://www.cnil.fr/fr/cookies-et-traceurs",
+    "https://www.cnil.fr/fr/cookies-et-autres-traceurs-bilan-du-plan-daction"
+  ],
+  "signals": {
+    "tcf_v22": true,
+    "gpp": {
+      "enabled": false,
+      "section": null
+    },
+    "gpc_honored": true,
+    "gpc_required": false,
+    "dnt_honored": true,
+    "cmv2": {
+      "ad_storage": "denied",
+      "analytics_storage": "denied",
+      "ad_user_data": "denied",
+      "ad_personalization": "denied",
+      "personalization_storage": "denied",
+      "functionality_storage": "granted",
+      "security_storage": "granted"
+    }
+  },
+  "ui": {
+    "equal_weight_buttons": true,
+    "donotsell_link_required": false,
+    "sensitive_separate_optin": false,
+    "revisit_widget_required": true,
+    "default_categories": {
+      "necessary": "granted-locked",
+      "functional": "denied",
+      "analytics": "denied",
+      "marketing": "denied",
+      "profiling": "denied"
+    }
+  },
+  "cross_border_notes": null,
+  "_meta": {
+    "behavior_review_date": "2026-05-20",
+    "next_review_due": "2027-05-20",
+    "notes": "Equal-weight buttons enforced per CNIL § 3"
+  }
+}
