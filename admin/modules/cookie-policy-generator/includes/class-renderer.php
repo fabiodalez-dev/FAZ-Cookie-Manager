@@ -66,7 +66,15 @@ class Renderer {
 			// NFR-03 graceful no-op + admin notice.
 			return self::no_template_notice( $jurisdiction, $lang );
 		}
-		$scaffold = (string) @file_get_contents( $template_path );
+		// No error-suppression on the read: the `null === $template_path`
+		// guard above already excludes the "no template" case, and an I/O
+		// failure here (permissions, disk full, deleted file mid-request)
+		// is a real problem the operator should see in their debug log
+		// rather than silently degrade to the empty-string branch.
+		// The empty-result branch below still handles a legitimate empty
+		// template file.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin-shipped Markdown template, not user content.
+		$scaffold = (string) file_get_contents( $template_path );
 		if ( '' === $scaffold ) {
 			return self::no_template_notice( $jurisdiction, $lang );
 		}
