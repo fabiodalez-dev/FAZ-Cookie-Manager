@@ -1,0 +1,32 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 2
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+    paths:
+        - .
+    excludePaths:
+        - vendor
+        - admin/modules/cache/services
+    scanDirectories:
+        - vendor/php-stubs/wordpress-stubs
+    ignoreErrors:
+        # External plugin functions/classes (optional integrations)
+        - '#Function pll_default_language not found#'
+        - '#Constant ICL_SITEPRESS_VERSION not found#'
+        - '#Function wc_get_page_id not found#'
+        # WP-CLI classes — only loaded when WP_CLI constant is defined
+        - '#Call to static method .+ on an unknown class WP_CLI#'
+        - '#Function WP_CLI.+not found#'
+        # PHPStan false positive on isset() defensive checks
+        - '#Variable \$\w+ in isset\(\) always exists and is not nullable#'
+        - '#Variable \$\w+ in empty\(\) always exists and is not falsy#'
+        # szepeviktor/phpstan-wordpress ships an outdated stub for wp_json_encode
+        # that declares only the $data param. The real WP signature is
+        # wp_json_encode( mixed $data, int $options = 0, int $depth = 512 )
+        # — see wp-includes/functions.php in WP 5.0+. Callsites that pass
+        # JSON_PRETTY_PRINT / JSON_UNESCAPED_UNICODE / JSON_UNESCAPED_SLASHES
+        # bitmasks are correct and must not be flagged.
+        - '#Function wp_json_encode invoked with [23] parameters, 1 required#'
