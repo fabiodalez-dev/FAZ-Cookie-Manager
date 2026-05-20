@@ -212,9 +212,12 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     // Disclaimer footer present.
     await expect(article.locator('.faz-cookie-policy-disclaimer')).toBeVisible();
 
-    // Policy version meta tag emitted via wp_head.
-    const meta = page.locator('meta[name="faz-policy-version"]');
-    await expect(meta).toHaveAttribute('content', /^[0-9a-f]+\.[0-9a-f]+$/);
+    // Policy version exposed as data-faz-policy-version on the article
+    // (HTML5-clean — <meta> inside <body> would be dropped by browsers).
+    // When the shortcode runs inside the_content (which is AFTER wp_head),
+    // the <head> meta tag is intentionally NOT emitted; the data-attribute
+    // is the canonical surface.
+    await expect(article).toHaveAttribute('data-faz-policy-version', /^[0-9a-f]+\.[0-9a-f]+$/);
   });
 
   test('6. 6 languages × 3 jurisdictions matrix renders without leftover tokens', async ({ page }) => {

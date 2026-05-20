@@ -82,22 +82,21 @@ class Renderer {
 		// template file (so admin section-overrides cannot suppress it).
 		$html .= self::disclaimer( $jurisdiction, $lang, $data );
 
-		// FR-07: emit meta tag for policy versioning (inline + head if possible).
-		// $inline_meta is constructed internally with esc_attr — no user input —
-		// so it is safe to emit OUTSIDE the wp_kses_post boundary (which would
-		// strip <meta>, not on the default-allowed-HTML list).
-		$inline_meta = self::register_version_meta( $template_path, $data );
+		// FR-07: compute the policy version hash. Exposed in <head> (if
+		// wp_head hasn't fired) AND as a data-faz-policy-version attribute
+		// on the article wrapper (HTML5-clean, always survives).
+		$policy_version = self::register_version_meta( $template_path, $data );
 
-		// Wrap in <article> per NFR-02-X accessibility. Inline meta is placed
-		// just inside the wrapper so it survives whether wp_head already fired
-		// (typical for shortcode rendering inside the_content) or not.
-		$wrapper_open  = '<article class="faz-cookie-policy" lang="' . esc_attr( $lang ) . '" data-jurisdiction="' . esc_attr( $jurisdiction ) . '">';
+		// Wrap in <article> per NFR-02-X accessibility.
+		$wrapper_open  = '<article class="faz-cookie-policy" lang="' . esc_attr( $lang )
+			. '" data-jurisdiction="' . esc_attr( $jurisdiction )
+			. '" data-faz-policy-version="' . esc_attr( $policy_version ) . '">';
 		$wrapper_close = '</article>';
 
-		// NFR-02-XI: sanitize only the body content via wp_kses_post. The
-		// wrapper + meta tag are emitted by trusted code (no user input
-		// reaches them un-escaped) and bypass the kses pass.
-		return $wrapper_open . $inline_meta . wp_kses_post( $html ) . $wrapper_close;
+		// NFR-02-XI: sanitize the body content via wp_kses_post. The wrapper
+		// is emitted by trusted code (no user input reaches it un-escaped)
+		// and bypasses the kses pass.
+		return $wrapper_open . wp_kses_post( $html ) . $wrapper_close;
 	}
 
 	/**
@@ -356,32 +355,32 @@ class Renderer {
 	}
 
 	/**
-	 * FR-07 emit policy version metadata to <head>.
+	 * FR-07 compute the policy version hash. The hash is exposed in two ways:
 	 *
-	 * Two-stage hook: when this is called from the shortcode handler, wp_head
-	 * has already fired (the_content runs after the head), so a late
-	 * add_action('wp_head', …) would be a no-op. We work around this by
-	 * stashing the hash in a static and registering a separate
-	 * `template_redirect` pre-scan that detects the shortcode and pre-emits
-	 * the meta. For the shortcode-render path we ALSO emit the meta inline
-	 * just inside the <article> wrapper so it survives any caching layer
-	 * that strips the head injection.
+	 *  1. As a <meta name="faz-policy-version"> in <head>, when wp_head has
+	 *     not yet fired. Useful for AJAX / fragment renders.
+	 *  2. As a data-faz-policy-version="..." attribute on the <article>
+	 *     wrapper itself — always present, survives the the_content/wp_head
+	 *     ordering issue (shortcodes run AFTER wp_head, so a late
+	 *     add_action('wp_head', ...) would be a no-op).
+	 *
+	 * The <meta> tag was previously placed inline inside <article> as well,
+	 * but HTML5 disallows <meta> inside <body> without itemprop attributes,
+	 * so browsers and Playwright's DOM dropped it. The data-attribute is a
+	 * standards-clean alternative.
 	 *
 	 * @param string $template_path
 	 * @param array  $data
-	 * @return string Inline <meta> tag for embedding in the article wrapper.
+	 * @return string Policy version hash (also used as data-attribute value).
 	 */
 	private static function register_version_meta( $template_path, array $data ) {
 		$hash = Generator::policy_version_hash( $template_path, $data );
-		// Late hook for completeness (works on AJAX render / fragment routes).
 		if ( did_action( 'wp_head' ) === 0 ) {
 			add_action( 'wp_head', function () use ( $hash ) {
 				echo '<meta name="faz-policy-version" content="' . esc_attr( $hash ) . '">' . "\n";
 			}, 99 );
 		}
-		// Inline emission — included in render() output so DOM selectors find it
-		// regardless of wp_head timing.
-		return '<meta name="faz-policy-version" content="' . esc_attr( $hash ) . '">' . "\n";
+		return $hash;
 	}
 
 	// ---------- Lang helpers ----------

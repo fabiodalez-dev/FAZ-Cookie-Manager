@@ -178,6 +178,15 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 				<code>[faz_cookie_policy jurisdiction="ccpa-california"]</code><br>
 				<code>[faz_cookie_policy lang="pt-BR" jurisdiction="lgpd-brazil"]</code>
 			</p>
+			<hr style="margin:14px 0;">
+			<p class="faz-help"><strong><?php esc_html_e( 'Editor compatibility:', 'faz-cookie-manager' ); ?></strong></p>
+			<ul style="margin-left:1.2em; list-style:disc;">
+				<li><?php esc_html_e( 'Classic editor: paste the shortcode anywhere in the content area.', 'faz-cookie-manager' ); ?></li>
+				<li><?php echo wp_kses_post( __( 'Gutenberg / block editor: add a <strong>Shortcode block</strong>, paste the code inside.', 'faz-cookie-manager' ) ); ?></li>
+				<li><?php echo wp_kses_post( __( 'Page builders (Bricks, Elementor, Beaver, Divi, WPBakery): use the builder\'s <strong>Shortcode</strong> widget/element and paste the code. Some builders (Bricks in particular) skip <code>the_content()</code> entirely on pages without a builder template, so the bare shortcode in the WP editor will not render — use the shortcode element of your builder instead.', 'faz-cookie-manager' ) ); ?></li>
+				<li><?php echo wp_kses_post( __( 'Theme template files: <code>echo do_shortcode( \'[faz_cookie_policy]\' );</code>', 'faz-cookie-manager' ) ); ?></li>
+				<li><?php echo wp_kses_post( __( 'WordPress block templates (FSE themes like Twenty Twenty-Four/Five): add a Shortcode block to your <em>Single Page</em> template, or use the Shortcode block on the individual page.', 'faz-cookie-manager' ) ); ?></li>
+			</ul>
 		</div>
 	</div>
 

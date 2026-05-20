@@ -54,6 +54,40 @@ class Cookie_Policy_Generator {
 		add_shortcode( self::SHORTCODE, array( $this, 'render_shortcode' ) );
 		// Also register the REST endpoints.
 		Cookie_Policy_Api::get_instance()->init();
+		// Enqueue the frontend CSS only on pages that actually use the shortcode.
+		add_action( 'wp_enqueue_scripts', array( $this, 'maybe_enqueue_frontend_assets' ) );
+	}
+
+	/**
+	 * Conditional frontend asset enqueue — only when the current post
+	 * contains the [faz_cookie_policy] shortcode. The CSS file is tiny
+	 * (~30 lines, mostly resets) and inherits everything else from the
+	 * host theme; loading it everywhere would be wasted bytes on
+	 * 99% of pageviews.
+	 *
+	 * @return void
+	 */
+	public function maybe_enqueue_frontend_assets() {
+		if ( is_admin() ) {
+			return;
+		}
+		// Only when the global $post actually contains the shortcode. We
+		// avoid is_singular()-only checks because the shortcode is valid
+		// in arbitrary pages, archives, or even widgets (where $post may
+		// not be the visible content).
+		global $post;
+		if ( ! is_a( $post, 'WP_Post' ) ) {
+			return;
+		}
+		if ( ! has_shortcode( (string) $post->post_content, self::SHORTCODE ) ) {
+			return;
+		}
+		wp_enqueue_style(
+			'faz-cookie-policy',
+			plugins_url( 'frontend/css/faz-cookie-policy.css', FAZ_PLUGIN_FILENAME ),
+			array(),
+			defined( 'FAZ_VERSION' ) ? FAZ_VERSION : '1.0.0'
+		);
 	}
 
 	/**
