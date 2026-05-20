@@ -17,6 +17,29 @@
 	var REST_URL   = root.dataset.fazRestUrl || '';
 	var REST_NONCE = root.dataset.fazRestNonce || '';
 
+	// ---------- i18n + locale helpers ----------
+	// Strings live in `fazConfig.i18n.geo.*` (see admin/class-admin.php).
+	// Fallbacks ship the English default so the page degrades gracefully
+	// if the locale array is incomplete (e.g., during a partial cache
+	// invalidation after a plugin update).
+	var FAZ_I18N = (window.fazConfig && window.fazConfig.i18n && window.fazConfig.i18n.geo) || {};
+	function t(key, fallback) {
+		return (FAZ_I18N && FAZ_I18N[key]) || fallback;
+	}
+	function getLocale() {
+		// `fazConfig.locale` is the WP user_locale (e.g. 'it_IT'); convert
+		// to a BCP-47 tag JS understands ('it-IT'). Fallback to the
+		// document's lang attribute, then to undefined (lets the JS
+		// engine pick the runtime default).
+		var loc = (window.fazConfig && window.fazConfig.locale) || document.documentElement.lang;
+		return loc ? String(loc).replace(/_/g, '-') : undefined;
+	}
+	function sprintf1(template, value) {
+		// Trivial single-substitution sprintf-alike for %s / %d / %1$s.
+		return String(template)
+			.replace(/%(\d+\$)?[sd]/, String(value));
+	}
+
 	// ---------- DOM helpers (XSS-safe by construction) ----------
 
 	function el(tag, attrs, children) {
@@ -221,14 +244,17 @@
 			clear(container);
 			var overrides = data.overrides || {};
 			var keys = Object.keys(overrides);
-			container.appendChild(el('p', { text: keys.length + ' override(s) configured.' }));
+			var countTpl = keys.length === 1
+				? t('overridesConfiguredSingular', '%d override configured.')
+				: t('overridesConfiguredPlural', '%d overrides configured.');
+			container.appendChild(el('p', { text: sprintf1(countTpl, keys.length) }));
 
 			if (keys.length) {
 				var thead = el('thead', null, el('tr', null, [
-					el('th', { text: 'Country' }),
-					el('th', { text: 'Ruleset override' }),
-					el('th', { text: 'Delta fields' }),
-					el('th', { text: 'Action' })
+					el('th', { text: t('country', 'Country') }),
+					el('th', { text: t('rulesetOverride', 'Ruleset override') }),
+					el('th', { text: t('deltaFields', 'Delta fields') }),
+					el('th', { text: t('action', 'Action') })
 				]));
 				var tbody = el('tbody');
 				keys.forEach(function(cc) {
@@ -236,31 +262,33 @@
 					var deltaCount = ov.delta ? Object.keys(ov.delta).length : 0;
 					var ridCell = ov.ruleset_id
 						? el('code', { text: ov.ruleset_id })
-						: el('em', { text: '(auto-detect)' });
+						: el('em', { text: t('autoDetect', '(auto-detect)') });
 					var deleteBtn = el('button', {
 						class: 'button button-link-delete',
 						'data-country': cc,
 						onclick: function() {
-							if (!confirm('Delete override for ' + cc + '?')) { return; }
+							if (!confirm(t('confirmDelete', 'Remove this override?') + ' (' + cc + ')')) { return; }
 							api('DELETE', 'overrides/' + cc).then(function() {
 								loaded.overrides = false;
 								loadOverrides();
-							}).catch(function(err) { alert('Error: ' + err.message); });
+							}).catch(function(err) { alert(sprintf1(t('errorPrefix', 'Error: %s'), err.message)); });
 						},
-						text: 'Delete'
+						text: t('delete', 'Delete')
 					});
 					tbody.appendChild(el('tr', null, [
 						el('td', null, el('strong', { text: cc })),
 						el('td', null, ridCell),
-						el('td', { text: deltaCount + ' field(s)' }),
+						el('td', { text: deltaCount + '' }),
 						el('td', null, deleteBtn)
 					]));
 				});
 				container.appendChild(el('table', { class: 'widefat striped' }, [thead, tbody]));
+			} else {
+				container.appendChild(el('p', { class: 'description', text: t('noOverrides', 'No per-country overrides configured. The plugin auto-detects rule-set from country and US state.') }));
 			}
 
 			// Add form
-			container.appendChild(el('h3', { style: 'margin-top:24px', text: 'Add override' }));
+			container.appendChild(el('h3', { style: 'margin-top:24px', text: t('addOverride', 'Add override') }));
 			var ovCountry = el('input', { type: 'text', id: 'ov-country', maxlength: '2', style: 'text-transform:uppercase;width:6em', required: true });
 			var ovRid     = el('input', { type: 'text', id: 'ov-ruleset-id', placeholder: 'e.g. gdpr-italy' });
 			var ovDelta   = el('textarea', { id: 'ov-delta', placeholder: '{"signals.cmv2.functionality_storage":"denied"}' });
@@ -283,7 +311,7 @@
 					api('POST', 'overrides', { overrides: current }).then(function() {
 						loaded.overrides = false;
 						loadOverrides();
-					}).catch(function(err) { alert('Error: ' + err.message); });
+					}).catch(function(err) { alert(sprintf1(t('errorPrefix', 'Error: %s'), err.message)); });
 				}
 			}, [
 				el('p', null, el('label', null, [
@@ -295,7 +323,7 @@
 				el('p', null, el('label', null, [
 					'Delta JSON (object, optional)', el('br'), ovDelta
 				])),
-				el('p', null, el('button', { type: 'submit', class: 'button button-primary', text: 'Save override' }))
+				el('p', null, el('button', { type: 'submit', class: 'button button-primary', text: t('save', 'Save') }))
 			]);
 			container.appendChild(form);
 		}).catch(function(err) { showError(container, err); throw err; });
@@ -314,12 +342,12 @@
 				clear(result);
 				var card = el('div', { class: 'faz-geo-preview-card' });
 				card.appendChild(el('p', null, [
-					el('strong', { text: 'Resolved ruleset: ' }),
+					el('strong', { text: t('resolvedRuleset', 'Resolved ruleset') + ': ' }),
 					el('code', { text: data.ruleset_id })
 				]));
 				if (data.ruleset) {
 					card.appendChild(el('p', { text: data.ruleset.display_name + ' (v' + data.ruleset.version + ')' }));
-					var summary = el('summary', { text: 'Full ruleset JSON' });
+					var summary = el('summary', { text: t('fullRulesetJson', 'Full ruleset JSON') });
 					var pre = el('pre', { text: JSON.stringify(data.ruleset, null, 2) });
 					var details = el('details', null, [summary, pre]);
 					card.appendChild(details);
@@ -335,13 +363,13 @@
 			clear(container);
 			var optinCb = el('input', { type: 'checkbox', id: 'ipinfo-optin' });
 			if (data.optin) { optinCb.checked = true; }
-			var keyInput = el('input', { type: 'password', id: 'ipinfo-api-key', autocomplete: 'off', placeholder: 'token from ipinfo.io/account/token' });
+			var keyInput = el('input', { type: 'password', id: 'ipinfo-api-key', autocomplete: 'off', placeholder: t('apiKeyPlaceholder', 'token from ipinfo.io/account/token') });
 			var attestCb = el('input', { type: 'checkbox', id: 'ipinfo-attestation' });
 
-			var keyLabelChildren = [ 'API key' ];
+			var keyLabelChildren = [ t('apiKeyLabel', 'API key') ];
 			if (data.key_present) {
 				keyLabelChildren.push(' ');
-				keyLabelChildren.push(el('em', { text: '(stored — leave blank to keep)' }));
+				keyLabelChildren.push(el('em', { text: t('apiKeyStored', '(stored — leave blank to keep)') }));
 			}
 			keyLabelChildren.push(el('br'));
 			keyLabelChildren.push(keyInput);
@@ -353,20 +381,20 @@
 					var body = { optin: optinCb.checked, attestation_dpf_scc: attestCb.checked };
 					if (keyInput.value) { body.api_key = keyInput.value; }
 					api('POST', 'ipinfo-settings', body).then(function() {
-						var msg = el('div', { class: 'faz-geo-success', text: 'Settings saved.' });
+						var msg = el('div', { class: 'faz-geo-success', text: t('settingsSaved', 'Settings saved.') });
 						container.insertBefore(msg, container.firstChild);
 						setTimeout(function() { if (msg.parentNode) { msg.parentNode.removeChild(msg); } }, 3000);
-					}).catch(function(err) { alert('Error: ' + err.message); });
+					}).catch(function(err) { alert(sprintf1(t('errorPrefix', 'Error: %s'), err.message)); });
 				}
 			}, [
 				el('p', null, el('label', null, [
-					optinCb, ' Enable ipinfo.io VPN detection'
+					optinCb, ' ' + t('enableIpinfo', 'Enable ipinfo.io VPN detection')
 				])),
 				el('p', null, el('label', null, keyLabelChildren)),
 				el('p', null, el('label', null, [
-					attestCb, ' I attest to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs (required for opt-in)'
+					attestCb, ' ' + t('attestDpfScc', 'I attest to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs (required for opt-in)')
 				])),
-				el('p', null, el('button', { type: 'submit', class: 'button button-primary', text: 'Save' }))
+				el('p', null, el('button', { type: 'submit', class: 'button button-primary', text: t('save', 'Save') }))
 			]);
 			container.appendChild(form);
 		}).catch(function(err) { showError(container, err); throw err; });
@@ -381,16 +409,30 @@
 
 			var children = [
 				el('p', null, el('label', null, [
-					attestedCb, ' I attest to having a Standard Contract (PIPL Art. 38) or CAC security assessment (Art. 40) for cross-border data transfers OF data subject to PIPL, OR to not process any data that requires such mechanisms.'
+					attestedCb, ' ' + t('piplAttestText', 'I attest to having a Standard Contract (PIPL Art. 38) or CAC security assessment (Art. 40) for cross-border data transfers OF data subject to PIPL, OR to not process any data that requires such mechanisms.')
 				]))
 			];
 			if (data.attested && data.timestamp) {
+				// Use the configured locale so non-English admins see a
+				// timestamp in their format (e.g. it-IT "20/05/2026, 11:23").
 				var dt = new Date(data.timestamp * 1000);
-				children.push(el('p', null, el('em', {
-					text: 'Attested at ' + dt.toLocaleString() + ' by user ID ' + String(data.user_id)
-				})));
+				var locale = getLocale();
+				var dateStr;
+				try {
+					dateStr = locale ? dt.toLocaleString(locale) : dt.toLocaleString();
+				} catch (e) {
+					// Bad locale tag (e.g. 'x_FAKE') — runtime throws RangeError.
+					dateStr = dt.toLocaleString();
+				}
+				var tmpl = t('piplAttestedAt', 'Attested at %1$s by user ID %2$s');
+				// Two substitutions — sprintf1 only handles one, so we
+				// chain: replace %1$s then %2$s.
+				var msg = String(tmpl)
+					.replace(/%1\$s/, dateStr)
+					.replace(/%2\$s/, String(data.user_id));
+				children.push(el('p', null, el('em', { text: msg })));
 			}
-			children.push(el('p', null, el('button', { type: 'submit', class: 'button button-primary', text: 'Save' })));
+			children.push(el('p', null, el('button', { type: 'submit', class: 'button button-primary', text: t('save', 'Save') })));
 
 			var form = el('form', {
 				id: 'faz-geo-pipl-form',
@@ -399,7 +441,7 @@
 					api('POST', 'pipl-attestation', { attested: attestedCb.checked }).then(function() {
 						loaded.pipl = false;
 						loadPipl();
-					}).catch(function(err) { alert('Error: ' + err.message); });
+					}).catch(function(err) { alert(sprintf1(t('errorPrefix', 'Error: %s'), err.message)); });
 				}
 			}, children);
 			container.appendChild(form);

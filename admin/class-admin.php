@@ -680,6 +680,41 @@ class Admin {
 					'systemStatus'             => array(
 						'copied'                   => __( 'Status copied to clipboard!', 'faz-cookie-manager' ),
 					),
+					// Geo-routing page (admin/assets/js/pages/geo-routing.js).
+					'geo'                      => array(
+						// Overrides panel.
+						'country'                      => __( 'Country', 'faz-cookie-manager' ),
+						'rulesetOverride'              => __( 'Ruleset override', 'faz-cookie-manager' ),
+						'deltaFields'                  => __( 'Delta fields', 'faz-cookie-manager' ),
+						'action'                       => __( 'Action', 'faz-cookie-manager' ),
+						'delete'                       => __( 'Delete', 'faz-cookie-manager' ),
+						'autoDetect'                   => __( '(auto-detect)', 'faz-cookie-manager' ),
+						/* translators: %d: number of country overrides configured */
+						'overridesConfiguredSingular'  => __( '%d override configured.', 'faz-cookie-manager' ),
+						/* translators: %d: number of country overrides configured */
+						'overridesConfiguredPlural'    => __( '%d overrides configured.', 'faz-cookie-manager' ),
+						'addOverride'                  => __( 'Add override', 'faz-cookie-manager' ),
+						'noOverrides'                  => __( 'No per-country overrides configured. The plugin auto-detects rule-set from country and US state.', 'faz-cookie-manager' ),
+						'confirmDelete'                => __( 'Remove this override?', 'faz-cookie-manager' ),
+						// Preview panel.
+						'resolvedRuleset'              => __( 'Resolved ruleset', 'faz-cookie-manager' ),
+						'fullRulesetJson'              => __( 'Full ruleset JSON', 'faz-cookie-manager' ),
+						// ipinfo panel.
+						'settingsSaved'                => __( 'Settings saved.', 'faz-cookie-manager' ),
+						'apiKeyLabel'                  => __( 'API key', 'faz-cookie-manager' ),
+						'apiKeyStored'                 => __( '(stored — leave blank to keep)', 'faz-cookie-manager' ),
+						'apiKeyPlaceholder'            => __( 'token from ipinfo.io/account/token', 'faz-cookie-manager' ),
+						'enableIpinfo'                 => __( 'Enable ipinfo.io VPN detection', 'faz-cookie-manager' ),
+						'attestDpfScc'                 => __( 'I attest to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs (required for opt-in)', 'faz-cookie-manager' ),
+						// PIPL panel.
+						'piplAttestText'               => __( 'I attest to having a Standard Contract (PIPL Art. 38) or CAC security assessment (Art. 40) for cross-border data transfers OF data subject to PIPL, OR to not process any data that requires such mechanisms.', 'faz-cookie-manager' ),
+						/* translators: 1: localised timestamp, 2: WP user id of the attesting admin */
+						'piplAttestedAt'               => __( 'Attested at %1$s by user ID %2$s', 'faz-cookie-manager' ),
+						// Common buttons.
+						'save'                         => __( 'Save', 'faz-cookie-manager' ),
+						/* translators: %s: low-level error message from the REST endpoint */
+						'errorPrefix'                  => __( 'Error: %s', 'faz-cookie-manager' ),
+					),
 				),
 			)
 		);

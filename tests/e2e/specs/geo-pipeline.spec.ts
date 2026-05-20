@@ -60,8 +60,13 @@ test.describe('Geo_Routing pipeline (P3 — T026/T027)', () => {
 
   test('unknown country → fallback-gdpr-most-protective', () => {
     const raw = wpEval(`
-      // No filter override → no CF header → no geolocation fallback in CLI →
-      // country='XX' resolved by Geo_Detector.
+      // Force XX via the admin-override filter so the test asserts a single
+      // deterministic outcome instead of accepting both XX and IT (the
+      // previous tolerant matcher hid regressions in Geo_Detector's
+      // unknown-country handling). XX is the documented sentinel for
+      // 'no geolocation available' per spec 001 §FR-02 stage 6.
+      add_filter( 'faz_geo_admin_override_country', function() { return 'XX'; } );
+
       $orchestrator = \\FazCookie\\Admin\\Modules\\Geo_Routing\\Geo_Routing::get_instance();
       $ctx = $orchestrator->get_visitor_context( '127.0.0.1' );
 
@@ -72,9 +77,8 @@ test.describe('Geo_Routing pipeline (P3 — T026/T027)', () => {
     `).trim();
 
     const data = JSON.parse(raw);
-    // 127.0.0.1 won't be CN/etc — XX expected in CLI runtime.
-    expect(['XX', 'IT']).toContain(data.country);  // tolerant: depends on resolver fallback
-    expect(['fallback-gdpr-most-protective', 'gdpr-strict']).toContain(data.ruleset_id);
+    expect(data.country).toBe('XX');
+    expect(data.ruleset_id).toBe('fallback-gdpr-most-protective');
   });
 
   test('VPN gate → forced fallback regardless of country', () => {

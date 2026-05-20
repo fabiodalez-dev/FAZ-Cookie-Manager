@@ -120,21 +120,30 @@ test.describe('Migration_V2 — geo-routing v2 schema migration', () => {
         exit;
       }
 
-      // Insert a v2 row populating all 7 new columns.
+      // Insert a v2 row populating all 7 new columns. Column names match
+      // the canonical CREATE TABLE in
+      // admin/modules/consentlogs/includes/class-controller.php::install_table():
+      //   log_id, consent_id, status, categories, ip_hash, user_agent,
+      //   url, banner_slug, policy_revision, created_at
+      // plus the 7 columns added by Migration_V2. The earlier test payload
+      // referenced non-existent columns (user_agent_hash, policy_version,
+      // banner_version, language, choice, method, date_created) — $wpdb->
+      // insert tolerates them silently by skipping unknown keys, but the
+      // assertion was effectively meaningless on those fields.
       $consent_id = 'test-v2-' . time();
       $wpdb->insert(
         $table,
         array(
           'consent_id'              => $consent_id,
-          'ip_hash'                 => str_repeat( 'a', 64 ),
-          'user_agent_hash'         => str_repeat( 'b', 64 ),
-          'policy_version'          => '1.0.0',
-          'banner_version'          => '1.0.0',
-          'language'                => 'en',
-          'choice'                  => 'accepted',
+          'status'                  => 'accepted',
           'categories'              => '{}',
-          'method'                  => 'banner',
-          'date_created'            => current_time( 'mysql' ),
+          'ip_hash'                 => str_repeat( 'a', 64 ),
+          'user_agent'              => 'phpunit-migration-test',
+          'url'                     => 'https://example.test/',
+          'banner_slug'             => 'test-banner',
+          'policy_revision'         => 1,
+          'created_at'              => current_time( 'mysql' ),
+          // v2 columns under test:
           'country_at_consent'      => 'US',
           'region_at_consent'       => 'US-CA',
           'ruleset_id_at_consent'   => 'ccpa-california',
@@ -144,6 +153,13 @@ test.describe('Migration_V2 — geo-routing v2 schema migration', () => {
           'gpp_string'              => 'DBABAA~test',
         )
       );
+
+      // Surface insert errors so the test fails loudly instead of returning
+      // a null row that the assertion would coerce to falsy.
+      if ( ! empty( $wpdb->last_error ) ) {
+        echo wp_json_encode( array( 'insert_error' => $wpdb->last_error ) );
+        exit;
+      }
 
       $row = $wpdb->get_row( $wpdb->prepare(
         "SELECT country_at_consent, region_at_consent, ruleset_id_at_consent, signal_gpc_received, signal_dnt_received, tc_string, gpp_string FROM {$table} WHERE consent_id = %s",
@@ -162,6 +178,11 @@ test.describe('Migration_V2 — geo-routing v2 schema migration', () => {
       test.skip(true, 'Migration not complete — skipping insert test');
       return;
     }
+
+    // Loud failure if the test payload missed a real column (regression
+    // guard against the previous schema mismatch where non-existent
+    // columns silently became no-ops).
+    expect(data, 'row inserted without DB error').not.toHaveProperty('insert_error');
 
     expect(data, 'row inserted+read with v2 columns').toBeTruthy();
     expect(data.country_at_consent).toBe('US');
