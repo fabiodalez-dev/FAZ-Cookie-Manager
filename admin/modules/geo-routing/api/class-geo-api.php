@@ -1,0 +1,420 @@
+<?php
+/**
+ * Class Geo_Api file — REST endpoints for geo-routing admin UI.
+ *
+ * Spec: specs/001-geo-routing-next/spec.md FR-05
+ * Task: T087 + T089 (P6 Admin UI)
+ *
+ * Endpoints under faz/v1/geo/*:
+ *   GET    /geo/rulesets        — list all available ruleset IDs
+ *   GET    /geo/rulesets/{id}   — get one ruleset config
+ *   GET    /geo/overrides       — list per-country admin overrides
+ *   POST   /geo/overrides       — set / replace overrides
+ *   DELETE /geo/overrides/{country} — remove one
+ *   POST   /geo/preview         — dry-run resolve {country, region} → ruleset
+ *   GET    /geo/status          — pipeline diagnostics (ipinfo configured, etc.)
+ *
+ * Constitution XI — manage_options gated + nonce verified.
+ *
+ * @package FazCookie\Admin\Modules\Geo_Routing\Api
+ * @since   1.15.0
+ */
+
+namespace FazCookie\Admin\Modules\Geo_Routing\Api;
+
+use FazCookie\Admin\Modules\Geo_Routing\Geo_Routing;
+use FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Loader;
+use FazCookie\Admin\Modules\Geo_Routing\Includes\Ruleset_Resolver;
+use FazCookie\Admin\Modules\Geo_Routing\Includes\Ipinfo_Client;
+use FazCookie\Admin\Modules\Geo_Routing\Includes\Secrets;
+use WP_REST_Request;
+use WP_REST_Response;
+use WP_Error;
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * REST API for geo-routing admin UI.
+ *
+ * @class    Geo_Api
+ * @since    1.15.0
+ */
+class Geo_Api {
+
+	const NAMESPACE = 'faz/v1';
+	const BASE      = 'geo';
+
+	/**
+	 * Singleton.
+	 *
+	 * @var Geo_Api|null
+	 */
+	private static $instance = null;
+
+	/**
+	 * @return Geo_Api
+	 */
+	public static function get_instance() {
+		if ( null === self::$instance ) {
+			self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
+	/**
+	 * Hook into rest_api_init.
+	 *
+	 * @return void
+	 */
+	public function init() {
+		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
+	}
+
+	/**
+	 * Register all routes.
+	 *
+	 * @return void
+	 */
+	public function register_routes() {
+		$ns   = self::NAMESPACE;
+		$base = self::BASE;
+
+		register_rest_route( $ns, "/{$base}/rulesets", array(
+			'methods'             => 'GET',
+			'callback'            => array( $this, 'list_rulesets' ),
+			'permission_callback' => array( $this, 'check_admin' ),
+		) );
+
+		register_rest_route( $ns, "/{$base}/rulesets/(?P<id>[a-z0-9-]+)", array(
+			'methods'             => 'GET',
+			'callback'            => array( $this, 'get_ruleset' ),
+			'permission_callback' => array( $this, 'check_admin' ),
+			'args'                => array(
+				'id' => array(
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+			),
+		) );
+
+		register_rest_route( $ns, "/{$base}/overrides", array(
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'get_overrides' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+			),
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'set_overrides' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+			),
+		) );
+
+		register_rest_route( $ns, "/{$base}/overrides/(?P<country>[A-Z]{2})", array(
+			'methods'             => 'DELETE',
+			'callback'            => array( $this, 'delete_override' ),
+			'permission_callback' => array( $this, 'check_admin' ),
+		) );
+
+		register_rest_route( $ns, "/{$base}/preview", array(
+			'methods'             => 'POST',
+			'callback'            => array( $this, 'preview' ),
+			'permission_callback' => array( $this, 'check_admin' ),
+		) );
+
+		register_rest_route( $ns, "/{$base}/status", array(
+			'methods'             => 'GET',
+			'callback'            => array( $this, 'status' ),
+			'permission_callback' => array( $this, 'check_admin' ),
+		) );
+
+		register_rest_route( $ns, "/{$base}/ipinfo-settings", array(
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'get_ipinfo_settings' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+			),
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'set_ipinfo_settings' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+			),
+		) );
+
+		register_rest_route( $ns, "/{$base}/pipl-attestation", array(
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'get_pipl_attestation' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+			),
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'set_pipl_attestation' ),
+				'permission_callback' => array( $this, 'check_admin' ),
+			),
+		) );
+	}
+
+	/**
+	 * Permission callback: must be admin + valid nonce.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool|WP_Error
+	 */
+	public function check_admin( $request ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return new WP_Error( 'forbidden', 'Admin capability required.', array( 'status' => 403 ) );
+		}
+		$nonce = $request->get_header( 'X-WP-Nonce' );
+		if ( ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+			return new WP_Error( 'invalid_nonce', 'Invalid nonce.', array( 'status' => 403 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * GET /rulesets — list all ruleset IDs + display names.
+	 */
+	public function list_rulesets() {
+		$loader = Ruleset_Loader::get_instance();
+		$ids    = $loader->list_all();
+		$out    = array();
+		foreach ( $ids as $id ) {
+			$r = $loader->load_ruleset( $id );
+			if ( null === $r ) {
+				continue;
+			}
+			$out[] = array(
+				'id'           => $r['id'],
+				'display_name' => $r['display_name'],
+				'version'      => $r['version'],
+				'applies_to'   => $r['applies_to'],
+				'native_lang'  => $r['native_lang'],
+				'model'        => $r['model'],
+			);
+		}
+		return new WP_REST_Response( array( 'rulesets' => $out ), 200 );
+	}
+
+	/**
+	 * GET /rulesets/{id} — full ruleset payload.
+	 */
+	public function get_ruleset( $request ) {
+		$id = (string) $request->get_param( 'id' );
+		$r  = Ruleset_Loader::get_instance()->load_ruleset( $id );
+		if ( null === $r ) {
+			return new WP_Error( 'not_found', 'Ruleset not found.', array( 'status' => 404 ) );
+		}
+		return new WP_REST_Response( $r, 200 );
+	}
+
+	/**
+	 * GET /overrides — current per-country override map.
+	 */
+	public function get_overrides() {
+		$overrides = (array) get_option( 'faz_geo_admin_overrides', array() );
+		return new WP_REST_Response( array( 'overrides' => $overrides ), 200 );
+	}
+
+	/**
+	 * POST /overrides — replace the entire override map.
+	 *
+	 * Request body shape (Q3 resolution 2026-05-20):
+	 *   {
+	 *     "overrides": {
+	 *       "<country_code>": {
+	 *         "ruleset_id": "..." | null,
+	 *         "delta": { "<dot.notation.path>": <value>, ... }
+	 *       }
+	 *     }
+	 *   }
+	 */
+	public function set_overrides( WP_REST_Request $request ) {
+		$body      = $request->get_json_params();
+		$overrides = isset( $body['overrides'] ) ? (array) $body['overrides'] : array();
+		$sanitized = $this->sanitize_overrides( $overrides );
+		update_option( 'faz_geo_admin_overrides', $sanitized, false );
+		return new WP_REST_Response( array( 'overrides' => $sanitized ), 200 );
+	}
+
+	/**
+	 * DELETE /overrides/{country} — remove a single country override.
+	 */
+	public function delete_override( WP_REST_Request $request ) {
+		$country   = strtoupper( (string) $request->get_param( 'country' ) );
+		$overrides = (array) get_option( 'faz_geo_admin_overrides', array() );
+		if ( isset( $overrides[ $country ] ) ) {
+			unset( $overrides[ $country ] );
+			update_option( 'faz_geo_admin_overrides', $overrides, false );
+		}
+		return new WP_REST_Response( array( 'overrides' => $overrides ), 200 );
+	}
+
+	/**
+	 * POST /preview — dry-run resolve {country, region} → ruleset.
+	 */
+	public function preview( WP_REST_Request $request ) {
+		$body    = $request->get_json_params();
+		$country = isset( $body['country'] ) ? (string) $body['country'] : '';
+		$region  = isset( $body['region'] ) ? (string) $body['region'] : '';
+		$vpn     = ! empty( $body['vpn'] );
+
+		$loader     = Ruleset_Loader::get_instance();
+		$overrides  = (array) get_option( 'faz_geo_admin_overrides', array() );
+		$ruleset_id = Ruleset_Resolver::resolve(
+			$country,
+			$region,
+			$vpn,
+			$overrides,
+			$loader->load_index(),
+			$loader->load_us_regions(),
+			$loader->get_fallback_id()
+		);
+
+		$ruleset = $loader->load_ruleset( $ruleset_id );
+
+		return new WP_REST_Response( array(
+			'input'      => array( 'country' => $country, 'region' => $region, 'vpn' => $vpn ),
+			'ruleset_id' => $ruleset_id,
+			'ruleset'    => $ruleset,
+		), 200 );
+	}
+
+	/**
+	 * GET /status — pipeline diagnostics.
+	 */
+	public function status() {
+		$ipinfo  = new Ipinfo_Client();
+		$migrate = '\\FazCookie\\Includes\\Migration_V2';
+		$status  = array(
+			'ipinfo' => array(
+				'optin'       => $ipinfo->is_optin_active(),
+				'key_present' => '' !== $ipinfo->get_api_key(),
+			),
+			'migration' => array(
+				'complete'         => class_exists( $migrate ) ? $migrate::is_complete() : false,
+				'pending_columns'  => (array) get_option( 'faz_geo_v2_migration_pending', array() ),
+				'disabled_reason'  => (string) get_option( 'faz_geo_v2_disabled_reason', '' ),
+			),
+			'catalog' => array(
+				'rulesets_count' => count( Ruleset_Loader::get_instance()->list_all() ),
+				'fallback_id'    => Ruleset_Loader::get_instance()->get_fallback_id(),
+			),
+		);
+		return new WP_REST_Response( $status, 200 );
+	}
+
+	/**
+	 * GET /ipinfo-settings.
+	 */
+	public function get_ipinfo_settings() {
+		$client = new Ipinfo_Client();
+		return new WP_REST_Response( array(
+			'optin'        => $client->is_optin_active(),
+			'key_present'  => '' !== $client->get_api_key(),
+			'attested_at'  => (int) get_option( 'faz_geo_ipinfo_optin_confirmed_at', 0 ),
+		), 200 );
+	}
+
+	/**
+	 * POST /ipinfo-settings — { optin, api_key (optional, will be encrypted), attestation }.
+	 */
+	public function set_ipinfo_settings( WP_REST_Request $request ) {
+		$body  = $request->get_json_params();
+		$optin = ! empty( $body['optin'] );
+		$attestation_ok = ! empty( $body['attestation_dpf_scc'] );
+
+		if ( $optin && ! $attestation_ok ) {
+			return new WP_Error( 'attestation_required', 'You must attest to DPF/SCC compliance before enabling ipinfo.', array( 'status' => 400 ) );
+		}
+
+		update_option( 'faz_geo_ipinfo_optin', $optin, false );
+
+		if ( isset( $body['api_key'] ) ) {
+			$key = (string) $body['api_key'];
+			if ( '' === $key ) {
+				delete_option( 'faz_geo_ipinfo_api_key' );
+			} else {
+				update_option( 'faz_geo_ipinfo_api_key', Secrets::encrypt( $key ), false );
+			}
+		}
+
+		if ( $optin && $attestation_ok ) {
+			update_option( 'faz_geo_ipinfo_optin_confirmed_at', time(), false );
+		}
+
+		return new WP_REST_Response( array( 'saved' => true ), 200 );
+	}
+
+	/**
+	 * GET /pipl-attestation.
+	 */
+	public function get_pipl_attestation() {
+		$data = (array) get_option( 'faz_geo_pipl_cross_border_attested', array() );
+		return new WP_REST_Response( array(
+			'attested'   => ! empty( $data['attested'] ),
+			'timestamp'  => (int) ( $data['timestamp'] ?? 0 ),
+			'user_id'    => (int) ( $data['user_id'] ?? 0 ),
+		), 200 );
+	}
+
+	/**
+	 * POST /pipl-attestation — { attested: bool }.
+	 */
+	public function set_pipl_attestation( WP_REST_Request $request ) {
+		$body     = $request->get_json_params();
+		$attested = ! empty( $body['attested'] );
+		$data = array(
+			'attested'  => $attested,
+			'timestamp' => time(),
+			'user_id'   => get_current_user_id(),
+		);
+		update_option( 'faz_geo_pipl_cross_border_attested', $data, false );
+		return new WP_REST_Response( $data, 200 );
+	}
+
+	/**
+	 * Sanitize the overrides payload.
+	 *
+	 * @param array $overrides Raw input.
+	 * @return array Sanitized.
+	 */
+	private function sanitize_overrides( $overrides ) {
+		$loader = Ruleset_Loader::get_instance();
+		$valid_rulesets = $loader->list_all();
+		$out = array();
+		foreach ( $overrides as $country => $config ) {
+			$country = strtoupper( (string) $country );
+			if ( ! preg_match( '/^[A-Z]{2}$/', $country ) ) {
+				continue;
+			}
+			$entry = array(
+				'ruleset_id' => null,
+				'delta'      => array(),
+			);
+			if ( isset( $config['ruleset_id'] ) && is_string( $config['ruleset_id'] ) ) {
+				$rid = $config['ruleset_id'];
+				if ( '' !== $rid && in_array( $rid, $valid_rulesets, true ) ) {
+					$entry['ruleset_id'] = $rid;
+				}
+			}
+			if ( isset( $config['delta'] ) && is_array( $config['delta'] ) ) {
+				foreach ( $config['delta'] as $path => $value ) {
+					if ( ! is_string( $path ) ) {
+						continue;
+					}
+					if ( ! preg_match( '/^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)*$/i', $path ) ) {
+						continue;
+					}
+					// Only scalar values allowed in delta.
+					if ( is_scalar( $value ) || is_null( $value ) ) {
+						$entry['delta'][ $path ] = is_string( $value ) ? sanitize_text_field( $value ) : $value;
+					}
+				}
+			}
+			$out[ $country ] = $entry;
+		}
+		return $out;
+	}
+}

@@ -131,6 +131,22 @@ Service URL:
 Terms of Service / Privacy Policy:
 * https://ip-api.com/docs/legal
 
+= ipinfo.io (geo-routing v2 only) =
+
+Used for VPN/proxy/Tor detection when the admin opts in to enhanced geo detection via Settings → Geo-routing → ipinfo settings. The plugin sends the visitor IP to ipinfo.io to determine whether the visitor is masking their location; when VPN is detected, the most-protective rule-set is applied regardless of the visitor's apparent country.
+
+Triggered when: a frontend page renders the banner AND the admin has configured an ipinfo API key AND has explicitly attested to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs. Without the admin opt-in, ipinfo is NEVER called.
+
+Data sent: the visitor's IP address (in cleartext, as required by ipinfo's lookup contract), the configured API key, and standard HTTP request headers. The plugin caches the VPN classification locally for 24 hours hash-keyed by the IP (with monthly salt rotation) so repeat visitors do not trigger fresh calls.
+
+Service URL:
+* https://ipinfo.io/{ip}/privacy
+
+Terms of Service / Privacy Policy:
+* https://ipinfo.io/terms-of-service
+* https://ipinfo.io/privacy-policy
+* DPA (Data Processing Agreement) available on request: https://ipinfo.io/contact
+
 = Plugin REST endpoint /faz/v1/banner (public) =
 
 Used by the plugin's own front-end JavaScript (`script.js`) to fetch the per-language / per-country banner payload after the page has loaded. This is an INTERNAL endpoint hosted by the plugin on the same WordPress install — no third-party network call leaves the visitor's browser to a remote service. It is documented here only because the response carries `bannerSlug` and `activeLaw`, two strings that describe which banner profile and which legal regime (gdpr / ccpa) currently applies to the visitor.

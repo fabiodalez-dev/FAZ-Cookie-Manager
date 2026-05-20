@@ -245,6 +245,11 @@ class Admin {
 				'slug'  => self::ADMIN_SLUG . '-gvl',
 				'view'  => 'gvl',
 			),
+			'geo-routing'  => array(
+				'title' => __( 'Geo-routing', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-geo-routing',
+				'view'  => 'geo-routing',
+			),
 			'settings'     => array(
 				'title' => __( 'Settings', 'faz-cookie-manager' ),
 				'slug'  => self::ADMIN_SLUG . '-settings',

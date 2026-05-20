@@ -406,6 +406,21 @@ require_once FAZ_PLUGIN_BASEPATH . 'class-autoloader.php';
 $autoloader = new \FazCookie\Autoloader();
 $autoloader->register();
 
+/**
+ * Bootstrap geo-routing v2 REST API (spec 001 — P6 task T087).
+ *
+ * Registers all /faz/v1/geo/* endpoints on rest_api_init. Keeps the
+ * orchestrator (admin/modules/geo-routing/class-geo-routing.php) inert
+ * — only the REST surface activates here.
+ *
+ * @since 1.15.0
+ */
+add_action( 'rest_api_init', function() {
+	if ( class_exists( '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Api\\Geo_Api' ) ) {
+		\FazCookie\Admin\Modules\Geo_Routing\Api\Geo_Api::get_instance()->register_routes();
+	}
+} );
+
 register_activation_hook( __FILE__, function( $network_wide ) {
 	if ( is_multisite() && $network_wide ) {
 		$sites = get_sites( array( 'number' => 0 ) );
