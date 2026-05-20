@@ -16,10 +16,10 @@
  * Plugin Name:       FAZ Cookie Manager
  * Plugin URI:        https://github.com/fabiodalez-dev/faz-cookie-manager
  * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
- * Version:           1.15.0
+ * Version:           1.16.0
  * Requires at least: 5.0
  * Tested up to:      7.0
- * Stable tag:        1.15.0
+ * Stable tag:        1.16.0
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro
  * Author URI:        https://fabiodalez.it/
@@ -51,7 +51,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'FAZ_VERSION', '1.15.0' );
+define( 'FAZ_VERSION', '1.16.0' );
 define( 'FAZ_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'FAZ_PLUGIN_BASEPATH', plugin_dir_path( __FILE__ ) );
 define( 'FAZ_PLUGIN_FILENAME', __FILE__ );
@@ -472,6 +472,12 @@ $faz_loader->run();
 // Registered after the core CLI loader so Frontend can query it during
 // its own "is banner disabled" checks.
 \FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->register_hooks();
+
+// Cookie Policy Generator (Spec 002) — registers the [faz_cookie_policy]
+// shortcode and the faz/v1/cookie-policy/* REST API. Always loads (no
+// module toggle); the admin tab is wired in admin/class-admin.php
+// alongside the other module pages.
+\FazCookie\Admin\Modules\Cookie_Policy_Generator\Cookie_Policy_Generator::get_instance()->init();
 
 /**
  * Force every /faz/v1/* REST response out of the LiteSpeed / CDN cache.

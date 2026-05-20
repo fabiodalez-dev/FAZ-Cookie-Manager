@@ -2,6 +2,18 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.16.0] — 2026-05-20
+
+### Added
+
+- **Cookie Policy Generator** (Spec 002). New admin tab under `FAZ Cookie Manager → Cookie Policy` and `[faz_cookie_policy_v2]` shortcode that renders a jurisdiction-aware, multi-language Cookie Policy from a template scaffold filled with the admin's own data (company details, DPO, third-party services, retention). Covers three jurisdictions (GDPR EU/EEA/UK, CCPA/CPRA California, LGPD Brazil) and six languages (en, it, fr, de, es, pt-BR) — 18 scaffolds total. The auto-populated cookie list pulls from `wp_faz_cookies` so additions via the scanner are reflected at the next render. A non-removable disclaimer at the bottom of every generated policy makes explicit that the templates are starting points, not legal advice. The long-standing `[faz_cookie_policy]` shortcode (with `site_name` / `contact` / `show_table` attributes) is **unchanged** and still supported for backward compatibility — the new `_v2` variant is opt-in.
+- New REST API under `faz/v1/cookie-policy/*` (`/settings` GET/POST, `/preview` POST) — `manage_options` + nonce. Preview endpoint renders without persisting (US-05).
+- Versioning hash emitted as `<meta name="faz-policy-version">` so a future re-prompt mechanism can detect template-or-data drift (Spec FR-07, Constitution VI).
+- `faz_cookie_policy_data` filter — site builders can inject custom placeholders before template substitution.
+
+### Notes
+
+Builds on top of the geo-routing v2 work from 1.15.0 (no shared code paths). The two features are orthogonal — geo-routing decides WHICH banner to show, the cookie-policy generator renders the policy page content.
 ## [1.15.0] — 2026-05-20
 
 ### Added
@@ -23,7 +35,6 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - 68 new unit tests across 3 test files (resolver / migration / ipinfo). Zero existing tests touched. The 21 compliance + 12 verification + 10 E2E baseline suite continues unchanged — geo-routing v2 is purely additive at this release.
 - New filters: `faz_geo_rulesets_dir`, `faz_geo_admin_override_country`, `faz_geo_lookup_cache_ttl`.
 - New WP options (all non-autoloaded): `faz_geo_admin_overrides`, `faz_geo_ipinfo_api_key`, `faz_geo_ipinfo_optin`, `faz_geo_ipinfo_optin_confirmed_at`, `faz_geo_pipl_cross_border_attested`, `faz_geo_v2_migration_pending`, `faz_geo_v2_disabled_reason`.
-
 ## [1.14.3] — 2026-05-19
 
 ### Added

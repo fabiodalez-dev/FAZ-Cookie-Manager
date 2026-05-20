@@ -1,0 +1,53 @@
+/*!
+ * FAZ Cookie Manager — Cookie Policy frontend styles.
+ *
+ * Deliberately minimal: inherits font, colours, spacing from the host
+ * theme. The only interventions are:
+ *   1. Lift the typographic max-width constraint that block themes like
+ *      Twenty Twenty-Four/Five impose via `.entry-content` (60ch) — which
+ *      makes a long legal document feel cramped.
+ *   2. Style the non-removable disclaimer footer so it is visually distinct
+ *      from body copy (warning-coloured callout, light backdrop). This is
+ *      the only "branded" element, by design — the disclaimer needs to be
+ *      noticed.
+ *   3. Tidy up dt/dd spacing in the auto-populated cookie list because
+ *      most themes don't style <dl> at all.
+ *
+ * Anything else (heading sizes, link colours, paragraph rhythm) is left
+ * to the theme.
+ */
+
+/* 1. Fill the available column. Most block themes constrain content to ~60ch. */
+.faz-cookie-policy {
+	max-width: none;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* 3. Cookie list (auto-populated) — themes typically ignore <dl>. */
+.faz-cookie-policy-category {
+	margin: 1em 0 1.5em 0;
+}
+.faz-cookie-policy-category dl {
+	margin: 0.5em 0 0 0;
+}
+.faz-cookie-policy-category dt {
+	font-weight: 600;
+	margin-top: 0.7em;
+}
+.faz-cookie-policy-category dd {
+	margin: 0.2em 0 0 1em;
+}
+
+/* 2. Disclaimer — the one element that intentionally stands out so the
+   visitor sees it. Uses CSS custom properties when the theme defines them
+   so it picks up the theme's accent palette, otherwise falls back to a
+   neutral warning yellow. */
+.faz-cookie-policy-disclaimer {
+	margin-top: 2em;
+	padding: 0.85em 1em;
+	background: var(--faz-disclaimer-bg, #fff5d6);
+	border-left: 4px solid var(--faz-disclaimer-accent, #d4a017);
+	font-size: 0.9em;
+	line-height: 1.55;
+}

@@ -25,6 +25,7 @@ $faz_page_title = isset( $faz_page_title ) && is_string( $faz_page_title ) ? $fa
 		'settings'       => array( 'slug' => 'faz-cookie-manager-settings',       'label' => __( 'Settings', 'faz-cookie-manager' ) ),
 		'gvl'            => array( 'slug' => 'faz-cookie-manager-gvl',            'label' => __( 'Global Vendor List', 'faz-cookie-manager' ) ),
 		'import-export'  => array( 'slug' => 'faz-cookie-manager-import-export',  'label' => __( 'Import / Export', 'faz-cookie-manager' ) ),
+		'cookie-policy'  => array( 'slug' => 'faz-cookie-manager-cookie-policy',  'label' => __( 'Cookie Policy', 'faz-cookie-manager' ) ),
 		'system-status'  => array( 'slug' => 'faz-cookie-manager-system-status',  'label' => __( 'System Status', 'faz-cookie-manager' ) ),
 	);
 	$faz_page_descriptions = array(
@@ -37,6 +38,7 @@ $faz_page_title = isset( $faz_page_title ) && is_string( $faz_page_title ) ? $fa
 		'settings'      => __( 'Tune privacy, logging, scanner, and integration settings from one backend workspace.', 'faz-cookie-manager' ),
 		'gvl'           => __( 'Browse IAB TCF vendors, review their declared purposes, and select which vendors your site works with.', 'faz-cookie-manager' ),
 		'import-export' => __( 'Move settings safely between environments and keep repeatable backups close at hand.', 'faz-cookie-manager' ),
+		'cookie-policy' => __( 'Generate a jurisdiction-aware Cookie Policy from templates filled with your company data. Embed via the [faz_cookie_policy] shortcode.', 'faz-cookie-manager' ),
 		'system-status' => __( 'Check environment details, plugin health, and runtime dependencies before troubleshooting.', 'faz-cookie-manager' ),
 	);
 	$faz_page_description = isset( $faz_page_descriptions[ $faz_page_slug ] ) ? $faz_page_descriptions[ $faz_page_slug ] : '';
