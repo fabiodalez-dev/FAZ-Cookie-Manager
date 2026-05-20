@@ -366,7 +366,29 @@ function _fazSetConsentID() {
 }
 
 var _revisitFazConsent = function () {
-    _fazShowBanner();
+    // CCPA 1-click revisit (1.14.4+): when the visitor has already made
+    // an opt-out choice in CCPA mode, skip the banner and open the
+    // opt-out preferences popup DIRECTLY. Matches the modern CCPA UX
+    // pattern (Termly / Iubenda / Cookiebot / CookieYes 2024+) where
+    // revisit = "change my opt-out decision" rather than "see the
+    // initial notice again".
+    //
+    // Guarded on:
+    //   - active law is ccpa (otherwise GDPR-style preference center)
+    //   - `action` is already recorded (first-time visitors MUST see
+    //     the full banner for compliance — the proposed shortcut only
+    //     kicks in after a previous choice)
+    //
+    // _fazGetLaw() resolves the active law for THIS visitor (multi-
+    // banner geo-routing aware), so an EU visitor on a CCPA+GDPR
+    // install still gets the GDPR banner on revisit.
+    var activeLaw = (typeof _fazGetLaw === "function") ? _fazGetLaw() : "";
+    var actionRecorded = ref && ref._fazGetFromStore && ref._fazGetFromStore("action");
+    if (activeLaw === "ccpa" && actionRecorded) {
+        _fazSetPreferenceAction("donotsell-button");
+    } else {
+        _fazShowBanner();
+    }
     _fazToggleRevisit();
     _fazUpdateVendorCheckboxStates();
 };
