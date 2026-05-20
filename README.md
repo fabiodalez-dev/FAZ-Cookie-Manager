@@ -547,6 +547,13 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.16.0 — 2026-05-20
+- **Feature**: Cookie Policy Generator (spec 002). New admin tab "Cookie Policy" + new `[faz_cookie_policy_v2]` shortcode rendering a jurisdiction-aware, multi-language Cookie Policy from a template scaffold filled with the admin's company data (name, address, DPO, third-party services, retention). Covers GDPR (EU/EEA/UK), CCPA/CPRA (California) and LGPD (Brazil) in 6 languages (en, it, fr, de, es, pt-BR) — 18 scaffolds total.
+- **Feature**: Auto-populated cookie list inside the rendered policy pulls live from `wp_faz_cookies` so additions via the scanner show up at the next render (5-min `wp_cache` TTL).
+- **Feature**: New REST API `faz/v1/cookie-policy/*` (`/settings` GET/POST, `/preview` POST) — `manage_options` + nonce. Preview renders without persisting so the admin can iterate inside a sandboxed-iframe modal.
+- **Feature**: Non-removable disclaimer at the bottom of every generated policy. Templates are starting points, not legal advice — `<footer class="faz-cookie-policy-disclaimer">` is hardcoded in the renderer, NOT in the template files, so section-overrides cannot suppress it.
+- **Compatibility**: the long-standing `[faz_cookie_policy]` shortcode (with `site_name` / `contact` / `show_table` attributes and the "How to Manage Cookies" section) is **unchanged and still supported**. The new variant is opt-in via the `_v2` tag — pattern of standard API versioning.
+
 ### 1.15.0 — 2026-05-20
 - **Feature**: Geo-routing v2 — 47 jurisdictional rule-set JSON files cover EU/UK + 19 US-state privacy laws + 18 international jurisdictions (LGPD/PIPL/APPI/PIPA/POPIA/PDPA/etc.) + most-protective fallback for unknown/VPN visitors. New `admin/modules/geo-routing/` module with REST API (`/faz/v1/geo/*`) and admin tab UI.
 - **Feature**: VPN/proxy detection via ipinfo.io (opt-in, gated by admin DPF/SCC attestation). When VPN detected → most-protective ruleset forced. API key encrypted at rest via `wp_salt('auth')`.
