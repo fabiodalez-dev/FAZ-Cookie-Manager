@@ -222,23 +222,136 @@ class Geo_Detector {
 	}
 
 	/**
+	 * Cloudflare published proxy IP ranges (https://www.cloudflare.com/ips/).
+	 * Static list as of 2026 — refresh annually. Any request whose REMOTE_ADDR
+	 * is NOT in this list is treated as direct (CF-Connecting-IP ignored)
+	 * because that header is set by Cloudflare's edge and is forgeable when
+	 * the origin is directly reachable.
+	 *
+	 * @var string[]
+	 */
+	private static $cf_ranges_v4 = array(
+		'173.245.48.0/20',
+		'103.21.244.0/22',
+		'103.22.200.0/22',
+		'103.31.4.0/22',
+		'141.101.64.0/18',
+		'108.162.192.0/18',
+		'190.93.240.0/20',
+		'188.114.96.0/20',
+		'197.234.240.0/22',
+		'198.41.128.0/17',
+		'162.158.0.0/15',
+		'104.16.0.0/13',
+		'104.24.0.0/14',
+		'172.64.0.0/13',
+		'131.0.72.0/22',
+	);
+
+	/**
+	 * @var string[]
+	 */
+	private static $cf_ranges_v6 = array(
+		'2400:cb00::/32',
+		'2606:4700::/32',
+		'2803:f800::/32',
+		'2405:b500::/32',
+		'2405:8100::/32',
+		'2a06:98c0::/29',
+		'2c0f:f248::/32',
+	);
+
+	/**
 	 * Best-effort client IP resolution.
 	 *
-	 * Trusts Cloudflare's CF-Connecting-IP first when CF is in front;
-	 * else REMOTE_ADDR.
+	 * Security: CF-Connecting-IP is set by Cloudflare's edge — but only when
+	 * the request actually transits Cloudflare. On any deployment where the
+	 * origin is directly reachable, an attacker can spoof the header to bypass
+	 * the VPN gate downstream. We validate REMOTE_ADDR against Cloudflare's
+	 * published proxy IP ranges before trusting the header. Operators behind
+	 * other CDNs/proxies can extend the allowlist via the
+	 * `faz_geo_trusted_proxy_cidrs` filter.
 	 *
 	 * @return string Cleartext IP.
 	 */
 	private function resolve_client_ip() {
-		if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) ) {
+		$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			return (string) $_SERVER['HTTP_CF_CONNECTING_IP'];
-		}
-		if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+			? (string) $_SERVER['REMOTE_ADDR']
+			: '';
+
+		if ( ! empty( $_SERVER['HTTP_CF_CONNECTING_IP'] ) && '' !== $remote_addr && $this->is_trusted_proxy( $remote_addr ) ) {
 			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			return (string) $_SERVER['REMOTE_ADDR'];
+			$cf_ip = trim( (string) $_SERVER['HTTP_CF_CONNECTING_IP'] );
+			// Only accept syntactically valid IPs to avoid downstream surprises.
+			if ( false !== filter_var( $cf_ip, FILTER_VALIDATE_IP ) ) {
+				return $cf_ip;
+			}
 		}
-		return '';
+
+		return $remote_addr;
+	}
+
+	/**
+	 * Whether REMOTE_ADDR is in a trusted proxy CIDR range.
+	 *
+	 * @param string $ip REMOTE_ADDR.
+	 * @return bool
+	 */
+	private function is_trusted_proxy( $ip ) {
+		$cidrs = array_merge( self::$cf_ranges_v4, self::$cf_ranges_v6 );
+		/**
+		 * Extend the trusted-proxy allowlist (e.g., for other CDNs, custom edges).
+		 *
+		 * Accept CIDR notation (e.g., "203.0.113.0/24" or "2001:db8::/32").
+		 * Each entry must be a string; non-string entries are ignored.
+		 *
+		 * @since 1.15.0
+		 * @param string[] $cidrs Default = Cloudflare public proxy ranges.
+		 */
+		$cidrs = (array) apply_filters( 'faz_geo_trusted_proxy_cidrs', $cidrs );
+
+		foreach ( $cidrs as $cidr ) {
+			if ( is_string( $cidr ) && $this->ip_in_cidr( $ip, $cidr ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Check whether $ip falls within $cidr.
+	 *
+	 * @param string $ip   IPv4 or IPv6 address.
+	 * @param string $cidr CIDR-notation range.
+	 * @return bool
+	 */
+	private function ip_in_cidr( $ip, $cidr ) {
+		if ( false === strpos( $cidr, '/' ) ) {
+			return false;
+		}
+		list( $subnet, $bits ) = explode( '/', $cidr, 2 );
+		$bits   = (int) $bits;
+		$ip_bin = @inet_pton( $ip );
+		$sn_bin = @inet_pton( $subnet );
+		if ( false === $ip_bin || false === $sn_bin || strlen( $ip_bin ) !== strlen( $sn_bin ) ) {
+			return false;
+		}
+		$max_bits = strlen( $ip_bin ) * 8;
+		if ( $bits < 0 || $bits > $max_bits ) {
+			return false;
+		}
+		// Compare $bits leading bits.
+		$full_bytes = intdiv( $bits, 8 );
+		$rest_bits  = $bits % 8;
+		if ( $full_bytes > 0 && 0 !== substr_compare( $ip_bin, $sn_bin, 0, $full_bytes ) ) {
+			return false;
+		}
+		if ( 0 === $rest_bits ) {
+			return true;
+		}
+		$mask = chr( ( 0xFF << ( 8 - $rest_bits ) ) & 0xFF );
+		return ( $ip_bin[ $full_bytes ] & $mask ) === ( $sn_bin[ $full_bytes ] & $mask );
 	}
 
 	/**

@@ -62,10 +62,11 @@ assert_true( isset( $cols['gpp_string'] ), 'has gpp_string' );
 // ---------- DDL fragment shape ----------
 
 foreach ( $cols as $name => $ddl ) {
-	// Each DDL must be `<TYPE>(<N>) NULL DEFAULT NULL` (sized) or
-	// `<TYPE> NULL DEFAULT NULL` (unsized, e.g. TEXT) shape — defensive
-	// against future edits that might add unsafe SQL.
-	$ok = (bool) preg_match( '/^([A-Z]+\([0-9]+\)|[A-Z]+) NULL DEFAULT NULL$/', $ddl );
+	// Each DDL must be either `<TYPE>(<N>) NULL[ DEFAULT NULL]` (sized) or
+	// `<TYPE> NULL[ DEFAULT NULL]` (unsized, e.g. TEXT) — defensive
+	// against future edits that might add unsafe SQL. DEFAULT NULL is
+	// optional because MySQL 5.7 rejects an explicit DEFAULT on TEXT/BLOB.
+	$ok = (bool) preg_match( '/^([A-Z]+\([0-9]+\)|[A-Z]+) NULL(?: DEFAULT NULL)?$/', $ddl );
 	assert_true( $ok, "DDL for '{$name}' matches safe shape" );
 }
 
@@ -76,8 +77,9 @@ assert_eq( $cols['region_at_consent'], 'VARCHAR(6) NULL DEFAULT NULL', 'region_a
 assert_eq( $cols['ruleset_id_at_consent'], 'VARCHAR(64) NULL DEFAULT NULL', 'ruleset_id_at_consent is VARCHAR(64)' );
 assert_eq( $cols['signal_gpc_received'], 'TINYINT(1) NULL DEFAULT NULL', 'signal_gpc_received is TINYINT(1)' );
 assert_eq( $cols['signal_dnt_received'], 'TINYINT(1) NULL DEFAULT NULL', 'signal_dnt_received is TINYINT(1)' );
-assert_eq( $cols['tc_string'], 'TEXT NULL DEFAULT NULL', 'tc_string is TEXT (post L1-SP1-S002 fix)' );
-assert_eq( $cols['gpp_string'], 'TEXT NULL DEFAULT NULL', 'gpp_string is TEXT (post L1-SP1-S002 fix)' );
+// TEXT columns: no explicit DEFAULT — MySQL 5.7 rejects DEFAULT on TEXT/BLOB.
+assert_eq( $cols['tc_string'], 'TEXT NULL', 'tc_string is TEXT (MySQL 5.7 compat)' );
+assert_eq( $cols['gpp_string'], 'TEXT NULL', 'gpp_string is TEXT (MySQL 5.7 compat)' );
 
 // ---------- Constants exist ----------
 

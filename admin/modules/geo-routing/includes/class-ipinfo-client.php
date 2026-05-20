@@ -153,15 +153,29 @@ class Ipinfo_Client {
 
 		$body = wp_remote_retrieve_body( $response );
 		$json = json_decode( $body, true );
-		if ( ! is_array( $json ) || ! isset( $json['privacy'] ) || ! is_array( $json['privacy'] ) ) {
-			$this->log_failure( 'parse', '' );
+
+		// ipinfo.io /privacy (Privacy Standard API) returns flags at the ROOT
+		// of the JSON object, NOT nested under a `privacy` key. The previous
+		// implementation looked for $json['privacy'] which only exists in
+		// the Core/Plus API tiers (under an `anonymous` object there, not
+		// `privacy`), so every Standard-tier lookup parsed as failure and
+		// the VPN gate effectively never engaged. Reference:
+		// https://ipinfo.io/developers/privacy-standard-api — fields:
+		//   { vpn, proxy, tor, relay, hosting, service }
+		// where service is a string and the four anonymity flags are bool.
+		// Per contracts/ipinfo-api.md §1.4 — vpn/proxy/tor/relay trigger the
+		// gate; hosting alone is NOT a trigger (legitimate data centers).
+		if ( ! is_array( $json ) ) {
+			$this->log_failure( 'parse', 'json_not_array' );
+			return array( 'vpn' => null, 'source' => 'error' );
+		}
+		$has_any_flag = isset( $json['vpn'] ) || isset( $json['proxy'] ) || isset( $json['tor'] ) || isset( $json['relay'] );
+		if ( ! $has_any_flag ) {
+			$this->log_failure( 'parse', 'no_anonymity_flags' );
 			return array( 'vpn' => null, 'source' => 'error' );
 		}
 
-		// Per contracts/ipinfo-api.md §1.4 — vpn/proxy/tor/relay triggers gate;
-		// hosting alone is NOT a trigger (legitimate data centers).
-		$p   = $json['privacy'];
-		$vpn = ! empty( $p['vpn'] ) || ! empty( $p['proxy'] ) || ! empty( $p['tor'] ) || ! empty( $p['relay'] );
+		$vpn = ! empty( $json['vpn'] ) || ! empty( $json['proxy'] ) || ! empty( $json['tor'] ) || ! empty( $json['relay'] );
 
 		return array( 'vpn' => (bool) $vpn, 'source' => 'ipinfo' );
 	}

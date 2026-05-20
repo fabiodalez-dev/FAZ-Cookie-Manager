@@ -93,8 +93,12 @@ class Migration_V2 {
 			'ruleset_id_at_consent' => "VARCHAR(64) NULL DEFAULT NULL",
 			'signal_gpc_received'   => "TINYINT(1) NULL DEFAULT NULL",
 			'signal_dnt_received'   => "TINYINT(1) NULL DEFAULT NULL",
-			'tc_string'             => "TEXT NULL DEFAULT NULL",
-			'gpp_string'            => "TEXT NULL DEFAULT NULL",
+			// MySQL 5.7 rejects an explicit DEFAULT on TEXT/BLOB columns
+			// ("BLOB and TEXT columns cannot have DEFAULT values" — MySQL 5.7
+			// docs). NULL is still implicitly allowed because the column is
+			// declared NULL; we just don't write DEFAULT NULL.
+			'tc_string'             => "TEXT NULL",
+			'gpp_string'            => "TEXT NULL",
 		);
 	}
 
@@ -287,8 +291,10 @@ class Migration_V2 {
 		}
 		// L1-SP1-S002 fix (1.15.0): accept both sized (VARCHAR(N), TINYINT(1))
 		// and unsized (TEXT) safe DDL shapes. TEXT avoids the 4096-char
-		// truncation risk for large IAB TC/GPP strings.
-		if ( ! preg_match( '/^([A-Z]+\([0-9]+\)|[A-Z]+) NULL DEFAULT NULL$/', $ddl ) ) {
+		// truncation risk for large IAB TC/GPP strings. MySQL 5.7 compat:
+		// DEFAULT NULL is optional — TEXT/BLOB columns cannot have an
+		// explicit DEFAULT, so allow `... NULL` without `DEFAULT NULL`.
+		if ( ! preg_match( '/^([A-Z]+\([0-9]+\)|[A-Z]+) NULL(?: DEFAULT NULL)?$/', $ddl ) ) {
 			return false;
 		}
 

@@ -171,9 +171,21 @@ class Geo_Api {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return new WP_Error( 'forbidden', 'Admin capability required.', array( 'status' => 403 ) );
 		}
-		$nonce = $request->get_header( 'X-WP-Nonce' );
-		if ( ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
-			return new WP_Error( 'invalid_nonce', 'Invalid nonce.', array( 'status' => 403 ) );
+		// Delegate nonce verification to the project helper to honour the
+		// internal REST contract (consistent WP_Error code/message shape with
+		// every other write endpoint under faz/v1/*). faz_verify_nonce()
+		// reads X-WP-Nonce from the request and returns true or a 403 WP_Error.
+		if ( function_exists( 'faz_verify_nonce' ) ) {
+			$check = faz_verify_nonce( $request );
+			if ( is_wp_error( $check ) ) {
+				return $check;
+			}
+		} else {
+			// Defensive fallback for the unlikely case the helper isn't loaded.
+			$nonce = $request->get_header( 'X-WP-Nonce' );
+			if ( ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+				return new WP_Error( 'invalid_nonce', 'Invalid nonce.', array( 'status' => 403 ) );
+			}
 		}
 		return true;
 	}

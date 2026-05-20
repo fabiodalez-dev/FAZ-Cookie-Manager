@@ -276,13 +276,23 @@ class Controller {
 		);
 		$insert_format = array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' );
 
-		// Append v2 columns only when geo-routing v2 has resolved data.
-		// $wpdb->insert tolerates extra keys against existing columns;
-		// the migration probe in Migration_V2 has already guaranteed
-		// the columns exist on this install (or the option
-		// faz_geo_v2_disabled_reason is set, in which case we still
-		// skip the v2 fields rather than emit unknown-column errors).
-		if ( is_array( $geo_fields ) && ! empty( $geo_fields ) && '' === (string) get_option( 'faz_geo_v2_disabled_reason', '' ) ) {
+		// Append v2 columns only when geo-routing v2 has resolved data
+		// AND the migration completed successfully on this install. Two
+		// guards (both must be false for v2 columns to be appended):
+		//   - faz_geo_v2_disabled_reason: set when admin explicitly disabled
+		//     v2 (MySQL too old, kill switch, etc.) — skip permanently.
+		//   - faz_geo_v2_migration_pending: set when Migration_V2::run()
+		//     finished with status 'partial' (some columns added, others
+		//     failed mid-ALTER). Appending v2 keys here would hit the
+		//     unknown-column branch on the missing columns; better to fall
+		//     back to a v1-shape insert until the next activator pass
+		//     retries the migration.
+		if (
+			is_array( $geo_fields )
+			&& ! empty( $geo_fields )
+			&& '' === (string) get_option( 'faz_geo_v2_disabled_reason', '' )
+			&& ! get_option( 'faz_geo_v2_migration_pending', false )
+		) {
 			foreach ( $geo_fields as $col => $val ) {
 				$insert_data[ $col ]   = $val;
 				$insert_format[]        = is_int( $val ) ? '%d' : '%s';
