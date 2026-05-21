@@ -156,21 +156,16 @@ class Geo_Detector {
 	/**
 	 * Whether the CF-IPCountry header is trustworthy on this request.
 	 *
-	 * Matches `resolve_client_ip()`'s CF-Connecting-IP gate: REMOTE_ADDR in
-	 * Cloudflare's published proxy CIDRs (extendable via
-	 * `faz_geo_trusted_proxy_cidrs`) OR explicit operator opt-in via
-	 * `faz_trust_cf_ipcountry_header` (the legacy `Geolocation` contract).
+	 * Matches `Geolocation::detect_country()` / `Geolocation::get_visitor_country()`:
+	 * operator opt-in via the `faz_trust_cf_ipcountry_header` filter, default
+	 * `false`. The CF CIDR gate used by `resolve_client_ip()` decides which
+	 * IP to USE; it does NOT, on its own, authorise consulting CF-IPCountry —
+	 * that requires explicit admin opt-in to keep parity with the legacy
+	 * `Geolocation` contract consumed by frontend/banner-rest/amp/i18n.
 	 *
 	 * @return bool
 	 */
 	private function cf_header_is_trusted() {
-		$remote_addr = ! empty( $_SERVER['REMOTE_ADDR'] )
-			// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-			? (string) $_SERVER['REMOTE_ADDR']
-			: '';
-		if ( '' !== $remote_addr && $this->is_trusted_proxy( $remote_addr ) ) {
-			return true;
-		}
 		return (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
 	}
 

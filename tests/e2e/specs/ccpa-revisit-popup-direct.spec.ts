@@ -150,12 +150,15 @@ test.describe('CCPA revisit → opt-out popup (1-click UX, 1.14.4+)', () => {
           // partial restore (only applicableLaw) would leak the CCPA-overlaid
           // config tree (donotSell.status=true, optoutPopup.status=true, ...)
           // into the next test, breaking the GDPR negative-coverage test.
-          const restorePayload = JSON.stringify(meta.original_settings);
+          // base64 round-trip avoids PHP $variable interpolation in double-quoted
+          // templates — see wp-env.ts::restoreActivePluginFiles for the same idiom.
+          const encoded = Buffer.from(meta.original_settings, 'utf8').toString('base64');
           wpEval(`
             global $wpdb;
+            $settings_json = base64_decode( '${encoded}' );
             $wpdb->update(
               $wpdb->prefix . 'faz_banners',
-              array( 'settings' => ${restorePayload} ),
+              array( 'settings' => $settings_json ),
               array( 'banner_id' => ${parseInt(meta.banner_id, 10)} ),
               array( '%s' ),
               array( '%d' )
@@ -256,12 +259,15 @@ test.describe('CCPA revisit → opt-out popup (1-click UX, 1.14.4+)', () => {
           // also overlays gdpr.json config defaults, so a partial restore
           // (only applicableLaw) would leak the freshly-promoted status=true
           // flags into other tests in the suite.
-          const restorePayload = JSON.stringify(meta.original_settings);
+          // base64 round-trip avoids PHP $variable interpolation in double-quoted
+          // templates — see wp-env.ts::restoreActivePluginFiles for the same idiom.
+          const encoded = Buffer.from(meta.original_settings, 'utf8').toString('base64');
           wpEval(`
             global $wpdb;
+            $settings_json = base64_decode( '${encoded}' );
             $wpdb->update(
               $wpdb->prefix . 'faz_banners',
-              array( 'settings' => ${restorePayload} ),
+              array( 'settings' => $settings_json ),
               array( 'banner_id' => ${parseInt(meta.banner_id, 10)} ),
               array( '%s' ),
               array( '%d' )

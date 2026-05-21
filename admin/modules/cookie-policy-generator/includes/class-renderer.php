@@ -54,12 +54,12 @@ class Renderer {
 	public static function render( $atts = array() ) {
 		$settings = (array) get_option( self::SETTINGS_OPTION, array() );
 
-		// On a fresh install (option missing) the frontend shortcode would
-		// otherwise emit a policy with empty company name / contact email
-		// while the admin form is showing blogname / admin_email defaults.
-		// Merge those same baseline defaults here so [faz_cookie_policy_v2]
-		// produces a coherent first-paint without requiring the admin to
-		// hit Save first. Existing saved values win on key collision.
+		// Merge a minimal structural baseline so substitution doesn't trip on
+		// missing keys when the option is absent. See baseline_defaults() —
+		// it deliberately does NOT seed admin_email / blogname into the
+		// public-facing fields (those are PII / operational values that must
+		// only appear once the admin explicitly saves them). Existing saved
+		// values win on key collision.
 		$settings = array_replace_recursive( self::baseline_defaults(), $settings );
 
 		// FR-03 step 1: resolve language.
@@ -116,13 +116,24 @@ class Renderer {
 	}
 
 	/**
-	 * Baseline defaults the shortcode falls back to on a fresh install.
+	 * Baseline defaults the public shortcode falls back to on a fresh install.
 	 *
-	 * Mirrors `Cookie_Policy_Api::default_settings()` for the keys the
-	 * renderer actually consumes (company name / contact email / retention /
-	 * jurisdiction / privacy_policy_url). Kept narrow to avoid the renderer
-	 * carrying the API's schema as a hard dependency — the API still owns
-	 * the authoritative defaults for the admin form.
+	 * This is a PUBLIC-FACING safety floor for `[faz_cookie_policy_v2]`, NOT a
+	 * UX prefill. It is distinct from `Cookie_Policy_Api::default_settings()`,
+	 * which prefills the admin form (that runs admin-side, behind auth, where
+	 * exposing `blogname` / `admin_email` to the operator is fine).
+	 *
+	 * Anything seeded here will surface in the rendered public policy without
+	 * any admin Save — so we deliberately do NOT seed
+	 * `get_option( 'admin_email' )` or `get_option( 'blogname' )` here. The
+	 * admin email in particular is PII (often a real person's mailbox) and
+	 * must not be published as the controller contact until the operator
+	 * explicitly confirms it via the Cookie Policy admin form.
+	 *
+	 * Keep this minimal — only the structural keys the renderer needs to walk
+	 * (jurisdiction, retention_months, empty company/dpo arrays, etc.) so
+	 * substitution doesn't trip on missing keys. Real values must come from
+	 * the saved `faz_cookie_policy_data` option.
 	 *
 	 * @return array
 	 */
@@ -130,9 +141,9 @@ class Renderer {
 		return array(
 			'jurisdiction'         => 'gdpr-strict',
 			'company'              => array(
-				'name'     => (string) get_option( 'blogname', '' ),
+				'name'     => '',
 				'address'  => '',
-				'email'    => (string) get_option( 'admin_email', '' ),
+				'email'    => '',
 				'registry' => '',
 			),
 			'dpo'                  => array(
