@@ -110,22 +110,52 @@ function resolveValue<T>(value: T | ((current: SettingsTree, sent?: unknown) => 
   return typeof value === 'function' ? (value as (current: SettingsTree, sent?: unknown) => T)(current, sent) : value;
 }
 
+async function refreshNonceFromAdmin(): Promise<void> {
+  // Reload the settings page so PHP re-issues a nonce minted against the
+  // current wp_salt. Long full-suite runs can rotate the salt or invalidate
+  // the captured session between beforeEach and afterEach (other specs
+  // exercise auth rotation), causing the cached top-level `nonce` to start
+  // returning 401/403 against rest_route=/faz/v1/settings/.
+  await adminPage.goto(settingsUrl(), { waitUntil: 'domcontentloaded' });
+  const fresh = await adminPage.evaluate(() => (window as any).fazConfig?.api?.nonce ?? '');
+  if (typeof fresh === 'string' && fresh.length > 0) {
+    nonce = fresh;
+  }
+}
+
 async function getSettings(): Promise<SettingsTree> {
-  const response = await adminPage.request.get(`${baseURL}/?rest_route=/faz/v1/settings/`, {
+  let response = await adminPage.request.get(`${baseURL}/?rest_route=/faz/v1/settings/`, {
     headers: { 'X-WP-Nonce': nonce },
   });
+  if (response.status() === 401 || response.status() === 403) {
+    // Nonce went stale — refresh and retry exactly once.
+    await refreshNonceFromAdmin();
+    response = await adminPage.request.get(`${baseURL}/?rest_route=/faz/v1/settings/`, {
+      headers: { 'X-WP-Nonce': nonce },
+    });
+  }
   expect(response.status()).toBe(200);
   return (await response.json()) as SettingsTree;
 }
 
 async function postSettings(payload: SettingsTree): Promise<SettingsTree> {
-  const response = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/settings/`, {
+  let response = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/settings/`, {
     headers: {
       'Content-Type': 'application/json',
       'X-WP-Nonce': nonce,
     },
     data: payload,
   });
+  if (response.status() === 401 || response.status() === 403) {
+    await refreshNonceFromAdmin();
+    response = await adminPage.request.post(`${baseURL}/?rest_route=/faz/v1/settings/`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-WP-Nonce': nonce,
+      },
+      data: payload,
+    });
+  }
   expect(response.status()).toBe(200);
   return (await response.json()) as SettingsTree;
 }

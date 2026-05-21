@@ -181,6 +181,21 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     );
     expect(sampleName, 'each service checkbox must carry a `name` so readForm picks it up').toBe('third_party_services[]');
 
+    // Wait for writeForm() (the REST GET .then handler in cookie-policy.js)
+    // to have hydrated the form with the persisted FAKE_DATA seed. The
+    // render at line 172 only verifies renderServicesList() ran; the
+    // hydration is a separate async step that runs after the GET resolves.
+    // If we tick `.checked` before writeForm fires, writeForm will race in
+    // afterwards and reset our ticks back to the persisted seed
+    // (`[ga4,cf,recaptcha]`) before submit serializes — the exact failure
+    // observed in long full-suite runs where the GET is slower under load.
+    // FAKE_DATA seeds 3 services, so wait for any checkbox to be :checked.
+    await adminPage.waitForFunction(
+      () => document.querySelectorAll('#cp-services-list input[type=checkbox]:checked').length > 0,
+      undefined,
+      { timeout: 5000 },
+    );
+
     // Clear any seeded state from beforeAll, then tick exactly 3 well-known
     // services covering 3 different group categories (analytics, CDN, anti-bot).
     await adminPage.evaluate(() => {
