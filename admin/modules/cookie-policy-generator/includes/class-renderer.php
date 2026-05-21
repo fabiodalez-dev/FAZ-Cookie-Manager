@@ -54,6 +54,14 @@ class Renderer {
 	public static function render( $atts = array() ) {
 		$settings = (array) get_option( self::SETTINGS_OPTION, array() );
 
+		// Merge a minimal structural baseline so substitution doesn't trip on
+		// missing keys when the option is absent. See baseline_defaults() —
+		// it deliberately does NOT seed admin_email / blogname into the
+		// public-facing fields (those are PII / operational values that must
+		// only appear once the admin explicitly saves them). Existing saved
+		// values win on key collision.
+		$settings = array_replace_recursive( self::baseline_defaults(), $settings );
+
 		// FR-03 step 1: resolve language.
 		$lang = self::resolve_lang( $atts, $settings );
 
@@ -105,6 +113,49 @@ class Renderer {
 		// is emitted by trusted code (no user input reaches it un-escaped)
 		// and bypasses the kses pass.
 		return $wrapper_open . wp_kses_post( $html ) . $wrapper_close;
+	}
+
+	/**
+	 * Baseline defaults the public shortcode falls back to on a fresh install.
+	 *
+	 * This is a PUBLIC-FACING safety floor for `[faz_cookie_policy_v2]`, NOT a
+	 * UX prefill. It is distinct from `Cookie_Policy_Api::default_settings()`,
+	 * which prefills the admin form (that runs admin-side, behind auth, where
+	 * exposing `blogname` / `admin_email` to the operator is fine).
+	 *
+	 * Anything seeded here will surface in the rendered public policy without
+	 * any admin Save — so we deliberately do NOT seed
+	 * `get_option( 'admin_email' )` or `get_option( 'blogname' )` here. The
+	 * admin email in particular is PII (often a real person's mailbox) and
+	 * must not be published as the controller contact until the operator
+	 * explicitly confirms it via the Cookie Policy admin form.
+	 *
+	 * Keep this minimal — only the structural keys the renderer needs to walk
+	 * (jurisdiction, retention_months, empty company/dpo arrays, etc.) so
+	 * substitution doesn't trip on missing keys. Real values must come from
+	 * the saved `faz_cookie_policy_data` option.
+	 *
+	 * @return array
+	 */
+	private static function baseline_defaults() {
+		return array(
+			'jurisdiction'         => 'gdpr-strict',
+			'company'              => array(
+				'name'     => '',
+				'address'  => '',
+				'email'    => '',
+				'registry' => '',
+			),
+			'dpo'                  => array(
+				'name'    => '',
+				'email'   => '',
+				'address' => '',
+			),
+			'retention_months'     => 12,
+			'privacy_policy_url'   => '',
+			'third_party_services' => array(),
+			'section_overrides'    => array(),
+		);
 	}
 
 	/**

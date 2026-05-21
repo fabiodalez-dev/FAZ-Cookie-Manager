@@ -380,12 +380,16 @@ class Geo_Api {
 			return new WP_Error( 'attestation_required', 'You must attest to DPF/SCC compliance before enabling ipinfo.', array( 'status' => 400 ) );
 		}
 
-		update_option( 'faz_geo_ipinfo_optin', $optin, false );
-
+		// Pre-validate the API key (if present) BEFORE persisting any option.
+		// Previously `faz_geo_ipinfo_optin` was written before the key length
+		// and encryption checks, so a 400/500 response left admin state
+		// out of sync with the persisted opt-in flag.
+		$encrypted_key   = null;
+		$clear_key       = false;
 		if ( isset( $body['api_key'] ) ) {
 			$key = (string) $body['api_key'];
 			if ( '' === $key ) {
-				delete_option( 'faz_geo_ipinfo_api_key' );
+				$clear_key = true;
 			} else {
 				// Bound the input: wp_options.option_value is LONGTEXT and would
 				// happily store 64 KB of payload; legitimate ipinfo tokens are
@@ -402,8 +406,17 @@ class Geo_Api {
 				if ( '' === $encrypted ) {
 					return new WP_Error( 'encryption_unavailable', 'Could not encrypt the API key (wp_salt unavailable).', array( 'status' => 500 ) );
 				}
-				update_option( 'faz_geo_ipinfo_api_key', $encrypted, false );
+				$encrypted_key = $encrypted;
 			}
+		}
+
+		// All validations passed — persist atomically.
+		update_option( 'faz_geo_ipinfo_optin', $optin, false );
+
+		if ( $clear_key ) {
+			delete_option( 'faz_geo_ipinfo_api_key' );
+		} elseif ( null !== $encrypted_key ) {
+			update_option( 'faz_geo_ipinfo_api_key', $encrypted_key, false );
 		}
 
 		if ( $optin && $attestation_ok ) {

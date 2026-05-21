@@ -64,11 +64,22 @@ async function gotoResilient(page: Page, url: string): Promise<void> {
   throw lastError;
 }
 
-export async function completeAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
-	const loginPath = getWpLoginPath();
+/**
+ * Single login attempt. Throws when WP issues a `reauth=1` redirect
+ * because the existing session cookie was invalidated (typical when a
+ * previous spec rotated wp_salt, mutated user_meta sessions, or changed
+ * banner_default which the plugin treats as an auth-impacting change).
+ * The caller wraps this in a retry that clears cookies between attempts.
+ */
+async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
+  const loginPath = getWpLoginPath();
   await gotoResilient(page, `${wpBaseURL}${loginPath}`);
 
-  if (page.url().includes('/wp-admin/')) {
+  // Lucky path: existing session cookie still valid and WP redirected
+  // straight to /wp-admin/. NB: a `reauth=1` URL landing on wp-login.php
+  // is NOT this branch — WP keeps the URL on /wp-login.php while the
+  // partial cookie is rejected, so we fall through to fill below.
+  if (page.url().includes('/wp-admin/') && !page.url().includes('reauth=')) {
     await expect(page.locator('#wpadminbar')).toBeVisible();
     return;
   }
@@ -102,6 +113,37 @@ export async function completeAdminLogin(page: Page, wpBaseURL: string, adminUse
 
   const loginError = await page.locator('#login_error').textContent().catch(() => '');
   throw new Error(`WordPress admin login failed. URL=${page.url()} error=${loginError ?? 'n/a'}`);
+}
+
+export async function completeAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
+  // Up to 2 attempts. The first usually succeeds; the second is needed
+  // when a previous spec invalidated the cookie WP is now trying to
+  // reuse (salt rotation, session-meta invalidation, banner_default
+  // mutations — all visible in the wp7-compat-full.log as the
+  // `URL=...reauth=1 error=` shape at log line 114, 1066 onwards).
+  //
+  // Between attempts we clear cookies for the WP base URL so the second
+  // try is a true fresh login rather than another reauth roundtrip
+  // against the same stale cookie. Pattern matches Playwright's own
+  // recommended retry-on-flaky-auth approach.
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await attemptAdminLogin(page, wpBaseURL, adminUser, adminPass);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        try {
+          await page.context().clearCookies();
+        } catch {
+          // Non-fatal — the retry will still reach wp-login.php and WP
+          // will issue fresh cookies on a successful POST.
+        }
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 export const test = base.extend<WPFixtures, WPWorkerFixtures>({

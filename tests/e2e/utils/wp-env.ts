@@ -60,27 +60,133 @@ function assertWpPath(): void {
   }
 }
 
-export function wp(args: string[]): string {
-  assertWpPath();
-  try {
-    return execFileSync('wp', [`--path=${WP_PATH}`, ...args], {
-      encoding: 'utf8',
-      env: WP_CLI_ENV,
-      killSignal: 'SIGTERM',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: WP_CLI_TIMEOUT_MS,
-    }).trim();
-  } catch (error) {
-    const command = ['wp', `--path=${WP_PATH}`, ...args].join(' ');
-    if (error instanceof Error) {
-      error.message = `WP-CLI command failed or timed out after ${WP_CLI_TIMEOUT_MS}ms: ${command}\n${error.message}`;
-    }
-    throw error;
+// Transient-failure detection: wp-cli occasionally hits a SIGTERM kill due to
+// MySQL pool exhaustion, an in-flight PHP-FPM worker recycle, or an OPcache
+// stale-file reload mid-call. These are not real test failures and retry on
+// a fresh process usually succeeds. Match on:
+//   - the explicit timeout we emit when execFileSync's `timeout` kicks in
+//   - SIGTERM/SIGKILL kill signals on child_process errors
+//   - 'Database connection' / 'MySQL server has gone away' runtime fragments
+//     the WP bootstrap can emit when the DB blinks
+const TRANSIENT_WP_CLI_PATTERNS = [
+  /ETIMEDOUT/i,
+  /SIGTERM/i,
+  /SIGKILL/i,
+  /Database connection/i,
+  /MySQL server has gone away/i,
+  /Lost connection to MySQL/i,
+];
+
+function isTransientWpCliError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code ?? '';
+  const signal = (error as { signal?: string }).signal ?? '';
+  const haystack = `${error.message}\n${code}\n${signal}`;
+  return TRANSIENT_WP_CLI_PATTERNS.some((re) => re.test(haystack));
+}
+
+function blockingSleep(ms: number): void {
+  // execFileSync is sync, so retry backoff needs a sync sleep. Atomics.wait
+  // on a SharedArrayBuffer yields the CPU without busy-waiting and works on
+  // any Node 12+. Avoids spawning child_process('sleep') for sub-second
+  // delays, which would add ~30-50ms fork overhead.
+  const sab = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(sab), 0, 0, ms);
+}
+
+/**
+ * Format a wp-cli invocation for safe inclusion in error messages / CI logs.
+ *
+ * Callers like setOption(name, value) and wpEval(php) can pass API tokens,
+ * encrypted blobs, attestation JSON, or arbitrary PHP code. If a wp-cli call
+ * fails and we dump the raw args in the thrown error, those values land in
+ * the CI artifact log. Redact the payload while keeping enough structural
+ * information to identify which call failed.
+ *
+ * Sanitisation rules — narrow on purpose. A broad "redact everything"
+ * sweep would lose the per-test debugging signal that test authors rely on
+ * (which plugin slug, which post type, which option name failed). The
+ * surfaces enumerated here are the ones that demonstrably carry secrets
+ * via existing callers in this file.
+ */
+function formatWpCommand(args: string[]): string {
+  const prefix = `wp --path=${WP_PATH}`;
+  // `wp eval <php>` — the PHP body can contain encrypted keys, salt
+  // values, or DB rows from privileged tables.
+  if (args[0] === 'eval' && args.length >= 2) {
+    return `${prefix} eval [REDACTED ${args[1].length} chars]`;
   }
+  // `wp option update <name> <value>` — value can be a token / API key.
+  // The option NAME stays in the message because that's the part a
+  // developer needs to know to debug, and it's intentionally non-secret
+  // (option names are listed in the schema, the value is what's secret).
+  if (args[0] === 'option' && args[1] === 'update' && args.length >= 4) {
+    return `${prefix} option update ${args[2]} [REDACTED]`;
+  }
+  // `wp user create <login> <email> --user_pass=<pw>` — the password
+  // arg is sensitive. Strip --user_pass=… and any --*_pass=… look-alike
+  // while preserving the positional args.
+  if (args[0] === 'user' && args[1] === 'create') {
+    const redacted = args.map((a) => a.replace(/^(--[a-z_-]*pass[a-z_]*)=.*$/i, '$1=[REDACTED]'));
+    return `${prefix} ${redacted.join(' ')}`;
+  }
+  return `${prefix} ${args.join(' ')}`;
+}
+
+export type WpOptions = {
+  // When false, fail fast on any error — no transient retry. The general
+  // mutation channels (wpEval, setOption, deleteOption) opt out because
+  // a mid-MySQL transient ("server has gone away" / "Lost connection")
+  // could re-run the same INSERT/UPDATE against already-mutated state.
+  // Direct wp() callers that issue mutating subcommands not wrapped
+  // here (e.g. raw `wp(['post','create',...])`) should also pass
+  // allowRetry:false when the operation isn't idempotent.
+  allowRetry?: boolean;
+};
+
+export function wp(args: string[], options: WpOptions = {}): string {
+  assertWpPath();
+  const command = formatWpCommand(args);
+  const allowRetry = options.allowRetry !== false;
+  const maxAttempts = allowRetry ? 2 : 1; // 1 retry on transient error (read paths); fail-fast on opted-out mutations.
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return execFileSync('wp', [`--path=${WP_PATH}`, ...args], {
+        encoding: 'utf8',
+        env: WP_CLI_ENV,
+        killSignal: 'SIGTERM',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: WP_CLI_TIMEOUT_MS,
+      }).trim();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts && isTransientWpCliError(error)) {
+        // 500ms backoff lets a recycling PHP-FPM worker / blinking MySQL
+        // settle before the retry — empirically enough on the dev stack
+        // (nginx + PHP-FPM 8.4 + brew MySQL). Longer makes per-spec
+        // overhead visible in serial runs; shorter risks the same
+        // transient firing twice.
+        blockingSleep(500);
+        continue;
+      }
+      break;
+    }
+  }
+
+  if (lastError instanceof Error) {
+    lastError.message = `WP-CLI command failed or timed out after ${WP_CLI_TIMEOUT_MS}ms (${maxAttempts} attempt(s)): ${command}\n${lastError.message}`;
+  }
+  throw lastError;
 }
 
 export function wpEval(code: string): string {
-  return wp(['eval', code]);
+  // PHP eval body can run arbitrary mutations. A transient "MySQL gone
+  // away" mid-execution would re-run the body against already-mutated
+  // state on retry, so we fail fast here. Read-only eval bodies that
+  // really need transient resilience should call wp() directly.
+  return wp(['eval', code], { allowRetry: false });
 }
 
 function rsyncDirectory(sourceDir: string, targetDir: string): void {
@@ -177,12 +283,14 @@ export function activatePlugins(slugs: string[], options: { tolerateFailures?: b
 }
 
 export function setOption(optionName: string, value: string): void {
-  wp(['option', 'update', optionName, value]);
+  // option update mutates wp_options; no transient retry — see wpEval rationale.
+  wp(['option', 'update', optionName, value], { allowRetry: false });
 }
 
 export function deleteOption(optionName: string): void {
   try {
-    wp(['option', 'delete', optionName]);
+    // option delete mutates wp_options; no transient retry — see wpEval rationale.
+    wp(['option', 'delete', optionName], { allowRetry: false });
   } catch {
     // Option may not exist yet.
   }

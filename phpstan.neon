@@ -3,8 +3,10 @@ includes:
 
 parameters:
     level: 2
-    bootstrapFiles:
-        - phpstan-bootstrap.php
+    # bootstrapFiles intentionally omitted: the szepeviktor/phpstan-wordpress
+    # extension already provides the WP stubs PHPStan needs at this level.
+    # If a future addition requires plugin-side initialisation, add the file
+    # AND list it here — the prior entry pointed at a non-existent path.
     paths:
         - .
     excludePaths:
@@ -20,9 +22,18 @@ parameters:
         # WP-CLI classes — only loaded when WP_CLI constant is defined
         - '#Call to static method .+ on an unknown class WP_CLI#'
         - '#Function WP_CLI.+not found#'
-        # PHPStan false positive on isset() defensive checks
-        - '#Variable \$\w+ in isset\(\) always exists and is not nullable#'
-        - '#Variable \$\w+ in empty\(\) always exists and is not falsy#'
+        # WordPress idiom: defensive isset()/empty() on $_GET / $_POST /
+        # $_SERVER / $_COOKIE / $_REQUEST / $_FILES and unserialise() output
+        # — superglobals always exist as arrays so PHPStan flags the
+        # `isset($_GET['foo'])` pattern as "always defined". Scope the
+        # suppression to those superglobals only; unrelated callsites still
+        # benefit from the level-2 always-defined check.
+        -
+            message: '#Variable \$_(GET|POST|SERVER|COOKIE|REQUEST|FILES) in isset\(\) always exists and is not nullable#'
+            path: '*'
+        -
+            message: '#Variable \$_(GET|POST|SERVER|COOKIE|REQUEST|FILES) in empty\(\) always exists and is not falsy#'
+            path: '*'
         # szepeviktor/phpstan-wordpress ships an outdated stub for wp_json_encode
         # that declares only the $data param. The real WP signature is
         # wp_json_encode( mixed $data, int $options = 0, int $depth = 512 )
