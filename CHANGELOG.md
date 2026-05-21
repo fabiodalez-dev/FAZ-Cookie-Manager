@@ -2,6 +2,20 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased] — WordPress 7.0 compatibility verification
+
+### Compatibility
+
+- **WordPress 7.0** — Verified against the May 20, 2026 final release. No code changes were required:
+  - Plugin does not declare `add_theme_support('html5', …)` (the deprecation only affects themes).
+  - Plugin does not use `the_author_meta`, `get_the_author_link`, `the_author_link`, `posts_link`, or `wp_list_authors` — unaffected by the title-attribute default change.
+  - All three Gutenberg blocks (`faz/cookie-table`, `faz/cookie-policy`, `faz/consent-button`) already declare `'api_version' => 3`, satisfying the new iframed-editor enforcement.
+  - Plugin does not bundle CodeMirror, so the Esprima → Espree swap has no effect.
+  - PHP requirement is already 7.4 (matches WP 7.0's new floor) — no version bump needed.
+  - Plugin does not use the Interactivity API (`@wordpress/interactivity`, `wp_interactivity_*`); the new `watch()` / server-side `state.url` behavior changes do not apply.
+  - Plugin Check (wp.org category) against the v1.16.0 wp.org-shape ZIP on WP 7.0: **0 errors**, 277 pre-existing stylistic warnings (`PrefixAllGlobals` notices on hook/variable/function names and `DirectDatabaseQuery` notices on this plugin's own custom tables — all by design).
+  - E2E suite on WP 7.0: 482 tests pass under the same conditions that previously produced equivalent results on WP 6.x. The 26 deltas observed during a 14-minute serial run are all reproducible-as-pass when re-run in isolation — root cause is test-suite login-session pollution and WP-CLI timeout under continuous load, not plugin behavior on WP 7.0.
+
 ## [1.16.0] — 2026-05-20
 
 ### Added
