@@ -91,8 +91,40 @@ class Renderer {
 		$data = self::build_data( $settings, $jurisdiction, $lang );
 
 		// FR-03 step 5+6: substitute + convert.
-		$markdown = Generator::substitute( $scaffold, $data );
+		//
+		// HTML-valued tokens (COOKIE_CATEGORIES, THIRD_PARTY_SERVICES) MUST NOT
+		// flow through markdown_to_html(): the line-based parser only preserves
+		// a narrow allowlist of OPENING tags, so closing tags (`</dt>`, `</dd>`)
+		// and inline tags (`<small>`, `<strong>`) would be wrapped in spurious
+		// `<p>` blocks and produce invalid nesting like `<p><small>…</small></dt></p>`.
+		// Two-pass strategy: substitute HTML tokens with single-line sentinels
+		// (plain text — markdown is happy), run markdown, then swap each
+		// sentinel back for the real HTML. Standalone-line sentinels get the
+		// surrounding `<p>` wrapper stripped so the injected block sits at the
+		// right nesting level.
+		$html_tokens   = array_intersect_key( $data, array_flip( Generator::HTML_TOKENS ) );
+		$data_for_md   = $data;
+		foreach ( array_keys( $html_tokens ) as $token_name ) {
+			$data_for_md[ $token_name ] = Generator::html_token_sentinel( $token_name );
+		}
+
+		$markdown = Generator::substitute( $scaffold, $data_for_md );
 		$html     = Generator::markdown_to_html( $markdown );
+
+		foreach ( $html_tokens as $token_name => $html_value ) {
+			$sentinel = Generator::html_token_sentinel( $token_name );
+			// Standalone-line case: markdown wrapped the sentinel in `<p>…</p>`.
+			// Strip the wrapper so the block-level HTML isn't nested inside <p>.
+			$html = (string) preg_replace(
+				'/<p>\s*' . preg_quote( $sentinel, '/' ) . '\s*<\/p>/',
+				(string) $html_value,
+				$html
+			);
+			// Inline-case fallback: sentinel sat mid-paragraph. Replace in place;
+			// the surrounding <p> stays. HTML-block tokens are conventionally
+			// standalone so this branch is defensive — covered by tests.
+			$html = str_replace( $sentinel, (string) $html_value, $html );
+		}
 
 		// FR-04: append the non-removable disclaimer. Hardcoded, NOT in the
 		// template file (so admin section-overrides cannot suppress it).
@@ -280,12 +312,22 @@ class Renderer {
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 		$rows = $wpdb->get_results(
-			"SELECT c.cookie_id, c.cookie_name, c.cookie_domain, c.cookie_duration,
-			        c.cookie_description, c.category_id, cat.category_name, cat.category_description
+			// Column aliases bridge the legacy in-PHP names (cookie_name,
+			// cookie_domain, cookie_duration, cookie_description,
+			// category_name, category_description) to the actual schema
+			// (`name`, `domain`, `duration`, `description`, etc.). Without
+			// the aliases the SELECT errors out with "Unknown column
+			// 'c.cookie_name'" and build_cookie_list_html returned an empty
+			// string — meaning [faz_cookie_policy_v2] rendered without any
+			// inventory section at all. The downstream rendering loop reads
+			// $row['cookie_name'] etc., so the aliases keep it untouched.
+			"SELECT c.cookie_id, c.name AS cookie_name, c.domain AS cookie_domain,
+			        c.duration AS cookie_duration, c.description AS cookie_description,
+			        c.category AS category_id,
+			        cat.name AS category_name, cat.description AS category_description
 			   FROM `{$cookies_table}` AS c
-			   LEFT JOIN `{$categories_table}` AS cat ON c.category_id = cat.category_id
-			   WHERE c.deleted = 0 OR c.deleted IS NULL
-			   ORDER BY cat.category_priority ASC, c.cookie_name ASC",
+			   LEFT JOIN `{$categories_table}` AS cat ON c.category = cat.category_id
+			   ORDER BY cat.priority ASC, c.name ASC",
 			ARRAY_A
 		);
 

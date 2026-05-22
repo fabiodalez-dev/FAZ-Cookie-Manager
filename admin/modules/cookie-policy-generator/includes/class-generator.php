@@ -291,7 +291,48 @@ class Generator {
 	}
 
 	/**
+	 * Token names that are display-only and MUST be excluded from the
+	 * policy version hash. The hash is meant to signal MATERIAL changes
+	 * (template, cookie inventory, saved settings) so consent-mechanisms
+	 * downstream can re-prompt visitors. Including calendar-volatile
+	 * values like LAST_UPDATED_DATE (computed from `current_time()`)
+	 * would drift the hash every day even when nothing changed, producing
+	 * spurious re-prompt signals.
+	 *
+	 * @var string[]
+	 */
+	const HASH_VOLATILE_KEYS = array( 'LAST_UPDATED_DATE' );
+
+	/**
+	 * Token names whose values are pre-rendered HTML and MUST be protected
+	 * from `markdown_to_html()`'s line-based parser (it only preserves a
+	 * narrow allowlist of opening tags; closing tags `</dt>`, `</dd>` and
+	 * inline tags `<small>`, `<strong>` would otherwise be wrapped in
+	 * extra `<p>` and corrupted). The renderer's two-pass substitution
+	 * (sentinel before markdown, real HTML after) gates on this list.
+	 *
+	 * @var string[]
+	 */
+	const HTML_TOKENS = array( 'COOKIE_CATEGORIES', 'THIRD_PARTY_SERVICES' );
+
+	/**
+	 * Single-line sentinel used by Renderer to protect HTML-valued tokens
+	 * across the markdown_to_html() pass. Format chosen so it cannot be
+	 * mistaken for a markdown heading/list/raw-HTML opening tag (it is
+	 * plain ASCII with no markdown-significant prefix).
+	 *
+	 * @param string $token_name e.g. 'COOKIE_CATEGORIES'.
+	 * @return string
+	 */
+	public static function html_token_sentinel( $token_name ) {
+		return '__FAZ_HTML_TOKEN_' . preg_replace( '/[^A-Z0-9_]/', '', strtoupper( (string) $token_name ) ) . '__';
+	}
+
+	/**
 	 * Compute the sha1 of a (template_path, data) tuple for FR-07 versioning.
+	 *
+	 * Volatile display-only keys (see HASH_VOLATILE_KEYS) are stripped from
+	 * $data before hashing so the version reflects material change only.
 	 *
 	 * @param string $template_path Absolute path.
 	 * @param array  $data          Substitution data.
@@ -299,7 +340,8 @@ class Generator {
 	 */
 	public static function policy_version_hash( $template_path, array $data ) {
 		$template_sha = $template_path && file_exists( $template_path ) ? sha1_file( $template_path ) : sha1( 'no-template' );
-		$data_sha = sha1( wp_json_encode( $data ) ?: '' );
+		$stable_data  = array_diff_key( $data, array_flip( self::HASH_VOLATILE_KEYS ) );
+		$data_sha     = sha1( wp_json_encode( $stable_data ) ?: '' );
 		return substr( $template_sha, 0, 6 ) . '.' . substr( $data_sha, 0, 6 );
 	}
 }
