@@ -74,27 +74,21 @@ class Cookie_Policy_Generator {
 	}
 
 	/**
-	 * Conditional frontend asset enqueue — only when the current post
-	 * contains the [faz_cookie_policy] shortcode. The CSS file is tiny
-	 * (~30 lines, mostly resets) and inherits everything else from the
-	 * host theme; loading it everywhere would be wasted bytes on
-	 * 99% of pageviews.
+	 * Frontend asset enqueue for the Cookie Policy Generator.
+	 *
+	 * The shortcode is valid in widgets, blocks, page-builder elements,
+	 * and template parts where `has_shortcode($post->post_content, ...)`
+	 * cannot see it (Elementor/Bricks/Beaver Builder store their content
+	 * outside `post_content`; widget areas live in their own option). To
+	 * avoid unstyled policies in those legitimate placements we just
+	 * enqueue the CSS on every frontend pageview — the file is tiny
+	 * (~30 lines of resets, ~1 KB) and inherits everything else from
+	 * the host theme, so the wasted bytes are negligible.
 	 *
 	 * @return void
 	 */
 	public function maybe_enqueue_frontend_assets() {
 		if ( is_admin() ) {
-			return;
-		}
-		// Only when the global $post actually contains the shortcode. We
-		// avoid is_singular()-only checks because the shortcode is valid
-		// in arbitrary pages, archives, or even widgets (where $post may
-		// not be the visible content).
-		global $post;
-		if ( ! is_a( $post, 'WP_Post' ) ) {
-			return;
-		}
-		if ( ! has_shortcode( (string) $post->post_content, self::SHORTCODE ) ) {
 			return;
 		}
 		wp_enqueue_style(

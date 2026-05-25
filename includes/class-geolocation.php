@@ -42,10 +42,18 @@ class Geolocation {
 	/**
 	 * Get the visitor's ISO 3166-1 alpha-2 country code.
 	 *
+	 * @param string|null $ip_override Optional explicit IP to look up instead of
+	 *                                 the request's client IP. Used by Geo_Detector
+	 *                                 to honour the `$ip_override` parameter of its
+	 *                                 own detect() method (test fixtures, cron jobs,
+	 *                                 batch GeoIP lookups) — without this, the geo
+	 *                                 fallback chain silently re-resolved REMOTE_ADDR
+	 *                                 and ignored the caller's explicit IP.
+	 *                                 Pass null/empty to fall back to client IP.
 	 * @return string Two-letter country code or empty string.
 	 */
-	public static function get_country() {
-		$ip = self::get_client_ip();
+	public static function get_country( $ip_override = null ) {
+		$ip = is_string( $ip_override ) && '' !== $ip_override ? $ip_override : self::get_client_ip();
 		if ( empty( $ip ) || in_array( $ip, array( '127.0.0.1', '::1' ), true ) ) {
 			return '';
 		}

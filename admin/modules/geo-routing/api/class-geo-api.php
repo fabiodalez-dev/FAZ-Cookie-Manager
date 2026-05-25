@@ -84,13 +84,13 @@ class Geo_Api {
 		register_rest_route( $ns, "/{$base}/rulesets", array(
 			'methods'             => 'GET',
 			'callback'            => array( $this, 'list_rulesets' ),
-			'permission_callback' => array( $this, 'check_admin' ),
+			'permission_callback' => array( $this, 'check_admin_read' ),
 		) );
 
 		register_rest_route( $ns, "/{$base}/rulesets/(?P<id>[a-z0-9-]+)", array(
 			'methods'             => 'GET',
 			'callback'            => array( $this, 'get_ruleset' ),
-			'permission_callback' => array( $this, 'check_admin' ),
+			'permission_callback' => array( $this, 'check_admin_read' ),
 			'args'                => array(
 				'id' => array(
 					'sanitize_callback' => 'sanitize_text_field',
@@ -102,12 +102,12 @@ class Geo_Api {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'get_overrides' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_read' ),
 			),
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'set_overrides' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_write' ),
 			),
 		) );
 
@@ -119,31 +119,31 @@ class Geo_Api {
 		register_rest_route( $ns, "/{$base}/overrides/(?P<country>[A-Za-z]{2})", array(
 			'methods'             => 'DELETE',
 			'callback'            => array( $this, 'delete_override' ),
-			'permission_callback' => array( $this, 'check_admin' ),
+			'permission_callback' => array( $this, 'check_admin_write' ),
 		) );
 
 		register_rest_route( $ns, "/{$base}/preview", array(
 			'methods'             => 'POST',
 			'callback'            => array( $this, 'preview' ),
-			'permission_callback' => array( $this, 'check_admin' ),
+			'permission_callback' => array( $this, 'check_admin_write' ),
 		) );
 
 		register_rest_route( $ns, "/{$base}/status", array(
 			'methods'             => 'GET',
 			'callback'            => array( $this, 'status' ),
-			'permission_callback' => array( $this, 'check_admin' ),
+			'permission_callback' => array( $this, 'check_admin_read' ),
 		) );
 
 		register_rest_route( $ns, "/{$base}/ipinfo-settings", array(
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'get_ipinfo_settings' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_read' ),
 			),
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'set_ipinfo_settings' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_write' ),
 			),
 		) );
 
@@ -151,23 +151,47 @@ class Geo_Api {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'get_pipl_attestation' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_read' ),
 			),
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'set_pipl_attestation' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_write' ),
 			),
 		) );
 	}
 
 	/**
-	 * Permission callback: must be admin + valid nonce.
+	 * Permission callback for read-only endpoints (GET).
+	 *
+	 * Only enforces `manage_options` — no `wp_rest` nonce check. WordPress
+	 * REST convention is that nonces are CSRF protection for browser-cookie
+	 * sessions; Application Passwords, WP-CLI, and OAuth callers DO NOT
+	 * carry `X-WP-Nonce` and would otherwise 403 on every legitimate read.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return bool|WP_Error
 	 */
-	public function check_admin( $request ) {
+	public function check_admin_read( $request ) {
+		unset( $request );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return new WP_Error( 'forbidden', 'Admin capability required.', array( 'status' => 403 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Permission callback for mutating endpoints (POST / PUT / PATCH / DELETE).
+	 *
+	 * `manage_options` + `wp_rest` nonce (CSRF gate for browser-cookie
+	 * sessions). Non-browser callers should authenticate via Basic Auth
+	 * with an Application Password, which WordPress core treats as a
+	 * separately-authenticated flow bypassing the cookie-layer nonce.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return bool|WP_Error
+	 */
+	public function check_admin_write( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return new WP_Error( 'forbidden', 'Admin capability required.', array( 'status' => 403 ) );
 		}
@@ -188,6 +212,19 @@ class Geo_Api {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Back-compat alias — kept for any external code that hooked the old
+	 * single permission callback. New endpoints SHOULD use the typed
+	 * variants directly.
+	 *
+	 * @deprecated 1.16.1 Use check_admin_read or check_admin_write.
+	 * @param WP_REST_Request $request Request.
+	 * @return bool|WP_Error
+	 */
+	public function check_admin( $request ) {
+		return $this->check_admin_write( $request );
 	}
 
 	/**

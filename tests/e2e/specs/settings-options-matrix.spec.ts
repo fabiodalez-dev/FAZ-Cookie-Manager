@@ -117,6 +117,23 @@ async function refreshNonceFromAdmin(): Promise<void> {
   // exercise auth rotation), causing the cached top-level `nonce` to start
   // returning 401/403 against rest_route=/faz/v1/settings/.
   await adminPage.goto(settingsUrl(), { waitUntil: 'domcontentloaded' });
+
+  // Session-redirect guard: if the goto landed on wp-login.php instead of
+  // the admin page, the session cookie is gone (not just the nonce). In
+  // that case fazConfig is absent, nonce stays stale, and the caller's
+  // retry would silently still 401/403 — looking like a product bug
+  // instead of an auth failure. Surface this clearly so test output
+  // points at the right root cause.
+  const currentUrl = adminPage.url();
+  if (currentUrl.includes('wp-login.php') || currentUrl.includes('?reauth=')) {
+    throw new Error(
+      `refreshNonceFromAdmin: session is gone — landed on ${currentUrl} ` +
+      `instead of the admin settings page. Upstream spec invalidated the ` +
+      `login session (wp_salt rotation, sessions destroy, etc.). The wp-fixture ` +
+      `loginAsAdmin() needs to re-run before any further REST calls succeed.`,
+    );
+  }
+
   const fresh = await adminPage.evaluate(() => (window as any).fazConfig?.api?.nonce ?? '');
   if (typeof fresh === 'string' && fresh.length > 0) {
     nonce = fresh;

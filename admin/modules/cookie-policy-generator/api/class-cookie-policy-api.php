@@ -62,29 +62,56 @@ class Cookie_Policy_Api {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'get_settings' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_read' ),
 			),
 			array(
 				'methods'             => 'POST',
 				'callback'            => array( $this, 'set_settings' ),
-				'permission_callback' => array( $this, 'check_admin' ),
+				'permission_callback' => array( $this, 'check_admin_write' ),
 			),
 		) );
 
 		register_rest_route( $ns, "/{$base}/preview", array(
 			'methods'             => 'POST',
 			'callback'            => array( $this, 'preview' ),
-			'permission_callback' => array( $this, 'check_admin' ),
+			'permission_callback' => array( $this, 'check_admin_write' ),
 		) );
 	}
 
 	/**
-	 * manage_options + nonce.
+	 * Permission callback for read-only endpoints (GET).
+	 *
+	 * Only enforces `manage_options` — no `wp_rest` nonce check. WordPress
+	 * REST convention is that nonces are CSRF protection for browser-cookie
+	 * sessions; Application Passwords, WP-CLI, and OAuth callers
+	 * authenticate via Basic Auth / app password tokens and DO NOT carry
+	 * an `X-WP-Nonce` header. Requiring nonce on GET would 403 every
+	 * legitimate programmatic admin read.
 	 *
 	 * @param WP_REST_Request $request
 	 * @return bool|WP_Error
 	 */
-	public function check_admin( $request ) {
+	public function check_admin_read( $request ) {
+		unset( $request );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return new WP_Error( 'forbidden', 'Admin capability required.', array( 'status' => 403 ) );
+		}
+		return true;
+	}
+
+	/**
+	 * Permission callback for mutating endpoints (POST / PUT / PATCH / DELETE).
+	 *
+	 * `manage_options` + `wp_rest` nonce — the nonce is the CSRF gate for
+	 * browser-cookie admin sessions. Non-browser callers (Application
+	 * Passwords, WP-CLI) should authenticate via Basic Auth, which
+	 * WordPress core treats as a separate authenticated flow that
+	 * bypasses the nonce requirement at the cookie layer.
+	 *
+	 * @param WP_REST_Request $request
+	 * @return bool|WP_Error
+	 */
+	public function check_admin_write( $request ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return new WP_Error( 'forbidden', 'Admin capability required.', array( 'status' => 403 ) );
 		}
@@ -100,6 +127,19 @@ class Cookie_Policy_Api {
 			return new WP_Error( 'invalid_nonce', 'Invalid nonce.', array( 'status' => 403 ) );
 		}
 		return true;
+	}
+
+	/**
+	 * Back-compat alias — kept for any external code that hooked the old
+	 * single permission callback. New endpoints SHOULD use check_admin_read
+	 * (for GET) or check_admin_write (for POST/PUT/PATCH/DELETE) directly.
+	 *
+	 * @deprecated 1.16.1 Use check_admin_read or check_admin_write.
+	 * @param WP_REST_Request $request
+	 * @return bool|WP_Error
+	 */
+	public function check_admin( $request ) {
+		return $this->check_admin_write( $request );
 	}
 
 	/**

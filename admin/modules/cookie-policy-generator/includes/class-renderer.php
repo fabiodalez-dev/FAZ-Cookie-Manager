@@ -108,6 +108,20 @@ class Renderer {
 			$data_for_md[ $token_name ] = Generator::html_token_sentinel( $token_name );
 		}
 
+		// Defensive: strip any literal occurrence of the sentinel strings
+		// from the HTML values themselves before substitution. The sentinel
+		// format (`__FAZ_HTML_TOKEN_*__`, double-underscores + all caps) is
+		// exotic enough to make real collisions vanishingly rare, but a DB
+		// row containing the literal sentinel as a cookie name or description
+		// would cause the post-markdown str_replace pass to double-insert.
+		// O(N) prefix scan over a handful of cookie rows — negligible cost.
+		foreach ( $html_tokens as $token_name => $html_value ) {
+			$s = Generator::html_token_sentinel( $token_name );
+			if ( is_string( $html_value ) && false !== strpos( $html_value, $s ) ) {
+				$html_tokens[ $token_name ] = str_replace( $s, '', $html_value );
+			}
+		}
+
 		$markdown = Generator::substitute( $scaffold, $data_for_md );
 		$html     = Generator::markdown_to_html( $markdown );
 

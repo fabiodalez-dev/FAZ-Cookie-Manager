@@ -132,7 +132,11 @@ class Geo_Routing {
 		$parts = explode( '.', $dot_path );
 		// Walk the ruleset path; abort if any intermediate is missing.
 		$ref =& $ruleset;
-		for ( $i = 0; $i < count( $parts ) - 1; $i++ ) {
+		// Cache count() outside the loop condition. O(1) on PHP arrays so
+		// correctness-equivalent, but PHPCS SlevomatCodingStandard flags
+		// the in-condition form and Plugin Check strict mode would flag it.
+		$parts_n = count( $parts );
+		for ( $i = 0; $i < $parts_n - 1; $i++ ) {
 			if ( ! is_array( $ref ) || ! array_key_exists( $parts[ $i ], $ref ) ) {
 				return $ruleset;
 			}

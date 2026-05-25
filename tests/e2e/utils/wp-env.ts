@@ -116,12 +116,13 @@ function formatWpCommand(args: string[]): string {
   if (args[0] === 'eval' && args.length >= 2) {
     return `${prefix} eval [REDACTED ${args[1].length} chars]`;
   }
-  // `wp option update <name> <value>` — value can be a token / API key.
-  // The option NAME stays in the message because that's the part a
-  // developer needs to know to debug, and it's intentionally non-secret
-  // (option names are listed in the schema, the value is what's secret).
-  if (args[0] === 'option' && args[1] === 'update' && args.length >= 4) {
-    return `${prefix} option update ${args[2]} [REDACTED]`;
+  // `wp option (update|add|patch) <name> <value>` — value can be a token /
+  // API key. Cover all three mutation subcommands; the option NAME stays in
+  // the message because that's the part a developer needs to know to debug,
+  // and it's intentionally non-secret (option names are listed in the schema,
+  // the value is what's secret).
+  if (args[0] === 'option' && ['update', 'add', 'patch'].includes(args[1]) && args.length >= 4) {
+    return `${prefix} option ${args[1]} ${args[2]} [REDACTED]`;
   }
   // `wp user create <login> <email> --user_pass=<pw>` — the password
   // arg is sensitive. Strip --user_pass=… and any --*_pass=… look-alike

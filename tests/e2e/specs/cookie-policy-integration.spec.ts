@@ -60,6 +60,12 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
         'post_status' => 'any',
       ));
       if (!empty($page_id)) { wp_delete_post((int) $page_id[0], true); }
+      // Delete the option seeded by beforeAll so downstream specs see a
+      // clean Cookie Policy state. Without this, any later spec that
+      // renders [faz_cookie_policy_complete] or reads the option via the
+      // REST API would see ACME Privacy S.r.l. / privacy@acme-fixture.test
+      // fixture data instead of an empty/default install state.
+      delete_option('faz_cookie_policy_data');
     `);
   });
 

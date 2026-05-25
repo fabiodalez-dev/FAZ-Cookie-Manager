@@ -221,14 +221,16 @@ class Geo_Detector {
 	 * Delegates to the existing geolocation infrastructure rather than
 	 * re-implementing the fallback chain.
 	 *
-	 * @param string $ip_unused Kept for signature stability with the call-site
-	 *                          (which has the IP available); Geolocation::get_country()
-	 *                          reads REMOTE_ADDR / CF-Connecting-IP internally,
-	 *                          so we do not need to pass it through.
+	 * @param string $ip Resolved client IP from the caller. Passed through to
+	 *                   Geolocation::get_country() so an explicit `$ip_override`
+	 *                   supplied to Geo_Detector::detect() (test fixtures,
+	 *                   cron jobs) actually reaches the underlying GeoIP
+	 *                   lookup instead of being silently dropped — earlier
+	 *                   revisions discarded `$ip` and re-resolved REMOTE_ADDR
+	 *                   inside Geolocation, breaking the explicit-IP contract.
 	 * @return array{country:string, region:string, source:string}
 	 */
-	private function resolve_via_existing_geolocation( $ip_unused ) {
-		unset( $ip_unused );
+	private function resolve_via_existing_geolocation( $ip ) {
 		// L2-SP1-S001 fix (1.15.0): use public static get_country(),
 		// not the private static detect_country(). The previous call to
 		// $geo->detect_country() raised a Throwable that was silently
@@ -236,10 +238,17 @@ class Geo_Detector {
 		// ip-api / GeoLite2 fallback chain — every non-CF visitor was
 		// being routed to fallback-gdpr-most-protective regardless of
 		// their real country.
+		// F-GEO-2 fix (1.16.0 backlog): pass the resolved $ip through
+		// to Geolocation::get_country() so that an explicit ip_override
+		// flowing in from Geo_Detector::detect($ip_override) reaches the
+		// underlying lookup. Without the pass-through, get_country()
+		// re-resolved REMOTE_ADDR via get_client_ip(), defeating the
+		// contract used by tests and cron callers that need to resolve a
+		// non-request IP.
 		$country = '';
 		if ( class_exists( '\\FazCookie\\Includes\\Geolocation' ) ) {
 			try {
-				$result  = \FazCookie\Includes\Geolocation::get_country();
+				$result  = \FazCookie\Includes\Geolocation::get_country( $ip );
 				$country = is_string( $result ) ? strtoupper( $result ) : '';
 			} catch ( \Throwable $e ) {
 				$country = '';

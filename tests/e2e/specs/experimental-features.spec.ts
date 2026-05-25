@@ -11,7 +11,7 @@
 
 import { expect, type Page } from '@playwright/test';
 import { test } from '../fixtures/wp-fixture';
-import { upsertPage, wp, wpEval } from '../utils/wp-env';
+import { upsertPage, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
