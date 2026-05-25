@@ -77,7 +77,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 						<option value="ccpa-california"><?php esc_html_e( 'CCPA / CPRA (California, USA)', 'faz-cookie-manager' ); ?></option>
 						<option value="lgpd-brazil"><?php esc_html_e( 'LGPD (Brazil)', 'faz-cookie-manager' ); ?></option>
 					</select>
-					<div class="faz-help"><?php esc_html_e( 'Override per shortcode call with [faz_cookie_policy_v2 jurisdiction="..."].', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Override per shortcode call with [faz_cookie_policy_complete jurisdiction="..."].', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>
@@ -185,15 +185,15 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 		</div>
 		<div class="faz-card-body">
 			<p><?php esc_html_e( 'Paste this shortcode on any page or post:', 'faz-cookie-manager' ); ?></p>
-			<p><code>[faz_cookie_policy_v2]</code></p>
+			<p><code>[faz_cookie_policy_complete]</code></p>
 			<p class="faz-help"><?php esc_html_e( 'With explicit language or jurisdiction:', 'faz-cookie-manager' ); ?></p>
 			<p>
-				<code>[faz_cookie_policy_v2 lang="it"]</code><br>
-				<code>[faz_cookie_policy_v2 jurisdiction="ccpa-california"]</code><br>
-				<code>[faz_cookie_policy_v2 lang="pt-BR" jurisdiction="lgpd-brazil"]</code>
+				<code>[faz_cookie_policy_complete lang="it"]</code><br>
+				<code>[faz_cookie_policy_complete jurisdiction="ccpa-california"]</code><br>
+				<code>[faz_cookie_policy_complete lang="pt-BR" jurisdiction="lgpd-brazil"]</code>
 			</p>
 			<p class="faz-help" style="margin-top:14px;">
-				<?php echo wp_kses_post( __( '<strong>Note:</strong> the long-standing <code>[faz_cookie_policy]</code> shortcode (with <code>site_name</code> / <code>contact</code> / <code>show_table</code> attributes) is still supported for backward compatibility. The new <code>[faz_cookie_policy_v2]</code> renders the jurisdiction-aware template from the form above.', 'faz-cookie-manager' ) ); ?>
+				<?php echo wp_kses_post( __( '<strong>Note:</strong> the long-standing <code>[faz_cookie_policy]</code> shortcode (with <code>site_name</code> / <code>contact</code> / <code>show_table</code> attributes) is still supported for backward compatibility. The new <code>[faz_cookie_policy_complete]</code> renders the jurisdiction-aware template from the form above.', 'faz-cookie-manager' ) ); ?>
 			</p>
 			<hr style="margin:14px 0;">
 			<p class="faz-help"><strong><?php esc_html_e( 'Editor compatibility:', 'faz-cookie-manager' ); ?></strong></p>
@@ -201,7 +201,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 				<li><?php esc_html_e( 'Classic editor: paste the shortcode anywhere in the content area.', 'faz-cookie-manager' ); ?></li>
 				<li><?php echo wp_kses_post( __( 'Gutenberg / block editor: add a <strong>Shortcode block</strong>, paste the code inside.', 'faz-cookie-manager' ) ); ?></li>
 				<li><?php echo wp_kses_post( __( 'Page builders (Bricks, Elementor, Beaver, Divi, WPBakery): use the builder\'s <strong>Shortcode</strong> widget/element and paste the code. Some builders (Bricks in particular) skip <code>the_content()</code> entirely on pages without a builder template, so the bare shortcode in the WP editor will not render — use the shortcode element of your builder instead.', 'faz-cookie-manager' ) ); ?></li>
-				<li><?php echo wp_kses_post( __( 'Theme template files: <code>echo do_shortcode( \'[faz_cookie_policy_v2]\' );</code>', 'faz-cookie-manager' ) ); ?></li>
+				<li><?php echo wp_kses_post( __( 'Theme template files: <code>echo do_shortcode( \'[faz_cookie_policy_complete]\' );</code>', 'faz-cookie-manager' ) ); ?></li>
 				<li><?php echo wp_kses_post( __( 'WordPress block templates (FSE themes like Twenty Twenty-Four/Five): add a Shortcode block to your <em>Single Page</em> template, or use the Shortcode block on the individual page.', 'faz-cookie-manager' ) ); ?></li>
 			</ul>
 		</div>

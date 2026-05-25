@@ -29,17 +29,19 @@ class Cookie_Policy_Generator {
 	/**
 	 * Shortcode name.
 	 *
-	 * Deliberately `faz_cookie_policy_v2` (NOT `faz_cookie_policy`) to
+	 * Deliberately `faz_cookie_policy_complete` (NOT `faz_cookie_policy`) to
 	 * coexist with the long-standing `[faz_cookie_policy]` shortcode
 	 * defined in includes/class-cookie-policy-shortcode.php. The legacy
 	 * shortcode accepts site_name / contact / show_table attributes and
 	 * renders a canned five-section policy in the active WP locale; the
-	 * v2 shortcode is jurisdiction-aware (GDPR / CCPA / LGPD) and pulls
-	 * its data from the admin form (Spec 002). Both stay supported.
+	 * `_complete` shortcode is jurisdiction-aware (GDPR / CCPA / LGPD) and
+	 * pulls its data from the admin form (Spec 002). Both stay supported —
+	 * `_complete` is the human-readable suffix chosen to make the migration
+	 * path obvious for operators upgrading from the canned legacy version.
 	 *
 	 * @since 1.16.0
 	 */
-	const SHORTCODE = 'faz_cookie_policy_v2';
+	const SHORTCODE = 'faz_cookie_policy_complete';
 
 	/**
 	 * @var self|null

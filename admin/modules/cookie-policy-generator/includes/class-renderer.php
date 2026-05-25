@@ -150,7 +150,7 @@ class Renderer {
 	/**
 	 * Baseline defaults the public shortcode falls back to on a fresh install.
 	 *
-	 * This is a PUBLIC-FACING safety floor for `[faz_cookie_policy_v2]`, NOT a
+	 * This is a PUBLIC-FACING safety floor for `[faz_cookie_policy_complete]`, NOT a
 	 * UX prefill. It is distinct from `Cookie_Policy_Api::default_settings()`,
 	 * which prefills the admin form (that runs admin-side, behind auth, where
 	 * exposing `blogname` / `admin_email` to the operator is fine).
@@ -318,7 +318,7 @@ class Renderer {
 			// (`name`, `domain`, `duration`, `description`, etc.). Without
 			// the aliases the SELECT errors out with "Unknown column
 			// 'c.cookie_name'" and build_cookie_list_html returned an empty
-			// string — meaning [faz_cookie_policy_v2] rendered without any
+			// string — meaning [faz_cookie_policy_complete] rendered without any
 			// inventory section at all. The downstream rendering loop reads
 			// $row['cookie_name'] etc., so the aliases keep it untouched.
 			"SELECT c.cookie_id, c.name AS cookie_name, c.domain AS cookie_domain,
