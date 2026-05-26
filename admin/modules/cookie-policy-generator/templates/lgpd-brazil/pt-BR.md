@@ -2,7 +2,7 @@
 
 **Última atualização:** {{LAST_UPDATED_DATE}}
 
-Esta Política de Cookies descreve como **{{COMPANY_NAME}}** ("nós") utiliza cookies e tecnologias similares neste site ({{COOKIE_POLICY_URL}}), em conformidade com a Lei Geral de Proteção de Dados (LGPD, Lei nº 13.709/2018) e o Marco Civil da Internet (Lei nº 12.965/2014).
+Esta Política de Cookies descreve como **{{COMPANY_NAME}}** ("nós") utiliza cookies e tecnologias similares neste site, em conformidade com a Lei Geral de Proteção de Dados (LGPD, Lei nº 13.709/2018) e o Marco Civil da Internet (Lei nº 12.965/2014).
 
 ## Quem somos
 

@@ -2,7 +2,7 @@
 
 **Last updated:** {{LAST_UPDATED_DATE}}
 
-This Cookie Policy explains how **{{COMPANY_NAME}}** ("we", "us", "our") uses cookies and similar technologies on this website ({{COOKIE_POLICY_URL}}), in compliance with the EU General Data Protection Regulation (GDPR, Reg. 2016/679) and the ePrivacy Directive (2002/58/EC, Art. 5(3)).
+This Cookie Policy explains how **{{COMPANY_NAME}}** ("we", "us", "our") uses cookies and similar technologies on this website, in compliance with the EU General Data Protection Regulation (GDPR, Reg. 2016/679) and the ePrivacy Directive (2002/58/EC, Art. 5(3)).
 
 ## Who we are
 

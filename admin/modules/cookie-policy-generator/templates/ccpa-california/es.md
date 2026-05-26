@@ -2,7 +2,7 @@
 
 **Última actualización:** {{LAST_UPDATED_DATE}}
 
-Este Aviso al momento de la recolección y Política de Cookies explica cómo **{{COMPANY_NAME}}** ("nosotros") recopila, utiliza y comparte Información Personal a través de este sitio ({{COOKIE_POLICY_URL}}), en cumplimiento de la Ley de Privacidad del Consumidor de California de 2018, según enmendada por la Ley de Derechos de Privacidad de California (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 y siguientes) y los reglamentos de la California Privacy Protection Agency (CPPA).
+Este Aviso al momento de la recolección y Política de Cookies explica cómo **{{COMPANY_NAME}}** ("nosotros") recopila, utiliza y comparte Información Personal a través de este sitio, en cumplimiento de la Ley de Privacidad del Consumidor de California de 2018, según enmendada por la Ley de Derechos de Privacidad de California (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 y siguientes) y los reglamentos de la California Privacy Protection Agency (CPPA).
 
 Esta versión en español se proporciona conforme al requisito de servicios bilingües del § 1798.130 cuando el negocio sirve sustancialmente a consumidores hispanohablantes.
 

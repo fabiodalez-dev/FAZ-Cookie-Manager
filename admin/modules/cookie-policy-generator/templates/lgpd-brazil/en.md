@@ -2,7 +2,7 @@
 
 **Last updated:** {{LAST_UPDATED_DATE}}
 
-This Cookie Policy describes how **{{COMPANY_NAME}}** ("we") uses cookies and similar technologies on this website ({{COOKIE_POLICY_URL}}), in compliance with the Brazilian General Data Protection Law (Lei Geral de Proteção de Dados Pessoais — LGPD, Lei nº 13.709/2018) and the Marco Civil da Internet (Lei nº 12.965/2014).
+This Cookie Policy describes how **{{COMPANY_NAME}}** ("we") uses cookies and similar technologies on this website, in compliance with the Brazilian General Data Protection Law (Lei Geral de Proteção de Dados Pessoais — LGPD, Lei nº 13.709/2018) and the Marco Civil da Internet (Lei nº 12.965/2014).
 
 ## Controller
 

@@ -121,11 +121,17 @@ test.describe('Cookie Policy 1.16.2 — regression suite', () => {
       expect(articleHtml, 'utm_source leaked into rendered policy').not.toContain('utm_source=');
       expect(articleHtml, 'fbclid leaked into rendered policy').not.toContain('fbclid=');
       expect(articleHtml, '_ga leaked into rendered policy').not.toContain('_ga=');
-      // Stronger structural assertion: any /policy/ URL inside the article
-      // must end at the trailing slash (no `?` query suffix).
+      // Stronger structural assertion: if any /policy/ URL surfaces in
+      // the article (e.g. via a section_overrides custom template that
+      // still uses {{COOKIE_POLICY_URL}}), it must end at the trailing
+      // slash — no `?` query suffix. The default 1.16.3 templates no
+      // longer reference the placeholder in the opening paragraph (the
+      // domain is already named via {{COMPANY_NAME}} earlier in the
+      // sentence, Gooloo feedback), so the typical default render now
+      // has zero policy URLs — that's fine; this test only constrains
+      // the cleanliness of whatever URLs DO appear.
       const urlMatches = articleHtml.match(/https?:\/\/[^"'\s<)]+/g) || [];
       const policyUrls = urlMatches.filter((u) => u.includes('/policy'));
-      expect(policyUrls.length, 'no policy URL placeholder found in rendered HTML').toBeGreaterThan(0);
       for (const u of policyUrls) {
         expect(u, `policy URL still contains query string: ${u}`).not.toMatch(/\?/);
       }
@@ -239,6 +245,33 @@ test.describe('Cookie Policy 1.16.2 — regression suite', () => {
     expect(html, 'EDPB sentence still rendered in EN policy').not.toContain('European Data Protection Board');
     // The "Supervisory authority" H2 header should also be gone.
     expect(html, 'Supervisory authority section header still rendered').not.toMatch(/<h2>\s*Supervisory authority\s*<\/h2>/);
+  });
+
+  test('1.16.3 — redundant ({{COOKIE_POLICY_URL}}) removed from intro paragraph in all default templates', async () => {
+    // Gooloo feedback on 1.16.2: the intro paragraph used to say
+    // "...uses cookies on this website ({{COOKIE_POLICY_URL}}), in compliance..."
+    // which, after substitution, prints the full URL right after the
+    // company name that's already named two clauses earlier. Pure
+    // redundancy + ugly on long URLs. 1.16.3 drops the parenthetical
+    // from the 18 default scaffolds (6 langs × 3 jurisdictions). The
+    // placeholder still resolves if a section_overrides template uses
+    // it — only the default body changed.
+    const langs = ['en', 'it', 'fr', 'de', 'es', 'pt-BR'];
+    const jurisdictions = ['gdpr-strict', 'ccpa-california', 'lgpd-brazil'];
+    for (const lang of langs) {
+      for (const jurisdiction of jurisdictions) {
+        const html = await callPreview({ settings: previewSettings({ default_lang: lang, jurisdiction }) });
+        // No literal placeholder leaked.
+        expect(html, `${jurisdiction}/${lang}: raw placeholder leaked`).not.toContain('{{COOKIE_POLICY_URL}}');
+        // No "(https://...)" tail right after a "this website" / "this site"
+        // phrase. Cheap, language-agnostic check: look for the pattern
+        // `<phrase ending in a noun> (https://` anywhere in the article.
+        // The default templates only ever produced that pattern via the
+        // parenthetical we just removed.
+        const pattern = /\b(website|site|sitio|sito|sito web|Website)\s+\(https?:\/\//;
+        expect(html, `${jurisdiction}/${lang}: redundant URL in parens still rendered`).not.toMatch(pattern);
+      }
+    }
   });
 
   test('wp-internal cookies excluded from the rendered policy', async ({ wpBaseURL }) => {

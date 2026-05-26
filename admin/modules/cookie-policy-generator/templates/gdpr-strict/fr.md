@@ -2,7 +2,7 @@
 
 **Dernière mise à jour :** {{LAST_UPDATED_DATE}}
 
-Cette politique décrit comment **{{COMPANY_NAME}}** ("nous") utilise les cookies et technologies similaires sur ce site ({{COOKIE_POLICY_URL}}), conformément au Règlement général sur la protection des données (RGPD, Règl. UE 2016/679) et à la Directive ePrivacy (2002/58/CE, Art. 5(3)).
+Cette politique décrit comment **{{COMPANY_NAME}}** ("nous") utilise les cookies et technologies similaires sur ce site, conformément au Règlement général sur la protection des données (RGPD, Règl. UE 2016/679) et à la Directive ePrivacy (2002/58/CE, Art. 5(3)).
 
 ## Qui sommes-nous
 

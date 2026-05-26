@@ -2,7 +2,7 @@
 
 **Zuletzt aktualisiert:** {{LAST_UPDATED_DATE}}
 
-Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** ("wir") Cookies und ähnliche Technologien auf dieser Website ({{COOKIE_POLICY_URL}}) verwendet, in Übereinstimmung mit der Lei Geral de Proteção de Dados Pessoais (LGPD, Lei nº 13.709/2018) Brasiliens.
+Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** ("wir") Cookies und ähnliche Technologien auf dieser Website verwendet, in Übereinstimmung mit der Lei Geral de Proteção de Dados Pessoais (LGPD, Lei nº 13.709/2018) Brasiliens.
 
 ## Verantwortlicher
 

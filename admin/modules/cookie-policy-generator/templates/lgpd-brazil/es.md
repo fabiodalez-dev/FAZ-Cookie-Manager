@@ -2,7 +2,7 @@
 
 **Última actualización:** {{LAST_UPDATED_DATE}}
 
-Esta Política de Cookies describe cómo **{{COMPANY_NAME}}** ("nosotros") utiliza cookies y tecnologías similares en este sitio ({{COOKIE_POLICY_URL}}), en cumplimiento de la Lei Geral de Proteção de Dados Pessoais (LGPD, Lei nº 13.709/2018) de Brasil.
+Esta Política de Cookies describe cómo **{{COMPANY_NAME}}** ("nosotros") utiliza cookies y tecnologías similares en este sitio, en cumplimiento de la Lei Geral de Proteção de Dados Pessoais (LGPD, Lei nº 13.709/2018) de Brasil.
 
 ## Controlador
 

@@ -2,7 +2,7 @@
 
 **Last updated:** {{LAST_UPDATED_DATE}}
 
-This Notice at Collection and Cookie Policy explains how **{{COMPANY_NAME}}** ("we", "us", "our") collects, uses, and shares Personal Information through this website ({{COOKIE_POLICY_URL}}), in compliance with the California Consumer Privacy Act of 2018 as amended by the California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 et seq.) and the implementing regulations issued by the California Privacy Protection Agency (CPPA).
+This Notice at Collection and Cookie Policy explains how **{{COMPANY_NAME}}** ("we", "us", "our") collects, uses, and shares Personal Information through this website, in compliance with the California Consumer Privacy Act of 2018 as amended by the California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 et seq.) and the implementing regulations issued by the California Privacy Protection Agency (CPPA).
 
 ## Business contact
 

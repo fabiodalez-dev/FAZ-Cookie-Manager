@@ -2,7 +2,7 @@
 
 **Dernière mise à jour :** {{LAST_UPDATED_DATE}}
 
-Cette politique décrit comment **{{COMPANY_NAME}}** collecte, utilise et partage des Informations Personnelles via ce site ({{COOKIE_POLICY_URL}}), conformément au California Consumer Privacy Act de 2018 tel que modifié par le California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 et seq.).
+Cette politique décrit comment **{{COMPANY_NAME}}** collecte, utilise et partage des Informations Personnelles via ce site, conformément au California Consumer Privacy Act de 2018 tel que modifié par le California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 et seq.).
 
 ## Contact
 

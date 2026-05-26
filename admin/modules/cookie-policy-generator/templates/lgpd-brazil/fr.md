@@ -2,7 +2,7 @@
 
 **Dernière mise à jour :** {{LAST_UPDATED_DATE}}
 
-Cette politique décrit comment **{{COMPANY_NAME}}** ("nous") utilise les cookies et technologies similaires sur ce site ({{COOKIE_POLICY_URL}}), conformément à la Lei Geral de Proteção de Dados Pessoais (LGPD, Lei nº 13.709/2018) du Brésil.
+Cette politique décrit comment **{{COMPANY_NAME}}** ("nous") utilise les cookies et technologies similaires sur ce site, conformément à la Lei Geral de Proteção de Dados Pessoais (LGPD, Lei nº 13.709/2018) du Brésil.
 
 ## Responsable du traitement
 

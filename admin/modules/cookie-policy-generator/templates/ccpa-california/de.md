@@ -2,7 +2,7 @@
 
 **Zuletzt aktualisiert:** {{LAST_UPDATED_DATE}}
 
-Diese Notice und Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** persönliche Informationen über diese Website ({{COOKIE_POLICY_URL}}) erhebt, verwendet und weitergibt, in Übereinstimmung mit dem California Consumer Privacy Act von 2018 in der Fassung des California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 ff.).
+Diese Notice und Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** persönliche Informationen über diese Website erhebt, verwendet und weitergibt, in Übereinstimmung mit dem California Consumer Privacy Act von 2018 in der Fassung des California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 ff.).
 
 ## Kontakt
 

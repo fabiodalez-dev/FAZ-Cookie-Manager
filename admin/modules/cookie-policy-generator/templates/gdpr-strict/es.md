@@ -2,7 +2,7 @@
 
 **Última actualización:** {{LAST_UPDATED_DATE}}
 
-Esta Política de Cookies explica cómo **{{COMPANY_NAME}}** ("nosotros") utiliza cookies y tecnologías similares en este sitio ({{COOKIE_POLICY_URL}}), en cumplimiento del Reglamento General de Protección de Datos (RGPD, Reg. UE 2016/679) y la Directiva ePrivacy (2002/58/CE, Art. 5(3)).
+Esta Política de Cookies explica cómo **{{COMPANY_NAME}}** ("nosotros") utiliza cookies y tecnologías similares en este sitio, en cumplimiento del Reglamento General de Protección de Datos (RGPD, Reg. UE 2016/679) y la Directiva ePrivacy (2002/58/CE, Art. 5(3)).
 
 ## Quiénes somos
 

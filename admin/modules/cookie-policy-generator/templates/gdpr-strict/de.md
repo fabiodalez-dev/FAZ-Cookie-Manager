@@ -2,7 +2,7 @@
 
 **Zuletzt aktualisiert:** {{LAST_UPDATED_DATE}}
 
-Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** ("wir") Cookies und ähnliche Technologien auf dieser Website ({{COOKIE_POLICY_URL}}) verwendet, in Übereinstimmung mit der Datenschutz-Grundverordnung (DSGVO, VO (EU) 2016/679) und der ePrivacy-Richtlinie (2002/58/EG, Art. 5(3)).
+Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** ("wir") Cookies und ähnliche Technologien auf dieser Website verwendet, in Übereinstimmung mit der Datenschutz-Grundverordnung (DSGVO, VO (EU) 2016/679) und der ePrivacy-Richtlinie (2002/58/EG, Art. 5(3)).
 
 ## Wer wir sind
 
