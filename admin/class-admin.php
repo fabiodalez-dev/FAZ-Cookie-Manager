@@ -1718,6 +1718,7 @@ class Admin {
 	public function ajax_disable_redundant_geo_routing() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => 'forbidden' ), 403 );
+			return;
 		}
 		check_ajax_referer( 'faz_disable_redundant_geo_routing', '_wpnonce' );
 
@@ -1745,6 +1746,7 @@ class Admin {
 	public function ajax_dismiss_redundant_geo_routing() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => 'forbidden' ), 403 );
+			return;
 		}
 		check_ajax_referer( 'faz_dismiss_redundant_geo_routing', '_wpnonce' );
 		set_transient( 'faz_dismiss_redundant_geo_routing', 1, 30 * DAY_IN_SECONDS );
