@@ -66,16 +66,6 @@ async function setSettings(page: Page, patch: Record<string, unknown>): Promise<
   expect(putRes.ok(), `settings POST ${putRes.status()}: ${(await putRes.text()).slice(0, 200)}`).toBeTruthy();
 }
 
-async function clearDismissal(page: Page): Promise<void> {
-  // Test setup drives wp transient delete via REST eval would be more
-  // elegant; here we just navigate to the admin page after the option
-  // change so the next notice render evaluates the live state. The
-  // dismissal transient is short-lived (30 days) so cross-test pollution
-  // is possible — neutralise it by always running the "warning expected"
-  // assertions before the dismiss flow.
-  await page.goto(ADMIN_PAGE, { waitUntil: 'domcontentloaded' });
-}
-
 test.describe('1.16.3 — Redundant Geo-routing admin warning', () => {
   test.describe.configure({ mode: 'serial' });
 
