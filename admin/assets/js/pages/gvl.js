@@ -23,6 +23,11 @@
 	var purposeFilter = 0;
 	var selectedVendors = {};  // { vendorId: true }
 	var searchTimer = null;
+	// Race guard for autoDetectFromCookies — incremented on every
+	// invocation, captured locally inside the function so a slow
+	// previous request that resolves AFTER a newer click cannot push
+	// stale data into selectedVendors / status / notifications.
+	var autoDetectRequestId = 0;
 
 	FAZ.ready(function () {
 		if (!document.getElementById('faz-gvl')) return;
@@ -318,12 +323,20 @@
 	}
 
 	function autoDetectFromCookies() {
+		// Race guard: capture the current request id BEFORE awaiting
+		// the network call. If a newer click bumps autoDetectRequestId
+		// while this promise is in flight, the stale .then / .catch
+		// handlers bail out early and leave the UI state to the newer
+		// invocation. Matches the previewRequestId pattern used in
+		// other admin pages.
+		var requestId = ++autoDetectRequestId;
 		var btn    = document.getElementById('faz-gvl-auto-detect');
 		var status = document.getElementById('faz-gvl-auto-detect-status');
 		FAZ.btnLoading(btn, true);
 		if (status) { status.textContent = ''; }
 
 		FAZ.get('gvl/suggest').then(function (data) {
+			if (requestId !== autoDetectRequestId) { return; }
 			FAZ.btnLoading(btn, false);
 			if (!data || data.gvl_available !== true) {
 				// GVL has never been downloaded — nudge the admin towards
@@ -373,6 +386,7 @@
 			if (status) { status.textContent = msg; }
 			FAZ.notify(msg, 'success');
 		}).catch(function () {
+			if (requestId !== autoDetectRequestId) { return; }
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('gvl.autoDetectFailed', 'Auto-detect failed. Check the cookie scanner and try again.'), 'error');
 		});

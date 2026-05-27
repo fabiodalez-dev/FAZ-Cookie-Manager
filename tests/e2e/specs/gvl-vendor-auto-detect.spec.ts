@@ -48,21 +48,24 @@ function resetCookies(): void {
 
 function plantCookies(rows: Array<{ name: string; slug: string; domain: string }>): void {
   if (rows.length === 0) return;
-  // Hand-rolled multi-row insert via $wpdb->prepare to keep the
-  // test fixtures legible. The fields are hard-coded in the spec
-  // (no test-runner user input flows through here) so the prepare
-  // is belt-and-braces rather than load-bearing security.
+  // Hand-rolled multi-row insert via $wpdb->insert to keep the
+  // fixtures legible. discovered=1 is intentional: the suggest
+  // helper restricts its domain SELECT to scanner-discovered rows
+  // (CodeRabbit PR #127 review), so the fixture must mirror what
+  // the live scanner would produce for the assertions to be
+  // meaningful.
   for (const r of rows) {
     const code = `global $wpdb; $wpdb->insert(
       $wpdb->prefix . 'faz_cookies',
       array(
-        'name'   => ${JSON.stringify(r.name)},
-        'slug'   => ${JSON.stringify(r.slug)},
-        'domain' => ${JSON.stringify(r.domain)},
-        'category' => 0,
-        'type'   => 'http',
+        'name'       => ${JSON.stringify(r.name)},
+        'slug'       => ${JSON.stringify(r.slug)},
+        'domain'     => ${JSON.stringify(r.domain)},
+        'category'   => 0,
+        'type'       => 'http',
+        'discovered' => 1,
       ),
-      array('%s','%s','%s','%d','%s')
+      array('%s','%s','%s','%d','%s','%d')
     );`;
     wpEval(code);
   }
@@ -192,6 +195,30 @@ test.describe('GVL vendor auto-detect from cookies', () => {
       `echo wp_json_encode(get_option('faz_gvl_selected_vendors', 'NOT_SET'));`,
     );
     expect(stored.trim()).toBe('"NOT_SET"');
+  });
+
+  test('8. discovered=0 rows are ignored — only scanner-discovered cookies feed suggestions', async () => {
+    // Manually-added cookies (discovered=0, the default when the
+    // admin adds a row from the Cookies admin page) MUST NOT
+    // surface a vendor suggestion: the auto-detect feature is
+    // explicitly about what the SCANNER observed on the live site.
+    // CodeRabbit PR #127 review flagged this as the cookie schema's
+    // discovered column is the contract boundary between
+    // scanner-observed and admin-curated rows.
+    wpEval(`global $wpdb; $wpdb->insert(
+      $wpdb->prefix . 'faz_cookies',
+      array(
+        'name'       => 'manual_ga',
+        'slug'       => 'auto-detect-manual',
+        'domain'     => '.googletagmanager.com',
+        'category'   => 0,
+        'type'       => 'http',
+        'discovered' => 0,
+      ),
+      array('%s','%s','%s','%d','%s','%d')
+    );`);
+    const r = await suggest();
+    expect(r.vendor_ids, 'manually-added discovered=0 cookies leaked into the suggestion').toEqual([]);
   });
 
   test('7. With zero matching cookies, response is empty arrays — not an error', async () => {

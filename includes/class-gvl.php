@@ -338,8 +338,17 @@ class Gvl {
 		if ( $exists !== $table ) {
 			return array();
 		}
+		// Restrict to scanner-discovered rows only — `discovered = 1` is
+		// the column the cookie scanner sets when it actually OBSERVED a
+		// cookie on the site (versus rows the admin added by hand from
+		// the Cookies admin page). The auto-detect feature is meant to
+		// surface vendors backing real network traffic; a manually-added
+		// row is, by definition, already known to the admin and should
+		// not retroactively trigger a TCF-vendor suggestion. CodeRabbit
+		// PR #127 review (2026-05-27) flagged the broader query as a
+		// source of potential false positives — confirmed.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$domains = (array) $wpdb->get_col( "SELECT DISTINCT domain FROM `{$table}` WHERE domain <> ''" );
+		$domains = (array) $wpdb->get_col( "SELECT DISTINCT domain FROM `{$table}` WHERE domain <> '' AND discovered = 1" );
 		if ( empty( $domains ) ) {
 			return array();
 		}
