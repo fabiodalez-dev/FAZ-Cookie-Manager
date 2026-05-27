@@ -464,6 +464,18 @@
 		// state because writeForm() runs after the second render.
 		renderServicesList();
 
+		// Bind + disable Auto-detect BEFORE the Promise.all fires. If
+		// the user clicks the button during hydration, writeForm(settings)
+		// would race and overwrite the just-applied auto-detect ticks
+		// with the saved option's state, silently dropping the user's
+		// action. Disabled until writeForm runs in the .then() resolver.
+		// CodeRabbit PR #127 review (2026-05-27) flagged this race.
+		var autoDetectBtn = document.getElementById('cp-services-auto-detect');
+		if (autoDetectBtn) {
+			autoDetectBtn.disabled = true;
+			autoDetectBtn.addEventListener('click', autoDetectServices);
+		}
+
 		Promise.all([
 			api('GET', 'settings').catch(function (err) { setStatus(t( 'loadFailed', 'Load failed' ) + ': ' + err.message, 'error'); return null; }),
 			api('GET', 'detected-services').catch(function () { return { service_ids: [] }; })
@@ -483,12 +495,11 @@
 			// writeForm runs LAST so checkbox state from settings overrides
 			// any default in the freshly-rendered DOM.
 			if (settings) { writeForm(settings); }
+			// Hydration done — Auto-detect is safe to use now (writeForm
+			// has already applied the saved selection, so subsequent
+			// auto-detect ticks can't be overwritten by a late hydration).
+			if (autoDetectBtn) { autoDetectBtn.disabled = false; }
 		});
-
-		var autoDetectBtn = document.getElementById('cp-services-auto-detect');
-		if (autoDetectBtn) {
-			autoDetectBtn.addEventListener('click', autoDetectServices);
-		}
 
 		document.getElementById('faz-cookie-policy-form').addEventListener('submit', function (e) {
 			e.preventDefault();

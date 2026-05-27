@@ -379,8 +379,14 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
 
   test('17. Unauthenticated request to /suggest-services returns 401 — admin gate enforced', async ({ browser }) => {
     // Fresh context = no admin cookie. Bare request must be rejected.
+    // Derive baseURL from the live admin page so the test stays portable
+    // across local (nginx :9998), CI (random port), and any future
+    // dynamic-port test harness. Hardcoding 'http://127.0.0.1:9998' here
+    // breaks the moment WP_BASE_URL points elsewhere — CodeRabbit PR #127
+    // review (2026-05-27) flagged this.
+    const baseURL = new URL(adminPage.url()).origin;
     const anonCtx = await browser.newContext();
-    const res = await anonCtx.request.get('http://127.0.0.1:9998' + REST_BASE + '/suggest-services');
+    const res = await anonCtx.request.get(baseURL + REST_BASE + '/suggest-services');
     // WP REST returns 401 (rest_forbidden) for cap-failed requests when
     // the user is unauthenticated. Some configs return 403 instead — accept either.
     expect([401, 403]).toContain(res.status());
