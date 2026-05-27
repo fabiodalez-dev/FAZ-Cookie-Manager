@@ -114,6 +114,23 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
+
+		// GET /faz/v1/gvl/suggest — vendor IDs suggested from the
+		// scanned cookie domains (Niharika "auto-scan for ad vendors"
+		// feature request). READABLE so the admin UI can preview the
+		// suggestion list without mutating any setting; the existing
+		// POST /selected route is what actually persists the choice.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/suggest',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'suggest_from_cookies' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
 	}
 
 	/**
@@ -296,6 +313,47 @@ class Api extends Rest_Controller {
 	public function get_selected( $request ) {
 		$selected = get_option( 'faz_gvl_selected_vendors', array() );
 		return new WP_REST_Response( array( 'vendor_ids' => $selected ), 200 );
+	}
+
+	/**
+	 * GET /faz/v1/gvl/suggest — return vendor IDs suggested from the
+	 * cookie scanner's domain inventory.
+	 *
+	 * Read-only by design: this endpoint NEVER mutates
+	 * faz_gvl_selected_vendors. The admin UI uses it to render
+	 * "suggested" checkboxes (pre-ticked but not saved); the existing
+	 * POST /selected route remains the single source of truth for
+	 * persistence so the auto-detect flow shares the same audit /
+	 * validation path as manual selection.
+	 *
+	 * Response shape:
+	 *   {
+	 *     "vendor_ids":   [27, 32, 89, 755, …],   // suggested
+	 *     "already_selected":  [89, 755],          // intersection with current selection
+	 *     "newly_suggested":   [27, 32],           // suggestions NOT already selected
+	 *     "gvl_available":     true                // false when GVL hasn't been downloaded
+	 *   }
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response
+	 */
+	public function suggest_from_cookies( $request ) {
+		$gvl       = Gvl::get_instance();
+		$suggested = $gvl->suggest_vendor_ids_from_scanned_cookies();
+		$selected  = (array) get_option( 'faz_gvl_selected_vendors', array() );
+		$selected  = array_map( 'intval', $selected );
+
+		$already_selected = array_values( array_intersect( $suggested, $selected ) );
+		$newly_suggested  = array_values( array_diff( $suggested, $selected ) );
+		sort( $already_selected );
+		sort( $newly_suggested );
+
+		return new WP_REST_Response( array(
+			'vendor_ids'       => $suggested,
+			'already_selected' => $already_selected,
+			'newly_suggested'  => $newly_suggested,
+			'gvl_available'    => $gvl->has_data(),
+		), 200 );
 	}
 
 	/**

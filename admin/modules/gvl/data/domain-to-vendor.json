@@ -1,0 +1,31 @@
+{
+  "_comment": "IAB GVL vendor-ID lookup by tracker domain. Conservative seed list — every entry was cross-checked against the live GVL (https://vendor-list.consensu.org/v3/vendor-list.json) at the date in _last_reviewed. Several major ad-tech brands (Meta, Snap, X/Twitter, Reddit, Hotjar) are intentionally absent because they are not registered TCF vendors at this time — the FAZ banner gates them via the standard category mechanism instead. Multi-vendor domains are allowed (e.g. msn.com served both Microsoft Advertising and Microsoft Audience Network). Schema: { 'mappings': { '<domain>': [<vendor_id>, ...] } }. Community PRs adding entries are welcome — please cite the vendor's official IAB GVL registration ID alongside the change.",
+  "_schema_version": 1,
+  "_last_reviewed": "2026-05-27",
+  "_gvl_version_at_review": 160,
+  "mappings": {
+    "doubleclick.net":         [755],
+    "googlesyndication.com":   [755],
+    "googletagmanager.com":    [755],
+    "google-analytics.com":    [755],
+    "googleadservices.com":    [755],
+    "googleoptimize.com":      [755],
+    "googletagservices.com":   [755],
+    "google.com":              [755],
+    "gstatic.com":             [755],
+    "googleusercontent.com":   [755],
+    "bing.com":                [1126],
+    "clarity.ms":              [1126],
+    "msn.com":                 [1126],
+    "adnxs.com":               [1126],
+    "live.com":                [1126],
+    "linkedin.com":            [804],
+    "licdn.com":               [804],
+    "tiktok.com":              [986],
+    "tiktokcdn.com":           [986],
+    "criteo.com":              [91],
+    "criteo.net":              [91],
+    "taboola.com":             [42],
+    "outbrain.com":            [164]
+  }
+}

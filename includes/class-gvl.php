@@ -298,6 +298,160 @@ class Gvl {
 	}
 
 	/**
+	 * Suggest IAB GVL vendor IDs from the cookies the scanner has
+	 * already catalogued for this site. Reviewer Niharika asked for a
+	 * "scan for ad vendors" shortcut so the 700+ vendor table doesn't
+	 * have to be browsed by hand. This helper does the lookup:
+	 *
+	 *   1. Read every distinct cookie domain stored in wp_faz_cookies.
+	 *   2. Match each domain against the curated domain → vendor-ID
+	 *      map shipped at admin/modules/gvl/data/domain-to-vendor.json.
+	 *      Matching is "domain suffix-aware" — `subdomain.facebook.com`
+	 *      matches the `facebook.com` entry without requiring an exact
+	 *      string equality (cookies frequently live on a subdomain).
+	 *   3. Intersect the resulting vendor IDs with the IDs that the
+	 *      downloaded GVL actually carries. Vendors that have left the
+	 *      list (de-registered, withdrawn) are dropped silently so the
+	 *      caller does not end up with stale IDs.
+	 *
+	 * The mapping JSON is intentionally conservative: every entry is a
+	 * vendor whose IAB GVL ID is published in the official registry
+	 * (https://vendor-list.consensu.org/v3/vendor-list.json) and whose
+	 * tracking domains are industry-recognised. Community contributions
+	 * (PRs adding entries with citations) are welcome — schema is
+	 * `{ "mappings": { "<domain>": [<vendor_id>, …] } }`.
+	 *
+	 * Returns an array of vendor IDs (sorted, unique) ready to be passed
+	 * to the existing /faz/v1/gvl/selected POST endpoint OR shown as
+	 * "suggested" checkboxes in the admin UI. Empty array when the
+	 * cookies table is empty / scanner never ran / no domain match.
+	 *
+	 * @return int[]
+	 */
+	public function suggest_vendor_ids_from_scanned_cookies() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_cookies';
+		// Safety: bail if the schema isn't installed yet (fresh install before
+		// activation hooks fire, or test harness that drops tables between runs).
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$exists = (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( $exists !== $table ) {
+			return array();
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$domains = (array) $wpdb->get_col( "SELECT DISTINCT domain FROM `{$table}` WHERE domain <> ''" );
+		if ( empty( $domains ) ) {
+			return array();
+		}
+
+		$map = self::load_domain_vendor_map();
+		if ( empty( $map ) ) {
+			return array();
+		}
+
+		// Cache lookup keys for the suffix scan. The map keys are
+		// `facebook.com`, `googletagmanager.com` etc.; the cookie
+		// `domain` column tends to carry the same plus optional leading
+		// dot (`.facebook.com`) or subdomain (`m.facebook.com`).
+		$map_keys = array_keys( $map );
+		$matched  = array();
+		foreach ( $domains as $raw_domain ) {
+			$d = strtolower( ltrim( (string) $raw_domain, '.' ) );
+			if ( '' === $d ) {
+				continue;
+			}
+			// Exact match first (cheapest, covers most rows).
+			if ( isset( $map[ $d ] ) ) {
+				foreach ( (array) $map[ $d ] as $vid ) {
+					$matched[ (int) $vid ] = true;
+				}
+				continue;
+			}
+			// Suffix match: cookie domain `m.facebook.com` against map key `facebook.com`.
+			// Guard against false positives by requiring a dot before the
+			// candidate suffix — `notfacebook.com` must NOT match
+			// `facebook.com`. The "." prefix achieves that.
+			foreach ( $map_keys as $key ) {
+				if ( substr( $d, -( strlen( $key ) + 1 ) ) === '.' . $key ) {
+					foreach ( (array) $map[ $key ] as $vid ) {
+						$matched[ (int) $vid ] = true;
+					}
+					break;
+				}
+			}
+		}
+
+		if ( empty( $matched ) ) {
+			return array();
+		}
+
+		// Filter out IDs that the currently-downloaded GVL doesn't carry
+		// any longer (vendor de-registered, GVL never downloaded yet).
+		$gvl_data = $this->get_data();
+		if ( $gvl_data && isset( $gvl_data['vendors'] ) && is_array( $gvl_data['vendors'] ) ) {
+			$live_ids = array_map( 'intval', array_keys( $gvl_data['vendors'] ) );
+			$matched  = array_intersect_key( $matched, array_flip( $live_ids ) );
+		}
+
+		$ids = array_keys( $matched );
+		sort( $ids );
+		return $ids;
+	}
+
+	/**
+	 * Load the bundled domain → vendor-ID map. The file lives outside
+	 * the plugin's PHP autoload path on purpose: it is plain data the
+	 * community is invited to extend via PRs without touching PHP.
+	 *
+	 * Cached in a static var per request — the file is < 5 KB so a
+	 * cold read costs microseconds, but the static cache keeps repeated
+	 * calls (e.g. from the REST endpoint + the admin notice on the
+	 * same load) at zero I/O.
+	 *
+	 * @return array<string, int[]>
+	 */
+	private static function load_domain_vendor_map() {
+		static $cached = null;
+		if ( null !== $cached ) {
+			return $cached;
+		}
+		$file = dirname( __DIR__ ) . '/admin/modules/gvl/data/domain-to-vendor.json';
+		if ( ! is_readable( $file ) ) {
+			$cached = array();
+			return $cached;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin-shipped JSON data file, not user content.
+		$json = (string) file_get_contents( $file );
+		$decoded = json_decode( $json, true );
+		if ( ! is_array( $decoded ) || empty( $decoded['mappings'] ) || ! is_array( $decoded['mappings'] ) ) {
+			$cached = array();
+			return $cached;
+		}
+		// Normalise: lowercase domain keys, drop the `_comment` / `_schema_version` meta.
+		$out = array();
+		foreach ( $decoded['mappings'] as $domain => $vendors ) {
+			if ( ! is_string( $domain ) || '' === $domain ) {
+				continue;
+			}
+			if ( ! is_array( $vendors ) ) {
+				continue;
+			}
+			$ids = array();
+			foreach ( $vendors as $v ) {
+				$vid = (int) $v;
+				if ( $vid > 0 ) {
+					$ids[] = $vid;
+				}
+			}
+			if ( ! empty( $ids ) ) {
+				$out[ strtolower( $domain ) ] = $ids;
+			}
+		}
+		$cached = $out;
+		return $cached;
+	}
+
+	/**
 	 * Get download metadata.
 	 *
 	 * @return array { version: int, vendor_count: int, last_updated: string, timestamp: int }
