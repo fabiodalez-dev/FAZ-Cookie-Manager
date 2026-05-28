@@ -46,7 +46,8 @@ defined( 'ABSPATH' ) || exit;
 
 			<div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
 				<button class="faz-btn faz-btn-primary" id="faz-gvl-save" type="button"><?php esc_html_e( 'Save Selection', 'faz-cookie-manager' ); ?></button>
-				<button class="faz-btn faz-btn-secondary" id="faz-gvl-auto-detect" type="button" title="<?php esc_attr_e( 'Pre-tick vendors whose tracking domains were found by the cookie scanner. You still need to click Save Selection to apply.', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Auto-detect from cookie scan', 'faz-cookie-manager' ); ?></button>
+				<?php // Disabled by default — gvl.js re-enables it in loadSelectedVendors().then()/.catch() once the saved selection has hydrated, so a click during hydration can't wipe the auto-detected selection (defense-in-depth for the F008 race). ?>
+				<button class="faz-btn faz-btn-secondary" id="faz-gvl-auto-detect" type="button" disabled title="<?php esc_attr_e( 'Pre-tick vendors whose tracking domains were found by the cookie scanner. You still need to click Save Selection to apply.', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Auto-detect from cookie scan', 'faz-cookie-manager' ); ?></button>
 				<span id="faz-gvl-auto-detect-status" aria-live="polite" style="color:var(--faz-text-secondary);"></span>
 			</div>
 		</div>

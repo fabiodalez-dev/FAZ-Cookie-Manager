@@ -574,7 +574,6 @@ class Cookie_Policy_Api {
 					foreach ( (array) $map[ $key ] as $sid ) {
 						$matched[ (string) $sid ] = true;
 					}
-					break;
 				}
 			}
 		}

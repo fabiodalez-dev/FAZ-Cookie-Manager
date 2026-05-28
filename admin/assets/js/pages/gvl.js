@@ -40,6 +40,14 @@
 		document.getElementById('faz-gvl-select-all').addEventListener('change', toggleSelectAll);
 		var autoBtn = document.getElementById('faz-gvl-auto-detect');
 		if (autoBtn) {
+			// Disable Auto-detect until the gvl/selected hydration completes.
+			// Otherwise a click during loadSelectedVendors() lets
+			// autoDetectFromCookies() tick selectedVendors, then the in-flight
+			// .then() resets selectedVendors={} and silently wipes the
+			// auto-detected selection after the admin already saw a success
+			// toast. loadSelectedVendors() re-enables it in BOTH .then()/.catch().
+			// Mirrors the cookie-policy.js fix (PR #127 CodeRabbit review).
+			autoBtn.disabled = true;
 			autoBtn.addEventListener('click', autoDetectFromCookies);
 		}
 
@@ -111,8 +119,17 @@
 				});
 			}
 			updateSelectedCount();
+			// Hydration done — Auto-detect is safe now (selectedVendors holds
+			// the saved selection, so a subsequent auto-detect tick can't be
+			// overwritten by a late hydration). Re-enable before loadVendors().
+			var ab = document.getElementById('faz-gvl-auto-detect');
+			if (ab) { ab.disabled = false; }
 			loadVendors();
 		}).catch(function () {
+			// Fetch error: re-enable so a transient failure doesn't brick
+			// Auto-detect permanently.
+			var ab = document.getElementById('faz-gvl-auto-detect');
+			if (ab) { ab.disabled = false; }
 			loadVendors();
 		});
 	}
@@ -323,6 +340,13 @@
 	}
 
 	function autoDetectFromCookies() {
+		var btn    = document.getElementById('faz-gvl-auto-detect');
+		// Hydration guard: while loadSelectedVendors() is still in flight the
+		// button is disabled. Bail out early so a click can't tick
+		// selectedVendors before the gvl/selected .then() resets it (which
+		// would silently wipe the auto-detected selection). Mirrors
+		// cookie-policy.js autoDetectServices().
+		if (!btn || btn.disabled) { return; }
 		// Race guard: capture the current request id BEFORE awaiting
 		// the network call. If a newer click bumps autoDetectRequestId
 		// while this promise is in flight, the stale .then / .catch
@@ -330,7 +354,6 @@
 		// invocation. Matches the previewRequestId pattern used in
 		// other admin pages.
 		var requestId = ++autoDetectRequestId;
-		var btn    = document.getElementById('faz-gvl-auto-detect');
 		var status = document.getElementById('faz-gvl-auto-detect-status');
 		FAZ.btnLoading(btn, true);
 		if (status) { status.textContent = ''; }
@@ -380,15 +403,26 @@
 			// already live.
 			var msg;
 			if (added.length === 0) {
+				// Single placeholder — no reordering possible, plain %d is fine.
 				msg = __('gvl.autoDetectAllAlready', 'All %d auto-detected vendor(s) were already in your selection.')
 					.replace('%d', suggested.length);
 			} else if (already.length === 0) {
+				// Single placeholder — no reordering possible, plain %d is fine.
 				msg = __('gvl.autoDetectAdded', 'Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply.')
 					.replace('%d', added.length);
 			} else {
-				msg = __('gvl.autoDetectMixed', 'Pre-ticked %d new vendor(s), %d were already selected. Click Save Selection to apply.')
-					.replace('%d', added.length)
-					.replace('%d', already.length);
+				// Dual-mode formatter: class-admin.php registers this string with
+				// positional %1$d/%2$d (WP best practice so translators can
+				// reorder), but a plain .replace('%d', …) chain no-ops on a
+				// positional string. Handle BOTH positional and plain %d so the
+				// English fallback (plain %d) and the registered string render
+				// correctly. Mirrors cookie-policy.js svcAutoDetectDone.
+				var template = __('gvl.autoDetectMixed', 'Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply.');
+				msg = template
+					.replace(/%1\$d/g, String(added.length))
+					.replace(/%2\$d/g, String(already.length))
+					.replace('%d', String(added.length))
+					.replace('%d', String(already.length));
 			}
 			if (status) { status.textContent = msg; }
 			FAZ.notify(msg, 'success');

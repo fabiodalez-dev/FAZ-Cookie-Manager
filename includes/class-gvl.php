@@ -385,7 +385,6 @@ class Gvl {
 					foreach ( (array) $map[ $key ] as $vid ) {
 						$matched[ (int) $vid ] = true;
 					}
-					break;
 				}
 			}
 		}

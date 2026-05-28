@@ -660,6 +660,16 @@ class Admin {
 						'version'                  => __( 'GVL Version: ', 'faz-cookie-manager' ),
 						'vendors'                  => __( 'Vendors: ', 'faz-cookie-manager' ),
 						'lastUpdated'              => __( 'Last Updated: ', 'faz-cookie-manager' ),
+						// Auto-detect-vendors-from-cookie-scan button feedback.
+						'autoDetectNoGvl'          => __( 'Update the Global Vendor List first, then try Auto-detect again.', 'faz-cookie-manager' ),
+						'autoDetectNoMatch'        => __( 'No matching ad-tech vendors were found in the scanned cookies. Run the cookie scanner first if you have not.', 'faz-cookie-manager' ),
+						/* translators: %d: number of vendors pre-ticked from the cookie scan */
+						'autoDetectAdded'          => __( 'Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply.', 'faz-cookie-manager' ),
+						/* translators: %d: number of auto-detected vendors already in the selection */
+						'autoDetectAllAlready'     => __( 'All %d auto-detected vendor(s) were already in your selection.', 'faz-cookie-manager' ),
+						/* translators: 1: number of newly pre-ticked vendors, 2: number already selected */
+						'autoDetectMixed'          => __( 'Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply.', 'faz-cookie-manager' ),
+						'autoDetectFailed'         => __( 'Auto-detect failed. Check the cookie scanner and try again.', 'faz-cookie-manager' ),
 					),
 					// Import/Export page.
 					'importExport'             => array(
