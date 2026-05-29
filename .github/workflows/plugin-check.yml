@@ -23,8 +23,43 @@ jobs:
       - name: Build wp.org-shape plugin copy
         run: rsync -a --exclude-from=.distignore . /tmp/faz-cookie-manager/
 
-      - name: Run Plugin Check
-        uses: wordpress/plugin-check-action@v1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
-          build-dir: /tmp/faz-cookie-manager
-          categories: plugin_repo
+          node-version: 20
+
+      # NOTE: we intentionally do NOT use wordpress/plugin-check-action@v1.
+      # That action auto-generates a .wp-env.json containing the
+      # plugin-check zip as a URL `plugins` entry. On the GitHub
+      # ubuntu-24.04 runner image from 2026-05-25 (Node 24.16 / libuv
+      # 1.52.1), @wordpress/env's URL-source download path silently exits 0
+      # without booting Docker, so the next step dies with "Environment not
+      # initialized." (upstream: WordPress/plugin-check-action#579,
+      # WordPress/gutenberg#78762). The documented workaround is to keep the
+      # plugin-check zip OUT of .wp-env.json and install it via wp-cli after
+      # wp-env start — which is what the two steps below do.
+      - name: Provision wp-env (plugin-check installed post-boot, not as a URL plugin)
+        run: |
+          cat > .wp-env.json <<'JSON'
+          {
+            "core": null,
+            "port": 8880,
+            "testsPort": 8881,
+            "testsEnvironment": false,
+            "mappings": {
+              "wp-content/plugins/faz-cookie-manager": "/tmp/faz-cookie-manager"
+            }
+          }
+          JSON
+          npm -g --no-fund i @wordpress/env
+          wp-env start --update
+          # wp-env can exit 0 without actually starting Docker (see #579) —
+          # this turns that silent failure into a loud one.
+          wp-env run cli wp cli info
+
+      - name: Run Plugin Check
+        run: |
+          wp-env run cli wp plugin install plugin-check --activate
+          wp-env run cli wp plugin activate faz-cookie-manager
+          # `wp plugin check` exits non-zero when ERROR-severity findings
+          # exist, so the job fails on real problems (pipefail is on).
+          wp-env run cli wp plugin check faz-cookie-manager --categories=plugin_repo
