@@ -35,6 +35,7 @@
 import { type Page } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
+import { acquireCookiesTableLock, releaseCookiesTableLock } from '../utils/db-lock';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const REST_BASE = '/wp-json/faz/v1/cookie-policy';
@@ -94,6 +95,20 @@ async function detected(): Promise<{
 test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeAll(async () => {
+    // Deliberately blocks until the sibling gvl spec releases the mutex,
+    // which can take that whole spec's runtime under parallel workers —
+    // past the default 45s hook timeout. Raise the hook budget above the
+    // lock's acquire timeout so the wait is loud-on-deadlock, not flaky.
+    test.setTimeout(660_000);
+    // Hold the shared-table mutex for the whole spec. Tests 16 and 20
+    // wipe every discovered row in wp_faz_cookies (then restore) to
+    // assert the zero-inventory path; under parallel CI workers that
+    // window must not overlap the gvl spec's table-scoped reads.
+    // Released in afterAll. See utils/db-lock.ts for the rationale.
+    await acquireCookiesTableLock();
+  });
+
   test.beforeEach(async ({ page, loginAsAdmin }) => {
     adminPage = page;
     await loginAsAdmin(adminPage);
@@ -117,6 +132,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
 
   test.afterAll(async () => {
     resetCookies();
+    releaseCookiesTableLock();
   });
 
   test('1. /suggest-services returns the documented shape with all four keys present', async () => {

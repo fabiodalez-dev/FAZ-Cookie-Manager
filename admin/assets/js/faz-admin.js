@@ -364,7 +364,13 @@
 	FAZ.btnLoading = function (btn, loading, loadingLabel) {
 		if (!btn) return;
 		if (loading) {
-			btn.dataset.origText = btn.textContent;
+			// Idempotency: only snapshot the original label the first time we
+			// enter the loading state. A second btnLoading(btn, true) call
+			// (e.g. a double-click or overlapping request) would otherwise
+			// capture the spinner-replaced text and lose the real label.
+			if (btn.getAttribute('aria-busy') !== 'true') {
+				btn.dataset.origText = btn.textContent;
+			}
 			btn.disabled = true;
 			btn.setAttribute('aria-busy', 'true');
 			var spinner = document.createElement('span');

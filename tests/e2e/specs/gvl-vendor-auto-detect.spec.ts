@@ -35,6 +35,7 @@
 import { type Page } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
+import { acquireCookiesTableLock, releaseCookiesTableLock } from '../utils/db-lock';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager';
 const REST_BASE = '/wp-json/faz/v1/gvl';
@@ -101,7 +102,18 @@ async function suggest(): Promise<{
 test.describe('GVL vendor auto-detect from cookies', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test.beforeAll(() => {
+  test.beforeAll(async () => {
+    // This hook deliberately blocks until the sibling cookie-policy spec
+    // (the only other holder) releases the mutex, which can take that
+    // whole spec's runtime under parallel workers — well past the
+    // default 45s hook timeout. Raise the hook budget above the lock's
+    // own acquire timeout so the wait is loud-on-deadlock, not flaky.
+    test.setTimeout(660_000);
+    // Hold the shared-table mutex for the whole spec so this suite's
+    // table-scoped reads never race the cookie-policy spec's discovered-
+    // row wipe under parallel CI workers. Released in afterAll. See
+    // utils/db-lock.ts for the rationale.
+    await acquireCookiesTableLock();
     // Force-download GVL once for the whole spec (idempotent: skipped
     // if already present). Without GVL data the `gvl_available` flag
     // is false and the suggester returns an empty list by design.
@@ -131,6 +143,7 @@ test.describe('GVL vendor auto-detect from cookies', () => {
 
   test.afterAll(async () => {
     resetCookies();
+    releaseCookiesTableLock();
   });
 
   test('1. Endpoint returns the documented shape with all keys present', async () => {

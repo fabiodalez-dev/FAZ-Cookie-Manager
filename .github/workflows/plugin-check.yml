@@ -50,7 +50,10 @@ jobs:
             }
           }
           JSON
-          npm -g --no-fund i @wordpress/env
+          # Pin @wordpress/env so the CI environment is reproducible — an
+          # unpinned @latest can introduce a wp-env boot regression (see #579)
+          # without any change to the plugin under test.
+          npm -g --no-fund i @wordpress/env@11.7.0
           wp-env start --update
           # wp-env can exit 0 without actually starting Docker (see #579) —
           # this turns that silent failure into a loud one.
@@ -58,7 +61,9 @@ jobs:
 
       - name: Run Plugin Check
         run: |
-          wp-env run cli wp plugin install plugin-check --activate
+          # Pin Plugin Check so a new release can't change the pass/fail
+          # outcome of this gate without a deliberate version bump here.
+          wp-env run cli wp plugin install plugin-check --version=1.9.0 --activate
           wp-env run cli wp plugin activate faz-cookie-manager
           # `wp plugin check` exits non-zero when ERROR-severity findings
           # exist, so the job fails on real problems (pipefail is on).

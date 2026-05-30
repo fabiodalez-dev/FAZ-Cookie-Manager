@@ -383,9 +383,10 @@
 		// Read-only scan, not a save — pass a scan-specific spinner label so
 		// the button doesn't misleadingly read "Saving..." during detection.
 		FAZ.btnLoading(btn, true, __('gvl.autoDetectScanning', 'Scanning cookie inventory…'));
-		// Scanning state: clear via the helper (no timer — stays until the
-		// next status write replaces it).
-		setAutoDetectStatus('', '');
+		// Scanning state: announce it in the aria-live status region (no
+		// timer — stays until the next status write replaces it) so screen
+		// readers hear the scan start, matching the cookie-policy page.
+		setAutoDetectStatus(__('gvl.autoDetectScanning', 'Scanning cookie inventory…'), 'info');
 
 		FAZ.get('gvl/suggest').then(function (data) {
 			if (requestId !== autoDetectRequestId) { return; }

@@ -665,6 +665,7 @@ class Admin {
 						'lastUpdated'              => __( 'Last Updated: ', 'faz-cookie-manager' ),
 						// Auto-detect-vendors-from-cookie-scan button feedback.
 						'autoDetectScanning'       => __( 'Scanning cookie inventory…', 'faz-cookie-manager' ),
+						'autoDetectHydrating'      => __( 'Loading saved selection…', 'faz-cookie-manager' ),
 						'autoDetectNoGvl'          => __( 'Update the Global Vendor List first, then try Auto-detect again.', 'faz-cookie-manager' ),
 						'autoDetectNoMatch'        => __( 'No matching ad-tech vendors were found in the scanned cookies. Run the cookie scanner first if you have not.', 'faz-cookie-manager' ),
 						/* translators: %d: number of vendors pre-ticked from the cookie scan */

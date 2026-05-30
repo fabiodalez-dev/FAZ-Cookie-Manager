@@ -339,7 +339,7 @@ class Gvl {
 		// Safety: bail if the schema isn't installed yet (fresh install before
 		// activation hooks fire, or test harness that drops tables between runs).
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$exists = (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		$exists = (string) $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) );
 		if ( $exists !== $table ) {
 			return array();
 		}
