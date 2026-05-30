@@ -400,6 +400,30 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
       // produces a non-empty <table>. Column names must match the live schema:
       // cookie_name / cookie_domain / cookie_duration / cookie_description.
       global $wpdb;
+      // Self-contained fixture: the renderer only emits a category block (and
+      // thus a <table>) for categories that exist in faz_cookie_categories.
+      // A sibling lifecycle spec can empty that table mid-run, so guarantee the
+      // probe's category (id 1) exists before rendering. Insert-if-missing only
+      // — never clobber a real category, and leave it in place (a 'necessary'
+      // category is the normal baseline, so restoring it un-pollutes the run).
+      $cat_table = $wpdb->prefix . 'faz_cookie_categories';
+      $has_cat1  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM \`{$cat_table}\` WHERE category_id = %d", 1 ) );
+      if ( ! $has_cat1 ) {
+        $now = current_time( 'mysql' );
+        $wpdb->insert( $cat_table, array(
+          'category_id'        => 1,
+          'name'               => wp_json_encode( array( 'en' => 'Necessary' ) ),
+          'slug'               => 'necessary',
+          'description'        => wp_json_encode( array( 'en' => '<p>Necessary cookies.</p>' ) ),
+          'prior_consent'      => 1,
+          'visibility'         => 1,
+          'priority'           => 0,
+          'sell_personal_data' => 0,
+          'meta'               => null,
+          'date_created'       => $now,
+          'date_modified'      => $now,
+        ) );
+      }
       $wpdb->delete( $wpdb->prefix . 'faz_cookies', array( 'name' => 'faz_p2_probe' ) );
       // Use real schema column names: name/domain/duration/description/category.
       $wpdb->insert( $wpdb->prefix . 'faz_cookies', array(
