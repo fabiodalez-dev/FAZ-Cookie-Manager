@@ -478,7 +478,8 @@ class Cookie_Policy_Api {
 	 */
 	public function suggest_services( WP_REST_Request $request ) {
 		unset( $request );
-		$matched   = $this->suggest_services_from_scanned_cookies();
+		$scan      = $this->scan_discovered_services();
+		$matched   = $scan['service_ids'];
 		$saved     = (array) get_option( self::OPTION, array() );
 		$selected  = isset( $saved['third_party_services'] ) && is_array( $saved['third_party_services'] )
 			? array_values( array_unique( array_map( 'strval', $saved['third_party_services'] ) ) )
@@ -496,7 +497,7 @@ class Cookie_Policy_Api {
 			'service_ids'      => $matched,
 			'already_selected' => $already_selected,
 			'newly_suggested'  => $newly_suggested,
-			'scan_available'   => $this->cookies_table_has_discovered_rows(),
+			'scan_available'   => $scan['scan_available'],
 		), 200 );
 	}
 
@@ -511,28 +512,42 @@ class Cookie_Policy_Api {
 	 */
 	public function detected_services( WP_REST_Request $request ) {
 		unset( $request );
+		$scan = $this->scan_discovered_services();
 		return new WP_REST_Response( array(
-			'service_ids'    => $this->suggest_services_from_scanned_cookies(),
-			'scan_available' => $this->cookies_table_has_discovered_rows(),
+			'service_ids'    => $scan['service_ids'],
+			'scan_available' => $scan['scan_available'],
 		), 200 );
 	}
 
 	/**
-	 * Core scan helper. Reads scanner-discovered cookie domains from
-	 * wp_faz_cookies, matches each against the bundled
-	 * domain → service-ID map, and returns the union of matched service
-	 * IDs (sorted, unique). Mirrors the pattern in
-	 * \FazCookie\Includes\Gvl::suggest_vendor_ids_from_scanned_cookies()
-	 * — both helpers share the dot-prefix suffix-guard so '.notgoogle.com'
-	 * cannot trick a match against 'google.com'.
+	 * Core scan helper. Reads every scanner-discovered cookie domain from
+	 * wp_faz_cookies in a SINGLE query and derives BOTH the matched service
+	 * IDs and the scan_available flag from that one result set, so the two
+	 * can never disagree.
 	 *
-	 * Filtered against the API allowlist (see sanitize_settings) so a
-	 * stale entry in the JSON map can never inject a service ID the
-	 * generator does not recognise.
+	 * Previously this was split across two queries — a SELECT DISTINCT for
+	 * the service IDs and a separate COUNT for scan_available. A concurrent
+	 * delete landing between them could return scan_available=true with an
+	 * empty service_ids list (or the reverse), mis-routing the UI hint
+	 * ("no matches found" vs "run the cookie scanner first"). One query
+	 * closes that TOCTOU window.
 	 *
-	 * @return string[]
+	 * scan_available is true when the result set has any row: a
+	 * blank-domain discovered row still appears as a '' entry, so a
+	 * non-empty set is equivalent to the old COUNT(*) WHERE discovered=1 > 0.
+	 * Only the non-blank domains are matched against the bundled
+	 * domain → service-ID map. Scanner-discovered rows only (discovered=1):
+	 * manually-added cookies (discovered=0) are admin curation, not real
+	 * network traffic. Mirrors \FazCookie\Includes\Gvl::
+	 * suggest_vendor_ids_from_scanned_cookies() and shares its dot-prefix
+	 * suffix-guard so '.notgoogle.com' cannot trick a match against
+	 * 'google.com'. Matches are filtered against the API allowlist (see
+	 * sanitize_settings) so a stale JSON-map entry can never inject a
+	 * service ID the generator does not recognise.
+	 *
+	 * @return array{service_ids: string[], scan_available: bool}
 	 */
-	private function suggest_services_from_scanned_cookies() {
+	private function scan_discovered_services() {
 		global $wpdb;
 		// Whitelist-sanitise the table identifier. It is server-derived from the
 		// WP prefix (no user input), but stripping anything outside [A-Za-z0-9_]
@@ -541,23 +556,21 @@ class Cookie_Policy_Api {
 		// would be cleaner but needs WP 6.2+; this plugin keeps Requires at least 5.0.)
 		$table = preg_replace( '/[^A-Za-z0-9_]/', '', $wpdb->prefix . 'faz_cookies' );
 		if ( ! self::table_exists( $table ) ) {
-			return array();
+			return array( 'service_ids' => array(), 'scan_available' => false );
 		}
-		// Scanner-discovered rows only. Manually-added cookies (discovered=0)
-		// represent admin curation, not real network traffic — auto-detecting
-		// a service from a row the admin typed by hand would short-circuit
-		// the very intent of "pre-tick what the scanner saw on your site".
-		// Same restriction as Gvl::suggest_vendor_ids_from_scanned_cookies()
-		// (CodeRabbit PR #127 review hardened this rule).
+		// Note: no `domain <> ''` filter here (unlike the per-output split it
+		// replaces) — a blank-domain discovered row must still count toward
+		// scan_available, and the matching loop skips blank domains anyway.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$domains = (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT domain FROM `{$table}` WHERE domain <> %s AND discovered = %d", '', 1 ) );
-		if ( empty( $domains ) ) {
-			return array();
+		$domains        = (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT domain FROM `{$table}` WHERE discovered = %d", 1 ) );
+		$scan_available = ! empty( $domains );
+		if ( ! $scan_available ) {
+			return array( 'service_ids' => array(), 'scan_available' => false );
 		}
 
 		$map = self::load_domain_service_map();
 		if ( empty( $map ) ) {
-			return array();
+			return array( 'service_ids' => array(), 'scan_available' => true );
 		}
 
 		$map_keys = array_keys( $map );
@@ -587,7 +600,7 @@ class Cookie_Policy_Api {
 		}
 
 		if ( empty( $matched ) ) {
-			return array();
+			return array( 'service_ids' => array(), 'scan_available' => true );
 		}
 
 		// Reuse sanitize_settings' allowlist as the single source of truth.
@@ -597,42 +610,14 @@ class Cookie_Policy_Api {
 		$pruned = $this->sanitize_settings( array( 'third_party_services' => array_keys( $matched ) ) );
 		$ids    = isset( $pruned['third_party_services'] ) ? (array) $pruned['third_party_services'] : array();
 		sort( $ids );
-		return $ids;
-	}
-
-	/**
-	 * Cheap probe used by the suggest/detected callbacks to tell the JS
-	 * whether the cookie scanner has any data at all — distinguishes
-	 * "no matches because no cookies scanned" from "no matches because
-	 * domains don't map to known services". The UI uses this to show a
-	 * helpful "run the cookie scanner first" hint instead of a generic
-	 * "no matches found".
-	 *
-	 * @return bool
-	 */
-	private function cookies_table_has_discovered_rows() {
-		global $wpdb;
-		// Whitelist-sanitise the table identifier. It is server-derived from the
-		// WP prefix (no user input), but stripping anything outside [A-Za-z0-9_]
-		// makes the interpolated query below provably injection-safe in code,
-		// not just by convention. ($wpdb->prepare()'s %i identifier placeholder
-		// would be cleaner but needs WP 6.2+; this plugin keeps Requires at least 5.0.)
-		$table = preg_replace( '/[^A-Za-z0-9_]/', '', $wpdb->prefix . 'faz_cookies' );
-		if ( ! self::table_exists( $table ) ) {
-			return false;
-		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM `{$table}` WHERE discovered = %d", 1 ) );
-		return $count > 0;
+		return array( 'service_ids' => $ids, 'scan_available' => true );
 	}
 
 	/**
 	 * SHOW TABLES LIKE existence probe, cached per request keyed by table
-	 * name. Shared by suggest_services_from_scanned_cookies() and
-	 * cookies_table_has_discovered_rows() so the suggest + detected pair on
-	 * the same admin page does not repeat the round-trip. The two callers
-	 * keep their own SELECT/COUNT queries (different WHERE clauses drive
-	 * distinct scan_available semantics); only the existence check is shared.
+	 * name. Called by scan_discovered_services() (which both the suggest
+	 * and detected callbacks share) so repeated calls on the same admin
+	 * page request don't re-run the round-trip.
 	 *
 	 * @param string $table Fully-qualified table name (with prefix).
 	 * @return bool

@@ -751,7 +751,7 @@ class Admin {
 						/* translators: %d: number of detected services already selected */
 						'svcAutoDetectAllAlready'  => __( 'All %d detected service(s) are already selected.', 'faz-cookie-manager' ),
 						/* translators: %1$d: number of newly pre-ticked services, %2$d: number of services already selected */
-						'svcAutoDetectDone'        => __( '%1$d new + %2$d already selected. Click Save to commit.', 'faz-cookie-manager' ),
+						'svcAutoDetectDone'        => __( 'Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit.', 'faz-cookie-manager' ),
 						'svcAutoDetectFailed'      => __( 'Auto-detect failed', 'faz-cookie-manager' ),
 						// Group headings.
 						'grpAnalytics'             => __( 'Analytics', 'faz-cookie-manager' ),

@@ -264,7 +264,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
 
     await adminPage.click('#cp-services-auto-detect');
     await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /new \+ \d+ already selected\. Click Save to commit\./i,
+      /Pre-ticked \d+ new service\(s\), \d+ were already selected\. Click Save to commit\./i,
       { timeout: 10_000 },
     );
 
@@ -480,7 +480,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     await adminPage.waitForSelector('#cp-services-auto-detect', { timeout: 5_000 });
     await adminPage.click('#cp-services-auto-detect');
     await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /new \+ \d+ already selected/i,
+      /Pre-ticked \d+ new service\(s\), \d+ were already selected/i,
       { timeout: 10_000 },
     );
     // Confirm the form submit button exists and submit.
@@ -548,7 +548,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
       adminPage.click('#cp-services-auto-detect', { force: true }),
     ]);
     await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /new \+ \d+ already selected|No matching services found|Scanning cookie inventory/i,
+      /Pre-ticked \d+ new service\(s\), \d+ were already selected|No matching services found|Scanning cookie inventory/i,
       { timeout: 15_000 },
     );
     // Allow the second response to settle, then re-check that the final
@@ -613,12 +613,13 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     // admin never accepted the suggestion.
     await expect(adminPage.locator('#cp-services-list input[data-service-id="gtm"]')).not.toBeChecked();
 
-    // Click Auto-detect. Status should say "1 new + 0 already selected"
-    // — GTM is genuinely new, none of the five pre-existing services
-    // have a cookie domain mapped to them in domain-to-service.json.
+    // Click Auto-detect. Status should say "Pre-ticked 1 new service(s), 0
+    // were already selected" — GTM is genuinely new, none of the five
+    // pre-existing services have a cookie domain mapped to them in
+    // domain-to-service.json.
     await adminPage.click('#cp-services-auto-detect');
     await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /1 new \+ 0 already selected\. Click Save to commit\./i,
+      /Pre-ticked 1 new service\(s\), 0 were already selected\. Click Save to commit\./i,
       { timeout: 10_000 },
     );
 

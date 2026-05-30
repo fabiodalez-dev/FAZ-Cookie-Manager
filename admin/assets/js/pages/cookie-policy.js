@@ -336,11 +336,13 @@
 				// "constructor" or "toString" can't false-positive.
 				if (Object.prototype.hasOwnProperty.call(detectedServiceIds, svc.id)) {
 					var badge = document.createElement('span');
-					// .faz-badge + .faz-badge-success supply padding, radius,
+					// .faz-badge + .faz-badge-success supply the radius,
 					// font-weight and the correct design-token colours (no
-					// hardcoded hex). faz-svc-detected-badge stays as the test
+					// hardcoded hex). faz-svc-detected-badge is both the test
 					// selector (cookie-policy-service-auto-detect.spec.ts) and
-					// carries the compact sizing override (see faz-admin.css).
+					// the source of the compact sizing override — including the
+					// padding (1px 6px, which overrides .faz-badge's 2px 8px;
+					// see faz-admin.css).
 					badge.className = 'faz-badge faz-badge-success faz-svc-detected-badge';
 					badge.title = t( 'svcDetectedTooltip', 'The cookie scanner observed a tracking domain for this service on your site.' );
 					badge.setAttribute( 'aria-label', t( 'svcDetectedTooltip', 'The cookie scanner observed a tracking domain for this service on your site.' ) );
@@ -388,7 +390,7 @@
 		var el = document.getElementById('cp-save-status');
 		if (!el) { return; }
 		el.textContent = msg || '';
-		el.style.color = kind === 'error' ? '#c4302b' : (kind === 'ok' ? '#1d7d28' : '');
+		el.style.color = kind === 'error' ? 'var(--faz-danger, #c03658)' : (kind === 'ok' ? 'var(--faz-success, #17785b)' : '');
 		if (msg && kind === 'ok') {
 			setTimeout(function () { el.textContent = ''; }, 3000);
 		}
@@ -404,7 +406,7 @@
 		if (!el) { return; }
 		if (autoDetectStatusTimer) { clearTimeout(autoDetectStatusTimer); autoDetectStatusTimer = null; }
 		el.textContent = msg || '';
-		el.style.color = kind === 'error' ? '#c4302b' : (kind === 'warning' ? 'var(--faz-warning, #b86900)' : (kind === 'ok' ? '#1d7d28' : 'var(--faz-text-secondary, #555)'));
+		el.style.color = kind === 'error' ? 'var(--faz-danger, #c03658)' : (kind === 'warning' ? 'var(--faz-warning, #b86900)' : (kind === 'ok' ? 'var(--faz-success, #17785b)' : 'var(--faz-text-secondary, #555)'));
 		// Mirror setStatus(): auto-clear the success message after 3s.
 		// 'error' and scanning ('') states stay persistent (no timer).
 		if (msg && kind === 'ok') {
@@ -475,7 +477,7 @@
 				// in the English fallback string. Pure ordered .replace('%d', …)
 				// chains break under reordering — same fragility CodeRabbit
 				// flagged on the GVL admin page (F006, below_gate).
-				var template = t( 'svcAutoDetectDone', '%1$d new + %2$d already selected. Click Save to commit.' );
+				var template = t( 'svcAutoDetectDone', 'Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit.' );
 				var formatted = template
 					.replace(/%1\$d/g, String(newly.length))
 					.replace(/%2\$d/g, String(already.length))
@@ -486,7 +488,11 @@
 			.catch(function (err) {
 				if (myReqId !== autoDetectRequestId) { return; }
 				if (FAZ && typeof FAZ.btnLoading === 'function') { FAZ.btnLoading(btn, false); } else { btn.disabled = false; }
-				setAutoDetectStatus(t( 'svcAutoDetectFailed', 'Auto-detect failed' ) + ': ' + err.message, 'error');
+				// Keep the raw server error in the console for debugging, but
+				// show the admin actionable copy only — don't surface verbatim
+				// WP_Error / internal detail in the UI (matches the GVL sibling).
+				if (window.console && console.error) { console.error('FAZ: service auto-detect failed', err); }
+				setAutoDetectStatus(t( 'svcAutoDetectFailed', 'Auto-detect failed. Check the cookie scanner and try again.' ), 'error');
 			});
 	}
 
