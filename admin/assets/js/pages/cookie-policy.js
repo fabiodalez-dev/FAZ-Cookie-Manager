@@ -36,6 +36,16 @@
 	// one. Mirrors the GVL admin page's autoDetectRequestId (PR #127).
 	var autoDetectRequestId = 0;
 
+	// Service IDs the admin manually UNTICKED during this session (since the
+	// last hydration / save). Auto-detect consults this so a re-run does not
+	// silently re-tick a detected service the admin deliberately removed
+	// before saving (F009). A null-prototype map is used as a Set so a
+	// service id that collides with an Object.prototype member name (e.g.
+	// "constructor") can never read as a spurious truthy hit. Reset on
+	// hydration (writeForm) and after a successful save — the saved state
+	// becomes the new baseline.
+	var userUntickedServices = Object.create(null);
+
 	// Set of service IDs the scanner has observed on this site. Populated
 	// in init() by GET /detected-services. Used by renderServicesList()
 	// to draw a small "Detected" badge next to the matching checkboxes so
@@ -175,6 +185,11 @@
 		document.querySelectorAll('#cp-services-list input[type=checkbox]').forEach(function (cb) {
 			cb.checked = services.indexOf(cb.dataset.serviceId) !== -1;
 		});
+		// The hydrated state is the new baseline — clear any in-session
+		// manual-untick tracking so Auto-detect re-suggests freely (F009).
+		// Programmatic .checked above does not fire 'change', so the map is
+		// not about to be repopulated by this write.
+		userUntickedServices = Object.create(null);
 	}
 
 	// ---------- services list (renders the checkboxes) ----------
@@ -462,15 +477,37 @@
 				}
 				// Pre-tick the newly_suggested checkboxes. Already-selected
 				// boxes stay checked (they already are). Save commits.
+				// EXCEPT services the admin manually unticked this session: a
+				// detected service the admin deliberately removed (before
+				// saving) must not be silently re-ticked by a later Auto-detect
+				// run (F009). Auto-detect stays additive without reversing the
+				// admin's unsaved intent.
 				var list = document.getElementById('cp-services-list');
+				var skipped = 0;
 				if (list) {
 					var boxes = list.querySelectorAll('input[type=checkbox][data-service-id]');
 					for (var i = 0; i < boxes.length; i++) {
 						var sid = boxes[i].dataset.serviceId;
-						if (newly.indexOf(sid) !== -1) {
-							boxes[i].checked = true;
-						}
+						if (newly.indexOf(sid) === -1) { continue; }
+						if (userUntickedServices[sid]) { skipped += 1; continue; }
+						boxes[i].checked = true;
 					}
+				}
+				// Report what was ACTUALLY pre-ticked, not the raw suggestion
+				// count: services the admin unticked this session were skipped
+				// above, so the count must subtract them or the status would
+				// claim more boxes than it ticked (the desync CodeRabbit flagged
+				// on F009).
+				var addedCount = newly.length - skipped;
+				if (addedCount === 0) {
+					// Every newly-detected service was one the admin unticked
+					// this session — nothing was pre-ticked, so omit the "Click
+					// Save" prompt. Confirm without lying about a pending change.
+					var noneMsg = (already.length > 0)
+						? t( 'svcAutoDetectAllAlready', 'All %d detected service(s) are already selected.' ).replace('%d', String(already.length))
+						: t( 'svcAutoDetectNoneAdded', 'Detected services left unticked, as you set them.' );
+					setAutoDetectStatus(noneMsg, 'ok');
+					return;
 				}
 				// Accept both positional (%1$d / %2$d — WP i18n best practice
 				// for translators that need to reorder) AND plain %d / %d
@@ -479,9 +516,9 @@
 				// flagged on the GVL admin page (F006, below_gate).
 				var template = t( 'svcAutoDetectDone', 'Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit.' );
 				var formatted = template
-					.replace(/%1\$d/g, String(newly.length))
+					.replace(/%1\$d/g, String(addedCount))
 					.replace(/%2\$d/g, String(already.length))
-					.replace('%d', String(newly.length))
+					.replace('%d', String(addedCount))
 					.replace('%d', String(already.length));
 				setAutoDetectStatus(formatted, 'ok');
 			})
@@ -516,6 +553,25 @@
 		if (autoDetectBtn) {
 			autoDetectBtn.disabled = true;
 			autoDetectBtn.addEventListener('click', autoDetectServices);
+		}
+
+		// Track the admin's manual tick/untick of service checkboxes so
+		// Auto-detect can skip a detected service the admin deliberately
+		// unticked this session (F009). Delegated on the container because
+		// the checkboxes are (re)rendered dynamically by renderServicesList().
+		// Programmatic `cb.checked = …` in writeForm() does NOT fire 'change',
+		// so hydration never pollutes this map.
+		var servicesListEl = document.getElementById('cp-services-list');
+		if (servicesListEl) {
+			servicesListEl.addEventListener('change', function (e) {
+				var cb = e.target;
+				if (!cb || cb.type !== 'checkbox' || !cb.dataset || !cb.dataset.serviceId) { return; }
+				if (cb.checked) {
+					delete userUntickedServices[cb.dataset.serviceId];
+				} else {
+					userUntickedServices[cb.dataset.serviceId] = true;
+				}
+			});
 		}
 
 		// Tracks whether the saved settings actually loaded. If the GET failed
@@ -583,7 +639,14 @@
 			var payload = readForm();
 			setStatus(t( 'saving', 'Saving…' ), '');
 			api('POST', 'settings', payload)
-				.then(function () { setStatus(t( 'saved', 'Saved.' ), 'ok'); })
+				.then(function () {
+					setStatus(t( 'saved', 'Saved.' ), 'ok');
+					// Saved state is the new baseline — a service the admin
+					// unticked is now persisted as unselected, so clear the
+					// in-session tracking and let a later Auto-detect re-suggest
+					// it freely (F009).
+					userUntickedServices = Object.create(null);
+				})
 				.catch(function (err) { setStatus(t( 'saveFailed', 'Save failed' ) + ': ' + err.message, 'error'); });
 		});
 

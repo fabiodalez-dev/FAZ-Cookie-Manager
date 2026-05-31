@@ -677,4 +677,86 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     expect(b.newly_suggested).toEqual(a.newly_suggested);
     expect(b.scan_available).toEqual(a.scan_available);
   });
+
+  test('27. F009: Auto-detect does NOT re-tick a detected service the admin unticked in-session (and still ticks the others)', async () => {
+    // Two detected-but-unsaved services. The admin manually adds then
+    // removes one (gtm) before saving; the other (stripe) is left alone.
+    plantCookies([
+      { name: 'cp_gtm', slug: 'cp-auto-f009-gtm', domain: '.googletagmanager.com' },
+      { name: 'cp_st',  slug: 'cp-auto-f009-st',  domain: '.js.stripe.com' },
+    ]);
+    await adminPage.reload({ waitUntil: 'domcontentloaded' });
+    await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
+    // Hydration must finish (writeForm clears the in-session untick map and
+    // enables the button) before we interact, or the manual untick we record
+    // would be wiped.
+    await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 10_000 });
+
+    const gtm = adminPage.locator('#cp-services-list input[data-service-id="gtm"]');
+    const stripe = adminPage.locator('#cp-services-list input[data-service-id="stripe"]');
+    // Both start unchecked — they are detected (newly) but not saved.
+    await expect(gtm).not.toBeChecked();
+    await expect(stripe).not.toBeChecked();
+
+    // Admin manually ticks gtm, then unticks it — a deliberate in-session
+    // removal. Each click fires 'change', which the delegated listener records.
+    await gtm.click();
+    await expect(gtm).toBeChecked();
+    await gtm.click();
+    await expect(gtm).not.toBeChecked();
+
+    // Run Auto-detect.
+    await adminPage.click('#cp-services-auto-detect');
+    // gtm stays UNCHECKED (skipped — the admin removed it); stripe IS ticked
+    // (auto-detect still works for services the admin didn't touch).
+    await expect(stripe).toBeChecked({ timeout: 10_000 });
+    await expect(gtm).not.toBeChecked();
+    // Status reflects only the one actually pre-ticked, not the raw count.
+    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+      /Pre-ticked 1 new service\(s\)/i,
+      { timeout: 10_000 },
+    );
+  });
+
+  test('28. F009: a successful save resets the baseline — a later Auto-detect re-suggests the removed service', async () => {
+    plantCookies([
+      { name: 'cp_gtm', slug: 'cp-auto-f009b-gtm', domain: '.googletagmanager.com' },
+    ]);
+    await adminPage.reload({ waitUntil: 'domcontentloaded' });
+    await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
+    await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 10_000 });
+
+    const gtm = adminPage.locator('#cp-services-list input[data-service-id="gtm"]');
+    await expect(gtm).not.toBeChecked();
+
+    // Tick then untick gtm → in-session removal recorded. Await the checked
+    // state BETWEEN the two clicks so each toggle's 'change' event is
+    // processed before the next (a rapid double-click can drop the second
+    // 'change', leaving the untick unrecorded).
+    await gtm.click();
+    await expect(gtm).toBeChecked();
+    await gtm.click();
+    await expect(gtm).not.toBeChecked();
+
+    // First Auto-detect: gtm is skipped, nothing pre-ticked.
+    await adminPage.click('#cp-services-auto-detect');
+    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+      /left unticked/i,
+      { timeout: 10_000 },
+    );
+    await expect(gtm).not.toBeChecked();
+
+    // Save (persists third_party_services = [] — gtm stays unselected).
+    await adminPage.click('button[type=submit]');
+    await expect(adminPage.locator('#cp-save-status')).toContainText(/Saved/i, { timeout: 10_000 });
+
+    // Saved state is the new baseline: the in-session untick is cleared, so a
+    // second Auto-detect re-suggests gtm and ticks it.
+    await adminPage.click('#cp-services-auto-detect');
+    await expect(gtm).toBeChecked({ timeout: 10_000 });
+    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+      /Pre-ticked 1 new service\(s\)/i,
+      { timeout: 10_000 },
+    );
+  });
 });

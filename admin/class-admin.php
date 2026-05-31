@@ -765,6 +765,7 @@ class Admin {
 						'svcAutoDetectNoMatch'     => __( 'No matching services found among scanned cookies.', 'faz-cookie-manager' ),
 						/* translators: %d: number of detected services already selected */
 						'svcAutoDetectAllAlready'  => __( 'All %d detected service(s) are already selected.', 'faz-cookie-manager' ),
+						'svcAutoDetectNoneAdded'   => __( 'Detected services left unticked, as you set them.', 'faz-cookie-manager' ),
 						/* translators: %1$d: number of newly pre-ticked services, %2$d: number of services already selected */
 						'svcAutoDetectDone'        => __( 'Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit.', 'faz-cookie-manager' ),
 						'svcAutoDetectFailed'      => __( 'Auto-detect failed', 'faz-cookie-manager' ),
