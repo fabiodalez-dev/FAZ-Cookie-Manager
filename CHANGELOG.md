@@ -2,6 +2,16 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.16.3] — 2026-05-26
+
+### Added
+
+- **Geo-routing cache-bypass warning.** When a full-page caching plugin is active and the admin has configured a country-targeted (geo-routed) banner, a dismissible `admin_notice` now warns that the cache will serve a single banner variant to every visitor — silently bypassing the per-country routing decision. The notice offers two AJAX actions: "disable geo-routing" (clears `geolocation.geo_targeting`) and "dismiss" (a 30-day transient, so the warning resurfaces if the configuration drifts back into the redundant state). Covered by `tests/e2e/specs/redundant-geo-routing-warning.spec.ts`.
+
+### Fixed
+
+- **Redundant policy-URL parenthetical removed** from the intro paragraph of all 18 Cookie Policy template scaffolds (`gdpr-strict`, `ccpa-california`, `lgpd-brazil` × en/it/fr/de/es/pt-BR). The `({{COOKIE_POLICY_URL}})` echo duplicated a link already present elsewhere on the rendered page.
+
 ## [1.16.2] — 2026-05-26
 
 ### Fixed
