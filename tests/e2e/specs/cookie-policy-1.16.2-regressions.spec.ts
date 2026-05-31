@@ -21,14 +21,48 @@
  */
 
 import { test, expect, type Page } from '../fixtures/wp-fixture';
+import { wpEval } from '../utils/wp-env';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const REST_BASE = '/wp-json/faz/v1/cookie-policy';
-// The "Cookie Policy" page is part of the test-site seed (see CLAUDE.md
-// — http://127.0.0.1:9998/policy/ resolves to it). We don't create one
-// per test: reusing the seed avoids polluting wp_posts across runs and
-// keeps the cookie inventory wired through the real shortcode path.
+// The public "Cookie Policy" page (http://127.0.0.1:9998/policy/) hosts the
+// real [faz_cookie_policy_complete] shortcode — these regression tests visit
+// it as a public page to exercise the true render path. It is provisioned
+// idempotently in beforeAll (see ensurePolicyPage) so the suite survives a
+// DB rebuild / a fresh CI install where the seed page is absent, instead of
+// silently failing with an empty article.
 const POLICY_PUBLIC_PATH = '/policy/';
+const POLICY_PAGE_SLUG = 'policy';
+const POLICY_SHORTCODE = '[faz_cookie_policy_complete]';
+
+/**
+ * Ensure a published page at /policy/ containing the cookie-policy shortcode
+ * exists. Idempotent: if the page already exists it only repairs the slug /
+ * status / content if they drifted, so re-runs never create duplicates.
+ */
+function ensurePolicyPage(): void {
+  wpEval(`
+    $slug = ${JSON.stringify(POLICY_PAGE_SLUG)};
+    $content = ${JSON.stringify(POLICY_SHORTCODE)};
+    $existing = get_page_by_path( $slug, OBJECT, 'page' );
+    if ( $existing instanceof WP_Post ) {
+      $needs = array();
+      if ( $existing->post_status !== 'publish' ) { $needs['post_status'] = 'publish'; }
+      if ( strpos( (string) $existing->post_content, 'faz_cookie_policy' ) === false ) { $needs['post_content'] = $content; }
+      if ( $needs ) { $needs['ID'] = $existing->ID; wp_update_post( $needs ); }
+      echo 'policy_page=' . $existing->ID;
+    } else {
+      $id = wp_insert_post( array(
+        'post_title'   => 'Cookie Policy',
+        'post_name'    => $slug,
+        'post_status'  => 'publish',
+        'post_type'    => 'page',
+        'post_content' => $content,
+      ) );
+      echo 'policy_page=' . ( is_wp_error( $id ) ? 'ERR:' . $id->get_error_message() : $id );
+    }
+  `);
+}
 
 // Module-scope auth state, populated by beforeEach. Matches the pattern
 // in settings-options-behavior.spec.ts so the X-WP-Nonce header rides
@@ -82,6 +116,13 @@ test.describe('Cookie Policy 1.16.2 — regression suite', () => {
   // per test; running in parallel would race the auth state across
   // workers. Sequential keeps the fixture deterministic.
   test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(() => {
+    // Self-provision the public /policy/ page so the visit-the-public-page
+    // tests (#5, #4-Layout, wp-internal exclusion) render the real shortcode
+    // even on a freshly-rebuilt DB where the seed page is missing.
+    ensurePolicyPage();
+  });
 
   test.beforeEach(async ({ page, loginAsAdmin }) => {
     adminPage = page;
