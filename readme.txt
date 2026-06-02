@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.0
-Stable tag: 1.17.0
+Stable tag: 1.17.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -324,6 +324,9 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.17.1 =
+* Fix: empty cookie categories are no longer listed in the preference center or the revisit banner. A category with no cookies has nothing for the visitor to consent to, but the preference-center modal and the revisit widget still rendered every category. The empty-category removal previously only applied to the inline category-preview chip and was skipped entirely in revisit mode; it now also removes the modal accordion item, in both normal and revisit mode (the "necessary" category is always shown). Consent recording is unaffected — accept/reject/save iterate the in-memory category list, not the DOM.
 
 = 1.17.0 =
 * Feature: Auto-detect from the cookie scanner. The IAB TCF Global Vendor List page and the Cookie Policy "Third-party services" tab each gain an "Auto-detect from cookie scan" button that pre-ticks the vendors / services whose tracking domains the scanner has actually observed on the site. Matching uses a bundled domain->vendor / domain->service map with a dot-prefix suffix guard (`.notgoogle.com` cannot match `google.com`); only scanner-discovered rows (`discovered = 1`) feed suggestions, never manually-added cookies. The REST endpoints (`gvl/suggest`, `cookie-policy/suggest-services`, `cookie-policy/detected-services`) are gated behind a `manage_options` capability check and are read-only (the write endpoints alongside them additionally verify a nonce).

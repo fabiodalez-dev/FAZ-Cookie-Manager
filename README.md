@@ -563,6 +563,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.17.1 — 2026-06-02
+- **Fix**: empty cookie categories are no longer listed in the preference center or the revisit banner. A category with no cookies has nothing to consent to, yet the modal and revisit widget still showed every category — the empty-category removal only applied to the inline preview chip and was skipped in revisit mode. It now drops both the modal accordion item and the inline chip, in normal and revisit mode alike (Necessary is always shown). Consent recording is unaffected.
+
 ### 1.17.0 — 2026-05-31
 - **Feature**: Auto-detect IAB TCF vendors and Cookie Policy third-party services from the cookie scan. New **Auto-detect from cookie scan** button on the GVL page and the Cookie Policy "Third-party services" tab pre-ticks the entries whose tracking domains the scanner actually observed (`SELECT DISTINCT domain FROM wp_faz_cookies WHERE discovered = 1`), matched against bundled `domain → vendor-id` / `domain → service-id` maps with a dot-prefix suffix guard. Read-only REST endpoints, `manage_options`-gated.
 - **Feature**: Live WCAG colour-contrast checker on Banner → Colours. A non-blocking advisory flags any text/background pair below the AA 4.5:1 ratio, recomputed live as colours change. Never blocks saving.

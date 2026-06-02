@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.17.1] — 2026-06-02
+
+### Fixed
+
+- **Empty cookie categories are no longer listed in the preference center or the revisit banner.** A category with no cookies has nothing for the visitor to consent to, but the preference-center modal and the revisit widget still rendered every category. The empty-category removal previously lived only in `_fazSetCategoryPreview`, which is skipped entirely when the revisit banner opens and only ever removed the inline category-preview chip — never the modal accordion item (`#fazDetailCategory{slug}`). The removal now runs in `_fazSetPreferenceState`, which executes for every category in both normal and revisit mode, and drops both the modal accordion item and the inline chip when a category has no cookies and is not "necessary" (which is always shown). The empty check also now treats an undefined `cookies` array as empty. Consent recording is unaffected — accept / reject / save iterate `_fazStore._categories` (not the DOM), and the toggle-state reader already falls back to the stored consent when a category's toggle is absent.
+
 ## [1.17.0] — 2026-05-31
 
 ### Added
