@@ -34,6 +34,7 @@
  */
 
 import { test, expect, type Page } from '../fixtures/wp-fixture';
+import { wpEval } from '../utils/wp-env';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager';
 const NOTICE_ID = 'faz-redundant-geo-routing-notice';
@@ -74,9 +75,44 @@ async function setSettings(page: Page, patch: Record<string, unknown>): Promise<
 test.describe('1.16.3 — Redundant Geo-routing admin warning', () => {
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeAll(() => {
+    // The "warning appears" tests require has_country_dependent_banners()
+    // to be false (no banner carries a target_countries list). The
+    // multi-banner-geo-routing spec runs earlier and restores banner_id=2
+    // with target_countries=["US"] from its snapshot, which would make the
+    // guard short-circuit and the notice never render. Clear every banner's
+    // target_countries here so this spec is self-contained regardless of
+    // what ran before. (Rows are left in place — only the column is reset —
+    // so the geo suite's banner_id=2-exists presupposition still holds.)
+    wpEval(`
+      global $wpdb;
+      $wpdb->query( "UPDATE {$wpdb->prefix}faz_banners SET target_countries = '[]'" );
+      \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+    `);
+  });
+
   test.beforeEach(async ({ page, loginAsAdmin }) => {
     adminPage = page;
     await loginAsAdmin(adminPage);
+  });
+
+  test.afterAll(() => {
+    // This spec toggles the global geo gate ON (geo_targeting + no_banner)
+    // to exercise the redundant-routing notice. Left behind, that state
+    // makes Frontend::is_geo_banner_disabled() suppress the banner for
+    // out-of-region visitors, which breaks later geo specs that assume a
+    // neutral global geo config (e.g. multi-banner-geo-routing GEO-19's
+    // US-visitor AMP resolution). Reset it here so the spec is a good
+    // citizen regardless of run order. global-setup also resets this at
+    // the start of every run as defence-in-depth.
+    wpEval(`
+      $s = get_option( 'faz_settings', array() );
+      if ( ! is_array( $s ) ) { $s = array(); }
+      if ( ! isset( $s['geolocation'] ) || ! is_array( $s['geolocation'] ) ) { $s['geolocation'] = array(); }
+      $s['geolocation']['geo_targeting'] = false;
+      update_option( 'faz_settings', $s );
+      delete_transient( 'faz_dismiss_redundant_geo_routing' );
+    `);
   });
 
   test('1. Warning appears when geo_targeting=on + no_banner + no target regions + no target_countries + iab off', async () => {

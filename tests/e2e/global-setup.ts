@@ -145,6 +145,21 @@ async function globalSetup(): Promise<void> {
         // Per-spec teardown (CB-OV-10) handles its own secondary banner
         // cleanup; cross-spec leakage is bounded by each spec's own
         // beforeAll/afterAll, not by a global blanket DELETE.
+        // Reset the GLOBAL geo gate (faz_settings option, distinct from the
+        // per-banner settings above). Specs like redundant-geo-routing-warning
+        // turn geo_targeting on with default_behavior=no_banner; left behind,
+        // Frontend::is_geo_banner_disabled() then suppresses the banner for
+        // out-of-region visitors and breaks geo specs that assume a neutral
+        // baseline (multi-banner-geo-routing GEO-19's US-visitor AMP path).
+        $faz_settings = get_option( 'faz_settings', array() );
+        if ( ! is_array( $faz_settings ) ) { $faz_settings = array(); }
+        if ( ! isset( $faz_settings['geolocation'] ) || ! is_array( $faz_settings['geolocation'] ) ) {
+          $faz_settings['geolocation'] = array();
+        }
+        $faz_settings['geolocation']['geo_targeting'] = false;
+        update_option( 'faz_settings', $faz_settings );
+        delete_transient( 'faz_dismiss_redundant_geo_routing' );
+
         delete_option( 'faz_banner_template' );
         if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
           faz_clear_banner_template_cache();
