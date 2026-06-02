@@ -17,9 +17,17 @@
  *     the filters when forced to false.
  */
 import { test, expect } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+
+test.beforeAll(() => {
+  // Self-provision the default box+popup GDPR banner so this spec is immune
+  // to a prior full-suite spec leaving the shared banner in classic/pushdown
+  // or CCPA mode (see utils/seed-defaults.ts).
+  resetDefaultBannerState();
+});
 
 test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
   // Ensure `alternative_asset_path` is OFF so scripts use the `faz-cookie-manager`

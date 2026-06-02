@@ -9,6 +9,7 @@
  */
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { clickFirstVisible } from '../utils/ui';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
@@ -110,6 +111,13 @@ async function setCategoryToggle(page: Page, slug: string, checked: boolean): Pr
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }, checked);
 }
+
+test.beforeAll(() => {
+  // Self-provision the default box+popup GDPR banner so this spec is immune
+  // to a prior full-suite spec leaving the shared banner in classic/pushdown
+  // or CCPA mode (see utils/seed-defaults.ts).
+  resetDefaultBannerState();
+});
 
 test.describe('Category-level blocking', () => {
   test.describe.configure({ mode: 'serial' });

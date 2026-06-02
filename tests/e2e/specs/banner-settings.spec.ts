@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 import type { Page } from '@playwright/test';
 import { getWpLoginPath } from '../utils/wp-auth';
 import { fazApiPut } from '../utils/faz-api';
@@ -325,6 +326,13 @@ async function expectPreviewMode(
 }
 
 /* ─── Tests ────────────────────────────────────────────────── */
+
+test.beforeAll(() => {
+  // Self-provision the default box+popup GDPR banner so this spec is immune
+  // to a prior full-suite spec leaving the shared banner in classic/pushdown
+  // or CCPA mode (see utils/seed-defaults.ts).
+  resetDefaultBannerState();
+});
 
 test.describe('Banner settings: persistence and frontend reflection', () => {
   test.describe.configure({ mode: 'serial' });

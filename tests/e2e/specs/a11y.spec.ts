@@ -1,5 +1,6 @@
 // tests/e2e/specs/a11y.spec.ts
 import { expect, test } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { wpEval } from '../utils/wp-env';
 
 // Ensure the banner is in "box / bottom-left" mode before a11y tests run.
@@ -35,6 +36,13 @@ test.beforeAll(async () => {
 // ---------------------------------------------------------------------------
 // Structural DOM fixes — applied by a11y.js after fazcookie_banner_loaded fires.
 // ---------------------------------------------------------------------------
+test.beforeAll(() => {
+  // Self-provision the default box+popup GDPR banner so this spec is immune
+  // to a prior full-suite spec leaving the shared banner in classic/pushdown
+  // or CCPA mode (see utils/seed-defaults.ts).
+  resetDefaultBannerState();
+});
+
 test.describe('Native a11y — structural DOM fixes', () => {
   test.describe.configure({ mode: 'serial' });
 

@@ -14,6 +14,7 @@
 
 import { expect } from '@playwright/test';
 import { test } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { upsertPage, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
@@ -80,6 +81,13 @@ test.beforeAll(() => {
 });
 
 // ─── P1-A: consentExpiry default = 180 days ───────────────────────────────────
+
+test.beforeAll(() => {
+  // Self-provision the default box+popup GDPR banner so this spec is immune
+  // to a prior full-suite spec leaving the shared banner in classic/pushdown
+  // or CCPA mode (see utils/seed-defaults.ts).
+  resetDefaultBannerState();
+});
 
 test.describe('P1-A — consent expiry default 180 days', () => {
   test.describe.configure({ mode: 'serial' });

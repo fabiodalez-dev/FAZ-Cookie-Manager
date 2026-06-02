@@ -19,9 +19,17 @@
  */
 
 import { test, expect } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { wpEval } from '../utils/wp-env';
 
 const REVISIT_TIMEOUT = 8000;
+
+test.beforeAll(() => {
+  // Self-provision the default box+popup GDPR banner so this spec is immune
+  // to a prior full-suite spec leaving the shared banner in classic/pushdown
+  // or CCPA mode (see utils/seed-defaults.ts).
+  resetDefaultBannerState();
+});
 
 test.describe('CCPA revisit → opt-out popup (1-click UX, 1.14.4+)', () => {
   test.beforeEach(async ({ page }) => {

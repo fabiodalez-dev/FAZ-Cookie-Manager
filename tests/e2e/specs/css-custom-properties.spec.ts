@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 
 async function openVisitorPage(browser: any, baseURL: string) {
   const ctx = await browser.newContext({
@@ -12,6 +13,13 @@ async function openVisitorPage(browser: any, baseURL: string) {
 }
 
 test.describe('CSS Custom Properties', () => {
+  // Self-provision the default box+popup GDPR banner: these tests presuppose
+  // it, but a prior spec in the full suite may have left the shared banner in
+  // classic/pushdown or CCPA mode. Pollution-immune regardless of run order.
+  test.beforeAll(() => {
+    resetDefaultBannerState();
+  });
+
   test('banner elements have no inline style attributes', async ({ browser, wpBaseURL }) => {
     const { page, ctx } = await openVisitorPage(browser, wpBaseURL);
     try {

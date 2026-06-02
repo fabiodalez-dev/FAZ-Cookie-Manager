@@ -20,7 +20,15 @@
  */
 
 import { test, expect } from '../fixtures/wp-fixture';
+import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { wpEval } from '../utils/wp-env';
+
+test.beforeAll(() => {
+  // Start from the canonical default banner regardless of what a prior
+  // full-suite spec left behind (this spec's afterAll already restores it
+  // on the way out; the beforeAll guarantees a clean entry too).
+  resetDefaultBannerState();
+});
 
 test.describe.serial('Close button per-banner override vs Garante/EDPB dark-pattern auto-hide', () => {
   test.afterAll(() => {

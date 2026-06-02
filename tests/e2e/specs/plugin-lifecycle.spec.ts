@@ -34,6 +34,13 @@ const PLUGINS_PAGE = '/wp-admin/plugins.php';
 // Source and deploy paths — configurable via env vars for CI portability.
 const SOURCE_PATH = process.env.FAZ_PLUGIN_SOURCE_PATH ?? `${process.cwd()}/`;
 const DEPLOY_PATH = process.env.FAZ_PLUGIN_DEPLOY_PATH ?? '';
+// Dev-only paths that never belong in the deployed plugin. `.git` is the
+// critical one: its fsmonitor--daemon.ipc UNIX socket makes `rsync -a`
+// abort with `mkstempsock: Invalid argument`. Mirrors CLAUDE.md's deploy.
+const RSYNC_EXCLUDES = [
+  '--exclude=.git', '--exclude=node_modules', '--exclude=graphify-out',
+  '--exclude=.code-review-graph', '--exclude=.serena', '--exclude=tests/e2e/reports',
+];
 
 if (!DEPLOY_PATH) {
   throw new Error(
@@ -60,9 +67,13 @@ function assertSafeDeployPath(): void {
 
 /** Helper: ensure the plugin is present and activated, handling any prior state. */
 async function ensurePluginActive(page: import('@playwright/test').Page, wpBaseURL: string): Promise<void> {
-  // Re-deploy in case a previous run deleted the plugin files
+  // Re-deploy in case a previous run deleted the plugin files. Exclude the
+  // dev-only directories that never belong in the deployed plugin — most
+  // importantly `.git`, whose fsmonitor--daemon.ipc UNIX socket makes rsync
+  // abort with `mkstempsock: Invalid argument`. Mirrors the canonical deploy
+  // excludes in CLAUDE.md.
   try {
-    execFileSync('rsync', ['-a', '--delete', SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
+    execFileSync('rsync', ['-a', '--delete', ...RSYNC_EXCLUDES, SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
   } catch (error) {
     throw new Error(
       `Failed to deploy plugin files via rsync.\n` +
@@ -203,7 +214,7 @@ test.describe.serial('Plugin lifecycle', () => {
     expect(pluginGone).toBe(0);
 
     // --- Step 4: Re-deploy plugin files via rsync (simulates upload/install) ---
-    execFileSync('rsync', ['-a', '--delete', SOURCE_PATH, DEPLOY_PATH], {
+    execFileSync('rsync', ['-a', '--delete', ...RSYNC_EXCLUDES, SOURCE_PATH, DEPLOY_PATH], {
       timeout: 30000,
     });
 
@@ -321,7 +332,7 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
     // execSync — not Playwright — because we may be in a state where the
     // plugin is fully uninstalled (no admin pages, no REST endpoints).
     try {
-      execFileSync('rsync', ['-a', '--delete', SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
+      execFileSync('rsync', ['-a', '--delete', ...RSYNC_EXCLUDES, SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
     } catch (_e) { /* best-effort */ }
     try {
       wp(['plugin', 'activate', PLUGIN_SLUG]);
@@ -636,7 +647,7 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
     // Activator::install() so the schema + default categories + faz_version
     // are guaranteed present before the migration assertions below.
     try {
-      execFileSync('rsync', ['-a', '--delete', SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
+      execFileSync('rsync', ['-a', '--delete', ...RSYNC_EXCLUDES, SOURCE_PATH, DEPLOY_PATH], { timeout: 30000 });
     } catch (_e) { /* best-effort */ }
     try { wp(['plugin', 'activate', PLUGIN_SLUG]); } catch (_e) { /* may already be active */ }
     wpEval(`

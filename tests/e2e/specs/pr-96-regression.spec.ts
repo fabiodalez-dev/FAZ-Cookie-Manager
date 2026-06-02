@@ -138,10 +138,18 @@ function clearRateLimitState(): void {
        WHERE option_name LIKE '_transient_faz_dnsmpi_%'
           OR option_name LIKE '_transient_faz_dsar_%'"
     );
+    // Delete BOTH the transient value AND its _transient_timeout_ sibling.
+    // Leaving the timeout behind is a flaky-test trap: WP set_transient() takes
+    // the add_option() path when the value option is absent, and that add fails
+    // silently on the stale leftover timeout — so the new 60s window inherits
+    // the PRIOR test's (often already-expired) expiry and the rate-limit check
+    // on the 2nd request sees the transient as expired. Also drop the DB lock.
     $wpdb->query(
       "DELETE FROM {$wpdb->options}
        WHERE option_name LIKE '_transient_faz_dnsmpi_%'
+          OR option_name LIKE '_transient_timeout_faz_dnsmpi_%'
           OR option_name LIKE '_transient_faz_dsar_%'
+          OR option_name LIKE '_transient_timeout_faz_dsar_%'
           OR option_name LIKE 'faz_dnsmpi_lock_%'"
     );
     // Strip the '_transient_' prefix to get the bare cache key and flush
@@ -378,9 +386,18 @@ test.describe('[faz_do_not_sell] — cookie path, rate limit, DB lock', () => {
   }) => {
     await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
 
+    // Match the SPECIFIC opt-out admin-ajax response, not just any
+    // admin-ajax.php hit: after a page reload the WordPress heartbeat (or any
+    // other plugin's admin-ajax call) can resolve first, and a bare
+    // '**/admin-ajax.php' matcher would capture that non-JSON body, making
+    // r.json() throw "Unexpected non-whitespace character after JSON".
+    const isOptoutResponse = (resp: import('@playwright/test').Response) =>
+      resp.url().includes('admin-ajax.php') &&
+      (resp.request().postData() ?? '').includes('faz_dnsmpi_optout');
+
     // First submission — must succeed.
     const [r1] = await Promise.all([
-      page.waitForResponse('**/admin-ajax.php'),
+      page.waitForResponse(isOptoutResponse),
       page.locator('.faz-dnsmpi-btn').click(),
     ]);
     const json1 = (await r1.json()) as { success: boolean };
@@ -394,7 +411,7 @@ test.describe('[faz_do_not_sell] — cookie path, rate limit, DB lock', () => {
 
     // Second submission — the rate-limit transient is still active.
     const [r2] = await Promise.all([
-      page.waitForResponse('**/admin-ajax.php'),
+      page.waitForResponse(isOptoutResponse),
       page.locator('.faz-dnsmpi-btn').click(),
     ]);
     const json2 = (await r2.json()) as { success: boolean; data?: string };
@@ -479,12 +496,15 @@ test.describe('[faz_dsar_form] — ARIA accessibility', () => {
       page.locator('.faz-dsar-btn').click(),
     ]);
 
-    // notice.focus() is called after the response — document.activeElement should be the notice.
-    const focusedOnNotice = await page.evaluate(() => {
-      const notice = document.querySelector('.faz-dsar-notice');
-      return notice !== null && document.activeElement === notice;
-    });
-    expect(focusedOnNotice, 'focus should move to .faz-dsar-notice after submission').toBe(true);
+    // notice.focus() runs inside the fetch .then() — a microtask AFTER the
+    // HTTP response arrives, so waitForResponse can resolve a tick before
+    // focus actually lands. A one-shot document.activeElement read races that
+    // tick; use the auto-retrying focus assertion so the check waits for the
+    // success-handler to run.
+    await expect(
+      page.locator('.faz-dsar-notice'),
+      'focus should move to .faz-dsar-notice after submission',
+    ).toBeFocused({ timeout: 5_000 });
   });
 });
 

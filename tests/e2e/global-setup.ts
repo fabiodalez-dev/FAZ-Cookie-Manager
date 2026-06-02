@@ -117,6 +117,10 @@ async function globalSetup(): Promise<void> {
           $s = $banner->get_settings();
           if ( ! is_array( $s ) ) { $s = array(); }
           if ( ! isset( $s['settings'] ) || ! is_array( $s['settings'] ) ) { $s['settings'] = array(); }
+          // applicableLaw is the axis the ccpa specs flip to 'ccpa'; reset it
+          // here too so a previous run's CCPA leak doesn't poison the first
+          // GDPR-mode spec (mirrors utils/seed-defaults.ts).
+          $s['settings']['applicableLaw'] = 'gdpr';
           $s['settings']['type'] = 'box';
           $s['settings']['preferenceCenterType'] = 'popup';
           $s['settings']['allowCloseButtonWithReject'] = false;
