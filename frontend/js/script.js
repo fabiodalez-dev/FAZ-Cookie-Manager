@@ -1940,11 +1940,11 @@ function _fazAttachShortCodeStyles() {
     // by the PHP-generated <style> block on .faz-btn-revisit-wrapper. Skip it here.
     const root = document.getElementById('faz-consent');
     if (!root) return;
-    // The popup preference center and the opt-out popup render as `.faz-modal`
-    // SIBLINGS of #faz-consent (not descendants), so custom properties set only
-    // on #faz-consent don't reach modal-only elements like the detail-view
-    // "Show more" toggle — they'd fall back to the hard-coded default colour.
-    // Apply the per-element vars to every .faz-modal too.
+    // The popup preference center and the opt-out popup live inside `.faz-modal`,
+    // which is a SIBLING of #faz-consent (not a descendant), so custom properties
+    // set only on #faz-consent don't reach modal-only elements like the
+    // detail-view "Show more" link — they'd fall back to the hard-coded default
+    // colour. Apply the per-element vars to every .faz-modal too.
     const targets = [root];
     Array.prototype.forEach.call(document.querySelectorAll('.faz-modal'), function (m) {
         targets.push(m);

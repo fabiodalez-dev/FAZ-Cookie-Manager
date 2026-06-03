@@ -478,9 +478,14 @@
 			var alreadyInSession = already.filter(function (id) { return selectedVendors[id] === true; });
 			var msg;
 			if (added.length === 0) {
-				// Single placeholder — no reordering possible, plain %d is fine.
-				msg = __('gvl.autoDetectAllAlready', 'All %d auto-detected vendor(s) were already in your selection.')
-					.replace('%d', suggested.length);
+				// Nothing new to pre-tick. Report only the matched vendors STILL
+				// selected in-session — an admin who unticked some this session must
+				// not see them counted (same screen-vs-count contradiction the
+				// sibling branches already avoid via alreadyInSession). Fall back to
+				// a "left unticked" note when none remain.
+				msg = (alreadyInSession.length > 0)
+					? __('gvl.autoDetectAllAlready', 'All %d auto-detected vendor(s) were already in your selection.').replace('%d', alreadyInSession.length)
+					: __('gvl.autoDetectNoneAdded', 'Auto-detected vendors left unticked, as you set them.');
 			} else if (alreadyInSession.length === 0) {
 				// Single placeholder — no reordering possible, plain %d is fine.
 				msg = __('gvl.autoDetectAdded', 'Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply.')

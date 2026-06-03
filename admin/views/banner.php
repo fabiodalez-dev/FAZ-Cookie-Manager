@@ -506,15 +506,15 @@ defined( 'ABSPATH' ) || exit;
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Show More / Show Less Link', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-showdesc-color">
-							<input type="text" class="faz-input faz-input-sm" id="faz-b-showdesc-color-hex" style="width:90px;">
+							<input type="color" id="faz-b-showdesc-color" aria-label="<?php esc_attr_e( 'Show More / Show Less link colour picker', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-showdesc-color-hex" aria-label="<?php esc_attr_e( 'Show More / Show Less link colour hex value', 'faz-cookie-manager' ); ?>" style="width:90px;">
 						</div>
 					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Read More / Cookie Policy Link', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-readmore-color">
-							<input type="text" class="faz-input faz-input-sm" id="faz-b-readmore-color-hex" style="width:90px;">
+							<input type="color" id="faz-b-readmore-color" aria-label="<?php esc_attr_e( 'Read More / Cookie Policy link colour picker', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-readmore-color-hex" aria-label="<?php esc_attr_e( 'Read More / Cookie Policy link colour hex value', 'faz-cookie-manager' ); ?>" style="width:90px;">
 						</div>
 					</div>
 				</div>

@@ -627,8 +627,9 @@ class Frontend {
 		// the banner permanently hidden (its fixed container still eating
 		// clicks). With the state-class gate, the JS adding `faz-ready` to
 		// <html> reveals the banner regardless of where the rule ended up.
-		// data-no-optimize / data-noptimize additionally ask LiteSpeed and
-		// Autoptimize to leave the block inline (belt-and-suspenders).
+		// data-no-optimize / data-noptimize additionally ask the CSS optimisers
+		// (LiteSpeed Cache, WP Rocket, Autoptimize, …) to leave the block inline
+		// (belt-and-suspenders).
 		echo '<style id="faz-style-inline" data-no-optimize="1" data-noptimize="1">html:not(.faz-ready) [data-faz-tag]{visibility:hidden;}'
 			. $placeholder_css // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS stripped of all tags; esc_html() would break selectors.
 			. '</style>';
