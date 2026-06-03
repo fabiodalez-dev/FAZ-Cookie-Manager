@@ -964,7 +964,14 @@ function _fazRegisterListeners() {
             : null;
         if (!trigger) return;
         e.preventDefault();
-        _fazShowPreferenceCenter();
+        // _fazShowPreferenceCenter() returns false when there is no
+        // preference-center DOM to open (banner UI suppressed for this visitor,
+        // empty template cache). Surface that as a console warning so a
+        // misplaced [faz_cookie_settings] button is diagnosable, instead of the
+        // button appearing to do nothing with no trace.
+        if (_fazShowPreferenceCenter() === false && window.console && console.warn) {
+            console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
+        }
     });
 
     // Escape key closes the preference center / optout popup only.
@@ -1149,7 +1156,11 @@ function _fazHidePreferenceCenter() {
 function _fazShowPreferenceCenter() {
     _fazStore._prefTriggerElement = document.activeElement;
     const element = _fazGetPreferenceCenter();
-    if (!element) return;
+    // No preference-center DOM to open (e.g. the banner UI is suppressed for
+    // this visitor, or the template cache is empty). Return false so callers
+    // — notably the [faz_cookie_settings] delegated click handler — can react
+    // instead of silently doing nothing.
+    if (!element) return false;
     element.classList.add(_fazGetPreferenceClass());
 
     // Ensure ARIA attributes are always present on the preference center div
@@ -1168,6 +1179,7 @@ function _fazShowPreferenceCenter() {
     // Target the inner .faz-preference-center so we don't focus a banner button
     // when pushdown mode embeds preferences inside the consent bar wrapper.
     _fazFocusIntoElement(preferenceCenter || element);
+    return true;
 }
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();

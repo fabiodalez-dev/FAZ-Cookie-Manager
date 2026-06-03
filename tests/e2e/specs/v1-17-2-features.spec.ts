@@ -161,4 +161,29 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
       'preference center did not open from the revisit button',
     ).toBeVisible({ timeout: 8_000 });
   });
+
+  test('12. button warns (no silent no-op) when no preference center is present', async ({ page, context, wpBaseURL }) => {
+    await context.clearCookies();
+    await page.goto(`${wpBaseURL}/${PAGES.settings.slug}/`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[data-faz-tag="accept-button"]').first().waitFor({ state: 'visible', timeout: 15_000 });
+
+    // Simulate the "banner UI suppressed" case: strip the preference-center DOM
+    // (#faz-consent + every .faz-modal) so the button has nothing to open.
+    await page.evaluate(() => {
+      document.querySelectorAll('#faz-consent, .faz-modal').forEach((el) => el.remove());
+    });
+
+    const warnings: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'warning') warnings.push(msg.text());
+    });
+
+    await page.locator('button.faz-cookie-settings-btn[data-faz-open-preferences]').first().click();
+    await page.waitForTimeout(500);
+
+    expect(
+      warnings.some((w) => w.includes('FAZ Cookie Manager') && w.includes('no consent preference center')),
+      'expected a console.warn diagnostic instead of a silent no-op',
+    ).toBe(true);
+  });
 });
