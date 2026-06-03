@@ -497,7 +497,7 @@ function _fazRemoveStyles() {
     // while its fixed container keeps eating clicks. The rule is scoped to
     // `html:not(.faz-ready)`, so adding the class reveals the banner no matter
     // where the rule ended up. Mirrors the server-side gate in
-    // class-frontend.php::print_inline_styles().
+    // class-frontend.php::insert_styles().
     document.documentElement.classList.add('faz-ready');
 }
 
@@ -1951,26 +1951,27 @@ function _fazSetShowMoreLess() {
  */
 function _fazAttachShortCodeStyles() {
     const shortCodes = _fazStore._tags;
+    if (!shortCodes) return;
     // revisit-consent lives outside #faz-consent; its CSS vars are already set
     // by the PHP-generated <style> block on .faz-btn-revisit-wrapper. Skip it here.
     const root = document.getElementById('faz-consent');
-    if (!root) return;
-    // The popup preference center and the opt-out popup live inside `.faz-modal`,
-    // which is a SIBLING of #faz-consent (not a descendant), so custom properties
-    // set only on #faz-consent don't reach modal-only elements like the
-    // detail-view "Show more" link — they'd fall back to the hard-coded default
-    // colour. Apply the per-element vars to every .faz-modal too.
-    const targets = [root];
-    // Also expose the per-element vars on :root so shortcode buttons rendered
-    // OUTSIDE #faz-consent — e.g. the [faz_cookie_settings] revisit button in
-    // page content — inherit the admin-configured banner button colours
-    // (--faz-accept-button-*) instead of falling back to the hard-coded
-    // defaults. :root is the lowest-specificity scope, so the banner's own
-    // per-element overrides on #faz-consent / .faz-modal still win inside it.
+    // Build the target list defensively. :root (document.documentElement) goes
+    // FIRST and unconditionally — so the [faz_cookie_settings] "manage consent
+    // preferences" button rendered in page content inherits the admin-configured
+    // banner button colours (--faz-accept-button-*) even when #faz-consent is
+    // absent (e.g. the banner UI is suppressed for membership-exempt users while
+    // the shortcode button is still on the page). :root is the lowest-specificity
+    // scope, so #faz-consent / .faz-modal per-element overrides still win inside
+    // the banner. #faz-consent and the popup preference center / opt-out popup
+    // (which live in `.faz-modal`, a SIBLING of #faz-consent, not a descendant)
+    // are pushed after :root, only when present.
+    const targets = [];
     if (document.documentElement) targets.push(document.documentElement);
+    if (root) targets.push(root);
     Array.prototype.forEach.call(document.querySelectorAll('.faz-modal'), function (m) {
         targets.push(m);
     });
+    if (!targets.length) return;
     Array.prototype.forEach.call(shortCodes, function (shortcode) {
         if (!shortcode.styles || shortcode.tag === 'revisit-consent') return;
         for (const key in shortcode.styles) {

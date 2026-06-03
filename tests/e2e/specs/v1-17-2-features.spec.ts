@@ -118,7 +118,7 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
     await expect(btn, 'custom text not applied').toHaveText('Gestisci cookie');
   });
 
-  test('11. button is styled like the banner primary button (not raw browser chrome)', async ({ page, wpBaseURL }) => {
+  test('10. button is styled like the banner primary button (not raw browser chrome)', async ({ page, wpBaseURL }) => {
     await page.goto(`${wpBaseURL}/${PAGES.settings.slug}/`, { waitUntil: 'domcontentloaded' });
     const btn = page.locator('button.faz-cookie-settings-btn').first();
     await expect(btn).toBeVisible({ timeout: 15_000 });
@@ -144,7 +144,7 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
     expect(style.fontWeight).toBe('500');
   });
 
-  test('10. clicking the button opens the preference center (after consent)', async ({ page, context, wpBaseURL }) => {
+  test('11. clicking the button opens the preference center (after consent)', async ({ page, context, wpBaseURL }) => {
     await context.clearCookies();
     await page.goto(`${wpBaseURL}/${PAGES.settings.slug}/`, { waitUntil: 'domcontentloaded' });
 

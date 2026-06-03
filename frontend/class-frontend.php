@@ -3446,12 +3446,16 @@ class Frontend {
 			. '.faz-modal .faz-accordion-header .faz-always-active{'
 			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
 			. '}';
-		// [faz_cookie_settings] revisit button. Rendered inside page content
+		// [faz_cookie_settings] "manage consent preferences" button (not the
+		// floating .faz-btn-revisit widget). Rendered inside page content
 		// (outside #faz-consent), so it can't inherit the banner's scoped
-		// rules — replicate the primary "accept" button here, consuming the
-		// SAME --faz-accept-button-* / --faz-btn-* custom properties the admin
-		// sets in Banner > Colours (exposed on :root by script.js), with the
-		// gdpr.json defaults as fallback so it still looks right before JS runs.
+		// rules — replicate the primary "accept" button here. The COLOUR
+		// properties consume the same --faz-accept-button-* custom properties
+		// the admin sets in Banner > Colours, which script.js exposes on :root;
+		// the --faz-btn-* sizing properties (font/line-height/padding/radius)
+		// are static design constants shared with the template's .faz-btn rule
+		// (never JS-set), so the gdpr.json defaults below are the effective
+		// values and the button still looks right before JS runs.
 		$css_settings_btn = '.faz-cookie-settings-btn{'
 			. 'display:inline-block;'
 			. 'font-family:inherit;'
