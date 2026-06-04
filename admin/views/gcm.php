@@ -113,7 +113,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Serve non-personalized ads when consent is denied', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help" id="faz-gcm-npa-fallback-help">
-					<?php esc_html_e( 'When a visitor rejects marketing cookies, keep ad_storage = granted but ad_user_data and ad_personalization = denied. This lets AdSense serve non-personalized ads (no profiling). Review your legal basis, disclosures, and Google AdSense configuration before enabling it.', 'faz-cookie-manager' ); ?>
+					<?php esc_html_e( 'When a visitor rejects marketing cookies, ad_storage / ad_user_data / ad_personalization all stay denied (no ad cookies are written) and the plugin signals npa = 1. Under Consent Mode v2 this already serves non-personalized, cookieless ads — compliant in the EEA/UK/CH. The plugin no longer grants ad_storage after a reject.', 'faz-cookie-manager' ); ?>
 				</div>
 			</div>
 		</div>
