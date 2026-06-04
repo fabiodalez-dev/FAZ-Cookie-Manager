@@ -578,6 +578,17 @@ function _fazInitOperations() {
         _fazInvalidateStoredConsent();
         _fazStoredAction = null;
     }
+    // Honour Global Privacy Control before deciding whether to show the banner.
+    // If the visitor's browser asserts GPC and they have NOT already made an
+    // explicit choice on this site, auto-apply an opt-out and skip the banner.
+    // An explicit prior action always wins over the signal, so this is gated on
+    // !_fazStoredAction (and is idempotent: once recorded, action becomes "yes"
+    // and this branch no longer runs).
+    if (!_fazStoredAction && !_fazPreviewEnabled() && _fazGpcActive()) {
+        _fazApplyGpcOptOut();
+        _fazRemoveBanner();
+        return;
+    }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
         _fazShowBanner();
         _fazSetInitialState();
@@ -600,6 +611,89 @@ function _fazInitOperations() {
         }
     }
 }
+
+/**
+ * Whether to honour a Global Privacy Control (GPC) signal right now.
+ *
+ * GPC is a browser-level opt-out preference exposed as
+ * navigator.globalPrivacyControl === true (the client mirror of the
+ * `Sec-GPC: 1` request header). Under CCPA/CPRA §7025 it is a legally
+ * binding opt-out of the sale/sharing of personal information and is
+ * recognised by the California Attorney General; honouring it is also good
+ * practice under the GDPR/ePrivacy. We act on it only when the site owner
+ * enabled "Respect Global Privacy Control" in the banner behaviours.
+ *
+ * @returns {boolean}
+ */
+function _fazGpcActive() {
+    try {
+        return !!(
+            _fazStore && _fazStore._bannerConfig && _fazStore._bannerConfig.behaviours &&
+            _fazStore._bannerConfig.behaviours.respectGPC === true &&
+            typeof navigator !== 'undefined' &&
+            navigator.globalPrivacyControl === true
+        );
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Record an automatic opt-out in response to a GPC signal.
+ *
+ * Mirrors the reject path of _fazAcceptCookies() but is law-aware and does
+ * NOT depend on any banner DOM (the banner is never shown in this flow):
+ *   - GDPR / opt-in laws: deny every non-necessary category.
+ *   - CCPA / opt-out laws: deny every sale/sharing category. A category whose
+ *     defaultConsent.ccpa === true is exempt (necessary) and stays granted.
+ * The choice is persisted with a `gpc:1` marker so the recorded state is
+ * self-describing, and a normal consent event is fired so downstream
+ * integrations (GCM, TCF, consent logger) react exactly as they would to a
+ * manual reject.
+ */
+function _fazApplyGpcOptOut() {
+    // First user-equivalent action: generate the consentid now (it is
+    // deliberately not created before any action, per ePrivacy Art. 5(3)).
+    _fazSetConsentID();
+    ref._fazSetInStore("action", "yes");
+    ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+    ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+    ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+    ref._fazSetInStore("consent", "no");
+    // Audit marker: this opt-out was driven by a Global Privacy Control signal,
+    // not an explicit on-page click.
+    ref._fazSetInStore("gpc", "1");
+
+    var law = _fazGetLaw();
+    var responseCategories = { accepted: [], rejected: [], action: "reject", gpc: true };
+    var categories = _fazStore._categories || [];
+    for (var i = 0; i < categories.length; i++) {
+        var category = categories[i];
+        var deny;
+        if (law === 'gdpr') {
+            deny = !category.isNecessary;
+        } else {
+            // Opt-out regimes: exempt categories carry defaultConsent.ccpa === true.
+            deny = !(category.defaultConsent && category.defaultConsent.ccpa === true);
+        }
+        var valueToSet = deny ? "no" : "yes";
+        ref._fazSetInStore(category.slug, valueToSet);
+        if (deny) {
+            responseCategories.rejected.push(category.slug);
+            _fazRemoveDeadCookies(category);
+        } else {
+            responseCategories.accepted.push(category.slug);
+        }
+    }
+
+    // Clear any per-service overrides and deny IAB vendors, mirroring reject.
+    _fazClearStoredServiceConsent();
+    _fazSaveVendorConsent("reject");
+
+    _fazUnblock();
+    _fazFireEvent(responseCategories);
+}
+
 function _fazPreviewEnabled() {
     let params = (new URL(document.location)).searchParams;
     return params.get("faz_preview") && params.get("faz_preview") === 'true';

@@ -150,7 +150,9 @@ function isConsentCookieStale(parsed) {
 }
 
 // Non-category meta keys stored in the consent cookie (not consent states).
-var FAZ_META_KEYS = { rev: 1, action: 1, consentid: 1 };
+// `gpc` flags a consent recorded automatically from a Global Privacy Control
+// signal; like rev/action/consentid it must not be coerced to granted/denied.
+var FAZ_META_KEYS = { rev: 1, action: 1, consentid: 1, gpc: 1 };
 
 function parseConsentCookie() {
     var parsed = parseConsentCookieParts();

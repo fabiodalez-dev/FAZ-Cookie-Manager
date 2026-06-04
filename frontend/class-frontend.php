@@ -3326,6 +3326,11 @@ class Frontend {
 		$data['settings']['applicableLaw']            = $settings['applicableLaw'] ?? 'gdpr';
 		$data['behaviours']['reloadBannerOnAccept']   = $behaviours['reloadBannerOnAccept']['status'] ?? false;
 		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
+		// Global Privacy Control: surfaced to the frontend so script.js can read
+		// navigator.globalPrivacyControl and auto-apply an opt-out. Previously
+		// the admin toggle was saved but never extracted here, so the setting
+		// was inert (the signal was never honoured).
+		$data['behaviours']['respectGPC']             = $behaviours['respectGPC']['status'] ?? false;
 		$data['behaviours']['animations']             = $behaviours['animations'] ?? array();
 		$data['config']['revisitConsent']             = $config['revisitConsent'] ?? array();
 		$data['config']['preferenceCenter']['toggle'] = $config['preferenceCenter']['toggle']
