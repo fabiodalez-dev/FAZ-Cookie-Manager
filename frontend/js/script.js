@@ -1176,8 +1176,22 @@ function _fazToggleRevisit(force = false) {
         force === true ? _fazHideRevisit() : revisit.classList.toggle('faz-revisit-hide');
     }
 }
+// Collapse any applicable-law value to its consent PARADIGM. There are only
+// two paradigms worldwide, and every consent-engine branch keys off this:
+//   - 'ccpa'  → opt-out family: CCPA/CPRA (California) and the US state laws
+//               (Virginia CDPA, Colorado CPA, Connecticut CTDPA, Utah UCPA…).
+//   - 'gdpr'  → opt-in family: GDPR, UK-GDPR, ePrivacy, **LGPD (Brazil)**,
+//               Swiss nFADP, PIPEDA (Canada), KVKK (Turkey) and similar
+//               consent-first regimes.
+// This mirrors the server-side mapping in
+// class-banner.php::get_default_config_type() ('ccpa' === $law ? 'ccpa' :
+// 'gdpr'), so a first-class opt-in law such as 'lgpd' is honoured as opt-in
+// here too and can never be misrouted into the opt-out branch (every engine
+// check is `=== 'gdpr'` / `=== 'ccpa'`, and the bare `else` historically meant
+// opt-out — an un-normalised 'lgpd' would have fallen through to it).
 function _fazGetLaw() {
-    return _fazCurrentLaw() || _fazStore._bannerConfig.settings.applicableLaw;
+    var raw = _fazCurrentLaw() || _fazStore._bannerConfig.settings.applicableLaw;
+    return String(raw) === 'ccpa' ? 'ccpa' : 'gdpr';
 }
 function _fazGetType() {
     return _fazStore._bannerConfig.settings.type;
