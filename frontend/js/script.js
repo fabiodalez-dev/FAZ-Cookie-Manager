@@ -548,6 +548,10 @@ function _fazRemoveBanner() {
  * @returns {boolean}
  */
 function _fazInitOperations() {
+    // Bind the banner-independent [faz_cookie_settings] trigger FIRST, before
+    // _fazRenderBanner() can early-return on a suppressed/absent banner template
+    // — otherwise the in-page shortcode button would never get its click handler.
+    _fazRegisterShortcodeTriggers();
     _fazAttachNoticeStyles();
     _fazRenderBanner();
     // _fazAttachShortCodeStyles must run after _fazRenderBanner so that
@@ -927,6 +931,31 @@ _fazDomReady(async function () {
 /**
  * Register event handler for all the action elements.
  */
+// Banner-independent delegated click handler for the [faz_cookie_settings]
+// shortcode button (and any [data-faz-open-preferences] / .faz-cookie-settings-btn
+// trigger). Registered from _fazInitOperations() — NOT from _fazRegisterListeners()
+// — so it binds even when the banner UI is suppressed server-side (PMP-exempt
+// members, empty template cache), where _fazRenderBanner() early-returns and
+// _fazRegisterListeners() never runs. In that case _fazShowPreferenceCenter()
+// returns false (no preference-center DOM) and the handler logs the diagnostic
+// warning, instead of the button being silently inert. Idempotent: the
+// document-level listener is attached at most once.
+var _fazShortcodeTriggersBound = false;
+function _fazRegisterShortcodeTriggers() {
+    if (_fazShortcodeTriggersBound) return;
+    _fazShortcodeTriggersBound = true;
+    document.addEventListener("click", function (e) {
+        var trigger = e.target && e.target.closest
+            ? e.target.closest('[data-faz-open-preferences],.faz-cookie-settings-btn')
+            : null;
+        if (!trigger) return;
+        e.preventDefault();
+        if (_fazShowPreferenceCenter() === false && window.console && console.warn) {
+            console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
+        }
+    });
+}
+
 function _fazRegisterListeners() {
     for (const { slug } of _fazStore._categories) {
         var title = document.querySelector(
@@ -952,27 +981,14 @@ function _fazRegisterListeners() {
     _fazAttachListener("=revisit-consent", () => _revisitFazConsent());
     _fazAttachListener("=optout-close", () => _fazHidePreferenceCenter());
 
-    // Open the preference center from any in-page trigger — the
-    // [faz_cookie_settings] shortcode button, or a custom element carrying
-    // `data-faz-open-preferences` or the `faz-cookie-settings-btn` class.
-    // Delegated on the document so it works for content rendered anywhere on
-    // the page (e.g. inside the generated cookie policy) and keeps working
-    // after the consent banner itself has been dismissed.
-    document.addEventListener("click", function (e) {
-        var trigger = e.target && e.target.closest
-            ? e.target.closest('[data-faz-open-preferences],.faz-cookie-settings-btn')
-            : null;
-        if (!trigger) return;
-        e.preventDefault();
-        // _fazShowPreferenceCenter() returns false when there is no
-        // preference-center DOM to open (banner UI suppressed for this visitor,
-        // empty template cache). Surface that as a console warning so a
-        // misplaced [faz_cookie_settings] button is diagnosable, instead of the
-        // button appearing to do nothing with no trace.
-        if (_fazShowPreferenceCenter() === false && window.console && console.warn) {
-            console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
-        }
-    });
+    // NOTE: the [faz_cookie_settings] / [data-faz-open-preferences] delegated
+    // click handler is NOT registered here. It lives in
+    // _fazRegisterShortcodeTriggers(), called from _fazInitOperations(), so it
+    // binds even when the banner UI is suppressed server-side (PMP-exempt
+    // members, empty template cache) — in that case _fazRenderBanner() early-
+    // returns and this function never runs, but the in-page shortcode button
+    // must still react (it logs the diagnostic warning when no preference
+    // center exists).
 
     // Escape key closes the preference center / optout popup only.
     // The main banner itself must NOT be dismissible via Escape without a

@@ -1,7 +1,7 @@
 /**
  * E2E — 1.17.2 feature & fix suite.
  *
- * 14 browser-level tests, one per contract the 1.17.2 work introduced.
+ * 15 browser-level tests, one per contract the 1.17.2 work introduced.
  * Each provisions a real published page carrying the relevant shortcode
  * (idempotently, so the file survives a DB rebuild / fresh CI install)
  * and exercises the true public render path, plus frontend interaction
@@ -21,6 +21,7 @@
  * 11.  Button opens center → clicking the [faz_cookie_settings] button opens the preference center.
  * 12.  Warn, no silent no-op → button warns when no preference center is present.
  * 13.  Pushdown ARIA       → repeated button clicks keep aria-expanded true (no desync).
+ * 14.  Suppressed banner   → shortcode trigger binds + warns when the banner template is absent at init.
  */
 
 import { test, expect, type Page } from '../fixtures/wp-fixture';
@@ -259,5 +260,44 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
           flushBannerCache,
       );
     }
+  });
+
+  test('14. shortcode trigger binds + warns even when the banner template is ABSENT at init', async ({ page, context, wpBaseURL }) => {
+    // Real suppressed-UI case (PMP-exempt member / empty template cache): the
+    // server enqueues script.js but banner_html() does NOT print the
+    // <template id="fazBannerTemplate">. _fazRenderBanner() then early-returns
+    // and _fazRegisterListeners() (the banner-dependent listeners) never runs —
+    // but the [faz_cookie_settings] handler must STILL bind (it lives in
+    // _fazRegisterShortcodeTriggers(), called unconditionally from
+    // _fazInitOperations()) and log the diagnostic warning. This differs from
+    // test 12, which removes the DOM AFTER listeners are already registered.
+    await context.clearCookies();
+    // Strip the banner template (a <script id="fazBannerTemplate" type="text/template">)
+    // from the HTML before the page scripts run, so _fazRenderBanner() early-returns.
+    await page.route(`**/${PAGES.settings.slug}/**`, async (route) => {
+      const resp = await route.fetch();
+      const stripped = (await resp.text()).replace(
+        /<script id="fazBannerTemplate"[^>]*>[\s\S]*?<\/script>/,
+        '',
+      );
+      await route.fulfill({ response: resp, body: stripped });
+    });
+
+    const warnings: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'warning') warnings.push(msg.text());
+    });
+
+    await page.goto(`${wpBaseURL}/${PAGES.settings.slug}/?n=${Date.now()}`, { waitUntil: 'domcontentloaded' });
+    // The banner template is gone — the consent banner can't render at all.
+    await expect(page.locator('#fazBannerTemplate')).toHaveCount(0);
+
+    // The in-page shortcode button is still present and its handler must be bound.
+    await page.locator('button.faz-cookie-settings-btn').first().click();
+    await page.waitForTimeout(500);
+    expect(
+      warnings.some((w) => w.includes('FAZ Cookie Manager') && w.includes('no consent preference center')),
+      'shortcode trigger did not bind / warn when the banner template was absent at init (regression of the PMP-exempt suppressed-UI fix)',
+    ).toBe(true);
   });
 });
