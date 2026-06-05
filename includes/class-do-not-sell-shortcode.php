@@ -1,6 +1,6 @@
 <?php
 /**
- * CCPA "Do Not Sell My Personal Information" Shortcode — [faz_do_not_sell]
+ * CCPA/CPRA "Do Not Sell or Share My Personal Information" Shortcode — [faz_do_not_sell]
  *
  * Renders a CCPA opt-out form. On submission, logs the opt-out in the
  * consent_logs table (status = 'dnsmpi_optout') with a hashed IP address
@@ -68,7 +68,7 @@ class Do_Not_Sell_Shortcode {
 				array(
 					'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
 					'rescindAction'  => self::RESCIND_ACTION,
-					'successMsg'     => __( 'Your opt-out request has been received. We will not sell your personal information.', 'faz-cookie-manager' ),
+					'successMsg'     => __( 'Your opt-out request has been received. We will not sell or share your personal information.', 'faz-cookie-manager' ),
 					'rescindSuccess' => __( 'Your opt-out has been withdrawn. You may submit a new request at any time.', 'faz-cookie-manager' ),
 					'errMsg'         => __( 'An error occurred. Please try again.', 'faz-cookie-manager' ),
 					'netMsg'         => __( 'Network error. Please try again.', 'faz-cookie-manager' ),
@@ -84,7 +84,7 @@ class Do_Not_Sell_Shortcode {
 	public function render( $atts = array() ) {
 		$atts = shortcode_atts(
 			array(
-				'title'  => __( 'Do Not Sell My Personal Information', 'faz-cookie-manager' ),
+				'title'  => __( 'Do Not Sell or Share My Personal Information', 'faz-cookie-manager' ),
 				'button' => __( 'Submit Opt-Out Request', 'faz-cookie-manager' ),
 			),
 			$atts,
@@ -119,7 +119,7 @@ class Do_Not_Sell_Shortcode {
 
 			<?php if ( $already_opted_out ) : ?>
 				<div class="faz-dnsmpi-notice success">
-					<?php esc_html_e( 'You have already submitted an opt-out request. We will not sell your personal information.', 'faz-cookie-manager' ); ?>
+					<?php esc_html_e( 'You have already submitted an opt-out request. We will not sell or share your personal information.', 'faz-cookie-manager' ); ?>
 				</div>
 				<p><?php esc_html_e( 'Changed your mind? You can withdraw your opt-out at any time.', 'faz-cookie-manager' ); ?></p>
 				<form class="faz-dnsmpi-rescind-form">
@@ -155,7 +155,7 @@ class Do_Not_Sell_Shortcode {
 		// creating a duplicate log entry and re-sending the admin notification.
 		if ( isset( $_COOKIE[ self::COOKIE_NAME ] ) && '1' === $_COOKIE[ self::COOKIE_NAME ] ) {
 			wp_send_json_success(
-				array( 'message' => __( 'You have already opted out. We will not sell your personal information.', 'faz-cookie-manager' ) )
+				array( 'message' => __( 'You have already opted out. We will not sell or share your personal information.', 'faz-cookie-manager' ) )
 			);
 			return;
 		}
@@ -185,7 +185,7 @@ class Do_Not_Sell_Shortcode {
 
 		wp_send_json_success(
 			array(
-				'message' => __( 'Your opt-out request has been received. We will not sell your personal information.', 'faz-cookie-manager' ),
+				'message' => __( 'Your opt-out request has been received. We will not sell or share your personal information.', 'faz-cookie-manager' ),
 			)
 		);
 	}
@@ -341,10 +341,10 @@ class Do_Not_Sell_Shortcode {
 		wp_mail(
 			$admin_email,
 			/* translators: %s: site name */
-			sprintf( __( '[%s] New CCPA Do Not Sell Opt-Out Request', 'faz-cookie-manager' ), $site_name ),
+			sprintf( __( '[%s] New CCPA/CPRA Do Not Sell or Share Opt-Out Request', 'faz-cookie-manager' ), $site_name ),
 			sprintf(
 				/* translators: 1: site name, 2: date/time, 3: IP hash */
-				__( "A visitor on %1\$s has submitted a Do Not Sell My Personal Information request.\n\nDate/Time: %2\$s\nIP Hash: %3\$s\n\nNo action is required unless you sell personal data, in which case you should ensure this user's data is excluded from any sale.", 'faz-cookie-manager' ),
+				__( "A visitor on %1\$s has submitted a Do Not Sell or Share My Personal Information request.\n\nDate/Time: %2\$s\nIP Hash: %3\$s\n\nNo action is required unless you sell or share personal data, in which case you should ensure this user's data is excluded from any sale or sharing.", 'faz-cookie-manager' ),
 				$site_name,
 				current_time( 'mysql' ),
 				$ip_hash

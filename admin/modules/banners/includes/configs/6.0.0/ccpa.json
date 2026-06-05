@@ -18,7 +18,7 @@
     },
     "consentExpiry": {
       "status": true,
-      "value": 180
+      "value": 365
     },
     "ruleSet": [
       {
@@ -60,7 +60,7 @@
       }
     },
     "respectGPC": {
-      "status": false
+      "status": true
     }
   },
   "config": {

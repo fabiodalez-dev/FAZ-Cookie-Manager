@@ -120,7 +120,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.03.19.1';
+	const MIGRATIONS_VERSION = '2026.06.05.1';
 
 	public static function run_pending_migrations() {
 		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
@@ -134,6 +134,7 @@ class Activator {
 			self::fix_banner_gdpr_defaults();
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
+			self::enable_gpc_on_ccpa_banners();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
@@ -1157,6 +1158,71 @@ class Activator {
 		// Clear banner template cache (base + language variants) to force regeneration with new URL.
 		faz_clear_banner_template_cache();
 		update_option( 'faz_brand_logo_path_fixed', 1, false );
+	}
+
+	/**
+	 * Enable "Respect Global Privacy Control" on existing CCPA banners.
+	 *
+	 * CPPA Reg. §7025 requires a business subject to CCPA/CPRA to treat a GPC
+	 * signal as a valid opt-out of the sale/sharing of personal information,
+	 * with NO admin opt-in required. The frontend now honours GPC (see
+	 * script.js::_fazGpcActive / _fazApplyGpcOptOut and behaviours.respectGPC),
+	 * and the default CCPA banner configs ship with respectGPC enabled — but
+	 * banners created before this release stored respectGPC.status = false.
+	 * Flip them on so existing CCPA installs become §7025-compliant on upgrade.
+	 *
+	 * Scoped to banners whose applicableLaw is 'ccpa' so opt-in (GDPR-family)
+	 * banners are untouched. Idempotent — guarded by an option flag and a
+	 * value check, so it never rewrites a banner that is already correct.
+	 */
+	public static function enable_gpc_on_ccpa_banners() {
+		if ( get_option( 'faz_ccpa_gpc_migrated' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_banners';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) !== $table ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_banners" (escaped via esc_sql); one-time read inside the activation/upgrade migration runner.
+		$rows = $wpdb->get_results( "SELECT banner_id, settings FROM `" . esc_sql( $table ) . "`" );
+		foreach ( $rows as $row ) {
+			$settings = json_decode( $row->settings, true );
+			if ( ! is_array( $settings ) ) {
+				continue;
+			}
+			// Only touch CCPA banners (opt-out paradigm).
+			$law = isset( $settings['settings']['applicableLaw'] ) ? (string) $settings['settings']['applicableLaw'] : 'gdpr';
+			if ( 'ccpa' !== $law ) {
+				continue;
+			}
+			$current = isset( $settings['behaviours']['respectGPC']['status'] )
+				? (bool) $settings['behaviours']['respectGPC']['status']
+				: false;
+			if ( true === $current ) {
+				continue; // Already compliant.
+			}
+			if ( ! isset( $settings['behaviours'] ) || ! is_array( $settings['behaviours'] ) ) {
+				$settings['behaviours'] = array();
+			}
+			$settings['behaviours']['respectGPC'] = array( 'status' => true );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to the custom faz_banners table; banner_id comes from the SELECT above, value JSON-encoded with %s. Caches invalidated below.
+			$wpdb->update(
+				$table,
+				array( 'settings' => wp_json_encode( $settings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ),
+				array( 'banner_id' => $row->banner_id ),
+				array( '%s' ),
+				array( '%d' )
+			);
+		}
+		// Invalidate the banner-controller item cache (epoch) and template cache
+		// so the new respectGPC value is served on the next request.
+		if ( class_exists( '\FazCookie\Admin\Modules\Banners\Includes\Controller' ) ) {
+			\FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->delete_cache();
+		}
+		faz_clear_banner_template_cache();
+		update_option( 'faz_ccpa_gpc_migrated', 1, false );
 	}
 
 	/**

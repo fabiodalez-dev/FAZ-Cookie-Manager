@@ -86,6 +86,16 @@ class Category_Controller extends Base_Controller {
 	protected function get_schema() {
 		global $wpdb;
 
+		// Note on `sell_personal_data` (default 1): a value of 1 marks the
+		// category's data as eligible to be SOLD or SHARED. Under CPRA
+		// §1798.140(ah) "sharing" for cross-context behavioural advertising is
+		// treated the same as a "sale" for opt-out purposes, so this single
+		// flag intentionally covers BOTH — the frontend "Do Not Sell or Share"
+		// opt-out denies every category where this is 1 (necessary is exempted
+		// by slug). The default is 1 (opt-out-able) to match the object-layer
+		// default in Cookie_Categories and prepare_item(); the previous
+		// `default 0` here was the lone outlier and would have made the opt-out
+		// silently ineffective for any row created without an explicit value.
 		$collate = '';
 
 		if ( $wpdb->has_cap( 'collation' ) ) {
@@ -101,7 +111,7 @@ class Category_Controller extends Base_Controller {
 			prior_consent int(11) NOT NULL default 0,
 			visibility int(11) NOT NULL default 1,
 			priority int(11) NOT NULL default 0,
-			sell_personal_data int(11) NOT NULL default 0,
+			sell_personal_data int(11) NOT NULL default 1,
 			meta longtext NULL,
 			date_created datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			date_modified datetime NOT NULL DEFAULT '0000-00-00 00:00:00',

@@ -172,6 +172,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_banner_gdpr_defaults_fixed',
 				'faz_uncategorized_consent_fixed',
 				'faz_migrated_advert_to_marketing',
+				'faz_ccpa_gpc_migrated',
 				'faz_migrations_version',
 				'faz_cookie_definitions',
 				'faz_cookie_definitions_meta',
