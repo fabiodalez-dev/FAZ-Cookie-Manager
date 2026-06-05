@@ -120,7 +120,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.06.05.1';
+	const MIGRATIONS_VERSION = '2026.06.05.2';
 
 	public static function run_pending_migrations() {
 		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
@@ -135,6 +135,7 @@ class Activator {
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
 			self::enable_gpc_on_ccpa_banners();
+			self::ensure_share_personal_data_column();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
@@ -1158,6 +1159,37 @@ class Activator {
 		// Clear banner template cache (base + language variants) to force regeneration with new URL.
 		faz_clear_banner_template_cache();
 		update_option( 'faz_brand_logo_path_fixed', 1, false );
+	}
+
+	/**
+	 * Ensure the faz_cookie_categories.share_personal_data column exists.
+	 *
+	 * CPRA §1798.140(ah) distinguishes "sharing" (cross-context behavioural
+	 * advertising) from a "sale". 1.17.2 adds a dedicated share_personal_data
+	 * flag alongside sell_personal_data. dbDelta in install_tables() adds the
+	 * column on the normal version-gated upgrade path, but this idempotent guard
+	 * covers installs that were already on a 1.17.2 dev build (same table
+	 * version, so dbDelta would not re-run) and any host where dbDelta skipped
+	 * the ALTER. Existing rows get the schema default 1 (opt-out-able).
+	 */
+	public static function ensure_share_personal_data_column() {
+		if ( get_option( 'faz_share_personal_data_column_added' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_cookie_categories';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal; SHOW COLUMNS probe, no user input.
+		$has_column = $wpdb->get_var( "SHOW COLUMNS FROM `" . esc_sql( $table ) . "` LIKE 'share_personal_data'" );
+		if ( ! $has_column ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix + literal "faz_cookie_categories"; the column definition is a fixed literal (no user input); one-shot DDL on the activation/upgrade path.
+			$wpdb->query( "ALTER TABLE `" . esc_sql( $table ) . "` ADD COLUMN `share_personal_data` int(11) NOT NULL DEFAULT 1 AFTER `sell_personal_data`" );
+		}
+		Category_Controller::get_instance()->delete_cache();
+		update_option( 'faz_share_personal_data_column_added', 1, false );
 	}
 
 	/**

@@ -86,16 +86,19 @@ class Category_Controller extends Base_Controller {
 	protected function get_schema() {
 		global $wpdb;
 
-		// Note on `sell_personal_data` (default 1): a value of 1 marks the
-		// category's data as eligible to be SOLD or SHARED. Under CPRA
-		// §1798.140(ah) "sharing" for cross-context behavioural advertising is
-		// treated the same as a "sale" for opt-out purposes, so this single
-		// flag intentionally covers BOTH — the frontend "Do Not Sell or Share"
-		// opt-out denies every category where this is 1 (necessary is exempted
-		// by slug). The default is 1 (opt-out-able) to match the object-layer
-		// default in Cookie_Categories and prepare_item(); the previous
-		// `default 0` here was the lone outlier and would have made the opt-out
-		// silently ineffective for any row created without an explicit value.
+		// CPRA §1798.140 distinguishes a "sale" (disclosure for monetary or other
+		// valuable consideration) from "sharing" (disclosure for cross-context
+		// behavioural advertising). Both carry an opt-out right, surfaced together
+		// as the single "Do Not Sell or Share My Personal Information" control, so
+		// a category is opt-out-able (denied once the visitor opts out, and
+		// flagged ccpaDoNotSell on the frontend) when EITHER flag is set:
+		//   - sell_personal_data: the category's data may be SOLD.
+		//   - share_personal_data: the category's data may be SHARED for
+		//     cross-context behavioural advertising.
+		// Both default to 1 so a new category is opt-out-able by default (the
+		// frontend exempts a category only when it is `necessary` OR neither sold
+		// nor shared). dbDelta adds share_personal_data to existing installs with
+		// default 1 on the next schema pass.
 		$collate = '';
 
 		if ( $wpdb->has_cap( 'collation' ) ) {
@@ -112,6 +115,7 @@ class Category_Controller extends Base_Controller {
 			visibility int(11) NOT NULL default 1,
 			priority int(11) NOT NULL default 0,
 			sell_personal_data int(11) NOT NULL default 1,
+			share_personal_data int(11) NOT NULL default 1,
 			meta longtext NULL,
 			date_created datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 			date_modified datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
@@ -202,6 +206,7 @@ class Category_Controller extends Base_Controller {
 				'visibility'         => ( true === $object->get_visibility() ? 1 : 0 ),
 				'priority'           => $object->get_priority(),
 				'sell_personal_data' => ( true === $object->get_sell_personal_data() ? 1 : 0 ),
+				'share_personal_data' => ( true === $object->get_share_personal_data() ? 1 : 0 ),
 				'meta'               => wp_json_encode( $object->get_meta() ),
 				'date_created'       => $object->get_date_created(),
 				'date_modified'      => $object->get_date_modified(),
@@ -210,6 +215,7 @@ class Category_Controller extends Base_Controller {
 				'%s',
 				'%s',
 				'%s',
+				'%d',
 				'%d',
 				'%d',
 				'%d',
@@ -244,6 +250,7 @@ class Category_Controller extends Base_Controller {
 				'visibility'         => ( true === $object->get_visibility() ? 1 : 0 ),
 				'priority'           => $object->get_priority(),
 				'sell_personal_data' => ( true === $object->get_sell_personal_data() ? 1 : 0 ),
+				'share_personal_data' => ( true === $object->get_share_personal_data() ? 1 : 0 ),
 				'meta'               => wp_json_encode( $object->get_meta() ),
 				'date_modified'      => $date_modified,
 			),
@@ -252,6 +259,7 @@ class Category_Controller extends Base_Controller {
 				'%s',
 				'%s',
 				'%s',
+				'%d',
 				'%d',
 				'%d',
 				'%d',
@@ -287,6 +295,7 @@ class Category_Controller extends Base_Controller {
 		$object->priority           = isset( $item->priority ) ? absint( $item->priority ) : '';
 		$object->visibility         = isset( $item->visibility ) ? absint( $item->visibility ) : 0;
 		$object->sell_personal_data = isset( $item->sell_personal_data ) ? absint( $item->sell_personal_data ) : 1;
+		$object->share_personal_data = isset( $item->share_personal_data ) ? absint( $item->share_personal_data ) : 1;
 		$object->meta               = isset( $item->meta ) ? $this->prepare_json( $item->meta ) : '';
 		$object->date_created       = isset( $item->date_created ) ? sanitize_text_field( $item->date_created ) : '';
 		$object->date_modified      = isset( $item->date_modified ) ? sanitize_text_field( $item->date_modified ) : '';

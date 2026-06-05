@@ -3209,12 +3209,17 @@ class Frontend {
 				'name'           => $category->get_name( faz_current_language() ),
 				'slug'           => $category->get_slug(),
 				'isNecessary'    => 'necessary' === $category->get_slug() ? true : false,
-				'ccpaDoNotSell'  => $category->get_sell_personal_data(),
+				// Subject to the combined "Do Not Sell or Share" opt-out when the
+				// category is SOLD or SHARED (CPRA treats sharing for cross-context
+				// behavioural advertising like a sale for opt-out purposes).
+				'ccpaDoNotSell'  => $category->get_sell_personal_data() || $category->get_share_personal_data(),
 				'cookies'        => $cookies,
 				'active'         => true,
 				'defaultConsent' => array(
 					'gdpr' => $category->get_prior_consent(),
-					'ccpa' => 'necessary' === $category->get_slug() || $category->get_sell_personal_data() === false ? true : false,
+					// Exempt from the CCPA opt-out only when necessary, or neither
+					// sold nor shared.
+					'ccpa' => ( 'necessary' === $category->get_slug() || ( false === $category->get_sell_personal_data() && false === $category->get_share_personal_data() ) ) ? true : false,
 				),
 			);
 		}

@@ -742,7 +742,8 @@ class Api extends Rest_Controller {
 					'prior_consent'      => absint( $cat['prior_consent'] ?? 0 ),
 					'visibility'         => absint( $cat['visibility'] ?? 1 ),
 					'priority'           => absint( $cat['priority'] ?? 0 ),
-					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 0 ),
+					'sell_personal_data' => absint( $cat['sell_personal_data'] ?? 1 ),
+					'share_personal_data' => absint( $cat['share_personal_data'] ?? 1 ),
 					'meta'               => array_key_exists( 'meta', $cat ) ? $this->encode_json_column( $cat_meta, array() ) : null,
 				) );
 				if ( false === $result ) {

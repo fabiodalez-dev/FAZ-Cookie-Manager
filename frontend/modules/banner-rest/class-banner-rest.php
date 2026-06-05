@@ -345,12 +345,13 @@ class Banner_Rest {
 				'slug'           => $slug,
 				'description'    => $category->get_description( $lang ),
 				'isNecessary'    => 'necessary' === $slug,
-				'ccpaDoNotSell'  => $category->get_sell_personal_data(),
+				// SOLD or SHARED → subject to the combined CPRA opt-out.
+				'ccpaDoNotSell'  => $category->get_sell_personal_data() || $category->get_share_personal_data(),
 				'cookies'        => $this->build_category_cookies_payload( $category->get_cookies() ),
 				'active'         => true,
 				'defaultConsent' => array(
 					'gdpr' => $category->get_prior_consent(),
-					'ccpa' => 'necessary' === $slug || false === $category->get_sell_personal_data(),
+					'ccpa' => 'necessary' === $slug || ( false === $category->get_sell_personal_data() && false === $category->get_share_personal_data() ),
 				),
 			);
 		}

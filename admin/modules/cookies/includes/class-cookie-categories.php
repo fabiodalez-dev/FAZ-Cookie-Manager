@@ -41,6 +41,7 @@ class Cookie_Categories extends Store {
 		'date_modified'      => '',
 		'language'           => 'en',
 		'sell_personal_data' => true,
+		'share_personal_data' => true,
 		'cookies'            => array(),
 	);
 	/**
@@ -100,6 +101,10 @@ class Cookie_Categories extends Store {
 					'visibility'         => $data->visibility,
 					'priority'           => $data->priority,
 					'sell_personal_data' => $data->sell_personal_data,
+					// `?? true` guards the upgrade window where a row predates the
+					// share_personal_data column (before dbDelta adds it): default
+					// to opt-out-able, matching the schema default.
+					'share_personal_data' => $data->share_personal_data ?? true,
 					'meta'               => $data->meta,
 					'cookies'            => $data->cookies,
 					'date_created'       => $data->date_created,
@@ -209,6 +214,17 @@ class Cookie_Categories extends Store {
 	}
 
 	/**
+	 * Return true if the category SHARES personal data for cross-context
+	 * behavioural advertising (CPRA §1798.140(ah)). Distinct from a sale; both
+	 * are covered by the combined "Do Not Sell or Share" opt-out.
+	 *
+	 * @return boolean
+	 */
+	public function get_share_personal_data() {
+		return (bool) $this->get_object_data( 'share_personal_data' );
+	}
+
+	/**
 	 * Return category meta data.
 	 *
 	 * @return array
@@ -282,6 +298,17 @@ class Cookie_Categories extends Store {
 	 */
 	public function set_sell_personal_data( $data ) {
 		$this->set_object_data( 'sell_personal_data', (bool) $data );
+	}
+
+	/**
+	 * Set whether the category SHARES personal data for cross-context
+	 * behavioural advertising (CPRA), distinct from a sale.
+	 *
+	 * @param boolean $data true if the category shares personal data.
+	 * @return void
+	 */
+	public function set_share_personal_data( $data ) {
+		$this->set_object_data( 'share_personal_data', (bool) $data );
 	}
 
 	/**
