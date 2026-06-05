@@ -15,6 +15,13 @@
  *      keyboard-accessible. The table inside uses a mobile-friendly
  *      data-label fallback so the layout collapses to a card stack on
  *      narrow screens without media queries fighting the theme.
+ *   4. Neutralise <code> inside the policy. The policy uses <code> for
+ *      cookie names and technical tokens; many themes style the global
+ *      `code {}` element with a coloured background + border (often via
+ *      their own `--theme-color-*` custom properties), which looks out of
+ *      place inside a legal document. We force a transparent, border-less,
+ *      inherit-colour monospace token so the policy renders neutrally on
+ *      any theme.
  *
  * Anything else (headings, link colours, paragraph rhythm) is theme.
  */
@@ -24,6 +31,21 @@
 	max-width: none;
 	width: 100%;
 	box-sizing: border-box;
+}
+
+/* 4. Neutral <code> regardless of the active theme. `!important` is a
+   deliberate, tightly-scoped exception to this file's otherwise no-!important
+   convention: a theme's `code {}` rule may itself be flagged !important or use
+   an equal-specificity `.entry-content code` selector, and the policy must look
+   clean on every theme. Only the box/colour properties are forced; the
+   monospace family is left to the theme/UA. */
+.faz-cookie-policy code {
+	border: 0 !important;
+	background: transparent !important;
+	background-color: transparent !important;
+	color: inherit !important;
+	box-shadow: none !important;
+	padding: 0;
 }
 
 /* 3. Cookie list (auto-populated). One <details> per category. */
@@ -145,9 +167,8 @@ details.faz-cookie-policy-details > summary.faz-cookie-policy-summary > .faz-coo
 }
 
 .faz-cookie-policy-table code {
-	background: rgba(0, 0, 0, 0.04);
-	padding: 0.1em 0.35em;
-	border-radius: 3px;
+	/* Box/colour neutralised by the `.faz-cookie-policy code` rule above; only
+	   nudge the cookie-name tokens to a slightly smaller monospace size. */
 	font-size: 0.95em;
 }
 

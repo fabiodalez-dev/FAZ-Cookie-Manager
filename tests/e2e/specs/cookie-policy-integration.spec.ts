@@ -322,6 +322,19 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     // the <head> meta tag is intentionally NOT emitted; the data-attribute
     // is the canonical surface.
     await expect(article).toHaveAttribute('data-faz-policy-version', /^[0-9a-f]+\.[0-9a-f]+$/);
+
+    // <code> inside the policy (cookie names / technical tokens) must render
+    // neutrally — the plugin resets the active theme's global `code {}` box so
+    // no border or coloured background bleeds into the legal document.
+    const codeEl = article.locator('code').first();
+    if ((await codeEl.count()) > 0) {
+      const codeStyle = await codeEl.evaluate((el) => {
+        const s = getComputedStyle(el as HTMLElement);
+        return { borderTopWidth: s.borderTopWidth, bg: s.backgroundColor };
+      });
+      expect(codeStyle.borderTopWidth, 'policy <code> must have no border').toBe('0px');
+      expect(['rgba(0, 0, 0, 0)', 'transparent'], 'policy <code> background must be transparent').toContain(codeStyle.bg);
+    }
   });
 
   test('6b. legacy [faz_cookie_policy] shortcode still registered + renders alongside [faz_cookie_policy_complete]', () => {
