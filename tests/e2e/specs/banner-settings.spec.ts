@@ -511,8 +511,11 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await expect.poll(async () => getSelectValue(page, 'faz-b-position')).toBe('bottom');
     await expect.poll(async () => getSelectValue(page, 'faz-b-theme')).toBe('light');
     await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('pushdown');
-    await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#16a34a');
-    await expect.poll(async () => getInputValue(page, 'faz-b-reject-bg-hex')).toBe('#dc2626');
+    // 1.17.2 (EDPB 03/2022): the "GDPR Strict" preset no longer uses a
+    // green-accept / red-reject traffic-light scheme — both primary buttons are
+    // a neutral, equally-weighted blue so colour can't nudge the choice.
+    await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#1863DC');
+    await expect.poll(async () => getInputValue(page, 'faz-b-reject-bg-hex')).toBe('#1863DC');
     await expect.poll(async () => getInputValue(page, 'faz-b-settings-bg-hex')).toBe('#1e40af');
   });
 

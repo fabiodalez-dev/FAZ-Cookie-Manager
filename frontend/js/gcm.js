@@ -63,6 +63,18 @@ gtag("set", "url_passthrough", !!data.url_passthrough);
 //   1. parseConsentCookie() -> read cookie synchronously
 //   2a. if cookie present -> emit consent default with granted states (once)
 //   2b. if cookie absent  -> emit region-specific denied defaults (legacy path)
+//
+// FAZ_META_KEYS must be declared BEFORE this call: parseConsentCookie() reads
+// it, and although the function is hoisted, the `var` only hoists the
+// declaration (not the value). Declaring it lower in the file left it
+// `undefined` at this call site, so a returning visitor (or a PMP-exempt member
+// with an auto-granted cookie) hit "Cannot read properties of undefined" on the
+// first key and gcm.js threw before emitting any consent.
+// Non-category meta keys stored in the consent cookie (not consent states).
+// `gpc` flags a consent recorded automatically from a Global Privacy Control
+// signal; like rev/action/consentid it must not be coerced to granted/denied.
+var FAZ_META_KEYS = { rev: 1, action: 1, consentid: 1, gpc: 1 };
+
 var initialCookieObj = parseConsentCookie();
 
 if (initialCookieObj) {
@@ -148,11 +160,6 @@ function isConsentCookieStale(parsed) {
     var storedRevision = parseInt(parsed.rev, 10);
     return serverRevision > 1 && (isNaN(storedRevision) || storedRevision < serverRevision);
 }
-
-// Non-category meta keys stored in the consent cookie (not consent states).
-// `gpc` flags a consent recorded automatically from a Global Privacy Control
-// signal; like rev/action/consentid it must not be coerced to granted/denied.
-var FAZ_META_KEYS = { rev: 1, action: 1, consentid: 1, gpc: 1 };
 
 function parseConsentCookie() {
     var parsed = parseConsentCookieParts();
