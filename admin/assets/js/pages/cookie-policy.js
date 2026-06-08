@@ -462,6 +462,13 @@
 				}
 				var newly  = (resp && Array.isArray(resp.newly_suggested))  ? resp.newly_suggested  : [];
 				var already = (resp && Array.isArray(resp.already_selected)) ? resp.already_selected : [];
+				// "already selected" for the status message must reflect the
+				// CURRENT in-session selection, not the server's saved-state
+				// `already_selected`: a service the admin unticked this session
+				// (and that auto-detect deliberately leaves unticked, F009) must
+				// not be counted as already-selected, or the count contradicts
+				// what the admin sees on screen. Mirrors gvl.js alreadyInSession.
+				var alreadyInSession = already.filter(function (sid) { return !userUntickedServices[sid]; });
 				if (newly.length === 0 && already.length === 0) {
 					setAutoDetectStatus(t( 'svcAutoDetectNoMatch', 'No matching services found among scanned cookies.' ), '');
 					return;
@@ -471,8 +478,10 @@
 				// prompt — there is nothing to save. Mirrors gvl.js's
 				// autoDetectAllAlready branch (added.length === 0).
 				if (newly.length === 0 && already.length > 0) {
-					var allAlreadyTpl = t( 'svcAutoDetectAllAlready', 'All %d detected service(s) are already selected.' );
-					setAutoDetectStatus(allAlreadyTpl.replace('%d', String(already.length)), 'ok');
+					var allAlreadyMsg = (alreadyInSession.length > 0)
+						? t( 'svcAutoDetectAllAlready', 'All %d detected service(s) are already selected.' ).replace('%d', String(alreadyInSession.length))
+						: t( 'svcAutoDetectNoneAdded', 'Detected services left unticked, as you set them.' );
+					setAutoDetectStatus(allAlreadyMsg, 'ok');
 					return;
 				}
 				// Pre-tick the newly_suggested checkboxes. Already-selected
@@ -503,8 +512,8 @@
 					// Every newly-detected service was one the admin unticked
 					// this session — nothing was pre-ticked, so omit the "Click
 					// Save" prompt. Confirm without lying about a pending change.
-					var noneMsg = (already.length > 0)
-						? t( 'svcAutoDetectAllAlready', 'All %d detected service(s) are already selected.' ).replace('%d', String(already.length))
+					var noneMsg = (alreadyInSession.length > 0)
+						? t( 'svcAutoDetectAllAlready', 'All %d detected service(s) are already selected.' ).replace('%d', String(alreadyInSession.length))
 						: t( 'svcAutoDetectNoneAdded', 'Detected services left unticked, as you set them.' );
 					setAutoDetectStatus(noneMsg, 'ok');
 					return;
@@ -517,9 +526,9 @@
 				var template = t( 'svcAutoDetectDone', 'Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit.' );
 				var formatted = template
 					.replace(/%1\$d/g, String(addedCount))
-					.replace(/%2\$d/g, String(already.length))
+					.replace(/%2\$d/g, String(alreadyInSession.length))
 					.replace('%d', String(addedCount))
-					.replace('%d', String(already.length));
+					.replace('%d', String(alreadyInSession.length));
 				setAutoDetectStatus(formatted, 'ok');
 			})
 			.catch(function (err) {

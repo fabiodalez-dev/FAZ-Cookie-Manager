@@ -219,6 +219,11 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 				iab: {
 					...originalIab,
 					enabled: true,
+					// 1.17.2: the TCF CMP only activates with a registered IAB
+					// CMP ID (>= 2); IDs 0/1 are reserved/invalid. Without a valid
+					// id tcf-cmp.js is not enqueued and euconsent-v2 is never
+					// written, so set a registered-style id for the TCF flow.
+					cmp_id: 123,
 				},
 			});
 

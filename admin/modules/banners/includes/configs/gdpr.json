@@ -50,14 +50,14 @@
         "newTab": false
       },
       "idle": {
-        "action": "acceptClose",
+        "action": "none",
         "delay": 1000
       },
       "navigation": {
-        "action": "acceptClose"
+        "action": "none"
       },
       "pageScroll": {
-        "action": "acceptClose"
+        "action": "none"
       }
     },
     "respectGPC": {
@@ -117,8 +117,8 @@
               "tag": "reject-button",
               "type": "button",
               "styles": {
-                "color": "#1863DC",
-                "background-color": "transparent",
+                "color": "#FFFFFF",
+                "background-color": "#1863DC",
                 "border-color": "#1863DC"
               }
             },
@@ -313,8 +313,8 @@
               "tag": "detail-reject-button",
               "type": "button",
               "styles": {
-                "color": "#1863DC",
-                "background-color": "transparent",
+                "color": "#FFFFFF",
+                "background-color": "#1863DC",
                 "border-color": "#1863DC"
               }
             },

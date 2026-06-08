@@ -120,7 +120,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.03.19.1';
+	const MIGRATIONS_VERSION = '2026.06.05.2';
 
 	public static function run_pending_migrations() {
 		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
@@ -134,6 +134,9 @@ class Activator {
 			self::fix_banner_gdpr_defaults();
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
+			self::enable_gpc_on_ccpa_banners();
+			self::ensure_share_personal_data_column();
+			self::clear_necessary_optout_flags();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
@@ -1157,6 +1160,162 @@ class Activator {
 		// Clear banner template cache (base + language variants) to force regeneration with new URL.
 		faz_clear_banner_template_cache();
 		update_option( 'faz_brand_logo_path_fixed', 1, false );
+	}
+
+	/**
+	 * Ensure the faz_cookie_categories.share_personal_data column exists.
+	 *
+	 * CPRA §1798.140(ah) distinguishes "sharing" (cross-context behavioural
+	 * advertising) from a "sale". 1.17.2 adds a dedicated share_personal_data
+	 * flag alongside sell_personal_data. dbDelta in install_tables() adds the
+	 * column on the normal version-gated upgrade path, but this idempotent guard
+	 * covers installs that were already on a 1.17.2 dev build (same table
+	 * version, so dbDelta would not re-run) and any host where dbDelta skipped
+	 * the ALTER. Existing rows get the schema default 1 (opt-out-able).
+	 */
+	public static function ensure_share_personal_data_column() {
+		if ( get_option( 'faz_share_personal_data_column_added' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_cookie_categories';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal; SHOW COLUMNS probe, no user input.
+		$has_column = $wpdb->get_var( "SHOW COLUMNS FROM `" . esc_sql( $table ) . "` LIKE 'share_personal_data'" );
+		if ( ! $has_column ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is $wpdb->prefix + literal "faz_cookie_categories"; the column definition is a fixed literal (no user input); one-shot DDL on the activation/upgrade path.
+			$result = $wpdb->query( "ALTER TABLE `" . esc_sql( $table ) . "` ADD COLUMN `share_personal_data` int(11) NOT NULL DEFAULT 1 AFTER `sell_personal_data`" );
+			if ( false === $result ) {
+				// The ALTER failed: throw so run_pending_migrations() does not mark
+				// the migration set complete and the column is retried on the next
+				// admin load, instead of permanently flagging it as added.
+				throw new \RuntimeException( 'FAZ: failed to add the share_personal_data column; migration will retry.' );
+			}
+		}
+		Category_Controller::get_instance()->delete_cache();
+		update_option( 'faz_share_personal_data_column_added', 1, false );
+	}
+
+	/**
+	 * Clear the CCPA opt-out flags on the always-exempt `necessary` category.
+	 *
+	 * sell_personal_data / share_personal_data both default to 1 at the schema
+	 * level, so a seeded `necessary` row inherits sell/share = true even though
+	 * strictly-necessary processing is never subject to a CPRA "Do Not Sell or
+	 * Share" opt-out (and the admin editor hides those toggles for it). Left as
+	 * 1/1 the row is serialized as `ccpaDoNotSell: true` to the frontend and
+	 * carried through import/export, contradicting its always-exempt status.
+	 * Normalise the stored row to 0/0 so every layer agrees. Idempotent — only
+	 * writes when a value is actually non-zero. Runs after
+	 * ensure_share_personal_data_column() so the column is guaranteed to exist.
+	 */
+	public static function clear_necessary_optout_flags() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_cookie_categories';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
+		$result = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE `" . esc_sql( $table ) . "` SET sell_personal_data = 0, share_personal_data = 0 WHERE slug = %s AND ( sell_personal_data <> 0 OR share_personal_data <> 0 )",
+				'necessary'
+			)
+		);
+		if ( false === $result ) {
+			// Throw so run_pending_migrations() does not bump the version and the
+			// normalisation is retried on the next admin load.
+			throw new \RuntimeException( 'FAZ: failed to clear opt-out flags on the necessary category; migration will retry.' );
+		}
+		if ( $result > 0 ) {
+			Category_Controller::get_instance()->delete_cache();
+		}
+	}
+
+	/**
+	 * Enable "Respect Global Privacy Control" on existing CCPA banners.
+	 *
+	 * CPPA Reg. §7025 requires a business subject to CCPA/CPRA to treat a GPC
+	 * signal as a valid opt-out of the sale/sharing of personal information,
+	 * with NO admin opt-in required. The frontend now honours GPC (see
+	 * script.js::_fazGpcActive / _fazApplyGpcOptOut and behaviours.respectGPC),
+	 * and the default CCPA banner configs ship with respectGPC enabled — but
+	 * banners created before this release stored respectGPC.status = false.
+	 * Flip them on so existing CCPA installs become §7025-compliant on upgrade.
+	 *
+	 * Scoped to banners whose applicableLaw is 'ccpa' so opt-in (GDPR-family)
+	 * banners are untouched. Idempotent — guarded by an option flag and a
+	 * value check, so it never rewrites a banner that is already correct.
+	 */
+	public static function enable_gpc_on_ccpa_banners() {
+		if ( get_option( 'faz_ccpa_gpc_migrated' ) ) {
+			return;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_banners';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time SHOW TABLES probe in the activation/upgrade path.
+		if ( $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table ) ) !== $table ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_banners" (escaped via esc_sql); one-time read inside the activation/upgrade migration runner.
+		$rows = $wpdb->get_results( "SELECT banner_id, settings FROM `" . esc_sql( $table ) . "`" );
+		$had_failures = false;
+		foreach ( $rows as $row ) {
+			$settings = json_decode( $row->settings, true );
+			if ( ! is_array( $settings ) ) {
+				continue;
+			}
+			// Only touch CCPA banners (opt-out paradigm).
+			$law = isset( $settings['settings']['applicableLaw'] ) ? (string) $settings['settings']['applicableLaw'] : 'gdpr';
+			if ( 'ccpa' !== $law ) {
+				continue;
+			}
+			$current = isset( $settings['behaviours']['respectGPC']['status'] )
+				? (bool) $settings['behaviours']['respectGPC']['status']
+				: false;
+			if ( true === $current ) {
+				continue; // Already compliant.
+			}
+			if ( ! isset( $settings['behaviours'] ) || ! is_array( $settings['behaviours'] ) ) {
+				$settings['behaviours'] = array();
+			}
+			$settings['behaviours']['respectGPC'] = array( 'status' => true );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- one-shot migration write to the custom faz_banners table; banner_id comes from the SELECT above, value JSON-encoded with %s. Caches invalidated below.
+			$result = $wpdb->update(
+				$table,
+				array( 'settings' => wp_json_encode( $settings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ),
+				array( 'banner_id' => $row->banner_id ),
+				array( '%s' ),
+				array( '%d' )
+			);
+			if ( false === $result ) {
+				// A write failed: stop and leave the migration flag unset so the
+				// upgrade path retries on the next load. Already-updated rows are
+				// re-skipped by the `true === $current` guard above (idempotent).
+				$had_failures = true;
+				break;
+			}
+		}
+		// Invalidate the banner-controller item cache (epoch) and template cache
+		// so any rows already updated above are served with the new respectGPC value.
+		if ( class_exists( '\FazCookie\Admin\Modules\Banners\Includes\Controller' ) ) {
+			\FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->delete_cache();
+		}
+		faz_clear_banner_template_cache();
+		// Only mark the migration complete when every CCPA banner was flipped
+		// successfully; otherwise a transient DB failure would permanently leave
+		// some CCPA banners non-compliant with CPPA Reg. §7025. Throw on failure
+		// so run_pending_migrations() does not bump the migration version and the
+		// flip is retried on the next admin load (already-flipped banners are
+		// re-skipped by the `true === $current` guard above, so this is idempotent).
+		if ( $had_failures ) {
+			throw new \RuntimeException( 'FAZ: failed enabling respectGPC on one or more CCPA banners; migration will retry.' );
+		}
+		update_option( 'faz_ccpa_gpc_migrated', 1, false );
 	}
 
 	/**

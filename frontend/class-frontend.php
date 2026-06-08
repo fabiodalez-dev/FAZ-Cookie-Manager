@@ -24,6 +24,7 @@ use FazCookie\Includes\Known_Providers;
 use FazCookie\Includes\Cookie_Table_Shortcode;
 use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
+use FazCookie\Includes\Cookie_Settings_Shortcode;
 use FazCookie\Frontend\Includes\Placeholder_Builder;
 /**
  * The public-facing functionality of the plugin.
@@ -120,6 +121,7 @@ class Frontend {
 		new Cookie_Table_Shortcode();
 		new Cookie_Policy_Shortcode();
 		new Do_Not_Sell_Shortcode();
+		new Cookie_Settings_Shortcode();
 		new AMP_Consent();
 		new Translation_Compat();
 		add_action( 'init', array( $this, 'load_banner' ) );
@@ -351,8 +353,14 @@ class Frontend {
 				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
 			}
 
-			// IAB TCF v2.3 CMP stub (when IAB is enabled in settings).
-			$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' );
+			// IAB TCF v2.3 CMP stub (when IAB is enabled AND a valid CMP ID is set).
+			// IAB Europe assigns CMP IDs; 0 and 1 are reserved/invalid. A TC string
+			// built with CmpId < 2 is rejected by the IAB-compliant ad-tech supply
+			// chain, so emitting one (the euconsent-v2 cookie) is a supply-chain
+			// non-compliance. Refuse to activate the CMP — do not enqueue tcf-cmp.js
+			// and do not emit _fazTcfConfig — until a registered CMP ID is configured.
+			$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' )
+				&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
 			if ( $iab_enabled ) {
 				// Early command-queue stub so ad scripts can call __tcfapi before CMP loads.
 				// Handles 'ping' directly so pre-CMP callers get a valid response.
@@ -445,13 +453,20 @@ class Frontend {
 						'token'     => $pv_token,
 					)
 				);
+				// Pre-consent banner/pageview metrics are AGGREGATE-ONLY: no
+				// per-visitor identifier is created or transmitted. We removed
+				// the former sessionStorage "faz_sid" + session_id field — it
+				// was a linkable identifier written before any consent (an
+				// ePrivacy/Art.5(3) risk) and, crucially, was never read back:
+				// every dashboard query is a COUNT(*) grouped by day/event, so
+				// dropping it is lossless. The events that remain (pageview,
+				// banner_view/accept/reject/settings) are unlinkable counters
+				// measuring the consent mechanism itself.
 				$pv_js = "(function(){" .
 					"if(typeof _fazPageviewConfig==='undefined')return;" .
-					"var sid=sessionStorage.getItem('faz_sid');" .
-					"if(!sid){sid=Math.random().toString(36).substring(2)+Date.now().toString(36);sessionStorage.setItem('faz_sid',sid);}" .
 					"function fazTrack(t){" .
 						"fetch(_fazPageviewConfig.restUrl,{method:'POST',headers:{'Content-Type':'application/json'}," .
-						"body:JSON.stringify({token:_fazPageviewConfig.token,page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t,session_id:sid})}).catch(function(){});" .
+						"body:JSON.stringify({token:_fazPageviewConfig.token,page_url:_fazPageviewConfig.pageUrl,page_title:_fazPageviewConfig.pageTitle,event_type:t})}).catch(function(){});" .
 					"}" .
 					"fazTrack('pageview');" .
 					"document.addEventListener('fazcookie_banner_loaded',function(){fazTrack('banner_view');});" .
@@ -617,7 +632,20 @@ class Frontend {
 			return;
 		}
 		$placeholder_css = wp_strip_all_tags( Placeholder_Builder::get_css() );
-		echo '<style id="faz-style-inline">[data-faz-tag]{visibility:hidden;}'
+		// Anti-FOUC: hide the banner until the JS has positioned/styled it.
+		// The rule is scoped to `html:not(.faz-ready)` (instead of being a flat
+		// `[data-faz-tag]{visibility:hidden}` that the JS reveals by *removing*
+		// this whole <style> element) so the reveal survives CSS-optimizer
+		// plugins. LiteSpeed/WP Rocket/Autoptimize hoist inline <style> blocks
+		// into a combined stylesheet; once that happens the element no longer
+		// exists for `_fazRemoveStyles()` to remove and the flat rule would keep
+		// the banner permanently hidden (its fixed container still eating
+		// clicks). With the state-class gate, the JS adding `faz-ready` to
+		// <html> reveals the banner regardless of where the rule ended up.
+		// data-no-optimize / data-noptimize additionally ask the CSS optimisers
+		// (LiteSpeed Cache, WP Rocket, Autoptimize, …) to leave the block inline
+		// (belt-and-suspenders).
+		echo '<style id="faz-style-inline" data-no-optimize="1" data-noptimize="1">html:not(.faz-ready) [data-faz-tag]{visibility:hidden;}'
 			. $placeholder_css // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS stripped of all tags; esc_html() would break selectors.
 			. '</style>';
 	}
@@ -1072,12 +1100,28 @@ class Frontend {
 		$banner          = $this->banner;
 		$banner_settings = $banner->get_settings();
 
+		// Consent-cookie lifetime, with a law-aware hard cap applied here so the
+		// EFFECTIVE expiry can never exceed the legal maximum regardless of any
+		// larger value an admin saved (the UI allows up to 10 years). The
+		// Italian Garante (Linee guida cookie, 10 Jun 2021) caps consent
+		// validity at 6 months for opt-in (GDPR-family) banners, so those are
+		// clamped to 182 days. Opt-out (CCPA/CPRA) banners are NOT subject to
+		// that cap — a LONGER lifetime is actually preferable there (CPRA bars
+		// asking a user to re-confirm an opt-out more than once per 12 months),
+		// so their configured value (default 365) is honoured as-is.
+		$faz_configured_expiry = isset( $banner_settings['settings']['consentExpiry']['value'] )
+			? absint( $banner_settings['settings']['consentExpiry']['value'] )
+			: 180;
+		$faz_expiry = ( 'ccpa' === $banner->get_law() )
+			? max( 1, $faz_configured_expiry )
+			: max( 1, min( 182, $faz_configured_expiry ) );
+
 		$providers = array();
 		$store     = array(
 			'_ipData'       => array(),
 			'_assetsURL'    => FAZ_PLUGIN_URL . 'frontend/images/',
 			'_publicURL'    => set_url_scheme( get_site_url() ),
-			'_expiry'       => max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
+			'_expiry'       => $faz_expiry,
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'         => $banner->get_law(),
 			'_bannerSlug'        => $banner->get_slug(),
@@ -1251,7 +1295,14 @@ class Frontend {
 		$store['_gtmDataLayer'] = ! empty( $settings['banner_control']['gtm_datalayer'] );
 
 		// IAB vendor data for preference center.
-		$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' );
+		// Mirror the asset-enqueue gate above: the IAB/TCF preference UI is
+		// only surfaced when a registered CMP ID (>= 2) is configured. CMP IDs
+		// 0 and 1 are reserved/invalid in the IAB GVL, so emitting the vendor
+		// list and purpose toggles without one would show a TCF UI that can
+		// never produce a valid TC string (tcf-cmp.js is not enqueued in that
+		// state). Keep both gates in sync.
+		$iab_enabled = (bool) $this->settings->get( 'iab', 'enabled' )
+			&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
 		$store['_iabEnabled'] = $iab_enabled;
 		if ( $iab_enabled ) {
 			$gvl = Gvl::get_instance();
@@ -2172,7 +2223,27 @@ class Frontend {
 			return false;
 		}
 
-		$is_url_pattern = false !== strpos( $pattern, '/' ) || false !== strpos( $pattern, '.' );
+		// Domain+path patterns ("googleapis.com/maps/api/", "hcaptcha.com/")
+		// — i.e. the pre-slash segment looks like a hostname (contains a dot)
+		// — are matched HOST-ANCHORED so that "googleapis.com/" cannot be
+		// spoofed by a look-alike host such as "evilgoogleapis.com/" or
+		// "googleapis.com.attacker.net/". Filename patterns ("jquery.min.js"),
+		// bare path fragments ("wp-includes/", "plugins/elementor/") and
+		// handle/class tokens fall through to the looser matching below — they
+		// are first-party infrastructure, not third-party domains.
+		$slash_pos = strpos( $pattern, '/' );
+		if ( false !== $slash_pos ) {
+			$pattern_host = substr( $pattern, 0, $slash_pos );
+			if ( false !== strpos( $pattern_host, '.' ) ) {
+				return $this->matches_domain_pattern(
+					$value,
+					$pattern_host,
+					ltrim( substr( $pattern, $slash_pos + 1 ), '/' )
+				);
+			}
+		}
+
+		$is_url_pattern = false !== $slash_pos || false !== strpos( $pattern, '.' );
 		if ( $is_url_pattern ) {
 			$parsed = wp_parse_url( $value );
 			if ( false !== $parsed && is_array( $parsed ) ) {
@@ -2211,6 +2282,51 @@ class Frontend {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Host-anchored match for a domain (+ optional path) whitelist pattern.
+	 *
+	 * The value's host must equal the pattern host or be a sub-domain of it
+	 * on a label boundary — so "googleapis.com" matches "maps.googleapis.com"
+	 * (legitimate sub-domain) but NOT "evilgoogleapis.com" or
+	 * "googleapis.com.attacker.net". When the pattern carries a path, the
+	 * request path must additionally begin with it (prefix-anchored).
+	 *
+	 * @param string $value        Attribute value (typically a src/href URL).
+	 * @param string $pattern_host Host portion of the pattern (pre-slash).
+	 * @param string $pattern_path Path portion of the pattern (post-slash, may be '').
+	 * @return bool
+	 */
+	private function matches_domain_pattern( $value, $pattern_host, $pattern_path ) {
+		$pattern_host = strtolower( trim( $pattern_host ) );
+		if ( '' === $pattern_host ) {
+			return false;
+		}
+
+		$parsed = wp_parse_url( $value );
+		$host   = ( is_array( $parsed ) && isset( $parsed['host'] ) ) ? strtolower( $parsed['host'] ) : '';
+		if ( '' === $host ) {
+			// Relative URL (no host) can never satisfy a domain pattern.
+			return false;
+		}
+
+		$host_ok = ( $host === $pattern_host )
+			|| (
+				strlen( $host ) > strlen( $pattern_host ) + 1
+				&& substr( $host, - ( strlen( $pattern_host ) + 1 ) ) === '.' . $pattern_host
+			);
+		if ( ! $host_ok ) {
+			return false;
+		}
+
+		$pattern_path = strtolower( $pattern_path );
+		if ( '' === $pattern_path ) {
+			return true;
+		}
+
+		$path = ( is_array( $parsed ) && isset( $parsed['path'] ) ) ? ltrim( strtolower( $parsed['path'] ), '/' ) : '';
+		return 0 === strpos( $path, $pattern_path );
 	}
 
 	/**
@@ -2534,6 +2650,31 @@ class Frontend {
 		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
 		$blocked = array();
 
+		// CCPA/CPRA is an OPT-OUT regime: personal data may be sold/shared — and
+		// the corresponding scripts may run — UNTIL the visitor exercises the
+		// "Do Not Sell or Share" opt-out. So for a CCPA banner we do NOT block
+		// anything server-side on first visit: the banner is a NOTICE, not a
+		// gate. Once the visitor opts out, the consent cookie carries the
+		// sale/sharing categories as ":no" and the consent-present branch below
+		// blocks them on the next load (the opt-out flow reloads the page). This
+		// mirrors the client-side default (script.js sets every category to
+		// "yes" on a CCPA first visit) and removes the block→unblock flash that a
+		// blanket pre-consent block would otherwise cause under an opt-out law.
+		$is_optout_law = ( $this->banner && 'ccpa' === $this->banner->get_law() );
+
+		// CPPA Reg. §7025: a browser Global Privacy Control signal (the
+		// `Sec-GPC: 1` request header, mirror of navigator.globalPrivacyControl)
+		// is a legally valid opt-out of the sale/sharing of personal information
+		// and must be honoured immediately — including on the very first
+		// response, before the JS opt-out (_fazApplyGpcOptOut) has had a chance
+		// to write the consent cookie. So under an opt-out law, when no consent
+		// is recorded yet and the request carries Sec-GPC:1, block the
+		// sell/share (ccpaDoNotSell) categories server-side too, mirroring the
+		// client-side behaviour. Opt-in laws are unaffected (already blocked).
+		$gpc_optout = $is_optout_law
+			&& isset( $_SERVER['HTTP_SEC_GPC'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+
 		foreach ( $categories as $cat_data ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
 			$slug     = $category->get_slug();
@@ -2541,8 +2682,16 @@ class Frontend {
 				continue;
 			}
 			if ( empty( $consent ) ) {
-				// No consent yet — block all non-necessary.
-				$blocked[] = $slug;
+				// No consent recorded yet. Under an opt-in law (GDPR/ePrivacy)
+				// block every non-necessary category until the visitor consents;
+				// under the CCPA opt-out model block nothing (see header above)
+				// UNLESS the visitor asserted GPC, which is an immediate opt-out
+				// of sale/sharing for the sold/shared categories.
+				if ( ! $is_optout_law ) {
+					$blocked[] = $slug;
+				} elseif ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
+					$blocked[] = $slug;
+				}
 			} else {
 				// Parse consent cookie: "consent:yes,necessary:yes,analytics:no,marketing:no"
 				if ( preg_match( '/(^|,)' . preg_quote( $slug, '/' ) . ':(\w+)/', $consent, $cm ) ) {
@@ -3077,12 +3226,19 @@ class Frontend {
 				'name'           => $category->get_name( faz_current_language() ),
 				'slug'           => $category->get_slug(),
 				'isNecessary'    => 'necessary' === $category->get_slug() ? true : false,
-				'ccpaDoNotSell'  => $category->get_sell_personal_data(),
+				// Subject to the combined "Do Not Sell or Share" opt-out when the
+				// category is SOLD or SHARED (CPRA treats sharing for cross-context
+				// behavioural advertising like a sale for opt-out purposes). The
+				// always-exempt `necessary` category is never opt-out-able,
+				// regardless of its stored flags (kept in sync with defaultConsent.ccpa).
+				'ccpaDoNotSell'  => 'necessary' !== $category->get_slug() && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ),
 				'cookies'        => $cookies,
 				'active'         => true,
 				'defaultConsent' => array(
 					'gdpr' => $category->get_prior_consent(),
-					'ccpa' => 'necessary' === $category->get_slug() || $category->get_sell_personal_data() === false ? true : false,
+					// Exempt from the CCPA opt-out only when necessary, or neither
+					// sold nor shared.
+					'ccpa' => ( 'necessary' === $category->get_slug() || ( false === $category->get_sell_personal_data() && false === $category->get_share_personal_data() ) ) ? true : false,
 				),
 			);
 		}
@@ -3226,6 +3382,11 @@ class Frontend {
 		$data['settings']['applicableLaw']            = $settings['applicableLaw'] ?? 'gdpr';
 		$data['behaviours']['reloadBannerOnAccept']   = $behaviours['reloadBannerOnAccept']['status'] ?? false;
 		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
+		// Global Privacy Control: surfaced to the frontend so script.js can read
+		// navigator.globalPrivacyControl and auto-apply an opt-out. Previously
+		// the admin toggle was saved but never extracted here, so the setting
+		// was inert (the signal was never honoured).
+		$data['behaviours']['respectGPC']             = $behaviours['respectGPC']['status'] ?? false;
 		$data['behaviours']['animations']             = $behaviours['animations'] ?? array();
 		$data['config']['revisitConsent']             = $config['revisitConsent'] ?? array();
 		$data['config']['preferenceCenter']['toggle'] = $config['preferenceCenter']['toggle']
@@ -3431,7 +3592,39 @@ class Frontend {
 			. '.faz-modal .faz-accordion-header .faz-always-active{'
 			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
 			. '}';
-		$css = $css_reset . $css . $css_fixes;
+		// [faz_cookie_settings] "manage consent preferences" button (not the
+		// floating .faz-btn-revisit widget). Rendered inside page content
+		// (outside #faz-consent), so it can't inherit the banner's scoped
+		// rules — replicate the primary "accept" button here. The COLOUR
+		// properties consume the same --faz-accept-button-* custom properties
+		// the admin sets in Banner > Colours, which script.js exposes on :root;
+		// the --faz-btn-* sizing properties (font/line-height/padding/radius)
+		// are static design constants shared with the template's .faz-btn rule
+		// (never JS-set), so the gdpr.json defaults below are the effective
+		// values and the button still looks right before JS runs.
+		$css_settings_btn = '.faz-cookie-settings-btn{'
+			. 'display:inline-block;'
+			. 'font-family:inherit;'
+			. 'font-size:var(--faz-btn-font-size,14px);'
+			. 'line-height:var(--faz-btn-line-height,24px);'
+			. 'font-weight:500;'
+			. 'padding:var(--faz-btn-padding,8px 27px);'
+			. 'border-radius:var(--faz-btn-border-radius,2px);'
+			. 'border-width:var(--faz-accept-button-border-width,2px);'
+			. 'border-style:var(--faz-accept-button-border-style,solid);'
+			. 'border-color:var(--faz-accept-button-border-color,#1863dc);'
+			. 'background:var(--faz-accept-button-background-color,#1863dc);'
+			. 'color:var(--faz-accept-button-color,#ffffff);'
+			. 'white-space:nowrap;text-align:center;text-transform:none;'
+			. 'text-decoration:none;text-shadow:none;box-shadow:none;'
+			. 'cursor:pointer;min-height:0;-webkit-appearance:none;appearance:none;'
+			. 'transition:opacity .15s ease;'
+			. '}'
+			. '.faz-cookie-settings-btn:hover{opacity:.8;}'
+			. '.faz-cookie-settings-btn:focus-visible{'
+			. 'outline:2px solid var(--faz-accept-button-background-color,#1863dc);outline-offset:2px;'
+			. '}';
+		$css = $css_reset . $css . $css_fixes . $css_settings_btn;
 
 		set_transient( $cache_key, $css, DAY_IN_SECONDS );
 		return $css;

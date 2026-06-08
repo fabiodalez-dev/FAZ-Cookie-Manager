@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
 			<h3><?php esc_html_e( 'Cookie Categories', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
-			<div class="faz-help" style="margin-bottom:12px;"><?php esc_html_e( 'Edit the display name and description for each cookie category. These are shown to visitors in the cookie preference center.', 'faz-cookie-manager' ); ?></div>
+			<div class="faz-help" style="margin-bottom:12px;"><?php esc_html_e( 'Edit the display name and description for each cookie category, and flag whether it involves the sale or sharing of personal data. Names and descriptions are shown to visitors in the cookie preference center; the sale/sharing flags drive the CCPA/CPRA "Do Not Sell or Share" opt-out.', 'faz-cookie-manager' ); ?></div>
 			<div class="faz-table-wrap">
 				<table class="faz-table" id="faz-category-edit-table">
 					<thead>
@@ -22,10 +22,11 @@ defined( 'ABSPATH' ) || exit;
 							<th style="width:120px;"><?php esc_html_e( 'Slug', 'faz-cookie-manager' ); ?></th>
 							<th style="width:200px;"><?php esc_html_e( 'Display Name', 'faz-cookie-manager' ); ?></th>
 							<th><?php esc_html_e( 'Description', 'faz-cookie-manager' ); ?></th>
+							<th style="width:160px;" title="<?php esc_attr_e( 'CPRA distinguishes a sale (for valuable consideration) from sharing (for cross-context behavioural advertising). A category flagged for either is covered by the visitor Do Not Sell or Share opt-out.', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Sale / Sharing (CCPA)', 'faz-cookie-manager' ); ?></th>
 						</tr>
 					</thead>
 					<tbody id="faz-category-edit-rows">
-						<tr><td colspan="3" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
+						<tr><td colspan="4" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
 					</tbody>
 				</table>
 			</div>

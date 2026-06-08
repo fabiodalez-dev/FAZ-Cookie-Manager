@@ -147,7 +147,8 @@ test.describe('[faz_do_not_sell] CCPA opt-out form', () => {
     await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
     const wrap = page.locator('.faz-dnsmpi-wrap');
     await expect(wrap).toBeVisible();
-    await expect(wrap.locator('h3')).toContainText('Do Not Sell My Personal Information');
+    // 1.17.2 (CPRA): the opt-out title covers "sharing" as well as "sale".
+    await expect(wrap.locator('h3')).toContainText('Do Not Sell or Share My Personal Information');
     await expect(wrap.locator('button[type="submit"].faz-dnsmpi-btn')).toBeVisible();
   });
 

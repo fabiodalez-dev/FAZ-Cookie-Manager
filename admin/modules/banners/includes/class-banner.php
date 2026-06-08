@@ -523,7 +523,15 @@ class Banner extends Store {
 			case 'status':
 				$value = faz_sanitize_bool( $value );
 				break;
+			case 'color':
+			case 'border-color':
 			case 'background-color':
+				// Admin-set colour values are later emitted as CSS custom-property
+				// values (class-template.php). esc_attr() at output does NOT strip
+				// CSS metacharacters ({ } ;), so sanitise to a strict colour here
+				// (hex / rgba / transparent) — a value like "red;}@import url(...)"
+				// would otherwise break out of the custom-property declaration into
+				// free-form CSS on every page.
 				$value = faz_sanitize_color( $value );
 				break;
 			case 'customCSS':

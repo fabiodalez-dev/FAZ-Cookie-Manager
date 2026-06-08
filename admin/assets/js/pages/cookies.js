@@ -206,6 +206,36 @@
 			tdDesc.appendChild(descInput);
 			tr.appendChild(tdDesc);
 
+			// Sale / Sharing flags (CCPA/CPRA). The "necessary" category is never
+			// a sale or a share (it is exempt from the opt-out by definition), so
+			// we don't offer the toggles for it.
+			var tdSaleShare = document.createElement('td');
+			if (cat.slug === 'necessary') {
+				var naSpan = document.createElement('span');
+				naSpan.style.color = 'var(--faz-text-muted)';
+				naSpan.textContent = __('cookies.notApplicable', '—');
+				tdSaleShare.appendChild(naSpan);
+			} else {
+				var mkToggle = function (kind, label, checked) {
+					var wrap = document.createElement('label');
+					wrap.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;';
+					var cb = document.createElement('input');
+					cb.type = 'checkbox';
+					cb.className = 'faz-cat-edit-' + kind;
+					cb.checked = !!checked;
+					wrap.appendChild(cb);
+					wrap.appendChild(document.createTextNode(label));
+					return wrap;
+				};
+				// Default to opt-out-able (true) when the flag is absent, matching
+				// the schema default.
+				var sellOn = (cat.sell_personal_data === undefined) ? true : !!cat.sell_personal_data;
+				var shareOn = (cat.share_personal_data === undefined) ? true : !!cat.share_personal_data;
+				tdSaleShare.appendChild(mkToggle('sell', __('cookies.sell', 'Sell'), sellOn));
+				tdSaleShare.appendChild(mkToggle('share', __('cookies.share', 'Share'), shareOn));
+			}
+			tr.appendChild(tdSaleShare);
+
 			tbody.appendChild(tr);
 		});
 	}
@@ -224,6 +254,8 @@
 			var id = row.getAttribute('data-cat-id');
 			var nameVal = row.querySelector('.faz-cat-edit-name').value;
 			var descVal = row.querySelector('.faz-cat-edit-desc').value;
+			var sellCb = row.querySelector('.faz-cat-edit-sell');
+			var shareCb = row.querySelector('.faz-cat-edit-share');
 
 			// Find the original category data to preserve other language keys
 			var original = null;
@@ -247,11 +279,22 @@
 			}
 			descObj[lang] = descVal;
 
+			var payload = {
+				name: nameObj,
+				description: descObj
+			};
+			// Only send the sale/sharing flags for rows that expose the toggles
+			// (every category except "necessary"), so the necessary row's PUT
+			// never carries them.
+			if (sellCb) {
+				payload.sell_personal_data = sellCb.checked;
+			}
+			if (shareCb) {
+				payload.share_personal_data = shareCb.checked;
+			}
+
 			promises.push(
-				FAZ.put('cookies/categories/' + id, {
-					name: nameObj,
-					description: descObj
-				})
+				FAZ.put('cookies/categories/' + id, payload)
 			);
 		});
 

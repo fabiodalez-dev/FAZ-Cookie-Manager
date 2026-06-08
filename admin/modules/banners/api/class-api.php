@@ -358,25 +358,44 @@ class Api extends Rest_Controller {
 		} else {
 			$clear = filter_var( $clear, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE );
 		}
+		$tx_started = false;
 		try {
 			if ( ! isset( $request['banners'] ) ) {
 				return new WP_Error( 'fazcookie_rest_invalid_data', __( 'No data specified to create/edit banners', 'faz-cookie-manager' ), array( 'status' => 404 ) );
 			}
-			if ( ! defined( 'FAZ_BULK_REQUEST' ) ) {
-				define( 'FAZ_BULK_REQUEST', true );
-			}
+			global $wpdb;
 			$item_objects = array();
 			$objects      = array();
 			$data         = $request['banners'];
+			// Reject a malformed payload before opening a transaction: iterating a
+			// non-array (or a list of non-array items) would otherwise reach COMMIT
+			// + do_action with zero real updates yet report success.
+			if ( ! is_array( $data ) ) {
+				return new WP_Error( 'fazcookie_rest_invalid_data', __( 'Invalid banners payload: expected an array.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+			}
+			if ( ! defined( 'FAZ_BULK_REQUEST' ) ) {
+				define( 'FAZ_BULK_REQUEST', true );
+			}
 
+			// Wrap the multi-banner save in a transaction so a failure on banner
+			// N does not leave banners 1…N-1 committed while N+1…M are dropped —
+			// a partial save would publish an inconsistent banner set (e.g. two
+			// banners both flagged default, or a half-applied geo-routing
+			// reshuffle). Either every banner in the batch is saved or none is.
+			$wpdb->query( 'START TRANSACTION' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$tx_started = true;
 			foreach ( $data as $_banner ) {
 				$object = $this->prepare_item_for_database( $_banner );
 				$result = $object->save();
 				if ( false === $result ) {
+					$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$tx_started = false;
 					return new WP_Error( 'fazcookie_rest_db_error', __( 'Failed to save banner during bulk update.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 				}
 				$item_objects[] = $object;
 			}
+			$wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$tx_started = false;
 			foreach ( $item_objects as $item ) {
 				$response  = $this->prepare_item_for_response( $item, $request );
 				$objects[] = $this->prepare_response_for_collection( $response );
@@ -384,6 +403,13 @@ class Api extends Rest_Controller {
 			do_action( 'faz_after_update_banner', $clear );
 			return rest_ensure_response( $objects );
 		} catch ( Exception $e ) {
+			// Roll back any still-open transaction so an exception thrown after
+			// START TRANSACTION does not leave the request in an open
+			// transactional state (holding locks until the connection closes).
+			if ( $tx_started ) {
+				global $wpdb;
+				$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			}
 			return new WP_Error( $e->getCode(), $e->getMessage(), array( 'status' => $e->getCode() ) );
 		}
 	}

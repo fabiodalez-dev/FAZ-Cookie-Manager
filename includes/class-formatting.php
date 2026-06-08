@@ -139,7 +139,18 @@ if ( ! function_exists( 'faz_sanitize_color' ) ) {
 	 * @return string
 	 */
 	function faz_sanitize_color( $value ) {
-		if ( 'transparent' === strtolower( $value ) ) {
+		if ( ! is_string( $value ) ) {
+			return '';
+		}
+		$value = trim( $value );
+		// CSS-wide / keyword colour values that are safe (no CSS
+		// metacharacters, so they cannot break out of the custom-property
+		// declaration) AND used by the bundled defaults — e.g. the revisit
+		// button ships "color": "inherit" in gdpr.json / ccpa.json / theme.json.
+		// Without this allow-list sanitize_hex_color() would turn them into ''
+		// and wipe the default on every set_settings()/get_settings() round-trip.
+		$keywords = array( 'transparent', 'inherit', 'initial', 'unset', 'currentcolor' );
+		if ( in_array( strtolower( $value ), $keywords, true ) ) {
 			return sanitize_text_field( $value );
 		}
 		if ( false === strpos( $value, 'rgba' ) ) {

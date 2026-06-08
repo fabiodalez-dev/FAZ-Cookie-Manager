@@ -48,7 +48,7 @@ class Generator {
 	 *
 	 * @var string[]
 	 */
-	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR' );
+	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg' );
 
 	/**
 	 * Native language per jurisdiction (statutory bias):
@@ -73,7 +73,7 @@ class Generator {
 	 *   3. en (universal fallback)
 	 *
 	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil).
-	 * @param string $lang         BCP-47 (en / it / fr / de / es / pt-BR).
+	 * @param string $lang         BCP-47 (en / it / fr / de / es / pt-BR / bg).
 	 * @return string|null Absolute path to .md file, or null if no template found.
 	 */
 	public static function resolve_template_path( $jurisdiction, $lang ) {
@@ -269,25 +269,44 @@ class Generator {
 		$text = preg_replace_callback(
 			'/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/',
 			function ( $m ) {
-				return '<a href="' . esc_url( $m[2] ) . '" rel="noopener">' . esc_html( $m[1] ) . '</a>';
+				return '<a href="' . esc_url( $m[2] ) . '" rel="noopener">' . self::esc_inline_once( $m[1] ) . '</a>';
 			},
 			$text
 		);
-		// Bold/italic/inline-code: route the captured text through esc_html()
-		// so HTML special chars (<, >, &) emitted by a filter or by a
-		// {{PLACEHOLDER}} expansion can't bypass the bold/italic wrapping
-		// and inject markup directly. Defence-in-depth alongside the final
-		// wp_kses_post() pass at the Renderer boundary.
+		// Bold/italic/inline-code: route the captured text through
+		// esc_inline_once() so HTML special chars (<, >, &) emitted by a filter
+		// or by a {{PLACEHOLDER}} expansion can't bypass the bold/italic
+		// wrapping and inject markup directly. Defence-in-depth alongside the
+		// final wp_kses_post() pass at the Renderer boundary.
 		$text = preg_replace_callback( '/\*\*([^*]+)\*\*/', function ( $m ) {
-			return '<strong>' . esc_html( $m[1] ) . '</strong>';
+			return '<strong>' . self::esc_inline_once( $m[1] ) . '</strong>';
 		}, $text );
 		$text = preg_replace_callback( '/(?<!\*)\*([^*]+)\*(?!\*)/', function ( $m ) {
-			return '<em>' . esc_html( $m[1] ) . '</em>';
+			return '<em>' . self::esc_inline_once( $m[1] ) . '</em>';
 		}, $text );
 		$text = preg_replace_callback( '/`([^`]+)`/', function ( $m ) {
-			return '<code>' . esc_html( $m[1] ) . '</code>';
+			return '<code>' . self::esc_inline_once( $m[1] ) . '</code>';
 		}, $text );
 		return $text;
+	}
+
+	/**
+	 * Escape inline markup-span text WITHOUT double-encoding.
+	 *
+	 * substitute()'s documented contract is that scalar {{PLACEHOLDER}} values
+	 * arrive already entity-escaped by the caller. esc_html() would re-encode
+	 * those (`&amp;` → `&amp;amp;`) whenever a pre-escaped value lands inside a
+	 * bold/italic/code/link span, producing visibly double-encoded entities in
+	 * the rendered policy. htmlspecialchars() with $double_encode = false still
+	 * escapes raw `< > & " '` (so the defence-in-depth against injected markup
+	 * is preserved) but leaves already-encoded entities untouched, so the
+	 * output is single-encoded regardless of whether the value was pre-escaped.
+	 *
+	 * @param string $text Captured span text.
+	 * @return string
+	 */
+	private static function esc_inline_once( $text ) {
+		return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8', false );
 	}
 
 	/**

@@ -156,6 +156,7 @@ class Categories_API extends API_Controller {
 			'language'           => $object->get_language(),
 			'priority'           => $object->get_priority(),
 			'sell_personal_data' => $object->get_sell_personal_data(),
+			'share_personal_data' => $object->get_share_personal_data(),
 			'cookie_list'        => $object->get_cookies(),
 			'date_created'       => $object->get_date_created(),
 			'date_modified'      => $object->get_date_modified(),
@@ -198,6 +199,15 @@ class Categories_API extends API_Controller {
 					$visibility    = isset( $_category['visibility'] ) ? (bool) $_category['visibility'] : true;
 					$object->set_prior_consent( $prior_consent );
 					$object->set_visibility( $visibility );
+					// CPRA sale / sharing flags. Only overwrite when the payload
+					// explicitly carries them so a partial update (e.g. a
+					// visibility-only save) never resets the classification.
+					if ( array_key_exists( 'sell_personal_data', $_category ) ) {
+						$object->set_sell_personal_data( (bool) $_category['sell_personal_data'] );
+					}
+					if ( array_key_exists( 'share_personal_data', $_category ) ) {
+						$object->set_share_personal_data( (bool) $_category['share_personal_data'] );
+					}
 					$object->save();
 					$item_objects[] = $object;
 
@@ -284,7 +294,12 @@ class Categories_API extends API_Controller {
 					'context'     => array( 'view', 'edit' ),
 				),
 				'sell_personal_data' => array(
-					'description' => __( 'Whether category involves selling personal data.', 'faz-cookie-manager' ),
+					'description' => __( 'Whether the category involves SELLING personal data (CCPA/CPRA sale).', 'faz-cookie-manager' ),
+					'type'        => 'boolean',
+					'context'     => array( 'view', 'edit' ),
+				),
+				'share_personal_data' => array(
+					'description' => __( 'Whether the category involves SHARING personal data for cross-context behavioural advertising (CPRA share).', 'faz-cookie-manager' ),
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),

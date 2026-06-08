@@ -1217,26 +1217,44 @@ class Admin {
 					</thead>
 					<tbody>
 						<?php
-						$site_ids = get_sites( array( 'number' => 0, 'fields' => 'ids' ) );
-						foreach ( $site_ids as $site_id ) :
-							switch_to_blog( $site_id );
-							$settings  = get_option( 'faz_settings' );
-							$banner_on = ! empty( $settings['banner_control']['status'] );
-							$admin_url = get_admin_url( $site_id, 'admin.php?page=faz-cookie-manager' );
-							$site_name = get_bloginfo( 'name' );
-							$site_obj  = get_site( $site_id );
-							restore_current_blog();
+						// Building this table costs one switch_to_blog() +
+						// get_option()/get_bloginfo()/get_site() per subsite. On a
+						// large network that is an expensive N+1 to repeat on every
+						// page load, so memoise the computed rows in a short-lived
+						// network transient. The overview tolerates a few minutes
+						// of staleness (a freshly toggled banner shows up on the
+						// next cache cycle); super-admins who need it live can
+						// purge the transient or wait out the 5-minute TTL.
+						$faz_network_rows = get_site_transient( 'faz_network_overview' );
+						if ( false === $faz_network_rows ) {
+							$faz_network_rows = array();
+							$site_ids         = get_sites( array( 'number' => 0, 'fields' => 'ids' ) );
+							foreach ( $site_ids as $site_id ) {
+								switch_to_blog( $site_id );
+								$settings  = get_option( 'faz_settings' );
+								$site_obj  = get_site( $site_id );
+								$site_name = get_bloginfo( 'name' );
+								$faz_network_rows[] = array(
+									'name'      => $site_name ? $site_name : ( $site_obj ? $site_obj->domain . $site_obj->path : '#' . $site_id ),
+									'banner_on' => ! empty( $settings['banner_control']['status'] ),
+									'admin_url' => get_admin_url( $site_id, 'admin.php?page=faz-cookie-manager' ),
+								);
+								restore_current_blog();
+							}
+							set_site_transient( 'faz_network_overview', $faz_network_rows, 5 * MINUTE_IN_SECONDS );
+						}
+						foreach ( $faz_network_rows as $faz_row ) :
 						?>
 						<tr>
-							<td><strong><?php echo esc_html( $site_name ? $site_name : ( $site_obj ? $site_obj->domain . $site_obj->path : '#' . $site_id ) ); ?></strong></td>
+							<td><strong><?php echo esc_html( $faz_row['name'] ); ?></strong></td>
 							<td>
-								<?php if ( $banner_on ) : ?>
+								<?php if ( $faz_row['banner_on'] ) : ?>
 									<span style="color:green;">&#9679; <?php esc_html_e( 'Active', 'faz-cookie-manager' ); ?></span>
 								<?php else : ?>
 									<span style="color:#999;">&#9679; <?php esc_html_e( 'Inactive', 'faz-cookie-manager' ); ?></span>
 								<?php endif; ?>
 							</td>
-							<td><a href="<?php echo esc_url( $admin_url ); ?>"><?php esc_html_e( 'Configure', 'faz-cookie-manager' ); ?></a></td>
+							<td><a href="<?php echo esc_url( $faz_row['admin_url'] ); ?>"><?php esc_html_e( 'Configure', 'faz-cookie-manager' ); ?></a></td>
 						</tr>
 						<?php endforeach; ?>
 					</tbody>

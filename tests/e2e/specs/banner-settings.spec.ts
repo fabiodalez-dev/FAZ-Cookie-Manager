@@ -511,8 +511,11 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await expect.poll(async () => getSelectValue(page, 'faz-b-position')).toBe('bottom');
     await expect.poll(async () => getSelectValue(page, 'faz-b-theme')).toBe('light');
     await expect.poll(async () => getSelectValue(page, 'faz-b-pref-type')).toBe('pushdown');
-    await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#16a34a');
-    await expect.poll(async () => getInputValue(page, 'faz-b-reject-bg-hex')).toBe('#dc2626');
+    // 1.17.2 (EDPB 03/2022): the "GDPR Strict" preset no longer uses a
+    // green-accept / red-reject traffic-light scheme — both primary buttons are
+    // a neutral, equally-weighted blue so colour can't nudge the choice.
+    await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#1863DC');
+    await expect.poll(async () => getInputValue(page, 'faz-b-reject-bg-hex')).toBe('#1863DC');
     await expect.poll(async () => getInputValue(page, 'faz-b-settings-bg-hex')).toBe('#1e40af');
   });
 
@@ -817,6 +820,68 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     expect(await getInputValue(page, 'faz-b-settings-bg-hex')).toBe(testSettingsBg);
 
     // Restore light theme — theme select is on the General tab
+    await clickTab(page, 'general');
+    await setSelect(page, 'faz-b-theme', 'light');
+    await page.evaluate(() => {
+      document.getElementById('faz-b-theme')?.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await saveBanner(page);
+  });
+
+  test('Colours: preference-center link + modal toggle colours persist and reflect on frontend', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+    await loginAsAdmin(page);
+    await goToBannerPage(page);
+    await clickTab(page, 'colours');
+
+    const showDesc = '#e3000f';     // red — Show More / Show Less link
+    const readMore = '#1a8a00';     // green — Read More / Cookie Policy link
+    const toggleActive = '#ff7a00'; // orange — category toggle active (inline + modal)
+
+    await setColorHex(page, 'faz-b-showdesc-color-hex', showDesc);
+    await setColorHex(page, 'faz-b-readmore-color-hex', readMore);
+    await setColorHex(page, 'faz-b-catprev-toggle-active-hex', toggleActive);
+    await saveBanner(page);
+
+    // Persistence
+    await goToBannerPage(page);
+    await clickTab(page, 'colours');
+    expect(await getInputValue(page, 'faz-b-showdesc-color-hex')).toBe(showDesc);
+    expect(await getInputValue(page, 'faz-b-readmore-color-hex')).toBe(readMore);
+    expect(await getInputValue(page, 'faz-b-catprev-toggle-active-hex')).toBe(toggleActive);
+
+    // Frontend reflection
+    const visitor = await openVisitorPage(browser, wpBaseURL);
+    try {
+      const notice = visitor.page.locator('[data-faz-tag="notice"]');
+      await expect(notice).toBeVisible({ timeout: 10_000 });
+
+      // Read-more / cookie-policy link lives in the notice bar.
+      const readMoreColor = await visitor.page.locator('[data-faz-tag="readmore-button"]').first()
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(readMoreColor).toBe('rgb(26, 138, 0)'); // #1a8a00
+
+      // Open the preference center for the modal-only show-more link + toggle.
+      await visitor.page.locator('[data-faz-tag="settings-button"]').first().click();
+      await visitor.page.locator('[data-faz-tag="detail"]').first().waitFor({ state: 'visible', timeout: 8_000 });
+
+      const showDescColor = await visitor.page.locator('[data-faz-tag="show-desc-button"]').first()
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(showDescColor).toBe('rgb(227, 0, 15)'); // #e3000f — proves modal-scoped CSS var fix
+
+      // Scope to an ENABLED modal toggle: the first ":checked" switch can be the
+      // disabled "necessary" toggle (different style), which makes the colour
+      // assertion flaky. Pick an enabled one in the modal and tick it explicitly.
+      const modalEnabledToggle = visitor.page
+        .locator('.faz-modal .faz-switch input[type="checkbox"]:not([disabled])')
+        .first();
+      await modalEnabledToggle.check();
+      const toggleBg = await modalEnabledToggle.evaluate((el) => getComputedStyle(el).backgroundColor);
+      expect(toggleBg).toBe('rgb(255, 122, 0)'); // #ff7a00 — modal toggle driven by the catprev picker
+    } finally {
+      await visitor.ctx.close();
+    }
+
+    // Restore light theme — theme select is on the General tab.
     await clickTab(page, 'general');
     await setSelect(page, 'faz-b-theme', 'light');
     await page.evaluate(() => {

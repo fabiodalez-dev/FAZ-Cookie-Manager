@@ -72,8 +72,8 @@ class Api extends Rest_Controller {
 		// pageview / banner-interaction tracking), so a logged-in capability
 		// check would defeat its purpose. Abuse mitigation lives at the
 		// callback layer instead:
-		//   - Required HMAC `token` (signed server-side, scoped to a session
-		//     id) — see `record_event()` validation.
+		//   - Required HMAC `token` (signed server-side, time-bucketed to a
+		//     12-hour window) — see `record_event()` validation.
 		//   - Per-IP rate limiting via transient counter.
 		//   - Strict `sanitize_callback` on every input field.
 		// Same shape as wp/v2/comments POST when "anyone can comment" is on.
@@ -104,10 +104,8 @@ class Api extends Rest_Controller {
 							'required'          => true,
 							'sanitize_callback' => 'sanitize_text_field',
 						),
-						'session_id' => array(
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-						),
+						// No per-visitor identifier is accepted: pre-consent
+						// metrics are aggregate-only (see class-frontend.php).
 					),
 				),
 			)
@@ -244,7 +242,8 @@ class Api extends Rest_Controller {
 			'page_url'   => $request->get_param( 'page_url' ),
 			'page_title' => $request->get_param( 'page_title' ),
 			'event_type' => $event_type,
-			'session_id' => $request->get_param( 'session_id' ),
+			// session_id intentionally omitted — pre-consent metrics carry no
+			// per-visitor identifier (the DB column defaults to '').
 		);
 
 		$result = Controller::get_instance()->record_event( $data );

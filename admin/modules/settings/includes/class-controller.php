@@ -114,7 +114,9 @@ class Controller {
 				'active'          => $object->get_visibility(),
 				'defaultConsent'  => array(
 					'gdpr' => $object->get_slug() === 'necessary' ? true : $object->get_prior_consent(),
-					'ccpa' => $object->get_sell_personal_data() === true && $object->get_slug() !== 'necessary' ? false : true,
+					// Subject to opt-out (ccpa=false) when the category is non-necessary
+					// AND sold or shared; exempt (true) otherwise.
+					'ccpa' => ( ( $object->get_sell_personal_data() === true || $object->get_share_personal_data() === true ) && $object->get_slug() !== 'necessary' ) ? false : true,
 				),
 				'cookies'         => $this->get_cookies( $object->get_id() ),
 			);

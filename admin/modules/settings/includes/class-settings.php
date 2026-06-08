@@ -122,17 +122,22 @@ class Settings extends Store {
 			'script_blocking' => array(
 				'custom_rules'       => array(),
 				'excluded_pages'     => array(),
+				// Default "never block before consent" list. Kept deliberately
+				// narrow: only anti-abuse / security challenge endpoints that
+				// are strictly necessary for a service the visitor actively
+				// requested (CAPTCHA, bot challenge). Convenience/remote
+				// resources that DO profile or set non-essential cookies —
+				// Google Fonts, Google Maps, the YouTube/CustomSearch/Translation
+				// APIs, OAuth, and generic CDNs (jsDelivr, unpkg) — are NOT
+				// whitelisted by default: under GDPR/ePrivacy they must stay
+				// blocked until consent (German courts have ruled CDN-hosted
+				// Google Fonts unlawful without consent). Site owners can still
+				// add any of them explicitly via Settings → Script Blocking if
+				// their lawful basis warrants it.
 				'whitelist_patterns' => array(
-					'googleapis.com/youtube/v3/',
-					'googleapis.com/customsearch/',
-					'translation.googleapis.com/',
 					'www.google.com/recaptcha/api',
+					'www.gstatic.com/recaptcha/',
 					'challenges.cloudflare.com/',
-					'maps.googleapis.com/maps/api/',
-					'www.googleapis.com/oauth2/',
-					'fonts.googleapis.com/',
-					'cdn.jsdelivr.net/',
-					'unpkg.com/',
 					'hcaptcha.com/',
 				),
 			),

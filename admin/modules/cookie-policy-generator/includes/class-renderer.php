@@ -131,6 +131,13 @@ class Renderer {
 		// trailing whitespace/em-dashes/commas, visually broken on the public
 		// policy page. Reported by Gooloo on 1.16.1.
 		$markdown = self::strip_empty_label_lines( $markdown );
+		// By default drop the scaffold's leading H1 ("# Cookie Policy") so the
+		// rendered policy does not duplicate the WordPress page title it is
+		// usually placed inside. `show_title="true"` keeps it. The policy stays
+		// self-referential either way — the intro paragraph names itself.
+		if ( ! self::should_show_title( $atts ) ) {
+			$markdown = self::strip_leading_h1( $markdown );
+		}
 		$html     = Generator::markdown_to_html( $markdown );
 
 		foreach ( $html_tokens as $token_name => $html_value ) {
@@ -547,6 +554,43 @@ class Renderer {
 	 * @param string $markdown
 	 * @return string
 	 */
+	/**
+	 * Whether the shortcode asked to keep the scaffold's leading H1 title.
+	 *
+	 * Default is false (the title is dropped). Accepts the usual truthy strings
+	 * so `show_title="true"`, `="1"`, `="yes"`, `="on"` all enable it.
+	 *
+	 * @param array $atts Shortcode attributes.
+	 * @return bool
+	 */
+	private static function should_show_title( $atts ) {
+		if ( ! is_array( $atts ) || ! isset( $atts['show_title'] ) ) {
+			return false;
+		}
+		$val = strtolower( trim( (string) $atts['show_title'] ) );
+		return in_array( $val, array( '1', 'true', 'yes', 'on' ), true );
+	}
+
+	/**
+	 * Remove the scaffold's leading level-1 ATX heading ("# Cookie Policy").
+	 *
+	 * Only the FIRST line is touched, and only when it is a single-`#` heading;
+	 * deeper headings (`## …`) are body structure and are preserved. A scaffold
+	 * without a leading H1 is returned unchanged.
+	 *
+	 * @param string $markdown
+	 * @return string
+	 */
+	private static function strip_leading_h1( $markdown ) {
+		if ( ! is_string( $markdown ) || '' === $markdown ) {
+			return (string) $markdown;
+		}
+		// \A + optional leading blank lines, then a single `#` followed by at
+		// least one space/tab (so `## …` H2 does NOT match) and the heading text,
+		// then the line break(s). Replaced once.
+		return (string) preg_replace( '/\A\s*#[ \t]+\S[^\n]*\R+/u', '', $markdown, 1 );
+	}
+
 	private static function strip_empty_label_lines( $markdown ) {
 		if ( ! is_string( $markdown ) || '' === $markdown ) {
 			return (string) $markdown;
@@ -733,6 +777,7 @@ class Renderer {
 				'de'    => 'Diese Cookie-Richtlinie wurde von FAZ Cookie Manager aus einer Vorlage für die Rechtsordnung %s generiert. Vorlagen stellen keine Rechtsberatung dar. Der Administrator dieser Website bleibt für die Datenverarbeitung verantwortlich und für die Richtigkeit und Angemessenheit der veröffentlichten Inhalte verantwortlich. Für rechtsraumspezifische Hinweise siehe: %s.',
 				'es'    => 'Esta política de cookies fue generada por FAZ Cookie Manager a partir de una plantilla para la jurisdicción %s. Las plantillas no constituyen asesoramiento legal. El administrador de este sitio sigue siendo el responsable del tratamiento de datos según la ley aplicable y es responsable de la exactitud y adecuación del contenido publicado. Para orientación específica de la jurisdicción, consulte: %s.',
 				'pt-BR' => 'Esta política de cookies foi gerada pelo FAZ Cookie Manager a partir de um modelo para a jurisdição %s. Os modelos não constituem aconselhamento jurídico. O administrador deste site permanece como controlador dos dados conforme a lei aplicável e é responsável pela exatidão e adequação do conteúdo publicado. Para orientação específica da jurisdição, consulte: %s.',
+				'bg'    => 'Тази политика за бисквитки е генерирана от FAZ Cookie Manager въз основа на образец за юрисдикция %s. Образците не представляват правен съвет. Администраторът на този сайт остава администратор на лични данни съгласно приложимото право и носи отговорност за точността и адекватността на публикуваното съдържание. За насоки, специфични за юрисдикцията, направете справка с: %s.',
 			);
 			$tpl = $texts[ $lang ] ?? $texts['en'];
 			$jurisdiction_label = self::jurisdiction_display_name( $jurisdiction, $lang );
@@ -845,17 +890,44 @@ class Renderer {
 	// ---------- Misc helpers ----------
 
 	private static function format_date( $lang ) {
-		$ts = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
+		$ts      = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
 		$ts_unix = strtotime( $ts );
-		$formats = array(
-			'en'    => 'F j, Y',
-			'it'    => 'j F Y',
-			'fr'    => 'j F Y',
-			'de'    => 'j. F Y',
-			'es'    => 'j \\d\\e F \\d\\e Y',
-			'pt-BR' => 'j \\d\\e F \\d\\e Y',
+		// date_i18n() localises month names to the SITE locale, not the policy
+		// template's language, so an it/fr/bg policy on an English site still
+		// printed an English month name ("3 June 2026" instead of "3 giugno
+		// 2026"). Localise the month explicitly per template language and
+		// assemble the date in that language's usual order.
+		$day        = (int) gmdate( 'j', $ts_unix );
+		$month      = (int) gmdate( 'n', $ts_unix );
+		$year       = gmdate( 'Y', $ts_unix );
+		$months     = self::month_names( $lang );
+		$month_name = $months[ $month - 1 ] ?? gmdate( 'F', $ts_unix );
+		switch ( $lang ) {
+			case 'en':
+				return sprintf( '%s %d, %s', $month_name, $day, $year );       // June 3, 2026
+			case 'de':
+				return sprintf( '%d. %s %s', $day, $month_name, $year );       // 3. Juni 2026
+			case 'es':
+			case 'pt-BR':
+				return sprintf( '%d de %s de %s', $day, $month_name, $year );  // 3 de junho de 2026
+			case 'bg':
+				return sprintf( '%d %s %s г.', $day, $month_name, $year );     // 3 юни 2026 г.
+			default:
+				return sprintf( '%d %s %s', $day, $month_name, $year );        // it / fr: 3 giugno 2026
+		}
+	}
+
+	private static function month_names( $lang ) {
+		$names = array(
+			'en'    => array( 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December' ),
+			'it'    => array( 'gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre' ),
+			'fr'    => array( 'janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre' ),
+			'de'    => array( 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember' ),
+			'es'    => array( 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre' ),
+			'pt-BR' => array( 'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro' ),
+			'bg'    => array( 'януари', 'февруари', 'март', 'април', 'май', 'юни', 'юли', 'август', 'септември', 'октомври', 'ноември', 'декември' ),
 		);
-		return date_i18n( $formats[ $lang ] ?? 'Y-m-d', $ts_unix );
+		return $names[ $lang ] ?? $names['en'];
 	}
 
 	private static function format_retention( array $settings, $lang ) {
@@ -868,15 +940,16 @@ class Renderer {
 			'de'    => '%d Monate',
 			'es'    => '%d meses',
 			'pt-BR' => '%d meses',
+			'bg'    => '%d месеца',
 		);
 		return sprintf( $labels[ $lang ] ?? '%d months', $months );
 	}
 
 	private static function jurisdiction_display_name( $jurisdiction, $lang ) {
 		$names = array(
-			'gdpr-strict'     => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)' ),
-			'ccpa-california' => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)' ),
-			'lgpd-brazil'     => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)' ),
+			'gdpr-strict'     => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)' ),
+			'ccpa-california' => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)' ),
+			'lgpd-brazil'     => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)' ),
 		);
 		return $names[ $jurisdiction ][ $lang ] ?? $names[ $jurisdiction ]['en'] ?? $jurisdiction;
 	}
@@ -889,6 +962,7 @@ class Renderer {
 			'de'    => 'Deutsch',
 			'es'    => 'Español',
 			'pt-BR' => 'Português (Brasil)',
+			'bg'    => 'Български',
 		);
 		return $names[ $lang ] ?? $lang;
 	}

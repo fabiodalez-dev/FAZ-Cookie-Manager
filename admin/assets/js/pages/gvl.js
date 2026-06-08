@@ -467,12 +467,26 @@
 			// Inline feedback string. Tone tries to make the deferred-save
 			// nature obvious so the admin doesn't think the change is
 			// already live.
+			// The "already selected" count must reflect the CURRENT in-session
+			// selection, not the server-computed `already_selected` (which is
+			// measured against the SAVED option). An admin who unticked a saved
+			// vendor in-session and then re-runs auto-detect should NOT see that
+			// vendor counted as "already selected": we deliberately do not
+			// re-tick it (see the `added`-only merge above), so reporting it as
+			// already-selected would contradict what the admin sees on screen.
+			// Keep only the matched-and-still-ticked vendors for the message.
+			var alreadyInSession = already.filter(function (id) { return selectedVendors[id] === true; });
 			var msg;
 			if (added.length === 0) {
-				// Single placeholder — no reordering possible, plain %d is fine.
-				msg = __('gvl.autoDetectAllAlready', 'All %d auto-detected vendor(s) were already in your selection.')
-					.replace('%d', suggested.length);
-			} else if (already.length === 0) {
+				// Nothing new to pre-tick. Report only the matched vendors STILL
+				// selected in-session — an admin who unticked some this session must
+				// not see them counted (same screen-vs-count contradiction the
+				// sibling branches already avoid via alreadyInSession). Fall back to
+				// a "left unticked" note when none remain.
+				msg = (alreadyInSession.length > 0)
+					? __('gvl.autoDetectAllAlready', 'All %d auto-detected vendor(s) were already in your selection.').replace('%d', alreadyInSession.length)
+					: __('gvl.autoDetectNoneAdded', 'Auto-detected vendors left unticked, as you set them.');
+			} else if (alreadyInSession.length === 0) {
 				// Single placeholder — no reordering possible, plain %d is fine.
 				msg = __('gvl.autoDetectAdded', 'Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply.')
 					.replace('%d', added.length);
@@ -486,9 +500,9 @@
 				var template = __('gvl.autoDetectMixed', 'Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply.');
 				msg = template
 					.replace(/%1\$d/g, String(added.length))
-					.replace(/%2\$d/g, String(already.length))
+					.replace(/%2\$d/g, String(alreadyInSession.length))
 					.replace('%d', String(added.length))
-					.replace('%d', String(already.length));
+					.replace('%d', String(alreadyInSession.length));
 			}
 			// Success: route through the helper so the message auto-clears
 			// after 3s (the only kind that gets a timer).

@@ -102,7 +102,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable pageview and banner interaction tracking', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'Tracks pageviews and banner interactions (accept, reject, settings) for the dashboard analytics. This sends first-party data (page URL, title, session ID) before consent is given. Disable for stricter compliance.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Tracks pageviews and banner interactions (accept, reject, settings) for the dashboard analytics. Data is aggregate-only: it sends the page URL and title with no per-visitor identifier or cookie, so the events cannot be linked across pages or sessions. Counts are stored first-party in your own database. Disable for stricter compliance.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>

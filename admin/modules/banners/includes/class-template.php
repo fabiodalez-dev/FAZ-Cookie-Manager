@@ -485,6 +485,22 @@ class Template {
 				}
 			}
 
+			// The modal preference-center toggles (.faz-switch) read
+			// --faz-toggle-active/inactive-background-color, which the per-element
+			// loop above does not produce (the toggle's tag-derived var name does
+			// not match). Source them from the same categoryPreview toggle config
+			// the "Category Preview" colour pickers already write, so one control
+			// colours both the inline preview toggles and the modal toggles.
+			$cp_toggle = isset( $configs['categoryPreview']['elements']['toggle']['states'] )
+				? $configs['categoryPreview']['elements']['toggle']['states']
+				: array();
+			if ( ! empty( $cp_toggle['active']['styles']['background-color'] ) ) {
+				$css_vars['--faz-toggle-active-background-color'] = $cp_toggle['active']['styles']['background-color'];
+			}
+			if ( ! empty( $cp_toggle['inactive']['styles']['background-color'] ) ) {
+				$css_vars['--faz-toggle-inactive-background-color'] = $cp_toggle['inactive']['styles']['background-color'];
+			}
+
 			if ( ! empty( $css_vars ) ) {
 				$vars_string = '';
 				foreach ( $css_vars as $var => $val ) {

@@ -148,7 +148,12 @@ class Cookie_Controller extends Base_Controller {
 		} elseif ( isset( $args['category'] ) && '' !== $args['category'] ) {
 			$results = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM `{$wpdb->prefix}faz_cookies` WHERE `category` = %d", absint( $args['category'] ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		} else {
-			$results = $wpdb->get_results( "SELECT * FROM `{$wpdb->prefix}faz_cookies`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			// Unfiltered "get all" path. Bound it with a high but finite cap so
+			// a runaway scanner that discovered tens of thousands of cookies
+			// cannot OOM the request loading + caching every row. 10000 is far
+			// beyond any legitimate cookie inventory; deterministic ORDER BY
+			// keeps the truncation (if it ever happens) stable across requests.
+			$results = $wpdb->get_results( "SELECT * FROM `{$wpdb->prefix}faz_cookies` ORDER BY `cookie_id` ASC LIMIT 10000" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		}
 
 		if ( isset( $results ) && ! empty( $results ) ) {

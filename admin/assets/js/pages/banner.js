@@ -281,7 +281,23 @@
 		if (typeEl) {
 			typeEl.addEventListener('change', updatePositionOptions);
 		}
+
+		// ── Hide the Read More link colour picker when the Read More button is
+		// toggled off (its colour would style an element that never renders). ──
+		var readmoreToggle = document.querySelector('#faz-b-readmore-toggle input[type="checkbox"]');
+		if (readmoreToggle) {
+			readmoreToggle.addEventListener('change', syncReadmoreColorVisibility);
+		}
+		syncReadmoreColorVisibility();
 	});
+
+	// Show/hide the Read More colour control to match the Read More button toggle.
+	function syncReadmoreColorVisibility() {
+		var group = document.getElementById('faz-readmore-color-group');
+		if (!group) return;
+		var cb = document.querySelector('#faz-b-readmore-toggle input[type="checkbox"]');
+		group.style.display = (cb && cb.checked) ? '' : 'none';
+	}
 
 	function updatePositionOptions() {
 		var type = getVal('faz-b-type') || 'box';
@@ -1008,7 +1024,12 @@
 		setVal('faz-b-position', s.position || 'bottom-right');
 		setVal('faz-b-theme', s.theme || 'light');
 		setVal('faz-b-pref-type', s.preferenceCenterType || 'popup');
-		setVal('faz-b-expiry', (s.consentExpiry && s.consentExpiry.value) || 365);
+		// Fallback expiry when the banner has no stored consentExpiry.value
+		// (newly cloned/migrated banners). Law-aware to match the JSON config
+		// defaults: opt-in (GDPR-family) banners default to 180 days — the
+		// Garante caps consent validity at 6 months, so the old blanket 365
+		// fallback silently exceeded it; opt-out (CCPA) banners default to 365.
+		setVal('faz-b-expiry', (s.consentExpiry && s.consentExpiry.value) || ((s.applicableLaw === 'ccpa') ? 365 : 180));
 		// Detect regulation mode: gdpr + donotSell.status=true → "Both" mode
 		var lawVal = s.applicableLaw || 'gdpr';
 		var donotSellEl = (config.notice && config.notice.elements && config.notice.elements.donotSell) || {};
@@ -1035,6 +1056,15 @@
 		var ao = config.accessibilityOverrides || {};
 		var linkStyles = (ao.elements && ao.elements.manualLinks && ao.elements.manualLinks.styles) || {};
 		setColor('faz-b-link-color', linkStyles.color || '#1863DC');
+
+		// Preference center: Show More/Less link + Read More/Cookie Policy link colours.
+		var aoPC = (ao.elements && ao.elements.preferenceCenter && ao.elements.preferenceCenter.elements) || {};
+		var showMoreStyles = (aoPC.showMore && aoPC.showMore.styles) || {};
+		setColor('faz-b-showdesc-color', showMoreStyles.color || '#1863DC');
+		var readMoreStyles = (config.notice && config.notice.elements && config.notice.elements.buttons
+			&& config.notice.elements.buttons.elements && config.notice.elements.buttons.elements.readMore
+			&& config.notice.elements.buttons.elements.readMore.styles) || {};
+		setColor('faz-b-readmore-color', readMoreStyles.color || '#1863DC');
 
 		// Colours - buttons
 		var buttons = (config.notice && config.notice.elements && config.notice.elements.buttons && config.notice.elements.buttons.elements) || {};
@@ -1066,6 +1096,8 @@
 		setChecked('faz-b-reject-toggle', getStatus(buttons.reject));
 		setChecked('faz-b-settings-toggle', getStatus(buttons.settings));
 		setChecked('faz-b-readmore-toggle', getStatus(buttons.readMore));
+		// Reflect the just-loaded Read More toggle state on its colour control.
+		syncReadmoreColorVisibility();
 
 		var closeBtn = (config.notice && config.notice.elements && config.notice.elements.closeButton) || {};
 		setChecked('faz-b-close-toggle', typeof closeBtn === 'object' ? getStatus(closeBtn) : true);
@@ -1292,6 +1324,9 @@
 		var presetAo = preset.accessibilityOverrides || {};
 		var presetLink = (presetAo.elements && presetAo.elements.manualLinks && presetAo.elements.manualLinks.styles) || {};
 		setColor('faz-b-link-color', presetLink.color || '#1863DC');
+		var presetPC = (presetAo.elements && presetAo.elements.preferenceCenter && presetAo.elements.preferenceCenter.elements) || {};
+		setColor('faz-b-showdesc-color', (presetPC.showMore && presetPC.showMore.styles && presetPC.showMore.styles.color) || '#1863DC');
+		setColor('faz-b-readmore-color', (ne.buttons && ne.buttons.elements && ne.buttons.elements.readMore && ne.buttons.elements.readMore.styles && ne.buttons.elements.readMore.styles.color) || '#1863DC');
 
 		var btns = (ne.buttons && ne.buttons.elements) || {};
 		populateButtonColors('accept', btns.accept);
@@ -1642,6 +1677,16 @@
 
 		ensureObj(props, 'config.accessibilityOverrides.elements.manualLinks.styles');
 		props.config.accessibilityOverrides.elements.manualLinks.styles.color = getColor('faz-b-link-color');
+
+		// Preference center Show More/Less link colour (applied to both showMore and
+		// the symmetric showLess so the pair always matches) + Read More/Cookie
+		// Policy link colour.
+		ensureObj(props, 'config.accessibilityOverrides.elements.preferenceCenter.elements.showMore.styles');
+		props.config.accessibilityOverrides.elements.preferenceCenter.elements.showMore.styles.color = getColor('faz-b-showdesc-color');
+		ensureObj(props, 'config.accessibilityOverrides.elements.preferenceCenter.elements.showLess.styles');
+		props.config.accessibilityOverrides.elements.preferenceCenter.elements.showLess.styles.color = getColor('faz-b-showdesc-color');
+		ensureObj(props, 'config.notice.elements.buttons.elements.readMore.styles');
+		props.config.notice.elements.buttons.elements.readMore.styles.color = getColor('faz-b-readmore-color');
 
 		// Colours + status - buttons
 		ensureObj(props, 'config.notice.elements.buttons.elements');

@@ -18,7 +18,7 @@
     },
     "consentExpiry": {
       "status": true,
-      "value": 180
+      "value": 365
     },
     "ruleSet": [
       {
@@ -49,18 +49,18 @@
         "newTab": false
       },
       "idle": {
-        "action": "acceptClose",
+        "action": "none",
         "delay": 1000
       },
       "navigation": {
-        "action": "acceptClose"
+        "action": "none"
       },
       "pageScroll": {
-        "action": "acceptClose"
+        "action": "none"
       }
     },
     "respectGPC": {
-      "status": false
+      "status": true
     }
   },
   "config": {
@@ -116,8 +116,8 @@
               "tag": "reject-button",
               "type": "button",
               "styles": {
-                "color": "#1863DC",
-                "background-color": "transparent",
+                "color": "#FFFFFF",
+                "background-color": "#1863DC",
                 "border-color": "#1863DC"
               }
             },
@@ -302,8 +302,8 @@
               "tag": "detail-reject-button",
               "type": "button",
               "styles": {
-                "color": "#1863DC",
-                "background-color": "transparent",
+                "color": "#FFFFFF",
+                "background-color": "#1863DC",
                 "border-color": "#1863DC"
               }
             },

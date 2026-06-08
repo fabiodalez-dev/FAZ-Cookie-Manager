@@ -375,7 +375,7 @@ if ( ! function_exists( 'faz_throttle_request' ) ) {
 	}
 }
 
-if ( ! function_exists( 'faz_is_bot' ) ) {
+if ( ! function_exists( 'faz_path_matches_pattern' ) ) {
 	/**
 	 * Match a URL path against a glob-like pattern with case-folding and
 	 * portable fallback when `fnmatch()` is unavailable.

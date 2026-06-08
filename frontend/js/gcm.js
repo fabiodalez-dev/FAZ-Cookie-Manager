@@ -63,6 +63,18 @@ gtag("set", "url_passthrough", !!data.url_passthrough);
 //   1. parseConsentCookie() -> read cookie synchronously
 //   2a. if cookie present -> emit consent default with granted states (once)
 //   2b. if cookie absent  -> emit region-specific denied defaults (legacy path)
+//
+// FAZ_META_KEYS must be declared BEFORE this call: parseConsentCookie() reads
+// it, and although the function is hoisted, the `var` only hoists the
+// declaration (not the value). Declaring it lower in the file left it
+// `undefined` at this call site, so a returning visitor (or a PMP-exempt member
+// with an auto-granted cookie) hit "Cannot read properties of undefined" on the
+// first key and gcm.js threw before emitting any consent.
+// Non-category meta keys stored in the consent cookie (not consent states).
+// `gpc` flags a consent recorded automatically from a Global Privacy Control
+// signal; like rev/action/consentid it must not be coerced to granted/denied.
+var FAZ_META_KEYS = { rev: 1, action: 1, consentid: 1, gpc: 1 };
+
 var initialCookieObj = parseConsentCookie();
 
 if (initialCookieObj) {
@@ -74,37 +86,26 @@ if (initialCookieObj) {
     // First-time visitor (or cookie expired/cleared): emit region-specific
     // defaults as configured by the admin.
     //
-    // If the non-personalized ads fallback is enabled, ad_storage stays
-    // "granted" by default so AdSense can serve non-personalized ads even
-    // before the visitor interacts with the banner. ad_user_data and
-    // ad_personalization keep the admin-configured region value (typically
-    // "denied") so no profiling happens pre-consent. This matches
-    // buildConsentState() so the initial state is consistent with the
-    // state emitted on "reject all".
+    // ad_storage stays at the admin-configured (typically "denied") region
+    // value before the visitor interacts. The "non-personalized ads fallback"
+    // does NOT grant ad_storage (that would write ad cookies without consent —
+    // unlawful under ePrivacy/Consent Mode v2 in EEA/UK/CH). Under Consent Mode
+    // v2 a denied ad_storage already lets Google serve non-personalized,
+    // cookieless ads; for legacy (non-Consent-Mode) ad tags we additionally
+    // signal `npa: 1` (see emitNpaSignal()). This keeps the behaviour compliant
+    // in every region with no geofencing required.
     var npFallback = !!data.non_personalized_ads_fallback;
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
-        var marketingState = regionSetting.marketing || regionSetting.advertisement || "denied";
-        var regionAdStorage = marketingState;
-        // When NPA fallback is active and marketing is denied, keep ad_storage
-        // "granted" (so AdSense can serve non-personalized ads) but force
-        // ad_user_data and ad_personalization to "denied" — no profiling, no
-        // user data sent upstream. Mirrors buildConsentState() so the initial
-        // region default is byte-for-byte identical to the post-"reject all"
-        // state emitted after the banner is dismissed.
-        var forceNpa = npFallback && marketingState === "denied";
-        if (forceNpa) {
-            regionAdStorage = "granted";
-        }
         var consentRegionData = {
-            ad_storage: regionAdStorage,
+            ad_storage: regionSetting.marketing || regionSetting.advertisement || "denied",
             analytics_storage: regionSetting.analytics,
             functionality_storage: regionSetting.functional,
             personalization_storage: regionSetting.functional,
             security_storage: regionSetting.necessary,
-            ad_user_data: forceNpa ? "denied" : regionSetting.ad_user_data,
-            ad_personalization: forceNpa ? "denied" : regionSetting.ad_personalization
+            ad_user_data: regionSetting.ad_user_data,
+            ad_personalization: regionSetting.ad_personalization
         };
         var regionsRaw = typeof regionSetting.regions === "string" ? regionSetting.regions : "";
         var regionsToSetFor = regionsRaw
@@ -119,7 +120,7 @@ if (initialCookieObj) {
 
     if (setDefaultSetting) {
         setConsentInitStates({
-          ad_storage: npFallback ? "granted" : "denied",
+          ad_storage: "denied",
           analytics_storage: "denied",
           functionality_storage: "denied",
           personalization_storage: "denied",
@@ -164,39 +165,55 @@ function parseConsentCookie() {
     var parsed = parseConsentCookieParts();
     if (!parsed || isConsentCookieStale(parsed)) return null;
     Object.keys(parsed).forEach(function(key) {
-        parsed[key] = getConsentStateForCategory(parsed[key]);
+        // Leave meta keys (rev/action/consentid) as their raw value; only
+        // category slugs are coerced to granted/denied.
+        if (!FAZ_META_KEYS[key]) parsed[key] = getConsentStateForCategory(parsed[key]);
     });
     // Backward compat: accept old "advertisement" key as alias for "marketing".
     if (!parsed.marketing && parsed.advertisement) {
         parsed.marketing = parsed.advertisement;
     }
-    var required = ["marketing", "analytics", "functional", "necessary"];
-    for (var i = 0; i < required.length; i++) {
-        if (parsed[required[i]] !== "granted" && parsed[required[i]] !== "denied") {
-            return null;
-        }
+    // Require only `necessary` — the one category guaranteed on every install.
+    // Other categories (analytics, marketing, functional, performance, or any
+    // custom slug) are optional; absent ones default to "denied" downstream in
+    // buildConsentState(). Hard-requiring a fixed slug list rejected the cookie
+    // on installs that renamed/replaced a default category (e.g. "performance").
+    if (parsed.necessary !== "granted" && parsed.necessary !== "denied") {
+        return null;
     }
     return parsed;
 }
 
+// Read a category's consent state, defaulting absent categories to "denied".
+function fazCat(cookieObj, slug) {
+    return cookieObj && cookieObj[slug] === "granted" ? "granted" : "denied";
+}
+
 function buildConsentState(cookieObj) {
-    // Non-personalized ads fallback: when enabled and the user has denied
-    // marketing consent, keep ad_storage = "granted" (so AdSense can serve
-    // non-personalized ads and preserve frequency capping) while keeping
-    // ad_user_data and ad_personalization = "denied".
-    // See https://support.google.com/adsense/answer/13554116
-    var adStorage = cookieObj.marketing;
-    if (data.non_personalized_ads_fallback && cookieObj.marketing === "denied") {
-        adStorage = "granted";
+    var marketing = fazCat(cookieObj, "marketing");
+    // analytics_storage is granted when EITHER the "analytics" OR the
+    // "performance" category is granted (performance is a valid analytics-class
+    // slug on some installs); previously "performance" was dropped entirely.
+    var analytics =
+        fazCat(cookieObj, "analytics") === "granted" || fazCat(cookieObj, "performance") === "granted"
+            ? "granted"
+            : "denied";
+    // Non-personalized ads fallback: when enabled and marketing is denied, we
+    // do NOT grant ad_storage (that would set ad cookies without consent —
+    // unlawful in EEA/UK/CH). ad_storage stays "denied"; Consent Mode v2 serves
+    // non-personalized, cookieless ads in that state. For legacy ad tags that
+    // don't read Consent Mode we additionally signal `npa: 1`.
+    if (data.non_personalized_ads_fallback && marketing === "denied") {
+        gtag("set", { npa: 1 });
     }
     return {
-        ad_storage: adStorage,
-        analytics_storage: cookieObj.analytics,
-        functionality_storage: cookieObj.functional,
-        personalization_storage: cookieObj.functional,
-        security_storage: cookieObj.necessary,
-        ad_user_data: cookieObj.marketing,
-        ad_personalization: cookieObj.marketing,
+        ad_storage: marketing,
+        analytics_storage: analytics,
+        functionality_storage: fazCat(cookieObj, "functional"),
+        personalization_storage: fazCat(cookieObj, "functional"),
+        security_storage: fazCat(cookieObj, "necessary"),
+        ad_user_data: marketing,
+        ad_personalization: marketing,
     };
 }
 

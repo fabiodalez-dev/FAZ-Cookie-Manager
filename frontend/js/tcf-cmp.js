@@ -261,11 +261,18 @@
 
 	/**
 	 * Build PurposesLegitimateInterest bitfield.
-	 * Per IAB TCF spec: LI bit = true only if a vendor declares LI for that purpose
-	 * AND the user has NOT exercised their Right to Object (i.e. user has consented
-	 * to the corresponding category).
+	 *
+	 * Per IAB TCF, legitimate interest is established BY DEFAULT and is
+	 * extinguished only when the user exercises the Right to Object (RTO) — a
+	 * separate signal from consent. Declining *consent* for a category is NOT an
+	 * RTO exercise, so it must not clear a vendor's LI bit. Until a dedicated RTO
+	 * toggle exists in the banner, set the LI bit for every purpose a selected
+	 * vendor declares under legitimate interest. (Over-reporting LI is the
+	 * less-harmful default under TCF; the previous code gated LI on
+	 * purposeConsent, which UNDER-reported LI — dropping valid LI signals
+	 * whenever the user merely declined consent — and mis-encoded the TC string.)
 	 */
-	function buildPurposeLI(purposeConsent) {
+	function buildPurposeLI() {
 		var li = {};
 		for (var p = 1; p <= 24; p++) li[String(p)] = false;
 
@@ -273,11 +280,7 @@
 			var v = VENDORS[SELECTED_VENDORS[i]];
 			if (!v || !v.legIntPurposes) continue;
 			for (var j = 0; j < v.legIntPurposes.length; j++) {
-				var pid = String(v.legIntPurposes[j]);
-				// Only set LI if user has not objected (consent for this purpose exists).
-				if (purposeConsent[pid]) {
-					li[pid] = true;
-				}
+				li[String(v.legIntPurposes[j])] = true;
 			}
 		}
 		return li;
@@ -314,7 +317,9 @@
 	 */
 	function buildConsentArtifacts(purposeConsent) {
 		var vendorConsent = buildVendorConsent(purposeConsent);
-		var purposeLI     = buildPurposeLI(purposeConsent);
+		// LI no longer depends on per-purpose consent (LI is established by
+		// default and only cleared by an explicit Right-to-Object signal).
+		var purposeLI     = buildPurposeLI();
 		return {
 			vendorConsent: vendorConsent,
 			purposeLI:     purposeLI,
@@ -690,8 +695,16 @@
 		(document.body || document.documentElement).appendChild(locatorFrame);
 	}
 
-	// Handle postMessage-based cross-frame __tcfapi calls (TCF spec requirement)
-	window.addEventListener("message", function (event) {
+	// Handle postMessage-based cross-frame __tcfapi calls (TCF spec requirement).
+	// The IAB TCF v2.x "__tcfapiLocator" protocol REQUIRES this listener to
+	// accept messages from ANY origin: vendor tags embedded in cross-origin
+	// iframes locate the CMP by posting an {__tcfapiCall} message and cannot be
+	// origin-whitelisted without breaking the spec. The handler is safe by
+	// construction — it ignores any payload lacking a well-formed __tcfapiCall,
+	// only ever dispatches the (string) command/version to the controlled
+	// tcfapi() router, and never reaches an eval/DOM/HTML sink. Origin
+	// restriction is therefore intentionally not applied here.
+	window.addEventListener("message", function (event) { // nosemgrep
 		var json;
 		try {
 			json = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
@@ -709,9 +722,16 @@
 				}
 			};
 			if (event.source) {
+				// Reply only to the exact origin that issued the __tcfapi call
+				// instead of broadcasting with "*". Sandboxed/opaque-origin
+				// frames report event.origin === "null" (a string); for those
+				// we fall back to "*" because a targetOrigin of "null" would
+				// never match and the response would be silently dropped.
+				var replyOrigin =
+					event.origin && event.origin !== "null" ? event.origin : "*";
 				event.source.postMessage(
 					typeof event.data === "string" ? JSON.stringify(msg) : msg,
-					"*"
+					replyOrigin
 				);
 			}
 		}, call.parameter);

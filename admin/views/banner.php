@@ -211,7 +211,7 @@ defined( 'ABSPATH' ) || exit;
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Days until consent expires', 'faz-cookie-manager' ); ?></label>
 					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="3650" style="width:120px;">
-					<div class="faz-help"><?php esc_html_e( 'After this many days, visitors will see the banner again.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. Note: for opt-in (GDPR) banners the consent lifetime is capped at 182 days (the Italian Garante limits consent validity to 6 months) — larger values are automatically clamped to 182 at serve time. Opt-out (CCPA/CPRA) banners are not capped.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>
@@ -499,6 +499,28 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		</div>
 
+		<div class="faz-card" id="faz-prefcenter-colors-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Preference Center Colours', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label><?php esc_html_e( 'Show More / Show Less Link', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-showdesc-color" aria-label="<?php esc_attr_e( 'Show More / Show Less link colour picker', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-showdesc-color-hex" aria-label="<?php esc_attr_e( 'Show More / Show Less link colour hex value', 'faz-cookie-manager' ); ?>" style="width:90px;">
+						</div>
+					</div>
+					<div class="faz-form-group" id="faz-readmore-color-group">
+						<label><?php esc_html_e( 'Read More / Cookie Policy Link', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-readmore-color" aria-label="<?php esc_attr_e( 'Read More / Cookie Policy link colour picker', 'faz-cookie-manager' ); ?>">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-readmore-color-hex" aria-label="<?php esc_attr_e( 'Read More / Cookie Policy link colour hex value', 'faz-cookie-manager' ); ?>" style="width:90px;">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<div class="faz-card">
 			<div class="faz-card-header"><h3><?php esc_html_e( 'Revisit Widget', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
@@ -596,6 +618,7 @@ defined( 'ABSPATH' ) || exit;
 
 	<!-- ─── Preference Center ──────────────────────────── -->
 	<div id="tab-preferences" class="faz-tab-panel">
+		<div class="faz-help" style="margin:0 0 12px;"><?php echo wp_kses_post( __( 'Looking for the preference center <strong>colours</strong> (the &quot;Show more/less&quot; and Cookie Policy link)? They live under <strong>Colours → Preference Center Colours</strong>, grouped with every other colour setting.', 'faz-cookie-manager' ) ); ?></div>
 		<div class="faz-card">
 			<div class="faz-card-header">
 				<h3><?php esc_html_e( 'Preference Center Text', 'faz-cookie-manager' ); ?></h3>
@@ -684,6 +707,12 @@ defined( 'ABSPATH' ) || exit;
 					<label><?php esc_html_e( 'Widget Label', 'faz-cookie-manager' ); ?></label>
 					<input type="text" class="faz-input" id="faz-b-revisit-title" placeholder="<?php esc_attr_e( 'Consent Preferences', 'faz-cookie-manager' ); ?>" style="max-width:320px;">
 					<div class="faz-help"><?php esc_html_e( 'Used as tooltip and screen reader label (aria-label).', 'faz-cookie-manager' ); ?></div>
+				</div>
+				<div class="faz-form-group" style="border-top:1px solid var(--faz-border);padding-top:16px;margin-top:4px;">
+					<strong style="display:block;font-size:13px;font-weight:700;color:var(--faz-text);margin-bottom:8px;"><?php esc_html_e( 'Inline &quot;manage preferences&quot; button (shortcode)', 'faz-cookie-manager' ); ?></strong>
+					<p style="margin:0 0 8px;font-size:13px;"><?php esc_html_e( 'As an alternative to the floating widget, place this shortcode in a page, post, footer or menu to render a button that re-opens this consent preference center:', 'faz-cookie-manager' ); ?></p>
+					<code style="display:inline-block;font-size:14px;padding:8px 12px;background:var(--faz-bg);border:1px solid var(--faz-border);border-radius:var(--faz-radius);user-select:all;">[faz_cookie_settings]</code>
+					<div class="faz-help"><?php echo wp_kses_post( __( 'Optional attributes: <code>text=&quot;Manage cookies&quot;</code> (custom label) and <code>class=&quot;my-button&quot;</code> (extra CSS classes). The button automatically inherits your banner&#39;s primary button colours. <strong>It needs the banner runtime to work, so place it on a page where the banner is active</strong> — pages added to the banner exclusion list don\'t load the consent runtime, so the button won\'t open the preferences there.', 'faz-cookie-manager' ) ); ?></div>
 				</div>
 			</div>
 		</div>

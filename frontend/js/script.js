@@ -490,6 +490,15 @@ function _fazFireEvent(responseCategories) {
 function _fazRemoveStyles() {
     const item = document.getElementById('faz-style-inline');
     item && item.remove();
+    // Belt-and-suspenders for CSS-optimizer plugins (LiteSpeed / WP Rocket /
+    // Autoptimize) that hoist the inline #faz-style-inline block into a
+    // combined stylesheet: the removal above then no-ops and the anti-FOUC
+    // `visibility:hidden` rule survives, leaving the banner permanently hidden
+    // while its fixed container keeps eating clicks. The rule is scoped to
+    // `html:not(.faz-ready)`, so adding the class reveals the banner no matter
+    // where the rule ended up. Mirrors the server-side gate in
+    // class-frontend.php::insert_styles().
+    document.documentElement.classList.add('faz-ready');
 }
 
 /**
@@ -539,6 +548,10 @@ function _fazRemoveBanner() {
  * @returns {boolean}
  */
 function _fazInitOperations() {
+    // Bind the banner-independent [faz_cookie_settings] trigger FIRST, before
+    // _fazRenderBanner() can early-return on a suppressed/absent banner template
+    // — otherwise the in-page shortcode button would never get its click handler.
+    _fazRegisterShortcodeTriggers();
     _fazAttachNoticeStyles();
     _fazRenderBanner();
     // _fazAttachShortCodeStyles must run after _fazRenderBanner so that
@@ -565,6 +578,17 @@ function _fazInitOperations() {
         _fazInvalidateStoredConsent();
         _fazStoredAction = null;
     }
+    // Honour Global Privacy Control before deciding whether to show the banner.
+    // If the visitor's browser asserts GPC and they have NOT already made an
+    // explicit choice on this site, auto-apply an opt-out and skip the banner.
+    // An explicit prior action always wins over the signal, so this is gated on
+    // !_fazStoredAction (and is idempotent: once recorded, action becomes "yes"
+    // and this branch no longer runs).
+    if (!_fazStoredAction && !_fazPreviewEnabled() && _fazGpcActive()) {
+        _fazApplyGpcOptOut();
+        _fazRemoveBanner();
+        return;
+    }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
         _fazShowBanner();
         _fazSetInitialState();
@@ -587,6 +611,89 @@ function _fazInitOperations() {
         }
     }
 }
+
+/**
+ * Whether to honour a Global Privacy Control (GPC) signal right now.
+ *
+ * GPC is a browser-level opt-out preference exposed as
+ * navigator.globalPrivacyControl === true (the client mirror of the
+ * `Sec-GPC: 1` request header). Under CCPA/CPRA §7025 it is a legally
+ * binding opt-out of the sale/sharing of personal information and is
+ * recognised by the California Attorney General; honouring it is also good
+ * practice under the GDPR/ePrivacy. We act on it only when the site owner
+ * enabled "Respect Global Privacy Control" in the banner behaviours.
+ *
+ * @returns {boolean}
+ */
+function _fazGpcActive() {
+    try {
+        return !!(
+            _fazStore && _fazStore._bannerConfig && _fazStore._bannerConfig.behaviours &&
+            _fazStore._bannerConfig.behaviours.respectGPC === true &&
+            typeof navigator !== 'undefined' &&
+            navigator.globalPrivacyControl === true
+        );
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Record an automatic opt-out in response to a GPC signal.
+ *
+ * Mirrors the reject path of _fazAcceptCookies() but is law-aware and does
+ * NOT depend on any banner DOM (the banner is never shown in this flow):
+ *   - GDPR / opt-in laws: deny every non-necessary category.
+ *   - CCPA / opt-out laws: deny every sale/sharing category. A category whose
+ *     defaultConsent.ccpa === true is exempt (necessary) and stays granted.
+ * The choice is persisted with a `gpc:1` marker so the recorded state is
+ * self-describing, and a normal consent event is fired so downstream
+ * integrations (GCM, TCF, consent logger) react exactly as they would to a
+ * manual reject.
+ */
+function _fazApplyGpcOptOut() {
+    // First user-equivalent action: generate the consentid now (it is
+    // deliberately not created before any action, per ePrivacy Art. 5(3)).
+    _fazSetConsentID();
+    ref._fazSetInStore("action", "yes");
+    ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+    ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+    ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+    ref._fazSetInStore("consent", "no");
+    // Audit marker: this opt-out was driven by a Global Privacy Control signal,
+    // not an explicit on-page click.
+    ref._fazSetInStore("gpc", "1");
+
+    var law = _fazGetLaw();
+    var responseCategories = { accepted: [], rejected: [], action: "reject", gpc: true };
+    var categories = _fazStore._categories || [];
+    for (var i = 0; i < categories.length; i++) {
+        var category = categories[i];
+        var deny;
+        if (law === 'gdpr') {
+            deny = !category.isNecessary;
+        } else {
+            // Opt-out regimes: exempt categories carry defaultConsent.ccpa === true.
+            deny = !(category.defaultConsent && category.defaultConsent.ccpa === true);
+        }
+        var valueToSet = deny ? "no" : "yes";
+        ref._fazSetInStore(category.slug, valueToSet);
+        if (deny) {
+            responseCategories.rejected.push(category.slug);
+            _fazRemoveDeadCookies(category);
+        } else {
+            responseCategories.accepted.push(category.slug);
+        }
+    }
+
+    // Clear any per-service overrides and deny IAB vendors, mirroring reject.
+    _fazClearStoredServiceConsent();
+    _fazSaveVendorConsent("reject");
+
+    _fazUnblock();
+    _fazFireEvent(responseCategories);
+}
+
 function _fazPreviewEnabled() {
     let params = (new URL(document.location)).searchParams;
     return params.get("faz_preview") && params.get("faz_preview") === 'true';
@@ -918,6 +1025,31 @@ _fazDomReady(async function () {
 /**
  * Register event handler for all the action elements.
  */
+// Banner-independent delegated click handler for the [faz_cookie_settings]
+// shortcode button (and any [data-faz-open-preferences] / .faz-cookie-settings-btn
+// trigger). Registered from _fazInitOperations() — NOT from _fazRegisterListeners()
+// — so it binds even when the banner UI is suppressed server-side (PMP-exempt
+// members, empty template cache), where _fazRenderBanner() early-returns and
+// _fazRegisterListeners() never runs. In that case _fazShowPreferenceCenter()
+// returns false (no preference-center DOM) and the handler logs the diagnostic
+// warning, instead of the button being silently inert. Idempotent: the
+// document-level listener is attached at most once.
+var _fazShortcodeTriggersBound = false;
+function _fazRegisterShortcodeTriggers() {
+    if (_fazShortcodeTriggersBound) return;
+    _fazShortcodeTriggersBound = true;
+    document.addEventListener("click", function (e) {
+        var trigger = e.target && e.target.closest
+            ? e.target.closest('[data-faz-open-preferences],.faz-cookie-settings-btn')
+            : null;
+        if (!trigger) return;
+        e.preventDefault();
+        if (_fazShowPreferenceCenter() === false && window.console && console.warn) {
+            console.warn('FAZ Cookie Manager: [faz_cookie_settings] was clicked but no consent preference center is available on this page (the banner UI may be disabled for this visitor).');
+        }
+    });
+}
+
 function _fazRegisterListeners() {
     for (const { slug } of _fazStore._categories) {
         var title = document.querySelector(
@@ -942,6 +1074,15 @@ function _fazRegisterListeners() {
     _fazAttachListener("=detail-reject-button", _fazAcceptReject("reject"));
     _fazAttachListener("=revisit-consent", () => _revisitFazConsent());
     _fazAttachListener("=optout-close", () => _fazHidePreferenceCenter());
+
+    // NOTE: the [faz_cookie_settings] / [data-faz-open-preferences] delegated
+    // click handler is NOT registered here. It lives in
+    // _fazRegisterShortcodeTriggers(), called from _fazInitOperations(), so it
+    // binds even when the banner UI is suppressed server-side (PMP-exempt
+    // members, empty template cache) — in that case _fazRenderBanner() early-
+    // returns and this function never runs, but the in-page shortcode button
+    // must still react (it logs the diagnostic warning when no preference
+    // center exists).
 
     // Escape key closes the preference center / optout popup only.
     // The main banner itself must NOT be dismissible via Escape without a
@@ -1035,8 +1176,22 @@ function _fazToggleRevisit(force = false) {
         force === true ? _fazHideRevisit() : revisit.classList.toggle('faz-revisit-hide');
     }
 }
+// Collapse any applicable-law value to its consent PARADIGM. There are only
+// two paradigms worldwide, and every consent-engine branch keys off this:
+//   - 'ccpa'  → opt-out family: CCPA/CPRA (California) and the US state laws
+//               (Virginia CDPA, Colorado CPA, Connecticut CTDPA, Utah UCPA…).
+//   - 'gdpr'  → opt-in family: GDPR, UK-GDPR, ePrivacy, **LGPD (Brazil)**,
+//               Swiss nFADP, PIPEDA (Canada), KVKK (Turkey) and similar
+//               consent-first regimes.
+// This mirrors the server-side mapping in
+// class-banner.php::get_default_config_type() ('ccpa' === $law ? 'ccpa' :
+// 'gdpr'), so a first-class opt-in law such as 'lgpd' is honoured as opt-in
+// here too and can never be misrouted into the opt-out branch (every engine
+// check is `=== 'gdpr'` / `=== 'ccpa'`, and the bare `else` historically meant
+// opt-out — an un-normalised 'lgpd' would have fallen through to it).
 function _fazGetLaw() {
-    return _fazCurrentLaw() || _fazStore._bannerConfig.settings.applicableLaw;
+    var raw = _fazCurrentLaw() || _fazStore._bannerConfig.settings.applicableLaw;
+    return String(raw) === 'ccpa' ? 'ccpa' : 'gdpr';
 }
 function _fazGetType() {
     return _fazStore._bannerConfig.settings.type;
@@ -1125,7 +1280,11 @@ function _fazHidePreferenceCenter() {
 function _fazShowPreferenceCenter() {
     _fazStore._prefTriggerElement = document.activeElement;
     const element = _fazGetPreferenceCenter();
-    if (!element) return;
+    // No preference-center DOM to open (e.g. the banner UI is suppressed for
+    // this visitor, or the template cache is empty). Return false so callers
+    // — notably the [faz_cookie_settings] delegated click handler — can react
+    // instead of silently doing nothing.
+    if (!element) return false;
     element.classList.add(_fazGetPreferenceClass());
 
     // Ensure ARIA attributes are always present on the preference center div
@@ -1137,13 +1296,21 @@ function _fazShowPreferenceCenter() {
         _fazShowOverLay();
         _fazHideBanner();
     } else {
-        _fazToggleAriaExpandStatus("=settings-button");
+        // FORCE "true" — this is an idempotent OPEN, not a toggle. Without the
+        // force value a second click of the [faz_cookie_settings] button (or any
+        // [data-faz-open-preferences] trigger) flips aria-expanded to "false"
+        // while the pushdown panel stays visually open (classList.add is
+        // idempotent), desyncing screen-reader state from the visible state. The
+        // real open/close toggle used by the banner's own settings button lives
+        // in _fazTogglePreferenceCenter() and is unaffected.
+        _fazToggleAriaExpandStatus("=settings-button", "true");
     }
 
     // Move focus into the preference center for keyboard/screen reader users.
     // Target the inner .faz-preference-center so we don't focus a banner button
     // when pushdown mode embeds preferences inside the consent bar wrapper.
     _fazFocusIntoElement(preferenceCenter || element);
+    return true;
 }
 function _fazTogglePreferenceCenter() {
     const element = _fazGetPreferenceCenter();
@@ -1927,16 +2094,35 @@ function _fazSetShowMoreLess() {
  */
 function _fazAttachShortCodeStyles() {
     const shortCodes = _fazStore._tags;
+    if (!shortCodes) return;
     // revisit-consent lives outside #faz-consent; its CSS vars are already set
     // by the PHP-generated <style> block on .faz-btn-revisit-wrapper. Skip it here.
     const root = document.getElementById('faz-consent');
-    if (!root) return;
+    // Build the target list defensively. :root (document.documentElement) goes
+    // FIRST and unconditionally — so the [faz_cookie_settings] "manage consent
+    // preferences" button rendered in page content inherits the admin-configured
+    // banner button colours (--faz-accept-button-*) even when #faz-consent is
+    // absent (e.g. the banner UI is suppressed for membership-exempt users while
+    // the shortcode button is still on the page). :root is the lowest-specificity
+    // scope, so #faz-consent / .faz-modal per-element overrides still win inside
+    // the banner. #faz-consent and the popup preference center / opt-out popup
+    // (which live in `.faz-modal`, a SIBLING of #faz-consent, not a descendant)
+    // are pushed after :root, only when present.
+    const targets = [];
+    if (document.documentElement) targets.push(document.documentElement);
+    if (root) targets.push(root);
+    Array.prototype.forEach.call(document.querySelectorAll('.faz-modal'), function (m) {
+        targets.push(m);
+    });
+    if (!targets.length) return;
     Array.prototype.forEach.call(shortCodes, function (shortcode) {
         if (!shortcode.styles || shortcode.tag === 'revisit-consent') return;
         for (const key in shortcode.styles) {
             const val = shortcode.styles[key];
             if (val) {
-                root.style.setProperty('--faz-' + shortcode.tag + '-' + key, val);
+                targets.forEach(function (t) {
+                    t.style.setProperty('--faz-' + shortcode.tag + '-' + key, val);
+                });
             }
         }
     });
@@ -3989,6 +4175,14 @@ window.addEventListener('message', function(event) {
         // action:yes the visitor has already chosen; forwarding must not upgrade
         // their choice (e.g. reject → accept) without their knowledge.
         if (ref._fazGetFromStore("action") === "yes") return;
+
+        // Idempotency / anti-reload-loop guard: if the forwarded consent is
+        // byte-for-byte identical to the cookie already stored on this domain,
+        // there is nothing to apply. Without this, two domains that each
+        // forward to the other could trigger an endless reload ping-pong, and
+        // a single allowed origin re-posting the same message would needlessly
+        // reload the page on every event.
+        if (ref._fazGetCookie('fazcookie-consent') === consent) return;
 
         // Clear any vendor/TCF cookies the recipient domain may have from
         // a previous (possibly more permissive) choice. Without this, a

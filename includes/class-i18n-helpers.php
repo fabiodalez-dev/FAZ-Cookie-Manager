@@ -37,6 +37,13 @@ if ( ! function_exists( 'faz_selected_languages' ) ) {
 	function faz_selected_languages( $language = '' ) {
 		$settings  = get_option( 'faz_settings' );
 		$languages = isset( $settings['languages']['selected'] ) ? faz_sanitize_text( $settings['languages']['selected'] ) : array();
+		// Defend against a stored scalar (e.g. a single language saved as a
+		// string instead of an array): faz_sanitize_text() would return that
+		// scalar, and the in_array()/array_push() calls below would emit
+		// warnings and fatally TypeError on PHP 8. Normalise to an array first.
+		if ( ! is_array( $languages ) ) {
+			$languages = ( '' === $languages || null === $languages ) ? array() : array( $languages );
+		}
 		if ( ! in_array( faz_default_language(), $languages, true ) ) {
 			array_push( $languages, faz_default_language() );
 		}
