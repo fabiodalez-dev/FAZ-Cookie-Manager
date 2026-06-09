@@ -501,6 +501,7 @@ class Frontend {
 								"url:safeUrl," .
 								"banner_slug:_fazConsentLog.bannerSlug||''," .
 								"policy_revision:_fazConsentLog.policyRevision||1," .
+								"signal_gpc:!!d.gpc," .
 								"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .
@@ -1077,7 +1078,12 @@ class Frontend {
 			'_ipData'       => array(),
 			'_assetsURL'    => FAZ_PLUGIN_URL . 'frontend/images/',
 			'_publicURL'    => set_url_scheme( get_site_url() ),
-			'_expiry'       => max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ),
+			// Consent lifetime in days. Hard-capped at 183 (6 months): the
+			// Italian Garante (Linee guida cookie 10/06/2021 §6) and EDPB
+			// practice require re-prompting at most every 6 months, and 6
+			// months is a valid ceiling under every supported regime, so the
+			// cap is applied universally. Floor of 1 day.
+			'_expiry'       => min( 183, max( 1, isset( $banner_settings['settings']['consentExpiry']['value'] ) ? absint( $banner_settings['settings']['consentExpiry']['value'] ) : 180 ) ),
 			'_categories'   => $this->get_cookie_groups(),
 			'_activeLaw'         => $banner->get_law(),
 			'_bannerSlug'        => $banner->get_slug(),
@@ -3226,6 +3232,10 @@ class Frontend {
 		$data['settings']['applicableLaw']            = $settings['applicableLaw'] ?? 'gdpr';
 		$data['behaviours']['reloadBannerOnAccept']   = $behaviours['reloadBannerOnAccept']['status'] ?? false;
 		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
+		// Global Privacy Control honoring (CCPA Regs §7025 + US universal-opt-out
+		// mandates / GDPR objection signal). When true, script.js auto-applies an
+		// opt-out for visitors whose browser sends navigator.globalPrivacyControl.
+		$data['behaviours']['respectGPC']             = array( 'status' => (bool) ( $behaviours['respectGPC']['status'] ?? false ) );
 		$data['behaviours']['animations']             = $behaviours['animations'] ?? array();
 		$data['config']['revisitConsent']             = $config['revisitConsent'] ?? array();
 		$data['config']['preferenceCenter']['toggle'] = $config['preferenceCenter']['toggle']

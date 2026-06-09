@@ -1008,7 +1008,9 @@
 		setVal('faz-b-position', s.position || 'bottom-right');
 		setVal('faz-b-theme', s.theme || 'light');
 		setVal('faz-b-pref-type', s.preferenceCenterType || 'popup');
-		setVal('faz-b-expiry', (s.consentExpiry && s.consentExpiry.value) || 365);
+		// Default to 180 days (the compliant gdpr.json default), never 365:
+		// a 1-year fallback would exceed the Garante/EDPB 6-month consent limit.
+		setVal('faz-b-expiry', (s.consentExpiry && s.consentExpiry.value) || 180);
 		// Detect regulation mode: gdpr + donotSell.status=true → "Both" mode
 		var lawVal = s.applicableLaw || 'gdpr';
 		var donotSellEl = (config.notice && config.notice.elements && config.notice.elements.donotSell) || {};
@@ -1610,7 +1612,10 @@
 		props.settings.theme = getVal('faz-b-theme');
 		if (!props.settings.consentExpiry) props.settings.consentExpiry = {};
 		props.settings.consentExpiry.status = true;
-		props.settings.consentExpiry.value = getVal('faz-b-expiry');
+		// Clamp to 1..183 days (6-month Garante/EDPB consent-duration ceiling)
+		// regardless of what was typed, so an out-of-range manual entry can
+		// never persist a non-compliant expiry.
+		props.settings.consentExpiry.value = Math.min(183, Math.max(1, parseInt(getVal('faz-b-expiry'), 10) || 180));
 
 		// Sync global languages into banner settings
 		var globalLangs = (typeof fazConfig !== 'undefined' && fazConfig.languages) || {};

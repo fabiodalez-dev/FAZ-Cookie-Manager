@@ -61,7 +61,7 @@
       }
     },
     "respectGPC": {
-      "status": false
+      "status": true
     }
   },
   "config": {
@@ -117,8 +117,8 @@
               "tag": "reject-button",
               "type": "button",
               "styles": {
-                "color": "#1863DC",
-                "background-color": "transparent",
+                "color": "#FFFFFF",
+                "background-color": "#1863DC",
                 "border-color": "#1863DC"
               }
             },

@@ -95,7 +95,8 @@
     "UA": "gdpr-strict"
   },
   "_us_regions": {
-    "_comment": "Region-level routing for US visitors. Each entry is the specific state ruleset. Other US states (no privacy law) fall back to gdpr-strict per Q2 2026-05-19.",
+    "_comment": "Region-level (ISO 3166-2) routing. Primarily US states, plus sub-national regimes that differ from their country default (e.g. CA-QC → Quebec Law 25 vs federal PIPEDA). A region match trumps the country-level mapping. US states without a privacy law fall back to gdpr-strict per Q2 2026-05-19.",
+    "CA-QC": "law25-quebec",
     "US-CA": "ccpa-california",
     "US-CO": "cpa-colorado",
     "US-CT": "ctdpa-connecticut",

@@ -478,10 +478,91 @@ function _fazRemoveElement(tag) {    const item = _fazGetElementByTag(tag);
 }
 
 function _fazFireEvent(responseCategories) {
+    // Surface the GPC opt-out signal on the event detail so the consent-log
+    // POST listener can persist signal_gpc_received for accountability.
+    if (responseCategories && typeof responseCategories === "object" && _fazStore && _fazStore._gpcSignal) {
+        responseCategories.gpc = true;
+    }
     const consentUpdate = new CustomEvent("fazcookie_consent_update", {
         detail: responseCategories
     });
     document.dispatchEvent(consentUpdate);
+}
+
+// When true, the CCPA/opt-out consent branch is forced into its opted-out
+// state regardless of the (possibly un-rendered) Do-Not-Sell checkbox. Set
+// only by the GPC honoring path so a single, legally-valid browser opt-out
+// signal denies the sale/share categories without requiring a banner click.
+var _fazGpcForceOptOut = false;
+
+/**
+ * Detect a Global Privacy Control opt-out signal from the visitor's browser.
+ *
+ * GPC (https://globalprivacycontrol.org/) is surfaced by Firefox, Brave,
+ * DuckDuckGo and the Privacy Badger / OptMeowt extensions as
+ * navigator.globalPrivacyControl === true. Under CCPA/CPRA Regs §7025 and the
+ * universal-opt-out mandates of Colorado, Connecticut, Oregon, Montana,
+ * Delaware, Texas, New Jersey, Minnesota, Maryland and New Hampshire, a GPC
+ * signal IS a valid consumer opt-out request and must be honored. Under
+ * GDPR/ePrivacy it is treated as an objection/withdrawal signal.
+ *
+ * @returns {boolean} True when the browser is actively sending GPC.
+ */
+function _fazGpcSignalPresent() {
+    try {
+        return typeof navigator !== "undefined" && navigator.globalPrivacyControl === true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Whether the admin has enabled GPC honoring for the active banner.
+ *
+ * Driven by the per-banner "Respect Global Privacy Control" toggle
+ * (behaviours.respectGPC.status), surfaced server-side in prepare_config().
+ *
+ * @returns {boolean}
+ */
+function _fazGpcHonoringEnabled() {
+    try {
+        var cfg = _fazStore && _fazStore._bannerConfig && _fazStore._bannerConfig.behaviours;
+        return !!(cfg && cfg.respectGPC && cfg.respectGPC.status === true);
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Honor a Global Privacy Control opt-out signal before the banner is shown.
+ *
+ * When GPC honoring is enabled and the browser is sending GPC, the visitor is
+ * automatically opted out of all non-necessary processing (sale/share under
+ * CCPA, tracking under GDPR) without requiring any banner interaction, and the
+ * choice is persisted and logged with signal_gpc_received=1 for the
+ * accountability trail. Returns true when it handled consent so the caller can
+ * suppress the banner.
+ *
+ * @returns {boolean} True when consent was auto-applied via GPC.
+ */
+function _fazMaybeHonorGPC() {
+    if (!_fazGpcHonoringEnabled() || !_fazGpcSignalPresent()) {
+        return false;
+    }
+    // Flag the GPC signal so _fazFireEvent's consent-log POST records it, and
+    // force the CCPA opt-out branch into its denied state.
+    _fazStore._gpcSignal = true;
+    _fazGpcForceOptOut = true;
+    try {
+        // Routes through the single consent-recording path: persists the
+        // cookie, generates the consentid, denies non-necessary categories
+        // (GDPR reject branch / CCPA forced opt-out), fires the update event
+        // and unblocks only what remains allowed.
+        _fazAcceptCookies("reject");
+    } finally {
+        _fazGpcForceOptOut = false;
+    }
+    return true;
 }
 
 /**
@@ -566,6 +647,17 @@ function _fazInitOperations() {
         _fazStoredAction = null;
     }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
+        // Honor a Global Privacy Control opt-out signal before showing the
+        // banner. GPC is itself a legally-valid opt-out request (CCPA Regs
+        // §7025 + US universal-opt-out mandates) / objection signal (GDPR),
+        // so when present we auto-record the most-protective choice and
+        // suppress the first-layer banner. The persistent revisit widget
+        // still lets the visitor change their mind. Skipped in preview mode
+        // so admins can always see the banner.
+        if (!_fazPreviewEnabled() && _fazMaybeHonorGPC()) {
+            _fazRemoveBanner();
+            return;
+        }
         _fazShowBanner();
         _fazSetInitialState();
         // Do NOT call _fazSetConsentID() here — the consentid is a stable
@@ -629,7 +721,7 @@ function _fazSetInitialState() {
     // written for the first time only when the user clicks Accept / Reject
     // (inside _fazAcceptCookies via _fazSetInStore).
     ref._fazConsentStore.set("consent", "no");
-    const ccpaCheckBoxValue = _fazFindCheckBoxValue();
+    const ccpaCheckBoxValue = _fazGpcForceOptOut || _fazFindCheckBoxValue();
     const responseCategories = { accepted: [], rejected: [], action: 'init' };
     for (const category of _fazStore._categories) {
         let valueToSet = "yes";
@@ -1758,7 +1850,7 @@ function _fazAcceptCookies(choice = "all") {
         }
     }
     const activeLaw = _fazGetLaw();
-    const ccpaCheckBoxValue = _fazFindCheckBoxValue();
+    const ccpaCheckBoxValue = _fazGpcForceOptOut || _fazFindCheckBoxValue();
     _fazClearStoredServiceConsent();
 
     // Generate a consentid now (first user action) — deferred from init so no

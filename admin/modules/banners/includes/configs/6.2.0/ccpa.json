@@ -60,7 +60,7 @@
       }
     },
     "respectGPC": {
-      "status": false
+      "status": true
     }
   },
   "config": {

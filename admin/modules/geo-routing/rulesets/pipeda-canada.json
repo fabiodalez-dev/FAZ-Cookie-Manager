@@ -11,7 +11,7 @@
       "CA"
     ]
   },
-  "model": "opt-out",
+  "model": "hybrid",
   "native_lang": "en",
   "official_resources_url": [
     "https://www.priv.gc.ca/"
@@ -22,14 +22,14 @@
       "enabled": false,
       "section": null
     },
-    "gpc_honored": false,
+    "gpc_honored": true,
     "gpc_required": false,
     "dnt_honored": false,
     "cmv2": {
-      "ad_storage": "granted",
+      "ad_storage": "denied-until-action",
       "analytics_storage": "granted",
-      "ad_user_data": "granted",
-      "ad_personalization": "granted",
+      "ad_user_data": "denied-until-action",
+      "ad_personalization": "denied-until-action",
       "personalization_storage": "granted",
       "functionality_storage": "granted",
       "security_storage": "granted"
@@ -44,14 +44,14 @@
       "necessary": "granted-locked",
       "functional": "granted",
       "analytics": "granted",
-      "marketing": "granted",
-      "profiling": "granted"
+      "marketing": "denied-until-action",
+      "profiling": "denied-until-action"
     }
   },
   "cross_border_notes": null,
   "_meta": {
-    "behavior_review_date": "2026-05-20",
-    "next_review_due": "2027-05-20",
-    "notes": "Opt-out + notice. CASL parallelo per email."
+    "behavior_review_date": "2026-06-09",
+    "next_review_due": "2027-06-09",
+    "notes": "Hybrid consent: implied consent for analytics/functional, express opt-in (denied-until-action) for marketing/profiling and ad_* CMv2 signals per OPC 'meaningful consent' guidance (behavioural advertising/cross-site tracking require express consent). GPC honored as a withdrawal/objection signal. CASL parallelo per email."
   }
 }

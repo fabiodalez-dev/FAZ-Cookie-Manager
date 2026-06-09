@@ -41,10 +41,18 @@ class Consent_Logger {
 		// `permission_callback => __return_true` is intentional. This endpoint
 		// records the GDPR consent decision of an anonymous visitor — it MUST
 		// be reachable without authentication, otherwise no consent could
-		// ever be logged. Abuse mitigation:
-		//   - Required HMAC `token` (server-issued, scoped to the consent_id).
-		//   - All inputs sanitized via `sanitize_callback`.
-		//   - The handler verifies the token before any DB write.
+		// ever be logged. Abuse mitigation (defense-in-depth, NOT authentication):
+		//   - A coarse time-bucketed HMAC `token` = wp_hash('faz_consent_'.bucket)
+		//     where bucket = floor(time()/12h). This is a same-origin / replay
+		//     speed-bump, NOT a per-session or per-consent_id secret: it is a
+		//     single global value embedded in the page HTML, so anyone who loads
+		//     one page obtains a token valid for up to ~24h. It only proves the
+		//     caller has seen a recent page, not who they are.
+		//   - Dual throttle: per-IP (faz_throttle_request) AND per-consent_id,
+		//     which is what actually bounds write volume.
+		//   - All inputs sanitized via `sanitize_callback`; only pseudonymised
+		//     data (hashed IP/UA) is stored, and the admin UI renders every
+		//     field via textContent (no XSS sink).
 		// See `handle_rest_consent()` for the verification logic.
 		register_rest_route(
 			'faz/v1',
@@ -83,6 +91,11 @@ class Consent_Logger {
 					'policy_revision' => array(
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
+					),
+					'signal_gpc' => array(
+						'type'              => 'boolean',
+						'default'           => false,
+						'sanitize_callback' => 'rest_sanitize_boolean',
 					),
 				),
 			)
@@ -143,6 +156,9 @@ class Consent_Logger {
 			'url'        => $request->get_param( 'url' ),
 			'banner_slug' => $request->get_param( 'banner_slug' ),
 			'policy_revision' => $request->get_param( 'policy_revision' ),
+			// GPC opt-out signal, recorded into signal_gpc_received for the
+			// accountability trail (CCPA recordkeeping / GDPR Art. 5(2)).
+			'signal_gpc' => $request->get_param( 'signal_gpc' ),
 		);
 
 		$result = Controller::get_instance()->log_consent( $data );

@@ -210,8 +210,8 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Days until consent expires', 'faz-cookie-manager' ); ?></label>
-					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="3650" style="width:120px;">
-					<div class="faz-help"><?php esc_html_e( 'After this many days, visitors will see the banner again.', 'faz-cookie-manager' ); ?></div>
+					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="183" style="width:120px;">
+					<div class="faz-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. Capped at 183 days (6 months) to comply with the Garante / EDPB consent-duration limit.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>
