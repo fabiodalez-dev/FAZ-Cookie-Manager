@@ -201,9 +201,13 @@ assert_eq(
 );
 
 // ===========================================================================
-// 4. respectGPC default-on in shipped banner configs
+// 4. respectGPC ships opt-in (default OFF) but the key is always present
 // ===========================================================================
-echo "\n-- respectGPC default --\n";
+// GPC honoring is a real, wired feature (see the E2E suite) but it ships OFF
+// by default so updating the plugin never silently changes the behaviour of
+// an existing install — the admin opts in via the per-banner toggle. The key
+// must still be present in every shipped config so the toggle round-trips.
+echo "\n-- respectGPC default (opt-in) --\n";
 
 foreach ( array( 'gdpr', 'ccpa' ) as $law ) {
 	foreach ( array( '', '6.0.0/', '6.2.0/' ) as $ver ) {
@@ -213,8 +217,13 @@ foreach ( array( 'gdpr', 'ccpa' ) as $law ) {
 		}
 		$cfg = load_json( $path );
 		assert_true(
-			true === ( $cfg['behaviours']['respectGPC']['status'] ?? false ),
-			"respectGPC default-on in {$ver}{$law}.json"
+			isset( $cfg['behaviours']['respectGPC']['status'] ),
+			"respectGPC key present in {$ver}{$law}.json (toggle round-trips)"
+		);
+		assert_eq(
+			$cfg['behaviours']['respectGPC']['status'] ?? null,
+			false,
+			"respectGPC defaults OFF in {$ver}{$law}.json (opt-in, no behaviour change for existing installs)"
 		);
 	}
 }

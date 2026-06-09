@@ -61,7 +61,7 @@
       }
     },
     "respectGPC": {
-      "status": true
+      "status": false
     }
   },
   "config": {
