@@ -8,7 +8,7 @@ Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** ("wir") Cookies und �
 
 Verantwortlicher für die Verarbeitung personenbezogener Daten durch Cookies ist:
 
-- **Unternehmen:** {{COMPANY_NAME}}
+- **Verantwortlicher:** {{COMPANY_NAME}}
 - **Adresse:** {{COMPANY_ADDRESS}}
 - **E-Mail:** {{COMPANY_EMAIL}}
 - **Register / USt-ID:** {{COMPANY_REGISTRY}}

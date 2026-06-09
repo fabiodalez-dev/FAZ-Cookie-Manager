@@ -6,7 +6,7 @@ Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** ("wir") Cookies und �
 
 ## Verantwortlicher
 
-- **Unternehmen:** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
+- **Verantwortlicher:** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
 - **CNPJ:** {{COMPANY_REGISTRY}}
 - **Encarregado de Dados (DPO) — verpflichtend Art. 41 LGPD:** {{DPO_NAME}} — {{DPO_EMAIL}}
 
