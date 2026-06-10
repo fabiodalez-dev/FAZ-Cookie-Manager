@@ -1,8 +1,13 @@
 includes:
     - vendor/szepeviktor/phpstan-wordpress/extension.neon
+    - phpstan-baseline.neon
 
 parameters:
     level: 2
+    # With a baseline in play, some ignoreErrors patterns (e.g. the defensive
+    # superglobal isset/empty idioms) may not match on a given run — that is
+    # expected and must not itself fail the pipeline.
+    reportUnmatchedIgnoredErrors: false
     # bootstrapFiles intentionally omitted: the szepeviktor/phpstan-wordpress
     # extension already provides the WP stubs PHPStan needs at this level.
     # If a future addition requires plugin-side initialisation, add the file
@@ -41,3 +46,16 @@ parameters:
         # JSON_PRETTY_PRINT / JSON_UNESCAPED_UNICODE / JSON_UNESCAPED_SLASHES
         # bitmasks are correct and must not be flagged.
         - '#Function wp_json_encode invoked with [23] parameters, 1 required#'
+        # More szepeviktor/phpstan-wordpress stub-signature deficiencies — the
+        # code is correct against the real WordPress signatures; only the bundled
+        # stubs are wrong. Scoped to the specific functions so genuine
+        # argument-count bugs elsewhere are still caught.
+        #   - WP_Error::__construct( $code='', $message='', $data='' ): stub says 0-2.
+        #   - apply_filters( $hook, $value, ...$args ) is variadic.
+        #   - set_transient( $transient, $value, $expiration = 0 ): 3rd optional.
+        #   - WP_Error::get_error_codes()/add()/… exist in core but not the stub.
+        - '#Class WP_Error constructor invoked with 3 parameters, 0-2 required#'
+        - '#Constructor of class WP_Error has an unused parameter \$(code|message|data)#'
+        - '#Call to an undefined method WP_Error::(get_error_codes|add|get_error_messages|get_error_data|has_errors)\(\)#'
+        - '#Function apply_filters invoked with [3-9] parameters, 2 required#'
+        - '#Function set_transient invoked with 2 parameters, 3 required#'

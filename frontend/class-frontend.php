@@ -516,6 +516,11 @@ class Frontend {
 								"url:safeUrl," .
 								"banner_slug:_fazConsentLog.bannerSlug||''," .
 								"policy_revision:_fazConsentLog.policyRevision||1," .
+								// TCF TC string (euconsent-v2 cookie) and GPP string
+								// (__gpp API), forwarded so the tc_string / gpp_string
+								// audit columns are populated for TCF/GPP-enabled sites.
+								"tc_string:(function(){var m=document.cookie.match(/euconsent-v2=([^;]+)/);return m?m[1]:''})()," .
+								"gpp_string:(function(){try{if(typeof window.__gpp!=='function')return '';var s='';window.__gpp('getGPPData',function(d){if(d&&d.gppString)s=d.gppString});return s}catch(e){return ''}})()," .
 								"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .
