@@ -30,6 +30,14 @@ import {
 const PLUGIN_SLUG = 'faz-cookie-manager';
 const PLUGIN_FILE = `${PLUGIN_SLUG}/faz-cookie-manager.php`;
 const PLUGINS_PAGE = '/wp-admin/plugins.php';
+// Match the actual plugin row, NOT the "update available" notification row.
+// faz-cookie-manager is published on wp.org, so whenever the local install is
+// behind the wp.org version WordPress renders a second
+// `<tr class="plugin-update-tr" data-plugin="...">` with the SAME data-plugin
+// attribute. A bare `tr[data-plugin=...]` locator then matches two elements
+// and trips Playwright strict mode. `:not(.plugin-update-tr)` selects only the
+// real plugin row (class active|inactive).
+const PLUGIN_ROW = `tr[data-plugin="${PLUGIN_FILE}"]:not(.plugin-update-tr)`;
 
 // Source and deploy paths — configurable via env vars for CI portability.
 const SOURCE_PATH = process.env.FAZ_PLUGIN_SOURCE_PATH ?? `${process.cwd()}/`;
@@ -83,7 +91,7 @@ async function ensurePluginActive(page: import('@playwright/test').Page, wpBaseU
   }
 
   await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-  const pluginRow = page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`);
+  const pluginRow = page.locator(`${PLUGIN_ROW}`);
 
   if (await pluginRow.count() === 0) {
     // Plugin files missing — reload after rsync
@@ -127,23 +135,23 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Deactivate ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const deactivateLink = page.locator(`tr[data-plugin="${PLUGIN_FILE}"] a[href*="action=deactivate"]`);
+    const deactivateLink = page.locator(`${PLUGIN_ROW} a[href*="action=deactivate"]`);
     await deactivateLink.click();
     await page.waitForLoadState('domcontentloaded');
 
     // Verify deactivated — WP class should be "inactive", NOT "active"
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const rowClassAfterDeactivate = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const rowClassAfterDeactivate = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(rowClassAfterDeactivate)).toBe(false);
 
     // --- Reactivate ---
-    const activateLink = page.locator(`tr[data-plugin="${PLUGIN_FILE}"] span.activate a`);
+    const activateLink = page.locator(`${PLUGIN_ROW} span.activate a`);
     await activateLink.click();
     await page.waitForLoadState('domcontentloaded');
 
     // Verify activated
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const rowClassAfterActivate = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const rowClassAfterActivate = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(rowClassAfterActivate)).toBe(true);
 
     // --- Verify data is still there (categories preserved) ---
@@ -189,14 +197,14 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Step 1: Deactivate via WP admin ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const deactivateLink = page.locator(`tr[data-plugin="${PLUGIN_FILE}"] a[href*="action=deactivate"]`);
+    const deactivateLink = page.locator(`${PLUGIN_ROW} a[href*="action=deactivate"]`);
     await expect(deactivateLink).toBeVisible();
     await deactivateLink.click();
     await page.waitForLoadState('domcontentloaded');
 
     // Verify deactivated
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const rowAfterDeactivate = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const rowAfterDeactivate = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(rowAfterDeactivate)).toBe(false);
 
     // --- Step 2: Delete plugin files from disk ---
@@ -210,7 +218,7 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Step 3: Verify plugin is gone ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const pluginGone = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).count();
+    const pluginGone = await page.locator(`${PLUGIN_ROW}`).count();
     expect(pluginGone).toBe(0);
 
     // --- Step 4: Re-deploy plugin files via rsync (simulates upload/install) ---
@@ -220,7 +228,7 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Step 5: Verify plugin appears in list (inactive) ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const reinstalledRow = page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`);
+    const reinstalledRow = page.locator(`${PLUGIN_ROW}`);
     await expect(reinstalledRow).toBeVisible();
     const rowClass = await reinstalledRow.getAttribute('class');
     expect(isPluginActive(rowClass)).toBe(false);
@@ -231,7 +239,7 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // Verify activated
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const activatedClass = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const activatedClass = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(activatedClass)).toBe(true);
 
     // --- Step 7: Verify DB tables created and default categories present ---
