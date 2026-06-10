@@ -120,7 +120,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.06.05.2';
+	const MIGRATIONS_VERSION = '2026.06.10.1';
 
 	public static function run_pending_migrations() {
 		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
@@ -1267,17 +1267,27 @@ class Activator {
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 			return;
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
+		// Strictly-functional buckets are never "sold" or "shared for
+		// cross-context advertising" — they serve the user-requested
+		// functionality of the site (language/preference cookies, internal
+		// WordPress cookies). Defaulting them to sell/share=1 would make a
+		// "Do Not Sell or Share" / GPC opt-out switch them off with no privacy
+		// gain (pure over-blocking), so normalise them to 0 on existing
+		// installs. Admins who genuinely sell one of these can re-enable it per
+		// category in the Cookies UI (this only fires once per migration bump).
+		$slugs        = array( 'necessary', 'functional', 'wordpress-internal' );
+		$placeholders = implode( ',', array_fill( 0, count( $slugs ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slugs bound via %s placeholders; one-shot idempotent migration write.
 		$result = $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE `" . esc_sql( $table ) . "` SET sell_personal_data = 0, share_personal_data = 0 WHERE slug = %s AND ( sell_personal_data <> 0 OR share_personal_data <> 0 )",
-				'necessary'
+				"UPDATE `" . esc_sql( $table ) . "` SET sell_personal_data = 0, share_personal_data = 0 WHERE slug IN ( {$placeholders} ) AND ( sell_personal_data <> 0 OR share_personal_data <> 0 )",
+				$slugs
 			)
 		);
 		if ( false === $result ) {
 			// Throw so run_pending_migrations() does not bump the version and the
 			// normalisation is retried on the next admin load.
-			throw new \RuntimeException( 'FAZ: failed to clear opt-out flags on the necessary category; migration will retry.' );
+			throw new \RuntimeException( 'FAZ: failed to clear opt-out flags on the functional categories; migration will retry.' );
 		}
 		if ( $result > 0 ) {
 			Category_Controller::get_instance()->delete_cache();

@@ -477,6 +477,19 @@ class Category_Controller extends Base_Controller {
 			if ( 'necessary' === $slug ) {
 				$object->set_prior_consent( true );
 			}
+			// CCPA/CPRA sell/share defaults. The schema column defaults to 1
+			// (opt-out-able) so an unknown/scanner-imported cookie is treated
+			// conservatively, but the strictly-functional buckets are never
+			// "sold" or "shared for cross-context advertising": they serve the
+			// user-requested functionality of the site. Defaulting them to 1
+			// would make a "Do Not Sell or Share" / GPC opt-out switch off
+			// language/preference/internal cookies with no privacy gain — pure
+			// over-blocking. Seed them at 0; the admin can still flip any
+			// category in the Cookies UI if their setup genuinely sells it.
+			if ( in_array( $slug, array( 'necessary', 'functional', 'wordpress-internal' ), true ) ) {
+				$object->set_sell_personal_data( false );
+				$object->set_share_personal_data( false );
+			}
 			$object->save();
 		}
 	}
