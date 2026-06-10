@@ -196,8 +196,8 @@ assert_eq(
 );
 assert_eq(
 	$pipeda['ui']['default_categories']['analytics'] ?? null,
-	'granted',
-	'PIPEDA analytics stays implied-consent (granted)'
+	'denied-until-action',
+	'PIPEDA analytics requires opt-in (no blanket implied consent)'
 );
 
 // ===========================================================================

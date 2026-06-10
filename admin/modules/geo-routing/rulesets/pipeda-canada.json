@@ -27,7 +27,7 @@
     "dnt_honored": false,
     "cmv2": {
       "ad_storage": "denied-until-action",
-      "analytics_storage": "granted",
+      "analytics_storage": "denied-until-action",
       "ad_user_data": "denied-until-action",
       "ad_personalization": "denied-until-action",
       "personalization_storage": "granted",
@@ -43,7 +43,7 @@
     "default_categories": {
       "necessary": "granted-locked",
       "functional": "granted",
-      "analytics": "granted",
+      "analytics": "denied-until-action",
       "marketing": "denied-until-action",
       "profiling": "denied-until-action"
     }

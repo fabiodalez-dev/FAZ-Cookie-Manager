@@ -135,6 +135,15 @@ class Controller {
 			}
 		}
 		$page_title = isset( $data['page_title'] ) ? sanitize_text_field( $data['page_title'] ) : '';
+
+		// The query string/fragment is already dropped above. The PATH and TITLE
+		// can still embed PII on some sites (e.g. /account/reset/<email>, an order
+		// number in the <title>). Aggregate metrics carry no identifier, so this
+		// is low-risk, but expose filters so privacy-conscious admins can redact
+		// or coarsen path/title without losing the rest of the analytics.
+		$page_url   = (string) apply_filters( 'faz_pageview_url', $page_url );
+		$page_title = (string) apply_filters( 'faz_pageview_title', $page_title );
+
 		$event_type = isset( $data['event_type'] ) ? sanitize_text_field( $data['event_type'] ) : 'pageview';
 		$session_id = isset( $data['session_id'] ) ? sanitize_text_field( $data['session_id'] ) : '';
 

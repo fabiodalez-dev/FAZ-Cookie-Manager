@@ -257,7 +257,10 @@ class Do_Not_Sell_Shortcode {
 			array(
 				'consent_id' => $consent_prefix . '-' . bin2hex( random_bytes( 8 ) ),
 				'status'     => $status,
-				'categories' => array(),
+				// Empty STRING, not array(): log_consent() json-encodes an array
+				// (array() → "[]"), but a DNSMPI opt-out carries no category map,
+				// and the audit/export contract expects "" for this column.
+				'categories' => '',
 				// Pass the Referer as `url`; log_consent() runs it through
 				// sanitize_log_url() which drops the query string and fragment.
 				'url'        => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '',
