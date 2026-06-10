@@ -2680,10 +2680,14 @@ class Frontend {
 		// is a binding opt-out of the sale/sharing of personal information
 		// (CCPA/CPRA §1798.120), so — like a GPC signal — it must actually stop
 		// the sale/share scripts server-side, not merely record the request.
-		// Honoured for the sell/share categories regardless of any prior banner
-		// consent (the opt-out overrides an earlier "accept").
-		$dnsmpi_optout = $is_optout_law
-			&& isset( $_COOKIE['fazcookie-dnsmpi'] )
+		// NOT gated on `$is_optout_law`: the cookie is only ever set by the
+		// Do-Not-Sell form, which the admin enables for CCPA *and* for the
+		// combined "GDPR + US" banner (saved with applicableLaw='gdpr' but with
+		// the donotSell control on — see banner.js). Honouring the cookie
+		// whenever it is present covers that mode too; under a pure opt-in law
+		// the sell/share categories are already blocked, so this is a no-op
+		// there.
+		$dnsmpi_optout = isset( $_COOKIE['fazcookie-dnsmpi'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
 
 		foreach ( $categories as $cat_data ) {

@@ -109,9 +109,12 @@
 						// Rescind succeeded — reload so the page re-renders the opt-out
 						// form (server-side state changed: cookie cleared). Delay so
 						// screen readers can announce the success notice first.
-						if (isRescind) {
-							setTimeout(function () { window.location.reload(); }, 800);
-						}
+						// Reload after either action so the server-side state change
+						// applies immediately on this page, not just on the next navigation:
+						// a rescind clears the opt-out cookie; an opt-out sets it, and
+						// get_blocked_categories() then blocks the sell/share scripts on the
+						// reloaded response.
+						setTimeout(function () { window.location.reload(); }, 800);
 					} else {
 						// Failure: assertive announcement.
 						notice.setAttribute('role', 'alert');

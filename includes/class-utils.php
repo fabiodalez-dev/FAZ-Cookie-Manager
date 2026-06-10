@@ -695,14 +695,22 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 		$messages[] = __( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period.', 'faz-cookie-manager' );
 
 		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
+			// IMPORTANT: always read the FIRST batch, never `paged => $page`.
+			// WordPress calls the eraser repeatedly, incrementing $page, but each
+			// call here DELETES the records it finds — so the matching set shrinks
+			// underneath the offset. Paging forward (page 2, 3, …) would skip the
+			// records that slid into the earlier offsets and leave them behind
+			// (e.g. 25 records / 20-per-page → page 1 deletes 20, page 2 offsets
+			// past the remaining 5 and reports done, orphaning them). Reading
+			// page 1 every time drains the set deterministically.
 			$query = new WP_Query(
 				array(
 					'post_type'      => 'faz_dsar',
 					'post_status'    => 'any',
 					'posts_per_page' => $per_page,
-					'paged'          => $page,
+					'paged'          => 1,
 					'fields'         => 'ids',
-					'no_found_rows'  => false,
+					'no_found_rows'  => true,
 					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- DSAR erasures are admin-triggered, low-volume, and must filter by the requester's email.
 					'meta_query'     => array(
 						array(
@@ -713,6 +721,7 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 					),
 				)
 			);
+			$found = count( $query->posts );
 			foreach ( $query->posts as $post_id ) {
 				if ( wp_delete_post( (int) $post_id, true ) ) {
 					$items_removed++;
@@ -722,7 +731,9 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 				/* translators: %d: number of privacy-request records deleted. */
 				$messages[] = sprintf( _n( 'Deleted %d FAZ Cookie Manager privacy request.', 'Deleted %d FAZ Cookie Manager privacy requests.', $items_removed, 'faz-cookie-manager' ), $items_removed );
 			}
-			$done = $page >= max( 1, (int) $query->max_num_pages );
+			// Not done while this batch was full — there may be more to drain on
+			// the next call (which again reads the new first page).
+			$done = $found < $per_page;
 		}
 
 		return array(
