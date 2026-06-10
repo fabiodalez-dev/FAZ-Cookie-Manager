@@ -173,10 +173,22 @@ class Renderer {
 			. '" data-faz-policy-version="' . esc_attr( $policy_version ) . '">';
 		$wrapper_close = '</article>';
 
-		// NFR-02-XI: sanitize the body content via wp_kses_post. The wrapper
-		// is emitted by trusted code (no user input reaches it un-escaped)
-		// and bypasses the kses pass.
-		return $wrapper_open . wp_kses_post( $html ) . $wrapper_close;
+		// NFR-02-XI: sanitize the body content via kses. We CANNOT use plain
+		// wp_kses_post() here: `aria-level` is NOT in WordPress's default
+		// 'post' allowlist, so wp_kses_post strips it while keeping
+		// role="heading" — leaving the category-name spans as headings with no
+		// level, an axe-critical WCAG 4.1.2 / 1.3.1 failure. Extend the 'post'
+		// allowlist with ONLY role + aria-level (no broadening of style/data-*)
+		// so the ARIA heading semantics survive the sanitization pass. The
+		// wrapper is emitted by trusted code and bypasses kses.
+		$allowed = wp_kses_allowed_html( 'post' );
+		foreach ( $allowed as $tag => $attrs ) {
+			if ( is_array( $attrs ) ) {
+				$allowed[ $tag ]['role']       = true;
+				$allowed[ $tag ]['aria-level'] = true;
+			}
+		}
+		return $wrapper_open . wp_kses( $html, $allowed ) . $wrapper_close;
 	}
 
 	/**

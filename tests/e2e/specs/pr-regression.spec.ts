@@ -1118,9 +1118,16 @@ test.describe('Language: default language uses site locale', () => {
 /* ─── Koko Analytics: built-in cookie lookup ── */
 
 test.describe('Koko Analytics cookie recognition', () => {
+  // The cookies admin page enumerates every stored cookie and can take well
+  // over the default 30s page.goto budget when the WP server is under
+  // sustained full-suite load (this describe runs late, after the destructive
+  // plugin-lifecycle reinstall). Give the navigations and the test headroom so
+  // a slow-but-correct admin render is not misreported as a failure.
+  test.setTimeout(90_000);
+
   test('_koko_analytics_pages_viewed is recognized as analytics in built-in database', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const nonce = await getAdminNonce(page);
 
     // Use the scrape endpoint to look up the cookie name against the built-in database
@@ -1140,11 +1147,11 @@ test.describe('Koko Analytics cookie recognition', () => {
 
   test('Koko Analytics script pattern is recognized by Known Providers', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
     // Check that visiting the frontend shows koko-analytics in the page source
     const frontPage = await page.context().newPage();
-    await frontPage.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await frontPage.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const html = await frontPage.content();
     const hasKokoScript = html.includes('koko-analytics');
     expect(hasKokoScript, 'Koko Analytics script should be present on frontend when plugin is active').toBe(true);
@@ -1195,7 +1202,16 @@ test.describe('Admin i18n: WordPress site language switch', () => {
   // Use empty string to restore default English.
   const originalLocale = '';
 
+  // Switching the WP site language saves options-general AND may trigger a
+  // language-pack download on the first selection of it_IT — slow under
+  // sustained full-suite load. Give the whole describe headroom so the
+  // options-general save (page.click '#submit') and the teardown are not
+  // misreported as failures on a slow-but-correct admin round-trip.
+  test.setTimeout(90_000);
+
   test.afterAll(async ({ browser }) => {
+    // Bump the hook timeout too (test.setTimeout above only covers tests).
+    test.setTimeout(90_000);
     // Restore original site language. Uses the shared login helper and
     // env-based credentials so non-default WP installs (and CI with custom
     // creds) don't poison the rest of the suite when this teardown runs.
@@ -1203,10 +1219,10 @@ test.describe('Admin i18n: WordPress site language switch', () => {
     const page = await ctx.newPage();
     try {
       await completeAdminLogin(page, WP_BASE, WP_ADMIN_USER, WP_ADMIN_PASS);
-      await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       // Try to select empty (English default); fall back silently if not available.
-      await page.selectOption('#WPLANG', originalLocale, { timeout: 5000 });
-      await page.click('#submit');
+      await page.selectOption('#WPLANG', originalLocale, { timeout: 15_000 });
+      await page.click('#submit', { timeout: 30_000 });
       await page.waitForLoadState('domcontentloaded');
     } catch (_) {
       // Some test environments only have one locale installed or use
@@ -1220,13 +1236,13 @@ test.describe('Admin i18n: WordPress site language switch', () => {
     await loginAsAdmin(page);
 
     // Switch WordPress site language to Italian
-    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
-    await page.selectOption('#WPLANG', 'it_IT');
-    await page.click('#submit');
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.selectOption('#WPLANG', 'it_IT', { timeout: 15_000 });
+    await page.click('#submit', { timeout: 30_000 });
     await page.waitForLoadState('domcontentloaded');
 
     // Now visit the plugin Cookies admin page
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
     // Read fazConfig.i18n from the localized script
     const i18n = await page.evaluate(() => (window as any).fazConfig?.i18n ?? null);
@@ -1254,19 +1270,19 @@ test.describe('Admin i18n: WordPress site language switch', () => {
     await loginAsAdmin(page);
 
     // Ensure Italian is set
-    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/options-general.php`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     const currentLang = await page.evaluate(() => {
       const el = document.getElementById('WPLANG') as HTMLSelectElement | null;
       return el?.value ?? '';
     });
     if (currentLang !== 'it_IT') {
-      await page.selectOption('#WPLANG', 'it_IT');
-      await page.click('#submit');
+      await page.selectOption('#WPLANG', 'it_IT', { timeout: 15_000 });
+      await page.click('#submit', { timeout: 30_000 });
       await page.waitForLoadState('domcontentloaded');
     }
 
     // Visit the plugin cookies page
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
     const pageText = await page.locator('body').innerText();
     const lower = pageText.toLowerCase();

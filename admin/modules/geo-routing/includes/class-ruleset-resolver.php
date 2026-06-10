@@ -120,6 +120,18 @@ class Ruleset_Resolver {
 			return self::resolve_us_no_law( $index_countries, $fallback_id );
 		}
 
+		// Stage 4b: any other country with a region-specific ruleset (e.g.
+		// CA-QC → law25-quebec). A region-level regime trumps the country
+		// default because it is the stricter, more specific law: without this,
+		// a Quebec visitor (CA-QC) fell through to the federal PIPEDA opt-out
+		// ruleset instead of Law 25's opt-in regime, silently downgrading
+		// protection and leaving law25-quebec.json unreachable. Generalizes
+		// region routing beyond the US so any future sub-national ruleset
+		// (CA-QC, future EU regions, etc.) is honored automatically.
+		if ( '' !== $region && is_array( $index_regions ) && isset( $index_regions[ $region ] ) ) {
+			return (string) $index_regions[ $region ];
+		}
+
 		// Stage 5: country in index map.
 		if ( is_array( $index_countries ) && isset( $index_countries[ $country ] ) ) {
 			return (string) $index_countries[ $country ];
