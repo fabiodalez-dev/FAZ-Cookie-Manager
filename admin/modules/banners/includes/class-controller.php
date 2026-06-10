@@ -638,6 +638,85 @@ class Controller extends Base_Controller {
 	}
 
 	/**
+	 * Pick the active banner whose applicable law matches, optionally honouring
+	 * the visitor's country for tie-breaking.
+	 *
+	 * Used by the runtime geo-routing wiring (flag `faz_geo_ruleset_runtime`):
+	 * once the resolved ruleset's MODEL maps to a binary law (gdpr/ccpa), the
+	 * frontend prefers the active banner carrying that law so the UI matches the
+	 * jurisdiction enforced. Restricts the same status / country / default tier
+	 * logic as get_active_banner_for_country() to banners whose
+	 * `settings.settings.applicableLaw` equals $law (defaulting to 'gdpr' when
+	 * unset, mirroring Banner::get_law()). Returns false when no active banner
+	 * carries that law, so the caller keeps the country-selected banner.
+	 *
+	 * @since 1.17.2
+	 * @param string $law     'gdpr' or 'ccpa'.
+	 * @param string $country Visitor's ISO-3166 alpha-2 country code, or ''.
+	 * @return Banner|false
+	 */
+	public function get_active_banner_for_law( $law, $country = '' ) {
+		$law          = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
+		$items        = $this->get_items();
+		$current_lang = faz_current_language();
+		if ( empty( $items ) || ! is_array( $items ) ) {
+			return false;
+		}
+
+		$country = is_string( $country ) ? strtoupper( trim( $country ) ) : '';
+		if ( 1 !== preg_match( '/^[A-Z]{2}$/', $country ) ) {
+			$country = '';
+		}
+
+		$match_ids   = array(); // law match + status=1 + targets the country
+		$anyland_ids = array(); // law match + status=1 + empty target list
+		$default_id  = null;    // law match + banner_default=1 (any status)
+
+		foreach ( $items as $item ) {
+			$inner = ( isset( $item->settings['settings'] ) && is_array( $item->settings['settings'] ) )
+				? $item->settings['settings'] : array();
+			$item_law = isset( $inner['applicableLaw'] ) && 'ccpa' === $inner['applicableLaw'] ? 'ccpa' : 'gdpr';
+			if ( $item_law !== $law ) {
+				continue;
+			}
+
+			$iid      = (int) $item->banner_id;
+			$status   = 1 === (int) $item->status;
+			$targets  = is_array( $item->target_countries ) ? $item->target_countries : array();
+			$priority = isset( $item->priority ) ? (int) $item->priority : 0;
+
+			if ( $status ) {
+				$entry = array( 'id' => $iid, 'priority' => $priority );
+				if ( '' !== $country && in_array( $country, $targets, true ) ) {
+					$match_ids[] = $entry;
+				} elseif ( empty( $targets ) ) {
+					$anyland_ids[] = $entry;
+				}
+			}
+			if ( 1 === (int) $item->banner_default && null === $default_id ) {
+				$default_id = $iid;
+			}
+		}
+
+		$winner_id = null;
+		if ( ! empty( $match_ids ) ) {
+			$winner_id = self::pick_highest_priority_id( $match_ids );
+		} elseif ( ! empty( $anyland_ids ) ) {
+			$winner_id = self::pick_highest_priority_id( $anyland_ids );
+		} elseif ( null !== $default_id ) {
+			$winner_id = $default_id;
+		}
+
+		if ( null === $winner_id ) {
+			return false;
+		}
+
+		$winner = new Banner( $winner_id );
+		$winner->set_language( $current_lang );
+		return $winner;
+	}
+
+	/**
 	 * Variant of pick_highest_priority() that operates on raw
 	 * {id, priority} pairs instead of Banner instances. Lets the caller
 	 * defer Banner instantiation until after the winner is known —

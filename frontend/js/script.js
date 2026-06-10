@@ -737,10 +737,22 @@ function _fazSetInitialState() {
     // (inside _fazAcceptCookies via _fazSetInStore).
     ref._fazConsentStore.set("consent", "no");
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
+    // When a runtime geo ruleset is active (_runtimeGeo), the per-category
+    // defaultConsent values are jurisdiction-authoritative: derive the
+    // pre-consent state straight from them, independent of the binary law.
+    // This is what keeps a denied-until-action category blocked on the very
+    // first visit even when the shown banner is an opt-out (CCPA) banner —
+    // otherwise the ccpa branch below would leave it "yes" until the visitor
+    // ticks the opt-out box, and _fazUnblock() would run the blocked scripts.
+    const runtimeGeo = !!(_fazStore && _fazStore._runtimeGeo);
     const responseCategories = { accepted: [], rejected: [], action: 'init' };
     for (const category of _fazStore._categories) {
         let valueToSet = "yes";
-        if (
+        if (runtimeGeo) {
+            if (!category.isNecessary && !category.defaultConsent.gdpr) {
+                valueToSet = "no";
+            }
+        } else if (
             (activeLaw === "gdpr" &&
                 !category.isNecessary &&
                 !category.defaultConsent[activeLaw]) ||

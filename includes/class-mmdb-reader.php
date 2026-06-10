@@ -106,6 +106,32 @@ class Mmdb_Reader {
 	}
 
 	/**
+	 * Look up an IP address and return the first subdivision ISO code.
+	 *
+	 * Only GeoLite2-City databases carry `subdivisions`; on a Country-only
+	 * database the field is absent and this returns '' (so callers degrade
+	 * gracefully to country-level routing). The returned value is the bare
+	 * subdivision code (e.g. 'QC', 'CA'), NOT the full ISO 3166-2 — the caller
+	 * combines it with the country to form 'CC-RR'.
+	 *
+	 * @param string $ip IPv4 or IPv6 address.
+	 * @return string Subdivision ISO code (e.g. 'QC') or empty string.
+	 */
+	public function subdivision( $ip ) {
+		$record = $this->find( $ip );
+		if ( null === $record ) {
+			return '';
+		}
+		$result = $this->read_record( $record );
+		if ( is_array( $result )
+			&& isset( $result['subdivisions'][0]['iso_code'] )
+			&& is_string( $result['subdivisions'][0]['iso_code'] ) ) {
+			return $result['subdivisions'][0]['iso_code'];
+		}
+		return '';
+	}
+
+	/**
 	 * Parse metadata from the end of the file.
 	 *
 	 * @throws \RuntimeException If metadata marker is not found.

@@ -115,5 +115,9 @@
     "US-MN": "mcdpa-minnesota",
     "US-RI": "ridtppa-rhodeisland",
     "US-IN": "icdpa-indiana"
+  },
+  "_regions": {
+    "_comment": "Region-level routing for NON-US visitors (ISO 3166-2). Resolved before the country map, so a province with its own privacy regime overrides the country default. Requires a sub-national signal (GeoLite2-City subdivision or CF-Region-Code header); without one the visitor falls back to the country map.",
+    "CA-QC": "law25-quebec"
   }
 }

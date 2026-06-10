@@ -22,6 +22,7 @@ use FazCookie\Frontend\Modules\Shortcodes\Shortcodes;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
 use FazCookie\Includes\Geolocation;
+use FazCookie\Frontend\Includes\Geo_Runtime;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -137,6 +138,23 @@ class Banner_Rest {
 		$controller = Banner_Controller::get_instance();
 		$country    = Geolocation::get_visitor_country();
 		$banner     = $controller->get_active_banner_for_country( $country );
+
+		// Runtime geo-routing parity with the initial render (load_banner):
+		// when the resolved ruleset's model maps to a different law than the
+		// country-selected banner, prefer the active banner carrying that law so
+		// the language-swapped banner enforces the same model as the first paint.
+		$runtime_ruleset = Geo_Runtime::resolve_for_country( $country );
+		if ( null !== $runtime_ruleset ) {
+			$wanted_law  = Geo_Runtime::model_to_law( $runtime_ruleset );
+			$current_law = ( $banner ) ? $banner->get_law() : '';
+			if ( $wanted_law !== $current_law ) {
+				$law_banner = $controller->get_active_banner_for_law( $wanted_law, $country );
+				if ( $law_banner ) {
+					$banner = $law_banner;
+				}
+			}
+		}
+
 		if ( ! $banner ) {
 			return new WP_Error(
 				'faz_no_banner',
@@ -180,7 +198,10 @@ class Banner_Rest {
 		$short_codes = $this->build_shortcodes_payload( $banner, $shortcodes_instance );
 
 		// Categories with names/descriptions resolved in the target language.
-		$categories = $this->build_categories_payload( $lang );
+		// Pass the runtime ruleset so the language swap preserves the
+		// jurisdiction-authoritative defaultConsent instead of resetting it to
+		// the catalogue values (finding #4).
+		$categories = $this->build_categories_payload( $lang, $runtime_ruleset );
 
 		// Build the i18n payload BEFORE restoring the locale — otherwise
 		// __( '...', 'faz-cookie-manager' ) would resolve against the
@@ -195,10 +216,16 @@ class Banner_Rest {
 			restore_previous_locale();
 		}
 
+		// Under the runtime flag the enforced law follows the ruleset model, so
+		// the swapped banner runs the same regime as the initial render.
+		$active_law = ( null !== $runtime_ruleset )
+			? Geo_Runtime::model_to_law( $runtime_ruleset )
+			: $banner->get_law();
+
 		$payload = array(
 			'language'   => $lang,
 			'bannerSlug' => $banner->get_slug(),
-			'activeLaw'  => $banner->get_law(),
+			'activeLaw'  => $active_law,
 			'html'       => $html,
 			'styles'     => $styles,
 			'shortCodes' => $short_codes,
@@ -207,7 +234,10 @@ class Banner_Rest {
 		);
 
 		$response = new WP_REST_Response( $payload, 200 );
-		if ( $controller->has_country_dependent_banners() ) {
+		// The runtime ruleset varies the payload (defaultConsent, activeLaw,
+		// banner) by the visitor's jurisdiction, so it must never be cached
+		// across visitors — force no-store while the flag is on.
+		if ( $controller->has_country_dependent_banners() || Geo_Runtime::is_enabled() ) {
 			$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
 			$response->header( 'Pragma', 'no-cache' );
 			$response->header( 'X-LiteSpeed-Cache-Control', 'no-cache' );
@@ -317,10 +347,11 @@ class Banner_Rest {
 	 * REST response matches what the client would have rendered on a fresh
 	 * request in that language.
 	 *
-	 * @param string $lang Language code.
+	 * @param string     $lang    Language code.
+	 * @param array|null $ruleset Resolved runtime ruleset, or null for catalogue.
 	 * @return array
 	 */
-	protected function build_categories_payload( $lang ) {
+	protected function build_categories_payload( $lang, $ruleset = null ) {
 		$categories = Category_Controller::get_instance()->get_items();
 		$out        = array();
 		if ( empty( $categories ) || ! is_array( $categories ) ) {
@@ -351,9 +382,12 @@ class Banner_Rest {
 				'ccpaDoNotSell'  => 'necessary' !== $slug && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ),
 				'cookies'        => $this->build_category_cookies_payload( $category->get_cookies() ),
 				'active'         => true,
-				'defaultConsent' => array(
-					'gdpr' => $category->get_prior_consent(),
-					'ccpa' => 'necessary' === $slug || ( false === $category->get_sell_personal_data() && false === $category->get_share_personal_data() ),
+				'defaultConsent' => Geo_Runtime::default_consent(
+					$ruleset,
+					$slug,
+					(bool) $category->get_prior_consent(),
+					(bool) $category->get_sell_personal_data(),
+					(bool) $category->get_share_personal_data()
 				),
 			);
 		}

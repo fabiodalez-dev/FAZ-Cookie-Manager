@@ -76,6 +76,22 @@ class Geolocation {
 	}
 
 	/**
+	 * Resolve the ISO 3166-2 region for an IP via the local GeoLite2-City DB.
+	 *
+	 * Public counterpart to get_country() for callers (e.g. Geo_Detector) that
+	 * already hold a resolved IP and want the sub-national region without the
+	 * Cloudflare-header layer that get_visitor_region() adds. Returns '' on a
+	 * Country-only DB or when no subdivision is present.
+	 *
+	 * @param string|null $ip_override Explicit IP, or null for the client IP.
+	 * @return string 'CC-RR' or empty string.
+	 */
+	public static function get_region( $ip_override = null ) {
+		$ip = is_string( $ip_override ) && '' !== $ip_override ? $ip_override : self::get_client_ip();
+		return self::detect_region( $ip );
+	}
+
+	/**
 	 * Check if the visitor is in the EU/EEA.
 	 *
 	 * @return bool
@@ -125,6 +141,92 @@ class Geolocation {
 			return '';
 		}
 		return $filtered;
+	}
+
+	/**
+	 * Resolve the visitor's ISO 3166-2 sub-national region (e.g. 'CA-QC').
+	 *
+	 * Sources, in priority order: the Cloudflare CF-Region-Code header (only
+	 * when `faz_trust_cf_ipcountry_header` is on) and the local GeoLite2-City
+	 * subdivision lookup. Returns '' when no sub-national signal is available
+	 * (e.g. a Country-only DB and no Cloudflare), so callers degrade to
+	 * country-level routing. Filterable via `faz_visitor_region` for fixtures.
+	 *
+	 * @return string ISO 3166-2 ('CC-RR') or empty string.
+	 */
+	public static function get_visitor_region() {
+		$region = '';
+
+		if (
+			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& ! empty( $_SERVER['HTTP_CF_REGION_CODE'] )
+			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] )
+		) {
+			$cc = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
+			$rr = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_REGION_CODE'] ) ) );
+			if ( self::is_valid_country_code( $cc ) && 'XX' !== $cc && 1 === preg_match( '/^[A-Z0-9]{1,3}$/', $rr ) ) {
+				$region = $cc . '-' . $rr;
+			}
+		}
+
+		if ( '' === $region ) {
+			$region = self::get_region();
+		}
+
+		$region = strtoupper( trim( $region ) );
+		if ( 1 !== preg_match( '/^[A-Z]{2}-[A-Z0-9]{1,3}$/', $region ) ) {
+			$region = '';
+		}
+
+		/**
+		 * Filter the resolved ISO 3166-2 visitor region.
+		 *
+		 * @since 1.17.2
+		 * @param string $region ISO 3166-2 region code, or ''.
+		 */
+		$filtered = (string) apply_filters( 'faz_visitor_region', $region );
+		$filtered = strtoupper( trim( $filtered ) );
+		return ( 1 === preg_match( '/^[A-Z]{2}-[A-Z0-9]{1,3}$/', $filtered ) ) ? $filtered : '';
+	}
+
+	/**
+	 * Resolve the ISO 3166-2 region from the local GeoLite2-City DB.
+	 *
+	 * @param string $ip Client IP address.
+	 * @return string 'CC-RR' or empty string.
+	 */
+	private static function detect_region( $ip ) {
+		if ( empty( $ip ) || in_array( $ip, array( '127.0.0.1', '::1' ), true ) ) {
+			return '';
+		}
+
+		$cache_key = 'faz_georeg_' . md5( $ip );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return (string) $cached;
+		}
+
+		$region  = '';
+		$db_path = self::get_database_path();
+		if ( '' !== $db_path ) {
+			try {
+				if ( null === self::$mmdb_reader ) {
+					self::$mmdb_reader = new Mmdb_Reader( $db_path );
+				}
+				$country = strtoupper( (string) self::$mmdb_reader->country( $ip ) );
+				$sub     = strtoupper( (string) self::$mmdb_reader->subdivision( $ip ) );
+				if ( self::is_valid_country_code( $country ) && 1 === preg_match( '/^[A-Z0-9]{1,3}$/', $sub ) ) {
+					$region = $country . '-' . $sub;
+				}
+			} catch ( \Exception $e ) {
+				error_log( 'FAZ GeoLite2 region lookup error: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+		}
+
+		// Cache even an empty result (briefly) to avoid re-reading the DB on
+		// every request for IPs with no subdivision data.
+		set_transient( $cache_key, $region, '' !== $region ? HOUR_IN_SECONDS : 10 * MINUTE_IN_SECONDS );
+		return $region;
 	}
 
 	/**
@@ -288,14 +390,21 @@ class Geolocation {
 	 * Get the path to the MMDB database file, if it exists.
 	 *
 	 * Checks (in order):
-	 *   1. wp-content/uploads/faz-cookie-manager/GeoLite2-Country.mmdb
-	 *   2. wp-content/uploads/faz-cookie-manager/dbip-country-lite.mmdb
+	 *   1. wp-content/uploads/faz-cookie-manager/GeoLite2-City.mmdb
+	 *   2. wp-content/uploads/faz-cookie-manager/GeoLite2-Country.mmdb (legacy)
+	 *   3. wp-content/uploads/faz-cookie-manager/dbip-country-lite.mmdb
+	 *
+	 * City is preferred because it additionally carries the `subdivisions`
+	 * needed for sub-national (province/state) geo-routing; Country.mmdb stays
+	 * a valid fallback for installs that downloaded it before the City switch
+	 * (country-level routing only, region lookups return '').
 	 *
 	 * @return string Full path to the database file, or empty string.
 	 */
 	public static function get_database_path() {
 		$upload_dir = self::get_data_dir();
 		$candidates = array(
+			$upload_dir . 'GeoLite2-City.mmdb',
 			$upload_dir . 'GeoLite2-Country.mmdb',
 			$upload_dir . 'dbip-country-lite.mmdb',
 		);
@@ -347,9 +456,11 @@ class Geolocation {
 	}
 
 	/**
-	 * Download and install a MaxMind GeoLite2-Country database.
+	 * Download and install a MaxMind GeoLite2-City database.
 	 *
-	 * Requires a MaxMind license key (free registration at maxmind.com).
+	 * City (not Country) is fetched so the local DB carries `subdivisions`,
+	 * which sub-national geo-routing (province/state rulesets) needs. Requires a
+	 * MaxMind license key (free registration at maxmind.com).
 	 *
 	 * @param string $license_key MaxMind license key.
 	 * @return true|\WP_Error True on success, WP_Error on failure.
@@ -362,7 +473,7 @@ class Geolocation {
 		$license_key = sanitize_text_field( $license_key );
 		$url         = add_query_arg(
 			array(
-				'edition_id'  => 'GeoLite2-Country',
+				'edition_id'  => 'GeoLite2-City',
 				'license_key' => $license_key,
 				'suffix'      => 'tar.gz',
 			),
@@ -414,7 +525,7 @@ class Geolocation {
 			$found = false;
 			foreach ( new \RecursiveIteratorIterator( $tar ) as $entry ) {
 				if ( '.mmdb' === substr( $entry->getFilename(), -5 ) ) {
-					$dest = $data_dir . 'GeoLite2-Country.mmdb';
+					$dest = $data_dir . 'GeoLite2-City.mmdb';
 					if ( ! copy( $entry->getPathname(), $dest ) ) {
 						return new \WP_Error( 'faz_geo_copy_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
 					}

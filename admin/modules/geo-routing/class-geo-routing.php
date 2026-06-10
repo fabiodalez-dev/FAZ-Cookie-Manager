@@ -163,13 +163,22 @@ class Geo_Routing {
 	 * Spec: FR-02 + FR-03 + FR-06 combined.
 	 * Task: T023 (P3 integration, non-invasive)
 	 *
-	 * @param string|null $ip_override Optional explicit IP for testing.
+	 * @param string|null $ip_override      Optional explicit IP for testing.
+	 * @param string|null $country_override Optional authoritative country code
+	 *                                      (ISO 3166-1 alpha-2). When supplied it
+	 *                                      overrides the detected country so the
+	 *                                      caller (e.g. the runtime banner picker,
+	 *                                      which already resolved the country via
+	 *                                      `faz_visitor_country`) keeps banner
+	 *                                      selection and ruleset resolution on the
+	 *                                      SAME country. Region still comes from
+	 *                                      detection.
 	 * @return array|null Shape: ['country' => 'IT', 'region' => '',
 	 *                            'vpn' => false, 'source' => 'cf_header',
 	 *                            'ruleset_id' => 'gdpr-strict',
 	 *                            'ruleset' => array $loaded_json_decoded].
 	 */
-	public function get_visitor_context( $ip_override = null ) {
+	public function get_visitor_context( $ip_override = null, $country_override = null ) {
 		// Lazy autoload of the resolver chain (only when consumer calls).
 		$detector_class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Geo_Detector';
 		$loader_class   = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Ruleset_Loader';
@@ -185,6 +194,13 @@ class Geo_Routing {
 
 			$geo = $detector->detect( $ip_override );
 
+			// Authoritative country override (e.g. from the frontend's
+			// `faz_visitor_country`): keep banner selection and ruleset
+			// resolution on the same country. Region stays from detection.
+			if ( is_string( $country_override ) && 1 === preg_match( '/^[A-Za-z]{2}$/', $country_override ) ) {
+				$geo['country'] = strtoupper( $country_override );
+			}
+
 			$overrides = (array) get_option( 'faz_geo_admin_overrides', array() );
 
 			$ruleset_id = $resolver_class::resolve(
@@ -199,7 +215,10 @@ class Geo_Routing {
 				// admin overrides against. Invalid overrides degrade
 				// to auto-detection instead of producing non-loadable
 				// ruleset ids.
-				$loader->list_all()
+				$loader->list_all(),
+				// Generic non-US sub-national region map (e.g. CA-QC →
+				// law25-quebec), parallel to the US `_us_regions` map.
+				$loader->load_regions()
 			);
 
 			$ruleset = $loader->load_ruleset( $ruleset_id );

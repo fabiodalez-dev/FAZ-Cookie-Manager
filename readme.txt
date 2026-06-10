@@ -118,7 +118,7 @@ Privacy Policy:
 
 = MaxMind =
 
-Used to download the GeoLite2 Country database for optional geo-targeting.
+Used to download the GeoLite2 City database for optional geo-targeting and sub-national (province/state) geo-routing. The City edition additionally carries region subdivisions; installs that downloaded the older Country database keep working for country-level routing.
 
 Triggered when: you enter a MaxMind license key in Settings and start the database download.
 
