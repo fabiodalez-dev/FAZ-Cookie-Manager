@@ -233,31 +233,44 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
-	 * Log the opt-out to the consent_logs table.
+	 * Log a DNSMPI event through the central consent logger.
+	 *
+	 * Routes the opt-out / rescind record through the same pipeline every other
+	 * consent record uses, so the User-Agent is HASHED and the URL is stripped
+	 * of query strings/fragments. The previous direct $wpdb->insert stored the
+	 * full raw User-Agent and the raw Referer URL (potentially with PII in the
+	 * query string) — a data-minimisation gap the central logger already solves
+	 * via hash_user_agent() + sanitize_log_url(). `$ip_hash` is no longer used
+	 * here (the central logger derives its own hashed IP from the same request);
+	 * the parameter is kept for call-site stability.
+	 *
+	 * @param string $consent_prefix consent_id prefix (e.g. 'dnsmpi', 'dnsmpi-rsc').
+	 * @param string $status         Log status (STATUS_FIELD / STATUS_RESCIND).
+	 * @return void
 	 */
-	private function log_optout( $ip_hash ) {
-		global $wpdb;
-		$table = $wpdb->prefix . 'faz_consent_logs';
-
-		if ( ! $this->table_exists( $table ) ) {
+	private function log_dnsmpi_event( $consent_prefix, $status ) {
+		$controller_class = '\\FazCookie\\Admin\\Modules\\Consentlogs\\Includes\\Controller';
+		if ( ! class_exists( $controller_class ) ) {
 			return;
 		}
-
-		$wpdb->insert(
-			$table,
+		$controller_class::get_instance()->log_consent(
 			array(
-				'consent_id'      => 'dnsmpi-' . bin2hex( random_bytes( 8 ) ),
-				'status'          => self::STATUS_FIELD,
-				'categories'      => '',
-				'ip_hash'         => $ip_hash,
-				'user_agent'      => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
-				'url'             => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '',
-				'banner_slug'     => '',
-				'policy_revision' => 1,
-				'created_at'      => current_time( 'mysql' ),
-			),
-			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' )
+				'consent_id' => $consent_prefix . '-' . bin2hex( random_bytes( 8 ) ),
+				'status'     => $status,
+				'categories' => array(),
+				// Pass the Referer as `url`; log_consent() runs it through
+				// sanitize_log_url() which drops the query string and fragment.
+				'url'        => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '',
+			)
 		);
+	}
+
+	/**
+	 * Log the opt-out to the consent_logs table (pseudonymised pipeline).
+	 */
+	private function log_optout( $ip_hash ) {
+		unset( $ip_hash ); // Central logger derives its own hashed IP.
+		$this->log_dnsmpi_event( 'dnsmpi', self::STATUS_FIELD );
 	}
 
 	/**
@@ -307,28 +320,8 @@ class Do_Not_Sell_Shortcode {
 	 * both sides of the CCPA opt-out / opt-back-in lifecycle.
 	 */
 	private function log_rescind( $ip_hash ) {
-		global $wpdb;
-		$table = $wpdb->prefix . 'faz_consent_logs';
-
-		if ( ! $this->table_exists( $table ) ) {
-			return;
-		}
-
-		$wpdb->insert(
-			$table,
-			array(
-				'consent_id'      => 'dnsmpi-rsc-' . bin2hex( random_bytes( 8 ) ),
-				'status'          => self::STATUS_RESCIND,
-				'categories'      => '',
-				'ip_hash'         => $ip_hash,
-				'user_agent'      => isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '',
-				'url'             => isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '',
-				'banner_slug'     => '',
-				'policy_revision' => 1,
-				'created_at'      => current_time( 'mysql' ),
-			),
-			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s' )
-		);
+		unset( $ip_hash ); // Central logger derives its own hashed IP.
+		$this->log_dnsmpi_event( 'dnsmpi-rsc', self::STATUS_RESCIND );
 	}
 
 	/**

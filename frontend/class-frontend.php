@@ -2675,10 +2675,27 @@ class Frontend {
 			&& isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
 
+		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
+		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
+		// is a binding opt-out of the sale/sharing of personal information
+		// (CCPA/CPRA §1798.120), so — like a GPC signal — it must actually stop
+		// the sale/share scripts server-side, not merely record the request.
+		// Honoured for the sell/share categories regardless of any prior banner
+		// consent (the opt-out overrides an earlier "accept").
+		$dnsmpi_optout = $is_optout_law
+			&& isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+
 		foreach ( $categories as $cat_data ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
 			$slug     = $category->get_slug();
 			if ( 'necessary' === $slug ) {
+				continue;
+			}
+			// A DNSMPI form opt-out blocks the sell/share categories outright,
+			// overriding any consent-cookie value (mirrors the GPC override).
+			if ( $dnsmpi_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
+				$blocked[] = $slug;
 				continue;
 			}
 			if ( empty( $consent ) ) {
