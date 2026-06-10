@@ -1126,11 +1126,24 @@ function _fazAttachCategoryListeners() {
         }
 
         _fazToggleAriaExpandStatus(accordionButtonSelector, "false");
-        _fazAttachListener(selector, ({ target: { id } }) => {
+        _fazAttachListener(selector, (event) => {
+            const target = event && event.target;
+            const id = target && target.id;
+            // A click on the category switch OR a per-service toggle inside the
+            // accordion must NOT open/close it (#136). The old guard only matched
+            // the category switch id (`fazSwitch<category>`); a service toggle has
+            // a different id, so it fell through to `_fazClassToggle()` — which
+            // toggles the accordion as a side effect, collapsing it under the
+            // user. Short-circuit on any toggle/checkbox click and leave the
+            // accordion exactly as it is.
             if (
                 id === `fazSwitch${category}` ||
-                !_fazClassToggle(selector, "faz-accordion-active", false)
+                (target && target.closest && target.closest('.faz-service-toggle, .faz-switch')) ||
+                (target && 'checkbox' === target.type)
             ) {
+                return;
+            }
+            if (!_fazClassToggle(selector, "faz-accordion-active", false)) {
                 _fazToggleAriaExpandStatus(accordionButtonSelector, "false");
                 return;
             }
@@ -3631,10 +3644,18 @@ function _fazWatchBannerElement() {
         _revisitFazConsent();
     });
 
-    // Delegate clicks on placeholder "Accept cookies" buttons.
+    // Delegate clicks on placeholder "Accept cookies" buttons. Prefer the
+    // specific service (#134): a YouTube placeholder enables only YouTube, not
+    // the entire Marketing category. Fall back to the category when no service
+    // id is present (older markup / non-service blocks).
     document.querySelector("body").addEventListener("click", function (event) {
         var btn = event.target.closest("[data-faz-accept]");
         if (!btn) return;
+        var service = btn.getAttribute("data-faz-accept-service");
+        if (service && typeof window._fazAcceptService === "function") {
+            window._fazAcceptService(service);
+            return;
+        }
         var cat = btn.getAttribute("data-faz-accept");
         if (cat && typeof window._fazAcceptCategory === "function") {
             window._fazAcceptCategory(cat);
@@ -4104,6 +4125,40 @@ window._fazAcceptCategory = function (categorySlug) {
     _fazAfterConsent();
     // Reset so the next direct call to _fazAcceptCookies takes a fresh snapshot.
     _fazCategoriesBeforeConsent = null;
+};
+
+/**
+ * Grant consent to a SINGLE service (e.g. just "youtube"), not its whole
+ * category (#134). Used by the content-blocker placeholder "Accept" button:
+ * accepting an embedded YouTube video must enable YouTube only, leaving the
+ * rest of the Marketing category blocked.
+ *
+ * Writes a per-service `svc.<id>:yes` override into the consent cookie and
+ * unblocks that provider, without flipping the category to "yes". The category
+ * stays whatever it was, so _fazShouldBlockProvider keeps blocking every other
+ * provider in it. Falls back to nothing when no serviceId is given.
+ *
+ * @param {string} serviceId  Service identifier (e.g. "youtube").
+ */
+window._fazAcceptService = function (serviceId) {
+    if (!serviceId) return;
+    // First user action — generate the consentid lazily (same rule as
+    // _fazAcceptCookies: no stable tracker before the visitor acts).
+    _fazSetConsentID();
+    // Record that the visitor acted so the banner is not re-shown, then store
+    // the per-service grant. _fazSetInStore serialises fazcookie-consent on each
+    // call, so this persists.
+    ref._fazSetInStore("action", "yes");
+    ref._fazSetInStore("svc." + serviceId, "yes");
+    // Keep any rendered service toggles for this service in sync.
+    document.querySelectorAll('.faz-service-toggle[data-service="' + serviceId + '"]')
+        .forEach(function (svcToggle) { svcToggle.checked = true; });
+    // Restore the now-consented provider's iframe/script; other providers in the
+    // same category remain blocked because their svc.<id> is unset and the
+    // category value is still "no".
+    _fazUnblock();
+    _fazFireEvent({ accepted: [], rejected: [], action: "custom", service: serviceId });
+    _fazAfterConsent();
 };
 
 window.getFazConsent = function () {

@@ -121,7 +121,7 @@ class Placeholder_Builder {
 		$html .= '<div class="faz-placeholder-overlay">';
 		$html .= '<svg class="faz-placeholder-icon" viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">' . $icon_svg . '</svg>';
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
-		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '">' . $button_text . '</button>';
+		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
 
 		// Hidden original content for JS to restore after consent.
@@ -174,7 +174,7 @@ class Placeholder_Builder {
 		$html .= '<div class="faz-placeholder-overlay">';
 		$html .= '<svg class="faz-placeholder-icon" viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">' . $icon_svg . '</svg>';
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
-		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '">' . $button_text . '</button>';
+		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
 		$html .= '</div>';
 
