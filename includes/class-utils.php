@@ -594,9 +594,75 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 	 * @return array Export data conforming to the WP privacy exporter format.
 	 */
 	function faz_privacy_exporter( $email_address, $page = 1 ) {
+		$export_items = array();
+		$email        = sanitize_email( (string) $email_address );
+		$page         = max( 1, (int) $page );
+		$per_page     = 20;
+		$done         = true;
+
+		// Consent logs store only one-way hashed IPs (SHA-256 + salt) and cannot
+		// be linked back to an email address — nothing to export there. DSAR form
+		// submissions (post_type faz_dsar), however, store the requester's name,
+		// email, request type and message in the clear, keyed by _dsar_email, so
+		// they ARE exportable personal data.
+		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
+			$query = new WP_Query(
+				array(
+					'post_type'      => 'faz_dsar',
+					'post_status'    => 'any',
+					'posts_per_page' => $per_page,
+					'paged'          => $page,
+					'fields'         => 'ids',
+					'no_found_rows'  => false,
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- DSAR exports are admin-triggered, low-volume, and must filter by the requester's email.
+					'meta_query'     => array(
+						array(
+							'key'     => '_dsar_email',
+							'value'   => $email,
+							'compare' => '=',
+						),
+					),
+				)
+			);
+			foreach ( $query->posts as $post_id ) {
+				$export_items[] = array(
+					'group_id'    => 'faz_dsar_requests',
+					'group_label' => __( 'Privacy requests (FAZ Cookie Manager)', 'faz-cookie-manager' ),
+					'item_id'     => 'faz-dsar-' . (int) $post_id,
+					'data'        => array(
+						array(
+							'name'  => __( 'Name', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_name', true ),
+						),
+						array(
+							'name'  => __( 'Email', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_email', true ),
+						),
+						array(
+							'name'  => __( 'Request type', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_type', true ),
+						),
+						array(
+							'name'  => __( 'Message', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_message', true ),
+						),
+						array(
+							'name'  => __( 'Status', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_status', true ),
+						),
+						array(
+							'name'  => __( 'Submitted', 'faz-cookie-manager' ),
+							'value' => (string) get_post_field( 'post_date', $post_id ),
+						),
+					),
+				);
+			}
+			$done = $page >= max( 1, (int) $query->max_num_pages );
+		}
+
 		return array(
-			'data' => array(),
-			'done' => true,
+			'data' => $export_items,
+			'done' => $done,
 		);
 	}
 }
@@ -615,13 +681,55 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	 * @return array Erasure result conforming to the WP privacy eraser format.
 	 */
 	function faz_privacy_eraser( $email_address, $page = 1 ) {
+		$email         = sanitize_email( (string) $email_address );
+		$page          = max( 1, (int) $page );
+		$per_page      = 20;
+		$items_removed = 0;
+		$messages      = array();
+		$done          = true;
+
+		// Consent logs use one-way IP hashing and cannot be linked to an email,
+		// so there is nothing to erase there (they auto-purge by retention). DSAR
+		// form submissions DO carry the requester's email and free text, so they
+		// are erasable on request.
+		$messages[] = __( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period.', 'faz-cookie-manager' );
+
+		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
+			$query = new WP_Query(
+				array(
+					'post_type'      => 'faz_dsar',
+					'post_status'    => 'any',
+					'posts_per_page' => $per_page,
+					'paged'          => $page,
+					'fields'         => 'ids',
+					'no_found_rows'  => false,
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- DSAR erasures are admin-triggered, low-volume, and must filter by the requester's email.
+					'meta_query'     => array(
+						array(
+							'key'     => '_dsar_email',
+							'value'   => $email,
+							'compare' => '=',
+						),
+					),
+				)
+			);
+			foreach ( $query->posts as $post_id ) {
+				if ( wp_delete_post( (int) $post_id, true ) ) {
+					$items_removed++;
+				}
+			}
+			if ( $items_removed > 0 ) {
+				/* translators: %d: number of privacy-request records deleted. */
+				$messages[] = sprintf( _n( 'Deleted %d FAZ Cookie Manager privacy request.', 'Deleted %d FAZ Cookie Manager privacy requests.', $items_removed, 'faz-cookie-manager' ), $items_removed );
+			}
+			$done = $page >= max( 1, (int) $query->max_num_pages );
+		}
+
 		return array(
-			'items_removed'  => 0,
-			'items_retained' => true,
-			'messages'       => array(
-				__( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses. Records are automatically purged after the configured retention period.', 'faz-cookie-manager' ),
-			),
-			'done'           => true,
+			'items_removed'  => $items_removed,
+			'items_retained' => false,
+			'messages'       => $messages,
+			'done'           => $done,
 		);
 	}
 }

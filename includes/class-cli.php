@@ -280,7 +280,7 @@ class CLI {
 		// Register personal data exporter.
 		add_filter( 'wp_privacy_personal_data_exporters', function ( $exporters ) {
 			$exporters['faz-cookie-manager'] = array(
-				'exporter_friendly_name' => __( 'FAZ Cookie Manager - Consent Logs', 'faz-cookie-manager' ),
+				'exporter_friendly_name' => __( 'FAZ Cookie Manager — Consent Logs & Privacy Requests', 'faz-cookie-manager' ),
 				'callback'               => 'faz_privacy_exporter',
 			);
 			return $exporters;
@@ -289,7 +289,7 @@ class CLI {
 		// Register personal data eraser.
 		add_filter( 'wp_privacy_personal_data_erasers', function ( $erasers ) {
 			$erasers['faz-cookie-manager'] = array(
-				'eraser_friendly_name' => __( 'FAZ Cookie Manager - Consent Logs', 'faz-cookie-manager' ),
+				'eraser_friendly_name' => __( 'FAZ Cookie Manager — Consent Logs & Privacy Requests', 'faz-cookie-manager' ),
 				'callback'             => 'faz_privacy_eraser',
 			);
 			return $erasers;
