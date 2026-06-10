@@ -507,7 +507,7 @@ class Controller {
 			$sitemap_url,
 			array(
 				'timeout'   => 15,
-				'sslverify' => false,
+				'sslverify' => (bool) apply_filters( 'faz_scanner_sslverify', true ),
 			)
 		);
 
@@ -533,7 +533,7 @@ class Controller {
 									$sub_url,
 									array(
 										'timeout'     => 15,
-										'sslverify'   => false,
+										'sslverify'   => (bool) apply_filters( 'faz_scanner_sslverify', true ),
 										'redirection' => 0,
 									)
 								);
@@ -580,7 +580,7 @@ class Controller {
 				$site_url,
 				array(
 					'timeout'   => 15,
-					'sslverify' => false,
+					'sslverify' => (bool) apply_filters( 'faz_scanner_sslverify', true ),
 				)
 			);
 			if ( ! is_wp_error( $homepage_response ) && 200 === wp_remote_retrieve_response_code( $homepage_response ) ) {
@@ -631,7 +631,7 @@ class Controller {
 		$static_ip = $settings->get( 'scanner', 'static_ip' );
 		$args      = array(
 			'timeout'     => 15,
-			'sslverify'   => false,
+			'sslverify'   => (bool) apply_filters( 'faz_scanner_sslverify', true ),
 			'redirection' => 3,
 		);
 		if ( ! empty( $static_ip ) && filter_var( $static_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {

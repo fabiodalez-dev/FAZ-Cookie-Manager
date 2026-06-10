@@ -458,7 +458,10 @@ class Api extends Rest_Controller {
 				$url,
 				array(
 					'timeout'             => 20,
-					'sslverify'           => false,
+					// Verify TLS by default — a MITM-altered page would corrupt the
+					// scanned cookie inventory. Only validated loopback scans skip it
+					// (local self-signed certs). Filterable for other local setups.
+					'sslverify'           => (bool) apply_filters( 'faz_scanner_sslverify', ! $is_validated_loopback, $url ),
 					'redirection'         => 3,
 					'reject_unsafe_urls'  => ! $is_validated_loopback,
 					'user-agent'          => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
