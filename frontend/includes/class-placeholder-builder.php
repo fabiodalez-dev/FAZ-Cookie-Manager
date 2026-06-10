@@ -43,7 +43,11 @@ class Placeholder_Builder {
 	 *
 	 * @var array<int,string>
 	 */
-	private static $video_services = array( 'youtube', 'vimeo', 'dailymotion', 'twitch' );
+	private static $video_services = array(
+		'youtube', 'vimeo', 'dailymotion', 'twitch',
+		// Extended video embeds.
+		'tiktok', 'wistia', 'loom', 'streamable', 'rumble',
+	);
 
 	/**
 	 * Map URL fragments to service identifiers.
@@ -60,11 +64,53 @@ class Placeholder_Builder {
 		'facebook.com'         => 'facebook',
 		'instagram.com'        => 'instagram',
 		'twitter.com'          => 'twitter',
-		'x.com'                => 'twitter',
+		// Host-anchored: a bare "x.com" substring also matches dropbox.com,
+		// netflix.com, mapbox.com, mailbox.com… — anchor to the host so only
+		// real x.com URLs resolve to Twitter/X.
+		'//x.com/'             => 'twitter',
 		'spotify.com'          => 'spotify',
 		'dailymotion.com'      => 'dailymotion',
 		'soundcloud.com'       => 'soundcloud',
 		'twitch.tv'            => 'twitch',
+		// Extended embed services. These have no bespoke brand icon and fall
+		// back to the default placeholder icon (see build()); only the URL→id
+		// mapping and the human name matter for the placeholder. Short link
+		// domains carry a trailing slash so `stripos` can't match them inside
+		// an unrelated host (e.g. "t.me/" won't match "content.medium.com").
+		'tiktok.com'           => 'tiktok',
+		'linkedin.com'         => 'linkedin',
+		'pinterest.com'        => 'pinterest',
+		'pin.it/'              => 'pinterest',
+		'reddit.com'           => 'reddit',
+		'redd.it/'             => 'reddit',
+		'tumblr.com'           => 'tumblr',
+		'flickr.com'           => 'flickr',
+		'threads.net'          => 'threads',
+		'bsky.app'             => 'bluesky',
+		't.me/'                => 'telegram',
+		'telegram.org'         => 'telegram',
+		'calendar.google.com'  => 'google-calendar',
+		'drive.google.com'     => 'google-drive',
+		'docs.google.com'      => 'google-docs',
+		'calendly.com'         => 'calendly',
+		'typeform.com'         => 'typeform',
+		'openstreetmap.org'    => 'openstreetmap',
+		'mapbox.com'           => 'mapbox',
+		'podcasts.apple.com'   => 'apple-podcasts',
+		'music.apple.com'      => 'apple-music',
+		'bandcamp.com'         => 'bandcamp',
+		'mixcloud.com'         => 'mixcloud',
+		'wistia.com'           => 'wistia',
+		'wistia.net'           => 'wistia',
+		'loom.com'             => 'loom',
+		'streamable.com'       => 'streamable',
+		'rumble.com'           => 'rumble',
+		'codepen.io'           => 'codepen',
+		'jsfiddle.net'         => 'jsfiddle',
+		'disqus.com'           => 'disqus',
+		'giphy.com'            => 'giphy',
+		'slideshare.net'       => 'slideshare',
+		'issuu.com'            => 'issuu',
 	);
 
 	/**
@@ -83,6 +129,37 @@ class Placeholder_Builder {
 		'dailymotion' => 'Dailymotion',
 		'soundcloud'  => 'SoundCloud',
 		'twitch'      => 'Twitch',
+		// Extended embed services (default placeholder icon).
+		'tiktok'          => 'TikTok',
+		'linkedin'        => 'LinkedIn',
+		'pinterest'       => 'Pinterest',
+		'reddit'          => 'Reddit',
+		'tumblr'          => 'Tumblr',
+		'flickr'          => 'Flickr',
+		'threads'         => 'Threads',
+		'bluesky'         => 'Bluesky',
+		'telegram'        => 'Telegram',
+		'google-calendar' => 'Google Calendar',
+		'google-drive'    => 'Google Drive',
+		'google-docs'     => 'Google Docs',
+		'calendly'        => 'Calendly',
+		'typeform'        => 'Typeform',
+		'openstreetmap'   => 'OpenStreetMap',
+		'mapbox'          => 'Mapbox',
+		'apple-podcasts'  => 'Apple Podcasts',
+		'apple-music'     => 'Apple Music',
+		'bandcamp'        => 'Bandcamp',
+		'mixcloud'        => 'Mixcloud',
+		'wistia'          => 'Wistia',
+		'loom'            => 'Loom',
+		'streamable'      => 'Streamable',
+		'rumble'          => 'Rumble',
+		'codepen'         => 'CodePen',
+		'jsfiddle'        => 'JSFiddle',
+		'disqus'          => 'Disqus',
+		'giphy'           => 'GIPHY',
+		'slideshare'      => 'SlideShare',
+		'issuu'           => 'Issuu',
 	);
 
 	/**
