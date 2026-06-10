@@ -4158,6 +4158,10 @@ window._fazAcceptService = function (serviceId) {
     // category value is still "no".
     _fazUnblock();
     _fazFireEvent({ accepted: [], rejected: [], action: "custom", service: serviceId });
+    // Dismiss the banner/preference center, same as _fazAcceptCategory — a
+    // placeholder accept is an explicit consent action.
+    _fazRemoveBanner();
+    _fazHidePreferenceCenter();
     _fazAfterConsent();
 };
 
