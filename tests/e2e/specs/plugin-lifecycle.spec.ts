@@ -351,6 +351,52 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
         \\FazCookie\\Includes\\Activator::install();
       }
     `);
+    // Activator::install() recreates the schema and the uncategorized /
+    // wordpress-internal categories, but NOT the user-facing default
+    // categories — and the destructive "drop wp_faz_* tables" test above
+    // also wipes every cookie row. Since 1.17.1 the preference center HIDES
+    // empty categories, so a downstream spec (e.g. the TCF timestamps test)
+    // that toggles `analytics` finds no toggle to click. Re-seed the default
+    // categories AND a fixture cookie per category, mirroring global-setup.ts,
+    // so the rest of the run sees the canonical, non-empty category set.
+    wpEval(`
+      global $wpdb;
+      if ( ! class_exists( '\\\\FazCookie\\\\Admin\\\\Modules\\\\Cookies\\\\Includes\\\\Category_Controller' ) ) { return; }
+      $category_controller = \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller::get_instance();
+      $category_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories" );
+      if ( $category_count < 3 && method_exists( $category_controller, 'reinstall' ) ) {
+        $category_controller->reinstall();
+      }
+      $fixture_categories = array(
+        'necessary'     => 'faz_e2e_necessary_probe',
+        'analytics'     => 'faz_e2e_analytics_probe',
+        'functional'    => 'faz_e2e_functional_probe',
+        'marketing'     => 'faz_e2e_marketing_probe',
+        'performance'   => 'faz_e2e_performance_probe',
+        'uncategorized' => 'faz_e2e_uncategorized_probe',
+      );
+      foreach ( $fixture_categories as $category_slug => $cookie_name ) {
+        $category_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug = %s", $category_slug ) );
+        if ( $category_id <= 0 ) { continue; }
+        $has_cookie = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookies WHERE category = %d", $category_id ) );
+        if ( 0 === $has_cookie ) {
+          $now = current_time( 'mysql' );
+          $wpdb->insert( $wpdb->prefix . 'faz_cookies', array(
+            'name' => $cookie_name, 'slug' => str_replace( '_', '-', $cookie_name ),
+            'description' => wp_json_encode( array( 'en' => 'E2E fixture cookie.' ) ),
+            'duration' => wp_json_encode( array( 'en' => 'Session' ) ),
+            'domain' => '127.0.0.1', 'category' => $category_id, 'type' => 'HTTP',
+            'discovered' => 0, 'url_pattern' => '', 'meta' => wp_json_encode( array() ),
+            'date_created' => $now, 'date_modified' => $now,
+          ) );
+        }
+      }
+      $category_controller->delete_cache();
+      if ( class_exists( '\\\\FazCookie\\\\Admin\\\\Modules\\\\Cookies\\\\Includes\\\\Cookie_Controller' ) ) {
+        \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Controller::get_instance()->delete_cache();
+      }
+      delete_option( 'faz_banner_template' );
+    `);
     // Restore remove_data_on_uninstall to its pre-test value.
     wpEval(`
       $s = get_option( 'faz_settings', array() );
