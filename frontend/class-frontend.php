@@ -1153,6 +1153,15 @@ class Frontend {
 		return Geo_Runtime::resolve_for_country( $this->get_visitor_country() );
 	}
 
+	/**
+	 * Build the Google Consent Mode payload passed to gcm.js.
+	 *
+	 * Reads the stored GCM settings and, when the geo-routing runtime flag is
+	 * on and a ruleset resolves for the visitor, overlays the ruleset's
+	 * `signals.cmv2` defaults via Geo_Runtime::apply_cmv2_to_gcm().
+	 *
+	 * @return array|null GCM data array, or null when GCM is disabled.
+	 */
 	public function get_gcm_data() {
 		if ( ! $this->gcm_settings ) {
 			return;
@@ -3332,6 +3341,17 @@ class Frontend {
 		return false;
 	}
 
+	/**
+	 * Assemble the per-category cookie groups exposed to the frontend banner.
+	 *
+	 * Skips hidden and `wordpress-internal` categories, then for each visible
+	 * category computes `ccpaDoNotSell`, the per-category `defaultConsent`
+	 * (jurisdiction-aware via Geo_Runtime::default_consent()) and
+	 * `defaultFromRuleset` so the JS knows whether the default is
+	 * ruleset-authoritative or must fall back to effective-law logic.
+	 *
+	 * @return array[] List of cookie-group descriptors for the banner store.
+	 */
 	public function get_cookie_groups() {
 		$cookie_groups = array();
 		$categories    = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
