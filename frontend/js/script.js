@@ -748,7 +748,12 @@ function _fazSetInitialState() {
     const responseCategories = { accepted: [], rejected: [], action: 'init' };
     for (const category of _fazStore._categories) {
         let valueToSet = "yes";
-        if (runtimeGeo) {
+        // Only categories the ruleset actually NAMES are jurisdiction-authoritative
+        // here. Custom categories absent from the ruleset fall through to the
+        // effective-law branch below — matching the server's get_blocked_categories
+        // split — so a custom category is never recorded "no" on the client while
+        // the (opt-out) server runs it.
+        if (runtimeGeo && category.defaultFromRuleset) {
             if (!category.isNecessary && !category.defaultConsent.gdpr) {
                 valueToSet = "no";
             }

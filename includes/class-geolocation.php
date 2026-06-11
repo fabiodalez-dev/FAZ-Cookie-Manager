@@ -458,9 +458,12 @@ class Geolocation {
 	/**
 	 * Download and install a MaxMind GeoLite2-City database.
 	 *
-	 * City (not Country) is fetched so the local DB carries `subdivisions`,
-	 * which sub-national geo-routing (province/state rulesets) needs. Requires a
-	 * MaxMind license key (free registration at maxmind.com).
+	 * The edition is flag-gated: the City edition (which carries `subdivisions`
+	 * for sub-national geo-routing) is fetched ONLY when the runtime geo-routing
+	 * flag `faz_geo_ruleset_runtime` is enabled; otherwise the smaller Country
+	 * edition is downloaded, exactly as before — so installs that have not opted
+	 * into runtime geo-routing see no change in download size or behaviour.
+	 * Requires a MaxMind license key (free registration at maxmind.com).
 	 *
 	 * @param string $license_key MaxMind license key.
 	 * @return true|\WP_Error True on success, WP_Error on failure.
@@ -470,10 +473,11 @@ class Geolocation {
 			return new \WP_Error( 'faz_geo_no_key', __( 'MaxMind license key is required.', 'faz-cookie-manager' ) );
 		}
 
+		$edition     = self::geolite2_edition();
 		$license_key = sanitize_text_field( $license_key );
 		$url         = add_query_arg(
 			array(
-				'edition_id'  => 'GeoLite2-City',
+				'edition_id'  => $edition,
 				'license_key' => $license_key,
 				'suffix'      => 'tar.gz',
 			),
@@ -496,23 +500,47 @@ class Geolocation {
 			);
 		}
 
-		$result = self::extract_mmdb( $tmp_file );
+		$result = self::extract_mmdb( $tmp_file, $edition );
 		@unlink( $tmp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
 
 		return $result;
 	}
 
 	/**
+	 * Decide which GeoLite2 edition to download.
+	 *
+	 * City only when the runtime geo-routing flag is on (it needs subdivisions);
+	 * Country otherwise — preserving the pre-feature behaviour for installs that
+	 * never opt into runtime geo-routing. Overridable via `faz_geolite2_edition`.
+	 *
+	 * @return string 'GeoLite2-City' or 'GeoLite2-Country'.
+	 */
+	private static function geolite2_edition() {
+		$default = apply_filters( 'faz_geo_ruleset_runtime', false ) ? 'GeoLite2-City' : 'GeoLite2-Country';
+		/**
+		 * Filter the GeoLite2 edition the downloader fetches.
+		 *
+		 * @since 1.17.2
+		 * @param string $edition 'GeoLite2-City' or 'GeoLite2-Country'.
+		 */
+		$edition = (string) apply_filters( 'faz_geolite2_edition', $default );
+		return in_array( $edition, array( 'GeoLite2-City', 'GeoLite2-Country' ), true ) ? $edition : $default;
+	}
+
+	/**
 	 * Extract a .mmdb file from a MaxMind .tar.gz archive.
 	 *
 	 * @param string $tar_gz_path Path to the downloaded .tar.gz file.
+	 * @param string $edition     Edition downloaded ('GeoLite2-City' or
+	 *                            'GeoLite2-Country'); determines the dest filename.
 	 * @return true|\WP_Error
 	 */
-	private static function extract_mmdb( $tar_gz_path ) {
+	private static function extract_mmdb( $tar_gz_path, $edition = 'GeoLite2-City' ) {
 		if ( ! class_exists( 'PharData' ) ) {
 			return new \WP_Error( 'faz_geo_no_phar', __( 'PharData extension is required to extract the database.', 'faz-cookie-manager' ) );
 		}
 
+		$edition  = in_array( $edition, array( 'GeoLite2-City', 'GeoLite2-Country' ), true ) ? $edition : 'GeoLite2-City';
 		$data_dir = self::get_data_dir();
 		wp_mkdir_p( $data_dir );
 
@@ -525,7 +553,7 @@ class Geolocation {
 			$found = false;
 			foreach ( new \RecursiveIteratorIterator( $tar ) as $entry ) {
 				if ( '.mmdb' === substr( $entry->getFilename(), -5 ) ) {
-					$dest = $data_dir . 'GeoLite2-City.mmdb';
+					$dest = $data_dir . $edition . '.mmdb';
 					if ( ! copy( $entry->getPathname(), $dest ) ) {
 						return new \WP_Error( 'faz_geo_copy_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
 					}

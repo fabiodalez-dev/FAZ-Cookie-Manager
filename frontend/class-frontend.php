@@ -3324,6 +3324,11 @@ class Frontend {
 					(bool) $category->get_sell_personal_data(),
 					(bool) $category->get_share_personal_data()
 				),
+				// True only when the runtime ruleset NAMES this category, so the
+				// JS knows whether defaultConsent is jurisdiction-authoritative
+				// (use it) or must fall back to the effective-law logic (matching
+				// the server's get_blocked_categories split).
+				'defaultFromRuleset' => Geo_Runtime::is_ruleset_default( $this->get_runtime_ruleset(), $category->get_slug() ),
 			);
 		}
 		return $cookie_groups;

@@ -670,7 +670,7 @@ class Controller extends Base_Controller {
 
 		$match_ids   = array(); // law match + status=1 + targets the country
 		$anyland_ids = array(); // law match + status=1 + empty target list
-		$default_id  = null;    // law match + banner_default=1 (any status)
+		$default_id  = null;    // law match + status=1 + banner_default=1
 
 		foreach ( $items as $item ) {
 			$inner = ( isset( $item->settings['settings'] ) && is_array( $item->settings['settings'] ) )
@@ -685,13 +685,20 @@ class Controller extends Base_Controller {
 			$targets  = is_array( $item->target_countries ) ? $item->target_countries : array();
 			$priority = isset( $item->priority ) ? (int) $item->priority : 0;
 
-			if ( $status ) {
-				$entry = array( 'id' => $iid, 'priority' => $priority );
-				if ( '' !== $country && in_array( $country, $targets, true ) ) {
-					$match_ids[] = $entry;
-				} elseif ( empty( $targets ) ) {
-					$anyland_ids[] = $entry;
-				}
+			// This selector is an ENABLEMENT preference, not a last-resort
+			// fallback like get_active_banner_for_country(): only ACTIVE
+			// (status=1) banners qualify, including the banner_default row.
+			// Returning a disabled banner here would override the
+			// country-selected active banner with one the admin turned off.
+			if ( ! $status ) {
+				continue;
+			}
+
+			$entry = array( 'id' => $iid, 'priority' => $priority );
+			if ( '' !== $country && in_array( $country, $targets, true ) ) {
+				$match_ids[] = $entry;
+			} elseif ( empty( $targets ) ) {
+				$anyland_ids[] = $entry;
 			}
 			if ( 1 === (int) $item->banner_default && null === $default_id ) {
 				$default_id = $iid;

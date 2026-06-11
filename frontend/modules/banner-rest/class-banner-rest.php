@@ -216,11 +216,13 @@ class Banner_Rest {
 			restore_previous_locale();
 		}
 
-		// Under the runtime flag the enforced law follows the ruleset model, so
-		// the swapped banner runs the same regime as the initial render.
-		$active_law = ( null !== $runtime_ruleset )
-			? Geo_Runtime::model_to_law( $runtime_ruleset )
-			: $banner->get_law();
+		// activeLaw must always reflect the law of the banner actually being
+		// returned. When the runtime flag is on, banner selection already
+		// preferred the banner whose applicableLaw matches the ruleset model;
+		// if no such banner exists the original is kept, and its real law must
+		// be reported so the served HTML and the JS regime stay coherent (a
+		// ruleset-model law on a mismatched banner would desync the two).
+		$active_law = $banner->get_law();
 
 		$payload = array(
 			'language'   => $lang,
@@ -389,6 +391,7 @@ class Banner_Rest {
 					(bool) $category->get_sell_personal_data(),
 					(bool) $category->get_share_personal_data()
 				),
+				'defaultFromRuleset' => Geo_Runtime::is_ruleset_default( $ruleset, $slug ),
 			);
 		}
 		/**

@@ -55,8 +55,12 @@ class Geo_Runtime {
 	 *
 	 * The country is supplied by the caller (the same value used to select the
 	 * banner, so banner selection and ruleset resolution can never disagree on
-	 * the country — finding #5). Region/sub-national detection still happens
-	 * inside Geo_Routing. Returns null when the flag is off or resolution fails.
+	 * the country — finding #5). The region is resolved here via
+	 * Geolocation::get_visitor_region() — which honours the `faz_visitor_region`
+	 * filter and the GeoLite2-City subdivision lookup — and passed alongside the
+	 * country so sub-national rulesets (e.g. Law 25 for CA-QC) resolve, while a
+	 * region whose prefix does not match the country is discarded downstream.
+	 * Returns null when the flag is off or resolution fails.
 	 *
 	 * @param string $country ISO 3166-1 alpha-2 country code (authoritative).
 	 * @return array|null
@@ -76,8 +80,19 @@ class Geo_Runtime {
 		if ( ! class_exists( $class ) || ! method_exists( $class, 'get_instance' ) ) {
 			return null;
 		}
+		// Resolve the sub-national region (honours faz_visitor_region) so it can
+		// be passed as an authoritative override; empty when no City DB / signal.
+		$region = '';
+		if ( class_exists( '\\FazCookie\\Includes\\Geolocation' )
+			&& method_exists( '\\FazCookie\\Includes\\Geolocation', 'get_visitor_region' ) ) {
+			try {
+				$region = (string) \FazCookie\Includes\Geolocation::get_visitor_region();
+			} catch ( \Throwable $e ) {
+				$region = '';
+			}
+		}
 		try {
-			$ctx = $class::get_instance()->get_visitor_context( null, $key );
+			$ctx = $class::get_instance()->get_visitor_context( null, $key, $region );
 		} catch ( \Throwable $e ) {
 			return null;
 		}
@@ -109,6 +124,24 @@ class Geo_Runtime {
 			return false;
 		}
 		return null;
+	}
+
+	/**
+	 * Whether a resolved ruleset actually NAMES this category.
+	 *
+	 * The client uses this to decide, per category, whether its pre-consent
+	 * default is jurisdiction-authoritative (came from the ruleset) or must fall
+	 * back to the effective-law logic — the same split the server applies in
+	 * get_blocked_categories(). Without it, a custom category absent from the
+	 * ruleset would be read as ruleset-denied on the client while the server
+	 * applies the (opt-out) law and runs it: client/server divergence.
+	 *
+	 * @param array|null $ruleset Resolved ruleset, or null.
+	 * @param string     $slug    Category slug.
+	 * @return bool
+	 */
+	public static function is_ruleset_default( $ruleset, $slug ) {
+		return ( null !== $ruleset ) && ( null !== self::category_default( $ruleset, $slug ) );
 	}
 
 	/**
