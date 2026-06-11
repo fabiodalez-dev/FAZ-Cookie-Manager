@@ -98,19 +98,19 @@ if (initialCookieObj) {
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
-        // Prefer the CANONICAL Consent Mode keys when present, falling back to
-        // the category-mirror keys for legacy payloads. The canonical keys are
-        // kept in sync with the mirrors on save (Gcm_Settings), so this is
-        // behaviour-preserving for normal rows; it also lets the runtime
-        // geo-routing override (which writes the canonical keys — see
-        // Geo_Runtime::apply_cmv2_to_gcm) reach gtag for ALL seven signals,
-        // including personalization_storage independently of functionality_storage.
+        // Read the category-mirror keys: these are the source of truth for the
+        // storage-type signals. The non-personalized-ads fallback deliberately
+        // keeps the `marketing` mirror and the canonical `ad_storage` OUT of sync
+        // (marketing drives ad serving here), so reading the mirrors is
+        // load-bearing — do NOT switch this to canonical-first. The runtime
+        // geo-routing override writes these same mirror keys (see
+        // Geo_Runtime::apply_cmv2_to_gcm) so its CMv2 signals reach gtag too.
         var consentRegionData = {
-            ad_storage: regionSetting.ad_storage || regionSetting.marketing || regionSetting.advertisement || "denied",
-            analytics_storage: regionSetting.analytics_storage || regionSetting.analytics,
-            functionality_storage: regionSetting.functionality_storage || regionSetting.functional,
-            personalization_storage: regionSetting.personalization_storage || regionSetting.functional,
-            security_storage: regionSetting.security_storage || regionSetting.necessary,
+            ad_storage: regionSetting.marketing || regionSetting.advertisement || "denied",
+            analytics_storage: regionSetting.analytics,
+            functionality_storage: regionSetting.functional,
+            personalization_storage: regionSetting.functional,
+            security_storage: regionSetting.necessary,
             ad_user_data: regionSetting.ad_user_data,
             ad_personalization: regionSetting.ad_personalization
         };

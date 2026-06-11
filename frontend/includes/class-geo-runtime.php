@@ -202,12 +202,20 @@ class Geo_Runtime {
 	/**
 	 * Override Google Consent Mode v2 default_settings from a ruleset's CMv2.
 	 *
-	 * Writes the CANONICAL signal keys (ad_storage, analytics_storage,
-	 * ad_user_data, ad_personalization, functionality_storage,
-	 * personalization_storage, security_storage). gcm.js reads these canonical
-	 * keys (with a category-mirror fallback for legacy payloads), so all seven
-	 * signals — including personalization_storage independently of
-	 * functionality_storage — reflect the jurisdiction.
+	 * Writes the CATEGORY-MIRROR keys that gcm.js actually reads for the
+	 * storage-type signals (marketing → ad_storage, analytics →
+	 * analytics_storage, functional → functionality_storage AND
+	 * personalization_storage, necessary → security_storage) plus the canonical
+	 * ad_user_data / ad_personalization keys (which gcm.js reads directly). The
+	 * canonical equivalents are also written for row consistency. gcm.js
+	 * deliberately reads the mirrors (the non-personalized-ads fallback keeps
+	 * `marketing` and canonical `ad_storage` out of sync), so writing the
+	 * mirrors is what makes the ruleset CMv2 signals reach gtag.
+	 *
+	 * Limitation: gcm.js derives BOTH functionality_storage and
+	 * personalization_storage from the single `functional` mirror, so they
+	 * cannot be set independently here. The more-restrictive of the two CMv2
+	 * values wins (denied if either is denied) — the compliance-safe choice.
 	 *
 	 * @param array|null $ruleset      Resolved ruleset, or null (no-op).
 	 * @param array      $gcm_settings GCM settings array (from Gcm_Settings::get()).
@@ -219,16 +227,46 @@ class Geo_Runtime {
 			|| ! isset( $gcm_settings['default_settings'] ) || ! is_array( $gcm_settings['default_settings'] ) ) {
 			return $gcm_settings;
 		}
-		$signals = $ruleset['signals']['cmv2'];
+		$cmv2 = $ruleset['signals']['cmv2'];
+		$norm = static function ( $state ) {
+			return ( 'granted' === $state || 'granted-locked' === $state ) ? 'granted' : 'denied';
+		};
+
+		// CMv2 canonical key → the gcm-row keys gcm.js reads. The mirror is the
+		// load-bearing one for the storage types; the canonical is written too
+		// so the stored row stays internally consistent.
+		$direct = array(
+			'ad_storage'        => array( 'marketing', 'ad_storage' ),
+			'analytics_storage' => array( 'analytics', 'analytics_storage' ),
+			'security_storage'  => array( 'necessary', 'security_storage' ),
+			'ad_user_data'      => array( 'ad_user_data' ),
+			'ad_personalization' => array( 'ad_personalization' ),
+		);
+
 		foreach ( $gcm_settings['default_settings'] as $idx => $row ) {
 			if ( ! is_array( $row ) ) {
 				continue;
 			}
-			foreach ( $signals as $key => $state ) {
-				// CMv2 states: granted / granted-locked → 'granted';
-				// denied / denied-until-action → 'denied'.
-				$gcm_settings['default_settings'][ $idx ][ $key ] =
-					( 'granted' === $state || 'granted-locked' === $state ) ? 'granted' : 'denied';
+			foreach ( $direct as $cmv2_key => $row_keys ) {
+				if ( ! isset( $cmv2[ $cmv2_key ] ) ) {
+					continue;
+				}
+				$value = $norm( $cmv2[ $cmv2_key ] );
+				foreach ( $row_keys as $rk ) {
+					$gcm_settings['default_settings'][ $idx ][ $rk ] = $value;
+				}
+			}
+
+			// functionality_storage + personalization_storage both derive from
+			// the `functional` mirror in gcm.js — set it to the more-restrictive
+			// of the two CMv2 values, and mirror that onto both canonical keys.
+			$func = isset( $cmv2['functionality_storage'] ) ? $norm( $cmv2['functionality_storage'] ) : null;
+			$pers = isset( $cmv2['personalization_storage'] ) ? $norm( $cmv2['personalization_storage'] ) : null;
+			if ( null !== $func || null !== $pers ) {
+				$combined = ( 'denied' === $func || 'denied' === $pers ) ? 'denied' : 'granted';
+				$gcm_settings['default_settings'][ $idx ]['functional']              = $combined;
+				$gcm_settings['default_settings'][ $idx ]['functionality_storage']   = $combined;
+				$gcm_settings['default_settings'][ $idx ]['personalization_storage'] = $combined;
 			}
 		}
 		return $gcm_settings;

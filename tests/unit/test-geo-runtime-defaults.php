@@ -170,15 +170,30 @@ $row      = $out['default_settings'][0];
 $cmv2     = $quebec['signals']['cmv2'];
 // Quebec CMv2: ad/analytics/ad_user_data/ad_personalization = denied-until-action;
 // personalization/functionality/security = granted.
+// The CATEGORY-MIRROR keys are the load-bearing ones gcm.js actually reads for
+// the storage-type signals.
+assert_eq( $row['marketing'], 'denied', 'Quebec → marketing (ad_storage mirror) denied' );
+assert_eq( $row['analytics'], 'denied', 'Quebec → analytics (analytics_storage mirror) denied' );
+assert_eq( $row['necessary'], 'granted', 'Quebec → necessary (security_storage mirror) granted' );
+assert_eq( $row['functional'], 'granted', 'Quebec → functional (functionality+personalization mirror) granted' );
+// Canonical keys written too (row stays internally consistent).
 assert_eq( $row['ad_storage'], 'denied', 'Quebec → ad_storage denied' );
 assert_eq( $row['analytics_storage'], 'denied', 'Quebec → analytics_storage denied' );
 assert_eq( $row['ad_user_data'], 'denied', 'Quebec → ad_user_data denied' );
 assert_eq( $row['ad_personalization'], 'denied', 'Quebec → ad_personalization denied' );
-assert_eq( $row['personalization_storage'], 'granted', 'Quebec → personalization_storage granted (independent of functionality)' );
+assert_eq( $row['personalization_storage'], 'granted', 'Quebec → personalization_storage granted' );
 assert_eq( $row['functionality_storage'], 'granted', 'Quebec → functionality_storage granted' );
 assert_eq( $row['security_storage'], 'granted', 'Quebec → security_storage granted' );
-// Mirror keys NOT named by CMv2 are left untouched (gcm.js falls back to them).
+// Non-signal keys untouched.
 assert_eq( $row['regions'], 'All', 'non-signal keys untouched' );
+
+// Most-restrictive combine: a ruleset that grants functionality but DENIES
+// personalization must collapse the shared `functional` mirror to denied
+// (gcm.js can't set the two independently). POPIA is exactly that shape.
+$popia_path = dirname( __DIR__, 2 ) . '/admin/modules/geo-routing/rulesets/popia-southafrica.json';
+$popia      = json_decode( (string) file_get_contents( $popia_path ), true );
+$popia_row  = Geo_Runtime::apply_cmv2_to_gcm( $popia, $gcm )['default_settings'][0];
+assert_eq( $popia_row['functional'], 'denied', 'POPIA → functional mirror denied (personalization denied wins over functionality granted)' );
 
 // Null ruleset → unchanged.
 assert_eq( Geo_Runtime::apply_cmv2_to_gcm( null, $gcm ), $gcm, 'null ruleset → GCM unchanged' );
