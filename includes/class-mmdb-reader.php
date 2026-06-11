@@ -65,6 +65,13 @@ class Mmdb_Reader {
 	 */
 	private $ip_version;
 
+	/**
+	 * Database type declared in the MMDB metadata.
+	 *
+	 * @var string
+	 */
+	private $database_type = '';
+
 	const SEPARATOR_SIZE  = 16;
 	const METADATA_MARKER = "\xab\xcd\xefMaxMind.com";
 	const MAX_DECODE_DEPTH = 128;
@@ -132,6 +139,17 @@ class Mmdb_Reader {
 	}
 
 	/**
+	 * Return the database type declared in the MMDB metadata.
+	 *
+	 * Examples: GeoLite2-Country, GeoLite2-City, GeoIP2-Country.
+	 *
+	 * @return string Database type, or an empty string when absent.
+	 */
+	public function database_type() {
+		return $this->database_type;
+	}
+
+	/**
 	 * Parse metadata from the end of the file.
 	 *
 	 * @throws \RuntimeException If metadata marker is not found.
@@ -155,6 +173,9 @@ class Mmdb_Reader {
 		if ( ! in_array( $this->ip_version, array( 4, 6 ), true ) ) {
 			throw new \RuntimeException( 'Unsupported MMDB ip_version: ' . esc_html( $this->ip_version ) );
 		}
+		$this->database_type    = isset( $meta['database_type'] ) && is_string( $meta['database_type'] )
+			? $meta['database_type']
+			: '';
 		$this->node_byte_size   = (int) ( $this->record_size * 2 / 8 );
 		$this->search_tree_size = $this->node_count * $this->node_byte_size;
 		if ( $this->search_tree_size + self::SEPARATOR_SIZE > strlen( $this->data ) ) {

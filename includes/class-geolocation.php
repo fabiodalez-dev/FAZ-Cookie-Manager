@@ -390,22 +390,22 @@ class Geolocation {
 	 * Get the path to the MMDB database file, if it exists.
 	 *
 	 * Checks (in order):
-	 *   1. wp-content/uploads/faz-cookie-manager/GeoLite2-City.mmdb
-	 *   2. wp-content/uploads/faz-cookie-manager/GeoLite2-Country.mmdb (legacy)
+	 *   1. The configured GeoLite2 edition (Country or City)
+	 *   2. The other GeoLite2 edition as a legacy fallback
 	 *   3. wp-content/uploads/faz-cookie-manager/dbip-country-lite.mmdb
 	 *
-	 * City is preferred because it additionally carries the `subdivisions`
-	 * needed for sub-national (province/state) geo-routing; Country.mmdb stays
-	 * a valid fallback for installs that downloaded it before the City switch
-	 * (country-level routing only, region lookups return '').
+	 * Honouring the configured edition also keeps activation deterministic if
+	 * an obsolete file cannot be deleted after a Country/City switch.
 	 *
 	 * @return string Full path to the database file, or empty string.
 	 */
 	public static function get_database_path() {
 		$upload_dir = self::get_data_dir();
+		$preferred  = self::geolite2_edition();
+		$alternate  = ( 'GeoLite2-City' === $preferred ) ? 'GeoLite2-Country' : 'GeoLite2-City';
 		$candidates = array(
-			$upload_dir . 'GeoLite2-City.mmdb',
-			$upload_dir . 'GeoLite2-Country.mmdb',
+			$upload_dir . $preferred . '.mmdb',
+			$upload_dir . $alternate . '.mmdb',
 			$upload_dir . 'dbip-country-lite.mmdb',
 		);
 
@@ -562,25 +562,56 @@ class Geolocation {
 		$edition  = in_array( $edition, array( 'GeoLite2-City', 'GeoLite2-Country' ), true ) ? $edition : 'GeoLite2-City';
 		$data_dir = self::get_data_dir();
 		wp_mkdir_p( $data_dir );
+		$tar_path = '';
+		$staged   = '';
 
 		try {
-			$phar    = new \PharData( $tar_gz_path );
-			$tar     = $phar->decompress();
+			$phar     = new \PharData( $tar_gz_path );
+			$tar      = $phar->decompress();
 			$tar_path = $tar->getPath();
 
 			// Find the .mmdb file inside the archive.
 			$found = false;
 			foreach ( new \RecursiveIteratorIterator( $tar ) as $entry ) {
 				if ( '.mmdb' === substr( $entry->getFilename(), -5 ) ) {
-					$dest = $data_dir . $edition . '.mmdb';
-					if ( ! copy( $entry->getPathname(), $dest ) ) {
+					$dest   = $data_dir . $edition . '.mmdb';
+					$staged = $data_dir . '.' . $edition . '.' . wp_generate_uuid4() . '.tmp';
+					if ( ! copy( $entry->getPathname(), $staged ) ) {
 						return new \WP_Error( 'faz_geo_copy_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
 					}
+
+					// Validate before replacing the active database. A valid tar
+					// can still contain a corrupt or wrong-edition .mmdb; without
+					// this check the endpoint reported success and broke lookups.
+					$reader        = new Mmdb_Reader( $staged );
+					$database_type = $reader->database_type();
+					$expected_type = ( 'GeoLite2-City' === $edition ) ? 'City' : 'Country';
+					unset( $reader );
+					if (
+						'' === $database_type
+						|| 1 !== preg_match( '/(?:^|-)' . preg_quote( $expected_type, '/' ) . '$/i', $database_type )
+					) {
+						throw new \RuntimeException(
+							'Downloaded MMDB edition mismatch: expected '
+							. $expected_type
+							. ', received '
+							. ( '' !== $database_type ? $database_type : 'unknown' )
+							. '.'
+						);
+					}
+
+					// The staging file is in the same directory, so rename is an
+					// atomic replacement on the filesystems used by WordPress.
+					// If activation fails, the previous database remains intact.
+					if ( ! @rename( $staged, $dest ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+						return new \WP_Error( 'faz_geo_activate_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
+					}
+					$staged = '';
 					$found = true;
 					// Remove the OTHER edition's DB so a Country↔City switch
 					// doesn't leave a stale file that get_database_path() (which
-					// prefers City) would keep serving over the freshly-chosen
-					// edition. Only the just-written edition survives.
+					// now prefers the configured edition) can fall back to stale
+					// data. Only the just-written edition should survive.
 					$superseded = array(
 						$data_dir . 'GeoLite2-City.mmdb',
 						$data_dir . 'GeoLite2-Country.mmdb',
@@ -594,9 +625,6 @@ class Geolocation {
 					break;
 				}
 			}
-
-			// Clean up decompressed tar.
-			@unlink( $tar_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
 
 			if ( ! $found ) {
 				return new \WP_Error( 'faz_geo_no_mmdb', __( 'No .mmdb file found in the archive.', 'faz-cookie-manager' ) );
@@ -615,6 +643,13 @@ class Geolocation {
 					$e->getMessage()
 				)
 			);
+		} finally {
+			if ( '' !== $staged && file_exists( $staged ) ) {
+				@unlink( $staged ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
+			}
+			if ( '' !== $tar_path && file_exists( $tar_path ) ) {
+				@unlink( $tar_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
+			}
 		}
 	}
 }
