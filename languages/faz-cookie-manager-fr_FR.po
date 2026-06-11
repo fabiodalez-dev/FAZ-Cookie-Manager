@@ -5418,3 +5418,31 @@ msgstr "Lien"
 
 #~ msgid "Uncategorized"
 #~ msgstr "Non catégorisé"
+
+msgid ""
+"Geo-targeting requires a MaxMind GeoLite2 database. <a href=\"https://"
+"www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Get "
+"a free license key</a>."
+msgstr "Le ciblage géographique nécessite une base de données MaxMind GeoLite2. <a href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Obtenez une clé de licence gratuite</a>."
+
+msgid "Database edition"
+msgstr "Édition de la base de données"
+
+msgid "Country &#8212; country-level only (recommended)"
+msgstr "Country &#8212; niveau pays uniquement (recommandé)"
+
+msgid "City &#8212; adds region / state detection"
+msgstr "City &#8212; ajoute la détection de la région / de l’État"
+
+msgid ""
+"<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only "
+"&#8212; enough for country-based banner targeting and most per-jurisdiction "
+"rules. <strong>City</strong> (~60&#8211;110 MB) additionally resolves the "
+"region / province / state, which a few rules need: sub-national regimes such "
+"as <em>Quebec Law 25</em> apply only inside one region of a country, so "
+"without City (or a Cloudflare <code>CF-Region-Code</code> header) the plugin "
+"can only see &#8220;Canada&#8221; and cannot route that visitor to the "
+"Quebec ruleset. Choose City only if you rely on region-level routing &#8212; "
+"it is a much larger download. Changing this and clicking &#8220;Update "
+"Database&#8221; replaces the installed database."
+msgstr "<strong>Country</strong> (~10 Mo) ne résout que le pays du visiteur &#8212; suffisant pour le ciblage du bandeau par pays et la plupart des règles par juridiction. <strong>City</strong> (~60&#8211;110 Mo) résout en plus la région / province / État, ce dont quelques règles ont besoin : les régimes infranationaux comme la <em>Loi 25 du Québec</em> ne s&#8217;appliquent qu&#8217;à l&#8217;intérieur d&#8217;une région d&#8217;un pays ; sans City (ou un en-tête Cloudflare <code>CF-Region-Code</code>), l&#8217;extension ne voit que &#8220;Canada&#8221; et ne peut pas router ce visiteur vers le ruleset du Québec. Ne choisissez City que si vous utilisez le routage au niveau régional &#8212; c&#8217;est un téléchargement bien plus volumineux. Modifier ce réglage puis cliquer sur &#8220;Mettre à jour la base de données&#8221; remplace la base installée."

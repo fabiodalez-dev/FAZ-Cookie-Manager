@@ -5425,3 +5425,31 @@ msgstr "Odkaz"
 # ==============
 #~ msgid "Always Active"
 #~ msgstr "Vždy aktivní"
+
+msgid ""
+"Geo-targeting requires a MaxMind GeoLite2 database. <a href=\"https://"
+"www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Get "
+"a free license key</a>."
+msgstr "Geografické cílení vyžaduje databázi MaxMind GeoLite2. <a href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Získejte bezplatný licenční klíč</a>."
+
+msgid "Database edition"
+msgstr "Edice databáze"
+
+msgid "Country &#8212; country-level only (recommended)"
+msgstr "Country &#8212; pouze na úrovni země (doporučeno)"
+
+msgid "City &#8212; adds region / state detection"
+msgstr "City &#8212; přidává detekci regionu/státu"
+
+msgid ""
+"<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only "
+"&#8212; enough for country-based banner targeting and most per-jurisdiction "
+"rules. <strong>City</strong> (~60&#8211;110 MB) additionally resolves the "
+"region / province / state, which a few rules need: sub-national regimes such "
+"as <em>Quebec Law 25</em> apply only inside one region of a country, so "
+"without City (or a Cloudflare <code>CF-Region-Code</code> header) the plugin "
+"can only see &#8220;Canada&#8221; and cannot route that visitor to the "
+"Quebec ruleset. Choose City only if you rely on region-level routing &#8212; "
+"it is a much larger download. Changing this and clicking &#8220;Update "
+"Database&#8221; replaces the installed database."
+msgstr "<strong>Country</strong> (~10 MB) určuje pouze zemi návštěvníka &#8212; postačuje pro cílení banneru podle země a pro většinu pravidel podle jurisdikce. <strong>City</strong> (~60&#8211;110 MB) navíc určuje region / provincii / stát, což některá pravidla potřebují: subnárodní režimy jako <em>zákon 25 v Quebecu</em> platí jen uvnitř jednoho regionu země, takže bez City (nebo hlavičky Cloudflare <code>CF-Region-Code</code>) plugin vidí pouze &#8220;Kanadu&#8221; a nemůže tohoto návštěvníka směrovat na ruleset Quebecu. City zvolte pouze tehdy, spoléháte-li na směrování na úrovni regionu &#8212; jde o mnohem větší stahování. Změnou tohoto nastavení a kliknutím na &#8220;Aktualizovat databázi&#8221; se nainstalovaná databáze nahradí."

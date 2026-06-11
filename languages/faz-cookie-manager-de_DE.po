@@ -5245,3 +5245,31 @@ msgstr ""
 
 #~ msgid "Customize Consent Preferences"
 #~ msgstr "Einwilligungseinstellungen anpassen"
+
+msgid ""
+"Geo-targeting requires a MaxMind GeoLite2 database. <a href=\"https://"
+"www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Get "
+"a free license key</a>."
+msgstr "Geo-Targeting erfordert eine MaxMind-GeoLite2-Datenbank. <a href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Kostenlosen Lizenzschlüssel anfordern</a>."
+
+msgid "Database edition"
+msgstr "Datenbank-Edition"
+
+msgid "Country &#8212; country-level only (recommended)"
+msgstr "Country &#8212; nur auf Länderebene (empfohlen)"
+
+msgid "City &#8212; adds region / state detection"
+msgstr "City &#8212; ergänzt die Erkennung von Region/Bundesland"
+
+msgid ""
+"<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only "
+"&#8212; enough for country-based banner targeting and most per-jurisdiction "
+"rules. <strong>City</strong> (~60&#8211;110 MB) additionally resolves the "
+"region / province / state, which a few rules need: sub-national regimes such "
+"as <em>Quebec Law 25</em> apply only inside one region of a country, so "
+"without City (or a Cloudflare <code>CF-Region-Code</code> header) the plugin "
+"can only see &#8220;Canada&#8221; and cannot route that visitor to the "
+"Quebec ruleset. Choose City only if you rely on region-level routing &#8212; "
+"it is a much larger download. Changing this and clicking &#8220;Update "
+"Database&#8221; replaces the installed database."
+msgstr "<strong>Country</strong> (~10 MB) ermittelt nur das Land des Besuchers &#8212; ausreichend für länderbasiertes Banner-Targeting und die meisten Regeln pro Rechtsraum. <strong>City</strong> (~60&#8211;110 MB) ermittelt zusätzlich Region / Provinz / Bundesland, was einige Regeln benötigen: subnationale Regelungen wie das <em>Quebec-Gesetz 25</em> gelten nur innerhalb einer Region eines Landes, sodass das Plugin ohne City (oder einen Cloudflare-Header <code>CF-Region-Code</code>) nur &#8220;Kanada&#8221; sieht und diesen Besucher nicht zum Quebec-Ruleset leiten kann. Wählen Sie City nur, wenn Sie auf Routing auf Regionsebene angewiesen sind &#8212; es ist ein deutlich größerer Download. Wenn Sie dies ändern und auf &#8220;Datenbank aktualisieren&#8221; klicken, wird die installierte Datenbank ersetzt."

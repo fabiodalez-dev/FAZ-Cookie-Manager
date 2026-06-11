@@ -5342,3 +5342,31 @@ msgstr ""
 
 #~ msgid "Search vendors..."
 #~ msgstr "Cerca fornitori..."
+
+msgid ""
+"Geo-targeting requires a MaxMind GeoLite2 database. <a href=\"https://"
+"www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Get "
+"a free license key</a>."
+msgstr "Il geo-targeting richiede un database MaxMind GeoLite2. <a href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Ottieni una chiave di licenza gratuita</a>."
+
+msgid "Database edition"
+msgstr "Edizione del database"
+
+msgid "Country &#8212; country-level only (recommended)"
+msgstr "Country &#8212; solo a livello di paese (consigliato)"
+
+msgid "City &#8212; adds region / state detection"
+msgstr "City &#8212; aggiunge il rilevamento di regione / stato"
+
+msgid ""
+"<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only "
+"&#8212; enough for country-based banner targeting and most per-jurisdiction "
+"rules. <strong>City</strong> (~60&#8211;110 MB) additionally resolves the "
+"region / province / state, which a few rules need: sub-national regimes such "
+"as <em>Quebec Law 25</em> apply only inside one region of a country, so "
+"without City (or a Cloudflare <code>CF-Region-Code</code> header) the plugin "
+"can only see &#8220;Canada&#8221; and cannot route that visitor to the "
+"Quebec ruleset. Choose City only if you rely on region-level routing &#8212; "
+"it is a much larger download. Changing this and clicking &#8220;Update "
+"Database&#8221; replaces the installed database."
+msgstr "<strong>Country</strong> (~10 MB) rileva solo il paese del visitatore &#8212; sufficiente per il targeting del banner per paese e per la maggior parte delle regole per giurisdizione. <strong>City</strong> (~60&#8211;110 MB) rileva inoltre la regione / provincia / stato, di cui alcune regole hanno bisogno: regimi sub-nazionali come la <em>Legge 25 del Quebec</em> si applicano solo all&#8217;interno di una regione di un paese, quindi senza City (o un&#8217;intestazione Cloudflare <code>CF-Region-Code</code>) il plugin vede solo &#8220;Canada&#8221; e non può instradare quel visitatore al ruleset del Quebec. Scegli City solo se ti affidi all&#8217;instradamento a livello di regione &#8212; è un download molto più grande. Modificando questa impostazione e facendo clic su &#8220;Aggiorna database&#8221; il database installato viene sostituito."
