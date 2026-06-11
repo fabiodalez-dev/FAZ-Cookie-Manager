@@ -13,10 +13,12 @@ import type { Page } from '@playwright/test';
 
 type FazSettings = Record<string, unknown>;
 
+/** Read the REST nonce exposed to the admin page via window.fazConfig. */
 async function getAdminNonce(page: Page): Promise<string> {
   return page.evaluate(() => window.fazConfig?.api?.nonce ?? '');
 }
 
+/** Fetch the current plugin settings object via the REST settings endpoint. */
 async function getSettings(page: Page, nonce: string): Promise<FazSettings> {
   const res = await page.request.get('/?rest_route=/faz/v1/settings/', {
     headers: { 'X-WP-Nonce': nonce },
@@ -25,6 +27,7 @@ async function getSettings(page: Page, nonce: string): Promise<FazSettings> {
   return (await res.json()) as FazSettings;
 }
 
+/** Persist a (partial) settings payload via the REST settings endpoint. */
 async function postSettings(page: Page, nonce: string, payload: FazSettings): Promise<void> {
   const res = await page.request.post('/?rest_route=/faz/v1/settings/', {
     headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
