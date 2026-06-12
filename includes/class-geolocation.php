@@ -603,7 +603,12 @@ class Geolocation {
 					// The staging file is in the same directory, so rename is an
 					// atomic replacement on the filesystems used by WordPress.
 					// If activation fails, the previous database remains intact.
-					if ( ! @rename( $staged, $dest ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					// WP_Filesystem is intentionally NOT used here: it offers no
+					// atomic move primitive, and a non-atomic copy+unlink would
+					// expose a window where the active .mmdb is truncated/half
+					// written. The staging file is a sibling of $dest, so a raw
+					// rename() is atomic on POSIX and NTFS — the property we need.
+					if ( ! @rename( $staged, $dest ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- intentional atomic same-dir swap; WP_Filesystem has no atomic move.
 						return new \WP_Error( 'faz_geo_activate_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
 					}
 					$staged = '';
