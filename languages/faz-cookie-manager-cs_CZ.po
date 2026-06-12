@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-06-11T19:29:04+00:00\n"
+"POT-Creation-Date: 2026-06-12T09:10:40+00:00\n"
 "PO-Revision-Date: 2026-04-18 11:25+0200\n"
 "Last-Translator: \n"
 "Language-Team: Czech\n"
@@ -56,11 +56,12 @@ msgid "Cookie Banner"
 msgstr "Cookie Banner"
 
 #: admin/class-admin.php:227 admin/views/base.php:21
+#: frontend/class-frontend.php:1264
 msgid "Cookies"
 msgstr "Cookies"
 
 #: admin/class-admin.php:232 admin/views/base.php:22
-#: admin/views/dashboard.php:149 admin/views/settings.php:130
+#: admin/views/dashboard.php:149 admin/views/settings.php:138
 msgid "Consent Logs"
 msgstr "Záznamy souhlasu"
 
@@ -2911,7 +2912,7 @@ msgstr "Kanada (PIPEDA)"
 msgid "Brazil (LGPD)"
 msgstr "Brazílie (LGPD)"
 
-#: admin/views/banner.php:834 admin/views/settings.php:303
+#: admin/views/banner.php:834 admin/views/settings.php:311
 msgid "Australia"
 msgstr "Austrálie"
 
@@ -4070,7 +4071,7 @@ msgstr ""
 msgid "Global Vendor List (IAB TCF 2.3)"
 msgstr "Globální seznam dodavatelů (IAB TCF 2.3)"
 
-#: admin/views/gvl.php:15 admin/views/settings.php:275
+#: admin/views/gvl.php:15 admin/views/settings.php:283
 msgid "Update GVL Now"
 msgstr "Aktualizovat GVL nyní"
 
@@ -4265,10 +4266,30 @@ msgstr ""
 "podrobnější kontrolu soukromí, ale činí centrum předvoleb složitějším."
 
 #: admin/views/settings.php:66
+msgid "Enable per-cookie consent"
+msgstr "Povolit souhlas pro jednotlivé cookies"
+
+#: admin/views/settings.php:68
+msgid ""
+"Requires per-service consent. Adds a nested toggle for each individual "
+"cookie a service declares, so visitors can opt out of specific cookies "
+"within an accepted service. A denied cookie cannot be prevented from being "
+"set (the service script controls that) but is deleted whenever it appears — "
+"the same enforcement used for per-service opt-out. Most useful for strict "
+"data-sovereignty setups."
+msgstr ""
+"Vyžaduje souhlas pro jednotlivé služby. Přidává vnořený přepínač pro každý "
+"cookie, který služba deklaruje, takže návštěvníci mohou odmítnout konkrétní "
+"cookies v rámci přijaté služby. Odmítnutému cookie nelze zabránit v "
+"nastavení (řídí to skript služby), ale je smazán pokaždé, když se objeví — "
+"stejné vynucení jako u odmítnutí pro službu. Nejužitečnější pro nastavení s "
+"přísnou suverenitou dat."
+
+#: admin/views/settings.php:74
 msgid "Share consent across subdomains"
 msgstr "Sdílet souhlas mezi subdoménami"
 
-#: admin/views/settings.php:68
+#: admin/views/settings.php:76
 msgid ""
 "Scope the consent cookie to your registrable domain (e.g. .example.com) so "
 "it is shared across www, shop, app, etc. Recommended only when all "
@@ -4281,15 +4302,15 @@ msgstr ""
 "ochrany osobních údajů. Zohledňuje veřejné sufixy pro víceúrovňové TLD "
 "(.co.uk, .com.au)."
 
-#: admin/views/settings.php:75 admin/views/system-status.php:87
+#: admin/views/settings.php:83 admin/views/system-status.php:87
 msgid "Cross-Domain Consent"
 msgstr "Souhlas napříč doménami"
 
-#: admin/views/settings.php:82
+#: admin/views/settings.php:90
 msgid "Enable cross-domain consent forwarding"
 msgstr "Povolit přeposílání souhlasu napříč doménami"
 
-#: admin/views/settings.php:84
+#: admin/views/settings.php:92
 msgid ""
 "Share consent choices across multiple domains. When a visitor accepts or "
 "rejects cookies on one domain, the same choice is forwarded to all "
@@ -4299,15 +4320,15 @@ msgstr ""
 "odmítne cookies na jedné doméně, stejná volba je přeposlána na všechny "
 "nakonfigurované cílové domény přes zabezpečenou postMessage."
 
-#: admin/views/settings.php:87
+#: admin/views/settings.php:95
 msgid "Target Domains"
 msgstr "Cílové domény"
 
-#: admin/views/settings.php:88
+#: admin/views/settings.php:96
 msgid "One per line: https://shop.example.com"
 msgstr "Jeden na řádek: https://shop.example.com"
 
-#: admin/views/settings.php:89
+#: admin/views/settings.php:97
 msgid ""
 "Full URLs of other sites that should receive consent state. Each site must "
 "also have FAZ Cookie Manager installed. One URL per line."
@@ -4315,15 +4336,15 @@ msgstr ""
 "Úplné URL ostatních webů, které by měly přijímat stav souhlasu. Každý web "
 "musí mít také nainstalovaný FAZ Cookie Manager. Jedna URL na řádek."
 
-#: admin/views/settings.php:96 admin/views/system-status.php:80
+#: admin/views/settings.php:104 admin/views/system-status.php:80
 msgid "Pageview Tracking"
 msgstr "Sledování zobrazení stránek"
 
-#: admin/views/settings.php:103
+#: admin/views/settings.php:111
 msgid "Enable pageview and banner interaction tracking"
 msgstr "Povolit sledování zobrazení stránek a interakcí s bannerem"
 
-#: admin/views/settings.php:105
+#: admin/views/settings.php:113
 msgid ""
 "Tracks pageviews and banner interactions (accept, reject, settings) for the "
 "dashboard analytics. Data is aggregate-only: it sends the page URL and title"
@@ -4338,19 +4359,19 @@ msgstr ""
 "stránkami nebo relacemi. Počty se ukládají jako data první strany ve vaší "
 "vlastní databázi. Pro přísnější soulad funkci vypněte."
 
-#: admin/views/settings.php:112
+#: admin/views/settings.php:120
 msgid "Script Blocking"
 msgstr "Blokování skriptů"
 
-#: admin/views/settings.php:116
+#: admin/views/settings.php:124
 msgid "Pages Excluded from Script Blocking"
 msgstr "Stránky vyloučené z blokování skriptů"
 
-#: admin/views/settings.php:117
+#: admin/views/settings.php:125
 msgid "One per line: /checkout/* or /cart/*"
 msgstr "Jeden na řádek: /checkout/* nebo /cart/*"
 
-#: admin/views/settings.php:118
+#: admin/views/settings.php:126
 msgid ""
 "URL patterns where script blocking is disabled (banner still shows). One per"
 " line, supports wildcards (e.g. <code>/checkout/*</code>)."
@@ -4358,17 +4379,17 @@ msgstr ""
 "URL vzory, kde je blokování skriptů zakázáno (banner se stále zobrazuje). "
 "Jeden na řádek, podporuje zástupné znaky (např. <code>/checkout/*</code>)."
 
-#: admin/views/settings.php:121
+#: admin/views/settings.php:129
 msgid "Script Blocking Exceptions"
 msgstr "Výjimky blokování skriptů"
 
-#: admin/views/settings.php:122
+#: admin/views/settings.php:130
 msgid ""
 "One per line: googleapis.com/youtube/v3, recaptcha, my-inline-script-id"
 msgstr ""
 "Jeden na řádek: googleapis.com/youtube/v3, recaptcha, my-inline-script-id"
 
-#: admin/views/settings.php:123
+#: admin/views/settings.php:131
 msgid ""
 "Scripts that should never be blocked, even before consent. One per line. "
 "Accepts three types of pattern:<br>- <strong>URL fragment</strong> (contains"
@@ -4400,11 +4421,11 @@ msgstr ""
 "<code>class=\"faz-skip\"</code> přímo k jakémukoli značce skriptu, abyste ji"
 " vyloučili bez jakékoliv konfigurace zde."
 
-#: admin/views/settings.php:137
+#: admin/views/settings.php:145
 msgid "Enable consent logging"
 msgstr "Povolit zaznamenávání souhlasu"
 
-#: admin/views/settings.php:139
+#: admin/views/settings.php:147
 msgid ""
 "Records each visitor's consent choice (accepted, rejected, or partial) for "
 "GDPR accountability. Required by Art. 7(1) GDPR to demonstrate that consent "
@@ -4414,11 +4435,11 @@ msgstr ""
 "částečné) pro odpovědnost podle GDPR. Vyžadováno podle čl. 7(1) GDPR k "
 "prokázání, že byl udělen souhlas."
 
-#: admin/views/settings.php:142
+#: admin/views/settings.php:150
 msgid "Retention Period (months)"
 msgstr "Doba uchování (měsíce)"
 
-#: admin/views/settings.php:144
+#: admin/views/settings.php:152
 msgid ""
 "How long consent records are kept before automatic deletion. Most DPAs "
 "recommend 12 months. Logs older than this period are purged daily."
@@ -4427,15 +4448,15 @@ msgstr ""
 "Většina úřadů na ochranu osobních údajů doporučuje 12 měsíců. Záznamy starší"
 " než toto období jsou denně mazány."
 
-#: admin/views/settings.php:151
+#: admin/views/settings.php:159
 msgid "Scanner"
 msgstr "Skener"
 
-#: admin/views/settings.php:155
+#: admin/views/settings.php:163
 msgid "Max Pages to Scan"
 msgstr "Max. stránek ke skenování"
 
-#: admin/views/settings.php:157
+#: admin/views/settings.php:165
 msgid ""
 "Maximum number of pages the cookie scanner will crawl. Higher values find "
 "more cookies but take longer. 100 pages is sufficient for most sites."
@@ -4444,11 +4465,11 @@ msgstr ""
 "najdou více cookies, ale trvají déle. 100 stránek je dostačujících pro "
 "většinu webů."
 
-#: admin/views/settings.php:163
+#: admin/views/settings.php:171
 msgid "Scanner Debug Mode"
 msgstr "Režim ladění skeneru"
 
-#: admin/views/settings.php:165
+#: admin/views/settings.php:173
 msgid ""
 "When enabled, the scanner logs every categorization decision. Download logs "
 "from the Cookies page."
@@ -4456,15 +4477,15 @@ msgstr ""
 "Pokud je povoleno, skener zaznamenává každé rozhodnutí o kategorizaci. "
 "Stažněte protokoly ze stránky Cookies."
 
-#: admin/views/settings.php:172
+#: admin/views/settings.php:180
 msgid "Automatic Scanning"
 msgstr "Automatické skenování"
 
-#: admin/views/settings.php:179
+#: admin/views/settings.php:187
 msgid "Enable automatic cookie scanning"
 msgstr "Povolit automatické skenování cookies"
 
-#: admin/views/settings.php:181
+#: admin/views/settings.php:189
 msgid ""
 "Automatically scan your site for new cookies on a schedule. You will receive"
 " an email notification if new uncategorized cookies are found."
@@ -4472,23 +4493,23 @@ msgstr ""
 "Automaticky skenujte váš web na nové cookies podle plánu. Obdržíte e-mailové"
 " oznámení, pokud budou nalezeny nové nekategorizované cookies."
 
-#: admin/views/settings.php:184
+#: admin/views/settings.php:192
 msgid "Scan Frequency"
 msgstr "Frekvence skenování"
 
-#: admin/views/settings.php:186
+#: admin/views/settings.php:194
 msgid "Daily"
 msgstr "Denně"
 
-#: admin/views/settings.php:187 includes/class-activator.php:199
+#: admin/views/settings.php:195 includes/class-activator.php:199
 msgid "Weekly"
 msgstr "Týdně"
 
-#: admin/views/settings.php:188
+#: admin/views/settings.php:196
 msgid "Monthly"
 msgstr "Měsíčně"
 
-#: admin/views/settings.php:190
+#: admin/views/settings.php:198
 msgid ""
 "How often the scanner runs automatically. Weekly is recommended for most "
 "sites."
@@ -4496,15 +4517,15 @@ msgstr ""
 "Jak často se skener spouští automaticky. Pro většinu webů se doporučuje "
 "týdně."
 
-#: admin/views/settings.php:197
+#: admin/views/settings.php:205
 msgid "Microsoft Consent APIs"
 msgstr "Microsoft Consent API"
 
-#: admin/views/settings.php:204
+#: admin/views/settings.php:212
 msgid "Microsoft UET Consent Mode"
 msgstr "Microsoft UET Consent Mode"
 
-#: admin/views/settings.php:206
+#: admin/views/settings.php:214
 msgid ""
 "Signals consent status to Microsoft Advertising (Bing Ads) via the UET tag. "
 "Enable if you use Microsoft Advertising and need to respect consent for ad "
@@ -4514,11 +4535,11 @@ msgstr ""
 "Povolte, pokud používáte Microsoft Advertising a potřebujete respektovat "
 "souhlas pro sledování reklam."
 
-#: admin/views/settings.php:212
+#: admin/views/settings.php:220
 msgid "Microsoft Clarity Consent API"
 msgstr "Microsoft Clarity Consent API"
 
-#: admin/views/settings.php:214
+#: admin/views/settings.php:222
 msgid ""
 "Signals consent status to Microsoft Clarity (heatmaps and session "
 "recordings). Enable if you use Clarity and want it to pause tracking until "
@@ -4528,15 +4549,15 @@ msgstr ""
 " Povolte, pokud používáte Clarity a chcete, aby pozastavilo sledování, dokud"
 " nebude udělen souhlas."
 
-#: admin/views/settings.php:221
+#: admin/views/settings.php:229
 msgid "Age Verification"
 msgstr "Ověření věku"
 
-#: admin/views/settings.php:228
+#: admin/views/settings.php:236
 msgid "Require age verification for consent"
 msgstr "Vyžadovat ověření věku pro souhlas"
 
-#: admin/views/settings.php:230
+#: admin/views/settings.php:238
 msgid ""
 "Under GDPR Art. 8, children below the minimum age cannot give valid consent "
 "for data processing. When enabled, visitors must confirm they meet the "
@@ -4546,26 +4567,26 @@ msgstr ""
 "se zpracováním údajů. Pokud je povoleno, musí návštěvníci před přijetím "
 "volitelných cookies potvrdit, že splňují minimální věk."
 
-#: admin/views/settings.php:233
+#: admin/views/settings.php:241
 msgid "Minimum Age"
 msgstr "Minimální věk"
 
-#: admin/views/settings.php:235
+#: admin/views/settings.php:243
 msgid ""
 "GDPR default is 16. Some EU member states allow 13-15. Check your local law."
 msgstr ""
 "Výchozí hodnota GDPR je 16. Některé členské státy EU povolují 13-15. "
 "Zkontrolujte své místní právní předpisy."
 
-#: admin/views/settings.php:242
+#: admin/views/settings.php:250
 msgid "IAB TCF"
 msgstr "IAB TCF"
 
-#: admin/views/settings.php:249
+#: admin/views/settings.php:257
 msgid "Enable IAB TCF v2.3"
 msgstr "Povolit IAB TCF v2.3"
 
-#: admin/views/settings.php:251
+#: admin/views/settings.php:259
 msgid ""
 "Enables the IAB Transparency & Consent Framework. Required if you work with "
 "ad-tech vendors that need a standardised TC String for programmatic "
@@ -4575,11 +4596,11 @@ msgstr ""
 " dodavateli reklamních technologií, kteří potřebují standardizovaný TC "
 "String pro programatickou reklamu v EU."
 
-#: admin/views/settings.php:254
+#: admin/views/settings.php:262
 msgid "Publisher Country Code"
 msgstr "Kód země vydavatele"
 
-#: admin/views/settings.php:256
+#: admin/views/settings.php:264
 msgid ""
 "ISO 3166-1 alpha-2 code of the publisher's country (e.g. IT, DE, FR). Used "
 "in the TCF consent string."
@@ -4587,11 +4608,11 @@ msgstr ""
 "ISO 3166-1 alpha-2 kód země vydavatele (např. IT, DE, FR). Používá se v TCF "
 "řetězci souhlasu."
 
-#: admin/views/settings.php:259
+#: admin/views/settings.php:267
 msgid "CMP ID"
 msgstr "CMP ID"
 
-#: admin/views/settings.php:261
+#: admin/views/settings.php:269
 msgid ""
 "Your registered IAB CMP ID (<a href=\"https://iabeurope.eu/cmp-list/\" "
 "target=\"_blank\" rel=\"noopener noreferrer\">IAB CMP List</a>). With "
@@ -4605,11 +4626,11 @@ msgstr ""
 "technologií budou ignorovat TC String. Google Consent Mode v2 funguje bez "
 "ohledu na registraci CMP."
 
-#: admin/views/settings.php:267
+#: admin/views/settings.php:275
 msgid "Purpose One Treatment"
 msgstr "Zacházení s účelem jedna"
 
-#: admin/views/settings.php:269
+#: admin/views/settings.php:277
 msgid ""
 "Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a "
 "country where Purpose 1 is not required)."
@@ -4617,19 +4638,19 @@ msgstr ""
 "Nastavte na true, pokud souhlas s účelem 1 NEBYL zveřejněn (např. vydavatel "
 "v zemi, kde není účel 1 vyžadován)."
 
-#: admin/views/settings.php:273
+#: admin/views/settings.php:281
 msgid "Loading GVL status..."
 msgstr "Načítání stavu GVL..."
 
-#: admin/views/settings.php:282 admin/views/system-status.php:82
+#: admin/views/settings.php:290 admin/views/system-status.php:82
 msgid "Geo-Targeting"
 msgstr "Geografické cílení"
 
-#: admin/views/settings.php:289
+#: admin/views/settings.php:297
 msgid "Enable geo-targeted banner display"
 msgstr "Povolit geograficky cílené zobrazení banneru"
 
-#: admin/views/settings.php:291
+#: admin/views/settings.php:299
 msgid ""
 "Show the cookie banner only to visitors from specific regions. Requires a "
 "MaxMind GeoLite2 database (configured below) or Cloudflare CF-IPCountry "
@@ -4639,39 +4660,39 @@ msgstr ""
 "databázi MaxMind GeoLite2 (nakonfigurovanou níže) nebo Cloudflare CF-"
 "IPCountry header."
 
-#: admin/views/settings.php:294
+#: admin/views/settings.php:302
 msgid "Target Regions"
 msgstr "Cílové regiony"
 
-#: admin/views/settings.php:298
+#: admin/views/settings.php:306
 msgid "EU / EEA"
 msgstr "EU / EHP"
 
-#: admin/views/settings.php:299
+#: admin/views/settings.php:307
 msgid "United Kingdom"
 msgstr "Spojené království"
 
-#: admin/views/settings.php:300
+#: admin/views/settings.php:308
 msgid "United States"
 msgstr "Spojené státy"
 
-#: admin/views/settings.php:301
+#: admin/views/settings.php:309
 msgid "Canada"
 msgstr "Kanada"
 
-#: admin/views/settings.php:302
+#: admin/views/settings.php:310
 msgid "Brazil"
 msgstr "Brazílie"
 
-#: admin/views/settings.php:304
+#: admin/views/settings.php:312
 msgid "Japan"
 msgstr "Japonsko"
 
-#: admin/views/settings.php:305
+#: admin/views/settings.php:313
 msgid "Switzerland"
 msgstr "Švýcarsko"
 
-#: admin/views/settings.php:315
+#: admin/views/settings.php:323
 msgid ""
 "Select which regions should see the cookie banner. Visitors from other "
 "regions will not see it (if \"Hide banner\" is selected below)."
@@ -4679,19 +4700,19 @@ msgstr ""
 "Vyberte, které regiony by měly vidět cookie banner. Návštěvníci z jiných "
 "regionů jej neuvidí (pokud je níže vybráno \"Skrýt banner\")."
 
-#: admin/views/settings.php:318
+#: admin/views/settings.php:326
 msgid "Non-target visitors"
 msgstr "Necílení návštěvníci"
 
-#: admin/views/settings.php:320
+#: admin/views/settings.php:328
 msgid "Show banner anyway (safest)"
 msgstr "Přesto zobrazit banner (nejbezpečnější)"
 
-#: admin/views/settings.php:321
+#: admin/views/settings.php:329
 msgid "Hide banner (scripts load normally)"
 msgstr "Skrýt banner (skripty se načítají normálně)"
 
-#: admin/views/settings.php:323
+#: admin/views/settings.php:331
 msgid ""
 "What happens when a visitor is from outside the target regions. \"Show "
 "banner anyway\" is the safest option and recommended for sites with global "
@@ -4701,11 +4722,11 @@ msgstr ""
 "banner\" je nejbezpečnější možnost a doporučuje se pro weby s globálním "
 "publikem."
 
-#: admin/views/settings.php:330
+#: admin/views/settings.php:338
 msgid "GeoIP Database (MaxMind GeoLite2)"
 msgstr "GeoIP databáze (MaxMind GeoLite2)"
 
-#: admin/views/settings.php:334
+#: admin/views/settings.php:342
 msgid ""
 "Geo-targeting requires a MaxMind GeoLite2 database. <a "
 "href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" "
@@ -4715,19 +4736,19 @@ msgstr ""
 "href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" "
 "rel=\"noopener\">Získejte bezplatný licenční klíč</a>."
 
-#: admin/views/settings.php:337
+#: admin/views/settings.php:345
 msgid "Database edition"
 msgstr "Edice databáze"
 
-#: admin/views/settings.php:339
+#: admin/views/settings.php:347
 msgid "Country &#8212; country-level only (recommended)"
 msgstr "Country &#8212; pouze na úrovni země (doporučeno)"
 
-#: admin/views/settings.php:340
+#: admin/views/settings.php:348
 msgid "City &#8212; adds region / state detection"
 msgstr "City &#8212; přidává detekci regionu/státu"
 
-#: admin/views/settings.php:343
+#: admin/views/settings.php:351
 msgid ""
 "<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only "
 "&#8212; enough for country-based banner targeting and most per-jurisdiction "
@@ -4752,27 +4773,27 @@ msgstr ""
 "kliknutím na &#8220;Aktualizovat databázi&#8221; se nainstalovaná databáze "
 "nahradí."
 
-#: admin/views/settings.php:347
+#: admin/views/settings.php:355
 msgid "MaxMind License Key"
 msgstr "Licenční klíč MaxMind"
 
-#: admin/views/settings.php:348
+#: admin/views/settings.php:356
 msgid "Enter your MaxMind license key"
 msgstr "Zadejte svůj licenční klíč MaxMind"
 
-#: admin/views/settings.php:352
+#: admin/views/settings.php:360
 msgid "Update Database"
 msgstr "Aktualizovat databázi"
 
-#: admin/views/settings.php:358
+#: admin/views/settings.php:366
 msgid "Data Management"
 msgstr "Správa dat"
 
-#: admin/views/settings.php:365
+#: admin/views/settings.php:373
 msgid "Remove all data on uninstall"
 msgstr "Odebrat všechna data při odinstalaci"
 
-#: admin/views/settings.php:367
+#: admin/views/settings.php:375
 msgid ""
 "When enabled, deleting the plugin will permanently remove ALL data: cookies,"
 " categories, consent logs, pageviews, banner settings, and scan history. "
@@ -4783,11 +4804,11 @@ msgstr ""
 " historii skenovnáí. Nechte tuto možnost VYPNUTOU, pokud plánujete plugin "
 "znovu nainstalovat nebo aktualizovat."
 
-#: admin/views/settings.php:375
+#: admin/views/settings.php:383
 msgid "Paid Memberships Pro integration"
 msgstr "Integrace Paid Memberships Pro"
 
-#: admin/views/settings.php:379
+#: admin/views/settings.php:387
 msgid ""
 "Implement a \"Pay-or-Accept\" model: logged-in members on selected PMP "
 "levels skip the cookie banner and have consent <strong>programmatically "
@@ -4804,11 +4825,11 @@ msgstr ""
 "interakce s bannerem. Bezplatní návštěvníci nadále vidí standardní banner a "
 "průběh udělení souhlasu."
 
-#: admin/views/settings.php:382
+#: admin/views/settings.php:390
 msgid "Legal note:"
 msgstr "Právní poznámka:"
 
-#: admin/views/settings.php:383
+#: admin/views/settings.php:391
 msgid ""
 "Because this option grants consent on behalf of the member (it does not "
 "merely hide the banner), you must disclose it clearly in your Terms of "
@@ -4824,19 +4845,19 @@ msgstr ""
 "musí mít kdykoli možnost odvolat nebo upravit svůj souhlas prostřednictvím "
 "standardního widgetu opětovné návštěvy."
 
-#: admin/views/settings.php:389
+#: admin/views/settings.php:397
 msgid "Enable PMP integration"
 msgstr "Povolit integraci PMP"
 
-#: admin/views/settings.php:393
+#: admin/views/settings.php:401
 msgid "Exempt membership level IDs"
 msgstr "ID úrovní členství s výjimkou"
 
-#: admin/views/settings.php:394
+#: admin/views/settings.php:402
 msgid "e.g. 2, 3, 5"
 msgstr "např. 2, 3, 5"
 
-#: admin/views/settings.php:396
+#: admin/views/settings.php:404
 msgid ""
 "Comma-separated PMP level IDs whose members should be exempted. Find level "
 "IDs in <strong>Memberships → Settings → Levels</strong>. Leave empty to "
@@ -4846,11 +4867,11 @@ msgstr ""
 "úrovní najdete v <strong>Memberships → Settings → Levels</strong>. Pro "
 "zakázání osvobození ponechte prázdné."
 
-#: admin/views/settings.php:405
+#: admin/views/settings.php:413
 msgid "Force re-consent"
 msgstr "Vynutit nový souhlas"
 
-#: admin/views/settings.php:409
+#: admin/views/settings.php:417
 msgid ""
 "Show the cookie banner again to all returning visitors. Useful when you "
 "change which cookies or services are used on your site (e.g. new AdSense "
@@ -4862,15 +4883,15 @@ msgstr ""
 "AdSense, přidané analýzy) a chcete, aby předchozí návštěvníci obnovili svůj "
 "souhlas před spuštěním těchto služeb."
 
-#: admin/views/settings.php:412
+#: admin/views/settings.php:420
 msgid "Current consent revision"
 msgstr "Aktuální revize souhlasu"
 
-#: admin/views/settings.php:416
+#: admin/views/settings.php:424
 msgid "Invalidate all consents"
 msgstr "Zneplatit všechny souhlasy"
 
-#: admin/views/settings.php:419
+#: admin/views/settings.php:427
 msgid ""
 "Visitors whose stored consent has a lower revision will see the banner again"
 " on their next visit. This does not affect the current page load."
@@ -4878,7 +4899,7 @@ msgstr ""
 "Návštěvníci, jejichž uložený souhlas má nižší revizi, uvidí banner znovu při"
 " příštím přístupu. Toto nemá vliv na načtení aktuální stránky."
 
-#: admin/views/settings.php:427
+#: admin/views/settings.php:435
 msgid "Save Settings"
 msgstr "Uložit nastavení"
 
@@ -5038,7 +5059,11 @@ msgstr "Přizpůsobit předvolby souhlasu"
 msgid "Service consent"
 msgstr "Souhlas se službou"
 
-#: frontend/class-frontend.php:1264
+#: frontend/class-frontend.php:1265
+msgid "Cookie consent"
+msgstr "Souhlas s cookies"
+
+#: frontend/class-frontend.php:1266
 #: frontend/modules/banner-rest/class-banner-rest.php:448
 msgid "Vendor consent"
 msgstr "Souhlas dodavatele"
