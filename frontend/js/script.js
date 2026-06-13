@@ -3910,8 +3910,13 @@ function _fazShowOptoutSuccessMessage() {
     }
 
     buttonWrapper.style.display = "none";
-    successMessage.classList.remove( "faz-hide" );
+    // Declare the live region BEFORE revealing the message so assistive tech
+    // treats the headline as a fresh polite announcement (the element ships
+    // role="status"; this reinforces it for combos that key off aria-live).
+    // The countdown subtext is aria-hidden in the template so its per-second
+    // updates don't flood the screen-reader queue.
     successMessage.setAttribute( "aria-live", "polite" );
+    successMessage.classList.remove( "faz-hide" );
     successMessage.focus();
     if ( ccpaCheckbox ) ccpaCheckbox.disabled = true;
     _fazClassAdd( "=optout-option", "faz-disabled", false );
@@ -3980,6 +3985,10 @@ function _fazResetOptoutSuccessMessage() {
     } else if ( countdownElement && _fazStore._optoutSuccessSubtextTemplate ) {
         countdownElement.textContent = _fazStore._optoutSuccessSubtextTemplate;
     }
+    // Drop the memoised template after restoring it, so a later show (e.g. after
+    // a frontend language switch re-renders the banner with new copy) re-reads
+    // the current subtext instead of replaying the previous language's string.
+    _fazStore._optoutSuccessSubtextTemplate = "";
 }
 
 /**
@@ -3989,6 +3998,11 @@ function _fazResetOptoutSuccessMessage() {
  * closing the popup (so the success message can show), then run the success +
  * countdown UI. Every other case falls through to the normal save/close path.
  *
+ * Persists with choice "custom" — the same value the pre-feature wiring used
+ * (`_fazAcceptReject()` defaults `option` to "custom"). The default "all" would
+ * grant every IAB TCF vendor consent on an opt-out and fire the
+ * fazcookie_consent_update event with action:"all" instead of "custom".
+ *
  * @return {Function}
  */
 function _fazHandleOptoutConfirm() {
@@ -3997,7 +4011,7 @@ function _fazHandleOptoutConfirm() {
             _fazAcceptReject()();
             return;
         }
-        _fazAcceptCookies();
+        _fazAcceptCookies( "custom" );
         _fazShowOptoutSuccessMessage();
     };
 }
