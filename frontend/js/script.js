@@ -1125,7 +1125,20 @@ function _fazRegisterListeners() {
     _fazAttachListener("=detail-close", () => _fazHidePreferenceCenter());
     _fazAttachListener("=optout-cancel-button", () => _fazHidePreferenceCenter());
     _fazAttachListener("=close-button", () => _fazActionClose());
-    _fazAttachListener("=donotsell-button", () => _fazSetPreferenceAction('donotsell-button'));
+    _fazAttachListener("=donotsell-button", () => {
+        // The "Do Not Sell" opt-out toggle lives inside the optout-popup. The
+        // `classic` template type does NOT render that popup, so opening the
+        // preference center would have nothing to show and the click looks
+        // dead. New CCPA/Do-Not-Sell banners can't select Classic (admin
+        // guard), but a banner saved before that guard can still be Classic —
+        // fall back to re-showing the banner so the click is never a silent
+        // no-op. Mirrors the revisit-path fallback in _revisitFazConsent.
+        if ( ! document.querySelector('[data-faz-tag="optout-popup"]') ) {
+            _fazShowBanner();
+            return;
+        }
+        _fazSetPreferenceAction('donotsell-button');
+    });
     _fazAttachListener("=reject-button", _fazAcceptReject("reject"));
     _fazAttachListener("=accept-button", _fazAcceptReject("all"));
     _fazAttachListener("=detail-accept-button", _fazAcceptReject("all"));

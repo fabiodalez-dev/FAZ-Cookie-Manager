@@ -137,6 +137,7 @@
 	if (lawEl) {
 		lawEl.addEventListener('change', function () {
 			toggleDoNotSellColorRow(lawEl.value);
+			syncClassicLawCompat();
 		});
 	}
 
@@ -297,6 +298,32 @@
 		if (!group) return;
 		var cb = document.querySelector('#faz-b-readmore-toggle input[type="checkbox"]');
 		group.style.display = (cb && cb.checked) ? '' : 'none';
+	}
+
+	// Compliance guard: a pure-CCPA banner serves the "Do Not Sell or Share"
+	// opt-out, whose toggle lives in the optout-popup. The Classic layout does
+	// NOT render that popup, so a Classic + CCPA banner has a "Do Not Sell" link
+	// that opens nothing — a non-functional opt-out. Disable Classic whenever the
+	// law is CCPA (gdpr_ccpa maps to applicableLaw=gdpr and uses the detail
+	// preference center, which Classic does have, so only pure 'ccpa' is gated).
+	function syncClassicLawCompat() {
+		var lawEl = document.getElementById('faz-b-law');
+		var typeEl = document.getElementById('faz-b-type');
+		if (!lawEl || !typeEl) return;
+		var isCcpaOnly = lawEl.value === 'ccpa';
+		var classicOpt = null;
+		for (var i = 0; i < typeEl.options.length; i++) {
+			if (typeEl.options[i].value === 'classic') { classicOpt = typeEl.options[i]; break; }
+		}
+		if (classicOpt) classicOpt.disabled = isCcpaOnly;
+		// Migrate an existing (or in-progress) Classic + CCPA selection to Box so
+		// the opt-out popup exists. updatePositionOptions() re-syncs dependent UI.
+		if (isCcpaOnly && typeEl.value === 'classic') {
+			typeEl.value = 'box';
+			updatePositionOptions();
+		}
+		var hint = document.getElementById('faz-b-type-ccpa-hint');
+		if (hint) hint.style.display = isCcpaOnly ? '' : 'none';
 	}
 
 	function updatePositionOptions() {
@@ -1439,6 +1466,9 @@
 
 		// Update position options for the new type
 		updatePositionOptions();
+		// Gate the Classic layout for CCPA banners (and migrate an existing
+		// Classic + CCPA selection to Box) once both type and law are loaded.
+		syncClassicLawCompat();
 
 		// Notice colours
 		var n = c.notice;

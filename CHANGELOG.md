@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **"Do Not Sell or Share" link did nothing on a Classic-layout CCPA banner.** The opt-out toggle lives in the opt-out popup, which the Classic template does not render — so a pure-CCPA banner using the Classic layout exposed a "Do Not Sell" link that opened nothing, i.e. a non-functional opt-out (a CCPA/CPRA compliance gap, not just a UI glitch). Fixed two ways: (1) the banner editor no longer offers the Classic layout for a pure-CCPA banner and migrates an existing Classic + CCPA selection to Box, so the opt-out popup always exists; (2) as a runtime safety net for banners saved before that guard, clicking "Do Not Sell" when no opt-out popup is present now re-shows the banner instead of being a silent dead click. "Both GDPR + US State Laws" banners are unaffected (they use the GDPR detail preference center, which the Classic layout does provide).
+
 ## [1.18.2] — 2026-06-13
 
 ### Changed

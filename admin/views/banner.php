@@ -157,6 +157,9 @@ defined( 'ABSPATH' ) || exit;
 						<option value="banner"><?php esc_html_e( 'Full-width Banner', 'faz-cookie-manager' ); ?></option>
 						<option value="classic"><?php esc_html_e( 'Classic', 'faz-cookie-manager' ); ?></option>
 					</select>
+					<div class="faz-help" id="faz-b-type-ccpa-hint" style="display:none;color:#92400e;">
+						<?php esc_html_e( 'The Classic layout has no opt-out popup, so it is not available for a CCPA / US State Laws banner — the "Do Not Sell" link needs a working opt-out to be compliant. Use Box or Full-width.', 'faz-cookie-manager' ); ?>
+					</div>
 				</div>
 
 				<div class="faz-form-group">
