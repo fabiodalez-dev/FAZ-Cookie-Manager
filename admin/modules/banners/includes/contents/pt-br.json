@@ -73,7 +73,13 @@
                         "confirm": "Salve minhas preferências"
                     }
                 },
-                "closeButton": "Fechar"
+                "closeButton": "Fechar",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Your opt-out preference has been honored.",
+                        "subtext": "Banner closes automatically in <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
             }
         },
         "revisitConsent": {
@@ -173,7 +179,13 @@
                         "confirm": "Salve minhas preferências"
                     }
                 },
-                "closeButton": "Fechar"
+                "closeButton": "Fechar",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Your opt-out preference has been honored.",
+                        "subtext": "Banner closes automatically in <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
             }
         },
         "revisitConsent": {

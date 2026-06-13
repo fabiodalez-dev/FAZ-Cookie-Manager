@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Opt-out success message (US state laws / CCPA).** When a visitor confirms a "Do Not Sell or Share My Personal Information" opt-out, the popup no longer just disappears — it shows a confirmation message ("Your opt-out preference has been honored.") with an accessible live region (`role="status"` + `aria-live="polite"`, focus moved to the message), a countdown subtext, and auto-closes after the countdown (15s). This mirrors the opt-out confirmation UX shipped by modern US-state-law CMPs and makes the outcome explicit, which several state privacy regulators treat as a best practice. The headline and countdown copy are editable per language via the new `[faz_optout_success_text]` / `[faz_optout_success_subtext]` shortcodes and ship translated for the bundled locales. Closing the popup while the message shows dismisses immediately (consent is already saved); a confirm without opting out keeps the previous immediate-close behaviour. New banners get the feature from the CCPA/GDPR config defaults; banners saved before this release fall back gracefully to the prior immediate-close flow until re-saved.
+
 ## [1.18.2] — 2026-06-13
 
 ### Changed

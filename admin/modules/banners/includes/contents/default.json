@@ -72,7 +72,13 @@
                     "confirm": ""
                 }
             },
-            "closeButton": ""
+            "closeButton": "",
+            "optoutSuccess": {
+                "elements": {
+                    "text": "Your opt-out preference has been honored.",
+                    "subtext": "Banner closes automatically in <span id=\"fazCountdownTimer\"></span> s..."
+                }
+            }
         }
     },
     "revisitConsent": {

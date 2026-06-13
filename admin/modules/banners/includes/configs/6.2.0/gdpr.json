@@ -442,6 +442,43 @@
           "status": true,
           "tag": "optout-close",
           "type": "button"
+        },
+        "optoutSuccess": {
+          "status": true,
+          "tag": "optout-success",
+          "styles": {
+            "background-color": "#E5F4EF",
+            "border-color": "inherit"
+          },
+          "elements": {
+            "icon": {
+              "status": true,
+              "tag": "optout-success-icon",
+              "styles": {
+                "color": "#00754E",
+                "background-color": "transparent",
+                "border-color": "transparent"
+              }
+            },
+            "text": {
+              "status": true,
+              "tag": "optout-success-text",
+              "styles": {
+                "color": "#14142A",
+                "background-color": "transparent",
+                "border-color": "transparent"
+              }
+            },
+            "subtext": {
+              "status": true,
+              "tag": "optout-success-subtext",
+              "styles": {
+                "color": "#4E4B66",
+                "background-color": "transparent",
+                "border-color": "transparent"
+              }
+            }
+          }
         }
       }
     },

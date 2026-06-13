@@ -646,6 +646,7 @@ class Template {
 			'detail-powered-by',
 			'optout-close',
 			'optout-powered-by',
+			'optout-success-icon',
 		);
 	}
 }

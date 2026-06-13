@@ -73,7 +73,13 @@
                         "confirm": "Speichern Sie meine Einstellungen"
                     }
                 },
-                "closeButton": "Nah dran"
+                "closeButton": "Nah dran",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Ihre Opt-out-Einstellung wurde berücksichtigt.",
+                        "subtext": "Das Banner schließt automatisch in <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
             }
         },
         "revisitConsent": {
@@ -173,7 +179,13 @@
                         "confirm": "Speichern Sie meine Einstellungen"
                     }
                 },
-                "closeButton": "Nah dran"
+                "closeButton": "Nah dran",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Ihre Opt-out-Einstellung wurde berücksichtigt.",
+                        "subtext": "Das Banner schließt automatisch in <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
             }
         },
         "revisitConsent": {
