@@ -4003,6 +4003,11 @@ function _fazResetOptoutSuccessMessage() {
  * grant every IAB TCF vendor consent on an opt-out and fire the
  * fazcookie_consent_update event with action:"all" instead of "custom".
  *
+ * `_fazAcceptCookies()` returns false when the age gate intercepts (it shows
+ * the age modal and defers recording consent). In that case we must NOT show
+ * the success message — it would claim "your opt-out has been honored" while no
+ * consent was actually recorded yet.
+ *
  * @return {Function}
  */
 function _fazHandleOptoutConfirm() {
@@ -4011,7 +4016,9 @@ function _fazHandleOptoutConfirm() {
             _fazAcceptReject()();
             return;
         }
-        _fazAcceptCookies( "custom" );
+        if ( _fazAcceptCookies( "custom" ) === false ) {
+            return;
+        }
         _fazShowOptoutSuccessMessage();
     };
 }
