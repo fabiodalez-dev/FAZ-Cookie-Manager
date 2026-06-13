@@ -79,6 +79,13 @@ function faz_clear_mmdb( $dir ) {
 	}
 }
 
+// Helper: write a minimal MMDB-shaped file. get_database_path() now validates a
+// candidate by looking for the MaxMind metadata marker in the file tail, so the
+// stub must carry that marker to be accepted as a real database.
+function faz_write_mmdb_stub( $path ) {
+	file_put_contents( $path, str_repeat( "\x00", 32 ) . "\xab\xcd\xefMaxMind.com" . str_repeat( "\x00", 8 ) );
+}
+
 echo "Geolocation::get_database_path() / has_database()\n";
 
 // ---- Case 1: nothing installed -> empty / false ----
@@ -88,18 +95,25 @@ faz_ok( false === Geolocation::has_database(), 'no database -> has_database() is
 
 // ---- Case 2: plugin-downloaded DB in uploads -> resolved (the false-negative case) ----
 $country_db = $data_dir . 'GeoLite2-Country.mmdb';
-file_put_contents( $country_db, 'fake-mmdb' );
+faz_write_mmdb_stub( $country_db );
 faz_ok( $country_db === Geolocation::get_database_path(), 'uploaded GeoLite2-Country.mmdb -> get_database_path() returns it' );
 faz_ok( true === Geolocation::has_database(), 'uploaded database -> has_database() is true' );
 
 // ---- Case 3: FAZ_MAXMIND_DB_PATH is honoured AND takes precedence over uploads ----
 $own_db = $faz_test_uploads . '/my-own-GeoLite2-City.mmdb';
-file_put_contents( $own_db, 'fake-mmdb' );
+faz_write_mmdb_stub( $own_db );
 define( 'FAZ_MAXMIND_DB_PATH', $own_db ); // constant is permanent for the rest of the run
 faz_ok( $own_db === Geolocation::get_database_path(), 'FAZ_MAXMIND_DB_PATH is honoured by the resolver and wins over uploads' );
 faz_ok( true === Geolocation::has_database(), 'FAZ_MAXMIND_DB_PATH present -> has_database() is true' );
 
-// ---- Case 4: a defined-but-MISSING FAZ_MAXMIND_DB_PATH falls through to the
+// ---- Case 4: a FAZ_MAXMIND_DB_PATH that exists but is CORRUPT (no MMDB marker)
+//      is skipped, and the resolver falls through to the valid uploads DB
+//      instead of preferring a database the reader would choke on. ----
+file_put_contents( $own_db, 'not-an-mmdb-file' );
+faz_ok( $country_db === Geolocation::get_database_path(), 'corrupt FAZ_MAXMIND_DB_PATH is skipped; falls through to the valid uploads database' );
+faz_ok( true === Geolocation::has_database(), 'corrupt constant + valid uploads -> has_database() is true' );
+
+// ---- Case 5: a defined-but-MISSING FAZ_MAXMIND_DB_PATH falls through to the
 //      uploads DB. The constant stays defined (PHP constants are permanent), but
 //      its target file is removed, so the file_exists guard must skip that
 //      candidate and the resolver must return the still-present uploads DB. ----

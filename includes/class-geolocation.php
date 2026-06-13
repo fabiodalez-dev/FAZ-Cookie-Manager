@@ -419,12 +419,54 @@ class Geolocation {
 		$candidates[] = $upload_dir . 'dbip-country-lite.mmdb';
 
 		foreach ( $candidates as $path ) {
-			if ( file_exists( $path ) && is_readable( $path ) ) {
+			if ( file_exists( $path ) && is_readable( $path ) && self::is_valid_mmdb( $path ) ) {
 				return $path;
 			}
 		}
 
 		return '';
+	}
+
+	/**
+	 * The marker that ends every MMDB metadata section (MaxMind DB format,
+	 * also used by the DB-IP lite distribution). Mirrors
+	 * Mmdb_Reader::METADATA_MARKER; duplicated here so this static check has no
+	 * dependency on the reader being autoloaded yet.
+	 */
+	const MMDB_METADATA_MARKER = "\xab\xcd\xefMaxMind.com";
+
+	/**
+	 * Cheap sanity check that a candidate file is an MMDB database.
+	 *
+	 * The resolver previously returned the first existing, readable candidate —
+	 * so a FAZ_MAXMIND_DB_PATH (or downloaded file) that exists but is corrupt or
+	 * the wrong format was preferred over a valid database, and Mmdb_Reader then
+	 * threw on first lookup with no fallback (every visitor resolved to
+	 * "unknown"). Skipping invalid candidates lets get_database_path() fall
+	 * through to the next valid database instead.
+	 *
+	 * The metadata marker lives in the last 128 KB of an MMDB file per the spec,
+	 * so this only reads that tail — never the whole multi-MB database.
+	 *
+	 * @param string $path Candidate file path.
+	 * @return bool True when the file ends with a recognisable MMDB metadata marker.
+	 */
+	private static function is_valid_mmdb( $path ) {
+		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $size || $size < strlen( self::MMDB_METADATA_MARKER ) ) {
+			return false;
+		}
+		$tail_len = (int) min( $size, 131072 );
+		$handle   = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $handle ) {
+			return false;
+		}
+		if ( $tail_len < $size ) {
+			@fseek( $handle, -$tail_len, SEEK_END ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		$tail = @fread( $handle, $tail_len ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread, WordPress.PHP.NoSilencedErrors.Discouraged
+		@fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPress.PHP.NoSilencedErrors.Discouraged
+		return is_string( $tail ) && false !== strpos( $tail, self::MMDB_METADATA_MARKER );
 	}
 
 	/**
