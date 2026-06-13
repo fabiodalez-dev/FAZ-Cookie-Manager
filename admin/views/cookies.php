@@ -48,7 +48,7 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		</div>
 		<div>
-			<div class="faz-card">
+			<div class="faz-card faz-card-overflow-visible">
 				<div class="faz-card-header">
 					<h3 id="faz-cookies-title"><?php esc_html_e( 'All Cookies', 'faz-cookie-manager' ); ?></h3>
 					<div class="faz-page-header-actions">
