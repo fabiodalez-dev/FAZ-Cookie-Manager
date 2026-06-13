@@ -39,23 +39,32 @@ test.describe('CCPA + Classic layout guard', () => {
     const classicOpt = page.locator('#faz-b-type option[value="classic"]');
     const hint = page.locator('#faz-b-type-ccpa-hint');
 
+    // Use auto-waiting assertions throughout so a read never races the UI
+    // update that selectOption() triggers. The <option> disabled state goes
+    // through expect.poll(() => classicOpt.isDisabled()): toBeDisabled() and
+    // toHaveJSProperty('disabled', …) don't reliably reflect an <option>'s
+    // disabled state in Playwright, while isDisabled() does — poll keeps it
+    // auto-waiting. The hint/value checks use the native auto-waiting matchers.
+    const classicDisabled = (val: boolean, msg: string) =>
+      expect.poll(() => classicOpt.isDisabled(), { message: msg }).toBe(val);
+
     // Baseline: GDPR + Classic is a valid combination.
     await page.selectOption('#faz-b-law', 'gdpr');
     await page.selectOption('#faz-b-type', 'classic');
-    expect(await classicOpt.isDisabled(), 'Classic allowed under GDPR').toBe(false);
+    await classicDisabled(false, 'Classic allowed under GDPR');
     await expect(hint, 'no CCPA hint under GDPR').toBeHidden();
 
     // Switch to pure CCPA → Classic must become unavailable and the current
     // Classic selection must migrate to Box so the opt-out popup exists.
     await page.selectOption('#faz-b-law', 'ccpa');
-    expect(await classicOpt.isDisabled(), 'Classic disabled under CCPA').toBe(true);
-    expect(await page.locator('#faz-b-type').inputValue(), 'Classic migrated to Box').toBe('box');
+    await classicDisabled(true, 'Classic disabled under CCPA');
+    await expect(page.locator('#faz-b-type'), 'Classic migrated to Box').toHaveValue('box');
     await expect(hint, 'CCPA incompatibility hint shown').toBeVisible();
 
     // "Both GDPR + US State Laws" maps to applicableLaw=gdpr (detail preference
     // center, which Classic has), so Classic stays available there.
     await page.selectOption('#faz-b-law', 'gdpr_ccpa');
-    expect(await classicOpt.isDisabled(), 'Classic allowed under gdpr_ccpa').toBe(false);
+    await classicDisabled(false, 'Classic allowed under gdpr_ccpa');
     await expect(hint, 'hint hidden under gdpr_ccpa').toBeHidden();
   });
 });
