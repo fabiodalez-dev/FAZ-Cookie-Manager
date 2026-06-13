@@ -748,8 +748,16 @@ defined( 'ABSPATH' ) || exit;
 		// countries, instead of letting them discover later that the feature
 		// they thought they enabled is a no-op.
 		$faz_geo_settings = get_option( 'faz_settings', array() );
+		// Mirror what the resolver actually uses: Geolocation::has_database()
+		// wraps get_database_path(), which honours FAZ_MAXMIND_DB_PATH and any
+		// .mmdb the plugin downloaded into wp-content/uploads/faz-cookie-manager/.
+		// Previously this notice only checked the maxmind_key option and the
+		// FAZ_MAXMIND_DB_PATH constant inline, so a site whose database had been
+		// downloaded through the plugin still saw "Geo source not configured"
+		// even though geo-detection worked — a false negative. A saved key also
+		// counts as configured (the plugin downloads + auto-updates the DB).
 		$faz_has_maxmind  = ! empty( $faz_geo_settings['geolocation']['maxmind_key'] )
-			|| ( defined( 'FAZ_MAXMIND_DB_PATH' ) && FAZ_MAXMIND_DB_PATH && file_exists( FAZ_MAXMIND_DB_PATH ) );
+			|| \FazCookie\Includes\Geolocation::has_database();
 		$faz_has_cf       = (bool) apply_filters( 'faz_trust_cf_ipcountry_header', false );
 		if ( ! $faz_has_maxmind && ! $faz_has_cf ) :
 			?>

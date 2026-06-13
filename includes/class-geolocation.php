@@ -390,6 +390,7 @@ class Geolocation {
 	 * Get the path to the MMDB database file, if it exists.
 	 *
 	 * Checks (in order):
+	 *   0. The FAZ_MAXMIND_DB_PATH constant (operator-provided own .mmdb)
 	 *   1. The configured GeoLite2 edition (Country or City)
 	 *   2. The other GeoLite2 edition as a legacy fallback
 	 *   3. wp-content/uploads/faz-cookie-manager/dbip-country-lite.mmdb
@@ -397,17 +398,25 @@ class Geolocation {
 	 * Honouring the configured edition also keeps activation deterministic if
 	 * an obsolete file cannot be deleted after a Country/City switch.
 	 *
+	 * The FAZ_MAXMIND_DB_PATH constant is checked first so that an operator who
+	 * points it at their own database actually gets that file used by the
+	 * resolver — previously the constant only silenced the admin "Geo source
+	 * not configured" notice without ever being read here, so a site that set
+	 * it still resolved every visitor to "unknown".
+	 *
 	 * @return string Full path to the database file, or empty string.
 	 */
 	public static function get_database_path() {
 		$upload_dir = self::get_data_dir();
 		$preferred  = self::geolite2_edition();
 		$alternate  = ( 'GeoLite2-City' === $preferred ) ? 'GeoLite2-Country' : 'GeoLite2-City';
-		$candidates = array(
-			$upload_dir . $preferred . '.mmdb',
-			$upload_dir . $alternate . '.mmdb',
-			$upload_dir . 'dbip-country-lite.mmdb',
-		);
+		$candidates = array();
+		if ( defined( 'FAZ_MAXMIND_DB_PATH' ) && FAZ_MAXMIND_DB_PATH ) {
+			$candidates[] = (string) FAZ_MAXMIND_DB_PATH;
+		}
+		$candidates[] = $upload_dir . $preferred . '.mmdb';
+		$candidates[] = $upload_dir . $alternate . '.mmdb';
+		$candidates[] = $upload_dir . 'dbip-country-lite.mmdb';
 
 		foreach ( $candidates as $path ) {
 			if ( file_exists( $path ) && is_readable( $path ) ) {
