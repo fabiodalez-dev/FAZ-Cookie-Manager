@@ -99,10 +99,13 @@ define( 'FAZ_MAXMIND_DB_PATH', $own_db ); // constant is permanent for the rest 
 faz_ok( $own_db === Geolocation::get_database_path(), 'FAZ_MAXMIND_DB_PATH is honoured by the resolver and wins over uploads' );
 faz_ok( true === Geolocation::has_database(), 'FAZ_MAXMIND_DB_PATH present -> has_database() is true' );
 
-// ---- Case 4: with the constant set, removing it still leaves the uploads DB resolving ----
-// (FAZ_MAXMIND_DB_PATH still points at $own_db which exists, so this asserts the
-//  uploads file remains valid as a candidate behind the constant.)
-faz_ok( file_exists( $country_db ), 'uploads database untouched by the constant lookup' );
+// ---- Case 4: a defined-but-MISSING FAZ_MAXMIND_DB_PATH falls through to the
+//      uploads DB. The constant stays defined (PHP constants are permanent), but
+//      its target file is removed, so the file_exists guard must skip that
+//      candidate and the resolver must return the still-present uploads DB. ----
+@unlink( $own_db );
+faz_ok( $country_db === Geolocation::get_database_path(), 'missing FAZ_MAXMIND_DB_PATH file falls through to the uploads database' );
+faz_ok( true === Geolocation::has_database(), 'fallback to uploads -> has_database() is still true' );
 
 // ---------- Cleanup + result ----------
 faz_clear_mmdb( $data_dir );
