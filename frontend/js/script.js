@@ -9,8 +9,8 @@ const _fazStore = window._fazConfig;
 // Opt-out success message (US state laws / CCPA): after the visitor confirms an
 // opt-out, the popup shows a confirmation message and auto-closes after a short
 // countdown instead of disappearing immediately.
-const FAZ_OPTOUT_SUCCESS_SECONDS = 15;
-const FAZ_OPTOUT_SUCCESS_DISMISS_MS = FAZ_OPTOUT_SUCCESS_SECONDS * 1000;
+const _FAZ_OPTOUT_SUCCESS_SECONDS = 15;
+const _FAZ_OPTOUT_SUCCESS_DISMISS_MS = _FAZ_OPTOUT_SUCCESS_SECONDS * 1000;
 
 if ( ! _fazStore ) {
     // _fazConfig is injected by wp_localize_script. If it is missing (e.g. a
@@ -3925,13 +3925,13 @@ function _fazShowOptoutSuccessMessage() {
         ( countdownElement && countdownElement.querySelector( "#fazCountdownTimer" ) ) ||
         document.getElementById( "fazCountdownTimer" );
 
-    let timeRemaining = FAZ_OPTOUT_SUCCESS_SECONDS;
+    let timeRemaining = _FAZ_OPTOUT_SUCCESS_SECONDS;
     // When the subtext has no countdown <span> (e.g. kses stripped the id),
     // memo its text once so we can swap the digit in place each tick.
     if ( countdownElement && ! countdownTimerEl && ! _fazStore._optoutSuccessSubtextTemplate ) {
         _fazStore._optoutSuccessSubtextTemplate =
             countdownElement.textContent ||
-            ( "Banner closes automatically in " + FAZ_OPTOUT_SUCCESS_SECONDS + " s..." );
+            ( "Banner closes automatically in " + _FAZ_OPTOUT_SUCCESS_SECONDS + " s..." );
     }
     const template = _fazStore._optoutSuccessSubtextTemplate;
     const hasDigit = template && /\d+/.test( template );
@@ -3954,7 +3954,7 @@ function _fazShowOptoutSuccessMessage() {
 
     _fazStore._optoutSuccessAutoCloseTimer = setTimeout(
         _fazDismissOptoutSuccessCountdown,
-        FAZ_OPTOUT_SUCCESS_DISMISS_MS
+        _FAZ_OPTOUT_SUCCESS_DISMISS_MS
     );
 }
 
