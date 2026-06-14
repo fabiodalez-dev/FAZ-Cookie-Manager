@@ -378,6 +378,12 @@
 			FAZ.initColorPickers();
 			// Filter position options for current type
 			updatePositionOptions();
+			// Gate the Classic layout for a CCPA banner on initial load too —
+			// an existing Classic + CCPA banner saved before this guard must be
+			// migrated to Box when it opens in the editor, not only on a later
+			// law change or preset apply. Without this the admin could re-save
+			// the invalid (opt-out-less) combination unknowingly.
+			syncClassicLawCompat();
 			ensurePreviewFrame(false);
 			// Render live preview
 			refreshPreview();

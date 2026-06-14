@@ -14,8 +14,39 @@
 
 import { test, expect } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
+import { wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
+
+/** Force the default banner to a saved Classic + CCPA state (the pre-guard
+ *  invalid combination) and return the original settings JSON for restore. */
+function seedClassicCcpaBanner(): string {
+  return wpEval(`
+    global $wpdb;
+    $row = $wpdb->get_row( "SELECT banner_id, settings FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 LIMIT 1" );
+    if ( ! $row ) { echo wp_json_encode( array( 'error' => 'no_default_banner' ) ); exit; }
+    $original = $row->settings;
+    $settings = json_decode( $row->settings, true );
+    if ( ! isset( $settings['settings'] ) || ! is_array( $settings['settings'] ) ) { $settings['settings'] = array(); }
+    $settings['settings']['applicableLaw'] = 'ccpa';
+    $settings['settings']['type'] = 'classic';
+    $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => wp_json_encode( $settings ) ), array( 'banner_id' => $row->banner_id ), array( '%s' ), array( '%d' ) );
+    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+    faz_clear_banner_template_cache();
+    echo wp_json_encode( array( 'banner_id' => $row->banner_id, 'original' => $original ) );
+  `).trim();
+}
+
+function restoreBanner(meta: { banner_id?: number; original?: string }): void {
+  if (!meta || typeof meta.original !== 'string' || !meta.banner_id) return;
+  const b64 = Buffer.from(meta.original, 'utf8').toString('base64');
+  wpEval(`
+    global $wpdb;
+    $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => base64_decode( '${b64}' ) ), array( 'banner_id' => ${meta.banner_id} ), array( '%s' ), array( '%d' ) );
+    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+    faz_clear_banner_template_cache();
+  `);
+}
 
 async function goToBannerPage(page: Page) {
   await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-banner`, {
@@ -66,5 +97,33 @@ test.describe('CCPA + Classic layout guard', () => {
     await page.selectOption('#faz-b-law', 'gdpr_ccpa');
     await classicDisabled(false, 'Classic allowed under gdpr_ccpa');
     await expect(hint, 'hint hidden under gdpr_ccpa').toBeHidden();
+  });
+
+  test('a saved Classic + CCPA banner is migrated to Box on initial load', async ({ page, loginAsAdmin }) => {
+    // Regression for the guard only firing on law-change / preset-apply: an
+    // existing Classic + CCPA banner (saved before the guard) must be migrated
+    // to Box when it opens in the editor, via syncClassicLawCompat() in
+    // loadBanner(). Without that call the admin could re-save the invalid,
+    // opt-out-less combination unknowingly.
+    const meta = JSON.parse(seedClassicCcpaBanner());
+    let cleanupErr: unknown;
+    try {
+      expect(meta.error, 'install has a default banner').toBeUndefined();
+
+      await loginAsAdmin(page);
+      await goToBannerPage(page);
+
+      // The law loaded as CCPA, and the saved Classic type must have been
+      // migrated to Box on load (not left as the invalid Classic).
+      await expect(page.locator('#faz-b-law'), 'law loaded as CCPA').toHaveValue('ccpa');
+      await expect(page.locator('#faz-b-type'), 'Classic migrated to Box on load').toHaveValue('box');
+      await expect(page.locator('#faz-b-type-ccpa-hint'), 'CCPA hint shown on load').toBeVisible();
+      await expect
+        .poll(() => page.locator('#faz-b-type option[value="classic"]').isDisabled(), { message: 'Classic disabled on load' })
+        .toBe(true);
+    } finally {
+      try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
+    }
+    if (cleanupErr) throw cleanupErr;
   });
 });
