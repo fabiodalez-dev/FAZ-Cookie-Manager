@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="8"
+    resolveFromConfigFile="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="false"
+>
+    <projectFiles>
+        <directory name="../includes" />
+        <directory name="../admin" />
+        <directory name="../frontend" />
+        <file name="../faz-cookie-manager.php" />
+        <file name="../uninstall.php" />
+        <ignoreFiles>
+            <directory name="../vendor" />
+            <directory name="../node_modules" />
+            <directory name="../.phpcs-tools" />
+            <directory name="../.security-tools" />
+            <file name="../admin/modules/scanner/run-scan.php" />
+        </ignoreFiles>
+    </projectFiles>
+    <plugins>
+        <pluginClass class="PsalmWordPress\Plugin" />
+    </plugins>
+</psalm>

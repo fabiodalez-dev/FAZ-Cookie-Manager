@@ -16,6 +16,7 @@
 .playwright-cli/
 .playwright-mcp/
 .phpcs-tools/
+.security-tools/
 .serena/
 .specify/
 .wordpress-org/
@@ -29,8 +30,10 @@ CLAUDE.md
 composer.json
 composer.lock
 cookie-banner-compliance-checklist.md
+DEV-TOOLING.md
 docs/
 eslint.config.mjs
+eslint.config.cjs
 graphify-out/
 node_modules/
 package.json

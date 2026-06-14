@@ -1,0 +1,9 @@
+{
+  "name": "faz/security-tools",
+  "description": "Isolated dev-only security analysis tools (Psalm + taint). NOT shipped.",
+  "require-dev": {
+    "vimeo/psalm": "^6.0",
+    "humanmade/psalm-plugin-wordpress": "^3.1"
+  },
+  "config": { "allow-plugins": { "humanmade/psalm-plugin-wordpress": true } }
+}
