@@ -65,12 +65,18 @@ $index_countries = array(
 	'IS' => 'gdpr-strict',
 	'LI' => 'gdpr-strict',
 	'NO' => 'gdpr-strict',
+	'CA' => 'pipeda-canada',
 );
 
 $index_regions = array(
 	'US-CA' => 'ccpa-california',
 	'US-CO' => 'ccpa-california',
 	'US-NY' => 'ccpa-california',
+);
+
+// Generic non-US sub-national region map (Ruleset_Loader::load_regions()).
+$index_subnational = array(
+	'CA-QC' => 'law25-quebec',
 );
 
 $no_overrides = array();
@@ -312,6 +318,57 @@ assert_eq(
 	Ruleset_Resolver::resolve( 'IT', null, false, $override_null_id, $index_countries, $index_regions, $fallback ),
 	'gdpr-strict',
 	'Override with null ruleset_id + delta → fall through to auto-detect (consumer applies delta downstream)'
+);
+
+// ---------- Round-3: generic non-US sub-national region stage (9th arg) ----------
+//
+// Proves the path PRODUCTION takes (Geo_Routing passes load_regions() as the 9th
+// arg): a CA visitor detected in Quebec (region CA-QC) must resolve to
+// law25-quebec, NOT the CA country default (pipeda-canada). Without the region
+// signal the visitor correctly falls back to the country map. This is the gap a
+// direct-JSON-load test could never catch.
+
+// 21. CA + CA-QC region → law25-quebec (region stage wins over country map).
+assert_eq(
+	Ruleset_Resolver::resolve( 'CA', 'CA-QC', false, $no_overrides, $index_countries, $index_regions, $fallback, null, $index_subnational ),
+	'law25-quebec',
+	'CA + CA-QC → law25-quebec (generic sub-national stage)'
+);
+
+// 22. CA with no region → country default pipeda-canada (no sub-national signal).
+assert_eq(
+	Ruleset_Resolver::resolve( 'CA', null, false, $no_overrides, $index_countries, $index_regions, $fallback, null, $index_subnational ),
+	'pipeda-canada',
+	'CA + no region → pipeda-canada (falls back to country map)'
+);
+
+// 23. CA + an unmapped region → country default (region stage only fires on a hit).
+assert_eq(
+	Ruleset_Resolver::resolve( 'CA', 'CA-ON', false, $no_overrides, $index_countries, $index_regions, $fallback, null, $index_subnational ),
+	'pipeda-canada',
+	'CA + CA-ON (not in sub-national map) → pipeda-canada'
+);
+
+// 24. Lowercase sub-national region normalises.
+assert_eq(
+	Ruleset_Resolver::resolve( 'ca', 'ca-qc', false, $no_overrides, $index_countries, $index_regions, $fallback, null, $index_subnational ),
+	'law25-quebec',
+	"Lowercase 'ca-qc' → normalized → law25-quebec"
+);
+
+// 25. US region resolution is unaffected by the new sub-national map (US keeps its
+// dedicated stage, which carries the no-law-state policy).
+assert_eq(
+	Ruleset_Resolver::resolve( 'US', 'US-CA', false, $no_overrides, $index_countries, $index_regions, $fallback, null, $index_subnational ),
+	'ccpa-california',
+	'US + US-CA still → ccpa-california with sub-national map present (US stage intact)'
+);
+
+// 26. VPN still trumps the sub-national region stage.
+assert_eq(
+	Ruleset_Resolver::resolve( 'CA', 'CA-QC', true, $no_overrides, $index_countries, $index_regions, $fallback, null, $index_subnational ),
+	$fallback,
+	'CA + CA-QC + VPN → fallback (VPN gate trumps region stage)'
 );
 
 // ---------- Summary ----------

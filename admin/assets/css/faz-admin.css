@@ -250,6 +250,14 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 	position: relative;
 	overflow: hidden;
 }
+/* Opt-out of the card's overflow clipping for cards whose header hosts a
+   dropdown menu (Cookies → Scan Site / Auto-categorize). The absolutely
+   positioned .faz-dropdown-menu drops below the header and was being cut off
+   by the card's overflow:hidden. The card has no decorative pseudo-element
+   that relies on the clip, so making it visible is safe. */
+.faz-card.faz-card-overflow-visible {
+	overflow: visible;
+}
 .faz-card-header {
 	display: flex;
 	align-items: center;

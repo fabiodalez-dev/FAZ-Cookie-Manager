@@ -51,8 +51,10 @@ class Ruleset_Resolver {
 	 * @param bool        $vpn_detected    True when ipinfo flagged the IP as VPN/proxy/Tor.
 	 * @param array       $admin_overrides Per-country override map. Shape: ['IT' => ['ruleset_id' => 'gdpr-italy', 'delta' => [...]], ...].
 	 * @param array       $index_countries Country → ruleset_id map (from Ruleset_Loader::load_index()).
-	 * @param array       $index_regions   US region → ruleset_id map (from Ruleset_Loader::load_us_regions()).
-	 * @param string      $fallback_id     Default fallback ruleset id (from Ruleset_Loader::get_fallback_id()).
+	 * @param array       $index_regions     US region → ruleset_id map (from Ruleset_Loader::load_us_regions()).
+	 * @param string      $fallback_id       Default fallback ruleset id (from Ruleset_Loader::get_fallback_id()).
+	 * @param array|null  $valid_ruleset_ids Whitelist of loadable ids to validate admin overrides against, or null.
+	 * @param array       $index_subnational Generic non-US sub-national region → ruleset_id map (e.g. 'CA-QC' => 'law25-quebec'), from Ruleset_Loader::load_regions().
 	 * @return string Resolved ruleset id.
 	 */
 	public static function resolve(
@@ -63,7 +65,8 @@ class Ruleset_Resolver {
 		$index_countries,
 		$index_regions,
 		$fallback_id = 'fallback-gdpr-most-protective',
-		$valid_ruleset_ids = null
+		$valid_ruleset_ids = null,
+		$index_subnational = array()
 	) {
 		// Stage 1: VPN trumps everything. Constitution Governance.
 		// Cast defensively so CLI scripts, REST consumers or future
@@ -109,6 +112,19 @@ class Ruleset_Resolver {
 		// Stage 3: XX / unknown / empty country → fallback.
 		if ( '' === $country || 'XX' === $country ) {
 			return $fallback_id;
+		}
+
+		// Stage 3.5: generic NON-US sub-national region → ruleset. Lets the
+		// catalog expose province/state rulesets outside the US (e.g.
+		// CA-QC → law25-quebec) without special-casing each country. The US
+		// keeps its dedicated stage below (it carries the extra no-law-state
+		// policy), so US is excluded here in code rather than relying on the
+		// catalog never mapping a US-* key in `_regions` — a future `_index.json`
+		// edit that did so must not be able to bypass the US no-law fallback.
+		// Region must already be ISO 3166-2 ('CC-RR'); it is populated by the
+		// GeoLite2-City subdivision lookup or a CF-Region-Code header.
+		if ( 'US' !== $country && '' !== $region && is_array( $index_subnational ) && isset( $index_subnational[ $region ] ) ) {
+			return (string) $index_subnational[ $region ];
 		}
 
 		// Stage 4: US with region → us-region ruleset or gdpr-strict.

@@ -332,7 +332,9 @@ test.describe('Settings option behavior interactions', () => {
     await context.close();
   });
 
-  test('per_service_consent exposes services and renders service toggles in preferences', async ({ browser }) => {
+  // 1.18.2 HOTFIX: per-service consent is force-disabled — _services is no longer
+  // exposed to the frontend and no service rows render. Re-enable with the feature.
+  test.skip('per_service_consent exposes services and renders service toggles in preferences', async ({ browser }) => {
     await putSettings({
       banner_control: { status: true, per_service_consent: true },
     });

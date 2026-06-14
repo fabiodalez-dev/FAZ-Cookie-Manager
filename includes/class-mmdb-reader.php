@@ -65,6 +65,13 @@ class Mmdb_Reader {
 	 */
 	private $ip_version;
 
+	/**
+	 * Database type declared in the MMDB metadata.
+	 *
+	 * @var string
+	 */
+	private $database_type = '';
+
 	const SEPARATOR_SIZE  = 16;
 	const METADATA_MARKER = "\xab\xcd\xefMaxMind.com";
 	const MAX_DECODE_DEPTH = 128;
@@ -106,6 +113,43 @@ class Mmdb_Reader {
 	}
 
 	/**
+	 * Look up an IP address and return the first subdivision ISO code.
+	 *
+	 * Only GeoLite2-City databases carry `subdivisions`; on a Country-only
+	 * database the field is absent and this returns '' (so callers degrade
+	 * gracefully to country-level routing). The returned value is the bare
+	 * subdivision code (e.g. 'QC', 'CA'), NOT the full ISO 3166-2 — the caller
+	 * combines it with the country to form 'CC-RR'.
+	 *
+	 * @param string $ip IPv4 or IPv6 address.
+	 * @return string Subdivision ISO code (e.g. 'QC') or empty string.
+	 */
+	public function subdivision( $ip ) {
+		$record = $this->find( $ip );
+		if ( null === $record ) {
+			return '';
+		}
+		$result = $this->read_record( $record );
+		if ( is_array( $result )
+			&& isset( $result['subdivisions'][0]['iso_code'] )
+			&& is_string( $result['subdivisions'][0]['iso_code'] ) ) {
+			return $result['subdivisions'][0]['iso_code'];
+		}
+		return '';
+	}
+
+	/**
+	 * Return the database type declared in the MMDB metadata.
+	 *
+	 * Examples: GeoLite2-Country, GeoLite2-City, GeoIP2-Country.
+	 *
+	 * @return string Database type, or an empty string when absent.
+	 */
+	public function database_type() {
+		return $this->database_type;
+	}
+
+	/**
 	 * Parse metadata from the end of the file.
 	 *
 	 * @throws \RuntimeException If metadata marker is not found.
@@ -129,6 +173,9 @@ class Mmdb_Reader {
 		if ( ! in_array( $this->ip_version, array( 4, 6 ), true ) ) {
 			throw new \RuntimeException( 'Unsupported MMDB ip_version: ' . esc_html( $this->ip_version ) );
 		}
+		$this->database_type    = isset( $meta['database_type'] ) && is_string( $meta['database_type'] )
+			? $meta['database_type']
+			: '';
 		$this->node_byte_size   = (int) ( $this->record_size * 2 / 8 );
 		$this->search_tree_size = $this->node_count * $this->node_byte_size;
 		if ( $this->search_tree_size + self::SEPARATOR_SIZE > strlen( $this->data ) ) {

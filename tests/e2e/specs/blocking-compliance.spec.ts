@@ -515,7 +515,9 @@ test.describe('Blocking compliance coverage', () => {
     }
   });
 
-  test('per-service consent from the UI can allow Google Analytics while keeping Clarity blocked', async ({
+  // 1.18.2 HOTFIX: per-service consent is force-disabled — _perServiceConsent is no
+  // longer true on the frontend and svc.* overrides are ignored. Re-enable with the feature.
+  test.skip('per-service consent from the UI can allow Google Analytics while keeping Clarity blocked', async ({
     page,
     getConsentCookie,
     loginAsAdmin,

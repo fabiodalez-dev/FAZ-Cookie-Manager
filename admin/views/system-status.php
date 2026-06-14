@@ -80,7 +80,8 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['pageview_tracking'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Auto Scan', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['scanner']['auto_scan'] ) ? '&#9989; ' . esc_html( $settings['scanner']['scan_frequency'] ?? 'weekly' ) : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Geo-Targeting', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['geolocation']['geo_targeting'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['per_service_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
+				<?php // 1.18.2: per-service / per-cookie consent is force-disabled regardless of the saved option, so report the effective (off) state — not the stored value — to avoid a misleading "enabled". ?>
+				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo '&#10060; '; esc_html_e( 'disabled in 1.18.2', 'faz-cookie-manager' ); ?></td></tr>
 				<tr><td><?php esc_html_e( 'Bot Detection', 'faz-cookie-manager' ); ?></td><td><?php echo ( ! isset( $settings['banner_control']['hide_from_bots'] ) || ! empty( $settings['banner_control']['hide_from_bots'] ) ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'GTM Data Layer', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['gtm_datalayer'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Age Gate', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['age_gate']['enabled'] ) ? '&#9989; (min ' . absint( $settings['age_gate']['min_age'] ?? 16 ) . ')' : '&#10060;'; ?></td></tr>

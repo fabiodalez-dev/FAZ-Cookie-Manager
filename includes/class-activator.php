@@ -108,20 +108,20 @@ class Activator {
 	}
 
 	/**
+	 * Bump this only when adding/changing a migration in the sequence below.
+	 */
+	const MIGRATIONS_VERSION = '2026.06.05.2';
+
+	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
 	 *
 	 * Checks a consolidated version flag first. When the flag matches
-	 * FAZ_VERSION, all migrations have already completed and we skip
+	 * MIGRATIONS_VERSION, all migrations have already completed and we skip
 	 * everything with a single get_option() call. This replaces 7
 	 * separate admin_init hooks that each performed their own DB lookup.
 	 *
 	 * @return void
 	 */
-	/**
-	 * Bump this only when adding/changing a migration in the sequence below.
-	 */
-	const MIGRATIONS_VERSION = '2026.06.05.2';
-
 	public static function run_pending_migrations() {
 		if ( get_option( 'faz_migrations_version' ) === self::MIGRATIONS_VERSION ) {
 			return;
