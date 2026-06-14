@@ -204,6 +204,9 @@ defined( 'ABSPATH' ) || exit;
 					<div class="faz-help">
 						<?php echo wp_kses_post( __( '<strong>GDPR</strong>: Shows consent category toggles. Visitors must opt-in.<br><strong>CCPA / US State Laws</strong>: Shows "Do Not Sell or Share My Personal Data" opt-out link.<br><strong>Both</strong>: Shows both category toggles and opt-out link.', 'faz-cookie-manager' ) ); ?>
 					</div>
+					<div class="faz-help" id="faz-b-law-content-hint" style="display:none;color:#92400e;">
+						<?php esc_html_e( 'Your banner text still mentions the "Do Not Sell" link, but the selected law no longer shows it. Update the description on the Content tab so it matches.', 'faz-cookie-manager' ); ?>
+					</div>
 				</div>
 			</div>
 		</div>

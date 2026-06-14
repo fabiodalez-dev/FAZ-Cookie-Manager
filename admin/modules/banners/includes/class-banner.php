@@ -585,6 +585,36 @@ class Banner extends Store {
 	}
 
 	/**
+	 * Default notice description text for each law, in a given language.
+	 *
+	 * Used by the banner editor so that switching the law dropdown can re-load
+	 * the law-appropriate copy. The CCPA description names the "Do Not Sell"
+	 * link and the consent-preferences icon; the GDPR description does not.
+	 * Without this, changing the law updates donotSell.status but leaves the
+	 * old copy in place, so a CCPA description can survive on a GDPR banner and
+	 * promise a link the layout no longer renders.
+	 *
+	 * @param string $lang Language code (falls back to the bundled en.json).
+	 * @return array { gdpr: string, ccpa: string }
+	 */
+	public static function get_law_notice_descriptions( $lang = 'en' ) {
+		$safe_lang = sanitize_file_name( (string) $lang );
+		$dir       = dirname( __FILE__ ) . '/contents/';
+		$file      = ( '' !== $safe_lang && file_exists( $dir . $safe_lang . '.json' ) ) ? $dir . $safe_lang . '.json' : $dir . 'en.json';
+		$data      = faz_read_json_file( $file );
+		$out       = array(
+			'gdpr' => '',
+			'ccpa' => '',
+		);
+		foreach ( array( 'gdpr', 'ccpa' ) as $law ) {
+			if ( isset( $data[ $law ]['notice']['elements']['description'] ) && is_string( $data[ $law ]['notice']['elements']['description'] ) ) {
+				$out[ $law ] = $data[ $law ]['notice']['elements']['description'];
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * Get contents by language.
 	 *
 	 * @param string $lang Language code.

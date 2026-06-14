@@ -645,7 +645,7 @@ class Api extends Rest_Controller {
 	 *
 	 * @return WP_Error|WP_REST_Response
 	 */
-	public function get_configs() {
+	public function get_configs( $request = null ) {
 		$throttle_seconds = (int) apply_filters( 'faz_configs_rate_limit_seconds', 5 );
 		if ( $throttle_seconds > 0 ) {
 			$user_id = get_current_user_id();
@@ -679,9 +679,13 @@ class Api extends Rest_Controller {
 				set_transient( $rl_key, $now, 60 );
 			}
 		}
+		$lang    = ( $request && isset( $request['lang'] ) ) ? sanitize_text_field( wp_unslash( (string) $request['lang'] ) ) : 'en';
 		$configs = array(
-			'gdpr' => $this->controller->get_default_configs(),
-			'ccpa' => $this->controller->get_default_configs( 'ccpa' ),
+			'gdpr'         => $this->controller->get_default_configs(),
+			'ccpa'         => $this->controller->get_default_configs( 'ccpa' ),
+			// Law-appropriate default notice copy for the requested language, so
+			// the editor can re-load the right description when the law changes.
+			'descriptions' => Banner::get_law_notice_descriptions( $lang ),
 		);
 		return rest_ensure_response( $configs );
 	}
