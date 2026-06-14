@@ -76,6 +76,22 @@ class Geolocation {
 	}
 
 	/**
+	 * Resolve the ISO 3166-2 region for an IP via the local GeoLite2-City DB.
+	 *
+	 * Public counterpart to get_country() for callers (e.g. Geo_Detector) that
+	 * already hold a resolved IP and want the sub-national region without the
+	 * Cloudflare-header layer that get_visitor_region() adds. Returns '' on a
+	 * Country-only DB or when no subdivision is present.
+	 *
+	 * @param string|null $ip_override Explicit IP, or null for the client IP.
+	 * @return string 'CC-RR' or empty string.
+	 */
+	public static function get_region( $ip_override = null ) {
+		$ip = is_string( $ip_override ) && '' !== $ip_override ? $ip_override : self::get_client_ip();
+		return self::detect_region( $ip );
+	}
+
+	/**
 	 * Check if the visitor is in the EU/EEA.
 	 *
 	 * @return bool
@@ -125,6 +141,92 @@ class Geolocation {
 			return '';
 		}
 		return $filtered;
+	}
+
+	/**
+	 * Resolve the visitor's ISO 3166-2 sub-national region (e.g. 'CA-QC').
+	 *
+	 * Sources, in priority order: the Cloudflare CF-Region-Code header (only
+	 * when `faz_trust_cf_ipcountry_header` is on) and the local GeoLite2-City
+	 * subdivision lookup. Returns '' when no sub-national signal is available
+	 * (e.g. a Country-only DB and no Cloudflare), so callers degrade to
+	 * country-level routing. Filterable via `faz_visitor_region` for fixtures.
+	 *
+	 * @return string ISO 3166-2 ('CC-RR') or empty string.
+	 */
+	public static function get_visitor_region() {
+		$region = '';
+
+		if (
+			apply_filters( 'faz_trust_cf_ipcountry_header', false )
+			&& ! empty( $_SERVER['HTTP_CF_REGION_CODE'] )
+			&& ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] )
+		) {
+			$cc = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_IPCOUNTRY'] ) ) );
+			$rr = strtoupper( sanitize_text_field( wp_unslash( $_SERVER['HTTP_CF_REGION_CODE'] ) ) );
+			if ( self::is_valid_country_code( $cc ) && 'XX' !== $cc && 1 === preg_match( '/^[A-Z0-9]{1,3}$/', $rr ) ) {
+				$region = $cc . '-' . $rr;
+			}
+		}
+
+		if ( '' === $region ) {
+			$region = self::get_region();
+		}
+
+		$region = strtoupper( trim( $region ) );
+		if ( 1 !== preg_match( '/^[A-Z]{2}-[A-Z0-9]{1,3}$/', $region ) ) {
+			$region = '';
+		}
+
+		/**
+		 * Filter the resolved ISO 3166-2 visitor region.
+		 *
+		 * @since 1.17.2
+		 * @param string $region ISO 3166-2 region code, or ''.
+		 */
+		$filtered = (string) apply_filters( 'faz_visitor_region', $region );
+		$filtered = strtoupper( trim( $filtered ) );
+		return ( 1 === preg_match( '/^[A-Z]{2}-[A-Z0-9]{1,3}$/', $filtered ) ) ? $filtered : '';
+	}
+
+	/**
+	 * Resolve the ISO 3166-2 region from the local GeoLite2-City DB.
+	 *
+	 * @param string $ip Client IP address.
+	 * @return string 'CC-RR' or empty string.
+	 */
+	private static function detect_region( $ip ) {
+		if ( empty( $ip ) || in_array( $ip, array( '127.0.0.1', '::1' ), true ) ) {
+			return '';
+		}
+
+		$cache_key = 'faz_georeg_' . md5( $ip );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return (string) $cached;
+		}
+
+		$region  = '';
+		$db_path = self::get_database_path();
+		if ( '' !== $db_path ) {
+			try {
+				if ( null === self::$mmdb_reader ) {
+					self::$mmdb_reader = new Mmdb_Reader( $db_path );
+				}
+				$country = strtoupper( (string) self::$mmdb_reader->country( $ip ) );
+				$sub     = strtoupper( (string) self::$mmdb_reader->subdivision( $ip ) );
+				if ( self::is_valid_country_code( $country ) && 1 === preg_match( '/^[A-Z0-9]{1,3}$/', $sub ) ) {
+					$region = $country . '-' . $sub;
+				}
+			} catch ( \Exception $e ) {
+				error_log( 'FAZ GeoLite2 region lookup error: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+		}
+
+		// Cache even an empty result (briefly) to avoid re-reading the DB on
+		// every request for IPs with no subdivision data.
+		set_transient( $cache_key, $region, '' !== $region ? HOUR_IN_SECONDS : 10 * MINUTE_IN_SECONDS );
+		return $region;
 	}
 
 	/**
@@ -288,15 +390,22 @@ class Geolocation {
 	 * Get the path to the MMDB database file, if it exists.
 	 *
 	 * Checks (in order):
-	 *   1. wp-content/uploads/faz-cookie-manager/GeoLite2-Country.mmdb
-	 *   2. wp-content/uploads/faz-cookie-manager/dbip-country-lite.mmdb
+	 *   1. The configured GeoLite2 edition (Country or City)
+	 *   2. The other GeoLite2 edition as a legacy fallback
+	 *   3. wp-content/uploads/faz-cookie-manager/dbip-country-lite.mmdb
+	 *
+	 * Honouring the configured edition also keeps activation deterministic if
+	 * an obsolete file cannot be deleted after a Country/City switch.
 	 *
 	 * @return string Full path to the database file, or empty string.
 	 */
 	public static function get_database_path() {
 		$upload_dir = self::get_data_dir();
+		$preferred  = self::geolite2_edition();
+		$alternate  = ( 'GeoLite2-City' === $preferred ) ? 'GeoLite2-Country' : 'GeoLite2-City';
 		$candidates = array(
-			$upload_dir . 'GeoLite2-Country.mmdb',
+			$upload_dir . $preferred . '.mmdb',
+			$upload_dir . $alternate . '.mmdb',
 			$upload_dir . 'dbip-country-lite.mmdb',
 		);
 
@@ -347,22 +456,32 @@ class Geolocation {
 	}
 
 	/**
-	 * Download and install a MaxMind GeoLite2-Country database.
+	 * Download and install a MaxMind GeoLite2 database.
 	 *
+	 * The edition is the publisher's choice (Settings → GeoIP Database):
+	 * 'GeoLite2-Country' (default, small, country-level only) or 'GeoLite2-City'
+	 * (larger, adds region/subdivision data needed by sub-national rulesets).
 	 * Requires a MaxMind license key (free registration at maxmind.com).
 	 *
-	 * @param string $license_key MaxMind license key.
+	 * @param string      $license_key      MaxMind license key.
+	 * @param string|null $edition_override Optional explicit edition
+	 *                                      ('GeoLite2-Country' | 'GeoLite2-City').
+	 *                                      When omitted, the stored setting wins.
 	 * @return true|\WP_Error True on success, WP_Error on failure.
 	 */
-	public static function download_database( $license_key ) {
+	public static function download_database( $license_key, $edition_override = null ) {
 		if ( empty( $license_key ) ) {
 			return new \WP_Error( 'faz_geo_no_key', __( 'MaxMind license key is required.', 'faz-cookie-manager' ) );
 		}
 
+		$edition = ( is_string( $edition_override )
+			&& in_array( $edition_override, array( 'GeoLite2-City', 'GeoLite2-Country' ), true ) )
+			? $edition_override
+			: self::geolite2_edition();
 		$license_key = sanitize_text_field( $license_key );
 		$url         = add_query_arg(
 			array(
-				'edition_id'  => 'GeoLite2-Country',
+				'edition_id'  => $edition,
 				'license_key' => $license_key,
 				'suffix'      => 'tar.gz',
 			),
@@ -385,46 +504,137 @@ class Geolocation {
 			);
 		}
 
-		$result = self::extract_mmdb( $tmp_file );
+		$result = self::extract_mmdb( $tmp_file, $edition );
 		@unlink( $tmp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
 
 		return $result;
 	}
 
 	/**
+	 * Decide which GeoLite2 edition to download and read.
+	 *
+	 * Driven by the publisher's explicit choice in Settings → GeoIP Database
+	 * (`geolocation.geolite2_edition`): 'city' → GeoLite2-City, anything else →
+	 * GeoLite2-Country (the default, so existing installs are unchanged). A
+	 * legacy install with the setting still unset falls back to the runtime
+	 * geo-routing flag (City when on). Overridable via `faz_geolite2_edition`.
+	 *
+	 * @return string 'GeoLite2-City' or 'GeoLite2-Country'.
+	 */
+	private static function geolite2_edition() {
+		$choice = '';
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings' ) ) {
+			$settings = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
+			$raw      = $settings->get( 'geolocation', 'geolite2_edition' );
+			$choice   = is_string( $raw ) ? strtolower( trim( $raw ) ) : '';
+		}
+		if ( 'city' === $choice ) {
+			$default = 'GeoLite2-City';
+		} elseif ( 'country' === $choice ) {
+			$default = 'GeoLite2-Country';
+		} else {
+			// Setting not yet saved (legacy). 1.18.2 HOTFIX: previously this
+			// honoured the faz_geo_ruleset_runtime flag (City when on), but that
+			// runtime is now hard-disabled — selecting City here would download a
+			// ~60 MB DB the disabled runtime never uses. Default to Country; an
+			// admin who wants City picks it explicitly (saved option above) or
+			// forces it via the faz_geolite2_edition filter below.
+			$default = 'GeoLite2-Country';
+		}
+		/**
+		 * Filter the GeoLite2 edition the downloader fetches and the lookup reads.
+		 *
+		 * @since 1.17.2
+		 * @param string $edition 'GeoLite2-City' or 'GeoLite2-Country'.
+		 */
+		$edition = (string) apply_filters( 'faz_geolite2_edition', $default );
+		return in_array( $edition, array( 'GeoLite2-City', 'GeoLite2-Country' ), true ) ? $edition : $default;
+	}
+
+	/**
 	 * Extract a .mmdb file from a MaxMind .tar.gz archive.
 	 *
 	 * @param string $tar_gz_path Path to the downloaded .tar.gz file.
+	 * @param string $edition     Edition downloaded ('GeoLite2-City' or
+	 *                            'GeoLite2-Country'); determines the dest filename.
 	 * @return true|\WP_Error
 	 */
-	private static function extract_mmdb( $tar_gz_path ) {
+	private static function extract_mmdb( $tar_gz_path, $edition = 'GeoLite2-City' ) {
 		if ( ! class_exists( 'PharData' ) ) {
 			return new \WP_Error( 'faz_geo_no_phar', __( 'PharData extension is required to extract the database.', 'faz-cookie-manager' ) );
 		}
 
+		$edition  = in_array( $edition, array( 'GeoLite2-City', 'GeoLite2-Country' ), true ) ? $edition : 'GeoLite2-City';
 		$data_dir = self::get_data_dir();
 		wp_mkdir_p( $data_dir );
+		$tar_path = '';
+		$staged   = '';
 
 		try {
-			$phar    = new \PharData( $tar_gz_path );
-			$tar     = $phar->decompress();
+			$phar     = new \PharData( $tar_gz_path );
+			$tar      = $phar->decompress();
 			$tar_path = $tar->getPath();
 
 			// Find the .mmdb file inside the archive.
 			$found = false;
 			foreach ( new \RecursiveIteratorIterator( $tar ) as $entry ) {
 				if ( '.mmdb' === substr( $entry->getFilename(), -5 ) ) {
-					$dest = $data_dir . 'GeoLite2-Country.mmdb';
-					if ( ! copy( $entry->getPathname(), $dest ) ) {
+					$dest   = $data_dir . $edition . '.mmdb';
+					$staged = $data_dir . '.' . $edition . '.' . wp_generate_uuid4() . '.tmp';
+					if ( ! copy( $entry->getPathname(), $staged ) ) {
 						return new \WP_Error( 'faz_geo_copy_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
 					}
+
+					// Validate before replacing the active database. A valid tar
+					// can still contain a corrupt or wrong-edition .mmdb; without
+					// this check the endpoint reported success and broke lookups.
+					$reader        = new Mmdb_Reader( $staged );
+					$database_type = $reader->database_type();
+					$expected_type = ( 'GeoLite2-City' === $edition ) ? 'City' : 'Country';
+					unset( $reader );
+					if (
+						'' === $database_type
+						|| 1 !== preg_match( '/(?:^|-)' . preg_quote( $expected_type, '/' ) . '$/i', $database_type )
+					) {
+						throw new \RuntimeException(
+							'Downloaded MMDB edition mismatch: expected '
+							. $expected_type
+							. ', received '
+							. ( '' !== $database_type ? $database_type : 'unknown' )
+							. '.'
+						);
+					}
+
+					// The staging file is in the same directory, so rename is an
+					// atomic replacement on the filesystems used by WordPress.
+					// If activation fails, the previous database remains intact.
+					// WP_Filesystem is intentionally NOT used here: it offers no
+					// atomic move primitive, and a non-atomic copy+unlink would
+					// expose a window where the active .mmdb is truncated/half
+					// written. The staging file is a sibling of $dest, so a raw
+					// rename() is atomic on POSIX and NTFS — the property we need.
+					if ( ! @rename( $staged, $dest ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- intentional atomic same-dir swap; WP_Filesystem has no atomic move.
+						return new \WP_Error( 'faz_geo_activate_failed', __( 'Failed to copy database file.', 'faz-cookie-manager' ) );
+					}
+					$staged = '';
 					$found = true;
+					// Remove the OTHER edition's DB so a Country↔City switch
+					// doesn't leave a stale file that get_database_path() (which
+					// now prefers the configured edition) can fall back to stale
+					// data. Only the just-written edition should survive.
+					$superseded = array(
+						$data_dir . 'GeoLite2-City.mmdb',
+						$data_dir . 'GeoLite2-Country.mmdb',
+						$data_dir . 'dbip-country-lite.mmdb',
+					);
+					foreach ( $superseded as $old ) {
+						if ( $old !== $dest && file_exists( $old ) ) {
+							@unlink( $old ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
+						}
+					}
 					break;
 				}
 			}
-
-			// Clean up decompressed tar.
-			@unlink( $tar_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
 
 			if ( ! $found ) {
 				return new \WP_Error( 'faz_geo_no_mmdb', __( 'No .mmdb file found in the archive.', 'faz-cookie-manager' ) );
@@ -443,6 +653,13 @@ class Geolocation {
 					$e->getMessage()
 				)
 			);
+		} finally {
+			if ( '' !== $staged && file_exists( $staged ) ) {
+				@unlink( $staged ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
+			}
+			if ( '' !== $tar_path && file_exists( $tar_path ) ) {
+				@unlink( $tar_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions.unlink_unlink
+			}
 		}
 	}
 }

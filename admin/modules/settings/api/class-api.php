@@ -482,11 +482,11 @@ class Api extends Rest_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function update_geolite2( $request ) {
+		$settings    = new Settings();
 		$license_key = $request->get_param( 'license_key' );
 		$license_key = is_scalar( $license_key ) ? trim( sanitize_text_field( (string) $license_key ) ) : '';
 		if ( '' === $license_key ) {
 			// Try from saved settings.
-			$settings    = new Settings();
 			$saved_key   = $settings->get( 'geolocation', 'maxmind_license_key' );
 			$license_key = is_scalar( $saved_key ) ? trim( sanitize_text_field( (string) $saved_key ) ) : '';
 		}
@@ -494,9 +494,31 @@ class Api extends Rest_Controller {
 			return new \WP_Error( 'missing_license_key', __( 'A MaxMind license key is required.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 
-		$result = \FazCookie\Includes\Geolocation::download_database( $license_key );
+		// Edition choice ('country' | 'city'). Download and activate first; only
+		// persist the choice after success so a failed switch cannot leave the
+		// settings pointing at a database that was never installed.
+		$edition_param = $request->get_param( 'edition' );
+		$edition_param = is_scalar( $edition_param ) ? strtolower( trim( (string) $edition_param ) ) : '';
+		$edition_id    = null;
+		if ( 'city' === $edition_param || 'country' === $edition_param ) {
+			$edition_id = ( 'city' === $edition_param ) ? 'GeoLite2-City' : 'GeoLite2-Country';
+		}
+
+		$result = \FazCookie\Includes\Geolocation::download_database( $license_key, $edition_id );
 		if ( is_wp_error( $result ) ) {
 			return $result;
+		}
+
+		if ( null !== $edition_id ) {
+			$all = $settings->get();
+			if ( ! is_array( $all ) ) {
+				$all = array();
+			}
+			if ( ! isset( $all['geolocation'] ) || ! is_array( $all['geolocation'] ) ) {
+				$all['geolocation'] = array();
+			}
+			$all['geolocation']['geolite2_edition'] = $edition_param;
+			$settings->update( $all );
 		}
 
 		$info = \FazCookie\Includes\Geolocation::get_database_info();

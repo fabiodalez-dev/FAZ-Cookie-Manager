@@ -98,6 +98,13 @@ if (initialCookieObj) {
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
+        // Read the category-mirror keys: these are the source of truth for the
+        // storage-type signals. The non-personalized-ads fallback deliberately
+        // keeps the `marketing` mirror and the canonical `ad_storage` OUT of sync
+        // (marketing drives ad serving here), so reading the mirrors is
+        // load-bearing — do NOT switch this to canonical-first. The runtime
+        // geo-routing override writes these same mirror keys (see
+        // Geo_Runtime::apply_cmv2_to_gcm) so its CMv2 signals reach gtag too.
         var consentRegionData = {
             ad_storage: regionSetting.marketing || regionSetting.advertisement || "denied",
             analytics_storage: regionSetting.analytics,

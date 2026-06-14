@@ -246,6 +246,7 @@ class Geo_Detector {
 		// contract used by tests and cron callers that need to resolve a
 		// non-request IP.
 		$country = '';
+		$region  = '';
 		if ( class_exists( '\\FazCookie\\Includes\\Geolocation' ) ) {
 			try {
 				$result  = \FazCookie\Includes\Geolocation::get_country( $ip );
@@ -257,11 +258,20 @@ class Geo_Detector {
 					error_log( '[FAZ Cookie Manager] Geolocation::get_country failed: ' . $e->getMessage() );
 				}
 			}
+			// Sub-national region from the GeoLite2-City subdivision lookup
+			// (empty on a Country-only DB or when no subdivision is present).
+			if ( '' !== $country && method_exists( '\\FazCookie\\Includes\\Geolocation', 'get_region' ) ) {
+				try {
+					$reg    = \FazCookie\Includes\Geolocation::get_region( $ip );
+					$region = ( is_string( $reg ) && 1 === preg_match( '/^[A-Z]{2}-[A-Z0-9]{1,3}$/', strtoupper( $reg ) ) ) ? strtoupper( $reg ) : '';
+				} catch ( \Throwable $e ) {
+					$region = '';
+				}
+			}
 		}
-		// Region not available from existing Geolocation; left empty.
 		return array(
 			'country' => $country,
-			'region'  => '',
+			'region'  => $region,
 			'source'  => '' !== $country ? 'geolocation_fallback' : '',
 		);
 	}

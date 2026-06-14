@@ -389,7 +389,8 @@ class WP_CLI_Commands {
 			array( 'Key' => 'Pageview Tracking',   'Value' => ! empty( $settings['pageview_tracking'] ) ? 'Yes' : 'No' ),
 			array( 'Key' => 'Auto Scan',           'Value' => ! empty( $settings['scanner']['auto_scan'] ) ? ( $settings['scanner']['scan_frequency'] ?? 'On' ) : 'Off' ),
 			array( 'Key' => 'Geo-Targeting',       'Value' => ! empty( $settings['geolocation']['geo_targeting'] ) ? 'Yes' : 'No' ),
-			array( 'Key' => 'Per-Service Consent', 'Value' => ! empty( $settings['banner_control']['per_service_consent'] ) ? 'Yes' : 'No' ),
+			// 1.18.2: force-disabled regardless of the saved option — report the effective (off) state, not the stored value.
+			array( 'Key' => 'Per-Service Consent', 'Value' => 'No (disabled in 1.18.2)' ),
 			array( 'Key' => 'Bot Detection',       'Value' => ( ! isset( $settings['banner_control']['hide_from_bots'] ) || ! empty( $settings['banner_control']['hide_from_bots'] ) ) ? 'Yes' : 'No' ),
 			array( 'Key' => 'Banners',             'Value' => $banner_count ),
 			array( 'Key' => 'Cookie Categories',   'Value' => $category_count ),

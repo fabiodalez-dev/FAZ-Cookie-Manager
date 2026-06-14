@@ -99,6 +99,7 @@ class Settings extends Store {
 				'gtm_datalayer'          => false,
 				'alternative_asset_path' => false,
 				'per_service_consent'    => false,
+				'per_cookie_consent'     => false,
 			),
 			'microsoft'    => array(
 				'uet_consent_mode' => false,
@@ -118,6 +119,12 @@ class Settings extends Store {
 				'geo_targeting'       => false,
 				'target_regions'      => array( 'eu', 'uk' ),
 				'default_behavior'    => 'show_banner',
+				// Which GeoLite2 edition the downloader fetches and the lookup
+				// reads: 'country' (small, country-level only — the default and
+				// the historical behaviour) or 'city' (larger, adds region /
+				// subdivision detection needed by sub-national rulesets). User
+				// choice surfaced in Settings → GeoIP Database.
+				'geolite2_edition'    => 'country',
 			),
 			'script_blocking' => array(
 				'custom_rules'       => array(),
@@ -285,11 +292,20 @@ class Settings extends Store {
 			case 'gtm_datalayer':
 			case 'alternative_asset_path':
 			case 'per_service_consent':
+			case 'per_cookie_consent':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'scan_frequency':
 				$allowed = array( 'daily', 'weekly', 'monthly' );
 				$value   = in_array( $value, $allowed, true ) ? $value : 'weekly';
+				break;
+			case 'geolite2_edition':
+				// Whitelist the GeoLite2 edition so a direct settings PUT cannot
+				// persist an arbitrary string. The runtime reader already falls
+				// back to Country on unknown values, but the stored value should
+				// never hold anything but the two valid editions.
+				$allowed = array( 'country', 'city' );
+				$value   = in_array( $value, $allowed, true ) ? $value : 'country';
 				break;
 			case 'installed':
 			case 'step':

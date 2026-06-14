@@ -163,13 +163,29 @@ class Geo_Routing {
 	 * Spec: FR-02 + FR-03 + FR-06 combined.
 	 * Task: T023 (P3 integration, non-invasive)
 	 *
-	 * @param string|null $ip_override Optional explicit IP for testing.
+	 * @param string|null $ip_override      Optional explicit IP for testing.
+	 * @param string|null $country_override Optional authoritative country code
+	 *                                      (ISO 3166-1 alpha-2). When supplied it
+	 *                                      overrides the detected country so the
+	 *                                      caller (e.g. the runtime banner picker,
+	 *                                      which already resolved the country via
+	 *                                      `faz_visitor_country`) keeps banner
+	 *                                      selection and ruleset resolution on the
+	 *                                      SAME country.
+	 * @param string|null $region_override Optional authoritative ISO 3166-2 region
+	 *                                      (e.g. 'CA-QC'), typically from the
+	 *                                      frontend's `faz_visitor_region`. When the
+	 *                                      country is overridden the detected region
+	 *                                      may belong to a DIFFERENT country, so any
+	 *                                      region whose 'CC' prefix does not match the
+	 *                                      resolved country is discarded — preventing
+	 *                                      e.g. US + CA-QC from resolving law25-quebec.
 	 * @return array|null Shape: ['country' => 'IT', 'region' => '',
 	 *                            'vpn' => false, 'source' => 'cf_header',
 	 *                            'ruleset_id' => 'gdpr-strict',
 	 *                            'ruleset' => array $loaded_json_decoded].
 	 */
-	public function get_visitor_context( $ip_override = null ) {
+	public function get_visitor_context( $ip_override = null, $country_override = null, $region_override = null ) {
 		// Lazy autoload of the resolver chain (only when consumer calls).
 		$detector_class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Geo_Detector';
 		$loader_class   = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Ruleset_Loader';
@@ -185,6 +201,29 @@ class Geo_Routing {
 
 			$geo = $detector->detect( $ip_override );
 
+			// Authoritative country override (e.g. from the frontend's
+			// `faz_visitor_country`): keep banner selection and ruleset
+			// resolution on the same country.
+			if ( is_string( $country_override ) && 1 === preg_match( '/^[A-Za-z]{2}$/', $country_override ) ) {
+				$geo['country'] = strtoupper( $country_override );
+			}
+
+			// Authoritative region override (e.g. from `faz_visitor_region`).
+			if ( is_string( $region_override ) && 1 === preg_match( '/^[A-Za-z]{2}-[A-Za-z0-9]{1,3}$/', $region_override ) ) {
+				$geo['region'] = strtoupper( $region_override );
+			}
+
+			// Coherence guard: a region must belong to the resolved country.
+			// When the country was overridden, the detected (or overridden)
+			// region can reference a different country — discard it so a
+			// mismatched 'CC-RR' never reaches the sub-national resolver stage
+			// (e.g. country US + region CA-QC must NOT resolve law25-quebec).
+			$gc = isset( $geo['country'] ) ? strtoupper( (string) $geo['country'] ) : '';
+			$gr = isset( $geo['region'] ) ? strtoupper( (string) $geo['region'] ) : '';
+			if ( '' !== $gr && ( '' === $gc || strtoupper( substr( $gr, 0, 2 ) ) !== $gc ) ) {
+				$geo['region'] = '';
+			}
+
 			$overrides = (array) get_option( 'faz_geo_admin_overrides', array() );
 
 			$ruleset_id = $resolver_class::resolve(
@@ -199,7 +238,10 @@ class Geo_Routing {
 				// admin overrides against. Invalid overrides degrade
 				// to auto-detection instead of producing non-loadable
 				// ruleset ids.
-				$loader->list_all()
+				$loader->list_all(),
+				// Generic non-US sub-national region map (e.g. CA-QC →
+				// law25-quebec), parallel to the US `_us_regions` map.
+				$loader->load_regions()
 			);
 
 			$ruleset = $loader->load_ruleset( $ruleset_id );

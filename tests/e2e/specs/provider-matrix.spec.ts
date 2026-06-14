@@ -645,7 +645,9 @@ test.describe('Provider matrix scan and blocking', () => {
     }
   });
 
-  test('13. per-service consent can allow Google Analytics while keeping Clarity blocked', async ({ page, browser, loginAsAdmin }) => {
+  // 1.18.2 HOTFIX: per-service consent is force-disabled — svc.* overrides are ignored,
+  // so Clarity (analytics) is no longer kept blocked when analytics is accepted. Re-enable with the feature.
+  test.skip('13. per-service consent can allow Google Analytics while keeping Clarity blocked', async ({ page, browser, loginAsAdmin }) => {
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await getSettings(page, nonce);
     // Defensive parse: same pattern as inline-script-filter.spec.ts. Without

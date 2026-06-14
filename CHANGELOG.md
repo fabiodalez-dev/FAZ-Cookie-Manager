@@ -2,6 +2,46 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.18.2] — 2026-06-13
+
+### Changed
+
+- **Experimental opt-in consent features temporarily disabled pending a correctness rework.** An external compliance review found that the three opt-in features added in 1.18.0 did not, when switched on, deliver the granular guarantees their UI and docs implied. They are now hard-disabled at their entry points so no install can enable a path that under-delivers; the default category-level consent flow (covered by the 113/113 compliance suite) is byte-for-byte unchanged.
+  - **Per-service / per-cookie consent toggles** (`banner_control.per_service_consent`, `banner_control.per_cookie_consent`) are hidden in Settings and forced off in the frontend. As shipped, a denied per-cookie/per-service decision was not enforced server-side or re-applied on page reload, the granular `svc.*` / `ck.*` decisions were never written to the consent log, a large override set could exceed the browser's ~4 KB per-cookie limit, and the toggle list showed the cookie-catalogue wildcards a service *can* set rather than the cookies actually detected.
+  - **Geo-routing runtime** (`faz_geo_ruleset_runtime` filter) no longer applies a resolved ruleset to the live banner. A jurisdiction whose model declares CCPA-style UI obligations (Do Not Sell link, Global Privacy Control handling, separate opt-in for sensitive data) was mapped onto a generic GDPR banner without rendering those obligations, so the runtime banner did not match what the ruleset declared. Catalogue-based multi-banner geo-routing (selecting which saved banner to show per country) is unaffected — only the experimental runtime ruleset application is gated off.
+
+### Fixed
+
+- **Corrected an overstated per-cookie enforcement claim.** The per-cookie consent help text previously stated a denied cookie "is deleted whenever it appears — the same enforcement used for per-service opt-out." That enforcement only ran client-side at save time and did not persist across reloads, so the claim was inaccurate. The text has been corrected (and the feature itself disabled, above) so no documentation implies a guarantee the code did not deliver.
+- **Diagnostics now report the effective state.** System Status and the WP-CLI status table previously echoed the saved `per_service_consent` option, so an install that had toggled it on still showed "Per-Service Consent: enabled" while the runtime was off. Both now report it as disabled in 1.18.2, matching what the plugin actually does.
+- **Completed the geo-runtime kill switch.** A legacy install with no saved GeoIP edition no longer defaults to downloading the larger GeoLite2-City database off the back of the (now disabled) `faz_geo_ruleset_runtime` filter — it defaults to Country, and an admin can still pick City explicitly.
+
+## [1.18.1] — 2026-06-13
+
+### Fixed
+
+- **Cookies admin: scan / auto-categorize dropdowns no longer clipped.** The *Scan Site* and *Auto-categorize* dropdown menus live in a card whose `overflow: hidden` (rounded-corner clipping) cut off the absolutely-positioned menu whenever the card was short enough that the menu extended past its box. The card now opts out of the clip via a `faz-card-overflow-visible` modifier, so the menu drops over the table below and shows all options.
+
+## [1.18.0] — 2026-06-12
+
+### Added
+
+- **Geo-routing runtime (opt-in, flag-gated).** When the `faz_geo_ruleset_runtime` filter is enabled, the resolved per-jurisdiction ruleset is applied to the live banner: pre-consent default state, script blocking, Google Consent Mode v2 defaults and banner selection follow the visitor's jurisdiction (GDPR / CCPA-CPRA / Law 25 Quebec / POPIA / LGPD / …). **Off by default** — existing installs are byte-for-byte unchanged until the filter is turned on.
+- **GeoLite2 edition choice (Country vs City).** Settings → GeoIP Database lets the admin pick the MaxMind GeoLite2 edition. Country (~10 MB) stays the default; City (~60 MB) adds province/state (ISO 3166-2) detection needed by sub-national rulesets such as Quebec's Law 25. The choice is surfaced with a clear size/use explanation, and the existing Country download keeps working exactly as before.
+- **Granular per-cookie consent toggles (#135).** A new opt-in sub-mode of per-service consent (`banner_control.per_cookie_consent`, default off) renders an individual toggle for every cookie a service declares, so visitors can opt out of specific cookies within an accepted service. Consent is stored as compact, override-only entries keyed by cookie name; enforcement reuses the existing cookie-shredding path (a denied cookie is deleted whenever it appears — the service script, not the individual cookie, is what gets gated).
+
+### Fixed
+
+- **GeoLite2 database activation is now validated and atomic.** The MaxMind download endpoint previously reported success whenever the archive extracted, even if the `.mmdb` inside was corrupt or the wrong edition — leaving lookups silently broken and the saved edition preference pointing at a database that was never installed. The downloader now validates the database type before activation, swaps it in atomically (preserving the previous database on any error, with staging/temp files cleaned up in a `finally` block), and persists the edition preference only after a successful download.
+
+### Translations
+
+- Completed and re-synced all six bundled locales (Italian, French, German, Dutch, Croatian, Czech). Every UI string — including the new geo-routing, edition-picker and per-cookie strings — is translated (1144/1144 per locale), and several strings that had drifted out of sync with the source were re-extracted and translated.
+
+### Hardening
+
+- Pre-release hardening from an internal multi-lens review: per-cookie consent keys now percent-escape `:`/`,`/`%` in cookie names so an exotic custom cookie name can't corrupt the consent cookie; a *custom* save under a runtime-geo CCPA-fallback banner honours the visitor's per-category toggles (instead of re-granting ruleset-denied categories) and the REST language-swap fails closed when an opt-in ruleset has no matching banner; the GeoLite2 edition setting is whitelisted; the resolver's sub-national stage is guarded against US bypass; and the law-banner default fallback is restricted to globally-applicable banners.
+
 ## [1.17.2] — 2026-06-03
 
 ### Added

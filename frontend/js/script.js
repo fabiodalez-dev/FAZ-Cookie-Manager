@@ -78,6 +78,33 @@ ref._fazSetInStore = function (key, value) {
                 if (typeof catValue === 'string' && catValue === v) continue;
             }
         }
+        // Per-cookie overrides (`ck.<service-id>.<cookie-index>`) follow the same
+        // size-saving contract: persist only the cookies whose value diverges
+        // from their service's effective consent (the explicit `svc.<id>` entry
+        // if present, otherwise the category). An absent `ck.` entry inherits the
+        // service on reload — see the restore block and _fazCookieEffectiveConsent.
+        // The service id is sanitize_key()'d server-side (no dots), so the FIRST
+        // dot separates it from the cookie name — the name itself may contain
+        // dots (e.g. `_pk_ses.*`), so indexOf (not lastIndexOf) is required.
+        if (typeof k === 'string' && k.indexOf('ck.') === 0) {
+            const ckRest = k.substring(3);
+            const ckFirstDot = ckRest.indexOf('.');
+            if (ckFirstDot > 0) {
+                const ckSvcId = ckRest.substring(0, ckFirstDot);
+                const ckSvcVal = ref._fazConsentStore.get('svc.' + ckSvcId);
+                let ckSvcEff = '';
+                if (typeof ckSvcVal === 'string' && ckSvcVal) {
+                    ckSvcEff = ckSvcVal;
+                } else {
+                    const ckCat = svcCatMap[ckSvcId];
+                    if (ckCat) {
+                        const ckCatVal = ref._fazConsentStore.get(ckCat);
+                        ckSvcEff = typeof ckCatVal === 'string' ? ckCatVal : '';
+                    }
+                }
+                if (ckSvcEff && ckSvcEff === v) continue;
+            }
+        }
         cookieStringArray.push(`${k}:${v}`);
     }
 
@@ -297,6 +324,19 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
         const svcKey = "svc." + svc.id;
         if (fazcookieConsentMap[svcKey]) {
             ref._fazConsentStore.set(svcKey, fazcookieConsentMap[svcKey]);
+        }
+        // Restore per-cookie overrides (ck.<service-id>.<cookie-name>) — only
+        // the entries that diverged from their service are persisted, so an
+        // absent key correctly inherits the service's effective consent.
+        // Keyed by cookie NAME (not array index) so a catalogue re-order can't
+        // silently remap a stored choice onto a different cookie.
+        if (_fazStore._perCookieConsent && Array.isArray(svc.cookies)) {
+            svc.cookies.forEach(function(cookieName) {
+                const ckKey = _fazCkKey(svc.id, cookieName);
+                if (fazcookieConsentMap[ckKey]) {
+                    ref._fazConsentStore.set(ckKey, fazcookieConsentMap[ckKey]);
+                }
+            });
         }
     });
 }
@@ -674,7 +714,11 @@ function _fazApplyGpcOptOut() {
             deny = !category.isNecessary;
         } else {
             // Opt-out regimes: exempt categories carry defaultConsent.ccpa === true.
-            deny = !(category.defaultConsent && category.defaultConsent.ccpa === true);
+            // A category flagged ccpaDoNotSell (sold or shared) is ALWAYS denied
+            // under a GPC opt-out, even when a runtime ruleset granted it — GPC is
+            // a legally-binding sale/share opt-out (CPPA §7025) that overrides the
+            // ruleset's default grant, mirroring the server-side get_blocked_categories.
+            deny = !!category.ccpaDoNotSell || !(category.defaultConsent && category.defaultConsent.ccpa === true);
         }
         var valueToSet = deny ? "no" : "yes";
         ref._fazSetInStore(category.slug, valueToSet);
@@ -737,10 +781,27 @@ function _fazSetInitialState() {
     // (inside _fazAcceptCookies via _fazSetInStore).
     ref._fazConsentStore.set("consent", "no");
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
+    // When a runtime geo ruleset is active (_runtimeGeo), the per-category
+    // defaultConsent values are jurisdiction-authoritative: derive the
+    // pre-consent state straight from them, independent of the binary law.
+    // This is what keeps a denied-until-action category blocked on the very
+    // first visit even when the shown banner is an opt-out (CCPA) banner —
+    // otherwise the ccpa branch below would leave it "yes" until the visitor
+    // ticks the opt-out box, and _fazUnblock() would run the blocked scripts.
+    const runtimeGeo = !!(_fazStore && _fazStore._runtimeGeo);
     const responseCategories = { accepted: [], rejected: [], action: 'init' };
     for (const category of _fazStore._categories) {
         let valueToSet = "yes";
-        if (
+        // Only categories the ruleset actually NAMES are jurisdiction-authoritative
+        // here. Custom categories absent from the ruleset fall through to the
+        // effective-law branch below — matching the server's get_blocked_categories
+        // split — so a custom category is never recorded "no" on the client while
+        // the (opt-out) server runs it.
+        if (runtimeGeo && category.defaultFromRuleset) {
+            if (!category.isNecessary && !category.defaultConsent.gdpr) {
+                valueToSet = "no";
+            }
+        } else if (
             (activeLaw === "gdpr" &&
                 !category.isNecessary &&
                 !category.defaultConsent[activeLaw]) ||
@@ -1972,6 +2033,27 @@ function _fazAcceptCookies(choice = "all") {
                         (choice === "custom" && !_fazFindCheckBoxValue(category.slug)))
                     ? "no"
                     : "yes";
+        } else if (_fazStore._runtimeGeo && category.defaultFromRuleset && (choice === "reject" || choice === "custom")) {
+            // Runtime geo-routing can serve a CCPA (opt-out) banner as a
+            // fallback to a visitor whose resolved ruleset is opt-in. The
+            // opt-out checkbox logic in the else branch would leave every
+            // non-necessary category "yes" (silently granting all cookies),
+            // which is wrong for both an explicit reject AND a custom save
+            // from the preference center (where the visitor's per-category
+            // toggles, not the single opt-out checkbox, express intent).
+            if (choice === "custom") {
+                // Honour the visitor's explicit per-category toggle; the
+                // preference-center toggles were seeded from the ruleset in
+                // _fazSetInitialState, so an untouched toggle already reflects
+                // the jurisdiction default. Necessary is always granted.
+                valueToSet = (category.isNecessary || _fazFindCheckBoxValue(category.slug)) ? "yes" : "no";
+            } else {
+                // reject/close → ruleset-authoritative default. defaultConsent.gdpr
+                // is jurisdiction-authoritative and mirrors _fazSetInitialState, so
+                // a ruleset-denied category becomes "no" while a ruleset-granted one
+                // (e.g. functional under an opt-out ruleset) stays "yes".
+                valueToSet = (category.isNecessary || category.defaultConsent.gdpr) ? "yes" : "no";
+            }
         } else {
             valueToSet = ccpaCheckBoxValue && !category.defaultConsent.ccpa ? "no" : "yes";
         }
@@ -1984,6 +2066,11 @@ function _fazAcceptCookies(choice = "all") {
     // Handle per-service consent.
     if (_fazStore._perServiceConsent && _fazStore._services) {
         _fazStoreCustomServiceConsent(choice);
+        // Per-cookie overrides are saved AFTER per-service so they read the
+        // freshly-written svc.<id> values when deciding what diverges.
+        if (_fazStore._perCookieConsent) {
+            _fazStoreCustomCookieConsent(choice);
+        }
     }
 
     // Handle IAB vendor consent.
@@ -1994,17 +2081,55 @@ function _fazAcceptCookies(choice = "all") {
     return true;
 }
 
+/**
+ * Drop every per-service (svc.<id>) and per-cookie (ck.<id>.<name>) override
+ * from the in-memory consent store, e.g. on reject-all or revoke, so those
+ * categories fall back to their category-level consent.
+ *
+ * @return {void}
+ */
 function _fazClearStoredServiceConsent() {
     if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return;
     var keys = [];
     ref._fazConsentStore.forEach(function(value, key) {
-        if (typeof key === 'string' && key.indexOf('svc.') === 0) keys.push(key);
+        if (typeof key === 'string' && (key.indexOf('svc.') === 0 || key.indexOf('ck.') === 0)) keys.push(key);
     });
     keys.forEach(function(key) {
         ref._fazConsentStore.delete(key);
     });
 }
 
+/**
+ * Build the consent-store key for a per-cookie override.
+ *
+ * The fazcookie-consent cookie is a comma-joined list of `key:value` pairs, so
+ * a cookie name containing `,` or `:` (which a publisher can enter as a custom
+ * cookie name even though browsers reject such names) would corrupt the whole
+ * cookie on the next parse — silently dropping unrelated consent entries.
+ * Percent-escape `%`, `:` and `,` in the name so the key is always safe. The
+ * service id is sanitize_key()'d server-side (no special characters), and the
+ * store serialiser parses svcId with the first dot, so escaping the name never
+ * affects that split.
+ *
+ * @param {string} serviceId  Sanitised service id.
+ * @param {string} cookieName Cookie name/pattern as declared by the service.
+ * @return {string} The `ck.<service>.<escaped-name>` store key.
+ */
+function _fazCkKey(serviceId, cookieName) {
+    var safe = String(cookieName).replace(/%/g, "%25").replace(/:/g, "%3A").replace(/,/g, "%2C");
+    return "ck." + serviceId + "." + safe;
+}
+
+/**
+ * Persist per-service overrides on a "Save preferences" (custom) action.
+ *
+ * For each category, writes svc.<id> entries only when at least one service in
+ * it diverges from the category consent; the store serialiser then drops any
+ * entry that matches its category, keeping the consent cookie small.
+ *
+ * @param {string} choice  The save action; only "custom" persists overrides.
+ * @return {void}
+ */
 function _fazStoreCustomServiceConsent(choice) {
     if (choice !== "custom") return;
     var togglesByCategory = {};
@@ -2026,6 +2151,56 @@ function _fazStoreCustomServiceConsent(choice) {
             if (!serviceId) return;
             ref._fazSetInStore("svc." + serviceId, toggle.checked ? "yes" : "no");
         });
+    });
+}
+
+/**
+ * Effective consent ("yes"/"no") for a service: the explicit svc.<id> override
+ * if the visitor set one, otherwise the parent category's consent.
+ *
+ * @param {string} serviceId  Sanitised service id.
+ * @param {string} category   Parent category slug.
+ * @return {string} "yes" or "no".
+ */
+function _fazServiceEffectiveConsent(serviceId, category) {
+    var svcConsent = ref._fazGetFromStore("svc." + serviceId);
+    if (svcConsent) return svcConsent === "yes" ? "yes" : "no";
+    return ref._fazGetFromStore(category) === "yes" ? "yes" : "no";
+}
+
+/**
+ * Effective consent ("yes"/"no") for one cookie within a service: the explicit
+ * ck.<service>.<cookie-name> override if present, otherwise the service's
+ * effective consent (which itself falls back to the category).
+ *
+ * @param {string} serviceId  Sanitised service id.
+ * @param {string} category   Parent category slug.
+ * @param {string} cookieName Cookie name/pattern as declared by the service.
+ * @return {string} "yes" or "no".
+ */
+function _fazCookieEffectiveConsent(serviceId, category, cookieName) {
+    var ck = ref._fazGetFromStore(_fazCkKey(serviceId, cookieName));
+    if (ck) return ck === "yes" ? "yes" : "no";
+    return _fazServiceEffectiveConsent(serviceId, category);
+}
+
+/**
+ * Persist per-cookie overrides on a "Save preferences" (custom) action.
+ *
+ * Only writes ck.<service>.<index> entries; the store serialiser drops any whose
+ * value matches the service's effective consent, so the consent cookie stays
+ * small even with hundreds of declared cookies (issue #135).
+ *
+ * @param {string} choice  The save action; only "custom" persists overrides.
+ * @return {void}
+ */
+function _fazStoreCustomCookieConsent(choice) {
+    if (choice !== "custom" || !_fazStore._perCookieConsent) return;
+    document.querySelectorAll('.faz-cookie-toggle[data-service][data-cookie-name]').forEach(function(toggle) {
+        var serviceId = toggle.getAttribute('data-service');
+        var cookieName = toggle.getAttribute('data-cookie-name');
+        if (!serviceId || !cookieName) return;
+        ref._fazSetInStore(_fazCkKey(serviceId, cookieName), toggle.checked ? "yes" : "no");
     });
 }
 function _fazSetShowMoreLess() {
@@ -3235,6 +3410,18 @@ function _fazCleanupRevokedCookies() {
             if (svcConsent === "no" && svc.cookies && svc.cookies.length) {
                 svc.cookies.forEach(function(pat) { svcCookieMap[pat] = svc.id; });
             }
+            // Per-cookie shredding (issue #135): when the service itself is
+            // allowed but the visitor opted a single cookie out, add just that
+            // cookie pattern. A denied cookie can't be stopped from being set
+            // (its service script runs) but is deleted whenever it appears —
+            // the same post-hoc enforcement used for a denied service.
+            if (_fazStore._perCookieConsent && svc.cookies && svc.cookies.length) {
+                svc.cookies.forEach(function(pat) {
+                    if (ref._fazGetFromStore(_fazCkKey(svc.id, pat)) === "no") {
+                        svcCookieMap[pat] = svc.id;
+                    }
+                });
+            }
         });
     }
 
@@ -3725,6 +3912,8 @@ window.revisitFazConsent = () => _revisitFazConsent();
 function _fazRenderServiceToggles() {
     if (!_fazStore._perServiceConsent || !_fazStore._services || !_fazStore._services.length) return;
 
+    if (_fazStore._perCookieConsent) _fazInjectCookieToggleStyles();
+
     _fazStore._categories.forEach(function(category) {
         if (category.isNecessary || category.slug === 'necessary') return;
 
@@ -3776,11 +3965,58 @@ function _fazRenderServiceToggles() {
             checkbox.addEventListener('change', function() {
                 // When a service is unchecked but category is checked, keep the category
                 // on — individual service opt-out within an accepted category.
+                // Flipping a service mirrors to its per-cookie toggles so the
+                // nested rows stay coherent with the service they belong to.
+                if (_fazStore._perCookieConsent) {
+                    var on = checkbox.checked;
+                    document.querySelectorAll('.faz-cookie-toggle[data-service="' + service.id + '"]')
+                        .forEach(function(ckToggle) { ckToggle.checked = on; });
+                }
             });
 
             switchWrap.appendChild(checkbox);
             row.appendChild(switchWrap);
             serviceList.appendChild(row);
+
+            // Per-cookie toggles nested under the service (issue #135). Rendered
+            // only when the admin enabled per-cookie consent AND the service
+            // declares cookies. Enforcement is by cookie shredding — see
+            // _fazCleanupRevokedCookies — since the service script, not the
+            // individual cookie, is what gets gated.
+            if (_fazStore._perCookieConsent && Array.isArray(service.cookies) && service.cookies.length) {
+                var cookieList = document.createElement('div');
+                cookieList.className = 'faz-cookie-list';
+                cookieList.setAttribute('data-faz-service', service.id);
+
+                service.cookies.forEach(function(cookieName, idx) {
+                    var cRow = document.createElement('div');
+                    cRow.classList.add('faz-cookie-row');
+
+                    var cLabel = document.createElement('span');
+                    cLabel.classList.add('faz-cookie-row-label');
+                    cLabel.textContent = cookieName;
+                    cRow.appendChild(cLabel);
+
+                    var cSwitchWrap = document.createElement('div');
+                    cSwitchWrap.classList.add('faz-switch');
+
+                    var cBox = document.createElement('input');
+                    cBox.type = 'checkbox';
+                    cBox.className = 'faz-cookie-toggle';
+                    cBox.setAttribute('data-cookie-index', String(idx));
+                    cBox.setAttribute('data-cookie-name', cookieName);
+                    cBox.setAttribute('data-service', service.id);
+                    cBox.setAttribute('data-category', service.category);
+                    cBox.setAttribute('aria-label', _fazTranslate('cookie_consent_label', 'Cookie consent') + ': ' + cookieName);
+                    cBox.checked = _fazCookieEffectiveConsent(service.id, service.category, cookieName) === 'yes';
+
+                    cSwitchWrap.appendChild(cBox);
+                    cRow.appendChild(cSwitchWrap);
+                    cookieList.appendChild(cRow);
+                });
+
+                serviceList.appendChild(cookieList);
+            }
         });
 
         accordionBody.appendChild(serviceList);
@@ -3799,6 +4035,12 @@ function _fazRenderServiceToggles() {
                     .forEach(function(svcToggle) {
                         svcToggle.checked = isChecked;
                     });
+                if (_fazStore._perCookieConsent) {
+                    document.querySelectorAll('.faz-cookie-toggle[data-category="' + category.slug + '"]')
+                        .forEach(function(ckToggle) {
+                            ckToggle.checked = isChecked;
+                        });
+                }
             });
         });
     });
@@ -3818,6 +4060,34 @@ function _fazUpdateServiceToggleStates() {
         var isChecked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
         toggle.checked = isChecked;
     });
+
+    if (_fazStore._perCookieConsent) {
+        document.querySelectorAll('.faz-cookie-toggle').forEach(function(toggle) {
+            var serviceId = toggle.getAttribute('data-service');
+            var category = toggle.getAttribute('data-category');
+            var cookieName = toggle.getAttribute('data-cookie-name');
+            toggle.checked = _fazCookieEffectiveConsent(serviceId, category, cookieName) === 'yes';
+        });
+    }
+}
+
+/**
+ * Inject the per-cookie toggle stylesheet once. The base banner CSS lives in the
+ * cached banner template; keeping these few nested-list rules here avoids
+ * coupling an optional sub-feature to the template-regeneration pipeline.
+ *
+ * @return {void}
+ */
+function _fazInjectCookieToggleStyles() {
+    if (document.getElementById('faz-cookie-toggle-styles')) return;
+    var style = document.createElement('style');
+    style.id = 'faz-cookie-toggle-styles';
+    style.textContent =
+        '.faz-cookie-list{margin:2px 0 8px 14px;padding-left:10px;border-left:1px solid rgba(0,0,0,.08);}' +
+        '.faz-cookie-row{display:flex;align-items:center;justify-content:space-between;padding:2px 0;}' +
+        '.faz-cookie-row-label{font-size:12px;color:#666;word-break:break-all;padding-right:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}' +
+        '.faz-cookie-row .faz-switch{flex-shrink:0;transform:scale(.82);transform-origin:right center;}';
+    document.head.appendChild(style);
 }
 
 /**

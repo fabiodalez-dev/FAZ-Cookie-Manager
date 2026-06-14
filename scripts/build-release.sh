@@ -111,6 +111,7 @@ COMMON_EXCLUDES=(
     "faz-cookie-manager/.code-review-graph/*"
     "faz-cookie-manager/graphify-out/*"
     "faz-cookie-manager/.serena/*"
+    "faz-cookie-manager/.phpcs-tools/*"
     "faz-cookie-manager/.specify/*"
     "faz-cookie-manager/specs/*"
     "faz-cookie-manager/.gitignore"

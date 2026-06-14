@@ -51,6 +51,15 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Uses generic script handle names to prevent ad blockers from blocking the cookie banner. Enable if visitors report the banner not appearing.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<?php
+			// 1.18.2 HOTFIX: the per-service and per-cookie consent toggles are
+			// hidden pending a correctness rework. As shipped they did not enforce
+			// per-cookie revocation server-side or on reload, did not log the
+			// granular decisions, could exceed the 4 KB cookie limit, and listed
+			// catalogue wildcards rather than detected cookies. The markup is kept
+			// (gated off) for an easy restore once those are fixed.
+			if ( false ) :
+			?>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.per_service_consent">
@@ -59,6 +68,15 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. This provides more granular privacy control but makes the preference center more complex.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="banner_control.per_cookie_consent">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Enable per-cookie consent', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Requires per-service consent. Adds a nested toggle for each individual cookie a service declares, so visitors can opt out of specific cookies within an accepted service.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<?php endif; ?>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.subdomain_sharing">
@@ -331,8 +349,18 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 		<div class="faz-card-body">
 			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
-				<?php echo wp_kses_post( __( 'Geo-targeting requires a MaxMind GeoLite2-Country database. <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">Get a free license key</a>.', 'faz-cookie-manager' ) ); ?>
+				<?php echo wp_kses_post( __( 'Geo-targeting requires a MaxMind GeoLite2 database. <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">Get a free license key</a>.', 'faz-cookie-manager' ) ); ?>
 			</p>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Database edition', 'faz-cookie-manager' ); ?></label>
+				<select class="faz-select" data-path="geolocation.geolite2_edition" style="width:auto;max-width:340px;">
+					<option value="country"><?php esc_html_e( 'Country &#8212; country-level only (recommended)', 'faz-cookie-manager' ); ?></option>
+					<option value="city"><?php esc_html_e( 'City &#8212; adds region / state detection', 'faz-cookie-manager' ); ?></option>
+				</select>
+				<div class="faz-help">
+					<?php echo wp_kses_post( __( '<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only &#8212; enough for country-based banner targeting and most per-jurisdiction rules. <strong>City</strong> (~60&#8211;110 MB) additionally resolves the region / province / state, which a few rules need: sub-national regimes such as <em>Quebec Law 25</em> apply only inside one region of a country, so without City (or a Cloudflare <code>CF-Region-Code</code> header) the plugin can only see &#8220;Canada&#8221; and cannot route that visitor to the Quebec ruleset. Choose City only if you rely on region-level routing &#8212; it is a much larger download. Changing this and clicking &#8220;Update Database&#8221; replaces the installed database.', 'faz-cookie-manager' ) ); ?>
+				</div>
+			</div>
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'MaxMind License Key', 'faz-cookie-manager' ); ?></label>
 				<input type="password" class="faz-input" data-path="geolocation.maxmind_license_key" placeholder="<?php esc_attr_e( 'Enter your MaxMind license key', 'faz-cookie-manager' ); ?>" style="max-width:400px;">
