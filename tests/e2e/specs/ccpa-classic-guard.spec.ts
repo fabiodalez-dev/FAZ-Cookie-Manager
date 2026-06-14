@@ -92,11 +92,17 @@ test.describe('CCPA + Classic layout guard', () => {
     await expect(page.locator('#faz-b-type'), 'Classic migrated to Box').toHaveValue('box');
     await expect(hint, 'CCPA incompatibility hint shown').toBeVisible();
 
-    // "Both GDPR + US State Laws" maps to applicableLaw=gdpr (detail preference
-    // center, which Classic has), so Classic stays available there.
+    // "Both GDPR + US State Laws" keeps the Do-Not-Sell button on (donotSell
+    // stays enabled), and Classic has no opt-out popup for it to open — so
+    // Classic must be forbidden under gdpr_ccpa too, not just pure CCPA.
     await page.selectOption('#faz-b-law', 'gdpr_ccpa');
-    await classicDisabled(false, 'Classic allowed under gdpr_ccpa');
-    await expect(hint, 'hint hidden under gdpr_ccpa').toBeHidden();
+    await classicDisabled(true, 'Classic disabled under gdpr_ccpa (Both)');
+    await expect(hint, 'incompatibility hint shown under gdpr_ccpa').toBeVisible();
+
+    // Back to pure GDPR → no Do-Not-Sell button, so Classic is allowed again.
+    await page.selectOption('#faz-b-law', 'gdpr');
+    await classicDisabled(false, 'Classic allowed again under GDPR');
+    await expect(hint, 'hint hidden under GDPR').toBeHidden();
   });
 
   test('a saved Classic + CCPA banner is migrated to Box on initial load', async ({ page, loginAsAdmin }) => {

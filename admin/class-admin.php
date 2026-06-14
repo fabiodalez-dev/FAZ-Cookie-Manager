@@ -936,6 +936,20 @@ class Admin {
 					$theme_file = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/templates/6.2.0/theme.json';
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
+
+					// Per-law default notice descriptions for EVERY selected language,
+					// so banner.js can reload the law-appropriate copy on a law change
+					// across all translations — synchronously, without the rate-limited
+					// /configs round-trip that loaded a single (often wrong) language.
+					$faz_law_langs = faz_selected_languages();
+					if ( empty( $faz_law_langs ) ) {
+						$faz_law_langs = array( faz_default_language() );
+					}
+					$faz_law_descs = array();
+					foreach ( $faz_law_langs as $faz_law_lang ) {
+						$faz_law_descs[ $faz_law_lang ] = \FazCookie\Admin\Modules\Banners\Includes\Banner::get_law_notice_descriptions( $faz_law_lang );
+					}
+					wp_add_inline_script( 'faz-admin', 'fazConfig.lawNoticeDescriptions=' . wp_json_encode( $faz_law_descs ) . ';', 'after' );
 				}
 
 				// Preload REST API responses so page JS gets instant data.
