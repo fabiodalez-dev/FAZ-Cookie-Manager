@@ -679,7 +679,9 @@ class Api extends Rest_Controller {
 				set_transient( $rl_key, $now, 60 );
 			}
 		}
-		$lang    = ( $request && isset( $request['lang'] ) ) ? sanitize_text_field( wp_unslash( (string) $request['lang'] ) ) : 'en';
+		// 'lang' is registered in get_collection_params() with sanitize_text_field,
+		// so the REST framework has already sanitised it by here; default to 'en'.
+		$lang    = ( $request && isset( $request['lang'] ) ) ? (string) $request['lang'] : 'en';
 		$configs = array(
 			'gdpr'         => $this->controller->get_default_configs(),
 			'ccpa'         => $this->controller->get_default_configs( 'ccpa' ),
@@ -774,6 +776,12 @@ class Api extends Rest_Controller {
 			),
 			'language' => array(
 				'description'       => __( 'Language of the banner', 'faz-cookie-manager' ),
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'validate_callback' => 'rest_validate_request_arg',
+			),
+			'lang'     => array(
+				'description'       => __( 'Language for the default per-law descriptions returned by /configs.', 'faz-cookie-manager' ),
 				'type'              => 'string',
 				'sanitize_callback' => 'sanitize_text_field',
 				'validate_callback' => 'rest_validate_request_arg',

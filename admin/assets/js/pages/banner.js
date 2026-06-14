@@ -405,14 +405,27 @@
 	}
 
 	// Lazy-load the per-law default descriptions for the current language.
+	// Queues callbacks while a request is in flight so two quick law changes
+	// don't fire duplicate requests.
+	var fazLawDescriptionsLoading = false;
+	var fazLawDescriptionsQueue = [];
 	function fazEnsureLawDescriptions(cb) {
 		if (fazLawDescriptions) { if (cb) cb(); return; }
+		if (cb) fazLawDescriptionsQueue.push(cb);
+		if (fazLawDescriptionsLoading) return;
+		fazLawDescriptionsLoading = true;
+		var flush = function () {
+			fazLawDescriptionsLoading = false;
+			var queued = fazLawDescriptionsQueue;
+			fazLawDescriptionsQueue = [];
+			queued.forEach(function (fn) { fn(); });
+		};
 		FAZ.get('banners/configs?lang=' + encodeURIComponent(currentLang)).then(function (configs) {
 			fazLawDescriptions = (configs && configs.descriptions) || { gdpr: '', ccpa: '' };
-			if (cb) cb();
+			flush();
 		}).catch(function () {
 			fazLawDescriptions = { gdpr: '', ccpa: '' };
-			if (cb) cb();
+			flush();
 		});
 	}
 

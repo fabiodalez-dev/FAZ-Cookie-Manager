@@ -65,6 +65,23 @@ async function goToBannerPage(page: Page) {
   }, { timeout: 10_000 });
 }
 
+/** Banner admin tabs hide their panels; clicking the tab button is required
+ *  before interacting with elements inside a non-active tab. The law dropdown
+ *  lives in "general", the notice editor in "content". */
+async function openTab(page: Page, tab: string) {
+  await page.click(`button.faz-tab[data-tab="${tab}"]`);
+  await page.waitForSelector(`#tab-${tab}.active`, { timeout: 5_000 });
+}
+
+/** The TinyMCE instance is initialised on page load, but a fast test can race
+ *  it; wait until the editor exists before reading/writing it. */
+async function ensureNoticeEditorReady(page: Page) {
+  await page.waitForFunction(() => {
+    const tm = (window as unknown as { tinyMCE?: { get: (id: string) => unknown } }).tinyMCE;
+    return !!(tm && tm.get('faz-b-notice-desc'));
+  }, { timeout: 10_000 });
+}
+
 /** Read the notice description straight from TinyMCE (works on a hidden tab). */
 function noticeDescription(page: Page): Promise<string> {
   return page.evaluate(() => {
@@ -85,17 +102,23 @@ test.describe('Banner law switch reloads the notice copy', () => {
 
       // Starts on CCPA with the CCPA copy → mentions Do Not Sell.
       await expect(page.locator('#faz-b-law')).toHaveValue('ccpa');
+      await openTab(page, 'content');
+      await ensureNoticeEditorReady(page);
       await expect.poll(() => noticeDescription(page), { message: 'starts with CCPA copy' })
         .toMatch(/do not sell/i);
 
       // Switch to GDPR → un-customised copy reloads to the GDPR default, which
       // does NOT mention Do Not Sell.
+      await openTab(page, 'general');
       await page.selectOption('#faz-b-law', 'gdpr');
+      await openTab(page, 'content');
       await expect.poll(() => noticeDescription(page), { message: 'GDPR copy no longer mentions Do Not Sell' })
         .not.toMatch(/do not sell/i);
 
       // Switch back to CCPA → the CCPA copy (with the link) returns.
+      await openTab(page, 'general');
       await page.selectOption('#faz-b-law', 'ccpa');
+      await openTab(page, 'content');
       await expect.poll(() => noticeDescription(page), { message: 'CCPA copy restored' })
         .toMatch(/do not sell/i);
     } finally {
@@ -113,6 +136,8 @@ test.describe('Banner law switch reloads the notice copy', () => {
       await goToBannerPage(page);
 
       // Customise the description with a sentence that still mentions Do Not Sell.
+      await openTab(page, 'content');
+      await ensureNoticeEditorReady(page);
       const custom = '<p>Custom CCPA copy — Do Not Sell my info, please.</p>';
       await page.evaluate((html) => {
         const tm = (window as unknown as { tinyMCE?: { get: (id: string) => { setContent: (h: string) => void } | null } }).tinyMCE;
@@ -122,8 +147,10 @@ test.describe('Banner law switch reloads the notice copy', () => {
 
       // Switch to GDPR: the custom copy must be left intact, and the mismatch
       // hint must show because the custom copy still names the Do-Not-Sell link.
+      await openTab(page, 'general');
       await page.selectOption('#faz-b-law', 'gdpr');
       await expect(page.locator('#faz-b-law-content-hint'), 'mismatch hint shown for custom copy').toBeVisible();
+      await openTab(page, 'content');
       await expect.poll(() => noticeDescription(page), { message: 'custom copy untouched' })
         .toContain('Custom CCPA copy');
     } finally {
