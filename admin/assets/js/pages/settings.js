@@ -269,6 +269,8 @@
 		var btn = document.getElementById('faz-geodb-update');
 		var keyInput = form.querySelector('[data-path="geolocation.maxmind_license_key"]');
 		var licenseKey = keyInput ? keyInput.value.trim() : '';
+		var edInput = form.querySelector('[data-path="geolocation.geolite2_edition"]');
+		var edition = edInput && (edInput.value === 'city' || edInput.value === 'country') ? edInput.value : '';
 
 		if (!licenseKey) {
 			FAZ.notify(__('settings.geoipNoKey', 'Please enter a MaxMind license key first.'), 'error');
@@ -276,7 +278,7 @@
 		}
 
 		FAZ.btnLoading(btn, true);
-		FAZ.post('settings/geolite2/update', { license_key: licenseKey }).then(function (data) {
+		FAZ.post('settings/geolite2/update', { license_key: licenseKey, edition: edition }).then(function (data) {
 			FAZ.btnLoading(btn, false);
 			if (data.success) {
 				FAZ.notify(__('settings.geoipUpdated', 'GeoIP database updated successfully.'));

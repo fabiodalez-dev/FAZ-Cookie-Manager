@@ -15,6 +15,7 @@
 .gitignore
 .playwright-cli/
 .playwright-mcp/
+.phpcs-tools/
 .serena/
 .specify/
 .wordpress-org/

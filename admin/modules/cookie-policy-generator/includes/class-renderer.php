@@ -603,6 +603,16 @@ class Renderer {
 		return (string) preg_replace( '/\A\s*#[ \t]+\S[^\n]*\R+/u', '', $markdown, 1 );
 	}
 
+	/**
+	 * Remove bullet lines whose only content is an empty "**Label:**" run.
+	 *
+	 * Strips list items that render as a bold label with no value (plus any
+	 * trailing dashes/dots/commas), then collapses the blank lines the
+	 * deletion leaves behind. Falls back to the original markdown on PCRE error.
+	 *
+	 * @param string $markdown Raw policy markdown.
+	 * @return string Cleaned markdown.
+	 */
 	private static function strip_empty_label_lines( $markdown ) {
 		if ( ! is_string( $markdown ) || '' === $markdown ) {
 			return (string) $markdown;
@@ -870,10 +880,23 @@ class Renderer {
 
 	// ---------- Lang helpers ----------
 
+	/**
+	 * Whether the given language is a supported policy template language.
+	 *
+	 * @param string $lang Language code (normalised before comparison).
+	 * @return bool True when the language is in Generator::LANGUAGES.
+	 */
 	private static function is_supported_lang( $lang ) {
 		return in_array( self::normalize_lang( (string) $lang ), Generator::LANGUAGES, true );
 	}
 
+	/**
+	 * Canonicalise a language code: underscores → hyphens, lowercase the
+	 * language part and uppercase the region part (e.g. pt_br → pt-BR).
+	 *
+	 * @param string $lang Raw language code.
+	 * @return string Normalised language code.
+	 */
 	private static function normalize_lang( $lang ) {
 		$lang = (string) $lang;
 		// Normalize underscores → hyphens (pt_BR → pt-BR).
@@ -886,6 +909,15 @@ class Renderer {
 		return strtolower( $lang );
 	}
 
+	/**
+	 * Map a WordPress locale to a policy template language code.
+	 *
+	 * Reduces a full locale to the template's language key (it_IT → it,
+	 * en_US → en), preserving pt-BR as the only region-qualified template.
+	 *
+	 * @param string $wp_locale WordPress locale (e.g. from get_locale()).
+	 * @return string Template language code; 'en' when empty.
+	 */
 	private static function wp_locale_to_template_lang( $wp_locale ) {
 		// it_IT → it, en_US → en, pt_BR → pt-BR.
 		if ( '' === $wp_locale ) {
@@ -901,6 +933,15 @@ class Renderer {
 
 	// ---------- Misc helpers ----------
 
+	/**
+	 * Format the current date in the policy template's language.
+	 *
+	 * Localises the month name to the template language (not the site locale)
+	 * and assembles day/month/year in that language's conventional order.
+	 *
+	 * @param string $lang Template language code.
+	 * @return string Human-readable localised date.
+	 */
 	private static function format_date( $lang ) {
 		$ts      = function_exists( 'current_time' ) ? current_time( 'mysql' ) : gmdate( 'Y-m-d H:i:s' );
 		$ts_unix = strtotime( $ts );
@@ -929,6 +970,12 @@ class Renderer {
 		}
 	}
 
+	/**
+	 * Localised month names for a template language.
+	 *
+	 * @param string $lang Template language code.
+	 * @return string[] Zero-indexed list of 12 month names; English fallback.
+	 */
 	private static function month_names( $lang ) {
 		$names = array(
 			'en'    => array( 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December' ),
@@ -942,6 +989,13 @@ class Renderer {
 		return $names[ $lang ] ?? $names['en'];
 	}
 
+	/**
+	 * Format the data-retention period as a localised "%d months" string.
+	 *
+	 * @param array  $settings Settings array (reads `retention_months`).
+	 * @param string $lang     Template language code.
+	 * @return string Localised retention label; defaults to 12 months.
+	 */
 	private static function format_retention( array $settings, $lang ) {
 		$months = (int) ( $settings['retention_months'] ?? 12 );
 		if ( $months <= 0 ) { $months = 12; }
@@ -957,6 +1011,13 @@ class Renderer {
 		return sprintf( $labels[ $lang ] ?? '%d months', $months );
 	}
 
+	/**
+	 * Human-readable, localised display name for a jurisdiction.
+	 *
+	 * @param string $jurisdiction Jurisdiction key (e.g. 'gdpr-strict').
+	 * @param string $lang         Template language code.
+	 * @return string Localised label; English or raw key as fallback.
+	 */
 	private static function jurisdiction_display_name( $jurisdiction, $lang ) {
 		$names = array(
 			'gdpr-strict'     => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)' ),
@@ -966,6 +1027,14 @@ class Renderer {
 		return $names[ $jurisdiction ][ $lang ] ?? $names[ $jurisdiction ]['en'] ?? $jurisdiction;
 	}
 
+	/**
+	 * Endonym (native display name) for a template language.
+	 *
+	 * @param string $lang    Language code to name.
+	 * @param string $in_lang Language to express the name in (currently unused;
+	 *                        names are returned as endonyms).
+	 * @return string Native language name; raw code as fallback.
+	 */
 	private static function language_display_name( $lang, $in_lang ) {
 		$names = array(
 			'en'    => 'English',
@@ -979,6 +1048,12 @@ class Renderer {
 		return $names[ $lang ] ?? $lang;
 	}
 
+	/**
+	 * Official data-protection authority URL for a jurisdiction.
+	 *
+	 * @param string $jurisdiction Jurisdiction key.
+	 * @return string Authority URL, or empty string when unknown.
+	 */
 	private static function official_resources_url( $jurisdiction ) {
 		$urls = array(
 			'gdpr-strict'     => 'https://edpb.europa.eu/',
@@ -988,6 +1063,16 @@ class Renderer {
 		return $urls[ $jurisdiction ] ?? '';
 	}
 
+	/**
+	 * Build the canonical URL of the current page for {{COOKIE_POLICY_URL}}.
+	 *
+	 * Derives the host from home_url() (admin-controlled) rather than the
+	 * attacker-controlled Host header, and uses only the sanitised request
+	 * path — query string and fragment are stripped so preview nonces never
+	 * leak into the published policy text.
+	 *
+	 * @return string Canonical path-only home URL for the current request.
+	 */
 	private static function current_url() {
 		// SECURITY: do NOT trust $_SERVER['HTTP_HOST'] for the host
 		// component. The Host header is attacker-controlled (think Host
@@ -1022,6 +1107,12 @@ class Renderer {
 		return home_url( $path );
 	}
 
+	/**
+	 * Whether a database table exists (exact name match).
+	 *
+	 * @param string $table Fully-qualified table name.
+	 * @return bool True when the table is present.
+	 */
 	private static function table_exists( $table ) {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching

@@ -26,6 +26,7 @@ use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
 use FazCookie\Includes\Cookie_Settings_Shortcode;
 use FazCookie\Frontend\Includes\Placeholder_Builder;
+use FazCookie\Frontend\Includes\Geo_Runtime;
 /**
  * The public-facing functionality of the plugin.
  *
@@ -103,6 +104,15 @@ class Frontend {
 	private $pattern_service_cache    = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
+	/**
+	 * Set when runtime geo-routing resolves an opt-in jurisdiction but no
+	 * matching active banner exists, so the country-selected (opt-out) banner
+	 * is kept only to drive server-side blocking — its visible UI is suppressed
+	 * to avoid showing opt-out copy while scripts are blocked opt-in style.
+	 *
+	 * @var bool
+	 */
+	private $faz_law_fallback_suppress = false;
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -696,6 +706,41 @@ class Frontend {
 		// banner setups.
 		$visitor_country = $this->get_visitor_country();
 		$this->banner    = Controller::get_instance()->get_active_banner_for_country( $visitor_country );
+
+		// Runtime geo-routing (flag-gated): the resolved ruleset's MODEL decides
+		// which consent regime actually applies to this visitor. Prefer the
+		// active banner whose applicableLaw matches that model so the UI the
+		// visitor sees (opt-in accept/reject vs opt-out notice) matches the
+		// jurisdiction enforced — otherwise a country-selected opt-out banner
+		// would show an opt-out checkbox while scripts are blocked opt-in style.
+		// Falls back to the country-selected banner when no law-matching active
+		// banner exists. get_runtime_ruleset() resolves with $visitor_country,
+		// so banner selection and ruleset never disagree on the country.
+		$runtime_ruleset = $this->get_runtime_ruleset();
+		if ( null !== $runtime_ruleset ) {
+			$wanted_law  = Geo_Runtime::model_to_law( $runtime_ruleset );
+			$current_law = ( false !== $this->banner ) ? $this->banner->get_law() : '';
+			if ( $wanted_law !== $current_law ) {
+				$law_banner = Controller::get_instance()->get_active_banner_for_law( $wanted_law, $visitor_country );
+				if ( false !== $law_banner ) {
+					$this->banner = $law_banner;
+				} elseif ( 'gdpr' === $wanted_law && false !== $this->banner ) {
+					// Fail-closed: the resolved ruleset enforces an opt-in
+					// (gdpr-style) regime but the publisher has no active GDPR
+					// banner, so the only candidate is the country-selected
+					// opt-out (CCPA) banner. Keep it so server-side blocking
+					// still runs (start_output_buffer needs $this->template),
+					// but suppress its visible UI — showing an opt-out notice
+					// ("we use cookies, opt out here") while scripts are blocked
+					// opt-in style would misrepresent the true state. Scripts
+					// stay blocked; the visitor simply sees no (misleading)
+					// banner. A correctly-configured install (a GDPR banner
+					// exists) never reaches this branch.
+					$this->faz_law_fallback_suppress = true;
+				}
+			}
+		}
+
 		if ( false === $this->banner ) {
 			return;
 		}
@@ -854,6 +899,19 @@ class Frontend {
 		}
 
 		if ( Controller::get_instance()->has_country_dependent_banners() ) {
+			$dependent = true;
+		}
+
+		// Runtime geo-routing (flag-gated): when the resolved ruleset drives the
+		// pre-consent category defaults, the GCM signals and the blocked-category
+		// set, the rendered HTML/JS varies by the visitor's country/region. A
+		// cached response would leak one jurisdiction's defaults to another, so
+		// the output must always be treated as country-dependent while the flag
+		// is on — independent of any multi-banner geo-targeting configuration.
+		// 1.18.2 HOTFIX: routed through Geo_Runtime::is_enabled() (hard-false)
+		// so the disabled runtime no longer forces no-cache; restoring the
+		// feature restores the cache-bust automatically via the same gate.
+		if ( Geo_Runtime::is_enabled() ) {
 			$dependent = true;
 		}
 
@@ -1084,13 +1142,48 @@ class Frontend {
 	 *
 	 * @return array
 	 */
+	/**
+	 * Resolved geo ruleset for the current visitor, or null.
+	 *
+	 * Gated behind the opt-in `faz_geo_ruleset_runtime` filter (default false),
+	 * so existing installs see ZERO behaviour change until they enable it. When
+	 * on, the resolved ruleset (model + default_categories + CMv2) drives the
+	 * chosen banner's per-category consent defaults, the server-side blocking
+	 * decision, the GCM defaults AND the banner selection (the active banner
+	 * whose applicableLaw matches the ruleset model). Resolution uses the same
+	 * visitor country as banner selection — see get_visitor_country() — so the
+	 * two can never disagree on the country (finding #5). Memoised per request
+	 * inside Geo_Runtime, keyed by that country.
+	 *
+	 * @return array|null
+	 */
+	private function get_runtime_ruleset() {
+		return Geo_Runtime::resolve_for_country( $this->get_visitor_country() );
+	}
+
+	/**
+	 * Build the Google Consent Mode payload passed to gcm.js.
+	 *
+	 * Reads the stored GCM settings and, when the geo-routing runtime flag is
+	 * on and a ruleset resolves for the visitor, overlays the ruleset's
+	 * `signals.cmv2` defaults via Geo_Runtime::apply_cmv2_to_gcm().
+	 *
+	 * @return array|null GCM data array, or null when GCM is disabled.
+	 */
 	public function get_gcm_data() {
 		if ( ! $this->gcm_settings ) {
 			return;
 		}
 		$gcm          = $this->gcm_settings;
 		$gcm_settings = $gcm->get();
-		return $gcm_settings;
+
+		// When the runtime geo-routing flag is on, override the Google Consent
+		// Mode default signals from the resolved ruleset's CMv2 block so the
+		// per-jurisdiction defaults (e.g. Quebec: ad_storage/analytics_storage
+		// denied) actually drive GCM, not just the catalogue. Writes the
+		// canonical signal keys, which gcm.js reads (with a category-mirror
+		// fallback for legacy payloads).
+		return Geo_Runtime::apply_cmv2_to_gcm( $this->get_runtime_ruleset(), $gcm_settings );
 	}
 	/**
 	 * Get store data
@@ -1131,6 +1224,14 @@ class Frontend {
 			'_activeLaw'         => $banner->get_law(),
 			'_bannerSlug'        => $banner->get_slug(),
 			'_geoRouting'        => $this->is_country_dependent_output(),
+			// When a runtime geo ruleset is active, the per-category
+			// defaultConsent values are jurisdiction-authoritative and the JS
+			// must derive the pre-consent state directly from them rather than
+			// from the binary law branch (which, under the CCPA opt-out model,
+			// would otherwise leave non-necessary categories granted until the
+			// visitor ticks the opt-out box — running blocked scripts). See
+			// _fazSetInitialState().
+			'_runtimeGeo'        => ( null !== $this->get_runtime_ruleset() ),
 			// Server-side fingerprint of the active scope, keyed by
 			// wp_salt('auth'). Used by _fazConsentScopeChanged() to detect
 			// cookie tampering: a visitor who hand-edits __scope.banner /
@@ -1168,6 +1269,8 @@ class Frontend {
 				'optout_preferences_label'              => __( 'Opt-out Preferences', 'faz-cookie-manager' ),
 				'customise_consent_preferences_label'   => __( 'Customise Consent Preferences', 'faz-cookie-manager' ),
 				'service_consent_label'                 => __( 'Service consent', 'faz-cookie-manager' ),
+				'cookies'                               => __( 'Cookies', 'faz-cookie-manager' ),
+				'cookie_consent_label'                  => __( 'Cookie consent', 'faz-cookie-manager' ),
 				'vendor_consent_label'                  => __( 'Vendor consent', 'faz-cookie-manager' ),
 			),
 			'_rtl'          => $this->is_rtl(),
@@ -1353,7 +1456,15 @@ class Frontend {
 		}
 
 		// Per-service consent: pass service list to frontend.
-		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
+		// 1.18.2 HOTFIX: per-service / per-cookie consent is temporarily disabled.
+		// Per-cookie revocation is not enforced server-side or on reload (P1-2),
+		// the granular svc.*/ck.* decisions are not written to the consent log
+		// (P1-3), a large override set can exceed the 4 KB cookie limit (P1-4),
+		// and the toggles list catalogue wildcards rather than detected cookies
+		// (P2). Force off until reworked — category-level consent (the default,
+		// covered by the 113/113 compliance suite) is unaffected. Restore by
+		// reading the banner_control.per_service_consent option again.
+		$per_service = false;
 		if ( $per_service ) {
 			$known    = Known_Providers::get_all();
 			$services = array();
@@ -1374,6 +1485,11 @@ class Frontend {
 			}
 			$store['_perServiceConsent'] = true;
 			$store['_services']         = $services;
+			// Per-cookie consent is a sub-mode of per-service: it nests an
+			// individual toggle under each service for every cookie the service
+			// declares. Only meaningful when per-service is on (the cookies are
+			// rendered beneath their service row), so it is gated on both flags.
+			$store['_perCookieConsent'] = ! empty( $settings['banner_control']['per_cookie_consent'] );
 		}
 
 		return $store;
@@ -1555,6 +1671,12 @@ class Frontend {
 	 */
 	protected function is_banner_ui_suppressed() {
 		if ( $this->is_banner_disabled_by_settings() ) {
+			return true;
+		}
+
+		// Runtime geo-routing opt-in fallback with no matching banner: keep
+		// blocking active (template loaded) but hide the mismatched opt-out UI.
+		if ( $this->faz_law_fallback_suppress ) {
 			return true;
 		}
 
@@ -2667,18 +2789,34 @@ class Frontend {
 		// blanket pre-consent block would otherwise cause under an opt-out law.
 		$is_optout_law = ( $this->banner && 'ccpa' === $this->banner->get_law() );
 
+		// Runtime geo-routing (flag-gated, default off): when a ruleset is
+		// resolved it is authoritative for the pre-consent default of each
+		// category it names — denied-until-action → block now, granted → allow —
+		// regardless of the banner's own law. This is what makes a Quebec (opt-in)
+		// visitor actually have marketing/analytics blocked even when served a
+		// banner the admin saved as opt-out. Categories the ruleset doesn't name
+		// fall back to the law default below.
+		$ruleset = $this->get_runtime_ruleset();
+
 		// CPPA Reg. §7025: a browser Global Privacy Control signal (the
 		// `Sec-GPC: 1` request header, mirror of navigator.globalPrivacyControl)
 		// is a legally valid opt-out of the sale/sharing of personal information
 		// and must be honoured immediately — including on the very first
 		// response, before the JS opt-out (_fazApplyGpcOptOut) has had a chance
-		// to write the consent cookie. So under an opt-out law, when no consent
-		// is recorded yet and the request carries Sec-GPC:1, block the
-		// sell/share (ccpaDoNotSell) categories server-side too, mirroring the
-		// client-side behaviour. Opt-in laws are unaffected (already blocked).
-		$gpc_optout = $is_optout_law
-			&& isset( $_SERVER['HTTP_SEC_GPC'] )
+		// to write the consent cookie. So when no consent is recorded yet and the
+		// request carries Sec-GPC:1, block the sell/share (ccpaDoNotSell)
+		// categories server-side too, mirroring the client-side behaviour.
+		// GPC applies when EITHER the banner is an opt-out (CCPA) law OR the
+		// resolved runtime ruleset declares it honours GPC (signals.gpc_honored)
+		// — the latter covers US-state rulesets whose model maps to a gdpr-style
+		// banner (e.g. opt-out-with-sensitive-opt-in → California) yet still
+		// require GPC sale/share opt-out. Pure opt-in jurisdictions that don't
+		// honour GPC are unaffected (their non-necessary categories are already
+		// blocked pre-consent).
+		$gpc_header_on = isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
+		$ruleset_honors_gpc = ( null !== $ruleset && ! empty( $ruleset['signals']['gpc_honored'] ) );
+		$gpc_optout = $gpc_header_on && ( $is_optout_law || $ruleset_honors_gpc );
 
 		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
 		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
@@ -2708,14 +2846,27 @@ class Frontend {
 				continue;
 			}
 			if ( empty( $consent ) ) {
-				// No consent recorded yet. Under an opt-in law (GDPR/ePrivacy)
-				// block every non-necessary category until the visitor consents;
-				// under the CCPA opt-out model block nothing (see header above)
-				// UNLESS the visitor asserted GPC, which is an immediate opt-out
-				// of sale/sharing for the sold/shared categories.
-				if ( ! $is_optout_law ) {
+				$rs_default = ( null !== $ruleset ) ? Geo_Runtime::category_default( $ruleset, $slug ) : null;
+				if ( false === $rs_default ) {
+					// Ruleset denies this category until an explicit action.
 					$blocked[] = $slug;
 				} elseif ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
+					// A Global Privacy Control sale/share opt-out is a
+					// legally-binding signal that OVERRIDES a ruleset 'granted'
+					// default — a Sec-GPC:1 request must block sold/shared
+					// categories even when the resolved ruleset grants them
+					// (CPPA §7025). This check runs BEFORE the ruleset-granted
+					// branch below so the grant can't bypass GPC. $gpc_optout
+					// already embeds $is_optout_law, so opt-in visitors are
+					// unaffected.
+					$blocked[] = $slug;
+				} elseif ( true === $rs_default ) {
+					// Ruleset grants this category — do not block (overrides the
+					// blanket opt-in pre-consent block).
+					continue;
+				} elseif ( ! $is_optout_law ) {
+					// No ruleset opinion: opt-in law blocks every non-necessary
+					// category until the visitor consents.
 					$blocked[] = $slug;
 				}
 			} else {
@@ -2751,8 +2902,10 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 		$this->service_consent_cache = array();
-		$settings    = $this->get_faz_settings();
-		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
+		// 1.18.2 HOTFIX: per-service / per-cookie consent disabled (see the note
+		// at the store-payload site). Returning an empty map keeps the
+		// cookie-shredding path on pure category-level enforcement.
+		$per_service = false;
 		if ( ! $per_service ) {
 			return $this->service_consent_cache;
 		}
@@ -3234,6 +3387,17 @@ class Frontend {
 		return false;
 	}
 
+	/**
+	 * Assemble the per-category cookie groups exposed to the frontend banner.
+	 *
+	 * Skips hidden and `wordpress-internal` categories, then for each visible
+	 * category computes `ccpaDoNotSell`, the per-category `defaultConsent`
+	 * (jurisdiction-aware via Geo_Runtime::default_consent()) and
+	 * `defaultFromRuleset` so the JS knows whether the default is
+	 * ruleset-authoritative or must fall back to effective-law logic.
+	 *
+	 * @return array[] List of cookie-group descriptors for the banner store.
+	 */
 	public function get_cookie_groups() {
 		$cookie_groups = array();
 		$categories    = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
@@ -3260,12 +3424,18 @@ class Frontend {
 				'ccpaDoNotSell'  => 'necessary' !== $category->get_slug() && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ),
 				'cookies'        => $cookies,
 				'active'         => true,
-				'defaultConsent' => array(
-					'gdpr' => $category->get_prior_consent(),
-					// Exempt from the CCPA opt-out only when necessary, or neither
-					// sold nor shared.
-					'ccpa' => ( 'necessary' === $category->get_slug() || ( false === $category->get_sell_personal_data() && false === $category->get_share_personal_data() ) ) ? true : false,
+				'defaultConsent' => Geo_Runtime::default_consent(
+					$this->get_runtime_ruleset(),
+					$category->get_slug(),
+					(bool) $category->get_prior_consent(),
+					(bool) $category->get_sell_personal_data(),
+					(bool) $category->get_share_personal_data()
 				),
+				// True only when the runtime ruleset NAMES this category, so the
+				// JS knows whether defaultConsent is jurisdiction-authoritative
+				// (use it) or must fall back to the effective-law logic (matching
+				// the server's get_blocked_categories split).
+				'defaultFromRuleset' => Geo_Runtime::is_ruleset_default( $this->get_runtime_ruleset(), $category->get_slug() ),
 			);
 		}
 		return $cookie_groups;

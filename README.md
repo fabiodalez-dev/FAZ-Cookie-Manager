@@ -563,6 +563,21 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.18.2 — 2026-06-13
+- **Change**: the experimental opt-in features from 1.18.0 (per-service / per-cookie consent toggles and the `faz_geo_ruleset_runtime` runtime geo-routing) are temporarily disabled pending a correctness rework — an external review found they did not deliver the granular guarantees their UI implied when enabled. They are hard-off at their entry points; the default category-level consent flow (covered by the 113/113 compliance suite) is byte-for-byte unchanged. Catalogue-based multi-banner geo-routing (per-country banner selection) is unaffected.
+- **Fix**: corrected an overstated per-cookie help text that claimed a denied cookie "is deleted whenever it appears" — that enforcement only ran client-side at save time and did not persist.
+
+### 1.18.1 — 2026-06-13
+- **Fix**: the Cookies admin *Scan Site* / *Auto-categorize* dropdown menus are no longer clipped by the card's `overflow: hidden` — the menu drops over the table below and shows every option.
+
+### 1.18.0 — 2026-06-12
+- **Feature**: geo-routing runtime (opt-in, `faz_geo_ruleset_runtime` filter) — the resolved per-jurisdiction ruleset drives the live banner (pre-consent default state, script blocking, Google Consent Mode v2 defaults and banner selection follow the visitor's jurisdiction: GDPR / CCPA-CPRA / Quebec Law 25 / POPIA / LGPD / …). Off by default; existing installs are unchanged until enabled.
+- **Feature**: GeoLite2 edition choice (Country vs City) under Settings → GeoIP Database. Country (~10 MB) stays the default; City (~60 MB) adds province/state (ISO 3166-2) detection needed by sub-national rulesets such as Quebec's Law 25.
+- **Feature**: granular per-cookie consent toggles (#135, opt-in, requires per-service consent) — a nested toggle for every cookie a service declares, so visitors can opt out of specific cookies within an accepted service. Stored as compact, override-only entries keyed by cookie name; a denied cookie is deleted whenever it appears.
+- **Fix**: GeoLite2 database activation is validated and atomic — a corrupt or wrong-edition download is rejected instead of silently breaking lookups; the previous database is preserved on error and the edition preference is saved only after a successful download.
+- **Translations**: all six bundled locales (it, fr, de, nl, hr, cs) completed and re-synced (1144 strings each).
+- **Hardening**: per-cookie consent keys escape special characters in cookie names; runtime geo-routing custom saves honour per-category toggles and fail closed without a matching banner; the GeoLite2 edition setting is whitelisted on save.
+
 ### 1.17.2 — 2026-06-03
 - **Feature**: new `[faz_cookie_settings]` shortcode — a *Manage consent preferences* button that re-opens the preference center on any page where the banner runtime is active (the equivalent of the common `[cookie_settings]` shortcode). It needs `script.js` + the preference-center template, so it stays inert on pages excluded from the banner. Optional `text` / `class` attributes; bound by a single delegated click handler in the banner script, so no inline JS. Styled to match the banner's primary button — it inherits the colours configured in Banner → Colours.
 - **Feature**: Bulgarian (`bg`) added to the Cookie Policy generator as the 7th language — full gdpr-strict / ccpa-california / lgpd-brazil scaffolds, admin dropdown, display names, retention labels and disclaimer. `bg_BG` installs resolve to it automatically.

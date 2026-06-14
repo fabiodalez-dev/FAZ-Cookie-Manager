@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.0
-Stable tag: 1.17.2
+Stable tag: 1.18.2
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -118,7 +118,7 @@ Privacy Policy:
 
 = MaxMind =
 
-Used to download the GeoLite2 Country database for optional geo-targeting.
+Used to download a GeoLite2 database for optional geo-targeting. You choose the edition in Settings → GeoIP Database: the smaller Country edition (default, country-level only) or the larger City edition (adds region/subdivision data for sub-national province/state routing such as Quebec Law 25). City is a much larger download; pick it only if you rely on region-level routing.
 
 Triggered when: you enter a MaxMind license key in Settings and start the database download.
 
@@ -325,6 +325,23 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.18.2 =
+* Change: the experimental opt-in features added in 1.18.0 (per-service / per-cookie consent toggles and the `faz_geo_ruleset_runtime` runtime geo-routing) are temporarily disabled pending a correctness rework — they did not, when enabled, deliver the granular guarantees their UI implied. They are now hard-off at their entry points. The default category-level consent flow (the path covered by the compliance suite) is byte-for-byte unchanged.
+* Change: per-service / per-cookie toggles are hidden in Settings and forced off. As shipped a denied cookie was not enforced server-side or on reload, the granular decisions were not written to the consent log, a large override set could exceed the browser's ~4 KB cookie limit, and the list showed catalogue wildcards rather than detected cookies.
+* Change: runtime geo-routing no longer applies a resolved ruleset to the live banner (a CCPA-style jurisdiction was mapped to a GDPR banner without rendering its Do-Not-Sell / GPC / sensitive-opt-in obligations). Catalogue-based multi-banner geo-routing — choosing which saved banner to show per country — is unaffected.
+* Fix: corrected an overstated per-cookie help text that claimed a denied cookie "is deleted whenever it appears." That enforcement only ran client-side at save time and did not persist, so the claim was inaccurate.
+
+= 1.18.1 =
+* Fix: the Cookies admin "Scan Site" and "Auto-categorize" dropdown menus are no longer clipped by the card's rounded-corner overflow — the menu now drops over the table below and shows all options.
+
+= 1.18.0 =
+* Feature: geo-routing runtime (opt-in). With the `faz_geo_ruleset_runtime` filter enabled, the resolved per-jurisdiction ruleset drives the live banner — pre-consent default state, script blocking, Google Consent Mode v2 defaults and banner selection follow the visitor's jurisdiction (GDPR, CCPA/CPRA, Quebec Law 25, POPIA, LGPD, …). Off by default: existing sites are unchanged until you enable the filter.
+* Feature: GeoLite2 edition choice (Country vs City) under Settings > GeoIP Database. Country (~10 MB) stays the default; City (~60 MB) adds province/state detection needed by sub-national rules such as Quebec's Law 25. The UI explains the size/use trade-off, and the existing Country download keeps working exactly as before.
+* Feature: granular per-cookie consent toggles (opt-in, requires per-service consent). A nested toggle for each cookie a service declares, so visitors can opt out of specific cookies within an accepted service. A denied cookie is deleted whenever it appears — the same enforcement used for per-service opt-out.
+* Fix: GeoLite2 database activation is validated and atomic. A corrupt or wrong-edition download is rejected instead of silently breaking lookups; the previous database is preserved on error, and the edition preference is saved only after a successful download.
+* Translations: all six bundled locales (Italian, French, German, Dutch, Croatian, Czech) completed and re-synced (1144 strings each).
+* Hardening: per-cookie consent keys escape special characters so an exotic custom cookie name can't corrupt the consent cookie; runtime geo-routing custom saves honour the visitor's per-category toggles and fail closed when an opt-in ruleset has no matching banner; the GeoLite2 edition setting is whitelisted on save.
+
 = 1.17.2 =
 * Feature: new `[faz_cookie_settings]` shortcode renders a "Manage consent preferences" button that re-opens the consent preference center on any page where the banner runtime is active (e.g. inside the generated Cookie Policy or a footer) — the equivalent of the common `[cookie_settings]` shortcode. It needs `script.js` + the preference-center template, so it stays inert on pages excluded from the banner (the admin snippet documents this). Accepts optional `text` (custom label) and `class` (extra CSS classes, sanitised) attributes. No inline JS: a single delegated click handler in the already-enqueued banner script binds every `.faz-cookie-settings-btn` / `[data-faz-open-preferences]` trigger to the same opener the banner's settings button uses. The button is styled to match the banner's primary button and inherits the colours configured in Banner > Colours (the `--faz-accept-button-*` custom properties), so it tracks the admin's theme automatically. A copyable shortcode snippet is shown on the Banner > Advanced > Revisit Consent card for discoverability.
 * Feature: Bulgarian (bg) added to the Cookie Policy generator as the 7th language — full gdpr-strict, ccpa-california and lgpd-brazil scaffolds, the language dropdown, jurisdiction / language display names, retention labels and the footer disclaimer. `bg_BG` site installs now resolve to the Bulgarian policy automatically.
@@ -445,6 +462,9 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: WordPress Playground Live Preview on the plugin directory page.
 
 == Upgrade Notice ==
+
+= 1.18.2 =
+Recommended for anyone who enabled the 1.18.0 opt-in features. The per-service / per-cookie consent toggles and the runtime geo-routing filter are temporarily disabled pending a correctness rework — they did not deliver the granular guarantees their UI implied. Default category-level consent is unchanged.
 
 = 1.13.11 =
 wp.org round-2 compliance pass. Custom CSS field removed from the Banner editor (use Customizer → Additional CSS instead); $_SERVER sanitization, FS_CHMOD globals, WP-CLI export path, and ob_start callback all hardened.

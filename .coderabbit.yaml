@@ -202,6 +202,14 @@ reviews:
     - "!admin/modules/banners/includes/presets/**/*.json"
     - "!admin/modules/cookies/includes/contents/**/*.json"
     - "!admin/dist/**"
+    # Standalone PHP unit/integration test harnesses. They redefine WordPress
+    # functions as no-op shims (__(), esc_html(), download_url(), …) so the
+    # tests run without a full WP bootstrap; those shims are not production code
+    # and should not count toward docstring coverage or review noise. The
+    # Playwright E2E suite (tests/e2e/**) stays reviewed — see the path
+    # instructions above.
+    - "!tests/unit/**"
+    - "!tests/integration/**"
 
   tools:
     phpstan:

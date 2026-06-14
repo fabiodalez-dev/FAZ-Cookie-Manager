@@ -357,7 +357,9 @@ class Geo_Api {
 			$overrides,
 			$loader->load_index(),
 			$loader->load_us_regions(),
-			$loader->get_fallback_id()
+			$loader->get_fallback_id(),
+			null,
+			$loader->load_regions()
 		);
 
 		$ruleset = $loader->load_ruleset( $ruleset_id );

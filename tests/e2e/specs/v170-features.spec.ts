@@ -348,7 +348,10 @@ test.describe('v1.7.0 features', () => {
   });
 
   // 17. Per-Service Consent
-  test('F17: per_service_consent setting persists and services are passed to frontend', async ({ page, loginAsAdmin }) => {
+  // 1.18.2 HOTFIX: per-service consent is force-disabled — the store no longer emits
+  // _perServiceConsent / _services. The option still persists (round-trip is covered
+  // by settings-options-matrix); only the frontend-passing assertion is invalid now.
+  test.skip('F17: per_service_consent setting persists and services are passed to frontend', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);

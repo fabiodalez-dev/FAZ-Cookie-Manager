@@ -114,6 +114,26 @@ class Ruleset_Loader {
 	}
 
 	/**
+	 * Load and return the generic non-US sub-national region → ruleset_id map
+	 * from _index.json (`_regions`).
+	 *
+	 * Parallel to load_us_regions() but for provinces/states outside the US
+	 * (e.g. 'CA-QC' => 'law25-quebec'). Keys are ISO 3166-2 ('CC-RR'). Returns
+	 * an empty array when the index has no `_regions` block.
+	 *
+	 * @return array<string,string> ISO 3166-2 → ruleset id.
+	 */
+	public function load_regions() {
+		$this->ensure_index_loaded();
+		if ( ! is_array( $this->index_cache ) || ! isset( $this->index_cache['_regions'] ) ) {
+			return array();
+		}
+		$regions = $this->index_cache['_regions'];
+		unset( $regions['_comment'] );
+		return $regions;
+	}
+
+	/**
 	 * Get the default fallback ruleset id (when country has no mapping).
 	 *
 	 * @return string Ruleset id. Defaults to 'fallback-gdpr-most-protective'.
