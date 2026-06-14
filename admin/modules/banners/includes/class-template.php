@@ -587,10 +587,9 @@ class Template {
 		// Only the nested buttons.elements.donotSell branch survives sanitize_settings;
 		// the legacy direct notice.elements.donotSell key is dropped, so don't read it.
 		$do_not_sell = ! empty( $config['notice']['elements']['buttons']['elements']['donotSell']['status'] );
-		$contents = $this->banner ? $this->banner->get_contents( $this->language ) : array();
-		$notice_description = isset( $contents['notice']['elements']['description'] )
-			? (string) $contents['notice']['elements']['description']
-			: '';
+		// Resolve only the current language's description (cheap) instead of
+		// get_contents() which re-sanitizes every selected language on a cache hit.
+		$notice_description = $this->banner ? $this->banner->get_notice_description( $this->language ) : '';
 
 		return md5(
 			wp_json_encode(

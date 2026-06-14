@@ -564,6 +564,41 @@ class Banner extends Store {
 		}
 		return $contents;
 	}
+
+	/**
+	 * Notice description for a SINGLE language, resolved cheaply.
+	 *
+	 * Unlike get_contents() this does not loop over and sanitize every selected
+	 * language — it resolves only the requested language (with the same
+	 * empty→get_translations() fallback) and returns its raw notice description.
+	 * Used by the template cache signature so a cache-hit render does not
+	 * re-sanitize the whole multilingual content tree on every page load. The
+	 * raw value is a valid fingerprint: sanitize_contents() is deterministic, so
+	 * the raw description changes iff the rendered one does.
+	 *
+	 * @param string $lang Language code; defaults to the current language.
+	 * @return string
+	 */
+	public function get_notice_description( $lang = '' ) {
+		if ( ! array_key_exists( 'contents', $this->data ) ) {
+			return '';
+		}
+		$lang    = '' !== $lang ? $lang : $this->get_language();
+		$data    = $this->normalize_multilingual_data( $this->data['contents'] );
+		$content = isset( $data[ $lang ] ) ? $data[ $lang ] : array();
+		if ( empty( self::array_empty_assoc( $content ) ) ) {
+			$content = $this->get_translations( $lang );
+		}
+		if ( is_string( $content ) ) {
+			$content = json_decode( $content, true );
+		}
+		if ( ! is_array( $content ) ) {
+			return '';
+		}
+		return isset( $content['notice']['elements']['description'] )
+			? (string) $content['notice']['elements']['description']
+			: '';
+	}
 	/**
 	 * Sanitize all the banner before insert or retrieval
 	 *
