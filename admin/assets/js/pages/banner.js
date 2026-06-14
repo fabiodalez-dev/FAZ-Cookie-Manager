@@ -352,19 +352,28 @@
 		for (var i = 0; i < typeEl.options.length; i++) {
 			if (typeEl.options[i].value === 'classic') { classicOpt = typeEl.options[i]; break; }
 		}
-		if (classicOpt) classicOpt.disabled = lawShowsDoNotSell;
+		if (classicOpt) {
+			classicOpt.disabled = lawShowsDoNotSell;
+			fazSetOptionUnavailable(classicOpt, lawShowsDoNotSell);
+		}
 
 		var pushdownOpt = null;
 		if (prefEl) {
 			for (var j = 0; j < prefEl.options.length; j++) {
 				if (prefEl.options[j].value === 'pushdown') { pushdownOpt = prefEl.options[j]; break; }
 			}
-			if (pushdownOpt) pushdownOpt.disabled = lawShowsDoNotSell && typeEl.value === 'banner';
+			if (pushdownOpt) {
+				var pushdownDisabled = lawShowsDoNotSell && typeEl.value === 'banner';
+				pushdownOpt.disabled = pushdownDisabled;
+				fazSetOptionUnavailable(pushdownOpt, pushdownDisabled);
+			}
 		}
 
 		// Migrate an existing Classic selection to Box. For the old Full-width +
 		// Pushdown combination, preserving Full-width and switching only the
 		// preference center to Popup is the least destructive compatible change.
+		// Toast on an ACTUAL migration so the admin knows their layout changed.
+		var migrated = false;
 		if (lawShowsDoNotSell && typeEl.value === 'classic') {
 			typeEl.value = 'box';
 			// Classic forces pushdown; Box needs a popup-capable preference
@@ -372,18 +381,37 @@
 			// (apply_runtime_layout_compatibility) so the stored value matches.
 			if (prefEl) prefEl.value = 'popup';
 			updatePositionOptions();
+			migrated = true;
 		} else if (lawShowsDoNotSell && typeEl.value === 'banner' && prefEl && prefEl.value === 'pushdown') {
 			prefEl.value = 'popup';
+			migrated = true;
+		}
+		if (migrated && typeof FAZ !== 'undefined' && FAZ.notify) {
+			FAZ.notify(__('banner.layoutMigrated', 'Classic / Pushdown has no opt-out popup, which a CCPA "Do Not Sell" banner requires — switched to a compatible layout.'), 'warning');
 		}
 		var hint = document.getElementById('faz-b-type-ccpa-hint');
 		if (hint) hint.style.display = lawShowsDoNotSell ? '' : 'none';
 	}
 
-	// Which default description applies to a law value. Pure CCPA gets the
-	// CCPA copy (names the Do-Not-Sell link); GDPR and "Both" (applicableLaw=
-	// gdpr) get the GDPR copy — "Both" still renders the Do-Not-Sell button, so
-	// the unmentioned link is fine, while a CCPA description on a GDPR banner is
-	// not (it promises a link that isn't there).
+	// Append/remove a "not available for CCPA" suffix on a disabled <option> so
+	// the reason is visible in the dropdown itself, not only in the hint below.
+	function fazSetOptionUnavailable(opt, unavailable) {
+		if (!opt) return;
+		if (!opt.dataset.baseLabel) opt.dataset.baseLabel = opt.textContent;
+		opt.textContent = unavailable
+			? opt.dataset.baseLabel + ' — ' + __('banner.notAvailCcpa', 'not available for CCPA / US State Laws')
+			: opt.dataset.baseLabel;
+	}
+
+	// Maps a law dropdown value ('ccpa' | 'gdpr' | 'gdpr_ccpa') to a default-copy
+	// key. Pure CCPA → CCPA copy (names the Do-Not-Sell link). GDPR and "Both"
+	// (the function receives 'gdpr_ccpa') → GDPR copy. This is a deliberate choice
+	// for "Both": that banner is served to a mixed EU+US audience, so the neutral
+	// GDPR copy is the safer default — the CCPA copy's "sale of personal
+	// information" wording reads wrong for EU visitors, and the Do-Not-Sell button
+	// is rendered and self-evident regardless. The bug this guards against is a
+	// CCPA description stranded on a pure-GDPR banner (it promises a link that
+	// isn't there); a Both banner always has the link, so GDPR copy is fine.
 	function fazLawToDescKey(law) {
 		return law === 'ccpa' ? 'ccpa' : 'gdpr';
 	}
@@ -1290,13 +1318,11 @@
 		// Detect regulation mode: gdpr + donotSell.status=true → "Both" mode
 		var lawVal = s.applicableLaw || 'gdpr';
 		var noticeElements = (config.notice && config.notice.elements) || {};
-		var directDoNotSell = noticeElements.donotSell;
+		// donotSell lives on the canonical nested buttons branch; the legacy direct
+		// notice.donotSell key is dropped by the PHP sanitizer, so it never reaches
+		// the API response and reading it would be dead.
 		var buttonDoNotSell = (noticeElements.buttons && noticeElements.buttons.elements && noticeElements.buttons.elements.donotSell) || {};
-		var doNotSellEnabled = !!(
-			(directDoNotSell && directDoNotSell.status === true)
-			|| buttonDoNotSell.status === true
-		);
-		if (lawVal === 'gdpr' && doNotSellEnabled) lawVal = 'gdpr_ccpa';
+		if (lawVal === 'gdpr' && buttonDoNotSell.status === true) lawVal = 'gdpr_ccpa';
 		setVal('faz-b-law', lawVal);
 		// Seed the law-change baseline so the first law change can compare against
 		// the right previous default. The per-law defaults themselves are already

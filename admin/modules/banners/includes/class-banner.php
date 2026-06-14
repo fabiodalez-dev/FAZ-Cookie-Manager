@@ -311,17 +311,10 @@ class Banner extends Store {
 			: false;
 		$changed    = false;
 
-		// CCPA always requires the first-party opt-out entry point; enable the
-		// canonical nested button branch.
-		if ( 'ccpa' === $law && ! $dns_status ) {
-			if ( ! isset( $properties['config']['notice']['elements']['buttons']['elements']['donotSell'] )
-				|| ! is_array( $properties['config']['notice']['elements']['buttons']['elements']['donotSell'] ) ) {
-				$properties['config']['notice']['elements']['buttons']['elements']['donotSell'] = array();
-			}
-			$properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = true;
-			$changed = true;
-		}
-
+		// CCPA and "Both" (gdpr + Do-Not-Sell on) require the first-party opt-out
+		// entry point; the block below enables the canonical nested button branch
+		// when missing, covering both cases (a separate ccpa-only enable here
+		// would be redundant — its write can never win over this one).
 		$shows_do_not_sell = 'ccpa' === $law || $dns_status;
 		if ( $shows_do_not_sell ) {
 			if ( empty( $properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ) ) {
@@ -386,6 +379,9 @@ class Banner extends Store {
 			? $properties['settings']
 			: array();
 		$law        = isset( $settings['applicableLaw'] ) ? sanitize_key( $settings['applicableLaw'] ) : 'gdpr';
+		// "Both" is stored as applicableLaw='gdpr' (+ Do-Not-Sell on) and, like
+		// pure GDPR, uses the neutral GDPR default copy — see fazLawToDescKey()
+		// in banner.js for the mixed-audience rationale.
 		$new_key    = 'ccpa' === $law ? 'ccpa' : 'gdpr';
 		$old_key    = 'ccpa' === $new_key ? 'gdpr' : 'ccpa';
 		$contents   = $this->normalize_multilingual_data( $this->data['contents'] );
@@ -794,14 +790,25 @@ class Banner extends Store {
 	 */
 	public static function get_law_notice_descriptions( $lang = 'en' ) {
 		$safe_lang = sanitize_file_name( (string) $lang );
-		$dir       = dirname( __FILE__ ) . '/contents/';
-		$data      = array();
+		$cache_key = 'faz_law_notice_desc_' . ( '' !== $safe_lang ? $safe_lang : 'en' );
+		// Object-cached: this is called per language on every frontend render
+		// (the runtime law-content compatibility pass) and on the banner-editor
+		// page load, so avoid re-reading the JSON files each time.
+		$cached = wp_cache_get( $cache_key, 'faz_banner_contents' );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
 
-		// Prefer a downloaded translation when available, matching
-		// get_translations(). This keeps the untouched-default comparison in the
-		// actual editor language instead of comparing translated copy to English.
-		if ( '' !== $safe_lang ) {
-			$upload_dir = wp_upload_dir();
+		$dir  = dirname( __FILE__ ) . '/contents/';
+		$data = array();
+
+		// Prefer a downloaded translation, but ONLY when the language is
+		// registered as translated — the same gate get_translations() uses, so
+		// the untouched-default baseline is read from the same source the
+		// frontend actually renders (an orphaned file on disk is ignored).
+		if ( '' !== $safe_lang
+			&& \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance()->is_faz_translated( $safe_lang ) ) {
+			$upload_dir      = wp_upload_dir();
 			$translated_file = trailingslashit( $upload_dir['basedir'] ) . 'fazcookie/languages/banners/' . $safe_lang . '.json';
 			if ( file_exists( $translated_file ) ) {
 				$translated = faz_read_json_file( $translated_file );
@@ -814,7 +821,7 @@ class Banner extends Store {
 			$file = ( '' !== $safe_lang && file_exists( $dir . $safe_lang . '.json' ) ) ? $dir . $safe_lang . '.json' : $dir . 'en.json';
 			$data = faz_read_json_file( $file );
 		}
-		$out       = array(
+		$out = array(
 			'gdpr' => '',
 			'ccpa' => '',
 		);
@@ -823,6 +830,7 @@ class Banner extends Store {
 				$out[ $law ] = $data[ $law ]['notice']['elements']['description'];
 			}
 		}
+		wp_cache_set( $cache_key, $out, 'faz_banner_contents', 12 * HOUR_IN_SECONDS );
 		return $out;
 	}
 

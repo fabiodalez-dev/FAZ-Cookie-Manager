@@ -243,6 +243,9 @@
 		toast.className = 'faz-toast faz-toast-' + type;
 		toast.textContent = message;
 		toastContainer.appendChild(toast);
+		// Warnings/errors carry actionable text and need longer to read than a
+		// "Saved" confirmation — keep them on screen twice as long.
+		var dismissAfter = (type === 'warning' || type === 'error') ? 6000 : 3000;
 		setTimeout(function () {
 			toast.style.opacity = '0';
 			toast.style.transform = 'translateX(40px)';
@@ -250,7 +253,7 @@
 			setTimeout(function () {
 				if (toast.parentNode) toast.parentNode.removeChild(toast);
 			}, 300);
-		}, 3000);
+		}, dismissAfter);
 	};
 
 	// ── Color picker ─────────────────────────────────────────
