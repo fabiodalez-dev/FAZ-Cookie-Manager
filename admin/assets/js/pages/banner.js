@@ -424,20 +424,60 @@
 		if (lang === currentLang) setVal('faz-b-notice-desc', text);
 	}
 
+	// The opt-out link label named in a language's bundled CCPA copy — the text
+	// inside the first quote pair (straight, curly or guillemets). Lets the
+	// mismatch check recognise the named link in ANY language instead of relying
+	// on a hardcoded English phrase. '' when the default has no quoted label.
+	function fazCcpaLinkLabel(lang) {
+		var ccpa = fazNormText(fazLawDescsFor(lang).ccpa);
+		var m = ccpa.match(/["“”«»']([^"“”«»']{6,})["“”«»']/);
+		return m ? fazNormText(m[1]) : '';
+	}
+
+	// True when a notice description "promises" the Do-Not-Sell control. Layered,
+	// data-derived detection (most → least precise) so it isn't English-only:
+	//  1. the [faz_do_not_sell] shortcode — an actual inline opt-out control;
+	//  2. the quoted opt-out link label taken from THIS language's CCPA default;
+	//  3. an English "do not sell" phrase, as a last-resort fallback.
+	function fazCopyPromisesDoNotSell(rawCopy, lang) {
+		if (/\[faz_do_?not_sell\b/i.test(rawCopy)) return true;
+		var norm = fazNormText(rawCopy);
+		var label = fazCcpaLinkLabel(lang);
+		if (label && norm.toLowerCase().indexOf(label.toLowerCase()) !== -1) return true;
+		return /do\s*not\s*sell/i.test(norm);
+	}
+
 	// Show the non-blocking mismatch hint when the VISIBLE language's copy still
-	// promises the Do-Not-Sell link but the chosen law no longer renders it.
-	// Best-effort English marker — the per-language reload in syncLawNoticeContent
-	// already fixes untouched copy in every language; this only flags a
-	// customised copy the editor is showing. Safe to call repeatedly (read-only).
+	// promises the Do-Not-Sell link but the chosen law no longer renders it. The
+	// per-language reload in syncLawNoticeContent already fixes untouched copy in
+	// every language; this only flags a CUSTOMISED copy the editor is showing.
+	// Safe to call repeatedly (read-only).
 	function fazUpdateLawContentHint(law) {
 		var hint = document.getElementById('faz-b-law-content-hint');
 		if (!hint) return;
 		var lawEl = document.getElementById('faz-b-law');
 		var lawVal = law || (lawEl && lawEl.value) || fazPrevLaw || 'gdpr';
 		var shows = (lawVal === 'ccpa' || lawVal === 'gdpr_ccpa');
-		var current = fazNormText(fazGetNoticeDescription());
-		var mentionsDoNotSell = /do\s*not\s*sell/i.test(current);
-		hint.style.display = (!shows && mentionsDoNotSell) ? '' : 'none';
+		var promises = fazCopyPromisesDoNotSell(fazGetNoticeDescription(), currentLang);
+		hint.style.display = (!shows && promises) ? '' : 'none';
+	}
+
+	// Every language whose stored notice copy promises the Do-Not-Sell link while
+	// the current law won't render it — including translations that are not the
+	// open tab. The live hint only watches the visible language; this is the
+	// save-time safety net so a hidden mismatch can't ship silently.
+	function fazLangsWithDoNotSellMismatch() {
+		var lawEl = document.getElementById('faz-b-law');
+		var lawVal = (lawEl && lawEl.value) || fazPrevLaw || 'gdpr';
+		if (lawVal === 'ccpa' || lawVal === 'gdpr_ccpa') return [];
+		var contents = (bannerData && bannerData.contents) || {};
+		var out = [];
+		fazAllBannerLangs().forEach(function (lang) {
+			var c = contents[lang];
+			var desc = (c && c.notice && c.notice.elements && c.notice.elements.description) || '';
+			if (desc && fazCopyPromisesDoNotSell(desc, lang)) out.push(lang);
+		});
+		return out;
 	}
 
 	// When the law changes, reload the law-appropriate default description for
@@ -1960,6 +2000,19 @@
 		FAZ.btnLoading(btn, true);
 
 		syncFormToBannerData();
+
+		// Safety net across ALL languages (not just the open tab): warn — but do
+		// not block — when a translation still promises the Do-Not-Sell link under
+		// a law that no longer renders it. The admin may keep it intentionally.
+		var dnsMismatch = fazLangsWithDoNotSellMismatch();
+		if (dnsMismatch.length) {
+			var dnsHint = document.getElementById('faz-b-law-content-hint');
+			if (dnsHint) dnsHint.style.display = '';
+			FAZ.notify(
+				__('banner.dnsMismatch', 'Heads up: the banner text still promises the "Do Not Sell" link under a law that no longer shows it (languages: %s). Saved anyway — update the Content tab to match.').replace('%s', dnsMismatch.join(', ')),
+				'warning'
+			);
+		}
 
 		var geo = collectGeoTargeting();
 		bannerData.target_countries = geo.target_countries;

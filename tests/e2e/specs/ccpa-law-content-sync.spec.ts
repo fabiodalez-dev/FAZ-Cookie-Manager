@@ -304,7 +304,58 @@ test.describe('Law/content mismatch hint refreshes outside the law-change event'
     }
     if (cleanupErr) throw cleanupErr;
   });
+
+  test('detection is language-agnostic: Italian copy + [faz_do_not_sell] shortcode (no English phrase) still flags the mismatch', async ({ page, loginAsAdmin }) => {
+    // Italian prose with the real opt-out shortcode and NO English "do not sell"
+    // phrase — the old English-only regex would have missed this entirely.
+    const custom = '<p>Per disattivare la vendita dei tuoi dati personali usa questo controllo: [faz_do_not_sell]</p>';
+    const meta = JSON.parse(seedGdprWithCustomCopy(custom));
+    let cleanupErr: unknown;
+    try {
+      expect(meta.error, 'install has a default banner').toBeUndefined();
+      await loginAsAdmin(page);
+      await goToBannerPage(page);
+
+      await expect(page.locator('#faz-b-law'), 'law loaded as GDPR').toHaveValue('gdpr');
+      await expect(page.locator('#faz-b-law-content-hint'), 'hint flags the shortcode/Italian copy under GDPR').toBeVisible();
+    } finally {
+      try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
+    }
+    if (cleanupErr) throw cleanupErr;
+  });
 });
+
+/** Default banner → applicableLaw=gdpr, donotSell off, every language's copy set
+ *  to an arbitrary custom HTML string (base64-passed to dodge shell escaping). */
+function seedGdprWithCustomCopy(html: string): string {
+  const b64 = Buffer.from(html, 'utf8').toString('base64');
+  return wpEval(`
+    global $wpdb;
+    $row = $wpdb->get_row( "SELECT banner_id, settings, contents FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 LIMIT 1" );
+    if ( ! $row ) { echo wp_json_encode( array( 'error' => 'no_default_banner' ) ); exit; }
+    $original_settings = $row->settings;
+    $original_contents = $row->contents;
+    $settings = json_decode( $row->settings, true );
+    if ( ! isset( $settings['settings'] ) || ! is_array( $settings['settings'] ) ) { $settings['settings'] = array(); }
+    $settings['settings']['applicableLaw'] = 'gdpr';
+    $custom = base64_decode( '${b64}' );
+    $contents = json_decode( $row->contents, true );
+    if ( ! is_array( $contents ) || empty( $contents ) ) { $contents = array( 'en' => array( 'notice' => array( 'elements' => array() ) ) ); }
+    foreach ( array_keys( $contents ) as $lang ) {
+      if ( ! isset( $contents[ $lang ]['notice']['elements'] ) || ! is_array( $contents[ $lang ]['notice']['elements'] ) ) {
+        $contents[ $lang ]['notice'] = array( 'elements' => array() );
+      }
+      $contents[ $lang ]['notice']['elements']['description'] = $custom;
+      if ( isset( $contents[ $lang ]['notice']['elements']['donotSell'] ) && is_array( $contents[ $lang ]['notice']['elements']['donotSell'] ) ) {
+        $contents[ $lang ]['notice']['elements']['donotSell']['status'] = false;
+      }
+    }
+    $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => wp_json_encode( $settings ), 'contents' => wp_json_encode( $contents ) ), array( 'banner_id' => $row->banner_id ), array( '%s', '%s' ), array( '%d' ) );
+    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+    faz_clear_banner_template_cache();
+    echo wp_json_encode( array( 'banner_id' => $row->banner_id, 'original_settings' => $original_settings, 'original_contents' => $original_contents ) );
+  `).trim();
+}
 
 /** Default banner → applicableLaw=gdpr but every language's copy is the English
  *  CCPA default (which names the Do-Not-Sell link). donotSell.status is forced
