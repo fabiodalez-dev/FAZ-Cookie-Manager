@@ -157,8 +157,8 @@ defined( 'ABSPATH' ) || exit;
 						<option value="banner"><?php esc_html_e( 'Full-width Banner', 'faz-cookie-manager' ); ?></option>
 						<option value="classic"><?php esc_html_e( 'Classic', 'faz-cookie-manager' ); ?></option>
 					</select>
-					<div class="faz-help" id="faz-b-type-ccpa-hint" style="display:none;color:#92400e;">
-						<?php esc_html_e( 'The Classic layout has no opt-out popup, so it is not available for a CCPA / US State Laws banner — the "Do Not Sell" link needs a working opt-out to be compliant. Use Box or Full-width.', 'faz-cookie-manager' ); ?>
+					<div class="faz-help" id="faz-b-type-ccpa-hint" style="display:none;color:#92400e;" role="status" aria-live="polite" aria-atomic="true">
+						<?php esc_html_e( 'Classic and Full-width with a Pushdown preference center have no opt-out popup, so they are not available for a CCPA / US State Laws banner — the "Do Not Sell" link needs a working opt-out to be compliant. Use Box, or Full-width with Popup/Sidebar.', 'faz-cookie-manager' ); ?>
 					</div>
 				</div>
 
@@ -204,7 +204,7 @@ defined( 'ABSPATH' ) || exit;
 					<div class="faz-help">
 						<?php echo wp_kses_post( __( '<strong>GDPR</strong>: Shows consent category toggles. Visitors must opt-in.<br><strong>CCPA / US State Laws</strong>: Shows "Do Not Sell or Share My Personal Data" opt-out link.<br><strong>Both</strong>: Shows both category toggles and opt-out link.', 'faz-cookie-manager' ) ); ?>
 					</div>
-					<div class="faz-help" id="faz-b-law-content-hint" style="display:none;color:#92400e;">
+					<div class="faz-help" id="faz-b-law-content-hint" style="display:none;color:#92400e;" role="status" aria-live="polite" aria-atomic="true">
 						<?php esc_html_e( 'Your banner text still mentions the "Do Not Sell" link, but the selected law no longer shows it. Update the description on the Content tab so it matches.', 'faz-cookie-manager' ); ?>
 					</div>
 				</div>

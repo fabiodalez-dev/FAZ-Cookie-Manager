@@ -645,7 +645,7 @@ class Api extends Rest_Controller {
 	 *
 	 * @return WP_Error|WP_REST_Response
 	 */
-	public function get_configs( $request = null ) {
+	public function get_configs() {
 		$throttle_seconds = (int) apply_filters( 'faz_configs_rate_limit_seconds', 5 );
 		if ( $throttle_seconds > 0 ) {
 			$user_id = get_current_user_id();

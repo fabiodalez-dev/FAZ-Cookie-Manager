@@ -937,11 +937,21 @@ class Admin {
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
 
-					// Per-law default notice descriptions for EVERY selected language,
-					// so banner.js can reload the law-appropriate copy on a law change
-					// across all translations — synchronously, without the rate-limited
-					// /configs round-trip that loaded a single (often wrong) language.
+					// Per-law default notice descriptions for every selected or bundled
+					// language. Banner rows preserve unselected translations, so those
+					// defaults must remain available for the all-language mismatch scan.
 					$faz_law_langs = faz_selected_languages();
+					$faz_contents_dir = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/contents/';
+					$faz_content_files = glob( $faz_contents_dir . '*.json' );
+					if ( is_array( $faz_content_files ) ) {
+						foreach ( $faz_content_files as $faz_content_file ) {
+							$faz_content_lang = basename( $faz_content_file, '.json' );
+							if ( 'default' !== $faz_content_lang ) {
+								$faz_law_langs[] = $faz_content_lang;
+							}
+						}
+					}
+					$faz_law_langs = array_values( array_unique( $faz_law_langs ) );
 					if ( empty( $faz_law_langs ) ) {
 						$faz_law_langs = array( faz_default_language() );
 					}

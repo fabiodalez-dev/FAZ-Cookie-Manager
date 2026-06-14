@@ -422,9 +422,10 @@ var _revisitFazConsent = function () {
     //     `classic` template type does NOT include the optout-popup
     //     element (verified across templates/6.2.0/template.json: box /
     //     banner / banner-sidebar / box-sidebar all carry it, classic
-    //     does not). If a future install uses classic + CCPA together,
-    //     fall back to the legacy `_fazShowBanner()` path so the user
-    //     never lands on a non-existent popup.
+    //     does not). The server-side runtime migration normally rewrites a
+    //     classic + CCPA banner to a popup-capable layout before render, but
+    //     if one still reaches here without the popup, fall back to the legacy
+    //     `_fazShowBanner()` path so the user never lands on a non-existent popup.
     //
     // _fazGetLaw() resolves the active law for THIS visitor (multi-
     // banner geo-routing aware), so an EU visitor on a CCPA+GDPR

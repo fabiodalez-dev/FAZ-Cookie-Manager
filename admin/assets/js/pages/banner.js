@@ -312,7 +312,14 @@
 		// ── Hide irrelevant position options based on banner type ──
 		var typeEl = document.getElementById('faz-b-type');
 		if (typeEl) {
-			typeEl.addEventListener('change', updatePositionOptions);
+			typeEl.addEventListener('change', function () {
+				updatePositionOptions();
+				syncClassicLawCompat();
+			});
+		}
+		var prefTypeEl = document.getElementById('faz-b-pref-type');
+		if (prefTypeEl) {
+			prefTypeEl.addEventListener('change', syncClassicLawCompat);
 		}
 
 		// ── Hide the Read More link colour picker when the Read More button is
@@ -332,30 +339,41 @@
 		group.style.display = (cb && cb.checked) ? '' : 'none';
 	}
 
-	// Compliance guard: a pure-CCPA banner serves the "Do Not Sell or Share"
-	// opt-out, whose toggle lives in the optout-popup. The Classic layout does
-	// NOT render that popup, so a Classic + CCPA banner has a "Do Not Sell" link
-	// that opens nothing — a non-functional opt-out. Disable Classic whenever the
-	// law is CCPA (gdpr_ccpa maps to applicableLaw=gdpr and uses the detail
-	// preference center, which Classic does have, so only pure 'ccpa' is gated).
+	// Compliance guard: CCPA and "Both" render the Do-Not-Sell control, whose
+	// toggle lives in the optout-popup. Classic and the legacy Full-width +
+	// Pushdown combination both use the classic template, which has no popup.
 	function syncClassicLawCompat() {
 		var lawEl = document.getElementById('faz-b-law');
 		var typeEl = document.getElementById('faz-b-type');
+		var prefEl = document.getElementById('faz-b-pref-type');
 		if (!lawEl || !typeEl) return;
-		// Classic has no opt-out popup, so any law that renders the Do-Not-Sell
-		// button — pure CCPA AND "Both" (gdpr_ccpa, which keeps donotSell on) —
-		// must forbid Classic, else the button has nothing to open.
 		var lawShowsDoNotSell = lawEl.value === 'ccpa' || lawEl.value === 'gdpr_ccpa';
 		var classicOpt = null;
 		for (var i = 0; i < typeEl.options.length; i++) {
 			if (typeEl.options[i].value === 'classic') { classicOpt = typeEl.options[i]; break; }
 		}
 		if (classicOpt) classicOpt.disabled = lawShowsDoNotSell;
-		// Migrate an existing (or in-progress) Classic selection to Box so the
-		// opt-out popup exists. updatePositionOptions() re-syncs dependent UI.
+
+		var pushdownOpt = null;
+		if (prefEl) {
+			for (var j = 0; j < prefEl.options.length; j++) {
+				if (prefEl.options[j].value === 'pushdown') { pushdownOpt = prefEl.options[j]; break; }
+			}
+			if (pushdownOpt) pushdownOpt.disabled = lawShowsDoNotSell && typeEl.value === 'banner';
+		}
+
+		// Migrate an existing Classic selection to Box. For the old Full-width +
+		// Pushdown combination, preserving Full-width and switching only the
+		// preference center to Popup is the least destructive compatible change.
 		if (lawShowsDoNotSell && typeEl.value === 'classic') {
 			typeEl.value = 'box';
+			// Classic forces pushdown; Box needs a popup-capable preference
+			// center for the opt-out popup. Mirror the PHP runtime fix
+			// (apply_runtime_layout_compatibility) so the stored value matches.
+			if (prefEl) prefEl.value = 'popup';
 			updatePositionOptions();
+		} else if (lawShowsDoNotSell && typeEl.value === 'banner' && prefEl && prefEl.value === 'pushdown') {
+			prefEl.value = 'popup';
 		}
 		var hint = document.getElementById('faz-b-type-ccpa-hint');
 		if (hint) hint.style.display = lawShowsDoNotSell ? '' : 'none';
@@ -378,20 +396,21 @@
 		return all[lang] || { gdpr: '', ccpa: '' };
 	}
 
-	// Every language the banner carries copy for — prefer the selected set
-	// (Languages page), fall back to whatever translations exist, then current.
+	// Every language the banner carries copy for. Keep stored translations in the
+	// scan even if they are no longer selected; they may be re-enabled later.
 	function fazAllBannerLangs() {
 		var sel = (typeof fazConfig !== 'undefined' && fazConfig.languages && fazConfig.languages.selected) || [];
-		if (sel && sel.length) return sel;
 		var contents = (bannerData && bannerData.contents) || {};
-		var keys = Object.keys(contents);
-		return keys.length ? keys : [currentLang];
+		var langs = (sel || []).concat(Object.keys(contents), [currentLang]);
+		return langs.filter(function (lang, index) {
+			return lang && langs.indexOf(lang) === index;
+		});
 	}
 
 	// Collapse whitespace so a description that only differs in formatting still
 	// compares equal to its bundled default.
 	function fazNormText(s) {
-		return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+		return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ' ').trim();
 	}
 
 	// Read the notice description for a language. For the visible (current)
@@ -425,12 +444,14 @@
 	}
 
 	// The opt-out link label named in a language's bundled CCPA copy — the text
-	// inside the first quote pair (straight, curly or guillemets). Lets the
+	// inside the first double-quote pair (straight, curly, low or guillemets).
+	// ASCII apostrophes are intentionally excluded so contractions cannot be
+	// mistaken for a quoted control label. Lets the
 	// mismatch check recognise the named link in ANY language instead of relying
 	// on a hardcoded English phrase. '' when the default has no quoted label.
 	function fazCcpaLinkLabel(lang) {
 		var ccpa = fazNormText(fazLawDescsFor(lang).ccpa);
-		var m = ccpa.match(/["“”«»']([^"“”«»']{6,})["“”«»']/);
+		var m = ccpa.match(/["“”„‟«»]([^"“”„‟«»]{6,})["“”„‟«»]/);
 		return m ? fazNormText(m[1]) : '';
 	}
 
@@ -507,6 +528,25 @@
 		fazUpdateLawContentHint(newLaw);
 	}
 
+	// Repair a pre-existing law/default mismatch on editor load. This is the
+	// same non-destructive rule as a law change, except the comparison baseline
+	// is explicitly the other law's default. Custom copy never matches and is
+	// left untouched for the hint to flag.
+	function syncLoadedLawNoticeContent(law) {
+		var newKey = fazLawToDescKey(law);
+		var oldKey = newKey === 'ccpa' ? 'gdpr' : 'ccpa';
+		fazAllBannerLangs().forEach(function (lang) {
+			var descs = fazLawDescsFor(lang);
+			var current = fazNormText(fazGetNoticeDescriptionFor(lang));
+			var oldDefault = fazNormText(descs[oldKey]);
+			var newDefault = descs[newKey] || '';
+			if ((current === '' || current === oldDefault) && newDefault && fazNormText(newDefault) !== current) {
+				fazSetNoticeDescriptionFor(lang, newDefault);
+			}
+		});
+		fazUpdateLawContentHint(law);
+	}
+
 	function updatePositionOptions() {
 		var type = getVal('faz-b-type') || 'box';
 		var posEl = document.getElementById('faz-b-position');
@@ -554,16 +594,16 @@
 				normalizeBannerConfig(bannerData.properties);
 				populateSettings();
 				populateContents(currentLang);
-				// Surface the law/content mismatch hint on load too — a saved GDPR
-				// banner may already carry CCPA copy that names the missing link.
-				fazUpdateLawContentHint();
+				// Repair untouched copy stranded under the other law. Custom copy
+				// remains unchanged and is surfaced by the mismatch hint.
+				syncLoadedLawNoticeContent(fazPrevLaw || 'gdpr');
 				populateGeoTargeting();
 			// Init color pickers after populating values
 			FAZ.initColorPickers();
 			// Filter position options for current type
 			updatePositionOptions();
-			// Gate the Classic layout for a CCPA banner on initial load too —
-			// an existing Classic + CCPA banner saved before this guard must be
+			// Gate the Classic layout for a CCPA / Both banner on initial load
+			// too — an existing Classic banner saved before this guard must be
 			// migrated to Box when it opens in the editor, not only on a later
 			// law change or preset apply. Without this the admin could re-save
 			// the invalid (opt-out-less) combination unknowingly.
@@ -1249,8 +1289,14 @@
 		setVal('faz-b-expiry', (s.consentExpiry && s.consentExpiry.value) || ((s.applicableLaw === 'ccpa') ? 365 : 180));
 		// Detect regulation mode: gdpr + donotSell.status=true → "Both" mode
 		var lawVal = s.applicableLaw || 'gdpr';
-		var donotSellEl = (config.notice && config.notice.elements && config.notice.elements.donotSell) || {};
-		if (lawVal === 'gdpr' && donotSellEl.status === true) lawVal = 'gdpr_ccpa';
+		var noticeElements = (config.notice && config.notice.elements) || {};
+		var directDoNotSell = noticeElements.donotSell;
+		var buttonDoNotSell = (noticeElements.buttons && noticeElements.buttons.elements && noticeElements.buttons.elements.donotSell) || {};
+		var doNotSellEnabled = !!(
+			(directDoNotSell && directDoNotSell.status === true)
+			|| buttonDoNotSell.status === true
+		);
+		if (lawVal === 'gdpr' && doNotSellEnabled) lawVal = 'gdpr_ccpa';
 		setVal('faz-b-law', lawVal);
 		// Seed the law-change baseline so the first law change can compare against
 		// the right previous default. The per-law defaults themselves are already
@@ -1660,8 +1706,8 @@
 
 		// Update position options for the new type
 		updatePositionOptions();
-		// Gate the Classic layout for CCPA banners (and migrate an existing
-		// Classic + CCPA selection to Box) once both type and law are loaded.
+		// Gate the Classic layout for CCPA / Both banners (and migrate an
+		// existing Classic selection to Box) once both type and law are loaded.
 		syncClassicLawCompat();
 
 		// Notice colours
@@ -1888,6 +1934,11 @@
 		ensureObj(props, 'config.notice.elements.donotSell');
 		props.config.notice.elements.donotSell.tag = 'donotsell-button';
 		props.config.notice.elements.donotSell.status = (law === 'ccpa' || law === 'gdpr_ccpa');
+		// GDPR defaults deliberately omit the US opt-out modal. When an existing
+		// GDPR banner is switched to CCPA/Both, explicitly enable that container
+		// so the Do-Not-Sell entry point never targets missing UI.
+		ensureObj(props, 'config.optoutPopup');
+		props.config.optoutPopup.status = (law === 'ccpa' || law === 'gdpr_ccpa');
 
 		// Colours - notice
 		ensureObj(props, 'config.notice.styles');
@@ -2716,6 +2767,10 @@
 	// List of fields that use wp_editor (TinyMCE)
 	var wpEditorIds = ['faz-b-notice-desc', 'faz-b-pref-desc'];
 
+	function isWpEditorTextMode(editor) {
+		return editor && typeof editor.isHidden === 'function' && editor.isHidden();
+	}
+
 	function getVal(id) {
 		// For wp_editor fields, read from TinyMCE
 		if (wpEditorIds.indexOf(id) > -1 && typeof tinyMCE !== 'undefined') {
@@ -2726,6 +2781,12 @@
 				if (panel) panel = panel.closest('.faz-tab-panel');
 				if (panel && !panel.classList.contains('active')) {
 					return undefined; // Signal: field not readable right now.
+				}
+				// In Text/Quicktags mode the TinyMCE instance still exists but its
+				// content is stale; the textarea is the source of truth.
+				if (isWpEditorTextMode(editor)) {
+					var textEl = document.getElementById(id);
+					return textEl ? textEl.value : '';
 				}
 				return editor.getContent();
 			}
@@ -2738,7 +2799,15 @@
 		// For wp_editor fields, set via TinyMCE
 		if (wpEditorIds.indexOf(id) > -1 && typeof tinyMCE !== 'undefined') {
 			var editor = tinyMCE.get(id);
-			if (editor) { editor.setContent(val); return; }
+			if (editor) {
+				if (isWpEditorTextMode(editor)) {
+					var textEl = document.getElementById(id);
+					if (textEl) textEl.value = val;
+					return;
+				}
+				editor.setContent(val);
+				return;
+			}
 		}
 		var el = document.getElementById(id);
 		if (el) el.value = val;

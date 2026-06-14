@@ -121,6 +121,20 @@ test.describe('Banner law switch reloads the notice copy', () => {
       await openTab(page, 'content');
       await expect.poll(() => noticeDescription(page), { message: 'CCPA copy restored' })
         .toMatch(/do not sell/i);
+
+      // Saving a banner converted from GDPR must also enable the target popup,
+      // not merely the visible link that opens it.
+      await page.click('#faz-b-save');
+      await expect.poll(() => JSON.parse(wpEval(`
+          global $wpdb;
+          $raw = $wpdb->get_var( "SELECT settings FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 LIMIT 1" );
+          $settings = json_decode( $raw, true );
+          echo wp_json_encode( array(
+            'popup' => ! empty( $settings['config']['optoutPopup']['status'] ),
+            'button' => ! empty( $settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ),
+          ) );
+        `).trim()), { message: 'saved CCPA config includes a working opt-out target' })
+        .toEqual({ popup: true, button: true });
     } finally {
       try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
     }
@@ -153,6 +167,36 @@ test.describe('Banner law switch reloads the notice copy', () => {
       await openTab(page, 'content');
       await expect.poll(() => noticeDescription(page), { message: 'custom copy untouched' })
         .toContain('Custom CCPA copy');
+    } finally {
+      try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
+    }
+    if (cleanupErr) throw cleanupErr;
+  });
+
+  test('Text/Quicktags edits are not replaced by stale TinyMCE content', async ({ page, loginAsAdmin }) => {
+    const meta = JSON.parse(seedCcpaDefaultCopy());
+    let cleanupErr: unknown;
+    try {
+      expect(meta.error).toBeUndefined();
+      await loginAsAdmin(page);
+      await goToBannerPage(page);
+
+      await openTab(page, 'content');
+      await ensureNoticeEditorReady(page);
+      await page.click('#faz-b-notice-desc-html');
+      const textarea = page.locator('#faz-b-notice-desc');
+      await expect(textarea, 'Text mode textarea visible').toBeVisible();
+
+      const custom = '<p>Text-mode custom copy — Do Not Sell remains intentional.</p>';
+      await textarea.fill(custom);
+
+      // Leaving the Content tab serialises the textarea, not the now-hidden and
+      // stale TinyMCE iframe. The law change must preserve the custom value.
+      await openTab(page, 'general');
+      await page.selectOption('#faz-b-law', 'gdpr');
+      await expect(page.locator('#faz-b-law-content-hint'), 'mismatch hint shown').toBeVisible();
+      await openTab(page, 'content');
+      await expect(textarea, 'custom Text-mode copy preserved').toHaveValue(custom);
     } finally {
       try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
     }
@@ -286,10 +330,10 @@ test.describe('Banner law switch reloads EVERY language (not just the open one)'
 });
 
 test.describe('Law/content mismatch hint refreshes outside the law-change event', () => {
-  test('a saved GDPR banner already carrying CCPA copy shows the hint on load', async ({ page, loginAsAdmin }) => {
+  test('a saved GDPR banner carrying untouched CCPA copy is repaired on load', async ({ page, loginAsAdmin }) => {
     // Seed a GDPR banner whose copy is the CCPA default (names Do-Not-Sell) —
-    // the exact stranded state from the support thread. The hint must surface on
-    // load, not only after a law change (finding #4).
+    // the exact stranded state from the support thread. Untouched default copy
+    // is safe to repair automatically; only customised copy needs a hint.
     const meta = JSON.parse(seedGdprWithCcpaCopy());
     let cleanupErr: unknown;
     try {
@@ -298,7 +342,11 @@ test.describe('Law/content mismatch hint refreshes outside the law-change event'
       await goToBannerPage(page);
 
       await expect(page.locator('#faz-b-law'), 'law loaded as GDPR').toHaveValue('gdpr');
-      await expect(page.locator('#faz-b-law-content-hint'), 'mismatch hint visible on load').toBeVisible();
+      await expect(page.locator('#faz-b-law-content-hint'), 'no warning after automatic repair').toBeHidden();
+      await openTab(page, 'content');
+      await ensureNoticeEditorReady(page);
+      await expect.poll(() => noticeDescription(page), { message: 'GDPR copy replaces the untouched CCPA default' })
+        .not.toMatch(/do not sell/i);
     } finally {
       try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
     }
@@ -323,6 +371,23 @@ test.describe('Law/content mismatch hint refreshes outside the law-change event'
     }
     if (cleanupErr) throw cleanupErr;
   });
+
+  test('frontend repairs untouched CCPA copy stranded on a GDPR banner', async ({ page }) => {
+    const meta = JSON.parse(seedGdprWithCcpaCopy());
+    let cleanupErr: unknown;
+    try {
+      expect(meta.error, 'install has a default banner').toBeUndefined();
+
+      await page.goto(WP_BASE, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      const description = page.locator('[data-faz-tag="description"]').first();
+      await expect(description, 'notice description rendered').toHaveCount(1);
+      await expect(description, 'runtime copy matches GDPR').not.toContainText(/do not sell/i);
+      await expect(page.locator('[data-faz-tag="donotsell-button"]'), 'GDPR has no Do-Not-Sell control').toHaveCount(0);
+    } finally {
+      try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
+    }
+    if (cleanupErr) throw cleanupErr;
+  });
 });
 
 /** Default banner → applicableLaw=gdpr, donotSell off, every language's copy set
@@ -338,6 +403,9 @@ function seedGdprWithCustomCopy(html: string): string {
     $settings = json_decode( $row->settings, true );
     if ( ! isset( $settings['settings'] ) || ! is_array( $settings['settings'] ) ) { $settings['settings'] = array(); }
     $settings['settings']['applicableLaw'] = 'gdpr';
+    $settings['config']['notice']['elements']['donotSell']['status'] = false;
+    $settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = false;
+    $settings['config']['optoutPopup']['status'] = false;
     $custom = base64_decode( '${b64}' );
     $contents = json_decode( $row->contents, true );
     if ( ! is_array( $contents ) || empty( $contents ) ) { $contents = array( 'en' => array( 'notice' => array( 'elements' => array() ) ) ); }
@@ -346,9 +414,6 @@ function seedGdprWithCustomCopy(html: string): string {
         $contents[ $lang ]['notice'] = array( 'elements' => array() );
       }
       $contents[ $lang ]['notice']['elements']['description'] = $custom;
-      if ( isset( $contents[ $lang ]['notice']['elements']['donotSell'] ) && is_array( $contents[ $lang ]['notice']['elements']['donotSell'] ) ) {
-        $contents[ $lang ]['notice']['elements']['donotSell']['status'] = false;
-      }
     }
     $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => wp_json_encode( $settings ), 'contents' => wp_json_encode( $contents ) ), array( 'banner_id' => $row->banner_id ), array( '%s', '%s' ), array( '%d' ) );
     \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
@@ -370,16 +435,15 @@ function seedGdprWithCcpaCopy(): string {
     $settings = json_decode( $row->settings, true );
     if ( ! isset( $settings['settings'] ) || ! is_array( $settings['settings'] ) ) { $settings['settings'] = array(); }
     $settings['settings']['applicableLaw'] = 'gdpr';
+    $settings['config']['notice']['elements']['donotSell']['status'] = false;
+    $settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = false;
+    $settings['config']['optoutPopup']['status'] = false;
     $en = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner::get_law_notice_descriptions( 'en' );
     $contents = json_decode( $row->contents, true );
     if ( ! is_array( $contents ) ) { $contents = array(); }
     foreach ( array_keys( $contents ) as $lang ) {
       if ( ! isset( $contents[ $lang ]['notice']['elements'] ) || ! is_array( $contents[ $lang ]['notice']['elements'] ) ) { continue; }
       $contents[ $lang ]['notice']['elements']['description'] = $en['ccpa'];
-      // Force the Do-Not-Sell button off so loadBanner keeps the law at 'gdpr'.
-      if ( isset( $contents[ $lang ]['notice']['elements']['donotSell'] ) && is_array( $contents[ $lang ]['notice']['elements']['donotSell'] ) ) {
-        $contents[ $lang ]['notice']['elements']['donotSell']['status'] = false;
-      }
     }
     if ( empty( $contents ) ) { $contents = array( 'en' => array( 'notice' => array( 'elements' => array( 'description' => $en['ccpa'] ) ) ) ); }
     $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => wp_json_encode( $settings ), 'contents' => wp_json_encode( $contents ) ), array( 'banner_id' => $row->banner_id ), array( '%s', '%s' ), array( '%d' ) );

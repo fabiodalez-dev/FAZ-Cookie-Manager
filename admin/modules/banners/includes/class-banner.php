@@ -276,6 +276,166 @@ class Banner extends Store {
 	}
 
 	/**
+	 * Apply non-persistent runtime fixes required for a working opt-out UI.
+	 *
+	 * Classic (including the legacy banner+pushdown combination) has no
+	 * opt-out popup. A CCPA banner, or a GDPR+CCPA banner with Do Not Sell
+	 * enabled, must therefore render with a popup-capable layout. This changes
+	 * only the in-memory Banner object used for frontend output; the editor
+	 * remains responsible for migrating and saving the stored configuration.
+	 *
+	 * @return bool Whether the in-memory settings changed.
+	 */
+	public function apply_runtime_layout_compatibility() {
+		$properties = $this->get_settings();
+		if ( ! is_array( $properties ) ) {
+			return false;
+		}
+
+		$settings = isset( $properties['settings'] ) && is_array( $properties['settings'] )
+			? $properties['settings']
+			: array();
+		$config   = isset( $properties['config'] ) && is_array( $properties['config'] )
+			? $properties['config']
+			: array();
+
+		$law        = isset( $settings['applicableLaw'] ) ? sanitize_key( $settings['applicableLaw'] ) : 'gdpr';
+		$type       = isset( $settings['type'] ) ? sanitize_key( $settings['type'] ) : 'box';
+		$ptype      = isset( $settings['preferenceCenterType'] ) ? sanitize_key( $settings['preferenceCenterType'] ) : 'popup';
+		// The nested buttons.elements.donotSell branch is the only Do-Not-Sell
+		// flag that survives sanitize_settings — the legacy direct
+		// notice.elements.donotSell key is absent from the default config and is
+		// dropped on every get_settings(), so it is never readable here.
+		$dns_status = isset( $config['notice']['elements']['buttons']['elements']['donotSell']['status'] )
+			? (bool) $config['notice']['elements']['buttons']['elements']['donotSell']['status']
+			: false;
+		$changed    = false;
+
+		// CCPA always requires the first-party opt-out entry point; enable the
+		// canonical nested button branch.
+		if ( 'ccpa' === $law && ! $dns_status ) {
+			if ( ! isset( $properties['config']['notice']['elements']['buttons']['elements']['donotSell'] )
+				|| ! is_array( $properties['config']['notice']['elements']['buttons']['elements']['donotSell'] ) ) {
+				$properties['config']['notice']['elements']['buttons']['elements']['donotSell'] = array();
+			}
+			$properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = true;
+			$changed = true;
+		}
+
+		$shows_do_not_sell = 'ccpa' === $law || $dns_status;
+		if ( $shows_do_not_sell ) {
+			if ( empty( $properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ) ) {
+				if ( ! isset( $properties['config']['notice']['elements']['buttons']['elements']['donotSell'] )
+					|| ! is_array( $properties['config']['notice']['elements']['buttons']['elements']['donotSell'] ) ) {
+					$properties['config']['notice']['elements']['buttons']['elements']['donotSell'] = array();
+				}
+				$properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = true;
+				$changed = true;
+			}
+		}
+		if ( $shows_do_not_sell && empty( $config['optoutPopup']['status'] ) ) {
+			if ( ! isset( $properties['config']['optoutPopup'] ) || ! is_array( $properties['config']['optoutPopup'] ) ) {
+				$properties['config']['optoutPopup'] = array();
+			}
+			$properties['config']['optoutPopup']['status'] = true;
+			$changed = true;
+		}
+
+		if ( $shows_do_not_sell && 'classic' === $type ) {
+			$properties['settings']['type']                 = 'box';
+			$properties['settings']['preferenceCenterType'] = 'popup';
+			$position = isset( $settings['position'] ) ? sanitize_key( $settings['position'] ) : '';
+			if ( ! in_array( $position, array( 'bottom-left', 'bottom-right' ), true ) ) {
+				$properties['settings']['position'] = 'bottom-left';
+			}
+			if ( isset( $properties['config']['categoryPreview'] ) && is_array( $properties['config']['categoryPreview'] ) ) {
+				$properties['config']['categoryPreview']['status'] = false;
+			}
+			$changed = true;
+		} elseif ( $shows_do_not_sell && 'banner' === $type && 'pushdown' === $ptype ) {
+			$properties['settings']['preferenceCenterType'] = 'popup';
+			if ( isset( $properties['config']['categoryPreview'] ) && is_array( $properties['config']['categoryPreview'] ) ) {
+				$properties['config']['categoryPreview']['status'] = false;
+			}
+			$changed = true;
+		}
+
+		if ( $changed ) {
+			$this->data['settings'] = $properties;
+		}
+
+		return $changed;
+	}
+
+	/**
+	 * Repair untouched notice copy that belongs to the other law.
+	 *
+	 * This is deliberately non-persistent and only changes an empty description
+	 * or one that still exactly matches the bundled default for the other law.
+	 * Customised copy is never changed.
+	 *
+	 * @return bool Whether the in-memory contents changed.
+	 */
+	public function apply_runtime_law_content_compatibility() {
+		if ( ! array_key_exists( 'contents', $this->data ) ) {
+			return false;
+		}
+
+		$properties = $this->get_settings();
+		$settings   = isset( $properties['settings'] ) && is_array( $properties['settings'] )
+			? $properties['settings']
+			: array();
+		$law        = isset( $settings['applicableLaw'] ) ? sanitize_key( $settings['applicableLaw'] ) : 'gdpr';
+		$new_key    = 'ccpa' === $law ? 'ccpa' : 'gdpr';
+		$old_key    = 'ccpa' === $new_key ? 'gdpr' : 'ccpa';
+		$contents   = $this->normalize_multilingual_data( $this->data['contents'] );
+		$changed    = false;
+
+		foreach ( $contents as $lang => &$content ) {
+			if ( ! is_array( $content ) ) {
+				continue;
+			}
+			$defaults    = self::get_law_notice_descriptions( $lang );
+			$current     = isset( $content['notice']['elements']['description'] )
+				? $content['notice']['elements']['description']
+				: '';
+			$current     = self::normalize_notice_description( $current );
+			$old_default = self::normalize_notice_description( $defaults[ $old_key ] );
+			$new_default = isset( $defaults[ $new_key ] ) ? $defaults[ $new_key ] : '';
+
+			if ( ( '' === $current || $current === $old_default )
+				&& '' !== $new_default
+				&& self::normalize_notice_description( $new_default ) !== $current ) {
+				if ( ! isset( $content['notice'] ) || ! is_array( $content['notice'] ) ) {
+					$content['notice'] = array();
+				}
+				if ( ! isset( $content['notice']['elements'] ) || ! is_array( $content['notice']['elements'] ) ) {
+					$content['notice']['elements'] = array();
+				}
+				$content['notice']['elements']['description'] = $new_default;
+				$changed = true;
+			}
+		}
+		unset( $content );
+
+		if ( $changed ) {
+			$this->data['contents'] = $contents;
+		}
+
+		return $changed;
+	}
+
+	/**
+	 * Normalize notice HTML for conservative default-copy comparisons.
+	 *
+	 * @param mixed $value Notice description.
+	 * @return string
+	 */
+	private static function normalize_notice_description( $value ) {
+		return trim( preg_replace( '/\s+/', ' ', (string) $value ) );
+	}
+
+	/**
 	 * Pick the matching default config tree for sanitization.
 	 *
 	 * Partial admin payloads must be backfilled from the correct law-specific
@@ -600,8 +760,25 @@ class Banner extends Store {
 	public static function get_law_notice_descriptions( $lang = 'en' ) {
 		$safe_lang = sanitize_file_name( (string) $lang );
 		$dir       = dirname( __FILE__ ) . '/contents/';
-		$file      = ( '' !== $safe_lang && file_exists( $dir . $safe_lang . '.json' ) ) ? $dir . $safe_lang . '.json' : $dir . 'en.json';
-		$data      = faz_read_json_file( $file );
+		$data      = array();
+
+		// Prefer a downloaded translation when available, matching
+		// get_translations(). This keeps the untouched-default comparison in the
+		// actual editor language instead of comparing translated copy to English.
+		if ( '' !== $safe_lang ) {
+			$upload_dir = wp_upload_dir();
+			$translated_file = trailingslashit( $upload_dir['basedir'] ) . 'fazcookie/languages/banners/' . $safe_lang . '.json';
+			if ( file_exists( $translated_file ) ) {
+				$translated = faz_read_json_file( $translated_file );
+				if ( isset( $translated['banner_data'] ) && is_array( $translated['banner_data'] ) ) {
+					$data = $translated['banner_data'];
+				}
+			}
+		}
+		if ( empty( $data ) ) {
+			$file = ( '' !== $safe_lang && file_exists( $dir . $safe_lang . '.json' ) ) ? $dir . $safe_lang . '.json' : $dir . 'en.json';
+			$data = faz_read_json_file( $file );
+		}
 		$out       = array(
 			'gdpr' => '',
 			'ccpa' => '',
