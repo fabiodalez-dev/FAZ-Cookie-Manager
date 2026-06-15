@@ -780,6 +780,12 @@ function _fazApplyGpcOptOut() {
     var law = _fazGetLaw();
     var responseCategories = { accepted: [], rejected: [], action: "reject", gpc: true };
     var categories = _fazStore._categories || [];
+    // GPC is a legally-binding opt-out (CPPA §7025) that overrides ANY prior
+    // consent, including explicit per-service allows. Clear the svc.*/ck.*
+    // overrides BEFORE the per-category shredder runs below, otherwise a stale
+    // svc.<id>:yes would make _fazRemoveDeadCookies skip a cookie the GPC signal
+    // requires deleting.
+    _fazClearStoredServiceConsent();
     for (var i = 0; i < categories.length; i++) {
         var category = categories[i];
         var deny;
@@ -803,8 +809,8 @@ function _fazApplyGpcOptOut() {
         }
     }
 
-    // Clear any per-service overrides and deny IAB vendors, mirroring reject.
-    _fazClearStoredServiceConsent();
+    // Deny IAB vendors, mirroring reject. (Per-service overrides were already
+    // cleared above, before the shredder, so GPC fully overrides them.)
     _fazSaveVendorConsent("reject");
 
     _fazUnblock();
