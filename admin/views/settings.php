@@ -51,15 +51,6 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Uses generic script handle names to prevent ad blockers from blocking the cookie banner. Enable if visitors report the banner not appearing.', 'faz-cookie-manager' ); ?></div>
 			</div>
-			<?php
-			// 1.18.2 HOTFIX: the per-service and per-cookie consent toggles are
-			// hidden pending a correctness rework. As shipped they did not enforce
-			// per-cookie revocation server-side or on reload, did not log the
-			// granular decisions, could exceed the 4 KB cookie limit, and listed
-			// catalogue wildcards rather than detected cookies. The markup is kept
-			// (gated off) for an easy restore once those are fixed.
-			if ( false ) :
-			?>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.per_service_consent">
@@ -68,6 +59,15 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. This provides more granular privacy control but makes the preference center more complex.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<?php
+			// Per-cookie consent stays hidden pending a correctness rework: the
+			// per-cookie revocation it advertises cannot be enforced server-side
+			// (the service script controls what is written; the plugin can only
+			// delete the cookie afterwards, client-side). Per-service consent
+			// above is reintroduced; the per-cookie markup is kept (gated off)
+			// for an easy restore once that enforcement gap is closed.
+			if ( false ) :
+			?>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.per_cookie_consent">

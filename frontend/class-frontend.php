@@ -1451,15 +1451,16 @@ class Frontend {
 		}
 
 		// Per-service consent: pass service list to frontend.
-		// 1.18.2 HOTFIX: per-service / per-cookie consent is temporarily disabled.
-		// Per-cookie revocation is not enforced server-side or on reload (P1-2),
-		// the granular svc.*/ck.* decisions are not written to the consent log
-		// (P1-3), a large override set can exceed the 4 KB cookie limit (P1-4),
-		// and the toggles list catalogue wildcards rather than detected cookies
-		// (P2). Force off until reworked — category-level consent (the default,
-		// covered by the 113/113 compliance suite) is unaffected. Restore by
-		// reading the banner_control.per_service_consent option again.
-		$per_service = false;
+		// 1.18.3: per-service consent reintroduced — read the option again so the
+		// resolved service list reaches the frontend preference center. Per-COOKIE
+		// consent remains out (its admin toggle stays gated; see settings.php), so
+		// no nested per-cookie overrides are emitted here. The known correctness
+		// gaps that still apply when per-service is on are tracked for follow-up:
+		// granular svc.* decisions not yet written to the consent log (P1-3), a
+		// large override set can approach the 4 KB cookie limit (P1-4), and the
+		// toggle list is sourced from the provider catalogue rather than the
+		// site's detected cookies (P2).
+		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( $per_service ) {
 			$known    = Known_Providers::get_all();
 			$services = array();
@@ -2876,10 +2877,11 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 		$this->service_consent_cache = array();
-		// 1.18.2 HOTFIX: per-service / per-cookie consent disabled (see the note
-		// at the store-payload site). Returning an empty map keeps the
-		// cookie-shredding path on pure category-level enforcement.
-		$per_service = false;
+		// 1.18.3: per-service consent reintroduced — read the option again so the
+		// cookie-shredder honours svc.* opt-outs. When the option is off this
+		// returns an empty map and enforcement stays purely category-level.
+		$settings    = $this->get_faz_settings();
+		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( ! $per_service ) {
 			return $this->service_consent_cache;
 		}
