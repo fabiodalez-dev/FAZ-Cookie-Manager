@@ -221,28 +221,12 @@ class Frontend {
 		add_filter( 'widget_block_content', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'embed_oembed_html', array( $this, 'filter_oembed_blocking' ), 1000, 2 );
 
-		// Invalidate the cookie-scripts transient whenever a cookie or category is
-		// saved or deleted. Category changes affect slug lookups in _cookieScripts,
-		// so a rename / delete must also clear the map. faz_after_update_settings
-		// and faz_clear_cache are added here for symmetry with the banner-template
-		// cache invalidation in class-template.php: disabling a category via the
-		// Settings UI (or any other settings change that affects the category list)
-		// would otherwise leave the cookie-scripts map stale for up to 12 hours.
-		$invalidate_scripts_map = function() {
-			delete_transient( 'faz_cookie_scripts_map' );
-			// Same lifecycle for the per-service detected-cookie-names set
-			// (P2): a scan / manual cookie add / delete changes which
-			// providers have a detected cookie, so the service toggle list
-			// must refresh instead of staying stale for up to 6 hours.
-			delete_transient( 'faz_detected_cookie_names' );
-		};
-		add_action( 'faz_after_update_cookie', $invalidate_scripts_map );
-		add_action( 'faz_after_create_cookie', $invalidate_scripts_map );
-		add_action( 'faz_after_delete_cookie', $invalidate_scripts_map );
-		add_action( 'faz_after_update_cookie_category', $invalidate_scripts_map );
-		add_action( 'faz_after_delete_cookie_category', $invalidate_scripts_map );
-		add_action( 'faz_after_update_settings', $invalidate_scripts_map );
-		add_action( 'faz_clear_cache', $invalidate_scripts_map );
+		// The cookie-scripts map and the per-service detected-cookie-names
+		// transients are invalidated on cookie / category / settings writes by
+		// CLI::define_public_hooks(), which registers the bust UNCONDITIONALLY —
+		// this Frontend constructor is skipped on pure-admin (non-AJAX, non-REST)
+		// requests, so a cache bust registered here would miss writes that
+		// originate from an admin page load. See includes/class-cli.php.
 	}
 
 	/**

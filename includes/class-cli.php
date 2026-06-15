@@ -173,6 +173,29 @@ class CLI {
 		// DSAR requests resolve to a registered post type.
 		new DSAR_Shortcode();
 
+		// Invalidate the frontend-output caches on every cookie / category /
+		// settings write, registered UNCONDITIONALLY here — the plugin's single
+		// always-run composition root. These transients (the cookie-scripts map
+		// and the per-service detected-cookie-names set, both consumed by the
+		// frontend store payload) must be busted even when the write happens on
+		// a pure-admin page request that skips the Frontend constructor below.
+		// Registering the bust inside Frontend would miss exactly that case.
+		$faz_bust_frontend_caches = static function () {
+			\delete_transient( 'faz_cookie_scripts_map' );
+			\delete_transient( 'faz_detected_cookie_names' );
+		};
+		foreach ( array(
+			'faz_after_update_cookie',
+			'faz_after_create_cookie',
+			'faz_after_delete_cookie',
+			'faz_after_update_cookie_category',
+			'faz_after_delete_cookie_category',
+			'faz_after_update_settings',
+			'faz_clear_cache',
+		) as $faz_cache_bust_hook ) {
+			\add_action( $faz_cache_bust_hook, $faz_bust_frontend_caches );
+		}
+
 		// Skip frontend initialization on admin page requests — none of the
 		// frontend hooks (wp_footer, wp_enqueue_scripts, template_redirect,
 		// etc.) fire in admin context, so the object creation is wasted work.
