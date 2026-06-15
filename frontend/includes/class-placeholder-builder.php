@@ -112,7 +112,7 @@ class Placeholder_Builder {
 
 		$button_text = esc_html__( 'Accept cookies', 'faz-cookie-manager' );
 
-		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '">';
+		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '">';
 
 		if ( $has_thumb ) {
 			$html .= '<img class="faz-placeholder-thumb" src="' . esc_url( $thumbnail_url ) . '" alt="" loading="lazy"/>';
@@ -121,7 +121,7 @@ class Placeholder_Builder {
 		$html .= '<div class="faz-placeholder-overlay">';
 		$html .= '<svg class="faz-placeholder-icon" viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">' . $icon_svg . '</svg>';
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
-		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '">' . $button_text . '</button>';
+		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
 
 		// Hidden original content for JS to restore after consent.
@@ -130,13 +130,13 @@ class Placeholder_Builder {
 			wp_kses_allowed_html( 'post' ),
 			array(
 				'iframe' => array(
-					'src' => true, 'data-faz-src' => true, 'data-faz-category' => true,
+					'src' => true, 'data-faz-src' => true, 'data-faz-category' => true, 'data-faz-service' => true,
 					'width' => true, 'height' => true, 'frameborder' => true,
 					'allow' => true, 'allowfullscreen' => true, 'loading' => true,
 					'style' => true, 'class' => true, 'id' => true, 'title' => true,
 				),
 				'script' => array(
-					'type' => true, 'src' => true, 'data-faz-category' => true,
+					'type' => true, 'src' => true, 'data-faz-category' => true, 'data-faz-service' => true,
 					'data-faz-src' => true, 'async' => true, 'defer' => true,
 				),
 			)
@@ -170,11 +170,11 @@ class Placeholder_Builder {
 
 		$button_text = esc_html__( 'Accept cookies', 'faz-cookie-manager' );
 
-		$html  = '<div class="faz-placeholder faz-placeholder--social faz-social-placeholder" data-faz-category="' . esc_attr( $category ) . '">';
+		$html  = '<div class="faz-placeholder faz-placeholder--social faz-social-placeholder" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '">';
 		$html .= '<div class="faz-placeholder-overlay">';
 		$html .= '<svg class="faz-placeholder-icon" viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">' . $icon_svg . '</svg>';
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
-		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '">' . $button_text . '</button>';
+		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
 		$html .= '</div>';
 

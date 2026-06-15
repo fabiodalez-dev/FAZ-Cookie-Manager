@@ -250,22 +250,23 @@ class Controller {
 		// arbitrary keys/values into the consent-log row. Cap the entry count,
 		// length-bound every key, and constrain values so the stored audit map
 		// stays well-formed regardless of what the client sends.
+		$clean = array();
 		if ( is_array( $categories ) || is_object( $categories ) ) {
-			$clean = array();
 			$count = 0;
 			foreach ( (array) $categories as $key => $value ) {
 				if ( $count >= 250 ) {
 					break;
 				}
-				$key = substr( sanitize_text_field( (string) $key ), 0, 190 );
-				if ( '' === $key ) {
+				$key   = substr( sanitize_text_field( (string) $key ), 0, 190 );
+				$value = sanitize_text_field( (string) $value );
+				if ( '' === $key || ! in_array( $value, array( 'yes', 'no' ), true ) ) {
 					continue;
 				}
-				$clean[ $key ] = substr( sanitize_text_field( (string) $value ), 0, 32 );
+				$clean[ $key ] = $value;
 				++$count;
 			}
-			$categories = wp_json_encode( $clean );
 		}
+		$categories = wp_json_encode( $clean );
 
 		// L2-SP1-S003 fix (1.15.0): populate the 7 geo-routing v2
 		// audit columns added by Migration_V2. Resolves Constitution V

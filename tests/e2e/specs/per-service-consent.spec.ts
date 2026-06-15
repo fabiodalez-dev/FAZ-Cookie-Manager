@@ -1,7 +1,8 @@
 import { expect, test } from '../fixtures/wp-fixture';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { clickFirstVisible } from '../utils/ui';
 
 /**
  * Per-service consent (1.18.3) — regression coverage for the three
@@ -130,14 +131,25 @@ test.describe('Per-service consent (1.18.3)', () => {
     // them), then read back the cookie the browser actually stored.
     const result = await page.evaluate(() => {
       const fz = (window as unknown as { fazcookie?: Record<string, (k: string, v: string) => void> }).fazcookie;
-      if (!fz || typeof fz._fazSetInStore !== 'function') return { ok: false, len: -1, hasCore: false };
+      if (!fz || typeof fz._fazSetInStore !== 'function') {
+        return { ok: false, len: -1, hasCore: false, hasCriticalDeny: false, hasCookieOverride: false };
+      }
       fz._fazSetInStore('analytics', 'yes'); // a core/category entry that must survive
       for (let i = 0; i < 300; i++) {
-        fz._fazSetInStore('svc.flood-provider-with-a-long-id-' + i, 'no');
+        fz._fazSetInStore('svc.flood-provider-with-a-long-id-' + i, 'yes');
       }
+      fz._fazSetInStore('svc.critical-deny', 'no');
+      fz._fazSetInStore('ck.low-priority.example', 'no');
       const m = document.cookie.match(/fazcookie-consent=([^;]+)/);
       const raw = m ? m[1] : '';
-      return { ok: true, len: raw.length, hasCore: decodeURIComponent(raw).indexOf('analytics:yes') !== -1 };
+      const decoded = decodeURIComponent(raw);
+      return {
+        ok: true,
+        len: raw.length,
+        hasCore: decoded.indexOf('analytics:yes') !== -1,
+        hasCriticalDeny: decoded.indexOf('svc.critical-deny:no') !== -1,
+        hasCookieOverride: decoded.indexOf('ck.low-priority.example:no') !== -1,
+      };
     });
 
     expect(result.ok, '_fazSetInStore is exposed on window.fazcookie').toBe(true);
@@ -147,6 +159,8 @@ test.describe('Per-service consent (1.18.3)', () => {
     expect(result.len).toBeLessThan(4096);
     // Core/category entries are never sacrificed to the cap.
     expect(result.hasCore, 'core category entry survives the cap').toBe(true);
+    expect(result.hasCriticalDeny, 'explicit service denials have priority').toBe(true);
+    expect(result.hasCookieOverride, 'cookie overrides are dropped before service decisions').toBe(false);
 
     await ctx.close();
   });
@@ -188,5 +202,66 @@ test.describe('Per-service consent (1.18.3)', () => {
     expect(cats['analytics']).toBe('yes');
 
     await ctx.close();
+  });
+
+  test('category-only mode hides and disables per-service consent', async ({
+    browser,
+    loginAsAdmin,
+  }) => {
+    const adminPage = await browser.newPage();
+    let visitorContext: BrowserContext | null = null;
+
+    await loginAsAdmin(adminPage);
+    await adminPage.goto('/wp-admin/admin.php?page=faz-cookie-manager-settings', {
+      waitUntil: 'domcontentloaded',
+    });
+    const adminNonce = await getAdminNonce(adminPage);
+    expect(adminNonce.length).toBeGreaterThan(0);
+
+    try {
+      const current = await getSettings(adminPage, adminNonce);
+      const bannerControl = {
+        ...(current.banner_control as Record<string, unknown> | undefined),
+        per_service_consent: false,
+      };
+      await postSettings(adminPage, adminNonce, { banner_control: bannerControl });
+
+      visitorContext = await browser.newContext();
+      const visitorPage = await visitorContext.newPage();
+      await visitorPage.goto('/', { waitUntil: 'domcontentloaded' });
+
+      const mode = await visitorPage.evaluate(() => {
+        const config = (window as unknown as {
+          _fazConfig?: { _perServiceConsent?: boolean; _services?: unknown };
+        })._fazConfig;
+        return {
+          enabled: config?._perServiceConsent === true,
+          hasServices: Array.isArray(config?._services),
+        };
+      });
+      expect(mode.enabled).toBe(false);
+      expect(mode.hasServices).toBe(false);
+
+      const opened = await clickFirstVisible(visitorPage, [
+        '[data-faz-tag="settings-button"] button',
+        '[data-faz-tag="settings-button"]',
+        '.faz-btn-customize',
+      ]);
+      expect(opened).toBeTruthy();
+      await expect(visitorPage.locator('[data-faz-tag="detail"]')).toBeVisible();
+      expect(await visitorPage.locator('.faz-service-toggle').count()).toBe(0);
+      expect(
+        await visitorPage.locator('input[id^="fazSwitch"], input[id^="fazCategoryDirect"]').count(),
+      ).toBeGreaterThan(0);
+    } finally {
+      const current = await getSettings(adminPage, adminNonce);
+      const bannerControl = {
+        ...(current.banner_control as Record<string, unknown> | undefined),
+        per_service_consent: true,
+      };
+      await postSettings(adminPage, adminNonce, { banner_control: bannerControl });
+      if (visitorContext) await visitorContext.close();
+      await adminPage.close();
+    }
   });
 });

@@ -102,6 +102,7 @@ class Frontend {
 	private $whitelist_cache          = null;
 	private $service_consent_cache    = null;
 	private $pattern_service_cache    = null;
+	private $per_service_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
 	/**
@@ -1194,7 +1195,7 @@ class Frontend {
 		}
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, prefix interpolation only, no user input; result cached in the transient set immediately below.
-		$names = $wpdb->get_col( "SELECT DISTINCT name FROM {$wpdb->prefix}faz_cookies WHERE name <> ''" );
+		$names = $wpdb->get_col( "SELECT DISTINCT name FROM {$wpdb->prefix}faz_cookies WHERE name <> '' AND discovered = 1" );
 		$names = is_array( $names ) ? array_values( array_filter( array_map( 'strval', $names ) ) ) : array();
 		set_transient( 'faz_detected_cookie_names', $names, 6 * HOUR_IN_SECONDS );
 		return $names;
@@ -1233,6 +1234,50 @@ class Frontend {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Services eligible for granular consent on this site.
+	 *
+	 * Only scanner-detected services in an active category are exposed and
+	 * enforced. This keeps the preference center and both blocking layers on
+	 * the same allowlist.
+	 *
+	 * @param string[]|null $valid_categories Active category slugs.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function get_per_service_services( $valid_categories = null ) {
+		if ( null !== $this->per_service_cache ) {
+			return $this->per_service_cache;
+		}
+
+		if ( null === $valid_categories ) {
+			$valid_categories = $this->get_valid_category_slugs();
+		}
+
+		$services       = array();
+		$detected_names = $this->get_detected_cookie_names();
+		foreach ( Known_Providers::get_all() as $id => $service ) {
+			if ( 'necessary' === $service['category'] || ! in_array( $service['category'], $valid_categories, true ) ) {
+				continue;
+			}
+
+			$service_cookies = ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array();
+			if ( ! $this->provider_has_detected_cookie( $service_cookies, $detected_names ) ) {
+				continue;
+			}
+
+			$services[] = array(
+				'id'       => sanitize_key( $id ),
+				'label'    => sanitize_text_field( $service['label'] ),
+				'category' => sanitize_key( $service['category'] ),
+				'patterns' => array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) ),
+				'cookies'  => $service_cookies,
+			);
+		}
+
+		$this->per_service_cache = $services;
+		return $this->per_service_cache;
 	}
 
 	/**
@@ -1518,8 +1563,6 @@ class Frontend {
 		// DETECTED cookie (P2, just here).
 		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( $per_service ) {
-			$known    = Known_Providers::get_all();
-			$services = array();
 			// P2: source the per-service toggle list from the cookies actually
 			// DETECTED on this site (wp_faz_cookies), not the full ~160-entry
 			// provider catalogue. A provider is shown only when at least one of
@@ -1530,26 +1573,7 @@ class Frontend {
 			// dump the whole catalogue, which would both over-disclose unrelated
 			// services and bloat the consent cookie toward the P1-4 cap. The admin
 			// help text tells the publisher to run a scan to populate the list.
-			$detected_names = $this->get_detected_cookie_names();
-			foreach ( $known as $id => $service ) {
-				if ( 'necessary' === $service['category'] ) {
-					continue;
-				}
-				if ( ! in_array( $service['category'], $valid_categories, true ) ) {
-					continue;
-				}
-				$service_cookies = ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array();
-				if ( ! $this->provider_has_detected_cookie( $service_cookies, $detected_names ) ) {
-					continue;
-				}
-				$services[] = array(
-					'id'       => sanitize_key( $id ),
-					'label'    => sanitize_text_field( $service['label'] ),
-					'category' => sanitize_key( $service['category'] ),
-					'patterns' => array_map( 'sanitize_text_field', $service['patterns'] ),
-					'cookies'  => $service_cookies,
-				);
-			}
+			$services                    = $this->get_per_service_services( $valid_categories );
 			$store['_perServiceConsent'] = true;
 			$store['_services']         = $services;
 			// Per-cookie consent is a sub-mode of per-service: it nests an
@@ -2962,10 +2986,17 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 
-		// Extract all svc.* entries from the consent cookie.
-		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(\w+)/', $consent, $matches, PREG_SET_ORDER ) ) {
+		$active_service_ids = array_fill_keys(
+			array_column( $this->get_per_service_services(), 'id' ),
+			true
+		);
+
+		// Extract valid svc.* entries for services currently exposed by this site.
+		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(yes|no)(?=,|$)/', $consent, $matches, PREG_SET_ORDER ) ) {
 			foreach ( $matches as $match ) {
-				$this->service_consent_cache[ $match[1] ] = $match[2];
+				if ( isset( $active_service_ids[ $match[1] ] ) ) {
+					$this->service_consent_cache[ $match[1] ] = $match[2];
+				}
 			}
 		}
 		return $this->service_consent_cache;
@@ -2974,20 +3005,21 @@ class Frontend {
 	/**
 	 * Build a lookup map from Known_Providers patterns → service IDs.
 	 *
-	 * @return array [ 'google-analytics.com/analytics.js' => 'google-analytics', ... ]
+	 * @return array [ 'google-analytics.com/analytics.js' => array( 'google-analytics' ), ... ]
 	 */
 	private function get_pattern_service_map() {
 		if ( null !== $this->pattern_service_cache ) {
 			return $this->pattern_service_cache;
 		}
 		$this->pattern_service_cache = array();
-		$known = Known_Providers::get_all();
-		foreach ( $known as $id => $service ) {
-			if ( 'necessary' === $service['category'] ) {
-				continue;
-			}
+		foreach ( $this->get_per_service_services() as $service ) {
 			foreach ( $service['patterns'] as $pattern ) {
-				$this->pattern_service_cache[ $pattern ] = sanitize_key( $id );
+				if ( ! isset( $this->pattern_service_cache[ $pattern ] ) ) {
+					$this->pattern_service_cache[ $pattern ] = array();
+				}
+				if ( ! in_array( $service['id'], $this->pattern_service_cache[ $pattern ], true ) ) {
+					$this->pattern_service_cache[ $pattern ][] = $service['id'];
+				}
 			}
 		}
 		return $this->pattern_service_cache;
@@ -3017,7 +3049,8 @@ class Frontend {
 		$inline              = $match_context['content'];
 		$is_data_uri_payload = ! empty( $match_context['is_data_uri_payload'] );
 
-		foreach ( $pattern_map as $pattern => $service_id ) {
+		$matched_service_ids = array();
+		foreach ( $pattern_map as $pattern => $service_ids ) {
 			if ( empty( $pattern ) ) {
 				continue;
 			}
@@ -3027,12 +3060,25 @@ class Frontend {
 				$matched = false !== stripos( $inline, $pattern );
 			}
 			if ( $matched ) {
-				if ( isset( $service_consent[ $service_id ] ) ) {
-					return 'yes' !== $service_consent[ $service_id ];
+				foreach ( $service_ids as $service_id ) {
+					$matched_service_ids[ $service_id ] = true;
 				}
-				// Service found but no explicit consent — fall back to category.
-				return null;
 			}
+		}
+
+		$has_explicit_yes = false;
+		foreach ( array_keys( $matched_service_ids ) as $service_id ) {
+			if ( ! isset( $service_consent[ $service_id ] ) ) {
+				continue;
+			}
+			if ( 'no' === $service_consent[ $service_id ] ) {
+				return true;
+			}
+			$has_explicit_yes = true;
+		}
+
+		if ( $has_explicit_yes ) {
+			return false;
 		}
 
 		return null;
@@ -4696,29 +4742,41 @@ class Frontend {
 
 		$blocked_categories = $this->get_blocked_categories();
 
-		// Per-service consent: also shred cookies for explicitly denied services
-		// even when their category is allowed (svc.hotjar:no + analytics:yes).
-		$service_consent   = $this->get_service_consent();
-		$svc_cookie_map    = array(); // pattern → service_id
+		// Per-service consent overrides the category fallback for matching
+		// cookies. A denied service wins over an allowed service when providers
+		// share a cookie pattern.
+		$service_consent       = $this->get_service_consent();
+		$svc_cookie_decisions = array(); // pattern => array( 'yes'|'no' ).
 		if ( ! empty( $service_consent ) ) {
-			$known = Known_Providers::get_all();
-			foreach ( $known as $id => $service ) {
-				$svc_id = sanitize_key( $id );
-				if ( isset( $service_consent[ $svc_id ] ) && 'no' === $service_consent[ $svc_id ] && ! empty( $service['cookies'] ) ) {
-					foreach ( $service['cookies'] as $cookie_pattern ) {
-						$svc_cookie_map[ $cookie_pattern ] = $svc_id;
+			foreach ( $this->get_per_service_services() as $service ) {
+				$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
+				if ( '' === $svc_id || ! isset( $service_consent[ $svc_id ] ) || empty( $service['cookies'] ) ) {
+					continue;
+				}
+				$decision = $service_consent[ $svc_id ];
+				if ( 'yes' !== $decision && 'no' !== $decision ) {
+					continue;
+				}
+				foreach ( $service['cookies'] as $cookie_pattern ) {
+					$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
+					if ( '' === $cookie_pattern ) {
+						continue;
 					}
+					if ( ! isset( $svc_cookie_decisions[ $cookie_pattern ] ) ) {
+						$svc_cookie_decisions[ $cookie_pattern ] = array();
+					}
+					$svc_cookie_decisions[ $cookie_pattern ][] = $decision;
 				}
 			}
 		}
 
-		// Nothing to shred: no blocked categories AND no denied services.
-		if ( empty( $blocked_categories ) && empty( $svc_cookie_map ) ) {
+		// Nothing to evaluate: no blocked categories and no explicit services.
+		if ( empty( $blocked_categories ) && empty( $svc_cookie_decisions ) ) {
 			return;
 		}
 
 		$cookie_map = Known_Providers::get_cookie_map();
-		if ( empty( $cookie_map ) && empty( $svc_cookie_map ) ) {
+		if ( empty( $cookie_map ) && empty( $svc_cookie_decisions ) ) {
 			return;
 		}
 
@@ -4742,22 +4800,31 @@ class Frontend {
 		);
 
 		foreach ( array_keys( $_COOKIE ) as $name ) {
-			$should_shred = false;
+			$should_shred   = false;
+			$service_allows = false;
 
-			// Category-based shredding.
-			foreach ( $cookie_map as $pattern => $category ) {
-				if ( ! in_array( $category, $blocked_categories, true ) ) {
+			foreach ( $svc_cookie_decisions as $pattern => $decisions ) {
+				if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
 					continue;
 				}
-				if ( $this->cookie_name_matches( $name, $pattern ) ) {
-					$should_shred = true;
-					break;
+				foreach ( $decisions as $decision ) {
+					if ( 'no' === $decision ) {
+						$should_shred = true;
+						break 2;
+					}
+					if ( 'yes' === $decision ) {
+						$service_allows = true;
+					}
 				}
 			}
 
-			// Per-service shredding (service explicitly denied).
-			if ( ! $should_shred && ! empty( $svc_cookie_map ) ) {
-				foreach ( $svc_cookie_map as $pattern => $svc_id ) {
+			// Category consent is only the fallback when no matching service has
+			// an explicit decision.
+			if ( ! $should_shred && ! $service_allows ) {
+				foreach ( $cookie_map as $pattern => $category ) {
+					if ( ! in_array( $category, $blocked_categories, true ) ) {
+						continue;
+					}
 					if ( $this->cookie_name_matches( $name, $pattern ) ) {
 						$should_shred = true;
 						break;

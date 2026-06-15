@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const API_TIMEOUT_MS = 60_000;
 
 export type FazApiResponse<T> = {
@@ -162,11 +162,14 @@ export async function openCookiesPage(page: Page, loginAsAdmin: (page: Page) => 
 }
 
 export async function openSettingsPage(page: Page, loginAsAdmin: (page: Page) => Promise<void>): Promise<string> {
-  await loginAsAdmin(page);
-  await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
-  const nonce = await getAdminNonce(page);
-  if (!nonce) {
-    throw new Error('Unable to read FAZ REST nonce from settings page.');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await loginAsAdmin(page);
+    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
+    const nonce = await getAdminNonce(page);
+    if (nonce) {
+      return nonce;
+    }
+    await page.context().clearCookies();
   }
-  return nonce;
+  throw new Error('Unable to read FAZ REST nonce from settings page.');
 }
