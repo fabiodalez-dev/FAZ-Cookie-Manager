@@ -388,6 +388,15 @@ class Banner extends Store {
 		$changed    = false;
 
 		foreach ( $contents as $lang => &$content ) {
+			// A language entry may still be a JSON string (not yet decoded by
+			// normalize_multilingual_data); decode it so its description is read
+			// correctly instead of being treated as empty and wrongly repaired.
+			if ( is_string( $content ) ) {
+				$decoded = json_decode( $content, true );
+				if ( is_array( $decoded ) ) {
+					$content = $decoded;
+				}
+			}
 			if ( ! is_array( $content ) ) {
 				continue;
 			}

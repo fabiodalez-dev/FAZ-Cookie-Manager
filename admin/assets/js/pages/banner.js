@@ -202,16 +202,29 @@
 			noticeTa.addEventListener('input', function () { fazUpdateLawContentHint(); });
 		}
 		if (typeof tinyMCE !== 'undefined') {
-			var noticeBindTries = 0;
-			var noticeBindTimer = setInterval(function () {
-				var ed = tinyMCE.get('faz-b-notice-desc');
-				if (ed) {
-					ed.on('input keyup change Undo Redo', function () { fazUpdateLawContentHint(); });
-					clearInterval(noticeBindTimer);
-				} else if (++noticeBindTries > 40) {
-					clearInterval(noticeBindTimer);
-				}
-			}, 250);
+			var noticeHintBound = false;
+			var bindNoticeHint = function (ed) {
+				if (noticeHintBound || !ed) return;
+				noticeHintBound = true;
+				ed.on('input keyup change Undo Redo', function () { fazUpdateLawContentHint(); });
+			};
+			// Bind now if the editor already exists; otherwise bind when TinyMCE
+			// creates it — event-driven, so it works no matter how long init takes.
+			bindNoticeHint(tinyMCE.get('faz-b-notice-desc'));
+			if (!noticeHintBound && typeof tinyMCE.on === 'function') {
+				tinyMCE.on('AddEditor', function (e) {
+					if (e && e.editor && e.editor.id === 'faz-b-notice-desc') bindNoticeHint(e.editor);
+				});
+			}
+			// Poll fallback (≈20s) for environments where the global event doesn't fire.
+			if (!noticeHintBound) {
+				var noticeBindTries = 0;
+				var noticeBindTimer = setInterval(function () {
+					var ed = tinyMCE.get('faz-b-notice-desc');
+					if (ed) { bindNoticeHint(ed); clearInterval(noticeBindTimer); }
+					else if (++noticeBindTries > 80) { clearInterval(noticeBindTimer); }
+				}, 250);
+			}
 		}
 
 		loadBanner();
@@ -498,7 +511,7 @@
 
 	function fazCcpaLinkLabel(lang) {
 		var ccpa = fazNormText(fazHtmlToText(fazLawDescsFor(lang).ccpa));
-		var m = ccpa.match(/["“”„‟«»]([^"“”„‟«»]{6,})["“”„‟«»]/);
+		var m = ccpa.match(/["“”„‟«»‘’‚‹›]([^"“”„‟«»‘’‚‹›]{6,})["“”„‟«»‘’‚‹›]/);
 		return m ? fazNormText(m[1]) : '';
 	}
 
