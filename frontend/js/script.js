@@ -108,6 +108,60 @@ ref._fazSetInStore = function (key, value) {
         cookieStringArray.push(`${k}:${v}`);
     }
 
+    // P1-4: hard size cap. The redundant-entry filter above already trims
+    // the cookie, but a site with very many active services can still push
+    // the per-service (`svc.*`) and per-cookie (`ck.*`) overrides past the
+    // 4 KB per-cookie limit every major browser enforces. A browser over the
+    // limit silently DROPS the whole cookie write, corrupting even the core
+    // category consent. So if the URL-encoded value would exceed the budget
+    // we deterministically drop the lowest-priority entries — `ck.*` first,
+    // then `svc.*` — keeping every core/category entry. A dropped override
+    // simply falls back to its category-level consent on reload (the same
+    // contract the redundant-entry filter relies on).
+    const FAZ_COOKIE_VALUE_BUDGET = 3500; // encoded bytes; headroom under 4096
+    const _fazEncodedLen = function (arr) {
+        return encodeURIComponent(arr.join(",")).length;
+    };
+    if (_fazEncodedLen(cookieStringArray) > FAZ_COOKIE_VALUE_BUDGET) {
+        const coreEntries = [];
+        const svcEntries = [];
+        const ckEntries = [];
+        cookieStringArray.forEach(function (entry) {
+            if (entry.indexOf("ck.") === 0) {
+                ckEntries.push(entry);
+            } else if (entry.indexOf("svc.") === 0) {
+                svcEntries.push(entry);
+            } else {
+                coreEntries.push(entry);
+            }
+        });
+        // Core entries are always kept. Re-add svc.* (higher priority) then
+        // ck.* (lowest) one at a time, stopping each group as soon as the next
+        // entry would exceed the budget.
+        const kept = coreEntries.slice();
+        let dropped = 0;
+        [svcEntries, ckEntries].forEach(function (group) {
+            group.forEach(function (entry) {
+                kept.push(entry);
+                if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
+                    kept.pop();
+                    dropped++;
+                }
+            });
+        });
+        if (dropped > 0 && typeof console !== "undefined" && console.warn) {
+            console.warn(
+                "[FAZ Cookie Manager] consent cookie exceeded " +
+                    FAZ_COOKIE_VALUE_BUDGET +
+                    " encoded bytes; dropped " +
+                    dropped +
+                    " per-service/per-cookie override(s) to avoid browser truncation. " +
+                    "The affected services fall back to their category-level consent."
+            );
+        }
+        cookieStringArray = kept;
+    }
+
     const scriptExpiry =
         _fazStore && _fazStore._expiry
             ? _fazStore._expiry
