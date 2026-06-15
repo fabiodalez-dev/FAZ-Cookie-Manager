@@ -39,6 +39,28 @@ class Placeholder_Builder {
 	);
 
 	/**
+	 * Brand accent colour per service — drives the placeholder CTA button via
+	 * the `--faz-svc-color` custom property so each blocked embed reads as the
+	 * right provider (YouTube red, Vimeo blue, …) instead of a single hard-coded
+	 * colour. No remote assets; pure CSS.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $service_colors = array(
+		'youtube'     => '#ff0000',
+		'vimeo'       => '#1ab7ea',
+		'google-maps' => '#4285f4',
+		'facebook'    => '#1877f2',
+		'instagram'   => '#e4405f',
+		'twitter'     => '#1d1d1f',
+		'spotify'     => '#1db954',
+		'dailymotion' => '#00b2ff',
+		'soundcloud'  => '#ff5500',
+		'twitch'      => '#9146ff',
+		'default'     => '#0d6efd',
+	);
+
+	/**
 	 * Service IDs that are video platforms (used for aspect-ratio CSS class).
 	 *
 	 * @var array<int,string>
@@ -103,6 +125,7 @@ class Placeholder_Builder {
 		$has_thumb        = ! empty( $thumbnail_url );
 		$is_video_service = in_array( $service_id, self::$video_services, true );
 		$class            = 'faz-placeholder' . ( ( $has_thumb || $is_video_service ) ? ' faz-placeholder--video' : '' );
+		$brand            = isset( self::$service_colors[ $service_id ] ) ? self::$service_colors[ $service_id ] : self::$service_colors['default'];
 
 		$message = sprintf(
 			/* translators: %s: service name (e.g., "YouTube", "Google Maps") */
@@ -112,7 +135,7 @@ class Placeholder_Builder {
 
 		$button_text = esc_html__( 'Accept cookies', 'faz-cookie-manager' );
 
-		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '">';
+		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '" style="--faz-svc-color:' . esc_attr( $brand ) . '">';
 
 		if ( $has_thumb ) {
 			$html .= '<img class="faz-placeholder-thumb" src="' . esc_url( $thumbnail_url ) . '" alt="" loading="lazy"/>';
@@ -120,6 +143,9 @@ class Placeholder_Builder {
 
 		$html .= '<div class="faz-placeholder-overlay">';
 		$html .= '<svg class="faz-placeholder-icon" viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">' . $icon_svg . '</svg>';
+		if ( $is_video_service || $has_thumb ) {
+			$html .= '<span class="faz-placeholder-svcname">' . esc_html( $service_name ) . '</span>';
+		}
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
 		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
@@ -249,29 +275,25 @@ class Placeholder_Builder {
 			/* readable floor when the container is wider, but yields to */
 			/* the container width when it is narrower (no horizontal */
 			/* overflow). */
-			/* Video variant: a self-contained dark "poster" card. The video */
-			/* thumbnail is intentionally NOT fetched (privacy — no request to */
-			/* the provider before consent), so the placeholder styles itself */
-			/* into a deliberate poster rather than looking like a broken/empty */
-			/* embed. Pure CSS, no remote assets. */
-			. '.faz-placeholder--video{min-width:min(280px,100%);aspect-ratio:16/9;background:#1f232e;border-color:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}'
+			/* Video variant: a neutral grey poster card that leads with the service brand mark (e.g. the red YouTube play button). Thumbnail intentionally not fetched (privacy). Pure CSS, no remote assets, no gradients. */
+			. '.faz-placeholder--video{min-width:min(280px,100%);aspect-ratio:16/9;background:#e9eaec;border:1px solid #d7d9dd}'
 			. '.faz-placeholder-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(4px) brightness(.7)}'
 			. '.faz-placeholder .faz-placeholder-overlay{position:relative;z-index:1;text-align:center;padding:32px 24px;color:#495057;max-width:420px;display:flex;flex-direction:column;align-items:center}'
-			. '.faz-placeholder--video .faz-placeholder-overlay{color:#fff;padding:24px}'
+			. '.faz-placeholder--video .faz-placeholder-overlay{padding:24px}'
 			. '.faz-placeholder .faz-placeholder-icon{margin:0 auto 16px;display:block;opacity:.7}'
 			/* Icon becomes a circular play-style badge on the dark poster. */
-			. '.faz-placeholder--video .faz-placeholder-icon{width:34px;height:34px;opacity:1;margin:0 0 18px;padding:18px;border-radius:50%;background:rgba(255,255,255,.12);box-shadow:0 6px 22px rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.22);color:#fff;box-sizing:content-box;transition:transform .15s ease,background .15s ease}'
-			. '.faz-placeholder--video:hover .faz-placeholder-icon{transform:scale(1.06);background:rgba(255,255,255,.18)}'
+			. '.faz-placeholder--video .faz-placeholder-icon{width:62px;height:auto;opacity:1;margin:0 0 14px;background:none;filter:none;box-shadow:none;transition:transform .15s ease}'
+			. '.faz-placeholder--video:hover .faz-placeholder-icon{transform:scale(1.08)}'
 			. '.faz-placeholder .faz-placeholder-msg{margin:0 0 20px;font-size:14px;line-height:22px;max-width:340px;color:inherit;padding:0;letter-spacing:normal;word-spacing:normal}'
-			. '.faz-placeholder--video .faz-placeholder-msg{font-size:15px;line-height:23px;opacity:.92}'
+			. '.faz-placeholder-svcname{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#6b7077;margin:0 0 10px}.faz-placeholder--video .faz-placeholder-msg{color:#41454b}'
 			. '.faz-placeholder .faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s,box-shadow .2s;letter-spacing:.3px;line-height:normal;display:inline-block;text-decoration:none}'
 			. '.faz-placeholder .faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
 			/* On the dark poster a solid white pill reads as the clear CTA. */
-			. '.faz-placeholder--video .faz-placeholder-btn{background:#fff;color:#15161f;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.35)}'
-			. '.faz-placeholder--video .faz-placeholder-btn:hover{background:#f0f1f5;transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.45)}'
+			. '.faz-placeholder--video .faz-placeholder-btn{background:var(--faz-svc-color,#ff0000);color:#fff;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.18)}'
+			. '.faz-placeholder--video .faz-placeholder-btn:hover{filter:brightness(.92);transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.25)}'
 			. '.faz-placeholder .faz-placeholder-btn:active{transform:translateY(0)}'
 			. '.faz-placeholder .faz-placeholder-btn:focus-visible{outline:2px solid #0b5ed7;outline-offset:2px}'
-			. '.faz-placeholder--video .faz-placeholder-btn:focus-visible{outline-color:#fff}'
+			. '.faz-placeholder--video .faz-placeholder-btn:focus-visible{outline-color:var(--faz-svc-color,#ff0000)}'
 			. '.faz-placeholder--social{min-height:120px}';
 	}
 }
