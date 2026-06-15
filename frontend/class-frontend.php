@@ -1583,6 +1583,19 @@ class Frontend {
 			$store['_perCookieConsent'] = ! empty( $settings['banner_control']['per_cookie_consent'] );
 		}
 
+		/**
+		 * Filter the full frontend consent store emitted to the page.
+		 *
+		 * Lets integrations (and isolated test harnesses) adjust the
+		 * client-side store — categories, services, flags — for the current
+		 * request only, without writing to the database.
+		 *
+		 * @since 1.19.1
+		 * @param array    $store    The assembled store payload.
+		 * @param Frontend $frontend The frontend instance.
+		 */
+		$store = apply_filters( 'faz_store_data', $store, $this );
+
 		return $store;
 	}
 
