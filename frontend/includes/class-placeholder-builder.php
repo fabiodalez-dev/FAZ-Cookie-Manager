@@ -231,7 +231,7 @@ class Placeholder_Builder {
 	 * @return string Minified CSS.
 	 */
 	public static function get_css() {
-		return '.faz-placeholder{position:relative;width:100%;min-height:200px;background:#f5f5f5;border:1px solid #dee2e6;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;margin:16px 0}'
+		return '.faz-placeholder{position:relative;width:100%;min-height:200px;background:#f6f7f9;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;margin:16px 0}'
 			. '.faz-placeholder *{box-sizing:border-box}'
 			/* `min-height: 200px` (kept from the base rule) is the floor; */
 			/* `aspect-ratio: 16/9` applies on top so the placeholder gets a */
@@ -249,16 +249,29 @@ class Placeholder_Builder {
 			/* readable floor when the container is wider, but yields to */
 			/* the container width when it is narrower (no horizontal */
 			/* overflow). */
-			. '.faz-placeholder--video{min-width:min(280px,100%);aspect-ratio:16/9}'
+			/* Video variant: a self-contained dark "poster" card. The video */
+			/* thumbnail is intentionally NOT fetched (privacy — no request to */
+			/* the provider before consent), so the placeholder styles itself */
+			/* into a deliberate poster rather than looking like a broken/empty */
+			/* embed. Pure CSS, no remote assets. */
+			. '.faz-placeholder--video{min-width:min(280px,100%);aspect-ratio:16/9;background:#1f232e;border-color:transparent;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}'
 			. '.faz-placeholder-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:blur(4px) brightness(.7)}'
-			. '.faz-placeholder .faz-placeholder-overlay{position:relative;z-index:1;text-align:center;padding:32px 24px;color:#495057;max-width:400px}'
-			. '.faz-placeholder--video .faz-placeholder-overlay{color:#fff;background:rgba(0,0,0,.6);border-radius:12px;padding:28px 36px;backdrop-filter:blur(4px)}'
+			. '.faz-placeholder .faz-placeholder-overlay{position:relative;z-index:1;text-align:center;padding:32px 24px;color:#495057;max-width:420px;display:flex;flex-direction:column;align-items:center}'
+			. '.faz-placeholder--video .faz-placeholder-overlay{color:#fff;padding:24px}'
 			. '.faz-placeholder .faz-placeholder-icon{margin:0 auto 16px;display:block;opacity:.7}'
+			/* Icon becomes a circular play-style badge on the dark poster. */
+			. '.faz-placeholder--video .faz-placeholder-icon{width:34px;height:34px;opacity:1;margin:0 0 18px;padding:18px;border-radius:50%;background:rgba(255,255,255,.12);box-shadow:0 6px 22px rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.22);color:#fff;box-sizing:content-box;transition:transform .15s ease,background .15s ease}'
+			. '.faz-placeholder--video:hover .faz-placeholder-icon{transform:scale(1.06);background:rgba(255,255,255,.18)}'
 			. '.faz-placeholder .faz-placeholder-msg{margin:0 0 20px;font-size:14px;line-height:22px;max-width:340px;color:inherit;padding:0;letter-spacing:normal;word-spacing:normal}'
-			. '.faz-placeholder .faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s;letter-spacing:.3px;line-height:normal;display:inline-block;text-decoration:none}'
+			. '.faz-placeholder--video .faz-placeholder-msg{font-size:15px;line-height:23px;opacity:.92}'
+			. '.faz-placeholder .faz-placeholder-btn{background:#0d6efd;color:#fff;border:none;padding:11px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:background .2s,transform .1s,box-shadow .2s;letter-spacing:.3px;line-height:normal;display:inline-block;text-decoration:none}'
 			. '.faz-placeholder .faz-placeholder-btn:hover{background:#0b5ed7;transform:translateY(-1px)}'
+			/* On the dark poster a solid white pill reads as the clear CTA. */
+			. '.faz-placeholder--video .faz-placeholder-btn{background:#fff;color:#15161f;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.35)}'
+			. '.faz-placeholder--video .faz-placeholder-btn:hover{background:#f0f1f5;transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.45)}'
 			. '.faz-placeholder .faz-placeholder-btn:active{transform:translateY(0)}'
 			. '.faz-placeholder .faz-placeholder-btn:focus-visible{outline:2px solid #0b5ed7;outline-offset:2px}'
+			. '.faz-placeholder--video .faz-placeholder-btn:focus-visible{outline-color:#fff}'
 			. '.faz-placeholder--social{min-height:120px}';
 	}
 }
