@@ -2,7 +2,7 @@
 
 **Poslední aktualizace:** {{LAST_UPDATED_DATE}}
 
-Toto Oznámení o shromažďování údajů a Zásady používání cookies vysvětlují, jak společnost **{{COMPANY_NAME}}** („my", „nás", „náš") shromažďuje, používá a sdílí osobní údaje prostřednictvím tohoto webu, a to v souladu s kalifornským zákonem o ochraně soukromí spotřebitelů z roku 2018 ve znění zákona o právech na ochranu soukromí v Kalifornii (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 a násl.) a prováděcími předpisy vydanými Californian Privacy Protection Agency (CPPA).
+Toto Oznámení o shromažďování údajů a Zásady používání cookies vysvětlují, jak společnost **{{COMPANY_NAME}}** („my", „nás", „náš") shromažďuje, používá a sdílí osobní údaje prostřednictvím tohoto webu, a to v souladu s kalifornským zákonem o ochraně soukromí spotřebitelů z roku 2018 ve znění zákona o právech na ochranu soukromí v Kalifornii (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 a násl.) a prováděcími předpisy vydanými California Privacy Protection Agency (CPPA).
 
 > **Poznámka pro provozovatele:** Tento šablonový dokument je primárně určen pro provozovatele, kteří cílí na spotřebitele v Kalifornii (USA). Pokud váš web obsluhuje výhradně české nebo evropské zákazníky, doporučujeme místo této šablony použít šablonu GDPR.
 
@@ -80,7 +80,7 @@ Respektujeme signál [Global Privacy Control](https://globalprivacycontrol.org/)
 
 ## Dozorový orgán
 
-Stížnosti lze podat Californian Privacy Protection Agency: {{CA_PIPC_CONTACT}}, nebo na adrese [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}).
+Stížnosti lze podat California Privacy Protection Agency: {{CA_PIPC_CONTACT}}, nebo na adrese [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}).
 
 ## Změny tohoto oznámení
 
