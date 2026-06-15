@@ -46,7 +46,7 @@ test.describe('Blocked-video placeholder stays styled after the JS runs', () => 
     // replaced with the consent placeholder server-side.
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await page.goto(url, { waitUntil: 'networkidle' });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     // Let the frontend JS run _fazRemoveStyles() (the step that used to strip
     // the placeholder CSS). The reveal flips <html> to .faz-ready.
     await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), { timeout: 8000 });
