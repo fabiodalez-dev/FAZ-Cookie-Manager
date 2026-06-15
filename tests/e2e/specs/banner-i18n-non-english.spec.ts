@@ -78,8 +78,17 @@ test.describe('Banner i18n — non-English locale renders translated copy', () =
       const open = html.indexOf('>', at);
       if (open < 0) return null;
       const close = html.indexOf('</', open);
-      const inner = close < 0 ? html.slice(open + 1) : html.slice(open + 1, close);
-      return inner.replace(/<[^>]+>/g, '').trim();
+      let inner = close < 0 ? html.slice(open + 1) : html.slice(open + 1, close);
+      // Strip nested tags, looping until stable so a crafted `<<a>script>`
+      // can't survive a single pass (satisfies CodeQL
+      // js/incomplete-multi-character-sanitization — the input is trusted
+      // server HTML, but a complete strip is cheap and correct).
+      let prev = '';
+      while (prev !== inner) {
+        prev = inner;
+        inner = inner.replace(/<[^>]*>/g, '');
+      }
+      return inner.trim();
     };
     const title = read('title');
     const description = read('description');
