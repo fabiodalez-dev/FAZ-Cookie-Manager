@@ -1351,6 +1351,10 @@ function _fazHidePreferenceCenter() {
         _fazStore._prefTriggerElement.focus();
         _fazStore._prefTriggerElement = null;
     }
+    // Clear the trigger origin so a later open via a path that does NOT set it
+    // (the revisit widget or the [faz_cookie_settings] shortcode) falls back to
+    // the law default instead of inheriting the previous trigger's panel.
+    _fazStore._preferenceOriginTag = false;
 }
 // Which preference panel to show: the opt-out popup when the visitor reached it
 // via the Do-Not-Sell control, the GDPR detail panel via the settings control,
@@ -1369,8 +1373,14 @@ function _fazSelectActivePreferencePanel() {
     const optout = _fazGetElementByTag('optout-popup');
     if (!detail || !optout) return; // only one panel is present — nothing to isolate
     const wantOptout = _fazActivePreferenceTag() === 'optout-popup';
-    (wantOptout ? optout : detail).classList.remove('faz-hide');
-    (wantOptout ? detail : optout).classList.add('faz-hide');
+    const active = wantOptout ? optout : detail;
+    const other = wantOptout ? detail : optout;
+    active.classList.remove('faz-hide');
+    active.removeAttribute('aria-hidden');
+    // Hidden via display:none AND aria-hidden, so the inactive panel can't be
+    // reached visually, by Tab, or as a second role="dialog" in the AT tree.
+    other.classList.add('faz-hide');
+    other.setAttribute('aria-hidden', 'true');
 }
 function _fazShowPreferenceCenter() {
     _fazStore._prefTriggerElement = document.activeElement;
@@ -1410,6 +1420,11 @@ function _fazShowPreferenceCenter() {
     // Target the inner .faz-preference-center so we don't focus a banner button
     // when pushdown mode embeds preferences inside the consent bar wrapper.
     _fazFocusIntoElement(preferenceCenter || element);
+    // Re-bind the focus trap to the panel now open. The initial render bound it
+    // to the law-default panel; on a "Both" banner the visitor may have just
+    // opened the OTHER panel via its trigger. Done AFTER initial focus so it
+    // never interferes with it. Idempotent — the WeakMap handler map replaces.
+    _fazLoopFocus();
     return true;
 }
 function _fazTogglePreferenceCenter() {
@@ -1480,7 +1495,7 @@ function _fazGetFocusableElements(element) {
         wrapperElement.querySelectorAll(
             'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([disabled]):not([tabindex="-1"])'
         )
-    ).filter((element) => !element.closest('.faz-hidden') && !element.hasAttribute('hidden'));
+    ).filter((element) => !element.closest('.faz-hidden') && !element.closest('.faz-hide') && !element.hasAttribute('hidden'));
     if (focussableElements.length <= 0) return [];
     return [
         focussableElements[0],
@@ -1768,7 +1783,10 @@ function _fazTranslate(key, fallback) {
 }
 
 function _fazGetPreferenceCenterAriaLabel() {
-    return _fazGetLaw() === 'ccpa'
+    // Key off the panel actually shown (trigger-aware), not the law: a "Both"
+    // banner (law=gdpr) opened via Do-Not-Sell shows the opt-out panel and must
+    // announce the opt-out label, not the consent-preferences one.
+    return _fazActivePreferenceTag() === 'optout-popup'
         ? _fazTranslate('optout_preferences_label', 'Opt-out Preferences')
         : _fazTranslate('customise_consent_preferences_label', 'Customise Consent Preferences');
 }

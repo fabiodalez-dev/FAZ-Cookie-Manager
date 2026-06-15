@@ -951,8 +951,9 @@ class Admin {
 							}
 						}
 					}
-					// Also include downloaded translations (validated via the
-					// translation registry) that may no longer be selected: a banner
+					// Also include downloaded translations (validated against the
+					// plugin's translated-language list, is_faz_translated()) that
+					// may no longer be selected: a banner
 					// can still carry such a language, and the all-language reload +
 					// save-time mismatch scan need its per-law defaults available.
 					$faz_uploads   = wp_upload_dir();

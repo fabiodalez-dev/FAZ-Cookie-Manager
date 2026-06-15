@@ -75,12 +75,40 @@ test.describe('"Both" banner — modal panel matches the trigger', () => {
         'opt-out popup modal is open',
       ).toHaveClass(/faz-modal-open/);
 
-      // Focus (and therefore ARIA) lands inside the opt-out popup, not the detail panel.
-      const focusInOptout = await page.evaluate(() => {
-        const el = document.activeElement;
-        return !!(el && el.closest('[data-faz-tag="optout-popup"]'));
+      // Focus (and therefore ARIA) lands inside the opt-out popup, not the detail
+      // panel. Focus settles asynchronously (the focus-retry mechanism), so wait.
+      await page.waitForFunction(
+        () => !!(document.activeElement && document.activeElement.closest('[data-faz-tag="optout-popup"]')),
+        { timeout: 5_000 },
+      );
+
+      // The inactive GDPR panel is removed from the a11y tree, and the dialog
+      // announces the opt-out label (not the consent-preferences one).
+      await expect(detail, 'detail panel aria-hidden').toHaveAttribute('aria-hidden', 'true');
+      await expect(optout, 'dialog announces the opt-out label').toHaveAttribute('aria-label', /opt-?out/i);
+
+      // Focus trap loops within the opt-out popup — Tab from the last focusable
+      // returns to the first, it does not escape the modal (WCAG 2.1.2).
+      const hasFocusable = await page.evaluate(() => {
+        const popup = document.querySelector('[data-faz-tag="optout-popup"]');
+        if (!popup) return false;
+        const f = popup.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+        if (!f.length) return false;
+        (f[f.length - 1] as HTMLElement).focus();
+        return true;
       });
-      expect(focusInOptout, 'focus is inside the opt-out popup').toBe(true);
+      expect(hasFocusable, 'opt-out popup has focusable controls').toBe(true);
+      await page.keyboard.press('Tab');
+      const stillTrapped = await page.evaluate(() => !!document.activeElement?.closest('[data-faz-tag="optout-popup"]'));
+      expect(stillTrapped, 'Tab stays trapped inside the opt-out popup').toBe(true);
+
+      // Closing clears the trigger origin so a non-setting entry point (revisit
+      // widget / [faz_cookie_settings] shortcode) falls back to the law default.
+      await page.keyboard.press('Escape');
+      const origin = await page.evaluate(
+        () => (window as unknown as { _fazConfig?: { _preferenceOriginTag?: unknown } })._fazConfig?._preferenceOriginTag,
+      );
+      expect(origin, 'trigger origin cleared on close').toBe(false);
     } finally {
       try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
     }
@@ -106,6 +134,8 @@ test.describe('"Both" banner — modal panel matches the trigger', () => {
 
       await expect(detail, 'GDPR detail panel visible').not.toHaveClass(/faz-hide/);
       await expect(optout, 'opt-out popup hidden').toHaveClass(/faz-hide/);
+      await expect(optout, 'hidden opt-out panel aria-hidden').toHaveAttribute('aria-hidden', 'true');
+      await expect(detail, 'dialog announces the consent-preferences label').toHaveAttribute('aria-label', /consent|preferences/i);
     } finally {
       try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
     }

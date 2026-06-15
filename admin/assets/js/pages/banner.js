@@ -505,7 +505,7 @@
 	// True when a notice description "promises" the Do-Not-Sell control. Layered,
 	// data-derived detection (most → least precise) so it isn't English-only,
 	// run against the plain-text form so inline HTML/entities can't hide it:
-	//  1. the [faz_do_not_sell] shortcode — an actual inline opt-out control;
+	//  1. the [faz_do_not_sell] (or [faz_donot_sell]) shortcode — an inline opt-out control;
 	//  2. the quoted opt-out link label taken from THIS language's CCPA default;
 	//  3. an English "do not sell" phrase, as a last-resort fallback.
 	function fazCopyPromisesDoNotSell(rawCopy, lang) {
