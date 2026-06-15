@@ -230,6 +230,11 @@ class Frontend {
 		// would otherwise leave the cookie-scripts map stale for up to 12 hours.
 		$invalidate_scripts_map = function() {
 			delete_transient( 'faz_cookie_scripts_map' );
+			// Same lifecycle for the per-service detected-cookie-names set
+			// (P2): a scan / manual cookie add / delete changes which
+			// providers have a detected cookie, so the service toggle list
+			// must refresh instead of staying stale for up to 6 hours.
+			delete_transient( 'faz_detected_cookie_names' );
 		};
 		add_action( 'faz_after_update_cookie', $invalidate_scripts_map );
 		add_action( 'faz_after_create_cookie', $invalidate_scripts_map );
@@ -1189,11 +1194,6 @@ class Frontend {
 		return Geo_Runtime::apply_cmv2_to_gcm( $this->get_runtime_ruleset(), $gcm_settings );
 	}
 	/**
-	 * Get store data
-	 *
-	 * @return array
-	 */
-	/**
 	 * Distinct cookie names detected on this site (wp_faz_cookies.name).
 	 *
 	 * Backs the per-service consent list (P2): the preference center shows
@@ -1251,6 +1251,11 @@ class Frontend {
 		return false;
 	}
 
+	/**
+	 * Get store data
+	 *
+	 * @return array
+	 */
 	public function get_store_data() {
 		if ( ! $this->banner ) {
 			return;
@@ -1521,10 +1526,12 @@ class Frontend {
 		// resolved service list reaches the frontend preference center. Per-COOKIE
 		// consent remains out (its admin toggle stays gated; see settings.php), so
 		// no nested per-cookie overrides are emitted here. The correctness gaps the
-		// 1.18.2 hotfix flagged are now closed: svc.*/ck.* decisions are logged
-		// (P1-3, see the inline consent logger), the consent cookie is hard-capped
-		// against the 4 KB browser limit (P1-4, see _fazSetInStore), and the list
-		// below is filtered to providers with a DETECTED cookie (P2, just here).
+		// 1.18.2 hotfix flagged are now closed: per-service (svc.*) decisions are
+		// logged (P1-3, see the inline consent logger — the ck.* branch is covered
+		// too but cannot fire while per-cookie consent stays gated), the consent
+		// cookie is hard-capped against the 4 KB browser limit (P1-4, see
+		// _fazSetInStore), and the list below is filtered to providers with a
+		// DETECTED cookie (P2, just here).
 		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( $per_service ) {
 			$known    = Known_Providers::get_all();
@@ -1533,12 +1540,13 @@ class Frontend {
 			// DETECTED on this site (wp_faz_cookies), not the full ~160-entry
 			// provider catalogue. A provider is shown only when at least one of
 			// the cookie names it declares matches a detected cookie (wildcards
-			// like "_ga_*" supported). Fallback: when nothing has been scanned
-			// yet (the cookie table is empty) we keep the full catalogue so the
-			// feature is not dead on a fresh install — the publisher should run
-			// a scan to narrow it to the services they actually use.
+			// like "_ga_*" supported). Until a scan has run, $detected_names is
+			// empty and NO provider matches, so the list is empty and the
+			// preference center falls back to category-level toggles — we do NOT
+			// dump the whole catalogue, which would both over-disclose unrelated
+			// services and bloat the consent cookie toward the P1-4 cap. The admin
+			// help text tells the publisher to run a scan to populate the list.
 			$detected_names = $this->get_detected_cookie_names();
-			$never_scanned  = empty( $detected_names );
 			foreach ( $known as $id => $service ) {
 				if ( 'necessary' === $service['category'] ) {
 					continue;
@@ -1547,7 +1555,7 @@ class Frontend {
 					continue;
 				}
 				$service_cookies = ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array();
-				if ( ! $never_scanned && ! $this->provider_has_detected_cookie( $service_cookies, $detected_names ) ) {
+				if ( ! $this->provider_has_detected_cookie( $service_cookies, $detected_names ) ) {
 					continue;
 				}
 				$services[] = array(
