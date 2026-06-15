@@ -179,7 +179,7 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
     await page.locator('[data-faz-tag="settings-button"]').first().click();
-    const prefCenter = page.locator('.faz-preference-center');
+    const prefCenter = page.locator('[data-faz-tag="detail"]');
     await expect(prefCenter).toHaveAttribute('aria-labelledby', 'faz-modal-title');
   });
 
@@ -195,7 +195,7 @@ test.describe('Native a11y — a11y.js runtime fixes', () => {
 
     await page.locator('[data-faz-tag="settings-button"]').first().click();
 
-    const prefCenter = page.locator('.faz-preference-center');
+    const prefCenter = page.locator('[data-faz-tag="detail"]');
     await expect(prefCenter).toBeVisible({ timeout: 5_000 });
 
     // Focus a button inside so the ESC listener fires from within.

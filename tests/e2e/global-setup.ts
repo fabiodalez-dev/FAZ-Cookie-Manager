@@ -124,6 +124,17 @@ async function globalSetup(): Promise<void> {
           $s['settings']['type'] = 'box';
           $s['settings']['preferenceCenterType'] = 'popup';
           $s['settings']['allowCloseButtonWithReject'] = false;
+          if ( ! isset( $s['config'] ) || ! is_array( $s['config'] ) ) { $s['config'] = array(); }
+          if ( ! isset( $s['config']['notice'] ) || ! is_array( $s['config']['notice'] ) ) { $s['config']['notice'] = array(); }
+          if ( ! isset( $s['config']['notice']['elements'] ) || ! is_array( $s['config']['notice']['elements'] ) ) { $s['config']['notice']['elements'] = array(); }
+          if ( ! isset( $s['config']['notice']['elements']['buttons'] ) || ! is_array( $s['config']['notice']['elements']['buttons'] ) ) { $s['config']['notice']['elements']['buttons'] = array(); }
+          if ( ! isset( $s['config']['notice']['elements']['buttons']['elements'] ) || ! is_array( $s['config']['notice']['elements']['buttons']['elements'] ) ) { $s['config']['notice']['elements']['buttons']['elements'] = array(); }
+          if ( ! isset( $s['config']['notice']['elements']['buttons']['elements']['donotSell'] ) || ! is_array( $s['config']['notice']['elements']['buttons']['elements']['donotSell'] ) ) {
+            $s['config']['notice']['elements']['buttons']['elements']['donotSell'] = array();
+          }
+          $s['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = false;
+          if ( ! isset( $s['config']['optoutPopup'] ) || ! is_array( $s['config']['optoutPopup'] ) ) { $s['config']['optoutPopup'] = array(); }
+          $s['config']['optoutPopup']['status'] = false;
           $banner->set_settings( $s );
           $banner->set_status( true );
           $banner->set_default( true );

@@ -1375,11 +1375,13 @@ function _fazSelectActivePreferencePanel() {
     const wantOptout = _fazActivePreferenceTag() === 'optout-popup';
     const active = wantOptout ? optout : detail;
     const other = wantOptout ? detail : optout;
-    active.classList.remove('faz-hide');
+    active.classList.remove('faz-hide', 'faz-hidden');
     active.removeAttribute('aria-hidden');
     // Hidden via display:none AND aria-hidden, so the inactive panel can't be
     // reached visually, by Tab, or as a second role="dialog" in the AT tree.
-    other.classList.add('faz-hide');
+    // `faz-hidden` is the authoritative utility (`display:none!important`);
+    // keep `faz-hide` too for compatibility with the template state classes.
+    other.classList.add('faz-hide', 'faz-hidden');
     other.setAttribute('aria-hidden', 'true');
 }
 function _fazShowPreferenceCenter() {

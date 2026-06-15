@@ -490,23 +490,18 @@
 	// mistaken for a quoted control label. Lets the
 	// mismatch check recognise the named link in ANY language instead of relying
 	// on a hardcoded English phrase. '' when the default has no quoted label.
-	// Strip HTML tags + decode entities to plain text, so detection isn't defeated
-	// by inline markup ("Do <strong>Not Sell</strong>") or entities ("Do&nbsp;Not
-	// Sell"). DOMParser builds an INERT document — no scripts run, no resources
-	// load, no onerror fires — so this never executes the parsed markup.
+	// Reduce editor HTML to searchable text without parsing it into a DOM. Only
+	// the separators and quote entities needed by the mismatch detector are
+	// normalised; notably, &amp; is left encoded so a value cannot be decoded
+	// twice into new markup or another entity.
 	function fazHtmlToText(html) {
 		if (html === null || html === undefined) return '';
-		var str = String(html);
-		if (typeof DOMParser !== 'undefined') {
-			var doc = new DOMParser().parseFromString(str, 'text/html');
-			return (doc && doc.body && doc.body.textContent) || '';
-		}
-		// Fallback (no DOMParser): strip tags + decode the common entities,
-		// without ever assigning to innerHTML.
-		return str.replace(/<[^>]*>/g, ' ')
-			.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
-			.replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-			.replace(/&quot;/gi, '"').replace(/&#0*39;|&apos;/gi, "'");
+		return String(html)
+			.replace(/<!--[\s\S]*?-->/g, ' ')
+			.replace(/<[^>]*>/g, ' ')
+			.replace(/&(?:nbsp|ensp|emsp|thinsp);|&#(?:0*160|x0*a0);/gi, ' ')
+			.replace(/&(?:quot|ldquo|rdquo|bdquo|laquo|raquo);|&#(?:0*34|x0*22|0*171|0*187|0*8220|0*8221|0*8222);/gi, '"')
+			.replace(/&(?:apos|lsquo|rsquo|sbquo|lsaquo|rsaquo);|&#(?:0*39|x0*27|0*8216|0*8217|0*8218|0*8249|0*8250);/gi, "'");
 	}
 
 	function fazCcpaLinkLabel(lang) {

@@ -70,6 +70,8 @@ test.describe('"Both" banner — modal panel matches the trigger', () => {
       // The opt-out popup is shown; the GDPR detail panel is explicitly hidden.
       await expect(optout, 'opt-out popup visible').not.toHaveClass(/faz-hide/);
       await expect(detail, 'GDPR detail panel hidden').toHaveClass(/faz-hide/);
+      await expect(optout, 'opt-out popup is actually rendered').toBeVisible();
+      await expect(detail, 'GDPR detail panel is actually not rendered').toBeHidden();
       await expect(
         optout.locator('xpath=ancestor::*[contains(@class,"faz-modal")][1]'),
         'opt-out popup modal is open',
@@ -134,6 +136,8 @@ test.describe('"Both" banner — modal panel matches the trigger', () => {
 
       await expect(detail, 'GDPR detail panel visible').not.toHaveClass(/faz-hide/);
       await expect(optout, 'opt-out popup hidden').toHaveClass(/faz-hide/);
+      await expect(detail, 'GDPR detail panel is actually rendered').toBeVisible();
+      await expect(optout, 'opt-out popup is actually not rendered').toBeHidden();
       await expect(optout, 'hidden opt-out panel aria-hidden').toHaveAttribute('aria-hidden', 'true');
       await expect(detail, 'dialog announces the consent-preferences label').toHaveAttribute('aria-label', /consent|preferences/i);
     } finally {
