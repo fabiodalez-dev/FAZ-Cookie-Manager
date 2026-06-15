@@ -400,6 +400,16 @@ class Banner extends Store {
 			if ( ! is_array( $content ) ) {
 				continue;
 			}
+			// Skip languages whose stored content is effectively blank. Such a
+			// language is rendered entirely from its bundled {lang}.json
+			// translation by get_contents()'s array_empty_assoc() fallback —
+			// writing only the law-default description here would leave a
+			// partial entry (description set, title/buttons still empty) that
+			// makes the language look "non-blank", defeating that whole-language
+			// fallback and blanking the title/labels on non-default locales.
+			if ( empty( self::array_empty_assoc( $content ) ) ) {
+				continue;
+			}
 			$defaults    = self::get_law_notice_descriptions( $lang );
 			$current     = isset( $content['notice']['elements']['description'] )
 				? $content['notice']['elements']['description']
