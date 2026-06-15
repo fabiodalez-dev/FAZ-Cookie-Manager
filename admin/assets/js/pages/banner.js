@@ -477,20 +477,41 @@
 	// mistaken for a quoted control label. Lets the
 	// mismatch check recognise the named link in ANY language instead of relying
 	// on a hardcoded English phrase. '' when the default has no quoted label.
+	// Strip HTML tags + decode entities to plain text, so detection isn't defeated
+	// by inline markup ("Do <strong>Not Sell</strong>") or entities ("Do&nbsp;Not
+	// Sell"). DOMParser builds an INERT document — no scripts run, no resources
+	// load, no onerror fires — so this never executes the parsed markup.
+	function fazHtmlToText(html) {
+		if (html === null || html === undefined) return '';
+		var str = String(html);
+		if (typeof DOMParser !== 'undefined') {
+			var doc = new DOMParser().parseFromString(str, 'text/html');
+			return (doc && doc.body && doc.body.textContent) || '';
+		}
+		// Fallback (no DOMParser): strip tags + decode the common entities,
+		// without ever assigning to innerHTML.
+		return str.replace(/<[^>]*>/g, ' ')
+			.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&')
+			.replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+			.replace(/&quot;/gi, '"').replace(/&#0*39;|&apos;/gi, "'");
+	}
+
 	function fazCcpaLinkLabel(lang) {
-		var ccpa = fazNormText(fazLawDescsFor(lang).ccpa);
+		var ccpa = fazNormText(fazHtmlToText(fazLawDescsFor(lang).ccpa));
 		var m = ccpa.match(/["“”„‟«»]([^"“”„‟«»]{6,})["“”„‟«»]/);
 		return m ? fazNormText(m[1]) : '';
 	}
 
 	// True when a notice description "promises" the Do-Not-Sell control. Layered,
-	// data-derived detection (most → least precise) so it isn't English-only:
+	// data-derived detection (most → least precise) so it isn't English-only,
+	// run against the plain-text form so inline HTML/entities can't hide it:
 	//  1. the [faz_do_not_sell] shortcode — an actual inline opt-out control;
 	//  2. the quoted opt-out link label taken from THIS language's CCPA default;
 	//  3. an English "do not sell" phrase, as a last-resort fallback.
 	function fazCopyPromisesDoNotSell(rawCopy, lang) {
-		if (/\[faz_do_?not_sell\b/i.test(rawCopy)) return true;
-		var norm = fazNormText(rawCopy);
+		var text = fazHtmlToText(rawCopy);
+		if (/\[faz_do_?not_sell\b/i.test(text)) return true;
+		var norm = fazNormText(text);
 		var label = fazCcpaLinkLabel(lang);
 		if (label && norm.toLowerCase().indexOf(label.toLowerCase()) !== -1) return true;
 		return /do\s*not\s*sell/i.test(norm);

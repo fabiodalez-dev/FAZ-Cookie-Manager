@@ -372,6 +372,25 @@ test.describe('Law/content mismatch hint refreshes outside the law-change event'
     if (cleanupErr) throw cleanupErr;
   });
 
+  test('detection survives inline HTML / entities (Do <strong>Not Sell</strong>, Do&nbsp;Not Sell)', async ({ page, loginAsAdmin }) => {
+    // Inline markup between the words and a &nbsp; entity — the raw-HTML regex
+    // would have missed both; detection now runs against the extracted text.
+    const custom = '<p>Do <strong>Not Sell</strong> or Share&nbsp;My&nbsp;Personal&nbsp;Information.</p>';
+    const meta = JSON.parse(seedGdprWithCustomCopy(custom));
+    let cleanupErr: unknown;
+    try {
+      expect(meta.error, 'install has a default banner').toBeUndefined();
+      await loginAsAdmin(page);
+      await goToBannerPage(page);
+
+      await expect(page.locator('#faz-b-law'), 'law loaded as GDPR').toHaveValue('gdpr');
+      await expect(page.locator('#faz-b-law-content-hint'), 'hint flags HTML/entity-wrapped Do Not Sell under GDPR').toBeVisible();
+    } finally {
+      try { restoreBanner(meta); } catch (e) { cleanupErr = e; }
+    }
+    if (cleanupErr) throw cleanupErr;
+  });
+
   test('frontend repairs untouched CCPA copy stranded on a GDPR banner', async ({ page }) => {
     const meta = JSON.parse(seedGdprWithCcpaCopy());
     let cleanupErr: unknown;

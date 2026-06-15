@@ -951,6 +951,22 @@ class Admin {
 							}
 						}
 					}
+					// Also include downloaded translations (validated via the
+					// translation registry) that may no longer be selected: a banner
+					// can still carry such a language, and the all-language reload +
+					// save-time mismatch scan need its per-law defaults available.
+					$faz_uploads   = wp_upload_dir();
+					$faz_trans_dir = trailingslashit( $faz_uploads['basedir'] ) . 'fazcookie/languages/banners/';
+					$faz_trans_files = glob( $faz_trans_dir . '*.json' );
+					if ( is_array( $faz_trans_files ) ) {
+						$faz_lang_ctrl = \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance();
+						foreach ( $faz_trans_files as $faz_trans_file ) {
+							$faz_trans_lang = basename( $faz_trans_file, '.json' );
+							if ( '' !== $faz_trans_lang && $faz_lang_ctrl->is_faz_translated( $faz_trans_lang ) ) {
+								$faz_law_langs[] = $faz_trans_lang;
+							}
+						}
+					}
 					$faz_law_langs = array_values( array_unique( $faz_law_langs ) );
 					if ( empty( $faz_law_langs ) ) {
 						$faz_law_langs = array( faz_default_language() );

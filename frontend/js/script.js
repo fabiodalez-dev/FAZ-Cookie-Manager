@@ -1352,6 +1352,26 @@ function _fazHidePreferenceCenter() {
         _fazStore._prefTriggerElement = null;
     }
 }
+// Which preference panel to show: the opt-out popup when the visitor reached it
+// via the Do-Not-Sell control, the GDPR detail panel via the settings control,
+// else the law default. Decisive for a "Both" banner, where the detail panel and
+// the opt-out popup live inside the SAME modal — without this the modal would
+// reveal both stacked panels.
+function _fazActivePreferenceTag() {
+    const origin = _fazStore._preferenceOriginTag;
+    if (origin === 'donotsell-button') return 'optout-popup';
+    if (origin === 'settings-button') return 'detail';
+    return _fazGetLaw() === 'ccpa' ? 'optout-popup' : 'detail';
+}
+// Reveal the active panel and hide its sibling when both share one modal.
+function _fazSelectActivePreferencePanel() {
+    const detail = _fazGetElementByTag('detail');
+    const optout = _fazGetElementByTag('optout-popup');
+    if (!detail || !optout) return; // only one panel is present — nothing to isolate
+    const wantOptout = _fazActivePreferenceTag() === 'optout-popup';
+    (wantOptout ? optout : detail).classList.remove('faz-hide');
+    (wantOptout ? detail : optout).classList.add('faz-hide');
+}
 function _fazShowPreferenceCenter() {
     _fazStore._prefTriggerElement = document.activeElement;
     const element = _fazGetPreferenceCenter();
@@ -1362,8 +1382,13 @@ function _fazShowPreferenceCenter() {
     if (!element) return false;
     element.classList.add(_fazGetPreferenceClass());
 
-    // Ensure ARIA attributes are always present on the preference center div
-    const preferenceCenter = element.querySelector('.faz-preference-center');
+    // For a "Both" banner, isolate the panel matching the trigger.
+    _fazSelectActivePreferencePanel();
+
+    // Ensure ARIA attributes are present on the ACTIVE preference center panel.
+    const preferenceCenter =
+        element.querySelector('[data-faz-tag="' + _fazActivePreferenceTag() + '"]') ||
+        element.querySelector('.faz-preference-center');
     _fazSetPreferenceCenterAccessibility(preferenceCenter);
     const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
 
@@ -1463,13 +1488,14 @@ function _fazGetFocusableElements(element) {
     ];
 }
 function _fazLoopFocus() {
-    const activeLaw = _fazGetLaw();
     const [firstElementBanner, lastElementBanner] =
         _fazGetFocusableElements("notice");
     _fazAttachFocusLoop(firstElementBanner, lastElementBanner, true);
     _fazAttachFocusLoop(lastElementBanner, firstElementBanner);
+    // Trap focus in the panel that is actually open (trigger-aware), so a "Both"
+    // banner loops the opt-out popup when reached via Do-Not-Sell.
     const [firstElementPopup, lastElementPopup] = _fazGetFocusableElements(
-        activeLaw === "ccpa" ? "optout-popup" : "detail"
+        _fazActivePreferenceTag()
     );
     _fazAttachFocusLoop(firstElementPopup, lastElementPopup, true);
     _fazAttachFocusLoop(lastElementPopup, firstElementPopup);
