@@ -250,8 +250,8 @@ class Controller {
 		// arbitrary keys/values into the consent-log row. Cap the entry count,
 		// length-bound every key, and constrain values so the stored audit map
 		// stays well-formed regardless of what the client sends.
-		$clean = array();
 		if ( is_array( $categories ) || is_object( $categories ) ) {
+			$clean = array();
 			$count = 0;
 			foreach ( (array) $categories as $key => $value ) {
 				if ( $count >= 250 ) {
@@ -265,8 +265,14 @@ class Controller {
 				$clean[ $key ] = $value;
 				++$count;
 			}
+			$categories = wp_json_encode( $clean );
+		} else {
+			// A scalar value (e.g. a DNSMPI opt-out passes '' and the audit /
+			// export contract expects '' for that column — NOT the '[]' that
+			// wp_json_encode( array() ) would produce). Keep it as a sanitized
+			// string instead of coercing it into an empty JSON array.
+			$categories = sanitize_text_field( (string) $categories );
 		}
-		$categories = wp_json_encode( $clean );
 
 		// L2-SP1-S003 fix (1.15.0): populate the 7 geo-routing v2
 		// audit columns added by Migration_V2. Resolves Constitution V

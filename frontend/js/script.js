@@ -2703,11 +2703,13 @@ document.createElement = (...args) => {
         // marks the script javascript/blocked) and only then set
         // `data-faz-service`; without re-checking here an explicit svc.<id>:yes
         // would never unblock that dynamically-created script.
-        if (name === "data-fazcookie" || name === "data-faz-service") {
+        if (name === "data-fazcookie" || name === "data-faz-category" || name === "data-faz-service") {
             if (_fazShouldChangeType(createdElement)) {
                 rememberOriginalType();
                 originalSetAttribute("type", "javascript/blocked");
-            } else {
+            } else if (createdElement.getAttribute("type") === "javascript/blocked") {
+                // Only restore when WE blocked it — never downgrade a script that
+                // was never blocked (e.g. a legitimate type="module").
                 restoreOriginalType();
             }
         }
@@ -3361,10 +3363,18 @@ function _fazShouldChangeType(element, src) {
     // must block one whose category is allowed). Without this the dynamic
     // document.createElement path ignored per-service choices.
     var serviceId = element.getAttribute ? (element.getAttribute("data-faz-service") || "") : "";
-    var serviceCategory = element.getAttribute && element.hasAttribute("data-fazcookie")
-        ? element.getAttribute("data-fazcookie").replace("fazcookie-", "")
-        : "";
-    // When the category tag is not (yet) set on a dynamically-created element,
+    // Derive the category from either tag the other blocker paths accept
+    // (data-fazcookie OR data-faz-category), so a per-service override is always
+    // validated against the element's declared category.
+    var serviceCategory = "";
+    if (element.getAttribute) {
+        serviceCategory = (
+            element.getAttribute("data-fazcookie") ||
+            element.getAttribute("data-faz-category") ||
+            ""
+        ).replace("fazcookie-", "");
+    }
+    // When no category tag is (yet) set on a dynamically-created element,
     // resolve the service's catalogue category so the override is validated
     // against the registered category — matching _fazShouldBlockResource's
     // semantics — instead of letting an empty category short-circuit the check.

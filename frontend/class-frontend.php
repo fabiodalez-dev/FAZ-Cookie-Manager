@@ -1631,6 +1631,11 @@ class Frontend {
 		 */
 		$store = apply_filters( 'faz_store_data', $store, $this );
 
+		// Per-cookie consent stays hard-off until its enforcement rework is
+		// complete — reassert it AFTER the legacy faz_store_data filter so a
+		// stale filter callback cannot re-enable the unsupported control.
+		$store['_perCookieConsent'] = false;
+
 		return $store;
 	}
 
