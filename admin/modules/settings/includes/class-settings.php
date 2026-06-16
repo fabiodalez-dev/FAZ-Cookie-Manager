@@ -292,8 +292,13 @@ class Settings extends Store {
 			case 'gtm_datalayer':
 			case 'alternative_asset_path':
 			case 'per_service_consent':
-			case 'per_cookie_consent':
 				$value = faz_sanitize_bool( $value );
+				break;
+			case 'per_cookie_consent':
+				// Hidden experimental sub-feature: reject direct REST/import
+				// attempts to enable it until the per-cookie enforcement rework
+				// is complete.
+				$value = false;
 				break;
 			case 'scan_frequency':
 				$allowed = array( 'daily', 'weekly', 'monthly' );
