@@ -302,14 +302,27 @@ class Banner extends Store {
 		$law        = isset( $settings['applicableLaw'] ) ? sanitize_key( $settings['applicableLaw'] ) : 'gdpr';
 		$type       = isset( $settings['type'] ) ? sanitize_key( $settings['type'] ) : 'box';
 		$ptype      = isset( $settings['preferenceCenterType'] ) ? sanitize_key( $settings['preferenceCenterType'] ) : 'popup';
-		// The nested buttons.elements.donotSell branch is the only Do-Not-Sell
-		// flag that survives sanitize_settings — the legacy direct
-		// notice.elements.donotSell key is absent from the default config and is
-		// dropped on every get_settings(), so it is never readable here.
+		// The nested buttons.elements.donotSell branch is the canonical
+		// Do-Not-Sell flag that survives sanitize_settings.
 		$dns_status = isset( $config['notice']['elements']['buttons']['elements']['donotSell']['status'] )
 			? (bool) $config['notice']['elements']['buttons']['elements']['donotSell']['status']
 			: false;
-		$changed    = false;
+
+		// Back-fill from the legacy direct key. Very old "Both" (GDPR + US) banners
+		// stored Do-Not-Sell only at config.notice.elements.donotSell.status, which
+		// sanitize_settings drops (it is absent from the default config). Read it
+		// from the RAW stored settings so a legacy US opt-out is not silently lost
+		// when such a banner renders — otherwise the button is never enabled and
+		// the banner degrades to pure GDPR.
+		if ( ! $dns_status && isset( $this->data['settings'] ) ) {
+			$raw = is_string( $this->data['settings'] )
+				? json_decode( $this->data['settings'], true )
+				: $this->data['settings'];
+			if ( is_array( $raw ) && ! empty( $raw['config']['notice']['elements']['donotSell']['status'] ) ) {
+				$dns_status = true;
+			}
+		}
+		$changed = false;
 
 		// CCPA and "Both" (gdpr + Do-Not-Sell on) require the first-party opt-out
 		// entry point; the block below enables the canonical nested button branch

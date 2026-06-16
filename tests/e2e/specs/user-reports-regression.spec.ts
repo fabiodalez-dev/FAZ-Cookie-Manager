@@ -392,6 +392,40 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 		}
 	});
 
+	test('R2b: non_personalized_ads_fallback emits npa:1 on the FIRST visit (no action yet)', async ({ page, context, loginAsAdmin }) => {
+		// Arrange — admin enables GCM + fallback.
+		await loginAsAdmin(page);
+		await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-gcm`, { waitUntil: 'domcontentloaded' });
+		const nonce = await getAdminNonce(page);
+		const before = await getGcmSettings(page, nonce);
+		await updateGcmSettings(page, nonce, { status: true, non_personalized_ads_fallback: true });
+
+		const visitor = await context.browser()?.newContext({ baseURL: WP_BASE });
+		if (!visitor) throw new Error('Could not create visitor context');
+		try {
+			const visitorPage = await visitor.newPage();
+			// Act — a FRESH first-time visitor: load the page, take NO consent action.
+			await visitorPage.goto(`${WP_BASE}/?nb=${Date.now()}`, { waitUntil: 'domcontentloaded' });
+			// The fallback must signal npa at the default-consent stage (legacy ad
+			// tags get non-personalized ads on the very first pageview), not only
+			// after a reject. Regression: the no-cookie path never called the npa
+			// emitter, so npFallback was computed but unused.
+			const npa = await visitorPage.waitForFunction(() => {
+				const dlName = (window as unknown as { fazSettings?: { dataLayerName?: string } }).fazSettings?.dataLayerName || 'dataLayer';
+				const dl = (window as unknown as Record<string, unknown[]>)[dlName] ?? [];
+				return (dl as Array<Record<number, unknown>>).some((e) => e && e[0] === 'set' && e[1] && (e[1] as Record<string, unknown>).npa === 1);
+			}, undefined, { timeout: 8_000 }).then(() => true).catch(() => false);
+
+			expect(npa, 'npa:1 must be emitted at first-visit default when fallback is on and marketing defaults denied').toBe(true);
+		} finally {
+			await updateGcmSettings(page, nonce, {
+				status: before.status ?? false,
+				non_personalized_ads_fallback: before.non_personalized_ads_fallback ?? false,
+			});
+			await visitor.close();
+		}
+	});
+
 	/* ─────────────────────────────────────────────────────────────────
 	 * Report 3 — "Upon revisiting, ads don't load unless you reaccept"
 	 * ───────────────────────────────────────────────────────────────── */

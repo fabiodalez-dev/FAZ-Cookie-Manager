@@ -236,6 +236,15 @@ class Controller {
 
 		$consent_id = ! empty( $data['consent_id'] ) ? sanitize_text_field( $data['consent_id'] ) : $this->generate_consent_id();
 		$status     = isset( $data['status'] ) ? sanitize_text_field( $data['status'] ) : 'partial';
+		// Constrain status to the known set. The REST `status` param has no
+		// validate_callback, so an unauthenticated POST could otherwise write an
+		// arbitrary string that pollutes the dashboard's GROUP BY statistics
+		// (total != accepted + rejected + partial). Unknown values fold to
+		// 'partial'; the internal-only dnsmpi_optout / dns_rescinded stay valid
+		// because the internal callers pass them verbatim.
+		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded' ), true ) ) {
+			$status = 'partial';
+		}
 		$categories = isset( $data['categories'] ) ? $data['categories'] : array();
 		$url        = isset( $data['url'] ) ? $this->sanitize_log_url( $data['url'] ) : '';
 		$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? $this->hash_user_agent( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) ) : '';

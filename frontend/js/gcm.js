@@ -49,6 +49,18 @@ function setConsentInitStates(consentData) {
     gtag("consent", "default", consentData);
 }
 
+// Non-personalized-ads fallback signal for LEGACY (non-Consent-Mode) ad tags,
+// which don't read ad_storage. When the publisher enabled the fallback, mirror
+// the ad_storage decision into `npa`: 1 (non-personalized) while ad_storage is
+// denied, 0 once granted. Two-sided + called from every path (first-visit
+// default, region rows, and the post-action update) so the signal is consistent
+// and self-clears within the session — Consent Mode v2 tags already read
+// ad_storage directly.
+function setNpaIfDenied(adStorage) {
+    if (!data || !data.non_personalized_ads_fallback) return;
+    gtag("set", { npa: adStorage === "denied" ? 1 : 0 });
+}
+
 gtag("set", "ads_data_redaction", !!data.ads_data_redaction);
 gtag("set", "url_passthrough", !!data.url_passthrough);
 
@@ -123,6 +135,7 @@ if (initialCookieObj) {
             consentRegionData.region = regionsToSetFor;
         else setDefaultSetting = false;
         setConsentInitStates(consentRegionData);
+        setNpaIfDenied(consentRegionData.ad_storage);
     }
 
     if (setDefaultSetting) {
@@ -135,6 +148,7 @@ if (initialCookieObj) {
           ad_user_data: "denied",
           ad_personalization: "denied"
         });
+        setNpaIfDenied("denied");
     }
 }
 
@@ -209,10 +223,9 @@ function buildConsentState(cookieObj) {
     // do NOT grant ad_storage (that would set ad cookies without consent —
     // unlawful in EEA/UK/CH). ad_storage stays "denied"; Consent Mode v2 serves
     // non-personalized, cookieless ads in that state. For legacy ad tags that
-    // don't read Consent Mode we additionally signal `npa: 1`.
-    if (data.non_personalized_ads_fallback && marketing === "denied") {
-        gtag("set", { npa: 1 });
-    }
+    // don't read Consent Mode we signal `npa` (two-sided: set to 0 when
+    // marketing is later granted so it self-clears within the session).
+    setNpaIfDenied(marketing);
     return {
         ad_storage: marketing,
         analytics_storage: analytics,

@@ -3256,19 +3256,28 @@ class Frontend {
 		// Custom rules CAN override built-in providers (admin intent takes priority).
 		$settings     = $this->get_faz_settings();
 		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		$custom_patterns = array();
 		foreach ( $custom_rules as $rule ) {
 			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
 			$category = isset( $rule['category'] ) ? $rule['category'] : '';
 			if ( ! empty( $pattern ) && ! empty( $category ) ) {
-				$map[ $pattern ] = $category;
+				$map[ $pattern ]               = $category;
+				$custom_patterns[ $pattern ] = true;
 			}
 		}
 
 		// 4. Developer filter (allows code-level custom rules).
 		$map = apply_filters( 'faz_blocking_rules', $map );
 
-		// 5. Remove always-allowed gateway patterns (e.g. Stripe on checkout).
+		// 5. Remove always-allowed gateway patterns (e.g. Stripe on checkout) —
+		// but NEVER an explicit admin custom rule. Admin intent wins (section 3),
+		// and the gateway match is substring-based, so a generic custom pattern
+		// like "payment" must not be silently exempted just because it is a
+		// substring of "stripe-payment".
 		foreach ( array_keys( $map ) as $p ) {
+			if ( isset( $custom_patterns[ $p ] ) ) {
+				continue;
+			}
 			if ( $this->is_always_allowed_gateway_pattern( $p ) ) {
 				unset( $map[ $p ] );
 			}

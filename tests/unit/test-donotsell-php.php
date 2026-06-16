@@ -205,6 +205,13 @@ namespace {
 			$this->data['contents'] = $contents;
 		}
 
+		// Set the RAW stored settings independently of what get_settings()
+		// returns, so a test can simulate sanitize_settings dropping a legacy
+		// key (present in raw $this->data['settings'], absent from get_settings()).
+		public function set_raw_settings( array $raw ) {
+			$this->data['settings'] = $raw;
+		}
+
 		// Return injected settings as-is (no Controller-backed sanitisation).
 		public function get_settings() {
 			return $this->injected_settings;
@@ -378,6 +385,26 @@ namespace {
 	$out = $b->peek( 'settings' );
 	assert_eq( $out['settings']['type'], 'box', 'Both classic → type box' );
 	assert_eq( $out['settings']['preferenceCenterType'], 'popup', 'Both classic → popup' );
+
+	// 3b. Legacy "Both" — Do-Not-Sell stored ONLY in the legacy direct key
+	//     config.notice.elements.donotSell.status (sanitize_settings drops it from
+	//     get_settings()). The runtime must back-fill it from the RAW settings so
+	//     a legacy US opt-out is not silently lost.
+	$b         = new Test_Banner();
+	$sanitised = faz_make_settings( 'gdpr', 'classic', 'pushdown', false ); // nested DNS off (legacy key dropped by sanitize)
+	$b->set_injected_settings( $sanitised );
+	$raw = faz_make_settings( 'gdpr', 'classic', 'pushdown', false );
+	$raw['config']['notice']['elements']['donotSell'] = array( 'status' => true ); // legacy direct key, present in RAW only
+	$b->set_raw_settings( $raw );
+	$changed = $b->apply_runtime_layout_compatibility();
+	assert_eq( $changed, true, 'Legacy Both (direct-key DNS) classic → changed (back-filled + migrated)' );
+	$out = $b->peek( 'settings' );
+	assert_eq(
+		$out['config']['notice']['elements']['buttons']['elements']['donotSell']['status'],
+		true,
+		'Legacy Both → donotSell button back-filled + force-enabled from the direct key'
+	);
+	assert_eq( $out['settings']['type'], 'box', 'Legacy Both → migrated to popup-capable layout (box)' );
 
 	// 4. CCPA Full-width(banner) + Pushdown → preferenceCenterType popup, type
 	//    stays "banner" (only the pushdown is downgraded).

@@ -1214,7 +1214,11 @@ function _fazRunDeadCookieCleanup() {
 }
 
 function _fazScheduleDeadCookieCleanup() {
-    [250, 1000, 2000].forEach(function (delay) {
+    // Staggered passes catch cookies written after load. The 5000 ms tail picks
+    // up lazy/deferred trackers that write a non-consented cookie well after the
+    // initial passes — otherwise that cookie lingers client-side until the next
+    // page load (the server-side send_headers shredder only runs per request).
+    [250, 1000, 2000, 5000].forEach(function (delay) {
         window.setTimeout(_fazRunDeadCookieCleanup, delay);
     });
 }
