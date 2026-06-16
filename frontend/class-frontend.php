@@ -102,6 +102,7 @@ class Frontend {
 	private $whitelist_cache          = null;
 	private $service_consent_cache    = null;
 	private $pattern_service_cache    = null;
+	private $per_service_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
 	/**
@@ -221,23 +222,12 @@ class Frontend {
 		add_filter( 'widget_block_content', array( $this, 'filter_content_blocking' ), 1000 );
 		add_filter( 'embed_oembed_html', array( $this, 'filter_oembed_blocking' ), 1000, 2 );
 
-		// Invalidate the cookie-scripts transient whenever a cookie or category is
-		// saved or deleted. Category changes affect slug lookups in _cookieScripts,
-		// so a rename / delete must also clear the map. faz_after_update_settings
-		// and faz_clear_cache are added here for symmetry with the banner-template
-		// cache invalidation in class-template.php: disabling a category via the
-		// Settings UI (or any other settings change that affects the category list)
-		// would otherwise leave the cookie-scripts map stale for up to 12 hours.
-		$invalidate_scripts_map = function() {
-			delete_transient( 'faz_cookie_scripts_map' );
-		};
-		add_action( 'faz_after_update_cookie', $invalidate_scripts_map );
-		add_action( 'faz_after_create_cookie', $invalidate_scripts_map );
-		add_action( 'faz_after_delete_cookie', $invalidate_scripts_map );
-		add_action( 'faz_after_update_cookie_category', $invalidate_scripts_map );
-		add_action( 'faz_after_delete_cookie_category', $invalidate_scripts_map );
-		add_action( 'faz_after_update_settings', $invalidate_scripts_map );
-		add_action( 'faz_clear_cache', $invalidate_scripts_map );
+		// The cookie-scripts map and the per-service detected-cookie-names
+		// transients are invalidated on cookie / category / settings writes by
+		// CLI::define_public_hooks(), which registers the bust UNCONDITIONALLY —
+		// this Frontend constructor is skipped on pure-admin (non-AJAX, non-REST)
+		// requests, so a cache bust registered here would miss writes that
+		// originate from an admin page load. See includes/class-cli.php.
 	}
 
 	/**
@@ -522,10 +512,23 @@ class Frontend {
 							"body:JSON.stringify({" .
 								"consent_id:(function(){var m=document.cookie.match(/fazcookie-consent=([^;]+)/);if(!m)return '';var v=m[1];try{v=decodeURIComponent(v)}catch(err){}var p=v.match(/(?:^|,)consentid:([^,;]+)/);return p?p[1]:''})()," .
 								"status:d.action==='reject'?'rejected':d.action==='all'?'accepted':'partial'," .
-								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});return c})()," .
+								"categories:(function(){var c={};(d.accepted||[]).forEach(function(k){c[k]='yes'});(d.rejected||[]).forEach(function(k){c[k]='no'});" .
+									// P1-3: fold the granular per-service (svc.*) and per-cookie
+									// (ck.*) decisions from the consent cookie into the logged
+									// record, namespaced by their prefix, so the consent log is a
+									// complete audit trail (GDPR accountability) — not just the
+									// category-level summary. When per-service consent is off there
+									// are no svc.*/ck.* entries and this adds nothing.
+									"try{var cm=document.cookie.match(/fazcookie-consent=([^;]+)/);if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}})}}catch(er){}" .
+									"return c})()," .
 								"url:safeUrl," .
 								"banner_slug:_fazConsentLog.bannerSlug||''," .
 								"policy_revision:_fazConsentLog.policyRevision||1," .
+								// TCF TC string (euconsent-v2 cookie) and GPP string
+								// (__gpp API), forwarded so the tc_string / gpp_string
+								// audit columns are populated for TCF/GPP-enabled sites.
+								"tc_string:(function(){var m=document.cookie.match(/euconsent-v2=([^;]+)/);return m?m[1]:''})()," .
+								"gpp_string:(function(){try{if(typeof window.__gpp!=='function')return '';var s='';window.__gpp('getGPPData',function(d){if(d&&d.gppString)s=d.gppString});return s}catch(e){return ''}})()," .
 								"token:_fazConsentLog.token" .
 						"})" .
 					"}).catch(function(){});" .
@@ -655,7 +658,15 @@ class Frontend {
 		// data-no-optimize / data-noptimize additionally ask the CSS optimisers
 		// (LiteSpeed Cache, WP Rocket, Autoptimize, …) to leave the block inline
 		// (belt-and-suspenders).
-		echo '<style id="faz-style-inline" data-no-optimize="1" data-noptimize="1">html:not(.faz-ready) [data-faz-tag]{visibility:hidden;}'
+		echo '<style id="faz-style-inline" data-no-optimize="1" data-noptimize="1">html:not(.faz-ready) [data-faz-tag]{visibility:hidden;}</style>';
+		// The blocked-embed placeholder CSS must OUTLIVE the banner reveal: it
+		// styles content that stays on the page until the visitor consents.
+		// Keep it in its OWN persistent <style> — `_fazRemoveStyles()` removes
+		// `#faz-style-inline` once the banner is positioned, and bundling the
+		// placeholder CSS there stripped its styling the moment the JS ran,
+		// leaving a bare unstyled box (the "nice design flashes, ugly box
+		// stays" report). This block has no id the JS removes.
+		echo '<style data-faz-placeholder-style="1" data-no-optimize="1" data-noptimize="1">'
 			. $placeholder_css // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS stripped of all tags; esc_html() would break selectors.
 			. '</style>';
 	}
@@ -1181,6 +1192,124 @@ class Frontend {
 		return Geo_Runtime::apply_cmv2_to_gcm( $this->get_runtime_ruleset(), $gcm_settings );
 	}
 	/**
+	 * Distinct cookie names detected on this site (wp_faz_cookies.name).
+	 *
+	 * Backs the per-service consent list (P2): the preference center shows
+	 * only services that have at least one cookie actually present on this
+	 * site, instead of the full provider catalogue. Cached in a transient
+	 * because the set changes only when the scanner writes new cookies.
+	 *
+	 * @return string[]
+	 */
+	private function get_detected_cookie_names() {
+		$cached = get_transient( 'faz_detected_cookie_names' );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- custom table, prefix interpolation only, no user input; result cached in the transient set immediately below.
+		$names = $wpdb->get_col( "SELECT DISTINCT name FROM {$wpdb->prefix}faz_cookies WHERE name <> '' AND discovered = 1" );
+		$names = is_array( $names ) ? array_values( array_filter( array_map( 'strval', $names ) ) ) : array();
+		set_transient( 'faz_detected_cookie_names', $names, 6 * HOUR_IN_SECONDS );
+		return $names;
+	}
+
+	/**
+	 * Whether any cookie name a provider declares matches a detected cookie.
+	 *
+	 * A "*" anywhere in a provider cookie name is treated as a wildcard
+	 * (e.g. "_ga_*" matches "_ga_ABC123"); other names match exactly and
+	 * case-insensitively.
+	 *
+	 * @param string[] $provider_cookies Cookie names the provider declares.
+	 * @param string[] $detected_names   Cookie names detected on the site.
+	 * @return bool
+	 */
+	private function provider_has_detected_cookie( $provider_cookies, $detected_names ) {
+		foreach ( (array) $provider_cookies as $pc ) {
+			$pc = (string) $pc;
+			if ( '' === $pc ) {
+				continue;
+			}
+			if ( false !== strpos( $pc, '*' ) ) {
+				$regex = '/^' . str_replace( '\*', '.*', preg_quote( $pc, '/' ) ) . '$/i';
+				foreach ( $detected_names as $dn ) {
+					if ( preg_match( $regex, $dn ) ) {
+						return true;
+					}
+				}
+			} else {
+				foreach ( $detected_names as $dn ) {
+					if ( 0 === strcasecmp( $pc, $dn ) ) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Services eligible for granular consent on this site.
+	 *
+	 * Only scanner-detected services in an active category are exposed and
+	 * enforced. This keeps the preference center and both blocking layers on
+	 * the same allowlist.
+	 *
+	 * @param string[]|null $valid_categories Active category slugs.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function get_per_service_services( $valid_categories = null ) {
+		if ( null !== $this->per_service_cache ) {
+			return $this->per_service_cache;
+		}
+
+		if ( null === $valid_categories ) {
+			$valid_categories = $this->get_valid_category_slugs();
+		}
+
+		$services       = array();
+		$detected_names = $this->get_detected_cookie_names();
+		foreach ( Known_Providers::get_all() as $id => $service ) {
+			if ( 'necessary' === $service['category'] || ! in_array( $service['category'], $valid_categories, true ) ) {
+				continue;
+			}
+
+			$service_cookies = ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array();
+			if ( ! $this->provider_has_detected_cookie( $service_cookies, $detected_names ) ) {
+				continue;
+			}
+
+			$services[] = array(
+				'id'       => sanitize_key( $id ),
+				'label'    => sanitize_text_field( $service['label'] ),
+				'category' => sanitize_key( $service['category'] ),
+				'patterns' => array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) ),
+				'cookies'  => $service_cookies,
+			);
+		}
+
+		/**
+		 * Filter the per-service consent list.
+		 *
+		 * This is the AUTHORITATIVE service list — it feeds BOTH the client
+		 * store (`_services`) AND the server-side enforcement (the pre-consent
+		 * block decision and the cookie shredder all call this method), so a
+		 * service added, removed, or re-categorised here stays consistent across
+		 * the UI, the output buffer, and PHP shredding. Prefer this over
+		 * `faz_store_data` for anything that must actually be enforced.
+		 *
+		 * @since 1.19.0
+		 * @param array $services         Each: {id,label,category,patterns,cookies}.
+		 * @param array $valid_categories Active non-necessary category slugs.
+		 */
+		$services = apply_filters( 'faz_per_service_services', $services, $valid_categories );
+
+		$this->per_service_cache = $services;
+		return $this->per_service_cache;
+	}
+
+	/**
 	 * Get store data
 	 *
 	 * @return array
@@ -1451,33 +1580,29 @@ class Frontend {
 		}
 
 		// Per-service consent: pass service list to frontend.
-		// 1.18.2 HOTFIX: per-service / per-cookie consent is temporarily disabled.
-		// Per-cookie revocation is not enforced server-side or on reload (P1-2),
-		// the granular svc.*/ck.* decisions are not written to the consent log
-		// (P1-3), a large override set can exceed the 4 KB cookie limit (P1-4),
-		// and the toggles list catalogue wildcards rather than detected cookies
-		// (P2). Force off until reworked — category-level consent (the default,
-		// covered by the 113/113 compliance suite) is unaffected. Restore by
-		// reading the banner_control.per_service_consent option again.
-		$per_service = false;
+		// 1.18.3: per-service consent reintroduced — read the option again so the
+		// resolved service list reaches the frontend preference center. Per-COOKIE
+		// consent remains out (its admin toggle stays gated; see settings.php), so
+		// no nested per-cookie overrides are emitted here. The correctness gaps the
+		// 1.18.2 hotfix flagged are now closed: per-service (svc.*) decisions are
+		// logged (P1-3, see the inline consent logger — the ck.* branch is covered
+		// too but cannot fire while per-cookie consent stays gated), the consent
+		// cookie is hard-capped against the 4 KB browser limit (P1-4, see
+		// _fazSetInStore), and the list below is filtered to providers with a
+		// DETECTED cookie (P2, just here).
+		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( $per_service ) {
-			$known    = Known_Providers::get_all();
-			$services = array();
-			foreach ( $known as $id => $service ) {
-				if ( 'necessary' === $service['category'] ) {
-					continue;
-				}
-				if ( ! in_array( $service['category'], $valid_categories, true ) ) {
-					continue;
-				}
-				$services[] = array(
-					'id'       => sanitize_key( $id ),
-					'label'    => sanitize_text_field( $service['label'] ),
-					'category' => sanitize_key( $service['category'] ),
-					'patterns' => array_map( 'sanitize_text_field', $service['patterns'] ),
-					'cookies'  => ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array(),
-				);
-			}
+			// P2: source the per-service toggle list from the cookies actually
+			// DETECTED on this site (wp_faz_cookies), not the full ~160-entry
+			// provider catalogue. A provider is shown only when at least one of
+			// the cookie names it declares matches a detected cookie (wildcards
+			// like "_ga_*" supported). Until a scan has run, $detected_names is
+			// empty and NO provider matches, so the list is empty and the
+			// preference center falls back to category-level toggles — we do NOT
+			// dump the whole catalogue, which would both over-disclose unrelated
+			// services and bloat the consent cookie toward the P1-4 cap. The admin
+			// help text tells the publisher to run a scan to populate the list.
+			$services                    = $this->get_per_service_services( $valid_categories );
 			$store['_perServiceConsent'] = true;
 			$store['_services']         = $services;
 			// Per-cookie consent is a sub-mode of per-service: it nests an
@@ -1486,6 +1611,25 @@ class Frontend {
 			// rendered beneath their service row), so it is gated on both flags.
 			$store['_perCookieConsent'] = ! empty( $settings['banner_control']['per_cookie_consent'] );
 		}
+
+		/**
+		 * Filter the frontend consent store emitted to the page — PRESENTATION ONLY.
+		 *
+		 * Lets integrations (and isolated test harnesses) adjust the
+		 * CLIENT-SIDE store — what the JS renders (categories shown, flags,
+		 * labels) — for the current request, without DB writes. It does NOT
+		 * change server-side enforcement: the pre-consent script block and the
+		 * cookie shredder read their own internal sources, so altering
+		 * `_services` / flags here only affects the rendered UI and can diverge
+		 * from what PHP actually blocks. To affect the ENFORCED per-service list
+		 * (keeping UI, output buffer, and shredder consistent), use the
+		 * `faz_per_service_services` filter instead.
+		 *
+		 * @since 1.19.0
+		 * @param array    $store    The assembled store payload.
+		 * @param Frontend $frontend The frontend instance.
+		 */
+		$store = apply_filters( 'faz_store_data', $store, $this );
 
 		return $store;
 	}
@@ -2813,10 +2957,31 @@ class Frontend {
 		$ruleset_honors_gpc = ( null !== $ruleset && ! empty( $ruleset['signals']['gpc_honored'] ) );
 		$gpc_optout = $gpc_header_on && ( $is_optout_law || $ruleset_honors_gpc );
 
+		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
+		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
+		// is a binding opt-out of the sale/sharing of personal information
+		// (CCPA/CPRA §1798.120), so — like a GPC signal — it must actually stop
+		// the sale/share scripts server-side, not merely record the request.
+		// NOT gated on `$is_optout_law`: the cookie is only ever set by the
+		// Do-Not-Sell form, which the admin enables for CCPA *and* for the
+		// combined "GDPR + US" banner (saved with applicableLaw='gdpr' but with
+		// the donotSell control on — see banner.js). Honouring the cookie
+		// whenever it is present covers that mode too; under a pure opt-in law
+		// the sell/share categories are already blocked, so this is a no-op
+		// there.
+		$dnsmpi_optout = isset( $_COOKIE['fazcookie-dnsmpi'] )
+			&& '1' === sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-dnsmpi'] ) );
+
 		foreach ( $categories as $cat_data ) {
 			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
 			$slug     = $category->get_slug();
 			if ( 'necessary' === $slug ) {
+				continue;
+			}
+			// A DNSMPI form opt-out blocks the sell/share categories outright,
+			// overriding any consent-cookie value (mirrors the GPC override).
+			if ( $dnsmpi_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
+				$blocked[] = $slug;
 				continue;
 			}
 			if ( empty( $consent ) ) {
@@ -2876,10 +3041,11 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 		$this->service_consent_cache = array();
-		// 1.18.2 HOTFIX: per-service / per-cookie consent disabled (see the note
-		// at the store-payload site). Returning an empty map keeps the
-		// cookie-shredding path on pure category-level enforcement.
-		$per_service = false;
+		// 1.18.3: per-service consent reintroduced — read the option again so the
+		// cookie-shredder honours svc.* opt-outs. When the option is off this
+		// returns an empty map and enforcement stays purely category-level.
+		$settings    = $this->get_faz_settings();
+		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( ! $per_service ) {
 			return $this->service_consent_cache;
 		}
@@ -2889,10 +3055,17 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 
-		// Extract all svc.* entries from the consent cookie.
-		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(\w+)/', $consent, $matches, PREG_SET_ORDER ) ) {
+		$active_service_ids = array_fill_keys(
+			array_column( $this->get_per_service_services(), 'id' ),
+			true
+		);
+
+		// Extract valid svc.* entries for services currently exposed by this site.
+		if ( preg_match_all( '/(?:^|,)svc\.([a-z0-9_-]+):(yes|no)(?=,|$)/', $consent, $matches, PREG_SET_ORDER ) ) {
 			foreach ( $matches as $match ) {
-				$this->service_consent_cache[ $match[1] ] = $match[2];
+				if ( isset( $active_service_ids[ $match[1] ] ) ) {
+					$this->service_consent_cache[ $match[1] ] = $match[2];
+				}
 			}
 		}
 		return $this->service_consent_cache;
@@ -2901,20 +3074,21 @@ class Frontend {
 	/**
 	 * Build a lookup map from Known_Providers patterns → service IDs.
 	 *
-	 * @return array [ 'google-analytics.com/analytics.js' => 'google-analytics', ... ]
+	 * @return array [ 'google-analytics.com/analytics.js' => array( 'google-analytics' ), ... ]
 	 */
 	private function get_pattern_service_map() {
 		if ( null !== $this->pattern_service_cache ) {
 			return $this->pattern_service_cache;
 		}
 		$this->pattern_service_cache = array();
-		$known = Known_Providers::get_all();
-		foreach ( $known as $id => $service ) {
-			if ( 'necessary' === $service['category'] ) {
-				continue;
-			}
+		foreach ( $this->get_per_service_services() as $service ) {
 			foreach ( $service['patterns'] as $pattern ) {
-				$this->pattern_service_cache[ $pattern ] = sanitize_key( $id );
+				if ( ! isset( $this->pattern_service_cache[ $pattern ] ) ) {
+					$this->pattern_service_cache[ $pattern ] = array();
+				}
+				if ( ! in_array( $service['id'], $this->pattern_service_cache[ $pattern ], true ) ) {
+					$this->pattern_service_cache[ $pattern ][] = $service['id'];
+				}
 			}
 		}
 		return $this->pattern_service_cache;
@@ -2944,7 +3118,8 @@ class Frontend {
 		$inline              = $match_context['content'];
 		$is_data_uri_payload = ! empty( $match_context['is_data_uri_payload'] );
 
-		foreach ( $pattern_map as $pattern => $service_id ) {
+		$matched_service_ids = array();
+		foreach ( $pattern_map as $pattern => $service_ids ) {
 			if ( empty( $pattern ) ) {
 				continue;
 			}
@@ -2954,12 +3129,25 @@ class Frontend {
 				$matched = false !== stripos( $inline, $pattern );
 			}
 			if ( $matched ) {
-				if ( isset( $service_consent[ $service_id ] ) ) {
-					return 'yes' !== $service_consent[ $service_id ];
+				foreach ( $service_ids as $service_id ) {
+					$matched_service_ids[ $service_id ] = true;
 				}
-				// Service found but no explicit consent — fall back to category.
-				return null;
 			}
+		}
+
+		$has_explicit_yes = false;
+		foreach ( array_keys( $matched_service_ids ) as $service_id ) {
+			if ( ! isset( $service_consent[ $service_id ] ) ) {
+				continue;
+			}
+			if ( 'no' === $service_consent[ $service_id ] ) {
+				return true;
+			}
+			$has_explicit_yes = true;
+		}
+
+		if ( $has_explicit_yes ) {
+			return false;
 		}
 
 		return null;
@@ -4623,29 +4811,41 @@ class Frontend {
 
 		$blocked_categories = $this->get_blocked_categories();
 
-		// Per-service consent: also shred cookies for explicitly denied services
-		// even when their category is allowed (svc.hotjar:no + analytics:yes).
-		$service_consent   = $this->get_service_consent();
-		$svc_cookie_map    = array(); // pattern → service_id
+		// Per-service consent overrides the category fallback for matching
+		// cookies. A denied service wins over an allowed service when providers
+		// share a cookie pattern.
+		$service_consent       = $this->get_service_consent();
+		$svc_cookie_decisions = array(); // pattern => array( 'yes'|'no' ).
 		if ( ! empty( $service_consent ) ) {
-			$known = Known_Providers::get_all();
-			foreach ( $known as $id => $service ) {
-				$svc_id = sanitize_key( $id );
-				if ( isset( $service_consent[ $svc_id ] ) && 'no' === $service_consent[ $svc_id ] && ! empty( $service['cookies'] ) ) {
-					foreach ( $service['cookies'] as $cookie_pattern ) {
-						$svc_cookie_map[ $cookie_pattern ] = $svc_id;
+			foreach ( $this->get_per_service_services() as $service ) {
+				$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
+				if ( '' === $svc_id || ! isset( $service_consent[ $svc_id ] ) || empty( $service['cookies'] ) ) {
+					continue;
+				}
+				$decision = $service_consent[ $svc_id ];
+				if ( 'yes' !== $decision && 'no' !== $decision ) {
+					continue;
+				}
+				foreach ( $service['cookies'] as $cookie_pattern ) {
+					$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
+					if ( '' === $cookie_pattern ) {
+						continue;
 					}
+					if ( ! isset( $svc_cookie_decisions[ $cookie_pattern ] ) ) {
+						$svc_cookie_decisions[ $cookie_pattern ] = array();
+					}
+					$svc_cookie_decisions[ $cookie_pattern ][] = $decision;
 				}
 			}
 		}
 
-		// Nothing to shred: no blocked categories AND no denied services.
-		if ( empty( $blocked_categories ) && empty( $svc_cookie_map ) ) {
+		// Nothing to evaluate: no blocked categories and no explicit services.
+		if ( empty( $blocked_categories ) && empty( $svc_cookie_decisions ) ) {
 			return;
 		}
 
 		$cookie_map = Known_Providers::get_cookie_map();
-		if ( empty( $cookie_map ) && empty( $svc_cookie_map ) ) {
+		if ( empty( $cookie_map ) && empty( $svc_cookie_decisions ) ) {
 			return;
 		}
 
@@ -4669,22 +4869,31 @@ class Frontend {
 		);
 
 		foreach ( array_keys( $_COOKIE ) as $name ) {
-			$should_shred = false;
+			$should_shred   = false;
+			$service_allows = false;
 
-			// Category-based shredding.
-			foreach ( $cookie_map as $pattern => $category ) {
-				if ( ! in_array( $category, $blocked_categories, true ) ) {
+			foreach ( $svc_cookie_decisions as $pattern => $decisions ) {
+				if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
 					continue;
 				}
-				if ( $this->cookie_name_matches( $name, $pattern ) ) {
-					$should_shred = true;
-					break;
+				foreach ( $decisions as $decision ) {
+					if ( 'no' === $decision ) {
+						$should_shred = true;
+						break 2;
+					}
+					if ( 'yes' === $decision ) {
+						$service_allows = true;
+					}
 				}
 			}
 
-			// Per-service shredding (service explicitly denied).
-			if ( ! $should_shred && ! empty( $svc_cookie_map ) ) {
-				foreach ( $svc_cookie_map as $pattern => $svc_id ) {
+			// Category consent is only the fallback when no matching service has
+			// an explicit decision.
+			if ( ! $should_shred && ! $service_allows ) {
+				foreach ( $cookie_map as $pattern => $category ) {
+					if ( ! in_array( $category, $blocked_categories, true ) ) {
+						continue;
+					}
 					if ( $this->cookie_name_matches( $name, $pattern ) ) {
 						$should_shred = true;
 						break;

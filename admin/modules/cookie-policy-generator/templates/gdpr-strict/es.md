@@ -8,7 +8,7 @@ Esta Política de Cookies explica cómo **{{COMPANY_NAME}}** ("nosotros") utiliz
 
 El responsable del tratamiento de los datos personales recogidos mediante cookies es:
 
-- **Empresa:** {{COMPANY_NAME}}
+- **Responsable del tratamiento:** {{COMPANY_NAME}}
 - **Dirección:** {{COMPANY_ADDRESS}}
 - **Correo electrónico:** {{COMPANY_EMAIL}}
 - **Registro / IVA:** {{COMPANY_REGISTRY}}

@@ -332,8 +332,14 @@ async function closePreferenceCenter(page: Page): Promise<void> {
 async function setCategoryToggle(page: Page, slug: string, checked: boolean): Promise<void> {
   const switchToggle = page.locator(`#fazSwitch${slug}`);
   const directToggle = page.locator(`#fazCategoryDirect${slug}`);
-  const toggle = (await switchToggle.count()) > 0 ? switchToggle : directToggle;
-  await expect(toggle).toHaveCount(1);
+  // Wait for whichever toggle the active banner layout renders to ATTACH
+  // before choosing one. The previous code selected switch-vs-direct from an
+  // instantaneous count(), which under full-suite load (slower render of the
+  // preference center) ran before either toggle existed — it then locked onto
+  // the wrong locator and timed out on toHaveCount(1). Polling for either to
+  // attach first makes the selection deterministic regardless of render speed.
+  await expect(switchToggle.or(directToggle).first()).toBeAttached({ timeout: 15_000 });
+  const toggle = (await switchToggle.count()) > 0 ? switchToggle.first() : directToggle.first();
   await toggle.evaluate((element, value) => {
     const input = element as HTMLInputElement;
     input.checked = value;

@@ -563,6 +563,61 @@ class Template {
 	}
 
 	/**
+	 * Fingerprint the inputs that determine the cached template/CSS.
+	 *
+	 * @return string
+	 */
+	private function get_layout_signature() {
+		$settings = isset( $this->properties['settings'] ) && is_array( $this->properties['settings'] )
+			? $this->properties['settings']
+			: array();
+		$config   = isset( $this->properties['config'] ) && is_array( $this->properties['config'] )
+			? $this->properties['config']
+			: array();
+		// Only the nested buttons.elements.donotSell branch survives sanitize_settings;
+		// the legacy direct notice.elements.donotSell key is dropped, so don't read it.
+		$do_not_sell = ! empty( $config['notice']['elements']['buttons']['elements']['donotSell']['status'] );
+		// Resolve only the current language's description (cheap) instead of
+		// get_contents() which re-sanitizes every selected language on a cache hit.
+		$notice_description = $this->banner ? $this->banner->get_notice_description( $this->language ) : '';
+
+		// Banner-control flags that change the generated preference-center markup
+		// (the per-service / per-cookie toggle structure script.js hydrates).
+		// Read from the global faz_settings option (autoloaded → cheap).
+		$faz_settings   = get_option( 'faz_settings', array() );
+		$banner_control = ( is_array( $faz_settings ) && isset( $faz_settings['banner_control'] ) && is_array( $faz_settings['banner_control'] ) )
+			? $faz_settings['banner_control']
+			: array();
+
+		return md5(
+			wp_json_encode(
+				array(
+					// Bump the cache whenever the plugin updates: the generated
+					// template HTML (ids, classes, accordion structure) can change
+					// between releases, and the stored template must never outlive
+					// the JS that hydrates it. Without this a post-update install
+					// keeps serving the previous version's markup to the new
+					// script.js, silently breaking features such as the per-service
+					// sub-toggles (issue #146).
+					'plugin_version' => defined( 'FAZ_VERSION' ) ? FAZ_VERSION : 'dev',
+					'version'        => isset( $settings['versionID'] ) ? $settings['versionID'] : 'default',
+					'type'           => isset( $settings['type'] ) ? $settings['type'] : 'box',
+					'ptype'          => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
+					'theme'          => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
+					'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
+					'do_not_sell'    => $do_not_sell,
+					'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
+					// Toggling per-service / per-cookie consent changes the
+					// preference-center structure, so it must invalidate the cache.
+					'per_service'    => ! empty( $banner_control['per_service_consent'] ),
+					'per_cookie'     => ! empty( $banner_control['per_cookie_consent'] ),
+					'description'    => md5( $notice_description ),
+				)
+			)
+		);
+	}
+
+	/**
 	 * Retrieve stored template.
 	 *
 	 * @return array

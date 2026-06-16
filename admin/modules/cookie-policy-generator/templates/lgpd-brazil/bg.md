@@ -6,7 +6,7 @@
 
 ## Администратор
 
-- **Дружество:** {{COMPANY_NAME}}
+- **Администратор на данни:** {{COMPANY_NAME}}
 - **Адрес:** {{COMPANY_ADDRESS}}
 - **Контакт за поверителност:** {{COMPANY_EMAIL}}
 - **CNPJ:** {{COMPANY_REGISTRY}}

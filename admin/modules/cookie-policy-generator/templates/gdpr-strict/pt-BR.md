@@ -8,7 +8,7 @@ Esta Política de Cookies explica como **{{COMPANY_NAME}}** ("nós") usa cookies
 
 O controlador dos dados pessoais coletados por meio de cookies é:
 
-- **Empresa:** {{COMPANY_NAME}}
+- **Controlador de dados:** {{COMPANY_NAME}}
 - **Endereço:** {{COMPANY_ADDRESS}}
 - **E-mail:** {{COMPANY_EMAIL}}
 - **Registro / VAT:** {{COMPANY_REGISTRY}}

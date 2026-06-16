@@ -390,6 +390,7 @@ class Geolocation {
 	 * Get the path to the MMDB database file, if it exists.
 	 *
 	 * Checks (in order):
+	 *   0. The FAZ_MAXMIND_DB_PATH constant (operator-provided own .mmdb)
 	 *   1. The configured GeoLite2 edition (Country or City)
 	 *   2. The other GeoLite2 edition as a legacy fallback
 	 *   3. wp-content/uploads/faz-cookie-manager/dbip-country-lite.mmdb
@@ -397,25 +398,75 @@ class Geolocation {
 	 * Honouring the configured edition also keeps activation deterministic if
 	 * an obsolete file cannot be deleted after a Country/City switch.
 	 *
+	 * The FAZ_MAXMIND_DB_PATH constant is checked first so that an operator who
+	 * points it at their own database actually gets that file used by the
+	 * resolver — previously the constant only silenced the admin "Geo source
+	 * not configured" notice without ever being read here, so a site that set
+	 * it still resolved every visitor to "unknown".
+	 *
 	 * @return string Full path to the database file, or empty string.
 	 */
 	public static function get_database_path() {
 		$upload_dir = self::get_data_dir();
 		$preferred  = self::geolite2_edition();
 		$alternate  = ( 'GeoLite2-City' === $preferred ) ? 'GeoLite2-Country' : 'GeoLite2-City';
-		$candidates = array(
-			$upload_dir . $preferred . '.mmdb',
-			$upload_dir . $alternate . '.mmdb',
-			$upload_dir . 'dbip-country-lite.mmdb',
-		);
+		$candidates = array();
+		if ( defined( 'FAZ_MAXMIND_DB_PATH' ) && FAZ_MAXMIND_DB_PATH ) {
+			$candidates[] = (string) FAZ_MAXMIND_DB_PATH;
+		}
+		$candidates[] = $upload_dir . $preferred . '.mmdb';
+		$candidates[] = $upload_dir . $alternate . '.mmdb';
+		$candidates[] = $upload_dir . 'dbip-country-lite.mmdb';
 
 		foreach ( $candidates as $path ) {
-			if ( file_exists( $path ) && is_readable( $path ) ) {
+			if ( file_exists( $path ) && is_readable( $path ) && self::is_valid_mmdb( $path ) ) {
 				return $path;
 			}
 		}
 
 		return '';
+	}
+
+	/**
+	 * The marker that ends every MMDB metadata section (MaxMind DB format,
+	 * also used by the DB-IP lite distribution). Mirrors
+	 * Mmdb_Reader::METADATA_MARKER; duplicated here so this static check has no
+	 * dependency on the reader being autoloaded yet.
+	 */
+	const MMDB_METADATA_MARKER = "\xab\xcd\xefMaxMind.com";
+
+	/**
+	 * Cheap sanity check that a candidate file is an MMDB database.
+	 *
+	 * The resolver previously returned the first existing, readable candidate —
+	 * so a FAZ_MAXMIND_DB_PATH (or downloaded file) that exists but is corrupt or
+	 * the wrong format was preferred over a valid database, and Mmdb_Reader then
+	 * threw on first lookup with no fallback (every visitor resolved to
+	 * "unknown"). Skipping invalid candidates lets get_database_path() fall
+	 * through to the next valid database instead.
+	 *
+	 * The metadata marker lives in the last 128 KB of an MMDB file per the spec,
+	 * so this only reads that tail — never the whole multi-MB database.
+	 *
+	 * @param string $path Candidate file path.
+	 * @return bool True when the file ends with a recognisable MMDB metadata marker.
+	 */
+	private static function is_valid_mmdb( $path ) {
+		$size = @filesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $size || $size < strlen( self::MMDB_METADATA_MARKER ) ) {
+			return false;
+		}
+		$tail_len = (int) min( $size, 131072 );
+		$handle   = @fopen( $path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( false === $handle ) {
+			return false;
+		}
+		if ( $tail_len < $size ) {
+			@fseek( $handle, -$tail_len, SEEK_END ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+		$tail = @fread( $handle, $tail_len ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread, WordPress.PHP.NoSilencedErrors.Discouraged
+		@fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPress.PHP.NoSilencedErrors.Discouraged
+		return is_string( $tail ) && false !== strpos( $tail, self::MMDB_METADATA_MARKER );
 	}
 
 	/**

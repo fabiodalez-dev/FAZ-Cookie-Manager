@@ -110,7 +110,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.06.05.2';
+	const MIGRATIONS_VERSION = '2026.06.14.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -275,6 +275,54 @@ class Activator {
 		if ( $retention > 0 ) {
 			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
 		}
+		self::cleanup_old_dsar_requests( $settings );
+	}
+
+	/**
+	 * Purge DSAR (faz_dsar) form submissions older than the configured retention.
+	 *
+	 * DSAR posts store the requester's name, email and message in the clear, so
+	 * keeping them indefinitely is a data-minimisation problem. Retention is in
+	 * months: read from `faz_settings['dsar']['retention']`, defaulting to 24
+	 * (long enough to evidence handling of the request, then purged). A value of
+	 * 0 disables auto-purge. Filterable via `faz_dsar_retention_months`.
+	 *
+	 * @param array|false $settings The faz_settings option (passed to avoid a re-read).
+	 * @return int Number of DSAR posts deleted.
+	 */
+	public static function cleanup_old_dsar_requests( $settings = false ) {
+		if ( ! is_array( $settings ) ) {
+			$settings = get_option( 'faz_settings' );
+		}
+		$default   = isset( $settings['dsar']['retention'] ) ? (int) $settings['dsar']['retention'] : 24;
+		$retention = (int) apply_filters( 'faz_dsar_retention_months', $default );
+		if ( $retention <= 0 || ! post_type_exists( 'faz_dsar' ) ) {
+			return 0;
+		}
+		$cutoff  = gmdate( 'Y-m-d H:i:s', time() - ( $retention * MONTH_IN_SECONDS ) );
+		$deleted = 0;
+		$old_ids = get_posts(
+			array(
+				'post_type'        => 'faz_dsar',
+				'post_status'      => 'any',
+				'posts_per_page'   => 200,
+				'fields'           => 'ids',
+				'no_found_rows'    => true,
+				'suppress_filters' => true,
+				'date_query'       => array(
+					array(
+						'column' => 'post_date_gmt',
+						'before' => $cutoff,
+					),
+				),
+			)
+		);
+		foreach ( (array) $old_ids as $post_id ) {
+			if ( wp_delete_post( (int) $post_id, true ) ) {
+				$deleted++;
+			}
+		}
+		return $deleted;
 	}
 
 	/**
@@ -1219,6 +1267,14 @@ class Activator {
 		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
 			return;
 		}
+		// Only `necessary` is normalised CATEGORICALLY here: strictly-necessary
+		// cookies are never sold or shared under any configuration, so forcing
+		// sell/share=0 on existing installs can't clobber a legitimate admin
+		// choice. functional / wordpress-internal are seeded to 0 for NEW
+		// installs (Category_Controller::load_default), but they are NOT
+		// force-reset on existing installs — an admin may have deliberately
+		// flagged a functional cookie as shared, and a migration must not
+		// silently overwrite that explicit classification.
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- $table is $wpdb->prefix + literal "faz_cookie_categories" (escaped via esc_sql); slug bound via %s; one-shot idempotent migration write.
 		$result = $wpdb->query(
 			$wpdb->prepare(

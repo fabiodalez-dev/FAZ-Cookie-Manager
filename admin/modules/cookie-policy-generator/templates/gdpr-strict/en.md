@@ -8,7 +8,7 @@ This Cookie Policy explains how **{{COMPANY_NAME}}** ("we", "us", "our") uses co
 
 The data controller for the processing of your personal data through cookies is:
 
-- **Company:** {{COMPANY_NAME}}
+- **Data controller:** {{COMPANY_NAME}}
 - **Address:** {{COMPANY_ADDRESS}}
 - **Email:** {{COMPANY_EMAIL}}
 - **Registry / VAT:** {{COMPANY_REGISTRY}}

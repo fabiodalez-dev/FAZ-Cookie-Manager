@@ -515,9 +515,7 @@ test.describe('Blocking compliance coverage', () => {
     }
   });
 
-  // 1.18.2 HOTFIX: per-service consent is force-disabled — _perServiceConsent is no
-  // longer true on the frontend and svc.* overrides are ignored. Re-enable with the feature.
-  test.skip('per-service consent from the UI can allow Google Analytics while keeping Clarity blocked', async ({
+  test('per-service consent from the UI can allow Google Analytics while keeping Clarity blocked', async ({
     page,
     getConsentCookie,
     loginAsAdmin,
@@ -570,7 +568,7 @@ test.describe('Blocking compliance coverage', () => {
       };
 
       if (renderedCategories.includes('analytics')) {
-        await forceToggle('analytics', true);
+        await forceToggle('analytics', false);
       }
       if (renderedCategories.includes('marketing')) {
         await forceToggle('marketing', false);
@@ -602,19 +600,15 @@ test.describe('Blocking compliance coverage', () => {
       expect(consent).toBeDefined();
 
       const parsed = parseConsentCookie(consent!.value);
-      expect(parsed.analytics).toBe('yes');
+      expect(parsed.analytics).toBe('no');
       // `svc.<id>` entries are stored only when they diverge from the
       // category consent — the frontend's per-service loader falls back
       // to the category when an explicit entry is absent (see
       // `_fazUpdateServiceToggleStates` / `_fazShouldBlockProvider`).
-      // Clarity is explicitly denied inside an accepted category, so it
-      // must be present as `no`; Google Analytics aligns with its
-      // category (`yes`) and may therefore be either explicit `yes` or
-      // omitted, both of which resolve to "allowed" on reload. Keeping
-      // the cookie minimal this way is what lets installs with large
-      // service catalogs stay under the browser's 4 KB cookie limit.
-      expect(['yes', undefined]).toContain(parsed['svc.google-analytics']);
-      expect(parsed['svc.clarity']).toBe('no');
+      // Google Analytics is explicitly allowed inside a denied category,
+      // while Clarity inherits the category denial.
+      expect(parsed['svc.google-analytics']).toBe('yes');
+      expect(['no', undefined]).toContain(parsed['svc.clarity']);
 
       const cookieNames = await browserCookieNames(page);
       expect(cookieNames).toContain('_ga');
