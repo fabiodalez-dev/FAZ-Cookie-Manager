@@ -154,7 +154,9 @@ test.describe('Live compliance — config-independent privacy invariants', () =>
     const consent = await getConsentCookie(page.context());
     expect(consent, 'consent cookie missing after accept').toBeDefined();
     expect(consent!.expires, 'consent cookie must not be a session cookie').toBeGreaterThan(0);
-    const days = Math.round((consent!.expires - Date.now() / 1000) / 86400);
-    expect(days, `consent lifetime is ${days} days`).toBeLessThanOrEqual(183);
+    // Compare the real (unrounded) lifetime: Math.round() could round a value
+    // just over the 183-day cap back down and let an over-long cookie pass.
+    const days = (consent!.expires - Date.now() / 1000) / 86400;
+    expect(days, `consent lifetime is ${days.toFixed(2)} days`).toBeLessThanOrEqual(183);
   });
 });

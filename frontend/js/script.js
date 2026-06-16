@@ -2593,7 +2593,12 @@ document.createElement = (...args) => {
         if (name === "type" || name === "src")
             return (createdElement[name] = value);
         originalSetAttribute(name, value);
-        if (name === "data-fazcookie") {
+        // Re-evaluate the script type when EITHER the category tag or the
+        // per-service tag is set. A library may set `src` first (which already
+        // marks the script javascript/blocked) and only then set
+        // `data-faz-service`; without re-checking here an explicit svc.<id>:yes
+        // would never unblock that dynamically-created script.
+        if (name === "data-fazcookie" || name === "data-faz-service") {
             if (_fazShouldChangeType(createdElement)) {
                 rememberOriginalType();
                 originalSetAttribute("type", "javascript/blocked");

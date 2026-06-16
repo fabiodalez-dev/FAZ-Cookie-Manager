@@ -278,6 +278,17 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
     browser,
     wpBaseURL,
   }) => {
+    // Capture the original respectGPC so the finally restores it instead of
+    // hardcoding false (which would corrupt state if GPC started enabled).
+    const originalGpcOn =
+      wpEval(
+        `global $wpdb; $t=$wpdb->prefix.'faz_banners';` +
+          `$id=(int)$wpdb->get_var("SELECT banner_id FROM $t WHERE banner_default=1 LIMIT 1");` +
+          `if(!$id){$id=(int)$wpdb->get_var("SELECT banner_id FROM $t WHERE status=1 LIMIT 1");}` +
+          `$s=$id?json_decode($wpdb->get_var($wpdb->prepare("SELECT settings FROM $t WHERE banner_id=%d",$id)),true):array();` +
+          `echo (is_array($s)&&!empty($s['behaviours']['respectGPC']['status']))?'1':'0';`,
+      ).trim() === '1';
+
     // Enable respectGPC on the default banner for this test only.
     wpEval(
       `global $wpdb; $t=$wpdb->prefix.'faz_banners';` +
@@ -293,6 +304,21 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
 
     try {
       const ctx = await browser.newContext();
+      // Pre-seed a PRE-ACTION cookie carrying a stale svc.google-analytics:yes
+      // override (no action:yes, so the GPC opt-out branch actually runs). This
+      // proves _fazApplyGpcOptOut() CLEARS an existing override — without it the
+      // "no svc.* in the cookie" assertion would pass vacuously.
+      const rev = parseInt(wpEval('echo faz_get_consent_revision();').trim(), 10) || 1;
+      const seedDomain = new URL(wpBaseURL).hostname;
+      await ctx.addCookies([
+        {
+          name: 'fazcookie-consent',
+          value: `necessary%3Ayes%2Canalytics%3Ayes%2Csvc.google-analytics%3Ayes%2Crev%3A${rev}`,
+          domain: seedDomain,
+          path: '/',
+          sameSite: 'Lax',
+        },
+      ]);
       // Assert GPC before any page script runs.
       await ctx.addInitScript(() => {
         Object.defineProperty(navigator, 'globalPrivacyControl', {
@@ -340,7 +366,7 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
           `if(!$id){$id=(int)$wpdb->get_var("SELECT banner_id FROM $t WHERE status=1 LIMIT 1");}` +
           `if($id){$s=json_decode($wpdb->get_var($wpdb->prepare("SELECT settings FROM $t WHERE banner_id=%d",$id)),true);` +
           `if(!is_array($s))$s=array();if(!isset($s['behaviours'])||!is_array($s['behaviours']))$s['behaviours']=array();` +
-          `$s['behaviours']['respectGPC']=array('status'=>false);` +
+          `$s['behaviours']['respectGPC']=array('status'=>${originalGpcOn ? 'true' : 'false'});` +
           `$wpdb->update($t,array('settings'=>wp_json_encode($s)),array('banner_id'=>$id));}` +
           `\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();` +
           `delete_option('faz_banner_template');`,
@@ -418,12 +444,17 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
         fazcookie?: { _fazGetFromStore?: (k: string) => string };
       };
       if (typeof w._fazAcceptService !== 'function') return { ok: false } as Record<string, unknown>;
-      // "youtube" is NOT a seeded/detected service, so there is no rendered
-      // .faz-service-toggle for it — the edge the placeholder accept handles.
+      // google-analytics IS a seeded/known service (from the _ga row), but we
+      // strip any rendered toggle so we exercise the REAL edge the new contract
+      // distinguishes: a KNOWN service with NO rendered toggle (not an unknown
+      // service, which takes the category-fallback path instead).
+      document
+        .querySelectorAll('.faz-service-toggle[data-service="google-analytics"]')
+        .forEach((el) => el.remove());
       const renderedTogglesBefore = document.querySelectorAll(
-        '.faz-service-toggle[data-service="youtube"]',
+        '.faz-service-toggle[data-service="google-analytics"]',
       ).length;
-      w._fazAcceptService('youtube');
+      w._fazAcceptService('google-analytics', 'analytics');
       const raw = document.cookie
         .split(';')
         .map((s) => s.trim())
@@ -433,22 +464,22 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
       return {
         ok: true,
         renderedTogglesBefore,
-        svcYes: typeof get === 'function' ? get('svc.youtube') : '',
-        // The whole marketing category must NOT be flipped to yes.
-        marketingValue: typeof get === 'function' ? get('marketing') : '',
-        cookieHasSvc: /(?:^|,)svc\.youtube:yes(?:,|$)/.test(decoded),
-        cookieHasMarketingYes: /(?:^|,)marketing:yes(?:,|$)/.test(decoded),
+        svcYes: typeof get === 'function' ? get('svc.google-analytics') : '',
+        // The whole analytics category must NOT be flipped to yes.
+        categoryValue: typeof get === 'function' ? get('analytics') : '',
+        cookieHasSvc: /(?:^|,)svc\.google-analytics:yes(?:,|$)/.test(decoded),
+        cookieHasCategoryYes: /(?:^|,)analytics:yes(?:,|$)/.test(decoded),
       };
     });
 
     expect(result.ok, '_fazAcceptService exposed on window').toBe(true);
-    expect(result.renderedTogglesBefore, 'no rendered toggle for the unseen service').toBe(0);
+    expect(result.renderedTogglesBefore, 'no rendered toggle for the known service').toBe(0);
     // The per-service grant is persisted…
-    expect(result.svcYes, 'svc.youtube stored as yes').toBe('yes');
-    expect(result.cookieHasSvc, 'svc.youtube:yes serialised into the cookie').toBe(true);
+    expect(result.svcYes, 'svc.google-analytics stored as yes').toBe('yes');
+    expect(result.cookieHasSvc, 'svc.google-analytics:yes serialised into the cookie').toBe(true);
     // …but the category is NOT flipped to yes by the single-service accept.
-    expect(result.marketingValue, 'marketing category not flipped to yes').not.toBe('yes');
-    expect(result.cookieHasMarketingYes, 'marketing:yes not written by single-service accept').toBe(
+    expect(result.categoryValue, 'analytics category not flipped to yes').not.toBe('yes');
+    expect(result.cookieHasCategoryYes, 'analytics:yes not written by single-service accept').toBe(
       false,
     );
 
