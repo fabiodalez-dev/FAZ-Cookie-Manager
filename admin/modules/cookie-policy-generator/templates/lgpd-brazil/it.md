@@ -6,7 +6,7 @@ Questa Cookie Policy descrive come **{{COMPANY_NAME}}** ("noi") utilizza cookie 
 
 ## Titolare
 
-- **Società:** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
+- **Titolare del trattamento:** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
 - **CNPJ:** {{COMPANY_REGISTRY}}
 - **Encarregado de Dados (DPO) — obbligatorio Art. 41 LGPD:** {{DPO_NAME}} — {{DPO_EMAIL}}
 

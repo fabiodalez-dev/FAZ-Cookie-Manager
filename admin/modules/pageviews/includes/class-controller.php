@@ -116,8 +116,34 @@ class Controller {
 
 		$allowed_events = array( 'pageview', 'banner_view', 'banner_accept', 'banner_reject', 'banner_settings' );
 
-		$page_url   = isset( $data['page_url'] ) ? esc_url_raw( $data['page_url'] ) : '';
+		// Data minimisation: aggregate pageview metrics carry no session id and
+		// don't need the query string — which can hold tokens, emails or other
+		// PII (?email=…, ?reset_key=…). Keep only scheme://host/path so the
+		// stored URL can't leak personal data from the query/fragment.
+		$page_url = '';
+		if ( isset( $data['page_url'] ) ) {
+			$raw_url = esc_url_raw( (string) $data['page_url'] );
+			$parts   = $raw_url ? faz_parse_url( $raw_url ) : false;
+			if ( is_array( $parts ) && ! empty( $parts['host'] ) ) {
+				$scheme   = isset( $parts['scheme'] ) ? $parts['scheme'] . '://' : '//';
+				$path     = isset( $parts['path'] ) ? $parts['path'] : '';
+				$page_url = esc_url_raw( $scheme . $parts['host'] . $path );
+			} else {
+				// Relative or unparseable URL — strip everything from the first
+				// `?`/`#` defensively.
+				$page_url = (string) preg_replace( '/[?#].*$/', '', $raw_url );
+			}
+		}
 		$page_title = isset( $data['page_title'] ) ? sanitize_text_field( $data['page_title'] ) : '';
+
+		// The query string/fragment is already dropped above. The PATH and TITLE
+		// can still embed PII on some sites (e.g. /account/reset/<email>, an order
+		// number in the <title>). Aggregate metrics carry no identifier, so this
+		// is low-risk, but expose filters so privacy-conscious admins can redact
+		// or coarsen path/title without losing the rest of the analytics.
+		$page_url   = (string) apply_filters( 'faz_pageview_url', $page_url );
+		$page_title = (string) apply_filters( 'faz_pageview_title', $page_title );
+
 		$event_type = isset( $data['event_type'] ) ? sanitize_text_field( $data['event_type'] ) : 'pageview';
 		$session_id = isset( $data['session_id'] ) ? sanitize_text_field( $data['session_id'] ) : '';
 

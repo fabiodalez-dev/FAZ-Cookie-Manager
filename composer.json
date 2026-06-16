@@ -1,6 +1,6 @@
 {
     "name": "fabiodalez/faz-cookie-manager",
-    "description": "The only cookie consent plugin you need. 100% free, zero cloud dependencies. Full GDPR, CCPA, ePrivacy, and IAB TCF v2.3 compliance.",
+    "description": "Cookie consent plugin: 100% free, zero cloud dependencies. Helps you comply with GDPR, CCPA/CPRA and ePrivacy, and supports the IAB TCF v2.3 framework (TCF requires a registered CMP ID).",
     "type": "wordpress-plugin",
     "license": "GPL-3.0-or-later",
     "authors": [

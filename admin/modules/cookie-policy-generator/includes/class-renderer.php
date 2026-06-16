@@ -173,10 +173,22 @@ class Renderer {
 			. '" data-faz-policy-version="' . esc_attr( $policy_version ) . '">';
 		$wrapper_close = '</article>';
 
-		// NFR-02-XI: sanitize the body content via wp_kses_post. The wrapper
-		// is emitted by trusted code (no user input reaches it un-escaped)
-		// and bypasses the kses pass.
-		return $wrapper_open . wp_kses_post( $html ) . $wrapper_close;
+		// NFR-02-XI: sanitize the body content via kses. We CANNOT use plain
+		// wp_kses_post() here: `aria-level` is NOT in WordPress's default
+		// 'post' allowlist, so wp_kses_post strips it while keeping
+		// role="heading" — leaving the category-name spans as headings with no
+		// level, an axe-critical WCAG 4.1.2 / 1.3.1 failure. Extend the 'post'
+		// allowlist with ONLY role + aria-level (no broadening of style/data-*)
+		// so the ARIA heading semantics survive the sanitization pass. The
+		// wrapper is emitted by trusted code and bypasses kses.
+		$allowed = wp_kses_allowed_html( 'post' );
+		foreach ( $allowed as $tag => $attrs ) {
+			if ( is_array( $attrs ) ) {
+				$allowed[ $tag ]['role']       = true;
+				$allowed[ $tag ]['aria-level'] = true;
+			}
+		}
+		return $wrapper_open . wp_kses( $html, $allowed ) . $wrapper_close;
 	}
 
 	/**
@@ -788,6 +800,7 @@ class Renderer {
 				'es'    => 'Esta política de cookies fue generada por FAZ Cookie Manager a partir de una plantilla para la jurisdicción %s. Las plantillas no constituyen asesoramiento legal. El administrador de este sitio sigue siendo el responsable del tratamiento de datos según la ley aplicable y es responsable de la exactitud y adecuación del contenido publicado. Para orientación específica de la jurisdicción, consulte: %s.',
 				'pt-BR' => 'Esta política de cookies foi gerada pelo FAZ Cookie Manager a partir de um modelo para a jurisdição %s. Os modelos não constituem aconselhamento jurídico. O administrador deste site permanece como controlador dos dados conforme a lei aplicável e é responsável pela exatidão e adequação do conteúdo publicado. Para orientação específica da jurisdição, consulte: %s.',
 				'bg'    => 'Тази политика за бисквитки е генерирана от FAZ Cookie Manager въз основа на образец за юрисдикция %s. Образците не представляват правен съвет. Администраторът на този сайт остава администратор на лични данни съгласно приложимото право и носи отговорност за точността и адекватността на публикуваното съдържание. За насоки, специфични за юрисдикцията, направете справка с: %s.',
+				'cs'    => 'Tyto zásady používání cookies byly vygenerovány pluginem FAZ Cookie Manager na základě šablony pro jurisdikci %s. Šablony nepředstavují právní poradenství. Provozovatel tohoto webu zůstává správcem osobních údajů ve smyslu platných právních předpisů a odpovídá za správnost a přiměřenost zveřejněného obsahu. Pro informace specifické pro danou jurisdikci se obraťte na: %s.',
 			);
 			$tpl = $texts[ $lang ] ?? $texts['en'];
 			$jurisdiction_label = self::jurisdiction_display_name( $jurisdiction, $lang );
@@ -953,6 +966,10 @@ class Renderer {
 				return sprintf( '%d de %s de %s', $day, $month_name, $year );  // 3 de junho de 2026
 			case 'bg':
 				return sprintf( '%d %s %s г.', $day, $month_name, $year );     // 3 юни 2026 г.
+			case 'cs':
+				// Czech dates take an ordinal day (trailing dot) and decline the
+				// month into the genitive — month_names() returns those forms.
+				return sprintf( '%d. %s %s', $day, $month_name, $year );       // 3. června 2026
 			default:
 				return sprintf( '%d %s %s', $day, $month_name, $year );        // it / fr: 3 giugno 2026
 		}
@@ -973,6 +990,10 @@ class Renderer {
 			'es'    => array( 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre' ),
 			'pt-BR' => array( 'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro' ),
 			'bg'    => array( 'януари', 'февруари', 'март', 'април', 'май', 'юни', 'юли', 'август', 'септември', 'октомври', 'ноември', 'декември' ),
+			// Genitive forms: Czech declines the month when written in a date
+			// ("3. června 2026"), and month_names() is only ever consumed by
+			// format_date(), so storing the genitive here keeps the date correct.
+			'cs'    => array( 'ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince' ),
 		);
 		return $names[ $lang ] ?? $names['en'];
 	}
@@ -995,6 +1016,7 @@ class Renderer {
 			'es'    => '%d meses',
 			'pt-BR' => '%d meses',
 			'bg'    => '%d месеца',
+			'cs'    => '%d měsíců',
 		);
 		return sprintf( $labels[ $lang ] ?? '%d months', $months );
 	}
@@ -1008,9 +1030,9 @@ class Renderer {
 	 */
 	private static function jurisdiction_display_name( $jurisdiction, $lang ) {
 		$names = array(
-			'gdpr-strict'     => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)' ),
-			'ccpa-california' => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)' ),
-			'lgpd-brazil'     => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)' ),
+			'gdpr-strict'     => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)' ),
+			'ccpa-california' => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)' ),
+			'lgpd-brazil'     => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)' ),
 		);
 		return $names[ $jurisdiction ][ $lang ] ?? $names[ $jurisdiction ]['en'] ?? $jurisdiction;
 	}
@@ -1032,6 +1054,7 @@ class Renderer {
 			'es'    => 'Español',
 			'pt-BR' => 'Português (Brasil)',
 			'bg'    => 'Български',
+			'cs'    => 'Čeština',
 		);
 		return $names[ $lang ] ?? $lang;
 	}

@@ -108,6 +108,79 @@ ref._fazSetInStore = function (key, value) {
         cookieStringArray.push(`${k}:${v}`);
     }
 
+    // P1-4: hard size cap. The redundant-entry filter above already trims
+    // the cookie, but a site with very many active services can still push
+    // the per-service (`svc.*`) and per-cookie (`ck.*`) overrides past the
+    // 4 KB per-cookie limit every major browser enforces. A browser over the
+    // limit silently DROPS the whole cookie write, corrupting even the core
+    // category consent. So if the URL-encoded value would exceed the budget
+    // we deterministically drop the lowest-priority entries — `ck.*` first,
+    // then `svc.*` — keeping every core/category entry. A dropped override
+    // simply falls back to its category-level consent on reload (the same
+    // contract the redundant-entry filter relies on).
+    const FAZ_COOKIE_VALUE_BUDGET = 3500; // encoded bytes; headroom under 4096
+    const _fazEncodedLen = function (arr) {
+        return encodeURIComponent(arr.join(",")).length;
+    };
+    if (_fazEncodedLen(cookieStringArray) > FAZ_COOKIE_VALUE_BUDGET) {
+        const coreEntries = [];
+        const svcDeniedEntries = [];
+        const svcAllowedEntries = [];
+        const ckEntries = [];
+        cookieStringArray.forEach(function (entry) {
+            if (entry.indexOf("ck.") === 0) {
+                ckEntries.push(entry);
+            } else if (entry.indexOf("svc.") === 0) {
+                if (/:no$/.test(entry)) {
+                    svcDeniedEntries.push(entry);
+                } else {
+                    svcAllowedEntries.push(entry);
+                }
+            } else {
+                coreEntries.push(entry);
+            }
+        });
+        // Core entries are always kept. Explicit service denials have the
+        // highest granular priority, followed by service allows. Per-cookie
+        // entries are considered only when every service decision fitted, so
+        // a shorter ck.* key can never displace a higher-priority svc.* key.
+        const kept = coreEntries.slice();
+        let dropped = 0;
+        let serviceDropped = false;
+        [svcDeniedEntries, svcAllowedEntries].forEach(function (group) {
+            group.forEach(function (entry) {
+                kept.push(entry);
+                if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
+                    kept.pop();
+                    dropped++;
+                    serviceDropped = true;
+                }
+            });
+        });
+        if (!serviceDropped) {
+            ckEntries.forEach(function (entry) {
+                kept.push(entry);
+                if (_fazEncodedLen(kept) > FAZ_COOKIE_VALUE_BUDGET) {
+                    kept.pop();
+                    dropped++;
+                }
+            });
+        } else {
+            dropped += ckEntries.length;
+        }
+        if (dropped > 0 && typeof console !== "undefined" && console.warn) {
+            console.warn(
+                "[FAZ Cookie Manager] consent cookie exceeded " +
+                    FAZ_COOKIE_VALUE_BUDGET +
+                    " encoded bytes; dropped " +
+                    dropped +
+                    " per-service/per-cookie override(s) to avoid browser truncation. " +
+                    "The affected services fall back to their category-level consent."
+            );
+        }
+        cookieStringArray = kept;
+    }
+
     const scriptExpiry =
         _fazStore && _fazStore._expiry
             ? _fazStore._expiry
@@ -707,6 +780,12 @@ function _fazApplyGpcOptOut() {
     var law = _fazGetLaw();
     var responseCategories = { accepted: [], rejected: [], action: "reject", gpc: true };
     var categories = _fazStore._categories || [];
+    // GPC is a legally-binding opt-out (CPPA §7025) that overrides ANY prior
+    // consent, including explicit per-service allows. Clear the svc.*/ck.*
+    // overrides BEFORE the per-category shredder runs below, otherwise a stale
+    // svc.<id>:yes would make _fazRemoveDeadCookies skip a cookie the GPC signal
+    // requires deleting.
+    _fazClearStoredServiceConsent();
     for (var i = 0; i < categories.length; i++) {
         var category = categories[i];
         var deny;
@@ -730,8 +809,8 @@ function _fazApplyGpcOptOut() {
         }
     }
 
-    // Clear any per-service overrides and deny IAB vendors, mirroring reject.
-    _fazClearStoredServiceConsent();
+    // Deny IAB vendors, mirroring reject. (Per-service overrides were already
+    // cleared above, before the shredder, so GPC fully overrides them.)
     _fazSaveVendorConsent("reject");
 
     _fazUnblock();
@@ -1542,6 +1621,9 @@ function _fazRemoveDeadCookies({ cookies }) {
         // Never delete the plugin's own consent-mechanism cookies.
         if (cookieID === "fazcookie-consent" || cookieID === "fazVendorConsent" || cookieID === "euconsent-v2") continue;
         if (_fazIsCookieWhitelisted(cookieID)) continue;
+        // An explicit per-service/per-cookie allow overrides the denied
+        // category fallback. Explicit denies are still deleted.
+        if (_fazGetServiceCookieDecision(cookieID) === "yes") continue;
         if (currentCookieMap[cookieID])
             [domain, ""].forEach((cookieDomain) =>
                 ref._fazSetCookie(cookieID, "", 0, cookieDomain)
@@ -1998,6 +2080,9 @@ function _fazAcceptCookies(choice = "all") {
             }
         }
     }
+    if (_fazServicesBeforeConsent === null) {
+        _fazServicesBeforeConsent = _fazGetServiceConsentSnapshot();
+    }
     const activeLaw = _fazGetLaw();
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
     _fazClearStoredServiceConsent();
@@ -2024,6 +2109,7 @@ function _fazAcceptCookies(choice = "all") {
         ref._fazSetInStore("consent", ccpaCheckBoxValue ? "yes" : "no");
     }
     const responseCategories = { accepted: [], rejected: [], action: choice };
+    const rejectedCategoryObjects = [];
     for (const category of _fazStore._categories) {
         let valueToSet = "no";
         if (activeLaw === 'gdpr') {
@@ -2060,7 +2146,7 @@ function _fazAcceptCookies(choice = "all") {
         ref._fazSetInStore(`${category.slug}`, valueToSet);
         if (valueToSet === "no") {
             responseCategories.rejected.push(category.slug);
-            _fazRemoveDeadCookies(category);
+            rejectedCategoryObjects.push(category);
         } else responseCategories.accepted.push(category.slug);
     }
     // Handle per-service consent.
@@ -2072,6 +2158,10 @@ function _fazAcceptCookies(choice = "all") {
             _fazStoreCustomCookieConsent(choice);
         }
     }
+
+    // Clean up only after granular choices have been persisted, so an
+    // explicitly allowed service inside a denied category keeps its cookies.
+    rejectedCategoryObjects.forEach(_fazRemoveDeadCookies);
 
     // Handle IAB vendor consent.
     _fazSaveVendorConsent(choice);
@@ -2168,6 +2258,16 @@ function _fazServiceEffectiveConsent(serviceId, category) {
     return ref._fazGetFromStore(category) === "yes" ? "yes" : "no";
 }
 
+function _fazGetServiceConsentSnapshot() {
+    var snapshot = {};
+    if (!_fazStore._perServiceConsent || !Array.isArray(_fazStore._services)) return snapshot;
+    _fazStore._services.forEach(function(service) {
+        if (!service || !service.id || !service.category) return;
+        snapshot[service.id] = _fazServiceEffectiveConsent(service.id, service.category);
+    });
+    return snapshot;
+}
+
 /**
  * Effective consent ("yes"/"no") for one cookie within a service: the explicit
  * ck.<service>.<cookie-name> override if present, otherwise the service's
@@ -2182,6 +2282,39 @@ function _fazCookieEffectiveConsent(serviceId, category, cookieName) {
     var ck = ref._fazGetFromStore(_fazCkKey(serviceId, cookieName));
     if (ck) return ck === "yes" ? "yes" : "no";
     return _fazServiceEffectiveConsent(serviceId, category);
+}
+
+/**
+ * Return the explicit granular decision for a cookie name/pattern.
+ *
+ * Per-cookie consent overrides its service. Across multiple matching
+ * services, any explicit denial wins; otherwise an explicit allow wins.
+ * An empty result means the caller must fall back to category consent.
+ *
+ * @param {string} cookieName Cookie or storage key to evaluate.
+ * @return {string} "yes", "no", or "".
+ */
+function _fazGetServiceCookieDecision(cookieName) {
+    if (!_fazStore._perServiceConsent || !Array.isArray(_fazStore._services)) return "";
+    var hasAllowedMatch = false;
+    for (var si = 0; si < _fazStore._services.length; si++) {
+        var service = _fazStore._services[si];
+        if (!service || !service.id || !Array.isArray(service.cookies)) continue;
+        for (var ci = 0; ci < service.cookies.length; ci++) {
+            var pattern = service.cookies[ci];
+            if (!pattern || !_fazCookieNameMatches(cookieName, pattern)) continue;
+            var decision = ref._fazGetFromStore("svc." + service.id);
+            if (_fazStore._perCookieConsent) {
+                var cookieDecision = ref._fazGetFromStore(_fazCkKey(service.id, pattern));
+                if (cookieDecision === "yes" || cookieDecision === "no") {
+                    decision = cookieDecision;
+                }
+            }
+            if (decision === "no") return "no";
+            if (decision === "yes") hasAllowedMatch = true;
+        }
+    }
+    return hasAllowedMatch ? "yes" : "";
 }
 
 /**
@@ -2477,8 +2610,8 @@ function _fazMutationObserver(mutations) {
                     ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
                     : "";
                 var nodeCategory = rawCategory.replace("fazcookie-", "");
-                var shouldBlockByCategory = nodeCategory && _fazIsCategoryToBeBlocked(nodeCategory);
-                if (!shouldBlockByCategory && !_fazShouldBlockProvider(blockingTarget)) continue;
+                var nodeService = node.getAttribute ? (node.getAttribute("data-faz-service") || "") : "";
+                if (!_fazShouldBlockResource(nodeCategory, blockingTarget, nodeService)) continue;
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);
@@ -2522,11 +2655,14 @@ function _fazUnblock() {
                     ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
                     : "";
                 nodeCategory = nodeCategory.replace("fazcookie-", "");
-                if (nodeCategory && _fazIsCategoryToBeBlocked(nodeCategory)) return true;
                 var nodeSrc = (node && typeof node.getAttribute === "function")
                     ? (node.getAttribute("src") || node.src || "")
                     : (node && node.src ? node.src : "");
-                if (_fazShouldBlockProvider(nodeSrc)) return true;
+                var nodeTarget = nodeSrc || (node && node.textContent ? node.textContent : "");
+                var nodeService = node && typeof node.getAttribute === "function"
+                    ? (node.getAttribute("data-faz-service") || "")
+                    : "";
+                if (_fazShouldBlockResource(nodeCategory, nodeTarget, nodeService)) return true;
                 if (node.nodeName.toLowerCase() === "script") {
                     const scriptNode = _fazBuildRestoredScript(node);
                     if (!scriptNode) return false;
@@ -2572,6 +2708,7 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
         'type',
         'src',
         'data-faz-category',
+        'data-faz-service',
         'data-faz-original-type',
     ]);
 
@@ -2611,7 +2748,7 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
 function _fazBuildRestoredIframe(iframe, placeholder) {
     var clone = document.createElement('iframe');
     var iframeSrc = iframe.getAttribute('src') || iframe.src;
-    var skip = { 'src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
+    var skip = { 'src': 1, 'data-faz-category': 1, 'data-faz-service': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
 
     for (var i = 0; i < iframe.attributes.length; i++) {
         var attr = iframe.attributes[i];
@@ -2637,6 +2774,7 @@ function _fazRestoreInlineScript(script, extraRemoveAttributes) {
     var origType = script.getAttribute('data-faz-original-type');
     var removeAttrs = (extraRemoveAttributes || []).concat([
         'data-faz-category',
+        'data-faz-service',
         'data-faz-original-type',
     ]);
 
@@ -2679,8 +2817,9 @@ function _fazUnblockServerSide() {
         .forEach(function (script) {
             var category = script.getAttribute("data-faz-category")
                 || (script.getAttribute("data-fazcookie") || "").replace("fazcookie-", "");
-            if (_fazIsCategoryToBeBlocked(category)) return;
             var scriptSrc = script.getAttribute('src') || script.src || '';
+            var scriptTarget = scriptSrc || script.textContent || '';
+            if (_fazShouldBlockResource(category, scriptTarget, script.getAttribute("data-faz-service") || "")) return;
             if (!scriptSrc) {
                 _fazRestoreInlineScript(script);
                 return;
@@ -2707,9 +2846,13 @@ function _fazUnblockServerSide() {
             // Skip social placeholders — handled separately in step 6.
             if (placeholder.classList.contains('faz-social-placeholder')) return;
             var cat = placeholder.getAttribute("data-faz-category");
-            if (_fazIsCategoryToBeBlocked(cat)) return;
             var tpl = placeholder.querySelector('template.faz-placeholder-content');
             if (!tpl) return;
+            if (_fazShouldBlockResource(
+                cat,
+                tpl.innerHTML || '',
+                placeholder.getAttribute("data-faz-service") || ""
+            )) return;
             // Clone template content into a document fragment for safe DOM insertion.
             // The template content is trusted server-rendered markup (the original
             // blocked iframe/oEmbed HTML), not user-supplied input.
@@ -2741,8 +2884,8 @@ function _fazUnblockServerSide() {
     document.querySelectorAll('iframe[data-faz-src][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
-            if (_fazIsCategoryToBeBlocked(cat)) return;
             var fazSrc = el.getAttribute("data-faz-src");
+            if (_fazShouldBlockResource(cat, fazSrc, el.getAttribute("data-faz-service") || "")) return;
             if (!_fazIsAllowedScheme(fazSrc)) return;
             el.src = fazSrc;
             el.removeAttribute("data-faz-src");
@@ -2759,8 +2902,8 @@ function _fazUnblockServerSide() {
     document.querySelectorAll('img[data-faz-src][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
-            if (_fazIsCategoryToBeBlocked(cat)) return;
             var imgSrc = el.getAttribute("data-faz-src");
+            if (_fazShouldBlockResource(cat, imgSrc, el.getAttribute("data-faz-service") || "")) return;
             if (!_fazIsAllowedScheme(imgSrc)) return;
             el.src = imgSrc;
             el.removeAttribute("data-faz-src");
@@ -2770,8 +2913,8 @@ function _fazUnblockServerSide() {
     document.querySelectorAll('link[data-faz-href][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
-            if (_fazIsCategoryToBeBlocked(cat)) return;
             var fazHref = el.getAttribute("data-faz-href");
+            if (_fazShouldBlockResource(cat, fazHref, el.getAttribute("data-faz-service") || "")) return;
             if (!_fazIsAllowedScheme(fazHref)) return;
             el.href = fazHref;
             el.removeAttribute("data-faz-href");
@@ -2801,9 +2944,14 @@ function _fazUnblockServerSide() {
     document.querySelectorAll('.faz-social-placeholder[data-faz-category]')
         .forEach(function (placeholder) {
             var cat = placeholder.getAttribute("data-faz-category");
-            if (_fazIsCategoryToBeBlocked(cat)) return;
             // Show the hidden social element that follows the placeholder.
             var next = placeholder.nextElementSibling;
+            var socialTarget = next ? (next.getAttribute("src") || next.outerHTML || "") : "";
+            if (_fazShouldBlockResource(
+                cat,
+                socialTarget,
+                placeholder.getAttribute("data-faz-service") || ""
+            )) return;
             if (next && next.getAttribute("data-faz-category") === cat) {
                 next.classList.remove('faz-hidden');
                 next.removeAttribute("data-faz-category");
@@ -2920,7 +3068,7 @@ function _fazIsCategoryToBeBlocked(category) {
 }
 
 /**
- * Build a lookup map from provider pattern → service ID (lazily cached).
+ * Build a lookup map from provider pattern → service IDs (lazily cached).
  * Used by _fazShouldBlockProvider when per-service consent is active.
  */
 var _fazPatternServiceMap = null;
@@ -2931,19 +3079,22 @@ function _fazGetPatternServiceMap() {
     _fazStore._services.forEach(function(svc) {
         if (!svc.patterns) return;
         svc.patterns.forEach(function(p) {
-            _fazPatternServiceMap[p] = svc.id;
+            if (!_fazPatternServiceMap[p]) _fazPatternServiceMap[p] = [];
+            if (_fazPatternServiceMap[p].indexOf(svc.id) === -1) {
+                _fazPatternServiceMap[p].push(svc.id);
+            }
         });
     });
     return _fazPatternServiceMap;
 }
 
-function _fazShouldBlockProvider(formattedRE) {
-    if (!formattedRE || typeof formattedRE !== "string") return false;
+function _fazMatchingProviders(formattedRE) {
+    if (!formattedRE || typeof formattedRE !== "string") return [];
     var matchTarget = _fazGetProviderMatchTarget(formattedRE);
-    if (!matchTarget) return false;
-    if (!_fazStore._providersToBlock || !_fazStore._providersToBlock.length) return false;
+    if (!matchTarget) return [];
+    if (!_fazStore._providersToBlock || !_fazStore._providersToBlock.length) return [];
     var normalizedTarget = matchTarget.toLowerCase();
-    const provider = _fazStore._providersToBlock.find(({ re }) => {
+    return _fazStore._providersToBlock.filter(({ re }) => {
         if (!re) return false;
         var needle = String(re).toLowerCase();
         var idx = normalizedTarget.indexOf(needle);
@@ -2951,21 +3102,55 @@ function _fazShouldBlockProvider(formattedRE) {
         if (!_fazHasProviderBoundary(matchTarget, idx, needle.length)) return false;
         return true;
     });
-    if (!provider) return false;
+}
 
-    // Per-service consent: check the specific service first.
-    if (_fazStore._perServiceConsent && _fazStore._services && provider.re) {
-        var psMap = _fazGetPatternServiceMap();
-        var serviceId = psMap[provider.re];
-        if (serviceId) {
-            var svcConsent = ref._fazGetFromStore("svc." + serviceId);
-            if (svcConsent === "yes") return false; // Explicitly allowed.
-            if (svcConsent === "no") return true;   // Explicitly blocked.
-            // No specific consent — fall through to category check.
+function _fazGetServiceConsentForTarget(formattedRE) {
+    if (!_fazStore._perServiceConsent || !_fazStore._services) return "";
+    var providers = _fazMatchingProviders(formattedRE);
+    if (!providers.length) return "";
+
+    var psMap = _fazGetPatternServiceMap();
+    var hasExplicitYes = false;
+    for (var pi = 0; pi < providers.length; pi++) {
+        var serviceIds = psMap[providers[pi].re] || [];
+        for (var si = 0; si < serviceIds.length; si++) {
+            var svcConsent = ref._fazGetFromStore("svc." + serviceIds[si]);
+            if (svcConsent === "no") return "no";
+            if (svcConsent === "yes") hasExplicitYes = true;
         }
     }
+    return hasExplicitYes ? "yes" : "";
+}
 
-    return provider.categories.some((category) => _fazIsCategoryToBeBlocked(category));
+function _fazShouldBlockResource(category, target, serviceId) {
+    if (_fazStore._perServiceConsent) {
+        if (serviceId) {
+            var explicit = ref._fazGetFromStore("svc." + serviceId);
+            if (explicit === "no") return true;
+            if (explicit === "yes") return false;
+        }
+        var targetConsent = _fazGetServiceConsentForTarget(target);
+        if (targetConsent === "no") return true;
+        if (targetConsent === "yes") return false;
+    }
+
+    if (category) return _fazIsCategoryToBeBlocked(category);
+    return _fazShouldBlockProvider(target);
+}
+
+function _fazShouldBlockProvider(formattedRE) {
+    var providers = _fazMatchingProviders(formattedRE);
+    if (!providers.length) return false;
+
+    var serviceConsent = _fazGetServiceConsentForTarget(formattedRE);
+    if (serviceConsent === "yes") return false;
+    if (serviceConsent === "no") return true;
+
+    return providers.some(function(provider) {
+        return provider.categories.some(function(category) {
+            return _fazIsCategoryToBeBlocked(category);
+        });
+    });
 }
 /**
  * Check if the URL matches a user-defined whitelist pattern.
@@ -3215,6 +3400,7 @@ function _fazAttachManualLinksStyles() {
 }
 
 var _fazCategoriesBeforeConsent = null;
+var _fazServicesBeforeConsent = null;
 
 function _fazAfterConsent() {
     if (_fazGetLaw() === 'gdpr') _fazSetPreferenceCheckBoxStates(true);
@@ -3236,7 +3422,25 @@ function _fazAfterConsent() {
     _fazExecuteConsentScripts(_fazCategoriesBeforeConsent);
 
     // Clean up cookies from categories/services the user has not consented to.
-    var svcRevoked = _fazCleanupRevokedCookies();
+    var revokedServiceCookie = _fazCleanupRevokedCookies();
+
+    // A running third-party script cannot be unloaded. Reload on every
+    // effective yes → no service transition, even when that service has not
+    // created a cookie yet (cookie cleanup alone cannot detect that case).
+    var serviceRevoked = false;
+    if (_fazServicesBeforeConsent) {
+        var activeServices = _fazStore._services || [];
+        for (var sri = 0; sri < activeServices.length; sri++) {
+            var activeService = activeServices[sri];
+            if (
+                _fazServicesBeforeConsent[activeService.id] === "yes" &&
+                _fazServiceEffectiveConsent(activeService.id, activeService.category) === "no"
+            ) {
+                serviceRevoked = true;
+                break;
+            }
+        }
+    }
 
     // Best-effort cleanup of IndexedDB databases and Cache Storage entries
     // that belong to blocked tracking providers (e.g. Mixpanel, PWA trackers).
@@ -3312,7 +3516,9 @@ function _fazAfterConsent() {
     // Re-run server-side unblocking for newly accepted categories.
     _fazUnblockServerSide();
 
-    if (svcRevoked || revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
+    if (revokedServiceCookie || serviceRevoked || revoked || _fazStore._bannerConfig.behaviours.reloadBannerOnAccept === true) {
+        _fazCategoriesBeforeConsent = null;
+        _fazServicesBeforeConsent = null;
         _storageCleanupPromise.then(function() { window.location.reload(); });
         return;
     }
@@ -3358,6 +3564,7 @@ function _fazAfterConsent() {
 
     // Reset snapshot so the next consent action starts with a clean diff.
     _fazCategoriesBeforeConsent = null;
+    _fazServicesBeforeConsent = null;
 }
 
 /**
@@ -3402,32 +3609,8 @@ function _fazDeleteCookie(name) {
 function _fazCleanupRevokedCookies() {
     var cookieMap = _fazStore._cookieCategoryMap;
 
-    // Build a per-service cookie map: pattern → service_id for denied services.
-    var svcCookieMap = {};
-    if (_fazStore._perServiceConsent && _fazStore._services) {
-        _fazStore._services.forEach(function(svc) {
-            var svcConsent = ref._fazGetFromStore("svc." + svc.id);
-            if (svcConsent === "no" && svc.cookies && svc.cookies.length) {
-                svc.cookies.forEach(function(pat) { svcCookieMap[pat] = svc.id; });
-            }
-            // Per-cookie shredding (issue #135): when the service itself is
-            // allowed but the visitor opted a single cookie out, add just that
-            // cookie pattern. A denied cookie can't be stopped from being set
-            // (its service script runs) but is deleted whenever it appears —
-            // the same post-hoc enforcement used for a denied service.
-            if (_fazStore._perCookieConsent && svc.cookies && svc.cookies.length) {
-                svc.cookies.forEach(function(pat) {
-                    if (ref._fazGetFromStore(_fazCkKey(svc.id, pat)) === "no") {
-                        svcCookieMap[pat] = svc.id;
-                    }
-                });
-            }
-        });
-    }
-
     var hasCategoryMap = cookieMap && typeof cookieMap === "object";
-    var hasSvcMap = Object.keys(svcCookieMap).length > 0;
-    if (!hasCategoryMap && !hasSvcMap) return;
+    if (!hasCategoryMap && !_fazStore._perServiceConsent) return;
 
     // Plugin cookies that must never be deleted.
     var protectedCookies = ['fazcookie-consent', 'fazVendorConsent', 'euconsent-v2'];
@@ -3444,28 +3627,17 @@ function _fazCleanupRevokedCookies() {
         if (protectedCookies.indexOf(cookieName) !== -1) continue;
         if (_fazIsCookieWhitelisted(cookieName)) continue;
 
-        var shouldDelete = false;
-
-        // Category-based shredding.
-        if (hasCategoryMap) {
+        var serviceDecision = _fazGetServiceCookieDecision(cookieName);
+        var shouldDelete = serviceDecision === "no";
+        if (shouldDelete) {
+            svcRevoked = true;
+        } else if (serviceDecision !== "yes" && hasCategoryMap) {
             for (var pattern in cookieMap) {
                 if (!cookieMap.hasOwnProperty(pattern)) continue;
                 var category = cookieMap[pattern];
                 if (!_fazIsCategoryToBeBlocked(category)) continue;
                 if (_fazCookieNameMatches(cookieName, pattern)) {
                     shouldDelete = true;
-                    break;
-                }
-            }
-        }
-
-        // Per-service shredding (service denied even if category allowed).
-        if (!shouldDelete && hasSvcMap) {
-            for (var svcPat in svcCookieMap) {
-                if (!svcCookieMap.hasOwnProperty(svcPat)) continue;
-                if (_fazCookieNameMatches(cookieName, svcPat)) {
-                    shouldDelete = true;
-                    svcRevoked = true;
                     break;
                 }
             }
@@ -3491,18 +3663,15 @@ function _fazCleanupRevokedCookies() {
                 // Never shred internal plugin session keys regardless of user-defined patterns.
                 if (key === 'faz_age_verified') continue;
                 if (_fazIsCookieWhitelisted(key)) continue;
-                var del = false;
-                if (hasCategoryMap) {
+                var storageServiceDecision = _fazGetServiceCookieDecision(key);
+                var del = storageServiceDecision === "no";
+                if (del) {
+                    svcRevoked = true;
+                } else if (storageServiceDecision !== "yes" && hasCategoryMap) {
                     for (var kPat in cookieMap) {
                         if (!cookieMap.hasOwnProperty(kPat)) continue;
                         if (!_fazIsCategoryToBeBlocked(cookieMap[kPat])) continue;
                         if (_fazCookieNameMatches(key, kPat)) { del = true; break; }
-                    }
-                }
-                if (!del && hasSvcMap) {
-                    for (var kSvc in svcCookieMap) {
-                        if (!svcCookieMap.hasOwnProperty(kSvc)) continue;
-                        if (_fazCookieNameMatches(key, kSvc)) { del = true; break; }
                     }
                 }
                 if (del) keysToDelete.push(key);
@@ -3844,6 +4013,20 @@ function _fazWatchBannerElement() {
             return;
         }
         var cat = btn.getAttribute("data-faz-accept");
+        var serviceId = btn.getAttribute("data-faz-accept-service");
+        if (
+            serviceId &&
+            _fazStore._perServiceConsent &&
+            typeof window._fazAcceptService === "function"
+        ) {
+            var activeService = (_fazStore._services || []).some(function(service) {
+                return service.id === serviceId && service.category === cat;
+            });
+            if (activeService) {
+                window._fazAcceptService(serviceId, cat);
+                return;
+            }
+        }
         if (cat && typeof window._fazAcceptCategory === "function") {
             window._fazAcceptCategory(cat);
         }
@@ -4339,6 +4522,44 @@ function _fazSaveVendorConsent(choice) {
 }
 
 /**
+ * Accept one detected service without granting its entire category.
+ */
+window._fazAcceptService = function (serviceId, categorySlug) {
+    var serviceToggle = document.querySelector(
+        '.faz-service-toggle[data-service="' + serviceId + '"][data-category="' + categorySlug + '"]'
+    );
+    if (!serviceToggle) {
+        window._fazAcceptCategory(categorySlug);
+        return;
+    }
+
+    _fazCategoriesBeforeConsent = [];
+    var categories = _fazStore._categories || [];
+    for (var ci = 0; ci < categories.length; ci++) {
+        if (categories[ci].slug !== 'necessary' && !_fazIsCategoryToBeBlocked(categories[ci].slug)) {
+            _fazCategoriesBeforeConsent.push(categories[ci].slug);
+        }
+    }
+    _fazServicesBeforeConsent = _fazGetServiceConsentSnapshot();
+
+    var previousChecked = serviceToggle.checked;
+    serviceToggle.checked = true;
+    serviceToggle.dispatchEvent(new Event('change', { bubbles: true }));
+
+    if (_fazAcceptCookies("custom") === false) {
+        serviceToggle.checked = previousChecked;
+        serviceToggle.dispatchEvent(new Event('change', { bubbles: true }));
+        _fazCategoriesBeforeConsent = null;
+        _fazServicesBeforeConsent = null;
+        return;
+    }
+
+    _fazRemoveBanner();
+    _fazHidePreferenceCenter();
+    _fazAfterConsent();
+};
+
+/**
  * Accept a single consent category programmatically (used by iframe placeholders).
  */
 window._fazAcceptCategory = function (categorySlug) {
@@ -4347,6 +4568,7 @@ window._fazAcceptCategory = function (categorySlug) {
     // _fazAcceptCookies can detect which categories are truly newly accepted.
     // _fazAcceptCookies skips its own snapshot when this is already populated.
     _fazCategoriesBeforeConsent = [];
+    _fazServicesBeforeConsent = _fazGetServiceConsentSnapshot();
     var _preCats = _fazStore._categories || [];
     for (var _pi = 0; _pi < _preCats.length; _pi++) {
         if (_preCats[_pi].slug !== 'necessary' && !_fazIsCategoryToBeBlocked(_preCats[_pi].slug)) {
@@ -4374,6 +4596,7 @@ window._fazAcceptCategory = function (categorySlug) {
     }
     if (!matched) {
         _fazCategoriesBeforeConsent = null;
+        _fazServicesBeforeConsent = null;
         return;
     }
     if (_fazAcceptCookies("custom") === false) {
@@ -4388,6 +4611,7 @@ window._fazAcceptCategory = function (categorySlug) {
                 .forEach(function(svcToggle) { svcToggle.checked = previousCategoryValue === "yes"; });
         }
         _fazCategoriesBeforeConsent = null;
+        _fazServicesBeforeConsent = null;
         return;
     }
     _fazRemoveBanner();
@@ -4395,6 +4619,7 @@ window._fazAcceptCategory = function (categorySlug) {
     _fazAfterConsent();
     // Reset so the next direct call to _fazAcceptCookies takes a fresh snapshot.
     _fazCategoriesBeforeConsent = null;
+    _fazServicesBeforeConsent = null;
 };
 
 /**
