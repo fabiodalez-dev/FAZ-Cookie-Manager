@@ -6,7 +6,7 @@ Esta Política de Cookies describe cómo **{{COMPANY_NAME}}** ("nosotros") utili
 
 ## Controlador
 
-- **Empresa:** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
+- **Responsable del tratamiento:** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
 - **CNPJ:** {{COMPANY_REGISTRY}}
 - **Encarregado de Dados (DPO) — obligatorio Art. 41 LGPD:** {{DPO_NAME}} — {{DPO_EMAIL}}
 

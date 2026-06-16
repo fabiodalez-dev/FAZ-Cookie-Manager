@@ -8,7 +8,7 @@ La presente Cookie Policy descrive come **{{COMPANY_NAME}}** ("noi") utilizza i 
 
 Il titolare del trattamento dei dati personali raccolti tramite cookie è:
 
-- **Società:** {{COMPANY_NAME}}
+- **Titolare del trattamento:** {{COMPANY_NAME}}
 - **Indirizzo:** {{COMPANY_ADDRESS}}
 - **Email:** {{COMPANY_EMAIL}}
 - **Registro / Partita IVA:** {{COMPANY_REGISTRY}}

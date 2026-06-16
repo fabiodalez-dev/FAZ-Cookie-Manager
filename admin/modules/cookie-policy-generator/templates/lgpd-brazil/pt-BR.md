@@ -8,7 +8,7 @@ Esta Política de Cookies descreve como **{{COMPANY_NAME}}** ("nós") utiliza co
 
 O Controlador dos dados pessoais coletados por meio de cookies é:
 
-- **Empresa:** {{COMPANY_NAME}}
+- **Controlador de dados:** {{COMPANY_NAME}}
 - **Endereço:** {{COMPANY_ADDRESS}}
 - **E-mail de privacidade:** {{COMPANY_EMAIL}}
 - **CNPJ / Inscrição:** {{COMPANY_REGISTRY}}
