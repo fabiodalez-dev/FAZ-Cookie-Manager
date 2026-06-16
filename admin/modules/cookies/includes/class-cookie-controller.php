@@ -295,7 +295,7 @@ class Cookie_Controller extends Base_Controller {
 		global $wpdb;
 		$date_modified = current_time( 'mysql' );
 		$object->set_date_modified( $date_modified );
-		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookies',
 			array(
 				'name'          => $object->get_name(),
@@ -327,8 +327,17 @@ class Cookie_Controller extends Base_Controller {
 				'%s',
 			)
 		);
+		if ( false === $result ) {
+			return false;
+		}
+		// 0 === $result is "no row changed" (id not matched, or identical
+		// values) — nothing to invalidate. Mirror delete_item()'s contract.
+		if ( 0 === $result ) {
+			return 0;
+		}
 		$this->delete_cache();
 		do_action( 'faz_after_update_cookie' );
+		return $result;
 	}
 
 	/**

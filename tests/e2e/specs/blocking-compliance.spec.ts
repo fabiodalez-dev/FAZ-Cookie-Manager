@@ -16,7 +16,7 @@ import {
   wpEval,
 } from '../utils/wp-env';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const IS_PHP_BUILT_IN_E2E = (process.env.FAZ_E2E_SERVER ?? 'php-built-in').toLowerCase() === 'php-built-in';
 
 type SettingsPayload = Record<string, any>;

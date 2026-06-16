@@ -3246,6 +3246,16 @@ function _fazShouldChangeType(element, src) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
     var url = src ? src : element.src;
     if (_fazIsUserWhitelisted(url)) return false;
+    // Per-service override wins for dynamically-created scripts too: an explicit
+    // svc.<id>:yes must unblock a script whose category is denied (and svc:no
+    // must block one whose category is allowed). Without this the dynamic
+    // document.createElement path ignored per-service choices.
+    var serviceId = element.getAttribute ? (element.getAttribute("data-faz-service") || "") : "";
+    if (_fazStore._perServiceConsent && serviceId) {
+        var explicit = ref._fazGetFromStore("svc." + serviceId);
+        if (explicit === "no") return true;
+        if (explicit === "yes") return false;
+    }
     return (
         (element.hasAttribute("data-fazcookie") &&
             _fazIsCategoryToBeBlocked(
@@ -4788,13 +4798,44 @@ function _fazSaveVendorConsent(choice) {
  * Accept one detected service without granting its entire category.
  */
 window._fazAcceptService = function (serviceId, categorySlug) {
-    var serviceToggle = document.querySelector(
-        '.faz-service-toggle[data-service="' + serviceId + '"][data-category="' + categorySlug + '"]'
-    );
-    if (!serviceToggle) {
+    // Is this a real per-service entry? If not (per-service off, or service not
+    // detected) fall back to accepting the category so the placeholder unblocks.
+    var knownService = false;
+    var services = _fazStore._services || [];
+    for (var si = 0; si < services.length; si++) {
+        if (services[si] && services[si].id === serviceId && services[si].category === categorySlug) {
+            knownService = true;
+            break;
+        }
+    }
+    if (!knownService) {
         window._fazAcceptCategory(categorySlug);
         return;
     }
+
+    var serviceToggle = document.querySelector(
+        '.faz-service-toggle[data-service="' + serviceId + '"][data-category="' + categorySlug + '"]'
+    );
+    var syntheticToggle = null;
+    if (!serviceToggle) {
+        // The preference center has not rendered this service's toggle (the embed
+        // was accepted from its placeholder before opening the panel). Drive the
+        // same svc.<id>:yes flow via a detached toggle so we grant the SERVICE,
+        // not the whole category.
+        syntheticToggle = document.createElement('input');
+        syntheticToggle.type = 'checkbox';
+        syntheticToggle.className = 'faz-service-toggle';
+        syntheticToggle.setAttribute('data-service', serviceId);
+        syntheticToggle.setAttribute('data-category', categorySlug);
+        syntheticToggle.style.display = 'none';
+        document.body.appendChild(syntheticToggle);
+        serviceToggle = syntheticToggle;
+    }
+    var _fazCleanupSyntheticToggle = function () {
+        if (syntheticToggle && syntheticToggle.parentNode) {
+            syntheticToggle.parentNode.removeChild(syntheticToggle);
+        }
+    };
 
     _fazCategoriesBeforeConsent = [];
     var categories = _fazStore._categories || [];
@@ -4812,11 +4853,13 @@ window._fazAcceptService = function (serviceId, categorySlug) {
     if (_fazAcceptCookies("custom") === false) {
         serviceToggle.checked = previousChecked;
         serviceToggle.dispatchEvent(new Event('change', { bubbles: true }));
+        _fazCleanupSyntheticToggle();
         _fazCategoriesBeforeConsent = null;
         _fazServicesBeforeConsent = null;
         return;
     }
 
+    _fazCleanupSyntheticToggle();
     _fazRemoveBanner();
     _fazHidePreferenceCenter();
     _fazAfterConsent();
@@ -4979,7 +5022,10 @@ window.addEventListener('message', function(event) {
         // surface: the overall payload is still bounded (length cap above)
         // and written verbatim as a cookie value, not interpreted as HTML.
         var consent = event.data.consent;
-        if (typeof consent !== 'string' || consent.length > 2048) return;
+        // Bound the forwarded value to the same ceiling the consent cookie uses
+        // (FAZ_COOKIE_VALUE_BUDGET = 3500 encoded bytes); the old 2048 cap
+        // silently dropped valid choices carrying many svc.* / ck.* overrides.
+        if (typeof consent !== 'string' || encodeURIComponent(consent).length > 3500) return;
         if (!/^[A-Za-z0-9._:+/=\-]+(,[A-Za-z0-9._:+/=\-]+)*$/.test(consent)) return;
 
         // Require that the source user actually took a consent action (action:yes
