@@ -2,6 +2,14 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.19.1] — 2026-06-16
+
+### Fixed
+
+- **Legacy "Both" (GDPR + US) banners could silently lose their Do-Not-Sell opt-out.** Very old banners stored the opt-out only in a legacy direct key that the settings sanitiser drops, so the runtime never enabled the control and the banner degraded to pure GDPR. The runtime now back-fills the opt-out from the raw stored settings.
+- **Google Consent Mode: non-personalized-ads fallback now also signals on the first visit.** With the fallback enabled, legacy (non-Consent-Mode) ad tags now receive the `npa` signal at the initial default-consent stage — not only after a reject — and the signal is two-sided, clearing within the session once marketing is granted.
+- **Consent log + cookie hardening.** The consent-log `status` column is constrained to the known set (unknown values fold to `partial`) so a crafted REST payload can't pollute the dashboard statistics; the cookie cleanup gained a longer-tail pass to catch trackers that write a cookie well after page load; and an admin's explicit custom block rule is no longer silently exempted when it happens to be a substring of an always-allowed gateway pattern.
+
 ## [1.19.0] — 2026-06-16
 
 ### Added

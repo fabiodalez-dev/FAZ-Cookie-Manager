@@ -563,6 +563,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.19.1 — 2026-06-16
+- **Fixed**: legacy "Both" (GDPR + US) banners no longer silently lose their Do-Not-Sell opt-out (the runtime back-fills it from the raw stored settings); the Google Consent Mode non-personalized-ads fallback now signals `npa` on the first visit too (not only after a reject) and clears within the session once marketing is granted; consent-log `status` is constrained to the known set, the cookie cleanup gained a longer-tail pass, and an explicit admin custom block rule is no longer exempted by an always-allowed gateway substring match.
+
 ### 1.19.0 — 2026-06-16
 - **Added**: per-service consent reintroduced and now actually enforced (server-side block + cookie shredder + client UI), opt-in by default and sourced from scanner-detected services; Czech (cs_CZ) cookie-policy templates; compliance hardening (Quebec/Law 25 routing, DNSMPI enforcement, DSAR, accessibility, scanner TLS, and new geo rulesets for MN/MD/NH/NJ/TX/Canada); CCPA opt-out success message with accessible countdown.
 - **Fixed**: "Do Not Sell" always reaches a working opt-out (Classic-layout guard + runtime migration); banner template cache self-heals on update/toggle (no more stale markup served to new JS); blocked-embed placeholder keeps its branded styling; geo "source not configured" false-negative notice; cookie-policy controller labelled "data controller". New extension filters: `faz_per_service_services`, `faz_store_data`.

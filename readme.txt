@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.0
-Stable tag: 1.19.0
+Stable tag: 1.19.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -325,6 +325,11 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.19.1 =
+* Fix: legacy "Both" (GDPR + US) banners no longer silently lose their Do-Not-Sell opt-out. Very old banners stored it only in a legacy key that the settings sanitiser drops; the runtime now back-fills the opt-out from the raw stored settings so the US control still renders.
+* Fix: the Google Consent Mode non-personalized-ads fallback now signals `npa` on the FIRST visit too (legacy non-Consent-Mode ad tags previously only got it after a reject), and the signal is two-sided — it clears within the session once marketing is granted.
+* Hardening: the consent-log `status` column is constrained to the known set (unknown values fold to `partial`) so a crafted REST payload can't pollute the dashboard statistics; the client-side cookie cleanup gained a longer-tail pass to catch trackers that write a cookie well after page load; and an admin's explicit custom block rule is no longer silently exempted when it is a substring of an always-allowed payment-gateway pattern.
+
 = 1.19.0 =
 * Feature: per-service consent is reintroduced and now actually enforced. Granular per-service sub-toggles return under each category in the preference center (opt-in, sourced from the cookies actually detected on the site). A denied service is enforced server-side (pre-consent script block + cookie shredder) and client-side, an explicit allow overrides a denied category, and the choice persists across reloads and is written to the consent log. Enable it in Settings > Per-service consent. Extension filters: `faz_per_service_services`, `faz_store_data`.
 * Feature: Czech (cs_CZ) cookie-policy templates for the GDPR, CCPA and LGPD generators, with correct legal terminology and date grammar.
@@ -474,6 +479,9 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: WordPress Playground Live Preview on the plugin directory page.
 
 == Upgrade Notice ==
+
+= 1.19.1 =
+Fixes a case where very old "Both" (GDPR + US) banners silently lost their Do-Not-Sell opt-out, makes the Google Consent Mode non-personalized-ads fallback signal on the first visit, and hardens consent-log status, cookie cleanup, and custom block rules. Recommended for everyone on 1.19.0.
 
 = 1.19.0 =
 Per-service consent returns, now properly enforced (server-side block + cookie shredder, persisted across reloads, written to the consent log). Adds Czech cookie-policy templates, an accessible Do-Not-Sell opt-out confirmation, Quebec/Law 25 and more US-state geo rulesets, and several compliance fixes. The default category-level consent flow is unchanged; per-cookie consent stays gated.
