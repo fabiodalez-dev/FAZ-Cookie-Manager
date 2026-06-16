@@ -73,7 +73,13 @@
                         "confirm": "Tallenna asetukset"
                     }
                 },
-                "closeButton": "kiinni"
+                "closeButton": "kiinni",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Kieltäytymisvalintasi on otettu huomioon.",
+                        "subtext": "Banneri sulkeutuu automaattisesti <span id=\"fazCountdownTimer\"></span> s kuluttua..."
+                    }
+                }
             }
         },
         "revisitConsent": {
@@ -173,7 +179,13 @@
                         "confirm": "Tallenna asetukset"
                     }
                 },
-                "closeButton": "kiinni"
+                "closeButton": "kiinni",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Kieltäytymisvalintasi on otettu huomioon.",
+                        "subtext": "Banneri sulkeutuu automaattisesti <span id=\"fazCountdownTimer\"></span> s kuluttua..."
+                    }
+                }
             }
         },
         "revisitConsent": {

@@ -469,5 +469,21 @@
         "content": {},
         "customTag": "",
         "uiTag": ""
+    },
+    {
+        "key": "faz_optout_success_text",
+        "type": "text",
+        "content": {},
+        "attributes": {},
+        "customTag": "",
+        "uiTag": ""
+    },
+    {
+        "key": "faz_optout_success_subtext",
+        "type": "text",
+        "content": {},
+        "attributes": {},
+        "customTag": "",
+        "uiTag": ""
     }
-] 
+]

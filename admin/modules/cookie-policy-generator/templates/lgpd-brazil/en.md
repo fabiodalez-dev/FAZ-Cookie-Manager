@@ -6,7 +6,7 @@ This Cookie Policy describes how **{{COMPANY_NAME}}** ("we") uses cookies and si
 
 ## Controller
 
-- **Company:** {{COMPANY_NAME}}
+- **Data controller:** {{COMPANY_NAME}}
 - **Address:** {{COMPANY_ADDRESS}}
 - **Privacy contact:** {{COMPANY_EMAIL}}
 - **CNPJ:** {{COMPANY_REGISTRY}}

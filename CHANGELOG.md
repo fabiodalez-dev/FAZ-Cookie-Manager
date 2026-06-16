@@ -4,6 +4,10 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-out success message (US state laws / CCPA).** When a visitor confirms a "Do Not Sell or Share My Personal Information" opt-out, the popup no longer just disappears — it shows a confirmation message ("Your opt-out preference has been honored.") with an accessible live region (`role="status"` + `aria-live="polite"`, focus moved to the message), a countdown subtext, and auto-closes after the countdown (15s). This mirrors the opt-out confirmation UX shipped by modern US-state-law CMPs and makes the outcome explicit, which several state privacy regulators treat as a best practice. The headline and countdown copy are editable per language via the new `[faz_optout_success_text]` / `[faz_optout_success_subtext]` shortcodes and ship translated for the bundled locales. Closing the popup while the message shows dismisses immediately (consent is already saved); a confirm without opting out keeps the previous immediate-close behaviour. New banners get the feature from the CCPA/GDPR config defaults; banners saved before this release fall back gracefully to the prior immediate-close flow until re-saved.
+
 ### Fixed
 
 - **Banner text could promise a "Do Not Sell" link the selected law had removed.** The notice description is law-specific (the CCPA copy names the "Do Not Sell or Share My Personal Information" link and the consent-preferences icon; the GDPR copy does not), but changing the law dropdown only updated the opt-out button's visibility, not the copy. So a CCPA description could survive on a GDPR banner and tell visitors to click a link that was no longer rendered (reported on the support forum). The banner editor now reloads the law-appropriate default description when the law changes — but only when the current copy is still the previous law's untouched default, so a customised description is never overwritten; if a customised description still names the Do-Not-Sell link under a law that doesn't show it, a non-destructive hint points the admin to the Content tab.

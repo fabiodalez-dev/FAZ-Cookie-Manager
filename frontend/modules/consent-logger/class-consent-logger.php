@@ -84,6 +84,14 @@ class Consent_Logger {
 						'type'              => 'integer',
 						'sanitize_callback' => 'absint',
 					),
+					'tc_string' => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					'gpp_string' => array(
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					),
 				),
 			)
 		);
@@ -143,6 +151,16 @@ class Consent_Logger {
 			'url'        => $request->get_param( 'url' ),
 			'banner_slug' => $request->get_param( 'banner_slug' ),
 			'policy_revision' => $request->get_param( 'policy_revision' ),
+			// Audit signals derived server-side from the request headers so the
+			// signal_gpc_received / signal_dnt_received columns are actually
+			// populated in the normal frontend flow (they were always NULL
+			// before — the frontend payload never carried them). GPC is the
+			// `Sec-GPC: 1` header (mirror of navigator.globalPrivacyControl);
+			// DNT is the legacy `DNT: 1` header.
+			'signal_gpc' => ( isset( $_SERVER['HTTP_SEC_GPC'] ) && '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) ) ) ? 1 : 0,
+			'signal_dnt' => ( isset( $_SERVER['HTTP_DNT'] ) && '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_DNT'] ) ) ) ? 1 : 0,
+			'tc_string'  => $request->get_param( 'tc_string' ),
+			'gpp_string' => $request->get_param( 'gpp_string' ),
 		);
 
 		$result = Controller::get_instance()->log_consent( $data );

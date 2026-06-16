@@ -129,8 +129,16 @@ test.describe('CCPA revisit → opt-out popup (1-click UX, 1.14.4+)', () => {
       await checkbox.check();
       await page.locator('[data-faz-tag="optout-confirm-button"]').first().click();
 
+      // 3b. Confirming a CCPA opt-out now shows a success message that
+      //     auto-closes after a countdown (opt-out success message feature).
+      //     Assert it appears, then dismiss it via the popup close control so
+      //     this revisit-UX test stays fast instead of waiting out the timer.
+      const successMsg = page.locator('[data-faz-tag="optout-success"]').first();
+      await expect(successMsg, 'opt-out success message appears after confirm').toBeVisible({ timeout: REVISIT_TIMEOUT });
+      await page.locator('[data-faz-tag="optout-close"]').first().click();
+
       // 4. Banner + popup should now be hidden. Revisit widget should be visible.
-      await expect(banner, 'banner closes after confirm').toBeHidden({ timeout: REVISIT_TIMEOUT });
+      await expect(banner, 'banner closes after dismissing the success message').toBeHidden({ timeout: REVISIT_TIMEOUT });
       const revisitWidget = page.locator('[data-faz-tag="revisit-consent"]').first();
       await expect(revisitWidget, 'revisit floating widget appears after action').toBeVisible({ timeout: REVISIT_TIMEOUT });
 

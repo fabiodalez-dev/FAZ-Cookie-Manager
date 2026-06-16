@@ -148,12 +148,6 @@ class Template {
 		$language       = is_string( $language ) ? trim( sanitize_text_field( $language ) ) : '';
 		$this->language = '' !== $language ? $language : faz_current_language();
 		if ( $banner ) {
-			if ( is_callable( array( $banner, 'apply_runtime_layout_compatibility' ) ) ) {
-				$banner->apply_runtime_layout_compatibility();
-			}
-			if ( is_callable( array( $banner, 'apply_runtime_law_content_compatibility' ) ) ) {
-				$banner->apply_runtime_law_content_compatibility();
-			}
 			$this->banner     = $banner;
 			$this->properties = $banner->get_settings();
 			$this->load();
@@ -174,11 +168,7 @@ class Template {
 	 * @return void
 	 */
 	public function load() {
-		$stored = $this->get_stored();
-		if ( true === $this->is_preview()
-			|| empty( $stored )
-			|| ! isset( $stored['layout_signature'] )
-			|| $this->get_layout_signature() !== $stored['layout_signature'] ) {
+		if ( true === $this->is_preview() || empty( $this->get_stored() ) ) {
 			$this->generate();
 		} else {
 			$this->set_template();
@@ -591,17 +581,37 @@ class Template {
 		// get_contents() which re-sanitizes every selected language on a cache hit.
 		$notice_description = $this->banner ? $this->banner->get_notice_description( $this->language ) : '';
 
+		// Banner-control flags that change the generated preference-center markup
+		// (the per-service / per-cookie toggle structure script.js hydrates).
+		// Read from the global faz_settings option (autoloaded → cheap).
+		$faz_settings   = get_option( 'faz_settings', array() );
+		$banner_control = ( is_array( $faz_settings ) && isset( $faz_settings['banner_control'] ) && is_array( $faz_settings['banner_control'] ) )
+			? $faz_settings['banner_control']
+			: array();
+
 		return md5(
 			wp_json_encode(
 				array(
-					'version'      => isset( $settings['versionID'] ) ? $settings['versionID'] : 'default',
-					'type'         => isset( $settings['type'] ) ? $settings['type'] : 'box',
-					'ptype'        => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
-					'theme'        => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
-					'law'          => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
-					'do_not_sell'  => $do_not_sell,
-					'optout_popup' => ! empty( $config['optoutPopup']['status'] ),
-					'description'  => md5( $notice_description ),
+					// Bump the cache whenever the plugin updates: the generated
+					// template HTML (ids, classes, accordion structure) can change
+					// between releases, and the stored template must never outlive
+					// the JS that hydrates it. Without this a post-update install
+					// keeps serving the previous version's markup to the new
+					// script.js, silently breaking features such as the per-service
+					// sub-toggles (issue #146).
+					'plugin_version' => defined( 'FAZ_VERSION' ) ? FAZ_VERSION : 'dev',
+					'version'        => isset( $settings['versionID'] ) ? $settings['versionID'] : 'default',
+					'type'           => isset( $settings['type'] ) ? $settings['type'] : 'box',
+					'ptype'          => isset( $settings['preferenceCenterType'] ) ? $settings['preferenceCenterType'] : 'popup',
+					'theme'          => isset( $settings['theme'] ) ? $settings['theme'] : 'light',
+					'law'            => isset( $settings['applicableLaw'] ) ? $settings['applicableLaw'] : 'gdpr',
+					'do_not_sell'    => $do_not_sell,
+					'optout_popup'   => ! empty( $config['optoutPopup']['status'] ),
+					// Toggling per-service / per-cookie consent changes the
+					// preference-center structure, so it must invalidate the cache.
+					'per_service'    => ! empty( $banner_control['per_service_consent'] ),
+					'per_cookie'     => ! empty( $banner_control['per_cookie_consent'] ),
+					'description'    => md5( $notice_description ),
 				)
 			)
 		);
@@ -632,12 +642,11 @@ class Template {
 		$stored    = is_array( $stored ) && ! empty( $stored ) ? $stored : array();
 
 		$stored[ $this->get_storage_key() ] = array(
-			'html'             => wp_kses( $this->html, faz_allowed_html() ),
-			'styles'           => wp_kses(
+			'html'   => wp_kses( $this->html, faz_allowed_html() ),
+			'styles' => wp_kses(
 				$this->styles,
 				faz_allowed_html()
 			),
-			'layout_signature' => $this->get_layout_signature(),
 		);
 		update_option(
 			$cache_key,
@@ -692,6 +701,7 @@ class Template {
 			'detail-powered-by',
 			'optout-close',
 			'optout-powered-by',
+			'optout-success-icon',
 		);
 	}
 }

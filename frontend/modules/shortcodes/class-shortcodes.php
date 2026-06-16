@@ -754,6 +754,30 @@ class Shortcodes {
 	}
 
 	/**
+	 * Callback for the shortcode [faz_optout_success_text]
+	 *
+	 * Headline shown after a US-state-law (CCPA) opt-out is confirmed.
+	 *
+	 * @return string
+	 */
+	public function faz_optout_success_text() {
+		return isset( $this->contents['optoutPopup']['elements']['optoutSuccess']['elements']['text'] ) ? $this->contents['optoutPopup']['elements']['optoutSuccess']['elements']['text'] : '';
+	}
+
+	/**
+	 * Callback for the shortcode [faz_optout_success_subtext]
+	 *
+	 * Auto-close countdown line shown beneath the opt-out success headline.
+	 * May contain a <span id="fazCountdownTimer"></span> that the frontend
+	 * script fills with the remaining seconds.
+	 *
+	 * @return string
+	 */
+	public function faz_optout_success_subtext() {
+		return isset( $this->contents['optoutPopup']['elements']['optoutSuccess']['elements']['subtext'] ) ? $this->contents['optoutPopup']['elements']['optoutSuccess']['elements']['subtext'] : '';
+	}
+
+	/**
 	 * Callback for the shortcode [faz_category_toggle_label]
 	 *
 	 * @return string

@@ -30,6 +30,14 @@ import {
 const PLUGIN_SLUG = 'faz-cookie-manager';
 const PLUGIN_FILE = `${PLUGIN_SLUG}/faz-cookie-manager.php`;
 const PLUGINS_PAGE = '/wp-admin/plugins.php';
+// Match the actual plugin row, NOT the "update available" notification row.
+// faz-cookie-manager is published on wp.org, so whenever the local install is
+// behind the wp.org version WordPress renders a second
+// `<tr class="plugin-update-tr" data-plugin="...">` with the SAME data-plugin
+// attribute. A bare `tr[data-plugin=...]` locator then matches two elements
+// and trips Playwright strict mode. `:not(.plugin-update-tr)` selects only the
+// real plugin row (class active|inactive).
+const PLUGIN_ROW = `tr[data-plugin="${PLUGIN_FILE}"]:not(.plugin-update-tr)`;
 
 // Source and deploy paths — configurable via env vars for CI portability.
 const SOURCE_PATH = process.env.FAZ_PLUGIN_SOURCE_PATH ?? `${process.cwd()}/`;
@@ -83,7 +91,7 @@ async function ensurePluginActive(page: import('@playwright/test').Page, wpBaseU
   }
 
   await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-  const pluginRow = page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`);
+  const pluginRow = page.locator(`${PLUGIN_ROW}`);
 
   if (await pluginRow.count() === 0) {
     // Plugin files missing — reload after rsync
@@ -127,23 +135,23 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Deactivate ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const deactivateLink = page.locator(`tr[data-plugin="${PLUGIN_FILE}"] a[href*="action=deactivate"]`);
+    const deactivateLink = page.locator(`${PLUGIN_ROW} a[href*="action=deactivate"]`);
     await deactivateLink.click();
     await page.waitForLoadState('domcontentloaded');
 
     // Verify deactivated — WP class should be "inactive", NOT "active"
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const rowClassAfterDeactivate = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const rowClassAfterDeactivate = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(rowClassAfterDeactivate)).toBe(false);
 
     // --- Reactivate ---
-    const activateLink = page.locator(`tr[data-plugin="${PLUGIN_FILE}"] span.activate a`);
+    const activateLink = page.locator(`${PLUGIN_ROW} span.activate a`);
     await activateLink.click();
     await page.waitForLoadState('domcontentloaded');
 
     // Verify activated
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const rowClassAfterActivate = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const rowClassAfterActivate = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(rowClassAfterActivate)).toBe(true);
 
     // --- Verify data is still there (categories preserved) ---
@@ -189,14 +197,14 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Step 1: Deactivate via WP admin ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const deactivateLink = page.locator(`tr[data-plugin="${PLUGIN_FILE}"] a[href*="action=deactivate"]`);
+    const deactivateLink = page.locator(`${PLUGIN_ROW} a[href*="action=deactivate"]`);
     await expect(deactivateLink).toBeVisible();
     await deactivateLink.click();
     await page.waitForLoadState('domcontentloaded');
 
     // Verify deactivated
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const rowAfterDeactivate = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const rowAfterDeactivate = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(rowAfterDeactivate)).toBe(false);
 
     // --- Step 2: Delete plugin files from disk ---
@@ -210,7 +218,7 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Step 3: Verify plugin is gone ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const pluginGone = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).count();
+    const pluginGone = await page.locator(`${PLUGIN_ROW}`).count();
     expect(pluginGone).toBe(0);
 
     // --- Step 4: Re-deploy plugin files via rsync (simulates upload/install) ---
@@ -220,7 +228,7 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // --- Step 5: Verify plugin appears in list (inactive) ---
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const reinstalledRow = page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`);
+    const reinstalledRow = page.locator(`${PLUGIN_ROW}`);
     await expect(reinstalledRow).toBeVisible();
     const rowClass = await reinstalledRow.getAttribute('class');
     expect(isPluginActive(rowClass)).toBe(false);
@@ -231,7 +239,7 @@ test.describe.serial('Plugin lifecycle', () => {
 
     // Verify activated
     await page.goto(`${wpBaseURL}${PLUGINS_PAGE}`, { waitUntil: 'domcontentloaded' });
-    const activatedClass = await page.locator(`tr[data-plugin="${PLUGIN_FILE}"]`).getAttribute('class');
+    const activatedClass = await page.locator(`${PLUGIN_ROW}`).getAttribute('class');
     expect(isPluginActive(activatedClass)).toBe(true);
 
     // --- Step 7: Verify DB tables created and default categories present ---
@@ -342,6 +350,52 @@ test.describe.serial('Plugin lifecycle — deep paths', () => {
       if ( class_exists( '\\\\FazCookie\\\\Includes\\\\Activator' ) ) {
         \\FazCookie\\Includes\\Activator::install();
       }
+    `);
+    // Activator::install() recreates the schema and the uncategorized /
+    // wordpress-internal categories, but NOT the user-facing default
+    // categories — and the destructive "drop wp_faz_* tables" test above
+    // also wipes every cookie row. Since 1.17.1 the preference center HIDES
+    // empty categories, so a downstream spec (e.g. the TCF timestamps test)
+    // that toggles `analytics` finds no toggle to click. Re-seed the default
+    // categories AND a fixture cookie per category, mirroring global-setup.ts,
+    // so the rest of the run sees the canonical, non-empty category set.
+    wpEval(`
+      global $wpdb;
+      if ( ! class_exists( '\\\\FazCookie\\\\Admin\\\\Modules\\\\Cookies\\\\Includes\\\\Category_Controller' ) ) { return; }
+      $category_controller = \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller::get_instance();
+      $category_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookie_categories" );
+      if ( $category_count < 3 && method_exists( $category_controller, 'reinstall' ) ) {
+        $category_controller->reinstall();
+      }
+      $fixture_categories = array(
+        'necessary'     => 'faz_e2e_necessary_probe',
+        'analytics'     => 'faz_e2e_analytics_probe',
+        'functional'    => 'faz_e2e_functional_probe',
+        'marketing'     => 'faz_e2e_marketing_probe',
+        'performance'   => 'faz_e2e_performance_probe',
+        'uncategorized' => 'faz_e2e_uncategorized_probe',
+      );
+      foreach ( $fixture_categories as $category_slug => $cookie_name ) {
+        $category_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT category_id FROM {$wpdb->prefix}faz_cookie_categories WHERE slug = %s", $category_slug ) );
+        if ( $category_id <= 0 ) { continue; }
+        $has_cookie = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}faz_cookies WHERE category = %d", $category_id ) );
+        if ( 0 === $has_cookie ) {
+          $now = current_time( 'mysql' );
+          $wpdb->insert( $wpdb->prefix . 'faz_cookies', array(
+            'name' => $cookie_name, 'slug' => str_replace( '_', '-', $cookie_name ),
+            'description' => wp_json_encode( array( 'en' => 'E2E fixture cookie.' ) ),
+            'duration' => wp_json_encode( array( 'en' => 'Session' ) ),
+            'domain' => '127.0.0.1', 'category' => $category_id, 'type' => 'HTTP',
+            'discovered' => 0, 'url_pattern' => '', 'meta' => wp_json_encode( array() ),
+            'date_created' => $now, 'date_modified' => $now,
+          ) );
+        }
+      }
+      $category_controller->delete_cache();
+      if ( class_exists( '\\\\FazCookie\\\\Admin\\\\Modules\\\\Cookies\\\\Includes\\\\Cookie_Controller' ) ) {
+        \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Cookie_Controller::get_instance()->delete_cache();
+      }
+      delete_option( 'faz_banner_template' );
     `);
     // Restore remove_data_on_uninstall to its pre-test value.
     wpEval(`

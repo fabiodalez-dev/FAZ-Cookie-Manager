@@ -48,7 +48,7 @@ class Generator {
 	 *
 	 * @var string[]
 	 */
-	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg' );
+	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs' );
 
 	/**
 	 * Native language per jurisdiction (statutory bias):
@@ -73,7 +73,7 @@ class Generator {
 	 *   3. en (universal fallback)
 	 *
 	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil).
-	 * @param string $lang         BCP-47 (en / it / fr / de / es / pt-BR / bg).
+	 * @param string $lang         BCP-47 (en / it / fr / de / es / pt-BR / bg / cs).
 	 * @return string|null Absolute path to .md file, or null if no template found.
 	 */
 	public static function resolve_template_path( $jurisdiction, $lang ) {
