@@ -6,7 +6,7 @@ Cette politique décrit comment **{{COMPANY_NAME}}** ("nous") utilise les cookie
 
 ## Responsable du traitement
 
-- **Société :** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
+- **Responsable du traitement :** {{COMPANY_NAME}} — {{COMPANY_ADDRESS}} — {{COMPANY_EMAIL}}
 - **CNPJ :** {{COMPANY_REGISTRY}}
 - **Encarregado de Dados (DPO) — obligatoire Art. 41 LGPD :** {{DPO_NAME}} — {{DPO_EMAIL}}
 

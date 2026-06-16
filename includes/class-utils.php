@@ -289,6 +289,69 @@ if ( ! function_exists( 'faz_missing_tables' ) ) {
 		return get_option( 'faz_missing_tables', array() );
 	}
 }
+if ( ! function_exists( 'faz_ip_in_cidr_list' ) ) {
+	/**
+	 * Whether an IP address falls within any CIDR / bare-IP entry in a list.
+	 *
+	 * Supports IPv4 and IPv6. A bare IP (no `/prefix`) matches only itself.
+	 * Malformed entries are skipped. Used to gate trust of forwarded proxy
+	 * headers behind a trusted-proxy allowlist.
+	 *
+	 * @since 1.17.2
+	 * @param string   $ip   The IP address to test.
+	 * @param string[] $list CIDRs (e.g. "10.0.0.0/8", "2400:cb00::/32") or bare IPs.
+	 * @return bool True when $ip is inside any entry.
+	 */
+	function faz_ip_in_cidr_list( $ip, $list ) {
+		$ip_bin = @inet_pton( $ip ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- invalid IP returns false, handled below.
+		if ( false === $ip_bin ) {
+			return false;
+		}
+		foreach ( (array) $list as $entry ) {
+			$entry = trim( (string) $entry );
+			if ( '' === $entry ) {
+				continue;
+			}
+			if ( false === strpos( $entry, '/' ) ) {
+				// Bare IP — exact binary match.
+				$entry_bin = @inet_pton( $entry ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				if ( false !== $entry_bin && hash_equals( $entry_bin, $ip_bin ) ) {
+					return true;
+				}
+				continue;
+			}
+			list( $subnet, $prefix ) = explode( '/', $entry, 2 );
+			$subnet_bin              = @inet_pton( trim( $subnet ) ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$prefix                  = (int) $prefix;
+			if ( false === $subnet_bin || $prefix < 0 ) {
+				continue;
+			}
+			// Address families must match (both IPv4 or both IPv6).
+			if ( strlen( $subnet_bin ) !== strlen( $ip_bin ) ) {
+				continue;
+			}
+			$max_bits = strlen( $ip_bin ) * 8;
+			if ( $prefix > $max_bits ) {
+				continue;
+			}
+			$bytes_full = intdiv( $prefix, 8 );
+			$bits_rem   = $prefix % 8;
+			if ( $bytes_full > 0 && ! hash_equals( substr( $subnet_bin, 0, $bytes_full ), substr( $ip_bin, 0, $bytes_full ) ) ) {
+				continue;
+			}
+			if ( 0 === $bits_rem ) {
+				return true; // Full-byte prefix matched.
+			}
+			$mask     = chr( 0xFF << ( 8 - $bits_rem ) & 0xFF );
+			$ip_byte  = isset( $ip_bin[ $bytes_full ] ) ? $ip_bin[ $bytes_full ] : "\0";
+			$sub_byte = isset( $subnet_bin[ $bytes_full ] ) ? $subnet_bin[ $bytes_full ] : "\0";
+			if ( ( ord( $ip_byte ) & ord( $mask ) ) === ( ord( $sub_byte ) & ord( $mask ) ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
 if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 	/**
 	 * Resolve the client IP address with proxy awareness.
@@ -315,6 +378,30 @@ if ( ! function_exists( 'faz_resolve_client_ip' ) ) {
 		 * @param string $remote_addr The REMOTE_ADDR value.
 		 */
 		if ( apply_filters( 'faz_trust_proxy_headers', false, $remote_addr ) ) {
+			/**
+			 * Trusted reverse-proxy CIDR allowlist.
+			 *
+			 * Forwarded headers (X-Forwarded-For etc.) are client-controlled and
+			 * spoofable. When this allowlist is non-empty, the forwarded headers
+			 * are consulted ONLY if REMOTE_ADDR (the actual TCP peer) is one of
+			 * the trusted proxies — so an attacker who can reach the origin
+			 * directly cannot inject an arbitrary client IP to rotate past the
+			 * per-IP throttle or poison the hashed ip_hash. When the allowlist
+			 * is empty the legacy behaviour is preserved (the admin opted into
+			 * `faz_trust_proxy_headers` without scoping it), but configuring
+			 * this list is strongly recommended when the origin is also
+			 * directly reachable. CIDRs and bare IPs are both accepted.
+			 *
+			 * @since 1.17.2
+			 * @param string[] $cidrs       Trusted proxy CIDRs / IPs. Default empty.
+			 * @param string   $remote_addr The REMOTE_ADDR value.
+			 */
+			$trusted_proxies = (array) apply_filters( 'faz_trusted_proxies', array(), $remote_addr );
+			if ( ! empty( $trusted_proxies ) && ! faz_ip_in_cidr_list( $remote_addr, $trusted_proxies ) ) {
+				// REMOTE_ADDR is not a trusted proxy — the forwarded headers
+				// cannot be vouched for, so fall back to the real peer address.
+				return $remote_addr;
+			}
 			$headers = array(
 				'HTTP_CF_CONNECTING_IP', // Cloudflare.
 				'HTTP_X_FORWARDED_FOR',  // Generic reverse proxy.
@@ -507,9 +594,75 @@ if ( ! function_exists( 'faz_privacy_exporter' ) ) {
 	 * @return array Export data conforming to the WP privacy exporter format.
 	 */
 	function faz_privacy_exporter( $email_address, $page = 1 ) {
+		$export_items = array();
+		$email        = sanitize_email( (string) $email_address );
+		$page         = max( 1, (int) $page );
+		$per_page     = 20;
+		$done         = true;
+
+		// Consent logs store only one-way hashed IPs (SHA-256 + salt) and cannot
+		// be linked back to an email address — nothing to export there. DSAR form
+		// submissions (post_type faz_dsar), however, store the requester's name,
+		// email, request type and message in the clear, keyed by _dsar_email, so
+		// they ARE exportable personal data.
+		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
+			$query = new WP_Query(
+				array(
+					'post_type'      => 'faz_dsar',
+					'post_status'    => 'any',
+					'posts_per_page' => $per_page,
+					'paged'          => $page,
+					'fields'         => 'ids',
+					'no_found_rows'  => false,
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- DSAR exports are admin-triggered, low-volume, and must filter by the requester's email.
+					'meta_query'     => array(
+						array(
+							'key'     => '_dsar_email',
+							'value'   => $email,
+							'compare' => '=',
+						),
+					),
+				)
+			);
+			foreach ( $query->posts as $post_id ) {
+				$export_items[] = array(
+					'group_id'    => 'faz_dsar_requests',
+					'group_label' => __( 'Privacy requests (FAZ Cookie Manager)', 'faz-cookie-manager' ),
+					'item_id'     => 'faz-dsar-' . (int) $post_id,
+					'data'        => array(
+						array(
+							'name'  => __( 'Name', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_name', true ),
+						),
+						array(
+							'name'  => __( 'Email', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_email', true ),
+						),
+						array(
+							'name'  => __( 'Request type', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_type', true ),
+						),
+						array(
+							'name'  => __( 'Message', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_message', true ),
+						),
+						array(
+							'name'  => __( 'Status', 'faz-cookie-manager' ),
+							'value' => (string) get_post_meta( $post_id, '_dsar_status', true ),
+						),
+						array(
+							'name'  => __( 'Submitted', 'faz-cookie-manager' ),
+							'value' => (string) get_post_field( 'post_date', $post_id ),
+						),
+					),
+				);
+			}
+			$done = $page >= max( 1, (int) $query->max_num_pages );
+		}
+
 		return array(
-			'data' => array(),
-			'done' => true,
+			'data' => $export_items,
+			'done' => $done,
 		);
 	}
 }
@@ -528,13 +681,66 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	 * @return array Erasure result conforming to the WP privacy eraser format.
 	 */
 	function faz_privacy_eraser( $email_address, $page = 1 ) {
+		$email         = sanitize_email( (string) $email_address );
+		$page          = max( 1, (int) $page );
+		$per_page      = 20;
+		$items_removed = 0;
+		$messages      = array();
+		$done          = true;
+
+		// Consent logs use one-way IP hashing and cannot be linked to an email,
+		// so there is nothing to erase there (they auto-purge by retention). DSAR
+		// form submissions DO carry the requester's email and free text, so they
+		// are erasable on request.
+		$messages[] = __( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period.', 'faz-cookie-manager' );
+
+		if ( is_email( $email ) && post_type_exists( 'faz_dsar' ) ) {
+			// IMPORTANT: always read the FIRST batch, never `paged => $page`.
+			// WordPress calls the eraser repeatedly, incrementing $page, but each
+			// call here DELETES the records it finds — so the matching set shrinks
+			// underneath the offset. Paging forward (page 2, 3, …) would skip the
+			// records that slid into the earlier offsets and leave them behind
+			// (e.g. 25 records / 20-per-page → page 1 deletes 20, page 2 offsets
+			// past the remaining 5 and reports done, orphaning them). Reading
+			// page 1 every time drains the set deterministically.
+			$query = new WP_Query(
+				array(
+					'post_type'      => 'faz_dsar',
+					'post_status'    => 'any',
+					'posts_per_page' => $per_page,
+					'paged'          => 1,
+					'fields'         => 'ids',
+					'no_found_rows'  => true,
+					// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- DSAR erasures are admin-triggered, low-volume, and must filter by the requester's email.
+					'meta_query'     => array(
+						array(
+							'key'     => '_dsar_email',
+							'value'   => $email,
+							'compare' => '=',
+						),
+					),
+				)
+			);
+			$found = count( $query->posts );
+			foreach ( $query->posts as $post_id ) {
+				if ( wp_delete_post( (int) $post_id, true ) ) {
+					$items_removed++;
+				}
+			}
+			if ( $items_removed > 0 ) {
+				/* translators: %d: number of privacy-request records deleted. */
+				$messages[] = sprintf( _n( 'Deleted %d FAZ Cookie Manager privacy request.', 'Deleted %d FAZ Cookie Manager privacy requests.', $items_removed, 'faz-cookie-manager' ), $items_removed );
+			}
+			// Not done while this batch was full — there may be more to drain on
+			// the next call (which again reads the new first page).
+			$done = $found < $per_page;
+		}
+
 		return array(
-			'items_removed'  => 0,
-			'items_retained' => true,
-			'messages'       => array(
-				__( 'FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses. Records are automatically purged after the configured retention period.', 'faz-cookie-manager' ),
-			),
-			'done'           => true,
+			'items_removed'  => $items_removed,
+			'items_retained' => false,
+			'messages'       => $messages,
+			'done'           => $done,
 		);
 	}
 }

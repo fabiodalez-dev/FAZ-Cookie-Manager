@@ -26,8 +26,8 @@
       "enabled": true,
       "section": "usnh"
     },
-    "gpc_honored": false,
-    "gpc_required": false,
+    "gpc_honored": true,
+    "gpc_required": true,
     "dnt_honored": false,
     "cmv2": {
       "ad_storage": "denied-until-action",

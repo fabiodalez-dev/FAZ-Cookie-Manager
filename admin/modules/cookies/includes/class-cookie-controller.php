@@ -72,6 +72,17 @@ class Cookie_Controller extends Base_Controller {
 	}
 
 	/**
+	 * Clear cookie caches, including the detected-name list used by
+	 * per-service consent.
+	 *
+	 * @return void
+	 */
+	public function delete_cache() {
+		parent::delete_cache();
+		delete_transient( 'faz_detected_cookie_names' );
+	}
+
+	/**
 	 * Return a list of Cookies tables
 	 *
 	 * @return array Cookies tables.
