@@ -235,7 +235,7 @@ assert_true(
 // ---------- Constants ----------
 
 assert_eq( count( Generator::JURISDICTIONS ), 3, '3 jurisdictions in scope v1' );
-assert_eq( count( Generator::LANGUAGES ), 7, '7 languages in scope (en, it, fr, de, es, pt-BR, bg)' );
+assert_eq( count( Generator::LANGUAGES ), 8, '8 languages in scope (en, it, fr, de, es, pt-BR, bg, cs)' );
 assert_eq( Generator::NATIVE_LANG['lgpd-brazil'], 'pt-BR', 'LGPD native lang is pt-BR' );
 assert_eq( Generator::NATIVE_LANG['gdpr-strict'], 'en', 'GDPR native lang is en' );
 assert_eq( Generator::NATIVE_LANG['ccpa-california'], 'en', 'CCPA native lang is en' );
