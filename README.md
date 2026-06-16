@@ -563,6 +563,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.19.0 — 2026-06-16
+- **Added**: per-service consent reintroduced and now actually enforced (server-side block + cookie shredder + client UI), opt-in by default and sourced from scanner-detected services; Czech (cs_CZ) cookie-policy templates; compliance hardening (Quebec/Law 25 routing, DNSMPI enforcement, DSAR, accessibility, scanner TLS, and new geo rulesets for MN/MD/NH/NJ/TX/Canada); CCPA opt-out success message with accessible countdown.
+- **Fixed**: "Do Not Sell" always reaches a working opt-out (Classic-layout guard + runtime migration); banner template cache self-heals on update/toggle (no more stale markup served to new JS); blocked-embed placeholder keeps its branded styling; geo "source not configured" false-negative notice; cookie-policy controller labelled "data controller". New extension filters: `faz_per_service_services`, `faz_store_data`.
+
 ### 1.18.2 — 2026-06-13
 - **Change**: the experimental opt-in features from 1.18.0 (per-service / per-cookie consent toggles and the `faz_geo_ruleset_runtime` runtime geo-routing) are temporarily disabled pending a correctness rework — an external review found they did not deliver the granular guarantees their UI implied when enabled. They are hard-off at their entry points; the default category-level consent flow (covered by the 113/113 compliance suite) is byte-for-byte unchanged. Catalogue-based multi-banner geo-routing (per-country banner selection) is unaffected.
 - **Fix**: corrected an overstated per-cookie help text that claimed a denied cookie "is deleted whenever it appears" — that enforcement only ran client-side at save time and did not persist.
