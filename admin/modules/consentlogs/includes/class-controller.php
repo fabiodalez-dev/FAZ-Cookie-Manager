@@ -120,21 +120,7 @@ class Controller {
 		$migration_ok = true;
 		if ( version_compare( $installed_version, '1.1', '<' ) ) {
 			if ( function_exists( 'wp_salt' ) ) {
-				// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- one-shot data migration in the activation/upgrade path; $table_name is $wpdb->prefix + literal "faz_consent_logs"; the salt and regex are bound via prepare(%s).
-				$result = $wpdb->query(
-					$wpdb->prepare(
-						"UPDATE {$table_name}
-						 SET user_agent = LOWER(SHA2(CONCAT(user_agent, %s), 256))
-						 WHERE user_agent <> ''
-						 AND user_agent NOT REGEXP %s",
-						\wp_salt( 'auth' ),
-						'^[0-9a-f]{64}$'
-					)
-				);
-				// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
-				if ( false === $result ) {
-					$migration_ok = false;
-				}
+				$migration_ok = $this->hash_legacy_user_agents();
 			}
 			// If wp_salt() is not yet available, skip migration silently.
 			// Fresh installs have no rows to migrate; upgrades will retry next request.
@@ -143,6 +129,67 @@ class Controller {
 		if ( $migration_ok ) {
 			update_option( 'faz_consent_logs_db_version', $this->db_version );
 		}
+	}
+
+	/**
+	 * Hash any legacy plaintext user_agent rows in PHP.
+	 *
+	 * The previous implementation used MySQL's SHA2()/REGEXP in a single UPDATE,
+	 * which fatals on SQLite-backed WordPress (no SHA2 function) and left the
+	 * migration to retry — and emit a database error — on every request. We hash
+	 * in PHP instead, with the exact same algorithm as hash_user_agent()
+	 * (hash('sha256', $ua . wp_salt('auth')) === LOWER(SHA2(CONCAT(ua, salt), 256))),
+	 * so the result is identical and the path is portable across MySQL and SQLite.
+	 * A log_id cursor guarantees forward progress and loop termination regardless
+	 * of row contents.
+	 *
+	 * @return bool True on success (or nothing to migrate), false on a query error.
+	 */
+	private function hash_legacy_user_agents() {
+		global $wpdb;
+		$table_name = $this->get_table_name();
+		$batch_size = 500;
+		$last_id    = 0;
+
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- one-shot upgrade-path migration; $table_name is $wpdb->prefix + literal "faz_consent_logs"; bounds are bound via prepare(%d).
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT log_id, user_agent FROM {$table_name}
+					 WHERE log_id > %d
+					 ORDER BY log_id ASC
+					 LIMIT %d",
+					$last_id,
+					$batch_size
+				),
+				ARRAY_A
+			);
+
+			if ( null === $rows ) {
+				return false;
+			}
+
+			foreach ( $rows as $row ) {
+				$last_id = (int) $row['log_id'];
+				$ua      = (string) $row['user_agent'];
+				// Skip empties and already-hashed values (64-char lowercase hex).
+				if ( '' === $ua || preg_match( '/^[0-9a-f]{64}$/', $ua ) ) {
+					continue;
+				}
+				$updated = $wpdb->update(
+					$table_name,
+					array( 'user_agent' => $this->hash_user_agent( $ua ) ),
+					array( 'log_id' => (int) $row['log_id'] ),
+					array( '%s' ),
+					array( '%d' )
+				);
+				if ( false === $updated ) {
+					return false;
+				}
+			}
+		} while ( count( $rows ) === $batch_size );
+
+		return true;
 	}
 
 	/**
