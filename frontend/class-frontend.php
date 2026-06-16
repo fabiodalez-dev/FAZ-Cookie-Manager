@@ -1276,6 +1276,22 @@ class Frontend {
 			);
 		}
 
+		/**
+		 * Filter the per-service consent list.
+		 *
+		 * This is the AUTHORITATIVE service list — it feeds BOTH the client
+		 * store (`_services`) AND the server-side enforcement (the pre-consent
+		 * block decision and the cookie shredder all call this method), so a
+		 * service added, removed, or re-categorised here stays consistent across
+		 * the UI, the output buffer, and PHP shredding. Prefer this over
+		 * `faz_store_data` for anything that must actually be enforced.
+		 *
+		 * @since 1.19.0
+		 * @param array $services         Each: {id,label,category,patterns,cookies}.
+		 * @param array $valid_categories Active non-necessary category slugs.
+		 */
+		$services = apply_filters( 'faz_per_service_services', $services, $valid_categories );
+
 		$this->per_service_cache = $services;
 		return $this->per_service_cache;
 	}
@@ -1584,13 +1600,19 @@ class Frontend {
 		}
 
 		/**
-		 * Filter the full frontend consent store emitted to the page.
+		 * Filter the frontend consent store emitted to the page — PRESENTATION ONLY.
 		 *
 		 * Lets integrations (and isolated test harnesses) adjust the
-		 * client-side store — categories, services, flags — for the current
-		 * request only, without writing to the database.
+		 * CLIENT-SIDE store — what the JS renders (categories shown, flags,
+		 * labels) — for the current request, without DB writes. It does NOT
+		 * change server-side enforcement: the pre-consent script block and the
+		 * cookie shredder read their own internal sources, so altering
+		 * `_services` / flags here only affects the rendered UI and can diverge
+		 * from what PHP actually blocks. To affect the ENFORCED per-service list
+		 * (keeping UI, output buffer, and shredder consistent), use the
+		 * `faz_per_service_services` filter instead.
 		 *
-		 * @since 1.19.1
+		 * @since 1.19.0
 		 * @param array    $store    The assembled store payload.
 		 * @param Frontend $frontend The frontend instance.
 		 */
