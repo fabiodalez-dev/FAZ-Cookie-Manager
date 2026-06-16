@@ -134,6 +134,14 @@ COMMON_EXCLUDES=(
     "faz-cookie-manager/settings-*.jpg"
     "faz-cookie-manager/fabiodalez-*.png"
     "faz-cookie-manager/fabiodalez-*.jpg"
+    # Catch-all for stray root-level screenshots/images (the * does not cross /,
+    # so this only excludes files directly in the plugin root — legitimate plugin
+    # images live under admin/dist/img, frontend/images, and .wordpress-org).
+    "faz-cookie-manager/*.png"
+    "faz-cookie-manager/*.jpg"
+    "faz-cookie-manager/*.jpeg"
+    "faz-cookie-manager/*.gif"
+    "faz-cookie-manager/*.webp"
     "faz-cookie-manager/release.md"
     "faz-cookie-manager/plan.md"
     "faz-cookie-manager/eslint.config.mjs"
