@@ -658,7 +658,15 @@ class Frontend {
 		// data-no-optimize / data-noptimize additionally ask the CSS optimisers
 		// (LiteSpeed Cache, WP Rocket, Autoptimize, …) to leave the block inline
 		// (belt-and-suspenders).
-		echo '<style id="faz-style-inline" data-no-optimize="1" data-noptimize="1">html:not(.faz-ready) [data-faz-tag]{visibility:hidden;}'
+		echo '<style id="faz-style-inline" data-no-optimize="1" data-noptimize="1">html:not(.faz-ready) [data-faz-tag]{visibility:hidden;}</style>';
+		// The blocked-embed placeholder CSS must OUTLIVE the banner reveal: it
+		// styles content that stays on the page until the visitor consents.
+		// Keep it in its OWN persistent <style> — `_fazRemoveStyles()` removes
+		// `#faz-style-inline` once the banner is positioned, and bundling the
+		// placeholder CSS there stripped its styling the moment the JS ran,
+		// leaving a bare unstyled box (the "nice design flashes, ugly box
+		// stays" report). This block has no id the JS removes.
+		echo '<style data-faz-placeholder-style="1" data-no-optimize="1" data-noptimize="1">'
 			. $placeholder_css // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- CSS stripped of all tags; esc_html() would break selectors.
 			. '</style>';
 	}
