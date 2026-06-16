@@ -2,13 +2,19 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.19.2] — 2026-06-17
+
+### Fixed
+
+- **SQLite compatibility: consent-log user-agent migration no longer errors.** The one-shot migration that hashes legacy plaintext user agents used MySQL's `SHA2()`/`REGEXP`, which do not exist on SQLite-backed WordPress (e.g. WordPress Playground) — the query failed, the migration never completed, and a database error was emitted on every request. It now runs in PHP with the identical hash, portable across MySQL and SQLite.
+- **Google Consent Mode: non-personalized-ads `npa` signal is now most-restrictive across regions.** Because `npa` is a global `gtag('set')` value that cannot be region-scoped, emitting it per region row let the last-evaluated region decide the signal for every visitor. The pre-consent default now emits a single most-restrictive value (non-personalized whenever any configured region denies ads) instead; the region-scoped Consent Mode v2 states are unaffected and the returning-visitor update path stays two-sided.
+
 ## [1.19.1] — 2026-06-16
 
 ### Fixed
 
 - **Legacy "Both" (GDPR + US) banners could silently lose their Do-Not-Sell opt-out.** Very old banners stored the opt-out only in a legacy direct key that the settings sanitiser drops, so the runtime never enabled the control and the banner degraded to pure GDPR. The runtime now back-fills the opt-out from the raw stored settings.
-- **Google Consent Mode: non-personalized-ads fallback now also signals on the first visit.** With the fallback enabled, legacy (non-Consent-Mode) ad tags now receive the `npa` signal at the initial default-consent stage — not only after a reject — and the signal is two-sided, clearing within the session once marketing is granted. Because `npa` is a global signal that cannot be region-scoped, the pre-consent default now emits a single most-restrictive value (non-personalized whenever any configured region denies ads) instead of letting the last-evaluated region win; the region-scoped Consent Mode v2 states are unaffected.
-- **SQLite compatibility: consent-log user-agent migration no longer errors.** The one-shot migration that hashes legacy plaintext user agents used MySQL's `SHA2()`/`REGEXP`, which do not exist on SQLite-backed WordPress — the query failed, the migration never completed, and a database error was emitted on every request. It now runs in PHP with the identical hash, portable across MySQL and SQLite.
+- **Google Consent Mode: non-personalized-ads fallback now also signals on the first visit.** With the fallback enabled, legacy (non-Consent-Mode) ad tags now receive the `npa` signal at the initial default-consent stage — not only after a reject — and the signal is two-sided, clearing within the session once marketing is granted.
 - **Consent log + cookie hardening.** The consent-log `status` column is constrained to the known set (unknown values fold to `partial`) so a crafted REST payload can't pollute the dashboard statistics; the cookie cleanup gained a longer-tail pass to catch trackers that write a cookie well after page load; and an admin's explicit custom block rule is no longer silently exempted when it happens to be a substring of an always-allowed gateway pattern.
 
 ## [1.19.0] — 2026-06-16

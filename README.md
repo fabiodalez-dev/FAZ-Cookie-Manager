@@ -563,6 +563,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.19.2 — 2026-06-17
+- **Fixed**: the consent-log user-agent migration no longer errors on SQLite-backed WordPress (e.g. WordPress Playground) — it previously used MySQL's `SHA2()`/`REGEXP` and now runs in PHP with the identical hash; the Google Consent Mode non-personalized-ads `npa` signal is now most-restrictive across regions (a single global value, non-personalized whenever any configured region denies ads, since `npa` cannot be region-scoped), leaving the region-scoped Consent Mode v2 states unaffected.
+
 ### 1.19.1 — 2026-06-16
 - **Fixed**: legacy "Both" (GDPR + US) banners no longer silently lose their Do-Not-Sell opt-out (the runtime back-fills it from the raw stored settings); the Google Consent Mode non-personalized-ads fallback now signals `npa` on the first visit too (not only after a reject) and clears within the session once marketing is granted; consent-log `status` is constrained to the known set, the cookie cleanup gained a longer-tail pass, and an explicit admin custom block rule is no longer exempted by an always-allowed gateway substring match.
 
