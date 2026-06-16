@@ -72,7 +72,13 @@
                     "confirm": ""
                 }
             },
-            "closeButton": ""
+            "closeButton": "",
+            "optoutSuccess": {
+                "elements": {
+                    "text": "",
+                    "subtext": ""
+                }
+            }
         }
     },
     "revisitConsent": {

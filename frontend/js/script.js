@@ -6,6 +6,12 @@ if ( typeof window._fazConfig === 'undefined' && typeof window._fazCfg !== 'unde
 }
 const _fazStore = window._fazConfig;
 
+// Opt-out success message (US state laws / CCPA): after the visitor confirms an
+// opt-out, the popup shows a confirmation message and auto-closes after a short
+// countdown instead of disappearing immediately.
+const _FAZ_OPTOUT_SUCCESS_SECONDS = 15;
+const _FAZ_OPTOUT_SUCCESS_DISMISS_MS = _FAZ_OPTOUT_SUCCESS_SECONDS * 1000;
+
 if ( ! _fazStore ) {
     // _fazConfig is injected by wp_localize_script. If it is missing (e.g. a
     // JS-defer plugin scoped the localize block inside a DOMContentLoaded
@@ -20,6 +26,9 @@ _fazStore._backupNodes = [];
 _fazStore._resetConsentID = false;
 _fazStore._bannerState = false;
 _fazStore._preferenceOriginTag = false;
+_fazStore._optoutSuccessCountdownInterval = null;
+_fazStore._optoutSuccessAutoCloseTimer = null;
+_fazStore._optoutSuccessSubtextTemplate = "";
 
 window.fazcookie = window.fazcookie || {};
 const ref = window.fazcookie;
@@ -1210,10 +1219,10 @@ function _fazRegisterListeners() {
     _fazAttachListener("=detail-accept-button", _fazAcceptReject("all"));
     _fazAttachListener("=detail-save-button", _fazAcceptReject());
     _fazAttachListener("=detail-category-preview-save-button", _fazAcceptReject());
-    _fazAttachListener("=optout-confirm-button", _fazAcceptReject());
+    _fazAttachListener("=optout-confirm-button", _fazHandleOptoutConfirm());
     _fazAttachListener("=detail-reject-button", _fazAcceptReject("reject"));
     _fazAttachListener("=revisit-consent", () => _revisitFazConsent());
-    _fazAttachListener("=optout-close", () => _fazHidePreferenceCenter());
+    _fazAttachListener("=optout-close", () => _fazHandleOptoutPopupClose());
 
     // NOTE: the [faz_cookie_settings] / [data-faz-open-preferences] delegated
     // click handler is NOT registered here. It lives in
@@ -1405,6 +1414,9 @@ function _fazGetPreferenceCenter() {
     return element && element.closest('.faz-modal') || false;
 }
 function _fazHidePreferenceCenter() {
+    // Reset the opt-out success UI (timers + visibility) on every close so a
+    // re-opened popup never shows a stale "honored" message or a dead countdown.
+    _fazResetOptoutSuccessMessage();
     const element = _fazGetPreferenceCenter();
     element && element.classList.remove(_fazGetPreferenceClass());
 
@@ -4038,6 +4050,197 @@ function _fazRemoveAllDeadCookies() {
         if (ref._fazGetFromStore(category.slug) !== "yes")
             _fazRemoveDeadCookies(category);
     }
+}
+
+/**
+ * Clear the opt-out success countdown timers (interval + auto-close timeout).
+ *
+ * @return {void}
+ */
+function _fazClearOptoutSuccessTimers() {
+    if ( _fazStore._optoutSuccessCountdownInterval ) {
+        clearInterval( _fazStore._optoutSuccessCountdownInterval );
+        _fazStore._optoutSuccessCountdownInterval = null;
+    }
+    if ( _fazStore._optoutSuccessAutoCloseTimer ) {
+        clearTimeout( _fazStore._optoutSuccessAutoCloseTimer );
+        _fazStore._optoutSuccessAutoCloseTimer = null;
+    }
+}
+
+/**
+ * Is the opt-out success message currently visible?
+ *
+ * @return {boolean}
+ */
+function _fazIsOptoutSuccessVisible() {
+    const el = _fazGetElementByTag( "optout-success" );
+    return !!( el && !el.classList.contains( "faz-hide" ) );
+}
+
+/**
+ * Tear down the banner once the opt-out countdown completes (or is skipped).
+ *
+ * @return {void}
+ */
+function _fazDismissOptoutSuccessCountdown() {
+    _fazRemoveBanner();
+    _fazHidePreferenceCenter();
+    _fazAfterConsent();
+}
+
+/**
+ * Show the opt-out success UI after a confirmed opt-out: hide the action
+ * buttons, reveal the success message, disable the opt-out controls, run a
+ * countdown in the subtext, then auto-dismiss the banner. The message is
+ * announced via aria-live="polite" and focused so assistive tech reports that
+ * the opt-out was recorded (WCAG 2.2 SC 4.1.3).
+ *
+ * @return {void}
+ */
+function _fazShowOptoutSuccessMessage() {
+    _fazClearOptoutSuccessTimers();
+
+    const buttonWrapper = _fazGetElementByTag( "optout-buttons" );
+    const successMessage = _fazGetElementByTag( "optout-success" );
+    const countdownElement = _fazGetElementByTag( "optout-success-subtext" );
+    const ccpaCheckbox = document.getElementById( "fazCCPAOptOut" );
+
+    // Banners saved before this feature shipped have no success element — fall
+    // back to the immediate dismiss so the opt-out still completes cleanly.
+    if ( ! buttonWrapper || ! successMessage ) {
+        _fazDismissOptoutSuccessCountdown();
+        return;
+    }
+
+    buttonWrapper.style.display = "none";
+    // Declare the live region BEFORE revealing the message so assistive tech
+    // treats the headline as a fresh polite announcement (the element ships
+    // role="status"; this reinforces it for combos that key off aria-live).
+    // The countdown subtext is aria-hidden in the template so its per-second
+    // updates don't flood the screen-reader queue.
+    successMessage.setAttribute( "aria-live", "polite" );
+    successMessage.classList.remove( "faz-hide" );
+    successMessage.focus();
+    if ( ccpaCheckbox ) ccpaCheckbox.disabled = true;
+    _fazClassAdd( "=optout-option", "faz-disabled", false );
+
+    const countdownTimerEl =
+        ( countdownElement && countdownElement.querySelector( "#fazCountdownTimer" ) ) ||
+        document.getElementById( "fazCountdownTimer" );
+
+    let timeRemaining = _FAZ_OPTOUT_SUCCESS_SECONDS;
+    // When the subtext has no countdown <span> (e.g. kses stripped the id),
+    // memo its text once so we can swap the digit in place each tick.
+    if ( countdownElement && ! countdownTimerEl && ! _fazStore._optoutSuccessSubtextTemplate ) {
+        _fazStore._optoutSuccessSubtextTemplate =
+            countdownElement.textContent ||
+            ( "Banner closes automatically in " + _FAZ_OPTOUT_SUCCESS_SECONDS + " s..." );
+    }
+    const template = _fazStore._optoutSuccessSubtextTemplate;
+    const hasDigit = template && /\d+/.test( template );
+    const updateSubtext = function () {
+        if ( ! countdownElement ) return;
+        if ( countdownTimerEl ) {
+            countdownTimerEl.textContent = String( timeRemaining );
+            return;
+        }
+        countdownElement.textContent = hasDigit
+            ? template.replace( /\d+/, String( timeRemaining ) )
+            : ( "Banner closes automatically in " + timeRemaining + " s..." );
+    };
+    updateSubtext();
+
+    _fazStore._optoutSuccessCountdownInterval = setInterval( function () {
+        timeRemaining -= 1;
+        if ( timeRemaining >= 0 ) updateSubtext();
+    }, 1000 );
+
+    _fazStore._optoutSuccessAutoCloseTimer = setTimeout(
+        _fazDismissOptoutSuccessCountdown,
+        _FAZ_OPTOUT_SUCCESS_DISMISS_MS
+    );
+}
+
+/**
+ * Reset the opt-out success UI (timers, visibility, checkbox, subtext) so a
+ * re-opened popup starts clean. Called from _fazHidePreferenceCenter().
+ *
+ * @return {void}
+ */
+function _fazResetOptoutSuccessMessage() {
+    _fazClearOptoutSuccessTimers();
+
+    const buttonWrapper = _fazGetElementByTag( "optout-buttons" );
+    const successMessage = _fazGetElementByTag( "optout-success" );
+    const countdownElement = _fazGetElementByTag( "optout-success-subtext" );
+    const ccpaCheckbox = document.getElementById( "fazCCPAOptOut" );
+
+    if ( buttonWrapper ) buttonWrapper.style.display = "";
+    if ( successMessage ) successMessage.classList.add( "faz-hide" );
+    if ( ccpaCheckbox ) ccpaCheckbox.disabled = false;
+    _fazClassRemove( "=optout-option", "faz-disabled", false );
+
+    const resetTimerEl =
+        ( countdownElement && countdownElement.querySelector( "#fazCountdownTimer" ) ) ||
+        document.getElementById( "fazCountdownTimer" );
+    if ( resetTimerEl ) {
+        resetTimerEl.textContent = "";
+    } else if ( countdownElement && _fazStore._optoutSuccessSubtextTemplate ) {
+        countdownElement.textContent = _fazStore._optoutSuccessSubtextTemplate;
+    }
+    // Drop the memoised template after restoring it, so a later show (e.g. after
+    // a frontend language switch re-renders the banner with new copy) re-reads
+    // the current subtext instead of replaying the previous language's string.
+    _fazStore._optoutSuccessSubtextTemplate = "";
+}
+
+/**
+ * Click handler factory for the opt-out "confirm" button.
+ *
+ * For a CCPA banner where the visitor has opted out, persist consent WITHOUT
+ * closing the popup (so the success message can show), then run the success +
+ * countdown UI. Every other case falls through to the normal save/close path.
+ *
+ * Persists with choice "custom" — the same value the pre-feature wiring used
+ * (`_fazAcceptReject()` defaults `option` to "custom"). The default "all" would
+ * grant every IAB TCF vendor consent on an opt-out and fire the
+ * fazcookie_consent_update event with action:"all" instead of "custom".
+ *
+ * `_fazAcceptCookies()` returns false when the age gate intercepts (it shows
+ * the age modal and defers recording consent). In that case we must NOT show
+ * the success message — it would claim "your opt-out has been honored" while no
+ * consent was actually recorded yet.
+ *
+ * @return {Function}
+ */
+function _fazHandleOptoutConfirm() {
+    return function () {
+        if ( _fazGetLaw() !== "ccpa" || ! _fazFindCheckBoxValue() ) {
+            _fazAcceptReject()();
+            return;
+        }
+        if ( _fazAcceptCookies( "custom" ) === false ) {
+            return;
+        }
+        _fazShowOptoutSuccessMessage();
+    };
+}
+
+/**
+ * Close handler for the opt-out popup: if the success message is showing, treat
+ * the close as "dismiss the countdown now" (consent already saved); otherwise
+ * hide the popup normally.
+ *
+ * @return {void}
+ */
+function _fazHandleOptoutPopupClose() {
+    if ( _fazIsOptoutSuccessVisible() ) {
+        ref._fazSetInStore( "action", "yes" );
+        _fazDismissOptoutSuccessCountdown();
+        return;
+    }
+    _fazHidePreferenceCenter();
 }
 
 function _fazSetCCPAOptions() {

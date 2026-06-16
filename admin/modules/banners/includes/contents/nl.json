@@ -73,7 +73,13 @@
             "confirm": "Mijn voorkeuren opslaan"
           }
         },
-        "closeButton": "Sluiten"
+        "closeButton": "Sluiten",
+        "optoutSuccess": {
+          "elements": {
+            "text": "Je opt-outvoorkeur is toegepast.",
+            "subtext": "De banner sluit automatisch over <span id=\"fazCountdownTimer\"></span> s..."
+          }
+        }
       }
     },
     "revisitConsent": {
@@ -173,7 +179,13 @@
             "confirm": "Mijn voorkeuren opslaan"
           }
         },
-        "closeButton": "Sluiten"
+        "closeButton": "Sluiten",
+        "optoutSuccess": {
+          "elements": {
+            "text": "Je opt-outvoorkeur is toegepast.",
+            "subtext": "De banner sluit automatisch over <span id=\"fazCountdownTimer\"></span> s..."
+          }
+        }
       }
     },
     "revisitConsent": {

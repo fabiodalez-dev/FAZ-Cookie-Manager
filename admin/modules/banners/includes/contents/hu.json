@@ -73,7 +73,13 @@
                         "confirm": "Mentse el a beállításokat"
                     }
                 },
-                "closeButton": "Bezárás"
+                "closeButton": "Bezárás",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "A leiratkozási beállításodat alkalmaztuk.",
+                        "subtext": "A banner automatikusan bezáródik <span id=\"fazCountdownTimer\"></span> s múlva..."
+                    }
+                }
             }
         },
         "revisitConsent": {
@@ -173,7 +179,13 @@
                         "confirm": "Mentse el a beállításokat"
                     }
                 },
-                "closeButton": "Bezárás"
+                "closeButton": "Bezárás",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "A leiratkozási beállításodat alkalmaztuk.",
+                        "subtext": "A banner automatikusan bezáródik <span id=\"fazCountdownTimer\"></span> s múlva..."
+                    }
+                }
             }
         },
         "revisitConsent": {

@@ -73,7 +73,13 @@
                         "confirm": "Guardar mis preferencias"
                     }
                 },
-                "closeButton": "Cerca"
+                "closeButton": "Cerca",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Tu preferencia de exclusión se ha aplicado.",
+                        "subtext": "El banner se cierra automáticamente en <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
             }
         },
         "revisitConsent": {
@@ -173,7 +179,13 @@
                         "confirm": "Guardar mis preferencias"
                     }
                 },
-                "closeButton": "Cerca"
+                "closeButton": "Cerca",
+                "optoutSuccess": {
+                    "elements": {
+                        "text": "Tu preferencia de exclusión se ha aplicado.",
+                        "subtext": "El banner se cierra automáticamente en <span id=\"fazCountdownTimer\"></span> s..."
+                    }
+                }
             }
         },
         "revisitConsent": {
