@@ -76,8 +76,8 @@
                 "closeButton": "Fechar",
                 "optoutSuccess": {
                     "elements": {
-                        "text": "Your opt-out preference has been honored.",
-                        "subtext": "Banner closes automatically in <span id=\"fazCountdownTimer\"></span> s..."
+                        "text": "A sua preferência de exclusão foi respeitada.",
+                        "subtext": "O banner fecha automaticamente em <span id=\"fazCountdownTimer\"></span> s..."
                     }
                 }
             }
@@ -182,8 +182,8 @@
                 "closeButton": "Fechar",
                 "optoutSuccess": {
                     "elements": {
-                        "text": "Your opt-out preference has been honored.",
-                        "subtext": "Banner closes automatically in <span id=\"fazCountdownTimer\"></span> s..."
+                        "text": "A sua preferência de exclusão foi respeitada.",
+                        "subtext": "O banner fecha automaticamente em <span id=\"fazCountdownTimer\"></span> s..."
                     }
                 }
             }

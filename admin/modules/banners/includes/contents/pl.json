@@ -76,8 +76,8 @@
                 "closeButton": "Blisko",
                 "optoutSuccess": {
                     "elements": {
-                        "text": "Your opt-out preference has been honored.",
-                        "subtext": "Banner closes automatically in <span id=\"fazCountdownTimer\"></span> s..."
+                        "text": "Twoja preferencja rezygnacji została uwzględniona.",
+                        "subtext": "Baner zamknie się automatycznie za <span id=\"fazCountdownTimer\"></span> s..."
                     }
                 }
             }
@@ -182,8 +182,8 @@
                 "closeButton": "Blisko",
                 "optoutSuccess": {
                     "elements": {
-                        "text": "Your opt-out preference has been honored.",
-                        "subtext": "Banner closes automatically in <span id=\"fazCountdownTimer\"></span> s..."
+                        "text": "Twoja preferencja rezygnacji została uwzględniona.",
+                        "subtext": "Baner zamknie się automatycznie za <span id=\"fazCountdownTimer\"></span> s..."
                     }
                 }
             }
