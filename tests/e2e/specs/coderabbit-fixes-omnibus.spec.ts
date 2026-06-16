@@ -76,19 +76,29 @@ test.describe('CodeRabbit PR #79 omnibus', () => {
       return JSON.parse(raw) as string[];
     }
 
-    // Sub-3-char needle is ignored — nothing should be whitelisted.
-    expect(callHelper(['js'])).toEqual([]);
-    // Empty list → empty output.
-    expect(callHelper([])).toEqual([]);
-    // "google-analytics" is a substring of at least one GA pattern
-    // in the known-providers catalog; we assert SOMETHING comes back.
+    // Always-allowed payment-gateway cookies (Stripe) are exempt from the
+    // shredder regardless of the user whitelist, so they are the BASELINE of the
+    // output. Capture it (empty user whitelist → gateway cookies only).
+    const gatewayBaseline = callHelper([]);
+    expect(
+      gatewayBaseline,
+      'always-allowed gateway cookies are exempt even with no user whitelist',
+    ).toEqual(expect.arrayContaining(['__stripe_mid', '__stripe_sid']));
+
+    // A sub-3-char needle ('js') matches no user-whitelisted provider, so the
+    // output is exactly the gateway baseline — no extra provider cookies.
+    expect(callHelper(['js'])).toEqual(gatewayBaseline);
+
+    // "google-analytics" matches a known provider → its cookies are added ON TOP
+    // of the gateway baseline.
     const whenGa = callHelper(['google-analytics']);
-    expect(whenGa.length, '"google-analytics" should match at least one known provider').toBeGreaterThan(0);
-    // Unidirectional: needle "com" (>= 3 chars) would match almost every
-    // pattern under the old bidirectional logic; under the new rule it
-    // still matches many (any pattern containing "com") — but
-    // `"long-needle-nobody-ships"` must produce nothing.
-    expect(callHelper(['long-needle-nobody-ships'])).toEqual([]);
+    expect(
+      whenGa.length,
+      '"google-analytics" should add at least one provider cookie beyond the gateway baseline',
+    ).toBeGreaterThan(gatewayBaseline.length);
+
+    // A needle nobody ships matches no provider → output stays the gateway baseline.
+    expect(callHelper(['long-needle-nobody-ships'])).toEqual(gatewayBaseline);
   });
 
   /**
