@@ -107,9 +107,15 @@ var initialCookieObj = parseConsentCookie();
     // unlawful under ePrivacy/Consent Mode v2 in EEA/UK/CH). Under Consent Mode
     // v2 a denied ad_storage already lets Google serve non-personalized,
     // cookieless ads; for legacy (non-Consent-Mode) ad tags we additionally
-    // signal `npa` via setNpaIfDenied() from every emission path (the region
-    // rows and denied fallback below, and buildConsentState() on update). This
-    // keeps the behaviour compliant in every region with no geofencing required.
+    // signal `npa`. Unlike the Consent Mode `ad_storage` states above, `npa` is
+    // a GLOBAL gtag('set') value — it CANNOT be region-scoped — so emitting it
+    // per region row would let the last-iterated row win for everyone. Instead
+    // we track the most-restrictive ad stance across all applicable defaults and
+    // emit `npa` ONCE after the loop: npa:1 if ANY default denies ads. This
+    // protects denied regions from personalized legacy ads pre-consent without
+    // geofencing. buildConsentState() (update path) re-evaluates `npa` two-sided
+    // from the returning visitor's real choice.
+    var anyAdDenied = false;
     for (var index = 0; index < regionSettings.length; index++) {
         var regionSetting = regionSettings[index];
         if (!regionSetting || typeof regionSetting !== "object") continue;
@@ -138,7 +144,7 @@ var initialCookieObj = parseConsentCookie();
             consentRegionData.region = regionsToSetFor;
         else setDefaultSetting = false;
         setConsentInitStates(consentRegionData);
-        setNpaIfDenied(consentRegionData.ad_storage);
+        if (consentRegionData.ad_storage === "denied") anyAdDenied = true;
     }
 
     if (setDefaultSetting) {
@@ -151,8 +157,12 @@ var initialCookieObj = parseConsentCookie();
           ad_user_data: "denied",
           ad_personalization: "denied"
         });
-        setNpaIfDenied("denied");
+        anyAdDenied = true;
     }
+
+    // Single global npa for the pre-consent default stage (see comment above):
+    // most-restrictive wins, since gtag('set', { npa }) is not region-scoped.
+    setNpaIfDenied(anyAdDenied ? "denied" : "granted");
 }
 
 // Returning visitor with saved consent: restore it via `consent update` (the
