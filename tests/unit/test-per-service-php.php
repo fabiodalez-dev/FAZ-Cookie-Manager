@@ -165,6 +165,7 @@ namespace {
 		$fe = $rc->newInstanceWithoutConstructor();
 		foreach ( array(
 			'per_service_cache',
+			'enforceable_cache',
 			'service_consent_cache',
 			'pattern_service_cache',
 			'settings_option_cache',
@@ -459,6 +460,10 @@ namespace {
 			$svc[] = array( 'id' => $id, 'label' => $id, 'category' => 'analytics', 'patterns' => array(), 'cookies' => array() );
 		}
 		faz_set_prop( $fe, 'per_service_cache', $svc );
+		// get_service_consent()/get_pattern_service_map() now resolve against the
+		// broader enforceable set (#134/#146). The tests drive that set directly
+		// via this cache, so seed it with the same ids the scenario exposes.
+		faz_set_prop( $fe, 'enforceable_cache', $svc );
 		return $fe;
 	}
 
@@ -540,6 +545,9 @@ namespace {
 		$fe = faz_new_frontend();
 		faz_set_prop( $fe, 'service_consent_cache', $service_consent );
 		faz_set_prop( $fe, 'per_service_cache', $services );
+		// get_pattern_service_map() now builds from the enforceable set (#134/#146);
+		// seed it with the same services the precedence scenario exercises.
+		faz_set_prop( $fe, 'enforceable_cache', $services );
 		faz_set_prop( $fe, 'pattern_service_cache', null );
 		return $fe;
 	}

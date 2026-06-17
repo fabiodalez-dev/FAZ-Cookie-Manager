@@ -52,6 +52,19 @@ class Controller {
 	);
 
 	/**
+	 * Embed/script src URLs harvested from page HTML during a server crawl.
+	 *
+	 * Accumulated across pages by scan_page() and turned into inferred
+	 * Known_Providers cookies in run_scan(), so a provider embedded as an
+	 * <iframe>/<script> (e.g. a blocked YouTube video) becomes a scanner-
+	 * detected service even when its cookie is never set on a block-first
+	 * site — which is what surfaces its per-service toggle (#134/#146).
+	 *
+	 * @var string[]
+	 */
+	private $scanned_embed_urls = array();
+
+	/**
 	 * WP-Cron action name for async scanning.
 	 */
 	const CRON_HOOK = 'faz_async_cookie_scan';
@@ -328,6 +341,23 @@ class Controller {
 						$cookies[ $name ] = $cookie_data;
 					}
 				}
+			}
+
+			// Infer Known_Providers cookies from embedded scripts/iframes seen
+			// across the crawl, so a provider present only as an embed (e.g. a
+			// blocked YouTube video) becomes a detected per-service even when its
+			// cookie is never set on a block-first site (#134/#146).
+			if ( ! empty( $this->scanned_embed_urls ) ) {
+				$embed_inferred = $this->infer_cookies_from_scripts( array_values( array_unique( $this->scanned_embed_urls ) ) );
+				$embed_added    = 0;
+				foreach ( $embed_inferred as $inf ) {
+					if ( empty( $inf['name'] ) || isset( $cookies[ $inf['name'] ] ) ) {
+						continue;
+					}
+					$cookies[ $inf['name'] ] = $inf;
+					++$embed_added;
+				}
+				$logger->log( 'Embed inference: +' . $embed_added . ' cookies from ' . count( $this->scanned_embed_urls ) . ' embed URLs' );
 			}
 
 			$total_cookies = count( $cookies );
@@ -648,6 +678,13 @@ class Controller {
 
 		if ( is_wp_error( $response ) ) {
 			return $cookies;
+		}
+
+		// Harvest embedded provider URLs (script/iframe src) from the page so
+		// run_scan() can infer Known_Providers whose cookie is never set on a
+		// block-first site (#134/#146).
+		foreach ( $this->extract_embed_urls( wp_remote_retrieve_body( $response ) ) as $embed_url ) {
+			$this->scanned_embed_urls[] = $embed_url;
 		}
 
 		// Parse Set-Cookie headers.
@@ -1104,6 +1141,33 @@ class Controller {
 	 * @param string $name Cookie name.
 	 * @return string|false Category slug or false.
 	 */
+	/**
+	 * Extract embeddable provider URLs (<script src> / <iframe src>) from HTML.
+	 *
+	 * Feeds infer_cookies_from_scripts() so a provider present only as an embed
+	 * (e.g. a blocked YouTube <iframe>) is detected even when it never sets a
+	 * cookie on a block-first site — which is what surfaces its per-service
+	 * toggle (#134/#146). Returns raw URLs (deduplication happens at the caller).
+	 *
+	 * @param string $html Raw page HTML.
+	 * @return string[] Embed src URLs.
+	 */
+	private function extract_embed_urls( $html ) {
+		if ( ! is_string( $html ) || '' === $html ) {
+			return array();
+		}
+		$urls = array();
+		if ( preg_match_all( '/<(?:script|iframe)\b[^>]*\bsrc\s*=\s*(["\'])(.*?)\1/i', $html, $matches ) ) {
+			foreach ( $matches[2] as $url ) {
+				$url = trim( html_entity_decode( $url, ENT_QUOTES ) );
+				if ( '' !== $url ) {
+					$urls[] = $url;
+				}
+			}
+		}
+		return $urls;
+	}
+
 	/**
 	 * Infer cookies from detected scripts using Known Providers.
 	 *

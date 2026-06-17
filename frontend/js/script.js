@@ -4236,13 +4236,12 @@ function _fazWatchBannerElement() {
             _fazStore._perServiceConsent &&
             typeof window._fazAcceptService === "function"
         ) {
-            var activeService = (_fazStore._services || []).some(function(service) {
-                return service.id === serviceId && service.category === cat;
-            });
-            if (activeService) {
-                window._fazAcceptService(serviceId, cat);
-                return;
-            }
+            // Trust the placeholder's provider id even when it is absent from the
+            // scanner-detected _services list (block-first site): accept ONLY this
+            // service, never the whole category. The server enforces the resulting
+            // svc.<id>:yes for any real Known_Providers embed. #134/#146.
+            window._fazAcceptService(serviceId, cat, true);
+            return;
         }
         if (cat && typeof window._fazAcceptCategory === "function") {
             window._fazAcceptCategory(cat);
@@ -4932,13 +4931,17 @@ function _fazSaveVendorConsent(choice) {
 /**
  * Accept one detected service without granting its entire category.
  */
-window._fazAcceptService = function (serviceId, categorySlug) {
+window._fazAcceptService = function (serviceId, categorySlug, trustService) {
     if (!categorySlug) {
         categorySlug = _fazKnownServiceCategory(serviceId);
     }
     // Is this a real per-service entry? If not (per-service off, or service not
     // detected) fall back to accepting the category so the placeholder unblocks.
-    if (!_fazIsKnownService(serviceId, categorySlug)) {
+    // `trustService` lets a caller vouch for the provider id: a content-blocker
+    // placeholder carries the verified id even on a block-first site where the
+    // scanner never saw the provider's cookie, so `_services` lacks it. The
+    // server still only enforces svc.* for real Known_Providers. #134/#146.
+    if (!trustService && !_fazIsKnownService(serviceId, categorySlug)) {
         if (categorySlug && typeof window._fazAcceptCategory === "function") {
             window._fazAcceptCategory(categorySlug);
         }
