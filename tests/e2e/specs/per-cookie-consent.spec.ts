@@ -36,12 +36,10 @@ async function postSettings(page: Page, nonce: string, payload: FazSettings): Pr
   expect(res.status(), `settings update status ${res.status()}`).toBe(200);
 }
 
-// 1.18.2 HOTFIX: per-service / per-cookie consent is hard-disabled — the store
-// payload forces $per_service = false and the Settings toggles are gated off, so
-// the frontend never renders the nested per-cookie toggles this spec drives.
-// Skipped until the feature is reworked (server-side ck.* enforcement, granular
-// logging, 4 KB guard) and re-enabled; flip back to test.describe(...) then.
-test.describe.skip('Per-cookie consent (issue #135)', () => {
+// Re-enabled once per-cookie consent gained server-side ck.* enforcement
+// (Frontend::shred_non_consented_cookies reads the same ck.* tokens via
+// resolve_service_cookie_decision) and its admin toggle was ungated.
+test.describe('Per-cookie consent (issue #135)', () => {
   test.describe.configure({ mode: 'serial' });
 
   let original: FazSettings | null = null;
@@ -152,6 +150,23 @@ test.describe.skip('Per-cookie consent (issue #135)', () => {
     // enforcement: the denied cookie was shredded inside the save action
     const stillThere = await fp.evaluate((p) => document.cookie.indexOf(p.name + '=') !== -1, target);
     expect(stillThere, 'denied cookie is shredded on save').toBe(false);
+
+    // server-side enforcement persists across requests: re-plant the denied
+    // cookie so the browser sends it on the next request, reload, and confirm
+    // the send_headers shredder removes it again while the ck.*:no choice holds.
+    await fp.evaluate((p) => {
+      document.cookie = p.name + '=replanted; path=/';
+    }, target);
+    await fp.goto('/', { waitUntil: 'domcontentloaded' });
+    await fp.waitForTimeout(900);
+    const afterReload = await fp.evaluate((p) => document.cookie.indexOf(p.name + '=') !== -1, target);
+    expect(afterReload, 'denied cookie stays shredded across a reload').toBe(false);
+    const cookies2 = await ctx.cookies();
+    const consent2 = cookies2.find((c) => c.name === 'fazcookie-consent');
+    const decoded2 = consent2 ? decodeURIComponent(consent2.value) : '';
+    expect(decoded2, 'per-cookie denial persists after reload').toContain(
+      'ck.' + target.svc + '.' + target.name + ':no',
+    );
 
     await ctx.close();
 

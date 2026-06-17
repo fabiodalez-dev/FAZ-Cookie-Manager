@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.20.0] — 2026-06-17
+
+### Added
+
+- **Per-cookie consent (#135).** With per-service consent enabled, a new "Enable per-cookie consent" setting adds a nested toggle for each individual cookie a service declares, so a visitor can keep an accepted service (e.g. YouTube) but opt out of specific cookies within it. The choice is stored as override-only `ck.<service>.<cookie>` tokens and is now **enforced on both sides**: the client-side cleanup and the server-side `send_headers` shredder both read the same tokens (`ck.*` > `svc.*` > category precedence), so a denied cookie is removed on every request — not only client-side at save time. Always-allowed payment-gateway cookies and admin-whitelisted cookies stay exempt. The control was previously gated off pending this server-side enforcement; it is now ungated, opt-in, and off by default.
+
 ## [1.19.2] — 2026-06-17
 
 ### Fixed

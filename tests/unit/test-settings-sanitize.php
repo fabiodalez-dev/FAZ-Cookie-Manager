@@ -63,8 +63,8 @@ namespace {
 	);
 	faz_assert_same(
 		$sanitized['banner_control']['per_cookie_consent'],
-		false,
-		'per_cookie_consent is hard-disabled even when direct input asks for true'
+		true,
+		'per_cookie_consent is a settable boolean (no longer hard-disabled)'
 	);
 
 	echo "\n--\n";
