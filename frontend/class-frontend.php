@@ -1581,15 +1581,14 @@ class Frontend {
 
 		// Per-service consent: pass service list to frontend.
 		// 1.18.3: per-service consent reintroduced — read the option again so the
-		// resolved service list reaches the frontend preference center. Per-COOKIE
-		// consent remains out (its admin toggle stays gated; see settings.php), so
-		// no nested per-cookie overrides are emitted here. The correctness gaps the
-		// 1.18.2 hotfix flagged are now closed: per-service (svc.*) decisions are
-		// logged (P1-3, see the inline consent logger — the ck.* branch is covered
-		// too but cannot fire while per-cookie consent stays gated), the consent
-		// cookie is hard-capped against the 4 KB browser limit (P1-4, see
-		// _fazSetInStore), and the list below is filtered to providers with a
-		// DETECTED cookie (P2, just here).
+		// resolved service list reaches the frontend preference center. 1.20.0:
+		// per-COOKIE consent ungated — when its toggle is on, nested per-cookie
+		// (ck.*) overrides are emitted below and enforced server-side too (see
+		// shred_non_consented_cookies). The 1.18.2-hotfix correctness gaps stay
+		// closed: per-service (svc.*) and per-cookie (ck.*) decisions are logged
+		// (P1-3, inline consent logger), the consent cookie is hard-capped against
+		// the 4 KB browser limit (P1-4, see _fazSetInStore), and the list below is
+		// filtered to providers with a DETECTED cookie (P2, just here).
 		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( $per_service ) {
 			// P2: source the per-service toggle list from the cookies actually
@@ -4873,7 +4872,7 @@ class Frontend {
 		// Parse ck.* from the SAME validated (non-stale) consent string as svc.*,
 		// so a revision-bumped/expired cookie does not enforce old per-cookie picks.
 		$valid_consent_str = ( $per_cookie_enabled && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
-		$consent_cookie    = ( '' !== $valid_consent_str ) ? faz_parse_consent_cookie( $valid_consent_str ) : array();
+		$consent_cookie    = ( '' !== $valid_consent_str && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid_consent_str ) : array();
 		$svc_cookie_decisions = array(); // pattern => array( 'yes'|'no' ).
 		if ( ! empty( $service_consent ) || $per_cookie_enabled ) {
 			foreach ( $this->get_per_service_services() as $service ) {

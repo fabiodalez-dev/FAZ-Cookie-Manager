@@ -413,6 +413,13 @@ class Activator {
 		// idempotent — they no-op when the category already exists.
 		self::ensure_uncategorized_category();
 		self::ensure_wordpress_internal_category();
+		// Neutralise a stale pre-1.18.2 per_cookie_consent=true on upgrade. This
+		// also runs in run_pending_migrations(), but that hook is admin_init-only;
+		// install() runs from check_version() on the `init` hook (frontend too),
+		// so the reset lands on the first request of ANY kind after the upgrade —
+		// closing the window where a rarely-admined site would re-activate
+		// per-cookie consent on the frontend before an admin ever loads wp-admin.
+		self::reset_stale_per_cookie_consent();
 		// Always clear the banner template cache on version upgrades so new
 		// CSS rules, shortcodes, and template HTML take effect immediately.
 		// Without this, users upgrading across multiple versions (e.g. 1.8 →
