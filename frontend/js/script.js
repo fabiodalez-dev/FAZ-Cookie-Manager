@@ -2773,10 +2773,18 @@ document.createElement = (...args) => {
         ) {
             originalSetAttribute("data-faz-original-type", current);
         }
+        // Mark that WE blocked this script, independent of whether there was a
+        // pre-existing type to remember. Without this, a script blocked via its
+        // category tag BEFORE its src is set (e.g. setAttribute('data-fazcookie')
+        // then a later src= pointing at a whitelisted URL) had no marker, so the
+        // src setter's restore branch could not tell our block from a third
+        // party's and left it blocked despite the whitelist match.
+        originalSetAttribute("data-faz-blocked-by-us", "1");
     }
     function restoreOriginalType() {
         var saved = createdElement.getAttribute("data-faz-original-type");
         originalSetAttribute("type", saved || "text/javascript");
+        createdElement.removeAttribute("data-faz-blocked-by-us");
     }
 
     Object.defineProperties(createdElement, {
@@ -2788,7 +2796,7 @@ document.createElement = (...args) => {
                 if (_fazShouldChangeType(createdElement, value)) {
                     rememberOriginalType();
                     originalSetAttribute("type", "javascript/blocked");
-                } else if (createdElement.getAttribute("data-faz-original-type")) {
+                } else if (createdElement.getAttribute("data-faz-blocked-by-us")) {
                     // Restore only a type WE clobbered (marked by
                     // data-faz-original-type), not one a third party set.
                     restoreOriginalType();
@@ -2833,7 +2841,7 @@ document.createElement = (...args) => {
             if (_fazShouldChangeType(createdElement)) {
                 rememberOriginalType();
                 originalSetAttribute("type", "javascript/blocked");
-            } else if (createdElement.getAttribute("data-faz-original-type")) {
+            } else if (createdElement.getAttribute("data-faz-blocked-by-us")) {
                 // Only restore when WE blocked it — rememberOriginalType() sets
                 // data-faz-original-type, so its presence is the reliable marker
                 // that this interceptor clobbered the type. Never downgrade a
