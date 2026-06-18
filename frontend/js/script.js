@@ -2524,6 +2524,26 @@ function _fazIsKnownService(serviceId, categorySlug) {
     return !categorySlug || serviceCategory === categorySlug;
 }
 
+/**
+ * Is this a service id the site actually recognises? True for a scanner-detected
+ * service (_services) OR any provider the site is configured to block
+ * (_providersToBlock carries the service id when per-service consent is on).
+ * This is the allowlist that keeps an explicit svc.<id> honest: a real but
+ * undetected provider (e.g. YouTube on a block-first site) is accepted, while a
+ * forged/injected/stale data-faz-service id is NOT — it can neither override a
+ * denied category nor mint an arbitrary grant. #134/#146.
+ */
+function _fazIsRecognizedService(serviceId) {
+    if (!serviceId) return false;
+    if (Array.isArray(_fazStore._services) && _fazStore._services.some(function (s) { return s && s.id === serviceId; })) {
+        return true;
+    }
+    if (Array.isArray(_fazStore._providersToBlock) && _fazStore._providersToBlock.some(function (p) { return p && p.service === serviceId; })) {
+        return true;
+    }
+    return false;
+}
+
 function _fazGetServiceConsentSnapshot() {
     var snapshot = {};
     if (!_fazStore._perServiceConsent) return snapshot;
@@ -3443,13 +3463,14 @@ function _fazGetServiceConsentForTarget(formattedRE) {
 
 function _fazShouldBlockResource(category, target, serviceId) {
     if (_fazStore._perServiceConsent) {
-        if (serviceId) {
+        if (serviceId && _fazIsRecognizedService(serviceId)) {
             // Honour an explicit per-service choice even when the service is not
             // in the scanner-detected _services list — a blocked element carries
             // a server-verified data-faz-service id, so its svc.<id>:yes|no must
             // win over the category fallback on block-first sites where the
-            // provider's cookie was never observed. Mirrors the server-side
-            // get_enforceable_services() resolution. #134/#146.
+            // provider's cookie was never observed. Gated on _fazIsRecognizedService
+            // so a forged/unknown svc.<id> cannot override a denied category.
+            // Mirrors the server-side get_enforceable_services() resolution. #134/#146.
             var explicit = ref._fazGetFromStore("svc." + serviceId);
             if (explicit === "no") return true;
             if (explicit === "yes") return false;
@@ -5075,13 +5096,14 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
     if (!categorySlug) {
         categorySlug = _fazKnownServiceCategory(serviceId);
     }
-    // Is this a real per-service entry? If not (per-service off, or service not
-    // detected) fall back to accepting the category so the placeholder unblocks.
-    // `trustService` lets a caller vouch for the provider id: a content-blocker
-    // placeholder carries the verified id even on a block-first site where the
-    // scanner never saw the provider's cookie, so `_services` lacks it. The
-    // server still only enforces svc.* for real Known_Providers. #134/#146.
-    if (!trustService && !_fazIsKnownService(serviceId, categorySlug)) {
+    // Only grant for a service the site actually RECOGNISES — a scanner-detected
+    // service OR a configured blockable provider (_providersToBlock carries the
+    // id when per-service is on, so a real-but-undetected provider like YouTube
+    // on a block-first site is accepted). A forged/unknown data-faz-accept-service
+    // must NOT mint an arbitrary svc.<id>:yes, so it falls back to category
+    // accept. (`trustService` is retained for call-site compatibility but the
+    // recognition allowlist is now authoritative.) #134/#146.
+    if (!_fazIsRecognizedService(serviceId)) {
         if (categorySlug && typeof window._fazAcceptCategory === "function") {
             window._fazAcceptCategory(categorySlug);
         }
