@@ -5,6 +5,7 @@ import {
   clickFirstVisible,
   getConsentCookie,
   parseConsentCookie,
+  waitForBannerSettled,
 } from './_live-helpers';
 
 /**
@@ -71,7 +72,9 @@ test.describe('Live compliance — config-independent privacy invariants', () =>
   // EDPB Guidelines 03/2022 — scrolling is NOT consent.
   test('COMP-03 (EDPB): scrolling does not grant consent', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator(NOTICE)).toBeVisible({ timeout: 10_000 });
+    // Wait for the banner to settle (visible + language-swap resolved) so the
+    // scroll/evaluate below doesn't race the first-paint→re-render rebuild.
+    await waitForBannerSettled(page);
     await page.evaluate(() => window.scrollBy(0, 1800));
     await page.waitForTimeout(2000);
     const consent = await getConsentCookie(page.context());
@@ -84,7 +87,9 @@ test.describe('Live compliance — config-independent privacy invariants', () =>
   // exposes only an X (a valid CCPA-only configuration).
   test('COMP-04 (Garante/EDPB): reject reachable at first layer, equal weight', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator(NOTICE)).toBeVisible({ timeout: 10_000 });
+    // Wait for the banner to settle so the reject-control probe below doesn't
+    // race a language-swap rebuild that momentarily detaches the buttons.
+    await waitForBannerSettled(page);
 
     const accept = page.locator('[data-faz-tag="accept-button"]').first();
     const reject = page.locator('[data-faz-tag="reject-button"]').first();
