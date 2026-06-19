@@ -405,25 +405,31 @@ test.describe.serial('PR #61 regressions', () => {
 				return Array.isArray(dl) && dl.some((entry: any) => entry && entry[0] === 'consent');
 			}, undefined, { timeout: 10_000 });
 
-			const firstConsentCall = await page.evaluate(() => {
+			const consentCalls = await page.evaluate(() => {
 				const dl = (window as any).dataLayer || [];
-				for (const entry of dl as any[]) {
-					if (entry && entry[0] === 'consent') {
-						return {
-							mode: entry[1],
-							payload: entry[2],
-						};
-					}
-				}
-				return null;
+				return (dl as any[])
+					.filter((entry) => entry && entry[0] === 'consent')
+					.map((entry) => ({ mode: entry[1], payload: entry[2] }));
 			});
 
 			const consentCookie = (await page.context().cookies()).find((cookie) => cookie.name === 'fazcookie-consent');
 			expect(consentCookie).toBeTruthy();
-			expect(firstConsentCall).toBeTruthy();
-			expect(firstConsentCall!.mode).toBe('default');
-			expect(firstConsentCall!.payload?.ad_storage).toBe('granted');
-			expect(firstConsentCall!.payload?.analytics_storage).toBe('granted');
+			expect(consentCalls.length).toBeGreaterThan(0);
+
+			// GCM-correct sequence (issue #149): the FIRST `consent default` is the
+			// compliant denied/region baseline — it must NOT pre-grant storage
+			// before any consent signal. The PMP exemption is a saved auto-grant,
+			// so it is restored via a `consent update` (never a second granted
+			// `consent default`). Assert the exempt member's GRANTED state arrives
+			// on a consent call carrying granted ad/analytics storage — without
+			// requiring it to be the baseline default, which would reintroduce the
+			// pre-consent granted window #149 removed.
+			const baseline = consentCalls[0];
+			expect(baseline.mode).toBe('default');
+			const grantedCall = consentCalls.find(
+				(c) => c.payload?.ad_storage === 'granted' && c.payload?.analytics_storage === 'granted',
+			);
+			expect(grantedCall, 'a consent call grants ad+analytics storage for the exempt member').toBeTruthy();
 
 			const allErrors = [...consoleErrors, ...pageErrors].join('\n');
 			expect(allErrors).not.toContain('Cannot read properties of null');

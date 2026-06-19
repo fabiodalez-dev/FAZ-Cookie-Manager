@@ -103,6 +103,7 @@ class Frontend {
 	private $service_consent_cache    = null;
 	private $pattern_service_cache    = null;
 	private $per_service_cache        = null;
+	private $enforceable_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
 	/**
@@ -1310,6 +1311,56 @@ class Frontend {
 	}
 
 	/**
+	 * Providers whose explicit per-service choice (svc.<id>:yes|no) must be
+	 * enforced, regardless of whether the scanner has seen one of their cookies.
+	 *
+	 * get_per_service_services() drives the visible preference-center toggles and
+	 * is deliberately narrowed to scanner-detected services. Enforcement is
+	 * broader: a visitor can accept or reject a provider straight from its
+	 * content-blocker placeholder (e.g. a YouTube embed) on a block-first site
+	 * where the provider's cookie was never observed — so its svc.* token has no
+	 * detected-cookie entry to anchor to. This returns every Known_Providers
+	 * entry in an active (non-necessary) category so get_service_consent() keeps
+	 * such a token and get_pattern_service_map() can match the embed. Matching
+	 * still only fires on a real script/iframe, and a provider with no explicit
+	 * choice still falls through to category-level blocking (#134/#146).
+	 *
+	 * @param string[]|null $valid_categories Active category slugs.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function get_enforceable_services( $valid_categories = null ) {
+		if ( null !== $this->enforceable_cache ) {
+			return $this->enforceable_cache;
+		}
+		if ( null === $valid_categories ) {
+			$valid_categories = $this->get_valid_category_slugs();
+		}
+		$services = array();
+		foreach ( Known_Providers::get_all() as $id => $service ) {
+			if ( 'necessary' === $service['category'] || ! in_array( $service['category'], $valid_categories, true ) ) {
+				continue;
+			}
+			$services[] = array(
+				'id'       => sanitize_key( $id ),
+				'label'    => sanitize_text_field( $service['label'] ),
+				'category' => sanitize_key( $service['category'] ),
+				'patterns' => array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) ),
+				'cookies'  => ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array(),
+			);
+		}
+		/**
+		 * Filter the enforceable per-service list (broader than the visible one).
+		 *
+		 * @since 1.20.0
+		 * @param array $services         Each: {id,label,category,patterns,cookies}.
+		 * @param array $valid_categories Active non-necessary category slugs.
+		 */
+		$services = apply_filters( 'faz_enforceable_services', $services, $valid_categories );
+		$this->enforceable_cache = $services;
+		return $this->enforceable_cache;
+	}
+
+	/**
 	 * Get store data
 	 *
 	 * @return array
@@ -1420,7 +1471,8 @@ class Frontend {
 		// Merge DB-based providers with Known_Providers for client-side blocking.
 		$valid_categories = $this->get_valid_category_slugs();
 		$known            = Known_Providers::get_all();
-		foreach ( $known as $service ) {
+		$provider_services = array(); // pattern => service id (per-service embed resolution).
+		foreach ( $known as $known_id => $service ) {
 			if ( 'necessary' === $service['category'] ) {
 				continue;
 			}
@@ -1431,6 +1483,27 @@ class Frontend {
 				if ( ! isset( $this->providers[ $pattern ] ) ) {
 					$this->providers[ $pattern ] = array( $service['category'] );
 				}
+			}
+		}
+
+		// Resolve pattern → service id from the SAME enforceable set the server
+		// uses for svc.* decisions, the pattern→service map and the cookie
+		// shredder (get_enforceable_services()), so the faz_enforceable_services
+		// filter can never make the client resolve an embed to a different
+		// service than the server enforces. The category-blocking map above
+		// stays on the raw Known_Providers set on purpose — per-category
+		// blocking must not depend on the per-service toggle/filter. #134/#146.
+		foreach ( $this->get_enforceable_services( $valid_categories ) as $service ) {
+			$service_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
+			if ( '' === $service_id || empty( $service['patterns'] ) ) {
+				continue;
+			}
+			foreach ( (array) $service['patterns'] as $pattern ) {
+				$pattern = sanitize_text_field( (string) $pattern );
+				if ( '' === $pattern || isset( $provider_services[ $pattern ] ) ) {
+					continue;
+				}
+				$provider_services[ $pattern ] = $service_id;
 			}
 		}
 
@@ -1474,11 +1547,21 @@ class Frontend {
 			$this->providers = array();
 		}
 
+		$expose_provider_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		foreach ( $this->providers as $key => $value ) {
-			$providers[] = array(
+			$entry = array(
 				're'         => $key,
 				'categories' => $value,
 			);
+			// Carry the provider's service id ONLY when per-service consent is on,
+			// so the client can resolve a matched embed (even a dynamically
+			// injected one, or a clean server-allowed iframe after a reload) to
+			// its svc.<id> decision instead of re-blocking it under the still-
+			// denied category. No extra payload on non-per-service sites. #134/#146.
+			if ( $expose_provider_service && ! empty( $provider_services[ $key ] ) ) {
+				$entry['service'] = $provider_services[ $key ];
+			}
+			$providers[] = $entry;
 		}
 		$store['_providersToBlock'] = $providers;
 
@@ -3071,8 +3154,12 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 
+		// Honour an explicit svc.* choice for ANY provider the site can block,
+		// not only scanner-detected ones — a placeholder lets a visitor accept or
+		// reject a provider (e.g. YouTube) whose cookie was never observed on a
+		// block-first site (#134/#146). Matching still only fires on a real embed.
 		$active_service_ids = array_fill_keys(
-			array_column( $this->get_per_service_services(), 'id' ),
+			array_column( $this->get_enforceable_services(), 'id' ),
 			true
 		);
 
@@ -3097,7 +3184,9 @@ class Frontend {
 			return $this->pattern_service_cache;
 		}
 		$this->pattern_service_cache = array();
-		foreach ( $this->get_per_service_services() as $service ) {
+		// Build from the broad enforceable set so an embed can be matched even
+		// when its provider is not in the scanner-detected list (#134/#146).
+		foreach ( $this->get_enforceable_services() as $service ) {
 			foreach ( $service['patterns'] as $pattern ) {
 				if ( ! isset( $this->pattern_service_cache[ $pattern ] ) ) {
 					$this->pattern_service_cache[ $pattern ] = array();
@@ -4875,7 +4964,14 @@ class Frontend {
 		$consent_cookie    = ( '' !== $valid_consent_str && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid_consent_str ) : array();
 		$svc_cookie_decisions = array(); // pattern => array( 'yes'|'no' ).
 		if ( ! empty( $service_consent ) || $per_cookie_enabled ) {
-			foreach ( $this->get_per_service_services() as $service ) {
+			// Use the broad enforceable set (same source as get_service_consent()
+			// and get_pattern_service_map()), not the narrow scanner-detected
+			// list. Otherwise a svc.<id>:no for an enforceable-but-undetected
+			// provider is honoured for script-blocking but its already-set cookie
+			// is never shredded — the three layers must agree. (#134/#146)
+			// The `|| $per_cookie_enabled` guard keeps the loop running for
+			// per-cookie (ck.*) denials even when no service-level svc.* exists. (#135)
+			foreach ( $this->get_enforceable_services() as $service ) {
 				$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
 				if ( '' === $svc_id || empty( $service['cookies'] ) ) {
 					continue;

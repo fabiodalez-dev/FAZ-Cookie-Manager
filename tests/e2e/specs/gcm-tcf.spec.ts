@@ -1,6 +1,16 @@
+import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
 import { wpEval } from '../utils/wp-env';
+
+type GcmLayerEntry = [string, unknown?, unknown?];
+type GcmScenario = {
+  name: string;
+  choose: (page: Page) => Promise<void>;
+  expected: Record<string, string>;
+  npa: number[];
+  addtl: string;
+};
 
 function parseCookieConsentTcString(tcString: string | undefined | null): { created: number; lastUpdated: number } | null {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -32,6 +42,86 @@ function parseCookieConsentTcString(tcString: string | undefined | null): { crea
     created: readBits(6, 36),
     lastUpdated: readBits(42, 36),
   };
+}
+
+async function readGcmLayer(page: Page) {
+  return page.evaluate(() => {
+    const normalize = (entry: unknown): unknown[] | null => {
+      if (!entry) {
+        return null;
+      }
+      try {
+        if (typeof (entry as { length?: unknown }).length === 'number') {
+          return Array.prototype.slice.call(entry);
+        }
+      } catch {
+        // Ignore and fall through to the object shape below.
+      }
+      if (Array.isArray(entry)) {
+        return entry;
+      }
+      if (typeof entry === 'object' && Object.prototype.hasOwnProperty.call(entry, '0')) {
+        const e = entry as Record<number, unknown>;
+        return [e[0], e[1], e[2]].filter((value) => typeof value !== 'undefined');
+      }
+      return null;
+    };
+
+    const dlName =
+      (window.fazSettings && typeof window.fazSettings.dataLayerName === 'string'
+        ? window.fazSettings.dataLayerName
+        : '') || 'dataLayer';
+    const layer = ((window as Record<string, unknown>)[dlName] || []) as unknown[];
+    const relevant = layer
+      .map(normalize)
+      .filter((entry): entry is GcmLayerEntry => Array.isArray(entry) && (entry[0] === 'consent' || entry[0] === 'set'));
+
+    return {
+      relevant,
+      defaults: relevant.filter((entry) => entry[0] === 'consent' && entry[1] === 'default'),
+      updates: relevant.filter((entry) => entry[0] === 'consent' && entry[1] === 'update'),
+      npaSets: relevant
+        .filter((entry) => entry[0] === 'set' && entry[1] && typeof entry[1] === 'object' && Object.prototype.hasOwnProperty.call(entry[1], 'npa'))
+        .map((entry) => (entry[1] as { npa: number }).npa),
+      addtlConsent: relevant
+        .filter((entry) => entry[0] === 'set' && entry[1] === 'addtl_consent')
+        .map((entry) => entry[2]),
+      decodedConsent: decodeURIComponent((document.cookie.match(/(?:^|; )fazcookie-consent=([^;]+)/) || [,''])[1] || ''),
+      bannerVisible: Array.from(document.querySelectorAll('#faz-consent,.faz-consent-container,.faz-modal')).some((el) => {
+        const style = window.getComputedStyle(el);
+        return !!(el as HTMLElement).offsetWidth || !!(el as HTMLElement).offsetHeight || el.getClientRects().length > 0
+          ? style.display !== 'none' && style.visibility !== 'hidden'
+          : false;
+      }),
+    };
+  });
+}
+
+function expectBaselineDefault(layer: Awaited<ReturnType<typeof readGcmLayer>>) {
+  expect(layer.defaults).toHaveLength(1);
+  const defaults = layer.defaults[0][2] as Record<string, unknown>;
+  expect(defaults).toMatchObject({
+    ad_storage: 'denied',
+    analytics_storage: 'denied',
+    functionality_storage: 'denied',
+    personalization_storage: 'denied',
+    security_storage: 'granted',
+    ad_user_data: 'denied',
+    ad_personalization: 'denied',
+    wait_for_update: 500,
+  });
+  for (const key of ['ad_storage', 'analytics_storage', 'functionality_storage', 'personalization_storage', 'ad_user_data', 'ad_personalization']) {
+    expect(defaults[key], `consent default must not grant ${key}`).not.toBe('granted');
+  }
+}
+
+function expectConsentUpdate(layer: Awaited<ReturnType<typeof readGcmLayer>>, expected: Record<string, string>) {
+  expect(layer.defaults).toHaveLength(1);
+  expectBaselineDefault(layer);
+  expect(layer.updates.length).toBeGreaterThanOrEqual(1);
+  const update = layer.updates[layer.updates.length - 1][2] as Record<string, unknown>;
+  expect(update).toMatchObject(expected);
+  expect(update).not.toHaveProperty('wait_for_update');
 }
 
 test.describe('GCM and IAB TCF behavior', () => {
@@ -82,6 +172,198 @@ test.describe('GCM and IAB TCF behavior', () => {
     expect(gcm.defaults).toBeTruthy();
     expect(gcm.defaults.ad_storage).toBe('denied');
     expect(gcm.defaults.analytics_storage).toBe('denied');
+  });
+
+  test('GCM restores stored consent with consent update, never a second default (#149)', async ({ browser, wpBaseURL }) => {
+    const rawGcmSettings = wpEval(`echo wp_json_encode( get_option( 'faz_gcm_settings', array() ) );`);
+    const gcmSettingsB64 = Buffer.from(rawGcmSettings, 'utf8').toString('base64');
+
+    const configureGcm = () => {
+      wpEval(`
+        update_option( 'faz_gcm_settings', array(
+          'status' => true,
+          'default_settings' => array(
+            array(
+              'ad_storage' => 'denied',
+              'analytics_storage' => 'denied',
+              'ad_user_data' => 'denied',
+              'ad_personalization' => 'denied',
+              'functionality_storage' => 'denied',
+              'personalization_storage' => 'denied',
+              'security_storage' => 'granted',
+              'analytics' => 'denied',
+              'marketing' => 'denied',
+              'functional' => 'denied',
+              'necessary' => 'granted',
+              'regions' => 'All',
+            ),
+          ),
+          'wait_for_update' => 500,
+          'url_passthrough' => true,
+          'ads_data_redaction' => true,
+          'gacm_enabled' => true,
+          'gacm_provider_ids' => '89,91,128',
+          'non_personalized_ads_fallback' => true,
+        ), false );
+        wp_cache_delete( 'faz_gcm_settings', 'options' );
+        if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+          \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+        }
+      `);
+    };
+
+    const restoreGcm = () => {
+      wpEval(`
+        $restored = json_decode( base64_decode( '${gcmSettingsB64}' ), true );
+        update_option( 'faz_gcm_settings', is_array( $restored ) ? $restored : array(), false );
+        wp_cache_delete( 'faz_gcm_settings', 'options' );
+        if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+          \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+        }
+      `);
+    };
+
+    const scenarios: GcmScenario[] = [
+      {
+        name: 'accept-all',
+        choose: async (page) => {
+          await page.getByRole('button', { name: /Accept All/i }).click();
+        },
+        expected: {
+          ad_storage: 'granted',
+          analytics_storage: 'granted',
+          functionality_storage: 'granted',
+          personalization_storage: 'granted',
+          security_storage: 'granted',
+          ad_user_data: 'granted',
+          ad_personalization: 'granted',
+        },
+        npa: [1, 0],
+        addtl: '1~89.91.128',
+      },
+      {
+        name: 'reject-all',
+        choose: async (page) => {
+          await page.getByRole('button', { name: /Reject All/i }).click();
+        },
+        expected: {
+          ad_storage: 'denied',
+          analytics_storage: 'denied',
+          functionality_storage: 'denied',
+          personalization_storage: 'denied',
+          security_storage: 'granted',
+          ad_user_data: 'denied',
+          ad_personalization: 'denied',
+        },
+        npa: [1],
+        addtl: '1~',
+      },
+      {
+        name: 'custom-marketing-only',
+        choose: async (page) => {
+          await page.getByRole('button', { name: /Customize/i }).click();
+          await page.locator('#fazSwitchmarketing').evaluate((el: HTMLInputElement) => {
+            el.checked = true;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+          await page.getByRole('button', { name: /Save My Preferences/i }).click();
+        },
+        expected: {
+          ad_storage: 'granted',
+          analytics_storage: 'denied',
+          functionality_storage: 'denied',
+          personalization_storage: 'denied',
+          security_storage: 'granted',
+          ad_user_data: 'granted',
+          ad_personalization: 'granted',
+        },
+        npa: [1, 0],
+        addtl: '1~89.91.128',
+      },
+      {
+        name: 'custom-performance-only',
+        choose: async (page) => {
+          await page.getByRole('button', { name: /Customize/i }).click();
+          await page.locator('#fazSwitchperformance').evaluate((el: HTMLInputElement) => {
+            el.checked = true;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+          await page.getByRole('button', { name: /Save My Preferences/i }).click();
+        },
+        expected: {
+          ad_storage: 'denied',
+          analytics_storage: 'granted',
+          functionality_storage: 'denied',
+          personalization_storage: 'denied',
+          security_storage: 'granted',
+          ad_user_data: 'denied',
+          ad_personalization: 'denied',
+        },
+        npa: [1],
+        addtl: '1~',
+      },
+    ];
+
+    const assertScenario = async (scenario: typeof scenarios[number]) => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      const initial = await readGcmLayer(page);
+      expectBaselineDefault(initial);
+      expect(initial.updates).toHaveLength(0);
+      expect(initial.npaSets).toContain(1);
+      expect(initial.addtlConsent).toContain('1~');
+
+      await scenario.choose(page);
+      await page.waitForFunction(() => document.cookie.includes('fazcookie-consent='));
+      const afterChoice = await readGcmLayer(page);
+      expectConsentUpdate(afterChoice, scenario.expected);
+      expect(afterChoice.npaSets).toEqual(expect.arrayContaining(scenario.npa));
+      expect(afterChoice.addtlConsent).toContain(scenario.addtl);
+
+      const cookies = await context.cookies();
+      await context.close();
+
+      const returningContext = await browser.newContext();
+      await returningContext.addCookies(cookies.filter((cookie) => cookie.name === 'fazcookie-consent'));
+      const returningPage = await returningContext.newPage();
+      await returningPage.goto('/', { waitUntil: 'domcontentloaded' });
+      const returning = await readGcmLayer(returningPage);
+      expect(returning.updates, `${scenario.name}: returning visitor must emit exactly one consent update`).toHaveLength(1);
+      expectConsentUpdate(returning, scenario.expected);
+      expect(returning.npaSets).toEqual(expect.arrayContaining(scenario.npa));
+      expect(returning.addtlConsent).toContain(scenario.addtl);
+      await returningContext.close();
+    };
+
+    try {
+      configureGcm();
+      for (const scenario of scenarios) {
+        await assertScenario(scenario);
+      }
+
+      const staleContext = await browser.newContext();
+      await staleContext.addCookies([
+        {
+          name: 'fazcookie-consent',
+          value: encodeURIComponent('consentid:stale,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,performance:yes,uncategorized:yes,marketing:yes,rev:1'),
+          domain: new URL(wpBaseURL).hostname,
+          path: '/',
+          sameSite: 'Lax',
+        },
+      ]);
+      const stalePage = await staleContext.newPage();
+      await stalePage.goto('/', { waitUntil: 'domcontentloaded' });
+      const stale = await readGcmLayer(stalePage);
+      expectBaselineDefault(stale);
+      expect(stale.updates, 'stale consent cookie must not be restored with consent update').toHaveLength(0);
+      expect(stale.npaSets).toContain(1);
+      expect(stale.addtlConsent).toContain('1~');
+      expect(stale.bannerVisible).toBe(true);
+      await staleContext.close();
+    } finally {
+      restoreGcm();
+    }
   });
 
   test('TCF API responds when enabled', async ({ page }) => {

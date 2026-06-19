@@ -75,3 +75,39 @@ export async function clickFirstVisible(
   }
   return false;
 }
+
+/**
+ * Wait until the banner has fully SETTLED before asserting against it: visible
+ * AND the client-side language-swap decision resolved.
+ *
+ * script.js paints the banner immediately from the default-language template
+ * (first paint must never wait on a network round-trip), then — on
+ * browser-detect multilingual sites — fetches the visitor's language and
+ * rebuilds the banner nodes. Asserting in the window between first paint and
+ * that re-render races the rebuild: Playwright's execution context can be
+ * destroyed mid-`evaluate` (COMP-03) or the reject control is momentarily
+ * detached (COMP-04). The store exposes a deterministic `_swapResolved` marker
+ * (set in a `finally`, so it fires whether or not a swap happened) precisely so
+ * tests can wait for "no more re-render coming" instead of sleeping on a fixed
+ * timeout. Read-only: only reads `window._fazConfig` (the in-page store alias).
+ */
+export async function waitForBannerSettled(page: Page, timeout = 12_000): Promise<void> {
+  await page.locator(NOTICE).first().waitFor({ state: 'visible', timeout });
+  // Wait for the swap decision to resolve. Degrade gracefully on legacy builds
+  // that predate the marker (older production) — fall back to visible-only.
+  await page
+    .waitForFunction(
+      () => {
+        const cfg = (window as unknown as { _fazConfig?: { _swapResolved?: boolean } })._fazConfig;
+        return !!(cfg && cfg._swapResolved === true);
+      },
+      undefined,
+      { timeout },
+    )
+    .catch(() => undefined);
+  // One animation frame so any synchronous post-resolve decoration has painted
+  // and the banner nodes are stable for the upcoming queries.
+  await page
+    .evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))))
+    .catch(() => undefined);
+}

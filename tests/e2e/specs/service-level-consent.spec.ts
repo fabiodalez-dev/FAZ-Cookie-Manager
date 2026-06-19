@@ -15,8 +15,8 @@ import { expect, test } from '../fixtures/wp-fixture';
  *
  * The cookie-state assertions exercise the real frontend runtime. Services are
  * injected into _fazConfig._services before each direct call so the tested path
- * matches the production contract: only scanner-exposed services can receive a
- * granular svc.<id> grant.
+ * matches the production contract: only scanner-exposed services or configured
+ * blockable providers can receive a granular svc.<id> grant.
  */
 
 const EXCLUDED = ['consentid', 'consent', 'action', 'necessary', '__scope.banner', '__scope.law', '__scope.fp'];
@@ -168,14 +168,13 @@ test.describe('Service-level consent — placeholder button (#134)', () => {
     expect(Object.keys(parsed).some((k) => k === 'svc.')).toBeFalsy();
   });
 
-  // 17: a placeholder service id not present in _services falls back to the category.
-  test('placeholder with an unknown service id does not create an arbitrary svc grant', async ({ page, context, getConsentCookie, parseConsentCookie }) => {
+  // 17: a placeholder service id not recognized by _services/_providersToBlock is a no-op.
+  test('placeholder with an unknown service id does not create an arbitrary svc or category grant', async ({ page, context, getConsentCookie }) => {
     await gotoFresh(page, context);
     await exposeServices(page, []);
     await injectPlaceholder(page, { 'data-faz-accept': 'marketing', 'data-faz-accept-service': 'definitely-not-a-rendered-service' });
-    const parsed = parseConsentCookie((await getConsentCookie(context))!.value);
-    expect(parsed['svc.definitely-not-a-rendered-service'] === 'yes').toBeFalsy();
-    expect(parsed.marketing).toBe('yes');
+    const consent = await getConsentCookie(context);
+    expect(consent, 'unknown service accepts must not persist consent').toBeUndefined();
   });
 
   // 18: the PHP builder ships the data-faz-accept-service attribute.

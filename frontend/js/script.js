@@ -484,6 +484,19 @@ if (!_fazConsentInvalidated && _fazStore._perServiceConsent && _fazStore._servic
             });
         }
     });
+    // Also restore svc.<id> tokens for providers NOT in the scanner-detected
+    // _services list. The server enforces the broad enforceable set (every
+    // Known_Provider in an active category), so on a block-first site a visitor
+    // can hold an explicit svc.<id> for a provider whose cookie was never
+    // detected. Without this the token is dropped from the in-memory store on
+    // reload and a dynamically-injected embed of that provider is re-blocked
+    // despite consent. The cookie only holds svc.* tokens the visitor actually
+    // chose, so this is bounded. #134/#146.
+    Object.keys(fazcookieConsentMap).forEach(function (k) {
+        if (k.indexOf('svc.') === 0 && !ref._fazConsentStore.has(k)) {
+            ref._fazConsentStore.set(k, fazcookieConsentMap[k]);
+        }
+    });
 }
 
 
@@ -1167,19 +1180,23 @@ async function _fazMaybeSwapLanguage() {
     // wp_localize_script stringifies booleans: true becomes "1", false
     // becomes "". Treat the field as a truthy flag so the JS works with
     // whatever wire format ends up in the page.
-    if (!_fazStore || !_fazStore._browserDetect) return;
+    if (!_fazStore || !_fazStore._browserDetect) return false;
     var available = Array.isArray(_fazStore._availableLanguages) ? _fazStore._availableLanguages : [];
-    if (available.length < 2) return;
+    if (available.length < 2) return false;
     var langMap = (_fazStore._languageMap && typeof _fazStore._languageMap === 'object') ? _fazStore._languageMap : {};
     var detected = _fazResolveBrowserLanguage(available, langMap);
-    if (!detected || detected === _fazStore._language) return;
-    if (!_fazStore._bannerEndpoint) return;
+    if (!detected || detected === _fazStore._language) return false;
+    if (!_fazStore._bannerEndpoint) return false;
     try {
         var payload = await _fazFetchBannerForLanguage(_fazStore._bannerEndpoint, detected, 500);
-        if (payload) _fazApplyBannerPayload(payload);
+        if (payload) {
+            _fazApplyBannerPayload(payload);
+            return true; // caller re-renders the visible banner in the new language
+        }
     } catch (err) {
-        // Silent degrade: if the swap fails we just render the default.
+        // Silent degrade: if the swap fails we just keep the default language.
     }
+    return false;
 }
 
 /**
@@ -1188,21 +1205,54 @@ async function _fazMaybeSwapLanguage() {
 async function _fazInit() {
     try {
         _fazRunDeadCookieCleanup();
+        // Render and show the banner FIRST, from the server-rendered default-
+        // language template — first paint must never wait on a network round-
+        // trip. (Previously _fazInit awaited the language swap before rendering,
+        // so on multilingual sites with browser-detect on, any visitor whose
+        // browser language differed from the site language saw the banner only
+        // after a /faz/v1/banner/{lang} fetch settled — "appears late / not at
+        // all".)
+        _fazInitOperations();
+        // Second pass, intentionally not redundant with the pre-paint one at the
+        // top: _fazInitOperations() restores server-allowed services (svc.*:yes)
+        // and can unblock iframes that immediately set cookies, so re-run the
+        // (idempotent, removal-only) cleanup to shred anything written for a
+        // still-denied category/service before the scheduled sweep would.
+        _fazRunDeadCookieCleanup();
+        _fazWatchBannerElement();
+        _fazScheduleDeadCookieCleanup();
+        // Language swap is now a progressive enhancement applied AFTER paint, and
+        // only when the first-visit banner is actually on screen. Returning / GPC
+        // visitors have no visible banner to re-localize, so they skip the fetch
+        // entirely.
         try {
-            await _fazMaybeSwapLanguage();
+            var _fazBannerEl = _fazGetBanner();
+            if (_fazBannerEl && !_fazBannerEl.classList.contains('faz-hide')) {
+                var _fazSwapped = await _fazMaybeSwapLanguage();
+                // Re-validate AFTER the await: the banner is fully interactive
+                // while the swap fetch is in flight, so the visitor may have
+                // clicked Accept/Reject during that window. _fazAcceptCookies()
+                // records the action and hides the banner; re-rendering now would
+                // re-show the dismissed banner and reset the in-memory consent
+                // store to defaults. Only re-localize when no choice was made and
+                // the banner is still on screen.
+                var _fazBannerNow = _fazGetBanner();
+                if (
+                    _fazSwapped &&
+                    !ref._fazGetFromStore('action') &&
+                    _fazBannerNow &&
+                    !_fazBannerNow.classList.contains('faz-hide')
+                ) {
+                    _fazReRenderVisibleBanner();
+                }
+            }
         } finally {
             // Deterministic marker so tests can wait for the client-side
             // language-swap decision instead of sleeping on a fixed timeout.
-            // Settled regardless of outcome (no-op / swapped / failed) so
-            // callers never race an unresolved promise.
             if (_fazStore && typeof _fazStore === 'object') {
                 _fazStore._swapResolved = true;
             }
         }
-        _fazInitOperations();
-        _fazRunDeadCookieCleanup();
-        _fazWatchBannerElement();
-        _fazScheduleDeadCookieCleanup();
     } catch (err) {
         console.error(err);
     }
@@ -1475,6 +1525,54 @@ function _fazHideBanner() {
     }
 }
 var _fazBannerLoadedFired = false;
+// Top-level nodes _fazRenderBanner() inserted, so a language swap can remove
+// and rebuild exactly the banner without orphaning or duplicating it.
+var _fazRenderedNodes = [];
+
+/**
+ * Rebuild the on-screen banner after a successful language swap, without
+ * blocking first paint. Only called when the first-visit banner is already
+ * visible (returning/GPC visitors have no banner to re-localize). Removes the
+ * previously-inserted template nodes, re-renders from the swapped template and
+ * re-applies the shown state. Banner-external listeners (shortcode triggers,
+ * the delegated _fazWatchBannerElement body listener) are untouched — they bind
+ * to nodes outside _fazRenderedNodes — so nothing double-binds.
+ */
+function _fazReRenderVisibleBanner() {
+    // Build-the-new-before-removing-the-old, so the first layer never has a
+    // window with no banner (and no reject control) on screen. The previous
+    // remove-then-render order detached the live banner before the rebuilt one
+    // existed; on browser-detect multilingual sites this produced a visible
+    // language flicker and momentarily dropped the reject button — observable as
+    // a flake in the live compliance suite (COMP-03/COMP-04). #134/#146 (F013).
+    var oldNodes = Array.isArray(_fazRenderedNodes) ? _fazRenderedNodes.slice() : [];
+    // Strip ids from the outgoing nodes so the rebuild's id-based decoration
+    // selectors (`#fazBannerTemplate`, `#fazDetailCategory…`, etc.) bind to the
+    // NEW banner only — no duplicate-id ambiguity while both are briefly in the
+    // DOM. The old nodes stay matchable by their data-faz-tag attributes, but
+    // the new banner is inserted at body-top so a `.first()` query resolves to
+    // it. data-faz-tag controls (accept/reject) are intentionally preserved.
+    oldNodes.forEach(function (n) {
+        if (n && n.nodeType === 1) {
+            if (n.id) n.removeAttribute('id');
+            if (n.querySelectorAll) {
+                n.querySelectorAll('[id]').forEach(function (el) { el.removeAttribute('id'); });
+            }
+        }
+    });
+    // _fazRenderBanner() inserts the rebuilt banner at body-top and resets
+    // _fazRenderedNodes to the new nodes.
+    _fazRenderBanner();
+    _fazShowBanner();
+    _fazSetInitialState();
+    // New banner is fully in place; drop the previous-language nodes. This whole
+    // function is synchronous, so the browser never paints the transient
+    // two-banner state — the swap reads as a single in-place re-localization.
+    oldNodes.forEach(function (n) {
+        if (n && n.parentNode) n.parentNode.removeChild(n);
+    });
+}
+
 function _fazShowBanner() {
     const notice = _fazGetBanner();
     if (notice) {
@@ -1932,25 +2030,40 @@ function _fazRenderBanner() {
     while (doc.body.firstChild) {
         fragment.appendChild(doc.body.firstChild);
     }
+    // Track exactly the nodes we insert so a later language swap can remove this
+    // banner and rebuild it in the detected language without leaving orphans or
+    // duplicating the preference center. See _fazReRenderVisibleBanner().
+    _fazRenderedNodes = Array.prototype.slice.call(fragment.childNodes);
     document.body.insertBefore(fragment, document.body.firstChild);
     if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') _fazToggleAriaExpandStatus("=settings-button", "false");
-    _fazSetPreferenceCheckBoxStates();
-    _fazRenderVendorSection();
-    _fazRenderServiceToggles();
-    _fazAttachCategoryListeners();
-    _fazRegisterListeners();
-    _fazSetCCPAOptions();
-    _fazSetPlaceHolder();
-    _fazAttachReadMore();
-    _fazAttachShowMoreLessStyles();
-    _fazAttachAlwaysActiveStyles();
-    _fazAttachManualLinksStyles();
-    _fazRemoveStyles();
-    _fazAddPositionClass();
-    _fazAddRtlClass();
-    _fazSetPoweredBy();
-    _fazLoopFocus();
-    _fazAddPreferenceCenterClass();
+    // Run each decoration helper in isolation: the banner template is already
+    // in the DOM at this point, so a single helper throwing (e.g. a fragile
+    // selector on a localized category name, or a render edge case) must NOT
+    // abort the remaining helpers. Before this guard, one early throw left the
+    // server-rendered "always active" strip on every category and skipped the
+    // listeners — the categories looked permanently locked. Each failure is
+    // logged but never cascades.
+    [
+        _fazSetPreferenceCheckBoxStates,
+        _fazRenderVendorSection,
+        _fazRenderServiceToggles,
+        _fazAttachCategoryListeners,
+        _fazRegisterListeners,
+        _fazSetCCPAOptions,
+        _fazSetPlaceHolder,
+        _fazAttachReadMore,
+        _fazAttachShowMoreLessStyles,
+        _fazAttachAlwaysActiveStyles,
+        _fazAttachManualLinksStyles,
+        _fazRemoveStyles,
+        _fazAddPositionClass,
+        _fazAddRtlClass,
+        _fazSetPoweredBy,
+        _fazLoopFocus,
+        _fazAddPreferenceCenterClass
+    ].forEach(function (fn) {
+        try { fn(); } catch (e) { console.error('[FAZ] banner render step failed:', e); }
+    });
 }
 
 /**
@@ -2313,7 +2426,19 @@ function _fazAcceptCookies(choice = "all") {
 
     // Clean up only after granular choices have been persisted, so an
     // explicitly allowed service inside a denied category keeps its cookies.
-    rejectedCategoryObjects.forEach(_fazRemoveDeadCookies);
+    // In granular mode (per-service/per-cookie), a cookie or service can be
+    // denied INSIDE a category the visitor accepted — those accepted categories
+    // are absent from rejectedCategoryObjects, so sweeping only the rejected set
+    // would leave the just-denied cookie in place until the next request's
+    // server shred. Sweep EVERY category instead: _fazRemoveDeadCookies keeps
+    // only cookies whose effective decision is "yes" (ck.* > svc.* > category),
+    // so accepted cookies survive and explicit denies are shredded immediately
+    // on save. #135 / #134/#146.
+    if (_fazStore._perCookieConsent || _fazStore._perServiceConsent) {
+        (_fazStore._categories || []).forEach(_fazRemoveDeadCookies);
+    } else {
+        rejectedCategoryObjects.forEach(_fazRemoveDeadCookies);
+    }
 
     // Handle IAB vendor consent.
     _fazSaveVendorConsent(choice);
@@ -2433,18 +2558,71 @@ function _fazKnownServiceCategory(serviceId) {
     return "";
 }
 
+/**
+ * Category slug for an enforceable-but-undetected provider, resolved from the
+ * _providersToBlock entry whose .service matches (its first category). Returns
+ * "" when no entry matches or the entry carries no category — callers must then
+ * fall back to the privacy-safe "no" default. Companion to
+ * _fazKnownServiceCategory for providers absent from the scanner-detected list.
+ */
+function _fazUndetectedProviderCategory(serviceId) {
+    if (!serviceId || !Array.isArray(_fazStore._providersToBlock)) return "";
+    for (var i = 0; i < _fazStore._providersToBlock.length; i++) {
+        var p = _fazStore._providersToBlock[i];
+        if (p && p.service === serviceId && Array.isArray(p.categories) && p.categories.length) {
+            return p.categories[0];
+        }
+    }
+    return "";
+}
+
 function _fazIsKnownService(serviceId, categorySlug) {
     var serviceCategory = _fazKnownServiceCategory(serviceId);
     if (!serviceCategory) return false;
     return !categorySlug || serviceCategory === categorySlug;
 }
 
+/**
+ * Is this a service id the site actually recognises? True for a scanner-detected
+ * service (_services) OR any provider the site is configured to block
+ * (_providersToBlock carries the service id when per-service consent is on).
+ * This is the allowlist that keeps an explicit svc.<id> honest: a real but
+ * undetected provider (e.g. YouTube on a block-first site) is accepted, while a
+ * forged/injected/stale data-faz-service id is NOT — it can neither override a
+ * denied category nor mint an arbitrary grant. #134/#146.
+ */
+function _fazIsRecognizedService(serviceId) {
+    if (!serviceId) return false;
+    if (Array.isArray(_fazStore._services) && _fazStore._services.some(function (s) { return s && s.id === serviceId; })) {
+        return true;
+    }
+    if (Array.isArray(_fazStore._providersToBlock) && _fazStore._providersToBlock.some(function (p) { return p && p.service === serviceId; })) {
+        return true;
+    }
+    return false;
+}
+
 function _fazGetServiceConsentSnapshot() {
     var snapshot = {};
-    if (!_fazStore._perServiceConsent || !Array.isArray(_fazStore._services)) return snapshot;
-    _fazStore._services.forEach(function(service) {
-        if (!service || !service.id || !service.category) return;
-        snapshot[service.id] = _fazServiceEffectiveConsent(service.id, service.category);
+    if (!_fazStore._perServiceConsent) return snapshot;
+    if (Array.isArray(_fazStore._services)) {
+        _fazStore._services.forEach(function(service) {
+            if (!service || !service.id || !service.category) return;
+            snapshot[service.id] = _fazServiceEffectiveConsent(service.id, service.category);
+        });
+    }
+    // Also snapshot any explicit svc.<id> token held for a provider NOT in the
+    // scanner-detected list (block-first enforceable providers). Without this a
+    // same-session accept-then-reject of such a provider is invisible to the
+    // revocation check, so no reload fires and its already-running embed keeps
+    // executing (faz-skip is never removed). #134/#146.
+    ref._fazConsentStore.forEach(function (val, key) {
+        if (typeof key === 'string' && key.indexOf('svc.') === 0) {
+            var sid = key.slice(4);
+            if (sid && !(sid in snapshot)) {
+                snapshot[sid] = (val === 'yes' ? 'yes' : 'no');
+            }
+        }
     });
     return snapshot;
 }
@@ -2653,10 +2831,18 @@ document.createElement = (...args) => {
         ) {
             originalSetAttribute("data-faz-original-type", current);
         }
+        // Mark that WE blocked this script, independent of whether there was a
+        // pre-existing type to remember. Without this, a script blocked via its
+        // category tag BEFORE its src is set (e.g. setAttribute('data-fazcookie')
+        // then a later src= pointing at a whitelisted URL) had no marker, so the
+        // src setter's restore branch could not tell our block from a third
+        // party's and left it blocked despite the whitelist match.
+        originalSetAttribute("data-faz-blocked-by-us", "1");
     }
     function restoreOriginalType() {
         var saved = createdElement.getAttribute("data-faz-original-type");
         originalSetAttribute("type", saved || "text/javascript");
+        createdElement.removeAttribute("data-faz-blocked-by-us");
     }
 
     Object.defineProperties(createdElement, {
@@ -2668,9 +2854,8 @@ document.createElement = (...args) => {
                 if (_fazShouldChangeType(createdElement, value)) {
                     rememberOriginalType();
                     originalSetAttribute("type", "javascript/blocked");
-                } else if (createdElement.getAttribute("data-faz-original-type")) {
-                    // Restore only a type WE clobbered (marked by
-                    // data-faz-original-type), not one a third party set.
+                } else if (createdElement.getAttribute("data-faz-blocked-by-us")) {
+                    // Restore only if WE blocked it (data-faz-blocked-by-us set by rememberOriginalType).
                     restoreOriginalType();
                 }
                 originalSetAttribute("src", value);
@@ -2713,12 +2898,8 @@ document.createElement = (...args) => {
             if (_fazShouldChangeType(createdElement)) {
                 rememberOriginalType();
                 originalSetAttribute("type", "javascript/blocked");
-            } else if (createdElement.getAttribute("data-faz-original-type")) {
-                // Only restore when WE blocked it — rememberOriginalType() sets
-                // data-faz-original-type, so its presence is the reliable marker
-                // that this interceptor clobbered the type. Never downgrade a
-                // script that was javascript/blocked by a third party, nor a
-                // legitimate type="module" we never touched.
+            } else if (createdElement.getAttribute("data-faz-blocked-by-us")) {
+                // Restore only if WE blocked it (data-faz-blocked-by-us set by rememberOriginalType).
                 restoreOriginalType();
             }
         }
@@ -2941,13 +3122,20 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
 function _fazBuildRestoredIframe(iframe, placeholder) {
     var clone = document.createElement('iframe');
     var iframeSrc = iframe.getAttribute('src') || iframe.src;
-    var skip = { 'src': 1, 'data-faz-category': 1, 'data-faz-service': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
+    // Keep data-faz-service on the restored clone so the live MutationObserver
+    // can resolve its explicit per-service consent (svc.<id>:yes) instead of
+    // falling back to the still-denied category and re-blocking it. #134/#146.
+    var skip = { 'src': 1, 'data-faz-category': 1, 'data-fazcookie': 1, 'data-faz-original-type': 1 };
 
     for (var i = 0; i < iframe.attributes.length; i++) {
         var attr = iframe.attributes[i];
         if (skip[attr.name]) continue;
         clone.setAttribute(attr.name, attr.value);
     }
+    // This iframe is being restored *because* consent now allows it — mark it
+    // faz-skip so the observer never re-wraps it in the banner video-placeholder
+    // ("Please accept cookies to access this content") within the same session.
+    clone.classList.add('faz-skip');
 
     if (iframeSrc) {
         clone.src = iframeSrc;
@@ -3051,12 +3239,22 @@ function _fazUnblockServerSide() {
             // blocked iframe/oEmbed HTML), not user-supplied input.
             var fragment = tpl.content.cloneNode(true);
             // Restore blocked iframes inside the template content.
+            var phService = placeholder.getAttribute("data-faz-service") || "";
             fragment.querySelectorAll('iframe[data-faz-src]').forEach(function (iframe) {
                 var fazSrc = iframe.getAttribute("data-faz-src");
                 if (!_fazIsAllowedScheme(fazSrc)) return;
                 iframe.src = fazSrc;
                 iframe.removeAttribute("data-faz-src");
                 iframe.classList.remove('faz-hidden');
+                // Carry the placeholder's verified provider id onto the restored
+                // iframe and mark it faz-skip, so the live MutationObserver (and
+                // the banner video-placeholder feature) leave this just-consented
+                // embed alone instead of re-blocking it under the still-denied
+                // category. #134/#146.
+                if (phService && !iframe.getAttribute("data-faz-service")) {
+                    iframe.setAttribute("data-faz-service", phService);
+                }
+                iframe.classList.add('faz-skip');
             });
             // Restore blocked scripts inside the template content.
             fragment.querySelectorAll('script[type="text/plain"][data-faz-category]').forEach(function (script) {
@@ -3083,6 +3281,9 @@ function _fazUnblockServerSide() {
             el.src = fazSrc;
             el.removeAttribute("data-faz-src");
             el.classList.remove('faz-hidden');
+            // Just-consented embed: mark faz-skip so the observer / video
+            // placeholder feature don't re-block it this session. #134/#146.
+            el.classList.add('faz-skip');
             // Remove legacy placeholder wrapper if present.
             var placeholder = el.closest('.faz-iframe-placeholder');
             if (placeholder) {
@@ -3298,14 +3499,20 @@ function _fazMatchingProviders(formattedRE) {
 }
 
 function _fazGetServiceConsentForTarget(formattedRE) {
-    if (!_fazStore._perServiceConsent || !_fazStore._services) return "";
+    if (!_fazStore._perServiceConsent) return "";
     var providers = _fazMatchingProviders(formattedRE);
     if (!providers.length) return "";
 
     var psMap = _fazGetPatternServiceMap();
     var hasExplicitYes = false;
     for (var pi = 0; pi < providers.length; pi++) {
-        var serviceIds = psMap[providers[pi].re] || [];
+        // Prefer the service id carried on the matched _providersToBlock entry
+        // (present when per-service consent is on) so an embed of an
+        // enforceable-but-undetected provider — e.g. a clean server-allowed
+        // YouTube iframe after a reload, or a dynamically-injected one — resolves
+        // to its svc.<id> instead of being re-blocked under the denied category.
+        // Fall back to the scanner-detected pattern map otherwise. #134/#146.
+        var serviceIds = providers[pi].service ? [providers[pi].service] : (psMap[providers[pi].re] || []);
         for (var si = 0; si < serviceIds.length; si++) {
             var svcConsent = ref._fazGetFromStore("svc." + serviceIds[si]);
             if (svcConsent === "no") return "no";
@@ -3317,7 +3524,14 @@ function _fazGetServiceConsentForTarget(formattedRE) {
 
 function _fazShouldBlockResource(category, target, serviceId) {
     if (_fazStore._perServiceConsent) {
-        if (serviceId && _fazIsKnownService(serviceId, category)) {
+        if (serviceId && _fazIsRecognizedService(serviceId)) {
+            // Honour an explicit per-service choice even when the service is not
+            // in the scanner-detected _services list — a blocked element carries
+            // a server-verified data-faz-service id, so its svc.<id>:yes|no must
+            // win over the category fallback on block-first sites where the
+            // provider's cookie was never observed. Gated on _fazIsRecognizedService
+            // so a forged/unknown svc.<id> cannot override a denied category.
+            // Mirrors the server-side get_enforceable_services() resolution. #134/#146.
             var explicit = ref._fazGetFromStore("svc." + serviceId);
             if (explicit === "no") return true;
             if (explicit === "yes") return false;
@@ -3390,7 +3604,13 @@ function _fazShouldChangeType(element, src) {
     if (!serviceCategory && serviceId) {
         serviceCategory = _fazKnownServiceCategory(serviceId);
     }
-    if (_fazStore._perServiceConsent && serviceId && _fazIsKnownService(serviceId, serviceCategory)) {
+    // Gate the explicit per-service override on _fazIsRecognizedService (the
+    // recognized-service allowlist), mirroring _fazShouldBlockResource — so an
+    // svc.<id>:yes|no for a server-recognized-but-undetected service is honoured
+    // first on the createElement path too, while a forged/unknown
+    // data-faz-service id is still rejected by the allowlist. serviceCategory is
+    // only consulted by the category fallback return below.
+    if (_fazStore._perServiceConsent && serviceId && _fazIsRecognizedService(serviceId)) {
         var explicit = ref._fazGetFromStore("svc." + serviceId);
         if (explicit === "no") return true;
         if (explicit === "yes") return false;
@@ -3651,13 +3871,35 @@ function _fazAfterConsent() {
     // created a cookie yet (cookie cleanup alone cannot detect that case).
     var serviceRevoked = false;
     if (_fazServicesBeforeConsent) {
-        var activeServices = _fazStore._services || [];
-        for (var sri = 0; sri < activeServices.length; sri++) {
-            var activeService = activeServices[sri];
-            if (
-                _fazServicesBeforeConsent[activeService.id] === "yes" &&
-                _fazServiceEffectiveConsent(activeService.id, activeService.category) === "no"
-            ) {
+        // Compare every service captured in the pre-consent snapshot — detected
+        // services AND any explicit svc.<id> for an enforceable-but-undetected
+        // provider — so a same-session accept-then-reject of any of them forces
+        // the reload that unloads its already-running embed. #134/#146.
+        var _fazDetectedById = {};
+        (_fazStore._services || []).forEach(function (s) { if (s && s.id) _fazDetectedById[s.id] = s; });
+        var _fazPrevIds = Object.keys(_fazServicesBeforeConsent);
+        for (var sri = 0; sri < _fazPrevIds.length; sri++) {
+            var _sid = _fazPrevIds[sri];
+            if (_fazServicesBeforeConsent[_sid] !== "yes") continue;
+            var _det = _fazDetectedById[_sid];
+            var _nowEffective;
+            if (_det) {
+                _nowEffective = _fazServiceEffectiveConsent(_sid, _det.category);
+            } else {
+                // Undetected provider: resolve its category from _providersToBlock
+                // and reuse _fazServiceEffectiveConsent's two-step svc-then-category
+                // logic, so an Accept-All (which clears every svc.* token) inherits
+                // the now-granted category instead of collapsing to "no" and firing
+                // a spurious reload. A genuine Reject-All still yields "no" because
+                // the category is denied. Fall back to the privacy-safe "no" when
+                // no category is resolvable (forged/unknown id, or entry without a
+                // category). #134/#146.
+                var _undetCat = _fazUndetectedProviderCategory(_sid);
+                _nowEffective = _undetCat
+                    ? _fazServiceEffectiveConsent(_sid, _undetCat)
+                    : (ref._fazGetFromStore("svc." + _sid) || "no");
+            }
+            if (_nowEffective === "no") {
                 serviceRevoked = true;
                 break;
             }
@@ -4236,13 +4478,12 @@ function _fazWatchBannerElement() {
             _fazStore._perServiceConsent &&
             typeof window._fazAcceptService === "function"
         ) {
-            var activeService = (_fazStore._services || []).some(function(service) {
-                return service.id === serviceId && service.category === cat;
-            });
-            if (activeService) {
-                window._fazAcceptService(serviceId, cat);
-                return;
-            }
+            // Trust the placeholder's provider id even when it is absent from the
+            // scanner-detected _services list (block-first site): accept ONLY this
+            // service, never the whole category. The server enforces the resulting
+            // svc.<id>:yes for any real Known_Providers embed. #134/#146.
+            window._fazAcceptService(serviceId, cat, true);
+            return;
         }
         if (cat && typeof window._fazAcceptCategory === "function") {
             window._fazAcceptCategory(cat);
@@ -4251,8 +4492,19 @@ function _fazWatchBannerElement() {
 }
 
 function _fazRemoveAllDeadCookies() {
+    // When per-service (svc.*) or per-cookie (ck.*) consent is on, a cookie can
+    // be denied INSIDE a category the visitor otherwise accepted. The
+    // category-only gate below would skip those accepted categories and leave
+    // the individually-revoked cookie in place (it survived "save" client-side
+    // even though the server shredder removes it on the next request). Run the
+    // sweep over EVERY category in granular mode: _fazRemoveDeadCookies already
+    // keeps only cookies whose effective decision is "yes"
+    // (_fazGetServiceCookieDecision honours ck.* > svc.* > category), so an
+    // accepted category with no override is a no-op while an explicit
+    // svc.<id>:no / ck.<svc>.<cookie>:no inside it gets shredded. #135 / #134/#146.
+    var _fazGranularConsent = _fazStore._perCookieConsent || _fazStore._perServiceConsent;
     for (const category of _fazStore._categories) {
-        if (ref._fazGetFromStore(category.slug) !== "yes")
+        if (_fazGranularConsent || ref._fazGetFromStore(category.slug) !== "yes")
             _fazRemoveDeadCookies(category);
     }
 }
@@ -4932,16 +5184,21 @@ function _fazSaveVendorConsent(choice) {
 /**
  * Accept one detected service without granting its entire category.
  */
-window._fazAcceptService = function (serviceId, categorySlug) {
+window._fazAcceptService = function (serviceId, categorySlug, trustService) {
     if (!categorySlug) {
         categorySlug = _fazKnownServiceCategory(serviceId);
     }
-    // Is this a real per-service entry? If not (per-service off, or service not
-    // detected) fall back to accepting the category so the placeholder unblocks.
-    if (!_fazIsKnownService(serviceId, categorySlug)) {
-        if (categorySlug && typeof window._fazAcceptCategory === "function") {
-            window._fazAcceptCategory(categorySlug);
-        }
+    // Only grant for a service the site actually RECOGNISES — a scanner-detected
+    // service OR a configured blockable provider (_providersToBlock carries the
+    // id when per-service is on, so a real-but-undetected provider like YouTube
+    // on a block-first site is accepted). A forged/unknown data-faz-accept-service
+    // must NOT mint an arbitrary svc.<id>:yes — and it must NOT silently grant the
+    // whole category either (a visitor who clicked "Accept <service>" would get
+    // category-wide consent they never asked for). Do nothing but a diagnosable
+    // no-op. (`trustService` is retained for call-site compatibility but the
+    // recognition allowlist is now authoritative.) #134/#146.
+    if (!_fazIsRecognizedService(serviceId)) {
+        console.warn('FAZ: ignoring accept for unrecognized service id "' + serviceId + '" — not granting category to avoid silent over-consent.');
         return;
     }
 
