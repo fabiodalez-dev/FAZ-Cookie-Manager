@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.0
-Stable tag: 1.19.2
+Stable tag: 1.20.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -324,6 +324,9 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.20.0 =
+* Feature: per-cookie consent (#135). With per-service consent enabled, a new "Enable per-cookie consent" setting adds a nested toggle for each individual cookie a service declares, so a visitor can keep an accepted service (e.g. YouTube) while opting out of specific cookies within it. The choice is now enforced on both sides — the client-side cleanup and the server-side shredder both read the same ck.<service>.<cookie> tokens (per-cookie > per-service > category), so a denied cookie is removed on every request. Payment-gateway and admin-whitelisted cookies stay exempt. Opt-in, off by default.
 
 = 1.19.2 =
 * Fix: the consent-log user-agent migration no longer errors on SQLite-backed WordPress (e.g. WordPress Playground). It previously used MySQL's SHA2()/REGEXP, which do not exist on SQLite, so the migration failed and emitted a database error on every request; it now runs in PHP with the identical hash.

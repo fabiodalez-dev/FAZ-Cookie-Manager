@@ -563,6 +563,9 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.20.0 — 2026-06-17
+- **Added**: per-cookie consent (#135) — with per-service consent on, a new setting adds a nested toggle for each cookie a service declares, so a visitor can keep an accepted service but opt out of specific cookies within it. Stored as override-only `ck.<service>.<cookie>` tokens and enforced on both sides (client cleanup + the server-side `send_headers` shredder read the same tokens, `ck.*` > `svc.*` > category), so a denied cookie is removed on every request; payment-gateway and admin-whitelisted cookies stay exempt. Opt-in, off by default.
+
 ### 1.19.2 — 2026-06-17
 - **Fixed**: the consent-log user-agent migration no longer errors on SQLite-backed WordPress (e.g. WordPress Playground) — it previously used MySQL's `SHA2()`/`REGEXP` and now runs in PHP with the identical hash; the Google Consent Mode non-personalized-ads `npa` signal is now most-restrictive across regions (a single global value, non-personalized whenever any configured region denies ads, since `npa` cannot be region-scoped), leaving the region-scoped Consent Mode v2 states unaffected.
 

@@ -1581,15 +1581,14 @@ class Frontend {
 
 		// Per-service consent: pass service list to frontend.
 		// 1.18.3: per-service consent reintroduced — read the option again so the
-		// resolved service list reaches the frontend preference center. Per-COOKIE
-		// consent remains out (its admin toggle stays gated; see settings.php), so
-		// no nested per-cookie overrides are emitted here. The correctness gaps the
-		// 1.18.2 hotfix flagged are now closed: per-service (svc.*) decisions are
-		// logged (P1-3, see the inline consent logger — the ck.* branch is covered
-		// too but cannot fire while per-cookie consent stays gated), the consent
-		// cookie is hard-capped against the 4 KB browser limit (P1-4, see
-		// _fazSetInStore), and the list below is filtered to providers with a
-		// DETECTED cookie (P2, just here).
+		// resolved service list reaches the frontend preference center. 1.20.0:
+		// per-COOKIE consent ungated — when its toggle is on, nested per-cookie
+		// (ck.*) overrides are emitted below and enforced server-side too (see
+		// shred_non_consented_cookies). The 1.18.2-hotfix correctness gaps stay
+		// closed: per-service (svc.*) and per-cookie (ck.*) decisions are logged
+		// (P1-3, inline consent logger), the consent cookie is hard-capped against
+		// the 4 KB browser limit (P1-4, see _fazSetInStore), and the list below is
+		// filtered to providers with a DETECTED cookie (P2, just here).
 		$per_service = ! empty( $settings['banner_control']['per_service_consent'] );
 		if ( $per_service ) {
 			// P2: source the per-service toggle list from the cookies actually
@@ -1605,11 +1604,14 @@ class Frontend {
 			$services                    = $this->get_per_service_services( $valid_categories );
 			$store['_perServiceConsent'] = true;
 			$store['_services']         = $services;
-			// Per-cookie consent remains gated until its rework is complete.
-			// New writes can no longer persist it as true (the settings
-			// sanitiser forces it false on the REST/import path), so this is a
-			// defensive runtime guard for a pre-gate legacy DB row only.
-			$store['_perCookieConsent'] = false;
+			// Per-cookie consent: nested per-cookie toggles inside each accepted
+			// service. Enabled only when its admin toggle is on (and per-service
+			// is on, which it is in this branch). Enforcement is by cookie
+			// shredding on every request — client-side (_fazCleanupRevokedCookies)
+			// and server-side (shred_non_consented_cookies, which reads the same
+			// ck.* tokens) — since the service script, not the individual cookie,
+			// is the atomic unit that gets gated.
+			$store['_perCookieConsent'] = ! empty( $settings['banner_control']['per_cookie_consent'] );
 		}
 
 		/**
@@ -1636,11 +1638,6 @@ class Frontend {
 		if ( is_array( $filtered_store ) ) {
 			$store = $filtered_store;
 		}
-
-		// Per-cookie consent stays hard-off until its enforcement rework is
-		// complete — reassert it AFTER the faz_store_data filter so a third-party
-		// filter callback cannot re-enable the unsupported control.
-		$store['_perCookieConsent'] = false;
 
 		return $store;
 	}
@@ -4864,27 +4861,42 @@ class Frontend {
 		// Per-service consent overrides the category fallback for matching
 		// cookies. A denied service wins over an allowed service when providers
 		// share a cookie pattern.
-		$service_consent       = $this->get_service_consent();
+		$service_consent = $this->get_service_consent();
+		// Per-cookie consent (ck.<svc>.<cookie>) is the most-specific override on
+		// top of per-service: a cookie denied inside an otherwise-accepted service
+		// is shredded server-side too. Mirrors the client resolver
+		// _fazGetServiceCookieDecision (per-cookie > per-service > category).
+		$shred_settings       = $this->get_faz_settings();
+		$shred_banner_control = isset( $shred_settings['banner_control'] ) ? (array) $shred_settings['banner_control'] : array();
+		$per_cookie_enabled   = ! empty( $shred_banner_control['per_cookie_consent'] ) && ! empty( $shred_banner_control['per_service_consent'] );
+		// Parse ck.* from the SAME validated (non-stale) consent string as svc.*,
+		// so a revision-bumped/expired cookie does not enforce old per-cookie picks.
+		$valid_consent_str = ( $per_cookie_enabled && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
+		$consent_cookie    = ( '' !== $valid_consent_str && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid_consent_str ) : array();
 		$svc_cookie_decisions = array(); // pattern => array( 'yes'|'no' ).
-		if ( ! empty( $service_consent ) ) {
+		if ( ! empty( $service_consent ) || $per_cookie_enabled ) {
 			foreach ( $this->get_per_service_services() as $service ) {
 				$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
-				if ( '' === $svc_id || ! isset( $service_consent[ $svc_id ] ) || empty( $service['cookies'] ) ) {
+				if ( '' === $svc_id || empty( $service['cookies'] ) ) {
 					continue;
 				}
-				$decision = $service_consent[ $svc_id ];
-				if ( 'yes' !== $decision && 'no' !== $decision ) {
-					continue;
+				$svc_decision = isset( $service_consent[ $svc_id ] ) ? $service_consent[ $svc_id ] : '';
+				if ( 'yes' !== $svc_decision && 'no' !== $svc_decision ) {
+					$svc_decision = '';
 				}
 				foreach ( $service['cookies'] as $cookie_pattern ) {
 					$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
 					if ( '' === $cookie_pattern ) {
 						continue;
 					}
+					$pattern_decision = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent_cookie, $per_cookie_enabled );
+					if ( 'yes' !== $pattern_decision && 'no' !== $pattern_decision ) {
+						continue; // No explicit svc/ck decision -> category fallback handles it.
+					}
 					if ( ! isset( $svc_cookie_decisions[ $cookie_pattern ] ) ) {
 						$svc_cookie_decisions[ $cookie_pattern ] = array();
 					}
-					$svc_cookie_decisions[ $cookie_pattern ][] = $decision;
+					$svc_cookie_decisions[ $cookie_pattern ][] = $pattern_decision;
 				}
 			}
 		}
@@ -4971,6 +4983,46 @@ class Frontend {
 				unset( $_COOKIE[ $name ] );
 			}
 		}
+	}
+
+	/**
+	 * Effective decision for one declared cookie of a service: the per-cookie
+	 * override (ck.<svc>.<cookie>) when present, else the per-service decision,
+	 * else '' (let category fallback decide). Mirrors the client-side
+	 * _fazCookieEffectiveConsent / _fazGetServiceCookieDecision precedence.
+	 *
+	 * @param string $svc_id             Sanitised service id.
+	 * @param string $cookie_pattern     Declared cookie name/pattern.
+	 * @param string $svc_decision       'yes'|'no'|'' per-service decision.
+	 * @param array  $consent_cookie     Parsed consent cookie (ck.* tokens).
+	 * @param bool   $per_cookie_enabled Whether per-cookie consent is active.
+	 * @return string 'yes'|'no'|''
+	 */
+	private function resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent_cookie, $per_cookie_enabled ) {
+		$decision = ( 'yes' === $svc_decision || 'no' === $svc_decision ) ? $svc_decision : '';
+		if ( $per_cookie_enabled ) {
+			$ck_key = 'ck.' . $svc_id . '.' . $this->ck_escape_cookie_name( $cookie_pattern );
+			if ( isset( $consent_cookie[ $ck_key ] ) && in_array( $consent_cookie[ $ck_key ], array( 'yes', 'no' ), true ) ) {
+				$decision = $consent_cookie[ $ck_key ];
+			}
+		}
+		return $decision;
+	}
+
+	/**
+	 * Escape a cookie name for the ck.<service>.<cookie> consent token, matching
+	 * the client-side _fazCkKey() escaping so PHP reconstructs the exact key the
+	 * browser wrote. Percent first, so we never double-escape the % in %3A/%2C.
+	 *
+	 * @param string $cookie_name Raw declared cookie name/pattern.
+	 * @return string
+	 */
+	private function ck_escape_cookie_name( $cookie_name ) {
+		$cookie_name = (string) $cookie_name;
+		$cookie_name = str_replace( '%', '%25', $cookie_name );
+		$cookie_name = str_replace( ':', '%3A', $cookie_name );
+		$cookie_name = str_replace( ',', '%2C', $cookie_name );
+		return $cookie_name;
 	}
 
 	/**
