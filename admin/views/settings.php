@@ -59,24 +59,14 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. The list shows only services detected by the cookie scanner, so run a scan first — until then the preference center stays on category-level toggles. This provides more granular privacy control but makes the preference center more complex.', 'faz-cookie-manager' ); ?></div>
 			</div>
-			<?php
-			// Per-cookie consent stays hidden pending a correctness rework: the
-			// per-cookie revocation it advertises cannot be enforced server-side
-			// (the service script controls what is written; the plugin can only
-			// delete the cookie afterwards, client-side). Per-service consent
-			// above is reintroduced; the per-cookie markup is kept (gated off)
-			// for an easy restore once that enforcement gap is closed.
-			if ( false ) :
-			?>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.per_cookie_consent">
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable per-cookie consent', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'Requires per-service consent. Adds a nested toggle for each individual cookie a service declares, so visitors can opt out of specific cookies within an accepted service.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Requires per-service consent. Adds a nested toggle for each individual cookie a service declares, so visitors can opt out of specific cookies within an accepted service. When script blocking is active for the page, a rejected cookie is removed on each load — client-side and server-side — rather than blocked before it is written: the service script is allowed to run, so the cookie may be set momentarily and is then shredded. Adds depth to the preference center; enable only if you need cookie-level control.', 'faz-cookie-manager' ); ?></div>
 			</div>
-			<?php endif; ?>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.subdomain_sharing">

@@ -3331,6 +3331,10 @@ msgstr "Portugalština (Brazílie)"
 msgid "Bulgarian"
 msgstr "Bulharština"
 
+#: admin/views/cookie-policy.php:171
+msgid "Czech"
+msgstr "Čeština"
+
 #: admin/views/cookie-policy.php:179
 msgid "Footer disclaimer"
 msgstr "Prohlášení v zápatí"

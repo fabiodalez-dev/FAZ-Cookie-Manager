@@ -295,10 +295,11 @@ class Settings extends Store {
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'per_cookie_consent':
-				// Hidden experimental sub-feature: reject direct REST/import
-				// attempts to enable it until the per-cookie enforcement rework
-				// is complete.
-				$value = false;
+				// Nested per-cookie toggles within an accepted service. Only
+				// meaningful alongside per_service_consent (the frontend store
+				// and the server-side shredder both gate it on per-service), but
+				// it is a plain boolean here.
+				$value = faz_sanitize_bool( $value );
 				break;
 			case 'scan_frequency':
 				$allowed = array( 'daily', 'weekly', 'monthly' );

@@ -110,7 +110,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.06.14.1';
+	const MIGRATIONS_VERSION = '2026.06.17.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -137,6 +137,7 @@ class Activator {
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
 			self::clear_necessary_optout_flags();
+			self::reset_stale_per_cookie_consent();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
@@ -412,6 +413,13 @@ class Activator {
 		// idempotent — they no-op when the category already exists.
 		self::ensure_uncategorized_category();
 		self::ensure_wordpress_internal_category();
+		// Neutralise a stale pre-1.18.2 per_cookie_consent=true on upgrade. This
+		// also runs in run_pending_migrations(), but that hook is admin_init-only;
+		// install() runs from check_version() on the `init` hook (frontend too),
+		// so the reset lands on the first request of ANY kind after the upgrade —
+		// closing the window where a rarely-admined site would re-activate
+		// per-cookie consent on the frontend before an admin ever loads wp-admin.
+		self::reset_stale_per_cookie_consent();
 		// Always clear the banner template cache on version upgrades so new
 		// CSS rules, shortcodes, and template HTML take effect immediately.
 		// Without this, users upgrading across multiple versions (e.g. 1.8 →
@@ -1290,6 +1298,43 @@ class Activator {
 		if ( $result > 0 ) {
 			Category_Controller::get_instance()->delete_cache();
 		}
+	}
+
+	/**
+	 * Make the per-cookie consent ungating (1.20.0) a surprise-free upgrade.
+	 *
+	 * Per-cookie consent was settable before 1.18.2, then hard-gated: 1.18.2
+	 * through 1.19.x forced banner_control.per_cookie_consent to false on every
+	 * write, so any stored `true` is necessarily a stale pre-gate value the
+	 * runtime was masking. 1.20.0 removes that mask and drives the feature from
+	 * the saved setting, so without this reset such installs would silently
+	 * re-activate the nested per-cookie toggles on upgrade. Reset the stale flag
+	 * to false so per-cookie consent starts OFF for everyone and must be
+	 * re-enabled explicitly. Fresh installs already default to false, and no
+	 * deliberate current `true` can exist at 1.20.0 (the write-gate prevented
+	 * it), so this only ever clears a legacy value on that one upgrade.
+	 *
+	 * A one-time marker (`faz_reset_stale_per_cookie_consent_done`) makes the
+	 * reset fire exactly once: install() calls this on every version upgrade,
+	 * so without the marker a later release would re-clear a per_cookie_consent
+	 * an admin intentionally re-enabled after 1.20.0.
+	 *
+	 * @return void
+	 */
+	public static function reset_stale_per_cookie_consent() {
+		if ( get_option( 'faz_reset_stale_per_cookie_consent_done' ) ) {
+			return; // Already neutralised once — never clobber a later intentional choice.
+		}
+		$settings = get_option( 'faz_settings' );
+		if ( ! is_array( $settings ) || empty( $settings['banner_control'] ) || ! is_array( $settings['banner_control'] ) ) {
+			update_option( 'faz_reset_stale_per_cookie_consent_done', 1, false );
+			return;
+		}
+		if ( ! empty( $settings['banner_control']['per_cookie_consent'] ) ) {
+			$settings['banner_control']['per_cookie_consent'] = false;
+			update_option( 'faz_settings', $settings );
+		}
+		update_option( 'faz_reset_stale_per_cookie_consent_done', 1, false );
 	}
 
 	/**

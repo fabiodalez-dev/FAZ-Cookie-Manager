@@ -336,6 +336,16 @@ class Placeholder_Builder {
 	public static function get_css() {
 		return '.faz-placeholder{position:relative;width:100%;min-height:200px;background:#f6f7f9;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;box-sizing:border-box;margin:16px 0}'
 			. '.faz-placeholder *{box-sizing:border-box}'
+			/* When the blocked embed sits inside WordPress's responsive-embed */
+			/* wrapper (figure.wp-has-aspect-ratio), core already reserves the */
+			/* 16:9 height with a ::before padding-top hack and absolutely */
+			/* positions the iframe to fill it. Our placeholder replaced that */
+			/* iframe but stayed in normal flow, so its own height stacked on */
+			/* top of the reserved space and the figure rendered ~twice as */
+			/* tall (a large empty gap above the card). Fill the reserved box */
+			/* exactly the way core fills it for the iframe. Reported on */
+			/* wp.org ("youtube-38"). */
+			. '.wp-embed-responsive .wp-has-aspect-ratio .faz-placeholder{position:absolute;top:0;left:0;width:100%;height:100%;min-height:0;margin:0;aspect-ratio:auto}'
 			/* `min-height: 200px` (kept from the base rule) is the floor; */
 			/* `aspect-ratio: 16/9` applies on top so the placeholder gets a */
 			/* video-shaped height when its container provides a real width. */
