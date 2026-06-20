@@ -198,6 +198,13 @@ test.describe('Per-service runtime reveal on block-first sites (#134/#146)', () 
     await expect(toggle).toHaveCount(1);
     expect(await toggle.getAttribute('data-category')).toBe('marketing');
 
+    // a11y: a toggle revealed at runtime is labelled and lives in a polite
+    // live region so screen-reader users perceive it (review F2/F3).
+    expect(await toggle.getAttribute('aria-label')).toBeTruthy();
+    const liveRegion = page.locator('.faz-service-list[data-faz-category="marketing"][aria-live="polite"]');
+    await expect(liveRegion).toHaveCount(1);
+    await expect(liveRegion.locator('.faz-service-toggle[data-service="dailymotion"]')).toHaveCount(1);
+
     // The blocked iframe is neutralised (enforcement still works).
     expect(await page.locator('iframe[src*="dailymotion.com"]').count()).toBe(0);
 

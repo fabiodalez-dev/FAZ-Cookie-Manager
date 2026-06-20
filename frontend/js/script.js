@@ -4852,10 +4852,15 @@ function _fazRenderServiceToggles() {
         var categoryServices = _fazStore._services.filter(function(s) { return s.category === category.slug; });
         if (!categoryServices.length) return;
 
-        // Create service toggles container.
+        // Create service toggles container. aria-live="polite" so a provider
+        // revealed AFTER this render (a below-the-fold embed scrolled into view,
+        // a dynamically-injected one blocked) — appended to this same list by
+        // _fazInjectServiceToggle — is announced to screen-reader users. This
+        // first render runs with the modal closed, so it never spams on open.
         var serviceList = document.createElement('div');
         serviceList.className = 'faz-service-list';
         serviceList.setAttribute('data-faz-category', category.slug);
+        serviceList.setAttribute('aria-live', 'polite');
 
         var serviceTitle = document.createElement('div');
         serviceTitle.classList.add('faz-service-list-title');
@@ -4993,7 +4998,9 @@ function _fazBuildServiceRow(service, serviceList) {
  *
  * @param {string} target      Cleaned hostname+path of the blocked resource.
  * @param {string} nodeService data-faz-service attribute value (may be empty).
- * @return {string} Sanitised service id, or "".
+ * @return {string} Service id, or "". A non-empty nodeService is returned
+ *   verbatim; it is only ever used as a _serviceCatalogue whitelist key (an
+ *   unknown value simply fails to resolve) and is sanitize_key'd server-side.
  */
 function _fazResolveServiceId(target, nodeService) {
     if (nodeService) return nodeService;
@@ -5054,6 +5061,13 @@ function _fazInjectServiceToggle(service) {
         serviceList = document.createElement('div');
         serviceList.className = 'faz-service-list';
         serviceList.setAttribute('data-faz-category', service.category);
+        // Announce rows appended at runtime: a provider revealed while the
+        // preference center is already open (a below-the-fold embed scrolled
+        // into view, a dynamically-injected one blocked) must be perceivable to
+        // screen-reader users, who otherwise never hear the new toggle. The
+        // first full render happens with the modal closed, so polite does not
+        // spam an opening visitor.
+        serviceList.setAttribute('aria-live', 'polite');
         var serviceTitle = document.createElement('div');
         serviceTitle.classList.add('faz-service-list-title');
         serviceTitle.textContent = _fazTranslate('services', 'Services');
@@ -5061,15 +5075,28 @@ function _fazInjectServiceToggle(service) {
         accordionBody.appendChild(serviceList);
     }
     _fazBuildServiceRow(service, serviceList);
+
+    // Re-arm the focus trap. _fazLoopFocus() captured the panel's first/last
+    // focusable elements at open time; appending a toggle to an already-open
+    // preference center can shift that boundary, letting a keyboard user Tab
+    // out of the modal. The re-bind is idempotent (it REPLACES the prior
+    // listeners, see _fazAttachFocusLoop) and harmless when the modal is closed.
+    if (typeof _fazLoopFocus === 'function') {
+        _fazLoopFocus();
+    }
 }
 
 /**
- * Sync the visible service list with providers actually blocked on the page,
- * reading the data-faz-service markers the blocker leaves on placeholders and
- * blocked iframes (server-rendered) so a block-first site shows toggles even
- * with no scanner-detected cookie. Data-only (no DOM injection): the caller
- * renders. JS-injected embeds are handled at block time by the MutationObserver
- * via _fazRevealService. #134/#146.
+ * Sync the visible service list with providers actually blocked on the page so
+ * a block-first site shows toggles even with no scanner-detected cookie. Two
+ * passes, both data-only (no DOM injection — the caller renders):
+ *   1. data-faz-service markers the blocker leaves on server-rendered
+ *      placeholders / blocked iframes.
+ *   2. lazy/deferred embeds whose real URL sits in data-src/data-lazy-src/…
+ *      (never a live <iframe src>, so the MutationObserver never fired on
+ *      them), resolved to their provider via _providersToBlock.
+ * Embeds that DO go live at runtime are handled separately at block time by the
+ * MutationObserver via _fazRevealService. #134/#146.
  */
 function _fazSyncPresentServicesData() {
     if (!_fazStore._perServiceConsent) return;
