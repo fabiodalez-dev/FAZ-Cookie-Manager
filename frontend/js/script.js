@@ -4904,7 +4904,7 @@ function _fazRenderServiceToggles() {
  * the same row markup can be injected incrementally when a provider is blocked
  * at runtime (see _fazInjectServiceToggle). #134/#146.
  *
- * @param {Object} service     {id,label,category,cookies}.
+ * @param {Object} service     {id,label,category,cookies,third_party}.
  * @param {Element} serviceList The .faz-service-list to append into.
  */
 function _fazBuildServiceRow(service, serviceList) {
@@ -4998,6 +4998,17 @@ function _fazBuildServiceRow(service, serviceList) {
             cBox.setAttribute('data-category', service.category);
             cBox.setAttribute('aria-label', _fazTranslate('cookie_consent_label', 'Cookie consent') + ': ' + cookieName);
             cBox.checked = _fazCookieEffectiveConsent(service.id, service.category, cookieName) === 'yes';
+            // Third-party embed: the cookie lives on the embed's domain and the
+            // first-party shredder can't delete it, so a per-cookie toggle can't
+            // enforce anything — only the service-level block does. Disable it
+            // (it still reflects the service's state) so the control isn't a
+            // false affordance; the note above explains why. The service toggle
+            // stays interactive.
+            if (service.third_party) {
+                cBox.disabled = true;
+                cBox.setAttribute('aria-disabled', 'true');
+                cRow.classList.add('faz-cookie-row--locked');
+            }
 
             cSwitchWrap.appendChild(cBox);
             cRow.appendChild(cSwitchWrap);
@@ -5062,7 +5073,7 @@ function _fazRevealService(serviceId) {
  * _fazRenderServiceToggles picks the service up from _services) or when its
  * toggle already exists. #134/#146.
  *
- * @param {Object} service {id,label,category,cookies}.
+ * @param {Object} service {id,label,category,cookies,third_party}.
  */
 function _fazInjectServiceToggle(service) {
     if (!service || !service.id || !service.category) return;
@@ -5200,7 +5211,8 @@ function _fazInjectCookieToggleStyles() {
     style.id = 'faz-cookie-toggle-styles';
     style.textContent =
         '.faz-cookie-list{margin:2px 0 8px 14px;padding-left:10px;border-left:1px solid rgba(0,0,0,.08);}' +
-        '.faz-cookie-list-note{margin:2px 0 6px;font-size:11px;line-height:1.4;color:#888;font-style:italic;}' +
+        '.faz-cookie-list-note{margin:2px 0 6px;font-size:11px;line-height:1.4;color:#595959;font-style:italic;}' +
+        '.faz-cookie-row--locked{opacity:.6;}' +
         '.faz-cookie-row{display:flex;align-items:center;justify-content:space-between;padding:2px 0;}' +
         '.faz-cookie-row-label{font-size:12px;color:#666;word-break:break-all;padding-right:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}' +
         '.faz-cookie-row .faz-switch{flex-shrink:0;transform:scale(.82);transform-origin:right center;}';

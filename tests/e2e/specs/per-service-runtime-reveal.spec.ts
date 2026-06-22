@@ -223,6 +223,15 @@ test.describe('Per-service runtime reveal on block-first sites (#134/#146)', () 
     // cookies live on the embed's domain, so they can't be shredded individually
     // — only the service-level block enforces).
     await expect(page.locator('.faz-cookie-list-note[data-faz-service="dailymotion"]')).toHaveCount(1);
+    // …and its per-cookie toggles are DISABLED (no false affordance — they can't
+    // delete a cross-origin cookie), while the service toggle stays interactive.
+    const embedCkToggles = page.locator('.faz-cookie-toggle[data-service="dailymotion"]');
+    const ckCount = await embedCkToggles.count();
+    expect(ckCount).toBeGreaterThan(0);
+    for (let i = 0; i < ckCount; i++) {
+      expect(await embedCkToggles.nth(i).isDisabled()).toBe(true);
+    }
+    expect(await toggle.isDisabled()).toBe(false);
 
     // The blocked iframe is neutralised (enforcement still works).
     expect(await page.locator('iframe[src*="dailymotion.com"]').count()).toBe(0);

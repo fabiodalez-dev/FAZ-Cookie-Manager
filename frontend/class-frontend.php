@@ -1432,9 +1432,19 @@ class Frontend {
 	 * @return array<string,array<string,mixed>> id => {id,label,category,cookies}.
 	 */
 	private function get_service_catalogue( $valid_categories = null ) {
+		if ( null === $valid_categories ) {
+			$valid_categories = $this->get_valid_category_slugs();
+		}
 		$catalogue = array();
 		foreach ( $this->get_enforceable_services( $valid_categories ) as $svc ) {
 			if ( empty( $svc['id'] ) ) {
+				continue;
+			}
+			// Re-check the category against the live active set: get_enforceable_services()
+			// memoises and ignores its $valid_categories argument once cached, so a cache
+			// populated earlier for a broader set could otherwise ship a toggle for a
+			// disabled/renamed category. Mirrors the guard in the withdrawal augmentation.
+			if ( empty( $svc['category'] ) || ! in_array( $svc['category'], $valid_categories, true ) ) {
 				continue;
 			}
 			$catalogue[ $svc['id'] ] = array(
