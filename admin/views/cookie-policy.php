@@ -19,7 +19,14 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
      data-faz-rest-url="<?php echo esc_url( $rest_url ); ?>"
      data-faz-rest-nonce="<?php echo esc_attr( $rest_nonce ); ?>">
 
-	<form id="faz-cookie-policy-form" novalidate>
+	<?php /* onsubmit="return false" is a no-JS / broken-JS safety net: the form is
+		saved entirely by cookie-policy.js (it preventDefault()s and POSTs via REST).
+		If that script never runs — a JS conflict from another plugin/theme, or a
+		cache/minify layer stripping admin scripts — a plain <form> would do a native
+		GET to admin.php, landing on a blank page with the fields in the URL and the
+		input lost. The attribute blocks that native submit unconditionally; the
+		script's own submit listener still fires and saves normally. */ ?>
+	<form id="faz-cookie-policy-form" novalidate onsubmit="return false">
 
 		<!-- 1. Company details -->
 		<div class="faz-card">

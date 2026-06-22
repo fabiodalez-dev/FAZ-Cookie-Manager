@@ -760,6 +760,7 @@ class Admin {
 						'saved'                    => __( 'Saved.', 'faz-cookie-manager' ),
 						'saveFailed'               => __( 'Save failed', 'faz-cookie-manager' ),
 						'previewFailed'            => __( 'Preview failed', 'faz-cookie-manager' ),
+						'initFailed'               => __( 'The generator could not start on this page. Please reload; if it persists, a plugin or theme conflict is likely.', 'faz-cookie-manager' ),
 						// Auto-detect-from-cookie-scan button + Detected badge.
 						'svcDetectedBadge'         => __( 'Detected', 'faz-cookie-manager' ),
 						'svcDetectedTooltip'       => __( 'The cookie scanner observed a tracking domain for this service on your site.', 'faz-cookie-manager' ),
