@@ -4832,13 +4832,11 @@ window.revisitFazConsent = () => _revisitFazConsent();
  */
 function _fazRenderServiceToggles() {
     if (!_fazStore._perServiceConsent) return;
-    // Reveal providers actually blocked on this page before rendering. The
-    // scanner-detected list (`_services`) is empty on a block-first site (the
-    // provider's cookie is never set) and blind to JS-injected embeds (never in
-    // the server HTML). Server-rendered placeholders carry data-faz-service;
-    // JS-injected embeds are added at block time by the MutationObserver. This
-    // folds both into `_services` so a toggle appears for every provider the
-    // page actually blocks — without dumping the whole catalogue. #134/#146.
+    // Populate `_services` from the providers present on this page — server-
+    // rendered placeholders (data-faz-service) and already-blocked embeds —
+    // before rendering toggles, so a toggle appears for every such provider
+    // without dumping the whole catalogue. Embeds that go live at runtime are
+    // handled separately (see _fazSyncPresentServicesData's JSDoc). #134/#146.
     _fazSyncPresentServicesData();
     // Register the category->service sync listeners BEFORE the no-services
     // early return below. On a block-first site the first render has zero
@@ -4992,9 +4990,11 @@ function _fazBuildServiceRow(service, serviceList) {
         // per-cookie toggles are therefore enforced by allowing/blocking the
         // whole embed, not by deleting individual cookies — say so rather than
         // implying a granular control the browser's same-origin rules forbid.
+        var ckNoteId = 'faz-ck-note-' + service.id;
         if (service.third_party) {
             var ckNote = document.createElement('p');
             ckNote.className = 'faz-cookie-list-note';
+            ckNote.id = ckNoteId;
             ckNote.setAttribute('data-faz-service', service.id);
             ckNote.textContent = _fazTranslate(
                 'third_party_cookie_note',
@@ -5033,6 +5033,7 @@ function _fazBuildServiceRow(service, serviceList) {
             if (service.third_party) {
                 cBox.disabled = true;
                 cBox.setAttribute('aria-disabled', 'true');
+                cBox.setAttribute('aria-describedby', ckNoteId);
                 cRow.classList.add('faz-cookie-row--locked');
             }
 
