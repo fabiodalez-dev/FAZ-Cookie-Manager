@@ -1270,6 +1270,7 @@ class Frontend {
 		}
 
 		$services       = array();
+		$seen           = array();
 		$detected_names = $this->get_detected_cookie_names();
 		foreach ( Known_Providers::get_all() as $id => $service ) {
 			if ( 'necessary' === $service['category'] || ! in_array( $service['category'], $valid_categories, true ) ) {
@@ -1281,13 +1282,65 @@ class Frontend {
 				continue;
 			}
 
-			$services[] = array(
-				'id'       => sanitize_key( $id ),
-				'label'    => sanitize_text_field( $service['label'] ),
-				'category' => sanitize_key( $service['category'] ),
-				'patterns' => array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) ),
-				'cookies'  => $service_cookies,
+			$service_id          = sanitize_key( $id );
+			$services[]          = array(
+				'id'          => $service_id,
+				'label'       => sanitize_text_field( $service['label'] ),
+				'category'    => sanitize_key( $service['category'] ),
+				'patterns'    => array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) ),
+				'cookies'     => $service_cookies,
+				'third_party' => $this->is_third_party_service( $service_id ),
 			);
+			$seen[ $service_id ] = true;
+		}
+
+		// Also surface any enforceable service the visitor has ALREADY made an
+		// explicit per-service choice for (svc.<id>:yes|no in the consent cookie),
+		// even when the scanner never recorded one of its cookies. A block-first
+		// embed such as YouTube only sets its cookies once the real iframe loads,
+		// so detection never sees it; the toggle therefore only ever came from the
+		// page-level reveal of its blocked placeholder (the client-side reveal in
+		// script.js) — which disappears the moment the embed is accepted and the
+		// iframe runs unblocked. Without this branch the granted (or denied)
+		// service has no toggle in the preference center on a page without the
+		// placeholder, so the choice can never be reviewed or WITHDRAWN (GDPR
+		// Art. 7(3): withdrawal must be as easy as consent). Keying off the
+		// persisted svc.* decision makes the toggle stick site-wide, independent
+		// of any placeholder being present — confirmed against criptasemantica.it,
+		// where accepting YouTube emptied `_services` and the toggle vanished.
+		//
+		// Page-cache safety: get_service_consent() returns an empty map whenever
+		// there is no consent cookie (and when per-service consent is off), so for
+		// the cacheable first-visit/anonymous request this whole branch is a no-op
+		// and `_services` is byte-identical to the detection-only list. The
+		// augmentation only fires for a request that already carries a consent
+		// cookie — output that is visitor-dependent under the plugin's existing
+		// per-service/per-cookie server enforcement regardless of this method.
+		$decided = $this->get_service_consent(); // id => yes|no, already enforceable-gated.
+		if ( ! empty( $decided ) ) {
+			$enforceable_by_id = array();
+			foreach ( $this->get_enforceable_services( $valid_categories ) as $enforceable ) {
+				if ( ! empty( $enforceable['id'] ) ) {
+					$enforceable_by_id[ $enforceable['id'] ] = $enforceable;
+				}
+			}
+			foreach ( array_keys( $decided ) as $decided_id ) {
+				if ( isset( $seen[ $decided_id ] ) || ! isset( $enforceable_by_id[ $decided_id ] ) ) {
+					continue;
+				}
+				$service_entry = $enforceable_by_id[ $decided_id ];
+				// Only surface a decided service whose category is still active. The
+				// enforceable cache may have been computed earlier in the request for
+				// a broader category set (it ignores the $valid_categories argument
+				// once memoised), so re-check here rather than trust the lookup. A
+				// site that renamed/removed the provider's category, or disabled it,
+				// then never shows a stale toggle.
+				if ( empty( $service_entry['category'] ) || ! in_array( $service_entry['category'], $valid_categories, true ) ) {
+					continue;
+				}
+				$services[]          = $service_entry;
+				$seen[ $decided_id ] = true;
+			}
 		}
 
 		/**
@@ -1340,12 +1393,14 @@ class Frontend {
 			if ( 'necessary' === $service['category'] || ! in_array( $service['category'], $valid_categories, true ) ) {
 				continue;
 			}
-			$services[] = array(
-				'id'       => sanitize_key( $id ),
-				'label'    => sanitize_text_field( $service['label'] ),
-				'category' => sanitize_key( $service['category'] ),
-				'patterns' => array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) ),
-				'cookies'  => ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array(),
+			$enforceable_id = sanitize_key( $id );
+			$services[]     = array(
+				'id'          => $enforceable_id,
+				'label'       => sanitize_text_field( $service['label'] ),
+				'category'    => sanitize_key( $service['category'] ),
+				'patterns'    => array_values( array_filter( array_map( 'sanitize_text_field', $service['patterns'] ) ) ),
+				'cookies'     => ! empty( $service['cookies'] ) ? array_map( 'sanitize_text_field', $service['cookies'] ) : array(),
+				'third_party' => $this->is_third_party_service( $enforceable_id ),
 			);
 		}
 		/**
@@ -1358,6 +1413,69 @@ class Frontend {
 		$services = apply_filters( 'faz_enforceable_services', $services, $valid_categories );
 		$this->enforceable_cache = $services;
 		return $this->enforceable_cache;
+	}
+
+	/**
+	 * Presentation catalogue of per-service providers, keyed by service id.
+	 *
+	 * Shipped to the client so it can REVEAL a per-service toggle for a provider
+	 * it actually blocks at runtime — a server-rendered placeholder
+	 * (data-faz-service) or a JS-injected embed the MutationObserver catches —
+	 * even when the scanner never saw the provider's cookie (block-first sites)
+	 * or never saw the embed at all (JS-injected). Built from the SAME enforceable
+	 * set used for blocking + shredding, so a revealed toggle is always a service
+	 * the server already enforces, and scoped to active categories so it never
+	 * dumps the whole ~160-entry catalogue. Presentation-only — enforcement reads
+	 * get_enforceable_services() directly. #134/#146.
+	 *
+	 * @param string[]|null $valid_categories Active category slugs.
+	 * @return array<string,array<string,mixed>> id => {id,label,category,cookies}.
+	 */
+	private function get_service_catalogue( $valid_categories = null ) {
+		if ( null === $valid_categories ) {
+			$valid_categories = $this->get_valid_category_slugs();
+		}
+		$catalogue = array();
+		foreach ( $this->get_enforceable_services( $valid_categories ) as $svc ) {
+			if ( empty( $svc['id'] ) ) {
+				continue;
+			}
+			// Re-check the category against the live active set: get_enforceable_services()
+			// memoises and ignores its $valid_categories argument once cached, so a cache
+			// populated earlier for a broader set could otherwise ship a toggle for a
+			// disabled/renamed category. Mirrors the guard in the withdrawal augmentation.
+			if ( empty( $svc['category'] ) || ! in_array( $svc['category'], $valid_categories, true ) ) {
+				continue;
+			}
+			$catalogue[ $svc['id'] ] = array(
+				'id'          => $svc['id'],
+				'label'       => isset( $svc['label'] ) ? $svc['label'] : $svc['id'],
+				'category'    => isset( $svc['category'] ) ? $svc['category'] : '',
+				'cookies'     => isset( $svc['cookies'] ) ? array_values( (array) $svc['cookies'] ) : array(),
+				// Carried so the client-side reveal (which builds _services entries
+				// from this catalogue) can flag embed services whose third-party
+				// cookies the first-party shredder can't delete. #134/#146.
+				'third_party' => ! empty( $svc['third_party'] ),
+			);
+		}
+		return $catalogue;
+	}
+
+	/**
+	 * Whether a service id is an embedded third-party widget whose cookies the
+	 * first-party shredder cannot delete (so per-cookie enforcement is by
+	 * blocking the embed, not by removing individual cookies).
+	 *
+	 * Guarded with class_exists() so the lookup degrades to false — never a
+	 * fatal — if the Placeholder_Builder class is unavailable for any reason on
+	 * a given install; under the normal autoloader it resolves and loads.
+	 *
+	 * @param string $service_id Sanitised service identifier.
+	 * @return bool
+	 */
+	private function is_third_party_service( $service_id ) {
+		return class_exists( Placeholder_Builder::class )
+			&& Placeholder_Builder::is_embed_service( $service_id );
 	}
 
 	/**
@@ -1447,6 +1565,7 @@ class Frontend {
 				'cookies'                               => __( 'Cookies', 'faz-cookie-manager' ),
 				'cookie_consent_label'                  => __( 'Cookie consent', 'faz-cookie-manager' ),
 				'vendor_consent_label'                  => __( 'Vendor consent', 'faz-cookie-manager' ),
+				'third_party_cookie_note'               => __( 'These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually.', 'faz-cookie-manager' ),
 			),
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
@@ -1687,6 +1806,21 @@ class Frontend {
 			$services                    = $this->get_per_service_services( $valid_categories );
 			$store['_perServiceConsent'] = true;
 			$store['_services']         = $services;
+			// Presentation catalogue for runtime-revealed toggles. The visible
+			// list above (`_services`) is scanner-detected only, so on a block-first
+			// site — where a provider's cookie is never set, and a JS-injected embed
+			// (e.g. a YouTube iframe_api player) never appears in the server HTML the
+			// scanner fetches — it stays empty and no toggle ever shows. This map
+			// lets the client REVEAL a per-service toggle for a provider it actually
+			// blocks at runtime (the MutationObserver resolves the embed to its
+			// svc.<id> via `_providersToBlock`), looking up the label/cookies here.
+			// Keyed by service id; scoped to the SAME enforceable set used for
+			// blocking + shredding, so a revealed toggle is always a service the
+			// server already enforces. Presentation-only: the consent cookie still
+			// gains svc.* tokens solely for services the visitor toggles, so this
+			// adds no P1-4 bloat, and only present (blocked) providers are revealed,
+			// so it never dumps the whole catalogue. #134/#146.
+			$store['_serviceCatalogue'] = $this->get_service_catalogue( $valid_categories );
 			// Per-cookie consent: nested per-cookie toggles inside each accepted
 			// service. Enabled only when its admin toggle is on (and per-service
 			// is on, which it is in this branch). Enforcement is by cookie
@@ -3229,9 +3363,11 @@ class Frontend {
 				continue;
 			}
 			$is_url_pattern = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
-			$matched        = ( '' !== $url && false !== stripos( $url, $pattern ) );
+			$matched        = ( '' !== $url && $this->provider_url_pattern_matches( $url, $pattern ) );
 			if ( ! $matched && ( ! $is_url_pattern || $is_data_uri_payload ) ) {
-				$matched = false !== stripos( $inline, $pattern );
+				$matched = $is_url_pattern
+					? $this->provider_url_pattern_matches( $inline, $pattern )
+					: false !== stripos( $inline, $pattern );
 			}
 			if ( $matched ) {
 				foreach ( $service_ids as $service_id ) {
@@ -3295,6 +3431,64 @@ class Frontend {
 			'haystack'            => trim( $url . ' ' . $normalized_content ),
 			'is_data_uri_payload' => $is_data_uri_payload,
 		);
+	}
+
+	/**
+	 * Match a provider URL fragment with the same loose boundary checks used by JS.
+	 *
+	 * This is not a full URL parser: provider patterns can be host fragments,
+	 * paths, plugin slugs, or decoded data-URI script payloads. The boundary check
+	 * prevents accidental matches inside unrelated words/hosts such as
+	 * notyoutube.com/embed while keeping normal host/path matches.
+	 *
+	 * @param string $target  URL-like haystack.
+	 * @param string $pattern Provider URL fragment.
+	 * @return bool
+	 */
+	private function provider_url_pattern_matches( $target, $pattern ) {
+		$target  = (string) $target;
+		$pattern = (string) $pattern;
+		if ( '' === $target || '' === $pattern ) {
+			return false;
+		}
+
+		$offset = 0;
+		$length = strlen( $pattern );
+		while ( false !== ( $index = stripos( $target, $pattern, $offset ) ) ) {
+			if ( $this->has_provider_boundary( $target, $index, $length ) ) {
+				return true;
+			}
+			$offset = $index + 1;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Mirror frontend/js/script.js::_fazHasProviderBoundary().
+	 *
+	 * @param string $target URL-like haystack.
+	 * @param int    $index  Match start offset.
+	 * @param int    $length Matched pattern length.
+	 * @return bool
+	 */
+	private function has_provider_boundary( $target, $index, $length ) {
+		if ( $index > 0 ) {
+			$before = substr( $target, $index - 1, 1 );
+			if ( ! preg_match( '/[\/.:\s"\'`=;,(<{\[]/', $before ) ) {
+				return false;
+			}
+		}
+
+		$after_pos = $index + $length;
+		if ( $after_pos < strlen( $target ) ) {
+			$after = substr( $target, $after_pos, 1 );
+			if ( ! preg_match( '/[\/.:\?#\s"\'=;,&)<}\]]/', $after ) ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**
@@ -3499,14 +3693,17 @@ class Frontend {
 			// reference a tracker domain in their data (e.g. Rank Math's rankMath.links
 			// object contains youtu.be, facebook.com, etc.) would be incorrectly blocked.
 			$is_url_pattern = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
-			if ( '' !== $url && false !== stripos( $url, $pattern ) ) {
+			if ( '' !== $url && $this->provider_url_pattern_matches( $url, $pattern ) ) {
 				return $category;
 			}
 			if ( ! $is_url_pattern || $is_data_uri_payload ) {
 				// Code-signature patterns (fbq(, gtag, _ga …) match inline content.
 				// URL-fragment patterns may also match decoded data: script payloads
 				// because that payload is the executable source, not page data.
-				if ( false !== stripos( $inline, $pattern ) ) {
+				$matched_inline = $is_url_pattern
+					? $this->provider_url_pattern_matches( $inline, $pattern )
+					: false !== stripos( $inline, $pattern );
+				if ( $matched_inline ) {
 					return $category;
 				}
 			}

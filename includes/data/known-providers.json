@@ -171,6 +171,7 @@
         "label": "TikTok Pixel",
         "category": "marketing",
         "patterns": [
+            "tiktok.com",
             "analytics.tiktok.com",
             "tiktok.com/i18n/pixel",
             "ttq.load(",
@@ -190,6 +191,8 @@
         "label": "Pinterest Tag",
         "category": "marketing",
         "patterns": [
+            "pinterest.com/pin",
+            "pin.it",
             "s.pinimg.com/ct/core.js",
             "assets.pinterest.com",
             "ct.pinterest.com",
@@ -208,6 +211,7 @@
         "label": "Twitter/X Pixel",
         "category": "marketing",
         "patterns": [
+            "x.com",
             "platform.twitter.com",
             "twitter-widgets.js",
             "ads-twitter.com",
@@ -390,6 +394,30 @@
         ],
         "cookies": []
     },
+    "google-calendar": {
+        "label": "Google Calendar",
+        "category": "functional",
+        "patterns": [
+            "calendar.google.com"
+        ],
+        "cookies": []
+    },
+    "google-drive": {
+        "label": "Google Drive",
+        "category": "functional",
+        "patterns": [
+            "drive.google.com"
+        ],
+        "cookies": []
+    },
+    "google-docs": {
+        "label": "Google Docs",
+        "category": "functional",
+        "patterns": [
+            "docs.google.com"
+        ],
+        "cookies": []
+    },
     "google-recaptcha": {
         "label": "Google reCAPTCHA",
         "category": "necessary",
@@ -427,10 +455,52 @@
         "category": "marketing",
         "patterns": [
             "instagram.com/embed",
+            "instagram.com/p",
             "cdninstagram.com",
             "instawidget.net",
             "plugins/instagram-feed/js/",
             "plugins/instagram-feed-pro/js/"
+        ],
+        "cookies": []
+    },
+    "threads": {
+        "label": "Threads",
+        "category": "marketing",
+        "patterns": [
+            "threads.net"
+        ],
+        "cookies": []
+    },
+    "bluesky": {
+        "label": "Bluesky",
+        "category": "marketing",
+        "patterns": [
+            "bsky.app"
+        ],
+        "cookies": []
+    },
+    "telegram": {
+        "label": "Telegram",
+        "category": "marketing",
+        "patterns": [
+            "t.me",
+            "telegram.org"
+        ],
+        "cookies": []
+    },
+    "flickr": {
+        "label": "Flickr",
+        "category": "marketing",
+        "patterns": [
+            "flickr.com"
+        ],
+        "cookies": []
+    },
+    "giphy": {
+        "label": "GIPHY",
+        "category": "marketing",
+        "patterns": [
+            "giphy.com/embed"
         ],
         "cookies": []
     },
@@ -479,6 +549,30 @@
         ],
         "cookies": []
     },
+    "apple-podcasts": {
+        "label": "Apple Podcasts",
+        "category": "functional",
+        "patterns": [
+            "podcasts.apple.com"
+        ],
+        "cookies": []
+    },
+    "apple-music": {
+        "label": "Apple Music",
+        "category": "functional",
+        "patterns": [
+            "music.apple.com"
+        ],
+        "cookies": []
+    },
+    "bandcamp": {
+        "label": "Bandcamp",
+        "category": "functional",
+        "patterns": [
+            "bandcamp.com"
+        ],
+        "cookies": []
+    },
     "dailymotion": {
         "label": "Dailymotion",
         "category": "marketing",
@@ -505,6 +599,30 @@
         "cookies": [
             "twitch.lohp.countryCode"
         ]
+    },
+    "loom": {
+        "label": "Loom",
+        "category": "marketing",
+        "patterns": [
+            "loom.com/embed"
+        ],
+        "cookies": []
+    },
+    "streamable": {
+        "label": "Streamable",
+        "category": "marketing",
+        "patterns": [
+            "streamable.com/e"
+        ],
+        "cookies": []
+    },
+    "rumble": {
+        "label": "Rumble",
+        "category": "marketing",
+        "patterns": [
+            "rumble.com/embed"
+        ],
+        "cookies": []
     },
     "addthis": {
         "label": "AddThis",
@@ -545,17 +663,42 @@
         "category": "functional",
         "patterns": [
             "assets.calendly.com",
+            "calendly.com",
             "calendly.com/assets/external",
             "calendly.com/widget"
         ],
         "cookies": []
     },
-    "openstreetmaps": {
+    "codepen": {
+        "label": "CodePen",
+        "category": "functional",
+        "patterns": [
+            "codepen.io"
+        ],
+        "cookies": []
+    },
+    "jsfiddle": {
+        "label": "JSFiddle",
+        "category": "functional",
+        "patterns": [
+            "jsfiddle.net"
+        ],
+        "cookies": []
+    },
+    "openstreetmap": {
         "label": "OpenStreetMap",
         "category": "functional",
         "patterns": [
             "openstreetmap.org",
             "osm/js/osm"
+        ],
+        "cookies": []
+    },
+    "mapbox": {
+        "label": "Mapbox",
+        "category": "functional",
+        "patterns": [
+            "mapbox.com"
         ],
         "cookies": []
     },
@@ -1242,6 +1385,7 @@
         "label": "Typeform",
         "category": "functional",
         "patterns": [
+            "form.typeform.com",
             "embed.typeform.com",
             "renderer.typeform.com"
         ],
@@ -1295,6 +1439,8 @@
         "label": "Reddit Pixel",
         "category": "marketing",
         "patterns": [
+            "reddit.com/r",
+            "redd.it",
             "www.redditstatic.com/ads/",
             "rdt(",
             "alb.reddit.com"
@@ -1436,7 +1582,7 @@
         "label": "Mixcloud",
         "category": "functional",
         "patterns": [
-            "mixcloud.com/widget/"
+            "mixcloud.com/widget"
         ],
         "cookies": []
     },
@@ -1606,6 +1752,7 @@
         "label": "Tumblr",
         "category": "marketing",
         "patterns": [
+            "tumblr.com/post",
             "assets.tumblr.com",
             "tumblr.com/share"
         ],

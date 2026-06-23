@@ -253,6 +253,37 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     wpEval(`update_option('faz_cookie_policy_data', json_decode('${restoreJson}', true));`);
   });
 
+  test('3c. Hardening: with the page JS blocked, Save does NOT native-submit to a blank admin.php', async ({ page, loginAsAdmin }) => {
+    // Regression guard for the DigitalGdn report: when cookie-policy.js does
+    // not run (JS conflict / cache-minify stripping admin scripts), a plain
+    // <form> submit would GET admin.php?company.name=&... — a blank page with
+    // the typed data lost in the URL. The static onsubmit="return false" on the
+    // form must block that native submit unconditionally, even with no JS.
+    await loginAsAdmin(page);
+
+    // Simulate the broken-JS environment: abort the generator's page script so
+    // its preventDefault() submit listener never binds.
+    await page.route('**/assets/js/pages/cookie-policy.js*', (route) => route.abort());
+
+    await page.goto(ADMIN_PAGE, { waitUntil: 'domcontentloaded' });
+
+    const form = page.locator('form#faz-cookie-policy-form');
+    await expect(form, 'form is server-rendered even without the page JS').toBeVisible();
+    await expect(
+      form,
+      'static no-JS safety net attribute is present',
+    ).toHaveAttribute('onsubmit', 'return false');
+
+    // Click Save. With the JS handler absent, the only thing standing between
+    // the user and a blank admin.php?company.name=... page is onsubmit.
+    await page.click('form#faz-cookie-policy-form button[type=submit]');
+
+    // Give a native navigation a chance to happen, then assert it did NOT.
+    await page.waitForTimeout(500);
+    expect(page.url(), 'no native form submit / no blank admin.php navigation').not.toContain('company.name=');
+    expect(page.url(), 'still on the generator page').toContain('page=faz-cookie-manager-cookie-policy');
+  });
+
   test('4. Preview button renders policy with disclaimer (no leftover {{...}})', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     const adminPage = page;

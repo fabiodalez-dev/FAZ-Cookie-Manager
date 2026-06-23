@@ -231,7 +231,7 @@ namespace {
 			$yt = $e;
 		}
 	}
-	assert_eq( is_array( $yt ) && array_keys( $yt ) === array( 'id', 'label', 'category', 'patterns', 'cookies' ), true, 'A5 enforceable entry is shaped {id,label,category,patterns,cookies}' );
+	assert_eq( is_array( $yt ) && array_keys( $yt ) === array( 'id', 'label', 'category', 'patterns', 'cookies', 'third_party' ), true, 'A5 enforceable entry is shaped {id,label,category,patterns,cookies,third_party}' );
 	assert_eq( $yt['category'], 'marketing', 'A6 enforceable entry carries the provider category' );
 	assert_eq( in_array( 'youtube.com/embed', $yt['patterns'], true ), true, 'A7 enforceable entry carries the provider URL patterns (used to match embeds)' );
 
@@ -293,9 +293,45 @@ namespace {
 	$fe = faz_arrange( 'necessary:yes,svc.youtube:no' );
 	assert_eq( faz_call( $fe, 'check_per_service_blocking', array( ' src="https://example.com/app.js" ', '' ) ), null, 'C4 non-provider embed → null (no per-service decision)' );
 
+	// C4b — provider fragments must not match inside unrelated hosts.
+	$fe = faz_arrange( 'necessary:yes,marketing:no,svc.youtube:yes' );
+	assert_eq( faz_call( $fe, 'check_per_service_blocking', array( ' src="https://notyoutube.com/embed/x" ', '' ) ), null, 'C4b notyoutube.com is not treated as youtube.com/embed for svc.* override' );
+	assert_eq( faz_call( $fe, 'match_script_to_provider', array( ' src="https://notyoutube.com/embed/x" ', '', array( 'youtube.com/embed' => 'marketing' ) ) ), false, 'C4c notyoutube.com is not treated as a YouTube provider match' );
+
 	// C5 — per-service OFF → null even with svc tokens present in the cookie.
 	$fe = faz_arrange( 'necessary:yes,svc.youtube:no', false );
 	assert_eq( faz_call( $fe, 'check_per_service_blocking', array( ' src="https://www.youtube.com/embed/x" ', '' ) ), null, 'C5 per-service OFF → check returns null (category-level only)' );
+
+	// ===== Group D — get_service_catalogue() presentation map =====
+	// The catalogue is what the client looks up to REVEAL a toggle for a provider
+	// it blocks at runtime (block-first / JS-injected embeds). It must mirror the
+	// enforceable set's membership but be a presentation shape keyed by id.
+	$GLOBALS['__faz_providers'] = faz_providers();
+	$fe_cat = faz_new_frontend();
+	$cat    = faz_call( $fe_cat, 'get_service_catalogue', array( faz_active_cats() ) );
+
+	assert_eq( isset( $cat['youtube'] ), true, 'D1 catalogue includes a marketing provider with no detected cookie (youtube)' );
+	assert_eq( isset( $cat['vimeo'] ), true, 'D2 catalogue includes another marketing provider (vimeo)' );
+	assert_eq( isset( $cat['google-analytics'] ), true, 'D3 catalogue includes an analytics provider' );
+	assert_eq( isset( $cat['a-necessary'] ), false, 'D4 necessary-category provider is excluded from the catalogue' );
+	assert_eq( isset( $cat['old-thing'] ), false, 'D5 provider in an inactive category is excluded from the catalogue' );
+
+	// Presentation shape: {id,label,category,cookies} — NO patterns (those are
+	// enforcement detail the client resolves via _providersToBlock instead).
+	assert_eq( array_keys( $cat['youtube'] ), array( 'id', 'label', 'category', 'cookies', 'third_party' ), 'D6 catalogue entry is shaped {id,label,category,cookies,third_party}' );
+	assert_eq( $cat['youtube']['id'], 'youtube', 'D7 catalogue is keyed by, and carries, the service id' );
+	assert_eq( $cat['youtube']['category'], 'marketing', 'D8 catalogue entry carries the provider category' );
+	assert_eq( $cat['youtube']['label'], 'YouTube', 'D9 catalogue entry carries the human label' );
+	assert_eq( $cat['youtube']['cookies'], array( 'YSC', 'VISITOR_INFO1_LIVE' ), 'D10 catalogue entry carries the declared cookies (for per-cookie toggles)' );
+
+	// Same membership as enforcement: the catalogue keys are exactly the
+	// enforceable ids, so a revealed toggle is always a service the server enforces.
+	$enf_ids = faz_call( $fe_cat, 'get_enforceable_services', array( faz_active_cats() ) );
+	$enf_ids = array_column( $enf_ids, 'id' );
+	sort( $enf_ids );
+	$cat_ids = array_keys( $cat );
+	sort( $cat_ids );
+	assert_eq( $cat_ids, $enf_ids, 'D11 catalogue membership equals the enforceable set (UI ⇄ enforcement consistency)' );
 
 	echo "\n";
 	echo "  Passed: {$tests_passed}\n";

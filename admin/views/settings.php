@@ -57,7 +57,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable per-service consent', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. The list shows only services detected by the cookie scanner, so run a scan first — until then the preference center stays on category-level toggles. This provides more granular privacy control but makes the preference center more complex.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. Services detected by the scanner are shown immediately, and embedded providers blocked at runtime are revealed when the browser sees them on the page. This keeps the preference center present-aware but makes it more complex.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
@@ -65,7 +65,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable per-cookie consent', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'Requires per-service consent. Adds a nested toggle for each individual cookie a service declares, so visitors can opt out of specific cookies within an accepted service. When script blocking is active for the page, a rejected cookie is removed on each load — client-side and server-side — rather than blocked before it is written: the service script is allowed to run, so the cookie may be set momentarily and is then shredded. Adds depth to the preference center; enable only if you need cookie-level control.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Requires per-service consent. Adds a nested row for each cookie a service declares. First-party cookies that the site can write are enforced by client cleanup and the server-side shredder. Cookies set by embedded third-party services on their own domains (for example YouTube, Vimeo, Maps, social embeds) cannot be deleted individually by this site; those rows are shown as disabled and are controlled by allowing or blocking the whole embed.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">

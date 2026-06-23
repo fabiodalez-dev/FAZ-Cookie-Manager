@@ -34,6 +34,40 @@ window.fazcookie = window.fazcookie || {};
 const ref = window.fazcookie;
 ref._fazConsentStore = new Map();
 
+// Build marker — bump when shipping behavioural changes to this file. Lets
+// `fazcookie._diag().build` reveal at a glance whether a cache (CDN / optimizer)
+// is serving a stale bundle after a plugin update. #auto-show-hardening
+const _FAZ_BUILD = '1.20.0+per-service-reveal';
+
+/**
+ * One-call frontend self-diagnosis for support: paste
+ * `copy(fazcookie._diag())` (or just `fazcookie._diag()`) from the console.
+ * Read-only — touches no consent state. Answers the two field questions:
+ * "why isn't the banner showing?" (ready/bannerHidden/action/hasConsentCookie/
+ * build) and "why don't my service toggles appear?" (perServiceConsent /
+ * services / catalogue counts). #auto-show-hardening
+ */
+ref._diag = function () {
+    var notice = null;
+    try { notice = _fazGetBanner(); } catch (e) { /* not ready */ }
+    var hasConsentCookie = false;
+    try { hasConsentCookie = /(?:^|;\s*)fazcookie-consent=/.test(document.cookie); } catch (e) { /* noop */ }
+    var store = (typeof _fazStore === 'object' && _fazStore) ? _fazStore : {};
+    return {
+        build: _FAZ_BUILD,
+        ready: document.documentElement.classList.contains('faz-ready'),
+        bannerFound: !!notice,
+        bannerHidden: notice ? notice.classList.contains('faz-hide') : null,
+        action: ref._fazGetFromStore('action') || '',
+        hasConsentCookie: hasConsentCookie,
+        swapResolved: !!store._swapResolved,
+        perServiceConsent: !!store._perServiceConsent,
+        perCookieConsent: !!store._perCookieConsent,
+        services: Array.isArray(store._services) ? store._services.map(function (s) { return s && s.id; }) : null,
+        catalogueCount: (store._serviceCatalogue && typeof store._serviceCatalogue === 'object') ? Object.keys(store._serviceCatalogue).length : 0
+    };
+};
+
 ref._fazGetCookieMap = function () {
     const cookieMap = {};
     try {
@@ -1204,6 +1238,12 @@ async function _fazMaybeSwapLanguage() {
  */
 async function _fazInit() {
     try {
+        // Arm the fail-open watchdog FIRST: if any init step below throws, the
+        // catch aborts the rest of init, so a watchdog scheduled at the end would
+        // never run and a banner that failed to paint would stay hidden (a
+        // missing consent prompt). Scheduling it up-front guarantees the
+        // timer exists even for a partially-failed init. #134/#146.
+        _fazScheduleBannerWatchdog();
         _fazRunDeadCookieCleanup();
         // Render and show the banner FIRST, from the server-rendered default-
         // language template — first paint must never wait on a network round-
@@ -1261,6 +1301,38 @@ async function _fazInit() {
 function _fazRunDeadCookieCleanup() {
     _fazRemoveAllDeadCookies();
     _fazCleanupRevokedCookies();
+}
+
+/**
+ * Fail-open watchdog: a banner that never appears is a missing consent prompt
+ * (a GDPR violation), strictly worse than one shown a beat late. After init has
+ * had time to settle (incl. the language-swap await), force the anti-FOUC gate
+ * open and, if the visitor has made NO choice yet and the banner is still
+ * hidden, reveal it. Defends against a partial init, an exception in a
+ * downstream decorator, or a CSS optimizer (LiteSpeed/WP Rocket/Autoptimize)
+ * that hoisted/stripped the inline reveal rule. Never suppresses a banner that
+ * should stay hidden (it only ever reveals), and never re-shows one the visitor
+ * already dismissed (gated on the recorded `action`). The watchdog itself never
+ * throws. #auto-show-hardening
+ */
+function _fazScheduleBannerWatchdog() {
+    window.setTimeout(function () {
+        try {
+            // Always lift the anti-FOUC gate — purely reveals, never hides.
+            if (!document.documentElement.classList.contains('faz-ready')) {
+                document.documentElement.classList.add('faz-ready');
+            }
+            // No consent choice recorded → the first-visit banner must be visible.
+            if (!ref._fazGetFromStore('action')) {
+                var notice = _fazGetBanner();
+                if (notice && notice.classList.contains('faz-hide')) {
+                    _fazShowBanner();
+                }
+            }
+        } catch (e) {
+            /* a watchdog must never break the page */
+        }
+    }, 2500);
 }
 
 function _fazScheduleDeadCookieCleanup() {
@@ -2986,6 +3058,12 @@ function _fazMutationObserver(mutations) {
                 var nodeCategory = rawCategory.replace("fazcookie-", "");
                 var nodeService = node.getAttribute ? (node.getAttribute("data-faz-service") || "") : "";
                 if (!_fazShouldBlockResource(nodeCategory, blockingTarget, nodeService)) continue;
+                // Reveal a per-service toggle for the provider we just blocked.
+                // This is the only place a JS-injected embed (e.g. a YouTube
+                // iframe_api player) — invisible to the server-side scanner — is
+                // known to be present, so block-first sites get granular control
+                // here too. Presentation-only. #134/#146.
+                _fazRevealService(_fazResolveServiceId(blockingTarget, nodeService));
                 const uniqueID = ref._fazRandomString(8, false);
                 if (node.nodeName.toLowerCase() === "iframe")
                     _fazAddPlaceholder(node, uniqueID);
@@ -3290,6 +3368,29 @@ function _fazUnblockServerSide() {
                 placeholder.parentNode.insertBefore(el, placeholder);
                 placeholder.remove();
             }
+        });
+
+    // 2c. Page-builder lightbox <a> links intercepted at click time. The link
+    // itself works once consent is granted (the click interceptor re-checks
+    // consent per click and stops preventing the default open), so there is
+    // nothing to "restore" on the link — but the consent placeholder injected
+    // at first block is a sibling div that persists and, when clicked, re-opens
+    // the preference center instead of playing the now-allowed video. On
+    // consent, remove that orphan placeholder and strip the now-dead markers so
+    // the link reverts to its native page-builder lightbox behaviour. #134/#146.
+    document.querySelectorAll('a[data-faz-src][data-faz-lightbox-intercepted]')
+        .forEach(function (link) {
+            var cat = link.getAttribute('data-faz-category') || 'marketing';
+            var svc = link.getAttribute('data-faz-service') || '';
+            if (_fazShouldBlockResource(cat, link.getAttribute('data-faz-src') || '', svc)) return;
+            var phId = link.dataset.fazLightboxPlaceholder;
+            if (phId) {
+                var ph = document.getElementById(phId);
+                if (ph) ph.remove();
+            }
+            link.removeAttribute('data-faz-src');
+            delete link.dataset.fazLightboxIntercepted;
+            delete link.dataset.fazLightboxPlaceholder;
         });
 
     // 3. Images (tracking pixels inside noscript tags that JS can see).
@@ -4753,7 +4854,24 @@ window.revisitFazConsent = () => _revisitFazConsent();
  * Render per-service toggles inside each category accordion (if per-service consent enabled).
  */
 function _fazRenderServiceToggles() {
-    if (!_fazStore._perServiceConsent || !_fazStore._services || !_fazStore._services.length) return;
+    if (!_fazStore._perServiceConsent) return;
+    // Populate `_services` from the providers present on this page — server-
+    // rendered placeholders (data-faz-service) and already-blocked embeds —
+    // before rendering toggles, so a toggle appears for every such provider
+    // without dumping the whole catalogue. Embeds that go live at runtime are
+    // handled separately (see _fazSyncPresentServicesData's JSDoc). #134/#146.
+    _fazSyncPresentServicesData();
+    // Register the category->service sync listeners BEFORE the no-services
+    // early return below. On a block-first site the first render has zero
+    // services, but _fazInjectServiceToggle() can add one later (a runtime-
+    // blocked embed). If the listeners were gated on this render having
+    // services, a category rejection would never deselect that late-injected
+    // svc.<id> toggle, letting service consent override the category revocation
+    // (#134/#146). _fazBindServiceCategorySync is idempotent.
+    if (Array.isArray(_fazStore._categories)) {
+        _fazStore._categories.forEach(_fazBindServiceCategorySync);
+    }
+    if (!Array.isArray(_fazStore._services) || !_fazStore._services.length) return;
 
     if (_fazStore._perCookieConsent) _fazInjectCookieToggleStyles();
 
@@ -4770,10 +4888,18 @@ function _fazRenderServiceToggles() {
         var categoryServices = _fazStore._services.filter(function(s) { return s.category === category.slug; });
         if (!categoryServices.length) return;
 
-        // Create service toggles container.
+        // Create service toggles container. aria-live="polite" so a provider
+        // revealed AFTER this render (a below-the-fold embed scrolled into view,
+        // a dynamically-injected one blocked) — appended to this same list by
+        // _fazInjectServiceToggle — is announced to screen-reader users. This
+        // first render runs with the modal closed, so it never spams on open.
         var serviceList = document.createElement('div');
         serviceList.className = 'faz-service-list';
         serviceList.setAttribute('data-faz-category', category.slug);
+        serviceList.setAttribute('aria-live', 'polite');
+        // aria-atomic so a runtime-revealed row is announced in full (label +
+        // state), not just the changed text node. #134/#146 (F021).
+        serviceList.setAttribute('aria-atomic', 'true');
 
         var serviceTitle = document.createElement('div');
         serviceTitle.classList.add('faz-service-list-title');
@@ -4781,111 +4907,331 @@ function _fazRenderServiceToggles() {
         serviceList.appendChild(serviceTitle);
 
         categoryServices.forEach(function(service) {
-            var row = document.createElement('div');
-            row.classList.add('faz-service-row');
-
-            var label = document.createElement('span');
-            label.classList.add('faz-service-row-label');
-            label.textContent = service.label;
-            row.appendChild(label);
-
-            // Toggle switch (same visual structure as category toggles).
-            var switchWrap = document.createElement('div');
-            switchWrap.classList.add('faz-switch');
-
-            var checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'faz-service-toggle';
-            checkbox.setAttribute('data-service', service.id);
-            checkbox.setAttribute('data-category', service.category);
-            checkbox.setAttribute('aria-label', _fazTranslate('service_consent_label', 'Service consent') + ': ' + service.label);
-
-            // Determine checked state: explicit service consent > category consent.
-            var svcConsent = ref._fazGetFromStore('svc.' + service.id);
-            var catConsent = ref._fazGetFromStore(service.category);
-            checkbox.checked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
-
-            checkbox.addEventListener('change', function() {
-                // When a service is unchecked but category is checked, keep the category
-                // on — individual service opt-out within an accepted category.
-                // Flipping a service mirrors to its per-cookie toggles so the
-                // nested rows stay coherent with the service they belong to.
-                if (_fazStore._perCookieConsent) {
-                    var on = checkbox.checked;
-                    document.querySelectorAll('.faz-cookie-toggle[data-service="' + service.id + '"]')
-                        .forEach(function(ckToggle) { ckToggle.checked = on; });
-                }
-            });
-
-            switchWrap.appendChild(checkbox);
-            row.appendChild(switchWrap);
-            serviceList.appendChild(row);
-
-            // Per-cookie toggles nested under the service (issue #135). Rendered
-            // only when the admin enabled per-cookie consent AND the service
-            // declares cookies. Enforcement is by cookie shredding — see
-            // _fazCleanupRevokedCookies — since the service script, not the
-            // individual cookie, is what gets gated.
-            if (_fazStore._perCookieConsent && Array.isArray(service.cookies) && service.cookies.length) {
-                var cookieList = document.createElement('div');
-                cookieList.className = 'faz-cookie-list';
-                cookieList.setAttribute('data-faz-service', service.id);
-
-                service.cookies.forEach(function(cookieName, idx) {
-                    var cRow = document.createElement('div');
-                    cRow.classList.add('faz-cookie-row');
-
-                    var cLabel = document.createElement('span');
-                    cLabel.classList.add('faz-cookie-row-label');
-                    cLabel.textContent = cookieName;
-                    cRow.appendChild(cLabel);
-
-                    var cSwitchWrap = document.createElement('div');
-                    cSwitchWrap.classList.add('faz-switch');
-
-                    var cBox = document.createElement('input');
-                    cBox.type = 'checkbox';
-                    cBox.className = 'faz-cookie-toggle';
-                    cBox.setAttribute('data-cookie-index', String(idx));
-                    cBox.setAttribute('data-cookie-name', cookieName);
-                    cBox.setAttribute('data-service', service.id);
-                    cBox.setAttribute('data-category', service.category);
-                    cBox.setAttribute('aria-label', _fazTranslate('cookie_consent_label', 'Cookie consent') + ': ' + cookieName);
-                    cBox.checked = _fazCookieEffectiveConsent(service.id, service.category, cookieName) === 'yes';
-
-                    cSwitchWrap.appendChild(cBox);
-                    cRow.appendChild(cSwitchWrap);
-                    cookieList.appendChild(cRow);
-                });
-
-                serviceList.appendChild(cookieList);
-            }
+            _fazBuildServiceRow(service, serviceList);
         });
 
         accordionBody.appendChild(serviceList);
     });
+}
 
-    // Sync: when a category toggle changes, update all its service toggles.
-    _fazStore._categories.forEach(function(category) {
-        if (category.isNecessary || category.slug === 'necessary') return;
+/**
+ * Register the "when a category toggle changes, mirror it onto all that
+ * category's service (and per-cookie) toggles" listener. Extracted from
+ * _fazRenderServiceToggles so it can also run for categories that had no
+ * services at first render but receive one later via _fazInjectServiceToggle
+ * (runtime-blocked embeds on block-first sites). Idempotent: the
+ * data-faz-service-sync-bound marker prevents binding the same toggle twice
+ * when called from both the full render and an incremental injection. #134/#146.
+ *
+ * @param {Object} category {slug,isNecessary}.
+ */
+function _fazBindServiceCategorySync(category) {
+    if (!category || category.isNecessary || category.slug === 'necessary') return;
 
-        ['fazSwitch', 'fazCategoryDirect'].forEach(function(prefix) {
-            var catToggle = document.getElementById(prefix + category.slug);
-            if (!catToggle) return;
-            catToggle.addEventListener('change', function() {
-                var isChecked = catToggle.checked;
-                document.querySelectorAll('.faz-service-toggle[data-category="' + category.slug + '"]')
-                    .forEach(function(svcToggle) {
-                        svcToggle.checked = isChecked;
+    ['fazSwitch', 'fazCategoryDirect'].forEach(function(prefix) {
+        var catToggle = document.getElementById(prefix + category.slug);
+        if (!catToggle || catToggle.getAttribute('data-faz-service-sync-bound') === '1') return;
+        catToggle.setAttribute('data-faz-service-sync-bound', '1');
+        catToggle.addEventListener('change', function() {
+            var isChecked = catToggle.checked;
+            document.querySelectorAll('.faz-service-toggle[data-category="' + category.slug + '"]')
+                .forEach(function(svcToggle) {
+                    svcToggle.checked = isChecked;
+                });
+            if (_fazStore._perCookieConsent) {
+                document.querySelectorAll('.faz-cookie-toggle[data-category="' + category.slug + '"]')
+                    .forEach(function(ckToggle) {
+                        ckToggle.checked = isChecked;
                     });
-                if (_fazStore._perCookieConsent) {
-                    document.querySelectorAll('.faz-cookie-toggle[data-category="' + category.slug + '"]')
-                        .forEach(function(ckToggle) {
-                            ckToggle.checked = isChecked;
-                        });
-                }
-            });
+            }
         });
+    });
+}
+
+/**
+ * Build one service row (+ its nested per-cookie toggles) and append it to the
+ * given .faz-service-list container. Extracted from _fazRenderServiceToggles so
+ * the same row markup can be injected incrementally when a provider is blocked
+ * at runtime (see _fazInjectServiceToggle). #134/#146.
+ *
+ * @param {Object} service     {id,label,category,cookies,third_party}.
+ * @param {Element} serviceList The .faz-service-list to append into.
+ */
+function _fazBuildServiceRow(service, serviceList) {
+    if (!service || !service.id || !serviceList) return;
+
+    var row = document.createElement('div');
+    row.classList.add('faz-service-row');
+
+    var label = document.createElement('span');
+    label.classList.add('faz-service-row-label');
+    label.textContent = service.label;
+    row.appendChild(label);
+
+    // Toggle switch (same visual structure as category toggles).
+    var switchWrap = document.createElement('div');
+    switchWrap.classList.add('faz-switch');
+
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'faz-service-toggle';
+    checkbox.setAttribute('data-service', service.id);
+    checkbox.setAttribute('data-category', service.category);
+    checkbox.setAttribute('aria-label', _fazTranslate('service_consent_label', 'Service consent') + ': ' + service.label);
+
+    // Determine checked state: explicit service consent > category consent.
+    var svcConsent = ref._fazGetFromStore('svc.' + service.id);
+    var catConsent = ref._fazGetFromStore(service.category);
+    checkbox.checked = svcConsent ? svcConsent === 'yes' : catConsent === 'yes';
+
+    checkbox.addEventListener('change', function() {
+        // When a service is unchecked but category is checked, keep the category
+        // on — individual service opt-out within an accepted category.
+        // Flipping a service mirrors to its per-cookie toggles so the
+        // nested rows stay coherent with the service they belong to.
+        if (_fazStore._perCookieConsent) {
+            var on = checkbox.checked;
+            document.querySelectorAll('.faz-cookie-toggle[data-service="' + service.id + '"]')
+                .forEach(function(ckToggle) { ckToggle.checked = on; });
+        }
+    });
+
+    switchWrap.appendChild(checkbox);
+    row.appendChild(switchWrap);
+    serviceList.appendChild(row);
+
+    // Per-cookie toggles nested under the service (issue #135). Rendered
+    // only when the admin enabled per-cookie consent AND the service
+    // declares cookies. Enforcement is by cookie shredding — see
+    // _fazCleanupRevokedCookies — since the service script, not the
+    // individual cookie, is what gets gated.
+    if (_fazStore._perCookieConsent && Array.isArray(service.cookies) && service.cookies.length) {
+        var cookieList = document.createElement('div');
+        cookieList.className = 'faz-cookie-list';
+        cookieList.setAttribute('data-faz-service', service.id);
+
+        // Embedded third-party widgets (YouTube, Vimeo, Maps, social…) set their
+        // cookies on the EMBED's own domain, which the first-party shredder
+        // (document.cookie on this site's root domain) can never delete. Their
+        // per-cookie toggles are therefore enforced by allowing/blocking the
+        // whole embed, not by deleting individual cookies — say so rather than
+        // implying a granular control the browser's same-origin rules forbid.
+        var ckNoteId = 'faz-ck-note-' + service.id;
+        if (service.third_party) {
+            var ckNote = document.createElement('p');
+            ckNote.className = 'faz-cookie-list-note';
+            ckNote.id = ckNoteId;
+            ckNote.setAttribute('data-faz-service', service.id);
+            ckNote.textContent = _fazTranslate(
+                'third_party_cookie_note',
+                'These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually.'
+            );
+            cookieList.appendChild(ckNote);
+        }
+
+        service.cookies.forEach(function(cookieName, idx) {
+            var cRow = document.createElement('div');
+            cRow.classList.add('faz-cookie-row');
+
+            var cLabel = document.createElement('span');
+            cLabel.classList.add('faz-cookie-row-label');
+            cLabel.textContent = cookieName;
+            cRow.appendChild(cLabel);
+
+            var cSwitchWrap = document.createElement('div');
+            cSwitchWrap.classList.add('faz-switch');
+
+            var cBox = document.createElement('input');
+            cBox.type = 'checkbox';
+            cBox.className = 'faz-cookie-toggle';
+            cBox.setAttribute('data-cookie-index', String(idx));
+            cBox.setAttribute('data-cookie-name', cookieName);
+            cBox.setAttribute('data-service', service.id);
+            cBox.setAttribute('data-category', service.category);
+            cBox.setAttribute('aria-label', _fazTranslate('cookie_consent_label', 'Cookie consent') + ': ' + cookieName);
+            cBox.checked = _fazCookieEffectiveConsent(service.id, service.category, cookieName) === 'yes';
+            // Third-party embed: the cookie lives on the embed's domain and the
+            // first-party shredder can't delete it, so a per-cookie toggle can't
+            // enforce anything — only the service-level block does. Disable it
+            // (it still reflects the service's state) so the control isn't a
+            // false affordance; the note above explains why. The service toggle
+            // stays interactive.
+            if (service.third_party) {
+                cBox.disabled = true;
+                cBox.setAttribute('aria-disabled', 'true');
+                cBox.setAttribute('aria-describedby', ckNoteId);
+                cRow.classList.add('faz-cookie-row--locked');
+            }
+
+            cSwitchWrap.appendChild(cBox);
+            cRow.appendChild(cSwitchWrap);
+            cookieList.appendChild(cRow);
+        });
+
+        serviceList.appendChild(cookieList);
+    }
+}
+
+/**
+ * Resolve the service id of a blocked embed. Prefers the server-verified
+ * data-faz-service attribute; otherwise matches the cleaned target URL against
+ * _providersToBlock (whose entries carry .service when per-service is on). #134/#146.
+ *
+ * @param {string} target      Cleaned hostname+path of the blocked resource.
+ * @param {string} nodeService data-faz-service attribute value (may be empty).
+ * @return {string} Service id, or "". A non-empty nodeService is returned
+ *   verbatim; it is only ever used as a _serviceCatalogue whitelist key (an
+ *   unknown value simply fails to resolve) and is sanitize_key'd server-side.
+ */
+function _fazResolveServiceId(target, nodeService) {
+    if (nodeService) return nodeService;
+    var matches = _fazMatchingProviders(target);
+    for (var i = 0; i < matches.length; i++) {
+        if (matches[i] && matches[i].service) return matches[i].service;
+    }
+    return "";
+}
+
+/**
+ * Fold a present (blocked) provider into the visible per-service list, looking
+ * up its label/cookies in the server-shipped _serviceCatalogue, then inject its
+ * toggle if the preference center is already built. Idempotent: a service
+ * already in _services (scanner-detected or previously revealed) is skipped.
+ * Presentation-only — enforcement already covers the broad enforceable set. #134/#146.
+ *
+ * @param {string} serviceId Sanitised service id.
+ */
+function _fazRevealService(serviceId) {
+    if (!serviceId || !_fazStore._perServiceConsent) return;
+    var catalogue = _fazStore._serviceCatalogue;
+    if (!catalogue || typeof catalogue !== 'object') return;
+    if (!Array.isArray(_fazStore._services)) _fazStore._services = [];
+    if (_fazStore._services.some(function(s) { return s && s.id === serviceId; })) return;
+    var entry = catalogue[serviceId];
+    if (!entry || !entry.id || !entry.category) return;
+    var service = {
+        id: entry.id,
+        label: entry.label || entry.id,
+        category: entry.category,
+        cookies: Array.isArray(entry.cookies) ? entry.cookies.slice() : [],
+        third_party: !!entry.third_party
+    };
+    _fazStore._services.push(service);
+    _fazInjectServiceToggle(service);
+}
+
+/**
+ * Inject a single service's toggle into an already-rendered preference center.
+ * No-op when the category accordion isn't built yet (a later full render of
+ * _fazRenderServiceToggles picks the service up from _services) or when its
+ * toggle already exists. #134/#146.
+ *
+ * @param {Object} service {id,label,category,cookies,third_party}.
+ */
+function _fazInjectServiceToggle(service) {
+    if (!service || !service.id || !service.category) return;
+    var accordionEl = document.getElementById('fazDetailCategory' + service.category);
+    if (!accordionEl) return;
+    var accordionBody = accordionEl.querySelector('.faz-accordion-body');
+    if (!accordionBody) return;
+    if (accordionBody.querySelector('.faz-service-toggle[data-service="' + service.id + '"]')) return;
+
+    if (_fazStore._perCookieConsent) _fazInjectCookieToggleStyles();
+
+    var serviceList = accordionBody.querySelector('.faz-service-list[data-faz-category="' + service.category + '"]');
+    if (!serviceList) {
+        serviceList = document.createElement('div');
+        serviceList.className = 'faz-service-list';
+        serviceList.setAttribute('data-faz-category', service.category);
+        // Announce rows appended at runtime: a provider revealed while the
+        // preference center is already open (a below-the-fold embed scrolled
+        // into view, a dynamically-injected one blocked) must be perceivable to
+        // screen-reader users, who otherwise never hear the new toggle. The
+        // first full render happens with the modal closed, so polite does not
+        // spam an opening visitor.
+        serviceList.setAttribute('aria-live', 'polite');
+        // aria-atomic so a runtime-revealed row is announced in full (label +
+        // state), not just the changed text node. #134/#146 (F021).
+        serviceList.setAttribute('aria-atomic', 'true');
+        var serviceTitle = document.createElement('div');
+        serviceTitle.classList.add('faz-service-list-title');
+        serviceTitle.textContent = _fazTranslate('services', 'Services');
+        serviceList.appendChild(serviceTitle);
+        accordionBody.appendChild(serviceList);
+    }
+    _fazBuildServiceRow(service, serviceList);
+
+    // Bind the category->service sync for this category in case the full render
+    // bailed early (no services at first paint) and never registered it — else
+    // rejecting the category would not deselect this just-injected toggle.
+    // Idempotent via data-faz-service-sync-bound. #134/#146.
+    _fazBindServiceCategorySync({ slug: service.category });
+
+    // Re-arm the focus trap. _fazLoopFocus() captured the panel's first/last
+    // focusable elements at open time; appending a toggle to an already-open
+    // preference center can shift that boundary, letting a keyboard user Tab
+    // out of the modal. The re-bind is idempotent (it REPLACES the prior
+    // listeners, see _fazAttachFocusLoop) and harmless when the modal is closed.
+    if (typeof _fazLoopFocus === 'function') {
+        _fazLoopFocus();
+    }
+}
+
+/**
+ * Sync the visible service list with providers actually blocked on the page so
+ * a block-first site shows toggles even with no scanner-detected cookie. Two
+ * passes, both data-only (no DOM injection — the caller renders):
+ *   1. data-faz-service markers the blocker leaves on server-rendered
+ *      placeholders / blocked iframes.
+ *   2. lazy/deferred embeds whose real URL sits in data-src/data-lazy-src/…
+ *      (never a live <iframe src>, so the MutationObserver never fired on
+ *      them), resolved to their provider via _providersToBlock.
+ * Embeds that DO go live at runtime are handled separately at block time by the
+ * MutationObserver via _fazRevealService. #134/#146.
+ */
+function _fazSyncPresentServicesData() {
+    if (!_fazStore._perServiceConsent) return;
+    var catalogue = _fazStore._serviceCatalogue;
+    if (!catalogue || typeof catalogue !== 'object') return;
+    if (!Array.isArray(_fazStore._services)) _fazStore._services = [];
+
+    var seen = {};
+    function addService(id) {
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        if (_fazStore._services.some(function(s) { return s && s.id === id; })) return;
+        var entry = catalogue[id];
+        if (!entry || !entry.id || !entry.category) return;
+        _fazStore._services.push({
+            id: entry.id,
+            label: entry.label || entry.id,
+            category: entry.category,
+            cookies: Array.isArray(entry.cookies) ? entry.cookies.slice() : [],
+            third_party: !!entry.third_party
+        });
+    }
+
+    // 1) Server-rendered placeholders + already-blocked nodes carry the resolved id.
+    document.querySelectorAll('[data-faz-service]').forEach(function(el) {
+        addService(el.getAttribute('data-faz-service'));
+    });
+
+    // 2) Lazy/deferred embeds: a lazy-loader keeps the real URL in a data-*
+    // attribute until the element scrolls into view, so it's not yet a live
+    // <iframe src> and the MutationObserver hasn't fired. Resolve those URLs to
+    // their provider now, so a below-the-fold YouTube/Vimeo is controllable from
+    // the preference center BEFORE the visitor scrolls. Matched against the same
+    // _providersToBlock set used for enforcement, so no false toggles. #134/#146.
+    var lazyAttrs = ['data-src', 'data-lazy-src', 'data-lazy', 'data-litespeed-src', 'data-ll-src', 'data-orig-src'];
+    document.querySelectorAll('iframe[data-src],iframe[data-lazy-src],iframe[data-lazy],iframe[data-litespeed-src],iframe[data-ll-src],iframe[data-orig-src]').forEach(function(el) {
+        for (var a = 0; a < lazyAttrs.length; a++) {
+            var url = el.getAttribute(lazyAttrs[a]);
+            if (!url) continue;
+            var matches = _fazMatchingProviders(url);
+            for (var i = 0; i < matches.length; i++) {
+                if (matches[i] && matches[i].service) addService(matches[i].service);
+            }
+        }
     });
 }
 
@@ -4927,6 +5273,8 @@ function _fazInjectCookieToggleStyles() {
     style.id = 'faz-cookie-toggle-styles';
     style.textContent =
         '.faz-cookie-list{margin:2px 0 8px 14px;padding-left:10px;border-left:1px solid rgba(0,0,0,.08);}' +
+        '.faz-cookie-list-note{margin:2px 0 6px;font-size:11px;line-height:1.4;color:inherit;opacity:.75;font-style:italic;}' +
+        '.faz-cookie-row--locked{opacity:.6;cursor:not-allowed;}' +
         '.faz-cookie-row{display:flex;align-items:center;justify-content:space-between;padding:2px 0;}' +
         '.faz-cookie-row-label{font-size:12px;color:#666;word-break:break-all;padding-right:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}' +
         '.faz-cookie-row .faz-switch{flex-shrink:0;transform:scale(.82);transform-origin:right center;}';
@@ -5468,19 +5816,39 @@ function _fazExtractLightboxUrl(el) {
 // modal-open BEFORE that iframe ever exists.
 function _fazIsKnownVideoUrl(url) {
     if (!url || typeof url !== 'string') return false;
-    var hosts = [
-        'youtube.com', 'www.youtube.com', 'youtu.be',
-        'youtube-nocookie.com', 'www.youtube-nocookie.com',
-        'vimeo.com', 'www.vimeo.com', 'player.vimeo.com',
-        'dailymotion.com', 'www.dailymotion.com', 'dai.ly',
-        'wistia.com', 'fast.wistia.net', 'fast.wistia.com',
-        'twitch.tv', 'www.twitch.tv', 'player.twitch.tv',
-    ];
     try {
         var u = new URL(url, window.location.href);
-        return hosts.indexOf(u.hostname) !== -1;
+        return _FAZ_VIDEO_HOST_SERVICE.hasOwnProperty(u.hostname);
     } catch (_e) {
-        return hosts.some(function (h) { return url.indexOf(h) !== -1; });
+        return Object.keys(_FAZ_VIDEO_HOST_SERVICE).some(function (h) { return url.indexOf(h) !== -1; });
+    }
+}
+
+// Map a video HOST to its per-service id. The lightbox link carries a WATCH-
+// style URL (youtube.com/watch?v=…, youtu.be/<id>, vimeo.com/<id>) that the
+// _providersToBlock patterns (which target the EMBED URL) don't match, so the
+// per-service reveal needs a host fallback to resolve the provider — mirroring
+// why _fazIsKnownVideoUrl matches by host, not path. #134/#146.
+var _FAZ_VIDEO_HOST_SERVICE = {
+    'youtube.com': 'youtube', 'www.youtube.com': 'youtube', 'youtu.be': 'youtube',
+    'youtube-nocookie.com': 'youtube', 'www.youtube-nocookie.com': 'youtube',
+    'vimeo.com': 'vimeo', 'www.vimeo.com': 'vimeo', 'player.vimeo.com': 'vimeo',
+    'dailymotion.com': 'dailymotion', 'www.dailymotion.com': 'dailymotion', 'dai.ly': 'dailymotion',
+    'wistia.com': 'wistia', 'fast.wistia.net': 'wistia', 'fast.wistia.com': 'wistia',
+    'twitch.tv': 'twitch', 'www.twitch.tv': 'twitch', 'player.twitch.tv': 'twitch',
+};
+
+// Resolve the per-service id of a lightbox video link: try the pattern-based
+// resolver first (covers youtu.be / player.vimeo.com whose host IS a pattern),
+// then fall back to the host map for WATCH-style URLs. Returns "" if unknown.
+function _fazResolveLightboxServiceId(blockingTarget, rawUrl) {
+    var byPattern = _fazResolveServiceId(blockingTarget, '');
+    if (byPattern) return byPattern;
+    try {
+        var u = new URL(rawUrl, window.location.href);
+        return _FAZ_VIDEO_HOST_SERVICE[u.hostname] || '';
+    } catch (_e) {
+        return '';
     }
 }
 
@@ -5537,6 +5905,21 @@ document.addEventListener('click', function (event) {
     if (!match.el.dataset.fazLightboxIntercepted) {
         match.el.dataset.fazLightboxIntercepted = '1';
         match.el.setAttribute('data-faz-src', match.url);
+        // Reveal the per-service toggle for the provider behind this lightbox,
+        // the same way blocked iframes/placeholders do. Without this, a video
+        // opened only via a page-builder lightbox link (youtube.com/watch?…)
+        // is blocked but never surfaces its toggle in the preference center.
+        // Mark the link with data-faz-service / data-faz-category too, so
+        // _fazSyncPresentServicesData also picks it up on a later render. #134/#146.
+        var lightboxSvc = _fazResolveLightboxServiceId(blockingTarget, match.url);
+        if (lightboxSvc) {
+            match.el.setAttribute('data-faz-service', lightboxSvc);
+            var lightboxCat = (_fazStore._serviceCatalogue
+                && _fazStore._serviceCatalogue[lightboxSvc]
+                && _fazStore._serviceCatalogue[lightboxSvc].category) || 'marketing';
+            match.el.setAttribute('data-faz-category', lightboxCat);
+            _fazRevealService(lightboxSvc);
+        }
         // Best-effort visual hint: surface the standard placeholder
         // INSIDE the link so the user sees the consent CTA. The
         // existing CSS floor (`min-height: 200px`,
@@ -5545,6 +5928,11 @@ document.addEventListener('click', function (event) {
         try {
             var uniqueID = 'faz-lightbox-' + Math.random().toString(36).slice(2, 10);
             _fazAddPlaceholder(match.el, uniqueID);
+            // Remember the injected placeholder's id on the link so that, once
+            // consent is granted, _fazUnblockServerSide can remove this orphan
+            // CTA (it otherwise persists and re-opens the preference center
+            // instead of letting the now-allowed video play). #134/#146 (F025).
+            match.el.dataset.fazLightboxPlaceholder = uniqueID;
         } catch (_pe) { /* placeholder injection is best-effort */ }
     }
 }, true /* capture phase — beats the page-builder listener */);

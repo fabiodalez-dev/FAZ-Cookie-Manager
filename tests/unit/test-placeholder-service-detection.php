@@ -26,11 +26,15 @@ use FazCookie\Frontend\Includes\Placeholder_Builder;
 $run = 0;
 $pass = 0;
 $fail = 0;
+$service_cases = array();
 
 function expect_service( $url, $expected ) {
-	global $run, $pass, $fail;
+	global $run, $pass, $fail, $service_cases;
 	$run++;
 	$got = Placeholder_Builder::detect_service_from_url( $url );
+	if ( 'default' !== $expected ) {
+		$service_cases[] = array( $url, $expected );
+	}
 	if ( $got === $expected ) {
 		$pass++;
 		echo "  \033[32m✓\033[0m $expected  ←  $url\n";
@@ -38,6 +42,59 @@ function expect_service( $url, $expected ) {
 		$fail++;
 		echo "  \033[31m✗\033[0m expected '$expected', got '$got'  ←  $url\n";
 	}
+}
+
+function expect_known_provider_coverage( $url, $service_id, $known ) {
+	global $run, $pass, $fail;
+	$run++;
+	if ( empty( $known[ $service_id ] ) || empty( $known[ $service_id ]['patterns'] ) ) {
+		$fail++;
+		echo "  \033[31m✗\033[0m $service_id is missing from Known_Providers  ←  $url\n";
+		return;
+	}
+	foreach ( $known[ $service_id ]['patterns'] as $pattern ) {
+		if ( provider_url_pattern_matches_for_test( $url, $pattern ) ) {
+			$pass++;
+			echo "  \033[32m✓\033[0m $service_id Known_Providers pattern covers $url\n";
+			return;
+		}
+	}
+	$fail++;
+	echo "  \033[31m✗\033[0m $service_id has no Known_Providers pattern covering $url\n";
+}
+
+function provider_url_pattern_matches_for_test( $target, $pattern ) {
+	$target  = (string) $target;
+	$pattern = (string) $pattern;
+	if ( '' === $target || '' === $pattern ) {
+		return false;
+	}
+	$offset = 0;
+	$length = strlen( $pattern );
+	while ( false !== ( $index = stripos( $target, $pattern, $offset ) ) ) {
+		if ( has_provider_boundary_for_test( $target, $index, $length ) ) {
+			return true;
+		}
+		$offset = $index + 1;
+	}
+	return false;
+}
+
+function has_provider_boundary_for_test( $target, $index, $length ) {
+	if ( $index > 0 ) {
+		$before = substr( $target, $index - 1, 1 );
+		if ( ! preg_match( '/[\/.:\s"\'`=;,(<{\[]/', $before ) ) {
+			return false;
+		}
+	}
+	$after_pos = $index + $length;
+	if ( $after_pos < strlen( $target ) ) {
+		$after = substr( $target, $after_pos, 1 );
+		if ( ! preg_match( '/[\/.:\?#\s"\'=;,&)<}\]]/', $after ) ) {
+			return false;
+		}
+	}
+	return true;
 }
 
 echo "\n== Placeholder_Builder::detect_service_from_url ==\n\n";
@@ -101,6 +158,17 @@ expect_service( 'https://my-site.test/page', 'default' );
 expect_service( 'https://www.dropbox.com/s/x/file', 'default' );
 expect_service( 'https://www.netflix.com/title/123', 'default' );
 expect_service( 'https://api.mapbox.com/styles/v1/x', 'mapbox' );
+
+$known_path = dirname( __DIR__, 2 ) . '/includes/data/known-providers.json';
+$known = json_decode( file_get_contents( $known_path ), true );
+if ( ! is_array( $known ) ) {
+	$known = array();
+}
+
+echo "\n== Placeholder service ↔ Known_Providers parity ==\n\n";
+foreach ( $service_cases as $case ) {
+	expect_known_provider_coverage( $case[0], $case[1], $known );
+}
 
 echo "\n";
 echo "Tests run: $run\n";

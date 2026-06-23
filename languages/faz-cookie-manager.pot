@@ -3763,7 +3763,7 @@ msgid "Enable per-service consent"
 msgstr ""
 
 #: admin/views/settings.php:60
-msgid "When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. This provides more granular privacy control but makes the preference center more complex."
+msgid "When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. Services detected by the scanner are shown immediately, and embedded providers blocked at runtime are revealed when the browser sees them on the page. This keeps the preference center present-aware but makes it more complex."
 msgstr ""
 
 #: admin/views/settings.php:66
@@ -3771,7 +3771,7 @@ msgid "Enable per-cookie consent"
 msgstr ""
 
 #: admin/views/settings.php:68
-msgid "Requires per-service consent. Adds a nested toggle for each individual cookie a service declares, so visitors can opt out of specific cookies within an accepted service. A denied cookie cannot be prevented from being set (the service script controls that) but is deleted whenever it appears — the same enforcement used for per-service opt-out. Most useful for strict data-sovereignty setups."
+msgid "Requires per-service consent. Adds a nested row for each cookie a service declares. First-party cookies that the site can write are enforced by client cleanup and the server-side shredder. Cookies set by embedded third-party services on their own domains (for example YouTube, Vimeo, Maps, social embeds) cannot be deleted individually by this site; those rows are shown as disabled and are controlled by allowing or blocking the whole embed."
 msgstr ""
 
 #: admin/views/settings.php:74

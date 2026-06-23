@@ -115,6 +115,13 @@ namespace {
 			return $GLOBALS['__faz_consent_cookie'];
 		}
 	}
+	if ( ! function_exists( 'get_option' ) ) {
+		// get_per_service_services() now reads settings (via get_service_consent)
+		// to keep an explicitly-decided service visible for revocation. Tests that
+		// don't set settings_option_cache get the empty default → per-service off
+		// in that call → no augmentation, original behaviour preserved.
+		function get_option( $key, $default = false ) { return $default; }
+	}
 
 	// --- $wpdb stub: get_col() returns whatever __faz_db_rows holds ---
 	if ( ! class_exists( 'FazTest_WPDB' ) ) {

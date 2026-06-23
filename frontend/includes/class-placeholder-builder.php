@@ -300,6 +300,36 @@ class Placeholder_Builder {
 	}
 
 	/**
+	 * Whether a service id is an embedded third-party widget (video, social,
+	 * map, etc.) rendered as a blocked-embed placeholder.
+	 *
+	 * Such a service's cookies are set by the EMBED's own domain (e.g.
+	 * youtube.com), not the publisher's site, so the first-party cookie
+	 * shredder — which can only write `document.cookie` for the site's root
+	 * domain — can never delete them. Enforcement for these is necessarily at
+	 * the SERVICE level (allow/block the whole embed), not per individual
+	 * cookie. The preference center uses this to clarify that nested per-cookie
+	 * toggles for an embed are enforced by blocking the embed, not by deleting
+	 * the cookie one by one.
+	 *
+	 * The authoritative set is the union of the URL→service map (every iframe
+	 * embed the placeholder system recognises) and the video-service list.
+	 *
+	 * @param string $service_id Sanitised service identifier.
+	 * @return bool
+	 */
+	public static function is_embed_service( $service_id ) {
+		if ( '' === (string) $service_id ) {
+			return false;
+		}
+		$embed_ids = array_merge(
+			array_values( self::$url_service_map ),
+			self::$video_services
+		);
+		return in_array( $service_id, $embed_ids, true );
+	}
+
+	/**
 	 * Get human-readable service name from a service ID.
 	 *
 	 * @param string $service_id Service identifier.
