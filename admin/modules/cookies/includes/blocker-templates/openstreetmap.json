@@ -1,5 +1,5 @@
 {
-    "id": "openstreetmaps",
+    "id": "openstreetmap",
     "name": "OpenStreetMap",
     "description": "Blocks OpenStreetMap embeds, widgets, or third-party content until consent is granted.",
     "category": "functional",
