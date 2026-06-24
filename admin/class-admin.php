@@ -930,6 +930,67 @@ class Admin {
 						filemtime( $page_js ),
 						true
 					);
+
+					// Blocked-script watchdog for the two pages whose page script
+					// filename contains "cookie" (cookie-policy.js, cookies.js) and
+					// is therefore liable to be blocked by ad blockers / browser
+					// privacy shields matching that name. The view ships a hidden
+					// "notice notice-error" element plus an aria-live <p> and a
+					// <template> carrying the message; this inline script reveals
+					// the notice (and announces it) only after the window 'load'
+					// lifecycle completes AND the boot flag is still unset — so a
+					// merely slow-but-not-blocked footer script never trips a false
+					// positive — and it re-hides the notice if the flag later turns
+					// true. Registered via wp_add_inline_script() (not an inline
+					// <script> in the view) to stay Plugin-Check clean, mirroring
+					// the languages.php pattern.
+					$faz_watchdog = array(
+						'cookie-policy' => array( 'flag' => 'fazCpBooted', 'notice' => 'faz-cp-script-blocked' ),
+						'cookies'       => array( 'flag' => 'fazCookiesBooted', 'notice' => 'faz-cookies-script-blocked' ),
+					);
+					if ( isset( $faz_watchdog[ $page['view'] ] ) ) {
+						$faz_wd  = $faz_watchdog[ $page['view'] ];
+						$faz_cfg = wp_json_encode(
+							array(
+								'flag'   => $faz_wd['flag'],
+								'notice' => $faz_wd['notice'],
+							)
+						);
+						$faz_wd_js = '( function () {' .
+							'var cfg = ' . $faz_cfg . ';' .
+							'var notice = document.getElementById( cfg.notice );' .
+							'if ( ! notice ) { return; }' .
+							'var msg = notice.querySelector( "[aria-live]" );' .
+							'var tpl = notice.querySelector( "template" );' .
+							'function booted() { return !! window[ cfg.flag ]; }' .
+							// Reveal: populate the aria-live region (content change drives
+							// the screen-reader announcement) and show the error notice.
+							'function reveal() {' .
+								'if ( booted() ) { return; }' .
+								'if ( msg && tpl && ! msg.textContent ) { msg.textContent = tpl.innerHTML; }' .
+								'notice.style.display = "";' .
+							'}' .
+							// Recovery: if the script later boots, clear the announcement
+							// and hide the notice again so it never persists falsely.
+							'function clear() {' .
+								'notice.style.display = "none";' .
+								'if ( msg ) { msg.textContent = ""; }' .
+							'}' .
+							// Decide once the page-load lifecycle has settled: by the time
+							// window "load" fires, every enqueued footer script has had its
+							// chance to run, so an unset flag now means genuinely blocked
+							// (not merely slow). Re-check shortly after as a last-resort
+							// fallback and to catch a late boot for recovery.
+							'function decide() { if ( booted() ) { clear(); } else { reveal(); } }' .
+							'function arm() {' .
+								'decide();' .
+								'window.setTimeout( decide, 1500 );' .
+							'}' .
+							'if ( document.readyState === "complete" ) { arm(); }' .
+							'else { window.addEventListener( "load", arm ); }' .
+						'}() );';
+						wp_add_inline_script( 'faz-page-' . $page['view'], $faz_wd_js, 'after' );
+					}
 				}
 
 				// Pass theme presets so banner.js can reset colours on theme switch.
