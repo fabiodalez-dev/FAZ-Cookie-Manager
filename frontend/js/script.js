@@ -2920,7 +2920,18 @@ document.createElement = (...args) => {
     Object.defineProperties(createdElement, {
         src: {
             get: function () {
-                return createdElement.getAttribute("src");
+                // Preserve native HTMLScriptElement.src semantics: return the
+                // RESOLVED absolute URL, not the raw attribute. Returning the raw
+                // value broke code (module loaders, framework runtimes) that
+                // expects an absolute URL. FAZ's own block/restore paths read
+                // getAttribute("src") directly, so they are unaffected.
+                var raw = createdElement.getAttribute("src");
+                if (!raw) return "";
+                try {
+                    return new URL(raw, document.baseURI).href;
+                } catch (_e) {
+                    return raw;
+                }
             },
             set: function (value) {
                 if (_fazShouldChangeType(createdElement, value)) {
@@ -2939,7 +2950,10 @@ document.createElement = (...args) => {
                 return createdElement.getAttribute("type");
             },
             set: function (value) {
-                if (_fazShouldChangeType(createdElement)) {
+                // A writer assigning type="module"/"importmap"/"litespeed/..."
+                // is declaring native-module or optimiser-deferred infrastructure
+                // — pass it straight through, never substitute the blocked type.
+                if (!_fazIsExemptScriptType(value) && _fazShouldChangeType(createdElement)) {
                     // Writer's own value is being intercepted — save it as
                     // the "original" before we substitute the blocked type.
                     if (
@@ -3052,6 +3066,11 @@ function _fazMutationObserver(mutations) {
                 }
                 if (_fazIsUserWhitelisted(nodeSrc)) continue;
                 if (node.classList && node.classList.contains('faz-skip')) continue;
+                // Native ES modules / importmaps and optimiser-deferred scripts
+                // (LiteSpeed/WP Rocket Delay JS) are infrastructure, not trackers —
+                // never neutralise them here. A deferred tracker is re-checked by
+                // its real src once the optimiser swaps the type back. (#158)
+                if (_fazIsExemptScript(node)) continue;
                 var rawCategory = node.getAttribute
                     ? (node.getAttribute("data-fazcookie") || node.getAttribute("data-faz-category") || "")
                     : "";
@@ -3678,8 +3697,46 @@ function _fazIsUserWhitelisted(url) {
     }
     return false;
 }
+/**
+ * WordPress Interactivity API / native ES modules and optimiser-deferred
+ * scripts must never be intercepted by the consent blocker.
+ *
+ * - type="module" / "importmap" are first-party module infrastructure: blocking
+ *   or accessor-wrapping them breaks native module resolution and freezes the
+ *   Interactivity API on WP 6.5+ themes (e.g. Twenty Twenty-Five).
+ * - type="litespeed/javascript" / "rocketlazyloadjs" are placeholders a caching
+ *   layer (LiteSpeed / WP Rocket "Delay JS") re-injects on its own schedule —
+ *   FAZ must leave them to the optimiser and re-evaluate the REAL script when it
+ *   wakes (its type flips back to a runnable one and the MutationObserver sees it
+ *   again), so a tracker delayed by the optimiser still gets blocked on execution.
+ *
+ * No-op on WordPress < 6.5 / ClassicPress 1.x, which ship none of these script
+ * kinds, so older installs behave exactly as before. (#158 follow-up.)
+ */
+function _fazIsExemptScriptType(type) {
+    if (!type || typeof type !== "string") return false;
+    var t = type.toLowerCase();
+    return (
+        t === "module" ||
+        t === "importmap" ||
+        t === "application/importmap+json" ||
+        t === "litespeed/javascript" ||
+        t === "rocketlazyloadjs"
+    );
+}
+function _fazIsExemptScript(node) {
+    if (!node) return false;
+    var type = (node.getAttribute && node.getAttribute("type")) ||
+        (typeof node.type === "string" ? node.type : "");
+    if (_fazIsExemptScriptType(type)) return true;
+    var src = (node.getAttribute && node.getAttribute("src")) || "";
+    // WordPress 6.5+ Interactivity API / script-modules infrastructure path.
+    return /\/wp-includes\/js\/dist\/(script-modules|interactivity)/i.test(src);
+}
 function _fazShouldChangeType(element, src) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
+    // Never touch native ES modules / importmaps or optimiser-deferred scripts.
+    if (_fazIsExemptScript(element)) return false;
     var url = src ? src : element.src;
     if (_fazIsUserWhitelisted(url)) return false;
     // Per-service override wins for dynamically-created scripts too: an explicit
