@@ -10,6 +10,12 @@
 (function () {
 	'use strict';
 
+	// Signal that this file actually loaded and ran. The view renders an inline
+	// watchdog that shows a "your browser blocked this script" notice if this
+	// flag is still unset after a short delay — the case when an ad blocker /
+	// browser shield blocks cookie-policy.js by filename (it contains "cookie").
+	window.fazCpBooted = true;
+
 	var root = document.getElementById('faz-cookie-policy-app');
 	if (!root) { return; }
 

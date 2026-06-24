@@ -8,6 +8,27 @@
 defined( 'ABSPATH' ) || exit;
 ?>
 <div id="faz-cookies">
+	<?php /* Blocked-script watchdog: cookies.js sets window.fazCookiesBooted the
+		instant it runs. An ad blocker or browser privacy shield can block that file
+		by name (it contains "cookie"), leaving this page silently inert (categories,
+		add-cookie and scan buttons do nothing). This server-rendered notice, hidden
+		by default and revealed by a tiny inline script if the flag stays unset, tells
+		the user why. Inline first-party script is not blocked the way the external
+		.js file is. */ ?>
+	<div id="faz-cookies-script-blocked" class="notice notice-error inline" role="alert" style="display:none;">
+		<p><?php esc_html_e( 'The Cookies page editor did not load, so its buttons will not work. A browser privacy shield or ad blocker is most likely blocking its script (the filename contains the word “cookie”, which some block lists match). Allow scripts for /wp-admin in this browser — or pause the shield for this page — then reload.', 'faz-cookie-manager' ); ?></p>
+	</div>
+	<script>
+	( function () {
+		window.setTimeout( function () {
+			if ( ! window.fazCookiesBooted ) {
+				var n = document.getElementById( 'faz-cookies-script-blocked' );
+				if ( n ) { n.style.display = ''; }
+			}
+		}, 2500 );
+	}() );
+	</script>
+
 	<!-- Cookie Categories Editor -->
 	<div class="faz-card" style="margin-bottom:16px;">
 		<div class="faz-card-header">
