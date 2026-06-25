@@ -226,6 +226,30 @@ class Cookies_API extends API_Controller {
 	}
 
 	/**
+	 * Concrete (non-wildcard) cookie names declared by a provider.
+	 *
+	 * Some catalogue entries list wildcard patterns (e.g. "_hjSession_*").
+	 * Those can't be created as a literal wp_faz_cookies row and never match a
+	 * real scanned cookie name, so they are excluded from both the registration
+	 * payload and the "registered" calculation — mirroring the scanner's own
+	 * inference path, which already drops them. (#161)
+	 *
+	 * @param array $svc Provider entry from Known_Providers.
+	 * @return array
+	 */
+	private function provider_concrete_cookies( $svc ) {
+		$cookies = isset( $svc['cookies'] ) && is_array( $svc['cookies'] ) ? $svc['cookies'] : array();
+		$out     = array();
+		foreach ( $cookies as $name ) {
+			$name = is_string( $name ) ? trim( $name ) : '';
+			if ( '' !== $name && false === strpos( $name, '*' ) ) {
+				$out[] = $name;
+			}
+		}
+		return array_values( $out );
+	}
+
+	/**
 	 * GET catalogue-services — the built-in provider catalogue for the manual
 	 * registration UI (#161). Lists non-necessary providers whose category is
 	 * active on this install, flagging which are already fully registered.
@@ -241,9 +265,10 @@ class Cookies_API extends API_Controller {
 			if ( '' === $category || ! in_array( $category, $active, true ) ) {
 				continue;
 			}
-			$cookies = isset( $svc['cookies'] ) && is_array( $svc['cookies'] ) ? array_values( $svc['cookies'] ) : array();
-			// Skip providers that declare no cookie names — nothing to register
-			// as a transparency row (they are still blocked by URL pattern).
+			$cookies = $this->provider_concrete_cookies( $svc );
+			// Skip providers that declare no concrete cookie names — nothing to
+			// register as a transparency row (they are still blocked by URL
+			// pattern, and wildcard-only entries can't be persisted).
 			if ( empty( $cookies ) ) {
 				continue;
 			}
@@ -294,9 +319,9 @@ class Cookies_API extends API_Controller {
 		if ( '' === $category || 'necessary' === $category || ! in_array( $category, $this->active_category_slugs(), true ) ) {
 			return new WP_Error( 'faz_invalid_category', __( 'This service maps to a category that is not active.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
-		$cookie_names = isset( $svc['cookies'] ) && is_array( $svc['cookies'] ) ? array_values( $svc['cookies'] ) : array();
+		$cookie_names = $this->provider_concrete_cookies( $svc );
 		if ( empty( $cookie_names ) ) {
-			return new WP_Error( 'faz_no_cookies', __( 'This service declares no cookies to register.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+			return new WP_Error( 'faz_no_cookies', __( 'This service declares no registrable cookies.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 		$domain  = $this->provider_domain_from_patterns( isset( $svc['patterns'] ) ? $svc['patterns'] : array() );
 		$before  = $this->existing_cookie_names();

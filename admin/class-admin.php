@@ -545,6 +545,11 @@ class Admin {
 						'cookieDeleteFailed'       => __( 'Failed to delete cookie.', 'faz-cookie-manager' ),
 						'staleDeleted'             => __( 'Stale cookie deleted.', 'faz-cookie-manager' ),
 						'staleDeleteFailed'        => __( 'Failed to delete stale cookie.', 'faz-cookie-manager' ),
+						// Manual service registration dropdown (#161).
+						'selectService'            => __( 'Select a service…', 'faz-cookie-manager' ),
+						'servicesLoadFailed'       => __( 'Could not load services', 'faz-cookie-manager' ),
+						'cookiesRegistered'        => __( 'cookie(s) registered', 'faz-cookie-manager' ),
+						'registerFailed'           => __( 'Could not register service.', 'faz-cookie-manager' ),
 						'staleAllConfirm'          => __( 'Delete all stale cookies not found in the latest scan?', 'faz-cookie-manager' ),
 						'staleNone'                => __( 'No stale cookies to delete.', 'faz-cookie-manager' ),
 						'staleDeleteAllFailed'     => __( 'Failed to delete stale cookies.', 'faz-cookie-manager' ),
