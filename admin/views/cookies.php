@@ -68,6 +68,16 @@ defined( 'ABSPATH' ) || exit;
 								<button class="faz-dropdown-item" data-scope="all"><?php esc_html_e( 'All cookies', 'faz-cookie-manager' ); ?></button>
 							</div>
 						</div>
+						<div class="faz-dropdown" id="faz-add-service-dropdown">
+							<button class="faz-btn faz-btn-outline faz-btn-sm" id="faz-add-service-btn"><?php esc_html_e( 'Add Service', 'faz-cookie-manager' ); ?> &#9662;</button>
+							<div class="faz-dropdown-menu" style="min-width:300px;padding:12px;">
+								<label for="faz-service-select" style="display:block;font-size:12px;line-height:1.4;margin-bottom:8px;"><?php esc_html_e( 'Register a known third-party service so its cookies are declared on every page — useful when the scanner cannot reach an embed (caching, lazy-load).', 'faz-cookie-manager' ); ?></label>
+								<select id="faz-service-select" style="width:100%;margin-bottom:8px;">
+									<option value=""><?php esc_html_e( 'Loading services…', 'faz-cookie-manager' ); ?></option>
+								</select>
+								<button class="faz-btn faz-btn-primary faz-btn-sm" id="faz-register-service-btn" type="button" style="width:100%;"><?php esc_html_e( 'Register service', 'faz-cookie-manager' ); ?></button>
+							</div>
+						</div>
 						<button class="faz-btn faz-btn-primary faz-btn-sm" id="faz-add-cookie-btn"><?php esc_html_e( 'Add Cookie', 'faz-cookie-manager' ); ?></button>
 						<span id="faz-debug-log-actions" style="display:none;">
 							<button class="faz-btn faz-btn-outline faz-btn-sm" id="faz-download-debug-log" type="button" title="<?php esc_attr_e( 'Download scanner debug log', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Debug Log', 'faz-cookie-manager' ); ?></button>

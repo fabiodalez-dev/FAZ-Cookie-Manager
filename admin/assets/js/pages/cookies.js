@@ -83,9 +83,70 @@
 				autoCategorize(item.dataset.scope);
 			});
 		});
+		// Add Service dropdown — manual service registration (#161).
+		var addSvcBtn = document.getElementById('faz-add-service-btn');
+		var addSvcDropdown = document.getElementById('faz-add-service-dropdown');
+		var svcSelect = document.getElementById('faz-service-select');
+		var registerSvcBtn = document.getElementById('faz-register-service-btn');
+		var catalogueLoaded = false;
+		function loadCatalogueServices() {
+			return FAZ.get('cookies/catalogue-services').then(function (data) {
+				var services = (data && data.services) || [];
+				svcSelect.innerHTML = '';
+				var placeholder = document.createElement('option');
+				placeholder.value = '';
+				placeholder.textContent = __('cookies.selectService', 'Select a service…');
+				svcSelect.appendChild(placeholder);
+				services.forEach(function (s) {
+					var opt = document.createElement('option');
+					opt.value = s.id;
+					opt.textContent = s.label + (s.registered ? ' ✓' : '');
+					opt.disabled = !!s.registered;
+					svcSelect.appendChild(opt);
+				});
+				catalogueLoaded = true;
+			}).catch(function () {
+				svcSelect.innerHTML = '';
+				var failOpt = document.createElement('option');
+				failOpt.value = '';
+				failOpt.textContent = __('cookies.servicesLoadFailed', 'Could not load services');
+				svcSelect.appendChild(failOpt);
+			});
+		}
+		if (addSvcBtn && addSvcDropdown && svcSelect && registerSvcBtn) {
+			addSvcBtn.addEventListener('click', function (e) {
+				e.stopPropagation();
+				addSvcDropdown.classList.toggle('open');
+				if (addSvcDropdown.classList.contains('open') && !catalogueLoaded) {
+					loadCatalogueServices();
+				}
+			});
+			var svcMenu = addSvcDropdown.querySelector('.faz-dropdown-menu');
+			if (svcMenu) svcMenu.addEventListener('click', function (e) { e.stopPropagation(); });
+			registerSvcBtn.addEventListener('click', function () {
+				var sid = svcSelect.value;
+				if (!sid) return;
+				registerSvcBtn.disabled = true;
+				FAZ.post('cookies/register-service', { service_id: sid }).then(function (res) {
+					var added = (res && typeof res.added === 'number') ? res.added : 0;
+					var label = (res && res.service && res.service.label) || sid;
+					FAZ.notify(label + ': ' + added + ' ' + __('cookies.cookiesRegistered', 'cookie(s) registered'), 'success');
+					addSvcDropdown.classList.remove('open');
+					catalogueLoaded = false;
+					loadCookies();
+					loadCategories();
+				}).catch(function () {
+					FAZ.notify(__('cookies.registerFailed', 'Could not register service.'), 'error');
+				}).then(function () {
+					registerSvcBtn.disabled = false;
+				});
+			});
+		}
+
 		document.addEventListener('click', function () {
 			scanDropdown.classList.remove('open');
 			acDropdown.classList.remove('open');
+			if (addSvcDropdown) addSvcDropdown.classList.remove('open');
 		});
 
 		// Select-all checkbox.
