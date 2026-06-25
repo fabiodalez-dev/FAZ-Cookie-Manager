@@ -82,7 +82,7 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
   let nonce = '';
   let originalBannerControl: Record<string, unknown> = {};
   let originalIab: Record<string, unknown> = {};
-  let originalActivePluginFiles: string[] = [];
+  let originalActivePluginFiles: string[] | null = null;
   let fixtureId = 0;
 
   async function applyState(opts: { cacheCompat: boolean; iab: boolean }): Promise<void> {
@@ -122,7 +122,7 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
         /* best-effort cleanup */
       }
     }
-    if (originalActivePluginFiles.length) {
+    if (originalActivePluginFiles !== null) {
       restoreActivePluginFiles(originalActivePluginFiles);
     }
     await admin.close();
