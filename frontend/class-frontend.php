@@ -245,10 +245,21 @@ class Frontend {
 			return;
 		}
 		// Skip banner for search engine bots (configurable via Settings).
-		$bot_settings = $this->get_faz_settings();
-		if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
-			if ( faz_is_bot() ) {
-				return;
+		//
+		// MUST be suppressed under Cache Compatibility Mode: the page is then
+		// full-page cached and the render has to be visitor-invariant. A bot
+		// request (incl. the cache-warming crawler) would otherwise generate a
+		// banner-less copy that LiteSpeed/WP Rocket caches and serves to every
+		// human visitor — leaving the banner permanently hidden and trackers
+		// unblocked (the server-rendered container stays, but script.min.js /
+		// _fazConfig that reveal it and block scripts are never enqueued).
+		// Reported on gooloo.de after enabling Cache Compatibility Mode. (#158)
+		if ( ! $this->is_cache_compatibility_enabled() ) {
+			$bot_settings = $this->get_faz_settings();
+			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
+				if ( faz_is_bot() ) {
+					return;
+				}
 			}
 		}
 		if ( $this->is_banner_disabled_by_settings() ) {
@@ -256,7 +267,12 @@ class Frontend {
 		}
 
 		// Geo-targeting: skip banner for visitors outside target regions.
-		if ( $this->is_geo_banner_disabled() ) {
+		// Same invariance requirement as the bot-skip above — under Cache
+		// Compatibility Mode geo gating is resolved client-side from the
+		// invariant config (is_country_dependent_output() is false), so the
+		// enqueue must never short-circuit per visitor here. Mirrors the
+		// cache-compat gate already applied to geo at load_banner().
+		if ( ! $this->is_cache_compatibility_enabled() && $this->is_geo_banner_disabled() ) {
 			return;
 		}
 

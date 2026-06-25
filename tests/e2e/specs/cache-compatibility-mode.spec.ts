@@ -200,4 +200,41 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     expect(noConsentTags.every(isBlockedAnalyticsTag)).toBe(true);
     expect(consentedTags.every(isBlockedAnalyticsTag)).toBe(true);
   });
+
+  // Regression for the gooloo.de report (#158): a full-page-cached site shares
+  // ONE rendered copy between crawlers and humans. With hide_from_bots on, a
+  // crawler request (or LiteSpeed's own cache-warming crawler) used to produce a
+  // banner-less copy that then got cached and served to every visitor — banner
+  // permanently hidden, trackers unblocked. Under Cache Compatibility Mode the
+  // render must be visitor-invariant, so the bot-skip is suppressed.
+  test('8. cache-compat ON makes the render bot-invariant — banner enqueued for crawlers too (#158)', async ({ browser }) => {
+    const GOOGLEBOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)';
+    const hasFazScript = (html: string) => /faz-cookie-manager\/frontend\/js\/script(\.min)?\.js/.test(html);
+    const fetchAsBot = async (): Promise<string> => {
+      const ctx = await browser.newContext({ userAgent: GOOGLEBOT });
+      try {
+        const res = await ctx.request.get(BASE + '/', { headers: { 'User-Agent': GOOGLEBOT } });
+        expect(res.status()).toBeLessThan(400);
+        return await res.text();
+      } finally {
+        await ctx.close();
+      }
+    };
+
+    // cache-compat OFF + hide_from_bots ON: the bot render skips the banner
+    // bootstrap (unchanged legacy behaviour — safe because the page is not cached).
+    await postSettings(admin, nonce, {
+      banner_control: { ...originalBannerControl, status: true, hide_from_bots: true, cache_compatibility: false },
+      iab: { ...originalIab, enabled: false },
+    });
+    expect(hasFazScript(await fetchAsBot()), 'bot render WITHOUT cache-compat should skip FAZ').toBe(false);
+
+    // cache-compat ON: the bot-skip is suppressed so the cacheable copy a crawler
+    // generates still ships script.min.js — humans served that copy get the banner.
+    await postSettings(admin, nonce, {
+      banner_control: { ...originalBannerControl, status: true, hide_from_bots: true, cache_compatibility: true },
+      iab: { ...originalIab, enabled: false },
+    });
+    expect(hasFazScript(await fetchAsBot()), 'bot render WITH cache-compat must include FAZ').toBe(true);
+  });
 });
