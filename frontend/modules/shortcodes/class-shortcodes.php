@@ -242,9 +242,32 @@ class Shortcodes {
 				return __( 'Show more', 'faz-cookie-manager' );
 			case 'Show less':
 				return __( 'Show less', 'faz-cookie-manager' );
+			case 'Cookie':
+				return __( 'Cookie', 'faz-cookie-manager' );
+			case 'Duration':
+				return __( 'Duration', 'faz-cookie-manager' );
+			case 'Description':
+				return __( 'Description', 'faz-cookie-manager' );
 			default:
 				return $value;
 		}
+	}
+
+	/**
+	 * Translate a cookie-audit-table column header while preserving any
+	 * admin-customised text. The header value comes from the banner config
+	 * (en.json `auditTable.elements.headers.elements.{id,duration,description}`)
+	 * and was previously echoed raw, so it stayed English on the front end
+	 * even when the locale had a translation (reported for sk_SK).
+	 *
+	 * @param array  $contents Audit-table elements config array.
+	 * @param string $key      Header key (id|duration|description).
+	 * @param string $default  Bundled English default for that header.
+	 * @return string
+	 */
+	private function translate_header( $contents, $key, $default ) {
+		$value = isset( $contents['headers']['elements'][ $key ] ) ? (string) $contents['headers']['elements'][ $key ] : '';
+		return $this->translate_default_text( $value, $default );
 	}
 
 	private function merge_contents_deep( ...$layers ) {
@@ -595,15 +618,15 @@ class Shortcodes {
 			$description = isset( $description[ $this->language ] ) ? $description[ $this->language ] : '';
 			$duration    = isset( $duration[ $this->language ] ) ? $duration[ $this->language ] : '';
 			$table_body .= '<li>';
-			$table_body .= '<div>' . esc_html( isset( $contents['headers']['elements']['id'] ) ? $contents['headers']['elements']['id'] : '' ) . '</div>';
+			$table_body .= '<div>' . esc_html( $this->translate_header( $contents, 'id', 'Cookie' ) ) . '</div>';
 			$table_body .= '<div>' . esc_html( $cookie['name'] ) . '</div>';
 			$table_body .= '</li>';
 			$table_body .= '<li>';
-			$table_body .= '<div>' . esc_html( isset( $contents['headers']['elements']['duration'] ) ? $contents['headers']['elements']['duration'] : '' ) . '</div>';
+			$table_body .= '<div>' . esc_html( $this->translate_header( $contents, 'duration', 'Duration' ) ) . '</div>';
 			$table_body .= '<div>' . esc_html( $duration ) . '</div>';
 			$table_body .= '</li>';
 			$table_body .= '<li>';
-			$table_body .= '<div>' . esc_html( isset( $contents['headers']['elements']['description'] ) ? $contents['headers']['elements']['description'] : '' ) . '</div>';
+			$table_body .= '<div>' . esc_html( $this->translate_header( $contents, 'description', 'Description' ) ) . '</div>';
 			$table_body .= '<div>' . wp_kses( $description, faz_allowed_html() ) . '</div>';
 			$table_body .= '</li>';
 
@@ -895,9 +918,9 @@ class Shortcodes {
 		$contents   = isset( $this->contents['auditTable']['elements'] ) ? $this->contents['auditTable']['elements'] : '';
 		$html       = '';
 		$table_head = '<thead><tr>
-		<th>' . esc_html( isset( $contents['headers']['elements']['id'] ) ? $contents['headers']['elements']['id'] : '' ) . '</th>
-		<th>' . esc_html( isset( $contents['headers']['elements']['duration'] ) ? $contents['headers']['elements']['duration'] : '' ) . '</th>
-		<th>' . esc_html( isset( $contents['headers']['elements']['description'] ) ? $contents['headers']['elements']['description'] : '' ) . '</th>
+		<th>' . esc_html( $this->translate_header( $contents, 'id', 'Cookie' ) ) . '</th>
+		<th>' . esc_html( $this->translate_header( $contents, 'duration', 'Duration' ) ) . '</th>
+		<th>' . esc_html( $this->translate_header( $contents, 'description', 'Description' ) ) . '</th>
 		</tr></thead>';
 		$table_body = '<tbody>';
 		foreach ( $cookies as $cookie ) {
