@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/wp-fixture';
 import type { Page } from '@playwright/test';
-import { wp } from '../utils/wp-env';
+import { wp, wpEval } from '../utils/wp-env';
 
 /**
  * Manual service registration (#161).
@@ -21,6 +21,21 @@ const YT_COOKIES = ['YSC', 'VISITOR_INFO1_LIVE', 'LOGIN_INFO'];
 
 async function getAdminNonce(page: Page): Promise<string> {
   return page.evaluate(() => window.fazConfig?.api?.nonce ?? '');
+}
+
+function storedYouTubeCookies(): Array<{ name: string; domain: string; discovered: string }> {
+  // Query the persisted rows directly so the test verifies the saved-record
+  // contract (discovered=1, domain-scoped), not just the rendered banner HTML.
+  const inList = YT_COOKIES.map((n) => `'${n}'`).join(',');
+  try {
+    const json = wpEval(
+      `global $wpdb; echo json_encode($wpdb->get_results("SELECT name, domain, discovered FROM {$wpdb->prefix}faz_cookies WHERE name IN (${inList})", ARRAY_A));`,
+    );
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function deleteYouTubeCookies(): void {
@@ -79,11 +94,22 @@ test.describe('Manual service registration (#161)', () => {
     expect(body.category).toBe('marketing');
     expect(body.added).toBeGreaterThan(0);
 
+    // Saved-record contract: all three concrete YouTube cookies must be
+    // persisted as discovered, domain-scoped rows (#161 goal) — not merely
+    // surfaced by name in the banner HTML.
+    const stored = storedYouTubeCookies();
+    expect(stored.map((c) => c.name).sort()).toEqual([...YT_COOKIES].sort());
+    stored.forEach((c) => {
+      expect(Number(c.discovered)).toBe(1);
+      expect(c.domain).toBe('youtube.com');
+    });
+
     // The registered cookies are now declared in the banner store on a plain
     // page that carries no YouTube embed (domain-wide transparency).
     const html = await admin.request.get('/', { headers: { 'User-Agent': 'Mozilla/5.0 (manual-service-e2e)' } }).then((r) => r.text());
     expect(html).toContain('YSC');
     expect(html).toContain('VISITOR_INFO1_LIVE');
+    expect(html).toContain('LOGIN_INFO');
   });
 
   test('3. registering again is idempotent and the catalogue flags it registered', async () => {

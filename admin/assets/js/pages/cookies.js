@@ -89,8 +89,13 @@
 		var svcSelect = document.getElementById('faz-service-select');
 		var registerSvcBtn = document.getElementById('faz-register-service-btn');
 		var catalogueLoaded = false;
+		var catalogueRequest = null;
 		function loadCatalogueServices() {
-			return FAZ.get('cookies/catalogue-services').then(function (data) {
+			// In-flight guard: a single request at a time. Toggling the menu
+			// quickly must not fire concurrent GETs nor let a late failure
+			// overwrite an already-loaded list.
+			if (catalogueRequest) return catalogueRequest;
+			catalogueRequest = FAZ.get('cookies/catalogue-services').then(function (data) {
 				var services = (data && data.services) || [];
 				svcSelect.innerHTML = '';
 				var placeholder = document.createElement('option');
@@ -111,7 +116,10 @@
 				failOpt.value = '';
 				failOpt.textContent = __('cookies.servicesLoadFailed', 'Could not load services');
 				svcSelect.appendChild(failOpt);
+			}).then(function () {
+				catalogueRequest = null;
 			});
+			return catalogueRequest;
 		}
 		if (addSvcBtn && addSvcDropdown && svcSelect && registerSvcBtn) {
 			addSvcBtn.addEventListener('click', function (e) {
