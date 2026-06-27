@@ -3788,7 +3788,10 @@ function _fazIsDeferredPlaceholderType(type) {
  * Advanced Consent Mode (#165): whether a URL is a Consent-Mode-aware Google
  * tag (gtag.js / GA4 / Ads) that may load before consent. gtag-direct only —
  * the GTM container (gtm.js) is intentionally NOT matched, so it stays blocked.
- * Keep in sync with is_gcm_managed_script() in frontend/class-frontend.php.
+ * These URL patterns are kept in sync with is_gcm_managed_script() in
+ * frontend/class-frontend.php; the PHP side additionally matches server-rendered
+ * inline gtag bootstrap calls (gtag('config'/'js'), which have no client-side
+ * equivalent because dynamically-created scripts are gated by their src URL).
  */
 function _fazIsGcmManaged(u) {
     if (!u) return false;

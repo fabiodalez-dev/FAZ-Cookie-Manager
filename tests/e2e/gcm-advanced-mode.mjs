@@ -213,6 +213,15 @@ const inlineDefaultBeforeGtag = (h) => {
 try {
   wp(['eval', setupPhp]);
 
+  // Regression for the REST save path: advanced_mode must round-trip through
+  // the GCM REST controller (get_item_schema -> prepare_item_for_database ->
+  // Gcm_Settings::update). It was originally absent from get_item_schema, so
+  // the admin toggle was silently dropped on save even though the runtime
+  // exemption worked when the option was set directly. (#165 F1)
+  console.log('## REST save path');
+  const restPersists = wp(['eval', "$s=get_option('faz_gcm_settings',array());$s['advanced_mode']=false;update_option('faz_gcm_settings',$s);$api=new \\FazCookie\\Admin\\Modules\\Gcm\\Api\\Api();$r=new WP_REST_Request('POST','/faz/v1/gcm');$r->set_param('status',true);$r->set_param('advanced_mode',true);$api->prepare_item_for_database($r);$a=get_option('faz_gcm_settings',array());echo !empty($a['advanced_mode'])?'yes':'no';"]).trim().endsWith('yes');
+  assert('advanced_mode persists through the GCM REST save path', restPersists);
+
   console.log('## Advanced ON');
   setGcm(true, true);
   let html = await fetchPage();

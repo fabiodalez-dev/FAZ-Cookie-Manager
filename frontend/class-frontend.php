@@ -373,7 +373,10 @@ class Frontend {
 				// already set the denied baseline synchronously in <head> — and
 				// keep only the `consent update` wiring.
 				$gcm['advanced_mode'] = $this->gcm_settings->is_advanced_mode();
-				$gcm_json             = wp_json_encode( $gcm );
+				// Single source of truth for the dataLayer array name so gcm.js
+				// and print_gcm_default_inline() push to the same array (#165 F4).
+				$gcm['data_layer_name'] = $this->gcm_datalayer_name();
+				$gcm_json               = wp_json_encode( $gcm );
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $script_handle . '-gcm';
@@ -1293,8 +1296,13 @@ class Frontend {
 		$passthrough  = faz_sanitize_bool( $this->gcm_settings->get( 'url_passthrough' ) );
 		$npa_fallback = faz_sanitize_bool( $this->gcm_settings->get( 'non_personalized_ads_fallback' ) );
 
-		$js  = 'window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}';
-		$js .= "gtag('consent','default'," . wp_json_encode( $default ) . ');';
+		// Resolve the dataLayer array name from the single server-side source
+		// (also passed to gcm.js in the _fazGcm payload) so the inline default
+		// and gcm.js's `consent update` always push to the SAME array — even
+		// when a site uses a non-default dataLayer name.
+		$dl    = wp_json_encode( $this->gcm_datalayer_name() );
+		$js    = 'window[' . $dl . ']=window[' . $dl . ']||[];function gtag(){window[' . $dl . '].push(arguments);}';
+		$js   .= "gtag('consent','default'," . wp_json_encode( $default ) . ');';
 		if ( $npa_fallback ) {
 			// ad_storage is denied in the baseline → request non-personalized ads.
 			$js .= "gtag('set',{npa:1});";
@@ -1304,6 +1312,22 @@ class Frontend {
 
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
 		echo "<script>" . $js . "</script>\n";
+	}
+
+	/**
+	 * Resolve the JS dataLayer array name. Single source of truth shared by
+	 * the synchronous inline default (print_gcm_default_inline) and gcm.js
+	 * (via the `data_layer_name` key on the `_fazGcm` payload), so both push
+	 * to the same array. Defaults to `dataLayer`; sites using GTM with a
+	 * custom dataLayer name can override via the `faz_gcm_datalayer_name`
+	 * filter. Restricted to a JS-identifier-safe charset.
+	 *
+	 * @return string
+	 */
+	private function gcm_datalayer_name() {
+		$name = apply_filters( 'faz_gcm_datalayer_name', 'dataLayer' );
+		$name = is_string( $name ) ? preg_replace( '/[^A-Za-z0-9_$]/', '', $name ) : '';
+		return '' !== $name ? $name : 'dataLayer';
 	}
 	/**
 	 * Distinct cookie names detected on this site (wp_faz_cookies.name).
@@ -2605,8 +2629,16 @@ class Frontend {
 	 *
 	 * Deliberately gtag-direct only: the GTM container (`gtm.js`) is excluded
 	 * because it can host non-Google tags that don't read Consent Mode, so
-	 * exempting it would let those load ungated. Keep this list in sync with
-	 * `_fazIsGcmManaged()` in frontend/js/script.js.
+	 * exempting it would let those load ungated.
+	 *
+	 * The URL needles are kept in sync with `_fazIsGcmManaged()` in
+	 * frontend/js/script.js. The inline-call needles (`gtag('config'` /
+	 * `gtag('js'`) are PHP-only by nature: they match a server-rendered inline
+	 * gtag bootstrap, which the client matcher never sees (it gates dynamically
+	 * created scripts by their `src` URL, not an inline body). They match the
+	 * specific gtag *bootstrap* calls — `config` (tag init) and `js` (load
+	 * timestamp) — rather than a bare `gtag(` substring, so a non-Google inline
+	 * script that merely references the string `gtag(` is NOT exempted.
 	 *
 	 * @param string $attrs   Script tag attributes.
 	 * @param string $content Inline script body.
@@ -2617,8 +2649,11 @@ class Frontend {
 		$hay = $ctx['haystack'];
 		foreach ( array(
 			'googletagmanager.com/gtag/js',
-			'gtag(',
-			'googleadservices.com/pagead/conversion',
+			"gtag('config'",
+			'gtag("config"',
+			"gtag('js'",
+			'gtag("js"',
+			'googleadservices.com',
 			'googlesyndication.com',
 			'doubleclick.net',
 		) as $needle ) {
