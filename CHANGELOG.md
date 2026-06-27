@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Advanced Consent Mode for Google Consent Mode v2 (#165).** A new opt-in GCM toggle (default off). When on, the Google tag stack — `gtag.js` / GA4 / Google Ads — is allowed to load *before* consent with a synchronous `consent default → denied` printed inline in `<head>`, so Google sends cookieless/modeled pings (Google's "Advanced" mode, `gcs=G100`) and upgrades to granted measurement on consent. Everything else stays hard-blocked exactly as before: non-Google trackers (Meta, TikTok, LinkedIn, Hotjar…) **and** the Google Tag Manager container (`gtm.js`, which can host tags that don't read Consent Mode). The exemption is enforced on both the server-side output buffer and the client-side blocker (for dynamically-injected tags), and `gcm.js` skips its own `consent default` so there is never a duplicate. Off by default — existing installs keep doing Basic mode (tags only after consent). The admin UI carries an explicit notice that loading Google before consent is the site operator's legal call.
+
 ## [1.21.1] — 2026-06-25
 
 ### Fixed

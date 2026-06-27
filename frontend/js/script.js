@@ -3697,6 +3697,9 @@ function _fazGetServiceConsentForTarget(formattedRE) {
 }
 
 function _fazShouldBlockResource(category, target, serviceId) {
+    // Advanced Consent Mode (#165): never block Consent-Mode-aware Google tags;
+    // they load gated by the denied `consent default`. gtm.js is not matched.
+    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(target)) return false;
     if (_fazStore._perServiceConsent) {
         if (serviceId && _fazIsRecognizedService(serviceId)) {
             // Honour an explicit per-service choice even when the service is not
@@ -3777,10 +3780,29 @@ function _fazIsDeferredPlaceholderType(type) {
     var t = type.toLowerCase();
     return t === "litespeed/javascript" || t === "rocketlazyloadjs";
 }
+/**
+ * Advanced Consent Mode (#165): whether a URL is a Consent-Mode-aware Google
+ * tag (gtag.js / GA4 / Ads) that may load before consent. gtag-direct only —
+ * the GTM container (gtm.js) is intentionally NOT matched, so it stays blocked.
+ * Keep in sync with is_gcm_managed_script() in frontend/class-frontend.php.
+ */
+function _fazIsGcmManaged(u) {
+    if (!u) return false;
+    u = String(u).toLowerCase();
+    return u.indexOf('googletagmanager.com/gtag/js') > -1
+        || u.indexOf('googleadservices.com') > -1
+        || u.indexOf('googlesyndication.com') > -1
+        || u.indexOf('doubleclick.net') > -1;
+}
 function _fazShouldChangeType(element, src, typeOverride) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
     var url = src ? src : element.src;
     if (_fazIsUserWhitelisted(url)) return false;
+    // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
+    // before consent. The synchronous denied `consent default` emitted in
+    // <head> keeps their pre-consent hits cookieless; mirrors the server-side
+    // is_gcm_managed_script() exemption. gtm.js stays blocked (not matched).
+    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(url)) return false;
     // Resolve the effective type: the value being ASSIGNED (typeOverride, passed
     // by the createElement type setter) wins over the currently-committed
     // attribute, so a module→runnable or placeholder→runnable reassignment is

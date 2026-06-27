@@ -140,6 +140,11 @@ class Frontend {
 		add_action( 'wp_footer', array( $this, 'banner_html' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 1 );
 		add_action( 'wp_head', array( $this, 'insert_styles' ) );
+		// Advanced Consent Mode (#165): the denied `consent default` must be set
+		// synchronously, before any Google tag. Priority 0 puts it at the very
+		// top of <head>, ahead of theme/plugin gtag snippets. No-op unless
+		// Advanced mode is on.
+		add_action( 'wp_head', array( $this, 'print_gcm_default_inline' ), 0 );
 		add_action( 'template_redirect', array( $this, 'render_banner_preview_frame' ), 0 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
@@ -362,8 +367,13 @@ class Frontend {
 
 			// GCM (Google Consent Mode) in local mode.
 			if ( true === $this->gcm_settings->is_gcm_enabled() ) {
-				$gcm      = $this->get_gcm_data();
-				$gcm_json = wp_json_encode( $gcm );
+				$gcm = $this->get_gcm_data();
+				// Advanced Consent Mode (#165): tell gcm.js to skip its own
+				// `consent default` emission — print_gcm_default_inline() has
+				// already set the denied baseline synchronously in <head> — and
+				// keep only the `consent update` wiring.
+				$gcm['advanced_mode'] = $this->gcm_settings->is_advanced_mode();
+				$gcm_json             = wp_json_encode( $gcm );
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $script_handle . '-gcm';
@@ -1242,6 +1252,59 @@ class Frontend {
 		// fallback for legacy payloads).
 		return Geo_Runtime::apply_cmv2_to_gcm( $this->get_runtime_ruleset(), $gcm_settings );
 	}
+
+	/**
+	 * Advanced Consent Mode (#165): emit the denied `consent default`
+	 * synchronously in <head>, before any Google tag.
+	 *
+	 * Google requires the default to be set before the gtag snippet, otherwise
+	 * the first hit ignores it ("default consent status set too late"). The
+	 * baseline is the most-restrictive denied state (every storage denied
+	 * except security_storage), so pre-consent hits are cookieless and Google
+	 * reports gcs=G100; gcm.js upgrades the relevant signals to granted on the
+	 * `fazcookie_consent_update` event.
+	 *
+	 * No-op unless Advanced mode is on. In Basic mode gcm.js emits the default
+	 * as before; in Advanced mode gcm.js skips its own default emission (it
+	 * reads `advanced_mode` from the payload) to avoid a duplicate.
+	 *
+	 * @return void
+	 */
+	public function print_gcm_default_inline() {
+		if ( ! $this->gcm_settings || ! $this->gcm_settings->is_advanced_mode() ) {
+			return;
+		}
+
+		$default = array(
+			'ad_storage'              => 'denied',
+			'ad_user_data'            => 'denied',
+			'ad_personalization'      => 'denied',
+			'analytics_storage'       => 'denied',
+			'functionality_storage'   => 'denied',
+			'personalization_storage' => 'denied',
+			'security_storage'        => 'granted',
+		);
+		$wait = absint( $this->gcm_settings->get( 'wait_for_update' ) );
+		if ( $wait > 0 ) {
+			$default['wait_for_update'] = $wait;
+		}
+
+		$redaction    = faz_sanitize_bool( $this->gcm_settings->get( 'ads_data_redaction' ) );
+		$passthrough  = faz_sanitize_bool( $this->gcm_settings->get( 'url_passthrough' ) );
+		$npa_fallback = faz_sanitize_bool( $this->gcm_settings->get( 'non_personalized_ads_fallback' ) );
+
+		$js  = 'window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}';
+		$js .= "gtag('consent','default'," . wp_json_encode( $default ) . ');';
+		if ( $npa_fallback ) {
+			// ad_storage is denied in the baseline → request non-personalized ads.
+			$js .= "gtag('set',{npa:1});";
+		}
+		$js .= "gtag('set','ads_data_redaction'," . ( $redaction ? 'true' : 'false' ) . ');';
+		$js .= "gtag('set','url_passthrough'," . ( $passthrough ? 'true' : 'false' ) . ');';
+
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inline JS bootstrap; every interpolated value is a bool/int or wp_json_encode of plugin-controlled constants, no user input.
+		echo "<script>" . $js . "</script>\n";
+	}
 	/**
 	 * Distinct cookie names detected on this site (wp_faz_cookies.name).
 	 *
@@ -1777,6 +1840,10 @@ class Frontend {
 
 		// GTM Data Layer toggle.
 		$store['_gtmDataLayer'] = ! empty( $settings['banner_control']['gtm_datalayer'] );
+		// Advanced Consent Mode (#165): mirror the server-side gtag exemption to
+		// the client blocker so dynamically-injected Google tags (which bypass
+		// the output buffer) are also allowed to load before consent.
+		$store['_gcmAdvanced'] = $this->gcm_settings ? (bool) $this->gcm_settings->is_advanced_mode() : false;
 
 		// IAB vendor data for preference center.
 		// Mirror the asset-enqueue gate above: the IAB/TCF preference UI is
@@ -2509,9 +2576,50 @@ class Frontend {
 			}
 		}
 
+		// Advanced Consent Mode (#165): when on, let Consent-Mode-aware Google
+		// tags (gtag.js / GA4 / Ads) load before consent. gcm.js has already
+		// emitted a synchronous `consent default → denied`, so these send
+		// cookieless/modeled pings and upgrade on consent instead of being
+		// hard-blocked. The GTM *container* (gtm.js) is intentionally NOT
+		// exempt: it can host non-Google tags that ignore Consent Mode.
+		if ( $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
+			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
+			return $full;
+		}
+
 		$new_attrs = $this->set_script_type_plain( $attrs );
 		$new_attrs .= ' data-faz-category="' . esc_attr( $matched_category ) . '"';
 		return '<script' . $new_attrs . '>' . $content . '</script>';
+	}
+
+	/**
+	 * Whether a script is a Consent-Mode-aware Google tag that Advanced
+	 * Consent Mode may load before consent (gtag.js / GA4 / Google Ads).
+	 *
+	 * Deliberately gtag-direct only: the GTM container (`gtm.js`) is excluded
+	 * because it can host non-Google tags that don't read Consent Mode, so
+	 * exempting it would let those load ungated. Keep this list in sync with
+	 * `_fazIsGcmManaged()` in frontend/js/script.js.
+	 *
+	 * @param string $attrs   Script tag attributes.
+	 * @param string $content Inline script body.
+	 * @return bool
+	 */
+	private function is_gcm_managed_script( $attrs, $content ) {
+		$ctx = $this->get_provider_match_context( $attrs, $content );
+		$hay = $ctx['haystack'];
+		foreach ( array(
+			'googletagmanager.com/gtag/js',
+			'gtag(',
+			'googleadservices.com/pagead/conversion',
+			'googlesyndication.com',
+			'doubleclick.net',
+		) as $needle ) {
+			if ( false !== stripos( $hay, $needle ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

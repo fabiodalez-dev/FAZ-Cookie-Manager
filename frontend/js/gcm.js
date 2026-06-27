@@ -45,6 +45,12 @@ function gtag() {
 }
 
 function setConsentInitStates(consentData) {
+    // Advanced Consent Mode (#165): the synchronous denied `consent default`
+    // is already emitted inline in <head> (print_gcm_default_inline) so it
+    // runs before the page's gtag snippet. Skip here so we never emit a
+    // SECOND `consent default`, which Consent Mode tooling flags as resetting
+    // consent (issue #149). The `consent update` path is unchanged.
+    if (data && data.advanced_mode) return;
     if (waitForTime > 0) consentData.wait_for_update = waitForTime;
     gtag("consent", "default", consentData);
 }
