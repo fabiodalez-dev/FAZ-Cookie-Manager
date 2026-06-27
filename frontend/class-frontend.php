@@ -2582,7 +2582,14 @@ class Frontend {
 		// cookieless/modeled pings and upgrade on consent instead of being
 		// hard-blocked. The GTM *container* (gtm.js) is intentionally NOT
 		// exempt: it can host non-Google tags that ignore Consent Mode.
-		if ( $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
+		//
+		// But never override an EXPLICIT per-service denial: if the visitor
+		// rejected this specific Google service via per-service consent
+		// (`svc.<id>:no` → $svc_blocked === true), that deliberate choice wins
+		// and the tag stays hard-blocked. The exemption only applies to the
+		// pre-consent / category-default state, not an explicit rejection.
+		if ( true !== $svc_blocked
+			&& $this->gcm_settings && $this->gcm_settings->is_advanced_mode()
 			&& $this->is_gcm_managed_script( $attrs, $content ) ) {
 			return $full;
 		}

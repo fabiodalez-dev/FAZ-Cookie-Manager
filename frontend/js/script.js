@@ -3697,9 +3697,6 @@ function _fazGetServiceConsentForTarget(formattedRE) {
 }
 
 function _fazShouldBlockResource(category, target, serviceId) {
-    // Advanced Consent Mode (#165): never block Consent-Mode-aware Google tags;
-    // they load gated by the denied `consent default`. gtm.js is not matched.
-    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(target)) return false;
     if (_fazStore._perServiceConsent) {
         if (serviceId && _fazIsRecognizedService(serviceId)) {
             // Honour an explicit per-service choice even when the service is not
@@ -3717,6 +3714,13 @@ function _fazShouldBlockResource(category, target, serviceId) {
         if (targetConsent === "no") return true;
         if (targetConsent === "yes") return false;
     }
+
+    // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
+    // gated by the denied `consent default`. gtm.js is not matched. Placed
+    // AFTER the per-service checks so an explicit svc.<id>:no (a deliberate
+    // rejection of this Google service) still hard-blocks it — the exemption
+    // only covers the pre-consent / category-default state.
+    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(target)) return false;
 
     if (category) return _fazIsCategoryToBeBlocked(category);
     return _fazShouldBlockProvider(target);
@@ -3798,11 +3802,6 @@ function _fazShouldChangeType(element, src, typeOverride) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
     var url = src ? src : element.src;
     if (_fazIsUserWhitelisted(url)) return false;
-    // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
-    // before consent. The synchronous denied `consent default` emitted in
-    // <head> keeps their pre-consent hits cookieless; mirrors the server-side
-    // is_gcm_managed_script() exemption. gtm.js stays blocked (not matched).
-    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(url)) return false;
     // Resolve the effective type: the value being ASSIGNED (typeOverride, passed
     // by the createElement type setter) wins over the currently-committed
     // attribute, so a module→runnable or placeholder→runnable reassignment is
@@ -3854,6 +3853,13 @@ function _fazShouldChangeType(element, src, typeOverride) {
         if (explicit === "no") return true;
         if (explicit === "yes") return false;
     }
+    // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
+    // before consent (the synchronous denied `consent default` in <head> keeps
+    // their pre-consent hits cookieless); mirrors the server-side
+    // is_gcm_managed_script() exemption. gtm.js stays blocked (not matched).
+    // Placed AFTER the explicit per-service check above so an svc.<id>:no
+    // (deliberate rejection of this Google service) still hard-blocks it.
+    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(url)) return false;
     // Tracker decision (also the exemption gate): block when the element's
     // declared category is to be blocked OR its URL matches a known provider —
     // matching the MutationObserver path. A native ES module / first-party WP
