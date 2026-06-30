@@ -3,7 +3,7 @@ import { clickFirstVisible } from '../utils/ui';
 import { deactivatePluginsExcept } from '../utils/wp-env';
 
 /**
- * Advanced img-tile blocking (#163).
+ * Advanced resource-src blocking (#163 img-tile + #167 Bricks-lazy iframe).
  *
  * Map widgets (Leaflet / OpenStreetMap, Bricks Map, …) draw themselves by
  * loading map tiles as runtime-injected <img>, which the script/iframe/fetch
@@ -18,7 +18,7 @@ import { deactivatePluginsExcept } from '../utils/wp-env';
 
 const OSM_TILE = 'https://tile.openstreetmap.org/17/69083/45877.png';
 
-test.describe('Advanced img-tile blocking (#163)', () => {
+test.describe('Advanced resource-src blocking (#163 img-tile + #167 Bricks-lazy iframe)', () => {
   test.beforeAll(() => {
     deactivatePluginsExcept(['faz-cookie-manager']);
   });
@@ -117,5 +117,69 @@ test.describe('Advanced img-tile blocking (#163)', () => {
 
     expect(restored.loaded, 'src restored to the tile URL on consent').toBe(true);
     expect(restored.cleared, 'data-faz-src cleared after restore').toBe(true);
+  });
+
+  // #167 — Bricks' native lazy-load parks the embed URL in data-src and does
+  // `iframe.src = data-src` at runtime, which the same src-setter gate now
+  // catches on the iframe prototype.
+  test('5. a Bricks-lazy iframe (iframe.src set at runtime) is parked + hidden, no request', async ({ page }) => {
+    const ytRequests: string[] = [];
+    page.on('request', (r) => { if (/youtube|nocookie/.test(r.url())) ytRequests.push(r.url()); });
+
+    await waitForFaz(page);
+
+    const result = await page.evaluate(async () => {
+      const f = document.createElement('iframe');
+      f.className = 'bricks-lazy-hidden';
+      f.setAttribute('data-src', 'https://www.youtube-nocookie.com/embed/NL2UmY9oKow?rel=0');
+      document.body.appendChild(f);
+      f.src = f.getAttribute('data-src')!; // Bricks lazy-load assignment
+      await new Promise((r) => setTimeout(r, 300));
+      return {
+        parked: f.getAttribute('data-faz-src') === 'https://www.youtube-nocookie.com/embed/NL2UmY9oKow?rel=0',
+        srcEmpty: !f.getAttribute('src'),
+        hidden: f.classList.contains('faz-hidden'),
+        category: f.getAttribute('data-faz-category'),
+      };
+    });
+
+    expect(result.parked, 'the runtime-assigned iframe src is parked in data-faz-src').toBe(true);
+    expect(result.srcEmpty, 'no src is set (no load)').toBe(true);
+    expect(result.hidden, 'parked iframe is hidden').toBe(true);
+    expect(result.category).toBe('marketing');
+    expect(ytRequests, `no youtube request should fire pre-consent, got: ${JSON.stringify(ytRequests)}`).toHaveLength(0);
+  });
+
+  test('6. accept-all restores the parked Bricks-lazy iframe', async ({ page }) => {
+    await waitForFaz(page);
+
+    const parked = await page.evaluate(async () => {
+      const f = document.createElement('iframe');
+      f.id = 'faz-iframe-restore-probe';
+      f.className = 'bricks-lazy-hidden';
+      const url = 'https://www.youtube-nocookie.com/embed/NL2UmY9oKow?rel=0';
+      document.body.appendChild(f);
+      f.src = url;
+      await new Promise((r) => setTimeout(r, 200));
+      return f.getAttribute('data-faz-src') === url;
+    });
+    expect(parked, 'iframe parked before consent').toBe(true);
+
+    const accepted = await clickFirstVisible(page, [
+      '[data-faz-tag="accept-button"] button',
+      '[data-faz-tag="accept-button"]',
+      '.faz-btn-accept',
+    ]);
+    expect(accepted).toBeTruthy();
+
+    const restored = await page.evaluate(async () => {
+      await new Promise((r) => setTimeout(r, 1200));
+      const f = document.getElementById('faz-iframe-restore-probe') as HTMLIFrameElement | null;
+      return f ? { loaded: /youtube-nocookie/.test(f.getAttribute('src') || ''), cleared: !f.getAttribute('data-faz-src'), shown: !f.classList.contains('faz-hidden') } : { loaded: false, cleared: false, shown: false };
+    });
+
+    expect(restored.loaded, 'iframe src restored on consent').toBe(true);
+    expect(restored.cleared, 'data-faz-src cleared after restore').toBe(true);
+    expect(restored.shown, 'faz-hidden cleared after restore').toBe(true);
   });
 });

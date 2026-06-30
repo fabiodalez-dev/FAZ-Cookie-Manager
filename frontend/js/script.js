@@ -2883,19 +2883,28 @@ function _fazAttachShortCodeStyles() {
 /** Script blocker Version 2 */
 
 /**
- * Advanced img-tile blocking (#163). Map widgets (Leaflet / OpenStreetMap,
- * etc.) draw themselves by loading map tiles as <img> at runtime, which the
- * script / iframe / fetch blocker never intercepts. Gate the HTMLImageElement
- * `src` setter so a tile whose URL matches a blocked provider in a denied
- * category is held — URL parked in data-faz-src, no network request — until
- * consent; the standard img[data-faz-src] restore pass re-enables it on
- * consent, like any other blocked resource.
+ * Runtime `src`-setter gate for <img> and <iframe> (#163 / #167).
+ *
+ * Two third-party patterns bypass the script/iframe/fetch blocker by setting
+ * a resource `src` at runtime, on an element that was never a tracked
+ * createElement('script') and (for server-rendered nodes) was never in the
+ * output buffer with a live src:
+ *
+ *   #163 — map widgets (Leaflet / OpenStreetMap, Bricks Map) draw the map by
+ *          assigning tile URLs to <img> at runtime;
+ *   #167 — Bricks' native lazy-load parks the real embed URL in `data-src`
+ *          (class `bricks-lazy-hidden`) and later does `iframe.src = data-src`
+ *          when the element scrolls into view.
+ *
+ * Gating the `src` setter on both prototypes catches both: a CROSS-ORIGIN
+ * resource whose URL matches a blocked provider in a denied category is held
+ * — URL parked in data-faz-src, no network request — until consent, then
+ * re-enabled by the standard img/iframe[data-faz-src] restore pass.
  *
  * Tightly scoped + fast-pathed: same-origin / relative / data: / blob:
- * images bail immediately, so only CROSS-ORIGIN images ever run the provider
- * match. The common case (theme assets + media-library uploads, all
- * same-origin) is untouched, so there is no per-image provider scan on a
- * normal page.
+ * resources bail immediately, so only cross-origin resources ever run the
+ * provider match — theme assets and media-library uploads are untouched and
+ * there is no per-resource provider scan on a normal page.
  */
 function _fazImgShouldBlock(el, url) {
     if (!_fazStore._block || typeof url !== "string" || url === "") return false;
@@ -2913,12 +2922,11 @@ function _fazImgCategory(url) {
     }
     return "functional";
 }
-(function () {
-    var proto = window.HTMLImageElement && HTMLImageElement.prototype;
+function _fazGateSrcSetter(proto, hideOnPark) {
     if (!proto) return;
     var desc = Object.getOwnPropertyDescriptor(proto, "src");
     // Only override a configurable native accessor; never clobber a
-    // non-configurable / missing descriptor (would throw and break images).
+    // non-configurable / missing descriptor (would throw and break the element).
     if (!desc || typeof desc.set !== "function" || desc.configurable === false) return;
     var nativeSet = desc.set, nativeGet = desc.get;
     Object.defineProperty(proto, "src", {
@@ -2930,13 +2938,19 @@ function _fazImgCategory(url) {
                 if (_fazImgShouldBlock(this, val)) {
                     this.setAttribute("data-faz-src", String(val));
                     this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    // Hide a parked iframe (the restore pass clears faz-hidden on
+                    // consent); leave parked <img> visible so a map widget's tile
+                    // layout / positioning is not disturbed.
+                    if (hideOnPark && this.classList) this.classList.add("faz-hidden");
                     return; // park the URL; issue no request until consent
                 }
             } catch (e) { /* fall through to the native setter on any error */ }
             nativeSet.call(this, val);
         }
     });
-})();
+}
+_fazGateSrcSetter(window.HTMLImageElement && HTMLImageElement.prototype, false);
+_fazGateSrcSetter(window.HTMLIFrameElement && HTMLIFrameElement.prototype, true);
 
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
