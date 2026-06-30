@@ -260,13 +260,19 @@ class Shortcodes {
 	 * and was previously echoed raw, so it stayed English on the front end
 	 * even when the locale had a translation (reported for sk_SK).
 	 *
-	 * @param array  $contents Audit-table elements config array.
-	 * @param string $key      Header key (id|duration|description).
-	 * @param string $default  Bundled English default for that header.
+	 * @param array|string $contents Audit-table elements config array (may be an
+	 *                               empty string when the section is absent).
+	 * @param string       $key      Header key (id|duration|description).
+	 * @param string       $default  Bundled English default for that header.
 	 * @return string
 	 */
 	private function translate_header( $contents, $key, $default ) {
-		$value = isset( $contents['headers']['elements'][ $key ] ) ? (string) $contents['headers']['elements'][ $key ] : '';
+		// Guard is_array(): $contents is '' when the audit-table section is
+		// absent. Fall back to the default (not '') so the header still renders
+		// translated instead of vanishing.
+		$value = ( is_array( $contents ) && isset( $contents['headers']['elements'][ $key ] ) && '' !== $contents['headers']['elements'][ $key ] )
+			? (string) $contents['headers']['elements'][ $key ]
+			: $default;
 		return $this->translate_default_text( $value, $default );
 	}
 

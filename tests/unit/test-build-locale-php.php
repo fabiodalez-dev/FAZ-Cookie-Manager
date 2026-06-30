@@ -152,6 +152,15 @@ namespace {
 	eq( call_priv( faz_template( 'en' ), 'resolve_build_locale' ), 'en_US', "key 'en' multilingual → faz locale (explicit per-language build)" );
 	$GLOBALS['__faz_multilingual'] = false;
 
+	// Memoization: the value is pinned on first call, so a get_locale() shift
+	// later in the same request (the switch_to_locale window) can't make the
+	// stored signature diverge from the locale generate() actually builds with.
+	$GLOBALS['__faz_wp_locale'] = 'de_DE';
+	$tpl_memo                   = faz_template( 'en' );
+	eq( call_priv( $tpl_memo, 'resolve_build_locale' ), 'de_DE', 'memo: first call resolves de_DE' );
+	$GLOBALS['__faz_wp_locale'] = 'fr_FR';
+	eq( call_priv( $tpl_memo, 'resolve_build_locale' ), 'de_DE', 'memo: second call returns the pinned value despite a get_locale() change' );
+
 	// =====================================================================
 	// get_layout_signature() must change when the resolved locale changes.
 	// =====================================================================

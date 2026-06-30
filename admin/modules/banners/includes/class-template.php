@@ -112,6 +112,18 @@ class Template {
 	protected $language = 'en';
 
 	/**
+	 * Memoized result of resolve_build_locale() for this request.
+	 *
+	 * Pinned on first call (which happens in get_layout_signature() before any
+	 * switch_to_locale()), so the cache-signature read in load(), the locale
+	 * generate() builds with, and the signature re-read in update() all agree
+	 * even if get_locale() shifts mid-request. null = not yet resolved.
+	 *
+	 * @var string|null
+	 */
+	private $resolved_build_locale = null;
+
+	/**
 	 * Instance of the current class
 	 *
 	 * @var object
@@ -292,7 +304,15 @@ class Template {
 	 * @return string Target WP locale (e.g. 'sk_SK'), or '' to skip switching.
 	 */
 	private function resolve_build_locale() {
+		// Memoize: pin the value on first call so the three callsites
+		// (load() signature, generate() switch, update() signature) cannot
+		// diverge if get_locale() shifts inside the switch_to_locale() window.
+		if ( null !== $this->resolved_build_locale ) {
+			return $this->resolved_build_locale;
+		}
+
 		$faz_locale = function_exists( 'faz_wp_locale' ) ? faz_wp_locale( $this->language ) : '';
+		$resolved   = $faz_locale;
 
 		if (
 			'en' === $this->language
@@ -301,11 +321,12 @@ class Template {
 		) {
 			$wp_locale = get_locale();
 			if ( is_string( $wp_locale ) && '' !== $wp_locale && 0 !== strpos( $wp_locale, 'en' ) ) {
-				return $wp_locale;
+				$resolved = $wp_locale;
 			}
 		}
 
-		return $faz_locale;
+		$this->resolved_build_locale = $resolved;
+		return $resolved;
 	}
 
 	/**
