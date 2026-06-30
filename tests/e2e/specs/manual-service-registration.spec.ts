@@ -187,4 +187,18 @@ test.describe('Manual service registration (#161)', () => {
     expect((body.service.label ?? '').length).toBeGreaterThan(0);
     expect(body.added).toBeGreaterThan(0);
   });
+
+  test('9. catalogue-services stays admin-gated after the read-permission switch', async ({ browser }) => {
+    // The route now uses get_items_permissions_check (read pattern) instead of
+    // create_item_permissions_check. Guard that the swap did not open it: an
+    // unauthenticated request (fresh context, no cookie / no nonce) must still
+    // be rejected. (#162 review)
+    const anon = await browser.newContext();
+    try {
+      const res = await anon.request.get('/?rest_route=/faz/v1/cookies/catalogue-services');
+      expect([401, 403]).toContain(res.status());
+    } finally {
+      await anon.close();
+    }
+  });
 });

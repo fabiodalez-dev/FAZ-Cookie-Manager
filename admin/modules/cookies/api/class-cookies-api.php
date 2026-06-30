@@ -111,7 +111,10 @@ class Cookies_API extends API_Controller {
 			array(
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => array( $this, 'get_catalogue_services' ),
-				'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				// Read endpoint → use the read permission (manage_options),
+				// matching the other READABLE routes here. create_item_* also
+				// demands the plugin write-nonce, which a read needn't. (#162 review)
+				'permission_callback' => array( $this, 'get_items_permissions_check' ),
 			)
 		);
 
