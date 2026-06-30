@@ -1274,6 +1274,12 @@ class Frontend {
 	 * @return void
 	 */
 	public function print_gcm_default_inline() {
+		// AMP pages delegate consent to <amp-consent>; emitting this inline gtag
+		// bootstrap there would invalidate the very branch enqueue_scripts(),
+		// insert_styles() and load_banner() already skip for AMP.
+		if ( apply_filters( 'faz_is_amp_request', false ) ) {
+			return;
+		}
 		if ( ! $this->gcm_settings || ! $this->gcm_settings->is_advanced_mode() ) {
 			return;
 		}

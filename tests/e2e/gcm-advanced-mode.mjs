@@ -26,7 +26,11 @@ import { execFileSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 
 const WP = process.env.WP_BASE_URL || 'http://127.0.0.1:9998';
-const WP_PATH = process.env.WP_PATH || '/Users/fabio/Sites/faz-test';
+const WP_PATH = process.env.WP_PATH;
+if (!WP_PATH) {
+  console.error('WP_PATH not set: export WP_PATH to the WordPress install root.');
+  process.exit(1);
+}
 const SLUG = 'gcm-advanced-test';
 const GTAG_ID = 'G-TESTADV1';
 const DYN_GTAG_ID = 'G-DYNADV1';
@@ -36,7 +40,9 @@ function wp(args) {
 }
 function setGcm(status, advanced) {
   wp(['eval', `$s=get_option('faz_gcm_settings',array());$s['status']=${status?'true':'false'};$s['advanced_mode']=${advanced?'true':'false'};update_option('faz_gcm_settings',$s);do_action('faz_clear_cache');`]);
-  wp(['db', 'query', "DELETE FROM wp_options WHERE option_name LIKE 'faz_banner_template%'"]);
+  // Prefix-safe: resolve the options table via $wpdb->options instead of a
+  // hardcoded wp_ prefix, so the cleanup works on custom-prefix installs too.
+  wp(['eval', "global \$wpdb; \$wpdb->query( \"DELETE FROM {\$wpdb->options} WHERE option_name LIKE 'faz_banner_template%'\" );"]);
 }
 async function fetchPage() {
   const res = await fetch(`${WP}/${SLUG}/`, { redirect: 'follow' });
@@ -123,7 +129,7 @@ async function runBrowserContract(advanced) {
     route.fulfill({ status: 204, body: '' });
   });
 
-  await page.goto(`${WP}/${SLUG}/`, { waitUntil: 'networkidle', timeout: 45000 });
+  await page.goto(`${WP}/${SLUG}/`, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForTimeout(500);
 
   assert(
@@ -190,7 +196,7 @@ if ($e) { $a['ID']=$e->ID; echo wp_update_post($a); } else { echo wp_insert_post
 
 const gtagBlocked = (h) => /<script[^>]*gtag\/js[^>]*type=["']text\/plain["']/.test(h);
 function scriptTags(html) {
-  return html.match(/<script\b[\s\S]*?<\/script>/gi) || [];
+  return html.match(/<script\b[\s\S]*?<\/script\s*>/gi) || [];
 }
 
 const inlineGtagBlocked = (h) => scriptTags(h).some((tag) => {
