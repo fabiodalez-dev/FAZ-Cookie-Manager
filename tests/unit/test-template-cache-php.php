@@ -247,7 +247,15 @@ faz_ok( $sig_base === $service_zero->faz_signature(), '09 per_service_consent=0 
 //     yields a different md5 (proven by recomputing the same array with a bumped
 //     version, mirroring the builder exactly).
 $desc_md5 = md5( 'We value your privacy' );
-function faz_sig_for_version( $version, $base_settings, $desc_md5 ) {
+// Mirror the resolved build locale that get_layout_signature() now folds in
+// (#164). Read it from the real resolver so the mirror matches whatever the
+// environment yields (empty here: no faz_wp_locale stub) without hardcoding.
+function faz_build_locale( $tpl ) {
+	$m = new ReflectionMethod( Template::class, 'resolve_build_locale' );
+	$m->setAccessible( true );
+	return $m->invoke( $tpl );
+}
+function faz_sig_for_version( $version, $base_settings, $desc_md5, $build_locale ) {
 	return md5(
 		wp_json_encode(
 			array(
@@ -262,12 +270,14 @@ function faz_sig_for_version( $version, $base_settings, $desc_md5 ) {
 				'per_service'    => false,
 				'per_cookie'     => false,
 				'description'    => $desc_md5,
+				'build_locale'   => $build_locale,
 			)
 		)
 	);
 }
-$sig_v1 = faz_sig_for_version( FAZ_VERSION, $base_settings, $desc_md5 );
-$sig_v2 = faz_sig_for_version( '0.0.1-other', $base_settings, $desc_md5 );
+$base_build_locale = faz_build_locale( $a );
+$sig_v1 = faz_sig_for_version( FAZ_VERSION, $base_settings, $desc_md5, $base_build_locale );
+$sig_v2 = faz_sig_for_version( '0.0.1-other', $base_settings, $desc_md5, $base_build_locale );
 faz_ok( $sig_v1 === $sig_base, '10a recomputed builder matches real signature (version field present)' );
 faz_ok( $sig_v1 !== $sig_v2, '10b changing plugin_version changes the signature' );
 
