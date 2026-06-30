@@ -670,6 +670,12 @@ class Template {
 					'per_service'    => ! empty( $banner_control['per_service_consent'] ),
 					'per_cookie'     => ! empty( $banner_control['per_cookie_consent'] ),
 					'description'    => md5( $notice_description ),
+					// The locale resolve_build_locale() picks drives the translated
+					// chrome (Always Active / audit-table headers). It can differ
+					// from $this->language (e.g. de_DE when the key is 'en'), so it
+					// must be in the signature or a WP locale switch would keep
+					// serving stale-language labels from cache. (CodeRabbit PR #164)
+					'build_locale'   => $this->resolve_build_locale(),
 				)
 			)
 		);

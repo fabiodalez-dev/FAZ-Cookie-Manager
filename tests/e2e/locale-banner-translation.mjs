@@ -32,7 +32,11 @@ import { existsSync, copyFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const WP = process.env.WP_BASE_URL || 'http://127.0.0.1:9998';
-const WP_PATH = process.env.WP_PATH || '/Users/fabio/Sites/faz-test';
+const WP_PATH = process.env.WP_PATH;
+if (!WP_PATH) {
+  console.error('WP_PATH not set: export WP_PATH to the WordPress install root.');
+  process.exit(1);
+}
 const PLUGIN_DIR = join(WP_PATH, 'wp-content', 'plugins', 'faz-cookie-manager');
 const MO_SRC = join(PLUGIN_DIR, 'languages', 'faz-cookie-manager-de_DE.mo');
 const MO_DST_DIR = join(WP_PATH, 'wp-content', 'languages', 'plugins');
@@ -64,7 +68,9 @@ try {
   copyFileSync(MO_SRC, MO_DST);
 
   console.log('## Scenario 1 — WP de_DE + FAZ default "en" (the reported bug)');
-  wp(['language', 'core', 'activate', 'de_DE']);
+  // install --activate is the unified, non-deprecated path: it installs the
+  // language pack first (fresh CI installs lack it) then activates it.
+  wp(['language', 'core', 'install', 'de_DE', '--activate']);
   setFaz("['en']", 'en');
   bust();
   let html = await fetchHome();
@@ -72,7 +78,7 @@ try {
   assert('header "Description" translated to "Beschreibung"', count(html, 'Beschreibung') > 0 && count(html, 'Description') === 0);
 
   console.log('## Scenario 2 — WP en_US + FAZ default "en" (no regression, all English)');
-  wp(['language', 'core', 'activate', 'en_US']);
+  wp(['language', 'core', 'install', 'en_US', '--activate']);
   setFaz("['en']", 'en');
   bust();
   html = await fetchHome();
@@ -85,7 +91,7 @@ try {
   assert('explicit FAZ German still wins', count(html, 'Immer aktiv') > 0 && count(html, 'Always Active') === 0);
 } finally {
   // Restore original state.
-  try { wp(['language', 'core', 'activate', 'en_US']); } catch { /* ignore */ }
+  try { wp(['language', 'core', 'install', 'en_US', '--activate']); } catch { /* ignore */ }
   try { setFaz("['en']", 'en'); } catch { /* ignore */ }
   try { rmSync(MO_DST, { force: true }); } catch { /* ignore */ }
   bust();
