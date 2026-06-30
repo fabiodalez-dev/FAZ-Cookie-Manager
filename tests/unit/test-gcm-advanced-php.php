@@ -177,6 +177,14 @@ namespace {
 	ok( false !== strpos( $out, "gtag('set','url_passthrough',false)" ), 'url_passthrough false by default' );
 	ok( false !== strpos( $out, 'window["dataLayer"]' ), 'pushes to the default dataLayer array' );
 
+	// INVARIANT (review): the inline bootstrap must NOT emit the Google
+	// code-signatures the output-buffer blocker matches — gtag('config'|'js')
+	// or dataLayer.push({ — or the blocker would neutralise this very <script>
+	// while the exempted gtag stack still loads (denied default never runs).
+	ok( false === strpos( $out, "gtag('config'" ) && false === strpos( $out, 'gtag("config"' ), "inline emits no gtag('config') (blocker-safe)" );
+	ok( false === strpos( $out, "gtag('js'" ) && false === strpos( $out, 'gtag("js"' ), "inline emits no gtag('js') (blocker-safe)" );
+	ok( false === strpos( $out, 'dataLayer.push({' ) && false === strpos( $out, '].push({' ), 'inline emits no dataLayer.push({ (blocker-safe)' );
+
 	// Knobs reflected.
 	$s = new FazTest_GcmSettings();
 	$s->bag = array(
