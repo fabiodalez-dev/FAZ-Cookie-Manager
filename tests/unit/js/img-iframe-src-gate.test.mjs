@@ -74,6 +74,8 @@ function loadFrontend() {
       // returning the category that actually triggers the block. (#168 review)
       { re: 'multi-cdn.example', categories: ['functional'], service: 'multi-a' },
       { re: 'multi-cdn.example/ads', categories: ['marketing'], service: 'multi-b' },
+      // Google Fonts — exercises the <link> href gate (Web Font Loader). #163 review / baga
+      { re: 'fonts.googleapis.com', categories: ['functional'], service: 'google-fonts' },
     ],
     _userWhitelist: [],
     _perServiceConsent: false,
@@ -227,6 +229,53 @@ eq('iframe: same-origin relative src loads', r.src, '/embedded/local.html');
 eq('iframe: same-origin iframe not parked', r.parked, null);
 r = probe('iframe', 'data:text/html,<p>hi</p>');
 eq('iframe: data: URI loads (fast path)', r.src, 'data:text/html,<p>hi</p>');
+
+// ---------------------------------------------------------------------------
+// HTMLLinkElement.href override — runtime stylesheet injection (Web Font
+// Loader / Google Fonts). Parked into data-faz-href, restored by the standard
+// link[data-faz-href] pass. (baga report)
+// ---------------------------------------------------------------------------
+console.log('\nHTMLLinkElement.href override (Web Font Loader)');
+const GF = 'https://fonts.googleapis.com/css?family=Roboto:400,700';
+function linkProbe(url, fn) {
+  const el = w.document.createElement('link');
+  el.rel = 'stylesheet';
+  if (fn) fn(el);
+  el.href = url;
+  return { parked: el.getAttribute('data-faz-href'), href: el.getAttribute('href') || '', category: el.getAttribute('data-faz-category') };
+}
+let lp = linkProbe(GF);
+eq('link: blocked Google Fonts stylesheet is parked in data-faz-href', lp.parked, GF);
+eq('link: parked stylesheet has no href (no fetch)', lp.href, '');
+eq('link: parked stylesheet tagged functional', lp.category, 'functional');
+// Web Font Loader shape: create link, set rel + href via property, append.
+const wfl = w.eval(`(function(){
+  var l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = ${JSON.stringify(GF)};
+  document.head.appendChild(l);
+  return { parked: l.getAttribute('data-faz-href'), href: l.getAttribute('href') || '' };
+})()`);
+eq('link: Web Font Loader runtime href assignment is parked', wfl.parked, GF);
+eq('link: Web Font Loader stylesheet fires no fetch (no href)', wfl.href, '');
+// same-origin / relative / non-provider stylesheets load normally.
+lp = linkProbe('http://localhost/wp-content/themes/x/style.css');
+eq('link: same-origin stylesheet loads (href set)', lp.href, 'http://localhost/wp-content/themes/x/style.css');
+eq('link: same-origin stylesheet not parked', lp.parked, null);
+lp = linkProbe('https://cdn.example.com/lib/some.css');
+eq('link: non-provider cross-origin stylesheet loads', lp.href, 'https://cdn.example.com/lib/some.css');
+eq('link: non-provider stylesheet not parked', lp.parked, null);
+// consent for functional → the Google Fonts stylesheet is no longer blocked.
+setConsent({ functional: 'yes' });
+lp = linkProbe(GF);
+eq('link: Google Fonts stylesheet after functional consent loads', lp.href, GF);
+eq('link: consented stylesheet not parked', lp.parked, null);
+resetConsent();
+// documented scope boundary: setAttribute('href', …) is the property gate's blind spot.
+const linkAttr = w.document.createElement('link');
+linkAttr.rel = 'stylesheet';
+linkAttr.setAttribute('href', GF);
+eq('link: setAttribute("href") is outside this gate (documented boundary)', linkAttr.getAttribute('data-faz-href'), null);
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

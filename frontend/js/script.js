@@ -2972,6 +2972,41 @@ function _fazGateSrcSetter(proto, hideOnPark) {
 _fazGateSrcSetter(window.HTMLImageElement && HTMLImageElement.prototype, false);
 _fazGateSrcSetter(window.HTMLIFrameElement && HTMLIFrameElement.prototype, true);
 
+/**
+ * Same gate for the `href` PROPERTY setter on <link>, so a stylesheet a script
+ * assigns at runtime — most commonly Google Fonts loaded through Web Font Loader
+ * (webfont.js), which does `link.href = cssUrl; head.appendChild(link)` — is
+ * parked before the browser fetches it (a <link> only loads once connected with
+ * an href, and we never set the native href when blocking). Parked into
+ * data-faz-href, the same attribute the server-side process_link_tag uses, so
+ * the standard link[data-faz-href] restore pass re-enables it on consent.
+ * Decision + category reuse the shared resource helpers (the element type is
+ * irrelevant to them — they judge by provider match). Scope mirrors the src
+ * gate: this catches the `el.href = …` PROPERTY assignment, not setAttribute.
+ */
+function _fazGateHrefSetter(proto) {
+    if (!proto) return;
+    var desc = Object.getOwnPropertyDescriptor(proto, "href");
+    if (!desc || typeof desc.set !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, "href", {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            try {
+                if (_fazImgShouldBlock(this, val)) {
+                    this.setAttribute("data-faz-href", String(val));
+                    this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    return; // park the URL; no stylesheet fetch until consent
+                }
+            } catch (e) { /* fall through to the native setter on any error */ }
+            nativeSet.call(this, val);
+        }
+    });
+}
+_fazGateHrefSetter(window.HTMLLinkElement && HTMLLinkElement.prototype);
+
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
     const createdElement = _fazCreateElementBackup.call(document, ...args);
