@@ -2947,7 +2947,7 @@ function _fazGateSrcSetter(proto, hideOnPark) {
     var desc = Object.getOwnPropertyDescriptor(proto, "src");
     // Only override a configurable native accessor; never clobber a
     // non-configurable / missing descriptor (would throw and break the element).
-    if (!desc || typeof desc.set !== "function" || desc.configurable === false) return;
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
     var nativeSet = desc.set, nativeGet = desc.get;
     Object.defineProperty(proto, "src", {
         configurable: true,
@@ -2987,7 +2987,7 @@ _fazGateSrcSetter(window.HTMLIFrameElement && HTMLIFrameElement.prototype, true)
 function _fazGateHrefSetter(proto) {
     if (!proto) return;
     var desc = Object.getOwnPropertyDescriptor(proto, "href");
-    if (!desc || typeof desc.set !== "function" || desc.configurable === false) return;
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
     var nativeSet = desc.set, nativeGet = desc.get;
     Object.defineProperty(proto, "href", {
         configurable: true,
@@ -3514,6 +3514,7 @@ function _fazUnblockServerSide() {
                 var fazSrc = iframe.getAttribute("data-faz-src");
                 if (!_fazIsAllowedScheme(fazSrc)) return;
                 iframe.src = fazSrc;
+                if (!iframe.getAttribute("src")) return; // gate re-parked it — stay parked, recoverable
                 iframe.removeAttribute("data-faz-src");
                 iframe.classList.remove('faz-hidden');
                 // Carry the placeholder's verified provider id onto the restored
@@ -3549,6 +3550,11 @@ function _fazUnblockServerSide() {
             if (_fazShouldBlockResource(cat, fazSrc, el.getAttribute("data-faz-service") || "")) return;
             if (!_fazIsAllowedScheme(fazSrc)) return;
             el.src = fazSrc;
+            // If the gate re-parked it (the URL matches another provider whose
+            // category is still denied), the native src stays empty — leave the
+            // element parked + hidden so it stays recoverable when that category
+            // is also consented, instead of stripping the marker and bricking it.
+            if (!el.getAttribute("src")) return;
             el.removeAttribute("data-faz-src");
             el.classList.remove('faz-hidden');
             // Just-consented embed: mark faz-skip so the observer / video
@@ -3593,6 +3599,7 @@ function _fazUnblockServerSide() {
             if (_fazShouldBlockResource(cat, imgSrc, el.getAttribute("data-faz-service") || "")) return;
             if (!_fazIsAllowedScheme(imgSrc)) return;
             el.src = imgSrc;
+            if (!el.getAttribute("src")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-src");
         });
 
@@ -3604,6 +3611,7 @@ function _fazUnblockServerSide() {
             if (_fazShouldBlockResource(cat, fazHref, el.getAttribute("data-faz-service") || "")) return;
             if (!_fazIsAllowedScheme(fazHref)) return;
             el.href = fazHref;
+            if (!el.getAttribute("href")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-href");
         });
 

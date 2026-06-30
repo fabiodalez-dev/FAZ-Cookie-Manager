@@ -199,11 +199,25 @@ eq('img: src getter returns resolved absolute URL',
   w.eval('(function(){ var i=document.createElement("img"); i.src="sub/pic.png"; return i.src; })()'),
   'http://localhost/sub/pic.png');
 // #168 review: documented scope boundary — this gate intercepts the `src`
-// PROPERTY setter only. A URL committed via setAttribute('src', …) is NOT
-// parked here (it stays covered by the markup / output-buffer blocking).
+// PROPERTY setter only. A runtime setAttribute('src', …) is out of scope here
+// (server-rendered markup is still handled by the output-buffer blocking; a
+// runtime setAttribute on a main-document element is not intercepted).
 const viaAttr = w.document.createElement('img');
 viaAttr.setAttribute('src', OSM);
 eq('img: setAttribute("src") is outside this gate (documented boundary)', viaAttr.getAttribute('data-faz-src'), null);
+
+// F1 (review): the restore re-park guard depends on the gate leaving the native
+// src empty when it blocks. With functional consented but marketing still denied,
+// a multi-provider URL must STILL park (marketing denied) and leave src empty —
+// so the restore pass's `if (!el.getAttribute("src")) return` keeps it parked and
+// recoverable instead of stripping data-faz-src and bricking the element.
+setConsent({ functional: 'yes' });
+const repark = w.document.createElement('img');
+repark.src = 'https://multi-cdn.example/ads/tile.png';
+eq('F1: partial-consent multi-provider img stays parked (native src empty)', repark.getAttribute('src') || '', '');
+eq('F1: partial-consent multi-provider img keeps data-faz-src (recoverable)', repark.getAttribute('data-faz-src'), 'https://multi-cdn.example/ads/tile.png');
+eq('F1: parked element tagged with the still-denied category (marketing)', repark.getAttribute('data-faz-category'), 'marketing');
+resetConsent();
 
 // ---------------------------------------------------------------------------
 // HTMLIFrameElement.src override — end-to-end (iframe hidden on park, #167).
