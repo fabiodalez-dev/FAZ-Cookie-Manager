@@ -195,6 +195,12 @@ eq('img: non-provider image not parked', r.parked, null);
 eq('img: src getter returns resolved absolute URL',
   w.eval('(function(){ var i=document.createElement("img"); i.src="sub/pic.png"; return i.src; })()'),
   'http://localhost/sub/pic.png');
+// #168 review: documented scope boundary — this gate intercepts the `src`
+// PROPERTY setter only. A URL committed via setAttribute('src', …) is NOT
+// parked here (it stays covered by the markup / output-buffer blocking).
+const viaAttr = w.document.createElement('img');
+viaAttr.setAttribute('src', OSM);
+eq('img: setAttribute("src") is outside this gate (documented boundary)', viaAttr.getAttribute('data-faz-src'), null);
 
 // ---------------------------------------------------------------------------
 // HTMLIFrameElement.src override — end-to-end (iframe hidden on park, #167).
