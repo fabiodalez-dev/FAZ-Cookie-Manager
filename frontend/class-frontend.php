@@ -1306,6 +1306,14 @@ class Frontend {
 		// (also passed to gcm.js in the _fazGcm payload) so the inline default
 		// and gcm.js's `consent update` always push to the SAME array — even
 		// when a site uses a non-default dataLayer name.
+		// INVARIANT — this inline bootstrap must only ever emit gtag('consent',…)
+		// and gtag('set',…) calls. It must NOT emit gtag('config'|'js',…) or
+		// dataLayer.push({…}): those are exactly the Google code-signatures
+		// is_gcm_managed_script() / match_script_to_provider() look for, so the
+		// output-buffer blocker would neutralise this very <script> while still
+		// letting the (exempted) gtag stack load — i.e. the denied default would
+		// never run and a pre-consent cookie could be written. Keep it to
+		// consent/set only so it always falls through the blocker unmatched.
 		$dl    = wp_json_encode( $this->gcm_datalayer_name() );
 		$js    = 'window[' . $dl . ']=window[' . $dl . ']||[];function gtag(){window[' . $dl . '].push(arguments);}';
 		$js   .= "gtag('consent','default'," . wp_json_encode( $default ) . ');';
