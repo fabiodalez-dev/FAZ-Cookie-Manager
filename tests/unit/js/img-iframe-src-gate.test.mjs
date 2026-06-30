@@ -76,6 +76,7 @@ function loadFrontend() {
       { re: 'multi-cdn.example/ads', categories: ['marketing'], service: 'multi-b' },
       // Google Fonts — exercises the <link> href gate (Web Font Loader). #163 review / baga
       { re: 'fonts.googleapis.com', categories: ['functional'], service: 'google-fonts' },
+      { re: 'fonts.gstatic.com', categories: ['functional'], service: 'google-fonts' },
     ],
     _userWhitelist: [],
     _perServiceConsent: false,
@@ -276,6 +277,28 @@ const linkAttr = w.document.createElement('link');
 linkAttr.rel = 'stylesheet';
 linkAttr.setAttribute('href', GF);
 eq('link: setAttribute("href") is outside this gate (documented boundary)', linkAttr.getAttribute('data-faz-href'), null);
+
+// --- 5 added edge-case tests for the href gate (escape hatches + edge URLs) ---
+console.log('\nHTMLLinkElement.href override — edge cases (added)');
+// 1. faz-skip escape hatch on a <link>.
+lp = linkProbe(GF, (el) => el.classList.add('faz-skip'));
+eq('link: faz-skip stylesheet is not parked (escape hatch)', lp.parked, null);
+// 2. user-whitelisted provider URL on a <link>.
+cfg._userWhitelist = ['fonts.googleapis.com'];
+lp = linkProbe(GF);
+eq('link: user-whitelisted Google Fonts stylesheet is not parked', lp.parked, null);
+cfg._userWhitelist = [];
+// 3. blocking globally off → not parked even for a known provider.
+cfg._block = '';
+lp = linkProbe(GF);
+eq('link: blocking globally off → stylesheet not parked', lp.parked, null);
+cfg._block = '1';
+// 4. protocol-relative provider stylesheet is cross-origin → parked.
+lp = linkProbe('//fonts.googleapis.com/css?family=Lato');
+eq('link: protocol-relative Google Fonts stylesheet is parked', lp.parked, '//fonts.googleapis.com/css?family=Lato');
+// 5. fonts.gstatic.com (font-file host) stylesheet/preload is also a blocked provider.
+lp = linkProbe('https://fonts.gstatic.com/s/roboto/v30/font.woff2');
+eq('link: fonts.gstatic.com resource is parked', lp.parked, 'https://fonts.gstatic.com/s/roboto/v30/font.woff2');
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
