@@ -2882,6 +2882,62 @@ function _fazAttachShortCodeStyles() {
 
 /** Script blocker Version 2 */
 
+/**
+ * Advanced img-tile blocking (#163). Map widgets (Leaflet / OpenStreetMap,
+ * etc.) draw themselves by loading map tiles as <img> at runtime, which the
+ * script / iframe / fetch blocker never intercepts. Gate the HTMLImageElement
+ * `src` setter so a tile whose URL matches a blocked provider in a denied
+ * category is held — URL parked in data-faz-src, no network request — until
+ * consent; the standard img[data-faz-src] restore pass re-enables it on
+ * consent, like any other blocked resource.
+ *
+ * Tightly scoped + fast-pathed: same-origin / relative / data: / blob:
+ * images bail immediately, so only CROSS-ORIGIN images ever run the provider
+ * match. The common case (theme assets + media-library uploads, all
+ * same-origin) is untouched, so there is no per-image provider scan on a
+ * normal page.
+ */
+function _fazImgShouldBlock(el, url) {
+    if (!_fazStore._block || typeof url !== "string" || url === "") return false;
+    if (url.charAt(0) === "/" || url.indexOf("data:") === 0 || url.indexOf("blob:") === 0) return false;
+    if (url.indexOf("//") === -1) return false; // relative path → same-origin
+    try { if (new URL(url, location.href).host === location.host) return false; } catch (e) { return false; }
+    if (el && el.classList && el.classList.contains("faz-skip")) return false;
+    if (_fazIsUserWhitelisted(url)) return false;
+    return _fazShouldBlockProvider(url);
+}
+function _fazImgCategory(url) {
+    var providers = _fazMatchingProviders(url);
+    if (providers && providers.length && Array.isArray(providers[0].categories) && providers[0].categories.length) {
+        return providers[0].categories[0];
+    }
+    return "functional";
+}
+(function () {
+    var proto = window.HTMLImageElement && HTMLImageElement.prototype;
+    if (!proto) return;
+    var desc = Object.getOwnPropertyDescriptor(proto, "src");
+    // Only override a configurable native accessor; never clobber a
+    // non-configurable / missing descriptor (would throw and break images).
+    if (!desc || typeof desc.set !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, "src", {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            try {
+                if (_fazImgShouldBlock(this, val)) {
+                    this.setAttribute("data-faz-src", String(val));
+                    this.setAttribute("data-faz-category", _fazImgCategory(String(val)));
+                    return; // park the URL; issue no request until consent
+                }
+            } catch (e) { /* fall through to the native setter on any error */ }
+            nativeSet.call(this, val);
+        }
+    });
+})();
+
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
     const createdElement = _fazCreateElementBackup.call(document, ...args);

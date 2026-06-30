@@ -2,6 +2,11 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Map tiles (Leaflet / OpenStreetMap) now blocked before consent (#163).** Map widgets — Leaflet/OpenStreetMap, the Bricks Map element, and similar — draw themselves by loading their map tiles as runtime-injected `<img>`, which the script/iframe/network blocker never intercepted, so the tiles loaded (and the visitor's IP reached the tile server) even with consent denied. The `HTMLImageElement` `src` setter is now gated: a cross-origin image whose URL matches a blocked provider in a denied category is parked (the URL is held in `data-faz-src`, no request is made) until consent, then restored by the standard restore pass. Tightly scoped and fast-pathed — same-origin, relative, `data:` and `blob:` images bail immediately, so theme assets and media-library uploads are untouched and there is no per-image provider scan on a normal page. Reported on a Bricks site with a Leaflet map.
+
 ## [1.21.1] — 2026-06-25
 
 ### Fixed
