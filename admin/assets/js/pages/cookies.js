@@ -142,8 +142,8 @@
 					// the service label, count and text and handle plural forms.
 					FAZ.notify(
 						__('cookies.serviceRegistered', '%1$s: %2$d cookie(s) registered')
-							.replace('%1$s', label)
-							.replace('%2$d', String(added)),
+							.replace('%1$s', function () { return label; })
+							.replace('%2$d', function () { return String(added); }),
 						'success'
 					);
 					addSvcDropdown.classList.remove('open');
