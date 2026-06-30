@@ -83,7 +83,7 @@ test.describe('Manual service registration (#161)', () => {
     expect(yt!.registered, 'YouTube should be unregistered after cleanup').toBe(false);
   });
 
-  test('2. register-service adds the provider cookies (discovered, domain-wide)', async () => {
+  test('2. register-service adds the provider cookies (discovered, domain-wide)', async ({ browser }) => {
     const res = await admin.request.post('/?rest_route=/faz/v1/cookies/register-service', {
       headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
       data: { service_id: 'youtube' },
@@ -105,11 +105,21 @@ test.describe('Manual service registration (#161)', () => {
     });
 
     // The registered cookies are now declared in the banner store on a plain
-    // page that carries no YouTube embed (domain-wide transparency).
-    const html = await admin.request.get('/', { headers: { 'User-Agent': 'Mozilla/5.0 (manual-service-e2e)' } }).then((r) => r.text());
-    expect(html).toContain('YSC');
-    expect(html).toContain('VISITOR_INFO1_LIVE');
-    expect(html).toContain('LOGIN_INFO');
+    // page that carries no YouTube embed (domain-wide transparency). Verify from
+    // a FRESH frontend context — no admin session, no consent cookie — so the
+    // assertion reflects a real visitor rather than an authenticated request
+    // whose markup may differ for logged-in users.
+    const fresh = await browser.newContext();
+    try {
+      const html = await fresh.request
+        .get('/', { headers: { 'User-Agent': 'Mozilla/5.0 (manual-service-e2e)' } })
+        .then((r) => r.text());
+      expect(html).toContain('YSC');
+      expect(html).toContain('VISITOR_INFO1_LIVE');
+      expect(html).toContain('LOGIN_INFO');
+    } finally {
+      await fresh.close();
+    }
   });
 
   test('3. registering again is idempotent and the catalogue flags it registered', async () => {
@@ -140,5 +150,41 @@ test.describe('Manual service registration (#161)', () => {
     await addBtn.click();
     // The catalogue loads lazily on first open; the select gains real options.
     await expect.poll(async () => admin.locator('#faz-service-select option').count(), { timeout: 8000 }).toBeGreaterThan(1);
+  });
+
+  test('6. the success message is a single reorderable i18n template (CodeRabbit)', async () => {
+    await admin.goto('/wp-admin/admin.php?page=faz-cookie-manager-cookies', { waitUntil: 'domcontentloaded' });
+    const i18n = await admin.evaluate(() => (window as Window & { fazConfig?: { i18n?: { cookies?: Record<string, string> } } }).fazConfig?.i18n?.cookies ?? {});
+    // The whole sentence is one key with positional placeholders so translators
+    // can reorder label/count/text and handle plural — not a glued fragment.
+    expect(i18n.serviceRegistered, 'serviceRegistered key is present').toBeTruthy();
+    expect(i18n.serviceRegistered).toContain('%1$s');
+    expect(i18n.serviceRegistered).toContain('%2$d');
+    // The old fragmented key must be gone (it would re-introduce the glue bug).
+    expect(i18n.cookiesRegistered, 'old fragmented cookiesRegistered key removed').toBeUndefined();
+  });
+
+  test('7. the i18n template substitutes the service label and count in order', async () => {
+    const msg = await admin.evaluate(() => {
+      const tpl = (window as Window & { fazConfig?: { i18n?: { cookies?: { serviceRegistered?: string } } } })
+        .fazConfig?.i18n?.cookies?.serviceRegistered || '%1$s: %2$d cookie(s) registered';
+      return tpl.replace('%1$s', 'YouTube').replace('%2$d', String(3));
+    });
+    expect(msg).toBe('YouTube: 3 cookie(s) registered');
+  });
+
+  test('8. register-service returns the service label the i18n message consumes', async () => {
+    // cookies.js builds the notification from res.service.label (→ %1$s) and
+    // res.added (→ %2$d); pin that REST↔JS contract so the message can't go blank.
+    deleteYouTubeCookies();
+    const res = await admin.request.post('/?rest_route=/faz/v1/cookies/register-service', {
+      headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+      data: { service_id: 'youtube' },
+    });
+    expect(res.status()).toBe(200);
+    const body = (await res.json()) as { service: { id: string; label?: string }; added: number };
+    expect(typeof body.service.label).toBe('string');
+    expect((body.service.label ?? '').length).toBeGreaterThan(0);
+    expect(body.added).toBeGreaterThan(0);
   });
 });

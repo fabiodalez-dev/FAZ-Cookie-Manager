@@ -138,7 +138,14 @@
 				FAZ.post('cookies/register-service', { service_id: sid }).then(function (res) {
 					var added = (res && typeof res.added === 'number') ? res.added : 0;
 					var label = (res && res.service && res.service.label) || sid;
-					FAZ.notify(label + ': ' + added + ' ' + __('cookies.cookiesRegistered', 'cookie(s) registered'), 'success');
+					// One i18n key for the whole sentence so translators can reorder
+					// the service label, count and text and handle plural forms.
+					FAZ.notify(
+						__('cookies.serviceRegistered', '%1$s: %2$d cookie(s) registered')
+							.replace('%1$s', label)
+							.replace('%2$d', String(added)),
+						'success'
+					);
 					addSvcDropdown.classList.remove('open');
 					catalogueLoaded = false;
 					loadCookies();
