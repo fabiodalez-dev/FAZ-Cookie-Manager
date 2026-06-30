@@ -69,6 +69,11 @@ function loadFrontend() {
       { re: 'tile.openstreetmap.org', categories: ['functional'], service: 'openstreetmap' },
       { re: 'youtube-nocookie.com', categories: ['marketing'], service: 'youtube' },
       { re: 'youtube.com', categories: ['marketing'], service: 'youtube' },
+      // A URL that matches two providers with diverging categories — the first
+      // matched is functional, a later one marketing. Exercises _fazImgCategory
+      // returning the category that actually triggers the block. (#168 review)
+      { re: 'multi-cdn.example', categories: ['functional'], service: 'multi-a' },
+      { re: 'multi-cdn.example/ads', categories: ['marketing'], service: 'multi-b' },
     ],
     _userWhitelist: [],
     _perServiceConsent: false,
@@ -162,6 +167,14 @@ const cat = (url) => w.eval(`_fazImgCategory(${JSON.stringify(url)})`);
 eq('OSM tile → functional', cat(OSM), 'functional');
 eq('YouTube embed → marketing', cat(YT), 'marketing');
 eq('non-provider URL → functional default', cat('https://example.com/x.jpg'), 'functional');
+// #168 review: multi-provider URL — tag the category that actually blocks.
+// Block-first (no consent): the first matched denied category wins.
+eq('multi-provider URL (block-first) → first denied category', cat('https://multi-cdn.example/ads/x.png'), 'functional');
+// functional consented, marketing denied → must tag marketing (the real block
+// reason), not the allowed functional, so the restore pass can't break it.
+setConsent({ functional: 'yes' });
+eq('multi-provider URL (functional consented) → denied marketing category', cat('https://multi-cdn.example/ads/x.png'), 'marketing');
+resetConsent();
 
 // ---------------------------------------------------------------------------
 // HTMLImageElement.src override — end-to-end (img stays visible on park).

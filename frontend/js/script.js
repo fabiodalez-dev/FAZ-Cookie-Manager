@@ -2920,8 +2920,25 @@ function _fazImgShouldBlock(el, url) {
 }
 function _fazImgCategory(url) {
     var providers = _fazMatchingProviders(url);
-    if (providers && providers.length && Array.isArray(providers[0].categories) && providers[0].categories.length) {
-        return providers[0].categories[0];
+    if (providers && providers.length) {
+        // Tag with the category that actually triggers the block (the first
+        // currently-denied one), not blindly providers[0].categories[0]. A URL
+        // matching several providers whose first category is allowed but a
+        // later one denied would otherwise be tagged "allowed": the restore
+        // pass would re-enable it, the src setter would re-park it, and the
+        // unconditional removeAttribute("data-faz-src") would strip the parked
+        // marker — leaving a permanently-broken element. (#168 review)
+        for (var i = 0; i < providers.length; i++) {
+            var cats = providers[i].categories;
+            if (Array.isArray(cats)) {
+                for (var j = 0; j < cats.length; j++) {
+                    if (_fazIsCategoryToBeBlocked(cats[j])) return cats[j];
+                }
+            }
+        }
+        if (Array.isArray(providers[0].categories) && providers[0].categories.length) {
+            return providers[0].categories[0];
+        }
     }
     return "functional";
 }
