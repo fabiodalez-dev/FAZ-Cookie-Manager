@@ -2908,7 +2908,10 @@ function _fazAttachShortCodeStyles() {
  */
 function _fazImgShouldBlock(el, url) {
     if (!_fazStore._block || typeof url !== "string" || url === "") return false;
-    if (url.charAt(0) === "/" || url.indexOf("data:") === 0 || url.indexOf("blob:") === 0) return false;
+    // Root-relative ("/path") is same-origin and bails; protocol-relative
+    // ("//host/path") is CROSS-origin and must still be matched — only the host
+    // check below can clear it. data:/blob: are inert and bail.
+    if ((url.charAt(0) === "/" && url.charAt(1) !== "/") || url.indexOf("data:") === 0 || url.indexOf("blob:") === 0) return false;
     if (url.indexOf("//") === -1) return false; // relative path → same-origin
     try { if (new URL(url, location.href).host === location.host) return false; } catch (e) { return false; }
     if (el && el.classList && el.classList.contains("faz-skip")) return false;

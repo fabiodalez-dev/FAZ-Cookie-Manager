@@ -26,6 +26,9 @@ test.describe('Advanced resource-src blocking (#163 img-tile + #167 Bricks-lazy 
   // Wait until FAZ's frontend blocker is initialised (banner present) before
   // injecting images, so the src-setter override is in place.
   async function waitForFaz(page: import('@playwright/test').Page) {
+    // Park-before-consent assertions are stateful: a prior test that accepted
+    // would leave a consent cookie behind and make the pre-consent cases flaky.
+    await page.context().clearCookies();
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
     await page.waitForFunction(() => !!(window as any).fazcookie?._diag?.().ready, undefined, { timeout: 8000 });

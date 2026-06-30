@@ -1,0 +1,213 @@
+/**
+ * JS unit test (jsdom) — guards the #163 (map-tile <img>) + #167 (Bricks-lazy
+ * <iframe>) work: FAZ now gates the `src` SETTER on HTMLImageElement and
+ * HTMLIFrameElement, so a cross-origin resource whose URL matches a blocked
+ * provider in a denied category is PARKED (URL → data-faz-src, no request)
+ * before consent, then restored by the standard data-faz-src pass.
+ *
+ * These checks exercise the REAL decision/gate functions in frontend/js/script.js
+ * with no browser and no network — they cover the fast-path bail-outs (same
+ * origin / relative / data: / blob:), the provider-match decision, the
+ * whitelist + faz-skip escape hatches, per-category and per-service consent,
+ * and the end-to-end setter override on both prototypes (img stays visible,
+ * iframe is hidden on park).
+ *
+ * Loads the REAL frontend/js/script.js with its DOMContentLoaded bootstrap
+ * neutralised. _fazStore = window._fazConfig and ref = window.fazcookie are
+ * captured at eval time (script.js:7 / :34), so the harness seeds them first
+ * and mutates them in place between scenarios.
+ *
+ * Run: node tests/unit/js/img-iframe-src-gate.test.mjs
+ */
+
+import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SCRIPT_PATH = resolve(HERE, '../../../frontend/js/script.js');
+
+let passed = 0;
+let failed = 0;
+function eq(label, actual, expected) {
+  if (actual === expected) {
+    passed += 1;
+    console.log(`  \x1b[32mPASS\x1b[0m ${label}`);
+  } else {
+    failed += 1;
+    console.log(`  \x1b[31mFAIL\x1b[0m ${label}`);
+    console.log(`       expected: ${JSON.stringify(expected)}`);
+    console.log(`       actual:   ${JSON.stringify(actual)}`);
+  }
+}
+
+const OSM = 'https://tile.openstreetmap.org/17/69083/45877.png';
+const YT = 'https://www.youtube-nocookie.com/embed/NL2UmY9oKow?rel=0';
+
+function loadFrontend() {
+  const code = readFileSync(SCRIPT_PATH, 'utf8');
+  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+    runScripts: 'outside-only',
+    url: 'http://localhost/',
+  });
+  const { window } = dom;
+  // Block-first store: functional + marketing are non-necessary and there is no
+  // consent cookie, so both categories are blocked until consent.
+  window._fazConfig = {
+    _block: '1',
+    _categories: [
+      { slug: 'necessary', isNecessary: true },
+      { slug: 'functional', isNecessary: false },
+      { slug: 'marketing', isNecessary: false },
+    ],
+    _services: [
+      { id: 'youtube', patterns: ['youtube-nocookie.com', 'youtube.com'] },
+      { id: 'openstreetmap', patterns: ['tile.openstreetmap.org'] },
+    ],
+    _providersToBlock: [
+      { re: 'tile.openstreetmap.org', categories: ['functional'], service: 'openstreetmap' },
+      { re: 'youtube-nocookie.com', categories: ['marketing'], service: 'youtube' },
+      { re: 'youtube.com', categories: ['marketing'], service: 'youtube' },
+    ],
+    _userWhitelist: [],
+    _perServiceConsent: false,
+    _perCookieConsent: false,
+    i18n: {},
+  };
+  // Default: no consent recorded for any key.
+  window.fazcookie = { _fazGetFromStore: () => undefined };
+  const realAdd = window.document.addEventListener.bind(window.document);
+  window.document.addEventListener = (type, ...rest) => {
+    if (type === 'DOMContentLoaded') return undefined;
+    return realAdd(type, ...rest);
+  };
+  window.eval(code);
+  window.document.addEventListener = realAdd;
+  return window;
+}
+
+console.log('img / iframe src-setter blocking gate (jsdom, #163 + #167)');
+const w = loadFrontend();
+const cfg = w._fazConfig;
+
+// Mutate consent in place; ref captured the same fazcookie object reference.
+function setConsent(map) {
+  w.fazcookie._fazGetFromStore = (k) => (k in map ? map[k] : undefined);
+}
+function resetConsent() {
+  w.fazcookie._fazGetFromStore = () => undefined;
+}
+
+// Build a parked/loaded probe for a freshly-created element.
+function probe(tag, url) {
+  const el = w.document.createElement(tag);
+  el.src = url;
+  return {
+    parked: el.getAttribute('data-faz-src'),
+    src: el.getAttribute('src') || '',
+    category: el.getAttribute('data-faz-category'),
+    hidden: el.classList.contains('faz-hidden'),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// _fazImgShouldBlock — the gate decision (fast paths + provider match).
+// ---------------------------------------------------------------------------
+console.log('\n_fazImgShouldBlock() — decision');
+const sb = (url, el) => w.eval(`_fazImgShouldBlock(${el || 'null'}, ${JSON.stringify(url)})`);
+eq('cross-origin OSM tile (functional, denied) → block', sb(OSM), true);
+eq('cross-origin YouTube embed (marketing, denied) → block', sb(YT), true);
+eq('same-origin absolute image → bail (false)', sb('http://localhost/wp-content/uploads/x.png'), false);
+eq('root-relative path → bail (false)', sb('/wp-content/uploads/y.png'), false);
+eq('bare relative path (no //) → bail (false)', sb('photo.png'), false);
+eq('data: URI → bail (false)', sb('data:image/gif;base64,R0lGODlhAQABAAAAACw='), false);
+eq('blob: URL → bail (false)', sb('blob:http://localhost/abc-123'), false);
+eq('empty string → bail (false)', sb(''), false);
+eq('non-string url → bail (false)', w.eval('_fazImgShouldBlock(null, 12345)'), false);
+eq('cross-origin non-provider image → not blocked', sb('https://example.com/some/photo.jpg'), false);
+eq('protocol-relative provider URL → block', sb('//tile.openstreetmap.org/5/1/2.png'), true);
+
+console.log('\n_fazImgShouldBlock() — escape hatches');
+eq('element carrying faz-skip class → not blocked',
+  sb(OSM, '{ classList:{ contains:function(c){ return c==="faz-skip"; } } }'), false);
+// Whitelist the OSM host → not blocked; restore afterwards.
+cfg._userWhitelist = ['tile.openstreetmap.org'];
+eq('user-whitelisted provider URL → not blocked', sb(OSM), false);
+cfg._userWhitelist = [];
+// _block off → never blocks, even for a known provider.
+cfg._block = '';
+eq('blocking globally off → not blocked', sb(OSM), false);
+cfg._block = '1';
+
+console.log('\n_fazImgShouldBlock() — consent gating');
+setConsent({ functional: 'yes' });
+eq('OSM tile after functional consent → not blocked', sb(OSM), false);
+eq('YouTube still blocked (marketing denied) when only functional consented', sb(YT), true);
+resetConsent();
+// Per-service: an explicit svc.<id>:yes releases the provider even pre-category.
+cfg._perServiceConsent = true;
+setConsent({ 'svc.youtube': 'yes' });
+eq('per-service svc.youtube:yes → YouTube not blocked', sb(YT), false);
+setConsent({ 'svc.youtube': 'no' });
+eq('per-service svc.youtube:no → YouTube blocked', sb(YT), true);
+resetConsent();
+cfg._perServiceConsent = false;
+
+// ---------------------------------------------------------------------------
+// _fazImgCategory — the tag written onto a parked resource.
+// ---------------------------------------------------------------------------
+console.log('\n_fazImgCategory() — category tagging');
+const cat = (url) => w.eval(`_fazImgCategory(${JSON.stringify(url)})`);
+eq('OSM tile → functional', cat(OSM), 'functional');
+eq('YouTube embed → marketing', cat(YT), 'marketing');
+eq('non-provider URL → functional default', cat('https://example.com/x.jpg'), 'functional');
+
+// ---------------------------------------------------------------------------
+// HTMLImageElement.src override — end-to-end (img stays visible on park).
+// ---------------------------------------------------------------------------
+console.log('\nHTMLImageElement.src override');
+let r = probe('img', OSM);
+eq('img: blocked tile is parked in data-faz-src', r.parked, OSM);
+eq('img: blocked tile has no src (no request)', r.src, '');
+eq('img: parked tile tagged functional', r.category, 'functional');
+eq('img: parked tile is NOT hidden (layout preserved)', r.hidden, false);
+r = probe('img', 'http://localhost/wp-content/uploads/local.png');
+eq('img: same-origin image loads (src set)', r.src, 'http://localhost/wp-content/uploads/local.png');
+eq('img: same-origin image not parked', r.parked, null);
+r = probe('img', 'https://example.com/photo.jpg');
+eq('img: non-provider cross-origin image loads', r.src, 'https://example.com/photo.jpg');
+eq('img: non-provider image not parked', r.parked, null);
+// getter still returns the native resolved absolute URL on a non-blocked load.
+eq('img: src getter returns resolved absolute URL',
+  w.eval('(function(){ var i=document.createElement("img"); i.src="sub/pic.png"; return i.src; })()'),
+  'http://localhost/sub/pic.png');
+
+// ---------------------------------------------------------------------------
+// HTMLIFrameElement.src override — end-to-end (iframe hidden on park, #167).
+// ---------------------------------------------------------------------------
+console.log('\nHTMLIFrameElement.src override');
+r = probe('iframe', YT);
+eq('iframe: blocked embed is parked in data-faz-src', r.parked, YT);
+eq('iframe: blocked embed has no src (no request)', r.src, '');
+eq('iframe: parked embed tagged marketing', r.category, 'marketing');
+eq('iframe: parked embed IS hidden (faz-hidden)', r.hidden, true);
+// Bricks lazy-load shape: data-src present, then runtime `iframe.src = data-src`.
+const lazy = w.eval(`(function(){
+  var f = document.createElement('iframe');
+  f.className = 'bricks-lazy-hidden';
+  f.setAttribute('data-src', ${JSON.stringify(YT)});
+  f.src = f.getAttribute('data-src');
+  return { parked: f.getAttribute('data-faz-src'), src: f.getAttribute('src') || '', hidden: f.classList.contains('faz-hidden') };
+})()`);
+eq('iframe: Bricks-lazy runtime src assignment is parked', lazy.parked, YT);
+eq('iframe: Bricks-lazy iframe fires no request (no src)', lazy.src, '');
+eq('iframe: Bricks-lazy iframe hidden', lazy.hidden, true);
+r = probe('iframe', '/embedded/local.html');
+eq('iframe: same-origin relative src loads', r.src, '/embedded/local.html');
+eq('iframe: same-origin iframe not parked', r.parked, null);
+r = probe('iframe', 'data:text/html,<p>hi</p>');
+eq('iframe: data: URI loads (fast path)', r.src, 'data:text/html,<p>hi</p>');
+
+console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
+process.exit(failed === 0 ? 0 : 1);
