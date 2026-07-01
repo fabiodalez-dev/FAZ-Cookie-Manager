@@ -36,15 +36,21 @@ function getConsentStateForCategory(categoryConsent) {
 }
 
 var dataLayerName =
-  window.fazSettings && window.fazSettings.dataLayerName
-    ? window.fazSettings.dataLayerName
-    : "dataLayer";
+  data.data_layer_name ||
+  (window.fazSettings && window.fazSettings.dataLayerName) ||
+  "dataLayer";
 window[dataLayerName] = window[dataLayerName] || [];
 function gtag() {
     window[dataLayerName].push(arguments);
 }
 
 function setConsentInitStates(consentData) {
+    // Advanced Consent Mode (#165): the synchronous denied `consent default`
+    // is already emitted inline in <head> (print_gcm_default_inline) so it
+    // runs before the page's gtag snippet. Skip here so we never emit a
+    // SECOND `consent default`, which Consent Mode tooling flags as resetting
+    // consent (issue #149). The `consent update` path is unchanged.
+    if (data.advanced_mode) return;
     if (waitForTime > 0) consentData.wait_for_update = waitForTime;
     gtag("consent", "default", consentData);
 }
@@ -61,8 +67,14 @@ function setNpaIfDenied(adStorage) {
     gtag("set", { npa: adStorage === "denied" ? 1 : 0 });
 }
 
-gtag("set", "ads_data_redaction", !!data.ads_data_redaction);
-gtag("set", "url_passthrough", !!data.url_passthrough);
+// In Advanced Consent Mode these are already emitted by the synchronous
+// inline <head> bootstrap (print_gcm_default_inline); skip here to avoid a
+// duplicate set (#165 F6). Both paths use the same dataLayer array (F4), so
+// the skip is purely cosmetic, but keeping a single emitter is cleaner.
+if (!data.advanced_mode) {
+    gtag("set", "ads_data_redaction", !!data.ads_data_redaction);
+    gtag("set", "url_passthrough", !!data.url_passthrough);
+}
 
 // IMPORTANT: we must parse the consent cookie BEFORE emitting any consent
 // states. We follow the standard Consent Mode pattern (matching CookieYes
@@ -75,7 +87,12 @@ gtag("set", "url_passthrough", !!data.url_passthrough);
 //
 // Order matters:
 //   1. parseConsentCookie() -> read cookie synchronously
-//   2.  always emit the region-specific / denied baseline `consent default`
+//   2.  emit the region-specific / denied baseline `consent default`
+//       (Basic mode). In Advanced Consent Mode (#165) this step is SKIPPED
+//       here — setConsentInitStates() early-returns — because the denied
+//       baseline is already emitted synchronously in <head> by
+//       print_gcm_default_inline(), as a single GLOBAL most-restrictive
+//       default rather than per-region.
 //   3.  if cookie present -> emit `consent update` with the stored grants
 //
 // FAZ_META_KEYS must be declared BEFORE this call: parseConsentCookie() reads
@@ -91,8 +108,10 @@ var FAZ_META_KEYS = { rev: 1, action: 1, consentid: 1, gpc: 1 };
 
 var initialCookieObj = parseConsentCookie();
 
-// Baseline consent DEFAULT (region-specific / denied) is ALWAYS emitted first —
-// for first-time AND returning visitors. Consent Mode expects exactly one
+// Baseline consent DEFAULT (region-specific / denied) is emitted first in
+// Basic mode — for first-time AND returning visitors. (In Advanced Consent
+// Mode it is emitted synchronously in <head> instead; setConsentInitStates()
+// below no-ops.) Consent Mode expects exactly one
 // well-formed `consent default` before any update; emitting a SECOND
 // `consent default` with granted values to restore a returning visitor (issue
 // #149) is flagged by Consent Mode tooling as resetting consent. The returning

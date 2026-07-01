@@ -35,6 +35,13 @@ class Gcm_Settings extends Store {
 			'ads_data_redaction' => false,
 			'gacm_enabled' => false,
 			'gacm_provider_ids' => '',
+			// Advanced Consent Mode (#165): when on, the Google tag stack
+			// (gtag.js / GA4 / Ads) loads BEFORE consent with a synchronous
+			// `consent default → denied`, so it sends cookieless/modeled pings
+			// and upgrades on consent. Non-Google trackers and the GTM
+			// container stay hard-blocked. Default off — existing installs
+			// keep doing Basic mode (tags only after consent).
+			'advanced_mode' => false,
 			// When true and marketing consent is denied, serve non-personalized ads:
 			// ad_storage = granted, but ad_user_data / ad_personalization = denied.
 			// See https://support.google.com/adsense/answer/13554116
@@ -214,6 +221,7 @@ class Gcm_Settings extends Store {
 			case 'ads_data_redaction':
 			case 'gacm_enabled':
 			case 'non_personalized_ads_fallback':
+			case 'advanced_mode':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'wait_for_update':
@@ -233,5 +241,18 @@ class Gcm_Settings extends Store {
 	 */
 	public function is_gcm_enabled() {
 		return $this->get( 'status' );
+	}
+
+	/**
+	 * Whether Advanced Consent Mode is active (#165).
+	 *
+	 * Only meaningful when GCM itself is enabled: it lets Consent-Mode-aware
+	 * Google tags load before consent (gated by `consent default → denied`)
+	 * instead of being hard-blocked. Default off.
+	 *
+	 * @return boolean
+	 */
+	public function is_advanced_mode() {
+		return $this->get( 'status' ) && faz_sanitize_bool( $this->get( 'advanced_mode' ) );
 	}
 }

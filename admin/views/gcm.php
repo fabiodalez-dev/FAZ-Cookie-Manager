@@ -116,6 +116,18 @@ defined( 'ABSPATH' ) || exit;
 					<?php esc_html_e( 'When a visitor rejects marketing cookies, ad_storage / ad_user_data / ad_personalization all stay denied (no ad cookies are written) and the plugin signals npa = 1. Under Consent Mode v2 this already serves non-personalized, cookieless ads — compliant in the EEA/UK/CH. The plugin no longer grants ad_storage after a reject.', 'faz-cookie-manager' ); ?>
 				</div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="advanced_mode" aria-describedby="faz-gcm-advanced-help">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Advanced Consent Mode (load Google tags before consent)', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help" id="faz-gcm-advanced-help">
+					<strong><?php esc_html_e( 'This lets Google tags (gtag.js / GA4 / Google Ads) load BEFORE consent.', 'faz-cookie-manager' ); ?></strong><br>
+					<?php esc_html_e( 'They run with consent default → denied, so pre-consent hits are cookieless (Google\'s "Advanced"/modeled mode) and upgrade to full measurement once the visitor accepts. Non-Google trackers and the Google Tag Manager container (gtm.js) stay fully blocked.', 'faz-cookie-manager' ); ?><br>
+					<?php esc_html_e( 'Leave this OFF for the strictest, block-everything-before-consent behaviour. Loading Google before consent is a legal judgement call: some EU authorities still treat cookieless pings as a third-party transfer, so enabling it is your responsibility as the site operator. Default: off.', 'faz-cookie-manager' ); ?>
+				</div>
+			</div>
 		</div>
 	</div>
 

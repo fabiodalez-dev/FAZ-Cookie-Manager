@@ -174,6 +174,11 @@ class Api extends Rest_Controller {
 					'type'        => 'boolean',
 					'context'     => array( 'view', 'edit' ),
 				),
+				'advanced_mode' => array(
+					'description' => __( 'Advanced Consent Mode: load Google tags before consent.', 'faz-cookie-manager' ),
+					'type'        => 'boolean',
+					'context'     => array( 'view', 'edit' ),
+				),
 			),
 		);
 

@@ -3715,6 +3715,13 @@ function _fazShouldBlockResource(category, target, serviceId) {
         if (targetConsent === "yes") return false;
     }
 
+    // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
+    // gated by the denied `consent default`. gtm.js is not matched. Placed
+    // AFTER the per-service checks so an explicit svc.<id>:no (a deliberate
+    // rejection of this Google service) still hard-blocks it — the exemption
+    // only covers the pre-consent / category-default state.
+    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(target)) return false;
+
     if (category) return _fazIsCategoryToBeBlocked(category);
     return _fazShouldBlockProvider(target);
 }
@@ -3777,6 +3784,23 @@ function _fazIsDeferredPlaceholderType(type) {
     var t = type.toLowerCase();
     return t === "litespeed/javascript" || t === "rocketlazyloadjs";
 }
+/**
+ * Advanced Consent Mode (#165): whether a URL is a Consent-Mode-aware Google
+ * tag (gtag.js / GA4 / Ads) that may load before consent. gtag-direct only —
+ * the GTM container (gtm.js) is intentionally NOT matched, so it stays blocked.
+ * These URL patterns are kept in sync with is_gcm_managed_script() in
+ * frontend/class-frontend.php; the PHP side additionally matches server-rendered
+ * inline gtag bootstrap calls (gtag('config'/'js'), which have no client-side
+ * equivalent because dynamically-created scripts are gated by their src URL).
+ */
+function _fazIsGcmManaged(u) {
+    if (!u) return false;
+    u = String(u).toLowerCase();
+    return u.indexOf('googletagmanager.com/gtag/js') > -1
+        || u.indexOf('googleadservices.com') > -1
+        || u.indexOf('googlesyndication.com') > -1
+        || u.indexOf('doubleclick.net') > -1;
+}
 function _fazShouldChangeType(element, src, typeOverride) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
     var url = src ? src : element.src;
@@ -3832,6 +3856,13 @@ function _fazShouldChangeType(element, src, typeOverride) {
         if (explicit === "no") return true;
         if (explicit === "yes") return false;
     }
+    // Advanced Consent Mode (#165): let Consent-Mode-aware Google tags load
+    // before consent (the synchronous denied `consent default` in <head> keeps
+    // their pre-consent hits cookieless); mirrors the server-side
+    // is_gcm_managed_script() exemption. gtm.js stays blocked (not matched).
+    // Placed AFTER the explicit per-service check above so an svc.<id>:no
+    // (deliberate rejection of this Google service) still hard-blocks it.
+    if (_fazStore._gcmAdvanced && _fazIsGcmManaged(url)) return false;
     // Tracker decision (also the exemption gate): block when the element's
     // declared category is to be blocked OR its URL matches a known provider —
     // matching the MutationObserver path. A native ES module / first-party WP
