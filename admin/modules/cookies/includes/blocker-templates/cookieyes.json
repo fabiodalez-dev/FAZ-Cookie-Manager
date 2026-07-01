@@ -1,0 +1,13 @@
+{
+    "id": "cookieyes",
+    "name": "CookieYes",
+    "description": "Blocks CookieYes consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "cookieyes.com",
+        "cdn-cookieyes.com"
+    ],
+    "cookies": [
+        "cookieyes-*"
+    ]
+}

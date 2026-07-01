@@ -1,0 +1,17 @@
+{
+    "id": "adroll",
+    "name": "AdRoll",
+    "description": "Blocks AdRoll advertising retargeting and audience pixels.",
+    "category": "marketing",
+    "patterns": [
+        "adroll.com",
+        "d.adroll.com",
+        "s.adroll.com",
+        "__adroll"
+    ],
+    "cookies": [
+        "__adroll",
+        "__ar_v4",
+        "__adroll_fpc"
+    ]
+}

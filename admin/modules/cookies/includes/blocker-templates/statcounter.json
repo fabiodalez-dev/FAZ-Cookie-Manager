@@ -1,0 +1,15 @@
+{
+    "id": "statcounter",
+    "name": "StatCounter",
+    "description": "Blocks StatCounter visitor analytics and page-view tracking.",
+    "category": "analytics",
+    "patterns": [
+        "statcounter.com",
+        "c.statcounter.com",
+        "statcounter.com/counter/counter.js"
+    ],
+    "cookies": [
+        "is_unique",
+        "sc_is_visitor_unique"
+    ]
+}

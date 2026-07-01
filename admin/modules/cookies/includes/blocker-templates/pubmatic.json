@@ -1,0 +1,15 @@
+{
+    "id": "pubmatic",
+    "name": "PubMatic",
+    "description": "Blocks PubMatic advertising exchange and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "pubmatic.com",
+        "ads.pubmatic.com",
+        "image6.pubmatic.com"
+    ],
+    "cookies": [
+        "KADUSERCOOKIE",
+        "PugT"
+    ]
+}

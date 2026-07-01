@@ -1,0 +1,13 @@
+{
+    "id": "jwplayer",
+    "name": "JW Player",
+    "description": "Blocks JW Player video hosting, player embeds and analytics.",
+    "category": "marketing",
+    "patterns": [
+        "jwpcdn.com",
+        "jwplayer.com",
+        "content.jwplatform.com",
+        "jwpltx.com"
+    ],
+    "cookies": []
+}

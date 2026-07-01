@@ -2004,5 +2004,345 @@
             "_cs_mk",
             "_cs_same_site"
         ]
+    },
+    "adroll": {
+        "label": "AdRoll",
+        "category": "marketing",
+        "patterns": [
+            "adroll.com",
+            "d.adroll.com",
+            "s.adroll.com",
+            "__adroll"
+        ],
+        "cookies": [
+            "__adroll",
+            "__ar_v4",
+            "__adroll_fpc"
+        ]
+    },
+    "the-trade-desk": {
+        "label": "The Trade Desk",
+        "category": "marketing",
+        "patterns": [
+            "adsrvr.org",
+            "js.adsrvr.org",
+            "insight.adsrvr.org"
+        ],
+        "cookies": [
+            "TDID",
+            "TDCPM"
+        ]
+    },
+    "xandr": {
+        "label": "Xandr (AppNexus)",
+        "category": "marketing",
+        "patterns": [
+            "adnxs.com",
+            "ib.adnxs.com",
+            "secure.adnxs.com"
+        ],
+        "cookies": [
+            "anj",
+            "uuid2"
+        ]
+    },
+    "pubmatic": {
+        "label": "PubMatic",
+        "category": "marketing",
+        "patterns": [
+            "pubmatic.com",
+            "ads.pubmatic.com",
+            "image6.pubmatic.com"
+        ],
+        "cookies": [
+            "KADUSERCOOKIE",
+            "PugT"
+        ]
+    },
+    "rubicon-project": {
+        "label": "Magnite (Rubicon Project)",
+        "category": "marketing",
+        "patterns": [
+            "rubiconproject.com",
+            "fastlane.rubiconproject.com",
+            "eus.rubiconproject.com"
+        ],
+        "cookies": [
+            "khaos",
+            "rpb",
+            "rpx"
+        ]
+    },
+    "openx": {
+        "label": "OpenX",
+        "category": "marketing",
+        "patterns": [
+            "openx.net",
+            "us-u.openx.net",
+            "rtb.openx.net"
+        ],
+        "cookies": [
+            "OX_*"
+        ]
+    },
+    "media-net": {
+        "label": "Media.net",
+        "category": "marketing",
+        "patterns": [
+            "media.net",
+            "contextual.media.net",
+            "static.media.net"
+        ],
+        "cookies": []
+    },
+    "liveramp": {
+        "label": "LiveRamp",
+        "category": "marketing",
+        "patterns": [
+            "rlcdn.com",
+            "idsync.rlcdn.com",
+            "liveramp.com"
+        ],
+        "cookies": [
+            "rlas3",
+            "pxrc"
+        ]
+    },
+    "comscore": {
+        "label": "Comscore (Scorecard Research)",
+        "category": "marketing",
+        "patterns": [
+            "scorecardresearch.com",
+            "sb.scorecardresearch.com",
+            "comscore.com"
+        ],
+        "cookies": []
+    },
+    "nielsen": {
+        "label": "Nielsen",
+        "category": "marketing",
+        "patterns": [
+            "imrworldwide.com",
+            "secure-us.imrworldwide.com",
+            "nielsen.com"
+        ],
+        "cookies": []
+    },
+    "yahoo-analytics": {
+        "label": "Yahoo Analytics / Dot",
+        "category": "marketing",
+        "patterns": [
+            "analytics.yahoo.com",
+            "sp.analytics.yahoo.com",
+            "s.yimg.com/wi"
+        ],
+        "cookies": [
+            "A1",
+            "A3",
+            "IDSYNC"
+        ]
+    },
+    "chartbeat": {
+        "label": "Chartbeat",
+        "category": "analytics",
+        "patterns": [
+            "chartbeat.com",
+            "static.chartbeat.com",
+            "ping.chartbeat.net"
+        ],
+        "cookies": [
+            "_cb",
+            "_chartbeat2",
+            "_cb_svref"
+        ]
+    },
+    "parsely": {
+        "label": "Parse.ly",
+        "category": "analytics",
+        "patterns": [
+            "parsely.com",
+            "cdn.parsely.com",
+            "p1.parsely.com"
+        ],
+        "cookies": [
+            "_parsely_visitor",
+            "_parsely_session"
+        ]
+    },
+    "statcounter": {
+        "label": "StatCounter",
+        "category": "analytics",
+        "patterns": [
+            "statcounter.com",
+            "c.statcounter.com",
+            "statcounter.com/counter/counter.js"
+        ],
+        "cookies": [
+            "is_unique",
+            "sc_is_visitor_unique"
+        ]
+    },
+    "inspectlet": {
+        "label": "Inspectlet",
+        "category": "analytics",
+        "patterns": [
+            "inspectlet.com",
+            "cdn.inspectlet.com",
+            "hn.inspectlet.com",
+            "__insp"
+        ],
+        "cookies": [
+            "__insp_*",
+            "_insp_*"
+        ]
+    },
+    "simple-analytics": {
+        "label": "Simple Analytics",
+        "category": "analytics",
+        "patterns": [
+            "simpleanalytics.com",
+            "scripts.simpleanalyticscdn.com",
+            "queue.simpleanalyticscdn.com"
+        ],
+        "cookies": []
+    },
+    "piwik-pro": {
+        "label": "Piwik PRO",
+        "category": "analytics",
+        "patterns": [
+            "piwik.pro",
+            "containers.piwik.pro",
+            ".piwik.pro/ppms"
+        ],
+        "cookies": []
+    },
+    "dynamic-yield": {
+        "label": "Dynamic Yield",
+        "category": "marketing",
+        "patterns": [
+            "dynamicyield.com",
+            "cdn.dynamicyield.com",
+            "st.dynamicyield.com"
+        ],
+        "cookies": [
+            "_dyid",
+            "_dyid_server",
+            "_dycst",
+            "dyid"
+        ]
+    },
+    "abtasty": {
+        "label": "AB Tasty",
+        "category": "analytics",
+        "patterns": [
+            "abtasty.com",
+            "try.abtasty.com"
+        ],
+        "cookies": [
+            "ABTasty",
+            "ABTastySession"
+        ]
+    },
+    "brevo": {
+        "label": "Brevo (Sendinblue)",
+        "category": "marketing",
+        "patterns": [
+            "sibautomation.com",
+            "sendinblue.com",
+            "brevo.com"
+        ],
+        "cookies": []
+    },
+    "constant-contact": {
+        "label": "Constant Contact",
+        "category": "marketing",
+        "patterns": [
+            "ctctcdn.com",
+            "constantcontact.com"
+        ],
+        "cookies": []
+    },
+    "getresponse": {
+        "label": "GetResponse",
+        "category": "marketing",
+        "patterns": [
+            "getresponse.com",
+            "gr-wcon.com",
+            "app.getresponse.com"
+        ],
+        "cookies": []
+    },
+    "brightcove": {
+        "label": "Brightcove",
+        "category": "marketing",
+        "patterns": [
+            "players.brightcove.net",
+            "brightcove.com",
+            "bcove.video"
+        ],
+        "cookies": []
+    },
+    "jwplayer": {
+        "label": "JW Player",
+        "category": "marketing",
+        "patterns": [
+            "jwpcdn.com",
+            "jwplayer.com",
+            "content.jwplatform.com",
+            "jwpltx.com"
+        ],
+        "cookies": []
+    },
+    "onesignal": {
+        "label": "OneSignal",
+        "category": "functional",
+        "patterns": [
+            "onesignal.com",
+            "cdn.onesignal.com",
+            "OneSignalSDK"
+        ],
+        "cookies": []
+    },
+    "yotpo": {
+        "label": "Yotpo",
+        "category": "functional",
+        "patterns": [
+            "yotpo.com",
+            "staticw2.yotpo.com",
+            "cdn-widgetsrepository.yotpo.com"
+        ],
+        "cookies": []
+    },
+    "iubenda": {
+        "label": "iubenda",
+        "category": "functional",
+        "patterns": [
+            "iubenda.com",
+            "cdn.iubenda.com",
+            "cs.iubenda.com"
+        ],
+        "cookies": []
+    },
+    "cookieyes": {
+        "label": "CookieYes",
+        "category": "functional",
+        "patterns": [
+            "cookieyes.com",
+            "cdn-cookieyes.com"
+        ],
+        "cookies": [
+            "cookieyes-*"
+        ]
+    },
+    "didomi": {
+        "label": "Didomi",
+        "category": "functional",
+        "patterns": [
+            "didomi.io",
+            "sdk.privacy-center.org"
+        ],
+        "cookies": [
+            "didomi_token"
+        ]
     }
 }

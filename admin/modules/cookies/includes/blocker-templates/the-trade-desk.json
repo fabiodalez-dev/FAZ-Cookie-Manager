@@ -1,0 +1,15 @@
+{
+    "id": "the-trade-desk",
+    "name": "The Trade Desk",
+    "description": "Blocks The Trade Desk programmatic advertising and identity syncing.",
+    "category": "marketing",
+    "patterns": [
+        "adsrvr.org",
+        "js.adsrvr.org",
+        "insight.adsrvr.org"
+    ],
+    "cookies": [
+        "TDID",
+        "TDCPM"
+    ]
+}

@@ -1,0 +1,11 @@
+{
+    "id": "constant-contact",
+    "name": "Constant Contact",
+    "description": "Blocks Constant Contact email marketing and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "ctctcdn.com",
+        "constantcontact.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "nielsen",
+    "name": "Nielsen",
+    "description": "Blocks Nielsen audience and media measurement.",
+    "category": "marketing",
+    "patterns": [
+        "imrworldwide.com",
+        "secure-us.imrworldwide.com",
+        "nielsen.com"
+    ],
+    "cookies": []
+}

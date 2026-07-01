@@ -1,0 +1,12 @@
+{
+    "id": "onesignal",
+    "name": "OneSignal",
+    "description": "Blocks OneSignal web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "onesignal.com",
+        "cdn.onesignal.com",
+        "OneSignalSDK"
+    ],
+    "cookies": []
+}

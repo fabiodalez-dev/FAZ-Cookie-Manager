@@ -1,0 +1,12 @@
+{
+    "id": "brightcove",
+    "name": "Brightcove",
+    "description": "Blocks Brightcove video hosting and player embeds.",
+    "category": "marketing",
+    "patterns": [
+        "players.brightcove.net",
+        "brightcove.com",
+        "bcove.video"
+    ],
+    "cookies": []
+}
