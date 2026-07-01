@@ -361,15 +361,74 @@ let writable = true;
 try { const s = w.HTMLStyleElement.prototype.appendChild; w.HTMLStyleElement.prototype.appendChild = s; } catch (e) { writable = false; }
 eq('B: gated style methods are writable (no strict-mode throw on reassign)', writable, true);
 // F: multiple blocked chunks accumulate — restore rebuilds ALL of them, not just the last.
+function restoreStyleCss(style) {
+  setConsent({ functional: 'yes' });
+  w.document.head.appendChild(style);
+  w.eval('_fazUnblockServerSide()');
+  const out = style.textContent;
+  resetConsent();
+  return out;
+}
+
 const cum = w.document.createElement('style');
-cum.appendChild(w.document.createTextNode('@font-face{font-family:A;src:url("' + GFONT + '")}'));
-cum.appendChild(w.document.createTextNode('@import "https://fonts.googleapis.com/css?family=X";'));
-setConsent({ functional: 'yes' });
-w.document.head.appendChild(cum);
-w.eval('_fazUnblockServerSide()');
+const cssA = '@font-face{font-family:A;src:url("' + GFONT + '")}';
+const cssB = '@font-face{font-family:B;src:url("https://fonts.gstatic.com/s/roboto/v30/second.woff2")}';
+const cssImport = '@import "https://fonts.googleapis.com/css?family=X";';
+const cssSafe = '.safe-local{color:#123}';
+cum.appendChild(w.document.createTextNode(cssA));
+cum.appendChild(w.document.createTextNode(cssSafe));
+cum.appendChild(w.document.createTextNode(cssImport));
+const cumRestored = restoreStyleCss(cum);
 eq('F: cumulative restore rebuilds the first blocked chunk (gstatic)', cum.textContent.includes('fonts.gstatic.com'), true);
 eq('F: cumulative restore rebuilds the second blocked chunk (googleapis @import)', cum.textContent.includes('fonts.googleapis.com'), true);
-resetConsent();
+eq('F: cumulative restore keeps benign chunks appended while parked', cumRestored, cssA + cssSafe + cssImport);
+
+const setterReplace = w.document.createElement('style');
+setterReplace.textContent = cssA;
+setterReplace.textContent = cssB;
+eq('F2: second textContent assignment replaces the prior parked original', restoreStyleCss(setterReplace), cssB);
+
+const replaceStyle = w.document.createElement('style');
+const replacedNode = w.document.createTextNode(cssA);
+replaceStyle.appendChild(replacedNode);
+replaceStyle.replaceChild(w.document.createTextNode(cssB), replacedNode);
+eq('F2: replaceChild restore does not resurrect the replaced node', restoreStyleCss(replaceStyle), cssB);
+
+const orderStyle = w.document.createElement('style');
+const orderRef = w.document.createTextNode(cssB);
+orderStyle.appendChild(orderRef);
+orderStyle.insertBefore(w.document.createTextNode(cssImport), orderRef);
+eq('F2: insertBefore restore preserves DOM order', restoreStyleCss(orderStyle), cssImport + cssB);
+
+const dataSetterStyle = w.document.createElement('style');
+const dataSetterNode = w.document.createTextNode(cssA);
+dataSetterStyle.appendChild(dataSetterNode);
+dataSetterNode.data = cssB;
+eq('F3: CharacterData.data replacement updates the parked original', restoreStyleCss(dataSetterStyle), cssB);
+
+const appendDataStyle = w.document.createElement('style');
+const appendDataNode = w.document.createTextNode(cssA);
+appendDataStyle.appendChild(appendDataNode);
+appendDataNode.appendData(cssImport);
+eq('F3: CharacterData.appendData preserves appended blocked CSS on restore', restoreStyleCss(appendDataStyle), cssA + cssImport);
+
+const insertDataStyle = w.document.createElement('style');
+const insertDataNode = w.document.createTextNode(cssB);
+insertDataStyle.appendChild(insertDataNode);
+insertDataNode.insertData(0, cssImport);
+eq('F3: CharacterData.insertData preserves insertion order on restore', restoreStyleCss(insertDataStyle), cssImport + cssB);
+
+const htmlBox = w.document.createElement('div');
+htmlBox.innerHTML = '<style id="faz-innerhtml-style">' + cssA + '</style>';
+const innerHtmlStyle = htmlBox.querySelector('#faz-innerhtml-style');
+eq('F4: parent innerHTML neutralizes style CSS before insertion', innerHtmlStyle.textContent.includes('fonts.gstatic.com'), false);
+eq('F4: parent innerHTML parks original style CSS', typeof innerHtmlStyle.getAttribute('data-faz-css'), 'string');
+eq('F4: parent innerHTML style restores original CSS after consent', restoreStyleCss(innerHtmlStyle), cssA);
+
+const adjacentBox = w.document.createElement('div');
+adjacentBox.insertAdjacentHTML('beforeend', '<style id="faz-adjacent-style">' + cssImport + '</style>');
+const adjacentStyle = adjacentBox.querySelector('#faz-adjacent-style');
+eq('F4: insertAdjacentHTML neutralizes and restores blocked style CSS', restoreStyleCss(adjacentStyle), cssImport);
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

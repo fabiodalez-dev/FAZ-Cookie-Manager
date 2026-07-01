@@ -3075,19 +3075,106 @@ function _fazBase64DecodeUtf8(encoded) {
     }
 }
 
-function _fazPrepareStyleCss(style, css) {
-    if (!_fazStore._block || !css || typeof css !== "string" || !_fazCssShouldBlock(css)) return css;
-    // Accumulate the ORIGINAL CSS across successive append/appendChild/insertBefore
-    // calls so the restore rebuilds the whole style, not just the last blocked
-    // chunk. Keep the first-tagged category (don't overwrite on later chunks).
-    var prior = style.getAttribute ? style.getAttribute("data-faz-css") : null;
-    var fullOriginal = prior ? (_fazBase64DecodeUtf8(prior) + css) : css;
-    var encoded = _fazBase64EncodeUtf8(fullOriginal);
-    if (encoded) style.setAttribute("data-faz-css", encoded);
-    if (!(style.getAttribute && style.getAttribute("data-faz-category"))) {
-        style.setAttribute("data-faz-category", _fazCssBlockedCategory(css));
+var _fazStyleOriginalCssByNode = window.WeakMap ? new WeakMap() : null;
+
+function _fazIsStyleTextNode(node) {
+    return !!(node && (node.nodeType === 3 || node.nodeType === 4));
+}
+
+function _fazHasStyleNodeOriginalCss(node) {
+    if (!node) return false;
+    if (_fazStyleOriginalCssByNode && _fazStyleOriginalCssByNode.has(node)) return true;
+    return Object.prototype.hasOwnProperty.call(node, "__fazOriginalCss");
+}
+
+function _fazSetStyleNodeOriginalCss(node, css) {
+    if (!node) return;
+    if (_fazStyleOriginalCssByNode) _fazStyleOriginalCssByNode.set(node, String(css || ""));
+    try { node.__fazOriginalCss = String(css || ""); } catch (_e) { /* ignore expando failures */ }
+}
+
+function _fazClearStyleNodeOriginalCss(node) {
+    if (!node) return;
+    if (_fazStyleOriginalCssByNode) _fazStyleOriginalCssByNode.delete(node);
+    try { delete node.__fazOriginalCss; } catch (_e) { /* ignore expando failures */ }
+}
+
+function _fazGetStyleNodeOriginalCss(node) {
+    if (!node) return "";
+    if (_fazStyleOriginalCssByNode && _fazStyleOriginalCssByNode.has(node)) {
+        return _fazStyleOriginalCssByNode.get(node) || "";
     }
-    return _fazNeutralizeCssUrls(css);
+    if (Object.prototype.hasOwnProperty.call(node, "__fazOriginalCss")) {
+        return node.__fazOriginalCss || "";
+    }
+    return typeof node.nodeValue === "string" ? node.nodeValue : "";
+}
+
+function _fazPrimeStyleCssMarkers(style) {
+    if (!style || !style.getAttribute || !style.childNodes) return;
+    var encoded = style.getAttribute("data-faz-css") || "";
+    if (!encoded) return;
+    var original = _fazBase64DecodeUtf8(encoded);
+    if (!original) return;
+    if (style.childNodes.length === 1 && _fazIsStyleTextNode(style.childNodes[0]) && !_fazHasStyleNodeOriginalCss(style.childNodes[0])) {
+        _fazSetStyleNodeOriginalCss(style.childNodes[0], original);
+    }
+}
+
+function _fazStyleOriginalCss(style) {
+    if (!style || !style.childNodes) return "";
+    _fazPrimeStyleCssMarkers(style);
+    var css = "";
+    for (var i = 0; i < style.childNodes.length; i++) {
+        var node = style.childNodes[i];
+        css += _fazIsStyleTextNode(node) ? _fazGetStyleNodeOriginalCss(node) : (node.textContent || "");
+    }
+    return css;
+}
+
+function _fazSyncStyleCssAttribute(style) {
+    if (!style || !style.setAttribute || !style.removeAttribute) return;
+    var original = _fazStyleOriginalCss(style);
+    if (original && _fazStore._block && _fazCssShouldBlock(original)) {
+        var encoded = _fazBase64EncodeUtf8(original);
+        if (encoded) style.setAttribute("data-faz-css", encoded);
+        style.setAttribute("data-faz-category", _fazCssBlockedCategory(original));
+    } else {
+        style.removeAttribute("data-faz-css");
+        style.removeAttribute("data-faz-category");
+    }
+}
+
+function _fazPrepareStyleStringArg(style, css) {
+    if (!_fazStore._block || !css || typeof css !== "string" || !_fazCssShouldBlock(css)) return css;
+    var doc = (style && style.ownerDocument) || document;
+    var node = doc.createTextNode(_fazNeutralizeCssUrls(css));
+    _fazSetStyleNodeOriginalCss(node, css);
+    return node;
+}
+
+function _fazPrepareStyleTextNode(style, node) {
+    if (!_fazIsStyleTextNode(node)) return;
+    var original = _fazGetStyleNodeOriginalCss(node);
+    if (!_fazStore._block || !original || !_fazCssShouldBlock(original)) {
+        if (_fazHasStyleNodeOriginalCss(node) && node.nodeValue !== original) node.nodeValue = original;
+        _fazClearStyleNodeOriginalCss(node);
+        return;
+    }
+    var neutralized = _fazNeutralizeCssUrls(original);
+    _fazSetStyleNodeOriginalCss(node, original);
+    if (node.nodeValue !== neutralized) node.nodeValue = neutralized;
+}
+
+function _fazPrepareStyleNodeTree(style, node) {
+    if (_fazIsStyleTextNode(node)) {
+        _fazPrepareStyleTextNode(style, node);
+        return;
+    }
+    if (!node || !node.childNodes) return;
+    for (var i = 0; i < node.childNodes.length; i++) {
+        _fazPrepareStyleNodeTree(style, node.childNodes[i]);
+    }
 }
 
 function _fazFindAccessorDescriptor(proto, prop) {
@@ -3110,12 +3197,24 @@ function _fazGateStyleTextSetter(proto, prop) {
         get: function () { return nativeGet.call(this); },
         set: function (val) {
             var s = String(val == null ? "" : val);
-            var out;
             // Fail open on any error in the CSS-block logic: assign the original
             // CSS rather than dropping it (a thrown error must never blank the
             // page's inline styles).
-            try { out = _fazPrepareStyleCss(this, s); } catch (e) { out = s; }
-            nativeSet.call(this, out);
+            try {
+                if (_fazStore._block && s && _fazCssShouldBlock(s)) {
+                    nativeSet.call(this, _fazNeutralizeCssUrls(s));
+                    if (_fazIsStyleTextNode(this.firstChild)) _fazSetStyleNodeOriginalCss(this.firstChild, s);
+                } else {
+                    nativeSet.call(this, s);
+                }
+                _fazSyncStyleCssAttribute(this);
+            } catch (e) {
+                try {
+                    this.removeAttribute("data-faz-css");
+                    this.removeAttribute("data-faz-category");
+                } catch (_ignore) { /* ignore */ }
+                nativeSet.call(this, s);
+            }
         }
     });
 }
@@ -3135,23 +3234,30 @@ function _fazGateStyleTextNodeMethod(proto, methodName) {
         enumerable: true,
         value: function () {
             var args = Array.prototype.slice.call(arguments);
+            if (methodName === "insertBefore" && args.length > 1 && args[1] !== null && args[1] && args[1].parentNode !== this) {
+                return native.apply(this, args);
+            }
+            if (methodName === "replaceChild" && (!args[1] || args[1].parentNode !== this)) {
+                return native.apply(this, args);
+            }
+            try { _fazPrimeStyleCssMarkers(this); } catch (_primeErr) { /* keep native behavior */ }
             var cssArgCount = methodName === "append" ? args.length : Math.min(args.length, 1);
             for (var i = 0; i < cssArgCount; i++) {
                 var arg = args[i];
                 try {
-                    if (typeof arg === "string") {
-                        args[i] = _fazPrepareStyleCss(this, arg);
-                    } else if (arg && (arg.nodeType === 3 || arg.nodeType === 4) && typeof arg.nodeValue === "string") {
-                        var css = _fazPrepareStyleCss(this, arg.nodeValue);
-                        // Mutate the node's value in place rather than inserting a
-                        // clone, so the native call inserts and returns the caller's
-                        // exact node — node identity, parentNode, and the return
-                        // value contract are preserved for CSS-in-JS libraries.
-                        if (css !== arg.nodeValue) arg.nodeValue = css;
+                    if (methodName === "append" && typeof arg === "string") {
+                        args[i] = _fazPrepareStyleStringArg(this, arg);
+                    } else {
+                        // Mutate text nodes in place rather than inserting clones, so
+                        // the native call keeps node identity, parentNode, and return
+                        // value semantics intact.
+                        _fazPrepareStyleNodeTree(this, arg);
                     }
                 } catch (e) { /* leave this argument untouched on any error */ }
             }
-            return native.apply(this, args);
+            var result = native.apply(this, args);
+            try { _fazSyncStyleCssAttribute(this); } catch (_syncErr) { /* native mutation already succeeded */ }
+            return result;
         }
     });
 }
@@ -3162,6 +3268,147 @@ _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototyp
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "insertBefore");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "replaceChild");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "append");
+
+function _fazStyleParentForCharacterData(node) {
+    var parent = node && node.parentNode;
+    if (!parent || parent.nodeType !== 1) return null;
+    return (parent.nodeName || "").toLowerCase() === "style" ? parent : null;
+}
+
+function _fazApplyStyleCharacterData(style, node, value, writeValue) {
+    var s = String(value == null ? "" : value);
+    if (_fazStore._block && s && _fazCssShouldBlock(s)) {
+        _fazSetStyleNodeOriginalCss(node, s);
+        writeValue(node, _fazNeutralizeCssUrls(s));
+    } else {
+        _fazClearStyleNodeOriginalCss(node);
+        writeValue(node, s);
+    }
+    _fazSyncStyleCssAttribute(style);
+}
+
+function _fazGateStyleCharacterDataSetter(proto, prop) {
+    if (!proto) return;
+    var desc = _fazFindAccessorDescriptor(proto, prop);
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            var style = _fazStyleParentForCharacterData(this);
+            if (!style) {
+                nativeSet.call(this, val);
+                return;
+            }
+            try {
+                _fazPrimeStyleCssMarkers(style);
+                _fazApplyStyleCharacterData(style, this, val, function (node, value) {
+                    nativeSet.call(node, value);
+                });
+            } catch (e) {
+                nativeSet.call(this, val);
+            }
+        }
+    });
+}
+
+function _fazGateStyleCharacterDataMethod(proto, methodName) {
+    if (!proto) return;
+    var native = proto[methodName];
+    if (typeof native !== "function") return;
+    Object.defineProperty(proto, methodName, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: function () {
+            var style = _fazStyleParentForCharacterData(this);
+            if (!style) return native.apply(this, arguments);
+            try {
+                _fazPrimeStyleCssMarkers(style);
+                var doc = this.ownerDocument || document;
+                var probe = doc.createTextNode(_fazGetStyleNodeOriginalCss(this));
+                native.apply(probe, arguments);
+                _fazApplyStyleCharacterData(style, this, probe.data, function (node, value) {
+                    node.nodeValue = value;
+                });
+                return undefined;
+            } catch (e) {
+                return native.apply(this, arguments);
+            }
+        }
+    });
+}
+
+_fazGateStyleCharacterDataSetter(window.CharacterData && CharacterData.prototype, "data");
+_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "appendData");
+_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "insertData");
+_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "deleteData");
+_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "replaceData");
+
+function _fazEscapeHtmlAttr(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;");
+}
+
+function _fazPrepareStyleTagHtml(full, attrs, css) {
+    if (!_fazStore._block || !css || typeof css !== "string" || !_fazCssShouldBlock(css)) return full;
+    if (attrs && /\bdata-faz-css\s*=/i.test(attrs)) return full;
+    var rewritten = _fazNeutralizeCssUrls(css);
+    if (rewritten === css) return full;
+    var encoded = _fazBase64EncodeUtf8(css);
+    if (!encoded) return full;
+    return '<style' + (attrs || '') +
+        ' data-faz-css="' + _fazEscapeHtmlAttr(encoded) + '"' +
+        ' data-faz-category="' + _fazEscapeHtmlAttr(_fazCssBlockedCategory(css)) + '">' +
+        rewritten +
+        '</style>';
+}
+
+function _fazPrepareStyleHtmlString(html) {
+    if (!html || typeof html !== "string" || html.toLowerCase().indexOf("<style") === -1) return html;
+    return html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, function (full, attrs, css) {
+        try { return _fazPrepareStyleTagHtml(full, attrs || "", css || ""); } catch (e) { return full; }
+    });
+}
+
+function _fazGateHtmlStyleStringSetter(proto, prop) {
+    if (!proto) return;
+    var desc = _fazFindAccessorDescriptor(proto, prop);
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            var html = String(val == null ? "" : val);
+            try { html = _fazPrepareStyleHtmlString(html); } catch (e) { /* fail open */ }
+            nativeSet.call(this, html);
+        }
+    });
+}
+
+function _fazGateInsertAdjacentHtml(proto) {
+    if (!proto || typeof proto.insertAdjacentHTML !== "function") return;
+    var native = proto.insertAdjacentHTML;
+    Object.defineProperty(proto, "insertAdjacentHTML", {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: function (position, html) {
+            var s = String(html == null ? "" : html);
+            try { s = _fazPrepareStyleHtmlString(s); } catch (e) { /* fail open */ }
+            return native.call(this, position, s);
+        }
+    });
+}
+
+_fazGateHtmlStyleStringSetter(window.Element && Element.prototype, "innerHTML");
+_fazGateInsertAdjacentHtml(window.Element && Element.prototype);
 
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
