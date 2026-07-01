@@ -430,5 +430,96 @@ adjacentBox.insertAdjacentHTML('beforeend', '<style id="faz-adjacent-style">' + 
 const adjacentStyle = adjacentBox.querySelector('#faz-adjacent-style');
 eq('F4: insertAdjacentHTML neutralizes and restores blocked style CSS', restoreStyleCss(adjacentStyle), cssImport);
 
+// ---------------------------------------------------------------------------
+// 25 review-coverage tests: blast-radius (global Element.innerHTML/CharacterData
+// gates), no-false-positives, scope breadth, and DOM-follow restore edges.
+// ---------------------------------------------------------------------------
+console.log('\nStyle gate — review coverage (25)');
+const doc = w.document;
+const mkStyle = (c) => { const s = doc.createElement('style'); s.textContent = c; return s; };
+
+// R1-R4 — Element.innerHTML global gate must not touch non-blocked content.
+const rb1 = doc.createElement('div'); rb1.innerHTML = '<p id="rp">hi</p>';
+eq('R1: innerHTML plain markup left intact (element present)', !!rb1.querySelector('#rp'), true);
+eq('R2: innerHTML plain markup not parked', rb1.innerHTML.indexOf('data-faz-css') === -1, true);
+const rb2 = doc.createElement('div'); rb2.innerHTML = '<style id="rb">.ok{color:red}</style>';
+eq('R3: innerHTML benign <style> left intact', rb2.querySelector('#rb').textContent.indexOf('.ok{color:red}') !== -1, true);
+eq('R4: innerHTML benign <style> not parked', rb2.querySelector('#rb').getAttribute('data-faz-css'), null);
+
+// R5-R7 — innerHTML with a blocked <style>: neutralized live, restores on consent.
+const rb3 = doc.createElement('div'); rb3.innerHTML = '<style id="rbk">' + cssImport + '</style>';
+const rb3s = rb3.querySelector('#rbk');
+eq('R5: innerHTML blocked <style> neutralized live', rb3s.textContent.includes('fonts.googleapis.com'), false);
+eq('R6: innerHTML blocked <style> parked', typeof rb3s.getAttribute('data-faz-css'), 'string');
+eq('R7: innerHTML blocked <style> restores original', restoreStyleCss(rb3s), cssImport);
+
+// R8-R9 — insertAdjacentHTML no-false-positive + position preserved.
+const rb5 = doc.createElement('div'); rb5.innerHTML = '<i>keep</i>';
+rb5.insertAdjacentHTML('afterbegin', '<b id="ri">bold</b>');
+eq('R8: insertAdjacentHTML non-style left intact', !!rb5.querySelector('#ri'), true);
+eq('R9: insertAdjacentHTML preserves position (afterbegin first)', rb5.firstElementChild.id, 'ri');
+
+// R10 — CharacterData.data on a text node OUTSIDE a <style> passes through untouched.
+const plainDiv = doc.createElement('div'); const ptn = doc.createTextNode('start'); plainDiv.appendChild(ptn);
+ptn.data = '@import "https://fonts.googleapis.com/css";';
+eq('R10: CharacterData.data outside <style> is untouched', ptn.data, '@import "https://fonts.googleapis.com/css";');
+
+// R11-R12 — replaceData inside a <style> neutralizes + restores.
+const rdStyle = mkStyle('.safe{color:#123}');
+rdStyle.firstChild.replaceData(0, rdStyle.firstChild.length, cssImport);
+eq('R11: replaceData neutralizes blocked CSS live', rdStyle.textContent.includes('fonts.googleapis.com'), false);
+eq('R12: replaceData restores original CSS', restoreStyleCss(rdStyle), cssImport);
+
+// R13-R14 — deleteData / return-value contract on a <style> text node.
+const ddStyle = mkStyle('.a{color:red}');
+ddStyle.firstChild.deleteData(0, 3);
+eq('R13: deleteData on a benign style leaves it un-parked', ddStyle.getAttribute('data-faz-css'), null);
+const cdStyle = mkStyle('.z{color:red}');
+eq('R14: gated appendData returns undefined (native contract)', cdStyle.firstChild.appendData('.q{color:blue}'), undefined);
+
+// R15-R16 — benign appendData stays live, style not parked.
+const adBenign = mkStyle('.a{color:red}');
+adBenign.firstChild.appendData('.later{color:green}');
+eq('R15: benign appendData stays live', adBenign.textContent.includes('.later{color:green}'), true);
+eq('R16: benign style not parked', adBenign.getAttribute('data-faz-css'), null);
+
+// R17-R18 — scope breadth: any blocked-provider url() (not just @font-face).
+eq('R17: background-image url() to a blocked provider is neutralized',
+  mkStyle('.bg{background-image:url("' + GFONT + '")}').textContent.includes('fonts.gstatic.com'), false);
+eq('R18: cursor url() to a blocked provider is neutralized',
+  mkStyle('.cur{cursor:url("' + GFONT + '"),auto}').textContent.includes('fonts.gstatic.com'), false);
+
+// R19-R21 — no-false-positive: non-provider, data:, and untouched styles.
+const np = mkStyle('.np{background:url("https://cdn.example.com/x.png")}');
+eq('R19: non-provider url() is not neutralized', np.textContent.includes('cdn.example.com/x.png'), true);
+eq('R20: non-provider style not parked', np.getAttribute('data-faz-css'), null);
+eq('R21: data: url() is not neutralized',
+  mkStyle('.d{background:url("data:image/gif;base64,R0lGODlhAQABAAAAACw=")}').textContent.includes('data:image/gif'), true);
+
+// R22 — blocking globally off → blocked CSS is not neutralized.
+cfg._block = '';
+eq('R22: blocking globally off → blocked CSS not neutralized',
+  mkStyle(cssImport).textContent.includes('fonts.googleapis.com'), true);
+cfg._block = '1';
+
+// R23 — a user-whitelisted provider is not neutralized.
+cfg._userWhitelist = ['fonts.gstatic.com'];
+eq('R23: whitelisted provider url() is not neutralized',
+  mkStyle('.w{background-image:url("' + GFONT + '")}').textContent.includes('fonts.gstatic.com'), true);
+cfg._userWhitelist = [];
+
+// R24 — replaceChild with an orphan oldNode: native passthrough, gate not corrupted.
+const rc2 = mkStyle('.x{color:red}');
+try { rc2.replaceChild(doc.createTextNode('.y{color:blue}'), doc.createTextNode('orphan')); } catch (e) { /* native NotFoundError is fine */ }
+eq('R24: replaceChild with orphan oldNode does not corrupt the style', rc2.textContent.includes('.x{color:red}'), true);
+
+// R25 — DOM-follow: a removed blocked node is not resurrected on restore.
+const rem = doc.createElement('style');
+rem.appendChild(doc.createTextNode(cssSafe));
+const drop = doc.createTextNode(cssImport);
+rem.appendChild(drop);
+rem.removeChild(drop);
+eq('R25: removed blocked node is not resurrected on restore', restoreStyleCss(rem).includes('fonts.googleapis.com'), false);
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

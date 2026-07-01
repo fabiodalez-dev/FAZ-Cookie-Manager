@@ -3269,6 +3269,38 @@ _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototyp
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "replaceChild");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "append");
 
+// Removal must re-sync data-faz-css from the remaining live nodes, so removing a
+// blocked text node (or clearing the style) doesn't leave a stale attribute that
+// the restore pass would use to resurrect the removed CSS. (review R25)
+function _fazGateStyleRemoveMethod(proto, methodName) {
+    if (!proto || !window.Node) return;
+    var native = proto[methodName]
+        || (Node.prototype && Node.prototype[methodName]);
+    if (typeof native !== "function") return;
+    Object.defineProperty(proto, methodName, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: function () {
+            var result = native.apply(this, arguments);
+            try {
+                // Drop the stale parked attribute BEFORE re-syncing: otherwise the
+                // single-node prime heuristic in _fazStyleOriginalCss would copy the
+                // old cumulative original (including the just-removed node's CSS)
+                // onto a benign leftover text node. Re-sync then rebuilds the
+                // attribute from the remaining live nodes' real originals.
+                if (this.removeAttribute) {
+                    this.removeAttribute("data-faz-css");
+                    this.removeAttribute("data-faz-category");
+                }
+                _fazSyncStyleCssAttribute(this);
+            } catch (_e) { /* native mutation already succeeded */ }
+            return result;
+        }
+    });
+}
+_fazGateStyleRemoveMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "removeChild");
+
 function _fazStyleParentForCharacterData(node) {
     var parent = node && node.parentNode;
     if (!parent || parent.nodeType !== 1) return null;
