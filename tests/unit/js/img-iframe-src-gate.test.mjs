@@ -521,5 +521,21 @@ rem.appendChild(drop);
 rem.removeChild(drop);
 eq('R25: removed blocked node is not resurrected on restore', restoreStyleCss(rem).includes('fonts.googleapis.com'), false);
 
+// R26-R29 — Constructable Stylesheets (adoptedStyleSheets) gate.
+console.log('\nConstructable Stylesheet gate (adoptedStyleSheets)');
+const csSheet = new w.CSSStyleSheet();
+csSheet.replaceSync('.cs{background-image:url("' + GFONT + '")}');
+eq('R26: replaceSync neutralizes a blocked provider url()', csSheet.cssRules[0].cssText.includes('fonts.gstatic.com'), false);
+eq('R27: the blocked constructable sheet is tracked for restore', w.eval('_fazTrackedSheets.length') >= 1, true);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+eq('R28: consent restores the original sheet CSS', csSheet.cssRules[0].cssText.includes('fonts.gstatic.com'), true);
+eq('R28b: restored sheet is untracked', w.eval('_fazTrackedSheets.length'), 0);
+resetConsent();
+const benignSheet = new w.CSSStyleSheet();
+benignSheet.replaceSync('.b{color:red}');
+eq('R29: benign replaceSync is not tracked', w.eval('_fazTrackedSheets.length'), 0);
+eq('R29b: benign replaceSync is not neutralized', benignSheet.cssRules[0].cssText.includes('red'), true);
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

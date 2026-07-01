@@ -3442,6 +3442,65 @@ function _fazGateInsertAdjacentHtml(proto) {
 _fazGateHtmlStyleStringSetter(window.Element && Element.prototype, "innerHTML");
 _fazGateInsertAdjacentHtml(window.Element && Element.prototype);
 
+// Constructable Stylesheets (adoptedStyleSheets): CSS-in-JS and modern themes
+// build styles with `new CSSStyleSheet(); sheet.replaceSync(css)` /
+// `sheet.replace(css)` — never a <style> element, so the DOM gates above never
+// see them. Gate the two content-set methods: park blocked CSS (neutralize the
+// url()/@import, remember the original per-sheet) and restore it on consent.
+var _fazSheetOriginalCss = window.WeakMap ? new WeakMap() : null;
+var _fazTrackedSheets = [];
+function _fazTrackSheet(sheet, css) {
+    if (_fazSheetOriginalCss) _fazSheetOriginalCss.set(sheet, css);
+    if (_fazTrackedSheets.indexOf(sheet) === -1) _fazTrackedSheets.push(sheet);
+}
+function _fazUntrackSheet(sheet) {
+    if (_fazSheetOriginalCss) _fazSheetOriginalCss.delete(sheet);
+    var idx = _fazTrackedSheets.indexOf(sheet);
+    if (idx !== -1) _fazTrackedSheets.splice(idx, 1);
+}
+function _fazGateConstructableSheetMethod(methodName) {
+    var proto = window.CSSStyleSheet && CSSStyleSheet.prototype;
+    if (!proto || typeof proto[methodName] !== "function") return;
+    var native = proto[methodName];
+    Object.defineProperty(proto, methodName, {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: function (css) {
+            var s = String(css == null ? "" : css);
+            try {
+                if (_fazStore._block && s && _fazCssShouldBlock(s)) {
+                    _fazTrackSheet(this, s);
+                    // replace() returns a Promise, replaceSync() undefined — native
+                    // return value is preserved.
+                    return native.call(this, _fazNeutralizeCssUrls(s));
+                }
+                _fazUntrackSheet(this);
+            } catch (_e) { /* fall through to native on any error */ }
+            return native.call(this, s);
+        }
+    });
+}
+_fazGateConstructableSheetMethod("replaceSync");
+_fazGateConstructableSheetMethod("replace");
+
+function _fazRestoreConstructableSheets() {
+    if (!_fazTrackedSheets.length || !_fazSheetOriginalCss) return;
+    var remaining = [];
+    for (var i = 0; i < _fazTrackedSheets.length; i++) {
+        var sheet = _fazTrackedSheets[i];
+        var original = _fazSheetOriginalCss.get(sheet);
+        if (original && !_fazCssShouldBlock(original)) {
+            // replaceSync re-enters the gate, which now sees the consented CSS as
+            // non-blocking and untracks it via the native path.
+            try { sheet.replaceSync(original); } catch (_e) { remaining.push(sheet); }
+        } else if (original) {
+            remaining.push(sheet); // still blocked (mixed categories) — keep tracked
+        }
+    }
+    _fazTrackedSheets = remaining;
+}
+
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
     const createdElement = _fazCreateElementBackup.call(document, ...args);
@@ -4062,6 +4121,9 @@ function _fazUnblockServerSide() {
             el.removeAttribute("data-faz-category");
             el.textContent = css;
         });
+
+    // 4b. Constructable Stylesheets parked at build time (adoptedStyleSheets).
+    _fazRestoreConstructableSheets();
 
     // 5. Deferred scripts with data-faz-waitfor (script dependency chains).
     // Usage: <script data-faz-waitfor="analytics" src="..."> loads only after
