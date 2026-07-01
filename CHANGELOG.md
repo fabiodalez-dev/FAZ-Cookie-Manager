@@ -2,6 +2,12 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Inline-CSS `url()` / `@import` blocking before consent.** Third-party resources loaded from **inline CSS** — most commonly a Google Fonts `@font-face { src: url(fonts.gstatic.com…) }` or an `@import "fonts.googleapis.com…"` printed in a `<style>` tag — previously reached the provider (and the visitor's IP) with consent denied, because the script / iframe / `<link>` blockers never parsed CSS text. The plugin now neutralises any `url()` / `@import` pointing at a blocked provider in a denied category: the URL is swapped for an inert `data:` placeholder so no request is made, the original is remembered, and it is restored on consent. Server-rendered `<style>` tags (handled server-side in the output buffer) and direct `HTMLStyleElement` writes at runtime (`style.textContent = …`, and `appendChild` / `insertBefore` / `replaceChild` / `removeChild` of a text node inside a `<style>`) are covered **by default**; the restore follows the real DOM state, so a chunk removed or replaced while parked is not resurrected.
+- **"Advanced inline CSS URL blocking" setting (Settings → Script Blocking, default off).** An opt-in high-coverage mode that additionally hooks the broader runtime channels used by page builders and CSS-in-JS libraries — a `<style>` injected via `Element.innerHTML` / `insertAdjacentHTML`, `CharacterData` edits inside an existing `<style>`, and Constructable Stylesheets (`CSSStyleSheet.replaceSync` / `replace` attached through `adoptedStyleSheets`). These hooks touch global browser prototypes and can affect page builders, editors, icon fonts or CSS-in-JS libraries, so they stay off unless a site actually needs them. The default (server-rendered + direct `<style>`) blocking is unaffected either way, and the admin toggle carries an explicit compatibility warning.
+
 ## [1.22.0] — 2026-07-01
 
 ### Added
