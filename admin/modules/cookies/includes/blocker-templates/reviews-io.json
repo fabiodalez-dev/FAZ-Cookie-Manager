@@ -5,8 +5,7 @@
     "category": "functional",
     "patterns": [
         "widget.reviews.io",
-        "assets.reviews.io",
-        "reviews.io/product/widget"
+        "assets.reviews.io"
     ],
     "cookies": []
 }

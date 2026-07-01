@@ -2192,8 +2192,7 @@
             "__insp"
         ],
         "cookies": [
-            "__insp_*",
-            "_insp_*"
+            "__insp_*"
         ]
     },
     "simple-analytics": {
@@ -2267,7 +2266,6 @@
         "category": "marketing",
         "patterns": [
             "getresponse.com",
-            "gr-wcon.com",
             "app.getresponse.com"
         ],
         "cookies": []
@@ -2640,7 +2638,6 @@
         "category": "functional",
         "patterns": [
             "manychat.com",
-            "mctr.io",
             "widget.manychat.com"
         ],
         "cookies": []
@@ -2660,8 +2657,7 @@
         "category": "functional",
         "patterns": [
             "widget.reviews.io",
-            "assets.reviews.io",
-            "reviews.io/product/widget"
+            "assets.reviews.io"
         ],
         "cookies": []
     },
@@ -2846,9 +2842,7 @@
             "histats.com",
             "s10.histats.com"
         ],
-        "cookies": [
-            "_ga_hist"
-        ]
+        "cookies": []
     },
     "rudderstack": {
         "label": "RudderStack",
@@ -3138,8 +3132,7 @@
         "category": "marketing",
         "patterns": [
             "infusionsoft.com",
-            "infusionsoft.app",
-            "keap.app"
+            "infusionsoft.app"
         ],
         "cookies": []
     },
@@ -3466,7 +3459,6 @@
         "category": "functional",
         "patterns": [
             "getgist.com",
-            "gist.build",
             "widget.getgist.com"
         ],
         "cookies": []
@@ -3476,8 +3468,7 @@
         "category": "functional",
         "patterns": [
             "okendo.io",
-            "okendo.reviews",
-            "d3hw6dc1ow8pp2.cloudfront.net"
+            "okendo.reviews"
         ],
         "cookies": []
     },
@@ -3551,8 +3542,7 @@
         "category": "marketing",
         "patterns": [
             "mutinyhq.com",
-            "mutinycdn.com",
-            "mutiny.dev"
+            "mutinycdn.com"
         ],
         "cookies": []
     },
@@ -3794,8 +3784,7 @@
         "category": "marketing",
         "patterns": [
             "developers.kakao.com",
-            "t1.kakaocdn.net",
-            "kakao.com/v2"
+            "t1.kakaocdn.net"
         ],
         "cookies": []
     }

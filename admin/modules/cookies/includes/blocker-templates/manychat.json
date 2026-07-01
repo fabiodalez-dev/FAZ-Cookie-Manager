@@ -5,7 +5,6 @@
     "category": "functional",
     "patterns": [
         "manychat.com",
-        "mctr.io",
         "widget.manychat.com"
     ],
     "cookies": []

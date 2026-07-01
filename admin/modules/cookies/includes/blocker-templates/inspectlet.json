@@ -10,7 +10,6 @@
         "__insp"
     ],
     "cookies": [
-        "__insp_*",
-        "_insp_*"
+        "__insp_*"
     ]
 }

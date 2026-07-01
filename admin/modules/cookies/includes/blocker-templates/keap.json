@@ -5,8 +5,7 @@
     "category": "marketing",
     "patterns": [
         "infusionsoft.com",
-        "infusionsoft.app",
-        "keap.app"
+        "infusionsoft.app"
     ],
     "cookies": []
 }

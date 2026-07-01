@@ -5,8 +5,7 @@
     "category": "marketing",
     "patterns": [
         "mutinyhq.com",
-        "mutinycdn.com",
-        "mutiny.dev"
+        "mutinycdn.com"
     ],
     "cookies": []
 }

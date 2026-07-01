@@ -5,7 +5,6 @@
     "category": "functional",
     "patterns": [
         "getgist.com",
-        "gist.build",
         "widget.getgist.com"
     ],
     "cookies": []

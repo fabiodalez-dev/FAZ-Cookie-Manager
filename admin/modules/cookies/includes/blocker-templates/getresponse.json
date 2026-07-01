@@ -5,7 +5,6 @@
     "category": "marketing",
     "patterns": [
         "getresponse.com",
-        "gr-wcon.com",
         "app.getresponse.com"
     ],
     "cookies": []
