@@ -1,0 +1,12 @@
+{
+    "id": "smart-adserver",
+    "name": "Equativ (Smart AdServer)",
+    "description": "Blocks Equativ (Smart AdServer) advertising serving and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "smartadserver.com",
+        "ec-ns.sascdn.com",
+        "sascdn.com"
+    ],
+    "cookies": []
+}

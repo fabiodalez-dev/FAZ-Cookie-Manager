@@ -1,0 +1,12 @@
+{
+    "id": "sharethrough",
+    "name": "Sharethrough",
+    "description": "Blocks Sharethrough native advertising and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "sharethrough.com",
+        "native.sharethrough.com",
+        "btlr.sharethrough.com"
+    ],
+    "cookies": []
+}

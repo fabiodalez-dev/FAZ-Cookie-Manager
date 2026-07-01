@@ -1,0 +1,11 @@
+{
+    "id": "sendgrid",
+    "name": "SendGrid (Twilio)",
+    "description": "Blocks SendGrid (Twilio) email delivery and open/click tracking.",
+    "category": "marketing",
+    "patterns": [
+        "sendgrid.net",
+        "ct.sendgrid.net"
+    ],
+    "cookies": []
+}

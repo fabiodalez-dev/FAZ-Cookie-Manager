@@ -1,0 +1,16 @@
+{
+    "id": "adform",
+    "name": "Adform",
+    "description": "Blocks Adform programmatic advertising and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "adform.net",
+        "track.adform.net",
+        "a2.adform.net"
+    ],
+    "cookies": [
+        "uid",
+        "C",
+        "cid"
+    ]
+}

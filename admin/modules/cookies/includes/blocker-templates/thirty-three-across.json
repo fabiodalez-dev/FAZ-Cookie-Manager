@@ -1,0 +1,12 @@
+{
+    "id": "thirty-three-across",
+    "name": "33Across",
+    "description": "Blocks 33Across advertising identity and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "33across.com",
+        "ssc.33across.com",
+        "de.33across.com"
+    ],
+    "cookies": []
+}

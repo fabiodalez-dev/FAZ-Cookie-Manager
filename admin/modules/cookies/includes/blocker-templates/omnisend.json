@@ -1,0 +1,14 @@
+{
+    "id": "omnisend",
+    "name": "Omnisend",
+    "description": "Blocks Omnisend email and SMS marketing tracking.",
+    "category": "marketing",
+    "patterns": [
+        "omnisend.com",
+        "omnisrc.com"
+    ],
+    "cookies": [
+        "omnisendSessionID",
+        "omnisendContactID"
+    ]
+}

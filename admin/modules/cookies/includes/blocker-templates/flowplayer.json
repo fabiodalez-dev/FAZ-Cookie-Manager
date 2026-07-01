@@ -1,0 +1,12 @@
+{
+    "id": "flowplayer",
+    "name": "Flowplayer",
+    "description": "Blocks Flowplayer video player embeds and analytics.",
+    "category": "marketing",
+    "patterns": [
+        "flowplayer.com",
+        "flowplayer.org",
+        "cdn.flowplayer.com"
+    ],
+    "cookies": []
+}

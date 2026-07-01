@@ -1,0 +1,12 @@
+{
+    "id": "teads",
+    "name": "Teads",
+    "description": "Blocks Teads outstream video advertising.",
+    "category": "marketing",
+    "patterns": [
+        "teads.tv",
+        "t.teads.tv",
+        "s8t.teads.tv"
+    ],
+    "cookies": []
+}

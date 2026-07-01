@@ -1,0 +1,14 @@
+{
+    "id": "leadfeeder",
+    "name": "Leadfeeder (Dealfront)",
+    "description": "Blocks Leadfeeder (Dealfront) B2B visitor identification tracking.",
+    "category": "marketing",
+    "patterns": [
+        "leadfeeder.com",
+        "lfeeder.com",
+        "sc.lfeeder.com"
+    ],
+    "cookies": [
+        "_lfa"
+    ]
+}

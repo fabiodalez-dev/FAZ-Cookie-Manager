@@ -1,0 +1,16 @@
+{
+    "id": "index-exchange",
+    "name": "Index Exchange",
+    "description": "Blocks Index Exchange advertising exchange and cookie syncing.",
+    "category": "marketing",
+    "patterns": [
+        "casalemedia.com",
+        "js-sec.indexww.com",
+        "ssum-sec.casalemedia.com"
+    ],
+    "cookies": [
+        "CMID",
+        "CMPS",
+        "CMPRO"
+    ]
+}

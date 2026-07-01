@@ -1,0 +1,15 @@
+{
+    "id": "lotame",
+    "name": "Lotame",
+    "description": "Blocks Lotame data-management platform and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "crwdcntrl.net",
+        "tags.crwdcntrl.net",
+        "bcp.crwdcntrl.net"
+    ],
+    "cookies": [
+        "_cc_id",
+        "panoramaId"
+    ]
+}

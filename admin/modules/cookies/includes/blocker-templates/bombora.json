@@ -1,0 +1,11 @@
+{
+    "id": "bombora",
+    "name": "Bombora",
+    "description": "Blocks Bombora B2B intent data collection.",
+    "category": "marketing",
+    "patterns": [
+        "ml314.com",
+        "bombora.com"
+    ],
+    "cookies": []
+}

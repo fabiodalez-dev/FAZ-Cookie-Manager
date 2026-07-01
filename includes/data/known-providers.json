@@ -2344,5 +2344,460 @@
         "cookies": [
             "didomi_token"
         ]
+    },
+    "adform": {
+        "label": "Adform",
+        "category": "marketing",
+        "patterns": [
+            "adform.net",
+            "track.adform.net",
+            "a2.adform.net"
+        ],
+        "cookies": [
+            "uid",
+            "C",
+            "cid"
+        ]
+    },
+    "teads": {
+        "label": "Teads",
+        "category": "marketing",
+        "patterns": [
+            "teads.tv",
+            "t.teads.tv",
+            "s8t.teads.tv"
+        ],
+        "cookies": []
+    },
+    "sharethrough": {
+        "label": "Sharethrough",
+        "category": "marketing",
+        "patterns": [
+            "sharethrough.com",
+            "native.sharethrough.com",
+            "btlr.sharethrough.com"
+        ],
+        "cookies": []
+    },
+    "index-exchange": {
+        "label": "Index Exchange",
+        "category": "marketing",
+        "patterns": [
+            "casalemedia.com",
+            "js-sec.indexww.com",
+            "ssum-sec.casalemedia.com"
+        ],
+        "cookies": [
+            "CMID",
+            "CMPS",
+            "CMPRO"
+        ]
+    },
+    "smart-adserver": {
+        "label": "Equativ (Smart AdServer)",
+        "category": "marketing",
+        "patterns": [
+            "smartadserver.com",
+            "ec-ns.sascdn.com",
+            "sascdn.com"
+        ],
+        "cookies": []
+    },
+    "gumgum": {
+        "label": "GumGum",
+        "category": "marketing",
+        "patterns": [
+            "gumgum.com",
+            "g2.gumgum.com",
+            "js.gumgum.com"
+        ],
+        "cookies": []
+    },
+    "triplelift": {
+        "label": "TripleLift",
+        "category": "marketing",
+        "patterns": [
+            "3lift.com",
+            "ib.3lift.com",
+            "eb2.3lift.com"
+        ],
+        "cookies": [
+            "tluid"
+        ]
+    },
+    "yieldmo": {
+        "label": "Yieldmo",
+        "category": "marketing",
+        "patterns": [
+            "yieldmo.com",
+            "s.yieldmo.com",
+            "ads.yieldmo.com"
+        ],
+        "cookies": []
+    },
+    "id5": {
+        "label": "ID5",
+        "category": "marketing",
+        "patterns": [
+            "id5-sync.com",
+            "cdn.id5-sync.com"
+        ],
+        "cookies": [
+            "id5",
+            "id5id"
+        ]
+    },
+    "lotame": {
+        "label": "Lotame",
+        "category": "marketing",
+        "patterns": [
+            "crwdcntrl.net",
+            "tags.crwdcntrl.net",
+            "bcp.crwdcntrl.net"
+        ],
+        "cookies": [
+            "_cc_id",
+            "panoramaId"
+        ]
+    },
+    "bidswitch": {
+        "label": "BidSwitch",
+        "category": "marketing",
+        "patterns": [
+            "bidswitch.net",
+            "x.bidswitch.net"
+        ],
+        "cookies": [
+            "c"
+        ]
+    },
+    "thirty-three-across": {
+        "label": "33Across",
+        "category": "marketing",
+        "patterns": [
+            "33across.com",
+            "ssc.33across.com",
+            "de.33across.com"
+        ],
+        "cookies": []
+    },
+    "tealium": {
+        "label": "Tealium",
+        "category": "marketing",
+        "patterns": [
+            "tiqcdn.com",
+            "tags.tiqcdn.com",
+            "tealiumiq.com"
+        ],
+        "cookies": [
+            "utag_main"
+        ]
+    },
+    "six-sense": {
+        "label": "6sense",
+        "category": "marketing",
+        "patterns": [
+            "6sense.com",
+            "j.6sc.co",
+            "epsilon.6sense.com"
+        ],
+        "cookies": [
+            "_6senseCompanyDetails"
+        ]
+    },
+    "demandbase": {
+        "label": "Demandbase",
+        "category": "marketing",
+        "patterns": [
+            "demandbase.com",
+            "company-target.com",
+            "scripts.demandbase.com"
+        ],
+        "cookies": []
+    },
+    "bombora": {
+        "label": "Bombora",
+        "category": "marketing",
+        "patterns": [
+            "ml314.com",
+            "bombora.com"
+        ],
+        "cookies": []
+    },
+    "leadfeeder": {
+        "label": "Leadfeeder (Dealfront)",
+        "category": "marketing",
+        "patterns": [
+            "leadfeeder.com",
+            "lfeeder.com",
+            "sc.lfeeder.com"
+        ],
+        "cookies": [
+            "_lfa"
+        ]
+    },
+    "zoominfo": {
+        "label": "ZoomInfo",
+        "category": "marketing",
+        "patterns": [
+            "ws.zoominfo.com",
+            "zoominfo.com",
+            "js.zi-scripts.com"
+        ],
+        "cookies": []
+    },
+    "braze": {
+        "label": "Braze",
+        "category": "marketing",
+        "patterns": [
+            "braze.com",
+            "sdk.iad-01.braze.com",
+            "sdk.iad-01.braze.eu"
+        ],
+        "cookies": []
+    },
+    "iterable": {
+        "label": "Iterable",
+        "category": "marketing",
+        "patterns": [
+            "iterable.com",
+            "links.iterable.com"
+        ],
+        "cookies": []
+    },
+    "aweber": {
+        "label": "AWeber",
+        "category": "marketing",
+        "patterns": [
+            "aweber.com",
+            "forms.aweber.com",
+            "aweber-static.com"
+        ],
+        "cookies": []
+    },
+    "omnisend": {
+        "label": "Omnisend",
+        "category": "marketing",
+        "patterns": [
+            "omnisend.com",
+            "omnisrc.com"
+        ],
+        "cookies": [
+            "omnisendSessionID",
+            "omnisendContactID"
+        ]
+    },
+    "mailerlite": {
+        "label": "MailerLite",
+        "category": "marketing",
+        "patterns": [
+            "mailerlite.com",
+            "static.mailerlite.com",
+            "assets.mailerlite.com"
+        ],
+        "cookies": []
+    },
+    "campaign-monitor": {
+        "label": "Campaign Monitor",
+        "category": "marketing",
+        "patterns": [
+            "createsend.com",
+            "createsend1.com",
+            "js.createsend1.com"
+        ],
+        "cookies": []
+    },
+    "sendgrid": {
+        "label": "SendGrid (Twilio)",
+        "category": "marketing",
+        "patterns": [
+            "sendgrid.net",
+            "ct.sendgrid.net"
+        ],
+        "cookies": []
+    },
+    "helpscout": {
+        "label": "Help Scout",
+        "category": "functional",
+        "patterns": [
+            "helpscout.net",
+            "beacon-v2.helpscout.net"
+        ],
+        "cookies": []
+    },
+    "gorgias": {
+        "label": "Gorgias",
+        "category": "functional",
+        "patterns": [
+            "gorgias.chat",
+            "config.gorgias.chat",
+            "assets.gorgias.chat"
+        ],
+        "cookies": []
+    },
+    "manychat": {
+        "label": "ManyChat",
+        "category": "functional",
+        "patterns": [
+            "manychat.com",
+            "mctr.io",
+            "widget.manychat.com"
+        ],
+        "cookies": []
+    },
+    "bazaarvoice": {
+        "label": "Bazaarvoice",
+        "category": "functional",
+        "patterns": [
+            "bazaarvoice.com",
+            "apps.bazaarvoice.com",
+            "display.ugc.bazaarvoice.com"
+        ],
+        "cookies": []
+    },
+    "reviews-io": {
+        "label": "REVIEWS.io",
+        "category": "functional",
+        "patterns": [
+            "widget.reviews.io",
+            "assets.reviews.io",
+            "reviews.io/product/widget"
+        ],
+        "cookies": []
+    },
+    "judge-me": {
+        "label": "Judge.me",
+        "category": "functional",
+        "patterns": [
+            "judge.me",
+            "cdn.judge.me",
+            "cache.judge.me"
+        ],
+        "cookies": []
+    },
+    "loox": {
+        "label": "Loox",
+        "category": "functional",
+        "patterns": [
+            "loox.io",
+            "loox.io/widget"
+        ],
+        "cookies": []
+    },
+    "vidyard": {
+        "label": "Vidyard",
+        "category": "marketing",
+        "patterns": [
+            "vidyard.com",
+            "play.vidyard.com",
+            "cdn.vidyard.com"
+        ],
+        "cookies": []
+    },
+    "kaltura": {
+        "label": "Kaltura",
+        "category": "marketing",
+        "patterns": [
+            "kaltura.com",
+            "cdnapisec.kaltura.com",
+            "cdnapi.kaltura.com"
+        ],
+        "cookies": []
+    },
+    "flowplayer": {
+        "label": "Flowplayer",
+        "category": "marketing",
+        "patterns": [
+            "flowplayer.com",
+            "flowplayer.org",
+            "cdn.flowplayer.com"
+        ],
+        "cookies": []
+    },
+    "pushengage": {
+        "label": "PushEngage",
+        "category": "functional",
+        "patterns": [
+            "pushengage.com",
+            "clientcdn.pushengage.com"
+        ],
+        "cookies": []
+    },
+    "izooto": {
+        "label": "iZooto",
+        "category": "functional",
+        "patterns": [
+            "izooto.com",
+            "cdn.izooto.com"
+        ],
+        "cookies": []
+    },
+    "surveymonkey": {
+        "label": "SurveyMonkey",
+        "category": "functional",
+        "patterns": [
+            "surveymonkey.com",
+            "secure.surveymonkey.com"
+        ],
+        "cookies": []
+    },
+    "jotform": {
+        "label": "Jotform",
+        "category": "functional",
+        "patterns": [
+            "jotform.com",
+            "form.jotform.com",
+            "cdn.jotfor.ms"
+        ],
+        "cookies": []
+    },
+    "qualtrics": {
+        "label": "Qualtrics",
+        "category": "functional",
+        "patterns": [
+            "qualtrics.com",
+            "siteintercept.qualtrics.com"
+        ],
+        "cookies": []
+    },
+    "font-awesome": {
+        "label": "Font Awesome",
+        "category": "functional",
+        "patterns": [
+            "use.fontawesome.com",
+            "kit.fontawesome.com",
+            "ka-f.fontawesome.com"
+        ],
+        "cookies": []
+    },
+    "monotype-fonts": {
+        "label": "Monotype Fonts (fonts.com)",
+        "category": "functional",
+        "patterns": [
+            "fast.fonts.net",
+            "fonts.net/jsapi",
+            "fast.fonts.com"
+        ],
+        "cookies": []
+    },
+    "monetate": {
+        "label": "Monetate",
+        "category": "marketing",
+        "patterns": [
+            "monetate.net",
+            "se.monetate.net",
+            "sb.monetate.net"
+        ],
+        "cookies": []
+    },
+    "kameleoon": {
+        "label": "Kameleoon",
+        "category": "analytics",
+        "patterns": [
+            "kameleoon.com",
+            "kameleoon.eu",
+            "denali.kameleoon.eu"
+        ],
+        "cookies": []
     }
 }

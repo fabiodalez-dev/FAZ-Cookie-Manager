@@ -1,0 +1,12 @@
+{
+    "id": "yieldmo",
+    "name": "Yieldmo",
+    "description": "Blocks Yieldmo advertising and audience measurement.",
+    "category": "marketing",
+    "patterns": [
+        "yieldmo.com",
+        "s.yieldmo.com",
+        "ads.yieldmo.com"
+    ],
+    "cookies": []
+}

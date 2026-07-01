@@ -1,0 +1,13 @@
+{
+    "id": "bidswitch",
+    "name": "BidSwitch",
+    "description": "Blocks BidSwitch programmatic advertising and cookie syncing.",
+    "category": "marketing",
+    "patterns": [
+        "bidswitch.net",
+        "x.bidswitch.net"
+    ],
+    "cookies": [
+        "c"
+    ]
+}

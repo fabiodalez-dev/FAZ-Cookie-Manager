@@ -1,0 +1,12 @@
+{
+    "id": "mailerlite",
+    "name": "MailerLite",
+    "description": "Blocks MailerLite email marketing forms and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "mailerlite.com",
+        "static.mailerlite.com",
+        "assets.mailerlite.com"
+    ],
+    "cookies": []
+}

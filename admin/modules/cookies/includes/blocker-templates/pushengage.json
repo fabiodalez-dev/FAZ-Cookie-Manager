@@ -1,0 +1,11 @@
+{
+    "id": "pushengage",
+    "name": "PushEngage",
+    "description": "Blocks PushEngage web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "pushengage.com",
+        "clientcdn.pushengage.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "manychat",
+    "name": "ManyChat",
+    "description": "Blocks ManyChat chat marketing growth widget.",
+    "category": "functional",
+    "patterns": [
+        "manychat.com",
+        "mctr.io",
+        "widget.manychat.com"
+    ],
+    "cookies": []
+}

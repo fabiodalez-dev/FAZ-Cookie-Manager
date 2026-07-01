@@ -1,0 +1,12 @@
+{
+    "id": "judge-me",
+    "name": "Judge.me",
+    "description": "Blocks Judge.me product reviews widget.",
+    "category": "functional",
+    "patterns": [
+        "judge.me",
+        "cdn.judge.me",
+        "cache.judge.me"
+    ],
+    "cookies": []
+}

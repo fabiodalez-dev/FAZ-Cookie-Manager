@@ -1,0 +1,11 @@
+{
+    "id": "surveymonkey",
+    "name": "SurveyMonkey",
+    "description": "Blocks SurveyMonkey surveys and embedded forms.",
+    "category": "functional",
+    "patterns": [
+        "surveymonkey.com",
+        "secure.surveymonkey.com"
+    ],
+    "cookies": []
+}

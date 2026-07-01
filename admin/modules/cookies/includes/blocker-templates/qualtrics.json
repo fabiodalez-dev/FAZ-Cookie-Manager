@@ -1,0 +1,11 @@
+{
+    "id": "qualtrics",
+    "name": "Qualtrics",
+    "description": "Blocks Qualtrics experience surveys and website feedback.",
+    "category": "functional",
+    "patterns": [
+        "qualtrics.com",
+        "siteintercept.qualtrics.com"
+    ],
+    "cookies": []
+}

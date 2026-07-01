@@ -1,0 +1,12 @@
+{
+    "id": "jotform",
+    "name": "Jotform",
+    "description": "Blocks Jotform embedded forms and surveys.",
+    "category": "functional",
+    "patterns": [
+        "jotform.com",
+        "form.jotform.com",
+        "cdn.jotfor.ms"
+    ],
+    "cookies": []
+}
