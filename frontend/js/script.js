@@ -3007,6 +3007,141 @@ function _fazGateHrefSetter(proto) {
 }
 _fazGateHrefSetter(window.HTMLLinkElement && HTMLLinkElement.prototype);
 
+var _FAZ_INERT_CSS_URL = 'data:application/octet-stream,';
+
+function _fazCssUrls(css) {
+    var urls = [];
+    if (!css || typeof css !== "string") return urls;
+    css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, function (_m, dq, sq, bare) {
+        urls.push(dq || sq || bare || "");
+        return _m;
+    });
+    css.replace(/@import\s+(["'])([^"']+)\1/gi, function (_m, _q, url) {
+        urls.push(url || "");
+        return _m;
+    });
+    return urls;
+}
+
+function _fazCssUrlShouldBlock(url) {
+    if (!url || typeof url !== "string") return false;
+    url = url.trim();
+    if (!url || url.charAt(0) === "#" || /^data:/i.test(url) || /^blob:/i.test(url)) return false;
+    if (_fazIsUserWhitelisted(url)) return false;
+    return _fazShouldBlockProvider(url);
+}
+
+function _fazCssShouldBlock(css) {
+    var urls = _fazCssUrls(css);
+    for (var i = 0; i < urls.length; i++) {
+        if (_fazCssUrlShouldBlock(urls[i])) return true;
+    }
+    return false;
+}
+
+function _fazCssBlockedCategory(css) {
+    var urls = _fazCssUrls(css);
+    for (var i = 0; i < urls.length; i++) {
+        if (_fazCssUrlShouldBlock(urls[i])) return _fazImgCategory(urls[i]);
+    }
+    return "functional";
+}
+
+function _fazNeutralizeCssUrls(css) {
+    if (!css || typeof css !== "string") return css;
+    css = css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^\)\s]+))\s*\)/gi, function (match, dq, sq, bare) {
+        var url = dq || sq || bare || "";
+        return _fazCssUrlShouldBlock(url) ? 'url("' + _FAZ_INERT_CSS_URL + '")' : match;
+    });
+    css = css.replace(/(@import\s+)(["'])([^"']+)\2/gi, function (match, prefix, _quote, url) {
+        return _fazCssUrlShouldBlock(url) ? prefix + 'url("' + _FAZ_INERT_CSS_URL + '")' : match;
+    });
+    return css;
+}
+
+function _fazBase64EncodeUtf8(str) {
+    try {
+        return btoa(unescape(encodeURIComponent(str)));
+    } catch (_e) {
+        return "";
+    }
+}
+
+function _fazBase64DecodeUtf8(encoded) {
+    try {
+        return decodeURIComponent(escape(atob(encoded)));
+    } catch (_e) {
+        return "";
+    }
+}
+
+function _fazPrepareStyleCss(style, css) {
+    if (!_fazStore._block || !css || typeof css !== "string" || !_fazCssShouldBlock(css)) return css;
+    var encoded = _fazBase64EncodeUtf8(css);
+    if (encoded) style.setAttribute("data-faz-css", encoded);
+    style.setAttribute("data-faz-category", _fazCssBlockedCategory(css));
+    return _fazNeutralizeCssUrls(css);
+}
+
+function _fazFindAccessorDescriptor(proto, prop) {
+    while (proto) {
+        var desc = Object.getOwnPropertyDescriptor(proto, prop);
+        if (desc) return desc;
+        proto = Object.getPrototypeOf(proto);
+    }
+    return null;
+}
+
+function _fazGateStyleTextSetter(proto, prop) {
+    if (!proto) return;
+    var desc = _fazFindAccessorDescriptor(proto, prop);
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, prop, {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            nativeSet.call(this, _fazPrepareStyleCss(this, String(val == null ? "" : val)));
+        }
+    });
+}
+
+function _fazGateStyleTextNodeMethod(proto, methodName) {
+    if (!proto || !window.Node) return;
+    var native = proto[methodName]
+        || (Node.prototype && Node.prototype[methodName])
+        || (window.Element && Element.prototype && Element.prototype[methodName]);
+    if (typeof native !== "function") return;
+    Object.defineProperty(proto, methodName, {
+        configurable: true,
+        value: function () {
+            var args = Array.prototype.slice.call(arguments);
+            var cssArgCount = methodName === "append" ? args.length : Math.min(args.length, 1);
+            for (var i = 0; i < cssArgCount; i++) {
+                var arg = args[i];
+                if (typeof arg === "string") {
+                    args[i] = _fazPrepareStyleCss(this, arg);
+                } else if (arg && (arg.nodeType === 3 || arg.nodeType === 4) && typeof arg.nodeValue === "string") {
+                    var css = _fazPrepareStyleCss(this, arg.nodeValue);
+                    if (css !== arg.nodeValue) {
+                        arg = arg.cloneNode(true);
+                        arg.nodeValue = css;
+                        args[i] = arg;
+                    }
+                }
+            }
+            return native.apply(this, args);
+        }
+    });
+}
+
+_fazGateStyleTextSetter(window.HTMLStyleElement && HTMLStyleElement.prototype, "textContent");
+_fazGateStyleTextSetter(window.HTMLStyleElement && HTMLStyleElement.prototype, "innerHTML");
+_fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "appendChild");
+_fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "insertBefore");
+_fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "append");
+
 const _fazCreateElementBackup = document.createElement;
 document.createElement = (...args) => {
     const createdElement = _fazCreateElementBackup.call(document, ...args);
@@ -3613,6 +3748,19 @@ function _fazUnblockServerSide() {
             el.href = fazHref;
             if (!el.getAttribute("href")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-href");
+        });
+
+    // 4b. Inline CSS whose url()/@import tokens were neutralised server-side or
+    // by the HTMLStyleElement runtime gate. Restore only when the ORIGINAL CSS no
+    // longer contains any blocked provider URL; this avoids restoring a mixed
+    // functional+marketing style block after only one category was accepted.
+    document.querySelectorAll('style[data-faz-css]')
+        .forEach(function (el) {
+            var css = _fazBase64DecodeUtf8(el.getAttribute("data-faz-css") || "");
+            if (!css || _fazCssShouldBlock(css)) return;
+            el.removeAttribute("data-faz-css");
+            el.removeAttribute("data-faz-category");
+            el.textContent = css;
         });
 
     // 5. Deferred scripts with data-faz-waitfor (script dependency chains).

@@ -1,9 +1,10 @@
 /**
- * JS unit test (jsdom) — guards the #163 (map-tile <img>) + #167 (Bricks-lazy
- * <iframe>) work: FAZ now gates the `src` SETTER on HTMLImageElement and
- * HTMLIFrameElement, so a cross-origin resource whose URL matches a blocked
- * provider in a denied category is PARKED (URL → data-faz-src, no request)
- * before consent, then restored by the standard data-faz-src pass.
+ * JS unit test (jsdom) — guards the #163 (map-tile <img>), #167 (Bricks-lazy
+ * <iframe>), runtime stylesheet, and inline CSS-url work. FAZ gates the `src`
+ * SETTER on HTMLImageElement/HTMLIFrameElement, `href` on HTMLLinkElement, and
+ * the common HTMLStyleElement text insertion paths, so a cross-origin resource
+ * whose URL matches a blocked provider in a denied category is PARKED before
+ * consent and restored by the standard unblock pass.
  *
  * These checks exercise the REAL decision/gate functions in frontend/js/script.js
  * with no browser and no network — they cover the fast-path bail-outs (same
@@ -44,6 +45,7 @@ function eq(label, actual, expected) {
 
 const OSM = 'https://tile.openstreetmap.org/17/69083/45877.png';
 const YT = 'https://www.youtube-nocookie.com/embed/NL2UmY9oKow?rel=0';
+const GFONT = 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2';
 
 function loadFrontend() {
   const code = readFileSync(SCRIPT_PATH, 'utf8');
@@ -313,6 +315,30 @@ eq('link: protocol-relative Google Fonts stylesheet is parked', lp.parked, '//fo
 // 5. fonts.gstatic.com (font-file host) stylesheet/preload is also a blocked provider.
 lp = linkProbe('https://fonts.gstatic.com/s/roboto/v30/font.woff2');
 eq('link: fonts.gstatic.com resource is parked', lp.parked, 'https://fonts.gstatic.com/s/roboto/v30/font.woff2');
+
+// ---------------------------------------------------------------------------
+// HTMLStyleElement text gates — inline CSS url() / @font-face font files.
+// ---------------------------------------------------------------------------
+console.log('\nHTMLStyleElement inline CSS-url gate');
+const css = `@font-face{font-family:"FazLeak";src:url("${GFONT}") format("woff2");} .probe{font-family:"FazLeak";color:#123}`;
+const st = w.document.createElement('style');
+st.textContent = css;
+eq('style: original CSS is parked in data-faz-css', typeof st.getAttribute('data-faz-css'), 'string');
+eq('style: parked CSS tagged functional', st.getAttribute('data-faz-category'), 'functional');
+eq('style: live CSS no longer contains fonts.gstatic pre-consent', st.textContent.includes('fonts.gstatic.com'), false);
+eq('style: live CSS contains an inert replacement URL', st.textContent.includes('data:application/octet-stream,'), true);
+
+const importStyle = w.document.createElement('style');
+importStyle.appendChild(w.document.createTextNode(`@import "https://fonts.googleapis.com/css?family=Roboto"; body{color:red}`));
+eq('style.appendChild: @import string is parked', typeof importStyle.getAttribute('data-faz-css'), 'string');
+eq('style.appendChild: live CSS no longer contains fonts.googleapis pre-consent', importStyle.textContent.includes('fonts.googleapis.com'), false);
+
+setConsent({ functional: 'yes' });
+w.document.head.appendChild(st);
+w.eval('_fazUnblockServerSide()');
+eq('style: consent restores original CSS text', st.textContent, css);
+eq('style: consent clears data-faz-css', st.getAttribute('data-faz-css'), null);
+resetConsent();
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
