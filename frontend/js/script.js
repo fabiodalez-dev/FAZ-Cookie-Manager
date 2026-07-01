@@ -3009,6 +3009,10 @@ _fazGateHrefSetter(window.HTMLLinkElement && HTMLLinkElement.prototype);
 
 var _FAZ_INERT_CSS_URL = 'data:application/octet-stream,';
 
+function _fazAggressiveCssUrlBlockingEnabled() {
+    return !!(_fazStore && _fazStore._aggressiveCssUrlBlocking);
+}
+
 function _fazCssUrls(css) {
     var urls = [];
     if (!css || typeof css !== "string") return urls;
@@ -3373,11 +3377,13 @@ function _fazGateStyleCharacterDataMethod(proto, methodName) {
     });
 }
 
-_fazGateStyleCharacterDataSetter(window.CharacterData && CharacterData.prototype, "data");
-_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "appendData");
-_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "insertData");
-_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "deleteData");
-_fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "replaceData");
+if (_fazAggressiveCssUrlBlockingEnabled()) {
+    _fazGateStyleCharacterDataSetter(window.CharacterData && CharacterData.prototype, "data");
+    _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "appendData");
+    _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "insertData");
+    _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "deleteData");
+    _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "replaceData");
+}
 
 function _fazEscapeHtmlAttr(value) {
     return String(value == null ? "" : value)
@@ -3439,8 +3445,10 @@ function _fazGateInsertAdjacentHtml(proto) {
     });
 }
 
-_fazGateHtmlStyleStringSetter(window.Element && Element.prototype, "innerHTML");
-_fazGateInsertAdjacentHtml(window.Element && Element.prototype);
+if (_fazAggressiveCssUrlBlockingEnabled()) {
+    _fazGateHtmlStyleStringSetter(window.Element && Element.prototype, "innerHTML");
+    _fazGateInsertAdjacentHtml(window.Element && Element.prototype);
+}
 
 // Constructable Stylesheets (adoptedStyleSheets): CSS-in-JS and modern themes
 // build styles with `new CSSStyleSheet(); sheet.replaceSync(css)` /
@@ -3481,8 +3489,10 @@ function _fazGateConstructableSheetMethod(methodName) {
         }
     });
 }
-_fazGateConstructableSheetMethod("replaceSync");
-_fazGateConstructableSheetMethod("replace");
+if (_fazAggressiveCssUrlBlockingEnabled()) {
+    _fazGateConstructableSheetMethod("replaceSync");
+    _fazGateConstructableSheetMethod("replace");
+}
 
 function _fazRestoreConstructableSheets() {
     if (!_fazTrackedSheets.length || !_fazSheetOriginalCss) return;

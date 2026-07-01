@@ -1737,6 +1737,12 @@ class Frontend {
 			// consent, and the banner is shown again. See Settings →
 			// "Invalidate all consents".
 			'_consentRevision' => isset( $settings['general']['consent_revision'] ) ? max( 1, absint( $settings['general']['consent_revision'] ) ) : 1,
+			// Optional high-coverage runtime CSS-url blocker. Default off because
+			// the aggressive client hooks touch broad browser APIs (Element.innerHTML,
+			// insertAdjacentHTML, CharacterData inside <style>, Constructable
+			// Stylesheets). Baseline blocking still covers server-rendered <style>
+			// tags and direct HTMLStyleElement writes before consent.
+			'_aggressiveCssUrlBlocking' => ! empty( $settings['script_blocking']['aggressive_css_url_blocking'] ),
 		);
 		// Merge DB-based providers with Known_Providers for client-side blocking.
 		$valid_categories = $this->get_valid_category_slugs();

@@ -138,6 +138,14 @@ defined( 'ABSPATH' ) || exit;
 				<textarea class="faz-textarea" data-path="script_blocking.whitelist_patterns" rows="3" placeholder="<?php esc_attr_e( 'One per line: googleapis.com/youtube/v3, recaptcha, my-inline-script-id', 'faz-cookie-manager' ); ?>"></textarea>
 				<div class="faz-help"><?php echo wp_kses_post( __( 'Scripts that should never be blocked, even before consent. One per line. Accepts three types of pattern:<br>- <strong>URL fragment</strong> (contains <code>.</code> or <code>/</code>): matched against the script\'s <code>src</code> or related URL attribute, e.g. <code>googleapis.com/youtube/v3</code>.<br>- <strong>Script ID</strong> (no dots/slashes): matched against the <code>id</code> attribute of the script tag, e.g. <code>my-product-form-data</code>.<br>- <strong>CSS class</strong> (no dots/slashes): matched against the script\'s <code>class</code> attribute, e.g. <code>recaptcha</code>.<br>These exceptions bypass blocking entirely. Use them only for scripts that genuinely do not set tracking cookies. <strong>Be specific</strong> to avoid accidentally unblocking trackers.<br><strong>Tip:</strong> You can also add <code>class="faz-skip"</code> directly to any script tag to exclude it without adding anything here — no configuration needed.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="script_blocking.aggressive_css_url_blocking">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Advanced inline CSS URL blocking', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Optional high-coverage mode for CSS-based third-party loads. The default blocker already handles server-rendered <code>&lt;style&gt;</code> tags and direct <code>HTMLStyleElement</code> updates. Enable this only if you have confirmed that a theme, page builder, or CSS-in-JS library injects blocked <code>url()</code> or <code>@import</code> rules through broader runtime channels such as <code>Element.innerHTML</code>, <code>insertAdjacentHTML</code>, <code>CharacterData</code> edits inside a style tag, or Constructable Stylesheets. This strengthens pre-consent blocking but hooks global browser APIs and may affect builders, editors, icon fonts, or CSS-in-JS libraries. Test the site before enabling in production.', 'faz-cookie-manager' ) ); ?></div>
+			</div>
 		</div>
 	</div>
 

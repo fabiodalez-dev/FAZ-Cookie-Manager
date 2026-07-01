@@ -47,7 +47,7 @@ const OSM = 'https://tile.openstreetmap.org/17/69083/45877.png';
 const YT = 'https://www.youtube-nocookie.com/embed/NL2UmY9oKow?rel=0';
 const GFONT = 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2';
 
-function loadFrontend() {
+function loadFrontend(options = {}) {
   const code = readFileSync(SCRIPT_PATH, 'utf8');
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     runScripts: 'outside-only',
@@ -83,6 +83,7 @@ function loadFrontend() {
     _userWhitelist: [],
     _perServiceConsent: false,
     _perCookieConsent: false,
+    _aggressiveCssUrlBlocking: options.aggressiveCssUrlBlocking !== false,
     i18n: {},
   };
   // Default: no consent recorded for any key.
@@ -431,10 +432,10 @@ const adjacentStyle = adjacentBox.querySelector('#faz-adjacent-style');
 eq('F4: insertAdjacentHTML neutralizes and restores blocked style CSS', restoreStyleCss(adjacentStyle), cssImport);
 
 // ---------------------------------------------------------------------------
-// 25 review-coverage tests: blast-radius (global Element.innerHTML/CharacterData
-// gates), no-false-positives, scope breadth, and DOM-follow restore edges.
+// Review coverage: blast-radius (global Element.innerHTML/CharacterData gates),
+// no-false-positives, scope breadth, DOM-follow restore edges, and opt-in mode.
 // ---------------------------------------------------------------------------
-console.log('\nStyle gate — review coverage (25)');
+console.log('\nStyle gate — review coverage');
 const doc = w.document;
 const mkStyle = (c) => { const s = doc.createElement('style'); s.textContent = c; return s; };
 
@@ -536,6 +537,24 @@ const benignSheet = new w.CSSStyleSheet();
 benignSheet.replaceSync('.b{color:red}');
 eq('R29: benign replaceSync is not tracked', w.eval('_fazTrackedSheets.length'), 0);
 eq('R29b: benign replaceSync is not neutralized', benignSheet.cssRules[0].cssText.includes('red'), true);
+
+// R30-R33 — aggressive CSS-url mode is opt-in. Baseline still gates direct
+// HTMLStyleElement writes, but global HTML-string and Constructable Stylesheet
+// hooks are not installed when the setting is false/default.
+console.log('\nAggressive CSS URL blocking setting');
+const wStd = loadFrontend({ aggressiveCssUrlBlocking: false });
+const stdStyle = wStd.document.createElement('style');
+stdStyle.textContent = cssA;
+eq('R30: standard mode still blocks direct HTMLStyleElement textContent', stdStyle.textContent.includes('fonts.gstatic.com'), false);
+const stdBox = wStd.document.createElement('div');
+stdBox.innerHTML = '<style id="std-style">' + cssA + '</style>';
+eq('R31: standard mode does not hook parent innerHTML style insertion', stdBox.querySelector('#std-style').textContent.includes('fonts.gstatic.com'), true);
+const stdAdjacent = wStd.document.createElement('div');
+stdAdjacent.insertAdjacentHTML('beforeend', '<style id="std-adjacent">' + cssImport + '</style>');
+eq('R32: standard mode does not hook insertAdjacentHTML style insertion', stdAdjacent.querySelector('#std-adjacent').textContent.includes('fonts.googleapis.com'), true);
+const stdSheet = new wStd.CSSStyleSheet();
+stdSheet.replaceSync('.std{background-image:url("' + GFONT + '")}');
+eq('R33: standard mode does not hook Constructable Stylesheets', stdSheet.cssRules[0].cssText.includes('fonts.gstatic.com'), true);
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

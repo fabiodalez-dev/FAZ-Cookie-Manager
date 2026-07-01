@@ -44,6 +44,9 @@ namespace {
 			'per_service_consent' => false,
 			'per_cookie_consent'  => false,
 		),
+		'script_blocking' => array(
+			'aggressive_css_url_blocking' => false,
+		),
 	);
 
 	$sanitized = Settings::sanitize(
@@ -51,6 +54,9 @@ namespace {
 			'banner_control' => array(
 				'per_service_consent' => 'true',
 				'per_cookie_consent'  => 'true',
+			),
+			'script_blocking' => array(
+				'aggressive_css_url_blocking' => 'true',
 			),
 		),
 		$defaults
@@ -65,6 +71,18 @@ namespace {
 		$sanitized['banner_control']['per_cookie_consent'],
 		true,
 		'per_cookie_consent is a settable boolean (no longer hard-disabled)'
+	);
+	faz_assert_same(
+		$sanitized['script_blocking']['aggressive_css_url_blocking'],
+		true,
+		'aggressive_css_url_blocking is opt-in via settings'
+	);
+
+	$sanitized_defaults = Settings::sanitize( array(), $defaults );
+	faz_assert_same(
+		$sanitized_defaults['script_blocking']['aggressive_css_url_blocking'],
+		false,
+		'aggressive_css_url_blocking defaults off'
 	);
 
 	echo "\n--\n";

@@ -128,8 +128,19 @@ class Settings extends Store {
 				'geolite2_edition'    => 'country',
 			),
 			'script_blocking' => array(
-				'custom_rules'       => array(),
-				'excluded_pages'     => array(),
+				'custom_rules'                => array(),
+				'excluded_pages'              => array(),
+				// Advanced runtime CSS-url blocking is intentionally opt-in.
+				// The baseline blocker already handles server-rendered inline
+				// <style> tags and direct HTMLStyleElement writes. This switch
+				// enables broader client-side hooks for page builders/CSS-in-JS
+				// channels such as Element.innerHTML, insertAdjacentHTML,
+				// CharacterData edits inside <style>, and Constructable
+				// Stylesheets. Those hooks improve block-first coverage for
+				// inline CSS url()/@import leaks but touch global browser
+				// prototypes, so they carry compatibility risk and stay off by
+				// default.
+				'aggressive_css_url_blocking' => false,
 				// Default "never block before consent" list. Kept deliberately
 				// narrow: only anti-abuse / security challenge endpoints that
 				// are strictly necessary for a service the visitor actively
@@ -294,6 +305,7 @@ class Settings extends Store {
 			case 'alternative_asset_path':
 			case 'per_service_consent':
 			case 'cache_compatibility':
+			case 'aggressive_css_url_blocking':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'per_cookie_consent':
