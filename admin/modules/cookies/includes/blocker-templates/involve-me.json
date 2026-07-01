@@ -1,0 +1,11 @@
+{
+    "id": "involve-me",
+    "name": "involve.me",
+    "description": "Blocks involve.me interactive content, forms and quizzes.",
+    "category": "functional",
+    "patterns": [
+        "involve.me",
+        "cdn.involve.me"
+    ],
+    "cookies": []
+}

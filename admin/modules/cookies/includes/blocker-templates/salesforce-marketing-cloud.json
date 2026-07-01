@@ -1,0 +1,12 @@
+{
+    "id": "salesforce-marketing-cloud",
+    "name": "Salesforce Marketing Cloud",
+    "description": "Blocks Salesforce Marketing Cloud email marketing and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "exacttarget.com",
+        "marketingcloudapps.com",
+        "exct.net"
+    ],
+    "cookies": []
+}

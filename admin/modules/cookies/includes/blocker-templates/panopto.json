@@ -1,0 +1,11 @@
+{
+    "id": "panopto",
+    "name": "Panopto",
+    "description": "Blocks Panopto video hosting and player embeds.",
+    "category": "marketing",
+    "patterns": [
+        "panopto.com",
+        "hosted.panopto.com"
+    ],
+    "cookies": []
+}

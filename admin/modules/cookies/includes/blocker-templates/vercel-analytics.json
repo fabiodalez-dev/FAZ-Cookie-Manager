@@ -1,0 +1,11 @@
+{
+    "id": "vercel-analytics",
+    "name": "Vercel Analytics",
+    "description": "Blocks Vercel Analytics web and page-view analytics.",
+    "category": "analytics",
+    "patterns": [
+        "vercel-insights.com",
+        "va.vercel-scripts.com"
+    ],
+    "cookies": []
+}

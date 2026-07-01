@@ -1,0 +1,11 @@
+{
+    "id": "xing",
+    "name": "XING",
+    "description": "Blocks XING social share widgets.",
+    "category": "marketing",
+    "patterns": [
+        "xing.com",
+        "www.xing-share.com"
+    ],
+    "cookies": []
+}

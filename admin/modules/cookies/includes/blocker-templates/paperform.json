@@ -1,0 +1,11 @@
+{
+    "id": "paperform",
+    "name": "Paperform",
+    "description": "Blocks Paperform embedded forms and surveys.",
+    "category": "functional",
+    "patterns": [
+        "paperform.co",
+        "l.paperform.co"
+    ],
+    "cookies": []
+}

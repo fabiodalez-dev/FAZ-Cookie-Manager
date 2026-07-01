@@ -1,0 +1,12 @@
+{
+    "id": "connatix",
+    "name": "Connatix",
+    "description": "Blocks Connatix outstream video advertising.",
+    "category": "marketing",
+    "patterns": [
+        "connatix.com",
+        "connatix.net",
+        "cdn.connatix.com"
+    ],
+    "cookies": []
+}

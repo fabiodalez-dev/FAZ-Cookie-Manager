@@ -1,0 +1,11 @@
+{
+    "id": "tally-forms",
+    "name": "Tally",
+    "description": "Blocks Tally embedded forms and surveys.",
+    "category": "functional",
+    "patterns": [
+        "tally.so",
+        "tally.so/widgets"
+    ],
+    "cookies": []
+}

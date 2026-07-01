@@ -1,0 +1,11 @@
+{
+    "id": "june",
+    "name": "June",
+    "description": "Blocks June product analytics event collection.",
+    "category": "analytics",
+    "patterns": [
+        "june.so",
+        "api.june.so"
+    ],
+    "cookies": []
+}

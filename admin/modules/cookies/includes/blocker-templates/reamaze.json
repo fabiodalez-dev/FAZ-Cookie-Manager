@@ -1,0 +1,12 @@
+{
+    "id": "reamaze",
+    "name": "Re:amaze",
+    "description": "Blocks Re:amaze live chat and helpdesk widget.",
+    "category": "functional",
+    "patterns": [
+        "reamaze.com",
+        "cdn.reamaze.com",
+        "reamaze.io"
+    ],
+    "cookies": []
+}

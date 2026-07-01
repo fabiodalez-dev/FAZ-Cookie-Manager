@@ -1,0 +1,11 @@
+{
+    "id": "civic-cookie-control",
+    "name": "Civic Cookie Control",
+    "description": "Blocks Civic Cookie Control consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "cookiecontrol.com",
+        "cc.cdn.civiccomputing.com"
+    ],
+    "cookies": []
+}

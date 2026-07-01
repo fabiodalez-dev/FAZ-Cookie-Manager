@@ -1,0 +1,12 @@
+{
+    "id": "oracle-eloqua",
+    "name": "Oracle Eloqua",
+    "description": "Blocks Oracle Eloqua B2B marketing automation and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "eloqua.com",
+        "en25.com",
+        "elqtrk.com"
+    ],
+    "cookies": []
+}

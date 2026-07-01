@@ -1,0 +1,11 @@
+{
+    "id": "helpcrunch",
+    "name": "HelpCrunch",
+    "description": "Blocks HelpCrunch live chat and messaging widget.",
+    "category": "functional",
+    "patterns": [
+        "helpcrunch.com",
+        "widget.helpcrunch.com"
+    ],
+    "cookies": []
+}

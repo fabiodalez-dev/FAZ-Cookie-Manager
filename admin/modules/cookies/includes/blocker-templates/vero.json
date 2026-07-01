@@ -1,0 +1,11 @@
+{
+    "id": "vero",
+    "name": "Vero",
+    "description": "Blocks Vero email marketing and behavioural tracking.",
+    "category": "marketing",
+    "patterns": [
+        "getvero.com",
+        "d3qxef4rp70elm.cloudfront.net"
+    ],
+    "cookies": []
+}

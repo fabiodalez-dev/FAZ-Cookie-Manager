@@ -1,0 +1,11 @@
+{
+    "id": "provesource",
+    "name": "ProveSource",
+    "description": "Blocks ProveSource social-proof conversion notifications.",
+    "category": "marketing",
+    "patterns": [
+        "provesrc.com",
+        "cdn.provesrc.com"
+    ],
+    "cookies": []
+}

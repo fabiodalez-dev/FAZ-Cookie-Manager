@@ -1,0 +1,11 @@
+{
+    "id": "powerreviews",
+    "name": "PowerReviews",
+    "description": "Blocks PowerReviews product ratings and reviews.",
+    "category": "functional",
+    "patterns": [
+        "powerreviews.com",
+        "ui.powerreviews.com"
+    ],
+    "cookies": []
+}

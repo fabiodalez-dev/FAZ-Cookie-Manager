@@ -7,7 +7,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 ### Added
 - **Advanced Consent Mode for Google Consent Mode v2 (#165).** A new opt-in GCM toggle (default off). When on, the Google tag stack — `gtag.js` / GA4 / Google Ads — is allowed to load *before* consent with a synchronous `consent default → denied` printed inline in `<head>`, so Google sends cookieless/modeled pings (Google's "Advanced" mode, `gcs=G100`) and upgrades to granted measurement on consent. Everything else stays hard-blocked exactly as before: non-Google trackers (Meta, TikTok, LinkedIn, Hotjar…) **and** the Google Tag Manager container (`gtm.js`, which can host tags that don't read Consent Mode). The exemption is enforced on both the server-side output buffer and the client-side blocker (for dynamically-injected tags), and `gcm.js` skips its own `consent default` so there is never a duplicate. Off by default — existing installs keep doing Basic mode (tags only after consent). The admin UI carries an explicit notice that loading Google before consent is the site operator's legal call.
 - **Manual service registration from the built-in catalogue (#161).** An admin can pick a known provider from the built-in catalogue on the Cookies page and register its cookies into the declaration table (marked discovered, domain-scoped) without running a scan, so they are declared domain-wide and feed the Cookie Policy generator.
-- **124 more known trackers in the blocking database and one-click catalogue.** Expanded `Known_Providers` (the engine behind server-side and client-side blocking, cookie shredding and scanner enrichment) and the admin blocker-template catalogue from 160 to 284 services, covering widely-used third parties not previously recognised:
+- **178 more known trackers in the blocking database and one-click catalogue.** Expanded `Known_Providers` (the engine behind server-side and client-side blocking, cookie shredding and scanner enrichment) and the admin blocker-template catalogue from 160 to 338 services, covering widely-used third parties not previously recognised:
   - *Ad-tech / SSP / DMP:* AdRoll, The Trade Desk, Xandr, PubMatic, Magnite/Rubicon, OpenX, Media.net, LiveRamp, Comscore, Nielsen, Yahoo, Adform, Teads, Sharethrough, Index Exchange, Equativ/Smart AdServer, GumGum, TripleLift, Yieldmo, ID5, Lotame, BidSwitch, 33Across, Tealium, Ensighten, Commanders Act.
   - *Content recommendation:* Revcontent, MGID, Mediavine, Ezoic, RTB House, Nativo, Infolinks.
   - *B2B intent / lead intelligence:* 6sense, Demandbase, Bombora, Leadfeeder, ZoomInfo.
@@ -21,7 +21,18 @@ All notable changes to FAZ Cookie Manager are documented in this file.
   - *Push notifications:* OneSignal, PushEngage, iZooto, Webpushr, PushCrew.
   - *Surveys / forms / popups:* SurveyMonkey, Jotform, Qualtrics, Wufoo, Formstack, GetSiteControl.
   - *Web fonts:* Font Awesome, Monotype (fonts.com).
-  - *Consent managers:* iubenda, CookieYes, Didomi, Termly, Osano, Sourcepoint, Cookie Script, Axeptio.
+  - *Consent managers:* iubenda, CookieYes, Didomi, Termly, Osano, Sourcepoint, Cookie Script, Axeptio, CookieFirst, Civic Cookie Control, Enzuzo.
+  - *CDP / product analytics:* mParticle, Freshpaint, June, Pirsch, Umami Cloud, Vercel Analytics, Medallia/Decibel, Naver.
+  - *Publisher ad monetisation:* Sovrn/Lijit, Raptive/AdThrive, Freestar, Connatix, Monumetric, AdPushup.
+  - *More chat / support:* HelpCrunch, Re:amaze, Chaport, Comm100, Gist.
+  - *More reviews / social proof:* Okendo, PowerReviews, eKomi, ProveSource, Nudgify, Shopper Approved.
+  - *More A/B & personalization:* Omniconvert, Personyze, Mutiny, Taplytics.
+  - *More email / CRM:* Oracle Eloqua, Salesforce Marketing Cloud, Ontraport, Vero, Sendlane.
+  - *Maps:* HERE, TomTom, Bing Maps, Esri ArcGIS.
+  - *More video:* Panopto, Bunny Stream, Dacast.
+  - *More push:* PushAlert, Aimtell, Truepush.
+  - *More forms / surveys:* Paperform, Cognito Forms, Tally, involve.me.
+  - *More social embeds:* Odnoklassniki, XING, Kakao.
 
   Every entry uses host- or path-scoped patterns (no bare CDN domains, no literal-`*` dead needles) so the runtime `src`/`href` gate and network interceptors cannot park a legitimate cross-origin asset; each batch was checked with a boundary-match simulation (0 false positives on adversarial legit URLs, all tracker URLs matched). Categories follow existing conventions (consent tools and fonts → functional, video → marketing, ad-tech/DMP → marketing, session/analytics → analytics).
 

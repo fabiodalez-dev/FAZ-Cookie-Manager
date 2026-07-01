@@ -1,0 +1,11 @@
+{
+    "id": "naver-analytics",
+    "name": "Naver Analytics",
+    "description": "Blocks Naver Analytics visitor analytics and conversion tracking.",
+    "category": "analytics",
+    "patterns": [
+        "wcs.naver.net",
+        "wcs.naver.com"
+    ],
+    "cookies": []
+}

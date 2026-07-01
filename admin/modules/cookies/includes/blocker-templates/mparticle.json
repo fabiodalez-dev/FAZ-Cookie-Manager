@@ -1,0 +1,11 @@
+{
+    "id": "mparticle",
+    "name": "mParticle",
+    "description": "Blocks mParticle customer-data platform event collection.",
+    "category": "analytics",
+    "patterns": [
+        "mparticle.com",
+        "jssdkcdns.mparticle.com"
+    ],
+    "cookies": []
+}

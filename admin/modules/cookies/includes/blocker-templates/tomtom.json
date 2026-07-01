@@ -1,0 +1,11 @@
+{
+    "id": "tomtom",
+    "name": "TomTom Maps",
+    "description": "Blocks TomTom Maps interactive maps and geocoding.",
+    "category": "functional",
+    "patterns": [
+        "api.tomtom.com",
+        "sdk.tomtom.com"
+    ],
+    "cookies": []
+}

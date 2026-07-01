@@ -1,0 +1,12 @@
+{
+    "id": "nudgify",
+    "name": "Nudgify",
+    "description": "Blocks Nudgify social-proof conversion notifications.",
+    "category": "marketing",
+    "patterns": [
+        "nudgify.com",
+        "cdn.nudgify.com",
+        "api.nudgify.com"
+    ],
+    "cookies": []
+}

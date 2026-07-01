@@ -1,0 +1,11 @@
+{
+    "id": "cookiefirst",
+    "name": "CookieFirst",
+    "description": "Blocks CookieFirst consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "cookiefirst.com",
+        "consent.cookiefirst.com"
+    ],
+    "cookies": []
+}

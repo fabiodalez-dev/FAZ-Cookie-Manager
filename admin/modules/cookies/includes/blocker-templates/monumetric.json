@@ -1,0 +1,11 @@
+{
+    "id": "monumetric",
+    "name": "Monumetric",
+    "description": "Blocks Monumetric display advertising monetisation.",
+    "category": "marketing",
+    "patterns": [
+        "monumetric.com",
+        "ads.monumetric.com"
+    ],
+    "cookies": []
+}

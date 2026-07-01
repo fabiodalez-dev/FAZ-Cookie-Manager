@@ -1,0 +1,11 @@
+{
+    "id": "adpushup",
+    "name": "AdPushup",
+    "description": "Blocks AdPushup advertising optimisation and monetisation.",
+    "category": "marketing",
+    "patterns": [
+        "adpushup.com",
+        "cdn.adpushup.com"
+    ],
+    "cookies": []
+}

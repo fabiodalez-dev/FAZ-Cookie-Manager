@@ -1,0 +1,12 @@
+{
+    "id": "ontraport",
+    "name": "Ontraport",
+    "description": "Blocks Ontraport CRM and marketing automation forms.",
+    "category": "marketing",
+    "patterns": [
+        "ontraport.com",
+        "app.ontraport.com",
+        "ontralinks.com"
+    ],
+    "cookies": []
+}

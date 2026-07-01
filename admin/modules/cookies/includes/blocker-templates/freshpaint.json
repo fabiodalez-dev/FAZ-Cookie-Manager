@@ -1,0 +1,11 @@
+{
+    "id": "freshpaint",
+    "name": "Freshpaint",
+    "description": "Blocks Freshpaint autotracking and customer-data collection.",
+    "category": "analytics",
+    "patterns": [
+        "freshpaint.io",
+        "perfalytics.com"
+    ],
+    "cookies": []
+}

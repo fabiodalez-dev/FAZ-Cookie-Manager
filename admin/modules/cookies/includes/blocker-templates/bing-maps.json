@@ -1,0 +1,12 @@
+{
+    "id": "bing-maps",
+    "name": "Bing Maps",
+    "description": "Blocks Bing Maps interactive maps and geocoding.",
+    "category": "functional",
+    "patterns": [
+        "virtualearth.net",
+        "dev.virtualearth.net",
+        "bing.com/api/maps"
+    ],
+    "cookies": []
+}

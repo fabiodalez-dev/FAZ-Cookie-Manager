@@ -1,0 +1,11 @@
+{
+    "id": "sendlane",
+    "name": "Sendlane",
+    "description": "Blocks Sendlane email and SMS marketing tracking.",
+    "category": "marketing",
+    "patterns": [
+        "sendlane.com",
+        "cdn.sendlane.com"
+    ],
+    "cookies": []
+}

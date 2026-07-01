@@ -1,0 +1,11 @@
+{
+    "id": "aimtell",
+    "name": "Aimtell",
+    "description": "Blocks Aimtell web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "aimtell.com",
+        "cdn.aimtell.com"
+    ],
+    "cookies": []
+}

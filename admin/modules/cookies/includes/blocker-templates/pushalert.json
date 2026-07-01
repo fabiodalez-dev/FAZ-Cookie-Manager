@@ -1,0 +1,11 @@
+{
+    "id": "pushalert",
+    "name": "PushAlert",
+    "description": "Blocks PushAlert web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "pushalert.co",
+        "cdn.pushalert.co"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "arcgis",
+    "name": "Esri ArcGIS",
+    "description": "Blocks Esri ArcGIS interactive maps and geospatial services.",
+    "category": "functional",
+    "patterns": [
+        "js.arcgis.com",
+        "arcgis.com",
+        "server.arcgisonline.com"
+    ],
+    "cookies": []
+}

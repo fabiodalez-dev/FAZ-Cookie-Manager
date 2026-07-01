@@ -3290,5 +3290,513 @@
             "cdn.pushcrew.com"
         ],
         "cookies": []
+    },
+    "mparticle": {
+        "label": "mParticle",
+        "category": "analytics",
+        "patterns": [
+            "mparticle.com",
+            "jssdkcdns.mparticle.com"
+        ],
+        "cookies": []
+    },
+    "freshpaint": {
+        "label": "Freshpaint",
+        "category": "analytics",
+        "patterns": [
+            "freshpaint.io",
+            "perfalytics.com"
+        ],
+        "cookies": []
+    },
+    "june": {
+        "label": "June",
+        "category": "analytics",
+        "patterns": [
+            "june.so",
+            "api.june.so"
+        ],
+        "cookies": []
+    },
+    "pirsch": {
+        "label": "Pirsch",
+        "category": "analytics",
+        "patterns": [
+            "pirsch.io",
+            "api.pirsch.io"
+        ],
+        "cookies": []
+    },
+    "umami-cloud": {
+        "label": "Umami Cloud",
+        "category": "analytics",
+        "patterns": [
+            "cloud.umami.is",
+            "us.umami.is",
+            "eu.umami.is"
+        ],
+        "cookies": []
+    },
+    "vercel-analytics": {
+        "label": "Vercel Analytics",
+        "category": "analytics",
+        "patterns": [
+            "vercel-insights.com",
+            "va.vercel-scripts.com"
+        ],
+        "cookies": []
+    },
+    "medallia": {
+        "label": "Medallia (Decibel)",
+        "category": "analytics",
+        "patterns": [
+            "decibelinsight.net",
+            "medallia.com",
+            "nebula-cdn.kampyle.com"
+        ],
+        "cookies": []
+    },
+    "naver-analytics": {
+        "label": "Naver Analytics",
+        "category": "analytics",
+        "patterns": [
+            "wcs.naver.net",
+            "wcs.naver.com"
+        ],
+        "cookies": []
+    },
+    "sovrn": {
+        "label": "Sovrn (Lijit)",
+        "category": "marketing",
+        "patterns": [
+            "sovrn.com",
+            "lijit.com",
+            "ce.lijit.com"
+        ],
+        "cookies": []
+    },
+    "raptive": {
+        "label": "Raptive (AdThrive)",
+        "category": "marketing",
+        "patterns": [
+            "adthrive.com",
+            "ads.adthrive.com",
+            "cafemedia.com"
+        ],
+        "cookies": []
+    },
+    "freestar": {
+        "label": "Freestar",
+        "category": "marketing",
+        "patterns": [
+            "freestar.com",
+            "a.pub.network",
+            "pub.network"
+        ],
+        "cookies": []
+    },
+    "connatix": {
+        "label": "Connatix",
+        "category": "marketing",
+        "patterns": [
+            "connatix.com",
+            "connatix.net",
+            "cdn.connatix.com"
+        ],
+        "cookies": []
+    },
+    "monumetric": {
+        "label": "Monumetric",
+        "category": "marketing",
+        "patterns": [
+            "monumetric.com",
+            "ads.monumetric.com"
+        ],
+        "cookies": []
+    },
+    "adpushup": {
+        "label": "AdPushup",
+        "category": "marketing",
+        "patterns": [
+            "adpushup.com",
+            "cdn.adpushup.com"
+        ],
+        "cookies": []
+    },
+    "helpcrunch": {
+        "label": "HelpCrunch",
+        "category": "functional",
+        "patterns": [
+            "helpcrunch.com",
+            "widget.helpcrunch.com"
+        ],
+        "cookies": []
+    },
+    "reamaze": {
+        "label": "Re:amaze",
+        "category": "functional",
+        "patterns": [
+            "reamaze.com",
+            "cdn.reamaze.com",
+            "reamaze.io"
+        ],
+        "cookies": []
+    },
+    "chaport": {
+        "label": "Chaport",
+        "category": "functional",
+        "patterns": [
+            "chaport.com",
+            "app.chaport.com"
+        ],
+        "cookies": []
+    },
+    "comm100": {
+        "label": "Comm100",
+        "category": "functional",
+        "patterns": [
+            "comm100.io",
+            "comm100.com",
+            "vue.comm100.io"
+        ],
+        "cookies": []
+    },
+    "gist": {
+        "label": "Gist (ConvertFox)",
+        "category": "functional",
+        "patterns": [
+            "getgist.com",
+            "gist.build",
+            "widget.getgist.com"
+        ],
+        "cookies": []
+    },
+    "okendo": {
+        "label": "Okendo",
+        "category": "functional",
+        "patterns": [
+            "okendo.io",
+            "okendo.reviews",
+            "d3hw6dc1ow8pp2.cloudfront.net"
+        ],
+        "cookies": []
+    },
+    "powerreviews": {
+        "label": "PowerReviews",
+        "category": "functional",
+        "patterns": [
+            "powerreviews.com",
+            "ui.powerreviews.com"
+        ],
+        "cookies": []
+    },
+    "ekomi": {
+        "label": "eKomi",
+        "category": "functional",
+        "patterns": [
+            "ekomi.com",
+            "ekomi.de",
+            "connect.ekomi.de"
+        ],
+        "cookies": []
+    },
+    "provesource": {
+        "label": "ProveSource",
+        "category": "marketing",
+        "patterns": [
+            "provesrc.com",
+            "cdn.provesrc.com"
+        ],
+        "cookies": []
+    },
+    "nudgify": {
+        "label": "Nudgify",
+        "category": "marketing",
+        "patterns": [
+            "nudgify.com",
+            "cdn.nudgify.com",
+            "api.nudgify.com"
+        ],
+        "cookies": []
+    },
+    "shopper-approved": {
+        "label": "Shopper Approved",
+        "category": "functional",
+        "patterns": [
+            "shopperapproved.com",
+            "www.shopperapproved.com"
+        ],
+        "cookies": []
+    },
+    "omniconvert": {
+        "label": "Omniconvert",
+        "category": "marketing",
+        "patterns": [
+            "omniconvert.com",
+            "web-sdk.omniconvert.com"
+        ],
+        "cookies": []
+    },
+    "personyze": {
+        "label": "Personyze",
+        "category": "marketing",
+        "patterns": [
+            "personyze.com",
+            "s3.personyze.com"
+        ],
+        "cookies": []
+    },
+    "mutiny": {
+        "label": "Mutiny",
+        "category": "marketing",
+        "patterns": [
+            "mutinyhq.com",
+            "mutinycdn.com",
+            "mutiny.dev"
+        ],
+        "cookies": []
+    },
+    "taplytics": {
+        "label": "Taplytics",
+        "category": "marketing",
+        "patterns": [
+            "taplytics.com",
+            "cdn.taplytics.com"
+        ],
+        "cookies": []
+    },
+    "oracle-eloqua": {
+        "label": "Oracle Eloqua",
+        "category": "marketing",
+        "patterns": [
+            "eloqua.com",
+            "en25.com",
+            "elqtrk.com"
+        ],
+        "cookies": []
+    },
+    "salesforce-marketing-cloud": {
+        "label": "Salesforce Marketing Cloud",
+        "category": "marketing",
+        "patterns": [
+            "exacttarget.com",
+            "marketingcloudapps.com",
+            "exct.net"
+        ],
+        "cookies": []
+    },
+    "ontraport": {
+        "label": "Ontraport",
+        "category": "marketing",
+        "patterns": [
+            "ontraport.com",
+            "app.ontraport.com",
+            "ontralinks.com"
+        ],
+        "cookies": []
+    },
+    "vero": {
+        "label": "Vero",
+        "category": "marketing",
+        "patterns": [
+            "getvero.com",
+            "d3qxef4rp70elm.cloudfront.net"
+        ],
+        "cookies": []
+    },
+    "sendlane": {
+        "label": "Sendlane",
+        "category": "marketing",
+        "patterns": [
+            "sendlane.com",
+            "cdn.sendlane.com"
+        ],
+        "cookies": []
+    },
+    "here-maps": {
+        "label": "HERE Maps",
+        "category": "functional",
+        "patterns": [
+            "js.api.here.com",
+            "maps.hereapi.com",
+            "image.maps.hereapi.com"
+        ],
+        "cookies": []
+    },
+    "tomtom": {
+        "label": "TomTom Maps",
+        "category": "functional",
+        "patterns": [
+            "api.tomtom.com",
+            "sdk.tomtom.com"
+        ],
+        "cookies": []
+    },
+    "bing-maps": {
+        "label": "Bing Maps",
+        "category": "functional",
+        "patterns": [
+            "virtualearth.net",
+            "dev.virtualearth.net",
+            "bing.com/api/maps"
+        ],
+        "cookies": []
+    },
+    "arcgis": {
+        "label": "Esri ArcGIS",
+        "category": "functional",
+        "patterns": [
+            "js.arcgis.com",
+            "arcgis.com",
+            "server.arcgisonline.com"
+        ],
+        "cookies": []
+    },
+    "panopto": {
+        "label": "Panopto",
+        "category": "marketing",
+        "patterns": [
+            "panopto.com",
+            "hosted.panopto.com"
+        ],
+        "cookies": []
+    },
+    "bunny-stream": {
+        "label": "Bunny Stream",
+        "category": "marketing",
+        "patterns": [
+            "mediadelivery.net",
+            "iframe.mediadelivery.net"
+        ],
+        "cookies": []
+    },
+    "dacast": {
+        "label": "Dacast",
+        "category": "marketing",
+        "patterns": [
+            "dacast.com",
+            "playerdev.dacast.com",
+            "player.dacast.com"
+        ],
+        "cookies": []
+    },
+    "pushalert": {
+        "label": "PushAlert",
+        "category": "functional",
+        "patterns": [
+            "pushalert.co",
+            "cdn.pushalert.co"
+        ],
+        "cookies": []
+    },
+    "aimtell": {
+        "label": "Aimtell",
+        "category": "functional",
+        "patterns": [
+            "aimtell.com",
+            "cdn.aimtell.com"
+        ],
+        "cookies": []
+    },
+    "truepush": {
+        "label": "Truepush",
+        "category": "functional",
+        "patterns": [
+            "truepush.com",
+            "cdn.truepush.com"
+        ],
+        "cookies": []
+    },
+    "cookiefirst": {
+        "label": "CookieFirst",
+        "category": "functional",
+        "patterns": [
+            "cookiefirst.com",
+            "consent.cookiefirst.com"
+        ],
+        "cookies": []
+    },
+    "civic-cookie-control": {
+        "label": "Civic Cookie Control",
+        "category": "functional",
+        "patterns": [
+            "cookiecontrol.com",
+            "cc.cdn.civiccomputing.com"
+        ],
+        "cookies": []
+    },
+    "enzuzo": {
+        "label": "Enzuzo",
+        "category": "functional",
+        "patterns": [
+            "enzuzo.com",
+            "app.enzuzo.com"
+        ],
+        "cookies": []
+    },
+    "paperform": {
+        "label": "Paperform",
+        "category": "functional",
+        "patterns": [
+            "paperform.co",
+            "l.paperform.co"
+        ],
+        "cookies": []
+    },
+    "cognito-forms": {
+        "label": "Cognito Forms",
+        "category": "functional",
+        "patterns": [
+            "cognitoforms.com",
+            "www.cognitoforms.com"
+        ],
+        "cookies": []
+    },
+    "tally-forms": {
+        "label": "Tally",
+        "category": "functional",
+        "patterns": [
+            "tally.so",
+            "tally.so/widgets"
+        ],
+        "cookies": []
+    },
+    "involve-me": {
+        "label": "involve.me",
+        "category": "functional",
+        "patterns": [
+            "involve.me",
+            "cdn.involve.me"
+        ],
+        "cookies": []
+    },
+    "odnoklassniki": {
+        "label": "Odnoklassniki (OK.ru)",
+        "category": "marketing",
+        "patterns": [
+            "connect.ok.ru",
+            "odnoklassniki.ru",
+            "ok.ru/dk"
+        ],
+        "cookies": []
+    },
+    "xing": {
+        "label": "XING",
+        "category": "marketing",
+        "patterns": [
+            "xing.com",
+            "www.xing-share.com"
+        ],
+        "cookies": []
+    },
+    "kakao": {
+        "label": "Kakao",
+        "category": "marketing",
+        "patterns": [
+            "developers.kakao.com",
+            "t1.kakaocdn.net",
+            "kakao.com/v2"
+        ],
+        "cookies": []
     }
 }
