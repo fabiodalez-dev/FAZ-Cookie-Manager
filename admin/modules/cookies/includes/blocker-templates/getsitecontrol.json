@@ -1,0 +1,11 @@
+{
+    "id": "getsitecontrol",
+    "name": "GetSiteControl",
+    "description": "Blocks GetSiteControl popups, forms and surveys.",
+    "category": "functional",
+    "patterns": [
+        "getsitecontrol.com",
+        "l.getsitecontrol.com"
+    ],
+    "cookies": []
+}

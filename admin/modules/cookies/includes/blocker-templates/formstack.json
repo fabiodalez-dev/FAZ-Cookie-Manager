@@ -1,0 +1,11 @@
+{
+    "id": "formstack",
+    "name": "Formstack",
+    "description": "Blocks Formstack embedded forms.",
+    "category": "functional",
+    "patterns": [
+        "formstack.com",
+        "js.formstack.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,11 @@
+{
+    "id": "pushcrew",
+    "name": "PushCrew (VWO Engage)",
+    "description": "Blocks PushCrew (VWO Engage) web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "pushcrew.com",
+        "cdn.pushcrew.com"
+    ],
+    "cookies": []
+}

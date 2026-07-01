@@ -1,0 +1,11 @@
+{
+    "id": "ensighten",
+    "name": "Ensighten",
+    "description": "Blocks Ensighten tag management and data collection.",
+    "category": "marketing",
+    "patterns": [
+        "ensighten.com",
+        "nexus.ensighten.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "revcontent",
+    "name": "Revcontent",
+    "description": "Blocks Revcontent content recommendation advertising.",
+    "category": "marketing",
+    "patterns": [
+        "revcontent.com",
+        "cdn.revcontent.com",
+        "trends.revcontent.com"
+    ],
+    "cookies": []
+}

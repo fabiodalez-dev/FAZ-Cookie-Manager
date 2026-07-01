@@ -1,0 +1,11 @@
+{
+    "id": "wufoo",
+    "name": "Wufoo",
+    "description": "Blocks Wufoo embedded forms.",
+    "category": "functional",
+    "patterns": [
+        "wufoo.com",
+        "secure.wufoo.com"
+    ],
+    "cookies": []
+}

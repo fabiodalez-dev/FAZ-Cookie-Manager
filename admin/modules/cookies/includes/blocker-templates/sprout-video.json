@@ -1,0 +1,12 @@
+{
+    "id": "sprout-video",
+    "name": "SproutVideo",
+    "description": "Blocks SproutVideo video hosting and player embeds.",
+    "category": "marketing",
+    "patterns": [
+        "sproutvideo.com",
+        "vids.io",
+        "videos.sproutvideo.com"
+    ],
+    "cookies": []
+}

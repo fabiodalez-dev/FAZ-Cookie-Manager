@@ -1,0 +1,11 @@
+{
+    "id": "fomo",
+    "name": "Fomo",
+    "description": "Blocks Fomo social-proof conversion notifications.",
+    "category": "marketing",
+    "patterns": [
+        "load.fomo.com",
+        "fomo.com/api"
+    ],
+    "cookies": []
+}

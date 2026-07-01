@@ -1,0 +1,11 @@
+{
+    "id": "rtb-house",
+    "name": "RTB House",
+    "description": "Blocks RTB House programmatic retargeting advertising.",
+    "category": "marketing",
+    "patterns": [
+        "rtbhouse.com",
+        "creativecdn.com"
+    ],
+    "cookies": []
+}

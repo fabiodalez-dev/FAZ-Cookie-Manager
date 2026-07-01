@@ -1,0 +1,12 @@
+{
+    "id": "mailjet",
+    "name": "Mailjet",
+    "description": "Blocks Mailjet email marketing forms and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "mailjet.com",
+        "mjt.lu",
+        "app.mailjet.com/statics"
+    ],
+    "cookies": []
+}

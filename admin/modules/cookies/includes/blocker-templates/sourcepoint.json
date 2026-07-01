@@ -1,0 +1,12 @@
+{
+    "id": "sourcepoint",
+    "name": "Sourcepoint",
+    "description": "Blocks Sourcepoint consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "sp-prod.net",
+        "privacy-mgmt.com",
+        "sourcepoint.mgr.consensu.org"
+    ],
+    "cookies": []
+}

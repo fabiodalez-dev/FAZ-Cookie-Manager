@@ -1,0 +1,10 @@
+{
+    "id": "quantum-metric",
+    "name": "Quantum Metric",
+    "description": "Blocks Quantum Metric session replay and experience analytics.",
+    "category": "analytics",
+    "patterns": [
+        "quantummetric.com"
+    ],
+    "cookies": []
+}

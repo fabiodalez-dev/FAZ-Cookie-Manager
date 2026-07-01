@@ -1,0 +1,13 @@
+{
+    "id": "woopra",
+    "name": "Woopra",
+    "description": "Blocks Woopra customer journey and behavioural analytics.",
+    "category": "analytics",
+    "patterns": [
+        "woopra.com",
+        "static.woopra.com"
+    ],
+    "cookies": [
+        "wooTracker"
+    ]
+}

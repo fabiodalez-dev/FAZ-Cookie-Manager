@@ -1,0 +1,12 @@
+{
+    "id": "glassbox",
+    "name": "Glassbox",
+    "description": "Blocks Glassbox session replay and experience analytics.",
+    "category": "analytics",
+    "patterns": [
+        "glassbox.com",
+        "glassboxcdn.com",
+        "glassboxdigital.io"
+    ],
+    "cookies": []
+}

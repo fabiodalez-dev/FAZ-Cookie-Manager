@@ -1,0 +1,11 @@
+{
+    "id": "infolinks",
+    "name": "Infolinks",
+    "description": "Blocks Infolinks in-text and display advertising.",
+    "category": "marketing",
+    "patterns": [
+        "infolinks.com",
+        "resources.infolinks.com"
+    ],
+    "cookies": []
+}

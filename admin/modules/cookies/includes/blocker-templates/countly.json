@@ -1,0 +1,11 @@
+{
+    "id": "countly",
+    "name": "Countly",
+    "description": "Blocks Countly product and behavioural analytics.",
+    "category": "analytics",
+    "patterns": [
+        "count.ly",
+        "countly.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,17 @@
+{
+    "id": "ezoic",
+    "name": "Ezoic",
+    "description": "Blocks Ezoic display advertising and site optimisation.",
+    "category": "marketing",
+    "patterns": [
+        "ezoic.net",
+        "ezoic.com",
+        "ezojs.com"
+    ],
+    "cookies": [
+        "ezoab",
+        "ezoadgid",
+        "ezoref",
+        "ezovuid"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "id": "cloudflare-stream",
+    "name": "Cloudflare Stream",
+    "description": "Blocks Cloudflare Stream video hosting and player embeds.",
+    "category": "marketing",
+    "patterns": [
+        "videodelivery.net",
+        "cloudflarestream.com",
+        "iframe.videodelivery.net"
+    ],
+    "cookies": []
+}

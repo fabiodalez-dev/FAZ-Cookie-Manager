@@ -1,0 +1,12 @@
+{
+    "id": "line",
+    "name": "LINE",
+    "description": "Blocks LINE social widgets and conversion tag.",
+    "category": "marketing",
+    "patterns": [
+        "line.me",
+        "line-scdn.net",
+        "tr.line.me"
+    ],
+    "cookies": []
+}

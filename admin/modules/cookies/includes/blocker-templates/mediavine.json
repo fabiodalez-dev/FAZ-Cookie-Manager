@@ -1,0 +1,11 @@
+{
+    "id": "mediavine",
+    "name": "Mediavine",
+    "description": "Blocks Mediavine display advertising and audience management.",
+    "category": "marketing",
+    "patterns": [
+        "mediavine.com",
+        "scripts.mediavine.com"
+    ],
+    "cookies": []
+}
