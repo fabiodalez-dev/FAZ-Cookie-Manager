@@ -3077,9 +3077,16 @@ function _fazBase64DecodeUtf8(encoded) {
 
 function _fazPrepareStyleCss(style, css) {
     if (!_fazStore._block || !css || typeof css !== "string" || !_fazCssShouldBlock(css)) return css;
-    var encoded = _fazBase64EncodeUtf8(css);
+    // Accumulate the ORIGINAL CSS across successive append/appendChild/insertBefore
+    // calls so the restore rebuilds the whole style, not just the last blocked
+    // chunk. Keep the first-tagged category (don't overwrite on later chunks).
+    var prior = style.getAttribute ? style.getAttribute("data-faz-css") : null;
+    var fullOriginal = prior ? (_fazBase64DecodeUtf8(prior) + css) : css;
+    var encoded = _fazBase64EncodeUtf8(fullOriginal);
     if (encoded) style.setAttribute("data-faz-css", encoded);
-    style.setAttribute("data-faz-category", _fazCssBlockedCategory(css));
+    if (!(style.getAttribute && style.getAttribute("data-faz-category"))) {
+        style.setAttribute("data-faz-category", _fazCssBlockedCategory(css));
+    }
     return _fazNeutralizeCssUrls(css);
 }
 
@@ -3102,7 +3109,13 @@ function _fazGateStyleTextSetter(proto, prop) {
         enumerable: desc.enumerable,
         get: function () { return nativeGet.call(this); },
         set: function (val) {
-            nativeSet.call(this, _fazPrepareStyleCss(this, String(val == null ? "" : val)));
+            var s = String(val == null ? "" : val);
+            var out;
+            // Fail open on any error in the CSS-block logic: assign the original
+            // CSS rather than dropping it (a thrown error must never blank the
+            // page's inline styles).
+            try { out = _fazPrepareStyleCss(this, s); } catch (e) { out = s; }
+            nativeSet.call(this, out);
         }
     });
 }
@@ -3114,22 +3127,29 @@ function _fazGateStyleTextNodeMethod(proto, methodName) {
         || (window.Element && Element.prototype && Element.prototype[methodName]);
     if (typeof native !== "function") return;
     Object.defineProperty(proto, methodName, {
+        // writable + enumerable to match the native inherited method's descriptor
+        // shape, so a later `HTMLStyleElement.prototype.<m> = fn` reassignment
+        // (polyfills, other libs) doesn't throw in strict mode.
         configurable: true,
+        writable: true,
+        enumerable: true,
         value: function () {
             var args = Array.prototype.slice.call(arguments);
             var cssArgCount = methodName === "append" ? args.length : Math.min(args.length, 1);
             for (var i = 0; i < cssArgCount; i++) {
                 var arg = args[i];
-                if (typeof arg === "string") {
-                    args[i] = _fazPrepareStyleCss(this, arg);
-                } else if (arg && (arg.nodeType === 3 || arg.nodeType === 4) && typeof arg.nodeValue === "string") {
-                    var css = _fazPrepareStyleCss(this, arg.nodeValue);
-                    if (css !== arg.nodeValue) {
-                        arg = arg.cloneNode(true);
-                        arg.nodeValue = css;
-                        args[i] = arg;
+                try {
+                    if (typeof arg === "string") {
+                        args[i] = _fazPrepareStyleCss(this, arg);
+                    } else if (arg && (arg.nodeType === 3 || arg.nodeType === 4) && typeof arg.nodeValue === "string") {
+                        var css = _fazPrepareStyleCss(this, arg.nodeValue);
+                        // Mutate the node's value in place rather than inserting a
+                        // clone, so the native call inserts and returns the caller's
+                        // exact node — node identity, parentNode, and the return
+                        // value contract are preserved for CSS-in-JS libraries.
+                        if (css !== arg.nodeValue) arg.nodeValue = css;
                     }
-                }
+                } catch (e) { /* leave this argument untouched on any error */ }
             }
             return native.apply(this, args);
         }
@@ -3140,6 +3160,7 @@ _fazGateStyleTextSetter(window.HTMLStyleElement && HTMLStyleElement.prototype, "
 _fazGateStyleTextSetter(window.HTMLStyleElement && HTMLStyleElement.prototype, "innerHTML");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "appendChild");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "insertBefore");
+_fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "replaceChild");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "append");
 
 const _fazCreateElementBackup = document.createElement;

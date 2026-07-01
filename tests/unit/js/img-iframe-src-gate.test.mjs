@@ -340,5 +340,36 @@ eq('style: consent restores original CSS text', st.textContent, css);
 eq('style: consent clears data-faz-css', st.getAttribute('data-faz-css'), null);
 resetConsent();
 
+// --- review fixes (F1-style rework of the style gate) ---
+console.log('\nHTMLStyleElement gate — review fixes');
+// A: appendChild mutates the passed node in place, preserving identity + return value (no clone).
+const idStyle = w.document.createElement('style');
+const tn = w.document.createTextNode('@font-face{src:url("' + GFONT + '")}');
+const ret = idStyle.appendChild(tn);
+eq('A: appendChild returns the exact node passed (identity)', ret === tn, true);
+eq('A: the passed node is connected (parentNode set, not a clone)', tn.parentNode === idStyle, true);
+eq('A: node value neutralized in place', tn.nodeValue.includes('fonts.gstatic.com'), false);
+// E: replaceChild is gated too.
+const rcStyle = w.document.createElement('style');
+const oldNode = w.document.createTextNode('body{color:green}');
+rcStyle.appendChild(oldNode);
+rcStyle.replaceChild(w.document.createTextNode('@import "https://fonts.googleapis.com/css?family=Lato";'), oldNode);
+eq('E: replaceChild neutralizes a blocked @import', rcStyle.textContent.includes('fonts.googleapis.com'), false);
+eq('E: replaceChild parks the original in data-faz-css', typeof rcStyle.getAttribute('data-faz-css'), 'string');
+// B: the gated methods stay writable (reassignment must not throw in strict mode).
+let writable = true;
+try { const s = w.HTMLStyleElement.prototype.appendChild; w.HTMLStyleElement.prototype.appendChild = s; } catch (e) { writable = false; }
+eq('B: gated style methods are writable (no strict-mode throw on reassign)', writable, true);
+// F: multiple blocked chunks accumulate — restore rebuilds ALL of them, not just the last.
+const cum = w.document.createElement('style');
+cum.appendChild(w.document.createTextNode('@font-face{font-family:A;src:url("' + GFONT + '")}'));
+cum.appendChild(w.document.createTextNode('@import "https://fonts.googleapis.com/css?family=X";'));
+setConsent({ functional: 'yes' });
+w.document.head.appendChild(cum);
+w.eval('_fazUnblockServerSide()');
+eq('F: cumulative restore rebuilds the first blocked chunk (gstatic)', cum.textContent.includes('fonts.gstatic.com'), true);
+eq('F: cumulative restore rebuilds the second blocked chunk (googleapis @import)', cum.textContent.includes('fonts.googleapis.com'), true);
+resetConsent();
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

@@ -2491,7 +2491,8 @@ class Frontend {
 		//     <noscript>" earlier in this method. Keeping the step-number gap
 		//     to avoid renumbering the rest of the pipeline.)
 
-		// 4. Block inline CSS url() channels (<style>@font-face src:url(...)).
+		// 4. Block inline CSS url()/@import channels — any blocked-provider target
+		//    inside a <style> (fonts, background-image, cursor, mask, @import).
 		if ( false !== stripos( $html, '<style' ) ) {
 			$result = preg_replace_callback(
 				'#<style\b([^>]*)>(.*?)</style>#is',
@@ -2868,12 +2869,14 @@ class Frontend {
 	}
 
 	/**
-	 * Process an inline <style> tag for blockable CSS url() references.
+	 * Process an inline <style> tag for blockable CSS url()/@import references.
 	 *
-	 * A font file referenced from @font-face src:url(...) is fetched by the CSS
-	 * engine, not by <link href>, so the stylesheet gate cannot see it. Keep the
-	 * non-provider CSS active, replace only blocked external URL tokens with an
-	 * inert data: URL, and store the original CSS for the frontend restore pass.
+	 * Any external resource referenced from CSS — @font-face src:url(...), but
+	 * also background-image, cursor, border-image, mask, list-style-image and
+	 * bare-string @import — is fetched by the CSS engine, not by <link href>, so
+	 * the stylesheet gate cannot see it. Keep the non-provider CSS active, replace
+	 * only blocked-provider url()/@import targets with an inert data: URL, and
+	 * store the original CSS for the frontend restore pass.
 	 *
 	 * @param array $m                  Regex match.
 	 * @param array $providers          Provider-to-category map.
@@ -2928,7 +2931,9 @@ class Frontend {
 			return true;
 		};
 
-		$css = preg_replace_callback(
+		$original = (string) $css;
+
+		$rewritten = preg_replace_callback(
 			'/url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^)\s]+))\s*\)/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				$url = isset( $m[1] ) && '' !== $m[1] ? $m[1] : ( isset( $m[2] ) && '' !== $m[2] ? $m[2] : ( isset( $m[3] ) ? $m[3] : '' ) );
@@ -2937,10 +2942,19 @@ class Frontend {
 				}
 				return 'url("' . $inert_url . '")';
 			},
-			$css
+			$original
 		);
+		// PCRE error (backtrack/recursion limit on crafted or very large CSS)
+		// returns null. Fail OPEN: reset categories and return the ORIGINAL CSS
+		// so process_style_tag leaves the <style> untouched, instead of emitting
+		// an empty <style> body that strips every rule. Also never pass a null
+		// subject into the second pass (deprecated / TypeError on PHP 8.1+).
+		if ( null === $rewritten ) {
+			$categories = array();
+			return $original;
+		}
 
-		$css = preg_replace_callback(
+		$rewritten = preg_replace_callback(
 			'/(@import\s+)(["\'])([^"\']+)\2/i',
 			function ( $m ) use ( $block_url, $inert_url ) {
 				if ( ! $block_url( $m[3] ) ) {
@@ -2948,11 +2962,15 @@ class Frontend {
 				}
 				return $m[1] . 'url("' . $inert_url . '")';
 			},
-			$css
+			$rewritten
 		);
+		if ( null === $rewritten ) {
+			$categories = array();
+			return $original;
+		}
 
 		$categories = array_values( array_unique( $categories ) );
-		return null === $css ? '' : $css;
+		return $rewritten;
 	}
 
 	/**
