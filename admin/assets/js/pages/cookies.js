@@ -4,6 +4,11 @@
 (function () {
 	'use strict';
 
+	// Signal that this file loaded and ran, for the view's blocked-script
+	// watchdog (cookies.js can be blocked by ad blockers / browser shields that
+	// match its "cookie" filename, leaving the page silently inert).
+	window.fazCookiesBooted = true;
+
 	// i18n helper — looks up fazConfig.i18n.<key> with dot-notation, falls back to provided string.
 	function __(key, fallback) {
 		var parts = key.split('.');
