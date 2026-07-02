@@ -1,0 +1,15 @@
+{
+    "id": "parsely",
+    "name": "Parse.ly",
+    "description": "Blocks Parse.ly content analytics and audience tracking.",
+    "category": "analytics",
+    "patterns": [
+        "parsely.com",
+        "cdn.parsely.com",
+        "p1.parsely.com"
+    ],
+    "cookies": [
+        "_parsely_visitor",
+        "_parsely_session"
+    ]
+}

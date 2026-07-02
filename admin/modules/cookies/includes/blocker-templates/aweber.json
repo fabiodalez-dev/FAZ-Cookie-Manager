@@ -1,0 +1,12 @@
+{
+    "id": "aweber",
+    "name": "AWeber",
+    "description": "Blocks AWeber email marketing forms and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "aweber.com",
+        "forms.aweber.com",
+        "aweber-static.com"
+    ],
+    "cookies": []
+}

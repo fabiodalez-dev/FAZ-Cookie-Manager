@@ -1,0 +1,12 @@
+{
+    "id": "raptive",
+    "name": "Raptive (AdThrive)",
+    "description": "Blocks Raptive (AdThrive) display advertising monetisation.",
+    "category": "marketing",
+    "patterns": [
+        "adthrive.com",
+        "ads.adthrive.com",
+        "cafemedia.com"
+    ],
+    "cookies": []
+}

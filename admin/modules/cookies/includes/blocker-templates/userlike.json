@@ -1,0 +1,11 @@
+{
+    "id": "userlike",
+    "name": "Userlike",
+    "description": "Blocks Userlike live chat widget.",
+    "category": "functional",
+    "patterns": [
+        "userlike.com",
+        "userlike-cdn.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,14 @@
+{
+    "id": "tealium",
+    "name": "Tealium",
+    "description": "Blocks Tealium tag management and audience data collection.",
+    "category": "marketing",
+    "patterns": [
+        "tiqcdn.com",
+        "tags.tiqcdn.com",
+        "tealiumiq.com"
+    ],
+    "cookies": [
+        "utag_main"
+    ]
+}

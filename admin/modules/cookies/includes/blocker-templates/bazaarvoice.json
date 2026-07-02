@@ -1,0 +1,12 @@
+{
+    "id": "bazaarvoice",
+    "name": "Bazaarvoice",
+    "description": "Blocks Bazaarvoice product ratings and reviews.",
+    "category": "functional",
+    "patterns": [
+        "bazaarvoice.com",
+        "apps.bazaarvoice.com",
+        "display.ugc.bazaarvoice.com"
+    ],
+    "cookies": []
+}

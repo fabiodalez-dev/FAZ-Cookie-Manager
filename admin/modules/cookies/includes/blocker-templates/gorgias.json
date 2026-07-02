@@ -1,0 +1,12 @@
+{
+    "id": "gorgias",
+    "name": "Gorgias",
+    "description": "Blocks Gorgias customer support chat widget.",
+    "category": "functional",
+    "patterns": [
+        "gorgias.chat",
+        "config.gorgias.chat",
+        "assets.gorgias.chat"
+    ],
+    "cookies": []
+}

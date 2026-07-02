@@ -1,0 +1,12 @@
+{
+    "id": "odnoklassniki",
+    "name": "Odnoklassniki (OK.ru)",
+    "description": "Blocks Odnoklassniki (OK.ru) social widgets and sharing.",
+    "category": "marketing",
+    "patterns": [
+        "connect.ok.ru",
+        "odnoklassniki.ru",
+        "ok.ru/dk"
+    ],
+    "cookies": []
+}

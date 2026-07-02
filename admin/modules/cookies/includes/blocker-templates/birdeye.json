@@ -1,0 +1,11 @@
+{
+    "id": "birdeye",
+    "name": "Birdeye",
+    "description": "Blocks Birdeye customer messaging and reviews widget.",
+    "category": "functional",
+    "patterns": [
+        "birdeye.com",
+        "birdeye.com/embed"
+    ],
+    "cookies": []
+}

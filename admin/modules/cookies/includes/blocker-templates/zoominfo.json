@@ -1,0 +1,12 @@
+{
+    "id": "zoominfo",
+    "name": "ZoomInfo",
+    "description": "Blocks ZoomInfo B2B visitor identification and enrichment.",
+    "category": "marketing",
+    "patterns": [
+        "ws.zoominfo.com",
+        "zoominfo.com",
+        "js.zi-scripts.com"
+    ],
+    "cookies": []
+}

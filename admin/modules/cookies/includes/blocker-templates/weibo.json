@@ -1,0 +1,11 @@
+{
+    "id": "weibo",
+    "name": "Sina Weibo",
+    "description": "Blocks Sina Weibo social sharing widgets.",
+    "category": "marketing",
+    "patterns": [
+        "weibo.com",
+        "tjs.sjs.sinajs.cn"
+    ],
+    "cookies": []
+}

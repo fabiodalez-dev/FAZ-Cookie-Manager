@@ -1,0 +1,12 @@
+{
+    "id": "axeptio",
+    "name": "Axeptio",
+    "description": "Blocks Axeptio consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "axept.io",
+        "axeptio.eu",
+        "static.axept.io"
+    ],
+    "cookies": []
+}

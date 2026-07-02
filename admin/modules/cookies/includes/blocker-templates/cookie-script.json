@@ -1,0 +1,11 @@
+{
+    "id": "cookie-script",
+    "name": "Cookie Script",
+    "description": "Blocks Cookie Script consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "cookie-script.com",
+        "cdn.cookie-script.com"
+    ],
+    "cookies": []
+}

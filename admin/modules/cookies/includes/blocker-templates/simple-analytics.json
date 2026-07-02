@@ -1,0 +1,12 @@
+{
+    "id": "simple-analytics",
+    "name": "Simple Analytics",
+    "description": "Blocks Simple Analytics privacy-friendly page-view analytics.",
+    "category": "analytics",
+    "patterns": [
+        "simpleanalytics.com",
+        "scripts.simpleanalyticscdn.com",
+        "queue.simpleanalyticscdn.com"
+    ],
+    "cookies": []
+}

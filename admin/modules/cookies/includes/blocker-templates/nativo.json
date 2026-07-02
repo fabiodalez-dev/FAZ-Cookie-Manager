@@ -1,0 +1,12 @@
+{
+    "id": "nativo",
+    "name": "Nativo",
+    "description": "Blocks Nativo native advertising and content distribution.",
+    "category": "marketing",
+    "patterns": [
+        "postrelease.com",
+        "ntv.io",
+        "b.ntv.io"
+    ],
+    "cookies": []
+}

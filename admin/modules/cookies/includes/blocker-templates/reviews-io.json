@@ -1,0 +1,11 @@
+{
+    "id": "reviews-io",
+    "name": "REVIEWS.io",
+    "description": "Blocks REVIEWS.io product and company reviews widget.",
+    "category": "functional",
+    "patterns": [
+        "widget.reviews.io",
+        "assets.reviews.io"
+    ],
+    "cookies": []
+}

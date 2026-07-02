@@ -1,0 +1,11 @@
+{
+    "id": "taplytics",
+    "name": "Taplytics",
+    "description": "Blocks Taplytics A/B testing and personalization.",
+    "category": "marketing",
+    "patterns": [
+        "taplytics.com",
+        "cdn.taplytics.com"
+    ],
+    "cookies": []
+}

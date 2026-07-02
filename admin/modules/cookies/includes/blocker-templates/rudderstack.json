@@ -1,0 +1,11 @@
+{
+    "id": "rudderstack",
+    "name": "RudderStack",
+    "description": "Blocks RudderStack customer-data event collection.",
+    "category": "analytics",
+    "patterns": [
+        "rudderstack.com",
+        "rudderlabs.com"
+    ],
+    "cookies": []
+}

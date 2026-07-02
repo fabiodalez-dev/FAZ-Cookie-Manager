@@ -1,0 +1,11 @@
+{
+    "id": "helpscout",
+    "name": "Help Scout",
+    "description": "Blocks Help Scout customer support chat and Beacon widget.",
+    "category": "functional",
+    "patterns": [
+        "helpscout.net",
+        "beacon-v2.helpscout.net"
+    ],
+    "cookies": []
+}

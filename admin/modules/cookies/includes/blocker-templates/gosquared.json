@@ -1,0 +1,11 @@
+{
+    "id": "gosquared",
+    "name": "GoSquared",
+    "description": "Blocks GoSquared real-time visitor analytics.",
+    "category": "analytics",
+    "patterns": [
+        "gosquared.com",
+        "data.gosquared.com"
+    ],
+    "cookies": []
+}

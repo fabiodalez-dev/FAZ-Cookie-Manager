@@ -1,0 +1,14 @@
+{
+    "id": "triplelift",
+    "name": "TripleLift",
+    "description": "Blocks TripleLift native advertising and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "3lift.com",
+        "ib.3lift.com",
+        "eb2.3lift.com"
+    ],
+    "cookies": [
+        "tluid"
+    ]
+}

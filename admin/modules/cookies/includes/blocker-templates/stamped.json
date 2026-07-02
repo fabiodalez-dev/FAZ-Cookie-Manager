@@ -1,0 +1,11 @@
+{
+    "id": "stamped",
+    "name": "Stamped.io",
+    "description": "Blocks Stamped.io product reviews and loyalty widget.",
+    "category": "functional",
+    "patterns": [
+        "stamped.io",
+        "cdn1.stamped.io"
+    ],
+    "cookies": []
+}

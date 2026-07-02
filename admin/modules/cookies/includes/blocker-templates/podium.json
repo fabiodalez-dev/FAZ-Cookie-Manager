@@ -1,0 +1,11 @@
+{
+    "id": "podium",
+    "name": "Podium",
+    "description": "Blocks Podium customer messaging and webchat widget.",
+    "category": "functional",
+    "patterns": [
+        "podium.com",
+        "connect.podium.com"
+    ],
+    "cookies": []
+}

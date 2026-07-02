@@ -1,0 +1,12 @@
+{
+    "id": "comm100",
+    "name": "Comm100",
+    "description": "Blocks Comm100 live chat widget.",
+    "category": "functional",
+    "patterns": [
+        "comm100.io",
+        "comm100.com",
+        "vue.comm100.io"
+    ],
+    "cookies": []
+}

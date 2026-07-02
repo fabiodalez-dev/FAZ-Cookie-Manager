@@ -1,0 +1,11 @@
+{
+    "id": "gist",
+    "name": "Gist (ConvertFox)",
+    "description": "Blocks Gist (ConvertFox) live chat and messaging widget.",
+    "category": "functional",
+    "patterns": [
+        "getgist.com",
+        "widget.getgist.com"
+    ],
+    "cookies": []
+}

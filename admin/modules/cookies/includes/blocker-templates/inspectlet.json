@@ -1,0 +1,15 @@
+{
+    "id": "inspectlet",
+    "name": "Inspectlet",
+    "description": "Blocks Inspectlet session recording and heatmap tracking.",
+    "category": "analytics",
+    "patterns": [
+        "inspectlet.com",
+        "cdn.inspectlet.com",
+        "hn.inspectlet.com",
+        "__insp"
+    ],
+    "cookies": [
+        "__insp_*"
+    ]
+}

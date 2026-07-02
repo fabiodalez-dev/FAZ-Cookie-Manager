@@ -1,0 +1,12 @@
+{
+    "id": "chatra",
+    "name": "Chatra",
+    "description": "Blocks Chatra live chat widget.",
+    "category": "functional",
+    "patterns": [
+        "chatra.io",
+        "call.chatra.io",
+        "chatra.com"
+    ],
+    "cookies": []
+}

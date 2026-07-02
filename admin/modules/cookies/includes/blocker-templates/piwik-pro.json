@@ -1,0 +1,12 @@
+{
+    "id": "piwik-pro",
+    "name": "Piwik PRO",
+    "description": "Blocks Piwik PRO analytics and tag management.",
+    "category": "analytics",
+    "patterns": [
+        "piwik.pro",
+        "containers.piwik.pro",
+        ".piwik.pro/ppms"
+    ],
+    "cookies": []
+}

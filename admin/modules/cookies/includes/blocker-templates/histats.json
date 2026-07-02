@@ -1,0 +1,11 @@
+{
+    "id": "histats",
+    "name": "Histats",
+    "description": "Blocks Histats visitor counter and analytics.",
+    "category": "analytics",
+    "patterns": [
+        "histats.com",
+        "s10.histats.com"
+    ],
+    "cookies": []
+}

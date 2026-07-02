@@ -1,0 +1,11 @@
+{
+    "id": "omniconvert",
+    "name": "Omniconvert",
+    "description": "Blocks Omniconvert A/B testing and personalization.",
+    "category": "marketing",
+    "patterns": [
+        "omniconvert.com",
+        "web-sdk.omniconvert.com"
+    ],
+    "cookies": []
+}

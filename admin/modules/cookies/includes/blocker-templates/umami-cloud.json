@@ -1,0 +1,12 @@
+{
+    "id": "umami-cloud",
+    "name": "Umami Cloud",
+    "description": "Blocks Umami Cloud privacy-friendly page-view analytics.",
+    "category": "analytics",
+    "patterns": [
+        "cloud.umami.is",
+        "us.umami.is",
+        "eu.umami.is"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,14 @@
+{
+    "id": "six-sense",
+    "name": "6sense",
+    "description": "Blocks 6sense B2B account identification and intent tracking.",
+    "category": "marketing",
+    "patterns": [
+        "6sense.com",
+        "j.6sc.co",
+        "epsilon.6sense.com"
+    ],
+    "cookies": [
+        "_6senseCompanyDetails"
+    ]
+}

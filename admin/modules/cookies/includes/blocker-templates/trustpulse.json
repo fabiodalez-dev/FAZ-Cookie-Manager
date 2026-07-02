@@ -1,0 +1,11 @@
+{
+    "id": "trustpulse",
+    "name": "TrustPulse",
+    "description": "Blocks TrustPulse social-proof conversion notifications.",
+    "category": "marketing",
+    "patterns": [
+        "trustpulse.com",
+        "app.trustpulse.com"
+    ],
+    "cookies": []
+}

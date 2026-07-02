@@ -1,0 +1,15 @@
+{
+    "id": "sailthru",
+    "name": "Sailthru (Marigold)",
+    "description": "Blocks Sailthru (Marigold) personalised email and onsite tracking.",
+    "category": "marketing",
+    "patterns": [
+        "sailthru.com",
+        "sail-horizon.com",
+        "ak.sail-horizon.com"
+    ],
+    "cookies": [
+        "sailthru_hid",
+        "sailthru_content"
+    ]
+}

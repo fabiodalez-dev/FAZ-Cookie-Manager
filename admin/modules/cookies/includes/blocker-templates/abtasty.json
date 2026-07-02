@@ -1,0 +1,14 @@
+{
+    "id": "abtasty",
+    "name": "AB Tasty",
+    "description": "Blocks AB Tasty A/B testing and personalization.",
+    "category": "analytics",
+    "patterns": [
+        "abtasty.com",
+        "try.abtasty.com"
+    ],
+    "cookies": [
+        "ABTasty",
+        "ABTastySession"
+    ]
+}

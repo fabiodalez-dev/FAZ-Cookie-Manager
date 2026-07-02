@@ -4,8 +4,19 @@
     "description": "Blocks TikTok conversion tracking pixel.",
     "category": "marketing",
     "patterns": [
+        "tiktok.com",
         "analytics.tiktok.com",
-        "tiktok.com/i18n/pixel"
+        "tiktok.com/i18n/pixel",
+        "ttq.load(",
+        "ttq.load (",
+        "ttq.page(",
+        "tiktok-events",
+        "add-tiktok-pixel-for-tiktok-ads",
+        "__tea_cache_tokens_"
     ],
-    "cookies": ["_ttp", "tt_webid", "tt_webid_v2"]
+    "cookies": [
+        "_ttp",
+        "tt_webid",
+        "tt_webid_v2"
+    ]
 }

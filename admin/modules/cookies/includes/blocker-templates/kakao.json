@@ -1,0 +1,11 @@
+{
+    "id": "kakao",
+    "name": "Kakao",
+    "description": "Blocks Kakao social login and share SDK.",
+    "category": "marketing",
+    "patterns": [
+        "developers.kakao.com",
+        "t1.kakaocdn.net"
+    ],
+    "cookies": []
+}

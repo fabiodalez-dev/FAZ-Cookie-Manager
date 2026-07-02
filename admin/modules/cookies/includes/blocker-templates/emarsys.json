@@ -1,0 +1,13 @@
+{
+    "id": "emarsys",
+    "name": "Emarsys (SAP)",
+    "description": "Blocks Emarsys (SAP) cross-channel marketing tracking.",
+    "category": "marketing",
+    "patterns": [
+        "emarsys.net",
+        "scarabresearch.com"
+    ],
+    "cookies": [
+        "scarab.visitor"
+    ]
+}

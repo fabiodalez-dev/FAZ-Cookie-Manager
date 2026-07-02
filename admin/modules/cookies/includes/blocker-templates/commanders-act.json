@@ -1,0 +1,11 @@
+{
+    "id": "commanders-act",
+    "name": "Commanders Act",
+    "description": "Blocks Commanders Act tag management and consent data.",
+    "category": "marketing",
+    "patterns": [
+        "tagcommander.com",
+        "commander1.com"
+    ],
+    "cookies": []
+}

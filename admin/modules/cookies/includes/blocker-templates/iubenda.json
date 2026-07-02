@@ -1,0 +1,12 @@
+{
+    "id": "iubenda",
+    "name": "iubenda",
+    "description": "Blocks iubenda consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "iubenda.com",
+        "cdn.iubenda.com",
+        "cs.iubenda.com"
+    ],
+    "cookies": []
+}

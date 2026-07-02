@@ -1,0 +1,17 @@
+{
+    "id": "dynamic-yield",
+    "name": "Dynamic Yield",
+    "description": "Blocks Dynamic Yield personalization and A/B testing.",
+    "category": "marketing",
+    "patterns": [
+        "dynamicyield.com",
+        "cdn.dynamicyield.com",
+        "st.dynamicyield.com"
+    ],
+    "cookies": [
+        "_dyid",
+        "_dyid_server",
+        "_dycst",
+        "dyid"
+    ]
+}

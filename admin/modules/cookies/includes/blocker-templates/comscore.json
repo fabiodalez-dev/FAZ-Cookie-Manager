@@ -1,0 +1,12 @@
+{
+    "id": "comscore",
+    "name": "Comscore (Scorecard Research)",
+    "description": "Blocks Comscore (Scorecard Research) audience measurement beacons.",
+    "category": "marketing",
+    "patterns": [
+        "scorecardresearch.com",
+        "sb.scorecardresearch.com",
+        "comscore.com"
+    ],
+    "cookies": []
+}

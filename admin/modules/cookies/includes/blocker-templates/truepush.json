@@ -1,0 +1,11 @@
+{
+    "id": "truepush",
+    "name": "Truepush",
+    "description": "Blocks Truepush web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "truepush.com",
+        "cdn.truepush.com"
+    ],
+    "cookies": []
+}

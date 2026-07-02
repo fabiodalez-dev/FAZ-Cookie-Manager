@@ -1,0 +1,12 @@
+{
+    "id": "font-awesome",
+    "name": "Font Awesome",
+    "description": "Blocks Font Awesome icon and web-font kits.",
+    "category": "functional",
+    "patterns": [
+        "use.fontawesome.com",
+        "kit.fontawesome.com",
+        "ka-f.fontawesome.com"
+    ],
+    "cookies": []
+}

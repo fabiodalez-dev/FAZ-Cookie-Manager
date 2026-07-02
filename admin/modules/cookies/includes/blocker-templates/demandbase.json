@@ -1,0 +1,12 @@
+{
+    "id": "demandbase",
+    "name": "Demandbase",
+    "description": "Blocks Demandbase B2B account identification and intent tracking.",
+    "category": "marketing",
+    "patterns": [
+        "demandbase.com",
+        "company-target.com",
+        "scripts.demandbase.com"
+    ],
+    "cookies": []
+}

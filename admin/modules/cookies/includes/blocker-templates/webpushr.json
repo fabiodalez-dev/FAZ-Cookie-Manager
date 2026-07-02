@@ -1,0 +1,11 @@
+{
+    "id": "webpushr",
+    "name": "Webpushr",
+    "description": "Blocks Webpushr web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "webpushr.com",
+        "cdn.webpushr.com"
+    ],
+    "cookies": []
+}

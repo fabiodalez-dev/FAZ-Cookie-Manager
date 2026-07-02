@@ -1,0 +1,10 @@
+{
+    "id": "snapengage",
+    "name": "SnapEngage",
+    "description": "Blocks SnapEngage live chat widget.",
+    "category": "functional",
+    "patterns": [
+        "snapengage.com"
+    ],
+    "cookies": []
+}

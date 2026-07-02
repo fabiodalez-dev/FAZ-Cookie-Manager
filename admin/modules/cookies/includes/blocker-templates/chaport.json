@@ -1,0 +1,11 @@
+{
+    "id": "chaport",
+    "name": "Chaport",
+    "description": "Blocks Chaport live chat widget.",
+    "category": "functional",
+    "patterns": [
+        "chaport.com",
+        "app.chaport.com"
+    ],
+    "cookies": []
+}

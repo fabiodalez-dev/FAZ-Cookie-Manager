@@ -5,6 +5,7 @@
     "category": "functional",
     "patterns": [
         "assets.calendly.com",
+        "calendly.com",
         "calendly.com/assets/external",
         "calendly.com/widget"
     ],

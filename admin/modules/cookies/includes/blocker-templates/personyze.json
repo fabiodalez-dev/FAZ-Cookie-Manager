@@ -1,0 +1,11 @@
+{
+    "id": "personyze",
+    "name": "Personyze",
+    "description": "Blocks Personyze personalization and A/B testing.",
+    "category": "marketing",
+    "patterns": [
+        "personyze.com",
+        "s3.personyze.com"
+    ],
+    "cookies": []
+}

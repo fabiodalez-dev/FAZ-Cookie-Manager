@@ -4,6 +4,8 @@
     "description": "Blocks Pinterest Tag marketing pixels, conversion tracking, and ad-targeting cookies.",
     "category": "marketing",
     "patterns": [
+        "pinterest.com/pin",
+        "pin.it",
         "s.pinimg.com/ct/core.js",
         "assets.pinterest.com",
         "ct.pinterest.com",

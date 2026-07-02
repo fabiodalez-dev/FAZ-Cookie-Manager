@@ -1,0 +1,11 @@
+{
+    "id": "sendpulse",
+    "name": "SendPulse",
+    "description": "Blocks SendPulse email, push and chatbot marketing tracking.",
+    "category": "marketing",
+    "patterns": [
+        "sendpulse.com",
+        "login.sendpulse.com"
+    ],
+    "cookies": []
+}

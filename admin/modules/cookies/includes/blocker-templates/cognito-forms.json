@@ -1,0 +1,11 @@
+{
+    "id": "cognito-forms",
+    "name": "Cognito Forms",
+    "description": "Blocks Cognito Forms embedded forms.",
+    "category": "functional",
+    "patterns": [
+        "cognitoforms.com",
+        "www.cognitoforms.com"
+    ],
+    "cookies": []
+}

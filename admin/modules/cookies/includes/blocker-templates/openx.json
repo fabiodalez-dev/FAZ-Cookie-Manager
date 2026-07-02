@@ -1,0 +1,14 @@
+{
+    "id": "openx",
+    "name": "OpenX",
+    "description": "Blocks OpenX advertising exchange and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "openx.net",
+        "us-u.openx.net",
+        "rtb.openx.net"
+    ],
+    "cookies": [
+        "OX_*"
+    ]
+}

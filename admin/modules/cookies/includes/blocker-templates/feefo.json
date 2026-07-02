@@ -1,0 +1,11 @@
+{
+    "id": "feefo",
+    "name": "Feefo",
+    "description": "Blocks Feefo product and service reviews widget.",
+    "category": "functional",
+    "patterns": [
+        "feefo.com",
+        "api.feefo.com"
+    ],
+    "cookies": []
+}

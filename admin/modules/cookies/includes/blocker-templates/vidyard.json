@@ -1,0 +1,12 @@
+{
+    "id": "vidyard",
+    "name": "Vidyard",
+    "description": "Blocks Vidyard video hosting, embeds and analytics.",
+    "category": "marketing",
+    "patterns": [
+        "vidyard.com",
+        "play.vidyard.com",
+        "cdn.vidyard.com"
+    ],
+    "cookies": []
+}

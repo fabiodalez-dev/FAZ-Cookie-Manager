@@ -1,0 +1,11 @@
+{
+    "id": "goatcounter",
+    "name": "GoatCounter",
+    "description": "Blocks GoatCounter privacy-friendly page-view analytics.",
+    "category": "analytics",
+    "patterns": [
+        "goatcounter.com",
+        "gc.zgo.at"
+    ],
+    "cookies": []
+}

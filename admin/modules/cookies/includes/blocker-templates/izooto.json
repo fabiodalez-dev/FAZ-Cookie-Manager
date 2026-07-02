@@ -1,0 +1,11 @@
+{
+    "id": "izooto",
+    "name": "iZooto",
+    "description": "Blocks iZooto web push notifications.",
+    "category": "functional",
+    "patterns": [
+        "izooto.com",
+        "cdn.izooto.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,11 @@
+{
+    "id": "iterable",
+    "name": "Iterable",
+    "description": "Blocks Iterable cross-channel marketing and link tracking.",
+    "category": "marketing",
+    "patterns": [
+        "iterable.com",
+        "links.iterable.com"
+    ],
+    "cookies": []
+}

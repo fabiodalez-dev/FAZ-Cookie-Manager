@@ -1,0 +1,11 @@
+{
+    "id": "enzuzo",
+    "name": "Enzuzo",
+    "description": "Blocks Enzuzo consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "enzuzo.com",
+        "app.enzuzo.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "media-net",
+    "name": "Media.net",
+    "description": "Blocks Media.net contextual advertising and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "media.net",
+        "contextual.media.net",
+        "static.media.net"
+    ],
+    "cookies": []
+}

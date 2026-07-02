@@ -1,0 +1,12 @@
+{
+    "id": "sovrn",
+    "name": "Sovrn (Lijit)",
+    "description": "Blocks Sovrn (Lijit) advertising exchange and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "sovrn.com",
+        "lijit.com",
+        "ce.lijit.com"
+    ],
+    "cookies": []
+}

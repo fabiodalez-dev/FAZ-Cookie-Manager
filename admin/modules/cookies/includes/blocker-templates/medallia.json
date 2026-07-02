@@ -1,0 +1,12 @@
+{
+    "id": "medallia",
+    "name": "Medallia (Decibel)",
+    "description": "Blocks Medallia (Decibel) experience analytics and session replay.",
+    "category": "analytics",
+    "patterns": [
+        "decibelinsight.net",
+        "medallia.com",
+        "nebula-cdn.kampyle.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,12 @@
+{
+    "id": "yotpo",
+    "name": "Yotpo",
+    "description": "Blocks Yotpo product reviews and user-generated content.",
+    "category": "functional",
+    "patterns": [
+        "yotpo.com",
+        "staticw2.yotpo.com",
+        "cdn-widgetsrepository.yotpo.com"
+    ],
+    "cookies": []
+}

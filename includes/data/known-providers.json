@@ -211,7 +211,7 @@
         "label": "Twitter/X Pixel",
         "category": "marketing",
         "patterns": [
-            "x.com",
+            "//x.com",
             "platform.twitter.com",
             "twitter-widgets.js",
             "ads-twitter.com",
@@ -306,7 +306,8 @@
             "_hjSessionUser_*",
             "_hjSession_*",
             "_hjAbsoluteSessionInProgress",
-            "_hjFirstSeen"
+            "_hjFirstSeen",
+            "_hjIncludedInPageviewSample"
         ]
     },
     "matomo": {
@@ -321,7 +322,15 @@
         "cookies": [
             "_pk_id.*",
             "_pk_ses.*",
-            "_pk_ref.*"
+            "_pk_ref.*",
+            "MATOMO_SESSID",
+            "_pk_cvar.*",
+            "_pk_hsr.*",
+            "_pk_testcookie.*",
+            "_pk_uid",
+            "mtm_consent",
+            "mtm_consent_removed",
+            "mtm_cookie_consent"
         ]
     },
     "koko-analytics": {
@@ -379,7 +388,8 @@
             "i.vimeocdn.com"
         ],
         "cookies": [
-            "vuid"
+            "vuid",
+            "__ssid"
         ]
     },
     "google-maps": {
@@ -2004,5 +2014,1788 @@
             "_cs_mk",
             "_cs_same_site"
         ]
+    },
+    "adroll": {
+        "label": "AdRoll",
+        "category": "marketing",
+        "patterns": [
+            "adroll.com",
+            "d.adroll.com",
+            "s.adroll.com",
+            "__adroll"
+        ],
+        "cookies": [
+            "__adroll",
+            "__ar_v4",
+            "__adroll_fpc"
+        ]
+    },
+    "the-trade-desk": {
+        "label": "The Trade Desk",
+        "category": "marketing",
+        "patterns": [
+            "adsrvr.org",
+            "js.adsrvr.org",
+            "insight.adsrvr.org"
+        ],
+        "cookies": [
+            "TDID",
+            "TDCPM"
+        ]
+    },
+    "xandr": {
+        "label": "Xandr (AppNexus)",
+        "category": "marketing",
+        "patterns": [
+            "adnxs.com",
+            "ib.adnxs.com",
+            "secure.adnxs.com"
+        ],
+        "cookies": [
+            "anj",
+            "uuid2"
+        ]
+    },
+    "pubmatic": {
+        "label": "PubMatic",
+        "category": "marketing",
+        "patterns": [
+            "pubmatic.com",
+            "ads.pubmatic.com",
+            "image6.pubmatic.com"
+        ],
+        "cookies": [
+            "KADUSERCOOKIE",
+            "PugT"
+        ]
+    },
+    "rubicon-project": {
+        "label": "Magnite (Rubicon Project)",
+        "category": "marketing",
+        "patterns": [
+            "rubiconproject.com",
+            "fastlane.rubiconproject.com",
+            "eus.rubiconproject.com"
+        ],
+        "cookies": [
+            "khaos",
+            "rpb",
+            "rpx"
+        ]
+    },
+    "openx": {
+        "label": "OpenX",
+        "category": "marketing",
+        "patterns": [
+            "openx.net",
+            "us-u.openx.net",
+            "rtb.openx.net"
+        ],
+        "cookies": [
+            "OX_*"
+        ]
+    },
+    "media-net": {
+        "label": "Media.net",
+        "category": "marketing",
+        "patterns": [
+            "media.net",
+            "contextual.media.net",
+            "static.media.net"
+        ],
+        "cookies": []
+    },
+    "liveramp": {
+        "label": "LiveRamp",
+        "category": "marketing",
+        "patterns": [
+            "rlcdn.com",
+            "idsync.rlcdn.com",
+            "liveramp.com"
+        ],
+        "cookies": [
+            "rlas3",
+            "pxrc"
+        ]
+    },
+    "comscore": {
+        "label": "Comscore (Scorecard Research)",
+        "category": "marketing",
+        "patterns": [
+            "scorecardresearch.com",
+            "sb.scorecardresearch.com",
+            "comscore.com"
+        ],
+        "cookies": []
+    },
+    "nielsen": {
+        "label": "Nielsen",
+        "category": "marketing",
+        "patterns": [
+            "imrworldwide.com",
+            "secure-us.imrworldwide.com",
+            "nielsen.com"
+        ],
+        "cookies": []
+    },
+    "yahoo-analytics": {
+        "label": "Yahoo Analytics / Dot",
+        "category": "marketing",
+        "patterns": [
+            "analytics.yahoo.com",
+            "sp.analytics.yahoo.com",
+            "s.yimg.com/wi"
+        ],
+        "cookies": [
+            "A1",
+            "A3",
+            "IDSYNC"
+        ]
+    },
+    "chartbeat": {
+        "label": "Chartbeat",
+        "category": "analytics",
+        "patterns": [
+            "chartbeat.com",
+            "static.chartbeat.com",
+            "ping.chartbeat.net"
+        ],
+        "cookies": [
+            "_cb",
+            "_chartbeat2",
+            "_cb_svref"
+        ]
+    },
+    "parsely": {
+        "label": "Parse.ly",
+        "category": "analytics",
+        "patterns": [
+            "parsely.com",
+            "cdn.parsely.com",
+            "p1.parsely.com"
+        ],
+        "cookies": [
+            "_parsely_visitor",
+            "_parsely_session"
+        ]
+    },
+    "statcounter": {
+        "label": "StatCounter",
+        "category": "analytics",
+        "patterns": [
+            "statcounter.com",
+            "c.statcounter.com",
+            "statcounter.com/counter/counter.js"
+        ],
+        "cookies": [
+            "is_unique",
+            "sc_is_visitor_unique"
+        ]
+    },
+    "inspectlet": {
+        "label": "Inspectlet",
+        "category": "analytics",
+        "patterns": [
+            "inspectlet.com",
+            "cdn.inspectlet.com",
+            "hn.inspectlet.com",
+            "__insp"
+        ],
+        "cookies": [
+            "__insp_*"
+        ]
+    },
+    "simple-analytics": {
+        "label": "Simple Analytics",
+        "category": "analytics",
+        "patterns": [
+            "simpleanalytics.com",
+            "scripts.simpleanalyticscdn.com",
+            "queue.simpleanalyticscdn.com"
+        ],
+        "cookies": []
+    },
+    "piwik-pro": {
+        "label": "Piwik PRO",
+        "category": "analytics",
+        "patterns": [
+            "piwik.pro",
+            "containers.piwik.pro",
+            ".piwik.pro/ppms"
+        ],
+        "cookies": []
+    },
+    "dynamic-yield": {
+        "label": "Dynamic Yield",
+        "category": "marketing",
+        "patterns": [
+            "dynamicyield.com",
+            "cdn.dynamicyield.com",
+            "st.dynamicyield.com"
+        ],
+        "cookies": [
+            "_dyid",
+            "_dyid_server",
+            "_dycst",
+            "dyid"
+        ]
+    },
+    "abtasty": {
+        "label": "AB Tasty",
+        "category": "analytics",
+        "patterns": [
+            "abtasty.com",
+            "try.abtasty.com"
+        ],
+        "cookies": [
+            "ABTasty",
+            "ABTastySession"
+        ]
+    },
+    "brevo": {
+        "label": "Brevo (Sendinblue)",
+        "category": "marketing",
+        "patterns": [
+            "sibautomation.com",
+            "sendinblue.com",
+            "brevo.com"
+        ],
+        "cookies": []
+    },
+    "constant-contact": {
+        "label": "Constant Contact",
+        "category": "marketing",
+        "patterns": [
+            "ctctcdn.com",
+            "constantcontact.com"
+        ],
+        "cookies": []
+    },
+    "getresponse": {
+        "label": "GetResponse",
+        "category": "marketing",
+        "patterns": [
+            "getresponse.com",
+            "app.getresponse.com"
+        ],
+        "cookies": []
+    },
+    "brightcove": {
+        "label": "Brightcove",
+        "category": "marketing",
+        "patterns": [
+            "players.brightcove.net",
+            "brightcove.com",
+            "bcove.video"
+        ],
+        "cookies": []
+    },
+    "jwplayer": {
+        "label": "JW Player",
+        "category": "marketing",
+        "patterns": [
+            "jwpcdn.com",
+            "jwplayer.com",
+            "content.jwplatform.com",
+            "jwpltx.com"
+        ],
+        "cookies": []
+    },
+    "onesignal": {
+        "label": "OneSignal",
+        "category": "functional",
+        "patterns": [
+            "onesignal.com",
+            "cdn.onesignal.com",
+            "OneSignalSDK"
+        ],
+        "cookies": []
+    },
+    "yotpo": {
+        "label": "Yotpo",
+        "category": "functional",
+        "patterns": [
+            "yotpo.com",
+            "staticw2.yotpo.com",
+            "cdn-widgetsrepository.yotpo.com"
+        ],
+        "cookies": []
+    },
+    "iubenda": {
+        "label": "iubenda",
+        "category": "functional",
+        "patterns": [
+            "iubenda.com",
+            "cdn.iubenda.com",
+            "cs.iubenda.com"
+        ],
+        "cookies": []
+    },
+    "cookieyes": {
+        "label": "CookieYes",
+        "category": "functional",
+        "patterns": [
+            "cookieyes.com",
+            "cdn-cookieyes.com"
+        ],
+        "cookies": [
+            "cookieyes-*"
+        ]
+    },
+    "didomi": {
+        "label": "Didomi",
+        "category": "functional",
+        "patterns": [
+            "didomi.io",
+            "sdk.privacy-center.org"
+        ],
+        "cookies": [
+            "didomi_token"
+        ]
+    },
+    "adform": {
+        "label": "Adform",
+        "category": "marketing",
+        "patterns": [
+            "adform.net",
+            "track.adform.net",
+            "a2.adform.net"
+        ],
+        "cookies": [
+            "uid",
+            "C",
+            "cid"
+        ]
+    },
+    "teads": {
+        "label": "Teads",
+        "category": "marketing",
+        "patterns": [
+            "teads.tv",
+            "t.teads.tv",
+            "s8t.teads.tv"
+        ],
+        "cookies": []
+    },
+    "sharethrough": {
+        "label": "Sharethrough",
+        "category": "marketing",
+        "patterns": [
+            "sharethrough.com",
+            "native.sharethrough.com",
+            "btlr.sharethrough.com"
+        ],
+        "cookies": []
+    },
+    "index-exchange": {
+        "label": "Index Exchange",
+        "category": "marketing",
+        "patterns": [
+            "casalemedia.com",
+            "js-sec.indexww.com",
+            "ssum-sec.casalemedia.com"
+        ],
+        "cookies": [
+            "CMID",
+            "CMPS",
+            "CMPRO"
+        ]
+    },
+    "smart-adserver": {
+        "label": "Equativ (Smart AdServer)",
+        "category": "marketing",
+        "patterns": [
+            "smartadserver.com",
+            "ec-ns.sascdn.com",
+            "sascdn.com"
+        ],
+        "cookies": []
+    },
+    "gumgum": {
+        "label": "GumGum",
+        "category": "marketing",
+        "patterns": [
+            "gumgum.com",
+            "g2.gumgum.com",
+            "js.gumgum.com"
+        ],
+        "cookies": []
+    },
+    "triplelift": {
+        "label": "TripleLift",
+        "category": "marketing",
+        "patterns": [
+            "3lift.com",
+            "ib.3lift.com",
+            "eb2.3lift.com"
+        ],
+        "cookies": [
+            "tluid"
+        ]
+    },
+    "yieldmo": {
+        "label": "Yieldmo",
+        "category": "marketing",
+        "patterns": [
+            "yieldmo.com",
+            "s.yieldmo.com",
+            "ads.yieldmo.com"
+        ],
+        "cookies": []
+    },
+    "id5": {
+        "label": "ID5",
+        "category": "marketing",
+        "patterns": [
+            "id5-sync.com",
+            "cdn.id5-sync.com"
+        ],
+        "cookies": [
+            "id5",
+            "id5id"
+        ]
+    },
+    "lotame": {
+        "label": "Lotame",
+        "category": "marketing",
+        "patterns": [
+            "crwdcntrl.net",
+            "tags.crwdcntrl.net",
+            "bcp.crwdcntrl.net"
+        ],
+        "cookies": [
+            "_cc_id",
+            "panoramaId"
+        ]
+    },
+    "bidswitch": {
+        "label": "BidSwitch",
+        "category": "marketing",
+        "patterns": [
+            "bidswitch.net",
+            "x.bidswitch.net"
+        ],
+        "cookies": [
+            "c"
+        ]
+    },
+    "thirty-three-across": {
+        "label": "33Across",
+        "category": "marketing",
+        "patterns": [
+            "33across.com",
+            "ssc.33across.com",
+            "de.33across.com"
+        ],
+        "cookies": []
+    },
+    "tealium": {
+        "label": "Tealium",
+        "category": "marketing",
+        "patterns": [
+            "tiqcdn.com",
+            "tags.tiqcdn.com",
+            "tealiumiq.com"
+        ],
+        "cookies": [
+            "utag_main"
+        ]
+    },
+    "six-sense": {
+        "label": "6sense",
+        "category": "marketing",
+        "patterns": [
+            "6sense.com",
+            "j.6sc.co",
+            "epsilon.6sense.com"
+        ],
+        "cookies": [
+            "_6senseCompanyDetails"
+        ]
+    },
+    "demandbase": {
+        "label": "Demandbase",
+        "category": "marketing",
+        "patterns": [
+            "demandbase.com",
+            "company-target.com",
+            "scripts.demandbase.com"
+        ],
+        "cookies": []
+    },
+    "bombora": {
+        "label": "Bombora",
+        "category": "marketing",
+        "patterns": [
+            "ml314.com",
+            "bombora.com"
+        ],
+        "cookies": []
+    },
+    "leadfeeder": {
+        "label": "Leadfeeder (Dealfront)",
+        "category": "marketing",
+        "patterns": [
+            "leadfeeder.com",
+            "lfeeder.com",
+            "sc.lfeeder.com"
+        ],
+        "cookies": [
+            "_lfa"
+        ]
+    },
+    "zoominfo": {
+        "label": "ZoomInfo",
+        "category": "marketing",
+        "patterns": [
+            "ws.zoominfo.com",
+            "zoominfo.com",
+            "js.zi-scripts.com"
+        ],
+        "cookies": []
+    },
+    "braze": {
+        "label": "Braze",
+        "category": "marketing",
+        "patterns": [
+            "braze.com",
+            "sdk.iad-01.braze.com",
+            "sdk.iad-01.braze.eu"
+        ],
+        "cookies": []
+    },
+    "iterable": {
+        "label": "Iterable",
+        "category": "marketing",
+        "patterns": [
+            "iterable.com",
+            "links.iterable.com"
+        ],
+        "cookies": []
+    },
+    "aweber": {
+        "label": "AWeber",
+        "category": "marketing",
+        "patterns": [
+            "aweber.com",
+            "forms.aweber.com",
+            "aweber-static.com"
+        ],
+        "cookies": []
+    },
+    "omnisend": {
+        "label": "Omnisend",
+        "category": "marketing",
+        "patterns": [
+            "omnisend.com",
+            "omnisrc.com"
+        ],
+        "cookies": [
+            "omnisendSessionID",
+            "omnisendContactID"
+        ]
+    },
+    "mailerlite": {
+        "label": "MailerLite",
+        "category": "marketing",
+        "patterns": [
+            "mailerlite.com",
+            "static.mailerlite.com",
+            "assets.mailerlite.com"
+        ],
+        "cookies": []
+    },
+    "campaign-monitor": {
+        "label": "Campaign Monitor",
+        "category": "marketing",
+        "patterns": [
+            "createsend.com",
+            "createsend1.com",
+            "js.createsend1.com"
+        ],
+        "cookies": []
+    },
+    "sendgrid": {
+        "label": "SendGrid (Twilio)",
+        "category": "marketing",
+        "patterns": [
+            "sendgrid.net",
+            "ct.sendgrid.net"
+        ],
+        "cookies": []
+    },
+    "helpscout": {
+        "label": "Help Scout",
+        "category": "functional",
+        "patterns": [
+            "helpscout.net",
+            "beacon-v2.helpscout.net"
+        ],
+        "cookies": []
+    },
+    "gorgias": {
+        "label": "Gorgias",
+        "category": "functional",
+        "patterns": [
+            "gorgias.chat",
+            "config.gorgias.chat",
+            "assets.gorgias.chat"
+        ],
+        "cookies": []
+    },
+    "manychat": {
+        "label": "ManyChat",
+        "category": "functional",
+        "patterns": [
+            "manychat.com",
+            "widget.manychat.com"
+        ],
+        "cookies": []
+    },
+    "bazaarvoice": {
+        "label": "Bazaarvoice",
+        "category": "functional",
+        "patterns": [
+            "bazaarvoice.com",
+            "apps.bazaarvoice.com",
+            "display.ugc.bazaarvoice.com"
+        ],
+        "cookies": []
+    },
+    "reviews-io": {
+        "label": "REVIEWS.io",
+        "category": "functional",
+        "patterns": [
+            "widget.reviews.io",
+            "assets.reviews.io"
+        ],
+        "cookies": []
+    },
+    "judge-me": {
+        "label": "Judge.me",
+        "category": "functional",
+        "patterns": [
+            "judge.me",
+            "cdn.judge.me",
+            "cache.judge.me"
+        ],
+        "cookies": []
+    },
+    "loox": {
+        "label": "Loox",
+        "category": "functional",
+        "patterns": [
+            "loox.io",
+            "loox.io/widget"
+        ],
+        "cookies": []
+    },
+    "vidyard": {
+        "label": "Vidyard",
+        "category": "marketing",
+        "patterns": [
+            "vidyard.com",
+            "play.vidyard.com",
+            "cdn.vidyard.com"
+        ],
+        "cookies": []
+    },
+    "kaltura": {
+        "label": "Kaltura",
+        "category": "marketing",
+        "patterns": [
+            "kaltura.com",
+            "cdnapisec.kaltura.com",
+            "cdnapi.kaltura.com"
+        ],
+        "cookies": []
+    },
+    "flowplayer": {
+        "label": "Flowplayer",
+        "category": "marketing",
+        "patterns": [
+            "flowplayer.com",
+            "flowplayer.org",
+            "cdn.flowplayer.com"
+        ],
+        "cookies": []
+    },
+    "pushengage": {
+        "label": "PushEngage",
+        "category": "functional",
+        "patterns": [
+            "pushengage.com",
+            "clientcdn.pushengage.com"
+        ],
+        "cookies": []
+    },
+    "izooto": {
+        "label": "iZooto",
+        "category": "functional",
+        "patterns": [
+            "izooto.com",
+            "cdn.izooto.com"
+        ],
+        "cookies": []
+    },
+    "surveymonkey": {
+        "label": "SurveyMonkey",
+        "category": "functional",
+        "patterns": [
+            "surveymonkey.com",
+            "secure.surveymonkey.com"
+        ],
+        "cookies": []
+    },
+    "jotform": {
+        "label": "Jotform",
+        "category": "functional",
+        "patterns": [
+            "jotform.com",
+            "form.jotform.com",
+            "cdn.jotfor.ms"
+        ],
+        "cookies": []
+    },
+    "qualtrics": {
+        "label": "Qualtrics",
+        "category": "functional",
+        "patterns": [
+            "qualtrics.com",
+            "siteintercept.qualtrics.com"
+        ],
+        "cookies": []
+    },
+    "font-awesome": {
+        "label": "Font Awesome",
+        "category": "functional",
+        "patterns": [
+            "use.fontawesome.com",
+            "kit.fontawesome.com",
+            "ka-f.fontawesome.com"
+        ],
+        "cookies": []
+    },
+    "monotype-fonts": {
+        "label": "Monotype Fonts (fonts.com)",
+        "category": "functional",
+        "patterns": [
+            "fast.fonts.net",
+            "fonts.net/jsapi",
+            "fast.fonts.com"
+        ],
+        "cookies": []
+    },
+    "monetate": {
+        "label": "Monetate",
+        "category": "marketing",
+        "patterns": [
+            "monetate.net",
+            "se.monetate.net",
+            "sb.monetate.net"
+        ],
+        "cookies": []
+    },
+    "kameleoon": {
+        "label": "Kameleoon",
+        "category": "analytics",
+        "patterns": [
+            "kameleoon.com",
+            "kameleoon.eu",
+            "denali.kameleoon.eu"
+        ],
+        "cookies": []
+    },
+    "woopra": {
+        "label": "Woopra",
+        "category": "analytics",
+        "patterns": [
+            "woopra.com",
+            "static.woopra.com"
+        ],
+        "cookies": [
+            "wooTracker"
+        ]
+    },
+    "countly": {
+        "label": "Countly",
+        "category": "analytics",
+        "patterns": [
+            "count.ly",
+            "countly.com"
+        ],
+        "cookies": []
+    },
+    "ptengine": {
+        "label": "Ptengine",
+        "category": "analytics",
+        "patterns": [
+            "ptengine.com",
+            "ptengine.io",
+            "js.ptengine.com"
+        ],
+        "cookies": []
+    },
+    "gosquared": {
+        "label": "GoSquared",
+        "category": "analytics",
+        "patterns": [
+            "gosquared.com",
+            "data.gosquared.com"
+        ],
+        "cookies": []
+    },
+    "histats": {
+        "label": "Histats",
+        "category": "analytics",
+        "patterns": [
+            "histats.com",
+            "s10.histats.com"
+        ],
+        "cookies": []
+    },
+    "rudderstack": {
+        "label": "RudderStack",
+        "category": "analytics",
+        "patterns": [
+            "rudderstack.com",
+            "rudderlabs.com"
+        ],
+        "cookies": []
+    },
+    "quantum-metric": {
+        "label": "Quantum Metric",
+        "category": "analytics",
+        "patterns": [
+            "quantummetric.com"
+        ],
+        "cookies": []
+    },
+    "glassbox": {
+        "label": "Glassbox",
+        "category": "analytics",
+        "patterns": [
+            "glassbox.com",
+            "glassboxcdn.com",
+            "glassboxdigital.io"
+        ],
+        "cookies": []
+    },
+    "goatcounter": {
+        "label": "GoatCounter",
+        "category": "analytics",
+        "patterns": [
+            "goatcounter.com",
+            "gc.zgo.at"
+        ],
+        "cookies": []
+    },
+    "webengage": {
+        "label": "WebEngage",
+        "category": "analytics",
+        "patterns": [
+            "webengage.com",
+            "widgets.in.webengage.com",
+            "ce.webengage.com"
+        ],
+        "cookies": []
+    },
+    "revcontent": {
+        "label": "Revcontent",
+        "category": "marketing",
+        "patterns": [
+            "revcontent.com",
+            "cdn.revcontent.com",
+            "trends.revcontent.com"
+        ],
+        "cookies": []
+    },
+    "mgid": {
+        "label": "MGID",
+        "category": "marketing",
+        "patterns": [
+            "mgid.com",
+            "jsc.mgid.com",
+            "servicer.mgid.com"
+        ],
+        "cookies": []
+    },
+    "mediavine": {
+        "label": "Mediavine",
+        "category": "marketing",
+        "patterns": [
+            "mediavine.com",
+            "scripts.mediavine.com"
+        ],
+        "cookies": []
+    },
+    "ezoic": {
+        "label": "Ezoic",
+        "category": "marketing",
+        "patterns": [
+            "ezoic.net",
+            "ezoic.com",
+            "ezojs.com"
+        ],
+        "cookies": [
+            "ezoab",
+            "ezoadgid",
+            "ezoref",
+            "ezovuid"
+        ]
+    },
+    "rtb-house": {
+        "label": "RTB House",
+        "category": "marketing",
+        "patterns": [
+            "rtbhouse.com",
+            "creativecdn.com"
+        ],
+        "cookies": []
+    },
+    "sailthru": {
+        "label": "Sailthru (Marigold)",
+        "category": "marketing",
+        "patterns": [
+            "sailthru.com",
+            "sail-horizon.com",
+            "ak.sail-horizon.com"
+        ],
+        "cookies": [
+            "sailthru_hid",
+            "sailthru_content"
+        ]
+    },
+    "nativo": {
+        "label": "Nativo",
+        "category": "marketing",
+        "patterns": [
+            "postrelease.com",
+            "ntv.io",
+            "b.ntv.io"
+        ],
+        "cookies": []
+    },
+    "infolinks": {
+        "label": "Infolinks",
+        "category": "marketing",
+        "patterns": [
+            "infolinks.com",
+            "resources.infolinks.com"
+        ],
+        "cookies": []
+    },
+    "ensighten": {
+        "label": "Ensighten",
+        "category": "marketing",
+        "patterns": [
+            "ensighten.com",
+            "nexus.ensighten.com"
+        ],
+        "cookies": []
+    },
+    "commanders-act": {
+        "label": "Commanders Act",
+        "category": "marketing",
+        "patterns": [
+            "tagcommander.com",
+            "commander1.com"
+        ],
+        "cookies": []
+    },
+    "vk": {
+        "label": "VK (VKontakte)",
+        "category": "marketing",
+        "patterns": [
+            "vk.com/js",
+            "userapi.com",
+            "vk.com/rtrg"
+        ],
+        "cookies": []
+    },
+    "weibo": {
+        "label": "Sina Weibo",
+        "category": "marketing",
+        "patterns": [
+            "weibo.com",
+            "tjs.sjs.sinajs.cn"
+        ],
+        "cookies": []
+    },
+    "line": {
+        "label": "LINE",
+        "category": "marketing",
+        "patterns": [
+            "line.me",
+            "line-scdn.net",
+            "tr.line.me"
+        ],
+        "cookies": []
+    },
+    "smartsupp": {
+        "label": "Smartsupp",
+        "category": "functional",
+        "patterns": [
+            "smartsupp.com",
+            "www.smartsuppchat.com"
+        ],
+        "cookies": [
+            "smartsupp*",
+            "ssupp.vid"
+        ]
+    },
+    "userlike": {
+        "label": "Userlike",
+        "category": "functional",
+        "patterns": [
+            "userlike.com",
+            "userlike-cdn.com"
+        ],
+        "cookies": []
+    },
+    "chatra": {
+        "label": "Chatra",
+        "category": "functional",
+        "patterns": [
+            "chatra.io",
+            "call.chatra.io",
+            "chatra.com"
+        ],
+        "cookies": []
+    },
+    "snapengage": {
+        "label": "SnapEngage",
+        "category": "functional",
+        "patterns": [
+            "snapengage.com"
+        ],
+        "cookies": []
+    },
+    "podium": {
+        "label": "Podium",
+        "category": "functional",
+        "patterns": [
+            "podium.com",
+            "connect.podium.com"
+        ],
+        "cookies": []
+    },
+    "birdeye": {
+        "label": "Birdeye",
+        "category": "functional",
+        "patterns": [
+            "birdeye.com",
+            "birdeye.com/embed"
+        ],
+        "cookies": []
+    },
+    "kustomer": {
+        "label": "Kustomer",
+        "category": "functional",
+        "patterns": [
+            "kustomerapp.com",
+            "cdn.kustomerapp.com"
+        ],
+        "cookies": []
+    },
+    "mailjet": {
+        "label": "Mailjet",
+        "category": "marketing",
+        "patterns": [
+            "mailjet.com",
+            "mjt.lu",
+            "app.mailjet.com/statics"
+        ],
+        "cookies": []
+    },
+    "moosend": {
+        "label": "Moosend",
+        "category": "marketing",
+        "patterns": [
+            "moosend.com",
+            "cdn.stat-track.com"
+        ],
+        "cookies": []
+    },
+    "emarsys": {
+        "label": "Emarsys (SAP)",
+        "category": "marketing",
+        "patterns": [
+            "emarsys.net",
+            "scarabresearch.com"
+        ],
+        "cookies": [
+            "scarab.visitor"
+        ]
+    },
+    "sendpulse": {
+        "label": "SendPulse",
+        "category": "marketing",
+        "patterns": [
+            "sendpulse.com",
+            "login.sendpulse.com"
+        ],
+        "cookies": []
+    },
+    "keap": {
+        "label": "Keap (Infusionsoft)",
+        "category": "marketing",
+        "patterns": [
+            "infusionsoft.com",
+            "infusionsoft.app"
+        ],
+        "cookies": []
+    },
+    "fomo": {
+        "label": "Fomo",
+        "category": "marketing",
+        "patterns": [
+            "load.fomo.com",
+            "fomo.com/api"
+        ],
+        "cookies": []
+    },
+    "trustpulse": {
+        "label": "TrustPulse",
+        "category": "marketing",
+        "patterns": [
+            "trustpulse.com",
+            "app.trustpulse.com"
+        ],
+        "cookies": []
+    },
+    "feefo": {
+        "label": "Feefo",
+        "category": "functional",
+        "patterns": [
+            "feefo.com",
+            "api.feefo.com"
+        ],
+        "cookies": []
+    },
+    "stamped": {
+        "label": "Stamped.io",
+        "category": "functional",
+        "patterns": [
+            "stamped.io",
+            "cdn1.stamped.io"
+        ],
+        "cookies": []
+    },
+    "termly": {
+        "label": "Termly",
+        "category": "functional",
+        "patterns": [
+            "termly.io",
+            "app.termly.io"
+        ],
+        "cookies": []
+    },
+    "osano": {
+        "label": "Osano",
+        "category": "functional",
+        "patterns": [
+            "osano.com",
+            "cmp.osano.com"
+        ],
+        "cookies": []
+    },
+    "sourcepoint": {
+        "label": "Sourcepoint",
+        "category": "functional",
+        "patterns": [
+            "sp-prod.net",
+            "privacy-mgmt.com",
+            "sourcepoint.mgr.consensu.org"
+        ],
+        "cookies": []
+    },
+    "cookie-script": {
+        "label": "Cookie Script",
+        "category": "functional",
+        "patterns": [
+            "cookie-script.com",
+            "cdn.cookie-script.com"
+        ],
+        "cookies": []
+    },
+    "axeptio": {
+        "label": "Axeptio",
+        "category": "functional",
+        "patterns": [
+            "axept.io",
+            "axeptio.eu",
+            "static.axept.io"
+        ],
+        "cookies": []
+    },
+    "sprout-video": {
+        "label": "SproutVideo",
+        "category": "marketing",
+        "patterns": [
+            "sproutvideo.com",
+            "vids.io",
+            "videos.sproutvideo.com"
+        ],
+        "cookies": []
+    },
+    "cloudflare-stream": {
+        "label": "Cloudflare Stream",
+        "category": "marketing",
+        "patterns": [
+            "videodelivery.net",
+            "cloudflarestream.com",
+            "iframe.videodelivery.net"
+        ],
+        "cookies": []
+    },
+    "wufoo": {
+        "label": "Wufoo",
+        "category": "functional",
+        "patterns": [
+            "wufoo.com",
+            "secure.wufoo.com"
+        ],
+        "cookies": []
+    },
+    "formstack": {
+        "label": "Formstack",
+        "category": "functional",
+        "patterns": [
+            "formstack.com",
+            "js.formstack.com"
+        ],
+        "cookies": []
+    },
+    "getsitecontrol": {
+        "label": "GetSiteControl",
+        "category": "functional",
+        "patterns": [
+            "getsitecontrol.com",
+            "l.getsitecontrol.com"
+        ],
+        "cookies": []
+    },
+    "webpushr": {
+        "label": "Webpushr",
+        "category": "functional",
+        "patterns": [
+            "webpushr.com",
+            "cdn.webpushr.com"
+        ],
+        "cookies": []
+    },
+    "pushcrew": {
+        "label": "PushCrew (VWO Engage)",
+        "category": "functional",
+        "patterns": [
+            "pushcrew.com",
+            "cdn.pushcrew.com"
+        ],
+        "cookies": []
+    },
+    "mparticle": {
+        "label": "mParticle",
+        "category": "analytics",
+        "patterns": [
+            "mparticle.com",
+            "jssdkcdns.mparticle.com"
+        ],
+        "cookies": []
+    },
+    "freshpaint": {
+        "label": "Freshpaint",
+        "category": "analytics",
+        "patterns": [
+            "freshpaint.io",
+            "perfalytics.com"
+        ],
+        "cookies": []
+    },
+    "june": {
+        "label": "June",
+        "category": "analytics",
+        "patterns": [
+            "june.so",
+            "api.june.so"
+        ],
+        "cookies": []
+    },
+    "pirsch": {
+        "label": "Pirsch",
+        "category": "analytics",
+        "patterns": [
+            "pirsch.io",
+            "api.pirsch.io"
+        ],
+        "cookies": []
+    },
+    "umami-cloud": {
+        "label": "Umami Cloud",
+        "category": "analytics",
+        "patterns": [
+            "cloud.umami.is",
+            "us.umami.is",
+            "eu.umami.is"
+        ],
+        "cookies": []
+    },
+    "vercel-analytics": {
+        "label": "Vercel Analytics",
+        "category": "analytics",
+        "patterns": [
+            "vercel-insights.com",
+            "va.vercel-scripts.com"
+        ],
+        "cookies": []
+    },
+    "medallia": {
+        "label": "Medallia (Decibel)",
+        "category": "analytics",
+        "patterns": [
+            "decibelinsight.net",
+            "medallia.com",
+            "nebula-cdn.kampyle.com"
+        ],
+        "cookies": []
+    },
+    "naver-analytics": {
+        "label": "Naver Analytics",
+        "category": "analytics",
+        "patterns": [
+            "wcs.naver.net",
+            "wcs.naver.com"
+        ],
+        "cookies": []
+    },
+    "sovrn": {
+        "label": "Sovrn (Lijit)",
+        "category": "marketing",
+        "patterns": [
+            "sovrn.com",
+            "lijit.com",
+            "ce.lijit.com"
+        ],
+        "cookies": []
+    },
+    "raptive": {
+        "label": "Raptive (AdThrive)",
+        "category": "marketing",
+        "patterns": [
+            "adthrive.com",
+            "ads.adthrive.com",
+            "cafemedia.com"
+        ],
+        "cookies": []
+    },
+    "freestar": {
+        "label": "Freestar",
+        "category": "marketing",
+        "patterns": [
+            "freestar.com",
+            "a.pub.network",
+            "pub.network"
+        ],
+        "cookies": []
+    },
+    "connatix": {
+        "label": "Connatix",
+        "category": "marketing",
+        "patterns": [
+            "connatix.com",
+            "connatix.net",
+            "cdn.connatix.com"
+        ],
+        "cookies": []
+    },
+    "monumetric": {
+        "label": "Monumetric",
+        "category": "marketing",
+        "patterns": [
+            "monumetric.com",
+            "ads.monumetric.com"
+        ],
+        "cookies": []
+    },
+    "adpushup": {
+        "label": "AdPushup",
+        "category": "marketing",
+        "patterns": [
+            "adpushup.com",
+            "cdn.adpushup.com"
+        ],
+        "cookies": []
+    },
+    "helpcrunch": {
+        "label": "HelpCrunch",
+        "category": "functional",
+        "patterns": [
+            "helpcrunch.com",
+            "widget.helpcrunch.com"
+        ],
+        "cookies": []
+    },
+    "reamaze": {
+        "label": "Re:amaze",
+        "category": "functional",
+        "patterns": [
+            "reamaze.com",
+            "cdn.reamaze.com",
+            "reamaze.io"
+        ],
+        "cookies": []
+    },
+    "chaport": {
+        "label": "Chaport",
+        "category": "functional",
+        "patterns": [
+            "chaport.com",
+            "app.chaport.com"
+        ],
+        "cookies": []
+    },
+    "comm100": {
+        "label": "Comm100",
+        "category": "functional",
+        "patterns": [
+            "comm100.io",
+            "comm100.com",
+            "vue.comm100.io"
+        ],
+        "cookies": []
+    },
+    "gist": {
+        "label": "Gist (ConvertFox)",
+        "category": "functional",
+        "patterns": [
+            "getgist.com",
+            "widget.getgist.com"
+        ],
+        "cookies": []
+    },
+    "okendo": {
+        "label": "Okendo",
+        "category": "functional",
+        "patterns": [
+            "okendo.io",
+            "okendo.reviews"
+        ],
+        "cookies": []
+    },
+    "powerreviews": {
+        "label": "PowerReviews",
+        "category": "functional",
+        "patterns": [
+            "powerreviews.com",
+            "ui.powerreviews.com"
+        ],
+        "cookies": []
+    },
+    "ekomi": {
+        "label": "eKomi",
+        "category": "functional",
+        "patterns": [
+            "ekomi.com",
+            "ekomi.de",
+            "connect.ekomi.de"
+        ],
+        "cookies": []
+    },
+    "provesource": {
+        "label": "ProveSource",
+        "category": "marketing",
+        "patterns": [
+            "provesrc.com",
+            "cdn.provesrc.com"
+        ],
+        "cookies": []
+    },
+    "nudgify": {
+        "label": "Nudgify",
+        "category": "marketing",
+        "patterns": [
+            "nudgify.com",
+            "cdn.nudgify.com",
+            "api.nudgify.com"
+        ],
+        "cookies": []
+    },
+    "shopper-approved": {
+        "label": "Shopper Approved",
+        "category": "functional",
+        "patterns": [
+            "shopperapproved.com",
+            "www.shopperapproved.com"
+        ],
+        "cookies": []
+    },
+    "omniconvert": {
+        "label": "Omniconvert",
+        "category": "marketing",
+        "patterns": [
+            "omniconvert.com",
+            "web-sdk.omniconvert.com"
+        ],
+        "cookies": []
+    },
+    "personyze": {
+        "label": "Personyze",
+        "category": "marketing",
+        "patterns": [
+            "personyze.com",
+            "s3.personyze.com"
+        ],
+        "cookies": []
+    },
+    "mutiny": {
+        "label": "Mutiny",
+        "category": "marketing",
+        "patterns": [
+            "mutinyhq.com",
+            "mutinycdn.com"
+        ],
+        "cookies": []
+    },
+    "taplytics": {
+        "label": "Taplytics",
+        "category": "marketing",
+        "patterns": [
+            "taplytics.com",
+            "cdn.taplytics.com"
+        ],
+        "cookies": []
+    },
+    "oracle-eloqua": {
+        "label": "Oracle Eloqua",
+        "category": "marketing",
+        "patterns": [
+            "eloqua.com",
+            "en25.com",
+            "elqtrk.com"
+        ],
+        "cookies": []
+    },
+    "salesforce-marketing-cloud": {
+        "label": "Salesforce Marketing Cloud",
+        "category": "marketing",
+        "patterns": [
+            "exacttarget.com",
+            "marketingcloudapps.com",
+            "exct.net"
+        ],
+        "cookies": []
+    },
+    "ontraport": {
+        "label": "Ontraport",
+        "category": "marketing",
+        "patterns": [
+            "ontraport.com",
+            "app.ontraport.com",
+            "ontralinks.com"
+        ],
+        "cookies": []
+    },
+    "vero": {
+        "label": "Vero",
+        "category": "marketing",
+        "patterns": [
+            "getvero.com",
+            "d3qxef4rp70elm.cloudfront.net"
+        ],
+        "cookies": []
+    },
+    "sendlane": {
+        "label": "Sendlane",
+        "category": "marketing",
+        "patterns": [
+            "sendlane.com",
+            "cdn.sendlane.com"
+        ],
+        "cookies": []
+    },
+    "here-maps": {
+        "label": "HERE Maps",
+        "category": "functional",
+        "patterns": [
+            "js.api.here.com",
+            "maps.hereapi.com",
+            "image.maps.hereapi.com"
+        ],
+        "cookies": []
+    },
+    "tomtom": {
+        "label": "TomTom Maps",
+        "category": "functional",
+        "patterns": [
+            "api.tomtom.com",
+            "sdk.tomtom.com"
+        ],
+        "cookies": []
+    },
+    "bing-maps": {
+        "label": "Bing Maps",
+        "category": "functional",
+        "patterns": [
+            "virtualearth.net",
+            "dev.virtualearth.net",
+            "bing.com/api/maps"
+        ],
+        "cookies": []
+    },
+    "arcgis": {
+        "label": "Esri ArcGIS",
+        "category": "functional",
+        "patterns": [
+            "js.arcgis.com",
+            "arcgis.com",
+            "server.arcgisonline.com"
+        ],
+        "cookies": []
+    },
+    "panopto": {
+        "label": "Panopto",
+        "category": "marketing",
+        "patterns": [
+            "panopto.com",
+            "hosted.panopto.com"
+        ],
+        "cookies": []
+    },
+    "bunny-stream": {
+        "label": "Bunny Stream",
+        "category": "marketing",
+        "patterns": [
+            "mediadelivery.net",
+            "iframe.mediadelivery.net"
+        ],
+        "cookies": []
+    },
+    "dacast": {
+        "label": "Dacast",
+        "category": "marketing",
+        "patterns": [
+            "dacast.com",
+            "playerdev.dacast.com",
+            "player.dacast.com"
+        ],
+        "cookies": []
+    },
+    "pushalert": {
+        "label": "PushAlert",
+        "category": "functional",
+        "patterns": [
+            "pushalert.co",
+            "cdn.pushalert.co"
+        ],
+        "cookies": []
+    },
+    "aimtell": {
+        "label": "Aimtell",
+        "category": "functional",
+        "patterns": [
+            "aimtell.com",
+            "cdn.aimtell.com"
+        ],
+        "cookies": []
+    },
+    "truepush": {
+        "label": "Truepush",
+        "category": "functional",
+        "patterns": [
+            "truepush.com",
+            "cdn.truepush.com"
+        ],
+        "cookies": []
+    },
+    "cookiefirst": {
+        "label": "CookieFirst",
+        "category": "functional",
+        "patterns": [
+            "cookiefirst.com",
+            "consent.cookiefirst.com"
+        ],
+        "cookies": []
+    },
+    "civic-cookie-control": {
+        "label": "Civic Cookie Control",
+        "category": "functional",
+        "patterns": [
+            "cookiecontrol.com",
+            "cc.cdn.civiccomputing.com"
+        ],
+        "cookies": []
+    },
+    "enzuzo": {
+        "label": "Enzuzo",
+        "category": "functional",
+        "patterns": [
+            "enzuzo.com",
+            "app.enzuzo.com"
+        ],
+        "cookies": []
+    },
+    "paperform": {
+        "label": "Paperform",
+        "category": "functional",
+        "patterns": [
+            "paperform.co",
+            "l.paperform.co"
+        ],
+        "cookies": []
+    },
+    "cognito-forms": {
+        "label": "Cognito Forms",
+        "category": "functional",
+        "patterns": [
+            "cognitoforms.com",
+            "www.cognitoforms.com"
+        ],
+        "cookies": []
+    },
+    "tally-forms": {
+        "label": "Tally",
+        "category": "functional",
+        "patterns": [
+            "tally.so",
+            "tally.so/widgets"
+        ],
+        "cookies": []
+    },
+    "involve-me": {
+        "label": "involve.me",
+        "category": "functional",
+        "patterns": [
+            "involve.me",
+            "cdn.involve.me"
+        ],
+        "cookies": []
+    },
+    "odnoklassniki": {
+        "label": "Odnoklassniki (OK.ru)",
+        "category": "marketing",
+        "patterns": [
+            "connect.ok.ru",
+            "odnoklassniki.ru",
+            "ok.ru/dk"
+        ],
+        "cookies": []
+    },
+    "xing": {
+        "label": "XING",
+        "category": "marketing",
+        "patterns": [
+            "xing.com",
+            "www.xing-share.com"
+        ],
+        "cookies": []
+    },
+    "kakao": {
+        "label": "Kakao",
+        "category": "marketing",
+        "patterns": [
+            "developers.kakao.com",
+            "t1.kakaocdn.net"
+        ],
+        "cookies": []
     }
 }

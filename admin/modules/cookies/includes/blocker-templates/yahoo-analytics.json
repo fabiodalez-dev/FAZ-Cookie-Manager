@@ -1,0 +1,16 @@
+{
+    "id": "yahoo-analytics",
+    "name": "Yahoo Analytics / Dot",
+    "description": "Blocks Yahoo Analytics / Dot advertising and audience measurement.",
+    "category": "marketing",
+    "patterns": [
+        "analytics.yahoo.com",
+        "sp.analytics.yahoo.com",
+        "s.yimg.com/wi"
+    ],
+    "cookies": [
+        "A1",
+        "A3",
+        "IDSYNC"
+    ]
+}

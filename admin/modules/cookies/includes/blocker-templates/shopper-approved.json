@@ -1,0 +1,11 @@
+{
+    "id": "shopper-approved",
+    "name": "Shopper Approved",
+    "description": "Blocks Shopper Approved customer reviews and ratings widget.",
+    "category": "functional",
+    "patterns": [
+        "shopperapproved.com",
+        "www.shopperapproved.com"
+    ],
+    "cookies": []
+}

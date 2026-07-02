@@ -1,0 +1,11 @@
+{
+    "id": "kustomer",
+    "name": "Kustomer",
+    "description": "Blocks Kustomer customer support chat widget.",
+    "category": "functional",
+    "patterns": [
+        "kustomerapp.com",
+        "cdn.kustomerapp.com"
+    ],
+    "cookies": []
+}

@@ -1,0 +1,15 @@
+{
+    "id": "xandr",
+    "name": "Xandr (AppNexus)",
+    "description": "Blocks Xandr (AppNexus) programmatic advertising and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "adnxs.com",
+        "ib.adnxs.com",
+        "secure.adnxs.com"
+    ],
+    "cookies": [
+        "anj",
+        "uuid2"
+    ]
+}

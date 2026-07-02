@@ -1,0 +1,12 @@
+{
+    "id": "freestar",
+    "name": "Freestar",
+    "description": "Blocks Freestar display advertising monetisation.",
+    "category": "marketing",
+    "patterns": [
+        "freestar.com",
+        "a.pub.network",
+        "pub.network"
+    ],
+    "cookies": []
+}

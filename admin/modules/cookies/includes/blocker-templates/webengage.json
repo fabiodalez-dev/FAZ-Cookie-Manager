@@ -1,0 +1,12 @@
+{
+    "id": "webengage",
+    "name": "WebEngage",
+    "description": "Blocks WebEngage engagement and behavioural analytics.",
+    "category": "analytics",
+    "patterns": [
+        "webengage.com",
+        "widgets.in.webengage.com",
+        "ce.webengage.com"
+    ],
+    "cookies": []
+}

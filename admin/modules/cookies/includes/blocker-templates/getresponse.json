@@ -1,0 +1,11 @@
+{
+    "id": "getresponse",
+    "name": "GetResponse",
+    "description": "Blocks GetResponse email marketing automation and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "getresponse.com",
+        "app.getresponse.com"
+    ],
+    "cookies": []
+}

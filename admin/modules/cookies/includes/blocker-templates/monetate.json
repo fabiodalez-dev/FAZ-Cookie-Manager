@@ -1,0 +1,12 @@
+{
+    "id": "monetate",
+    "name": "Monetate",
+    "description": "Blocks Monetate personalization and A/B testing.",
+    "category": "marketing",
+    "patterns": [
+        "monetate.net",
+        "se.monetate.net",
+        "sb.monetate.net"
+    ],
+    "cookies": []
+}

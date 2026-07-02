@@ -1,0 +1,12 @@
+{
+    "id": "vk",
+    "name": "VK (VKontakte)",
+    "description": "Blocks VK (VKontakte) social widgets and retargeting pixel.",
+    "category": "marketing",
+    "patterns": [
+        "vk.com/js",
+        "userapi.com",
+        "vk.com/rtrg"
+    ],
+    "cookies": []
+}

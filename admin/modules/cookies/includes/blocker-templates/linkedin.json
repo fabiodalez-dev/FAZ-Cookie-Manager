@@ -4,8 +4,19 @@
     "description": "Blocks LinkedIn conversion tracking and audience insights.",
     "category": "marketing",
     "patterns": [
+        "platform.linkedin.com",
         "snap.licdn.com",
-        "platform.linkedin.com"
+        "linkedin.com/embed",
+        "snap.licdn.com/li.lms-analytics/insight.min.js",
+        "_linkedin_partner_id",
+        "lintrk("
     ],
-    "cookies": ["li_sugr", "bcookie", "lidc", "UserMatchHistory", "AnalyticsSyncHistory", "ln_or"]
+    "cookies": [
+        "li_sugr",
+        "bcookie",
+        "lidc",
+        "UserMatchHistory",
+        "AnalyticsSyncHistory",
+        "ln_or"
+    ]
 }

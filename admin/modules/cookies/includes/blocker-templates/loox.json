@@ -1,0 +1,11 @@
+{
+    "id": "loox",
+    "name": "Loox",
+    "description": "Blocks Loox product reviews and photo widget.",
+    "category": "functional",
+    "patterns": [
+        "loox.io",
+        "loox.io/widget"
+    ],
+    "cookies": []
+}

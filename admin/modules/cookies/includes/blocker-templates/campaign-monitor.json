@@ -1,0 +1,12 @@
+{
+    "id": "campaign-monitor",
+    "name": "Campaign Monitor",
+    "description": "Blocks Campaign Monitor email marketing forms and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "createsend.com",
+        "createsend1.com",
+        "js.createsend1.com"
+    ],
+    "cookies": []
+}

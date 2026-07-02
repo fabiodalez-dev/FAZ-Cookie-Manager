@@ -1,0 +1,12 @@
+{
+    "id": "ptengine",
+    "name": "Ptengine",
+    "description": "Blocks Ptengine heatmaps and behavioural analytics.",
+    "category": "analytics",
+    "patterns": [
+        "ptengine.com",
+        "ptengine.io",
+        "js.ptengine.com"
+    ],
+    "cookies": []
+}

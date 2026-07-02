@@ -1,0 +1,12 @@
+{
+    "id": "ekomi",
+    "name": "eKomi",
+    "description": "Blocks eKomi customer reviews and ratings widget.",
+    "category": "functional",
+    "patterns": [
+        "ekomi.com",
+        "ekomi.de",
+        "connect.ekomi.de"
+    ],
+    "cookies": []
+}

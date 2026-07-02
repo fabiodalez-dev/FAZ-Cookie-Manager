@@ -1,0 +1,11 @@
+{
+    "id": "pirsch",
+    "name": "Pirsch",
+    "description": "Blocks Pirsch privacy-friendly page-view analytics.",
+    "category": "analytics",
+    "patterns": [
+        "pirsch.io",
+        "api.pirsch.io"
+    ],
+    "cookies": []
+}

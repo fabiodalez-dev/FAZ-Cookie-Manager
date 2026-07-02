@@ -1,0 +1,12 @@
+{
+    "id": "kaltura",
+    "name": "Kaltura",
+    "description": "Blocks Kaltura video hosting and player embeds.",
+    "category": "marketing",
+    "patterns": [
+        "kaltura.com",
+        "cdnapisec.kaltura.com",
+        "cdnapi.kaltura.com"
+    ],
+    "cookies": []
+}

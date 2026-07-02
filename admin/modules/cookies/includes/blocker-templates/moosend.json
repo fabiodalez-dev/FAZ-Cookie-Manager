@@ -1,0 +1,11 @@
+{
+    "id": "moosend",
+    "name": "Moosend",
+    "description": "Blocks Moosend email marketing automation and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "moosend.com",
+        "cdn.stat-track.com"
+    ],
+    "cookies": []
+}

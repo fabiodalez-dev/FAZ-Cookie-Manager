@@ -1,0 +1,11 @@
+{
+    "id": "mutiny",
+    "name": "Mutiny",
+    "description": "Blocks Mutiny website personalization.",
+    "category": "marketing",
+    "patterns": [
+        "mutinyhq.com",
+        "mutinycdn.com"
+    ],
+    "cookies": []
+}

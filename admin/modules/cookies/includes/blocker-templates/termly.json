@@ -1,0 +1,11 @@
+{
+    "id": "termly",
+    "name": "Termly",
+    "description": "Blocks Termly consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "termly.io",
+        "app.termly.io"
+    ],
+    "cookies": []
+}

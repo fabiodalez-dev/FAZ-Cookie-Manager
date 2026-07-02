@@ -1,0 +1,16 @@
+{
+    "id": "chartbeat",
+    "name": "Chartbeat",
+    "description": "Blocks Chartbeat real-time audience and engagement analytics.",
+    "category": "analytics",
+    "patterns": [
+        "chartbeat.com",
+        "static.chartbeat.com",
+        "ping.chartbeat.net"
+    ],
+    "cookies": [
+        "_cb",
+        "_chartbeat2",
+        "_cb_svref"
+    ]
+}

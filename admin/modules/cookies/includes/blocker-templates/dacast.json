@@ -1,0 +1,12 @@
+{
+    "id": "dacast",
+    "name": "Dacast",
+    "description": "Blocks Dacast video hosting and player embeds.",
+    "category": "marketing",
+    "patterns": [
+        "dacast.com",
+        "playerdev.dacast.com",
+        "player.dacast.com"
+    ],
+    "cookies": []
+}

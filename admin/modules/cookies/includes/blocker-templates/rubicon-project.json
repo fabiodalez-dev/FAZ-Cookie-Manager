@@ -1,0 +1,16 @@
+{
+    "id": "rubicon-project",
+    "name": "Magnite (Rubicon Project)",
+    "description": "Blocks Magnite (Rubicon Project) advertising exchange and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "rubiconproject.com",
+        "fastlane.rubiconproject.com",
+        "eus.rubiconproject.com"
+    ],
+    "cookies": [
+        "khaos",
+        "rpb",
+        "rpx"
+    ]
+}

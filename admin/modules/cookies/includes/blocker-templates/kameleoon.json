@@ -1,0 +1,12 @@
+{
+    "id": "kameleoon",
+    "name": "Kameleoon",
+    "description": "Blocks Kameleoon A/B testing and personalization.",
+    "category": "analytics",
+    "patterns": [
+        "kameleoon.com",
+        "kameleoon.eu",
+        "denali.kameleoon.eu"
+    ],
+    "cookies": []
+}

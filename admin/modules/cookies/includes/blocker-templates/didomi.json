@@ -1,0 +1,13 @@
+{
+    "id": "didomi",
+    "name": "Didomi",
+    "description": "Blocks Didomi consent management platform.",
+    "category": "functional",
+    "patterns": [
+        "didomi.io",
+        "sdk.privacy-center.org"
+    ],
+    "cookies": [
+        "didomi_token"
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "id": "gumgum",
+    "name": "GumGum",
+    "description": "Blocks GumGum contextual advertising and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "gumgum.com",
+        "g2.gumgum.com",
+        "js.gumgum.com"
+    ],
+    "cookies": []
+}

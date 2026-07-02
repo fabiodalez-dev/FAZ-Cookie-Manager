@@ -6,7 +6,9 @@
     "patterns": [
         "maps.googleapis.com",
         "maps.google.com",
-        "google.com/maps"
+        "google.com/maps",
+        "new google.maps.",
+        "wp-google-maps"
     ],
     "cookies": []
 }

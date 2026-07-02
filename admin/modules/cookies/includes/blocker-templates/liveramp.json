@@ -1,0 +1,15 @@
+{
+    "id": "liveramp",
+    "name": "LiveRamp",
+    "description": "Blocks LiveRamp identity resolution and audience syncing.",
+    "category": "marketing",
+    "patterns": [
+        "rlcdn.com",
+        "idsync.rlcdn.com",
+        "liveramp.com"
+    ],
+    "cookies": [
+        "rlas3",
+        "pxrc"
+    ]
+}

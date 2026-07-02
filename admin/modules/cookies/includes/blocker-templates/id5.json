@@ -1,0 +1,14 @@
+{
+    "id": "id5",
+    "name": "ID5",
+    "description": "Blocks ID5 advertising identity resolution and syncing.",
+    "category": "marketing",
+    "patterns": [
+        "id5-sync.com",
+        "cdn.id5-sync.com"
+    ],
+    "cookies": [
+        "id5",
+        "id5id"
+    ]
+}

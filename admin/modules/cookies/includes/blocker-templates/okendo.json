@@ -1,0 +1,11 @@
+{
+    "id": "okendo",
+    "name": "Okendo",
+    "description": "Blocks Okendo product reviews and ratings widget.",
+    "category": "functional",
+    "patterns": [
+        "okendo.io",
+        "okendo.reviews"
+    ],
+    "cookies": []
+}

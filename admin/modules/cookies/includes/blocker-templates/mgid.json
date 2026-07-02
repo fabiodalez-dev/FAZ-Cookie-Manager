@@ -1,0 +1,12 @@
+{
+    "id": "mgid",
+    "name": "MGID",
+    "description": "Blocks MGID content recommendation advertising.",
+    "category": "marketing",
+    "patterns": [
+        "mgid.com",
+        "jsc.mgid.com",
+        "servicer.mgid.com"
+    ],
+    "cookies": []
+}

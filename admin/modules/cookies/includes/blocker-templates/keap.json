@@ -1,0 +1,11 @@
+{
+    "id": "keap",
+    "name": "Keap (Infusionsoft)",
+    "description": "Blocks Keap (Infusionsoft) CRM and marketing automation forms.",
+    "category": "marketing",
+    "patterns": [
+        "infusionsoft.com",
+        "infusionsoft.app"
+    ],
+    "cookies": []
+}

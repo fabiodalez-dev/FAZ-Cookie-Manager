@@ -1,0 +1,12 @@
+{
+    "id": "brevo",
+    "name": "Brevo (Sendinblue)",
+    "description": "Blocks Brevo (Sendinblue) email marketing automation and tracking.",
+    "category": "marketing",
+    "patterns": [
+        "sibautomation.com",
+        "sendinblue.com",
+        "brevo.com"
+    ],
+    "cookies": []
+}

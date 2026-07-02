@@ -1,0 +1,14 @@
+{
+    "id": "smartsupp",
+    "name": "Smartsupp",
+    "description": "Blocks Smartsupp live chat and visitor recording.",
+    "category": "functional",
+    "patterns": [
+        "smartsupp.com",
+        "www.smartsuppchat.com"
+    ],
+    "cookies": [
+        "smartsupp*",
+        "ssupp.vid"
+    ]
+}

@@ -4,7 +4,7 @@
     "description": "Blocks Mixcloud embeds, widgets, or third-party content until consent is granted.",
     "category": "functional",
     "patterns": [
-        "mixcloud.com/widget/"
+        "mixcloud.com/widget"
     ],
     "cookies": []
 }

@@ -1,0 +1,12 @@
+{
+    "id": "monotype-fonts",
+    "name": "Monotype Fonts (fonts.com)",
+    "description": "Blocks Monotype Fonts (fonts.com) hosted web fonts.",
+    "category": "functional",
+    "patterns": [
+        "fast.fonts.net",
+        "fonts.net/jsapi",
+        "fast.fonts.com"
+    ],
+    "cookies": []
+}

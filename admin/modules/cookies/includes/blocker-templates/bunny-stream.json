@@ -1,0 +1,11 @@
+{
+    "id": "bunny-stream",
+    "name": "Bunny Stream",
+    "description": "Blocks Bunny Stream video hosting and player embeds.",
+    "category": "marketing",
+    "patterns": [
+        "mediadelivery.net",
+        "iframe.mediadelivery.net"
+    ],
+    "cookies": []
+}

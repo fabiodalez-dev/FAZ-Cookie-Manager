@@ -1,0 +1,12 @@
+{
+    "id": "here-maps",
+    "name": "HERE Maps",
+    "description": "Blocks HERE Maps interactive maps and geocoding.",
+    "category": "functional",
+    "patterns": [
+        "js.api.here.com",
+        "maps.hereapi.com",
+        "image.maps.hereapi.com"
+    ],
+    "cookies": []
+}

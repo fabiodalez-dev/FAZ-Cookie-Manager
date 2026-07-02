@@ -1,0 +1,12 @@
+{
+    "id": "braze",
+    "name": "Braze",
+    "description": "Blocks Braze customer engagement and messaging tracking.",
+    "category": "marketing",
+    "patterns": [
+        "braze.com",
+        "sdk.iad-01.braze.com",
+        "sdk.iad-01.braze.eu"
+    ],
+    "cookies": []
+}
