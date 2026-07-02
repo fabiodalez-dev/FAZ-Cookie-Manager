@@ -3374,11 +3374,12 @@ function _fazGateStyleTextNodeMethod(proto, methodName) {
                 return native.apply(this, args);
             }
             try { _fazPrimeStyleCssMarkers(this); } catch (_primeErr) { /* keep native behavior */ }
-            var cssArgCount = methodName === "append" ? args.length : Math.min(args.length, 1);
+            var allArgs = methodName === "append" || methodName === "replaceChildren";
+            var cssArgCount = allArgs ? args.length : Math.min(args.length, 1);
             for (var i = 0; i < cssArgCount; i++) {
                 var arg = args[i];
                 try {
-                    if (methodName === "append" && typeof arg === "string") {
+                    if (allArgs && typeof arg === "string") {
                         args[i] = _fazPrepareStyleStringArg(this, arg);
                     } else {
                         // Mutate text nodes in place rather than inserting clones, so
@@ -3401,6 +3402,42 @@ _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototyp
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "insertBefore");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "replaceChild");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "append");
+_fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "replaceChildren");
+
+// style.insertAdjacentText('beforeend'|'afterbegin', css) inserts a text node
+// inside the <style>. It is on Element.prototype (not covered by the text-node
+// method gates), so a blocked url()/@import passed to it would reach the network.
+// Only the two in-element positions matter; before/afterbegin outside the element
+// are passed through.
+function _fazGateStyleInsertAdjacentText(proto) {
+    if (!proto || !window.Node) return;
+    var native = proto.insertAdjacentText
+        || (window.Element && Element.prototype && Element.prototype.insertAdjacentText);
+    if (typeof native !== "function") return;
+    Object.defineProperty(proto, "insertAdjacentText", {
+        configurable: true, writable: true, enumerable: true,
+        value: function (position, text) {
+            var pos = String(position == null ? "" : position).toLowerCase();
+            if (pos !== "afterbegin" && pos !== "beforeend") return native.call(this, position, text);
+            var s = String(text == null ? "" : text);
+            try {
+                if (_fazStore._block && s && _fazCssShouldBlock(s)) {
+                    _fazPrimeStyleCssMarkers(this);
+                    var node = (this.ownerDocument || document).createTextNode(_fazNeutralizeCssUrls(s));
+                    _fazSetStyleNodeOriginalCss(node, s);
+                    // native DOM insertion (Node.prototype) so the already-parked node
+                    // doesn't re-enter the gated appendChild/insertBefore.
+                    if (pos === "afterbegin") Node.prototype.insertBefore.call(this, node, this.firstChild);
+                    else Node.prototype.appendChild.call(this, node);
+                    _fazSyncStyleCssAttribute(this);
+                    return undefined;
+                }
+            } catch (e) { /* fall through to native */ }
+            return native.call(this, position, text);
+        }
+    });
+}
+_fazGateStyleInsertAdjacentText(window.HTMLStyleElement && HTMLStyleElement.prototype);
 
 // Removal must re-sync data-faz-css from the remaining live nodes, so removing a
 // blocked text node (or clearing the style) doesn't leave a stale attribute that
@@ -3440,14 +3477,25 @@ function _fazStyleParentForCharacterData(node) {
     return (parent.nodeName || "").toLowerCase() === "style" ? parent : null;
 }
 
+// Re-entrancy guard: the method gate writes its neutralized result via
+// `node.nodeValue = …`, which now re-enters the gated nodeValue setter. While an
+// internal write is in flight, the setter/nodeValue gate must pass straight to
+// native so it doesn't re-process (and clear) the original we just parked.
+var _fazInStyleCharDataWrite = false;
+
 function _fazApplyStyleCharacterData(style, node, value, writeValue) {
     var s = String(value == null ? "" : value);
-    if (_fazStore._block && s && _fazCssShouldBlock(s)) {
-        _fazSetStyleNodeOriginalCss(node, s);
-        writeValue(node, _fazNeutralizeCssUrls(s));
-    } else {
-        _fazClearStyleNodeOriginalCss(node);
-        writeValue(node, s);
+    _fazInStyleCharDataWrite = true;
+    try {
+        if (_fazStore._block && s && _fazCssShouldBlock(s)) {
+            _fazSetStyleNodeOriginalCss(node, s);
+            writeValue(node, _fazNeutralizeCssUrls(s));
+        } else {
+            _fazClearStyleNodeOriginalCss(node);
+            writeValue(node, s);
+        }
+    } finally {
+        _fazInStyleCharDataWrite = false;
     }
     _fazSyncStyleCssAttribute(style);
 }
@@ -3462,6 +3510,7 @@ function _fazGateStyleCharacterDataSetter(proto, prop) {
         enumerable: desc.enumerable,
         get: function () { return nativeGet.call(this); },
         set: function (val) {
+            if (_fazInStyleCharDataWrite) { nativeSet.call(this, val); return; }
             var style = _fazStyleParentForCharacterData(this);
             if (!style) {
                 nativeSet.call(this, val);
@@ -3506,12 +3555,68 @@ function _fazGateStyleCharacterDataMethod(proto, methodName) {
     });
 }
 
+// textNode.replaceWith(...) swaps a <style>'s text node for new nodes/strings; it
+// is on ChildNode (CharacterData.prototype), not the HTMLStyleElement method gates,
+// so blocked CSS passed to it would go live. Neutralize + park each argument.
+function _fazGateStyleCharacterDataReplaceWith(proto) {
+    if (!proto || typeof proto.replaceWith !== "function") return;
+    var native = proto.replaceWith;
+    Object.defineProperty(proto, "replaceWith", {
+        configurable: true, writable: true, enumerable: true,
+        value: function () {
+            var style = _fazStyleParentForCharacterData(this);
+            if (!style) return native.apply(this, arguments);
+            var args = Array.prototype.slice.call(arguments);
+            try {
+                _fazPrimeStyleCssMarkers(style);
+                for (var i = 0; i < args.length; i++) {
+                    if (typeof args[i] === "string") args[i] = _fazPrepareStyleStringArg(style, args[i]);
+                    else _fazPrepareStyleNodeTree(style, args[i]);
+                }
+            } catch (e) { /* leave args untouched on error */ }
+            var result = native.apply(this, args);
+            try { _fazSyncStyleCssAttribute(style); } catch (_e) { /* native mutation already applied */ }
+            return result;
+        }
+    });
+}
+
+// CSSStyleSheet.insertRule('.x{background:url(blocked)}') / '@import ...' writes a
+// live CSS rule (a document <style>'s .sheet or a constructable sheet) without
+// going through replaceSync/replace. Neutralize the rule's url()/@import so the
+// resource is not fetched before consent. (Live restore of an individually-inserted
+// rule is not tracked — the inert rule is re-evaluated on the next navigation once
+// consented; the pre-consent leak is what matters here.)
+function _fazGateStyleSheetInsertRule() {
+    var proto = window.CSSStyleSheet && CSSStyleSheet.prototype;
+    if (!proto || typeof proto.insertRule !== "function") return;
+    var native = proto.insertRule;
+    Object.defineProperty(proto, "insertRule", {
+        configurable: true, writable: true, enumerable: true,
+        value: function (rule, index) {
+            try {
+                var s = String(rule == null ? "" : rule);
+                if (_fazStore._block && s && _fazCssShouldBlock(s)) {
+                    return native.call(this, _fazNeutralizeCssUrls(s), index);
+                }
+            } catch (e) { /* fall through to native */ }
+            return native.call(this, rule, index);
+        }
+    });
+}
+
 if (_fazAggressiveCssUrlBlockingEnabled()) {
     _fazGateStyleCharacterDataSetter(window.CharacterData && CharacterData.prototype, "data");
+    // nodeValue is a separate accessor (Node.prototype) that writes the same
+    // underlying text — gate it too, or `textNode.nodeValue = blockedCss` inside a
+    // <style> bypasses the .data gate and neutralization entirely (pre-consent leak).
+    _fazGateStyleCharacterDataSetter(window.CharacterData && CharacterData.prototype, "nodeValue");
     _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "appendData");
     _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "insertData");
     _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "deleteData");
     _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "replaceData");
+    _fazGateStyleCharacterDataReplaceWith(window.CharacterData && CharacterData.prototype);
+    _fazGateStyleSheetInsertRule();
 }
 
 function _fazEscapeHtmlAttr(value) {
