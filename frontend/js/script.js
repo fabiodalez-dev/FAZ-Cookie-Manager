@@ -3007,6 +3007,96 @@ function _fazGateHrefSetter(proto) {
 }
 _fazGateHrefSetter(window.HTMLLinkElement && HTMLLinkElement.prototype);
 
+// A srcset is a comma-separated candidate list ("url1 1x, url2 2x"); return the
+// blocked category of the first candidate that matches a blocked provider, else "".
+function _fazSrcsetBlockedCategory(el, srcset) {
+    var s = String(srcset == null ? "" : srcset);
+    if (!s) return "";
+    var parts = s.split(",");
+    for (var i = 0; i < parts.length; i++) {
+        var url = parts[i].replace(/^\s+/, "").split(/\s+/)[0];
+        if (url && _fazImgShouldBlock(el, url)) return _fazImgCategory(url);
+    }
+    return "";
+}
+
+/**
+ * The src/href PROPERTY-setter gates above catch `el.src = …` / `el.href = …`, but
+ * NOT `el.setAttribute('src'|'href'|'srcset', …)` — a distinct code path a page
+ * builder or lazy-loader can use to assign a blocked resource at runtime with no
+ * gate in the way. Override setAttribute on the resource prototypes so those
+ * assignments park into the same data-faz-src / data-faz-href / data-faz-srcset
+ * attributes the standard restore pass re-enables on consent. Writes the park
+ * attributes via the native setAttribute so it does not re-enter this gate.
+ */
+function _fazGateResourceSetAttribute(proto, opts) {
+    if (!proto || typeof proto.setAttribute !== "function") return;
+    var native = proto.setAttribute;
+    Object.defineProperty(proto, "setAttribute", {
+        configurable: true,
+        writable: true,
+        enumerable: true,
+        value: function (name, value) {
+            try {
+                var n = String(name == null ? "" : name).toLowerCase();
+                if (n === opts.urlAttr && _fazImgShouldBlock(this, value)) {
+                    native.call(this, opts.parkAttr, String(value));
+                    native.call(this, "data-faz-category", _fazImgCategory(String(value)));
+                    if (opts.hideOnPark && this.classList) this.classList.add("faz-hidden");
+                    return;
+                }
+                if (n === "srcset" && opts.srcset) {
+                    var cat = _fazSrcsetBlockedCategory(this, value);
+                    if (cat) {
+                        native.call(this, "data-faz-srcset", String(value));
+                        native.call(this, "data-faz-category", cat);
+                        return;
+                    }
+                }
+            } catch (e) { /* fall through to native on any error */ }
+            return native.call(this, name, value);
+        }
+    });
+}
+_fazGateResourceSetAttribute(window.HTMLImageElement && HTMLImageElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: true });
+_fazGateResourceSetAttribute(window.HTMLIFrameElement && HTMLIFrameElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: true, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLLinkElement && HTMLLinkElement.prototype, { urlAttr: "href", parkAttr: "data-faz-href", hideOnPark: false, srcset: false });
+_fazGateResourceSetAttribute(window.HTMLSourceElement && HTMLSourceElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: true });
+
+// Best-effort park for a resource element that entered the DOM via HTML parsing
+// (innerHTML / server-rendered markup the MutationObserver sees), where neither
+// the property setter nor setAttribute was called. Async relative to parsing, so
+// not a hard guarantee against the first fetch — the synchronous setter/setAttribute
+// gates cover the runtime-assignment case; this is the backstop for parsed markup.
+function _fazParkResourceElementIfBlocked(el) {
+    if (!el || el.nodeType !== 1 || !el.getAttribute) return;
+    var tag = (el.nodeName || "").toLowerCase();
+    try {
+        if (tag === "img" || tag === "iframe" || tag === "source") {
+            var src = el.getAttribute("src");
+            if (src && !el.getAttribute("data-faz-src") && _fazImgShouldBlock(el, src)) {
+                el.setAttribute("data-faz-src", src);
+                el.setAttribute("data-faz-category", _fazImgCategory(src));
+                el.removeAttribute("src");
+                if (tag === "iframe" && el.classList) el.classList.add("faz-hidden");
+            }
+            var ss = el.getAttribute("srcset");
+            if (ss && !el.getAttribute("data-faz-srcset")) {
+                var c = _fazSrcsetBlockedCategory(el, ss);
+                if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-category", c); el.removeAttribute("srcset"); }
+            }
+        } else if (tag === "link") {
+            var href = el.getAttribute("href");
+            var rel = (el.getAttribute("rel") || "").toLowerCase();
+            if (href && rel.indexOf("stylesheet") !== -1 && !el.getAttribute("data-faz-href") && _fazImgShouldBlock(el, href)) {
+                el.setAttribute("data-faz-href", href);
+                el.setAttribute("data-faz-category", _fazImgCategory(href));
+                el.removeAttribute("href");
+            }
+        }
+    } catch (e) { /* leave the element untouched on error */ }
+}
+
 var _FAZ_INERT_CSS_URL = 'data:application/octet-stream,';
 
 function _fazAggressiveCssUrlBlockingEnabled() {
@@ -3700,13 +3790,25 @@ function _fazMutationObserver(mutations) {
             if (tag === 'script' || tag === 'iframe') {
                 if (_fazInsideNoscript(n)) continue;
                 nodesToProcess.push(n);
-            } else if (typeof n.querySelectorAll === 'function') {
-                // Descend: pick up <script[src]> / <iframe[src]> nested
-                // inside the inserted wrapper.
-                var nested = n.querySelectorAll('script[src], iframe[src]');
-                for (var ni = 0; ni < nested.length; ni++) {
-                    if (_fazInsideNoscript(nested[ni])) continue;
-                    nodesToProcess.push(nested[ni]);
+            } else {
+                // img/link/source that entered via parsed markup never hit the
+                // property setter or setAttribute, so park them here (best-effort).
+                if (tag === 'img' || tag === 'link' || tag === 'source') {
+                    if (!_fazInsideNoscript(n)) _fazParkResourceElementIfBlocked(n);
+                }
+                if (typeof n.querySelectorAll === 'function') {
+                    // Descend: <script[src]>/<iframe[src]> queue for blocking; parsed
+                    // img/link/source get parked in place.
+                    var nested = n.querySelectorAll('script[src], iframe[src]');
+                    for (var ni = 0; ni < nested.length; ni++) {
+                        if (_fazInsideNoscript(nested[ni])) continue;
+                        nodesToProcess.push(nested[ni]);
+                    }
+                    var nestedRes = n.querySelectorAll('img[src], img[srcset], link[href], source[src], source[srcset]');
+                    for (var ri = 0; ri < nestedRes.length; ri++) {
+                        if (_fazInsideNoscript(nestedRes[ri])) continue;
+                        _fazParkResourceElementIfBlocked(nestedRes[ri]);
+                    }
                 }
             }
         }
@@ -4118,6 +4220,16 @@ function _fazUnblockServerSide() {
             el.src = imgSrc;
             if (!el.getAttribute("src")) return; // gate re-parked it — stay parked, recoverable
             el.removeAttribute("data-faz-src");
+        });
+
+    // 3b. srcset parked by the setAttribute gate (img / source).
+    document.querySelectorAll('[data-faz-srcset][data-faz-category]')
+        .forEach(function (el) {
+            var cat = el.getAttribute("data-faz-category");
+            var srcset = el.getAttribute("data-faz-srcset");
+            if (_fazSrcsetBlockedCategory(el, srcset)) return; // still has a blocked candidate
+            el.setAttribute("srcset", srcset);
+            el.removeAttribute("data-faz-srcset");
         });
 
     // 4. Stylesheets.
