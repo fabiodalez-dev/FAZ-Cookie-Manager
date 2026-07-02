@@ -211,7 +211,7 @@
         "label": "Twitter/X Pixel",
         "category": "marketing",
         "patterns": [
-            "x.com",
+            "//x.com",
             "platform.twitter.com",
             "twitter-widgets.js",
             "ads-twitter.com",
