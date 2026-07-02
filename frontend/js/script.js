@@ -3253,11 +3253,12 @@ function _fazGateStyleTextNodeMethod(proto, methodName) {
                 return native.apply(this, args);
             }
             try { _fazPrimeStyleCssMarkers(this); } catch (_primeErr) { /* keep native behavior */ }
-            var cssArgCount = methodName === "append" ? args.length : Math.min(args.length, 1);
+            var allArgs = methodName === "append" || methodName === "replaceChildren";
+            var cssArgCount = allArgs ? args.length : Math.min(args.length, 1);
             for (var i = 0; i < cssArgCount; i++) {
                 var arg = args[i];
                 try {
-                    if (methodName === "append" && typeof arg === "string") {
+                    if (allArgs && typeof arg === "string") {
                         args[i] = _fazPrepareStyleStringArg(this, arg);
                     } else {
                         // Mutate text nodes in place rather than inserting clones, so
@@ -3280,6 +3281,7 @@ _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototyp
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "insertBefore");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "replaceChild");
 _fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "append");
+_fazGateStyleTextNodeMethod(window.HTMLStyleElement && HTMLStyleElement.prototype, "replaceChildren");
 
 // Removal must re-sync data-faz-css from the remaining live nodes, so removing a
 // blocked text node (or clearing the style) doesn't leave a stale attribute that
@@ -3319,14 +3321,25 @@ function _fazStyleParentForCharacterData(node) {
     return (parent.nodeName || "").toLowerCase() === "style" ? parent : null;
 }
 
+// Re-entrancy guard: the method gate writes its neutralized result via
+// `node.nodeValue = …`, which now re-enters the gated nodeValue setter. While an
+// internal write is in flight, the setter/nodeValue gate must pass straight to
+// native so it doesn't re-process (and clear) the original we just parked.
+var _fazInStyleCharDataWrite = false;
+
 function _fazApplyStyleCharacterData(style, node, value, writeValue) {
     var s = String(value == null ? "" : value);
-    if (_fazStore._block && s && _fazCssShouldBlock(s)) {
-        _fazSetStyleNodeOriginalCss(node, s);
-        writeValue(node, _fazNeutralizeCssUrls(s));
-    } else {
-        _fazClearStyleNodeOriginalCss(node);
-        writeValue(node, s);
+    _fazInStyleCharDataWrite = true;
+    try {
+        if (_fazStore._block && s && _fazCssShouldBlock(s)) {
+            _fazSetStyleNodeOriginalCss(node, s);
+            writeValue(node, _fazNeutralizeCssUrls(s));
+        } else {
+            _fazClearStyleNodeOriginalCss(node);
+            writeValue(node, s);
+        }
+    } finally {
+        _fazInStyleCharDataWrite = false;
     }
     _fazSyncStyleCssAttribute(style);
 }
@@ -3341,6 +3354,7 @@ function _fazGateStyleCharacterDataSetter(proto, prop) {
         enumerable: desc.enumerable,
         get: function () { return nativeGet.call(this); },
         set: function (val) {
+            if (_fazInStyleCharDataWrite) { nativeSet.call(this, val); return; }
             var style = _fazStyleParentForCharacterData(this);
             if (!style) {
                 nativeSet.call(this, val);
@@ -3387,6 +3401,10 @@ function _fazGateStyleCharacterDataMethod(proto, methodName) {
 
 if (_fazAggressiveCssUrlBlockingEnabled()) {
     _fazGateStyleCharacterDataSetter(window.CharacterData && CharacterData.prototype, "data");
+    // nodeValue is a separate accessor (Node.prototype) that writes the same
+    // underlying text — gate it too, or `textNode.nodeValue = blockedCss` inside a
+    // <style> bypasses the .data gate and neutralization entirely (pre-consent leak).
+    _fazGateStyleCharacterDataSetter(window.CharacterData && CharacterData.prototype, "nodeValue");
     _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "appendData");
     _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "insertData");
     _fazGateStyleCharacterDataMethod(window.CharacterData && CharacterData.prototype, "deleteData");

@@ -577,5 +577,20 @@ eq('RF2: first constructable sheet restored', sh1.cssRules[0].cssText.includes('
 eq('RF2: second constructable sheet restored (not skipped by mid-iteration splice)', sh2.cssRules[0].cssText.includes('fonts.gstatic.com'), true);
 resetConsent();
 
+// RF3 — nodeValue is a separate accessor from .data; writing blocked CSS via it
+// inside a <style> must still be neutralized (was a pre-consent bypass).
+const nvStyle = w.document.createElement('style');
+const nvNode = w.document.createTextNode('');
+nvStyle.appendChild(nvNode);
+nvNode.nodeValue = cssImport;
+eq('RF3: nodeValue write inside <style> is neutralized (no .data-gate bypass)', nvStyle.textContent.includes('fonts.googleapis.com'), false);
+// RF4 — replaceChildren() replaces all children; a blocked text node passed to it
+// must be neutralized (was ungated on HTMLStyleElement -> pre-consent bypass).
+const rcStyle2 = w.document.createElement('style');
+if (typeof rcStyle2.replaceChildren === 'function') {
+  rcStyle2.replaceChildren(w.document.createTextNode('.rc{background-image:url("' + GFONT + '")}'));
+  eq('RF4: replaceChildren neutralizes a blocked url() (no bypass)', rcStyle2.textContent.includes('fonts.gstatic.com'), false);
+} else { eq('RF4: replaceChildren unavailable (skip)', true, true); }
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
