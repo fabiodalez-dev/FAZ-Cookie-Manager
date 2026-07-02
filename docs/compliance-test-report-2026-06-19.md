@@ -22,7 +22,7 @@
 
 ---
 
-## 2. Unit test suites (PHP) — 26/26 ✅
+## 2. Unit test suites (PHP) — 27/27 ✅
 
 Run: `npm run test:unit` (`bash scripts/run-unit-tests.sh`). Each suite is a self-contained CLI runner (stubs WP, no DB/browser).
 
@@ -62,8 +62,8 @@ A dedicated semantic audit (`tests/compliance-audit.py`) checks each ruleset aga
 
 **Result: 0 ERROR, 0 WARN across all 47.** Distribution:
 
-- **opt-in (19):** GDPR Italy/Germany/France/Ireland/Netherlands/Poland/Spain + gdpr-strict, UK-GDPR/PECR, LGPD Brazil, India DPDPA, Korea PIPA, China PIPL, Turkey KVKK, UAE PDPL, KSA PDPL, Israel PPL, South Africa POPIA, Malaysia/Singapore/Thailand/Vietnam PDPA, New Zealand, fallback. → all non-necessary categories `denied` (no cookies before consent).
-- **opt-out-with-sensitive-opt-in (18 US states):** CCPA, Colorado, Connecticut, Texas, New Jersey, Minnesota, Maryland, New Hampshire, Oregon, Delaware, Montana, Virginia, Utah, Indiana, Iowa, Kentucky, Tennessee, Rhode Island, Florida. → analytics/marketing `granted`, `profiling` (sensitive) `denied-until-action`; UOOM states honour GPC.
+- **opt-in (24):** GDPR Italy/Germany/France/Ireland/Netherlands/Poland/Spain + gdpr-strict, UK-GDPR/PECR, LGPD Brazil, India DPDPA, Korea PIPA, China PIPL, Turkey KVKK, UAE PDPL, KSA PDPL, Israel PPL, South Africa POPIA, Malaysia/Singapore/Thailand/Vietnam PDPA, New Zealand, fallback. → all non-necessary categories `denied` (no cookies before consent).
+- **opt-out-with-sensitive-opt-in (19 US states):** CCPA, Colorado, Connecticut, Texas, New Jersey, Minnesota, Maryland, New Hampshire, Oregon, Delaware, Montana, Virginia, Utah, Indiana, Iowa, Kentucky, Tennessee, Rhode Island, Florida. → analytics/marketing `granted`, `profiling` (sensitive) `denied-until-action`; UOOM states honour GPC.
 - **hybrid (4):** Quebec Law 25, PIPEDA Canada, Australia Privacy Act, Japan APPI → express opt-in for analytics/marketing/profiling where required.
 
 Full matrix is reproduced by running the script (see §7).

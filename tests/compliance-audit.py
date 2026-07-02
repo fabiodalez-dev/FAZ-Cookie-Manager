@@ -81,7 +81,15 @@ for f in files:
         if ui.get('equal_weight_buttons') is not True:
             add('WARN',rid,'opt-in: equal_weight_buttons not true (dark-pattern risk)')
 
-    elif model in ('opt-out','opt-out-with-sensitive-opt-in','hybrid'):
+    elif model=='hybrid':
+        # H1: hybrid laws (Quebec Law 25, PIPEDA, Australia, Japan) still deny
+        # analytics/marketing/profiling by default (express opt-in where required),
+        # so the same prior-blocking invariant as opt-in applies to them.
+        for c in ('analytics','marketing','profiling'):
+            v=dc.get(c)
+            if v not in ('denied','denied-until-action'):
+                add('ERROR',rid,f'hybrid: category "{c}" defaults to "{v}" (must be denied — express opt-in required)')
+    elif model in ('opt-out','opt-out-with-sensitive-opt-in'):
         # U1 sensitive gating
         if dc.get('profiling') not in ('denied','denied-until-action'):
             add('WARN',rid,f'profiling defaults to "{dc.get("profiling")}" (sensitive data usually opt-in)')
