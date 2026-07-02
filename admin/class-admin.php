@@ -967,7 +967,11 @@ class Admin {
 							// the screen-reader announcement) and show the error notice.
 							'function reveal() {' .
 								'if ( booted() ) { return; }' .
-								'if ( msg && tpl && ! msg.textContent ) { msg.textContent = tpl.innerHTML; }' .
+								// Read the parsed template content (a DocumentFragment lives in
+								// .content) as raw text — tpl.innerHTML would re-serialize
+								// entities and .textContent would double-escape any &, <, > in a
+								// localized string. tpl.textContent is empty for a <template>.
+								'if ( msg && tpl && ! msg.textContent ) { msg.textContent = tpl.content.textContent; }' .
 								'notice.style.display = "";' .
 							'}' .
 							// Recovery: if the script later boots, clear the announcement
