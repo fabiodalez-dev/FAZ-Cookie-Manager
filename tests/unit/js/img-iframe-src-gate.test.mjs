@@ -604,5 +604,31 @@ w.eval('_fazParkResourceElementIfBlocked')(saParse);
 eq('SA6: observer park helper parks a parsed blocked img', saParse.getAttribute('data-faz-src'), OSM);
 eq('SA6b: parked parsed img has no live src', saParse.getAttribute('src'), null);
 
+// SA7 (review medium) — a parked <source> src is restored on consent (was parked
+// with no matching restore selector → media stayed permanently broken).
+const vid = w.document.createElement('video');
+const saSrc = w.document.createElement('source');
+saSrc.setAttribute('src', OSM);
+eq('SA7-pre: <source> setAttribute src is parked', saSrc.getAttribute('data-faz-src'), OSM);
+vid.appendChild(saSrc); w.document.body.appendChild(vid);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+eq('SA7: parked <source> src restored after consent', saSrc.getAttribute('src'), OSM);
+eq('SA7b: data-faz-src cleared on <source> after restore', saSrc.getAttribute('data-faz-src'), null);
+resetConsent();
+// SA8 (review low) — srcset PROPERTY setter is gated (img.srcset = blocked parks).
+const saProp = w.document.createElement('img');
+saProp.srcset = GFONT + ' 2x';
+eq('SA8: img.srcset = blocked is parked', typeof saProp.getAttribute('data-faz-srcset'), 'string');
+eq('SA8b: property-set blocked srcset has no live srcset', saProp.getAttribute('srcset'), null);
+// SA9 (review low) — a src park and a srcset park on ONE element keep independent
+// categories (srcset uses data-faz-srcset-category, so it can't clobber the src's
+// data-faz-category and break the src restore).
+const saDual = w.document.createElement('img');
+saDual.setAttribute('src', YT);          // marketing provider
+saDual.setAttribute('srcset', OSM + ' 1x'); // functional provider
+eq('SA9: src park keeps its own category (marketing)', saDual.getAttribute('data-faz-category'), 'marketing');
+eq('SA9b: srcset park uses a separate category attribute (functional)', saDual.getAttribute('data-faz-srcset-category'), 'functional');
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

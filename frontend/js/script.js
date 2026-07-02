@@ -3049,7 +3049,9 @@ function _fazGateResourceSetAttribute(proto, opts) {
                     var cat = _fazSrcsetBlockedCategory(this, value);
                     if (cat) {
                         native.call(this, "data-faz-srcset", String(value));
-                        native.call(this, "data-faz-category", cat);
+                        // srcset keeps its OWN category so it never collides with a
+                        // src/href park's data-faz-category on the same element.
+                        native.call(this, "data-faz-srcset-category", cat);
                         return;
                     }
                 }
@@ -3062,6 +3064,35 @@ _fazGateResourceSetAttribute(window.HTMLImageElement && HTMLImageElement.prototy
 _fazGateResourceSetAttribute(window.HTMLIFrameElement && HTMLIFrameElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: true, srcset: false });
 _fazGateResourceSetAttribute(window.HTMLLinkElement && HTMLLinkElement.prototype, { urlAttr: "href", parkAttr: "data-faz-href", hideOnPark: false, srcset: false });
 _fazGateResourceSetAttribute(window.HTMLSourceElement && HTMLSourceElement.prototype, { urlAttr: "src", parkAttr: "data-faz-src", hideOnPark: false, srcset: true });
+
+// srcset PROPERTY setter (img.srcset = …) — the sibling of the .src/.href property
+// gates. Without it, a runtime `.srcset` assignment writes the attribute directly
+// and the browser can fetch a blocked candidate before consent. Parks into the same
+// data-faz-srcset the restore pass re-enables. Native setter writes avoid re-entry.
+function _fazGateSrcsetSetter(proto) {
+    if (!proto) return;
+    var desc = Object.getOwnPropertyDescriptor(proto, "srcset");
+    if (!desc || typeof desc.set !== "function" || typeof desc.get !== "function" || desc.configurable === false) return;
+    var nativeSet = desc.set, nativeGet = desc.get;
+    Object.defineProperty(proto, "srcset", {
+        configurable: true,
+        enumerable: desc.enumerable,
+        get: function () { return nativeGet.call(this); },
+        set: function (val) {
+            try {
+                var cat = _fazSrcsetBlockedCategory(this, val);
+                if (cat) {
+                    this.setAttribute("data-faz-srcset", String(val));
+                    this.setAttribute("data-faz-srcset-category", cat);
+                    return;
+                }
+            } catch (e) { /* fall through to native */ }
+            nativeSet.call(this, val);
+        }
+    });
+}
+_fazGateSrcsetSetter(window.HTMLImageElement && HTMLImageElement.prototype);
+_fazGateSrcsetSetter(window.HTMLSourceElement && HTMLSourceElement.prototype);
 
 // Best-effort park for a resource element that entered the DOM via HTML parsing
 // (innerHTML / server-rendered markup the MutationObserver sees), where neither
@@ -3083,7 +3114,7 @@ function _fazParkResourceElementIfBlocked(el) {
             var ss = el.getAttribute("srcset");
             if (ss && !el.getAttribute("data-faz-srcset")) {
                 var c = _fazSrcsetBlockedCategory(el, ss);
-                if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-category", c); el.removeAttribute("srcset"); }
+                if (c) { el.setAttribute("data-faz-srcset", ss); el.setAttribute("data-faz-srcset-category", c); el.removeAttribute("srcset"); }
             }
         } else if (tag === "link") {
             var href = el.getAttribute("href");
@@ -4211,7 +4242,7 @@ function _fazUnblockServerSide() {
         });
 
     // 3. Images (tracking pixels inside noscript tags that JS can see).
-    document.querySelectorAll('img[data-faz-src][data-faz-category]')
+    document.querySelectorAll('img[data-faz-src][data-faz-category], source[data-faz-src][data-faz-category]')
         .forEach(function (el) {
             var cat = el.getAttribute("data-faz-category");
             var imgSrc = el.getAttribute("data-faz-src");
@@ -4222,14 +4253,17 @@ function _fazUnblockServerSide() {
             el.removeAttribute("data-faz-src");
         });
 
-    // 3b. srcset parked by the setAttribute gate (img / source).
-    document.querySelectorAll('[data-faz-srcset][data-faz-category]')
+    // 3b. srcset parked by the srcset gates (setAttribute / property setter / parser).
+    // Keyed on data-faz-srcset alone — the category lives in its own
+    // data-faz-srcset-category so it never collides with a src/href park's
+    // data-faz-category on the same element.
+    document.querySelectorAll('[data-faz-srcset]')
         .forEach(function (el) {
-            var cat = el.getAttribute("data-faz-category");
             var srcset = el.getAttribute("data-faz-srcset");
             if (_fazSrcsetBlockedCategory(el, srcset)) return; // still has a blocked candidate
             el.setAttribute("srcset", srcset);
             el.removeAttribute("data-faz-srcset");
+            el.removeAttribute("data-faz-srcset-category");
         });
 
     // 4. Stylesheets.
