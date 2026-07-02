@@ -3121,7 +3121,15 @@ function _fazPrimeStyleCssMarkers(style) {
     var original = _fazBase64DecodeUtf8(encoded);
     if (!original) return;
     if (style.childNodes.length === 1 && _fazIsStyleTextNode(style.childNodes[0]) && !_fazHasStyleNodeOriginalCss(style.childNodes[0])) {
-        _fazSetStyleNodeOriginalCss(style.childNodes[0], original);
+        // Only adopt the parked original when the live node still holds its
+        // neutralized form (server-rendered <style data-faz-css> with the inert
+        // CSS as its content). If the node was overwritten with different CSS —
+        // e.g. `style.textContent = "body{color:red}"` after a prior blocked
+        // write left a stale data-faz-css — its value won't match, so priming is
+        // skipped and the restore pass can't resurrect the old blocked CSS.
+        if (_fazNeutralizeCssUrls(original) === style.childNodes[0].nodeValue) {
+            _fazSetStyleNodeOriginalCss(style.childNodes[0], original);
+        }
     }
 }
 
@@ -3496,9 +3504,14 @@ if (_fazAggressiveCssUrlBlockingEnabled()) {
 
 function _fazRestoreConstructableSheets() {
     if (!_fazTrackedSheets.length || !_fazSheetOriginalCss) return;
+    // Snapshot before iterating: sheet.replaceSync() below re-enters the gate,
+    // which untracks the sheet via _fazTrackedSheets.splice() — mutating the
+    // array mid-walk would skip every other sheet. Iterate the snapshot and
+    // overwrite the live list with `remaining` at the end.
+    var sheets = _fazTrackedSheets.slice();
     var remaining = [];
-    for (var i = 0; i < _fazTrackedSheets.length; i++) {
-        var sheet = _fazTrackedSheets[i];
+    for (var i = 0; i < sheets.length; i++) {
+        var sheet = sheets[i];
         var original = _fazSheetOriginalCss.get(sheet);
         if (original && !_fazCssShouldBlock(original)) {
             // replaceSync re-enters the gate, which now sees the consented CSS as

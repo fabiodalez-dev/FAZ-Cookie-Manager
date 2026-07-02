@@ -556,5 +556,26 @@ const stdSheet = new wStd.CSSStyleSheet();
 stdSheet.replaceSync('.std{background-image:url("' + GFONT + '")}');
 eq('R33: standard mode does not hook Constructable Stylesheets', stdSheet.cssRules[0].cssText.includes('fonts.gstatic.com'), true);
 
+// RF1 / RF2 — per-branch review regressions.
+console.log('\nReview-fix regressions');
+// RF1: a benign textContent overwrite after a prior blocked write must not
+// resurrect the old blocked CSS on restore (the single-node prime heuristic must
+// not re-attribute the stale data-faz-css to the fresh benign node).
+const ovStyle = w.document.createElement('style');
+ovStyle.textContent = cssA;                        // blocked (gstatic) -> parked
+ovStyle.textContent = '.benign-after{color:#0a0}'; // benign overwrite, fresh node + stale attr
+eq('RF1: benign overwrite after a blocked write does not resurrect old CSS on restore', restoreStyleCss(ovStyle), '.benign-after{color:#0a0}');
+// RF2: two blocked Constructable Stylesheets must BOTH restore — the gate's
+// re-entrant untrack splices _fazTrackedSheets mid-walk, so the restore loop
+// must iterate a snapshot or it skips every other sheet.
+const sh1 = new w.CSSStyleSheet(); sh1.replaceSync('.s1{background-image:url("' + GFONT + '")}');
+const sh2 = new w.CSSStyleSheet(); sh2.replaceSync('.s2{background-image:url("https://fonts.gstatic.com/s2.woff2")}');
+eq('RF2: both constructable sheets tracked', w.eval('_fazTrackedSheets.length') >= 2, true);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+eq('RF2: first constructable sheet restored', sh1.cssRules[0].cssText.includes('fonts.gstatic.com'), true);
+eq('RF2: second constructable sheet restored (not skipped by mid-iteration splice)', sh2.cssRules[0].cssText.includes('fonts.gstatic.com'), true);
+resetConsent();
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
