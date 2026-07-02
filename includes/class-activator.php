@@ -309,6 +309,7 @@ class Activator {
 				'posts_per_page'   => 200,
 				'fields'           => 'ids',
 				'no_found_rows'    => true,
+				// phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.SuppressFilters_suppress_filters -- intentional: this DSAR retention cleanup must find and delete EVERY expired faz_dsar record regardless of third-party query filters (e.g. multilingual language scoping), so filters are suppressed on this internal housekeeping query. Not a wp.org plugin_repo error (WordPressVIPMinimum only).
 				'suppress_filters' => true,
 				'date_query'       => array(
 					array(
