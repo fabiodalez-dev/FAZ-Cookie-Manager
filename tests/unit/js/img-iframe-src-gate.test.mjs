@@ -591,6 +591,24 @@ if (typeof rcStyle2.replaceChildren === 'function') {
   rcStyle2.replaceChildren(w.document.createTextNode('.rc{background-image:url("' + GFONT + '")}'));
   eq('RF4: replaceChildren neutralizes a blocked url() (no bypass)', rcStyle2.textContent.includes('fonts.gstatic.com'), false);
 } else { eq('RF4: replaceChildren unavailable (skip)', true, true); }
+// RF6 — insertAdjacentText into a <style> is neutralized (was ungated).
+const iatStyle = w.document.createElement('style'); w.document.head.appendChild(iatStyle);
+if (typeof iatStyle.insertAdjacentText === 'function') {
+  iatStyle.insertAdjacentText('beforeend', cssImport);
+  eq('RF6: insertAdjacentText into <style> is neutralized', iatStyle.textContent.includes('fonts.googleapis.com'), false);
+} else { eq('RF6: insertAdjacentText unavailable (skip)', true, true); }
+// RF7 — replaceWith on a <style> text node is neutralized (was ungated).
+const rwStyle = w.document.createElement('style'); rwStyle.appendChild(w.document.createTextNode('.x{}')); w.document.head.appendChild(rwStyle);
+if (rwStyle.firstChild && typeof rwStyle.firstChild.replaceWith === 'function') {
+  rwStyle.firstChild.replaceWith(w.document.createTextNode(cssImport));
+  eq('RF7: replaceWith on a <style> text node is neutralized', rwStyle.textContent.includes('fonts.googleapis.com'), false);
+} else { eq('RF7: replaceWith unavailable (skip)', true, true); }
+// RF8 — CSSStyleSheet.insertRule neutralizes a blocked url() (was ungated).
+const irStyle = w.document.createElement('style'); w.document.head.appendChild(irStyle);
+if (irStyle.sheet && typeof irStyle.sheet.insertRule === 'function') {
+  irStyle.sheet.insertRule('.ir{background-image:url("' + GFONT + '")}', 0);
+  eq('RF8: insertRule neutralizes a blocked url()', irStyle.sheet.cssRules[0].cssText.includes('fonts.gstatic.com'), false);
+} else { eq('RF8: insertRule unavailable (skip)', true, true); }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
