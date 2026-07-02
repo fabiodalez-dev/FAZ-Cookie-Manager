@@ -4,6 +4,7 @@
     "description": "Blocks Tumblr marketing pixels, conversion tracking, and ad-targeting cookies.",
     "category": "marketing",
     "patterns": [
+        "tumblr.com/post",
         "assets.tumblr.com",
         "tumblr.com/share"
     ],

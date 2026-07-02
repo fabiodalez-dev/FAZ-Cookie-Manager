@@ -5,7 +5,15 @@
     "category": "analytics",
     "patterns": [
         "static.hotjar.com",
-        "hotjar.com/c/hotjar"
+        "hotjar.com/c/hotjar",
+        "_hjSettings"
     ],
-    "cookies": ["_hjid", "_hjSession*", "_hjSessionUser_*", "_hjSession_*", "_hjIncludedInPageviewSample", "_hjAbsoluteSessionInProgress", "_hjFirstSeen"]
+    "cookies": [
+        "_hjid",
+        "_hjSessionUser_*",
+        "_hjSession_*",
+        "_hjAbsoluteSessionInProgress",
+        "_hjFirstSeen",
+        "_hjIncludedInPageviewSample"
+    ]
 }

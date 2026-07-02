@@ -6,7 +6,14 @@
     "patterns": [
         "youtube.com/embed",
         "youtube-nocookie.com/embed",
-        "youtube.com/iframe_api"
+        "youtu.be",
+        "youtube.com/iframe_api",
+        "ytimg.com",
+        "yotuwp"
     ],
-    "cookies": ["YSC", "VISITOR_INFO1_LIVE", "LOGIN_INFO", "PREF", "GPS", "CONSENT"]
+    "cookies": [
+        "YSC",
+        "VISITOR_INFO1_LIVE",
+        "LOGIN_INFO"
+    ]
 }

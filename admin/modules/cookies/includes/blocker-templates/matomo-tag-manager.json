@@ -1,0 +1,11 @@
+{
+    "id": "matomo-tag-manager",
+    "name": "Matomo Tag Manager",
+    "description": "Blocks Matomo Tag Manager containers and tag-management scripts.",
+    "category": "analytics",
+    "patterns": [
+        "cdn.matomo.cloud/container_",
+        "MatomoTagManager"
+    ],
+    "cookies": []
+}

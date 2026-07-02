@@ -5,6 +5,7 @@
     "category": "marketing",
     "patterns": [
         "instagram.com/embed",
+        "instagram.com/p",
         "cdninstagram.com",
         "instawidget.net",
         "plugins/instagram-feed/js/",

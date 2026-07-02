@@ -306,7 +306,8 @@
             "_hjSessionUser_*",
             "_hjSession_*",
             "_hjAbsoluteSessionInProgress",
-            "_hjFirstSeen"
+            "_hjFirstSeen",
+            "_hjIncludedInPageviewSample"
         ]
     },
     "matomo": {
@@ -321,7 +322,15 @@
         "cookies": [
             "_pk_id.*",
             "_pk_ses.*",
-            "_pk_ref.*"
+            "_pk_ref.*",
+            "MATOMO_SESSID",
+            "_pk_cvar.*",
+            "_pk_hsr.*",
+            "_pk_testcookie.*",
+            "_pk_uid",
+            "mtm_consent",
+            "mtm_consent_removed",
+            "mtm_cookie_consent"
         ]
     },
     "koko-analytics": {
@@ -379,7 +388,8 @@
             "i.vimeocdn.com"
         ],
         "cookies": [
-            "vuid"
+            "vuid",
+            "__ssid"
         ]
     },
     "google-maps": {
