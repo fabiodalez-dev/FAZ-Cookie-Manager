@@ -201,13 +201,11 @@ eq('img: non-provider image not parked', r.parked, null);
 eq('img: src getter returns resolved absolute URL',
   w.eval('(function(){ var i=document.createElement("img"); i.src="sub/pic.png"; return i.src; })()'),
   'http://localhost/sub/pic.png');
-// #168 review: documented scope boundary — this gate intercepts the `src`
-// PROPERTY setter only. A runtime setAttribute('src', …) is out of scope here
-// (server-rendered markup is still handled by the output-buffer blocking; a
-// runtime setAttribute on a main-document element is not intercepted).
+// Finding 2 fix: the setAttribute path is now gated too (was the property-setter's
+// blind spot). A runtime setAttribute('src', blocked) parks into data-faz-src.
 const viaAttr = w.document.createElement('img');
 viaAttr.setAttribute('src', OSM);
-eq('img: setAttribute("src") is outside this gate (documented boundary)', viaAttr.getAttribute('data-faz-src'), null);
+eq('img: setAttribute("src", blocked) is now parked (Finding 2 fix)', viaAttr.getAttribute('data-faz-src'), OSM);
 
 // F1 (review): the restore re-park guard depends on the gate leaving the native
 // src empty when it blocks. With functional consented but marketing still denied,
@@ -289,11 +287,12 @@ lp = linkProbe(GF);
 eq('link: Google Fonts stylesheet after functional consent loads', lp.href, GF);
 eq('link: consented stylesheet not parked', lp.parked, null);
 resetConsent();
-// documented scope boundary: setAttribute('href', …) is the property gate's blind spot.
+// Finding 2 fix: setAttribute('href', …) is now gated too (was the property
+// gate's blind spot) — a runtime setAttribute parks into data-faz-href.
 const linkAttr = w.document.createElement('link');
 linkAttr.rel = 'stylesheet';
 linkAttr.setAttribute('href', GF);
-eq('link: setAttribute("href") is outside this gate (documented boundary)', linkAttr.getAttribute('data-faz-href'), null);
+eq('link: setAttribute("href", blocked) is now parked (Finding 2 fix)', linkAttr.getAttribute('data-faz-href'), GF);
 
 // --- 5 added edge-case tests for the href gate (escape hatches + edge URLs) ---
 console.log('\nHTMLLinkElement.href override — edge cases (added)');
@@ -577,6 +576,60 @@ eq('RF2: first constructable sheet restored', sh1.cssRules[0].cssText.includes('
 eq('RF2: second constructable sheet restored (not skipped by mid-iteration splice)', sh2.cssRules[0].cssText.includes('fonts.gstatic.com'), true);
 resetConsent();
 
+// SA1-SA6 — setAttribute / srcset / observer-park gates (Finding 2).
+console.log('\nsetAttribute / srcset / observer-park (Finding 2)');
+const saImg = w.document.createElement('img'); saImg.setAttribute('src', OSM);
+eq('SA1: img.setAttribute("src", blocked) is parked', saImg.getAttribute('data-faz-src'), OSM);
+eq('SA1b: parked img has no live src', saImg.getAttribute('src'), null);
+const saLink = w.document.createElement('link'); saLink.setAttribute('rel', 'stylesheet'); saLink.setAttribute('href', 'https://fonts.googleapis.com/css?family=X');
+eq('SA2: link.setAttribute("href", blocked) is parked', saLink.getAttribute('data-faz-href'), 'https://fonts.googleapis.com/css?family=X');
+eq('SA2b: parked link has no live href', saLink.getAttribute('href'), null);
+const saSs = w.document.createElement('img'); saSs.setAttribute('srcset', GFONT + ' 1x, https://fonts.gstatic.com/b.png 2x');
+eq('SA3: img.setAttribute("srcset", blocked) is parked', typeof saSs.getAttribute('data-faz-srcset'), 'string');
+eq('SA3b: parked img has no live srcset', saSs.getAttribute('srcset'), null);
+const saOk = w.document.createElement('img'); saOk.setAttribute('src', 'http://localhost/wp-content/uploads/x.png');
+eq('SA4: same-origin setAttribute src stays live (no false positive)', !!saOk.getAttribute('src') && !saOk.getAttribute('data-faz-src'), true);
+// SA5 — parked srcset restored on consent.
+w.document.body.appendChild(saSs);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+eq('SA5: parked srcset restored after consent', typeof saSs.getAttribute('srcset'), 'string');
+eq('SA5b: data-faz-srcset cleared after restore', saSs.getAttribute('data-faz-srcset'), null);
+resetConsent();
+// SA6 — observer park helper handles a parsed <img> (native src, no gate call).
+const saParse = w.document.createElement('img');
+w.Element.prototype.setAttribute.call(saParse, 'src', OSM); // native, bypasses the gate
+eq('SA6-pre: parsed img has a live blocked src', saParse.getAttribute('src'), OSM);
+w.eval('_fazParkResourceElementIfBlocked')(saParse);
+eq('SA6: observer park helper parks a parsed blocked img', saParse.getAttribute('data-faz-src'), OSM);
+eq('SA6b: parked parsed img has no live src', saParse.getAttribute('src'), null);
+
+// SA7 (review medium) — a parked <source> src is restored on consent (was parked
+// with no matching restore selector → media stayed permanently broken).
+const vid = w.document.createElement('video');
+const saSrc = w.document.createElement('source');
+saSrc.setAttribute('src', OSM);
+eq('SA7-pre: <source> setAttribute src is parked', saSrc.getAttribute('data-faz-src'), OSM);
+vid.appendChild(saSrc); w.document.body.appendChild(vid);
+setConsent({ functional: 'yes' });
+w.eval('_fazUnblockServerSide()');
+eq('SA7: parked <source> src restored after consent', saSrc.getAttribute('src'), OSM);
+eq('SA7b: data-faz-src cleared on <source> after restore', saSrc.getAttribute('data-faz-src'), null);
+resetConsent();
+// SA8 (review low) — srcset PROPERTY setter is gated (img.srcset = blocked parks).
+const saProp = w.document.createElement('img');
+saProp.srcset = GFONT + ' 2x';
+eq('SA8: img.srcset = blocked is parked', typeof saProp.getAttribute('data-faz-srcset'), 'string');
+eq('SA8b: property-set blocked srcset has no live srcset', saProp.getAttribute('srcset'), null);
+// SA9 (review low) — a src park and a srcset park on ONE element keep independent
+// categories (srcset uses data-faz-srcset-category, so it can't clobber the src's
+// data-faz-category and break the src restore).
+const saDual = w.document.createElement('img');
+saDual.setAttribute('src', YT);          // marketing provider
+saDual.setAttribute('srcset', OSM + ' 1x'); // functional provider
+eq('SA9: src park keeps its own category (marketing)', saDual.getAttribute('data-faz-category'), 'marketing');
+eq('SA9b: srcset park uses a separate category attribute (functional)', saDual.getAttribute('data-faz-srcset-category'), 'functional');
+resetConsent();
 // RF3 — nodeValue is a separate accessor from .data; writing blocked CSS via it
 // inside a <style> must still be neutralized (was a pre-consent bypass).
 const nvStyle = w.document.createElement('style');
