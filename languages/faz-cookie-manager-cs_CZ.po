@@ -2251,6 +2251,9 @@ msgstr "Typ banneru"
 msgid "Box (bottom corner)"
 msgstr "Box (spodní roh)"
 
+msgid "Box (centered)"
+msgstr "Box (vycentrovaný)"
+
 #: admin/views/banner.php:157
 msgid "Full-width Banner"
 msgstr "Banner přes celou šířku"
@@ -2306,6 +2309,12 @@ msgstr "Pushdown"
 #: admin/views/banner.php:185
 msgid "Sidebar"
 msgstr "Postranní panel"
+
+msgid "Show as soft cookie wall"
+msgstr "Zobrazit jako měkkou cookie stěnu"
+
+msgid "Dims the page behind the banner. Visitors can still scroll but see the content obscured until they make a choice."
+msgstr "Ztmaví stránku za bannerem. Návštěvníci mohou stále rolovat, ale obsah vidí skrytý až do svého výběru."
 
 #: admin/views/banner.php:192
 msgid "Applicable Regulation"

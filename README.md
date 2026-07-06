@@ -563,6 +563,10 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.23.0 — 2026-07-06
+- **Added**: "Box (centered)" banner type - positions the consent box in the centre of the screen via CSS transform, a common pattern on European sites.
+- **Added**: soft cookie wall option - when enabled, a semi-transparent overlay dims the page behind the banner until the visitor makes a choice (works with Box corner, Box centered, and Full-width Banner types).
+
 ### 1.22.0 — 2026-07-03
 - **Added**: inline-CSS `url()` / `@import` blocking before consent. A Google Fonts `@font-face { src: url(fonts.gstatic.com…) }` or `@import "fonts.googleapis.com…"` printed in a `<style>` tag previously reached the provider with consent denied. Any `url()` / `@import` pointing at a blocked provider in a denied category is now neutralised (swapped for an inert `data:` placeholder, restored on consent). Server-rendered `<style>` and direct runtime `HTMLStyleElement` writes are covered by default; a new opt-in **"Advanced inline CSS URL blocking"** setting (default off) additionally hooks the broader runtime channels (`innerHTML` / `insertAdjacentHTML`, `CharacterData` edits including `.nodeValue` / `replaceWith`, `replaceChildren` / `insertAdjacentText`, and Constructable Stylesheets / `insertRule`) used by page builders and CSS-in-JS libraries.
 - **Added**: wider runtime resource blocking for `<img>` / `<iframe>` / `<link>` / `<source>` (extends #163 / #167) — beyond the `src` / `href` property setters, the `setAttribute('src'|'href'|'srcset', …)` path and the `srcset` property setter are now gated, blocked `<source>` `src` / `srcset` candidates are parked, and the MutationObserver also parks parsed `img` / `link` / `source`.

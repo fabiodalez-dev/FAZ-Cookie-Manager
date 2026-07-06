@@ -2257,6 +2257,9 @@ msgstr "Vrsta bannera"
 msgid "Box (bottom corner)"
 msgstr "Okvir (donji kut)"
 
+msgid "Box (centered)"
+msgstr "Okvir (centrirano)"
+
 #: admin/views/banner.php:157
 msgid "Full-width Banner"
 msgstr "Banner pune širine"
@@ -2312,6 +2315,12 @@ msgstr "Potiskivanje sadržaja"
 #: admin/views/banner.php:185
 msgid "Sidebar"
 msgstr "Bočna traka"
+
+msgid "Show as soft cookie wall"
+msgstr "Prikaži kao meki cookie zid"
+
+msgid "Dims the page behind the banner. Visitors can still scroll but see the content obscured until they make a choice."
+msgstr "Zatamnjuje stranicu iza bannera. Posjetitelji mogu scrollati ali vide sadržaj zamagljen dok ne izaberu."
 
 #: admin/views/banner.php:192
 msgid "Applicable Regulation"

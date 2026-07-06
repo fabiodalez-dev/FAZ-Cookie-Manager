@@ -744,6 +744,7 @@ class Banner extends Store {
 			case 'reloadOnAccept':
 			case 'enableCallbacks':
 			case 'status':
+			case 'softCookieWall':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'color':

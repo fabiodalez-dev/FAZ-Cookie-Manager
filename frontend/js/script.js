@@ -770,6 +770,7 @@ ref._fazRandomString = function (length, allChars = true) {
  */
 function _fazRemoveBanner() {
     _fazHideBanner();
+    _fazRemoveCookieWall();
     if (_fazStore._bannerConfig.config.revisitConsent.status === true) {
         _fazShowRevisit();
     }
@@ -1036,19 +1037,26 @@ function _fazAddPositionClass() {
     let position = _fazStore._bannerConfig.settings.position;
     let bannerType = type;
     if (bannerType === 'popup') {
+        // Centered box: always center, no positional class needed beyond the type
         position = 'center';
-    }
-    // Banner + pushdown uses classic template (for pushdown expansion support).
-    // The CSS position classes are .faz-classic-*, so match the class name.
-    if (bannerType === 'banner' && _fazGetPtype() === 'pushdown') {
-        bannerType = 'classic';
-    }
-    // Non-box types use simplified top/bottom positioning
-    if (bannerType !== 'box') {
-        position = position.startsWith('top') ? 'top' : 'bottom';
+    } else {
+        // Banner + pushdown uses classic template (for pushdown expansion support).
+        // The CSS position classes are .faz-classic-*, so match the class name.
+        if (bannerType === 'banner' && _fazGetPtype() === 'pushdown') {
+            bannerType = 'classic';
+        }
+        // Non-box types use simplified top/bottom positioning
+        if (bannerType !== 'box') {
+            position = position.startsWith('top') ? 'top' : 'bottom';
+        }
     }
     const noticeClass = `faz-${bannerType}-${position}`;
     container.classList.add(noticeClass);
+
+    // Soft cookie wall: inject a full-screen backdrop behind the banner
+    if (_fazStore._bannerConfig.settings.softCookieWall) {
+        _fazInjectCookieWall();
+    }
     const revisitConsent = _fazGetElementByTag('revisit-consent');
     if (!revisitConsent) return false;
     const revisitPosition = 'faz-revisit-' + _fazStore._bannerConfig.config.revisitConsent.position;
@@ -1669,6 +1677,17 @@ function _fazShowOverLay() {
 function _fazToggleOverLay() {
     const overlay = document.querySelector('.faz-overlay');
     overlay && overlay.classList.toggle('faz-hide');
+}
+function _fazInjectCookieWall() {
+    if (document.getElementById('faz-cookie-wall')) return;
+    const wall = document.createElement('div');
+    wall.id = 'faz-cookie-wall';
+    wall.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(wall);
+}
+function _fazRemoveCookieWall() {
+    const wall = document.getElementById('faz-cookie-wall');
+    if (wall) wall.remove();
 }
 function _fazGetPreferenceCenter() {
     if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') {
