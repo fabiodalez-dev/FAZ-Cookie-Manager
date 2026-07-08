@@ -175,8 +175,8 @@
 			clear(container);
 			var tbody = el('tbody');
 			tbody.appendChild(el('tr', null, [
-				el('td', null, el('strong', { text: 'Automatic per-visitor application' })),
-				el('td', { text: (data.runtime && data.runtime.applied) ? '✅ active' : '⚪ off — default banner served to all visitors' })
+				el('td', null, el('strong', { text: 'Runtime rule-set application' })),
+				el('td', { text: (data.runtime && data.runtime.applied) ? '✅ active' : '⚪ off — catalogue is preview/reference only' })
 			]));
 			tbody.appendChild(el('tr', null, [
 				el('td', null, el('strong', { text: 'Catalog rulesets' })),
