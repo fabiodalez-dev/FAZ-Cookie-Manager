@@ -179,34 +179,34 @@
 				el('td', { text: (data.runtime && data.runtime.applied) ? t('runtimeApplicationActive', '✅ active') : t('runtimeApplicationOff', '⚪ off — catalogue is preview/reference only') })
 			]));
 			tbody.appendChild(el('tr', null, [
-				el('td', null, el('strong', { text: 'Catalog rulesets' })),
+				el('td', null, el('strong', { text: t('catalogRulesets', 'Catalog rulesets') })),
 				el('td', { text: String(data.catalog.rulesets_count) })
 			]));
 			tbody.appendChild(el('tr', null, [
-				el('td', null, el('strong', { text: 'Fallback ruleset' })),
+				el('td', null, el('strong', { text: t('fallbackRuleset', 'Fallback ruleset') })),
 				el('td', null, el('code', { text: data.catalog.fallback_id }))
 			]));
 			tbody.appendChild(el('tr', null, [
-				el('td', null, el('strong', { text: 'ipinfo opt-in' })),
-				el('td', { text: data.ipinfo.optin ? '✅ active' : '⚪ disabled' })
+				el('td', null, el('strong', { text: t('ipinfoOptin', 'ipinfo opt-in') })),
+				el('td', { text: data.ipinfo.optin ? t('statusActive', '✅ active') : t('statusDisabled', '⚪ disabled') })
 			]));
 			tbody.appendChild(el('tr', null, [
-				el('td', null, el('strong', { text: 'ipinfo API key' })),
-				el('td', { text: data.ipinfo.key_present ? '✅ configured' : '⚪ not set' })
+				el('td', null, el('strong', { text: t('ipinfoApiKey', 'ipinfo API key') })),
+				el('td', { text: data.ipinfo.key_present ? t('statusConfigured', '✅ configured') : t('statusNotSet', '⚪ not set') })
 			]));
 			tbody.appendChild(el('tr', null, [
-				el('td', null, el('strong', { text: 'Schema migration v2' })),
-				el('td', { text: data.migration.complete ? '✅ complete' : '⚠️ incomplete' })
+				el('td', null, el('strong', { text: t('schemaMigration', 'Schema migration v2') })),
+				el('td', { text: data.migration.complete ? t('statusComplete', '✅ complete') : t('statusIncomplete', '⚠️ incomplete') })
 			]));
 			if (data.migration.pending_columns && data.migration.pending_columns.length) {
 				tbody.appendChild(el('tr', null, [
-					el('td', null, el('strong', { text: 'Pending columns' })),
+					el('td', null, el('strong', { text: t('pendingColumns', 'Pending columns') })),
 					el('td', { text: data.migration.pending_columns.join(', ') })
 				]));
 			}
 			if (data.migration.disabled_reason) {
 				tbody.appendChild(el('tr', null, [
-					el('td', null, el('strong', { text: 'Migration disabled' })),
+					el('td', null, el('strong', { text: t('migrationDisabled', 'Migration disabled') })),
 					el('td', { text: data.migration.disabled_reason })
 				]));
 			}
