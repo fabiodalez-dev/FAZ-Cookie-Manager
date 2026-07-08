@@ -288,7 +288,7 @@
 				});
 				container.appendChild(el('table', { class: 'widefat striped' }, [thead, tbody]));
 			} else {
-				container.appendChild(el('p', { class: 'description', text: t('noOverrides', 'No per-country overrides configured. The plugin auto-detects rule-set from country and US state.') }));
+				container.appendChild(el('p', { class: 'description', text: t('noOverrides', 'No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only.') }));
 			}
 
 			// Add form
