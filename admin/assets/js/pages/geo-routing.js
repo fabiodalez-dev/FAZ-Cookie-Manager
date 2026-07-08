@@ -175,6 +175,10 @@
 			clear(container);
 			var tbody = el('tbody');
 			tbody.appendChild(el('tr', null, [
+				el('td', null, el('strong', { text: 'Automatic per-visitor application' })),
+				el('td', { text: (data.runtime && data.runtime.applied) ? '✅ active' : '⚪ off — default banner served to all visitors' })
+			]));
+			tbody.appendChild(el('tr', null, [
 				el('td', null, el('strong', { text: 'Catalog rulesets' })),
 				el('td', { text: String(data.catalog.rulesets_count) })
 			]));

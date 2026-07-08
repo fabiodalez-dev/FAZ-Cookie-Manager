@@ -25,7 +25,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 
 	<h1><?php esc_html_e( 'Geo-routing', 'faz-cookie-manager' ); ?></h1>
 	<p class="faz-page-intro">
-		<?php esc_html_e( 'Inspect, override, and preview the built-in jurisdiction rule-sets per country and US state. Note: automatic per-visitor application to the live banner is currently off — the default banner is served to every visitor, and jurisdiction-specific banners (for example a CCPA/CPRA "Do Not Sell" banner) are configured manually. The rule-set catalogue below powers the previews and is the reference for that configuration.', 'faz-cookie-manager' ); ?>
+		<?php esc_html_e( 'Inspect, override, and preview the built-in jurisdiction rule-sets per country and US state. Automatic per-visitor application to the live banner is off (see Pipeline status) — configure jurisdiction-specific banners, such as a CCPA/CPRA "Do Not Sell" banner, manually on the Banner page.', 'faz-cookie-manager' ); ?>
 	</p>
 
 	<nav class="faz-geo-tabs" role="tablist" aria-label="<?php esc_attr_e( 'Geo-routing sections', 'faz-cookie-manager' ); ?>">
