@@ -391,6 +391,13 @@ class Geo_Api {
 				'rulesets_count' => count( Ruleset_Loader::get_instance()->list_all() ),
 				'fallback_id'    => Ruleset_Loader::get_instance()->get_fallback_id(),
 			),
+			// Whether the resolved ruleset is actually applied to the live banner
+			// per visitor. Currently hard-off (1.18.2 hotfix) until the per-
+			// jurisdiction UI obligations (Do Not Sell link, GPC, sensitive
+			// separate opt-in) are wired; the catalogue is preview/reference only.
+			'runtime' => array(
+				'applied' => \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled(),
+			),
 		);
 		return new WP_REST_Response( $status, 200 );
 	}
