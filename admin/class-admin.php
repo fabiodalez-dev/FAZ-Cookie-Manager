@@ -740,6 +740,10 @@ class Admin {
 						'addOverride'                  => __( 'Add override', 'faz-cookie-manager' ),
 						'noOverrides'                  => __( 'No per-country overrides configured. The plugin auto-detects rule-set from country and US state.', 'faz-cookie-manager' ),
 						'confirmDelete'                => __( 'Remove this override?', 'faz-cookie-manager' ),
+						// Pipeline status panel.
+						'runtimeApplicationLabel'      => __( 'Runtime rule-set application', 'faz-cookie-manager' ),
+						'runtimeApplicationActive'     => __( '✅ active', 'faz-cookie-manager' ),
+						'runtimeApplicationOff'        => __( '⚪ off — catalogue is preview/reference only', 'faz-cookie-manager' ),
 						// Preview panel.
 						'resolvedRuleset'              => __( 'Resolved ruleset', 'faz-cookie-manager' ),
 						'fullRulesetJson'              => __( 'Full ruleset JSON', 'faz-cookie-manager' ),

@@ -175,8 +175,8 @@
 			clear(container);
 			var tbody = el('tbody');
 			tbody.appendChild(el('tr', null, [
-				el('td', null, el('strong', { text: 'Runtime rule-set application' })),
-				el('td', { text: (data.runtime && data.runtime.applied) ? '✅ active' : '⚪ off — catalogue is preview/reference only' })
+				el('td', null, el('strong', { text: t('runtimeApplicationLabel', 'Runtime rule-set application') })),
+				el('td', { text: (data.runtime && data.runtime.applied) ? t('runtimeApplicationActive', '✅ active') : t('runtimeApplicationOff', '⚪ off — catalogue is preview/reference only') })
 			]));
 			tbody.appendChild(el('tr', null, [
 				el('td', null, el('strong', { text: 'Catalog rulesets' })),
