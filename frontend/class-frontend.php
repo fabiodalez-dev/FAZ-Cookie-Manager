@@ -352,6 +352,16 @@ class Frontend {
 			// rules never reach them. Without this floor, placeholders for lazy-loaded
 			// iframes (Bricks/Elementor/Divi Video) collapse to 0×0. The 4-ancestor
 			// probe in _fazAddPlaceholder (issue #87) expected this CSS floor.
+			// Neutralise WordPress core's block-border support rule
+			// `html :where([style*="border-color"]){border-style:solid}`
+			// (wp-includes, WP 5.9+). The banner container carries the
+			// per-button colour CSS variables (…-border-color) in its inline
+			// style, so that substring selector matches it and paints an
+			// unintended medium/solid currentColor (black) border around the
+			// whole banner — the intended border lives on .faz-consent-bar, not
+			// the container. The id selector outranks WP's zero-specificity
+			// :where(), and border-radius is unaffected.
+			$css .= '#faz-consent{border-style:none}';
 			$css .= '.faz-hidden{display:none!important;visibility:hidden!important}'
 				. '.faz-consent-bridge{width:0;height:0;border:0}'
 				. '.faz-age-gate-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}'

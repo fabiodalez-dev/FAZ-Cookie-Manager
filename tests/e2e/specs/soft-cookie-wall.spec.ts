@@ -81,12 +81,18 @@ test.describe('Soft cookie wall overlay', () => {
           wallZ: cs ? parseInt(cs.zIndex || '0', 10) : 0,
           bannerZ: container ? parseInt(getComputedStyle(container).zIndex || '0', 10) : 0,
           hitIsWall: hit ? hit.id === 'faz-cookie-wall' : false,
+          // WordPress core's block-border rule `:where([style*="border-color"])`
+          // matches the container (its inline style carries the …-border-color
+          // CSS variables) and would paint a spurious solid currentColor border.
+          // The plugin resets border-style on #faz-consent; assert it stuck.
+          containerBorderStyle: container ? getComputedStyle(container).borderStyle : null,
         };
       });
       expect(probe.pointerEvents, 'overlay must not capture pointer events').toBe('none');
       expect(probe.ariaHidden, 'overlay hidden from assistive tech').toBe('true');
       expect(probe.hitIsWall, 'the page under the overlay stays hit-testable').toBe(false);
       expect(probe.bannerZ, 'banner sits above the overlay').toBeGreaterThan(probe.wallZ);
+      expect(probe.containerBorderStyle, 'no spurious WP block-border on the banner container').toBe('none');
 
       // Making a choice removes the overlay.
       await page.locator('[data-faz-tag="accept-button"]').first().click();
