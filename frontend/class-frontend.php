@@ -4470,7 +4470,7 @@ class Frontend {
 		$data['settings']['preferenceCenterType']     = ( $settings['type'] ?? '' ) === 'classic' ? 'pushdown' : ( $settings['preferenceCenterType'] ?? 'popup' );
 		$data['settings']['position']                 = $settings['position'] ?? 'bottom-right';
 		$data['settings']['applicableLaw']            = $settings['applicableLaw'] ?? 'gdpr';
-		$data['settings']['softCookieWall']           = ! empty( $settings['softCookieWall'] );
+		$data['settings']['softCookieWall']           = 'classic' !== ( $settings['type'] ?? '' ) && ! empty( $settings['softCookieWall'] );
 		$data['behaviours']['reloadBannerOnAccept']   = $behaviours['reloadBannerOnAccept']['status'] ?? false;
 		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
 		// Global Privacy Control: surfaced to the frontend so script.js can read

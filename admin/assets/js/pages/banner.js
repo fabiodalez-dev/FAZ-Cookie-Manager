@@ -644,13 +644,34 @@
 				if ((type === 'box' || type === 'popup') && prefEl.value === 'pushdown') {
 					prefEl.value = 'popup';
 				}
+				// Popup has no sidebar template — disable the option and fall back
+				// to popup if it was previously selected.
+				var sidebarOpt = prefEl.querySelector('option[value="sidebar"]');
+				if (sidebarOpt) {
+					sidebarOpt.disabled = (type === 'popup');
+				}
+				if (type === 'popup' && prefEl.value === 'sidebar') {
+					prefEl.value = 'popup';
+				}
 			}
 		}
 
 		// Soft cookie wall toggle: only relevant for box/popup/banner types
 		var wallGroup = document.getElementById('faz-soft-cookie-wall-group');
+		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		if (wallGroup) {
-			wallGroup.style.display = (type === 'classic') ? 'none' : '';
+			if (type === 'classic') {
+				wallGroup.style.display = 'none';
+				if (wallEl) {
+					wallEl.checked = false;
+					wallEl.disabled = true;
+				}
+			} else {
+				wallGroup.style.display = '';
+				if (wallEl) {
+					wallEl.disabled = false;
+				}
+			}
 		}
 	}
 

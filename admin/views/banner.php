@@ -195,7 +195,8 @@ defined( 'ABSPATH' ) || exit;
 						<input type="checkbox" id="faz-b-soft-cookie-wall" style="width:auto;">
 						<?php esc_html_e( 'Show as soft cookie wall', 'faz-cookie-manager' ); ?>
 					</label>
-					<div class="faz-help"><?php esc_html_e( 'Dims the page behind the banner. Visitors can still scroll but see the content obscured until they make a choice.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Dims the page behind the banner. Visitors can read and scroll the page but cannot interact with it (links, buttons) until they make a consent choice.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help" style="margin-top:4px;">&#9888; <?php esc_html_e( 'Cookie-wall patterns carry EU consent-validity risk under GDPR/EDPB guidance. Enable only after legal review.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>

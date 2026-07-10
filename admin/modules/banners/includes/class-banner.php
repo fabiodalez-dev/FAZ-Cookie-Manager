@@ -347,6 +347,13 @@ class Banner extends Store {
 			$changed = true;
 		}
 
+		// Classic banners never have a soft cookie wall — enforce it regardless of
+		// how the setting reached the database (REST bypass, import, legacy save).
+		if ( 'classic' === $type && ! empty( $properties['settings']['softCookieWall'] ) ) {
+			$properties['settings']['softCookieWall'] = false;
+			$changed = true;
+		}
+
 		if ( $shows_do_not_sell && 'classic' === $type ) {
 			$properties['settings']['type']                 = 'box';
 			$properties['settings']['preferenceCenterType'] = 'popup';

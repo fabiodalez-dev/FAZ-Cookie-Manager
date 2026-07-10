@@ -19,7 +19,7 @@
  * Version:           1.23.0
  * Requires at least: 5.0
  * Tested up to:      7.0
- * Stable tag:        1.23.0
+ * Stable tag:        1.22.0
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro
  * Author URI:        https://fabiodalez.it/

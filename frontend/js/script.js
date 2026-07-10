@@ -1690,7 +1690,7 @@ function _fazRemoveCookieWall() {
     if (wall) wall.remove();
 }
 function _fazGetPreferenceCenter() {
-    if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') {
+    if (_fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1) {
         return _fazGetBanner();
     }
     let element = _fazGetLaw() === 'ccpa' ? _fazGetElementByTag("optout-popup") : _fazGetElementByTag("detail");
@@ -1709,7 +1709,7 @@ function _fazHidePreferenceCenter() {
 
     // ARIA attributes remain always present - only aria-expanded on settings button changes
     // The modal relationship is permanent, only visibility changes
-    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
+    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
 
     if (!isPushdown) {
         _fazHideOverLay();
@@ -1775,7 +1775,7 @@ function _fazShowPreferenceCenter() {
         element.querySelector('[data-faz-tag="' + _fazActivePreferenceTag() + '"]') ||
         element.querySelector('.faz-preference-center');
     _fazSetPreferenceCenterAccessibility(preferenceCenter);
-    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
+    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
 
     if (!isPushdown) {
         _fazShowOverLay();
@@ -1807,7 +1807,7 @@ function _fazTogglePreferenceCenter() {
     if (!element) return;
     const isOpen = element.classList.contains(_fazGetPreferenceClass());
     element.classList.toggle(_fazGetPreferenceClass());
-    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
+    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
     if (isPushdown) {
         const preferenceCenter = element.querySelector('.faz-preference-center');
         _fazSetPreferenceCenterAccessibility(preferenceCenter);
@@ -1835,8 +1835,8 @@ function _fazTogglePreferenceCenter() {
     }
 }
 function _fazGetPreferenceClass() {
-    // Pushdown (expand) only works for classic/full-width; box falls back to popup modal
-    if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') {
+    // Pushdown (expand) only works for classic/full-width; box/popup fall back to popup modal
+    if (_fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1) {
         return 'faz-consent-bar-expand';
     }
     return 'faz-modal-open';
@@ -1856,7 +1856,7 @@ function _fazShowRevisit() {
 function _fazSetPreferenceAction(tagName = false) {
     _fazStore._preferenceOriginTag = tagName;
     _fazStore._prefTriggerElement = document.activeElement;
-    const isPushdown = _fazGetPtype() === 'pushdown' && _fazGetType() !== 'box';
+    const isPushdown = _fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1;
     if (isPushdown) {
         _fazTogglePreferenceCenter();
     } else {
@@ -2126,7 +2126,7 @@ function _fazRenderBanner() {
     // duplicating the preference center. See _fazReRenderVisibleBanner().
     _fazRenderedNodes = Array.prototype.slice.call(fragment.childNodes);
     document.body.insertBefore(fragment, document.body.firstChild);
-    if (_fazGetPtype() === 'pushdown' && _fazGetType() !== 'box') _fazToggleAriaExpandStatus("=settings-button", "false");
+    if (_fazGetPtype() === 'pushdown' && ['box', 'popup'].indexOf(_fazGetType()) === -1) _fazToggleAriaExpandStatus("=settings-button", "false");
     // Run each decoration helper in isolation: the banner template is already
     // in the DOM at this point, so a single helper throwing (e.g. a fragile
     // selector on a localized category name, or a render edge case) must NOT
