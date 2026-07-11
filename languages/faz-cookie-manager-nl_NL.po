@@ -2270,6 +2270,9 @@ msgstr "Banner Type"
 msgid "Box (bottom corner)"
 msgstr "Kader (onderhoek)"
 
+msgid "Box (centered)"
+msgstr "Box (gecentreerd)"
+
 #: admin/views/banner.php:157
 msgid "Full-width Banner"
 msgstr "Volledige-banner"
@@ -2325,6 +2328,12 @@ msgstr "Pushdown"
 #: admin/views/banner.php:185
 msgid "Sidebar"
 msgstr "Zijbalk"
+
+msgid "Show as soft cookie wall"
+msgstr "Tonen als zachte cookiewall"
+
+msgid "Dims the page behind the banner. Visitors can still scroll but see the content obscured until they make a choice."
+msgstr "Verduistert de pagina achter de banner. Bezoekers kunnen nog scrollen maar zien de inhoud verborgen totdat ze een keuze maken."
 
 #: admin/views/banner.php:192
 msgid "Applicable Regulation"

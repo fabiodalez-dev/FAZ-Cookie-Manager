@@ -154,6 +154,7 @@ defined( 'ABSPATH' ) || exit;
 					<label><?php esc_html_e( 'Banner Type', 'faz-cookie-manager' ); ?></label>
 					<select class="faz-select" id="faz-b-type" style="width:auto;max-width:280px;">
 						<option value="box"><?php esc_html_e( 'Box (bottom corner)', 'faz-cookie-manager' ); ?></option>
+						<option value="popup"><?php esc_html_e( 'Box (centered)', 'faz-cookie-manager' ); ?></option>
 						<option value="banner"><?php esc_html_e( 'Full-width Banner', 'faz-cookie-manager' ); ?></option>
 						<option value="classic"><?php esc_html_e( 'Classic', 'faz-cookie-manager' ); ?></option>
 					</select>
@@ -187,6 +188,15 @@ defined( 'ABSPATH' ) || exit;
 						<option value="pushdown"><?php esc_html_e( 'Pushdown', 'faz-cookie-manager' ); ?></option>
 						<option value="sidebar"><?php esc_html_e( 'Sidebar', 'faz-cookie-manager' ); ?></option>
 					</select>
+				</div>
+
+				<div class="faz-form-group" id="faz-soft-cookie-wall-group">
+					<label class="faz-toggle-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+						<input type="checkbox" id="faz-b-soft-cookie-wall" style="width:auto;">
+						<?php esc_html_e( 'Show as soft cookie wall', 'faz-cookie-manager' ); ?>
+					</label>
+					<div class="faz-help"><?php esc_html_e( 'Dims the page behind the banner. Visitors can read and scroll the page but cannot interact with it (links, buttons) until they make a consent choice.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help" style="margin-top:4px;">&#9888; <?php esc_html_e( 'Cookie-wall patterns carry EU consent-validity risk under GDPR/EDPB guidance. Enable only after legal review.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>

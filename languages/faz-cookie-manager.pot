@@ -2161,6 +2161,10 @@ msgid "Box (bottom corner)"
 msgstr ""
 
 #: admin/views/banner.php:157
+msgid "Box (centered)"
+msgstr ""
+
+#: admin/views/banner.php:158
 msgid "Full-width Banner"
 msgstr ""
 
@@ -2220,6 +2224,14 @@ msgstr ""
 
 #: admin/views/banner.php:188
 msgid "Sidebar"
+msgstr ""
+
+#: admin/views/banner.php:196
+msgid "Show as soft cookie wall"
+msgstr ""
+
+#: admin/views/banner.php:198
+msgid "Dims the page behind the banner. Visitors can still scroll but see the content obscured until they make a choice."
 msgstr ""
 
 #: admin/views/banner.php:195

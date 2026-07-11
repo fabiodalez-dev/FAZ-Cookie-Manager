@@ -26,7 +26,8 @@
         "regions": []
       }
     ],
-    "allowCloseButtonWithReject": false
+    "allowCloseButtonWithReject": false,
+    "softCookieWall": false
   },
   "behaviours": {
     "reloadBannerOnAccept": {

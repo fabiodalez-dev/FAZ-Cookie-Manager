@@ -325,6 +325,10 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.23.0 =
+* Added: "Box (centered)" banner type - positions the consent box in the centre of the screen via CSS transform, a common pattern on European sites.
+* Added: soft cookie wall option - when enabled, a semi-transparent overlay dims the page behind the banner until the visitor makes a choice (works with Box corner, Box centered, and Full-width Banner types).
+
 = 1.22.0 =
 * Added: inline-CSS url()/@import blocking before consent — a Google Fonts @font-face src url() or @import in a <style> tag previously reached the provider with consent denied; any url()/@import pointing at a blocked provider in a denied category is now neutralised (inert data: placeholder, restored on consent). Server-rendered <style> and direct runtime HTMLStyleElement writes are covered by default; a new opt-in "Advanced inline CSS URL blocking" setting (default off) additionally hooks page-builder/CSS-in-JS channels (innerHTML/insertAdjacentHTML, CharacterData incl. nodeValue/replaceWith, replaceChildren/insertAdjacentText, Constructable Stylesheets/insertRule).
 * Added: wider runtime resource blocking for <img>/<iframe>/<link>/<source> (extends #163/#167) — beyond the src/href property setters, the setAttribute('src'|'href'|'srcset') path and the srcset property setter are gated, blocked <source> src/srcset are parked, and the MutationObserver also parks parsed img/link/source.

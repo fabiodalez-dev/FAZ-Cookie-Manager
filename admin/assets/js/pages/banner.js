@@ -607,7 +607,10 @@
 	function updatePositionOptions() {
 		var type = getVal('faz-b-type') || 'box';
 		var posEl = document.getElementById('faz-b-position');
+		var posGroup = posEl && posEl.closest('.faz-form-group');
 		if (!posEl) return;
+		// Centered popup has no position choice — hide the whole group
+		if (posGroup) posGroup.style.display = (type === 'popup') ? 'none' : '';
 		var opts = posEl.options;
 		for (var i = 0; i < opts.length; i++) {
 			var v = opts[i].value;
@@ -638,8 +641,35 @@
 				prefEl.disabled = true;
 			} else {
 				prefEl.disabled = false;
-				if (type === 'box' && prefEl.value === 'pushdown') {
+				if ((type === 'box' || type === 'popup') && prefEl.value === 'pushdown') {
 					prefEl.value = 'popup';
+				}
+				// Popup has no sidebar template — disable the option and fall back
+				// to popup if it was previously selected.
+				var sidebarOpt = prefEl.querySelector('option[value="sidebar"]');
+				if (sidebarOpt) {
+					sidebarOpt.disabled = (type === 'popup');
+				}
+				if (type === 'popup' && prefEl.value === 'sidebar') {
+					prefEl.value = 'popup';
+				}
+			}
+		}
+
+		// Soft cookie wall toggle: only relevant for box/popup/banner types
+		var wallGroup = document.getElementById('faz-soft-cookie-wall-group');
+		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
+		if (wallGroup) {
+			if (type === 'classic') {
+				wallGroup.style.display = 'none';
+				if (wallEl) {
+					wallEl.checked = false;
+					wallEl.disabled = true;
+				}
+			} else {
+				wallGroup.style.display = '';
+				if (wallEl) {
+					wallEl.disabled = false;
 				}
 			}
 		}
@@ -1338,6 +1368,8 @@
 		setVal('faz-b-position', s.position || 'bottom-right');
 		setVal('faz-b-theme', s.theme || 'light');
 		setVal('faz-b-pref-type', s.preferenceCenterType || 'popup');
+		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
+		if (wallEl) wallEl.checked = !!s.softCookieWall;
 		// Fallback expiry when the banner has no stored consentExpiry.value
 		// (newly cloned/migrated banners). Law-aware to match the JSON config
 		// defaults: opt-in (GDPR-family) banners default to 180 days — the
@@ -1968,6 +2000,8 @@
 		}
 		props.settings.position = getVal('faz-b-position');
 		props.settings.theme = getVal('faz-b-theme');
+		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
+		props.settings.softCookieWall = wallEl ? wallEl.checked : false;
 		if (!props.settings.consentExpiry) props.settings.consentExpiry = {};
 		props.settings.consentExpiry.status = true;
 		props.settings.consentExpiry.value = getVal('faz-b-expiry');
@@ -2470,9 +2504,13 @@
 		var position = getVal('faz-b-position') || 'bottom-right';
 		var ptype = getVal('faz-b-pref-type') || 'popup';
 		var positionType = type;
-		if (type !== 'box' && ptype === 'pushdown') positionType = 'classic';
-		var positionForClass = position;
-		if (positionType !== 'box') {
+		if (type === 'popup') {
+			positionType = 'popup';
+		} else if (type !== 'box' && ptype === 'pushdown') {
+			positionType = 'classic';
+		}
+		var positionForClass = (positionType === 'popup') ? 'center' : position;
+		if (positionType !== 'box' && positionType !== 'popup') {
 			positionForClass = (position.indexOf('top') !== -1) ? 'top' : 'bottom';
 		}
 		var positionClass = 'faz-' + positionType + '-' + positionForClass;

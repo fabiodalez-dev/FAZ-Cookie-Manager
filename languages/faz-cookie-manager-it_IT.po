@@ -2269,6 +2269,9 @@ msgstr "Tipo di banner"
 msgid "Box (bottom corner)"
 msgstr "Box (angolo inferiore)"
 
+msgid "Box (centered)"
+msgstr "Riquadro (centrato)"
+
 #: admin/views/banner.php:157
 msgid "Full-width Banner"
 msgstr "Banner a larghezza piena"
@@ -2324,6 +2327,12 @@ msgstr "Pushdown"
 #: admin/views/banner.php:185
 msgid "Sidebar"
 msgstr "Sidebar"
+
+msgid "Show as soft cookie wall"
+msgstr "Mostra come soft cookie wall"
+
+msgid "Dims the page behind the banner. Visitors can still scroll but see the content obscured until they make a choice."
+msgstr "Oscura la pagina dietro il banner. I visitatori possono scorrere ma vedono il contenuto oscurato fino alla loro scelta."
 
 #: admin/views/banner.php:192
 msgid "Applicable Regulation"

@@ -2274,6 +2274,9 @@ msgstr "Type de bannière"
 msgid "Box (bottom corner)"
 msgstr "Boîte (coin inférieur)"
 
+msgid "Box (centered)"
+msgstr "Boîte (centrée)"
+
 #: admin/views/banner.php:157
 msgid "Full-width Banner"
 msgstr "Bannière pleine largeur"
@@ -2329,6 +2332,12 @@ msgstr "Pushdown"
 #: admin/views/banner.php:185
 msgid "Sidebar"
 msgstr "Sidebar"
+
+msgid "Show as soft cookie wall"
+msgstr "Afficher comme cookie wall doux"
+
+msgid "Dims the page behind the banner. Visitors can still scroll but see the content obscured until they make a choice."
+msgstr "Assombrit la page derrière la bannière. Les visiteurs peuvent toujours faire défiler mais voient le contenu obscurci jusqu'à leur choix."
 
 #: admin/views/banner.php:192
 msgid "Applicable Regulation"

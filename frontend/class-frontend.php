@@ -4470,6 +4470,7 @@ class Frontend {
 		$data['settings']['preferenceCenterType']     = ( $settings['type'] ?? '' ) === 'classic' ? 'pushdown' : ( $settings['preferenceCenterType'] ?? 'popup' );
 		$data['settings']['position']                 = $settings['position'] ?? 'bottom-right';
 		$data['settings']['applicableLaw']            = $settings['applicableLaw'] ?? 'gdpr';
+		$data['settings']['softCookieWall']           = 'classic' !== ( $settings['type'] ?? '' ) && ! empty( $settings['softCookieWall'] );
 		$data['behaviours']['reloadBannerOnAccept']   = $behaviours['reloadBannerOnAccept']['status'] ?? false;
 		$data['behaviours']['loadAnalyticsByDefault'] = $behaviours['loadAnalyticsByDefault']['status'] ?? false;
 		// Global Privacy Control: surfaced to the frontend so script.js can read
@@ -4750,6 +4751,7 @@ class Frontend {
 			'.faz-box-bottom-right',
 			'.faz-box-top-left',
 			'.faz-box-top-right',
+			'.faz-popup-center',
 		);
 
 		// Classes on sibling elements (outside #faz-consent in the DOM).
@@ -4762,6 +4764,7 @@ class Frontend {
 			'.faz-modal',
 			'.faz-age-gate',
 			'.faz-consent-bridge',
+			'#faz-cookie-wall',
 		);
 
 		// Classes inside .faz-modal (popup/sidebar) OR inside #faz-consent (classic).
