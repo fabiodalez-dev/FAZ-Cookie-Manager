@@ -5242,6 +5242,14 @@ class Frontend {
 	}
 
 	public function filter_script_loader_tag( $tag, $handle, $src ) {
+		// Prevent Cloudflare Rocket Loader from deferring the consent banner and
+		// its companion scripts. These must execute synchronously so the DOM-hiding
+		// routine fires before the page is painted — deferral breaks Accept/Reject.
+		$own_handles = array( $this->plugin_name, 'faz-fw', $this->plugin_name . '-gcm', 'faz-fw-gcm', $this->plugin_name . '-tcf-cmp', 'faz-fw-tcf-cmp' );
+		if ( in_array( $handle, $own_handles, true ) && false === strpos( $tag, 'data-cfasync' ) ) {
+			$tag = str_replace( '<script ', '<script data-cfasync="false" ', $tag );
+		}
+
 		if ( is_admin() ) {
 			return $tag;
 		}
