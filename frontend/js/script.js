@@ -1375,6 +1375,17 @@ function _fazDomReady(callback) {
  * Callback function to Domready event.
  */
 _fazDomReady(async function () {
+    // Guard against double-execution. Cloudflare Rocket Loader (and some other
+    // script optimisers) can run a script both synchronously (because data-cfasync=
+    // "false" opts it out of deferral) AND again via their own deferred queue.
+    // A second _fazInit call inserts a second banner into the DOM; _fazGetBanner
+    // uses querySelector (first match), so clicking Reject hides banner #1 while
+    // banner #2 stays visible. window.fazcookie persists across executions
+    // (initialised as window.fazcookie = window.fazcookie || {}), so this flag
+    // survives the second run and makes it a no-op.
+    if (window.fazcookie && window.fazcookie._fazInitDone) return;
+    window.fazcookie = window.fazcookie || {};
+    window.fazcookie._fazInitDone = true;
     try {
         await _fazInit();
     } catch (err) {
