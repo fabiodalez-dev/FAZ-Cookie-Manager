@@ -16,6 +16,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Cache {
 
 	/**
+	 * TTL for the plugin's data transients (7 days).
+	 *
+	 * Data transients are epoch-invalidated (see delete_transient()): a
+	 * rotated prefix makes the old entries unreachable rather than
+	 * physically deleting them, so on persistent object-cache backends
+	 * (Redis, Memcached) each invalidation would otherwise leave the
+	 * previous epoch's payloads behind forever. A finite expiration lets
+	 * the backend reap those orphans, and on plain-DB installs it also
+	 * keeps the rows out of the autoload set (WordPress autoloads only
+	 * transients stored without an expiration). The payloads are pure
+	 * caches rebuilt from the plugin tables on any miss, so expiry never
+	 * loses data.
+	 *
+	 * @var int
+	 */
+	const TRANSIENT_TTL = 7 * 24 * 3600;
+
+	/**
 	 * Per-request memoization of group → resolved prefix.
 	 *
 	 * Critical: without this cache, if the underlying store (`wp_cache_*`
@@ -233,8 +251,7 @@ class Cache {
 	 */
 	public static function set_transient( $key, $group, $data ) {
 		$key = self::get_transient_prefix( $group ) . $key;
-		set_transient( $key, $data );
-
+		set_transient( $key, $data, self::TRANSIENT_TTL );
 	}
 
 	/**
@@ -275,6 +292,23 @@ class Cache {
 		foreach ( $transients as $key ) {
 			delete_transient( $key );
 		}
+
+		// The wp_options scan above only reaches DB-backed transients. With
+		// a persistent object-cache drop-in (Redis Object Cache, Memcached,
+		// W3TC object cache, …) transients bypass wp_options entirely, so
+		// the scan finds nothing and the stale payloads survive in the
+		// external store under the unchanged prefix. Because get() falls
+		// back from the object cache to transients, those survivors were
+		// re-promoted into the object cache after every invalidation:
+		// a banner save wrote the new row to the DB, but every subsequent
+		// read kept serving the pre-save payload (issue #125, "Cookie
+		// banner not saving" with Redis object cache active). Rotate the
+		// prefix seed itself — the same epoch-bump strategy
+		// invalidate_cache_group() uses for the object cache — so every
+		// previously written transient becomes unreachable on BOTH
+		// backends. Orphaned epochs self-expire via TRANSIENT_TTL.
+		set_transient( 'faz_' . $group . '_transient_prefix', microtime() );
+
 		// Drop the memoized prefix so the next call after the underlying
 		// transient has been invalidated upstream picks up a fresh one.
 		self::reset_prefix_cache( $group );

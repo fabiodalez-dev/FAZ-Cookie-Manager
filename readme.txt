@@ -214,6 +214,8 @@ When multi-banner geo-routing (1.14.0+) is active, the rendered HTML can legitim
 * **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
 * **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
 * **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
+* **FlyingPress** — the plugin purges (and re-warms) FlyingPress's page cache automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Note: if you use "Delay all JavaScript", add `faz-cookie-manager` to FlyingPress's "Exclude scripts from delay" keywords — a delayed consent banner defeats pre-consent blocking.
+* **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
 * **Cloudflare APO** — honors the `Cache-Control: no-store` header. With CF in front, also enable the trust filter so the `Vary: CF-IPCountry` header is emitted and CF caches per-country variants instead of bypassing entirely.
 
 = Known limitations =

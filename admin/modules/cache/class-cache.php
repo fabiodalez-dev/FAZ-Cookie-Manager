@@ -118,6 +118,7 @@ class Cache extends Modules {
 			'siteground_optimize',
 			'cache_enabler',
 			'litespeed_cache',
+			'flying_press',
 		);
 	}
 }

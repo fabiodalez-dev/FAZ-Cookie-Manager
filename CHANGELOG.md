@@ -2,6 +2,14 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Banner/cookie saves not sticking with a persistent object cache (Redis Object Cache, Memcached) — issue #125.** The plugin's internal cache invalidation deleted its transient copies by scanning `wp_options`, but with an external object-cache drop-in transients never touch `wp_options` — the scan found nothing, the stale payload survived in Redis under the unchanged prefix, and every read re-promoted it into the object cache. A banner save wrote the new row to the database, yet the editor (and the frontend) kept serving the pre-save data. `Cache::delete_transient()` now rotates the transient prefix seed (the same epoch-bump strategy already used for the object cache), making previously written entries unreachable on both backends, and data transients now carry a 7-day TTL so rotated-away epochs self-expire (on plain-DB installs this also keeps them out of the autoload set).
+
+### Added
+- **FlyingPress cache purge integration — issue #125.** FlyingPress joins the supported cache services (WP Rocket, LiteSpeed, W3TC, …): saving a banner, cookie, category or setting now automatically purges the FlyingPress page cache via its documented API (`FlyingPress\Purge::purge_everything()`) and queues a re-warm (`FlyingPress\Preload::preload_cache()`), so a stale cached page can no longer keep serving the old banner markup after a save.
+
 ## [1.23.0] — 2026-07-11
 
 ### Added
