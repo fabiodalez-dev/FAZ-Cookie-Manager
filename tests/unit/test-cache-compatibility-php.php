@@ -579,6 +579,61 @@ namespace {
 	);
 	$GLOBALS['faz_test_is_admin'] = false;
 
+	// --- WPML URL-negotiation exception: resolving the WPML language IS
+	// cache-safe even under Cache Compatibility Mode when WPML encodes the
+	// language in the URL (directory or domain mode) — a URL-keyed cache then
+	// stores one entry per language, exactly like Polylang. Only WPML's
+	// parameter/cookie negotiation stays gated to the default (query strings are
+	// unreliable cache keys). faz_wpml_language_in_url() gates it.
+	echo "\nfaz_current_language() — WPML URL-mode under cache-compat\n";
+
+	// WPML defines this constant; defining it here makes the WPML branch
+	// reachable. (Can't be undefined afterwards — placed last on purpose.)
+	if ( ! defined( 'ICL_LANGUAGE_CODE' ) ) {
+		define( 'ICL_LANGUAGE_CODE', 'it' );
+	}
+	// Isolate the WPML branch from the TranslatePress stub defined earlier
+	// (TRP_PLUGIN_VERSION is a constant and outlives this file's earlier test).
+	unset( $GLOBALS['TRP_LANGUAGE'] );
+
+	$GLOBALS['faz_test_options']['faz_settings'] = array(
+		'languages'      => array( 'default' => 'en', 'selected' => array( 'en', 'it' ) ),
+		'banner_control' => array( 'cache_compatibility' => true ),
+	);
+	$wpml_negotiation            = 1;
+	$GLOBALS['faz_test_filters'] = array(
+		'wpml_setting'          => array(
+			function ( $value, $name = '' ) use ( &$wpml_negotiation ) {
+				return 'language_negotiation_type' === $name ? $wpml_negotiation : $value;
+			},
+		),
+		'wpml_current_language' => array(
+			function () {
+				return 'it';
+			},
+		),
+	);
+
+	// Directory mode (type 1) → URL-keyed → resolved under cache-compat.
+	$wpml_negotiation = 1;
+	assert_eq( faz_wpml_language_in_url(), true, 'WPML directory mode (type 1) → language is URL-keyed (cache-safe)' );
+	faz_current_language( true );
+	assert_eq( faz_current_language(), 'it', 'cache-compat ON + WPML directory mode → per-URL WPML language is honoured' );
+
+	// Domain mode (type 2) → also URL-keyed → resolved under cache-compat.
+	$wpml_negotiation = 2;
+	assert_eq( faz_wpml_language_in_url(), true, 'WPML domain mode (type 2) → language is URL-keyed (cache-safe)' );
+	faz_current_language( true );
+	assert_eq( faz_current_language(), 'it', 'cache-compat ON + WPML domain mode → per-URL WPML language is honoured' );
+
+	// Parameter mode (type 3) → query string, not a reliable cache key → gated.
+	$wpml_negotiation = 3;
+	assert_eq( faz_wpml_language_in_url(), false, 'WPML parameter mode (type 3) → not URL-keyed (query strings unreliable in caches)' );
+	faz_current_language( true );
+	assert_eq( faz_current_language(), 'en', 'cache-compat ON + WPML parameter mode → language stays gated to the site default' );
+
+	$GLOBALS['faz_test_filters'] = array();
+
 	echo "\n";
 	if ( $tests_failed > 0 ) {
 		echo "\033[31m✗ {$tests_failed} failed\033[0m, {$tests_passed} passed ({$tests_run} total)\n";
