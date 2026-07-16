@@ -41,47 +41,6 @@ class Flying_Press extends Services {
 	 */
 	public function run() {
 		$this->load_hooks();
-		$this->exclude_scripts_from_optimization();
-	}
-
-	/**
-	 * Keep the consent scripts out of FlyingPress's JS delay / defer / minify.
-	 *
-	 * FlyingPress does not honour the `data-cfasync` / `data-no-optimize` /
-	 * `data-no-minify` attributes the plugin already prints on its own script
-	 * tags, and its "Delay all JavaScript" mode holds every script until the
-	 * first user interaction. With that on, the banner script is delayed too,
-	 * so the consent banner appears late or not at all — a compliance problem,
-	 * not merely a UX one.
-	 *
-	 * FlyingPress 4.16+ exposes filters to exclude JS from delay/defer, and
-	 * 5.0+ one for minify; the exclusion matches a substring of the full
-	 * `<script>` tag (src, id and inline content). The `faz-cookie-manager` and
-	 * `faz-fw` keywords match every consent script by its enqueue handle id
-	 * (`faz-cookie-manager-js`, `…-gcm-js`, `…-tcf-cmp-js`, `…-a11y-js`, and the
-	 * alt-asset `faz-fw-*` variants), which is independent of the install
-	 * folder name, and also matches their `…/faz-cookie-manager/frontend/js/…`
-	 * src path. Registered only when FlyingPress is active (Services::run() is
-	 * gated on is_active()); a no-op when the filters do not exist.
-	 *
-	 * Filter names + merge pattern mirror the FlyingPress integration in Real
-	 * Cookie Banner (devowl-wp/cache-invalidate, GPLv3), reimplemented here.
-	 *
-	 * @return void
-	 */
-	public function exclude_scripts_from_optimization() {
-		$keywords = array( 'faz-cookie-manager', 'faz-fw' );
-		$exclude  = static function ( $excluded ) use ( $keywords ) {
-			return array_merge( is_array( $excluded ) ? $excluded : array(), $keywords );
-		};
-		$filters = array(
-			'flying_press_exclude_from_delay:js',
-			'flying_press_exclude_from_defer:js',
-			'flying_press_exclude_from_minify:js',
-		);
-		foreach ( $filters as $filter ) {
-			add_filter( $filter, $exclude );
-		}
 	}
 
 	/**

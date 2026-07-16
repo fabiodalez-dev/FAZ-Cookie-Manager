@@ -154,37 +154,10 @@ namespace {
 	$missing = array_diff( $expected_hooks, array_keys( $GLOBALS['faz_actions'] ) );
 	faz_ok( array() === $missing, '05 clear_cache subscribed to every faz CRUD/purge hook' );
 
-	// ---------------------------------------------------------------------
-	// FlyingPress JS delay / defer / minify exclusion (banner must not be
-	// held back by "Delay all JavaScript"). Filters registered on run().
-	// ---------------------------------------------------------------------
-	$expected_filters = array(
-		'flying_press_exclude_from_delay:js',
-		'flying_press_exclude_from_defer:js',
-		'flying_press_exclude_from_minify:js',
-	);
-	$missing_filters = array_diff( $expected_filters, array_keys( $GLOBALS['faz_filters'] ) );
-	faz_ok( array() === $missing_filters, '05a consent scripts registered on every FlyingPress delay/defer/minify:js filter' );
-
-	// Each filter must ADD our keywords without dropping FlyingPress's existing
-	// exclusions (the merge is additive).
-	$excl_ok = true;
-	foreach ( $expected_filters as $filter ) {
-		$result = apply_filters( $filter, array( 'existing-exclusion' ) );
-		if ( ! in_array( 'faz-cookie-manager', $result, true )
-			|| ! in_array( 'faz-fw', $result, true )
-			|| ! in_array( 'existing-exclusion', $result, true ) ) {
-			$excl_ok = false;
-		}
-	}
-	faz_ok( $excl_ok, '05b filters add faz-cookie-manager + faz-fw and preserve prior exclusions' );
-
-	// A non-array input (older FlyingPress builds seed null) must not fatal.
-	$null_seed = apply_filters( 'flying_press_exclude_from_delay:js', null );
-	faz_ok(
-		is_array( $null_seed ) && in_array( 'faz-cookie-manager', $null_seed, true ),
-		'05c non-array filter seed is handled (returns our keywords, no fatal)'
-	);
+	// Asset optimisation exclusions belong to Frontend's always-run public
+	// bootstrap. Keeping them out of this admin/REST-loaded adapter prevents the
+	// false-positive unit coverage that originally hid their absence on pages.
+	faz_ok( array() === $GLOBALS['faz_filters'], '05a purge adapter does not own frontend optimisation filters' );
 
 	// ---------------------------------------------------------------------
 	// Purge behaviour when a banner is saved.

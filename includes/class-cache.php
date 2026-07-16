@@ -169,7 +169,9 @@ class Cache {
 	 * @return void
 	 */
 	public static function delete( $group ) {
-		self::delete_cache( $group );
+		// delete_transient() rotates BOTH the object-cache and the transient
+		// prefix, so this one call invalidates every backend. (delete_cache()
+		// stays available on its own for object-cache-only invalidation.)
 		self::delete_transient( $group );
 	}
 
@@ -287,6 +289,17 @@ class Cache {
 	 * @return void
 	 */
 	public static function delete_transient( $group ) {
+		// Invalidate the object cache too. The two backends must be rotated
+		// together: get() falls back from the object cache to transients and
+		// re-promotes the result, so rotating only the transient prefix here
+		// would leave a stale payload live in a persistent object cache
+		// (Redis/Memcached) and every read would keep serving it — the exact
+		// #125 symptom. Coupling it in-method (rather than relying on the caller
+		// to also call delete_cache()) makes a standalone delete_transient()
+		// call safe; delete_cache() alone remains available for object-cache-only
+		// invalidation, and delete() now delegates here so nothing rotates twice.
+		self::delete_cache( $group );
+
 		$prefix     = self::get_transient_prefix( $group );
 		$transients = self::get_transient_keys_with_prefix( $prefix );
 		foreach ( $transients as $key ) {
@@ -306,7 +319,13 @@ class Cache {
 		// prefix seed itself — the same epoch-bump strategy
 		// invalidate_cache_group() uses for the object cache — so every
 		// previously written transient becomes unreachable on BOTH
-		// backends. Orphaned epochs self-expire via TRANSIENT_TTL.
+		// backends. Orphaned data payloads self-expire via TRANSIENT_TTL.
+		//
+		// The seed pointer itself is written WITHOUT a TTL on purpose: it is the
+		// stable "current epoch" marker every read resolves against, so it must
+		// not expire out from under live payloads (an evicted seed would force a
+		// fresh-prefix rebuild-miss). The autoload rationale on TRANSIENT_TTL
+		// therefore covers the data payloads, not this pointer row.
 		set_transient( 'faz_' . $group . '_transient_prefix', microtime() );
 
 		// Drop the memoized prefix so the next call after the underlying

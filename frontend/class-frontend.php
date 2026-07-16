@@ -208,6 +208,23 @@ class Frontend {
 
 			// Autoptimize exclude helper.
 			add_filter( 'autoptimize_filter_js_exclude', array( $this, 'autoptimize_exclude_own_scripts' ) );
+
+			// FlyingPress v4 exposes delay/defer filters; v5 retains the minify
+			// filter but reads Delay All JavaScript exclusions directly from its
+			// runtime config. Register the public filters here, in the always-run
+			// frontend composition root (the admin cache adapter is not loaded on
+			// ordinary public requests), and inject the same keywords into the v5
+			// in-memory config without persisting or overwriting the user's option.
+			add_filter( 'flying_press_exclude_from_delay:js', array( $this, 'flying_press_exclude_own_scripts' ) );
+			add_filter( 'flying_press_exclude_from_defer:js', array( $this, 'flying_press_exclude_own_scripts' ) );
+			add_filter( 'flying_press_exclude_from_minify:js', array( $this, 'flying_press_exclude_own_scripts' ) );
+			add_action( 'plugins_loaded', array( $this, 'flying_press_apply_runtime_delay_exclusions' ), PHP_INT_MAX, 0 );
+			add_action( 'flying_press_update_config:after', array( $this, 'flying_press_apply_runtime_delay_exclusions' ), PHP_INT_MAX, 0 );
+			// Covers non-standard/late bootstrap paths where plugins_loaded has
+			// already fired before this object is constructed.
+			if ( did_action( 'plugins_loaded' ) ) {
+				$this->flying_press_apply_runtime_delay_exclusions();
+			}
 		}
 
 		// WP 5.7+ exposes wp_inline_script_tag for inline scripts added via
@@ -5149,6 +5166,104 @@ class Frontend {
 			$attributes['data-ao-skip']     = '1';
 		}
 		return $attributes;
+	}
+
+	/**
+	 * FlyingPress v4/v5 filter callback: add every FAZ asset marker without
+	 * dropping or duplicating exclusions registered by the site or another
+	 * integration.
+	 *
+	 * @param mixed $excludes Existing FlyingPress exclusion keywords.
+	 * @return array
+	 */
+	public function flying_press_exclude_own_scripts( $excludes ) {
+		$excludes = is_array( $excludes ) ? $excludes : array();
+		foreach ( array( 'faz-cookie-manager', 'faz-fw' ) as $keyword ) {
+			if ( ! in_array( $keyword, $excludes, true ) ) {
+				$excludes[] = $keyword;
+			}
+		}
+		return $excludes;
+	}
+
+	/**
+	 * Add FAZ to FlyingPress v5's Delay All JavaScript runtime config.
+	 *
+	 * FlyingPress v5 no longer consumes the v4 delay/defer filters while
+	 * optimizing HTML; it reads `js_delay_excludes` from Config::$config.
+	 * The helper only receives FlyingPress's already-loaded static value; FAZ
+	 * deliberately does not filter or write the `FLYING_PRESS_CONFIG` option,
+	 * so disabling FAZ restores the administrator's exact configuration.
+	 * Empty/unmigrated or older config shapes are left untouched.
+	 *
+	 * @param mixed $config FlyingPress configuration option.
+	 * @return mixed
+	 */
+	public function flying_press_add_delay_exclusions_to_config( $config ) {
+		if ( ! is_array( $config ) || ! array_key_exists( 'js_delay_excludes', $config ) ) {
+			return $config;
+		}
+		$config['js_delay_excludes'] = $this->flying_press_exclude_own_scripts( $config['js_delay_excludes'] );
+		return $config;
+	}
+
+	/**
+	 * Patch FlyingPress v5's already-loaded config after all normal plugins have
+	 * booted (covering either plugin load order) and after a settings update
+	 * replaces Config::$config during the current request.
+	 *
+	 * Reflection keeps this compatibility bridge fail-closed if FlyingPress
+	 * changes the property visibility or removes the current config shape: no
+	 * fatal is allowed on a public request. No persistent option is modified.
+	 *
+	 * @return void
+	 */
+	public function flying_press_apply_runtime_delay_exclusions() {
+		// Front-end page renders only. Frontend is also constructed on AJAX/REST
+		// requests (Consent_Logger's REST routes live on this class), and this
+		// method runs at plugins_loaded, i.e. BEFORE FlyingPress's own settings
+		// save would run on such a request. Mutating the shared static
+		// \FlyingPress\Config::$config there risks the injected keywords leaking
+		// into the option FlyingPress persists — the opposite of the "never
+		// overwrites the administrator's saved config" guarantee below. The
+		// runtime exclusion is only needed while FlyingPress is serving/optimising
+		// a public page anyway, so restrict the in-memory patch to those requests.
+		if ( ! faz_is_front_end_request() ) {
+			return;
+		}
+		if ( ! class_exists( '\\FlyingPress\\Config' ) || ! property_exists( '\\FlyingPress\\Config', 'config' ) ) {
+			return;
+		}
+		try {
+			$property = new \ReflectionProperty( '\\FlyingPress\\Config', 'config' );
+			if ( ! $property->isStatic() ) {
+				return;
+			}
+			if ( ! $property->isPublic() ) {
+				$property->setAccessible( true );
+			}
+			$config = $property->getValue();
+			if ( ! is_array( $config ) || ! array_key_exists( 'js_delay_excludes', $config ) ) {
+				// The v5 config shape this bridge relies on has changed. Degrade
+				// quietly (the consent banner may then be delayed by "Delay all
+				// JavaScript"), but leave a WP_DEBUG breadcrumb so the regression
+				// is diagnosable and the readme's manual-exclusion fallback applies.
+				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					error_log( 'FAZ Cookie Manager: FlyingPress delay-exclusion bridge skipped — \\FlyingPress\\Config::$config has no js_delay_excludes key (FlyingPress internals changed). Add "faz-cookie-manager" to FlyingPress "Delay JavaScript" exclusions manually.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				}
+				return;
+			}
+			$updated = $this->flying_press_add_delay_exclusions_to_config( $config );
+			if ( $updated !== $config ) {
+				$property->setValue( null, $updated );
+			}
+		} catch ( \Throwable $error ) {
+			// Compatibility code must degrade to FlyingPress's original config.
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'FAZ Cookie Manager: FlyingPress delay-exclusion bridge failed — ' . $error->getMessage() . '. Add "faz-cookie-manager" to FlyingPress "Delay JavaScript" exclusions manually.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+			unset( $error );
+		}
 	}
 
 	/**
