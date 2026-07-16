@@ -32,7 +32,7 @@
  */
 import { test, expect } from '../fixtures/wp-fixture';
 import { type APIRequestContext } from '@playwright/test';
-import { wpEval, upsertPage, ensureFixturePlugin } from '../utils/wp-env';
+import { wp, wpEval, upsertPage, ensureFixturePlugin } from '../utils/wp-env';
 import { resetDefaultBannerState } from '../utils/seed-defaults';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
@@ -43,10 +43,23 @@ const MARKER_ALPHA = 'FAZ-FP-MARKER-ALPHA';
 const MARKER_BETA = 'FAZ-FP-MARKER-BETA';
 
 let flyingPressActive = false;
+let weActivatedFlyingPress = false;
 let testPageId = 0;
 let testPageUrl = '';
 
-/** class_exists() probe — the whole suite hinges on FlyingPress being active. */
+/** Is the (commercial) FlyingPress plugin present on disk? False on CI / clean machines. */
+function fpInstalled(): boolean {
+  try {
+    // `wp plugin is-installed` exits 0 when installed, non-zero otherwise
+    // (the wp() helper throws on non-zero).
+    wp(['plugin', 'is-installed', 'flying-press']);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** class_exists() probe — true only once FlyingPress is loaded (i.e. activated). */
 function fpActive(): boolean {
   try {
     return (
@@ -128,6 +141,21 @@ async function primeCache(request: APIRequestContext, url: string): Promise<void
 }
 
 test.beforeAll(() => {
+  // Self-provision FlyingPress for the duration of THIS spec file only. When
+  // the plugin is installed (dev box) the tests run as part of the suite;
+  // when it's absent (CI / other machines) they auto-skip. afterAll tears it
+  // back down so FlyingPress's page cache never lingers for other specs —
+  // this file activating it globally is the reason it must clean up after
+  // itself (the suite runs fullyParallel:false, 1 worker locally, and CI has
+  // no FlyingPress to activate, so no concurrent spec sees it mid-flight).
+  if (!fpInstalled()) {
+    flyingPressActive = false;
+    return;
+  }
+  if (!fpActive()) {
+    wp(['plugin', 'activate', 'flying-press']);
+    weActivatedFlyingPress = true;
+  }
   flyingPressActive = fpActive();
   if (!flyingPressActive) {
     return;
@@ -142,8 +170,34 @@ test.beforeAll(() => {
   testPageUrl = wpEval(`echo get_permalink( ${testPageId} );`).trim();
 });
 
+test.afterAll(() => {
+  if (!flyingPressActive) {
+    return;
+  }
+  // Restore the shared env to its FlyingPress-off baseline: purge the cache,
+  // drop the probe, and deactivate FlyingPress if this file activated it.
+  // An active FlyingPress page cache would serve stale HTML to later specs.
+  try {
+    wpEval(`if ( class_exists( '\\\\FlyingPress\\\\Purge' ) ) { \\FlyingPress\\Purge::purge_everything(); }`);
+  } catch {
+    /* best-effort */
+  }
+  try {
+    wp(['plugin', 'deactivate', 'faz-e2e-fp-probe']);
+  } catch {
+    /* best-effort */
+  }
+  if (weActivatedFlyingPress) {
+    try {
+      wp(['plugin', 'deactivate', 'flying-press']);
+    } catch {
+      /* best-effort */
+    }
+  }
+});
+
 test.beforeEach(() => {
-  test.skip(!flyingPressActive, 'FlyingPress is not active on this environment');
+  test.skip(!flyingPressActive, 'FlyingPress is not installed on this environment');
 });
 
 test.describe('FlyingPress cache purge (#125 / PR #186)', () => {
