@@ -156,5 +156,54 @@ eq('src getter returns the resolved absolute URL on a non-blocked module',
   ev(`(function(){ var s=document.createElement("script"); s.setAttribute("type","module"); s.setAttribute("src","sub/app.js"); return s.src; })()`),
   'http://localhost/sub/app.js');
 
+// ---------------------------------------------------------------------
+// MutationObserver safety net — the REAL LiteSpeed path.
+//
+// The per-element type/src gate is installed INSIDE document.createElement, so
+// it only covers scripts JS created. A LiteSpeed-deferred tracker is
+// server-rendered: it arrives in the cached HTML and is built by the parser, so
+// it carries no per-element gate. When the optimiser later flips its type in
+// place, the observer's attribute branch (attributeFilter:["type"]) is the ONLY
+// thing that can re-block it — hence this coverage.
+//
+// MutationObserver records are delivered ASYNCHRONOUSLY (microtask), so every
+// mutation below is followed by a flush. Asserting synchronously would read the
+// pre-observer state (type still runnable, node still in the DOM) and look
+// exactly like a bypass — a false negative, not a real one.
+// ---------------------------------------------------------------------
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+{
+  const w = loadFrontend();
+  w.document.body.innerHTML =
+    '<script type="litespeed/javascript" data-faz-category="marketing" src="https://connect.facebook.net/en_US/fbevents.js"><\/script>';
+  await flush();
+  const s = w.document.querySelector('script[src*="fbevents"]');
+  eq('server-rendered litespeed placeholder is left to the optimiser',
+    s.getAttribute('type'), 'litespeed/javascript');
+
+  // The optimiser wakes it up in place (native setAttribute — no gate here).
+  s.setAttribute('type', 'text/javascript');
+  await flush();
+  eq('optimiser waking a server-rendered tracker → observer re-blocks it',
+    s.getAttribute('type'), 'javascript/blocked');
+  eq('re-blocked woken tracker is detached from the document',
+    s.parentNode, null);
+}
+
+{
+  // A genuine deferred script (no blocked category, not a known provider) must
+  // survive the wake-up untouched — the observer must not over-block.
+  const w = loadFrontend();
+  w.document.body.innerHTML =
+    '<script type="litespeed/javascript" src="https://example.com/theme-bundle.js"><\/script>';
+  await flush();
+  const s = w.document.querySelector('script[src*="theme-bundle"]');
+  s.setAttribute('type', 'text/javascript');
+  await flush();
+  eq('non-tracker woken from a placeholder stays runnable',
+    s.getAttribute('type'), 'text/javascript');
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
