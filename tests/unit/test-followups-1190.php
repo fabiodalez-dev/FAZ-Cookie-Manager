@@ -119,6 +119,23 @@ namespace {
 	// 4. No relation to any gateway token.
 	check( false === $gw( 'google-analytics' ), '04 no match: google-analytics is not a gateway' );
 
+	// 5. PayPal checkout SDK is always-allowed site-wide (not just WooCommerce
+	//    checkout) so a Forminator / Paid Memberships Pro payment form does not
+	//    throw "paypal is not defined" (#125 thread, gooloo.de).
+	check(
+		true === $gw( 'https://www.paypal.com/sdk/js?client-id=XXX&currency=EUR' ),
+		'05 forward match: paypal.com/sdk/js is always-allowed everywhere'
+	);
+	// 6. …but the PayPal MARKETING pixel is NOT exempted — it stays blockable.
+	check(
+		false === $gw( 'https://www.paypal.com/tagmanager/pptm.js' ),
+		'06 PayPal marketing pixel (pptm.js) is NOT always-allowed (stays blocked)'
+	);
+	// 7. The other cross-context payment SDK loaders are covered too.
+	check( true === $gw( 'https://squareup.com/v2/paymentform' ), '07 Square SDK always-allowed' );
+	check( true === $gw( 'https://js.braintreegateway.com/web/3.x/js/client.min.js' ), '08 Braintree SDK always-allowed' );
+	check( true === $gw( 'https://x.klarnacdn.net/kp/lib/v1/api.js' ), '09 Klarna SDK always-allowed' );
+
 	echo "== compute_whitelisted_cookie_patterns ==\n";
 
 	$stripe = array(
