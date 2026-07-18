@@ -3469,25 +3469,10 @@ class Frontend {
 	}
 
 	/**
-	 * Return third-party payment SDK loaders that must never be blocked, on ANY
-	 * page (not just WooCommerce cart/checkout).
+	 * Return payment SDK patterns that must never be blocked on the storefront.
 	 *
-	 * These are the vendor SDK URLs that define a payment global other code calls
-	 * (window.Stripe, window.paypal, window.braintree, …). They are loaded
-	 * wherever a payment element renders — WooCommerce, but also non-WooCommerce
-	 * plugins like Forminator, Paid Memberships Pro, Easy Digital Downloads and
-	 * Give — so scoping them to WooCommerce checkout leaves them blocked on a
-	 * Forminator/PMPro payment form, where the form's own script then throws
-	 * "paypal is not defined" (reported for gooloo.de on the #125 thread). They
-	 * are payment-necessary for the transaction the visitor initiated, so — like
-	 * Stripe, which has been globally allowed since it appears on express-button /
-	 * saved-card flows outside checkout — they are allowed site-wide.
-	 *
-	 * Deliberately NOT here: a gateway's MARKETING pixel (e.g. PayPal's
-	 * paypal.com/tagmanager/pptm.js) — only the checkout SDK loader is exempt, so
-	 * the marketing pixel stays blocked until consent. WooCommerce-plugin-internal
-	 * script handles (ppcp-gateway, wc-braintree, …) stay in
-	 * get_payment_gateway_whitelist(), gated to WooCommerce checkout/cart.
+	 * Stripe can appear on product/cart/account flows outside checkout (express
+	 * buttons, saved cards, payment-request widgets), so keep it globally allowed.
 	 *
 	 * @return string[]
 	 */
@@ -3495,22 +3480,11 @@ class Frontend {
 		$patterns = apply_filters(
 			'faz_always_allowed_gateway_patterns',
 			array(
-				// Stripe.
 				'js.stripe.com',
 				'm.stripe.network',
 				'wc-stripe-',
 				'stripe-payment',
 				'stripe-upe',
-				// PayPal — the checkout SDK loader that defines window.paypal.
-				'paypal.com/sdk/js',
-				'paypalobjects.com/api/checkout.js',
-				// Square.
-				'squareup.com',
-				// Braintree.
-				'braintreegateway.com',
-				'braintree-web/',
-				// Klarna.
-				'x.klarnacdn.net',
 			)
 		);
 		if ( ! is_array( $patterns ) ) {
@@ -3585,21 +3559,18 @@ class Frontend {
 	}
 
 	/**
-	 * Return WooCommerce-plugin-internal payment gateway script handles that are
-	 * whitelisted only on WooCommerce checkout/cart pages.
+	 * Return additional whitelist patterns for payment gateway scripts.
 	 *
-	 * The cross-context vendor SDK LOADERS (paypal.com/sdk/js, squareup.com,
-	 * braintreegateway.com, klarnacdn, …) moved to
-	 * get_always_allowed_gateway_patterns() so they work on non-WooCommerce
-	 * payment pages too; what remains here are the WooCommerce gateway plugins'
-	 * own enqueued handles, which are meaningless off a WooCommerce checkout.
+	 * These scripts are necessary for completing purchases on checkout/cart pages.
 	 * Filterable via `faz_payment_gateway_whitelist` for custom gateways.
 	 *
 	 * @return string[]
 	 */
 	private function get_payment_gateway_whitelist() {
 		$patterns = apply_filters( 'faz_payment_gateway_whitelist', array(
-			// PayPal (WooCommerce PayPal Payments).
+			// PayPal.
+			'paypal.com/sdk/js',
+			'paypalobjects.com/api/checkout.js',
 			'ppcp-gateway',
 			'ppcp-webhooks',
 			'PayPalCommerceGateway',
@@ -3607,10 +3578,14 @@ class Frontend {
 			'mollie-payments',
 			'plugins/mollie-payments-for-woocommerce/',
 			// Square.
+			'squareup.com',
 			'square-credit-card',
 			// Braintree.
+			'braintreegateway.com',
+			'braintree-web/',
 			'wc-braintree',
 			// Klarna.
+			'x.klarnacdn.net',
 			'klarna-payments',
 			'klarna-checkout',
 			// Amazon Pay.
