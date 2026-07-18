@@ -146,6 +146,22 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php echo wp_kses_post( __( 'Optional high-coverage mode for CSS-based third-party loads. The default blocker already handles server-rendered <code>&lt;style&gt;</code> tags and direct <code>HTMLStyleElement</code> updates. Enable this only if you have confirmed that a theme, page builder, or CSS-in-JS library injects blocked <code>url()</code> or <code>@import</code> rules through broader runtime channels such as <code>Element.innerHTML</code>, <code>insertAdjacentHTML</code>, <code>CharacterData</code> edits inside a style tag, or Constructable Stylesheets. This strengthens pre-consent blocking but hooks global browser APIs and may affect builders, editors, icon fonts, or CSS-in-JS libraries. Test the site before enabling in production.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
+			<?php if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) : ?>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Payment gateway scripts (e-commerce)', 'faz-cookie-manager' ); ?></label>
+				<div class="faz-help"><?php echo wp_kses_post( __( '<strong>Only enable a gateway if your site takes payments.</strong> A payment provider\'s SDK (PayPal, Stripe, …) can set cookies and fingerprint the visitor, so it is blocked until consent by default. Enabling a gateway here loads its <em>payment</em> scripts before consent across your site — needed for payment forms that live outside a WooCommerce checkout (Forminator, Paid Memberships Pro, Easy Digital Downloads, Give, …). This is a compliance decision and <strong>your responsibility</strong> for your jurisdiction. A real WooCommerce checkout/cart page already loads these automatically as strictly necessary; a gateway\'s marketing pixel (e.g. PayPal\'s <code>pptm.js</code>) stays blocked regardless.', 'faz-cookie-manager' ) ); ?></div>
+				<?php foreach ( \FazCookie\Frontend\Frontend::payment_gateway_catalog() as $faz_gw_key => $faz_gw ) : ?>
+				<label class="faz-toggle" style="margin-top:10px">
+					<input type="checkbox" data-path="script_blocking.payment_gateways.<?php echo esc_attr( $faz_gw_key ); ?>">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php
+						/* translators: %s: payment gateway name, e.g. PayPal. */
+						printf( esc_html__( 'Allow %s payment scripts before consent', 'faz-cookie-manager' ), esc_html( $faz_gw['label'] ) );
+					?></span>
+				</label>
+				<?php endforeach; ?>
+			</div>
+			<?php endif; ?>
 		</div>
 	</div>
 

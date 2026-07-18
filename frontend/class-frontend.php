@@ -3469,24 +3469,71 @@ class Frontend {
 	}
 
 	/**
-	 * Return payment SDK patterns that must never be blocked on the storefront.
+	 * Catalogue of supported payment gateways and the script patterns that make
+	 * each one functional (the SDK loader that defines its JS global plus the
+	 * gateway plugin's own script handles). Single source of truth shared with
+	 * the admin settings (the per-gateway opt-in checkboxes) and the sanitiser.
 	 *
-	 * Stripe can appear on product/cart/account flows outside checkout (express
-	 * buttons, saved cards, payment-request widgets), so keep it globally allowed.
+	 * Deliberately excludes a gateway's MARKETING pixel (e.g. PayPal's
+	 * paypal.com/tagmanager/pptm.js): enabling a gateway must not unblock its
+	 * tracking pixel, only the payment machinery.
+	 *
+	 * @return array<string,array{label:string,patterns:string[]}>
+	 */
+	public static function payment_gateway_catalog() {
+		return array(
+			'paypal'     => array( 'label' => 'PayPal',     'patterns' => array( 'paypal.com/sdk/js', 'paypalobjects.com/api/checkout.js', 'ppcp-gateway', 'ppcp-webhooks', 'PayPalCommerceGateway' ) ),
+			'stripe'     => array( 'label' => 'Stripe',     'patterns' => array( 'js.stripe.com', 'm.stripe.network', 'wc-stripe-', 'stripe-payment', 'stripe-upe' ) ),
+			'square'     => array( 'label' => 'Square',     'patterns' => array( 'squareup.com', 'square-credit-card' ) ),
+			'braintree'  => array( 'label' => 'Braintree',  'patterns' => array( 'braintreegateway.com', 'braintree-web/', 'wc-braintree' ) ),
+			'klarna'     => array( 'label' => 'Klarna',     'patterns' => array( 'x.klarnacdn.net', 'klarna-payments', 'klarna-checkout' ) ),
+			'mollie'     => array( 'label' => 'Mollie',     'patterns' => array( 'js.mollie.com', 'mollie-payments', 'plugins/mollie-payments-for-woocommerce/' ) ),
+			'amazon_pay' => array( 'label' => 'Amazon Pay', 'patterns' => array( 'static-na.payments-amazon.com', 'amazonpay', 'amazon-payments-advanced' ) ),
+		);
+	}
+
+	/**
+	 * Payment gateway script patterns that are exempt from consent blocking on
+	 * the current request.
+	 *
+	 * Payment SDKs can set cookies and fingerprint, so they are NOT globally
+	 * allowed by default (that would load a tracker before consent — a GDPR /
+	 * ePrivacy violation). They are exempt only when:
+	 *
+	 *   1. the request is a WooCommerce checkout/cart page — the SDK is then
+	 *      strictly necessary for the transaction the visitor initiated (the
+	 *      ePrivacy Art. 5(3) "strictly necessary" exemption), OR
+	 *   2. the site owner explicitly enabled that gateway under Settings →
+	 *      Script Blocking → Payment gateways — an informed, per-gateway,
+	 *      admin-responsibility opt-in for stores whose payment forms live
+	 *      outside a WooCommerce checkout (Forminator, Paid Memberships Pro,
+	 *      Easy Digital Downloads, Give, …).
+	 *
+	 * This is also the source the cookie shredder consults
+	 * (is_always_allowed_gateway_pattern → compute_whitelisted_cookie_patterns),
+	 * so a gateway's cookies are exempted exactly when its scripts are — never
+	 * for a gateway that is neither on-checkout nor opted-in.
 	 *
 	 * @return string[]
 	 */
 	private function get_always_allowed_gateway_patterns() {
-		$patterns = apply_filters(
-			'faz_always_allowed_gateway_patterns',
-			array(
-				'js.stripe.com',
-				'm.stripe.network',
-				'wc-stripe-',
-				'stripe-payment',
-				'stripe-upe',
-			)
-		);
+		$catalog     = self::payment_gateway_catalog();
+		$settings    = $this->get_faz_settings();
+		$enabled     = ( isset( $settings['script_blocking']['payment_gateways'] ) && is_array( $settings['script_blocking']['payment_gateways'] ) )
+			? $settings['script_blocking']['payment_gateways']
+			: array();
+		$on_checkout = $this->is_wc_checkout_or_cart();
+
+		$patterns = array();
+		foreach ( $catalog as $key => $gateway ) {
+			// Strictly necessary on WooCommerce checkout/cart; otherwise only when
+			// the admin opted this gateway in.
+			if ( $on_checkout || ! empty( $enabled[ $key ] ) ) {
+				$patterns = array_merge( $patterns, $gateway['patterns'] );
+			}
+		}
+
+		$patterns = apply_filters( 'faz_always_allowed_gateway_patterns', $patterns );
 		if ( ! is_array( $patterns ) ) {
 			$patterns = array( $patterns );
 		}

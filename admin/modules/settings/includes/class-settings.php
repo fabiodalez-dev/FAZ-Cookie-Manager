@@ -159,6 +159,26 @@ class Settings extends Store {
 					'challenges.cloudflare.com/',
 					'hcaptcha.com/',
 				),
+				// Per-gateway payment-SDK opt-in. Each toggle, when the site owner
+				// enables it, allows that gateway's payment scripts (PayPal SDK,
+				// Stripe.js, …) to load BEFORE consent site-wide — for stores whose
+				// payment forms live outside a WooCommerce checkout (Forminator,
+				// Paid Memberships Pro, Easy Digital Downloads, Give, …). All OFF
+				// by default: a payment SDK can set cookies / fingerprint, so
+				// loading it before consent is an explicit, per-gateway,
+				// admin-responsibility decision — never automatic. (A genuine
+				// WooCommerce checkout/cart page is still exempt automatically as
+				// "strictly necessary", regardless of these toggles.) Keys mirror
+				// Frontend::payment_gateway_catalog().
+				'payment_gateways' => array(
+					'paypal'     => false,
+					'stripe'     => false,
+					'square'     => false,
+					'braintree'  => false,
+					'klarna'     => false,
+					'mollie'     => false,
+					'amazon_pay' => false,
+				),
 			),
 			'pageview_tracking' => false,
 			'consent_forwarding' => array(
@@ -228,6 +248,7 @@ class Settings extends Store {
 			'target_domains',
 			'whitelist_patterns',
 			'exempt_levels',
+			'payment_gateways',
 		);
 	}
 	/**
@@ -399,6 +420,19 @@ class Settings extends Store {
 				}, $value ), function ( $item ) {
 					return '' !== $item;
 				} ) );
+				break;
+			case 'payment_gateways':
+				// Map of gateway-key => bool. Only known catalogue keys survive,
+				// each coerced to a strict boolean, so a settings PUT cannot smuggle
+				// an unknown gateway or a non-bool into the whitelist decision.
+				$gateway_keys = class_exists( '\\FazCookie\\Frontend\\Frontend' )
+					? array_keys( \FazCookie\Frontend\Frontend::payment_gateway_catalog() )
+					: array( 'paypal', 'stripe', 'square', 'braintree', 'klarna', 'mollie', 'amazon_pay' );
+				$clean = array();
+				foreach ( $gateway_keys as $gw_key ) {
+					$clean[ $gw_key ] = ( is_array( $value ) && ! empty( $value[ $gw_key ] ) );
+				}
+				$value = $clean;
 				break;
 			case 'exempt_levels':
 				// Accept either an array of IDs or a comma-separated string

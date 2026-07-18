@@ -1,23 +1,29 @@
 <?php
 /**
- * Standalone unit tests for the 1.19.0 release follow-up fixes (backend).
+ * Standalone unit tests for the 1.19.0 release follow-up fixes (backend), plus
+ * the per-gateway payment-SDK opt-in that replaced the hardcoded gateway
+ * allow-list.
  *
  * Subsystem: followups-1190
  *
- * Covers two private Frontend helpers touched by the follow-up commits:
+ * Covers two private Frontend helpers:
  *   - Frontend::is_always_allowed_gateway_pattern()  (forward match always;
- *     reverse substring match guarded by a >=4-char minimum needle, so a short
- *     generic pattern can't be a substring of a gateway URL and over-exempt).
- *   - Frontend::compute_whitelisted_cookie_patterns() (now also exempts the
- *     cookies of always-allowed payment gateways — Stripe etc. — from the
- *     shredder, even with NO user whitelist; the user-whitelist path still
- *     works; necessary / out-of-scope categories stay excluded).
+ *     reverse substring match guarded by a >=4-char minimum needle). Its source,
+ *     get_always_allowed_gateway_patterns(), is no longer a hardcoded Stripe set:
+ *     a payment SDK is exempt from consent blocking ONLY when the site owner
+ *     opted that gateway in (Settings → Script Blocking → payment_gateways) or on
+ *     a WooCommerce checkout/cart page. A payment SDK can track, so loading it
+ *     before consent is never automatic. A gateway's marketing pixel
+ *     (paypal.com/tagmanager/pptm.js) is never exempted.
+ *   - Frontend::compute_whitelisted_cookie_patterns() (exempts the cookies of
+ *     an opted-in / on-checkout gateway from the shredder — and NOT the cookies
+ *     of a gateway that is neither, since its SDK is blocked so it sets none).
  *
  * Pure-logic: no browser, no DB, no live WordPress. Frontend is built with
- * ReflectionClass::newInstanceWithoutConstructor(); the few WP functions the
- * two methods touch are stubbed; Known_Providers is replaced with a
- * controllable double (braced-namespace block, defined BEFORE class-frontend.php
- * loads so the `use FazCookie\Includes\Known_Providers` alias resolves to it).
+ * ReflectionClass::newInstanceWithoutConstructor(); the settings option is
+ * seeded via the reflection-accessible settings_option_cache so get_option is
+ * never hit; the WooCommerce-checkout branch is off (no WooCommerce class).
+ * Known_Providers is replaced with a controllable double.
  *
  * Run: php tests/unit/test-followups-1190.php   (or bash scripts/run-unit-tests.sh)
  *
@@ -48,10 +54,15 @@ namespace {
 	$GLOBALS['__faz_providers'] = array();
 
 	if ( ! function_exists( 'apply_filters' ) ) {
-		// No filters registered: return the default value verbatim, so
-		// get_always_allowed_gateway_patterns() yields its hardcoded Stripe set.
 		function apply_filters( $tag, $value ) {
 			return $value;
+		}
+	}
+	if ( ! function_exists( 'get_option' ) ) {
+		// Never reached in practice (settings_option_cache is seeded), but a safe
+		// fallback so a stray call can't fatal.
+		function get_option( $name, $default = false ) {
+			return $default;
 		}
 	}
 	if ( ! function_exists( 'wp_strip_all_tags' ) ) {
@@ -87,13 +98,21 @@ namespace {
 	$fe  = ( new ReflectionClass( Frontend::class ) )->newInstanceWithoutConstructor();
 	$ref = new ReflectionClass( Frontend::class );
 
+	$settings_prop = new ReflectionProperty( Frontend::class, 'settings_option_cache' );
+	$settings_prop->setAccessible( true );
+	$cache_prop = new ReflectionProperty( Frontend::class, 'always_allowed_cache' );
+	$cache_prop->setAccessible( true );
+
+	// Seed the enabled-gateway opt-in map and reset the per-request gateway cache.
+	$set_gateways = function ( array $enabled ) use ( $settings_prop, $cache_prop, $fe ) {
+		$settings_prop->setValue( $fe, array( 'script_blocking' => array( 'payment_gateways' => $enabled ) ) );
+		$cache_prop->setValue( $fe, null );
+	};
+
 	$is_gateway = $ref->getMethod( 'is_always_allowed_gateway_pattern' );
 	$is_gateway->setAccessible( true );
-	$gw = function ( $pattern ) use ( $is_gateway, $fe ) {
-		// Reset the per-instance cache between calls so each is independent.
-		$prop = new ReflectionProperty( \FazCookie\Frontend\Frontend::class, 'always_allowed_cache' );
-		$prop->setAccessible( true );
-		$prop->setValue( $fe, null );
+	$gw = function ( $pattern ) use ( $is_gateway, $cache_prop, $fe ) {
+		$cache_prop->setValue( $fe, null );
 		return (bool) $is_gateway->invoke( $fe, $pattern );
 	};
 
@@ -103,23 +122,36 @@ namespace {
 		return $compute->invoke( $fe, $user_whitelist, $valid_categories );
 	};
 
-	echo "== is_always_allowed_gateway_pattern ==\n";
+	echo "== is_always_allowed_gateway_pattern (per-gateway opt-in) ==\n";
 
-	// 1. Forward: the default allow-list contains 'js.stripe.com'.
-	check( true === $gw( 'js.stripe.com' ), '01 forward match: js.stripe.com is always-allowed' );
+	// Default: no gateway opted in, not a WooCommerce checkout → NOTHING is
+	// always-allowed. A payment SDK stays blocked until consent (compliant).
+	$set_gateways( array() );
+	check( false === $gw( 'js.stripe.com' ), '01 no gateway opted in → Stripe SDK is NOT always-allowed' );
+	check( false === $gw( 'paypal.com/sdk/js' ), '02 no gateway opted in → PayPal SDK is NOT always-allowed' );
 
-	// 2. Reverse (needle >= 4): 'wc-stripe' is a substring of the allowed
-	//    'wc-stripe-' and is 9 chars, so the reverse arm matches.
-	check( true === $gw( 'wc-stripe' ), '02 reverse match (>=4): wc-stripe is inside wc-stripe-' );
+	// Stripe opted in → its scripts are exempt; unrelated scripts are not.
+	$set_gateways( array( 'stripe' => true ) );
+	check( true === $gw( 'js.stripe.com' ), '03 Stripe opted in → js.stripe.com is always-allowed' );
+	check( true === $gw( 'wc-stripe' ), '04 reverse match (>=4): wc-stripe is inside allowed wc-stripe-' );
+	check( false === $gw( 'com' ), '05 reverse rejected (<4): com does NOT over-match a gateway URL' );
+	check( false === $gw( 'paypal.com/sdk/js' ), '06 Stripe opt-in does NOT also allow PayPal' );
 
-	// 3. Reverse rejected (needle < 4): 'com' is a substring of 'js.stripe.com'
-	//    but only 3 chars — the min-length guard must keep it from matching.
-	check( false === $gw( 'com' ), '03 reverse rejected (<4): com does NOT over-match a gateway URL' );
+	// PayPal opted in → the checkout SDK is exempt, the MARKETING pixel is not.
+	$set_gateways( array( 'paypal' => true ) );
+	check(
+		true === $gw( 'https://www.paypal.com/sdk/js?client-id=X&currency=EUR' ),
+		'07 PayPal opted in → paypal.com/sdk/js is always-allowed'
+	);
+	check(
+		false === $gw( 'https://www.paypal.com/tagmanager/pptm.js' ),
+		'08 PayPal marketing pixel (pptm.js) is NEVER always-allowed'
+	);
 
-	// 4. No relation to any gateway token.
-	check( false === $gw( 'google-analytics' ), '04 no match: google-analytics is not a gateway' );
+	// No relation to any gateway token, regardless of opt-in.
+	check( false === $gw( 'google-analytics' ), '09 non-gateway (google-analytics) is never always-allowed' );
 
-	echo "== compute_whitelisted_cookie_patterns ==\n";
+	echo "== compute_whitelisted_cookie_patterns (gateway coupling) ==\n";
 
 	$stripe = array(
 		'category' => 'marketing',
@@ -138,45 +170,47 @@ namespace {
 	);
 	$necessary = array(
 		'category' => 'necessary',
-		'patterns' => array( 'js.stripe.com' ), // even a gateway match must be skipped for necessary.
-		'cookies'  => array( 'sess_x' ),
-	);
-	$out_of_scope = array(
-		'category' => 'social', // not in valid_categories below.
 		'patterns' => array( 'js.stripe.com' ),
-		'cookies'  => array( 'sc_y' ),
+		'cookies'  => array( 'sess_x' ),
 	);
 
 	$valid = array( 'marketing', 'analytics' );
 
-	// 5. Always-allowed gateway cookies are exempt even with NO user whitelist.
+	// A gateway's cookies are exempt from the shredder ONLY when the gateway is
+	// opted in (its SDK then loads and legitimately sets them).
+	$set_gateways( array( 'stripe' => true ) );
 	$GLOBALS['__faz_providers'] = array( $stripe, $ga );
 	$res = $wl( array(), $valid );
 	check(
 		in_array( '__stripe_mid', $res, true ) && in_array( '__stripe_sid', $res, true ),
-		'05 gateway cookies whitelisted with empty user whitelist (__stripe_mid/__stripe_sid)'
+		'10 opted-in gateway cookies exempt with empty user whitelist (__stripe_mid/__stripe_sid)'
 	);
-
-	// 6. A non-gateway provider's cookies are NOT whitelisted with no user whitelist.
 	check(
 		! in_array( '_ga', $res, true ) && ! in_array( '_gid', $res, true ),
-		'06 non-gateway provider (_ga/_gid) NOT whitelisted without a user whitelist'
+		'11 non-gateway provider (_ga/_gid) NOT exempt without a user whitelist'
 	);
 
-	// 7. The admin user-whitelist path still works (token matches a provider pattern).
+	// …but with NO gateway opted in, the gateway's cookies are NOT exempt — its
+	// SDK is blocked, so it sets nothing to protect (the compliance change).
+	$set_gateways( array() );
+	$GLOBALS['__faz_providers'] = array( $stripe );
+	$res = $wl( array(), $valid );
+	check(
+		! in_array( '__stripe_mid', $res, true ) && array() === $res,
+		'12 gateway cookies NOT exempt when the gateway is not opted in'
+	);
+
+	// The admin user-whitelist path still works (token matches a provider pattern).
+	$set_gateways( array() );
 	$GLOBALS['__faz_providers'] = array( $fb );
 	$res = $wl( array( 'fbevents' ), $valid );
-	check( in_array( '_fbp', $res, true ), '07 user whitelist token fbevents whitelists _fbp' );
+	check( in_array( '_fbp', $res, true ), '13 user whitelist token fbevents whitelists _fbp' );
 
-	// 8a. A necessary-category provider is always skipped (even on a gateway match).
+	// A necessary-category provider is always skipped (even on a gateway match).
+	$set_gateways( array( 'stripe' => true ) );
 	$GLOBALS['__faz_providers'] = array( $necessary );
 	$res = $wl( array(), $valid );
-	check( ! in_array( 'sess_x', $res, true ) && array() === $res, '08a necessary-category provider excluded' );
-
-	// 8b. A provider whose category is not in valid_categories is skipped.
-	$GLOBALS['__faz_providers'] = array( $out_of_scope );
-	$res = $wl( array(), $valid );
-	check( ! in_array( 'sc_y', $res, true ) && array() === $res, '08b out-of-scope-category provider excluded' );
+	check( ! in_array( 'sess_x', $res, true ) && array() === $res, '14 necessary-category provider excluded' );
 
 	echo "\nPassed: $passed\nFailed: $failed\n";
 	if ( $failed > 0 ) {

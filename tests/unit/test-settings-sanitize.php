@@ -46,6 +46,15 @@ namespace {
 		),
 		'script_blocking' => array(
 			'aggressive_css_url_blocking' => false,
+			'payment_gateways'            => array(
+				'paypal'     => false,
+				'stripe'     => false,
+				'square'     => false,
+				'braintree'  => false,
+				'klarna'     => false,
+				'mollie'     => false,
+				'amazon_pay' => false,
+			),
 		),
 	);
 
@@ -78,7 +87,34 @@ namespace {
 		'aggressive_css_url_blocking is opt-in via settings'
 	);
 
+	// Payment-gateway opt-in: values coerce to strict bools, unknown gateway
+	// keys are dropped (no injection into the whitelist decision), and every
+	// catalogue key is always present.
+	$gw_sanitized = Settings::sanitize(
+		array(
+			'script_blocking' => array(
+				'payment_gateways' => array(
+					'paypal'     => '1',
+					'stripe'     => 0,
+					'amazon_pay' => 'yes',
+					'evilkey'    => true,
+				),
+			),
+		),
+		$defaults
+	);
+	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['paypal'], true, "payment gateway 'paypal' string '1' coerces to bool true" );
+	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['stripe'], false, "payment gateway 'stripe' int 0 coerces to bool false" );
+	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['amazon_pay'], true, "payment gateway 'amazon_pay' string 'yes' coerces to bool true" );
+	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['braintree'], false, 'unset payment gateway defaults to false' );
+	faz_assert_same( array_key_exists( 'evilkey', $gw_sanitized['script_blocking']['payment_gateways'] ), false, 'unknown payment-gateway key is dropped (injection-safe)' );
+
 	$sanitized_defaults = Settings::sanitize( array(), $defaults );
+	faz_assert_same(
+		$sanitized_defaults['script_blocking']['payment_gateways']['paypal'],
+		false,
+		'payment gateways default off (compliant: no SDK before consent)'
+	);
 	faz_assert_same(
 		$sanitized_defaults['script_blocking']['aggressive_css_url_blocking'],
 		false,
