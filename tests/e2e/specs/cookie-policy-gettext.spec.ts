@@ -82,7 +82,9 @@ function renderFacts(opts: RenderOpts): Facts {
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async ({}, testInfo) => {
-  testInfo.setTimeout(10 * 60_000);
+  // The shared WordPress lock can wait for a long-running cache-compatibility
+  // worker; keep the hook timeout above the lock's 40-minute acquisition window.
+  testInfo.setTimeout(41 * 60_000);
   await acquireSharedWordPressLock();
   lockHeld = true;
   const exists = wpEval(`echo class_exists( '${RENDERER}' ) ? '1' : '0';`).trim();

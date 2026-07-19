@@ -126,9 +126,9 @@ function clearQueue(): void {
   `);
 }
 
-/** Fire a FAZ CRUD/purge action hook exactly as the admin save path would. */
+/** Fire a FAZ CRUD/purge hook after the same REST module bootstrap used by saves. */
 function fireHook(hook: string): void {
-  wpEval(`do_action('${hook}');`);
+  wpEval(`do_action('rest_api_init'); do_action('${hook}');`);
 }
 
 async function cacheState(request: APIRequestContext, url: string): Promise<string> {
@@ -148,7 +148,7 @@ async function primeCache(request: APIRequestContext, url: string): Promise<void
 }
 
 test.beforeAll(async ({}, testInfo) => {
-  testInfo.setTimeout(21 * 60_000);
+  testInfo.setTimeout(41 * 60_000);
   await acquireSharedWordPressLock();
   lockHeld = true;
   probeWasActive = isPluginActive('faz-e2e-fp-probe');

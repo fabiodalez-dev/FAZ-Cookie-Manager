@@ -74,7 +74,10 @@ function resetLsPurgeCount(): void {
 }
 
 function fireHook(hook: string): void {
-  wpEval(`do_action('${hook}');`);
+  // FAZ's cache adapters are intentionally instantiated on rest_api_init. A
+  // bare WP-CLI do_action() would skip that production bootstrap and test only
+  // an unregistered hook, yielding a false purge failure.
+  wpEval(`do_action('rest_api_init'); do_action('${hook}');`);
 }
 
 /** Read FAZ's resolved language + WPML URL-safety off the fixture's headers. */
@@ -92,7 +95,7 @@ async function langProbe(
 }
 
 test.beforeAll(async ({}, testInfo) => {
-  testInfo.setTimeout(21 * 60_000);
+  testInfo.setTimeout(41 * 60_000);
   await acquireSharedWordPressLock();
   lockHeld = true;
   litespeedWasActive = isPluginActive('litespeed-cache');

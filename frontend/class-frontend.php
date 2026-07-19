@@ -106,7 +106,6 @@ class Frontend {
 	private $enforceable_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
-	private $all_gateway_patterns_cache = null;
 	/**
 	 * Set when runtime geo-routing resolves an opt-in jurisdiction but no
 	 * matching active banner exists, so the country-selected (opt-out) banner
@@ -147,6 +146,12 @@ class Frontend {
 		// Advanced mode is on.
 		add_action( 'wp_head', array( $this, 'print_gcm_default_inline' ), 0 );
 		add_action( 'template_redirect', array( $this, 'render_banner_preview_frame' ), 0 );
+		// Cookie shredding needs the resolved main query so WooCommerce checkout /
+		// cart conditionals and page exclusions are reliable. template_redirect is
+		// still before any template output, so Set-Cookie deletion headers remain
+		// safe while gateway cookies are protected only in the request where their
+		// scripts are actually allowed.
+		add_action( 'template_redirect', array( $this, 'shred_non_consented_cookies' ), 1 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
@@ -256,7 +261,6 @@ class Frontend {
 		// and the OB handles everything.
 		add_filter( 'wp_inline_script_tag', array( $this, 'filter_inline_script_tag' ), 10, 3 );
 		add_action( 'send_headers', array( $this, 'send_geo_cache_headers' ), 0 );
-		add_action( 'send_headers', array( $this, 'shred_non_consented_cookies' ) );
 		add_action( 'send_headers', array( $this, 'send_vary_header' ) );
 
 		// FlyingPress honours neither the DONOTCACHEPAGE constant nor the
@@ -3513,7 +3517,9 @@ class Frontend {
 	 * This is also the source the cookie shredder consults
 	 * (is_always_allowed_gateway_pattern → compute_whitelisted_cookie_patterns),
 	 * so a gateway's cookies are exempted exactly when its scripts are — never
-	 * for a gateway that is neither on-checkout nor opted-in.
+	 * for a gateway that is neither on-checkout nor opted-in. The shredder runs
+	 * on template_redirect, after the main query is resolved, so the WooCommerce
+	 * conditional is reliable there too.
 	 *
 	 * @return string[]
 	 */
@@ -3590,45 +3596,6 @@ class Frontend {
 			$this->always_allowed_cache = $this->get_always_allowed_gateway_patterns();
 		}
 		return $this->gateway_pattern_matches( $pattern, $this->always_allowed_cache );
-	}
-
-	/**
-	 * Every payment-gateway script pattern in the catalogue, regardless of opt-in
-	 * or checkout context.
-	 *
-	 * @return string[]
-	 */
-	private function get_all_payment_gateway_patterns() {
-		if ( null === $this->all_gateway_patterns_cache ) {
-			$patterns = array();
-			foreach ( self::payment_gateway_catalog() as $gateway ) {
-				$patterns = array_merge( $patterns, $gateway['patterns'] );
-			}
-			$this->all_gateway_patterns_cache = array_values( array_unique( $patterns ) );
-		}
-		return $this->all_gateway_patterns_cache;
-	}
-
-	/**
-	 * Whether a provider pattern belongs to a known payment gateway — used by the
-	 * COOKIE shredder to exempt a gateway's cookies, CONTEXT-INDEPENDENTLY.
-	 *
-	 * The shredder runs on `send_headers`, before WordPress populates the main
-	 * query, so WooCommerce conditional tags (is_checkout()/is_cart()) are not
-	 * reliable there; is_always_allowed_gateway_pattern() would wrongly report
-	 * "not on checkout" and shred a live gateway cookie (e.g. __stripe_mid) on a
-	 * real WooCommerce checkout. This full-catalogue check avoids that: a gateway
-	 * cookie can only exist if the gateway's SDK actually loaded, which happens
-	 * only when the gateway is opted-in or on a genuine checkout (both compliant
-	 * contexts) — so exempting a gateway's cookies unconditionally never protects
-	 * a tracker that ran without consent (no SDK => no cookie), while it stops the
-	 * timing-sensitive shredder from deleting a legitimate one.
-	 *
-	 * @param string $pattern
-	 * @return bool
-	 */
-	private function is_payment_gateway_pattern( $pattern ) {
-		return $this->gateway_pattern_matches( $pattern, $this->get_all_payment_gateway_patterns() );
 	}
 
 	/**
@@ -4177,14 +4144,15 @@ class Frontend {
 	/**
 	 * Build the set of cookie patterns that must be exempt from shredding —
 	 * the cookies of services the user has whitelisted (Settings → Script
-	 * Blocking → whitelist_patterns) AND of always-allowed payment gateways
-	 * (Stripe etc.), whose scripts run pre-consent so their cookies must
-	 * persist too. The gateway exemption applies even with no user whitelist.
+	 * Blocking → whitelist_patterns) AND of payment gateways allowed on the
+	 * current request (explicit admin opt-in or a real WooCommerce checkout/cart),
+	 * whose scripts run pre-consent so their cookies may persist too. A gateway
+	 * that is neither opted in nor needed on this request is never exempted.
 	 *
 	 * Used both by `get_store_data()` to populate
 	 * `_whitelistedCookiePatterns` for the frontend network interceptors,
 	 * AND by `shred_non_consented_cookies()` so the server-side shredder
-	 * on `send_headers` doesn't delete cookies that the frontend whitelist
+	 * on `template_redirect` doesn't delete cookies that the frontend whitelist
 	 * intentionally allows to persist. Keeping a single helper prevents
 	 * the two layers from drifting out of sync.
 	 *
@@ -4216,17 +4184,13 @@ class Frontend {
 
 			$service_whitelisted = false;
 
-			// Payment-gateway cookies (Stripe __stripe_mid, etc.) are exempt from
-			// the shredder. This uses the CONTEXT-INDEPENDENT catalogue check, not
-			// the opt-in/checkout one: the shredder runs on send_headers, before
-			// the main query, so WooCommerce is_checkout() is unreliable there and
-			// the context-aware check would delete a live gateway cookie on a real
-			// checkout. Exempting a gateway's cookies unconditionally is safe — a
-			// gateway cookie only exists if its SDK loaded, which happens only when
-			// the gateway is opted-in or on a genuine checkout (no SDK => no cookie
-			// to protect). Applies even with no user whitelist.
+			// Payment-gateway cookies (Stripe __stripe_mid, etc.) are exempt only
+			// when the same gateway scripts are allowed on this request: an explicit
+			// per-gateway admin opt-in or a resolved WooCommerce checkout/cart. This
+			// keeps script blocking, server shredding, client cleanup and developer
+			// filter extensions on the same context-aware source of truth.
 			foreach ( $service['patterns'] as $pattern ) {
-				if ( $this->is_payment_gateway_pattern( $pattern ) ) {
+				if ( $this->is_always_allowed_gateway_pattern( $pattern ) ) {
 					$service_whitelisted = true;
 					break;
 				}
@@ -5828,9 +5792,9 @@ class Frontend {
 	/**
 	 * Delete non-consented cookies before the page renders (cookie shredding).
 	 *
-	 * Runs on the send_headers hook. Compares cookies against the
-	 * Known_Providers cookie map and deletes any that belong to
-	 * categories the visitor has not consented to.
+	 * Runs on template_redirect, after the main query has resolved but before
+	 * template output. Compares cookies against the Known_Providers cookie map
+	 * and deletes any that belong to categories the visitor has not consented to.
 	 */
 	public function shred_non_consented_cookies() {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
@@ -5912,7 +5876,7 @@ class Frontend {
 
 		// Whitelist short-circuit: cookies belonging to services the admin
 		// has whitelisted (Settings → Script Blocking → whitelist_patterns)
-		// must survive `send_headers` shredding too, otherwise the frontend
+		// must survive `template_redirect` shredding too, otherwise the frontend
 		// whitelist is only honored on the first page load and is silently
 		// neutralized on every subsequent request.
 		$settings                    = $this->get_faz_settings();
@@ -5925,8 +5889,9 @@ class Frontend {
 		);
 
 		foreach ( array_keys( $_COOKIE ) as $name ) {
-			$should_shred   = false;
-			$service_allows = false;
+			$should_shred    = false;
+			$service_allows  = false;
+			$service_denied  = false;
 
 			foreach ( $svc_cookie_decisions as $pattern => $decisions ) {
 				if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
@@ -5934,7 +5899,8 @@ class Frontend {
 				}
 				foreach ( $decisions as $decision ) {
 					if ( 'no' === $decision ) {
-						$should_shred = true;
+						$should_shred   = true;
+						$service_denied = true;
 						break 2;
 					}
 					if ( 'yes' === $decision ) {
@@ -5957,9 +5923,10 @@ class Frontend {
 				}
 			}
 
-			// Honor the frontend whitelist after category/service decisions:
-			// a whitelisted service overrides both.
-			if ( $should_shred && ! empty( $whitelisted_cookie_patterns ) ) {
+			// A whitelist can override the category fallback, but never an explicit
+			// per-service/per-cookie denial. This preserves genuine checkout/admin
+			// gateway exemptions without making consent revocation ineffective.
+			if ( $should_shred && ! $service_denied && ! empty( $whitelisted_cookie_patterns ) ) {
 				foreach ( $whitelisted_cookie_patterns as $wl_pattern ) {
 					if ( $this->cookie_name_matches( $name, $wl_pattern ) ) {
 						$should_shred = false;

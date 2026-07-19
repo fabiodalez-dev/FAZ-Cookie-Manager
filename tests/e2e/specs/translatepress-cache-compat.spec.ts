@@ -67,7 +67,7 @@ async function probe(request: APIRequestContext, path: string): Promise<{ lang: 
 }
 
 test.beforeAll(async ({}, testInfo) => {
-  testInfo.setTimeout(21 * 60_000);
+  testInfo.setTimeout(41 * 60_000);
   await acquireSharedWordPressLock();
   lockHeld = true;
   translatePressWasActive = isPluginActive('translatepress-multilingual');
