@@ -122,7 +122,6 @@ COMMON_EXCLUDES=(
     "faz-cookie-manager/composer.json"
     "faz-cookie-manager/composer.lock"
     "faz-cookie-manager/phpstan.neon"
-    "faz-cookie-manager/phpstan-baseline.neon"
     "faz-cookie-manager/phpstan-bootstrap.php"
     "faz-cookie-manager/.DS_Store"
     "faz-cookie-manager/**/.DS_Store"

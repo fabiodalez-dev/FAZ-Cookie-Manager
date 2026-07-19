@@ -341,14 +341,14 @@ class Template {
 	/**
 	 * Get presets by template version
 	 *
-	 * @param integer $id Template version.
+	 * @param integer|null $id Template version.
 	 * @return array
 	 */
 	public function get_presets( $id ) {
-		$this->id = isset( $id ) ? $id : 0;
-		$key      = '_preset_' . $id;
+		$this->id = null !== $id ? $id : 0;
+		$key      = '_preset_' . $this->id;
 		$presets  = Cache::get( $key, $this->cache_group );
-		$presets  = ( isset( $presets ) && is_array( $presets ) ) ? $presets : array();
+		$presets  = is_array( $presets ) ? $presets : array();
 		if ( empty( $presets ) ) {
 			$presets = $this->load_presets();
 			Cache::set( $key, $this->cache_group, $presets, false );
@@ -359,14 +359,14 @@ class Template {
 	/**
 	 * Get templates by template version
 	 *
-	 * @param integer $id Template version.
+	 * @param integer|null $id Template version.
 	 * @return array
 	 */
 	public function get_templates( $id ) {
-		$this->id  = isset( $id ) ? $id : 0;
+		$this->id  = null !== $id ? $id : 0;
 		$key       = '_template_' . $this->id;
 		$templates = Cache::get( $key, $this->cache_group );
-		$templates = ( isset( $templates ) && is_array( $templates ) ) ? $templates : array();
+		$templates = is_array( $templates ) ? $templates : array();
 
 		if ( empty( $templates ) ) {
 			$templates = $this->load_templates();

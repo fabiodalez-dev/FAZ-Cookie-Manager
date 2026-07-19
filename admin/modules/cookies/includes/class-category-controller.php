@@ -529,7 +529,7 @@ class Category_Controller extends Base_Controller {
 				}
 			}
 		}
-		return isset( $id ) && isset( $categories[ $id ] ) ? $categories[ $id ] : $categories;
+		return false !== $id && isset( $categories[ $id ] ) ? $categories[ $id ] : $categories;
 	}
 
 	/**

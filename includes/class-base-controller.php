@@ -63,7 +63,7 @@ abstract class Base_Controller {
 				}
 			}
 		}
-		return isset( $id ) && isset( $items[ $id ] ) ? $items[ $id ] : $items;
+		return false !== $id && isset( $items[ $id ] ) ? $items[ $id ] : $items;
 	}
 	/**
 	 * Set items to the cache.

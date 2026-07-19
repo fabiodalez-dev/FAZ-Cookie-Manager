@@ -1,24 +1,31 @@
 includes:
     - vendor/szepeviktor/phpstan-wordpress/extension.neon
-    - phpstan-baseline.neon
 
 parameters:
     level: 2
-    # With a baseline in play, some ignoreErrors patterns (e.g. the defensive
-    # superglobal isset/empty idioms) may not match on a given run — that is
-    # expected and must not itself fail the pipeline.
+    # Some integration-specific ignoreErrors patterns may not match on every
+    # installation or dependency version; that must not fail the gate itself.
     reportUnmatchedIgnoredErrors: false
-    # bootstrapFiles intentionally omitted: the szepeviktor/phpstan-wordpress
-    # extension already provides the WP stubs PHPStan needs at this level.
-    # If a future addition requires plugin-side initialisation, add the file
-    # AND list it here — the prior entry pointed at a non-existent path.
+    # Analyse the complete distributable PHP surface, but not the standalone
+    # test programs. Those tests intentionally declare narrow WordPress
+    # polyfills (for example add_action() with no parameters); including them
+    # in the same PHPStan symbol table replaces the real WordPress signatures
+    # supplied by phpstan-wordpress and produces hundreds of false positives.
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+    scanFiles:
+        - tests/phpstan/optional-integrations.stub.php
     paths:
-        - .
-    excludePaths:
-        - vendor
-        - admin/modules/cache/services
-    scanDirectories:
-        - vendor/php-stubs/wordpress-stubs
+        - faz-cookie-manager.php
+        - class-autoloader.php
+        - index.php
+        - uninstall.php
+        - admin
+        - frontend
+        - includes
+        - integrations
+        - languages/index.php
+        - public
     ignoreErrors:
         # External plugin functions/classes (optional integrations)
         - '#Function pll_default_language not found#'

@@ -89,7 +89,7 @@ abstract class API_Controller extends Rest_Controller {
 			$args['category'] = sanitize_text_field( $request['category'] );
 		}
 		$item_data = $this->get_item_objects( $args );
-		if ( isset( $item_data ) && ! empty( $item_data ) ) {
+		if ( ! empty( $item_data ) ) {
 			$item_objects = array_filter( array_map( array( $this, 'get_item_object' ), $item_data ) );
 		}
 		foreach ( $item_objects as $data ) {

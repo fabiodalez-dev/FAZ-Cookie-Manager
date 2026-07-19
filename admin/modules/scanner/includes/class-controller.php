@@ -786,9 +786,6 @@ class Controller {
 		);
 
 		$parts = explode( ';', $cookie_string );
-		if ( empty( $parts ) ) {
-			return $result;
-		}
 
 		// First part is name=value.
 		$name_value = trim( $parts[0] );

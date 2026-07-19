@@ -188,7 +188,7 @@ class Filesystem {
 	 */
 	public function get_contents( $file_path ) {
 		$file_system = $this->get_filesystem();
-		if ( isset( $file_system ) && empty( $file_system->errors->errors ) ) {
+		if ( $file_system instanceof \WP_Filesystem_Base && empty( $file_system->errors->errors ) ) {
 			$file_path = str_replace( ABSPATH, $this->abspath(), $file_path );
 			if ( $this->get_filesystem()->exists( $file_path ) && $this->get_filesystem()->is_readable( $file_path ) ) {
 				return $this->get_filesystem()->get_contents( $file_path );
