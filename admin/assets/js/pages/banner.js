@@ -167,7 +167,7 @@
 		//  - content lost entirely (iframe content gone) → restore from bannerData
 		var tabEditors = {
 			content: ['faz-b-notice-desc'],
-			preferences: ['faz-b-pref-desc']
+			preferences: ['faz-b-pref-desc', 'faz-b-optout-desc']
 		};
 		document.querySelectorAll('#faz-banner .faz-tab').forEach(function (btn) {
 			btn.addEventListener('click', function () {
@@ -180,7 +180,8 @@
 				var pref = (c.preferenceCenter && c.preferenceCenter.elements) || {};
 				var stored = {
 					'faz-b-notice-desc': notice.description || '',
-					'faz-b-pref-desc': pref.description || ''
+					'faz-b-pref-desc': pref.description || '',
+					'faz-b-optout-desc': ((c.optoutPopup && c.optoutPopup.elements) || {}).description || ''
 				};
 				ids.forEach(function (id) {
 					var editor = tinyMCE.get(id);
@@ -1529,7 +1530,21 @@
 
 	function toggleDoNotSellColorRow(law) {
 		var row = document.getElementById('faz-donotsell-color-row');
-		if (row) row.style.display = (law === 'ccpa' || law === 'gdpr_ccpa') ? '' : 'none';
+		var shows = (law === 'ccpa' || law === 'gdpr_ccpa');
+		if (row) row.style.display = shows ? '' : 'none';
+		// The opt-out (Do Not Sell) modal only exists on CCPA / US State Laws
+		// banners, so its text card is only relevant there. #187
+		var optoutCard = document.getElementById('faz-optout-text-card');
+		if (optoutCard) {
+			optoutCard.style.display = shows ? '' : 'none';
+			// A TinyMCE editor initialised inside a hidden card paints into a
+			// zero-size iframe; re-set its content once the card is revealed so
+			// the description is visible (mirrors the tab-switch re-render).
+			if (shows && typeof tinyMCE !== 'undefined') {
+				var ed = tinyMCE.get('faz-b-optout-desc');
+				if (ed) ed.setContent(ed.getContent() || '');
+			}
+		}
 	}
 
 	function populateButtonColors(name, btnData) {
@@ -1597,6 +1612,14 @@
 		setVal('faz-b-pref-accept', prefBtns.accept || '');
 		setVal('faz-b-pref-save', prefBtns.save || '');
 		setVal('faz-b-pref-reject', prefBtns.reject || '');
+
+		// Opt-out (Do Not Sell) popup text — CCPA / US State Laws only. The card
+		// itself is shown/hidden by toggleDoNotSellColorRow(). #187
+		var optout = (c.optoutPopup && c.optoutPopup.elements) || {};
+		setVal('faz-b-optout-title', optout.title || '');
+		setVal('faz-b-optout-desc', optout.description || '');
+		var optOption = (optout.optOption && optout.optOption.elements) || {};
+		setVal('faz-b-optout-option-title', optOption.title || '');
 	}
 
 	// Helper: only overwrite field if the value is readable (not undefined).
@@ -1646,6 +1669,17 @@
 		storeField(c.preferenceCenter.elements.buttons.elements, 'accept', 'faz-b-pref-accept');
 		storeField(c.preferenceCenter.elements.buttons.elements, 'save', 'faz-b-pref-save');
 		storeField(c.preferenceCenter.elements.buttons.elements, 'reject', 'faz-b-pref-reject');
+
+		// Opt-out (Do Not Sell) popup text — persisted for every language even
+		// when the card is hidden (a GDPR-only banner keeps any copy the admin
+		// entered before switching law). storeField() no-ops on hidden TinyMCE. #187
+		if (!c.optoutPopup) c.optoutPopup = { elements: {} };
+		if (!c.optoutPopup.elements) c.optoutPopup.elements = {};
+		storeField(c.optoutPopup.elements, 'title', 'faz-b-optout-title');
+		storeField(c.optoutPopup.elements, 'description', 'faz-b-optout-desc');
+		if (!c.optoutPopup.elements.optOption) c.optoutPopup.elements.optOption = { elements: {} };
+		if (!c.optoutPopup.elements.optOption.elements) c.optoutPopup.elements.optOption.elements = {};
+		storeField(c.optoutPopup.elements.optOption.elements, 'title', 'faz-b-optout-option-title');
 
 		bannerData.contents = contents;
 	}
@@ -2858,7 +2892,7 @@
 	// ── Helpers ──
 
 	// List of fields that use wp_editor (TinyMCE)
-	var wpEditorIds = ['faz-b-notice-desc', 'faz-b-pref-desc'];
+	var wpEditorIds = ['faz-b-notice-desc', 'faz-b-pref-desc', 'faz-b-optout-desc'];
 
 	function isWpEditorTextMode(editor) {
 		return editor && typeof editor.isHidden === 'function' && editor.isHidden();
