@@ -563,6 +563,17 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.24.0 — 2026-07-21
+- **Added**: editable opt-out (Do Not Sell) modal text (#187) — a new "Opt-out (Do Not Sell) Text" card on the Cookie Banner → Preference Center tab edits the "Opt-out Preferences" popup's title, description and toggle label, per language, on CCPA / US State Laws (and Both) banners. Previously that copy was fixed to the bundled default. Translated into every bundled locale.
+- **Added**: FlyingPress cache integration (#125) — saving a banner/cookie/category/setting purges FlyingPress's cached HTML; country-dependent pages bypass its cache via `flying_press_is_cacheable`; the consent scripts are excluded from its JS delay/defer/minify so the banner is never held back.
+- **Added**: the Cookie Policy generator now flows through the WordPress gettext pipeline, so the policy honours the site locale and `.mo` overrides.
+- **Changed**: payment-gateway scripts are now a per-gateway opt-in (Settings → Script Blocking → Payment gateways) instead of an automatic allow-list. A payment SDK can track, so it stays blocked until consent unless the store owner enables that gateway or it is strictly necessary on a real WooCommerce checkout/cart (the marketing pixel stays blocked either way). **Migration**: if you use Stripe elements outside a WooCommerce checkout, enable Stripe there after updating.
+- **Changed**: the server-side cookie shredder moved to `template_redirect` (reliable checkout/cart conditionals), and an explicit per-service/per-cookie denial now wins over the admin cookie whitelist on both server and client.
+- **Fixed**: category toggles rendering as editable text fields when another active plugin filters `wp_kses_allowed_html` (#188) — the `<input>` allow-list no longer loses `type="checkbox"` regardless of filter order.
+- **Fixed**: banner/cookie saves not sticking on sites with a persistent object cache (Redis Object Cache, Memcached) — internal cache invalidation now rotates the transient prefix instead of scanning `wp_options` (#125).
+- **Fixed**: WPML, TranslatePress and Weglot banners showing only the default language under Cache Compatibility Mode — URL-keyed language negotiation (directory/domain) now resolves the per-URL language while staying cache-friendly.
+- **Fixed**: the per-service consent toggle now appears for JS-injected embeds on block-first sites (#134/#146); the consent banner no longer double-initialises under Cloudflare Rocket Loader (#185); the icon-only notice dismiss link is now labelled for screen readers.
+
 ### 1.23.0 — 2026-07-11
 - **Added**: "Box (centered)" banner type - positions the consent box in the centre of the screen via CSS transform, a common pattern on European sites.
 - **Added**: "Dim the page behind the banner" option - a semi-transparent overlay greys out the page to draw attention to the banner. The overlay is a visual cue only (`pointer-events: none`) and never blocks reading, scrolling, or clicking, so it does not act as a cookie wall. Available for Box corner, Box centered, and Full-width Banner types; automatically disabled for the Classic layout. Default off.
