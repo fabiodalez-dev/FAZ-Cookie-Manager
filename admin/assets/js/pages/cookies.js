@@ -802,6 +802,29 @@
 
 		form.appendChild(transferGroup);
 
+		// F014 fix: the country/safeguard inputs stayed editable (and their
+		// values still saved into data.transfer.countries/.safeguard) even
+		// when "enabled" was left unticked, so an admin could fill them in,
+		// forget to tick the checkbox, save "successfully" and the
+		// disclosure would silently never render (render_transfer_disclosure()
+		// returns '' unless transfer.enabled is true). Grey the inputs out
+		// and disable them while the checkbox is off — same
+		// bind-to-checkbox/sync-on-change pattern used for the close-button
+		// sub-toggle in banner.js (bindCloseSubToggle).
+		(function bindTransferInputs() {
+			var sync = function () {
+				var enabled = !!transferEnabled.checked;
+				countryInput.disabled = !enabled;
+				safeguardInput.disabled = !enabled;
+				countryLabel.style.opacity = enabled ? '1' : '0.5';
+				countryInput.style.opacity = enabled ? '1' : '0.5';
+				safeguardLabel.style.opacity = enabled ? '1' : '0.5';
+				safeguardInput.style.opacity = enabled ? '1' : '0.5';
+			};
+			transferEnabled.addEventListener('change', sync);
+			sync();
+		})();
+
 		// Category dropdown
 		var catGroup = document.createElement('div');
 		catGroup.className = 'faz-form-group';

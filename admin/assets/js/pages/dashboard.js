@@ -114,20 +114,27 @@
 		}
 	}
 
+	// Shared label vocabulary for a "days" window — used by both the main
+	// filter bar (updateRangeLabel) and the A/B Test Results card, which
+	// queries its own days window independently (see loadAbTestStats).
+	function rangeLabelForDays(days) {
+		var map = {
+			1: 'Last 24 Hours',
+			7: 'Last 7 Days',
+			30: 'Last 30 Days',
+			365: 'Last Year',
+			0: 'All Time'
+		};
+		return map[days] || ('Last ' + days + ' Days');
+	}
+
 	function updateRangeLabel() {
 		var text;
 
 		if (currentFilter.from && currentFilter.to) {
 			text = formatDateRange(currentFilter.from, currentFilter.to);
 		} else {
-			var map = {
-				1: 'Last 24 Hours',
-				7: 'Last 7 Days',
-				30: 'Last 30 Days',
-				365: 'Last Year',
-				0: 'All Time'
-			};
-			text = map[currentFilter.days] || ('Last ' + currentFilter.days + ' Days');
+			text = rangeLabelForDays(currentFilter.days);
 		}
 
 		var ids = ['faz-chart-range-label', 'faz-consent-range-label', 'faz-consent-stats-range-label'];
@@ -505,6 +512,12 @@
 		// back to all-time (days = 0) so the panel stays simple and correct.
 		var abParams = { days: (params && typeof params.days !== 'undefined') ? params.days : 0 };
 
+		// Reflect the actual A/B query window in the card header — it does not
+		// necessarily match the main filter bar (custom ranges collapse to
+		// all-time here), so it must be derived from abParams, not currentFilter.
+		var rangeLabelEl = document.getElementById('faz-abtest-range-label');
+		if (rangeLabelEl) rangeLabelEl.textContent = rangeLabelForDays(abParams.days);
+
 		FAZ.get('consent_logs/ab_test', abParams).then(function (data) {
 			var variants = (data && Array.isArray(data.variants)) ? data.variants : [];
 
@@ -571,8 +584,29 @@
 				body.appendChild(wrap);
 			});
 		}).catch(function () {
-			// Non-fatal: hide the panel if the endpoint errors.
-			card.hidden = true;
+			// The stats request failed — this is NOT the same as "A/B test off".
+			// Check the settings context directly (banner_control.ab_test.status)
+			// so an admin who enabled the test can tell a real REST failure apart
+			// from the legitimate off/<2-variants branch above.
+			FAZ.get('settings').then(function (settings) {
+				var ab = settings && settings.banner_control && settings.banner_control.ab_test;
+				var enabled = !!(ab && ab.status);
+
+				if (!enabled) {
+					card.hidden = true;
+					return;
+				}
+
+				card.hidden = false;
+				while (body.firstChild) { body.removeChild(body.firstChild); }
+				var errEl = document.createElement('p');
+				errEl.style.color = 'var(--faz-text-muted)';
+				errEl.textContent = __('dashboard.abTestLoadError', 'Could not load A/B test results.');
+				body.appendChild(errEl);
+			}).catch(function () {
+				// Can't even confirm the enabled state — fall back to hiding.
+				card.hidden = true;
+			});
 		});
 	}
 

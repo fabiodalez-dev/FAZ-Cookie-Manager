@@ -125,13 +125,36 @@ class Ab_Test {
 	 *
 	 * Zero-fills every requested variant slug (so a variant that has not yet
 	 * produced a consent still appears with a 0% rate rather than vanishing)
-	 * and computes the acceptance rate as a percentage of that variant's own
-	 * total consents. Order follows the requested $variant_slugs so the admin
-	 * sees the columns in the order they configured.
+	 * and computes the acceptance rate for each variant. Order follows the
+	 * requested $variant_slugs so the admin sees the columns in the order they
+	 * configured.
+	 *
+	 * Metric definition (well-defined and transparent):
+	 *   - NUMERATOR — `accepted`: rows with status 'accepted'.
+	 *   - DENOMINATOR — `decisions`: every explicit consent DECISION recorded
+	 *     under the variant, i.e.
+	 *         accepted + rejected + partial + optout + rescinded
+	 *     where `optout` = status 'dnsmpi_optout' and `rescinded` =
+	 *     'dns_rescinded' (the two CCPA / Do-Not-Sell "Do Not Sell / opt-out"
+	 *     outcomes). An opt-out or a rescind is a deliberate NON-accept
+	 *     decision, so it belongs in the denominator — a CCPA (or 'both')
+	 *     variant is rated against every decision it produced, not just the
+	 *     GDPR-style accept / reject / partial ones.
+	 *   - `accept_rate = accepted / decisions * 100` (0 when decisions == 0).
+	 *
+	 * The denominator is computed from the named per-status counts, NOT from
+	 * `total` (COUNT(*) over the window). That makes the rate independent of
+	 * any status outside the known decision set, so it can never be silently
+	 * diluted by an unexpected value. `total` is still returned verbatim for
+	 * backward compatibility, and every per-status count plus the derived
+	 * `decisions` denominator is exposed so the dashboard can show the
+	 * composition behind the single rate rather than one ambiguous number.
 	 *
 	 * @param array $rows          Grouped rows, each with keys banner_slug,
-	 *                             total, accepted, rejected, partial (strings
-	 *                             from $wpdb are fine — they are cast here).
+	 *                             total, accepted, rejected, partial, optout,
+	 *                             rescinded (strings from $wpdb are fine — they
+	 *                             are cast here; missing count keys default to
+	 *                             0).
 	 * @param array $variant_slugs Slugs to report, in display order.
 	 * @return array<int, array<string, mixed>> One entry per variant slug.
 	 */
@@ -157,11 +180,20 @@ class Ab_Test {
 			}
 			$seen[ $slug ] = true;
 
-			$row      = isset( $by_slug[ $slug ] ) ? $by_slug[ $slug ] : array();
-			$total    = isset( $row['total'] ) ? (int) $row['total'] : 0;
-			$accepted = isset( $row['accepted'] ) ? (int) $row['accepted'] : 0;
-			$rejected = isset( $row['rejected'] ) ? (int) $row['rejected'] : 0;
-			$partial  = isset( $row['partial'] ) ? (int) $row['partial'] : 0;
+			$row       = isset( $by_slug[ $slug ] ) ? $by_slug[ $slug ] : array();
+			$total     = isset( $row['total'] ) ? (int) $row['total'] : 0;
+			$accepted  = isset( $row['accepted'] ) ? (int) $row['accepted'] : 0;
+			$rejected  = isset( $row['rejected'] ) ? (int) $row['rejected'] : 0;
+			$partial   = isset( $row['partial'] ) ? (int) $row['partial'] : 0;
+			$optout    = isset( $row['optout'] ) ? (int) $row['optout'] : 0;
+			$rescinded = isset( $row['rescinded'] ) ? (int) $row['rescinded'] : 0;
+
+			// Explicit, documented denominator: every consent DECISION recorded
+			// under this variant. Opt-out / rescind are deliberate non-accepts,
+			// so they count as decisions — see the method docblock. Derived from
+			// the named statuses (not $total) so the rate can't be diluted by a
+			// value outside the known decision set.
+			$decisions = $accepted + $rejected + $partial + $optout + $rescinded;
 
 			$out[] = array(
 				'slug'        => $slug,
@@ -169,7 +201,10 @@ class Ab_Test {
 				'accepted'    => $accepted,
 				'rejected'    => $rejected,
 				'partial'     => $partial,
-				'accept_rate' => $total > 0 ? round( $accepted / $total * 100, 1 ) : 0,
+				'optout'      => $optout,
+				'rescinded'   => $rescinded,
+				'decisions'   => $decisions,
+				'accept_rate' => $decisions > 0 ? round( $accepted / $decisions * 100, 1 ) : 0,
 			);
 		}
 		return $out;

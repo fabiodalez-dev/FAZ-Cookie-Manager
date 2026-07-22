@@ -923,9 +923,15 @@ class Frontend {
 	 *
 	 * @since 1.25.0
 	 * @param Banner|false $default_banner  The banner selected before A/B.
-	 * @param string       $visitor_country Resolved visitor country (unused by
-	 *                                      the split itself; reserved for a
-	 *                                      future country-scoped variant set).
+	 * @param string       $visitor_country Resolved visitor country. Used to keep
+	 *                                      variant selection within the same
+	 *                                      geo-eligibility as the normal banner
+	 *                                      selection: filters candidates by
+	 *                                      get_target_countries() and
+	 *                                      is_banner_geo_blocked() so an A/B
+	 *                                      experiment can never surface a variant
+	 *                                      that normal routing would have hidden
+	 *                                      or excluded for this visitor.
 	 * @return Banner|false The variant banner, or $default_banner unchanged.
 	 */
 	private function maybe_apply_ab_test( $default_banner, $visitor_country ) {

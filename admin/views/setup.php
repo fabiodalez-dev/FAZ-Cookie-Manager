@@ -33,7 +33,7 @@ $faz_setup_laws = array(
 		'title'  => __( 'GDPR / ePrivacy (EU, EEA, UK)', 'faz-cookie-manager' ),
 		'desc'   => __( 'For visitors in the European Union, EEA, or United Kingdom. Non-essential cookies stay blocked until the visitor actively opts in — nothing is pre-ticked, and Accept and Reject carry equal weight.', 'faz-cookie-manager' ),
 		'effect' => __( 'Opt-in model: no cookie is set before consent.', 'faz-cookie-manager' ),
-		'expiry' => __( 'Consent is remembered for up to 182 days.', 'faz-cookie-manager' ),
+		'expiry' => __( 'Consent is remembered for up to 180 days.', 'faz-cookie-manager' ),
 		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, with no pre-ticked categories.', 'faz-cookie-manager' ),
 	),
 	'ccpa' => array(
@@ -47,7 +47,7 @@ $faz_setup_laws = array(
 		'title'  => __( 'Both (mixed EU + US audience)', 'faz-cookie-manager' ),
 		'desc'   => __( 'For a site with both EU and US visitors. The more protective opt-in model governs the banner, so EU visitors are never downgraded — while the US "Do Not Sell or Share" opt-out link is still shown.', 'faz-cookie-manager' ),
 		'effect' => __( 'Opt-in model plus the US "Do Not Sell or Share" link.', 'faz-cookie-manager' ),
-		'expiry' => __( 'Consent is remembered for up to 182 days.', 'faz-cookie-manager' ),
+		'expiry' => __( 'Consent is remembered for up to 180 days.', 'faz-cookie-manager' ),
 		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, together with the US opt-out control.', 'faz-cookie-manager' ),
 	),
 );
@@ -74,7 +74,7 @@ $faz_setup_laws = array(
 
 			<!-- Step 1 — Applicable law -->
 			<section class="faz-wizard-step is-active" data-step="1" aria-labelledby="faz-setup-step1-title">
-				<h2 id="faz-setup-step1-title" class="faz-setup-step-title"><?php esc_html_e( 'Which privacy law applies to your visitors?', 'faz-cookie-manager' ); ?></h2>
+				<h2 id="faz-setup-step1-title" class="faz-setup-step-title" tabindex="-1"><?php esc_html_e( 'Which privacy law applies to your visitors?', 'faz-cookie-manager' ); ?></h2>
 				<p class="faz-setup-step-lead"><?php esc_html_e( 'This sets a compliant baseline for your cookie banner. You can change every detail later on the Cookie Banner page.', 'faz-cookie-manager' ); ?></p>
 
 				<fieldset class="faz-setup-law-group">
@@ -94,7 +94,7 @@ $faz_setup_laws = array(
 
 			<!-- Step 2 — Find cookies (optional) -->
 			<section class="faz-wizard-step" data-step="2" hidden aria-labelledby="faz-setup-step2-title">
-				<h2 id="faz-setup-step2-title" class="faz-setup-step-title"><?php esc_html_e( 'Find your cookies', 'faz-cookie-manager' ); ?> <span class="faz-setup-optional"><?php esc_html_e( '(optional)', 'faz-cookie-manager' ); ?></span></h2>
+				<h2 id="faz-setup-step2-title" class="faz-setup-step-title" tabindex="-1"><?php esc_html_e( 'Find your cookies', 'faz-cookie-manager' ); ?> <span class="faz-setup-optional"><?php esc_html_e( '(optional)', 'faz-cookie-manager' ); ?></span></h2>
 				<p class="faz-setup-step-lead"><?php esc_html_e( 'A quick server-side scan looks at a sample of your pages to discover cookies and categorise them automatically. It is optional — you can always run it later, and finishing setup never waits for it.', 'faz-cookie-manager' ); ?></p>
 
 				<div class="faz-setup-scan">
@@ -113,7 +113,7 @@ $faz_setup_laws = array(
 
 			<!-- Step 3 — Review & finish -->
 			<section class="faz-wizard-step" data-step="3" hidden aria-labelledby="faz-setup-step3-title">
-				<h2 id="faz-setup-step3-title" class="faz-setup-step-title"><?php esc_html_e( 'Review & finish', 'faz-cookie-manager' ); ?></h2>
+				<h2 id="faz-setup-step3-title" class="faz-setup-step-title" tabindex="-1"><?php esc_html_e( 'Review & finish', 'faz-cookie-manager' ); ?></h2>
 				<p class="faz-setup-step-lead"><?php esc_html_e( 'Here is what will be applied. These are compliant defaults — the controls match the selected consent model and no categories are pre-ticked.', 'faz-cookie-manager' ); ?></p>
 
 				<ul class="faz-setup-review" id="faz-setup-review"

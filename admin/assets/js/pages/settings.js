@@ -266,10 +266,37 @@
 				}
 			});
 
-			return FAZ.post('settings', current);
-		}).then(function () {
+			// A/B testing silently no-ops server-side in two configurations:
+			// fewer than 2 selected variants (Ab_Test::pick_variant needs >=2
+			// valid slugs to pick from) or Cache Compatibility Mode enabled
+			// (maybe_apply_ab_test() short-circuits entirely under cache-compat).
+			// Warn the admin instead of letting the generic success toast imply
+			// the A/B test is actually running.
+			var abTestWarning = null;
+			if (current.banner_control && current.banner_control.ab_test
+				&& current.banner_control.ab_test.status) {
+				if (serializeAbVariants().length < 2) {
+					abTestWarning = __(
+						'settings.abTestWarnVariants',
+						'A/B testing needs at least 2 selected banner variants to run.'
+					);
+				} else if (current.banner_control.cache_compatibility) {
+					abTestWarning = __(
+						'settings.abTestWarnCache',
+						'A/B testing is disabled while Cache Compatibility Mode is on.'
+					);
+				}
+			}
+
+			return FAZ.post('settings', current).then(function () {
+				return abTestWarning;
+			});
+		}).then(function (abTestWarning) {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saved', 'Settings saved successfully.'));
+			if (abTestWarning) {
+				FAZ.notify(abTestWarning, 'warning');
+			}
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');

@@ -558,9 +558,14 @@ class Renderer {
 
 	/**
 	 * Resolve an already-decoded multilingual map ({ <lang> => string }) to the
-	 * active language. Same fallback chain as decode_i18n_text(), but for a value
-	 * that is already a PHP array (the transfer countries/safeguard sub-objects
-	 * arrive decoded from the cookie meta JSON, not as a raw JSON string).
+	 * active language. Same fallback chain as
+	 * Cookie_Table_Shortcode::resolve_transfer_text() (active language →
+	 * faz_default_language() → first non-empty entry) so the transfer
+	 * country/safeguard text matches between the banner preference-center and
+	 * the [faz_cookie_policy_complete] page on sites whose default language
+	 * isn't 'en'. Value is already a PHP array (the transfer countries/safeguard
+	 * sub-objects arrive decoded from the cookie meta JSON, not as a raw JSON
+	 * string).
 	 *
 	 * @param mixed  $map  Multilingual array, or a plain string.
 	 * @param string $lang Preferred language code.
@@ -576,8 +581,9 @@ class Renderer {
 		if ( is_string( $lang ) && '' !== $lang && isset( $map[ $lang ] ) && is_string( $map[ $lang ] ) && '' !== $map[ $lang ] ) {
 			return $map[ $lang ];
 		}
-		if ( isset( $map['en'] ) && is_string( $map['en'] ) && '' !== $map['en'] ) {
-			return $map['en'];
+		$default = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		if ( isset( $map[ $default ] ) && is_string( $map[ $default ] ) && '' !== $map[ $default ] ) {
+			return $map[ $default ];
 		}
 		foreach ( $map as $v ) {
 			if ( is_string( $v ) && '' !== $v ) {

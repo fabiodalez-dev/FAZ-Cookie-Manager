@@ -872,16 +872,21 @@ class Controller {
 	 * Accept-rate per banner variant for the A/B test Dashboard panel.
 	 *
 	 * Groups the consent log by banner_slug for the requested variant slugs and
-	 * reports, per variant, the total consents and the accepted / rejected /
-	 * partial split with the acceptance rate. The banner_slug column is written
-	 * on every consent (Frontend records the variant the visitor was served),
-	 * so this attributes each consent to the variant that produced it — the
-	 * accountability side of the random split.
+	 * reports, per variant, the total consents and the full per-status split —
+	 * accepted / rejected / partial plus the two CCPA / Do-Not-Sell outcomes
+	 * (dnsmpi_optout, dns_rescinded) — with the acceptance rate. The
+	 * banner_slug column is written on every consent (Frontend records the
+	 * variant the visitor was served), so this attributes each consent to the
+	 * variant that produced it — the accountability side of the random split.
 	 *
 	 * The raw grouped rows are reshaped by Ab_Test::compute_stats(), which
-	 * zero-fills variants with no consents yet and follows the requested slug
-	 * order — keeping this method a thin query wrapper and the arithmetic
-	 * unit-testable without a database.
+	 * zero-fills variants with no consents yet, follows the requested slug
+	 * order, and computes accept_rate over an explicit `decisions` denominator
+	 * (accepted + rejected + partial + optout + rescinded) so a CCPA variant's
+	 * rate is not silently diluted by opt-out / rescind events — while also
+	 * surfacing the per-status counts so the composition stays visible. Keeping
+	 * the arithmetic there makes it unit-testable without a database and keeps
+	 * this method a thin query wrapper.
 	 *
 	 * @since 1.25.0
 	 * @param array $slugs Banner variant slugs to report.
@@ -926,7 +931,9 @@ class Controller {
 						COUNT(*) as total,
 						SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
 						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
+						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial,
+						SUM(CASE WHEN status = 'dnsmpi_optout' THEN 1 ELSE 0 END) as optout,
+						SUM(CASE WHEN status = 'dns_rescinded' THEN 1 ELSE 0 END) as rescinded
 				 FROM {$table}
 				 WHERE banner_slug IN ({$placeholders}){$cutoff_sql}
 				 GROUP BY banner_slug", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared

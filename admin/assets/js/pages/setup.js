@@ -100,6 +100,12 @@
 		finishBtn.hidden = (currentStep !== TOTAL_STEPS);
 
 		if (currentStep === TOTAL_STEPS) { renderReview(); }
+
+		// Move focus to the newly-active step's heading so keyboard/screen-reader
+		// users get step-change feedback (focus would otherwise remain on a
+		// just-hidden Next/Back button). Standard wizard pattern.
+		var heading = document.getElementById('faz-setup-step' + currentStep + '-title');
+		if (heading) { heading.focus(); }
 	}
 
 	/* ── Review summary ── */
@@ -236,11 +242,11 @@
 				// navigation sink (and custom WordPress admin paths keep working).
 				window.location.assign('admin.php?page=faz-cookie-manager');
 			}, 700);
-		}).catch(function () {
+		}).catch(function (err) {
 			finishing = false;
 			finishBtn.disabled = false;
 			backBtn.disabled = false;
-			FAZ.notify(__('setup.finish_failed', 'Setup could not be saved. Please try again.'), 'error');
+			FAZ.notify((err && err.message) || __('setup.finish_failed', 'Setup could not be saved. Please try again.'), 'error');
 		});
 	}
 

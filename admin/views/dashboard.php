@@ -159,7 +159,7 @@ defined( 'ABSPATH' ) || exit;
 				echo wp_kses_post( sprintf(
 					/* translators: %s: date range label injected by JS */
 					__( 'A/B Test Results &mdash; %s', 'faz-cookie-manager' ),
-					'<span id="faz-abtest-range-label">' . esc_html__( 'Last 30 Days', 'faz-cookie-manager' ) . '</span>'
+					'<span id="faz-abtest-range-label">' . esc_html__( 'Last 7 Days', 'faz-cookie-manager' ) . '</span>'
 				) );
 			?></h3>
 		</div>

@@ -143,21 +143,40 @@ namespace {
 	$rows = array(
 		array( 'banner_slug' => 'gdpr-1', 'total' => '4', 'accepted' => '3', 'rejected' => '1', 'partial' => '0' ),
 		array( 'banner_slug' => 'ccpa-2', 'total' => '2', 'accepted' => '1', 'rejected' => '0', 'partial' => '1' ),
+		// CCPA / Do-Not-Sell variant: COUNT(*) (total) also folds in the two
+		// opt-out statuses AND a hypothetical stray status (total 12 > the 10
+		// named decisions) — the rate must be computed on `decisions`, not total.
+		array( 'banner_slug' => 'ccpa-4', 'total' => '12', 'accepted' => '4', 'rejected' => '2', 'partial' => '0', 'optout' => '3', 'rescinded' => '1' ),
 		array( 'banner_slug' => 'unrelated-9', 'total' => '5', 'accepted' => '5', 'rejected' => '0', 'partial' => '0' ),
 	);
-	$stats = Ab_Test::compute_stats( $rows, array( 'gdpr-1', 'ccpa-2', 'empty-3' ) );
+	$stats = Ab_Test::compute_stats( $rows, array( 'gdpr-1', 'ccpa-2', 'ccpa-4', 'empty-3' ) );
 
-	faz_assert_same( count( $stats ), 3, 'one entry per requested variant slug (order preserved)' );
+	faz_assert_same( count( $stats ), 4, 'one entry per requested variant slug (order preserved)' );
 	faz_assert_same( $stats[0]['slug'], 'gdpr-1', 'first entry is the first requested slug' );
 	faz_assert_same( $stats[0]['total'], 4, 'DB string counts are cast to int (total)' );
 	faz_assert_same( $stats[0]['accepted'], 3, 'accepted cast to int' );
-	faz_assert_same( $stats[0]['accept_rate'], 75.0, 'accept_rate = accepted/total*100 (3/4 -> 75.0)' );
+	faz_assert_same( $stats[0]['optout'], 0, 'optout defaults to 0 when the GROUP BY row omits it' );
+	faz_assert_same( $stats[0]['rescinded'], 0, 'rescinded defaults to 0 when omitted' );
+	faz_assert_same( $stats[0]['decisions'], 4, 'decisions = accepted+rejected+partial+optout+rescinded (3+1+0+0+0)' );
+	faz_assert_same( $stats[0]['accept_rate'], 75.0, 'accept_rate = accepted/decisions*100 (3/4 -> 75.0)' );
 	faz_assert_same( $stats[1]['slug'], 'ccpa-2', 'second entry follows requested order' );
 	faz_assert_same( $stats[1]['partial'], 1, 'partial cast to int' );
+	faz_assert_same( $stats[1]['decisions'], 2, 'ccpa-2 decisions (1+0+1+0+0)' );
 	faz_assert_same( $stats[1]['accept_rate'], 50.0, 'accept_rate for ccpa-2 (1/2 -> 50.0)' );
-	faz_assert_same( $stats[2]['slug'], 'empty-3', 'a variant with no consents is zero-filled, not dropped' );
-	faz_assert_same( $stats[2]['total'], 0, 'zero-filled variant has total 0' );
-	faz_assert_same( $stats[2]['accept_rate'], 0, 'zero-filled variant has accept_rate 0 (no divide-by-zero)' );
+
+	// The CCPA fix: accept_rate uses the explicit `decisions` denominator, so
+	// it is NOT diluted by opt-out/rescind (and NOT skewed by total's COUNT(*)).
+	faz_assert_same( $stats[2]['slug'], 'ccpa-4', 'third entry is the CCPA variant' );
+	faz_assert_same( $stats[2]['total'], 12, 'total (COUNT(*)) is preserved verbatim for backward compat' );
+	faz_assert_same( $stats[2]['optout'], 3, 'dnsmpi_optout count is exposed in the breakdown' );
+	faz_assert_same( $stats[2]['rescinded'], 1, 'dns_rescinded count is exposed in the breakdown' );
+	faz_assert_same( $stats[2]['decisions'], 10, 'decisions sums the 5 named statuses (4+2+0+3+1), ignoring stray total' );
+	faz_assert_same( $stats[2]['accept_rate'], 40.0, 'accept_rate = accepted/decisions (4/10 -> 40.0), not accepted/total (4/12 -> 33.3)' );
+
+	faz_assert_same( $stats[3]['slug'], 'empty-3', 'a variant with no consents is zero-filled, not dropped' );
+	faz_assert_same( $stats[3]['total'], 0, 'zero-filled variant has total 0' );
+	faz_assert_same( $stats[3]['decisions'], 0, 'zero-filled variant has decisions 0' );
+	faz_assert_same( $stats[3]['accept_rate'], 0, 'zero-filled variant has accept_rate 0 (no divide-by-zero)' );
 
 	// Rows for slugs not requested must never leak into the output.
 	$slugs_out = array_map( function ( $r ) { return $r['slug']; }, $stats );

@@ -2494,6 +2494,39 @@ function _fazHideAgeConfirmError() {
 }
 
 /**
+ * The grant a blocked-embed placeholder was trying to make when the age gate
+ * intercepted it. When _fazAcceptService/_fazAcceptCategory call
+ * _fazAcceptCookies() and it returns false (age not yet affirmed), they roll
+ * back their state and park the original intent here so ticking the affirmation
+ * checkbox can replay the exact same grant — the visitor never has to re-click
+ * the embed. Cleared once replayed or when a reject/withdraw discards it.
+ *
+ * Shape: {type:'service', serviceId, categorySlug, trustService}
+ *      | {type:'category', categorySlug}
+ *
+ * @type {?Object}
+ */
+var _fazPendingAgeGatedGrant = null;
+
+/**
+ * Replay the grant parked by a placeholder when the age gate intercepted it,
+ * now that the visitor has affirmed their age. Clears the pending intent before
+ * replaying so the replayed accept (which passes the gate) cannot re-enter here.
+ *
+ * @returns {void}
+ */
+function _fazResumePendingAgeGatedGrant() {
+    var pending = _fazPendingAgeGatedGrant;
+    if (!pending) return;
+    _fazPendingAgeGatedGrant = null;
+    if (pending.type === 'service' && typeof window._fazAcceptService === 'function') {
+        window._fazAcceptService(pending.serviceId, pending.categorySlug, pending.trustService);
+    } else if (pending.type === 'category' && typeof window._fazAcceptCategory === 'function') {
+        window._fazAcceptCategory(pending.categorySlug);
+    }
+}
+
+/**
  * Announce the age-confirmation validation error through the shared polite live
  * region (WCAG 2.2 SC 4.1.3), mirroring _fazAnnounceConsent().
  *
@@ -2577,7 +2610,13 @@ function _fazRenderAgeConfirmation(group) {
         for (var i = 0; i < boxes.length; i++) {
             if (boxes[i] !== cb) boxes[i].checked = checked;
         }
-        if (checked) _fazHideAgeConfirmError();
+        if (checked) {
+            _fazHideAgeConfirmError();
+            // Age now affirmed: replay any grant a blocked-embed placeholder was
+            // parked on when the gate intercepted it, so the visitor need not
+            // re-click the embed.
+            _fazResumePendingAgeGatedGrant();
+        }
     });
 
     row.appendChild(cb);
@@ -2662,11 +2701,11 @@ function _fazActionClose() {
  *   rejection would be both unlawful and a dark pattern). The opt-out persists
  *   with choice "custom" (to avoid granting every TCF vendor), so it cannot be
  *   distinguished by `choice` alone and needs this explicit flag.
- * @returns {false|undefined} Returns false when the age-gate intercepts the
- *   action (visitor under the configured minimum age); otherwise returns
- *   undefined. Callers such as _fazAcceptReject() and window._fazAcceptCategory
- *   check `=== false` to short-circuit downstream state changes when the gate
- *   fires.
+ * @returns {false|undefined} Returns false when the age gate intercepts the
+ *   action because age is not yet affirmed (the affirmation checkbox is
+ *   unticked); otherwise returns undefined. Callers such as _fazAcceptReject()
+ *   and window._fazAcceptCategory check `=== false` to short-circuit downstream
+ *   state changes when the gate fires.
  */
 function _fazAcceptCookies(choice = "all", ungated = false) {
     // Age gate (GDPR Art. 8): gate ONLY the accept/partial path, never reject
@@ -2682,6 +2721,12 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     if (_ageGateActive && !_fazIsAgeAffirmed()) {
         _fazShowAgeConfirmError();
         return false;
+    }
+    if (choice === 'reject' || ungated) {
+        // A reject/withdraw (or the ungated CCPA opt-out) discards any grant a
+        // placeholder parked waiting for age affirmation — the visitor chose not
+        // to grant it, so it must not later replay when a checkbox is ticked.
+        _fazPendingAgeGatedGrant = null;
     }
 
     // Past the age gate the choice WILL be recorded below, so announce the
@@ -6974,6 +7019,14 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
         _fazCleanupSyntheticToggle();
         _fazCategoriesBeforeConsent = null;
         _fazServicesBeforeConsent = null;
+        // Age gate intercepted: remember this exact grant so ticking the
+        // affirmation checkbox replays it without a second embed click.
+        _fazPendingAgeGatedGrant = {
+            type: 'service',
+            serviceId: serviceId,
+            categorySlug: categorySlug,
+            trustService: trustService
+        };
         return;
     }
 
@@ -7036,6 +7089,9 @@ window._fazAcceptCategory = function (categorySlug) {
         }
         _fazCategoriesBeforeConsent = null;
         _fazServicesBeforeConsent = null;
+        // Age gate intercepted: remember this exact grant so ticking the
+        // affirmation checkbox replays it without a second embed click.
+        _fazPendingAgeGatedGrant = { type: 'category', categorySlug: categorySlug };
         return;
     }
     _fazRemoveBanner();

@@ -452,8 +452,15 @@ class Cookie extends Store {
 	 *
 	 * This is public so the REST schema boundary and the model setter use the
 	 * exact same normalisation while still applying it twice as defence in
-	 * depth. Keeping the bool whitelist and multilingual-key rules here avoids
-	 * the two write paths drifting apart.
+	 * depth. Keeping the strict bool allowlist and multilingual-key rules here
+	 * avoids the two write paths drifting apart.
+	 *
+	 * `enabled` is a legal disclosure flag (it gates whether
+	 * render_transfer_disclosure() ever prints anything), so this deliberately
+	 * uses a strict ALLOWLIST rather than a lenient denylist: only an explicit
+	 * truthy value turns it on, everything else — including values we don't
+	 * recognise — resolves to false. That is the safer default for something
+	 * an admin must consciously opt into.
 	 *
 	 * @param mixed $data Raw transfer object or JSON string.
 	 * @return array{enabled:bool,countries:array,safeguard:array}
@@ -470,7 +477,7 @@ class Cookie extends Store {
 		$enabled = false;
 		if ( isset( $data['enabled'] ) ) {
 			$raw     = is_string( $data['enabled'] ) ? strtolower( trim( $data['enabled'] ) ) : $data['enabled'];
-			$enabled = ! in_array( $raw, array( false, 0, '0', '', 'false', 'no', 'off' ), true );
+			$enabled = in_array( $raw, array( true, 1, '1', 'true', 'yes', 'on' ), true );
 		}
 
 		return array(
