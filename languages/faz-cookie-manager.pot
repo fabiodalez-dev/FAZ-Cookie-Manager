@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-22T09:29:11+00:00\n"
+"POT-Creation-Date: 2026-07-22T10:20:35+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -44,27 +44,27 @@ msgid "Dashboard"
 msgstr ""
 
 #: admin/class-admin.php:223 admin/views/base.php:20
-#: admin/views/dashboard.php:163
+#: admin/views/dashboard.php:185
 msgid "Cookie Banner"
 msgstr ""
 
 #: admin/class-admin.php:228 admin/views/base.php:21
-#: frontend/class-frontend.php:1830
+#: frontend/class-frontend.php:1915
 msgid "Cookies"
 msgstr ""
 
 #: admin/class-admin.php:233 admin/views/base.php:22
-#: admin/views/dashboard.php:171 admin/views/settings.php:178
+#: admin/views/dashboard.php:193 admin/views/settings.php:193
 msgid "Consent Logs"
 msgstr ""
 
 #: admin/class-admin.php:238 admin/views/base.php:23
-#: admin/views/dashboard.php:167 admin/views/system-status.php:78
+#: admin/views/dashboard.php:189 admin/views/system-status.php:78
 msgid "Google Consent Mode"
 msgstr ""
 
 #: admin/class-admin.php:243 admin/views/base.php:24
-#: admin/views/dashboard.php:175
+#: admin/views/dashboard.php:197
 msgid "Languages"
 msgstr ""
 
@@ -82,7 +82,7 @@ msgid "Cookie Policy"
 msgstr ""
 
 #: admin/class-admin.php:263 admin/class-admin.php:2218 admin/views/base.php:25
-#: admin/views/dashboard.php:179 includes/blocks/editor.js:27
+#: admin/views/dashboard.php:201 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
 msgstr ""
@@ -1654,7 +1654,7 @@ msgid "Too many requests. Please slow down."
 msgstr ""
 
 #: admin/modules/banners/api/class-api.php:760
-#: admin/modules/consentlogs/api/class-api.php:266
+#: admin/modules/consentlogs/api/class-api.php:344
 #: admin/modules/cookies/api/class-api-controller.php:291
 #: admin/modules/settings/api/class-api.php:430
 msgid "Limit results to those matching a string."
@@ -1709,55 +1709,59 @@ msgstr ""
 msgid "Number of days to look back."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:201
+#: admin/modules/consentlogs/api/class-api.php:123
+msgid "Look-back window in days; 0 means all time."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:279
 msgid "Consent log not found."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:249
+#: admin/modules/consentlogs/api/class-api.php:327
 #: admin/modules/cookies/api/class-api-controller.php:274
 #: admin/modules/settings/api/class-api.php:413
 msgid "Current page of the collection."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:257
+#: admin/modules/consentlogs/api/class-api.php:335
 #: admin/modules/cookies/api/class-api-controller.php:282
 #: admin/modules/settings/api/class-api.php:421
 msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:272
+#: admin/modules/consentlogs/api/class-api.php:350
 msgid "Filter by consent status."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:292
+#: admin/modules/consentlogs/api/class-api.php:370
 msgid "Log ID."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:298
+#: admin/modules/consentlogs/api/class-api.php:376
 msgid "Unique consent ID."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:303
+#: admin/modules/consentlogs/api/class-api.php:381
 msgid "Consent status."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:308
+#: admin/modules/consentlogs/api/class-api.php:386
 msgid "Consent categories."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:313
+#: admin/modules/consentlogs/api/class-api.php:391
 msgid "Hashed visitor IP."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:319
+#: admin/modules/consentlogs/api/class-api.php:397
 msgid "Visitor user agent."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:325
+#: admin/modules/consentlogs/api/class-api.php:403
 msgid "Page URL where consent was given."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:330
+#: admin/modules/consentlogs/api/class-api.php:408
 msgid "Date the consent was logged."
 msgstr ""
 
@@ -1772,43 +1776,43 @@ msgid "cookies"
 msgstr ""
 
 #. translators: %s: recipient country name.
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:530
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:471
 #, php-format
 msgid "Transfers personal data to: %s"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:531
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:472
 msgid "Transfers personal data outside the EU/EEA"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:738
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:760
 msgid "International data transfers"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:739
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:761
 msgid "Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:749
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:762
 msgid "Recipient country:"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:751
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:763
 msgid "transfers personal data outside the EU/EEA"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:754
-#: frontend/modules/shortcodes/class-shortcodes.php:1078
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:764
+#: frontend/modules/shortcodes/class-shortcodes.php:1087
 msgid "Safeguard:"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:861
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:977
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:922
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1038
 msgid "None declared."
 msgstr ""
 
 #. translators: 1: jurisdiction, 2: lang
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1042
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1103
 #, php-format
 msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" and language \"%2$s\". Configure the generator under FAZ Cookie Manager → Cookie Policy."
 msgstr ""
@@ -2770,7 +2774,7 @@ msgstr ""
 msgid "Notice Title"
 msgstr ""
 
-#: admin/views/banner.php:277 frontend/class-frontend.php:1825
+#: admin/views/banner.php:277 frontend/class-frontend.php:1910
 #: frontend/modules/banner-rest/class-banner-rest.php:494
 msgid "We value your privacy"
 msgstr ""
@@ -3071,7 +3075,7 @@ msgstr ""
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr ""
 
-#: admin/views/banner.php:699 frontend/class-frontend.php:1827
+#: admin/views/banner.php:699 frontend/class-frontend.php:1912
 #: frontend/modules/banner-rest/class-banner-rest.php:496
 msgid "Opt-out Preferences"
 msgstr ""
@@ -3202,7 +3206,7 @@ msgstr ""
 msgid "Brazil (LGPD)"
 msgstr ""
 
-#: admin/views/banner.php:900 admin/views/settings.php:352
+#: admin/views/banner.php:900 admin/views/settings.php:367
 msgid "Australia"
 msgstr ""
 
@@ -3918,7 +3922,7 @@ msgstr ""
 msgid "Consent Statistics &mdash; %s"
 msgstr ""
 
-#: admin/views/dashboard.php:119
+#: admin/views/dashboard.php:119 admin/views/dashboard.php:162
 msgid "Last 30 Days"
 msgstr ""
 
@@ -3942,11 +3946,23 @@ msgstr ""
 msgid "Per-Category Acceptance"
 msgstr ""
 
-#: admin/views/dashboard.php:153
+#. translators: %s: date range label injected by JS
+#: admin/views/dashboard.php:161
+#, php-format
+msgid "A/B Test Results &mdash; %s"
+msgstr ""
+
+#: admin/views/dashboard.php:168 admin/views/geo-routing.php:56
+#: admin/views/geo-routing.php:67 admin/views/geo-routing.php:78
+#: admin/views/geo-routing.php:123 admin/views/geo-routing.php:134
+msgid "Loading…"
+msgstr ""
+
+#: admin/views/dashboard.php:175
 msgid "Quick Links"
 msgstr ""
 
-#: admin/views/dashboard.php:159
+#: admin/views/dashboard.php:181
 msgid "Manage Cookies"
 msgstr ""
 
@@ -4089,12 +4105,6 @@ msgstr ""
 msgid "PIPL cross-border"
 msgstr ""
 
-#: admin/views/geo-routing.php:56 admin/views/geo-routing.php:67
-#: admin/views/geo-routing.php:78 admin/views/geo-routing.php:123
-#: admin/views/geo-routing.php:134
-msgid "Loading…"
-msgstr ""
-
 #: admin/views/geo-routing.php:64
 msgid "Each country (and US state with privacy law) maps to a specific rule-set that defines banner behaviour, default signals, and UI flags. Click any row to inspect the resolved ruleset configuration."
 msgstr ""
@@ -4149,7 +4159,7 @@ msgstr ""
 msgid "Global Vendor List (IAB TCF 2.3)"
 msgstr ""
 
-#: admin/views/gvl.php:15 admin/views/settings.php:324
+#: admin/views/gvl.php:15 admin/views/settings.php:339
 msgid "Update GVL Now"
 msgstr ""
 
@@ -4331,409 +4341,429 @@ msgstr ""
 msgid "Keep the page fully cacheable by LiteSpeed, QUIC.cloud, Varnish, Nginx FastCGI or WP Rocket. The plugin stops emitting <code>no-cache</code>/<code>no-store</code> headers and the <code>DONOTCACHEPAGE</code> constant for anonymous visitors, so the static HTML is cached and the banner runs entirely client-side from the consent cookie. <strong>Only enable this if your banner output does NOT vary by visitor country.</strong> With IAB TCF, geo-targeting, country-targeted banners or runtime geo-routing active, the same cached HTML would be served to every region (e.g. an EU TCF <code>gdprApplies=true</code> page reaching a US visitor) — keep this OFF in that case, or vary the cache by country at the CDN."
 msgstr ""
 
-#: admin/views/settings.php:99 admin/views/system-status.php:88
-msgid "Cross-Domain Consent"
+#: admin/views/settings.php:98
+msgid "A/B test banner variants"
+msgstr ""
+
+#: admin/views/settings.php:100
+msgid "Run two or more of your existing banners at the same time. Each visitor is randomly assigned one variant and keeps it across visits, and the acceptance rate per variant is reported on the Dashboard so you can optimise the consent experience with evidence. Every variant you pick stays independently compliant — this only chooses among banners you already built, it never changes their buttons or defaults. <strong>Requires Cache Compatibility Mode above to be OFF</strong>, because a per-visitor split cannot run behind full-page caching."
+msgstr ""
+
+#: admin/views/settings.php:103
+msgid "Variants in the test group"
+msgstr ""
+
+#: admin/views/settings.php:104
+msgid "Select two or more active banners to include in the test. Only active banners can be used as variants."
 msgstr ""
 
 #: admin/views/settings.php:106
+msgid "Loading banners…"
+msgstr ""
+
+#: admin/views/settings.php:114 admin/views/system-status.php:88
+msgid "Cross-Domain Consent"
+msgstr ""
+
+#: admin/views/settings.php:121
 msgid "Enable cross-domain consent forwarding"
 msgstr ""
 
-#: admin/views/settings.php:108
+#: admin/views/settings.php:123
 msgid "Share consent choices across multiple domains. When a visitor accepts or rejects cookies on one domain, the same choice is forwarded to all configured target domains via secure postMessage."
 msgstr ""
 
-#: admin/views/settings.php:111
+#: admin/views/settings.php:126
 msgid "Target Domains"
 msgstr ""
 
-#: admin/views/settings.php:112
+#: admin/views/settings.php:127
 msgid "One per line: https://shop.example.com"
 msgstr ""
 
-#: admin/views/settings.php:113
+#: admin/views/settings.php:128
 msgid "Full URLs of other sites that should receive consent state. Each site must also have FAZ Cookie Manager installed. One URL per line."
 msgstr ""
 
-#: admin/views/settings.php:120 admin/views/system-status.php:80
+#: admin/views/settings.php:135 admin/views/system-status.php:80
 msgid "Pageview Tracking"
 msgstr ""
 
-#: admin/views/settings.php:127
+#: admin/views/settings.php:142
 msgid "Enable pageview and banner interaction tracking"
 msgstr ""
 
-#: admin/views/settings.php:129
+#: admin/views/settings.php:144
 msgid "Tracks pageviews and banner interactions (accept, reject, settings) for the dashboard analytics. Data is aggregate-only: it sends the page URL and title with no per-visitor identifier or cookie, so the events cannot be linked across pages or sessions. Counts are stored first-party in your own database. Disable for stricter compliance."
 msgstr ""
 
-#: admin/views/settings.php:136
+#: admin/views/settings.php:151
 msgid "Script Blocking"
 msgstr ""
 
-#: admin/views/settings.php:140
+#: admin/views/settings.php:155
 msgid "Pages Excluded from Script Blocking"
 msgstr ""
 
-#: admin/views/settings.php:141
+#: admin/views/settings.php:156
 msgid "One per line: /checkout/* or /cart/*"
 msgstr ""
 
-#: admin/views/settings.php:142
+#: admin/views/settings.php:157
 msgid "URL patterns where script blocking is disabled (banner still shows). One per line, supports wildcards (e.g. <code>/checkout/*</code>)."
 msgstr ""
 
-#: admin/views/settings.php:145
+#: admin/views/settings.php:160
 msgid "Script Blocking Exceptions"
 msgstr ""
 
-#: admin/views/settings.php:146
+#: admin/views/settings.php:161
 msgid "One per line: googleapis.com/youtube/v3, recaptcha, my-inline-script-id"
 msgstr ""
 
-#: admin/views/settings.php:147
+#: admin/views/settings.php:162
 msgid "Scripts that should never be blocked, even before consent. One per line. Accepts three types of pattern:<br>- <strong>URL fragment</strong> (contains <code>.</code> or <code>/</code>): matched against the script's <code>src</code> or related URL attribute, e.g. <code>googleapis.com/youtube/v3</code>.<br>- <strong>Script ID</strong> (no dots/slashes): matched against the <code>id</code> attribute of the script tag, e.g. <code>my-product-form-data</code>.<br>- <strong>CSS class</strong> (no dots/slashes): matched against the script's <code>class</code> attribute, e.g. <code>recaptcha</code>.<br>These exceptions bypass blocking entirely. Use them only for scripts that genuinely do not set tracking cookies. <strong>Be specific</strong> to avoid accidentally unblocking trackers.<br><strong>Tip:</strong> You can also add <code>class=\"faz-skip\"</code> directly to any script tag to exclude it without adding anything here — no configuration needed."
 msgstr ""
 
-#: admin/views/settings.php:153
+#: admin/views/settings.php:168
 msgid "Advanced inline CSS URL blocking"
 msgstr ""
 
-#: admin/views/settings.php:155
+#: admin/views/settings.php:170
 msgid "Optional high-coverage mode for CSS-based third-party loads. The default blocker already handles server-rendered <code>&lt;style&gt;</code> tags and direct <code>HTMLStyleElement</code> updates. Enable this only if you have confirmed that a theme, page builder, or CSS-in-JS library injects blocked <code>url()</code> or <code>@import</code> rules through broader runtime channels such as <code>Element.innerHTML</code>, <code>insertAdjacentHTML</code>, <code>CharacterData</code> edits inside a style tag, or Constructable Stylesheets. This strengthens pre-consent blocking but hooks global browser APIs and may affect builders, editors, icon fonts, or CSS-in-JS libraries. Test the site before enabling in production."
 msgstr ""
 
-#: admin/views/settings.php:159
+#: admin/views/settings.php:174
 msgid "Payment gateway scripts (e-commerce)"
 msgstr ""
 
-#: admin/views/settings.php:160
+#: admin/views/settings.php:175
 msgid "<strong>Only enable a gateway if your site takes payments.</strong> A payment provider's SDK (PayPal, Stripe, …) can set cookies and fingerprint the visitor, so it is blocked until consent by default. Enabling a gateway here loads its <em>payment</em> scripts before consent across your site — needed for payment forms that live outside a WooCommerce checkout (Forminator, Paid Memberships Pro, Easy Digital Downloads, Give, …). This is a compliance decision and <strong>your responsibility</strong> for your jurisdiction. A real WooCommerce checkout/cart page already loads these automatically as strictly necessary; a gateway's marketing pixel (e.g. PayPal's <code>pptm.js</code>) stays blocked regardless."
 msgstr ""
 
 #. translators: %s: payment gateway name, e.g. PayPal.
-#: admin/views/settings.php:167
+#: admin/views/settings.php:182
 #, php-format
 msgid "Allow %s payment scripts before consent"
 msgstr ""
 
-#: admin/views/settings.php:185
+#: admin/views/settings.php:200
 msgid "Enable consent logging"
 msgstr ""
 
-#: admin/views/settings.php:187
+#: admin/views/settings.php:202
 msgid "Records each visitor's consent choice (accepted, rejected, or partial) for GDPR accountability. Required by Art. 7(1) GDPR to demonstrate that consent was given."
 msgstr ""
 
-#: admin/views/settings.php:190
+#: admin/views/settings.php:205
 msgid "Retention Period (months)"
 msgstr ""
 
-#: admin/views/settings.php:192
+#: admin/views/settings.php:207
 msgid "How long consent records are kept before automatic deletion. Most DPAs recommend 12 months. Logs older than this period are purged daily."
 msgstr ""
 
-#: admin/views/settings.php:199
+#: admin/views/settings.php:214
 msgid "Scanner"
 msgstr ""
 
-#: admin/views/settings.php:203
+#: admin/views/settings.php:218
 msgid "Max Pages to Scan"
 msgstr ""
 
-#: admin/views/settings.php:205
+#: admin/views/settings.php:220
 msgid "Maximum number of pages the cookie scanner will crawl. Higher values find more cookies but take longer. 100 pages is sufficient for most sites."
 msgstr ""
 
-#: admin/views/settings.php:211
+#: admin/views/settings.php:226
 msgid "Scanner Debug Mode"
 msgstr ""
 
-#: admin/views/settings.php:213
+#: admin/views/settings.php:228
 msgid "When enabled, the scanner logs every categorization decision. Download logs from the Cookies page."
 msgstr ""
 
-#: admin/views/settings.php:220
+#: admin/views/settings.php:235
 msgid "Automatic Scanning"
 msgstr ""
 
-#: admin/views/settings.php:227
+#: admin/views/settings.php:242
 msgid "Enable automatic cookie scanning"
 msgstr ""
 
-#: admin/views/settings.php:229
+#: admin/views/settings.php:244
 msgid "Automatically scan your site for new cookies on a schedule. You will receive an email notification if new uncategorized cookies are found."
 msgstr ""
 
-#: admin/views/settings.php:232
+#: admin/views/settings.php:247
 msgid "Scan Frequency"
 msgstr ""
 
-#: admin/views/settings.php:234
+#: admin/views/settings.php:249
 msgid "Daily"
 msgstr ""
 
-#: admin/views/settings.php:235 includes/class-activator.php:200
+#: admin/views/settings.php:250 includes/class-activator.php:200
 msgid "Weekly"
 msgstr ""
 
-#: admin/views/settings.php:236
+#: admin/views/settings.php:251
 msgid "Monthly"
 msgstr ""
 
-#: admin/views/settings.php:238
+#: admin/views/settings.php:253
 msgid "How often the scanner runs automatically. Weekly is recommended for most sites."
 msgstr ""
 
-#: admin/views/settings.php:245
+#: admin/views/settings.php:260
 msgid "Microsoft Consent APIs"
 msgstr ""
 
-#: admin/views/settings.php:252
+#: admin/views/settings.php:267
 msgid "Microsoft UET Consent Mode"
 msgstr ""
 
-#: admin/views/settings.php:254
+#: admin/views/settings.php:269
 msgid "Signals consent status to Microsoft Advertising (Bing Ads) via the UET tag. Enable if you use Microsoft Advertising and need to respect consent for ad tracking."
 msgstr ""
 
-#: admin/views/settings.php:260
+#: admin/views/settings.php:275
 msgid "Microsoft Clarity Consent API"
 msgstr ""
 
-#: admin/views/settings.php:262
+#: admin/views/settings.php:277
 msgid "Signals consent status to Microsoft Clarity (heatmaps and session recordings). Enable if you use Clarity and want it to pause tracking until consent is given."
 msgstr ""
 
-#: admin/views/settings.php:269
+#: admin/views/settings.php:284
 msgid "Age Verification"
 msgstr ""
 
-#: admin/views/settings.php:276
+#: admin/views/settings.php:291
 msgid "Require age verification for consent"
 msgstr ""
 
-#: admin/views/settings.php:278
+#: admin/views/settings.php:293
 msgid "Under GDPR Art. 8, children below the minimum age cannot give valid consent for data processing. When enabled, the visitor sees an age-confirmation checkbox directly above the Accept/Reject buttons; it gates only the Accept path — Reject stays available and is never blocked, and the checkbox is never pre-ticked."
 msgstr ""
 
-#: admin/views/settings.php:279
+#: admin/views/settings.php:294
 msgid "This is a self-declared age affirmation only. It is NOT a substitute for verifying parental consent for under-age children under GDPR Art. 8(2), which requires separate reasonable-efforts verification this feature does not provide."
 msgstr ""
 
-#: admin/views/settings.php:282
+#: admin/views/settings.php:297
 msgid "Minimum Age"
 msgstr ""
 
-#: admin/views/settings.php:284
+#: admin/views/settings.php:299
 msgid "GDPR default is 16. Some EU member states allow 13-15 (e.g. Italy 14, Spain 14, France 15, Germany 16). Check your local law."
 msgstr ""
 
-#: admin/views/settings.php:291
+#: admin/views/settings.php:306
 msgid "IAB TCF"
 msgstr ""
 
-#: admin/views/settings.php:298
+#: admin/views/settings.php:313
 msgid "Enable IAB TCF v2.3"
 msgstr ""
 
-#: admin/views/settings.php:300
+#: admin/views/settings.php:315
 msgid "Enables the IAB Transparency & Consent Framework. Required if you work with ad-tech vendors that need a standardised TC String for programmatic advertising in the EU."
 msgstr ""
 
-#: admin/views/settings.php:303
+#: admin/views/settings.php:318
 msgid "Publisher Country Code"
 msgstr ""
 
-#: admin/views/settings.php:305
+#: admin/views/settings.php:320
 msgid "ISO 3166-1 alpha-2 code of the publisher's country (e.g. IT, DE, FR). Used in the TCF consent string."
 msgstr ""
 
-#: admin/views/settings.php:308
+#: admin/views/settings.php:323
 msgid "CMP ID"
 msgstr ""
 
-#: admin/views/settings.php:310
+#: admin/views/settings.php:325
 msgid "Your registered IAB CMP ID (<a href=\"https://iabeurope.eu/cmp-list/\" target=\"_blank\" rel=\"noopener noreferrer\">IAB CMP List</a>). With ID&nbsp;0 the banner and cookie blocking work normally, but ad-tech vendors will ignore the TC String. Google Consent Mode v2 works regardless of CMP registration."
 msgstr ""
 
-#: admin/views/settings.php:316
+#: admin/views/settings.php:331
 msgid "Purpose One Treatment"
 msgstr ""
 
-#: admin/views/settings.php:318
+#: admin/views/settings.php:333
 msgid "Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a country where Purpose 1 is not required)."
 msgstr ""
 
-#: admin/views/settings.php:322
+#: admin/views/settings.php:337
 msgid "Loading GVL status..."
 msgstr ""
 
-#: admin/views/settings.php:331 admin/views/system-status.php:82
+#: admin/views/settings.php:346 admin/views/system-status.php:82
 msgid "Geo-Targeting"
 msgstr ""
 
-#: admin/views/settings.php:338
+#: admin/views/settings.php:353
 msgid "Enable geo-targeted banner display"
 msgstr ""
 
-#: admin/views/settings.php:340
+#: admin/views/settings.php:355
 msgid "Show the cookie banner only to visitors from specific regions. Requires a MaxMind GeoLite2 database (configured below) or Cloudflare CF-IPCountry header."
 msgstr ""
 
-#: admin/views/settings.php:343
+#: admin/views/settings.php:358
 msgid "Target Regions"
 msgstr ""
 
-#: admin/views/settings.php:347
+#: admin/views/settings.php:362
 msgid "EU / EEA"
 msgstr ""
 
-#: admin/views/settings.php:348
+#: admin/views/settings.php:363
 msgid "United Kingdom"
 msgstr ""
 
-#: admin/views/settings.php:349
+#: admin/views/settings.php:364
 msgid "United States"
 msgstr ""
 
-#: admin/views/settings.php:350
+#: admin/views/settings.php:365
 msgid "Canada"
 msgstr ""
 
-#: admin/views/settings.php:351
+#: admin/views/settings.php:366
 msgid "Brazil"
 msgstr ""
 
-#: admin/views/settings.php:353
+#: admin/views/settings.php:368
 msgid "Japan"
 msgstr ""
 
-#: admin/views/settings.php:354
+#: admin/views/settings.php:369
 msgid "Switzerland"
 msgstr ""
 
-#: admin/views/settings.php:364
+#: admin/views/settings.php:379
 msgid "Select which regions should see the cookie banner. Visitors from other regions will not see it (if \"Hide banner\" is selected below)."
 msgstr ""
 
-#: admin/views/settings.php:367
+#: admin/views/settings.php:382
 msgid "Non-target visitors"
 msgstr ""
 
-#: admin/views/settings.php:369
+#: admin/views/settings.php:384
 msgid "Show banner anyway (safest)"
 msgstr ""
 
-#: admin/views/settings.php:370
+#: admin/views/settings.php:385
 msgid "Hide banner (scripts load normally)"
 msgstr ""
 
-#: admin/views/settings.php:372
+#: admin/views/settings.php:387
 msgid "What happens when a visitor is from outside the target regions. \"Show banner anyway\" is the safest option and recommended for sites with global audiences."
 msgstr ""
 
-#: admin/views/settings.php:379
+#: admin/views/settings.php:394
 msgid "GeoIP Database (MaxMind GeoLite2)"
 msgstr ""
 
-#: admin/views/settings.php:383
+#: admin/views/settings.php:398
 msgid "Geo-targeting requires a MaxMind GeoLite2 database. <a href=\"https://www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Get a free license key</a>."
 msgstr ""
 
-#: admin/views/settings.php:386
+#: admin/views/settings.php:401
 msgid "Database edition"
 msgstr ""
 
-#: admin/views/settings.php:388
+#: admin/views/settings.php:403
 msgid "Country &#8212; country-level only (recommended)"
 msgstr ""
 
-#: admin/views/settings.php:389
+#: admin/views/settings.php:404
 msgid "City &#8212; adds region / state detection"
 msgstr ""
 
-#: admin/views/settings.php:392
+#: admin/views/settings.php:407
 msgid "<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only &#8212; enough for country-based banner targeting and most per-jurisdiction rules. <strong>City</strong> (~60&#8211;110 MB) additionally resolves the region / province / state, which a few rules need: sub-national regimes such as <em>Quebec Law 25</em> apply only inside one region of a country, so without City (or a Cloudflare <code>CF-Region-Code</code> header) the plugin can only see &#8220;Canada&#8221; and cannot route that visitor to the Quebec ruleset. Choose City only if you rely on region-level routing &#8212; it is a much larger download. Changing this and clicking &#8220;Update Database&#8221; replaces the installed database."
 msgstr ""
 
-#: admin/views/settings.php:396
+#: admin/views/settings.php:411
 msgid "MaxMind License Key"
 msgstr ""
 
-#: admin/views/settings.php:397
+#: admin/views/settings.php:412
 msgid "Enter your MaxMind license key"
 msgstr ""
 
-#: admin/views/settings.php:401
+#: admin/views/settings.php:416
 msgid "Update Database"
 msgstr ""
 
-#: admin/views/settings.php:407
+#: admin/views/settings.php:422
 msgid "Data Management"
 msgstr ""
 
-#: admin/views/settings.php:414
+#: admin/views/settings.php:429
 msgid "Remove all data on uninstall"
 msgstr ""
 
-#: admin/views/settings.php:416
+#: admin/views/settings.php:431
 msgid "When enabled, deleting the plugin will permanently remove ALL data: cookies, categories, consent logs, pageviews, banner settings, and scan history. Keep this OFF if you plan to reinstall or update the plugin."
 msgstr ""
 
-#: admin/views/settings.php:424
+#: admin/views/settings.php:439
 msgid "Paid Memberships Pro integration"
 msgstr ""
 
-#: admin/views/settings.php:428
+#: admin/views/settings.php:443
 msgid "Implement a \"Pay-or-Accept\" model: logged-in members on selected PMP levels skip the cookie banner and have consent <strong>programmatically recorded as granted for all categories</strong> via a server-side cookie. Marketing, analytics, functional and other non-necessary scripts will run for them without an explicit banner interaction. Free visitors continue to see the standard banner and consent flow."
 msgstr ""
 
-#: admin/views/settings.php:431
+#: admin/views/settings.php:446
 msgid "Legal note:"
 msgstr ""
 
-#: admin/views/settings.php:432
+#: admin/views/settings.php:447
 msgid "Because this option grants consent on behalf of the member (it does not merely hide the banner), you must disclose it clearly in your Terms of Service, Privacy Policy, and at the point of subscription so the membership fee is understood as a genuine alternative to giving consent (EDPB Opinion 08/2024). Members must remain able to revoke or adjust their consent at any time via the standard revisit widget."
 msgstr ""
 
-#: admin/views/settings.php:438
+#: admin/views/settings.php:453
 msgid "Enable PMP integration"
 msgstr ""
 
-#: admin/views/settings.php:442
+#: admin/views/settings.php:457
 msgid "Exempt membership level IDs"
 msgstr ""
 
-#: admin/views/settings.php:443
+#: admin/views/settings.php:458
 msgid "e.g. 2, 3, 5"
 msgstr ""
 
-#: admin/views/settings.php:445
+#: admin/views/settings.php:460
 msgid "Comma-separated PMP level IDs whose members should be exempted. Find level IDs in <strong>Memberships → Settings → Levels</strong>. Leave empty to disable exemption."
 msgstr ""
 
-#: admin/views/settings.php:454
+#: admin/views/settings.php:469
 msgid "Force re-consent"
 msgstr ""
 
-#: admin/views/settings.php:458
+#: admin/views/settings.php:473
 msgid "Show the cookie banner again to all returning visitors. Useful when you change which cookies or services are used on your site (e.g. new AdSense tags, added analytics) and want prior visitors to renew their consent before those services run."
 msgstr ""
 
-#: admin/views/settings.php:461
+#: admin/views/settings.php:476
 msgid "Current consent revision"
 msgstr ""
 
-#: admin/views/settings.php:465
+#: admin/views/settings.php:480
 msgid "Invalidate all consents"
 msgstr ""
 
-#: admin/views/settings.php:468
+#: admin/views/settings.php:483
 msgid "Visitors whose stored consent has a lower revision will see the banner again on their next visit. This does not affect the current page load."
 msgstr ""
 
-#: admin/views/settings.php:476
+#: admin/views/settings.php:491
 msgid "Save Settings"
 msgstr ""
 
@@ -4994,51 +5024,51 @@ msgid "Manage cookie preferences"
 msgstr ""
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:674
+#: frontend/class-frontend.php:675
 msgid "{name} enabled, disable {name}"
 msgstr ""
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:676
+#: frontend/class-frontend.php:677
 msgid "{name} disabled, enable {name}"
 msgstr ""
 
-#: frontend/class-frontend.php:1826
+#: frontend/class-frontend.php:1911
 #: frontend/modules/banner-rest/class-banner-rest.php:495
 msgid "Your cookie preferences have been saved."
 msgstr ""
 
-#: frontend/class-frontend.php:1828
+#: frontend/class-frontend.php:1913
 #: frontend/modules/banner-rest/class-banner-rest.php:497
 msgid "Customise Consent Preferences"
 msgstr ""
 
-#: frontend/class-frontend.php:1829
+#: frontend/class-frontend.php:1914
 #: frontend/modules/banner-rest/class-banner-rest.php:498
 msgid "Service consent"
 msgstr ""
 
-#: frontend/class-frontend.php:1831
+#: frontend/class-frontend.php:1916
 msgid "Cookie consent"
 msgstr ""
 
-#: frontend/class-frontend.php:1832
+#: frontend/class-frontend.php:1917
 #: frontend/modules/banner-rest/class-banner-rest.php:499
 msgid "Vendor consent"
 msgstr ""
 
-#: frontend/class-frontend.php:1833
+#: frontend/class-frontend.php:1918
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr ""
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:1837
+#: frontend/class-frontend.php:1922
 #: frontend/modules/banner-rest/class-banner-rest.php:504
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr ""
 
-#: frontend/class-frontend.php:1838
+#: frontend/class-frontend.php:1923
 #: frontend/modules/banner-rest/class-banner-rest.php:505
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr ""
@@ -5087,15 +5117,15 @@ msgstr ""
 msgid "Show less"
 msgstr ""
 
-#: frontend/modules/shortcodes/class-shortcodes.php:645
+#: frontend/modules/shortcodes/class-shortcodes.php:647
 msgid "Data transfer"
 msgstr ""
 
-#: frontend/modules/shortcodes/class-shortcodes.php:1067
+#: frontend/modules/shortcodes/class-shortcodes.php:1076
 msgid "This cookie may transfer personal data to:"
 msgstr ""
 
-#: frontend/modules/shortcodes/class-shortcodes.php:1073
+#: frontend/modules/shortcodes/class-shortcodes.php:1082
 msgid "This cookie may transfer personal data to a country without an EU adequacy decision."
 msgstr ""
 
