@@ -641,8 +641,13 @@ class Shortcodes {
 			// never surface. Renders only when transfer.enabled is set.
 			$transfer_disclosure = $this->render_transfer_disclosure( $cookie );
 			if ( '' !== $transfer_disclosure ) {
+				// Resolve the row label in the banner language, matching the
+				// disclosure body (see render_transfer_disclosure()).
+				$switched       = $this->switch_to_banner_locale();
+				$transfer_label = esc_html__( 'Data transfer', 'faz-cookie-manager' );
+				$this->restore_banner_locale( $switched );
 				$table_body .= '<li class="faz-audit-transfer">';
-				$table_body .= '<div>' . esc_html__( 'Data transfer', 'faz-cookie-manager' ) . '</div>';
+				$table_body .= '<div>' . $transfer_label . '</div>';
 				$table_body .= '<div>' . $transfer_disclosure . '</div>';
 				$table_body .= '</li>';
 			}
@@ -1043,11 +1048,12 @@ class Shortcodes {
 	 * is a pure function of the cookie inventory (not the visitor's consent
 	 * state), so it is invariant across consent and Cache-Compatibility-Mode safe.
 	 *
-	 * The fixed labels use gettext directly (site locale). This is a deliberate,
-	 * documented divergence from routing them through translate_default_text():
-	 * that helper only translates admin-overridable *banner-content* defaults,
-	 * whereas these labels are fixed plugin strings that never live in the banner
-	 * config — direct gettext is the correct mechanism.
+	 * The fixed labels are resolved in the banner's active language via the same
+	 * switch_to_locale( faz_wp_locale( $this->language ) ) mechanism the banner
+	 * template generator (class-template::generate()) and the banner REST
+	 * endpoint use, so they follow the banner language exactly like the
+	 * multilingual country/safeguard values above — instead of resolving against
+	 * whatever request locale happens to be active.
 	 *
 	 * @param array $cookie Prepared cookie data (must include the 'transfer' key
 	 *                      from Cookie::get_prepared_data()).
@@ -1060,6 +1066,9 @@ class Shortcodes {
 		}
 		$country   = $this->resolve_transfer_text( isset( $transfer['countries'] ) ? $transfer['countries'] : array() );
 		$safeguard = $this->resolve_transfer_text( isset( $transfer['safeguard'] ) ? $transfer['safeguard'] : array() );
+
+		// Resolve the fixed labels in the banner language (see method docblock).
+		$switched = $this->switch_to_banner_locale();
 
 		$parts = array();
 		if ( '' !== $country ) {
@@ -1078,7 +1087,43 @@ class Shortcodes {
 				. esc_html__( 'Safeguard:', 'faz-cookie-manager' ) . ' '
 				. wp_kses( $safeguard, faz_allowed_html() ) . '</span>';
 		}
+
+		$this->restore_banner_locale( $switched );
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * Switch the WordPress locale to the banner's active language so fixed
+	 * __()/esc_html__() plugin strings resolve in that language, mirroring
+	 * class-template::generate() and the banner REST endpoint (single source of
+	 * truth: faz_wp_locale()). No-op when the helpers are unavailable or the
+	 * target locale already matches the active one — so the common case where
+	 * the caller has already switched stays a byte-identical no-op.
+	 *
+	 * @return bool Whether a switch happened; pass it to restore_banner_locale().
+	 */
+	private function switch_to_banner_locale() {
+		if ( ! function_exists( 'faz_wp_locale' ) || ! function_exists( 'switch_to_locale' ) ) {
+			return false;
+		}
+		$target = faz_wp_locale( (string) $this->language );
+		if ( '' === $target || ( function_exists( 'get_locale' ) && $target === get_locale() ) ) {
+			return false;
+		}
+		return (bool) switch_to_locale( $target );
+	}
+
+	/**
+	 * Pair switch_to_banner_locale(): restore the previous locale when a switch
+	 * actually happened.
+	 *
+	 * @param bool $switched Return value of switch_to_banner_locale().
+	 * @return void
+	 */
+	private function restore_banner_locale( $switched ) {
+		if ( $switched && function_exists( 'restore_previous_locale' ) ) {
+			restore_previous_locale();
+		}
 	}
 
 }

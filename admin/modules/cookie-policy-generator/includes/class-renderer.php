@@ -460,6 +460,18 @@ class Renderer {
 			$col_desc     = esc_html__( 'Description', 'faz-cookie-manager' );
 			$cookies_lbl  = esc_html__( 'cookies', 'faz-cookie-manager' );
 
+			// Third-country (Schrems II) per-row indicator labels, resolved once
+			// in the policy language via the same switch_to_locale( faz_wp_locale(
+			// $lang ) ) mechanism the banner template generator and REST endpoint
+			// use, so the fixed labels follow $lang like the country/safeguard
+			// values do — instead of the ambient request locale. Precomputed
+			// outside the loop so a flagged cookie costs no per-row locale switch.
+			$transfer_switched = self::switch_to_policy_locale( $lang );
+			/* translators: %s: recipient country name. */
+			$transfer_to_fmt  = esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' );
+			$transfer_outside = esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+			self::restore_policy_locale( $transfer_switched );
+
 			$parts = array();
 			foreach ( $grouped as $cat_name => $items ) {
 				$cookie_count = count( $items );
@@ -526,9 +538,8 @@ class Renderer {
 					if ( ! empty( $transfer['enabled'] ) ) {
 						$t_country = self::resolve_i18n_array( $transfer['countries'], $lang );
 						$indicator = ( '' !== $t_country )
-							/* translators: %s: recipient country name. */
-							? sprintf( esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' ), esc_html( $t_country ) )
-							: esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+							? sprintf( $transfer_to_fmt, esc_html( $t_country ) )
+							: $transfer_outside;
 						$desc_cell .= '<small class="faz-cookie-policy-transfer">' . $indicator . '</small>';
 					}
 					$parts[]  = '<td data-label="' . $col_desc . '">' . $desc_cell . '</td>';
@@ -726,6 +737,14 @@ class Renderer {
 	 * Returns '' when no cookie is flagged (empty-state), so the section and its
 	 * accountability fingerprint are absent on a default-OFF install.
 	 *
+	 * The fixed section labels are resolved in the policy language via the same
+	 * switch_to_locale( faz_wp_locale( $lang ) ) mechanism the banner template
+	 * generator (class-template::generate()) and the banner REST endpoint use,
+	 * so they follow $lang like the per-cookie country/safeguard values do —
+	 * instead of resolving against the ambient request locale (which differs
+	 * from $lang when the policy is rendered via the [faz_cookie_policy_complete
+	 * lang="…"] attribute or the preview REST endpoint).
+	 *
 	 * @param string $lang Active policy language.
 	 * @return string HTML section, or '' when nothing is flagged.
 	 */
@@ -735,8 +754,15 @@ class Renderer {
 			return '';
 		}
 
-		$heading = esc_html__( 'International data transfers', 'faz-cookie-manager' );
-		$intro   = esc_html__( 'Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+		// Resolve every fixed label in the policy language up front (see docblock),
+		// then build the markup after restoring the locale.
+		$switched         = self::switch_to_policy_locale( $lang );
+		$heading          = esc_html__( 'International data transfers', 'faz-cookie-manager' );
+		$intro            = esc_html__( 'Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+		$recipient_label  = esc_html__( 'Recipient country:', 'faz-cookie-manager' );
+		$outside_label    = esc_html__( 'transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+		$safeguard_label  = esc_html__( 'Safeguard:', 'faz-cookie-manager' );
+		self::restore_policy_locale( $switched );
 
 		$parts   = array();
 		$parts[] = '<section class="faz-cookie-policy-transfers">';
@@ -746,18 +772,53 @@ class Renderer {
 		foreach ( $rows as $r ) {
 			$line = '<code>' . esc_html( (string) $r['name'] ) . '</code>';
 			if ( '' !== (string) $r['country'] ) {
-				$line .= ' &mdash; ' . esc_html__( 'Recipient country:', 'faz-cookie-manager' ) . ' ' . esc_html( (string) $r['country'] );
+				$line .= ' &mdash; ' . $recipient_label . ' ' . esc_html( (string) $r['country'] );
 			} else {
-				$line .= ' &mdash; ' . esc_html__( 'transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+				$line .= ' &mdash; ' . $outside_label;
 			}
 			if ( '' !== (string) $r['safeguard'] ) {
-				$line .= '. ' . esc_html__( 'Safeguard:', 'faz-cookie-manager' ) . ' ' . wp_kses_post( (string) $r['safeguard'] );
+				$line .= '. ' . $safeguard_label . ' ' . wp_kses_post( (string) $r['safeguard'] );
 			}
 			$parts[] = '<li>' . $line . '</li>';
 		}
 		$parts[] = '</ul>';
 		$parts[] = '</section>';
 		return "\n" . implode( "\n", $parts );
+	}
+
+	/**
+	 * Switch the WordPress locale to the policy language so fixed __()/esc_html__()
+	 * labels resolve in that language, mirroring class-template::generate() and the
+	 * banner REST endpoint (single source of truth: faz_wp_locale()). No-op when
+	 * the helpers are unavailable or the target locale already matches the active
+	 * one — so the common case (ambient locale already == $lang, e.g. WPML/Polylang
+	 * per-page) stays a byte-identical no-op.
+	 *
+	 * @param string $lang Policy language code.
+	 * @return bool Whether a switch happened; pass it to restore_policy_locale().
+	 */
+	private static function switch_to_policy_locale( $lang ) {
+		if ( ! function_exists( 'faz_wp_locale' ) || ! function_exists( 'switch_to_locale' ) ) {
+			return false;
+		}
+		$target = faz_wp_locale( (string) $lang );
+		if ( '' === $target || ( function_exists( 'get_locale' ) && $target === get_locale() ) ) {
+			return false;
+		}
+		return (bool) switch_to_locale( $target );
+	}
+
+	/**
+	 * Pair switch_to_policy_locale(): restore the previous locale when a switch
+	 * actually happened.
+	 *
+	 * @param bool $switched Return value of switch_to_policy_locale().
+	 * @return void
+	 */
+	private static function restore_policy_locale( $switched ) {
+		if ( $switched && function_exists( 'restore_previous_locale' ) ) {
+			restore_previous_locale();
+		}
 	}
 
 	/**
