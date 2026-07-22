@@ -230,27 +230,6 @@ class Onboarding {
 	}
 
 	/**
-	 * Mark onboarding as dismissed without finishing (Dashboard card "×").
-	 *
-	 * Leaves `completed` untouched so the Setup submenu page stays reachable,
-	 * but hides the Dashboard nag permanently.
-	 *
-	 * @return void
-	 */
-	public function dismiss() {
-		$settings_obj = new Settings();
-		$all          = $settings_obj->get();
-		if ( ! is_array( $all ) ) {
-			$all = array();
-		}
-		if ( ! isset( $all['onboarding'] ) || ! is_array( $all['onboarding'] ) ) {
-			$all['onboarding'] = array();
-		}
-		$all['onboarding']['dismissed'] = true;
-		$settings_obj->update( $all );
-	}
-
-	/**
 	 * Whether onboarding has been completed (or the install predates the wizard).
 	 *
 	 * @return bool
