@@ -101,6 +101,15 @@ class Settings extends Store {
 				'per_service_consent'    => false,
 				'per_cookie_consent'     => false,
 				'cache_compatibility'    => false,
+				// Anti-adblock banner resilience. When enabled, a single
+				// deferred client-side check re-asserts the consent banner's
+				// visibility if an ad-block cosmetic filter list (e.g. EasyList
+				// Cookie) hides it. Purely keeps a legally required notice
+				// visible — never forces interaction, never a cookie wall.
+				// Distinct from 'alternative_asset_path' above, which only
+				// renames the script handle so network-level filters do not
+				// block the JavaScript itself. Default off.
+				'adblock_resilience'     => false,
 			),
 			'microsoft'    => array(
 				'uet_consent_mode' => false,
@@ -331,6 +340,7 @@ class Settings extends Store {
 			case 'hide_from_bots':
 			case 'gtm_datalayer':
 			case 'alternative_asset_path':
+			case 'adblock_resilience':
 			case 'per_service_consent':
 			case 'cache_compatibility':
 			case 'aggressive_css_url_blocking':

@@ -1253,6 +1253,10 @@ async function _fazInit() {
         // still-denied category/service before the scheduled sweep would.
         _fazRunDeadCookieCleanup();
         _fazWatchBannerElement();
+        // Opt-in anti-adblock resilience: keep a legally required consent
+        // notice visible if an ad-block cosmetic filter list hides it. No-op
+        // unless the server emitted _adblockResilience (default off). #adblock
+        _fazScheduleAdblockGuard();
         _fazScheduleDeadCookieCleanup();
         // Language swap is now a progressive enhancement applied AFTER paint, and
         // only when the first-visit banner is actually on screen. Returning / GPC
@@ -1327,6 +1331,118 @@ function _fazScheduleBannerWatchdog() {
         }
     }, 2500);
 }
+
+// Belt-and-suspenders against a Rocket-Loader double-init (already guarded by
+// window.fazcookie._fazInitDone): ensure the anti-adblock timer is armed at
+// most once per page.
+var _fazAdblockGuardScheduled = false;
+
+/**
+ * Opt-in anti-adblock banner resilience (COMPLIANCE: resilience, not
+ * circumvention). Some ad-block cosmetic filter lists (e.g. EasyList Cookie)
+ * inject `##[class*=consent]` / `##[id*=cookie]` rules that hide any element
+ * whose class/id contains "cookie"/"consent" — which matches FAZ's own
+ * `.faz-consent-container` / `#faz-consent`, suppressing a LEGALLY REQUIRED
+ * notice. When the admin enables the safeguard, we schedule ONE deferred check
+ * that re-asserts the banner container's visibility if (and only if) an
+ * external rule has hidden it.
+ *
+ * This is deliberately a single deferred re-assert — not a loop and not a
+ * MutationObserver war with the filter list: it keeps the behaviour
+ * transparent, CPU-cheap, and squarely on the "keep a mandatory notice
+ * visible" side rather than "defeat a privacy tool". It never forces
+ * interaction, never injects an overlay/cookie wall, and never touches consent
+ * state or script blocking. Gated on _fazStore._adblockResilience (emitted
+ * server-side only when the toggle is on), so default-off installs are
+ * byte-identical and this returns immediately. #adblock
+ */
+function _fazScheduleAdblockGuard() {
+    try {
+        if (_fazAdblockGuardScheduled) return;
+        if (!_fazStore || !_fazStore._adblockResilience) return;
+        _fazAdblockGuardScheduled = true;
+        // ~1200ms: after first paint and after _fazInit lifts the anti-FOUC
+        // `faz-ready` gate, but well before the 2500ms fail-open watchdog, so a
+        // cosmetically-hidden banner is restored promptly. Single timer, fail-open.
+        window.setTimeout(_fazAdblockResilienceCheck, 1200);
+    } catch (e) {
+        /* a guard must never break the page */
+    }
+}
+
+/**
+ * The deferred decision + re-assert for _fazScheduleAdblockGuard(). Exposed so
+ * the jsdom unit test can call it directly. Fully try/catch wrapped — a guard
+ * must never throw. Bails (no-op) when: the safeguard is off; the visitor has
+ * already accepted/rejected/dismissed (respects the decision — never re-shows a
+ * banner the visitor decided on); the banner is not on the page; the container
+ * carries FAZ's own `.faz-hide` (we only ever counter an EXTERNAL rule, never
+ * FAZ's own suppression for returning/geo/PMP-exempt/empty-template visitors);
+ * or getComputedStyle reports the container as visible.
+ *
+ * When an external rule has hidden the container (display:none — the common
+ * EasyList Cookie form — or visibility:hidden or opacity:0), it re-asserts with
+ * inline `!important` props, which beat an author-stylesheet `!important` rule
+ * (including the filter's injected sheet). `display:block` is the correct
+ * restore value: the container's natural display is block in all template
+ * variants, so this does not disturb the inner `.faz-consent-bar` flex layout.
+ */
+function _fazAdblockResilienceCheck() {
+    try {
+        if (!_fazStore || !_fazStore._adblockResilience) return;
+        // Respect an existing decision — never re-show a dismissed banner.
+        if (ref._fazGetFromStore('action')) return;
+        var notice = _fazGetBanner();
+        if (!notice) return;
+        // Never fight FAZ's own hidden state (returning visitor, geo no-banner,
+        // PMP-exempt, empty template) — only ever counter an external rule.
+        if (notice.classList.contains('faz-hide')) return;
+        if (typeof window.getComputedStyle !== 'function') return;
+        var cs = window.getComputedStyle(notice);
+        if (!cs) return;
+        var hidden = cs.display === 'none' ||
+            cs.visibility === 'hidden' ||
+            parseFloat(cs.opacity) === 0;
+        if (!hidden) return;
+        // Inline !important beats the filter's injected author-stylesheet rule.
+        notice.style.setProperty('display', 'block', 'important');
+        notice.style.setProperty('visibility', 'visible', 'important');
+        notice.style.setProperty('opacity', '1', 'important');
+        if (notice.dataset) {
+            notice.dataset.fazReasserted = '1';
+        }
+    } catch (e) {
+        /* a guard must never break the page */
+    }
+}
+
+/**
+ * Remove the inline props _fazAdblockResilienceCheck() may have set, so a later
+ * dismissal (accept/reject/close) can still hide the banner. Without this, the
+ * inline `display:block!important` would override `.faz-hide {display:none}`
+ * and the banner would stay on screen after the visitor decided. Called at the
+ * top of BOTH container-hide paths (_fazHideBanner and _fazToggleBanner) — the
+ * only two spots that add `faz-hide` to the container. #adblock
+ */
+function _fazClearAdblockReassert(container) {
+    try {
+        if (!container || !container.style) return;
+        container.style.removeProperty('display');
+        container.style.removeProperty('visibility');
+        container.style.removeProperty('opacity');
+        if (container.dataset && container.dataset.fazReasserted) {
+            delete container.dataset.fazReasserted;
+        }
+    } catch (e) {
+        /* never break the hide path */
+    }
+}
+
+// Expose the anti-adblock internals so the jsdom unit test can call them
+// directly (the whole file runs inside the `else` block, so top-level function
+// declarations are not global). Not part of the public API.
+ref._fazAdblockResilienceCheck = _fazAdblockResilienceCheck;
+ref._fazClearAdblockReassert = _fazClearAdblockReassert;
 
 function _fazScheduleDeadCookieCleanup() {
     // Staggered passes catch cookies written after load. The 5000 ms tail picks
@@ -1547,6 +1663,9 @@ function _fazInitiAccordionTabs() {    document.querySelectorAll(".faz-accordion
 function _fazToggleBanner(force = false) {    const notice = _fazGetElementByTag('notice');
     const container = notice && notice.closest('.faz-consent-container') || false;
     if (container) {
+        // Clear any anti-adblock inline re-assert first, otherwise its
+        // display:block!important would override .faz-hide's display:none.
+        _fazClearAdblockReassert(container);
         force === true ? container.classList.add('faz-hide') : container.classList.toggle('faz-hide');
     }
 
@@ -1592,6 +1711,10 @@ function _fazGetBanner() {
 function _fazHideBanner() {
     const notice = _fazGetBanner();
     if (notice) {
+        // Clear any anti-adblock inline re-assert first, otherwise its
+        // display:block!important would override .faz-hide's display:none and
+        // the dismissed banner would stay on screen.
+        _fazClearAdblockReassert(notice);
         const focusWasInside = notice.contains(document.activeElement);
         notice.classList.add('faz-hide');
         if (focusWasInside && _fazStore._bannerTriggerElement) {

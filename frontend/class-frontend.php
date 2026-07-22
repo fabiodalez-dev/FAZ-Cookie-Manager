@@ -2005,6 +2005,13 @@ class Frontend {
 
 		// GTM Data Layer toggle.
 		$store['_gtmDataLayer'] = ! empty( $settings['banner_control']['gtm_datalayer'] );
+		// Anti-adblock banner resilience toggle. Emitted ONLY when true so the
+		// _fazConfig blob stays byte-identical for every default-off install
+		// (no behaviour change, no cache-diff). Site-wide static flag, safe
+		// under cache-compatibility mode.
+		if ( ! empty( $settings['banner_control']['adblock_resilience'] ) ) {
+			$store['_adblockResilience'] = true;
+		}
 		// Advanced Consent Mode (#165): mirror the server-side gtag exemption to
 		// the client blocker so dynamically-injected Google tags (which bypass
 		// the output buffer) are also allowed to load before consent.
