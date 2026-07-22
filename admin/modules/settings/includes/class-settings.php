@@ -73,7 +73,22 @@ class Settings extends Store {
 				'default'  => 'en',
 			),
 			'onboarding'   => array(
-				'step' => 2,
+				// Legacy CookieYes-fork leftover; preserved but unread.
+				'step'      => 2,
+				// Guided setup wizard state. `completed` DEFAULTS TO TRUE so any
+				// install upgrading to this version (whose stored option predates
+				// these keys) is treated as already-onboarded and is NEVER nagged.
+				// The wizard is armed for exactly one path — a genuine fresh
+				// install — where Activator::install() explicitly writes
+				// completed=false through Settings::update(). See class-onboarding.php.
+				'completed' => true,
+				// Dashboard "Complete setup" card dismissed without finishing.
+				'dismissed' => false,
+				// Chosen jurisdiction, stored only for display / wizard re-entry
+				// pre-selection: '' | 'gdpr' | 'ccpa' | 'both'. The law is APPLIED
+				// to the default banner's applicableLaw / Do-Not-Sell fields — it
+				// is not itself a runtime setting.
+				'law'       => '',
 			),
 			'general'      => array(
 				'remove_data_on_uninstall' => false,
@@ -352,6 +367,22 @@ class Settings extends Store {
 				// and the server-side shredder both gate it on per-service), but
 				// it is a plain boolean here.
 				$value = faz_sanitize_bool( $value );
+				break;
+			case 'completed':
+			case 'dismissed':
+				// Guided setup wizard flags (onboarding group). Plain booleans:
+				// `completed` gates the activation redirect + Dashboard card,
+				// `dismissed` hides the card without finishing. Without these
+				// explicit cases they would fall through to faz_sanitize_text and
+				// a truthy string like 'false' would survive as a non-empty string.
+				$value = faz_sanitize_bool( $value );
+				break;
+			case 'law':
+				// Chosen jurisdiction for the guided setup wizard. Whitelisted so
+				// a direct settings PUT cannot persist an arbitrary string; the
+				// banner-apply logic only ever reads one of these four values.
+				$allowed = array( '', 'gdpr', 'ccpa', 'both' );
+				$value   = in_array( $value, $allowed, true ) ? $value : '';
 				break;
 			case 'scan_frequency':
 				$allowed = array( 'daily', 'weekly', 'monthly' );

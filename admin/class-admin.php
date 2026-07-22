@@ -274,6 +274,17 @@ class Admin {
 				'slug'  => self::ADMIN_SLUG . '-system-status',
 				'view'  => 'system-status',
 			),
+			// Guided setup wizard. Registered as a submenu so render_page() and
+			// the per-page JS auto-enqueue (assets/js/pages/setup.js) work; it is
+			// deliberately NOT added to the top-nav in base.php (matching the
+			// geo-routing precedent) to keep the chromeless wizard uncluttered and
+			// avoid a permanent nav entry once onboarding is complete. It stays
+			// reachable from the WordPress submenu for re-entry.
+			'setup'         => array(
+				'title' => __( 'Setup', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-setup',
+				'view'  => 'setup',
+			),
 		);
 	}
 
@@ -2065,7 +2076,15 @@ class Admin {
 		if ( wp_doing_ajax() || is_network_admin() || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		wp_safe_redirect( admin_url( 'admin.php?page=' . self::ADMIN_SLUG ) );
+		// A genuine fresh install lands on the guided setup wizard; every other
+		// activation (upgrade / re-activation) keeps the Dashboard target. The
+		// onboarding.completed flag defaults to true, so only the activator's
+		// fresh-install write (completed=false) routes here.
+		$onboarding = new \FazCookie\Admin\Modules\Settings\Includes\Onboarding();
+		$target     = $onboarding->is_complete()
+			? self::ADMIN_SLUG
+			: self::ADMIN_SLUG . '-setup';
+		wp_safe_redirect( admin_url( 'admin.php?page=' . $target ) );
 		exit;
 	}
 

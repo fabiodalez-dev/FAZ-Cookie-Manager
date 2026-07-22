@@ -40,6 +40,7 @@ $faz_page_title = isset( $faz_page_title ) && is_string( $faz_page_title ) ? $fa
 		'import-export' => __( 'Move settings safely between environments and keep repeatable backups close at hand.', 'faz-cookie-manager' ),
 		'cookie-policy' => __( 'Generate a jurisdiction-aware Cookie Policy from templates filled with your company data. Embed via the [faz_cookie_policy_complete] shortcode.', 'faz-cookie-manager' ),
 		'system-status' => __( 'Check environment details, plugin health, and runtime dependencies before troubleshooting.', 'faz-cookie-manager' ),
+		'setup'         => __( 'A few guided steps to configure consent correctly for the privacy law that applies to your visitors.', 'faz-cookie-manager' ),
 	);
 	$faz_page_description = isset( $faz_page_descriptions[ $faz_page_slug ] ) ? $faz_page_descriptions[ $faz_page_slug ] : '';
 	?>

@@ -9,6 +9,28 @@ defined( 'ABSPATH' ) || exit;
 ?>
 
 <div id="faz-dashboard">
+	<?php
+	// "Complete setup" card — hidden by default and revealed by dashboard.js only
+	// when onboarding is incomplete and not dismissed (i.e. a fresh install whose
+	// wizard has not been finished). Existing installs default onboarding.completed
+	// to true, so this card never appears for them.
+	?>
+	<div class="faz-card faz-setup-nudge" id="faz-setup-card" hidden>
+		<div class="faz-setup-nudge-body">
+			<span class="faz-setup-nudge-icon" aria-hidden="true">
+				<span class="dashicons dashicons-shield-alt"></span>
+			</span>
+			<div class="faz-setup-nudge-copy">
+				<h3><?php esc_html_e( 'Finish setting up your cookie banner', 'faz-cookie-manager' ); ?></h3>
+				<p><?php esc_html_e( 'A few guided steps configure consent correctly for the privacy law that applies to your visitors.', 'faz-cookie-manager' ); ?></p>
+			</div>
+		</div>
+		<div class="faz-setup-nudge-actions">
+			<a class="faz-btn faz-btn-primary" href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-setup' ) ); ?>"><?php esc_html_e( 'Finish setup', 'faz-cookie-manager' ); ?></a>
+			<button type="button" class="faz-btn faz-btn-secondary" id="faz-setup-card-dismiss"><?php esc_html_e( 'Dismiss', 'faz-cookie-manager' ); ?></button>
+		</div>
+	</div>
+
 	<div class="faz-grid faz-grid-4" id="faz-stats-row">
 		<div class="faz-stat-card">
 			<div class="faz-stat-icon faz-stat-icon-primary">

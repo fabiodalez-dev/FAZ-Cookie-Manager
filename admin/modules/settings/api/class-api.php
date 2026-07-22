@@ -15,6 +15,7 @@ use stdClass;
 use FazCookie\Includes\Rest_Controller;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Settings\Includes\Controller;
+use FazCookie\Admin\Modules\Settings\Includes\Onboarding;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Admin\Modules\Cookies\Api\Cookies_API;
 use FazCookie\Includes\Notice;
@@ -179,6 +180,47 @@ class Api extends Rest_Controller {
 				),
 			)
 		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/onboarding',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'complete_onboarding' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Finish the guided setup wizard.
+	 *
+	 * Applies the chosen jurisdiction to the default banner (opt-in for GDPR,
+	 * opt-out notice model for CCPA, the more-protective opt-in + US Do-Not-Sell
+	 * entry point for "both"), re-asserts the accountability baseline (banner
+	 * visible + consent logging), and persists the onboarding completion flags.
+	 * All compliance-critical logic lives in the Onboarding helper so it can be
+	 * unit-tested directly.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function complete_onboarding( $request ) {
+		$law = $request->get_param( 'law' );
+		$law = is_scalar( $law ) ? sanitize_key( (string) $law ) : '';
+
+		// `enable_logging` defaults to true (accountability baseline). Only an
+		// explicit false disables it.
+		$enable_logging = $request->get_param( 'enable_logging' );
+		$enable_logging = is_null( $enable_logging )
+			? true
+			: (bool) filter_var( $enable_logging, FILTER_VALIDATE_BOOLEAN );
+
+		$onboarding = new Onboarding();
+		$result     = $onboarding->finish( $law, $enable_logging );
+
+		return rest_ensure_response( $result );
 	}
 	/**
 	 * Get a collection of items.

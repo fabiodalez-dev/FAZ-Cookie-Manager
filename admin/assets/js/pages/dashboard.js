@@ -23,7 +23,42 @@
 	FAZ.ready(function () {
 		reloadDashboard();
 		initFilterBar();
+		initSetupCard();
 	});
+
+	/* ── "Complete setup" card ── */
+
+	// Reveal the onboarding nudge only when the guided wizard is incomplete AND
+	// not dismissed. onboarding.completed defaults to true, so upgrading installs
+	// (whose stored settings predate the wizard) never see the card.
+	function initSetupCard() {
+		var card = document.getElementById('faz-setup-card');
+		if (!card) { return; }
+
+		FAZ.get('settings').then(function (settings) {
+			var onboarding = (settings && settings.onboarding) || {};
+			if (onboarding.completed === true || onboarding.dismissed === true) {
+				return; // stays hidden
+			}
+			card.hidden = false;
+
+			var dismissBtn = document.getElementById('faz-setup-card-dismiss');
+			if (dismissBtn) {
+				dismissBtn.addEventListener('click', function () {
+					dismissBtn.disabled = true;
+					// Merges via faz_merge_settings — only the flag is written.
+					FAZ.post('settings', { onboarding: { dismissed: true } }).then(function () {
+						card.hidden = true;
+					}).catch(function () {
+						dismissBtn.disabled = false;
+						FAZ.notify(__('setup.dismiss_failed', 'Could not dismiss. Please try again.'), 'error');
+					});
+				});
+			}
+		}).catch(function () {
+			// Non-fatal: if settings can't be read, leave the card hidden.
+		});
+	}
 
 	/* ── Filter bar ── */
 

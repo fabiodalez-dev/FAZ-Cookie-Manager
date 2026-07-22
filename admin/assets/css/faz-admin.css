@@ -1884,3 +1884,251 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	width: 40%;
 	color: var(--faz-text-secondary);
 }
+
+/* ── Guided setup wizard ────────────────────────────────────── */
+.faz-wizard-progress {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	list-style: none;
+	margin: 0 0 20px;
+	padding: 0;
+	counter-reset: faz-wizard;
+}
+.faz-wizard-progress-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: 1 1 0;
+	min-width: 0;
+	color: var(--faz-text-muted);
+	font-weight: 600;
+	font-size: 13px;
+}
+.faz-wizard-progress-item:not(:last-child)::after {
+	content: "";
+	flex: 1 1 auto;
+	height: 2px;
+	background: var(--faz-border);
+	border-radius: 2px;
+}
+.faz-wizard-progress-num {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	flex: 0 0 28px;
+	border-radius: 50%;
+	background: var(--faz-bg-secondary);
+	border: 2px solid var(--faz-border);
+	color: var(--faz-text-muted);
+	font-size: 13px;
+}
+.faz-wizard-progress-label {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.faz-wizard-progress-item.is-active .faz-wizard-progress-num {
+	background: var(--faz-primary);
+	border-color: var(--faz-primary);
+	color: #fff;
+}
+.faz-wizard-progress-item.is-active {
+	color: var(--faz-text);
+}
+.faz-wizard-progress-item.is-done .faz-wizard-progress-num {
+	background: var(--faz-success);
+	border-color: var(--faz-success);
+	color: #fff;
+}
+.faz-wizard-progress-item.is-done .faz-wizard-progress-label {
+	color: var(--faz-text-secondary);
+}
+
+.faz-card.faz-setup-card {
+	max-width: 760px;
+	margin: 0 auto;
+}
+.faz-setup-step-title {
+	margin: 0 0 6px;
+	font-size: 20px;
+	color: var(--faz-text);
+}
+.faz-setup-optional,
+.faz-setup-step-title .faz-setup-optional {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--faz-text-muted);
+}
+.faz-setup-step-lead {
+	margin: 0 0 20px;
+	color: var(--faz-text-secondary);
+	line-height: 1.55;
+}
+
+.faz-setup-law-group {
+	display: grid;
+	gap: 14px;
+	border: 0;
+	margin: 0;
+	padding: 0;
+}
+.faz-setup-law-card {
+	display: flex;
+	gap: 14px;
+	align-items: flex-start;
+	padding: 16px 18px;
+	border: 2px solid var(--faz-border);
+	border-radius: var(--faz-radius-sm);
+	cursor: pointer;
+	transition: border-color var(--faz-transition), background var(--faz-transition), box-shadow var(--faz-transition);
+	background: var(--faz-card);
+}
+.faz-setup-law-card:hover {
+	border-color: var(--faz-border-hover);
+}
+.faz-setup-law-card.is-selected {
+	border-color: var(--faz-primary);
+	background: var(--faz-primary-soft);
+	box-shadow: 0 0 0 3px var(--faz-primary-light);
+}
+.faz-setup-law-card input[type="radio"] {
+	margin-top: 3px;
+	flex: 0 0 auto;
+}
+.faz-setup-law-body {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.faz-setup-law-title {
+	font-weight: 700;
+	color: var(--faz-text);
+}
+.faz-setup-law-desc {
+	color: var(--faz-text-secondary);
+	font-size: 13.5px;
+	line-height: 1.5;
+}
+.faz-setup-law-effect {
+	color: var(--faz-primary-strong);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.faz-setup-scan {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	align-items: flex-start;
+	margin-bottom: 16px;
+}
+.faz-setup-scan-status {
+	margin: 0;
+	color: var(--faz-text-secondary);
+	font-size: 13.5px;
+}
+.faz-setup-scan-note {
+	margin: 0;
+	color: var(--faz-text-muted);
+	font-size: 13px;
+}
+
+.faz-setup-review {
+	list-style: none;
+	margin: 0 0 16px;
+	padding: 0;
+	display: grid;
+	gap: 10px;
+}
+.faz-setup-review-item {
+	padding: 12px 14px;
+	background: var(--faz-bg-secondary);
+	border: 1px solid var(--faz-border);
+	border-radius: var(--faz-radius-sm);
+	color: var(--faz-text-secondary);
+	line-height: 1.5;
+}
+.faz-setup-review-item strong {
+	color: var(--faz-text);
+}
+.faz-setup-review-note {
+	color: var(--faz-text-muted);
+	font-size: 13px;
+	margin: 0;
+}
+
+.faz-setup-nav {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 24px;
+	padding-top: 18px;
+	border-top: 1px solid var(--faz-border);
+}
+.faz-setup-nav-spacer {
+	flex: 1 1 auto;
+}
+
+/* Dashboard "Complete setup" nudge card */
+.faz-card.faz-setup-nudge {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 18px 20px;
+	margin-bottom: 16px;
+	border-left: 4px solid var(--faz-primary);
+}
+/* The display rule above is more specific than the UA `[hidden]` rule, so it
+   would otherwise force the card visible even while the hidden attribute is
+   set. Re-assert hidden with matching specificity. */
+.faz-card.faz-setup-nudge[hidden] {
+	display: none;
+}
+.faz-setup-nudge-body {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-width: 0;
+}
+.faz-setup-nudge-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 42px;
+	height: 42px;
+	flex: 0 0 42px;
+	border-radius: 50%;
+	background: var(--faz-primary-light);
+	color: var(--faz-primary-strong);
+}
+.faz-setup-nudge-icon .dashicons {
+	width: 22px;
+	height: 22px;
+	font-size: 22px;
+}
+.faz-setup-nudge-copy h3 {
+	margin: 0 0 2px;
+	color: var(--faz-text);
+	font-size: 15px;
+}
+.faz-setup-nudge-copy p {
+	margin: 0;
+	color: var(--faz-text-secondary);
+	font-size: 13.5px;
+}
+.faz-setup-nudge-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 0 0 auto;
+}
+
+@media (max-width: 600px) {
+	.faz-wizard-progress-label { display: none; }
+	.faz-setup-nudge-actions { width: 100%; }
+}
