@@ -2307,14 +2307,40 @@ function _fazIsAgeAffirmed() {
  * (EDPB 03/2022): the visitor simply cannot complete an accept until they tick
  * the box, while Reject stays fully available.
  *
+ * The gate can be reached from OUTSIDE a visible banner surface — a blocked
+ * -embed placeholder (_fazAcceptCategory / _fazAcceptService) can fire an
+ * accept while the banner is hidden (faz-hide → display:none). Its injected
+ * checkbox is then in the DOM but non-interactable, so an error revealed on it
+ * would be invisible and the visitor would have no reachable control to affirm
+ * their age (a dead-end). When no checkbox is currently interactable we first
+ * re-reveal the banner (re-rendering its confirmation row if the banner had
+ * never displayed) so a reachable checkbox exists before we focus it.
+ *
  * @returns {void}
  */
 function _fazShowAgeConfirmError() {
+    var boxes = document.querySelectorAll('.faz-age-confirm-cb');
+    var anyInteractable = false;
+    for (var b = 0; b < boxes.length; b++) {
+        // offsetParent is null when the checkbox (or an ancestor) is
+        // display:none — i.e. inside a hidden banner or a closed preference
+        // center. A visible box means the visitor already has a control at hand.
+        if (boxes[b].offsetParent !== null) { anyInteractable = true; break; }
+    }
+    if (!anyInteractable) {
+        // Ensure the confirmation row is present on the banner surface (it is
+        // absent only if the banner never rendered its buttons), then reveal
+        // the banner so the notice checkbox becomes reachable.
+        _fazRenderAgeConfirmations();
+        _fazShowBanner();
+        // Re-query — _fazRenderAgeConfirmations() may have injected a new row.
+        boxes = document.querySelectorAll('.faz-age-confirm-cb');
+    }
+
     var errors = document.querySelectorAll('.faz-age-confirm-error');
     for (var i = 0; i < errors.length; i++) {
         errors[i].removeAttribute('hidden');
     }
-    var boxes = document.querySelectorAll('.faz-age-confirm-cb');
     var focusTarget = null;
     for (var j = 0; j < boxes.length; j++) {
         // Prefer a visible checkbox (offsetParent is null for one inside a
@@ -2502,23 +2528,31 @@ function _fazActionClose() {
 /**
  * Consent accept callback.
  *
- * @param {string} choice  Type of consent.
+ * @param {string} choice   Type of consent.
+ * @param {boolean} [ungated=false] When true the age gate is bypassed for this
+ *   call even if `choice` is not 'reject'. Used by the CCPA "Do Not Sell"
+ *   opt-out confirm: an opt-out is a withdrawal/rejection of sale, so — like
+ *   reject — it must NEVER be gated behind an age affirmation (gating a
+ *   rejection would be both unlawful and a dark pattern). The opt-out persists
+ *   with choice "custom" (to avoid granting every TCF vendor), so it cannot be
+ *   distinguished by `choice` alone and needs this explicit flag.
  * @returns {false|undefined} Returns false when the age-gate intercepts the
  *   action (visitor under the configured minimum age); otherwise returns
  *   undefined. Callers such as _fazAcceptReject() and window._fazAcceptCategory
  *   check `=== false` to short-circuit downstream state changes when the gate
  *   fires.
  */
-function _fazAcceptCookies(choice = "all") {
+function _fazAcceptCookies(choice = "all", ungated = false) {
     // Age gate (GDPR Art. 8): gate ONLY the accept/partial path, never reject
-    // or withdraw (choice === 'reject' short-circuits here). Equal weight is
-    // preserved — the Accept button is never disabled/greyed while Reject stays
-    // active (that asymmetry would be an EDPB 03/2022 "Emphasising" dark
-    // pattern). Instead an un-affirmed accept reveals an inline validation
-    // message and focuses the checkbox, and NO consent is written (no action =
-    // no consent = only necessary cookies stay allowed — the correct GDPR
-    // posture; we deliberately do not auto-write a "rejected" record).
-    var _ageGateActive = choice !== 'reject' && _fazStore._ageGate && _fazStore._ageGate.enabled;
+    // or withdraw (choice === 'reject' — and the ungated CCPA opt-out — short-
+    // circuit here). Equal weight is preserved — the Accept button is never
+    // disabled/greyed while Reject stays active (that asymmetry would be an
+    // EDPB 03/2022 "Emphasising" dark pattern). Instead an un-affirmed accept
+    // reveals an inline validation message and focuses the checkbox, and NO
+    // consent is written (no action = no consent = only necessary cookies stay
+    // allowed — the correct GDPR posture; we deliberately do not auto-write a
+    // "rejected" record).
+    var _ageGateActive = choice !== 'reject' && !ungated && _fazStore._ageGate && _fazStore._ageGate.enabled;
     if (_ageGateActive && !_fazIsAgeAffirmed()) {
         _fazShowAgeConfirmError();
         return false;
@@ -5984,10 +6018,12 @@ function _fazResetOptoutSuccessMessage() {
  * grant every IAB TCF vendor consent on an opt-out and fire the
  * fazcookie_consent_update event with action:"all" instead of "custom".
  *
- * `_fazAcceptCookies()` returns false when the age gate intercepts (it shows
- * the age modal and defers recording consent). In that case we must NOT show
- * the success message — it would claim "your opt-out has been honored" while no
- * consent was actually recorded yet.
+ * The opt-out is passed as an UNGATED accept (second arg `true`): a "Do Not
+ * Sell" opt-out is a withdrawal/rejection of sale and must never sit behind the
+ * age gate — gating a rejection would be unlawful and a dark pattern. So this
+ * path never returns false for age reasons; the `=== false` guard remains only
+ * as defence-in-depth (e.g. a future gate on a different axis) so the success
+ * message is never shown without consent actually being recorded.
  *
  * @return {Function}
  */
@@ -5997,7 +6033,7 @@ function _fazHandleOptoutConfirm() {
             _fazAcceptReject()();
             return;
         }
-        if ( _fazAcceptCookies( "custom" ) === false ) {
+        if ( _fazAcceptCookies( "custom", true ) === false ) {
             return;
         }
         _fazShowOptoutSuccessMessage();

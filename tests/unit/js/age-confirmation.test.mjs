@@ -45,9 +45,15 @@ function check(label, cond) {
  */
 function loadFrontend(ageGate) {
   const code = readFileSync(SCRIPT_PATH, 'utf8');
+  // The notice surface lives inside a .faz-consent-container so _fazGetBanner()
+  // resolves and _fazShowBanner()/_fazHideBanner() can toggle its faz-hide state
+  // — needed to exercise the out-of-banner re-reveal branch.
   const html = `<!DOCTYPE html><html><body>
     <div id="faz-consent">
-      <div class="faz-notice-btn-wrapper" data-faz-tag="notice-buttons"></div>
+      <div class="faz-consent-container">
+        <div data-faz-tag="notice"></div>
+        <div class="faz-notice-btn-wrapper" data-faz-tag="notice-buttons"></div>
+      </div>
       <div class="faz-modal">
         <div class="faz-prefrence-btn-wrapper" data-faz-tag="detail-buttons"></div>
       </div>
@@ -174,6 +180,44 @@ console.log('youth / age-appropriate consent gate (GDPR Art. 8, jsdom)');
   window.eval('_fazRenderAgeConfirmations()');
   const label = window.document.querySelector('.faz-age-confirm-label');
   check('the fallback label mentions the default age 16', label && label.textContent.indexOf('16') !== -1);
+}
+
+// ---------------------------------------------------------------------------
+// (g) Gated accept from a blocked-embed placeholder AFTER the banner is hidden
+//     → the banner is re-revealed so a reachable age checkbox exists (no
+//     dead-end: an invisible error on a non-interactable checkbox would leave
+//     the visitor with no control to affirm their age). Regression guard for
+//     the out-of-banner accept path (_fazAcceptCategory / _fazAcceptService).
+// ---------------------------------------------------------------------------
+{
+  const window = loadFrontend({ enabled: true, minAge: 16 });
+  window.eval('_fazRenderAgeConfirmations()');
+  // Simulate the post-dismiss state: the banner is hidden (faz-hide) while its
+  // injected checkbox stays in the DOM but non-interactable. A placeholder
+  // click now drives a gated accept via the public _fazAcceptCategory entry.
+  const container = window.document.querySelector('.faz-consent-container');
+  container.classList.add('faz-hide');
+  window.eval('window._fazAcceptCategory("analytics")');
+  const action = window.fazcookie._fazGetFromStore('action');
+  check('placeholder accept is gated — no action written', action === undefined || action === '');
+  check('the hidden banner is re-revealed so the age checkbox is reachable', !container.classList.contains('faz-hide'));
+  const err = window.document.querySelector('.faz-age-confirm-error');
+  check('the validation message is shown after a gated placeholder accept', err && !err.hasAttribute('hidden'));
+}
+
+// ---------------------------------------------------------------------------
+// (h) The CCPA "Do Not Sell" opt-out is an UNGATED accept: an opt-out is a
+//     withdrawal/rejection of sale and must never sit behind the age gate.
+//     _fazHandleOptoutConfirm() calls _fazAcceptCookies("custom", true).
+// ---------------------------------------------------------------------------
+{
+  const window = loadFrontend({ enabled: true, minAge: 16 });
+  window.eval('_fazRenderAgeConfirmations()');
+  const result = window.eval('_fazAcceptCookies("custom", true)');
+  check('an ungated opt-out is NOT blocked by the age gate (returns true)', result === true);
+  check('the ungated opt-out records action:yes without affirmation', window.fazcookie._fazGetFromStore('action') === 'yes');
+  const err = window.document.querySelector('.faz-age-confirm-error');
+  check('no validation error is shown for the ungated opt-out', err && err.hasAttribute('hidden'));
 }
 
 // ---------------------------------------------------------------------------
