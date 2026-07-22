@@ -2666,6 +2666,18 @@ class Frontend {
 			$html = strtr( $html, $noscript_stash );
 		}
 
+		// 7. Hide social/widget embed containers that depend on blocked scripts
+		// (Facebook/Instagram/Twitter/X, Smash Balloon Instagram Feed, Elementor
+		// video widgets). filter_content_blocking() already runs these same two
+		// detectors for the_content/widget_text/widget_block_content, but an
+		// embed placed OUTSIDE post content - a theme-builder header/footer, a
+		// global (non-widget-area) template part, or any markup a page builder
+		// renders directly into the page - never passes through those narrower
+		// filters and only ever reaches the page here, in the full-page buffer.
+		// Without this, such an embed is never detected at all.
+		$html = $this->process_social_embeds( $html, $blocked_categories );
+		$html = $this->process_elementor_video_widgets( $html, $blocked_categories );
+
 		return $html;
 	}
 
@@ -6085,6 +6097,11 @@ class Frontend {
 		// Hide social embed containers that depend on blocked scripts.
 		$content = $this->process_social_embeds( $content, $blocked_categories );
 
+		// Hide Elementor video widgets (they render an EMPTY .elementor-video
+		// wrapper server-side and build the real iframe client-side from
+		// data-settings, so the generic <iframe> blocker above never sees one).
+		$content = $this->process_elementor_video_widgets( $content, $blocked_categories );
+
 		return $content;
 	}
 
@@ -6259,7 +6276,153 @@ class Frontend {
 			);
 		}
 
+		// Smash Balloon Instagram Feed renders as <div id="sb_instagram" ...>
+		// (or "sb_instagram_<n>" when multiple feeds are on one page) rather
+		// than a class-based embed like the ones above, so it needs an
+		// id-anchored match instead of a class-anchored one. Same block/
+		// placeholder logic otherwise - mirrors the Known_Providers entry
+		// "smash-balloon-instagram" (distinct from the generic "instagram"
+		// oEmbed entry above, since it is blocked by its own script pattern).
+		$social_ids = array(
+			'sb_instagram' => array( 'service_id' => 'smash-balloon-instagram', 'label' => 'Instagram', 'category' => 'marketing' ),
+		);
+
+		foreach ( $social_ids as $id_prefix => $info ) {
+			if ( false === stripos( $content, $id_prefix ) ) {
+				continue;
+			}
+
+			$category     = $info['category'];
+			$should_block = in_array( $category, $blocked_categories, true );
+
+			// Per-service consent check: override category-level decision.
+			$service_consent = $this->get_service_consent();
+			if ( ! empty( $service_consent ) && ! empty( $info['service_id'] ) ) {
+				$svc_key = $info['service_id'];
+				if ( isset( $service_consent[ $svc_key ] ) ) {
+					if ( 'yes' === $service_consent[ $svc_key ] ) {
+						$should_block = false;
+					} elseif ( 'no' === $service_consent[ $svc_key ] ) {
+						$should_block = true;
+					}
+				}
+			}
+
+			if ( ! $should_block ) {
+				continue;
+			}
+
+			// Insert a placeholder BEFORE the widget container, and hide it.
+			$content = preg_replace_callback(
+				'#(<(?:div|blockquote|span)\b)([^>]*\bid\s*=\s*["\']' . preg_quote( $id_prefix, '#' ) . '[^"\']*["\'][^>]*)>#i',
+				function ( $m ) use ( $category, $info ) {
+					// Skip if already processed.
+					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
+						return $m[0];
+					}
+					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
+					// Placeholder before + hidden original element.
+					$blocked = $m[1] . $m[2] . ' data-faz-category="' . esc_attr( $category ) . '">';
+				return $placeholder . self::faz_add_hidden_class( $blocked );
+				},
+				$content
+			);
+		}
+
 		return $content;
+	}
+
+	/**
+	 * Process Elementor "Video" widgets.
+	 *
+	 * Elementor's native Video widget renders an EMPTY `<div class="elementor-video">`
+	 * server-side and builds the real iframe entirely client-side, reading the
+	 * source URL from the `youtube_url` / `vimeo_url` / … key inside the
+	 * ancestor widget's `data-settings` JSON attribute - never from a `src`
+	 * attribute. The generic <iframe> blocker (process_iframe_tag) therefore
+	 * never sees anything to match, because there is no iframe in the initial
+	 * HTML at all. Detect the widget wrapper directly instead: parse its
+	 * data-settings JSON for the embed URL, resolve the provider the same way
+	 * the iframe blocker does, and gate the whole wrapper - mirroring
+	 * process_social_embeds() (placeholder before + faz-hidden original).
+	 *
+	 * @param string $content            HTML content.
+	 * @param array  $blocked_categories Blocked category slugs.
+	 * @return string Modified content.
+	 */
+	private function process_elementor_video_widgets( $content, $blocked_categories ) {
+		if ( false === stripos( $content, 'elementor-widget-video' ) ) {
+			return $content;
+		}
+
+		$result = preg_replace_callback(
+			'#<div\b(?=[^>]*\bclass\s*=\s*["\'][^"\']*\belementor-widget-video\b)(?=[^>]*\bdata-settings\s*=)([^>]*)>#i',
+			function ( $m ) use ( $blocked_categories ) {
+				$attrs = $m[1];
+
+				// Skip if already processed.
+				if ( false !== strpos( $attrs, 'data-faz-category' ) ) {
+					return '<div' . $attrs . '>';
+				}
+
+				$raw_settings = $this->extract_tag_attr( $attrs, 'data-settings' );
+				if ( '' === $raw_settings ) {
+					return '<div' . $attrs . '>';
+				}
+
+				// data-settings is HTML-entity-encoded JSON (Elementor escapes it
+				// for the attribute) - decode entities before json_decode.
+				$settings = json_decode( html_entity_decode( $raw_settings, ENT_QUOTES ), true );
+				if ( ! is_array( $settings ) ) {
+					return '<div' . $attrs . '>';
+				}
+
+				// The Video widget stores the source URL under one of these keys
+				// depending on the selected "video_type".
+				$url = '';
+				foreach ( array( 'youtube_url', 'vimeo_url', 'dailymotion_url', 'external_url' ) as $key ) {
+					if ( ! empty( $settings[ $key ] ) ) {
+						$url = (string) $settings[ $key ];
+						break;
+					}
+				}
+				if ( '' === $url ) {
+					return '<div' . $attrs . '>';
+				}
+
+				$service_id = Placeholder_Builder::detect_service_from_url( $url );
+				if ( 'default' === $service_id ) {
+					return '<div' . $attrs . '>'; // Self-hosted / unrecognised source - nothing to gate.
+				}
+
+				$known    = Known_Providers::get_all();
+				$category = isset( $known[ $service_id ]['category'] ) ? $known[ $service_id ]['category'] : 'marketing';
+
+				$should_block = in_array( $category, $blocked_categories, true );
+
+				// Per-service consent check: override category-level decision.
+				$service_consent = $this->get_service_consent();
+				if ( isset( $service_consent[ $service_id ] ) ) {
+					if ( 'yes' === $service_consent[ $service_id ] ) {
+						$should_block = false;
+					} elseif ( 'no' === $service_consent[ $service_id ] ) {
+						$should_block = true;
+					}
+				}
+
+				if ( ! $should_block ) {
+					return '<div' . $attrs . '>';
+				}
+
+				$label       = Placeholder_Builder::get_service_name( $service_id );
+				$placeholder = Placeholder_Builder::build_social( $service_id, $label, $category );
+				$blocked     = '<div' . $attrs . ' data-faz-category="' . esc_attr( $category ) . '">';
+				return $placeholder . self::faz_add_hidden_class( $blocked );
+			},
+			$content
+		);
+
+		return null !== $result ? $result : $content;
 	}
 
 	/**

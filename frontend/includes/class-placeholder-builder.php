@@ -30,6 +30,10 @@ class Placeholder_Builder {
 		'google-maps' => '<path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5c-1.4 0-2.5-1.1-2.5-2.5S10.6 6.5 12 6.5 14.5 7.6 14.5 9 13.4 11.5 12 11.5z" fill="#4285F4"/>',
 		'facebook'    => '<path d="M24 12c0-6.6-5.4-12-12-12S0 5.4 0 12c0 6 4.4 11 10.1 11.9v-8.4H7.1V12h3V9.4c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9V12h3.3l-.5 3.5h-2.8v8.4C19.6 23 24 18 24 12z" fill="#1877F2"/>',
 		'instagram'   => '<path d="M12 2.2c3.2 0 3.6 0 4.8.1 3.5.2 5.1 1.7 5.3 5.3.1 1.3.1 1.6.1 4.8 0 3.2 0 3.6-.1 4.8-.2 3.5-1.8 5.1-5.3 5.3-1.3.1-1.6.1-4.8.1-3.2 0-3.6 0-4.8-.1-3.5-.2-5.1-1.8-5.3-5.3-.1-1.3-.1-1.6-.1-4.8 0-3.2 0-3.6.1-4.8.2-3.5 1.8-5.1 5.3-5.3 1.3-.1 1.6-.1 4.8-.1zM12 0C8.7 0 8.3 0 7.1.1 2.7.3.3 2.7.1 7.1 0 8.3 0 8.7 0 12s0 3.7.1 4.9c.2 4.4 2.6 6.8 7 7 1.2.1 1.6.1 4.9.1s3.7 0 4.9-.1c4.4-.2 6.8-2.6 7-7 .1-1.2.1-1.6.1-4.9s0-3.7-.1-4.9c-.2-4.4-2.6-6.8-7-7C16.7 0 16.3 0 12 0zm0 5.8a6.2 6.2 0 100 12.4 6.2 6.2 0 000-12.4zM12 16a4 4 0 110-8 4 4 0 010 8zm6.4-10.8a1.4 1.4 0 100 2.8 1.4 1.4 0 000-2.8z" fill="#E4405F"/>',
+		// Smash Balloon Instagram Feed is a third-party feed widget, not the
+		// native oEmbed - kept as its own service id (matches its Known_Providers
+		// entry) but visually branded the same as Instagram.
+		'smash-balloon-instagram' => '<path d="M12 2.2c3.2 0 3.6 0 4.8.1 3.5.2 5.1 1.7 5.3 5.3.1 1.3.1 1.6.1 4.8 0 3.2 0 3.6-.1 4.8-.2 3.5-1.8 5.1-5.3 5.3-1.3.1-1.6.1-4.8.1-3.2 0-3.6 0-4.8-.1-3.5-.2-5.1-1.8-5.3-5.3-.1-1.3-.1-1.6-.1-4.8 0-3.2 0-3.6.1-4.8.2-3.5 1.8-5.1 5.3-5.3 1.3-.1 1.6-.1 4.8-.1zM12 0C8.7 0 8.3 0 7.1.1 2.7.3.3 2.7.1 7.1 0 8.3 0 8.7 0 12s0 3.7.1 4.9c.2 4.4 2.6 6.8 7 7 1.2.1 1.6.1 4.9.1s3.7 0 4.9-.1c4.4-.2 6.8-2.6 7-7 .1-1.2.1-1.6.1-4.9s0-3.7-.1-4.9c-.2-4.4-2.6-6.8-7-7C16.7 0 16.3 0 12 0zm0 5.8a6.2 6.2 0 100 12.4 6.2 6.2 0 000-12.4zM12 16a4 4 0 110-8 4 4 0 010 8zm6.4-10.8a1.4 1.4 0 100 2.8 1.4 1.4 0 000-2.8z" fill="#E4405F"/>',
 		'twitter'     => '<path d="M18.2 2h3.6l-7.9 9 9.3 12.3h-7.3l-5.7-7.4-6.5 7.4H.1l8.4-9.6L0 2h7.5l5.1 6.8L18.2 2zm-1.3 19.1h2L7.3 4H5.1l11.8 17.1z" fill="#000"/>',
 		'spotify'     => '<path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.6 0 12 0zm5.5 17.3c-.2.3-.6.4-.9.2-2.6-1.6-5.8-1.9-9.6-1.1-.4.1-.7-.2-.8-.5-.1-.4.2-.7.5-.8 4.2-.9 7.8-.5 10.6 1.2.4.2.4.7.2 1zm1.5-3.3c-.3.4-.8.5-1.2.3-3-1.8-7.5-2.4-11-1.3-.4.1-.9-.1-1-.6-.1-.4.1-.9.6-1 4-.1.2 8.9.7 12.2 2.5.3.2.5.8.2 1.1zm.1-3.4C15.3 8.4 8.9 8.2 5.2 9.3c-.5.2-1-.2-1.2-.7-.2-.5.2-1 .7-1.2 4.3-1.3 11.4-1 15.9 1.5.5.3.6.9.4 1.3-.3.5-.9.6-1.3.4z" fill="#1DB954"/>',
 		'dailymotion' => '<path d="M12.1 2C6.5 2 2 6.5 2 12.1s4.5 10.1 10.1 10.1c2.4 0 4.7-.9 6.5-2.4v2h3.4V12.1C22 6.5 17.5 2 12.1 2zm0 16.1c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6z" fill="#00B2FF"/>',
@@ -52,6 +56,7 @@ class Placeholder_Builder {
 		'google-maps' => '#4285f4',
 		'facebook'    => '#1877f2',
 		'instagram'   => '#e4405f',
+		'smash-balloon-instagram' => '#e4405f',
 		'twitter'     => '#1d1d1f',
 		'spotify'     => '#1db954',
 		'dailymotion' => '#00b2ff',
@@ -273,9 +278,22 @@ class Placeholder_Builder {
 
 		$button_text = esc_html__( 'Accept cookies', 'faz-cookie-manager' );
 
-		$html  = '<div class="faz-placeholder faz-placeholder--social faz-social-placeholder" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '">';
+		// A video service (e.g. an Elementor Video widget resolved to YouTube)
+		// routed through this social-style builder still needs the 16:9
+		// aspect-ratio "video" card, not the compact 120px social-icon card -
+		// otherwise the page collapses to a tiny box where a full-size video
+		// used to be, causing a layout shift instead of preventing one.
+		$is_video_service = in_array( $service_id, self::$video_services, true );
+		$class             = 'faz-placeholder faz-social-placeholder'
+			. ( $is_video_service ? ' faz-placeholder--video' : ' faz-placeholder--social' );
+		$brand = isset( self::$service_colors[ $service_id ] ) ? self::$service_colors[ $service_id ] : self::$service_colors['default'];
+
+		$html  = '<div class="' . esc_attr( $class ) . '" data-faz-category="' . esc_attr( $category ) . '" data-faz-service="' . esc_attr( $service_id ) . '" style="--faz-svc-color:' . esc_attr( $brand ) . '">';
 		$html .= '<div class="faz-placeholder-overlay">';
 		$html .= '<svg class="faz-placeholder-icon" viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">' . $icon_svg . '</svg>';
+		if ( $is_video_service ) {
+			$html .= '<span class="faz-placeholder-svcname">' . esc_html( $service_name ) . '</span>';
+		}
 		$html .= '<p class="faz-placeholder-msg">' . $message . '</p>';
 		$html .= '<button type="button" class="faz-placeholder-btn" data-faz-accept="' . esc_attr( $category ) . '" data-faz-accept-service="' . esc_attr( $service_id ) . '">' . $button_text . '</button>';
 		$html .= '</div>';
