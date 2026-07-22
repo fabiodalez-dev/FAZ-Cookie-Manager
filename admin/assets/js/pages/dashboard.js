@@ -561,10 +561,9 @@
 				meta.style.color = 'var(--faz-text-muted)';
 				meta.style.fontSize = '12px';
 				meta.style.marginTop = '2px';
-				// translators-free client string: "<accepted> accepted of <total> consents".
-				meta.textContent = (parseInt(v.accepted, 10) || 0).toLocaleString()
-					+ ' ' + __('dashboard.abTestAcceptedOf', 'accepted of') + ' '
-					+ total.toLocaleString() + ' ' + __('dashboard.abTestConsents', 'consents');
+				meta.textContent = __('dashboard.abTestAcceptedOf', '{accepted} accepted of {total} consents')
+					.replace('{accepted}', (parseInt(v.accepted, 10) || 0).toLocaleString())
+					.replace('{total}', total.toLocaleString());
 
 				wrap.appendChild(barLabel);
 				wrap.appendChild(barOuter);

@@ -14,6 +14,7 @@ namespace FazCookie\Frontend;
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 use FazCookie\Admin\Modules\Banners\Includes\Controller;
+use FazCookie\Admin\Modules\Banners\Includes\Banner;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
@@ -901,11 +902,11 @@ class Frontend {
 	 *
 	 * When Settings → Banner Control → A/B test is enabled and lists two or
 	 * more slugs that still resolve to ACTIVE banner rows, the visitor is
-	 * assigned one variant via a persistent random split and that variant's
-	 * banner replaces the default selection. The assignment is stored in the
-	 * fazcookie-abvariant cookie so the visitor keeps the same variant across
-	 * visits (stable UX) and so the consent log's banner_slug honestly records
-	 * which variant produced each consent (accountability).
+	 * assigned one variant via a random split and that variant's banner replaces
+	 * the default selection. No experiment cookie is written before consent.
+	 * Once the visitor acts, the existing strictly-necessary consent record's
+	 * scoped banner slug keeps the assignment stable and the consent log records
+	 * which variant produced the decision (accountability).
 	 *
 	 * Compliance: the test only ever chooses among banner rows the admin
 	 * already created, each independently compliant (equal-weight buttons,
@@ -929,7 +930,7 @@ class Frontend {
 	 */
 	private function maybe_apply_ab_test( $default_banner, $visitor_country ) {
 		// See docblock: no server-side split under Cache Compatibility Mode.
-		if ( $this->is_cache_compatibility_enabled() ) {
+		if ( false === $default_banner || $this->is_cache_compatibility_enabled() ) {
 			return $default_banner;
 		}
 
@@ -951,22 +952,63 @@ class Frontend {
 			return $default_banner;
 		}
 
-		$cookie = isset( $_COOKIE[ FAZ_AB_COOKIE ] ) ? sanitize_text_field( wp_unslash( (string) $_COOKIE[ FAZ_AB_COOKIE ] ) ) : '';
-		$chosen = Ab_Test::pick_variant( $valid, $cookie, wp_rand( 0, count( $valid ) - 1 ) );
+		// An experiment may vary presentation, never the legal/geo regime. Keep
+		// only active banners with the same law + Do-Not-Sell model as the banner
+		// selected by normal routing, and which are eligible for this visitor.
+		// Without this gate a US-targeted CCPA variant could replace an EU GDPR
+		// banner (or a country-restricted variant could make is_geo_blocked() hide
+		// the notice entirely), turning an A/B setting into a compliance override.
+		$required_model = $this->banner_experiment_model( $default_banner );
+		$compatible     = array();
+		foreach ( $valid as $slug ) {
+			$candidate = $controller->get_active_banner_by_slug( $slug );
+			if ( false === $candidate || $this->banner_experiment_model( $candidate ) !== $required_model ) {
+				continue;
+			}
+			$targets = $candidate->get_target_countries();
+			if ( ! empty( $targets ) && ( '' === $visitor_country || ! in_array( $visitor_country, $targets, true ) ) ) {
+				continue;
+			}
+			if ( $this->is_banner_geo_blocked( $candidate, $visitor_country ) ) {
+				continue;
+			}
+			$compatible[ $slug ] = $candidate;
+		}
+		$valid = array_keys( $compatible );
+		if ( count( $valid ) < 2 ) {
+			return $default_banner;
+		}
+
+		// Reuse the assignment already present in the strictly-necessary consent
+		// record. Creating a standalone A/B cookie before the visitor acts would
+		// itself be non-essential tracking under opt-in regimes. Before any action
+		// the split is intentionally stateless; the selected banner is still
+		// recorded with the eventual consent and becomes sticky from then on.
+		$consent       = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie() : array();
+		$stored_banner = isset( $consent['__scope.banner'] ) ? sanitize_title( (string) $consent['__scope.banner'] ) : '';
+		$chosen        = Ab_Test::pick_variant( $valid, $stored_banner, wp_rand( 0, count( $valid ) - 1 ) );
 		if ( '' === $chosen ) {
 			return $default_banner;
 		}
 
-		// Persist the assignment (6-month cap, mirroring the consent-cookie
-		// retention ceiling). Only (re)write when it changed to avoid an
-		// unnecessary Set-Cookie header on every request. faz_set_browser_cookie
-		// also mirrors the value into $_COOKIE for this same request.
-		if ( $chosen !== $cookie ) {
-			faz_set_browser_cookie( FAZ_AB_COOKIE, $chosen, time() + ( 6 * MONTH_IN_SECONDS ) );
-		}
+		return isset( $compatible[ $chosen ] ) ? $compatible[ $chosen ] : $default_banner;
+	}
 
-		$variant_banner = $controller->get_active_banner_by_slug( $chosen );
-		return ( false !== $variant_banner ) ? $variant_banner : $default_banner;
+	/**
+	 * Compliance model a banner must share with every A/B peer.
+	 *
+	 * "Both" is stored as applicableLaw=gdpr plus Do-Not-Sell=true, so law alone
+	 * is insufficient: mixing it with pure GDPR would randomly remove the US
+	 * opt-out entry point. This compact signature keeps experiments within one
+	 * consent model while still allowing arbitrary visual/copy variants.
+	 *
+	 * @param Banner $banner Banner candidate.
+	 * @return string
+	 */
+	private function banner_experiment_model( $banner ) {
+		$properties = $banner->get_settings();
+		$dns        = ! empty( $properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] );
+		return $banner->get_law() . '|' . ( $dns ? 'dns' : 'plain' );
 	}
 
 	/**
@@ -978,7 +1020,21 @@ class Frontend {
 		if ( ! $this->banner ) {
 			return false;
 		}
-		$settings = $this->banner->get_settings();
+		return $this->is_banner_geo_blocked( $this->banner, $this->get_visitor_country() );
+	}
+
+	/**
+	 * Check one banner's ruleSet against an already-resolved visitor country.
+	 *
+	 * Shared by the normal post-selection guard and A/B candidate filtering so
+	 * an experiment cannot choose a banner that the normal geo path would hide.
+	 *
+	 * @param Banner $banner  Banner to evaluate.
+	 * @param string $country ISO-3166 alpha-2 country code, or ''.
+	 * @return bool True when the banner must not be shown.
+	 */
+	private function is_banner_geo_blocked( $banner, $country ) {
+		$settings = $banner->get_settings();
 		$inner    = isset( $settings['settings'] ) && is_array( $settings['settings'] ) ? $settings['settings'] : array();
 		$rules    = isset( $inner['ruleSet'] ) && is_array( $inner['ruleSet'] ) ? $inner['ruleSet'] : array();
 		if ( empty( $rules ) ) {
@@ -992,7 +1048,6 @@ class Frontend {
 		// Without this, a ruleSet like [{code:ALL}, {code:US}] would emit
 		// no-cache headers but the runtime check on $rules[0] only would
 		// still let the first rule decide, asymmetrically.
-		$country = $this->get_visitor_country();
 		foreach ( $rules as $rule ) {
 			if ( ! is_array( $rule ) ) {
 				continue;

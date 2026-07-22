@@ -1131,6 +1131,9 @@ function _fazResolveBrowserLanguage(available, langMap) {
 function _fazFetchBannerForLanguage(endpoint, lang, timeoutMs) {
     if (!endpoint || !lang) return Promise.resolve(null);
     var url = endpoint.replace(/\/+$/, '') + '/' + encodeURIComponent(lang);
+    if (_fazStore && _fazStore._bannerSlug) {
+        url += '?banner=' + encodeURIComponent(String(_fazStore._bannerSlug));
+    }
     var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var timer = (controller && timeoutMs > 0)
         ? window.setTimeout(function () { controller.abort(); }, timeoutMs)

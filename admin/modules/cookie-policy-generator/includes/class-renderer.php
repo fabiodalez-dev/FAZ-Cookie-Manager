@@ -54,6 +54,16 @@ class Renderer {
 	private static $transfer_cache = array();
 
 	/**
+	 * Visitor-facing inventory shared only within the current request. The final
+	 * rendered surfaces retain their mandated five-minute object caches; keeping
+	 * this intermediate cache request-local prevents a late cache miss from
+	 * extending stale database rows for a second five-minute window.
+	 *
+	 * @var array<int,array<string,mixed>>|null
+	 */
+	private static $public_cookie_rows_cache = null;
+
+	/**
 	 * Public entry point used by the shortcode handler.
 	 *
 	 * @param array<string,string> $atts Shortcode attributes:
@@ -371,69 +381,11 @@ class Renderer {
 			return $cached;
 		}
 
-		global $wpdb;
-		$cookies_table   = $wpdb->prefix . 'faz_cookies';
-		$categories_table = $wpdb->prefix . 'faz_cookie_categories';
-
-		// Schema sanity: skip if either table is missing (e.g. unactivated install).
-		if ( ! self::table_exists( $cookies_table ) || ! self::table_exists( $categories_table ) ) {
-			return '';
-		}
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = $wpdb->get_results(
-			// Column aliases bridge the legacy in-PHP names (cookie_name,
-			// cookie_domain, cookie_duration, cookie_description,
-			// category_name, category_description) to the actual schema
-			// (`name`, `domain`, `duration`, `description`, etc.). Without
-			// the aliases the SELECT errors out with "Unknown column
-			// 'c.cookie_name'" and build_cookie_list_html returned an empty
-			// string — meaning [faz_cookie_policy_complete] rendered without any
-			// inventory section at all. The downstream rendering loop reads
-			// $row['cookie_name'] etc., so the aliases keep it untouched.
-			"SELECT c.cookie_id, c.name AS cookie_name, c.domain AS cookie_domain,
-			        c.duration AS cookie_duration, c.description AS cookie_description,
-			        c.meta AS cookie_meta,
-			        c.category AS category_id,
-			        cat.name AS category_name, cat.description AS category_description,
-			        cat.slug AS category_slug
-			   FROM `{$cookies_table}` AS c
-			   LEFT JOIN `{$categories_table}` AS cat ON c.category = cat.category_id
-			   ORDER BY cat.priority ASC, c.name ASC",
-			ARRAY_A
-		);
+		$rows = self::load_public_cookie_rows();
 
 		if ( empty( $rows ) ) {
 			$html = '';
 		} else {
-			// 1.16.2 — exclude WordPress-internal infrastructure cookies
-			// (wp-settings-*, wordpress_logged_in_*, wordpress_test_cookie,
-			// comment_author_*, etc.) AND the "wordpress-internal" admin
-			// category as a whole. These are strictly-necessary admin-only
-			// cookies that visitors never receive — listing them in the
-			// public Cookie Policy is misleading and bloats the page.
-			// Mirrors the same filter applied to the frontend banner
-			// (Frontend::is_wp_internal_cookie + 'wordpress-internal'
-			// category skip in prepare_frontend_categories).
-			$rows = array_values( array_filter( $rows, function ( $row ) {
-				// Skip the dedicated "wordpress-internal" admin category
-				// entirely — by convention it groups admin-only cookies
-				// that visitors never receive.
-				if ( 'wordpress-internal' === (string) ( $row['category_slug'] ?? '' ) ) {
-					return false;
-				}
-				$name = (string) ( $row['cookie_name'] ?? '' );
-				if ( class_exists( '\\FazCookie\\Frontend\\Frontend' )
-					&& \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
-					return false;
-				}
-				return true;
-			} ) );
-			if ( empty( $rows ) ) {
-				wp_cache_set( $cache_key, '', 'faz_cookie_policy', 5 * MINUTE_IN_SECONDS );
-				self::$cookie_list_cache[ $cache_key ] = '';
-				return '';
-			}
 			$grouped = array();
 			foreach ( $rows as $row ) {
 				// Categories' `name` and `description` columns store i18n
@@ -460,17 +412,25 @@ class Renderer {
 			$col_desc     = esc_html__( 'Description', 'faz-cookie-manager' );
 			$cookies_lbl  = esc_html__( 'cookies', 'faz-cookie-manager' );
 
-			// Third-country (Schrems II) per-row indicator labels, resolved once
-			// in the policy language via the same switch_to_locale( faz_wp_locale(
-			// $lang ) ) mechanism the banner template generator and REST endpoint
-			// use, so the fixed labels follow $lang like the country/safeguard
-			// values do — instead of the ambient request locale. Precomputed
-			// outside the loop so a flagged cookie costs no per-row locale switch.
-			$transfer_switched = self::switch_to_policy_locale( $lang );
-			/* translators: %s: recipient country name. */
-			$transfer_to_fmt  = esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' );
-			$transfer_outside = esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
-			self::restore_policy_locale( $transfer_switched );
+			$has_transfer = false;
+			foreach ( $rows as $row ) {
+				$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
+				if ( ! empty( $transfer['enabled'] ) ) {
+					$has_transfer = true;
+					break;
+				}
+			}
+			$transfer_to_fmt  = '';
+			$transfer_outside = '';
+			if ( $has_transfer ) {
+				// Resolve the fixed transfer labels only when at least one row uses
+				// them; unflagged inventories avoid an unnecessary locale switch.
+				$transfer_switched = self::switch_to_policy_locale( $lang );
+				/* translators: %s: recipient country name. */
+				$transfer_to_fmt  = esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' );
+				$transfer_outside = esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+				self::restore_policy_locale( $transfer_switched );
+			}
 
 			$parts = array();
 			foreach ( $grouped as $cat_name => $items ) {
@@ -660,6 +620,57 @@ class Renderer {
 	}
 
 	/**
+	 * Load the visitor-facing cookie inventory once for every policy surface.
+	 *
+	 * Both the table renderer and the international-transfer disclosure consume
+	 * the same JOIN. Sharing the raw, filtered rows prevents a second query when
+	 * both sections are rendered on a cache miss while preserving their existing
+	 * language-specific output caches.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function load_public_cookie_rows() {
+		if ( null !== self::$public_cookie_rows_cache ) {
+			return self::$public_cookie_rows_cache;
+		}
+
+		global $wpdb;
+		$cookies_table    = $wpdb->prefix . 'faz_cookies';
+		$categories_table = $wpdb->prefix . 'faz_cookie_categories';
+		if ( ! self::table_exists( $cookies_table ) || ! self::table_exists( $categories_table ) ) {
+			self::$public_cookie_rows_cache = array();
+			return self::$public_cookie_rows_cache;
+		}
+
+		// Column aliases preserve the legacy renderer field names while reading
+		// the current schema. Custom table names derive only from $wpdb->prefix.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			"SELECT c.cookie_id, c.name AS cookie_name, c.domain AS cookie_domain,
+			        c.duration AS cookie_duration, c.description AS cookie_description,
+			        c.meta AS cookie_meta, c.category AS category_id,
+			        cat.name AS category_name, cat.description AS category_description,
+			        cat.slug AS category_slug
+			   FROM `{$cookies_table}` AS c
+			   LEFT JOIN `{$categories_table}` AS cat ON c.category = cat.category_id
+			   ORDER BY cat.priority ASC, c.name ASC",
+			ARRAY_A
+		);
+
+		$rows = array_values( array_filter( (array) $rows, function ( $row ) {
+			if ( 'wordpress-internal' === (string) ( $row['category_slug'] ?? '' ) ) {
+				return false;
+			}
+			$name = (string) ( $row['cookie_name'] ?? '' );
+			return ! class_exists( '\\FazCookie\\Frontend\\Frontend' )
+				|| ! \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name );
+		} ) );
+
+		self::$public_cookie_rows_cache = $rows;
+		return self::$public_cookie_rows_cache;
+	}
+
+	/**
 	 * Collect the flagged third-country transfer disclosures, resolved to $lang.
 	 *
 	 * Returns a list of [ name, country, safeguard ] for every cookie with
@@ -682,35 +693,11 @@ class Renderer {
 			return $cached;
 		}
 
-		global $wpdb;
-		$cookies_table    = $wpdb->prefix . 'faz_cookies';
-		$categories_table = $wpdb->prefix . 'faz_cookie_categories';
-		if ( ! self::table_exists( $cookies_table ) || ! self::table_exists( $categories_table ) ) {
-			return array();
-		}
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = $wpdb->get_results(
-			// Custom-table names are interpolated (WP has no %i placeholder on the
-			// 5.0 floor); they derive from $wpdb->prefix, not user input.
-			"SELECT c.name AS cookie_name, c.meta AS cookie_meta, cat.slug AS category_slug
-			   FROM `{$cookies_table}` AS c
-			   LEFT JOIN `{$categories_table}` AS cat ON c.category = cat.category_id
-			   ORDER BY cat.priority ASC, c.name ASC",
-			ARRAY_A
-		);
+		$rows = self::load_public_cookie_rows();
 
 		$out = array();
 		foreach ( (array) $rows as $row ) {
-			// Skip the admin-only "wordpress-internal" category outright.
-			if ( 'wordpress-internal' === (string) ( $row['category_slug'] ?? '' ) ) {
-				continue;
-			}
 			$name = (string) ( $row['cookie_name'] ?? '' );
-			if ( class_exists( '\\FazCookie\\Frontend\\Frontend' )
-				&& \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
-				continue;
-			}
 			$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
 			if ( empty( $transfer['enabled'] ) ) {
 				continue;

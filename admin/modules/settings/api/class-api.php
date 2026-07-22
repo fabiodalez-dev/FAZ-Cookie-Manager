@@ -188,6 +188,14 @@ class Api extends Rest_Controller {
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'complete_onboarding' ),
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+					'args'                => array(
+						'law' => array(
+							'required'          => true,
+							'type'              => 'string',
+							'enum'              => Onboarding::LAWS,
+							'sanitize_callback' => 'sanitize_key',
+						),
+					),
 				),
 			)
 		);
@@ -209,16 +217,16 @@ class Api extends Rest_Controller {
 	public function complete_onboarding( $request ) {
 		$law = $request->get_param( 'law' );
 		$law = is_scalar( $law ) ? sanitize_key( (string) $law ) : '';
-
-		// `enable_logging` defaults to true (accountability baseline). Only an
-		// explicit false disables it.
-		$enable_logging = $request->get_param( 'enable_logging' );
-		$enable_logging = is_null( $enable_logging )
-			? true
-			: (bool) filter_var( $enable_logging, FILTER_VALIDATE_BOOLEAN );
+		if ( ! in_array( $law, Onboarding::LAWS, true ) ) {
+			return new WP_Error(
+				'faz_invalid_onboarding_law',
+				__( 'Choose a valid privacy law before finishing setup.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
+		}
 
 		$onboarding = new Onboarding();
-		$result     = $onboarding->finish( $law, $enable_logging );
+		$result     = $onboarding->finish( $law );
 
 		return rest_ensure_response( $result );
 	}

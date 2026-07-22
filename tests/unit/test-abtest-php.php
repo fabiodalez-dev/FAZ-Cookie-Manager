@@ -91,27 +91,27 @@ namespace {
 	faz_assert_same(
 		Ab_Test::pick_variant( $valid, 'ccpa-2', 0 ),
 		'ccpa-2',
-		'sticky: a valid existing cookie value is kept regardless of the random index'
+		'sticky: a valid banner slug from the consent scope is kept regardless of the random index'
 	);
-	// Determinism: same sticky cookie always yields the same variant.
+	// Determinism: the same stored consent scope always yields the same variant.
 	$first  = Ab_Test::pick_variant( $valid, 'box-3', 2 );
 	$second = Ab_Test::pick_variant( $valid, 'box-3', 99 );
-	faz_assert_same( $first === $second && 'box-3' === $first, true, 'same visitor (cookie) always resolves to the same variant' );
+	faz_assert_same( $first === $second && 'box-3' === $first, true, 'same stored consent scope always resolves to the same variant' );
 
 	faz_assert_same(
 		Ab_Test::pick_variant( $valid, '', 0 ),
 		'gdpr-1',
-		'no cookie: random index 0 selects the first valid variant'
+		'no stored scope: random index 0 selects the first valid variant'
 	);
 	faz_assert_same(
 		Ab_Test::pick_variant( $valid, '', 1 ),
 		'ccpa-2',
-		'no cookie: random index 1 selects the second valid variant'
+		'no stored scope: random index 1 selects the second valid variant'
 	);
 	faz_assert_same(
 		Ab_Test::pick_variant( $valid, 'deleted-7', 2 ),
 		'box-3',
-		'a cookie whose variant no longer exists triggers a fresh pick (index 2)'
+		'a stored variant that no longer exists triggers a fresh pick (index 2)'
 	);
 	faz_assert_same(
 		Ab_Test::pick_variant( $valid, '', 4 ),

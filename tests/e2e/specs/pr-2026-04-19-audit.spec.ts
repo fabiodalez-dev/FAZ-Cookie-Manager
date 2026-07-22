@@ -89,6 +89,24 @@ function restoreSettingsOption(encoded: string): void {
   `);
 }
 
+function setStripeGatewayEnabled(enabled: boolean): void {
+  wpEval(`
+    $settings = get_option( 'faz_settings', array() );
+    if ( ! is_array( $settings ) ) { $settings = array(); }
+    if ( ! isset( $settings['script_blocking'] ) || ! is_array( $settings['script_blocking'] ) ) {
+      $settings['script_blocking'] = array();
+    }
+    if ( ! isset( $settings['script_blocking']['payment_gateways'] ) || ! is_array( $settings['script_blocking']['payment_gateways'] ) ) {
+      $settings['script_blocking']['payment_gateways'] = array();
+    }
+    $settings['script_blocking']['payment_gateways']['stripe'] = ${enabled ? 'true' : 'false'};
+    update_option( 'faz_settings', $settings, false );
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+    }
+  `);
+}
+
 function enableConsentLogging(): void {
   wpEval(`
     $settings = get_option( 'faz_settings', array() );
@@ -512,20 +530,26 @@ test.describe('PR audit regressions (2026-04-19)', () => {
     }
   });
 
-  test('Stripe remains always-allowed before consent even on non-checkout pages', async ({ page }) => {
-    resetProviderMatrixState();
+  test('Stripe stays usable before consent on non-checkout pages when explicitly enabled', async ({ page }) => {
+    const originalSettings = backupSettingsOption();
+    setStripeGatewayEnabled(true);
+    try {
+      resetProviderMatrixState();
 
-    await page.goto(providerMatrixUrl, { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+      await page.goto(providerMatrixUrl, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    await expect
-      .poll(() => readProviderMatrixHits().stripe ?? 0, {
-        timeout: 10_000,
-        message: 'Stripe provider matrix hit should be recorded before consent on a non-checkout page.',
-      })
-      .toBeGreaterThan(0);
+      await expect
+        .poll(() => readProviderMatrixHits().stripe ?? 0, {
+          timeout: 10_000,
+          message: 'Explicitly enabled Stripe should execute before consent on a non-checkout page.',
+        })
+        .toBeGreaterThan(0);
 
-    await expect(page.locator('script[type="text/plain"][src*="js.stripe.com"]')).toHaveCount(0);
+      await expect(page.locator('script[type="text/plain"][src*="js.stripe.com"]')).toHaveCount(0);
+    } finally {
+      restoreSettingsOption(originalSettings);
+    }
   });
 
   test('WooCommerce wc-ajax responses stay valid JSON while the frontend output buffer is active', async ({ page }) => {

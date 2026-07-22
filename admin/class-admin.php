@@ -731,6 +731,24 @@ class Admin {
 						'selectBothDates'          => __( 'Please select both start and end dates.', 'faz-cookie-manager' ),
 						'startBeforeEnd'           => __( 'Start date must be before end date.', 'faz-cookie-manager' ),
 						'noCategoryData'           => __( 'No category data yet.', 'faz-cookie-manager' ),
+						'abTestNoData'              => __( 'No consents recorded for these variants yet. Results appear once visitors respond to the banner.', 'faz-cookie-manager' ),
+						/* translators: {accepted}: accepted count, {total}: total consent count. */
+						'abTestAcceptedOf'          => __( '{accepted} accepted of {total} consents', 'faz-cookie-manager' ),
+					),
+					// Guided setup wizard (admin/assets/js/pages/setup.js).
+					'setup'                    => array(
+						'scan_starting'             => __( 'Starting scan…', 'faz-cookie-manager' ),
+						'scan_in_progress'          => __( 'A scan is already in progress…', 'faz-cookie-manager' ),
+						'scan_failed'               => __( 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.', 'faz-cookie-manager' ),
+						'scan_failed_notify'        => __( 'Cookie scan could not be started.', 'faz-cookie-manager' ),
+						'scan_running'              => __( 'Scanning your site… this can take a moment.', 'faz-cookie-manager' ),
+						/* translators: %d: number of cookies found by the quick scan. */
+						'scan_done_found'           => __( 'Scan complete — %d cookies found.', 'faz-cookie-manager' ),
+						'scan_done_empty'           => __( 'Scan complete. No new cookies were found.', 'faz-cookie-manager' ),
+						'scan_slow'                 => __( 'The scan is still running in the background. You can finish setup now — results will appear on the Cookies page.', 'faz-cookie-manager' ),
+						'scan_status_error'         => __( 'Could not read the scan status. You can finish setup and check the Cookies page later.', 'faz-cookie-manager' ),
+						'finished'                  => __( 'Setup complete. Your cookie banner is ready.', 'faz-cookie-manager' ),
+						'finish_failed'             => __( 'Setup could not be saved. Please try again.', 'faz-cookie-manager' ),
 					),
 					// System Status page.
 					'systemStatus'             => array(

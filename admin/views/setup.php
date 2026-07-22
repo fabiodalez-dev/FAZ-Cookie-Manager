@@ -34,24 +34,25 @@ $faz_setup_laws = array(
 		'desc'   => __( 'For visitors in the European Union, EEA, or United Kingdom. Non-essential cookies stay blocked until the visitor actively opts in — nothing is pre-ticked, and Accept and Reject carry equal weight.', 'faz-cookie-manager' ),
 		'effect' => __( 'Opt-in model: no cookie is set before consent.', 'faz-cookie-manager' ),
 		'expiry' => __( 'Consent is remembered for up to 182 days.', 'faz-cookie-manager' ),
+		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, with no pre-ticked categories.', 'faz-cookie-manager' ),
 	),
 	'ccpa' => array(
 		'title'  => __( 'CCPA / US State laws', 'faz-cookie-manager' ),
 		'desc'   => __( 'For visitors covered by California (CCPA/CPRA) and similar US state privacy laws. These follow an opt-out model: a first-party "Do Not Sell or Share My Personal Information" link lets visitors withdraw at any time.', 'faz-cookie-manager' ),
 		'effect' => __( 'Opt-out model: a "Do Not Sell or Share" link is added.', 'faz-cookie-manager' ),
 		'expiry' => __( 'Consent is remembered for up to 365 days.', 'faz-cookie-manager' ),
+		'buttons' => __( 'The notice shows the "Do Not Sell or Share" control instead of GDPR Accept and Reject controls.', 'faz-cookie-manager' ),
 	),
 	'both' => array(
 		'title'  => __( 'Both (mixed EU + US audience)', 'faz-cookie-manager' ),
 		'desc'   => __( 'For a site with both EU and US visitors. The more protective opt-in model governs the banner, so EU visitors are never downgraded — while the US "Do Not Sell or Share" opt-out link is still shown.', 'faz-cookie-manager' ),
 		'effect' => __( 'Opt-in model plus the US "Do Not Sell or Share" link.', 'faz-cookie-manager' ),
 		'expiry' => __( 'Consent is remembered for up to 182 days.', 'faz-cookie-manager' ),
+		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, together with the US opt-out control.', 'faz-cookie-manager' ),
 	),
 );
 ?>
-<div id="faz-setup"
-	data-cookies-url="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-cookies' ) ); ?>"
-	data-dashboard-url="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager' ) ); ?>">
+<div id="faz-setup">
 
 	<ol class="faz-wizard-progress" aria-label="<?php esc_attr_e( 'Setup steps', 'faz-cookie-manager' ); ?>">
 		<li class="faz-wizard-progress-item is-active" data-progress="1">
@@ -80,7 +81,7 @@ $faz_setup_laws = array(
 					<legend class="screen-reader-text"><?php esc_html_e( 'Applicable privacy law', 'faz-cookie-manager' ); ?></legend>
 					<?php foreach ( $faz_setup_laws as $faz_law_key => $faz_law ) : ?>
 						<label class="faz-setup-law-card<?php echo ( $faz_onboarding_law === $faz_law_key ) ? ' is-selected' : ''; ?>">
-							<input type="radio" name="faz-setup-law" value="<?php echo esc_attr( $faz_law_key ); ?>" data-expiry="<?php echo esc_attr( $faz_law['expiry'] ); ?>"<?php checked( $faz_onboarding_law, $faz_law_key ); ?>>
+							<input type="radio" name="faz-setup-law" value="<?php echo esc_attr( $faz_law_key ); ?>" data-expiry="<?php echo esc_attr( $faz_law['expiry'] ); ?>" data-buttons="<?php echo esc_attr( $faz_law['buttons'] ); ?>"<?php checked( $faz_onboarding_law, $faz_law_key ); ?>>
 							<span class="faz-setup-law-body">
 								<span class="faz-setup-law-title"><?php echo esc_html( $faz_law['title'] ); ?></span>
 								<span class="faz-setup-law-desc"><?php echo esc_html( $faz_law['desc'] ); ?></span>
@@ -113,13 +114,12 @@ $faz_setup_laws = array(
 			<!-- Step 3 — Review & finish -->
 			<section class="faz-wizard-step" data-step="3" hidden aria-labelledby="faz-setup-step3-title">
 				<h2 id="faz-setup-step3-title" class="faz-setup-step-title"><?php esc_html_e( 'Review & finish', 'faz-cookie-manager' ); ?></h2>
-				<p class="faz-setup-step-lead"><?php esc_html_e( 'Here is what will be applied. These are compliant defaults — the banner keeps equal-weight Accept and Reject buttons and no pre-ticked categories.', 'faz-cookie-manager' ); ?></p>
+				<p class="faz-setup-step-lead"><?php esc_html_e( 'Here is what will be applied. These are compliant defaults — the controls match the selected consent model and no categories are pre-ticked.', 'faz-cookie-manager' ); ?></p>
 
 				<ul class="faz-setup-review" id="faz-setup-review"
 					data-label-law="<?php esc_attr_e( 'Applicable law', 'faz-cookie-manager' ); ?>"
 					data-label-effect="<?php esc_attr_e( 'Consent model', 'faz-cookie-manager' ); ?>"
 					data-label-expiry="<?php esc_attr_e( 'Consent expiry', 'faz-cookie-manager' ); ?>"
-					data-buttons="<?php esc_attr_e( 'Equal-weight Accept and Reject buttons, with no pre-ticked categories.', 'faz-cookie-manager' ); ?>"
 					data-logging="<?php esc_attr_e( 'Consent logging stays on for accountability.', 'faz-cookie-manager' ); ?>"></ul>
 
 				<p class="faz-setup-review-note"><?php esc_html_e( 'Consent logging is kept on for accountability, and your cookie banner will be shown to visitors. You can adjust anything afterwards on the Cookie Banner and Settings pages.', 'faz-cookie-manager' ); ?></p>

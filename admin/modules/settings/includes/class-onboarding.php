@@ -15,6 +15,7 @@
 namespace FazCookie\Admin\Modules\Settings\Includes;
 
 use FazCookie\Admin\Modules\Banners\Includes\Controller as Banner_Controller;
+use FazCookie\Admin\Modules\Banners\Includes\Banner;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -44,19 +45,21 @@ class Onboarding {
 	 * posture and mirrors the encoding banner.js writes when the admin picks a
 	 * law manually (admin/assets/js/pages/banner.js):
 	 *
-	 *  - gdpr : opt-in model, no US opt-out entry point.
-	 *  - ccpa : opt-out (notice) model, first-party "Do Not Sell or Share"
-	 *           entry point + opt-out popup enabled.
+	 *  - gdpr : opt-in model, equal-weight Accept/Reject controls, no US
+	 *           opt-out entry point, 180-day consent lifetime.
+	 *  - ccpa : opt-out notice model, first-party "Do Not Sell or Share"
+	 *           entry point + opt-out popup enabled, without GDPR Accept/Reject
+	 *           controls, and a 365-day preference lifetime.
 	 *  - both : mixed EU+US audience. Stored as applicableLaw='gdpr' (the MORE
 	 *           protective opt-in model governs the banner, so EU visitors are
 	 *           never downgraded to opt-out) WITH the US Do-Not-Sell entry point
 	 *           also rendered. This is the plugin's established "gdpr_ccpa"
 	 *           encoding (see Banner::apply_runtime_law_content_compatibility).
 	 *
-	 * Consent-expiry and equal-weight buttons are intentionally NOT part of the
-	 * mapping: the bundled per-law defaults already carry lawful values
-	 * (gdpr 180 days ≤ the Garante 182-day cap the frontend re-clamps to,
-	 * ccpa 365) and the wizard must never raise expiry or weaken button weight.
+	 * These fields are explicit because the wizard changes the existing default
+	 * GDPR row in place. Relying on the stored row's previous values would leave
+	 * a CCPA selection with GDPR buttons and a 180-day expiry even though the
+	 * review step promises the canonical 365-day opt-out configuration.
 	 *
 	 * @param string $law One of self::LAWS.
 	 * @return array|null Banner field map, or null for an unknown law.
@@ -68,18 +71,24 @@ class Onboarding {
 					'applicableLaw' => 'gdpr',
 					'donotSell'     => false,
 					'optoutPopup'   => false,
+					'consentExpiry' => 180,
+					'noticeButtons' => true,
 				);
 			case 'ccpa':
 				return array(
 					'applicableLaw' => 'ccpa',
 					'donotSell'     => true,
 					'optoutPopup'   => true,
+					'consentExpiry' => 365,
+					'noticeButtons' => false,
 				);
 			case 'both':
 				return array(
 					'applicableLaw' => 'gdpr',
 					'donotSell'     => true,
 					'optoutPopup'   => true,
+					'consentExpiry' => 180,
+					'noticeButtons' => true,
 				);
 			default:
 				return null;
@@ -89,35 +98,47 @@ class Onboarding {
 	/**
 	 * Apply the chosen jurisdiction to the site's default/active banner.
 	 *
-	 * Only the law-related fields are touched — applicableLaw plus the canonical
-	 * Do-Not-Sell button branch and the opt-out popup container. Colours, copy,
-	 * layout and every other customisation are preserved. The write goes through
+	 * Only the law-model fields are touched — applicableLaw, consent lifetime,
+	 * canonical notice controls, Do-Not-Sell, and the opt-out popup container.
+	 * Colours, copy, layout and every other customisation are preserved. The write goes through
 	 * the normal Banner::set_settings()/save() path so cache invalidation and the
 	 * standard sanitisation cascade run exactly as they do for a manual save.
 	 *
 	 * @param string $law One of self::LAWS.
-	 * @return true|WP_Error True on success; WP_Error (status 200, non-fatal)
-	 *                       when no default banner row exists to update.
+	 * If no global/default banner is available (for example, an install contains
+	 * only country-targeted banners), a new default banner is created instead of
+	 * overwriting one of those specialised rows.
+	 *
+	 * @return true|WP_Error True on success; WP_Error when validation or creation fails.
 	 */
 	public function apply_law_to_default_banner( $law ) {
 		$fields = self::map_law_to_banner_fields( $law );
 		if ( null === $fields ) {
-			// Unknown law — nothing to apply, but not an error condition.
-			return true;
+			return new WP_Error(
+				'faz_invalid_onboarding_law',
+				__( 'Choose a valid privacy law before finishing setup.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
 		}
 
 		$controller = Banner_Controller::get_instance();
 		$banner     = $controller->get_active_banner();
-		if ( ! $banner ) {
-			// Rare corrupted install with no default banner. Non-fatal: the
-			// caller still marks onboarding complete and surfaces a notice
-			// pointing the admin at the Banner page.
-			return new WP_Error(
-				'faz_no_default_banner',
-				__( 'No default cookie banner was found to configure. Open the Cookie Banner page to review your setup.', 'faz-cookie-manager' ),
-				array( 'status' => 200 )
-			);
+		if ( $banner && ! $banner->get_default() && ! empty( $banner->get_target_countries() ) ) {
+			// get_active_banner() deliberately falls back to an active targeted
+			// row when no global/default row exists (legacy caller compatibility).
+			// That fallback is not safe for onboarding: changing it would silently
+			// rewrite a country-specific law. Create a new global banner below.
+			$banner = false;
 		}
+		if ( ! $banner ) {
+			// Do not repurpose a country/law-specific banner. A fresh Banner starts
+			// from the bundled multilingual defaults and becomes the global fallback.
+			$banner = new Banner();
+			$name   = 'ccpa' === $law ? __( 'CCPA', 'faz-cookie-manager' ) : __( 'GDPR', 'faz-cookie-manager' );
+			$banner->set_name( $name );
+			$banner->set_default( true );
+		}
+		$banner->set_status( true );
 
 		$properties = $banner->get_settings();
 		if ( ! is_array( $properties ) ) {
@@ -127,6 +148,29 @@ class Onboarding {
 			$properties['settings'] = array();
 		}
 		$properties['settings']['applicableLaw'] = $fields['applicableLaw'];
+		self::set_nested(
+			$properties,
+			array( 'settings', 'consentExpiry', 'status' ),
+			true
+		);
+		self::set_nested(
+			$properties,
+			array( 'settings', 'consentExpiry', 'value' ),
+			$fields['consentExpiry']
+		);
+
+		// A pure CCPA banner is an opt-out notice. Leaving the GDPR Accept/Reject
+		// controls visible is not merely cosmetic: the CCPA runtime interprets its
+		// opt-out checkbox, so a GDPR-style "Reject" click could be logged as a
+		// rejection while optional categories remained allowed. GDPR and Both use
+		// the normal equal-weight notice controls; CCPA exposes Do Not Sell only.
+		foreach ( array( 'accept', 'reject', 'settings', 'readMore' ) as $button ) {
+			self::set_nested(
+				$properties,
+				array( 'config', 'notice', 'elements', 'buttons', 'elements', $button, 'status' ),
+				$fields['noticeButtons']
+			);
+		}
 
 		// Canonical Do-Not-Sell flag: the nested buttons.elements.donotSell branch
 		// is the one that survives sanitize_settings (it exists in the bundled
@@ -150,9 +194,59 @@ class Onboarding {
 		);
 
 		$banner->set_settings( $properties );
-		$banner->save();
+		$saved_id = $banner->save();
+		if ( ! $saved_id ) {
+			return new WP_Error(
+				'faz_onboarding_banner_save_failed',
+				__( 'The cookie banner could not be created. Please try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
+
+		// Store::save() returns the object's ID for updates even if the underlying
+		// database UPDATE fails. Re-read the row and verify every promised field so
+		// onboarding cannot be marked complete on a half-persisted configuration.
+		$persisted = new Banner( (int) $saved_id );
+		if ( ! self::banner_matches_law_fields( $persisted, $fields ) ) {
+			return new WP_Error(
+				'faz_onboarding_banner_save_failed',
+				__( 'Setup could not be saved. Please try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
 
 		return true;
+	}
+
+	/**
+	 * Confirm that the persisted banner matches the configuration promised by
+	 * the wizard review screen.
+	 *
+	 * @param Banner $banner Persisted banner instance.
+	 * @param array  $fields Canonical law field map.
+	 * @return bool
+	 */
+	private static function banner_matches_law_fields( $banner, $fields ) {
+		if ( ! $banner->get_id() || ! $banner->get_status() ) {
+			return false;
+		}
+		$properties = $banner->get_settings();
+		if ( ! is_array( $properties ) ) {
+			return false;
+		}
+		$buttons = $properties['config']['notice']['elements']['buttons']['elements'] ?? array();
+		foreach ( array( 'accept', 'reject', 'settings', 'readMore' ) as $button ) {
+			$status = ! empty( $buttons[ $button ]['status'] );
+			if ( $status !== $fields['noticeButtons'] ) {
+				return false;
+			}
+		}
+
+		return ( $properties['settings']['applicableLaw'] ?? '' ) === $fields['applicableLaw']
+			&& (int) ( $properties['settings']['consentExpiry']['value'] ?? 0 ) === $fields['consentExpiry']
+			&& ! empty( $properties['settings']['consentExpiry']['status'] )
+			&& ( ! empty( $buttons['donotSell']['status'] ) ) === $fields['donotSell']
+			&& ( ! empty( $properties['config']['optoutPopup']['status'] ) ) === $fields['optoutPopup'];
 	}
 
 	/**
@@ -163,27 +257,28 @@ class Onboarding {
 	 * GDPR Art. 5(2)/7(1). On a fresh install these are already the defaults; the
 	 * wizard only re-asserts them so a completed setup is demonstrably compliant.
 	 *
-	 * @param string $law            Chosen jurisdiction ('' | 'gdpr' | 'ccpa' | 'both').
-	 * @param bool   $enable_logging Whether to keep consent logging enabled (default true).
-	 * @return array {
-	 *     @type bool   $success        Always true (the settings write is the last step).
+	 * @param string $law Chosen jurisdiction ('gdpr' | 'ccpa' | 'both').
+	 * @return array|WP_Error {
+	 *     @type bool   $success        True after banner and settings are persisted.
 	 *     @type bool   $banner_applied Whether the default banner was law-switched.
 	 *     @type string $law            The persisted, validated jurisdiction.
-	 *     @type string $warning        Non-fatal message (e.g. no default banner), or ''.
+	 *     @type string $warning        Reserved advisory message; currently ''.
 	 * }
 	 */
-	public function finish( $law, $enable_logging = true ) {
-		$law            = in_array( $law, self::LAWS, true ) ? $law : '';
-		$banner_applied = false;
-		$warning        = '';
+	public function finish( $law ) {
+		if ( ! in_array( $law, self::LAWS, true ) ) {
+			return new WP_Error(
+				'faz_invalid_onboarding_law',
+				__( 'Choose a valid privacy law before finishing setup.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
+		}
 
-		if ( '' !== $law ) {
-			$applied = $this->apply_law_to_default_banner( $law );
-			if ( is_wp_error( $applied ) ) {
-				$warning = $applied->get_error_message();
-			} else {
-				$banner_applied = true;
-			}
+		$applied = $this->apply_law_to_default_banner( $law );
+		if ( is_wp_error( $applied ) ) {
+			// Never mark onboarding complete when no banner was configured. The
+			// wizard's success state must mean the requested setup actually exists.
+			return $applied;
 		}
 
 		$settings_obj = new Settings();
@@ -197,12 +292,10 @@ class Onboarding {
 			$all['banner_control'] = array();
 		}
 		$all['banner_control']['status'] = true;
-		if ( $enable_logging ) {
-			if ( ! isset( $all['consent_logs'] ) || ! is_array( $all['consent_logs'] ) ) {
-				$all['consent_logs'] = array();
-			}
-			$all['consent_logs']['status'] = true;
+		if ( ! isset( $all['consent_logs'] ) || ! is_array( $all['consent_logs'] ) ) {
+			$all['consent_logs'] = array();
 		}
+		$all['consent_logs']['status'] = true;
 
 		if ( ! isset( $all['onboarding'] ) || ! is_array( $all['onboarding'] ) ) {
 			$all['onboarding'] = array();
@@ -223,9 +316,9 @@ class Onboarding {
 
 		return array(
 			'success'        => true,
-			'banner_applied' => $banner_applied,
+			'banner_applied' => true,
 			'law'            => $law,
-			'warning'        => $warning,
+			'warning'        => '',
 		);
 	}
 

@@ -97,11 +97,11 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'A/B test banner variants', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php echo wp_kses_post( __( 'Run two or more of your existing banners at the same time. Each visitor is randomly assigned one variant and keeps it across visits, and the acceptance rate per variant is reported on the Dashboard so you can optimise the consent experience with evidence. Every variant you pick stays independently compliant — this only chooses among banners you already built, it never changes their buttons or defaults. <strong>Requires Cache Compatibility Mode above to be OFF</strong>, because a per-visitor split cannot run behind full-page caching.', 'faz-cookie-manager' ) ); ?></div>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Run two or more of your existing banners at the same time. A visitor is randomly shown one eligible variant without creating an experiment cookie before consent; after a choice, the banner slug in the consent record keeps the assignment stable. Acceptance rate per variant is reported on the Dashboard. Variants must use the same privacy-law and Do-Not-Sell model; country targeting is always respected, so the experiment can vary presentation but never a visitor\'s legal regime. <strong>Requires Cache Compatibility Mode above to be OFF</strong>, because a per-visitor split cannot run behind full-page caching.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
 			<div class="faz-form-group" data-show-if="banner_control.ab_test.status">
 				<label><?php esc_html_e( 'Variants in the test group', 'faz-cookie-manager' ); ?></label>
-				<div class="faz-help"><?php esc_html_e( 'Select two or more active banners to include in the test. Only active banners can be used as variants.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Select two or more active banners with the same consent model. Incompatible or country-ineligible banners are ignored for that visitor.', 'faz-cookie-manager' ); ?></div>
 				<div id="faz-abtest-variants" class="faz-abtest-variants">
 					<p style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading banners…', 'faz-cookie-manager' ); ?></p>
 				</div>

@@ -284,6 +284,13 @@ test.describe('GCM and IAB TCF behavior', () => {
 
   test('GCM restores stored consent with consent update, never a second default (#149)', async ({ browser, wpBaseURL }) => {
     const gcmSettingsSnapshot = snapshotGcmSettings();
+    const fazSettingsSnapshot = Buffer.from(wpEval(`
+      echo wp_json_encode( array(
+        'exists' => false !== get_option( 'faz_settings', false ),
+        'value'  => get_option( 'faz_settings', array() ),
+      ) );
+    `).trim(), 'utf8').toString('base64');
+    let activeConsentRevision = 2;
 
     const scenarios: GcmScenario[] = [
       {
@@ -400,6 +407,25 @@ test.describe('GCM and IAB TCF behavior', () => {
 
     try {
       configureGcm();
+      activeConsentRevision = Number(wpEval(`
+        $settings = get_option( 'faz_settings', array() );
+        $settings = is_array( $settings ) ? $settings : array();
+        $settings['general'] = isset( $settings['general'] ) && is_array( $settings['general'] )
+          ? $settings['general']
+          : array();
+        $current = max( 1, absint( $settings['general']['consent_revision'] ?? 1 ) );
+        $settings['general']['consent_revision'] = max( 2, $current + 1 );
+        update_option( 'faz_settings', $settings, false );
+        wp_cache_delete( 'faz_settings', 'options' );
+        if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+          \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+        }
+        do_action( 'rest_api_init' );
+        do_action( 'faz_after_update_settings', $settings );
+        echo (int) $settings['general']['consent_revision'];
+      `).trim());
+      expect(activeConsentRevision).toBeGreaterThan(1);
+
       for (const scenario of scenarios) {
         await assertScenario(scenario);
       }
@@ -408,7 +434,7 @@ test.describe('GCM and IAB TCF behavior', () => {
       await staleContext.addCookies([
         {
           name: 'fazcookie-consent',
-          value: encodeURIComponent('consentid:stale,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,performance:yes,uncategorized:yes,marketing:yes,rev:1'),
+          value: encodeURIComponent(`consentid:stale,consent:yes,action:yes,necessary:yes,functional:yes,analytics:yes,performance:yes,uncategorized:yes,marketing:yes,rev:${activeConsentRevision - 1}`),
           domain: new URL(wpBaseURL).hostname,
           path: '/',
           sameSite: 'Lax',
@@ -425,6 +451,22 @@ test.describe('GCM and IAB TCF behavior', () => {
       await staleContext.close();
     } finally {
       restoreGcmSettings(gcmSettingsSnapshot);
+      wpEval(`
+        $snapshot = json_decode( base64_decode( '${fazSettingsSnapshot}' ), true );
+        if ( is_array( $snapshot ) && ! empty( $snapshot['exists'] ) ) {
+          $settings = is_array( $snapshot['value'] ) ? $snapshot['value'] : array();
+          update_option( 'faz_settings', $settings, false );
+        } else {
+          $settings = array();
+          delete_option( 'faz_settings' );
+        }
+        wp_cache_delete( 'faz_settings', 'options' );
+        if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+          \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+        }
+        do_action( 'rest_api_init' );
+        do_action( 'faz_after_update_settings', $settings );
+      `);
     }
   });
 

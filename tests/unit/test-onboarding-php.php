@@ -8,8 +8,8 @@
  *   - Backward-compat: an existing option array WITHOUT the onboarding key must
  *     still yield completed=true (no nag for upgrading installs).
  *   - Onboarding::map_law_to_banner_fields() returns the exact, compliant
- *     applicableLaw / donotSell / optoutPopup combos per jurisdiction and never
- *     mutates equal-weight buttons or consent-expiry.
+ *     applicableLaw / donotSell / optoutPopup / expiry / notice-control combos
+ *     per jurisdiction.
  *
  * Run: php tests/unit/test-onboarding-php.php
  *
@@ -134,30 +134,36 @@ namespace {
 	faz_assert_same( $gdpr['applicableLaw'], 'gdpr', 'gdpr -> applicableLaw gdpr' );
 	faz_assert_same( $gdpr['donotSell'], false, 'gdpr -> Do-Not-Sell off (opt-in, no US opt-out entry point)' );
 	faz_assert_same( $gdpr['optoutPopup'], false, 'gdpr -> opt-out popup off' );
+	faz_assert_same( $gdpr['consentExpiry'], 180, 'gdpr -> canonical 180-day consent lifetime' );
+	faz_assert_same( $gdpr['noticeButtons'], true, 'gdpr -> equal-weight notice controls visible' );
 
 	$ccpa = Onboarding::map_law_to_banner_fields( 'ccpa' );
 	faz_assert_same( $ccpa['applicableLaw'], 'ccpa', 'ccpa -> applicableLaw ccpa' );
 	faz_assert_same( $ccpa['donotSell'], true, 'ccpa -> Do-Not-Sell on (opt-out model)' );
 	faz_assert_same( $ccpa['optoutPopup'], true, 'ccpa -> opt-out popup on' );
+	faz_assert_same( $ccpa['consentExpiry'], 365, 'ccpa -> canonical 365-day preference lifetime' );
+	faz_assert_same( $ccpa['noticeButtons'], false, 'ccpa -> GDPR Accept/Reject notice controls hidden' );
 
 	$both = Onboarding::map_law_to_banner_fields( 'both' );
 	faz_assert_same( $both['applicableLaw'], 'gdpr', 'both -> applicableLaw gdpr (more-protective opt-in governs)' );
 	faz_assert_same( $both['donotSell'], true, 'both -> Do-Not-Sell on (US opt-out entry point still shown)' );
 	faz_assert_same( $both['optoutPopup'], true, 'both -> opt-out popup on' );
+	faz_assert_same( $both['consentExpiry'], 180, 'both -> canonical GDPR-family 180-day lifetime' );
+	faz_assert_same( $both['noticeButtons'], true, 'both -> equal-weight notice controls visible' );
 
 	faz_assert_same( Onboarding::map_law_to_banner_fields( 'evil' ), null, 'unknown law -> null (no banner mutation)' );
 	faz_assert_same( Onboarding::map_law_to_banner_fields( '' ), null, "empty law -> null (no banner mutation)" );
 
-	echo "\n-- invariants: expiry & equal-weight buttons never mutated --\n";
+	echo "\n-- invariants: complete law-specific mapping --\n";
 
-	// The map must expose ONLY the three law-related fields. Any consentExpiry or
-	// button-weight key here would mean the wizard could raise expiry above the
-	// 182-day Garante cap or unbalance Accept/Reject — a compliance regression.
+	// The map must expose exactly the fields the wizard applies. Extra keys would
+	// expand its mutation surface; missing keys would leave stale values from the
+	// previous law (the CCPA-on-GDPR regression this suite guards).
 	foreach ( array( 'gdpr', 'ccpa', 'both' ) as $law ) {
 		$fields = Onboarding::map_law_to_banner_fields( $law );
 		$keys   = array_keys( $fields );
 		sort( $keys );
-		faz_assert_same( $keys, array( 'applicableLaw', 'donotSell', 'optoutPopup' ), "map('$law') exposes only law fields (no expiry/button mutation)" );
+		faz_assert_same( $keys, array( 'applicableLaw', 'consentExpiry', 'donotSell', 'noticeButtons', 'optoutPopup' ), "map('$law') exposes the complete canonical law fields only" );
 	}
 	// gdpr/both keep applicableLaw='gdpr', so the frontend's non-ccpa expiry clamp
 	// (<=182 days) always applies to them.

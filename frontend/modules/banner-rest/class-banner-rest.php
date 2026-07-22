@@ -74,6 +74,11 @@ class Banner_Rest {
 						'sanitize_callback' => array( $this, 'sanitize_language' ),
 						'validate_callback' => array( $this, 'validate_language' ),
 					),
+					'banner' => array(
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_title',
+					),
 				),
 			)
 		);
@@ -176,6 +181,19 @@ class Banner_Rest {
 				__( 'No active banner found.', 'faz-cookie-manager' ),
 				array( 'status' => 404 )
 			);
+		}
+
+		// A client-side language swap must keep the banner variant selected for
+		// the current page. Otherwise an Italian REST fetch after an A/B choice
+		// would silently replace variant B with the default banner A. Honour the
+		// requested slug only when it is the already-routed banner or a currently
+		// configured A/B peer with the same law/Do-Not-Sell model and geo scope.
+		$requested_slug = sanitize_title( (string) $request->get_param( 'banner' ) );
+		if ( '' !== $requested_slug && $requested_slug !== $banner->get_slug() ) {
+			$requested_variant = $this->resolve_requested_variant( $requested_slug, $banner, $country, $controller );
+			if ( $requested_variant ) {
+				$banner = $requested_variant;
+			}
 		}
 
 		// Force the language context for downstream helpers. The static cache
@@ -303,6 +321,108 @@ class Banner_Rest {
 	private function is_cache_compatibility_enabled() {
 		$settings = $this->get_faz_settings();
 		return ! empty( $settings['banner_control']['cache_compatibility'] );
+	}
+
+	/**
+	 * Resolve an A/B variant requested by the language-swap client.
+	 *
+	 * @param string            $requested_slug Requested current-page slug.
+	 * @param object            $default_banner Banner selected by legal routing.
+	 * @param string            $country        Visitor country or empty string.
+	 * @param Banner_Controller $controller     Banner controller.
+	 * @return object|false
+	 */
+	private function resolve_requested_variant( $requested_slug, $default_banner, $country, $controller ) {
+		if ( $this->is_cache_compatibility_enabled() ) {
+			return false;
+		}
+		$settings = $this->get_faz_settings();
+		$ab       = isset( $settings['banner_control']['ab_test'] ) && is_array( $settings['banner_control']['ab_test'] )
+			? $settings['banner_control']['ab_test'] : array();
+		$configured = isset( $ab['variants'] ) && is_array( $ab['variants'] ) ? $ab['variants'] : array();
+		if ( empty( $ab['status'] ) || count( $configured ) < 2 ) {
+			return false;
+		}
+
+		$valid          = $controller->filter_active_variant_slugs( $configured );
+		$required_model = $this->banner_experiment_model( $default_banner );
+		$compatible     = array();
+		foreach ( $valid as $slug ) {
+			$candidate = $controller->get_active_banner_by_slug( $slug );
+			if ( ! $candidate
+				|| $this->banner_experiment_model( $candidate ) !== $required_model
+				|| ! $this->is_banner_geo_eligible( $candidate, $country ) ) {
+				continue;
+			}
+			$compatible[ $slug ] = $candidate;
+		}
+
+		return count( $compatible ) >= 2 && isset( $compatible[ $requested_slug ] )
+			? $compatible[ $requested_slug ]
+			: false;
+	}
+
+	/**
+	 * Return the law + Do-Not-Sell model used to constrain A/B peers.
+	 *
+	 * @param object $banner Banner object.
+	 * @return string
+	 */
+	private function banner_experiment_model( $banner ) {
+		$properties = $banner->get_settings();
+		$dns        = ! empty( $properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] );
+		return $banner->get_law() . '|' . ( $dns ? 'dns' : 'plain' );
+	}
+
+	/**
+	 * Check target_countries and ruleSet without letting A/B cross geo scope.
+	 *
+	 * @param object $banner  Candidate banner.
+	 * @param string $country Visitor country or empty string.
+	 * @return bool
+	 */
+	private function is_banner_geo_eligible( $banner, $country ) {
+		$country = strtoupper( (string) $country );
+		$targets = array_map( 'strtoupper', (array) $banner->get_target_countries() );
+		if ( ! empty( $targets ) && ( '' === $country || ! in_array( $country, $targets, true ) ) ) {
+			return false;
+		}
+
+		$properties = $banner->get_settings();
+		$rules      = isset( $properties['settings']['ruleSet'] ) && is_array( $properties['settings']['ruleSet'] )
+			? $properties['settings']['ruleSet'] : array();
+		if ( empty( $rules ) || '' === $country ) {
+			return true;
+		}
+		foreach ( $rules as $rule ) {
+			if ( is_array( $rule ) && $this->rule_matches_country( $rule, $country ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether one banner rule matches the visitor country.
+	 *
+	 * @param array  $rule    Banner ruleSet entry.
+	 * @param string $country ISO-3166 alpha-2 code.
+	 * @return bool
+	 */
+	private function rule_matches_country( $rule, $country ) {
+		$code = isset( $rule['code'] ) ? strtoupper( (string) $rule['code'] ) : 'ALL';
+		switch ( $code ) {
+			case 'ALL':
+				return true;
+			case 'EU':
+				return in_array( $country, Geolocation::$eu_countries, true );
+			case 'US':
+				return 'US' === $country;
+			case 'OTHER':
+				return in_array( $country, array_map( 'strtoupper', (array) ( $rule['regions'] ?? array() ) ), true );
+			default:
+				return false;
+		}
 	}
 
 	/**

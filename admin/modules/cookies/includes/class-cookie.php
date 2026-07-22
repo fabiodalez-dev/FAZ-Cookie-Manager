@@ -374,11 +374,7 @@ class Cookie extends Store {
 	 * @return array{enabled:bool,countries:array,safeguard:array}
 	 */
 	private function default_transfer() {
-		return array(
-			'enabled'   => false,
-			'countries' => array(),
-			'safeguard' => array(),
-		);
+		return self::sanitize_transfer_value( array() );
 	}
 
 	/**
@@ -448,8 +444,27 @@ class Cookie extends Store {
 	 * @return array{enabled:bool,countries:array,safeguard:array}
 	 */
 	private function sanitize_transfer_meta( $data ) {
+		return self::sanitize_transfer_value( $data );
+	}
+
+	/**
+	 * Shared pure coercion for the third-country transfer sub-object.
+	 *
+	 * This is public so the REST schema boundary and the model setter use the
+	 * exact same normalisation while still applying it twice as defence in
+	 * depth. Keeping the bool whitelist and multilingual-key rules here avoids
+	 * the two write paths drifting apart.
+	 *
+	 * @param mixed $data Raw transfer object or JSON string.
+	 * @return array{enabled:bool,countries:array,safeguard:array}
+	 */
+	public static function sanitize_transfer_value( $data ) {
+		if ( is_string( $data ) ) {
+			$decoded = json_decode( $data, true );
+			$data    = is_array( $decoded ) ? $decoded : array();
+		}
 		if ( ! is_array( $data ) ) {
-			return $this->default_transfer();
+			$data = array();
 		}
 
 		$enabled = false;
@@ -458,35 +473,25 @@ class Cookie extends Store {
 			$enabled = ! in_array( $raw, array( false, 0, '0', '', 'false', 'no', 'off' ), true );
 		}
 
-		$countries = $this->sanitize_transfer_lang_map(
-			isset( $data['countries'] ) ? $data['countries'] : array(),
-			'sanitize_text_field'
-		);
-		$safeguard = $this->sanitize_transfer_lang_map(
-			isset( $data['safeguard'] ) ? $data['safeguard'] : array(),
-			array( $this, 'kses_safeguard' )
-		);
-
 		return array(
 			'enabled'   => (bool) $enabled,
-			'countries' => $countries,
-			'safeguard' => $safeguard,
+			'countries' => self::sanitize_transfer_lang_map( isset( $data['countries'] ) ? $data['countries'] : array(), false ),
+			'safeguard' => self::sanitize_transfer_lang_map( isset( $data['safeguard'] ) ? $data['safeguard'] : array(), true ),
 		);
 	}
 
 	/**
-	 * Normalise a multilingual { <lang> => string } map, running each value
-	 * through the given per-value sanitiser. Mirrors the shape/fallback
-	 * contract of the existing description/duration multilingual fields.
+	 * Normalise a multilingual { <lang> => string } map. Mirrors the
+	 * shape/fallback contract of the existing description/duration fields.
 	 *
 	 * A bare string is wrapped under the default language so a single-language
 	 * admin payload (or a legacy scalar) still round-trips.
 	 *
-	 * @param mixed    $map       Raw value (array keyed by language, or a scalar).
-	 * @param callable $sanitiser Per-value sanitiser.
+	 * @param mixed $map  Raw value (array keyed by language, or a scalar).
+	 * @param bool  $html Whether limited HTML is allowed in values.
 	 * @return array
 	 */
-	private function sanitize_transfer_lang_map( $map, $sanitiser ) {
+	private static function sanitize_transfer_lang_map( $map, $html ) {
 		$out = array();
 		if ( is_array( $map ) ) {
 			foreach ( $map as $lang => $value ) {
@@ -497,26 +502,12 @@ class Cookie extends Store {
 				if ( '' === $lang_key ) {
 					continue;
 				}
-				$out[ $lang_key ] = call_user_func( $sanitiser, $value );
+				$out[ $lang_key ] = $html ? wp_kses( $value, faz_allowed_html() ) : sanitize_text_field( $value );
 			}
 		} elseif ( is_string( $map ) && '' !== trim( $map ) ) {
-			$out[ faz_default_language() ] = call_user_func( $sanitiser, $map );
+			$out[ faz_default_language() ] = $html ? wp_kses( $map, faz_allowed_html() ) : sanitize_text_field( $map );
 		}
 		return $out;
-	}
-
-	/**
-	 * wp_kses() a safeguard string against the plugin's allowed-HTML set.
-	 *
-	 * Wrapped in a named method so it can be passed as a callable to
-	 * sanitize_transfer_lang_map() while still supplying the second
-	 * faz_allowed_html() argument.
-	 *
-	 * @param string $value Raw safeguard text.
-	 * @return string
-	 */
-	private function kses_safeguard( $value ) {
-		return wp_kses( (string) $value, faz_allowed_html() );
 	}
 
 	/**

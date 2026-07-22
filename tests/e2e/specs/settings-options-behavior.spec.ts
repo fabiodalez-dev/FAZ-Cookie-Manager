@@ -307,6 +307,12 @@ test.describe('Settings option behavior interactions', () => {
     // ---- Surface 3: Reject is ungated — no affirmation needed, records a
     //      rejection with every non-necessary category denied. ----
     const rejectVisit = await newVisitorPage(browser);
+    let rejectLogBody: any = null;
+    rejectVisit.page.on('request', (request) => {
+      if (request.url().includes('/faz/v1/consent') && request.method() === 'POST') {
+        try { rejectLogBody = request.postDataJSON(); } catch { /* ignore malformed diagnostics */ }
+      }
+    });
     const clickedReject = await clickFirstVisible(rejectVisit.page, [
       '[data-faz-tag="reject-button"] button',
       '[data-faz-tag="reject-button"]',
@@ -320,8 +326,10 @@ test.describe('Settings option behavior interactions', () => {
     expect(rejectValue).toContain('consent:no');
     expect(rejectValue).toContain('analytics:no');
     expect(rejectValue).toContain('marketing:no');
-    // A rejection never affirms age → the log must NOT carry the age flag.
-    expect(rejectValue).not.toContain('meta.age_affirmed');
+    // A rejection never affirms age: validate the actual consent-log payload,
+    // not the consent cookie (which never carries metadata keys).
+    await expect.poll(() => rejectLogBody, { message: 'a consent-log POST must fire on reject' }).not.toBeNull();
+    expect(rejectLogBody.categories?.['meta.age_affirmed']).toBeUndefined();
     await rejectVisit.context.close();
   });
 

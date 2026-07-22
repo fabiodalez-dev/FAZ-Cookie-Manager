@@ -119,7 +119,7 @@
 		if (input && input.getAttribute('data-expiry')) {
 			addReviewItem(list, list.getAttribute('data-label-expiry'), input.getAttribute('data-expiry'));
 		}
-		addReviewItem(list, '', list.getAttribute('data-buttons'));
+		addReviewItem(list, '', input ? input.getAttribute('data-buttons') : '');
 		addReviewItem(list, '', list.getAttribute('data-logging'));
 	}
 
@@ -221,19 +221,20 @@
 		finishBtn.disabled = true;
 		backBtn.disabled = true;
 
-		var payload = { law: selectedLaw(), enable_logging: true };
+		var payload = { law: selectedLaw() };
 
 		FAZ.post('settings/onboarding', payload).then(function (result) {
 			if (result && result.warning) {
-				// Non-fatal (e.g. no default banner). Surface it but still proceed.
+				// Keep the response contract forward-compatible with advisory notices.
 				FAZ.notify(result.warning, 'warning');
 			} else {
 				FAZ.notify(__('setup.finished', 'Setup complete. Your cookie banner is ready.'), 'success');
 			}
-			var target = root.getAttribute('data-dashboard-url');
 			// Brief pause so the toast is visible before navigating.
 			setTimeout(function () {
-				if (target) { window.location.href = target; }
+				// Same-directory, constant admin target: no DOM-derived URL reaches a
+				// navigation sink (and custom WordPress admin paths keep working).
+				window.location.assign('admin.php?page=faz-cookie-manager');
 			}, 700);
 		}).catch(function () {
 			finishing = false;

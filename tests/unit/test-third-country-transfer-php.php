@@ -213,6 +213,7 @@ if ( ! function_exists( 'wp_cache_delete' ) ) {
 class Faz_Transfer_WPDB {
 	public $prefix       = 'wp_';
 	public $cookies_rows = array();
+	public $query_count  = 0;
 
 	public function prepare( $query, ...$args ) {
 		if ( 1 === count( $args ) && is_array( $args[0] ) ) {
@@ -237,6 +238,7 @@ class Faz_Transfer_WPDB {
 		return null;
 	}
 	public function get_results( $query, $output = ARRAY_A ) {
+		$this->query_count++;
 		return $this->cookies_rows;
 	}
 }
@@ -437,11 +439,20 @@ $collect       = $ref_r->getMethod( 'collect_transfer_disclosures' );
 $collect->setAccessible( true );
 $section       = $ref_r->getMethod( 'international_transfers_section' );
 $section->setAccessible( true );
+$cookie_list   = $ref_r->getMethod( 'build_cookie_list_html' );
+$cookie_list->setAccessible( true );
 $transfer_prop = $ref_r->getProperty( 'transfer_cache' );
 $transfer_prop->setAccessible( true );
+$list_prop = $ref_r->getProperty( 'cookie_list_cache' );
+$list_prop->setAccessible( true );
+$rows_prop = $ref_r->getProperty( 'public_cookie_rows_cache' );
+$rows_prop->setAccessible( true );
 
-$reset_renderer = function () use ( $transfer_prop ) {
+$reset_renderer = function () use ( $transfer_prop, $list_prop, $rows_prop, $wpdb ) {
 	$transfer_prop->setValue( null, array() );
+	$list_prop->setValue( null, array() );
+	$rows_prop->setValue( null, null );
+	$wpdb->query_count = 0;
 	$GLOBALS['_cache'] = array();
 };
 
@@ -489,6 +500,12 @@ assert_not_contains( $section_html, 'wp-settings-1', 'international_transfers_se
 // Must NOT assert the transfer is legally valid.
 assert_not_contains( $section_html, 'legally valid', 'international_transfers_section: makes NO legality claim' );
 assert_not_contains( $section_html, 'is compliant', 'international_transfers_section: makes NO compliance claim' );
+
+// The list and transfer surfaces share one request-local inventory query.
+$reset_renderer();
+$cookie_list->invoke( null, 'en' );
+$collect->invoke( null, 'en' );
+assert_eq( $wpdb->query_count, 1, 'renderer: cookie list + transfer disclosure execute one shared inventory query per request' );
 
 // 6c. Policy version fingerprint bumps when transfer data changes.
 $data_none = array( 'COMPANY_NAME' => 'Acme' );

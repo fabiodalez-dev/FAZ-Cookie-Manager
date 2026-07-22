@@ -78,20 +78,19 @@ class Ab_Test {
 	/**
 	 * Assign a visitor to one of the valid variant slugs.
 	 *
-	 * The split is STICKY: if the visitor already carries a variant cookie
-	 * whose value is still a valid variant, that same variant is returned so
-	 * they keep the identical banner across visits (stable UX and honest
-	 * per-variant accountability in the consent log). Only a first-time or
-	 * now-invalid cookie triggers a fresh random pick, driven by the caller's
-	 * random index (kept as a parameter so this method stays pure and
-	 * deterministically testable — the caller passes wp_rand()).
+	 * The split is STICKY after a consent action: the caller supplies the banner
+	 * slug already stored in the strictly-necessary consent record. If it is
+	 * still a valid variant, that same variant is returned. A visitor who has
+	 * not acted yet gets a fresh random pick without setting an experiment
+	 * cookie before consent. The random index stays a parameter so this method
+	 * remains pure and deterministically testable — the caller passes wp_rand().
 	 *
 	 * @param array  $valid_slugs  Slugs already filtered to valid variants.
-	 * @param string $cookie_value Current fazcookie-abvariant cookie value.
+	 * @param string $stored_value Banner slug from the stored consent scope.
 	 * @param int    $random_index Caller-supplied random integer (any range).
 	 * @return string Chosen variant slug, or '' when fewer than two variants.
 	 */
-	public static function pick_variant( $valid_slugs, $cookie_value, $random_index ) {
+	public static function pick_variant( $valid_slugs, $stored_value, $random_index ) {
 		$valid = array();
 		if ( is_array( $valid_slugs ) ) {
 			foreach ( $valid_slugs as $slug ) {
@@ -109,9 +108,9 @@ class Ab_Test {
 			return '';
 		}
 
-		$cookie_value = is_scalar( $cookie_value ) ? trim( (string) $cookie_value ) : '';
-		if ( '' !== $cookie_value && in_array( $cookie_value, $valid, true ) ) {
-			return $cookie_value;
+		$stored_value = is_scalar( $stored_value ) ? trim( (string) $stored_value ) : '';
+		if ( '' !== $stored_value && in_array( $stored_value, $valid, true ) ) {
+			return $stored_value;
 		}
 
 		$n = count( $valid );

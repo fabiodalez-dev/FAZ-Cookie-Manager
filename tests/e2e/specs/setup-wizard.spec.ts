@@ -24,6 +24,9 @@ type WizardState = {
   law: string;
   donotSell: boolean;
   optoutPopup: boolean;
+  expiry: number;
+  noticeAccept: boolean;
+  noticeReject: boolean;
 };
 
 /** Snapshot faz_settings + the default banner settings JSON for later restore. */
@@ -88,14 +91,25 @@ function readState(): WizardState {
     $onb = $o->get( 'onboarding' );
     $ctrl = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
     $b = $ctrl->get_active_banner();
-    $law = ''; $dns = false; $pop = false;
+    $law = ''; $dns = false; $pop = false; $expiry = 0; $accept = false; $reject = false;
     if ( $b ) {
       $s = $b->get_settings();
       $law = isset( $s['settings']['applicableLaw'] ) ? $s['settings']['applicableLaw'] : '';
       $dns = ! empty( $s['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] );
       $pop = ! empty( $s['config']['optoutPopup']['status'] );
+      $expiry = isset( $s['settings']['consentExpiry']['value'] ) ? (int) $s['settings']['consentExpiry']['value'] : 0;
+      $accept = ! empty( $s['config']['notice']['elements']['buttons']['elements']['accept']['status'] );
+      $reject = ! empty( $s['config']['notice']['elements']['buttons']['elements']['reject']['status'] );
     }
-    echo wp_json_encode( array( 'onboarding' => $onb, 'law' => $law, 'donotSell' => (bool) $dns, 'optoutPopup' => (bool) $pop ) );
+    echo wp_json_encode( array(
+      'onboarding' => $onb,
+      'law' => $law,
+      'donotSell' => (bool) $dns,
+      'optoutPopup' => (bool) $pop,
+      'expiry' => $expiry,
+      'noticeAccept' => (bool) $accept,
+      'noticeReject' => (bool) $reject,
+    ) );
   `).trim();
   return JSON.parse(raw) as WizardState;
 }
@@ -132,6 +146,9 @@ test.describe('Guided setup wizard', () => {
       expect(state.law).toBe('ccpa');
       expect(state.donotSell).toBe(true);
       expect(state.optoutPopup).toBe(true);
+      expect(state.expiry).toBe(365);
+      expect(state.noticeAccept).toBe(false);
+      expect(state.noticeReject).toBe(false);
     } finally {
       restore(snap);
     }
@@ -158,6 +175,37 @@ test.describe('Guided setup wizard', () => {
       expect(state.onboarding.law).toBe('gdpr');
       expect(state.law).toBe('gdpr');
       expect(state.donotSell).toBe(false);
+      expect(state.optoutPopup).toBe(false);
+      expect(state.expiry).toBe(180);
+      expect(state.noticeAccept).toBe(true);
+      expect(state.noticeReject).toBe(true);
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('Both keeps GDPR opt-in controls and adds the US Do-Not-Sell path', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      forceIncomplete();
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+
+      await page.locator('input[name="faz-setup-law"][value="both"]').check();
+      await page.click('#faz-setup-next');
+      await page.click('#faz-setup-next');
+      await page.click('#faz-setup-finish');
+      await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
+
+      const state = readState();
+      expect(state.onboarding.completed).toBe(true);
+      expect(state.onboarding.law).toBe('both');
+      expect(state.law).toBe('gdpr');
+      expect(state.donotSell).toBe(true);
+      expect(state.optoutPopup).toBe(true);
+      expect(state.expiry).toBe(180);
+      expect(state.noticeAccept).toBe(true);
+      expect(state.noticeReject).toBe(true);
     } finally {
       restore(snap);
     }
@@ -196,6 +244,36 @@ test.describe('Guided setup wizard', () => {
       await page.click('#faz-setup-finish');
       await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
       expect(readState().onboarding.completed).toBe(true);
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('invalid jurisdiction is rejected without completing onboarding', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      forceIncomplete();
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(
+        () => typeof (window as any).fazConfig?.api?.nonce === 'string' && (window as any).fazConfig.api.nonce.length > 0,
+      );
+
+      const response = await page.evaluate(async () => {
+        const nonce = (window as any).fazConfig.api.nonce;
+        const res = await fetch('/?rest_route=/faz/v1/settings/onboarding', {
+          method: 'POST',
+          headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ law: 'not-a-law' }),
+        });
+        return { status: res.status, body: await res.json() };
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('faz_invalid_onboarding_law');
+      const state = readState();
+      expect(state.onboarding.completed).toBe(false);
+      expect(state.onboarding.law).toBe('');
     } finally {
       restore(snap);
     }

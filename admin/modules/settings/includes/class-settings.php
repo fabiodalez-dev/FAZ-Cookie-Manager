@@ -127,9 +127,10 @@ class Settings extends Store {
 				'adblock_resilience'     => false,
 				// A/B testing of banner variants. When `status` is on and
 				// `variants` lists two or more EXISTING active banner slugs,
-				// each visitor is assigned one variant via a persistent random
-				// split (fazcookie-abvariant cookie) and the accept-rate per
-				// variant is reported on the Dashboard from the consent log.
+				// each visitor is assigned one variant without a pre-consent
+				// experiment cookie. After a choice, the banner slug already stored
+				// in the consent record keeps the assignment stable. The accept-rate
+				// per variant is reported on the Dashboard from the consent log.
 				// The tool only ever chooses among banner rows the admin
 				// already created — every variant stays independently
 				// compliant (equal-weight buttons, opt-in categories); it is
