@@ -792,22 +792,7 @@ function _fazInitOperations() {
     // #faz-consent exists in the DOM when CSS custom properties are set.
     _fazAttachShortCodeStyles();
     _fazSetShowMoreLess();
-    // Defensive: a prior buggy build wrote action:age-gate into the persistent
-    // fazcookie-consent cookie before the visitor had actually consented.
-    // Treat that residual value as "no consent yet" so the banner re-appears
-    // for these users on the next visit instead of being suppressed for the
-    // remainder of the 180-day cookie TTL.
     var _fazStoredAction = ref._fazGetFromStore("action");
-    if (_fazStoredAction === 'age-gate') {
-        _fazStoredAction = null;
-        ref._fazConsentStore.set("action", "");
-        // Also drop any per-service `svc.<id>` overrides. Without this,
-        // _fazShouldBlockProvider() gives precedence to a stale `svc.<id>:yes`
-        // entry and unblocks individual services before the visitor has
-        // re-confirmed consent — defeating the "treat age-gate as no-
-        // consent-yet" semantics the branch is built around.
-        _fazClearStoredServiceConsent();
-    }
     if (_fazStoredAction && _fazConsentScopeChanged()) {
         _fazInvalidateStoredConsent();
         _fazStoredAction = null;
@@ -2165,7 +2150,12 @@ function _fazRenderBanner() {
         _fazAddRtlClass,
         _fazSetPoweredBy,
         _fazLoopFocus,
-        _fazAddPreferenceCenterClass
+        _fazAddPreferenceCenterClass,
+        // Inject the age-confirmation row above the accept surfaces AFTER the
+        // banner (and its preference center) is in the DOM. Runs on the initial
+        // render and on every language-swap re-render, so the label is always
+        // read from the current _i18n. Idempotent per surface. GDPR Art. 8.
+        _fazRenderAgeConfirmations
     ].forEach(function (fn) {
         try { fn(); } catch (e) { console.error('[FAZ] banner render step failed:', e); }
     });
@@ -2276,80 +2266,186 @@ function _fazCancelPreferenceFocusRetries() {
 }
 
 /**
- * Show the age verification modal (GDPR Art. 8).
- * Under-age visitors are treated as reject (only necessary cookies).
+ * Resolve the configured minimum digital-age-of-consent threshold, falling back
+ * to the GDPR Art. 8(1) default of 16 when the store omits/garbles it. The
+ * server sanitizer already clamps the persisted value to 13-18, so this is a
+ * belt-and-suspenders default for a missing/legacy store only.
  *
- * @param {string} pendingChoice  The consent choice to execute if age-verified.
+ * @returns {number}
  */
-function _fazShowAgeGate(pendingChoice) {
-    var minAge = (_fazStore._ageGate && _fazStore._ageGate.minAge)
-        ? _fazStore._ageGate.minAge
-        : 16;
+function _fazAgeGateMinAge() {
+    var minAge = _fazStore._ageGate && _fazStore._ageGate.minAge;
+    minAge = parseInt(minAge, 10);
+    return (minAge && minAge >= 13 && minAge <= 18) ? minAge : 16;
+}
 
-    // Create modal overlay
-    var overlay = document.createElement('div');
-    overlay.id = 'faz-age-gate';
-    overlay.classList.add('faz-age-gate-overlay');
+/**
+ * Whether the visitor has affirmed they meet the digital age of consent.
+ *
+ * True when a same-session flag is present (a returning-within-session visitor
+ * is not re-prompted) OR any rendered age-confirmation checkbox is ticked.
+ * Ticking one surface's checkbox therefore covers every accept path (notice
+ * buttons AND preference-center action buttons).
+ *
+ * @returns {boolean}
+ */
+function _fazIsAgeAffirmed() {
+    try {
+        if (sessionStorage.getItem('faz_age_verified') === '1') return true;
+    } catch (e) { /* sessionStorage blocked (Safari private / strict privacy) */ }
+    var boxes = document.querySelectorAll('.faz-age-confirm-cb');
+    for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].checked) return true;
+    }
+    return false;
+}
 
-    var modal = document.createElement('div');
-    modal.classList.add('faz-age-gate-modal');
-    modal.setAttribute('role', 'dialog');
-    modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-labelledby', 'faz-age-gate-title');
+/**
+ * Reveal the inline age-confirmation validation message on every rendered
+ * surface, move focus to the (first) checkbox, and announce the error to
+ * assistive tech. Never disables the Accept button — equal-weight is preserved
+ * (EDPB 03/2022): the visitor simply cannot complete an accept until they tick
+ * the box, while Reject stays fully available.
+ *
+ * @returns {void}
+ */
+function _fazShowAgeConfirmError() {
+    var errors = document.querySelectorAll('.faz-age-confirm-error');
+    for (var i = 0; i < errors.length; i++) {
+        errors[i].removeAttribute('hidden');
+    }
+    var boxes = document.querySelectorAll('.faz-age-confirm-cb');
+    var focusTarget = null;
+    for (var j = 0; j < boxes.length; j++) {
+        // Prefer a visible checkbox (offsetParent is null for one inside a
+        // hidden preference-center panel) so focus lands where the visitor is.
+        if (boxes[j].offsetParent !== null) { focusTarget = boxes[j]; break; }
+    }
+    if (!focusTarget && boxes.length) focusTarget = boxes[0];
+    if (focusTarget) {
+        try { focusTarget.focus(); } catch (e) { /* focus may throw on detached nodes */ }
+    }
+    _fazAnnounceAgeError();
+}
 
-    var title = document.createElement('h3');
-    title.id = 'faz-age-gate-title';
-    title.classList.add('faz-age-gate-title');
-    title.textContent = _fazTranslate('age_gate_title', 'Age Verification');
-    modal.appendChild(title);
+/**
+ * Hide the inline age-confirmation validation message on every rendered surface
+ * (called once the visitor ticks a checkbox, so the error does not linger).
+ *
+ * @returns {void}
+ */
+function _fazHideAgeConfirmError() {
+    var errors = document.querySelectorAll('.faz-age-confirm-error');
+    for (var i = 0; i < errors.length; i++) {
+        errors[i].setAttribute('hidden', '');
+    }
+}
 
-    var msg = document.createElement('p');
-    msg.classList.add('faz-age-gate-message');
-    msg.textContent = _fazTranslate('age_gate_message', 'You must be at least ' + minAge + ' years old to accept optional cookies on this site.');
-    modal.appendChild(msg);
-
-    var btnYes = document.createElement('button');
-    btnYes.type = 'button';
-    btnYes.classList.add('faz-age-gate-btn-yes');
-    btnYes.textContent = _fazTranslate('age_gate_yes', 'I am ' + minAge + ' or older');
-    btnYes.addEventListener('click', function() {
-        sessionStorage.setItem('faz_age_verified', '1');
-        overlay.remove();
-        _fazAcceptCookies(pendingChoice);
-        _fazRemoveBanner();
-        _fazHidePreferenceCenter();
-        _fazAfterConsent();
+/**
+ * Announce the age-confirmation validation error through the shared polite live
+ * region (WCAG 2.2 SC 4.1.3), mirroring _fazAnnounceConsent().
+ *
+ * @returns {void}
+ */
+function _fazAnnounceAgeError() {
+    var region = document.getElementById('faz-a11y-live');
+    if (!region) {
+        region = document.createElement('div');
+        region.id = 'faz-a11y-live';
+        region.setAttribute('role', 'status');
+        region.setAttribute('aria-live', 'polite');
+        region.setAttribute('aria-atomic', 'true');
+        region.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);border:0;white-space:nowrap';
+        document.body.appendChild(region);
+    }
+    var msg = _fazTranslate('age_confirm_error', 'Please confirm you meet the minimum age to accept optional cookies.');
+    region.textContent = '';
+    (window.requestAnimationFrame || function (cb) { setTimeout(cb, 16); })(function () {
+        region.textContent = msg;
     });
-    modal.appendChild(btnYes);
+}
 
-    var btnNo = document.createElement('button');
-    btnNo.type = 'button';
-    btnNo.classList.add('faz-age-gate-btn-no');
-    btnNo.textContent = _fazTranslate('age_gate_no', 'I am under ' + minAge);
-    btnNo.addEventListener('click', function() {
-        overlay.remove();
-        // Under-age: treat as reject (only necessary cookies)
-        _fazAcceptCookies('reject');
-        _fazRemoveBanner();
-        _fazHidePreferenceCenter();
-        _fazAfterConsent();
-    });
-    modal.appendChild(btnNo);
+/**
+ * Inject a single, idempotent age-confirmation row directly above the given
+ * button group (GDPR Art. 8). The row is an unchecked checkbox + <label> and a
+ * hidden inline validation message; it gates ONLY the accept/partial path — the
+ * Reject/withdraw controls sit in the same group and are never affected.
+ *
+ * The checkbox renders UNCHECKED (affirmative-action requirement — a pre-ticked
+ * age box is invalid consent and a dark-pattern nudge). Ticking any surface's
+ * checkbox mirrors onto the others and clears the validation message.
+ *
+ * @param {HTMLElement} group  The [data-faz-tag="…-buttons"] button wrapper.
+ * @returns {void}
+ */
+function _fazRenderAgeConfirmation(group) {
+    if (!_fazStore._ageGate || !_fazStore._ageGate.enabled) return;
+    if (!group || !group.parentNode) return;
 
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    btnYes.focus();
+    // Idempotency (Rocket-Loader / double-init / language-swap re-render): if a
+    // row is already the immediate previous sibling of this group, do nothing.
+    var prev = group.previousElementSibling;
+    if (prev && prev.classList && prev.classList.contains('faz-age-confirm')) return;
 
-    // Trap focus between the two buttons while the age gate is open.
-    overlay.addEventListener('keydown', function(e) {
-        if (e.key !== 'Tab') return;
-        var focusable = [btnYes, btnNo];
-        var first = focusable[0], last = focusable[focusable.length - 1];
-        if (e.shiftKey) {
-            if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-        } else {
-            if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    // Derive a stable per-surface id suffix from the button group's tag so the
+    // <label for>/aria-describedby wiring is unambiguous even with two rows.
+    var tag = group.getAttribute('data-faz-tag') || 'age';
+    var suffix = tag.replace(/[^a-z0-9]+/gi, '-');
+    var cbId = 'faz-age-confirm-cb-' + suffix;
+    var errId = 'faz-age-confirm-error-' + suffix;
+    var minAge = _fazAgeGateMinAge();
+
+    var row = document.createElement('div');
+    row.className = 'faz-age-confirm';
+
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'faz-age-confirm-cb';
+    cb.id = cbId;
+    cb.checked = false; // never pre-check (affirmative action)
+    cb.setAttribute('aria-describedby', errId);
+
+    var label = document.createElement('label');
+    label.className = 'faz-age-confirm-label';
+    label.setAttribute('for', cbId);
+    label.textContent = _fazTranslate('age_confirm_label', 'I confirm I am at least ' + minAge + ' years old');
+
+    var error = document.createElement('span');
+    error.className = 'faz-age-confirm-error';
+    error.id = errId;
+    error.setAttribute('role', 'alert');
+    error.setAttribute('hidden', '');
+    error.textContent = _fazTranslate('age_confirm_error', 'Please confirm you meet the minimum age to accept optional cookies.');
+
+    cb.addEventListener('change', function () {
+        var checked = cb.checked;
+        // Mirror onto every other surface so a single affirmation covers both
+        // the notice buttons and the preference-center action buttons.
+        var boxes = document.querySelectorAll('.faz-age-confirm-cb');
+        for (var i = 0; i < boxes.length; i++) {
+            if (boxes[i] !== cb) boxes[i].checked = checked;
         }
+        if (checked) _fazHideAgeConfirmError();
+    });
+
+    row.appendChild(cb);
+    row.appendChild(label);
+    row.appendChild(error);
+    group.parentNode.insertBefore(row, group);
+}
+
+/**
+ * Render the age-confirmation row above every accept surface currently in the
+ * DOM (the notice buttons and the preference-center action buttons). Safe to
+ * call repeatedly — each row is idempotent per surface.
+ *
+ * @returns {void}
+ */
+function _fazRenderAgeConfirmations() {
+    if (!_fazStore._ageGate || !_fazStore._ageGate.enabled) return;
+    ['notice-buttons', 'detail-buttons'].forEach(function (tag) {
+        var group = document.querySelector('[data-faz-tag="' + tag + '"]');
+        if (group) _fazRenderAgeConfirmation(group);
     });
 }
 
@@ -2414,21 +2510,18 @@ function _fazActionClose() {
  *   fires.
  */
 function _fazAcceptCookies(choice = "all") {
-    // Age gate check (GDPR Art. 8): only on accept/partial, never on reject.
-    if (choice !== 'reject' && _fazStore._ageGate && _fazStore._ageGate.enabled) {
-        if (!sessionStorage.getItem('faz_age_verified')) {
-            // Use sessionStorage (not the persistent fazcookie-consent cookie)
-            // to flag that age verification is in progress. Writing
-            // action:age-gate to the 180-day cookie before the user has
-            // actually consented would persist across reloads — if the visitor
-            // abandoned the modal, the bootstrap "action exists, skip banner"
-            // check would suppress the banner forever. sessionStorage is
-            // scoped to the current tab/session, so abandoning the gate has
-            // no lingering effect.
-            try { sessionStorage.setItem('faz_age_gate_pending', '1'); } catch (e) {}
-            _fazShowAgeGate(choice);
-            return false;
-        }
+    // Age gate (GDPR Art. 8): gate ONLY the accept/partial path, never reject
+    // or withdraw (choice === 'reject' short-circuits here). Equal weight is
+    // preserved — the Accept button is never disabled/greyed while Reject stays
+    // active (that asymmetry would be an EDPB 03/2022 "Emphasising" dark
+    // pattern). Instead an un-affirmed accept reveals an inline validation
+    // message and focuses the checkbox, and NO consent is written (no action =
+    // no consent = only necessary cookies stay allowed — the correct GDPR
+    // posture; we deliberately do not auto-write a "rejected" record).
+    var _ageGateActive = choice !== 'reject' && _fazStore._ageGate && _fazStore._ageGate.enabled;
+    if (_ageGateActive && !_fazIsAgeAffirmed()) {
+        _fazShowAgeConfirmError();
+        return false;
     }
 
     // Past the age gate the choice WILL be recorded below, so announce the
@@ -2547,6 +2640,17 @@ function _fazAcceptCookies(choice = "all") {
 
     // Handle IAB vendor consent.
     _fazSaveVendorConsent(choice);
+
+    // Accountability (GDPR Art. 5(2)/7(1)): when the age gate is active and the
+    // visitor has affirmed, persist a same-session flag (so a returning-within-
+    // session visitor is not re-prompted) and tag the consent event so the
+    // server-side logger folds meta.age_affirmed:yes into the consent-log row —
+    // demonstrating the age was affirmed at consent time. Not written into the
+    // 180-day cookie (data minimisation — the DB log is the record of record).
+    if (_ageGateActive) {
+        try { sessionStorage.setItem('faz_age_verified', '1'); } catch (e) { /* storage blocked */ }
+        responseCategories.ageAffirmed = true;
+    }
 
     _fazUnblock();
     _fazFireEvent(responseCategories);

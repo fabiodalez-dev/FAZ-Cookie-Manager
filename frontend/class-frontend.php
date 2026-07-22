@@ -398,7 +398,7 @@ class Frontend {
 			// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
 			// Utility rules appended AFTER boost_css_specificity() so they are NOT
 			// scoped inside #faz-consent — these classes are used on elements outside
-			// the banner container (consent-bridge iframe, age-gate overlay, blocked embeds).
+			// the banner container (consent-bridge iframe, blocked embeds).
 			// `_fazAddPlaceholder` inserts `.video-placeholder-{normal,youtube}` next
 			// to blocked iframes (outside #faz-consent), so the scoped template.json
 			// rules never reach them. Without this floor, placeholders for lazy-loaded
@@ -416,8 +416,15 @@ class Frontend {
 			$css .= '#faz-consent{border-style:none}';
 			$css .= '.faz-hidden{display:none!important;visibility:hidden!important}'
 				. '.faz-consent-bridge{width:0;height:0;border:0}'
-				. '.faz-age-gate-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}'
-				. '.faz-age-gate-modal{background:#fff;border-radius:8px;padding:24px 32px;max-width:420px;text-align:center}'
+				// Inline age-confirmation row (GDPR Art. 8) injected by script.js
+				// above the accept surfaces. Inherits the banner's text direction
+				// (RTL support) from its container. The [hidden] attribute keeps
+				// the validation message out of the flow until an un-affirmed
+				// accept reveals it.
+				. '.faz-age-confirm{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;margin:0 0 12px;font-size:13px;line-height:1.4}'
+				. '.faz-age-confirm-cb{margin:2px 0 0;flex:0 0 auto}'
+				. '.faz-age-confirm-label{cursor:pointer}'
+				. '.faz-age-confirm-error{flex-basis:100%;margin:2px 0 0;color:#b00020;font-size:12px}'
 				. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
 			$css_handle = $this->plugin_name . '-css';
 			wp_register_style( $css_handle, false, array(), $this->version );
@@ -619,6 +626,13 @@ class Frontend {
 									// category-level summary. When per-service consent is off there
 									// are no svc.*/ck.* entries and this adds nothing.
 									"try{var cm=document.cookie.match(/fazcookie-consent=([^;]+)/);if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}})}}catch(er){}" .
+										// Age-gate accountability (GDPR Art. 5(2)/7(1)): when the
+										// visitor affirmed they meet the digital age of consent, fold
+										// the reserved meta.age_affirmed:yes key into the logged
+										// categories map so the record demonstrates the age was
+										// affirmed at consent time. get_consent_stats() skips the
+										// meta.* prefix so it never appears as a phantom category.
+										"if(d.ageAffirmed===true){c['meta.age_affirmed']='yes'}" .
 									"return c})()," .
 								"url:safeUrl," .
 								"banner_slug:_fazConsentLog.bannerSlug||''," .
@@ -1737,6 +1751,11 @@ class Frontend {
 		$banner          = $this->banner;
 		$banner_settings = $banner->get_settings();
 
+		// Age gate (GDPR Art. 8) minimum age. Sanitizer clamps the persisted
+		// value to 13-18; default 16. Resolved once here so it feeds both the
+		// _ageGate store and the sprintf'd age-confirmation label below.
+		$age_min = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
+
 		// Consent-cookie lifetime, with a law-aware hard cap applied here so the
 		// EFFECTIVE expiry can never exceed the legal maximum regardless of any
 		// larger value an admin saved (the UI allows up to 10 years). The
@@ -1812,6 +1831,11 @@ class Frontend {
 				'cookie_consent_label'                  => __( 'Cookie consent', 'faz-cookie-manager' ),
 				'vendor_consent_label'                  => __( 'Vendor consent', 'faz-cookie-manager' ),
 				'third_party_cookie_note'               => __( 'These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually.', 'faz-cookie-manager' ),
+				// Age gate (GDPR Art. 8). The number is sprintf'd server-side so
+				// the label is correct per-locale with no JS string concatenation.
+				// translators: %d is the minimum digital age of consent.
+				'age_confirm_label'                     => sprintf( __( 'I confirm I am at least %d years old', 'faz-cookie-manager' ), $age_min ),
+				'age_confirm_error'                     => __( 'Please confirm you meet the minimum age to accept optional cookies.', 'faz-cookie-manager' ),
 			),
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
@@ -1970,10 +1994,12 @@ class Frontend {
 			$store['_cookieScripts'] = $cookie_scripts;
 		}
 
-		// Age gate (GDPR Art. 8).
+		// Age gate (GDPR Art. 8). Site-wide (not per-visitor/geo), so it is safe
+		// to bake into full-page caches; the checkbox is injected client-side
+		// from this JSON, so it is cache-safe and never baked into cached markup.
 		$age_gate = array(
 			'enabled' => ! empty( $settings['age_gate']['enabled'] ),
-			'minAge'  => isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16,
+			'minAge'  => $age_min,
 		);
 		$store['_ageGate'] = $age_gate;
 
@@ -4917,7 +4943,6 @@ class Frontend {
 			'.faz-hide',
 			'.faz-hidden',
 			'.faz-modal',
-			'.faz-age-gate',
 			'.faz-consent-bridge',
 			'#faz-cookie-wall',
 		);

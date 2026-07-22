@@ -841,6 +841,14 @@ class Controller {
 				}
 				foreach ( $cats as $cat => $value ) {
 					$cat = sanitize_text_field( $cat );
+					// Skip reserved audit-only keys (e.g. meta.age_affirmed): they
+					// ride the categories JSON for accountability but are NOT
+					// consent categories, so counting them would draw a phantom
+					// bar in the dashboard acceptance-rate chart. They still render
+					// as an audit pill in the individual consent-log row.
+					if ( 0 === strpos( $cat, 'meta.' ) ) {
+						continue;
+					}
 					if ( ! isset( $cat_counts[ $cat ] ) ) {
 						$cat_counts[ $cat ] = array( 'yes' => 0, 'no' => 0 );
 					}

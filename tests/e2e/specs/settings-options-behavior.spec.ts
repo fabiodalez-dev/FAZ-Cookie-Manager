@@ -239,41 +239,90 @@ test.describe('Settings option behavior interactions', () => {
     await context.close();
   });
 
-  test('age_gate blocks accept-all behind verification and under-age falls back to reject', async ({ browser }) => {
+  test('age_gate gates only the accept path via an inline equal-weight checkbox', async ({ browser }) => {
     await putSettings({
       banner_control: { status: true },
+      consent_logs: { status: true },
       age_gate: { enabled: true, min_age: 14 },
     });
 
+    // ---- Surface 1: a fresh visitor sees an unchecked checkbox above the
+    //      buttons, its label carries the configured age, and both Accept and
+    //      Reject are visible & enabled (equal weight — EDPB 03/2022). ----
     const { context, page } = await newVisitorPage(browser);
+
+    const checkbox = page.locator('.faz-age-confirm-cb').first();
+    await expect(checkbox).toBeVisible();
+    await expect(checkbox).not.toBeChecked(); // never pre-checked
+    await expect(page.locator('.faz-age-confirm-label').first()).toContainText('14');
+
+    // The confirmation row renders ABOVE the notice button group.
+    const rowPrecedesButtons = await page.evaluate(() => {
+      const group = document.querySelector('[data-faz-tag="notice-buttons"]');
+      const prev = group && group.previousElementSibling;
+      return !!(prev && prev.classList.contains('faz-age-confirm'));
+    });
+    expect(rowPrecedesButtons).toBe(true);
+
+    const acceptBtn = page.locator('[data-faz-tag="accept-button"]').first();
+    const rejectBtn = page.locator('[data-faz-tag="reject-button"]').first();
+    await expect(acceptBtn).toBeVisible();
+    await expect(rejectBtn).toBeVisible();
+    await expect(acceptBtn).toBeEnabled(); // never disabled/greyed
+    await expect(rejectBtn).toBeEnabled();
+
+    // ---- Accept without affirming → NO action token written, inline error
+    //      shown, banner stays. ----
     await acceptAll(page);
-
-    await expect(page.locator('#faz-age-gate')).toBeVisible();
-    await expect(page.locator('.faz-age-gate-message')).toContainText('14');
-    // When the age gate intercepts an accept-all click, the script intentionally
-    // avoids writing ANY `action:` token to the persistent fazcookie-consent
-    // cookie (otherwise an abandoned modal would suppress the banner forever).
-    // Instead it flags the pending state via sessionStorage. Verify both:
-    //   - the persistent cookie has NO action key at all (strict regex, not
-    //     just the absence of `:yes` / `:no` — a future regression that writes
-    //     `action:age-gate` or `action:pending` would slip through the weaker
-    //     two-step check),
-    //   - the sessionStorage flag is set.
-    const pendingCookie = (await context.cookies(baseURL)).find((cookie) => cookie.name === 'fazcookie-consent');
-    const pendingValue = decodeURIComponent(pendingCookie?.value ?? '');
-    expect(pendingValue, 'persistent cookie must not carry any `action:` token while the age gate is pending').not.toMatch(/(?:^|,)action:/);
-    const agePending = await page.evaluate(() => sessionStorage.getItem('faz_age_gate_pending'));
-    expect(agePending).toBe('1');
-
-    await page.locator('.faz-age-gate-btn-no').click();
-    await page.waitForFunction(() => document.cookie.includes('fazcookie-consent'));
-    const consentCookie = (await context.cookies(baseURL)).find((cookie) => cookie.name === 'fazcookie-consent');
-    const rejectedConsent = decodeURIComponent(consentCookie?.value ?? '');
-    expect(rejectedConsent).toContain('action:yes');
-    expect(rejectedConsent).toContain('consent:no');
-    expect(rejectedConsent).toContain('analytics:no');
-    expect(rejectedConsent).toContain('marketing:no');
+    await expect(page.locator('.faz-age-confirm-error').first()).toBeVisible();
+    const noActionCookie = (await context.cookies(baseURL)).find((c) => c.name === 'fazcookie-consent');
+    const noActionValue = decodeURIComponent(noActionCookie?.value ?? '');
+    expect(noActionValue, 'no consent may be recorded until the visitor affirms').not.toMatch(/(?:^|,)action:/);
     await context.close();
+
+    // ---- Surface 2: tick the checkbox then Accept → consent recorded with
+    //      action:yes, and the consent-log row folds meta.age_affirmed=yes. ----
+    const affirmVisit = await newVisitorPage(browser);
+    let logBody: any = null;
+    affirmVisit.page.on('response', async (resp) => {
+      if (resp.url().includes('/faz/v1/consent') && resp.request().method() === 'POST') {
+        try { logBody = resp.request().postDataJSON(); } catch { /* ignore */ }
+      }
+    });
+    await affirmVisit.page.locator('.faz-age-confirm-cb').first().check();
+    await acceptAll(affirmVisit.page);
+    await affirmVisit.page.waitForFunction(() => /(?:^|;)\s*fazcookie-consent=.*action:yes/.test(decodeURIComponent(document.cookie)));
+    const acceptedCookie = (await affirmVisit.context.cookies(baseURL)).find((c) => c.name === 'fazcookie-consent');
+    const acceptedValue = decodeURIComponent(acceptedCookie?.value ?? '');
+    expect(acceptedValue).toContain('action:yes');
+    expect(acceptedValue).toContain('consent:yes');
+    // The consent event carries ageAffirmed → the server logger folds the
+    // reserved meta.age_affirmed:yes key into the categories map. The log POST
+    // is fire-and-forget, so wait for the captured request body.
+    await affirmVisit.page.waitForTimeout(800); // allow the fire-and-forget log POST to flush
+    expect(logBody, 'a consent-log POST must fire on accept').not.toBeNull();
+    expect(logBody.categories && logBody.categories['meta.age_affirmed']).toBe('yes');
+    await affirmVisit.context.close();
+
+    // ---- Surface 3: Reject is ungated — no affirmation needed, records a
+    //      rejection with every non-necessary category denied. ----
+    const rejectVisit = await newVisitorPage(browser);
+    const clickedReject = await clickFirstVisible(rejectVisit.page, [
+      '[data-faz-tag="reject-button"] button',
+      '[data-faz-tag="reject-button"]',
+      '.faz-btn-reject',
+    ]);
+    expect(clickedReject).toBe(true);
+    await rejectVisit.page.waitForFunction(() => document.cookie.includes('fazcookie-consent'));
+    const rejectCookie = (await rejectVisit.context.cookies(baseURL)).find((c) => c.name === 'fazcookie-consent');
+    const rejectValue = decodeURIComponent(rejectCookie?.value ?? '');
+    expect(rejectValue).toContain('action:yes');
+    expect(rejectValue).toContain('consent:no');
+    expect(rejectValue).toContain('analytics:no');
+    expect(rejectValue).toContain('marketing:no');
+    // A rejection never affirms age → the log must NOT carry the age flag.
+    expect(rejectValue).not.toContain('meta.age_affirmed');
+    await rejectVisit.context.close();
   });
 
   test('microsoft consent toggles enqueue UET defaults and update UET/Clarity on consent', async ({ browser }) => {

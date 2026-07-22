@@ -488,6 +488,8 @@ class Banner_Rest {
 	 * @return array
 	 */
 	protected function build_i18n_payload() {
+		$settings = $this->get_faz_settings();
+		$age_min  = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
 		return array(
 			'privacy_region_label'                => __( 'We value your privacy', 'faz-cookie-manager' ),
 			'consent_saved'                       => __( 'Your cookie preferences have been saved.', 'faz-cookie-manager' ),
@@ -495,6 +497,12 @@ class Banner_Rest {
 			'customise_consent_preferences_label' => __( 'Customise Consent Preferences', 'faz-cookie-manager' ),
 			'service_consent_label'               => __( 'Service consent', 'faz-cookie-manager' ),
 			'vendor_consent_label'                => __( 'Vendor consent', 'faz-cookie-manager' ),
+			// Age gate (GDPR Art. 8) — sprintf'd for the swapped locale so the
+			// client-side language swap keeps the localized age-confirmation
+			// label instead of reverting to English.
+			// translators: %d is the minimum digital age of consent.
+			'age_confirm_label'                   => sprintf( __( 'I confirm I am at least %d years old', 'faz-cookie-manager' ), $age_min ),
+			'age_confirm_error'                   => __( 'Please confirm you meet the minimum age to accept optional cookies.', 'faz-cookie-manager' ),
 		);
 	}
 

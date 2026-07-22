@@ -267,12 +267,13 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Require age verification for consent', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'Under GDPR Art. 8, children below the minimum age cannot give valid consent for data processing. When enabled, visitors must confirm they meet the minimum age before accepting optional cookies.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Under GDPR Art. 8, children below the minimum age cannot give valid consent for data processing. When enabled, the visitor sees an age-confirmation checkbox directly above the Accept/Reject buttons; it gates only the Accept path — Reject stays available and is never blocked, and the checkbox is never pre-ticked.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'This is a self-declared age affirmation only. It is NOT a substitute for verifying parental consent for under-age children under GDPR Art. 8(2), which requires separate reasonable-efforts verification this feature does not provide.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Minimum Age', 'faz-cookie-manager' ); ?></label>
 				<input type="number" class="faz-input faz-input-sm" data-path="age_gate.min_age" min="13" max="18" style="width:80px;">
-				<div class="faz-help"><?php esc_html_e( 'GDPR default is 16. Some EU member states allow 13-15. Check your local law.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'GDPR default is 16. Some EU member states allow 13-15 (e.g. Italy 14, Spain 14, France 15, Germany 16). Check your local law.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>
