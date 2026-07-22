@@ -45,6 +45,15 @@ class Renderer {
 	private static $cookie_list_cache = array();
 
 	/**
+	 * Per-request micro-cache for the collected third-country transfer
+	 * disclosures, keyed by language. Mirrors $cookie_list_cache; the shared
+	 * wp_cache (group faz_cookie_policy, 5 min TTL) backs it across requests.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $transfer_cache = array();
+
+	/**
 	 * Public entry point used by the shortcode handler.
 	 *
 	 * @param array<string,string> $atts Shortcode attributes:
@@ -156,6 +165,11 @@ class Renderer {
 			// standalone so this branch is defensive — covered by tests.
 			$html = str_replace( $sentinel, (string) $html_value, $html );
 		}
+
+		// International data transfers (Schrems II) section — appended just
+		// before the disclaimer and gated on >=1 flagged cookie, so a site with
+		// no flagged transfer renders byte-identically to a pre-feature install.
+		$html .= self::international_transfers_section( $lang );
 
 		// Disclaimer block. Admin-configurable since 1.16.2: visibility
 		// + text are stored in the `disclaimer` sub-array of the
@@ -308,6 +322,16 @@ class Renderer {
 			'OFFICIAL_RESOURCES_URL' => esc_url( self::official_resources_url( $jurisdiction ) ),
 		);
 
+		// FR-07 accountability: fold a compact fingerprint of the flagged
+		// third-country-transfer data into the substitution data so the policy
+		// version hash bumps whenever a disclosure is added/edited/removed. Added
+		// ONLY when at least one cookie is flagged, so installs with no flag keep
+		// a byte-identical $data (and hash) — default-OFF is preserved.
+		$transfer_rows = self::collect_transfer_disclosures( $lang );
+		if ( ! empty( $transfer_rows ) ) {
+			$data['INTERNATIONAL_TRANSFERS_FP'] = sha1( (string) wp_json_encode( $transfer_rows ) );
+		}
+
 		// Jurisdiction-specific official body refs.
 		$data['EDPB_CONTACT']   = ( 'gdpr-strict' === $jurisdiction ) ? 'edpb@edpb.europa.eu' : '';
 		$data['CA_PIPC_CONTACT'] = ( 'ccpa-california' === $jurisdiction ) ? 'cppa@cppa.ca.gov' : '';
@@ -369,6 +393,7 @@ class Renderer {
 			// $row['cookie_name'] etc., so the aliases keep it untouched.
 			"SELECT c.cookie_id, c.name AS cookie_name, c.domain AS cookie_domain,
 			        c.duration AS cookie_duration, c.description AS cookie_description,
+			        c.meta AS cookie_meta,
 			        c.category AS category_id,
 			        cat.name AS category_name, cat.description AS category_description,
 			        cat.slug AS category_slug
@@ -492,7 +517,21 @@ class Renderer {
 					$parts[]  = '<td data-label="' . $col_domain . '">' . ( '' !== $domain ? esc_html( $domain ) : '&mdash;' ) . '</td>';
 					$parts[]  = '<td data-label="' . $col_duration . '">' . ( '' !== $duration ? esc_html( $duration ) : '&mdash;' ) . '</td>';
 					// Cookie description may contain HTML inside the JSON value.
-					$parts[]  = '<td data-label="' . $col_desc . '">' . wp_kses_post( $desc ) . '</td>';
+					$desc_cell = wp_kses_post( $desc );
+					// Third-country (Schrems II) per-row indicator. Neutral, purely
+					// transparency: names the recipient country (or a generic
+					// outside-EU/EEA line) so the row is self-explanatory; the
+					// dedicated section below carries the full Art. 44-49 framing.
+					$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
+					if ( ! empty( $transfer['enabled'] ) ) {
+						$t_country = self::resolve_i18n_array( $transfer['countries'], $lang );
+						$indicator = ( '' !== $t_country )
+							/* translators: %s: recipient country name. */
+							? sprintf( esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' ), esc_html( $t_country ) )
+							: esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+						$desc_cell .= '<small class="faz-cookie-policy-transfer">' . $indicator . '</small>';
+					}
+					$parts[]  = '<td data-label="' . $col_desc . '">' . $desc_cell . '</td>';
 					$parts[]  = '</tr>';
 				}
 				$parts[] = '</tbody>';
@@ -544,6 +583,181 @@ class Renderer {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Resolve an already-decoded multilingual map ({ <lang> => string }) to the
+	 * active language. Same fallback chain as decode_i18n_text(), but for a value
+	 * that is already a PHP array (the transfer countries/safeguard sub-objects
+	 * arrive decoded from the cookie meta JSON, not as a raw JSON string).
+	 *
+	 * @param mixed  $map  Multilingual array, or a plain string.
+	 * @param string $lang Preferred language code.
+	 * @return string
+	 */
+	private static function resolve_i18n_array( $map, $lang ) {
+		if ( is_string( $map ) ) {
+			return $map;
+		}
+		if ( ! is_array( $map ) ) {
+			return '';
+		}
+		if ( is_string( $lang ) && '' !== $lang && isset( $map[ $lang ] ) && is_string( $map[ $lang ] ) && '' !== $map[ $lang ] ) {
+			return $map[ $lang ];
+		}
+		if ( isset( $map['en'] ) && is_string( $map['en'] ) && '' !== $map['en'] ) {
+			return $map['en'];
+		}
+		foreach ( $map as $v ) {
+			if ( is_string( $v ) && '' !== $v ) {
+				return $v;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Decode a cookie's `meta` value and extract the normalised third-country
+	 * transfer sub-object. Mirrors Cookie::get_transfer()'s disabled default so
+	 * a legacy/absent/corrupt meta never fatals and never renders a disclosure.
+	 *
+	 * @param mixed $raw_meta The cookie's raw `meta` column (JSON string / array).
+	 * @return array{enabled:bool,countries:array,safeguard:array}
+	 */
+	private static function decode_transfer_meta( $raw_meta ) {
+		$default = array(
+			'enabled'   => false,
+			'countries' => array(),
+			'safeguard' => array(),
+		);
+		if ( is_array( $raw_meta ) ) {
+			$meta = $raw_meta;
+		} elseif ( is_string( $raw_meta ) && '' !== $raw_meta ) {
+			$meta = json_decode( $raw_meta, true );
+		} else {
+			$meta = null;
+		}
+		if ( ! is_array( $meta ) || ! isset( $meta['transfer'] ) || ! is_array( $meta['transfer'] ) ) {
+			return $default;
+		}
+		$transfer = $meta['transfer'];
+		return array(
+			'enabled'   => ! empty( $transfer['enabled'] ),
+			'countries' => ( isset( $transfer['countries'] ) && is_array( $transfer['countries'] ) ) ? $transfer['countries'] : array(),
+			'safeguard' => ( isset( $transfer['safeguard'] ) && is_array( $transfer['safeguard'] ) ) ? $transfer['safeguard'] : array(),
+		);
+	}
+
+	/**
+	 * Collect the flagged third-country transfer disclosures, resolved to $lang.
+	 *
+	 * Returns a list of [ name, country, safeguard ] for every cookie with
+	 * transfer.enabled=true, EXCLUDING the wordpress-internal category and any
+	 * WP-internal cookie (same guards as build_cookie_list_html) so an admin-only
+	 * cookie can never surface. Cached 5 min in the faz_cookie_policy group,
+	 * matching the cookie-list cache lifetime.
+	 *
+	 * @param string $lang Active policy language.
+	 * @return array<int,array{name:string,country:string,safeguard:string}>
+	 */
+	private static function collect_transfer_disclosures( $lang ) {
+		$cache_key = 'faz_cookie_policy_transfers_' . $lang;
+		if ( isset( self::$transfer_cache[ $cache_key ] ) ) {
+			return self::$transfer_cache[ $cache_key ];
+		}
+		$cached = wp_cache_get( $cache_key, 'faz_cookie_policy' );
+		if ( false !== $cached && is_array( $cached ) ) {
+			self::$transfer_cache[ $cache_key ] = $cached;
+			return $cached;
+		}
+
+		global $wpdb;
+		$cookies_table    = $wpdb->prefix . 'faz_cookies';
+		$categories_table = $wpdb->prefix . 'faz_cookie_categories';
+		if ( ! self::table_exists( $cookies_table ) || ! self::table_exists( $categories_table ) ) {
+			return array();
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			// Custom-table names are interpolated (WP has no %i placeholder on the
+			// 5.0 floor); they derive from $wpdb->prefix, not user input.
+			"SELECT c.name AS cookie_name, c.meta AS cookie_meta, cat.slug AS category_slug
+			   FROM `{$cookies_table}` AS c
+			   LEFT JOIN `{$categories_table}` AS cat ON c.category = cat.category_id
+			   ORDER BY cat.priority ASC, c.name ASC",
+			ARRAY_A
+		);
+
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			// Skip the admin-only "wordpress-internal" category outright.
+			if ( 'wordpress-internal' === (string) ( $row['category_slug'] ?? '' ) ) {
+				continue;
+			}
+			$name = (string) ( $row['cookie_name'] ?? '' );
+			if ( class_exists( '\\FazCookie\\Frontend\\Frontend' )
+				&& \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
+				continue;
+			}
+			$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
+			if ( empty( $transfer['enabled'] ) ) {
+				continue;
+			}
+			$out[] = array(
+				'name'      => $name,
+				'country'   => self::resolve_i18n_array( $transfer['countries'], $lang ),
+				'safeguard' => self::resolve_i18n_array( $transfer['safeguard'], $lang ),
+			);
+		}
+
+		wp_cache_set( $cache_key, $out, 'faz_cookie_policy', 5 * MINUTE_IN_SECONDS );
+		self::$transfer_cache[ $cache_key ] = $out;
+		return $out;
+	}
+
+	/**
+	 * Build the "International data transfers" policy section.
+	 *
+	 * Emits a neutral GDPR Art. 44-49 framing paragraph followed by a per-cookie
+	 * list of recipient country + admin-described safeguard. It states the FACT
+	 * that a transfer occurs and surfaces the safeguard — it NEVER asserts the
+	 * transfer is legally valid (that is the site controller's responsibility).
+	 * Returns '' when no cookie is flagged (empty-state), so the section and its
+	 * accountability fingerprint are absent on a default-OFF install.
+	 *
+	 * @param string $lang Active policy language.
+	 * @return string HTML section, or '' when nothing is flagged.
+	 */
+	private static function international_transfers_section( $lang ) {
+		$rows = self::collect_transfer_disclosures( $lang );
+		if ( empty( $rows ) ) {
+			return '';
+		}
+
+		$heading = esc_html__( 'International data transfers', 'faz-cookie-manager' );
+		$intro   = esc_html__( 'Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+
+		$parts   = array();
+		$parts[] = '<section class="faz-cookie-policy-transfers">';
+		$parts[] = '<h2 class="faz-cookie-policy-transfers-title">' . $heading . '</h2>';
+		$parts[] = '<p>' . $intro . '</p>';
+		$parts[] = '<ul class="faz-cookie-policy-transfers-list">';
+		foreach ( $rows as $r ) {
+			$line = '<code>' . esc_html( (string) $r['name'] ) . '</code>';
+			if ( '' !== (string) $r['country'] ) {
+				$line .= ' &mdash; ' . esc_html__( 'Recipient country:', 'faz-cookie-manager' ) . ' ' . esc_html( (string) $r['country'] );
+			} else {
+				$line .= ' &mdash; ' . esc_html__( 'transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+			}
+			if ( '' !== (string) $r['safeguard'] ) {
+				$line .= '. ' . esc_html__( 'Safeguard:', 'faz-cookie-manager' ) . ' ' . wp_kses_post( (string) $r['safeguard'] );
+			}
+			$parts[] = '<li>' . $line . '</li>';
+		}
+		$parts[] = '</ul>';
+		$parts[] = '</section>';
+		return "\n" . implode( "\n", $parts );
 	}
 
 	/**

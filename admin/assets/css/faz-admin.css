@@ -670,6 +670,28 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 	text-transform: uppercase;
 }
 
+/* Third-country (Schrems II) transfer chip shown on flagged cookie rows in the
+   cookies list, and mirrored as the fieldset accent in the cookie editor. */
+.faz-cookie-transfer-badge {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 1px 7px;
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 1.6;
+	letter-spacing: .02em;
+	text-transform: uppercase;
+	border-radius: 10px;
+	background: var(--faz-warning-light);
+	color: #92400e;
+	vertical-align: middle;
+}
+.faz-transfer-fieldset {
+	border-top: 1px solid var(--faz-border);
+	padding-top: 12px;
+	margin-top: 4px;
+}
+
 /* ── Dropdown ── */
 .faz-dropdown {
 	position: relative;

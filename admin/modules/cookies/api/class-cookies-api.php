@@ -486,6 +486,22 @@ class Cookies_API extends API_Controller {
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
+				'transfer'       => array(
+					'description'       => __( 'Third-country (Schrems II) personal-data transfer disclosure for this cookie.', 'faz-cookie-manager' ),
+					'type'              => 'object',
+					// Visible in both contexts: this is not sensitive raw JS, it is
+					// a transparency disclosure that the frontend store and the
+					// public Cookie Policy both consume from the 'view' context.
+					'context'           => array( 'view', 'edit' ),
+					// No unfiltered_html gate — not a script field. The safeguard
+					// text is still markup-filtered via wp_kses in the sanitiser.
+					'sanitize_callback' => array( __CLASS__, 'sanitize_transfer_field' ),
+					'properties'        => array(
+						'enabled'   => array( 'type' => 'boolean' ),
+						'countries' => array( 'type' => 'object' ),
+						'safeguard' => array( 'type' => 'object' ),
+					),
+				),
 				'opt_in_script'  => array(
 					'description'       => __( 'JavaScript executed when this cookie\'s category is accepted.', 'faz-cookie-manager' ),
 					'type'              => 'string',
@@ -669,6 +685,70 @@ class Cookies_API extends API_Controller {
 			);
 		}
 		return (string) $value;
+	}
+
+	/**
+	 * Structurally sanitise the third-country transfer schema property.
+	 *
+	 * Defence-in-depth for the REST boundary: coerces the incoming object into
+	 * the { enabled:bool, countries:{lang:text}, safeguard:{lang:html} } shape
+	 * before it reaches Cookie::set_transfer() (which re-sanitises via its own
+	 * private helper — this keeps a bad payload from ever reaching the setter).
+	 *
+	 * Unlike sanitize_script_field this NEVER returns a WP_Error: the transfer
+	 * disclosure carries no unfiltered_html-gated content (the safeguard text is
+	 * markup-filtered, not executed), so an editor with manage_options may save
+	 * it. A non-object simply collapses to the disabled default.
+	 *
+	 * @param mixed           $value   Raw request value.
+	 * @param WP_REST_Request $request Request object (unused; REST signature).
+	 * @param string          $param   Parameter name (unused; REST signature).
+	 * @return array
+	 */
+	public static function sanitize_transfer_field( $value, $request = null, $param = '' ) {
+		$default = array(
+			'enabled'   => false,
+			'countries' => array(),
+			'safeguard' => array(),
+		);
+		if ( is_string( $value ) ) {
+			$decoded = json_decode( $value, true );
+			$value   = is_array( $decoded ) ? $decoded : array();
+		}
+		if ( ! is_array( $value ) ) {
+			return $default;
+		}
+
+		$enabled = false;
+		if ( isset( $value['enabled'] ) ) {
+			$raw     = is_string( $value['enabled'] ) ? strtolower( trim( $value['enabled'] ) ) : $value['enabled'];
+			$enabled = ! in_array( $raw, array( false, 0, '0', '', 'false', 'no', 'off' ), true );
+		}
+
+		$clean_map = static function ( $map, $html ) {
+			$out = array();
+			if ( is_array( $map ) ) {
+				foreach ( $map as $lang => $val ) {
+					if ( ! is_string( $val ) ) {
+						continue;
+					}
+					$lang_key = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $lang );
+					if ( '' === $lang_key ) {
+						continue;
+					}
+					$out[ $lang_key ] = $html ? wp_kses( $val, faz_allowed_html() ) : sanitize_text_field( $val );
+				}
+			} elseif ( is_string( $map ) && '' !== trim( $map ) ) {
+				$out[ faz_default_language() ] = $html ? wp_kses( $map, faz_allowed_html() ) : sanitize_text_field( $map );
+			}
+			return $out;
+		};
+
+		return array(
+			'enabled'   => (bool) $enabled,
+			'countries' => $clean_map( isset( $value['countries'] ) ? $value['countries'] : array(), false ),
+			'safeguard' => $clean_map( isset( $value['safeguard'] ) ? $value['safeguard'] : array(), true ),
+		);
 	}
 
 	/**

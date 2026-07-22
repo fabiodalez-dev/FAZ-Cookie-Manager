@@ -596,6 +596,15 @@
 			var strong = document.createElement('strong');
 			strong.textContent = cookie.name || '--';
 			tdName.appendChild(strong);
+			// Flag cookies that carry a third-country (Schrems II) transfer
+			// disclosure so admins can spot them at a glance.
+			if (cookie.transfer && cookie.transfer.enabled) {
+				var transferBadge = document.createElement('span');
+				transferBadge.className = 'faz-cookie-transfer-badge';
+				transferBadge.textContent = __('cookies.transferBadge', '3rd country');
+				transferBadge.title = __('cookies.transferBadgeTitle', 'Transfers personal data to a third country (Schrems II)');
+				tdName.appendChild(transferBadge);
+			}
 			tr.appendChild(tdName);
 
 			var tdDomain = document.createElement('td');
@@ -742,6 +751,57 @@
 			form.appendChild(group);
 		});
 
+		// International data transfers (Schrems II) fieldset. Purely a
+		// transparency disclosure — it does not gate or reweight any consent
+		// choice; default OFF so existing cookies are unchanged until ticked.
+		var existingTransfer = (isEdit && cookie && cookie.transfer && typeof cookie.transfer === 'object' && !Array.isArray(cookie.transfer)) ? cookie.transfer : {};
+
+		var transferGroup = document.createElement('div');
+		transferGroup.className = 'faz-form-group faz-transfer-fieldset';
+
+		var transferTitle = document.createElement('label');
+		transferTitle.textContent = __('cookies.transferTitle', 'International data transfers (Schrems II)');
+		transferGroup.appendChild(transferTitle);
+
+		var transferEnabledLabel = document.createElement('label');
+		transferEnabledLabel.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-weight:400;margin-bottom:8px;';
+		var transferEnabled = document.createElement('input');
+		transferEnabled.type = 'checkbox';
+		transferEnabled.className = 'faz-transfer-enabled';
+		transferEnabled.checked = !!existingTransfer.enabled;
+		transferEnabledLabel.appendChild(transferEnabled);
+		transferEnabledLabel.appendChild(document.createTextNode(__('cookies.transferEnabledLabel', 'This cookie may transfer personal data to a country without an EU adequacy decision')));
+		transferGroup.appendChild(transferEnabledLabel);
+
+		var countryLabel = document.createElement('label');
+		countryLabel.style.cssText = 'font-weight:400;font-size:12px;';
+		countryLabel.textContent = __('cookies.transferCountryLabel', 'Recipient country / countries');
+		transferGroup.appendChild(countryLabel);
+		var countryInput = document.createElement('input');
+		countryInput.type = 'text';
+		countryInput.className = 'faz-input faz-transfer-country';
+		countryInput.placeholder = __('cookies.transferCountryPlaceholder', 'e.g. United States');
+		countryInput.value = textVal(existingTransfer.countries) || '';
+		transferGroup.appendChild(countryInput);
+
+		var safeguardLabel = document.createElement('label');
+		safeguardLabel.style.cssText = 'font-weight:400;font-size:12px;margin-top:8px;';
+		safeguardLabel.textContent = __('cookies.transferSafeguardLabel', 'Safeguard (optional)');
+		transferGroup.appendChild(safeguardLabel);
+		var safeguardInput = document.createElement('textarea');
+		safeguardInput.className = 'faz-textarea faz-transfer-safeguard';
+		safeguardInput.rows = 2;
+		safeguardInput.placeholder = __('cookies.transferSafeguardPlaceholder', 'e.g. Standard Contractual Clauses, EU-US Data Privacy Framework, or explicit consent (Art. 49(1)(a))');
+		safeguardInput.value = textVal(existingTransfer.safeguard) || '';
+		transferGroup.appendChild(safeguardInput);
+
+		var transferHelp = document.createElement('p');
+		transferHelp.style.cssText = 'font-size:12px;color:#767676;margin:4px 0 0;';
+		transferHelp.textContent = __('cookies.transferHelp', 'Naming a third-country transfer helps you obtain informed consent. This plugin does not provide legal advice — describe the safeguard your provider relies on.');
+		transferGroup.appendChild(transferHelp);
+
+		form.appendChild(transferGroup);
+
 		// Category dropdown
 		var catGroup = document.createElement('div');
 		catGroup.className = 'faz-form-group';
@@ -808,6 +868,24 @@
 			if (data.category) {
 				data.category = parseInt(data.category, 10) || 0;
 			}
+
+			// Assemble the third-country transfer disclosure. Country/safeguard
+			// are wrapped into multilingual objects under the default language,
+			// preserving any other-language values on edit (same pattern as
+			// description/duration above).
+			var countriesObj = (isEdit && cookie.transfer && cookie.transfer.countries && typeof cookie.transfer.countries === 'object' && !Array.isArray(cookie.transfer.countries))
+				? Object.assign({}, cookie.transfer.countries)
+				: {};
+			countriesObj[defLang] = countryInput.value;
+			var safeguardObj = (isEdit && cookie.transfer && cookie.transfer.safeguard && typeof cookie.transfer.safeguard === 'object' && !Array.isArray(cookie.transfer.safeguard))
+				? Object.assign({}, cookie.transfer.safeguard)
+				: {};
+			safeguardObj[defLang] = safeguardInput.value;
+			data.transfer = {
+				enabled: transferEnabled.checked,
+				countries: countriesObj,
+				safeguard: safeguardObj
+			};
 
 			FAZ.btnLoading(saveBtn, true);
 			var promise = isEdit
