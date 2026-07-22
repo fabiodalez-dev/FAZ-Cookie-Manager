@@ -19,6 +19,7 @@ use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
 use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
 use FazCookie\Includes\Geolocation;
+use FazCookie\Includes\Ab_Test;
 use FazCookie\Includes\Gvl;
 use FazCookie\Includes\Known_Providers;
 use FazCookie\Includes\Cookie_Table_Shortcode;
@@ -838,6 +839,17 @@ class Frontend {
 		$visitor_country = $this->is_cache_compatibility_enabled() ? '' : $this->get_visitor_country();
 		$this->banner    = Controller::get_instance()->get_active_banner_for_country( $visitor_country );
 
+		// A/B testing of banner variants (Settings → Banner Control): when the
+		// admin has enabled the test with 2+ valid variants, replace the
+		// normally-selected banner with the visitor's persistently-assigned
+		// variant. No-op (returns the banner above) when the feature is off,
+		// under-configured, or Cache Compatibility Mode is on. Runs BEFORE the
+		// runtime law-routing block below so, in the common configuration
+		// (runtime geo-routing off → $runtime_ruleset is null → that block is
+		// skipped), the chosen variant is what ships; when runtime geo-routing
+		// IS active, jurisdiction compliance still wins over the A/B preference.
+		$this->banner = $this->maybe_apply_ab_test( $this->banner, $visitor_country );
+
 		// Runtime geo-routing (flag-gated): the resolved ruleset's MODEL decides
 		// which consent regime actually applies to this visitor. Prefer the
 		// active banner whose applicableLaw matches that model so the UI the
@@ -882,6 +894,79 @@ class Frontend {
 		}
 
 		$this->template = $this->banner->get_template();
+	}
+
+	/**
+	 * Apply the banner-variant A/B test to the selected banner.
+	 *
+	 * When Settings → Banner Control → A/B test is enabled and lists two or
+	 * more slugs that still resolve to ACTIVE banner rows, the visitor is
+	 * assigned one variant via a persistent random split and that variant's
+	 * banner replaces the default selection. The assignment is stored in the
+	 * fazcookie-abvariant cookie so the visitor keeps the same variant across
+	 * visits (stable UX) and so the consent log's banner_slug honestly records
+	 * which variant produced each consent (accountability).
+	 *
+	 * Compliance: the test only ever chooses among banner rows the admin
+	 * already created, each independently compliant (equal-weight buttons,
+	 * opt-in categories). It cannot author a dark pattern.
+	 *
+	 * Cache Compatibility Mode: a per-visitor SERVER-side random split is
+	 * fundamentally incompatible with full-page caching — the first anonymous
+	 * visitor's variant would be baked into the cached HTML and then served to
+	 * everyone, silently ending the experiment and making the persisted cookie
+	 * disagree with the served banner. So when that mode is on we skip the
+	 * split entirely and serve the normally-selected banner. (A future
+	 * cache-safe variant would have to run the split client-side in script.js;
+	 * until then A/B testing simply requires Cache Compatibility Mode off.)
+	 *
+	 * @since 1.25.0
+	 * @param Banner|false $default_banner  The banner selected before A/B.
+	 * @param string       $visitor_country Resolved visitor country (unused by
+	 *                                      the split itself; reserved for a
+	 *                                      future country-scoped variant set).
+	 * @return Banner|false The variant banner, or $default_banner unchanged.
+	 */
+	private function maybe_apply_ab_test( $default_banner, $visitor_country ) {
+		// See docblock: no server-side split under Cache Compatibility Mode.
+		if ( $this->is_cache_compatibility_enabled() ) {
+			return $default_banner;
+		}
+
+		$ab = $this->settings->get( 'banner_control', 'ab_test' );
+		if ( ! is_array( $ab ) || empty( $ab['status'] ) ) {
+			return $default_banner;
+		}
+
+		$configured = ( isset( $ab['variants'] ) && is_array( $ab['variants'] ) ) ? $ab['variants'] : array();
+		if ( count( $configured ) < 2 ) {
+			return $default_banner;
+		}
+
+		// Re-validate the configured slugs against the LIVE banner rows so a
+		// variant whose banner was deleted or deactivated after setup drops out.
+		$controller = Controller::get_instance();
+		$valid      = $controller->filter_active_variant_slugs( $configured );
+		if ( count( $valid ) < 2 ) {
+			return $default_banner;
+		}
+
+		$cookie = isset( $_COOKIE[ FAZ_AB_COOKIE ] ) ? sanitize_text_field( wp_unslash( (string) $_COOKIE[ FAZ_AB_COOKIE ] ) ) : '';
+		$chosen = Ab_Test::pick_variant( $valid, $cookie, wp_rand( 0, count( $valid ) - 1 ) );
+		if ( '' === $chosen ) {
+			return $default_banner;
+		}
+
+		// Persist the assignment (6-month cap, mirroring the consent-cookie
+		// retention ceiling). Only (re)write when it changed to avoid an
+		// unnecessary Set-Cookie header on every request. faz_set_browser_cookie
+		// also mirrors the value into $_COOKIE for this same request.
+		if ( $chosen !== $cookie ) {
+			faz_set_browser_cookie( FAZ_AB_COOKIE, $chosen, time() + ( 6 * MONTH_IN_SECONDS ) );
+		}
+
+		$variant_banner = $controller->get_active_banner_by_slug( $chosen );
+		return ( false !== $variant_banner ) ? $variant_banner : $default_banner;
 	}
 
 	/**

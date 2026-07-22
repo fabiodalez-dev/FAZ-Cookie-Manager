@@ -125,6 +125,21 @@ class Settings extends Store {
 				// renames the script handle so network-level filters do not
 				// block the JavaScript itself. Default off.
 				'adblock_resilience'     => false,
+				// A/B testing of banner variants. When `status` is on and
+				// `variants` lists two or more EXISTING active banner slugs,
+				// each visitor is assigned one variant via a persistent random
+				// split (fazcookie-abvariant cookie) and the accept-rate per
+				// variant is reported on the Dashboard from the consent log.
+				// The tool only ever chooses among banner rows the admin
+				// already created — every variant stays independently
+				// compliant (equal-weight buttons, opt-in categories); it is
+				// NOT a way to author dark patterns. Default off, so existing
+				// installs are unchanged. Server-side splitting is skipped
+				// under Cache Compatibility Mode (see Frontend::maybe_apply_ab_test).
+				'ab_test'                => array(
+					'status'   => false,
+					'variants' => array(),
+				),
 			),
 			'microsoft'    => array(
 				'uet_consent_mode' => false,
@@ -265,6 +280,11 @@ class Settings extends Store {
 			'whitelist_patterns',
 			'exempt_levels',
 			'payment_gateways',
+			// A/B test variant slug list (banner_control.ab_test.variants).
+			// Excluded so the recursive sanitiser hands the raw array to
+			// sanitize_option() instead of recursing into it against an empty
+			// default array (which would wipe every entry).
+			'variants',
 		);
 	}
 
@@ -468,6 +488,23 @@ class Settings extends Store {
 				}, $value ), function ( $item ) {
 					return '' !== $item;
 				} ) );
+				break;
+			case 'variants':
+				// A/B test variant list: an array of banner slugs. Each slug is
+				// normalised with sanitize_title() (banner slugs are created via
+				// sanitize_title in the Banners controller), blanks dropped and
+				// duplicates removed. Storing a slug that no longer maps to a
+				// banner is harmless — the selector and the stats reporter both
+				// re-validate against the live banner rows at read time.
+				if ( ! is_array( $value ) ) {
+					$value = array();
+					break;
+				}
+				$value = array_values( array_unique( array_filter( array_map( function ( $item ) {
+					return is_scalar( $item ) ? sanitize_title( (string) $item ) : '';
+				}, $value ), function ( $item ) {
+					return '' !== $item;
+				} ) ) );
 				break;
 			case 'payment_gateways':
 				// Map of gateway-key => bool. Only known catalogue keys survive,

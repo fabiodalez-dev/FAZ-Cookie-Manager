@@ -166,6 +166,7 @@
 		loadStats(params);
 		loadChart(params);
 		loadConsentStats(params);
+		loadAbTestStats(params);
 	}
 
 	/* ── Stats + Donut ── */
@@ -490,6 +491,89 @@
 			}
 		}).catch(function () {
 			// Silently fail — stats card shows default dashes.
+		});
+	}
+
+	/* ── A/B Test Results ── */
+
+	function loadAbTestStats(params) {
+		var card = document.getElementById('faz-abtest-card');
+		var body = document.getElementById('faz-abtest-body');
+		if (!card || !body) return;
+
+		// The A/B route reports by day window only; a custom from/to range falls
+		// back to all-time (days = 0) so the panel stays simple and correct.
+		var abParams = { days: (params && typeof params.days !== 'undefined') ? params.days : 0 };
+
+		FAZ.get('consent_logs/ab_test', abParams).then(function (data) {
+			var variants = (data && Array.isArray(data.variants)) ? data.variants : [];
+
+			// Hide the whole card unless the test is enabled with 2+ variants.
+			if (!data || !data.enabled || variants.length < 2) {
+				card.hidden = true;
+				return;
+			}
+			card.hidden = false;
+
+			while (body.firstChild) { body.removeChild(body.firstChild); }
+
+			var totalConsents = variants.reduce(function (sum, v) {
+				return sum + (parseInt(v.total, 10) || 0);
+			}, 0);
+
+			if (totalConsents === 0) {
+				var empty = document.createElement('p');
+				empty.style.color = 'var(--faz-text-muted)';
+				empty.textContent = __(
+					'dashboard.abTestNoData',
+					'No consents recorded for these variants yet. Results appear once visitors respond to the banner.'
+				);
+				body.appendChild(empty);
+				return;
+			}
+
+			variants.forEach(function (v) {
+				var total = parseInt(v.total, 10) || 0;
+				var rate = (typeof v.accept_rate !== 'undefined') ? Number(v.accept_rate) : 0;
+				if (!isFinite(rate)) rate = 0;
+				var name = String(v.name || v.slug || '');
+
+				var wrap = document.createElement('div');
+				wrap.className = 'faz-category-bar-wrap';
+
+				var barLabel = document.createElement('div');
+				barLabel.className = 'faz-category-bar-label';
+				var nameSpan = document.createElement('span');
+				nameSpan.textContent = name;
+				var pctSpan = document.createElement('span');
+				pctSpan.textContent = Math.round(rate) + '%';
+				barLabel.appendChild(nameSpan);
+				barLabel.appendChild(pctSpan);
+
+				var barOuter = document.createElement('div');
+				barOuter.className = 'faz-category-bar';
+				var barFill = document.createElement('div');
+				barFill.className = 'faz-category-bar-fill';
+				barFill.style.width = Math.max(0, Math.min(100, rate)) + '%';
+				barOuter.appendChild(barFill);
+
+				var meta = document.createElement('div');
+				meta.style.color = 'var(--faz-text-muted)';
+				meta.style.fontSize = '12px';
+				meta.style.marginTop = '2px';
+				// translators-free client string: "<accepted> accepted of <total> consents".
+				meta.textContent = (parseInt(v.accepted, 10) || 0).toLocaleString()
+					+ ' ' + __('dashboard.abTestAcceptedOf', 'accepted of') + ' '
+					+ total.toLocaleString() + ' ' + __('dashboard.abTestConsents', 'consents');
+
+				wrap.appendChild(barLabel);
+				wrap.appendChild(barOuter);
+				wrap.appendChild(meta);
+				body.appendChild(wrap);
+			});
+		}).catch(function () {
+			// Non-fatal: hide the panel if the endpoint errors.
+			card.hidden = true;
 		});
 	}
 

@@ -95,10 +95,85 @@
 			}
 			FAZ.populateForm(form, data);
 			populateTargetRegions(data);
+			renderAbVariants(data);
 			applyShowIf();
 		}).catch(function () {
 			FAZ.notify(__('settings.loadFailed', 'Failed to load settings.'), 'error');
 		});
+	}
+
+	/**
+	 * Build the A/B-test variant checkbox list from the site's active banners,
+	 * pre-checking the ones already stored in banner_control.ab_test.variants.
+	 * Inactive banners are excluded (they cannot serve as variants) and, when
+	 * there are fewer than two active banners, a hint replaces the list.
+	 *
+	 * @param {Object} data Full settings payload (for the stored variant list).
+	 */
+	function renderAbVariants(data) {
+		var container = document.getElementById('faz-abtest-variants');
+		if (!container) return;
+
+		var stored = (data && data.banner_control && data.banner_control.ab_test
+			&& Array.isArray(data.banner_control.ab_test.variants))
+			? data.banner_control.ab_test.variants
+			: [];
+
+		FAZ.get('banners').then(function (banners) {
+			var list = Array.isArray(banners) ? banners.filter(function (b) { return b && b.status; }) : [];
+
+			while (container.firstChild) { container.removeChild(container.firstChild); }
+
+			if (list.length < 2) {
+				var hint = document.createElement('p');
+				hint.style.color = 'var(--faz-text-muted)';
+				hint.textContent = __(
+					'settings.abTestNeedBanners',
+					'Create at least two active banners on the Banner page to run an A/B test.'
+				);
+				container.appendChild(hint);
+				return;
+			}
+
+			list.forEach(function (banner) {
+				var label = document.createElement('label');
+				label.className = 'faz-checkbox';
+				label.style.display = 'block';
+				label.style.marginBottom = '6px';
+
+				var cb = document.createElement('input');
+				cb.type = 'checkbox';
+				cb.className = 'faz-abtest-variant';
+				cb.value = String(banner.slug || '');
+				cb.checked = stored.indexOf(String(banner.slug || '')) !== -1;
+
+				var text = document.createElement('span');
+				text.style.marginLeft = '6px';
+				text.textContent = String(banner.name || banner.slug || '');
+
+				label.appendChild(cb);
+				label.appendChild(text);
+				container.appendChild(label);
+			});
+		}).catch(function () {
+			while (container.firstChild) { container.removeChild(container.firstChild); }
+			var err = document.createElement('p');
+			err.style.color = 'var(--faz-text-muted)';
+			err.textContent = __('settings.abTestLoadFailed', 'Could not load banners for the A/B test.');
+			container.appendChild(err);
+		});
+	}
+
+	/** Collect the checked A/B-test variant slugs into an array. */
+	function serializeAbVariants() {
+		var slugs = [];
+		var container = document.getElementById('faz-abtest-variants');
+		if (!container) return slugs;
+		container.querySelectorAll('input.faz-abtest-variant:checked').forEach(function (cb) {
+			var v = String(cb.value || '').trim();
+			if (v && slugs.indexOf(v) === -1) slugs.push(v);
+		});
+		return slugs;
 	}
 
 	/** Populate target region checkboxes from the stored array */
@@ -170,6 +245,17 @@
 			// Target regions: replace boolean from generic serializer with proper array
 			if (!formData.geolocation) formData.geolocation = {};
 			formData.geolocation.target_regions = serializeTargetRegions();
+
+			// A/B test variants: the checkbox list is built dynamically from the
+			// banner rows (no data-path), so the generic serializer skips it —
+			// collect the checked slugs here into banner_control.ab_test.variants.
+			// The ab_test.status flag IS a data-path checkbox, so formData already
+			// carries it; we only add the variant array alongside it.
+			if (!formData.banner_control) formData.banner_control = {};
+			if (!formData.banner_control.ab_test || typeof formData.banner_control.ab_test !== 'object') {
+				formData.banner_control.ab_test = {};
+			}
+			formData.banner_control.ab_test.variants = serializeAbVariants();
 
 			// Deep merge form data into current settings
 			Object.keys(formData).forEach(function (key) {

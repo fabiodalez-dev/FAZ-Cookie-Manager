@@ -731,6 +731,63 @@ class Controller extends Base_Controller {
 	}
 
 	/**
+	 * Get an ACTIVE banner by its slug, for the A/B variant selector.
+	 *
+	 * Only status=1 rows qualify: an A/B variant must be a live, compliant
+	 * banner. Returns false when the slug does not match any active row (e.g.
+	 * the variant was deactivated or deleted after the test was configured),
+	 * so the caller falls back to the normal banner selection.
+	 *
+	 * @since 1.25.0
+	 * @param string $slug Banner slug.
+	 * @return Banner|false
+	 */
+	public function get_active_banner_by_slug( $slug ) {
+		$slug = is_scalar( $slug ) ? trim( (string) $slug ) : '';
+		if ( '' === $slug ) {
+			return false;
+		}
+		$items = $this->get_items();
+		if ( empty( $items ) || ! is_array( $items ) ) {
+			return false;
+		}
+		foreach ( $items as $item ) {
+			if ( isset( $item->slug ) && (string) $item->slug === $slug && 1 === (int) $item->status ) {
+				$winner = new Banner( (int) $item->banner_id );
+				$winner->set_language( faz_current_language() );
+				return $winner;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Reduce a list of configured A/B variant slugs to those that still map to
+	 * an ACTIVE banner row, preserving order and dropping blanks / duplicates.
+	 *
+	 * Shared by the frontend selector and the Dashboard stats route so both
+	 * agree on which variants are currently in play. The pure intersection
+	 * logic lives in Ab_Test::filter_slugs(); this method just supplies the
+	 * live set of active slugs from the cached banner rows.
+	 *
+	 * @since 1.25.0
+	 * @param array $slugs Configured variant slugs.
+	 * @return string[] Ordered, unique subset that resolves to active banners.
+	 */
+	public function filter_active_variant_slugs( $slugs ) {
+		$items  = $this->get_items();
+		$active = array();
+		if ( is_array( $items ) ) {
+			foreach ( $items as $item ) {
+				if ( isset( $item->slug ) && 1 === (int) $item->status ) {
+					$active[] = (string) $item->slug;
+				}
+			}
+		}
+		return \FazCookie\Includes\Ab_Test::filter_slugs( $slugs, $active );
+	}
+
+	/**
 	 * Variant of pick_highest_priority() that operates on raw
 	 * {id, priority} pairs instead of Banner instances. Lets the caller
 	 * defer Banner instantiation until after the winner is known —

@@ -869,6 +869,80 @@ class Controller {
 	}
 
 	/**
+	 * Accept-rate per banner variant for the A/B test Dashboard panel.
+	 *
+	 * Groups the consent log by banner_slug for the requested variant slugs and
+	 * reports, per variant, the total consents and the accepted / rejected /
+	 * partial split with the acceptance rate. The banner_slug column is written
+	 * on every consent (Frontend records the variant the visitor was served),
+	 * so this attributes each consent to the variant that produced it — the
+	 * accountability side of the random split.
+	 *
+	 * The raw grouped rows are reshaped by Ab_Test::compute_stats(), which
+	 * zero-fills variants with no consents yet and follows the requested slug
+	 * order — keeping this method a thin query wrapper and the arithmetic
+	 * unit-testable without a database.
+	 *
+	 * @since 1.25.0
+	 * @param array $slugs Banner variant slugs to report.
+	 * @param int   $days  Look-back window in days; 0 means all time.
+	 * @return array<int, array<string, mixed>> Per-variant stats rows.
+	 */
+	public function get_ab_test_stats( $slugs, $days = 0 ) {
+		global $wpdb;
+
+		// Normalise to a unique, non-empty list of string slugs.
+		$slugs = is_array( $slugs ) ? $slugs : array();
+		$slugs = array_values( array_unique( array_filter( array_map( function ( $s ) {
+			return is_scalar( $s ) ? trim( (string) $s ) : '';
+		}, $slugs ), function ( $s ) {
+			return '' !== $s;
+		} ) ) );
+		if ( empty( $slugs ) ) {
+			return array();
+		}
+
+		$table = $this->get_table_name();
+		$days  = absint( $days );
+
+		// One %s placeholder per slug for the IN() list; every value is bound
+		// through prepare() below.
+		$placeholders = implode( ', ', array_fill( 0, count( $slugs ), '%s' ) );
+		$params       = $slugs;
+
+		$cutoff_sql = '';
+		if ( $days > 0 ) {
+			// PHP-computed cutoff via current_time() for consistency with how
+			// created_at is stored (current_time('mysql') in log_consent).
+			$cutoff       = gmdate( 'Y-m-d H:i:s', strtotime( '-' . $days . ' days', strtotime( current_time( 'mysql' ) ) ) );
+			$cutoff_sql   = ' AND created_at >= %s';
+			$params[]     = $cutoff;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is the plugin-prefix custom table; the only interpolated fragments are a $wpdb->prepare-safe list of %s placeholders and a fixed cutoff clause, every value bound via prepare(). Live admin aggregate — must not be cached.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT banner_slug,
+						COUNT(*) as total,
+						SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+						SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+						SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) as partial
+				 FROM {$table}
+				 WHERE banner_slug IN ({$placeholders}){$cutoff_sql}
+				 GROUP BY banner_slug", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$params
+			),
+			ARRAY_A
+		);
+
+		if ( ! is_array( $rows ) ) {
+			$rows = array();
+		}
+
+		return \FazCookie\Includes\Ab_Test::compute_stats( $rows, $slugs );
+	}
+
+	/**
 	 * Cleanup old consent logs beyond a given retention period.
 	 *
 	 * @param int $months Number of months to retain. Logs older than this are deleted.

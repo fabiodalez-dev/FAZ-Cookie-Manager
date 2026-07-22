@@ -57,6 +57,12 @@ define( 'FAZ_PLUGIN_BASEPATH', plugin_dir_path( __FILE__ ) );
 define( 'FAZ_PLUGIN_FILENAME', __FILE__ );
 define( 'FAZ_POST_TYPE', 'cookielawinfo' );
 define( 'FAZ_DEFAULT_LANGUAGE', faz_set_default_language() );
+// Persistent A/B-test variant cookie. Holds only the assigned banner slug so
+// a visitor keeps the same variant across visits (stable UX + honest
+// per-variant accounting in the consent log). Contains no consent state and
+// no PII. Only written when banner_control.ab_test is enabled with 2+ valid
+// variants and Cache Compatibility Mode is off.
+define( 'FAZ_AB_COOKIE', 'fazcookie-abvariant' );
 
 /** Stub for backward compat — cloud URLs removed. */
 if ( ! defined( 'FAZ_APP_URL' ) ) {

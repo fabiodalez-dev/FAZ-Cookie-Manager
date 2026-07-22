@@ -91,6 +91,21 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep the page fully cacheable by LiteSpeed, QUIC.cloud, Varnish, Nginx FastCGI or WP Rocket. The plugin stops emitting <code>no-cache</code>/<code>no-store</code> headers and the <code>DONOTCACHEPAGE</code> constant for anonymous visitors, so the static HTML is cached and the banner runs entirely client-side from the consent cookie. <strong>Only enable this if your banner output does NOT vary by visitor country.</strong> With IAB TCF, geo-targeting, country-targeted banners or runtime geo-routing active, the same cached HTML would be served to every region (e.g. an EU TCF <code>gdprApplies=true</code> page reaching a US visitor) — keep this OFF in that case, or vary the cache by country at the CDN.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="banner_control.ab_test.status">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'A/B test banner variants', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Run two or more of your existing banners at the same time. Each visitor is randomly assigned one variant and keeps it across visits, and the acceptance rate per variant is reported on the Dashboard so you can optimise the consent experience with evidence. Every variant you pick stays independently compliant — this only chooses among banners you already built, it never changes their buttons or defaults. <strong>Requires Cache Compatibility Mode above to be OFF</strong>, because a per-visitor split cannot run behind full-page caching.', 'faz-cookie-manager' ) ); ?></div>
+			</div>
+			<div class="faz-form-group" data-show-if="banner_control.ab_test.status">
+				<label><?php esc_html_e( 'Variants in the test group', 'faz-cookie-manager' ); ?></label>
+				<div class="faz-help"><?php esc_html_e( 'Select two or more active banners to include in the test. Only active banners can be used as variants.', 'faz-cookie-manager' ); ?></div>
+				<div id="faz-abtest-variants" class="faz-abtest-variants">
+					<p style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading banners…', 'faz-cookie-manager' ); ?></p>
+				</div>
+			</div>
 		</div>
 	</div>
 

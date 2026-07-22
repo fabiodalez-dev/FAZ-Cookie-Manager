@@ -148,6 +148,28 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 	</div>
 
+	<?php
+	// A/B test results — hidden by default and revealed by dashboard.js only
+	// when the test is enabled with two or more variants. Existing installs
+	// (A/B test off by default) never see this card.
+	?>
+	<div class="faz-card" id="faz-abtest-card" hidden>
+		<div class="faz-card-header">
+			<h3><?php
+				echo wp_kses_post( sprintf(
+					/* translators: %s: date range label injected by JS */
+					__( 'A/B Test Results &mdash; %s', 'faz-cookie-manager' ),
+					'<span id="faz-abtest-range-label">' . esc_html__( 'Last 30 Days', 'faz-cookie-manager' ) . '</span>'
+				) );
+			?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div id="faz-abtest-body">
+				<p style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading…', 'faz-cookie-manager' ); ?></p>
+			</div>
+		</div>
+	</div>
+
 	<div class="faz-card">
 		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Quick Links', 'faz-cookie-manager' ); ?></h3>
