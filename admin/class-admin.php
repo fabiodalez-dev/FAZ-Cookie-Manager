@@ -642,6 +642,8 @@ class Admin {
 						'dbFileInfo'               => __( '{file} ({size} KB) - Last updated: {date}', 'faz-cookie-manager' ),
 						'gvlUpdatedWithMeta'       => __( 'GVL updated: v{version} ({count} vendors)', 'faz-cookie-manager' ),
 						'noGeoipDb'                => __( 'No GeoIP database installed. Enter your license key and click "Update Database".', 'faz-cookie-manager' ),
+						'abTestWarnVariants'       => __( 'A/B testing needs at least 2 selected banner variants to run.', 'faz-cookie-manager' ),
+						'abTestWarnCache'          => __( 'A/B testing is disabled while Cache Compatibility Mode is on.', 'faz-cookie-manager' ),
 					),
 					// GCM page.
 					'gcm'                      => array(
@@ -734,6 +736,7 @@ class Admin {
 						'abTestNoData'              => __( 'No consents recorded for these variants yet. Results appear once visitors respond to the banner.', 'faz-cookie-manager' ),
 						/* translators: {accepted}: accepted count, {total}: total consent count. */
 						'abTestAcceptedOf'          => __( '{accepted} accepted of {total} consents', 'faz-cookie-manager' ),
+						'abTestLoadError'          => __( 'Could not load A/B test results.', 'faz-cookie-manager' ),
 					),
 					// Guided setup wizard (admin/assets/js/pages/setup.js).
 					'setup'                    => array(
