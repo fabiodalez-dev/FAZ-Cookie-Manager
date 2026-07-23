@@ -257,31 +257,35 @@ test.describe.serial('PR #189 competitor-parity runtime invariants', () => {
   test('wizard updates only the default banner across multiple languages and laws', () => {
     const raw = wpEval(`
       $onboarding = new \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Onboarding();
-      $onboarding->apply_law_to_default_banner( 'both' );
-      \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
-      $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
-      $a = $controller->get_active_banner_by_slug( '${VARIANT_A}' );
-      $b = $controller->get_active_banner_by_slug( '${VARIANT_B}' );
-      $ccpa = $controller->get_active_banner_by_slug( '${VARIANT_CCPA}' );
-      $us = $controller->get_active_banner_by_slug( '${VARIANT_US}' );
-      $a_settings = $a->get_settings();
-      $ccpa_settings = $ccpa->get_settings();
-      $a_contents = $a->get_contents();
-      $ccpa_contents = $ccpa->get_contents();
-      $result = array(
-        'default_law' => $a->get_law(),
-        'default_dns' => ! empty( $a_settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ),
-        'a_en' => $a_contents['en']['notice']['elements']['title'] ?? '',
-        'a_it' => $a_contents['it']['notice']['elements']['title'] ?? '',
-        'ccpa_law' => $ccpa->get_law(),
-        'ccpa_dns' => ! empty( $ccpa_settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ),
-        'ccpa_en' => $ccpa_contents['en']['notice']['elements']['title'] ?? '',
-        'ccpa_it' => $ccpa_contents['it']['notice']['elements']['title'] ?? '',
-        'peer_laws' => array( $b->get_law(), $us->get_law() ),
-      );
-      // Restore the default fixture for the remaining runtime tests.
-      $onboarding->apply_law_to_default_banner( 'gdpr' );
-      \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+      $result = array();
+      try {
+        $onboarding->apply_law_to_default_banner( 'both' );
+        \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+        $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
+        $a = $controller->get_active_banner_by_slug( '${VARIANT_A}' );
+        $b = $controller->get_active_banner_by_slug( '${VARIANT_B}' );
+        $ccpa = $controller->get_active_banner_by_slug( '${VARIANT_CCPA}' );
+        $us = $controller->get_active_banner_by_slug( '${VARIANT_US}' );
+        $a_settings = $a->get_settings();
+        $ccpa_settings = $ccpa->get_settings();
+        $a_contents = $a->get_contents();
+        $ccpa_contents = $ccpa->get_contents();
+        $result = array(
+          'default_law' => $a->get_law(),
+          'default_dns' => ! empty( $a_settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ),
+          'a_en' => $a_contents['en']['notice']['elements']['title'] ?? '',
+          'a_it' => $a_contents['it']['notice']['elements']['title'] ?? '',
+          'ccpa_law' => $ccpa->get_law(),
+          'ccpa_dns' => ! empty( $ccpa_settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ),
+          'ccpa_en' => $ccpa_contents['en']['notice']['elements']['title'] ?? '',
+          'ccpa_it' => $ccpa_contents['it']['notice']['elements']['title'] ?? '',
+          'peer_laws' => array( $b->get_law(), $us->get_law() ),
+        );
+      } finally {
+        // Restore the default fixture for the remaining runtime tests.
+        $onboarding->apply_law_to_default_banner( 'gdpr' );
+        \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+      }
       echo wp_json_encode( $result );
     `).trim();
     const state = JSON.parse(raw);

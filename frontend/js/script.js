@@ -2499,30 +2499,37 @@ function _fazHideAgeConfirmError() {
  * _fazAcceptCookies() and it returns false (age not yet affirmed), they roll
  * back their state and park the original intent here so ticking the affirmation
  * checkbox can replay the exact same grant — the visitor never has to re-click
- * the embed. Cleared once replayed or when a reject/withdraw discards it.
+ * the embed. This is a QUEUE (not a single slot): a visitor can trigger accept
+ * on several blocked embeds/categories before ever ticking the age box, and
+ * every one of those intents must be preserved, not just the last. Drained
+ * (emptied) once replayed or when a reject/withdraw discards it.
  *
- * Shape: {type:'service', serviceId, categorySlug, trustService}
- *      | {type:'category', categorySlug}
+ * Shape of each queued entry: {type:'service', serviceId, categorySlug, trustService}
+ *                            | {type:'category', categorySlug}
  *
- * @type {?Object}
+ * @type {Array<Object>}
  */
-var _fazPendingAgeGatedGrant = null;
+var _fazPendingAgeGatedGrants = [];
 
 /**
- * Replay the grant parked by a placeholder when the age gate intercepted it,
- * now that the visitor has affirmed their age. Clears the pending intent before
- * replaying so the replayed accept (which passes the gate) cannot re-enter here.
+ * Replay every grant parked by placeholders while the age gate intercepted
+ * them, now that the visitor has affirmed their age. Drains the queue to
+ * empty BEFORE replaying so a replayed accept (which now passes the gate)
+ * cannot re-enter and re-queue itself.
  *
  * @returns {void}
  */
 function _fazResumePendingAgeGatedGrant() {
-    var pending = _fazPendingAgeGatedGrant;
-    if (!pending) return;
-    _fazPendingAgeGatedGrant = null;
-    if (pending.type === 'service' && typeof window._fazAcceptService === 'function') {
-        window._fazAcceptService(pending.serviceId, pending.categorySlug, pending.trustService);
-    } else if (pending.type === 'category' && typeof window._fazAcceptCategory === 'function') {
-        window._fazAcceptCategory(pending.categorySlug);
+    if (!_fazPendingAgeGatedGrants.length) return;
+    var queued = _fazPendingAgeGatedGrants;
+    _fazPendingAgeGatedGrants = [];
+    for (var i = 0; i < queued.length; i++) {
+        var pending = queued[i];
+        if (pending.type === 'service' && typeof window._fazAcceptService === 'function') {
+            window._fazAcceptService(pending.serviceId, pending.categorySlug, pending.trustService);
+        } else if (pending.type === 'category' && typeof window._fazAcceptCategory === 'function') {
+            window._fazAcceptCategory(pending.categorySlug);
+        }
     }
 }
 
@@ -2593,7 +2600,7 @@ function _fazRenderAgeConfirmation(group) {
     var label = document.createElement('label');
     label.className = 'faz-age-confirm-label';
     label.setAttribute('for', cbId);
-    label.textContent = _fazTranslate('age_confirm_label', 'I confirm I am at least ' + minAge + ' years old');
+    label.textContent = _fazTranslate('age_confirm_label', 'I confirm I am at least %d years old').replace('%d', minAge);
 
     var error = document.createElement('span');
     error.className = 'faz-age-confirm-error';
@@ -2723,10 +2730,10 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
         return false;
     }
     if (choice === 'reject' || ungated) {
-        // A reject/withdraw (or the ungated CCPA opt-out) discards any grant a
+        // A reject/withdraw (or the ungated CCPA opt-out) discards every grant a
         // placeholder parked waiting for age affirmation — the visitor chose not
-        // to grant it, so it must not later replay when a checkbox is ticked.
-        _fazPendingAgeGatedGrant = null;
+        // to grant them, so none may later replay when a checkbox is ticked.
+        _fazPendingAgeGatedGrants.length = 0;
     }
 
     // Past the age gate the choice WILL be recorded below, so announce the
@@ -7019,14 +7026,15 @@ window._fazAcceptService = function (serviceId, categorySlug, trustService) {
         _fazCleanupSyntheticToggle();
         _fazCategoriesBeforeConsent = null;
         _fazServicesBeforeConsent = null;
-        // Age gate intercepted: remember this exact grant so ticking the
-        // affirmation checkbox replays it without a second embed click.
-        _fazPendingAgeGatedGrant = {
+        // Age gate intercepted: queue this exact grant so ticking the
+        // affirmation checkbox replays it (along with any other queued grant)
+        // without a second embed click.
+        _fazPendingAgeGatedGrants.push({
             type: 'service',
             serviceId: serviceId,
             categorySlug: categorySlug,
             trustService: trustService
-        };
+        });
         return;
     }
 
@@ -7089,9 +7097,10 @@ window._fazAcceptCategory = function (categorySlug) {
         }
         _fazCategoriesBeforeConsent = null;
         _fazServicesBeforeConsent = null;
-        // Age gate intercepted: remember this exact grant so ticking the
-        // affirmation checkbox replays it without a second embed click.
-        _fazPendingAgeGatedGrant = { type: 'category', categorySlug: categorySlug };
+        // Age gate intercepted: queue this exact grant so ticking the
+        // affirmation checkbox replays it (along with any other queued grant)
+        // without a second embed click.
+        _fazPendingAgeGatedGrants.push({ type: 'category', categorySlug: categorySlug });
         return;
     }
     _fazRemoveBanner();

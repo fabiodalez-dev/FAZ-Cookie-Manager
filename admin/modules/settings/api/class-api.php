@@ -194,6 +194,7 @@ class Api extends Rest_Controller {
 							'type'              => 'string',
 							'enum'              => Onboarding::LAWS,
 							'sanitize_callback' => 'sanitize_key',
+							'validate_callback' => 'rest_validate_request_arg',
 						),
 					),
 				),

@@ -926,9 +926,9 @@ class Frontend {
 	 * @param string       $visitor_country Resolved visitor country. Used to keep
 	 *                                      variant selection within the same
 	 *                                      geo-eligibility as the normal banner
-	 *                                      selection: filters candidates by
-	 *                                      get_target_countries() and
-	 *                                      is_banner_geo_blocked() so an A/B
+	 *                                      selection: filters candidates through
+	 *                                      Ab_Test::is_banner_geo_eligible()
+	 *                                      (target_countries + ruleSet) so an A/B
 	 *                                      experiment can never surface a variant
 	 *                                      that normal routing would have hidden
 	 *                                      or excluded for this visitor.
@@ -964,18 +964,19 @@ class Frontend {
 		// Without this gate a US-targeted CCPA variant could replace an EU GDPR
 		// banner (or a country-restricted variant could make is_geo_blocked() hide
 		// the notice entirely), turning an A/B setting into a compliance override.
-		$required_model = $this->banner_experiment_model( $default_banner );
+		$required_model = Ab_Test::experiment_model( $default_banner );
 		$compatible     = array();
 		foreach ( $valid as $slug ) {
 			$candidate = $controller->get_active_banner_by_slug( $slug );
-			if ( false === $candidate || $this->banner_experiment_model( $candidate ) !== $required_model ) {
+			if ( false === $candidate || Ab_Test::experiment_model( $candidate ) !== $required_model ) {
 				continue;
 			}
-			$targets = $candidate->get_target_countries();
-			if ( ! empty( $targets ) && ( '' === $visitor_country || ! in_array( $visitor_country, $targets, true ) ) ) {
-				continue;
-			}
-			if ( $this->is_banner_geo_blocked( $candidate, $visitor_country ) ) {
+			// Geo scope (target_countries) + ruleSet eligibility go through ONE
+			// shared implementation with the REST language-swap path
+			// (Ab_Test::is_banner_geo_eligible) so the initial server render and a
+			// later REST swap can never resolve a different variant for the same
+			// visitor. Case is normalised on both country and targets.
+			if ( ! Ab_Test::is_banner_geo_eligible( $candidate, $visitor_country ) ) {
 				continue;
 			}
 			$compatible[ $slug ] = $candidate;
@@ -998,23 +999,6 @@ class Frontend {
 		}
 
 		return isset( $compatible[ $chosen ] ) ? $compatible[ $chosen ] : $default_banner;
-	}
-
-	/**
-	 * Compliance model a banner must share with every A/B peer.
-	 *
-	 * "Both" is stored as applicableLaw=gdpr plus Do-Not-Sell=true, so law alone
-	 * is insufficient: mixing it with pure GDPR would randomly remove the US
-	 * opt-out entry point. This compact signature keeps experiments within one
-	 * consent model while still allowing arbitrary visual/copy variants.
-	 *
-	 * @param Banner $banner Banner candidate.
-	 * @return string
-	 */
-	private function banner_experiment_model( $banner ) {
-		$properties = $banner->get_settings();
-		$dns        = ! empty( $properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] );
-		return $banner->get_law() . '|' . ( $dns ? 'dns' : 'plain' );
 	}
 
 	/**

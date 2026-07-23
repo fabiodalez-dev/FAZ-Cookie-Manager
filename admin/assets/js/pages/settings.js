@@ -21,6 +21,12 @@
 	// mutated the form. Each loadSettings() captures the current token and
 	// only applies its payload if the token still matches at resolution time.
 	var settingsRequestId = 0;
+	// True only once renderAbVariants()'s FAZ.get('banners') has resolved
+	// successfully and the checkbox list (or the "need more banners" hint)
+	// has been rendered into the DOM. False while that request is still in
+	// flight or after it failed. saveSettings() must not trust the DOM-derived
+	// serializeAbVariants() result while this is false — see saveSettings().
+	var abVariantsReady = false;
 
 	FAZ.ready(function () {
 		form = document.getElementById('faz-settings');
@@ -119,6 +125,10 @@
 			? data.banner_control.ab_test.variants
 			: [];
 
+		// The checkbox list doesn't exist in the DOM yet — until FAZ.get('banners')
+		// below resolves (or fails), serializeAbVariants() cannot be trusted.
+		abVariantsReady = false;
+
 		FAZ.get('banners').then(function (banners) {
 			var list = Array.isArray(banners) ? banners.filter(function (b) { return b && b.status; }) : [];
 
@@ -132,6 +142,7 @@
 					'Create at least two active banners on the Banner page to run an A/B test.'
 				);
 				container.appendChild(hint);
+				abVariantsReady = true;
 				return;
 			}
 
@@ -155,12 +166,17 @@
 				label.appendChild(text);
 				container.appendChild(label);
 			});
+
+			abVariantsReady = true;
 		}).catch(function () {
 			while (container.firstChild) { container.removeChild(container.firstChild); }
 			var err = document.createElement('p');
 			err.style.color = 'var(--faz-text-muted)';
 			err.textContent = __('settings.abTestLoadFailed', 'Could not load banners for the A/B test.');
 			container.appendChild(err);
+			// Load failed — the checkbox list is empty/stale. Keep saveSettings()
+			// from treating serializeAbVariants() as authoritative.
+			abVariantsReady = false;
 		});
 	}
 
@@ -255,7 +271,19 @@
 			if (!formData.banner_control.ab_test || typeof formData.banner_control.ab_test !== 'object') {
 				formData.banner_control.ab_test = {};
 			}
-			formData.banner_control.ab_test.variants = serializeAbVariants();
+			if (abVariantsReady) {
+				formData.banner_control.ab_test.variants = serializeAbVariants();
+			} else {
+				// The variant checkboxes never finished loading (renderAbVariants()'s
+				// FAZ.get('banners') is still in flight, or it failed) — the DOM has
+				// no checkboxes yet, so serializeAbVariants() would return [] and
+				// silently wipe out the admin's previously configured variants.
+				// Preserve whatever is already stored server-side instead.
+				formData.banner_control.ab_test.variants = (current.banner_control && current.banner_control.ab_test
+					&& Array.isArray(current.banner_control.ab_test.variants))
+					? current.banner_control.ab_test.variants
+					: [];
+			}
 
 			// Deep merge form data into current settings
 			Object.keys(formData).forEach(function (key) {
@@ -275,7 +303,15 @@
 			var abTestWarning = null;
 			if (current.banner_control && current.banner_control.ab_test
 				&& current.banner_control.ab_test.status) {
-				if (serializeAbVariants().length < 2) {
+				// current.banner_control.ab_test.variants was just overwritten by the
+				// merge above with formData.banner_control.ab_test.variants (either the
+				// freshly serialized checkboxes, or the preserved server-side value when
+				// the checkbox list hadn't finished loading) — use it instead of a fresh
+				// serializeAbVariants() call, which would be wrong while !abVariantsReady.
+				var effectiveVariants = Array.isArray(current.banner_control.ab_test.variants)
+					? current.banner_control.ab_test.variants
+					: [];
+				if (effectiveVariants.length < 2) {
 					abTestWarning = __(
 						'settings.abTestWarnVariants',
 						'A/B testing needs at least 2 selected banner variants to run.'

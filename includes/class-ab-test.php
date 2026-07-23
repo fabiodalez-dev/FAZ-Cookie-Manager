@@ -209,4 +209,114 @@ class Ab_Test {
 		}
 		return $out;
 	}
+
+	/**
+	 * Compliance model a banner must share with every A/B peer.
+	 *
+	 * An experiment may vary presentation but never the legal/geo regime, so
+	 * candidate variants are constrained to the same "model" as the banner
+	 * selected by normal routing. "Both" is stored as applicableLaw=gdpr plus
+	 * Do-Not-Sell=true, so law alone is insufficient: mixing it with pure GDPR
+	 * would randomly remove the US opt-out entry point. This compact signature
+	 * keeps experiments within one consent model while still allowing arbitrary
+	 * visual/copy variants.
+	 *
+	 * Single source of truth shared by the initial server render
+	 * (Frontend::maybe_apply_ab_test) and the REST language-swap path
+	 * (Banner_Rest::resolve_requested_variant) so the two can never drift and
+	 * silently serve different variants for the same visitor.
+	 *
+	 * The parameter is any object exposing the banner public getters
+	 * `get_settings()` and `get_law()` (kept duck-typed to avoid coupling this
+	 * WordPress-free helper to the Banner class).
+	 *
+	 * @since 1.25.0
+	 * @param object $banner Banner candidate (get_settings()/get_law()).
+	 * @return string Signature "<law>|<dns|plain>".
+	 */
+	public static function experiment_model( $banner ) {
+		$properties = $banner->get_settings();
+		$dns        = ! empty( $properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] );
+		return $banner->get_law() . '|' . ( $dns ? 'dns' : 'plain' );
+	}
+
+	/**
+	 * Whether a candidate banner is geo-eligible for the visitor.
+	 *
+	 * Combines the two geo gates that normal banner routing applies, so an A/B
+	 * experiment can never surface a variant that geo-targeting would otherwise
+	 * hide for this visitor:
+	 *   1. target_countries — when the banner is country-restricted, the visitor
+	 *      country must be one of them (and must be resolved);
+	 *   2. ruleSet — when present, at least one rule (ALL / EU / US / OTHER) must
+	 *      match the visitor country. An unresolved country ('') is treated as
+	 *      "no signal": a ruleSet-only banner stays eligible rather than being
+	 *      silently suppressed (the normal geo guard never hides a consent
+	 *      surface just because the country lookup failed).
+	 *
+	 * Case is normalised on BOTH sides (visitor country and stored targets are
+	 * upper-cased) so the initial server render and the REST swap agree even
+	 * when target_countries were saved in a different case — the asymmetry this
+	 * shared implementation exists to remove.
+	 *
+	 * Single source of truth shared by Frontend::maybe_apply_ab_test and
+	 * Banner_Rest::resolve_requested_variant.
+	 *
+	 * @since 1.25.0
+	 * @param object $banner  Banner candidate (get_settings()/get_target_countries()).
+	 * @param string $country ISO-3166 alpha-2 country code, or '' if unknown.
+	 * @return bool True when the banner may be shown to this visitor.
+	 */
+	public static function is_banner_geo_eligible( $banner, $country ) {
+		$country = strtoupper( (string) $country );
+		$targets = array();
+		foreach ( (array) $banner->get_target_countries() as $target ) {
+			$targets[] = strtoupper( (string) $target );
+		}
+		if ( ! empty( $targets ) && ( '' === $country || ! in_array( $country, $targets, true ) ) ) {
+			return false;
+		}
+
+		$properties = $banner->get_settings();
+		$inner      = isset( $properties['settings'] ) && is_array( $properties['settings'] ) ? $properties['settings'] : array();
+		$rules      = isset( $inner['ruleSet'] ) && is_array( $inner['ruleSet'] ) ? $inner['ruleSet'] : array();
+		if ( empty( $rules ) || '' === $country ) {
+			return true;
+		}
+		foreach ( $rules as $rule ) {
+			if ( is_array( $rule ) && self::rule_matches_country( $rule, $country ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether one banner ruleSet entry matches the visitor country.
+	 *
+	 * Only reached with a resolved (non-empty) country from
+	 * is_banner_geo_eligible(). Region codes are upper-cased before comparison,
+	 * matching the upper-cased visitor country.
+	 *
+	 * @since 1.25.0
+	 * @param array  $rule    Banner ruleSet entry.
+	 * @param string $country ISO-3166 alpha-2 code (upper-case).
+	 * @return bool
+	 */
+	private static function rule_matches_country( $rule, $country ) {
+		$code = isset( $rule['code'] ) ? strtoupper( (string) $rule['code'] ) : 'ALL';
+		switch ( $code ) {
+			case 'ALL':
+				return true;
+			case 'EU':
+				return in_array( $country, Geolocation::$eu_countries, true );
+			case 'US':
+				return 'US' === $country;
+			case 'OTHER':
+				$regions = isset( $rule['regions'] ) ? array_map( 'strtoupper', (array) $rule['regions'] ) : array();
+				return in_array( $country, $regions, true );
+			default:
+				return false;
+		}
+	}
 }

@@ -19,6 +19,13 @@
 namespace FazCookie\Includes {
 	// Minimal stub: Settings extends Store, which we don't exercise here.
 	class Store {}
+
+	// Minimal stub for the geo helper referenced by Ab_Test::is_banner_geo_eligible
+	// (only its static $eu_countries data is used). Kept tiny — the real class is
+	// not loaded in this standalone runner.
+	class Geolocation {
+		public static $eu_countries = array( 'IT', 'FR', 'DE', 'ES', 'NL' );
+	}
 }
 
 namespace {
@@ -45,6 +52,32 @@ namespace {
 
 	use FazCookie\Includes\Ab_Test;
 	use FazCookie\Admin\Modules\Settings\Includes\Settings;
+
+	/**
+	 * Tiny banner double exposing only the three public getters Ab_Test reads:
+	 * get_law(), get_settings(), get_target_countries(). Lets the geo-eligibility
+	 * and experiment-model helpers be exercised without WordPress or the real
+	 * Banner class.
+	 */
+	class Faz_Fake_Banner {
+		private $law;
+		private $settings;
+		private $targets;
+		public function __construct( $law, $settings = array(), $targets = array() ) {
+			$this->law      = $law;
+			$this->settings = $settings;
+			$this->targets  = $targets;
+		}
+		public function get_law() {
+			return $this->law;
+		}
+		public function get_settings() {
+			return $this->settings;
+		}
+		public function get_target_countries() {
+			return $this->targets;
+		}
+	}
 
 	$tests_run = $tests_passed = $tests_failed = 0;
 	function faz_assert_same( $actual, $expected, $label ) {
@@ -181,6 +214,112 @@ namespace {
 	// Rows for slugs not requested must never leak into the output.
 	$slugs_out = array_map( function ( $r ) { return $r['slug']; }, $stats );
 	faz_assert_same( in_array( 'unrelated-9', $slugs_out, true ), false, 'rows for non-requested slugs are excluded' );
+
+	echo "\n== A/B test: experiment_model ==\n\n";
+
+	// donotSell true => "<law>|dns"; anything else => "<law>|plain". "Both" is
+	// stored as gdpr + donotSell, so it must NOT collapse into pure gdpr.
+	$dns_settings = array(
+		'config' => array(
+			'notice' => array(
+				'elements' => array(
+					'buttons' => array(
+						'elements' => array(
+							'donotSell' => array( 'status' => true ),
+						),
+					),
+				),
+			),
+		),
+	);
+	faz_assert_same(
+		Ab_Test::experiment_model( new Faz_Fake_Banner( 'gdpr', array() ) ),
+		'gdpr|plain',
+		'pure GDPR banner (no donotSell) => gdpr|plain'
+	);
+	faz_assert_same(
+		Ab_Test::experiment_model( new Faz_Fake_Banner( 'gdpr', $dns_settings ) ),
+		'gdpr|dns',
+		'"both" banner (gdpr + donotSell) => gdpr|dns, distinct from pure GDPR'
+	);
+	faz_assert_same(
+		Ab_Test::experiment_model( new Faz_Fake_Banner( 'ccpa', $dns_settings ) ),
+		'ccpa|dns',
+		'CCPA banner with donotSell => ccpa|dns'
+	);
+
+	echo "\n== A/B test: is_banner_geo_eligible ==\n\n";
+
+	// No targets, no ruleSet => eligible everywhere (incl. unknown country).
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', array() ), 'IT' ),
+		true,
+		'no target_countries and no ruleSet => eligible for any visitor'
+	);
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', array() ), '' ),
+		true,
+		'no target/ruleSet with unresolved country => still eligible (no signal never hides the surface)'
+	);
+
+	// target_countries gate.
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', array(), array( 'IT', 'FR' ) ), 'DE' ),
+		false,
+		'country-restricted banner drops a visitor outside target_countries'
+	);
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', array(), array( 'IT', 'FR' ) ), '' ),
+		false,
+		'country-restricted banner drops an unresolved-country visitor'
+	);
+	// THE ASYMMETRY FIX: targets stored lower-case must still match an
+	// upper-case visitor country (both sides normalised now).
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', array(), array( 'it', 'fr' ) ), 'IT' ),
+		true,
+		'case-insensitive target match: lower-case targets accept upper-case visitor country'
+	);
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', array(), array( 'IT' ) ), 'it' ),
+		true,
+		'case-insensitive target match: lower-case visitor country accepted against upper-case target'
+	);
+
+	// ruleSet gate.
+	$rule_eu = array( 'settings' => array( 'ruleSet' => array( array( 'code' => 'EU' ) ) ) );
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', $rule_eu ), 'IT' ),
+		true,
+		'ruleSet EU matches an EU visitor (IT in $eu_countries)'
+	);
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', $rule_eu ), 'US' ),
+		false,
+		'ruleSet EU does not match a US visitor'
+	);
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', $rule_eu ), '' ),
+		true,
+		'ruleSet present but country unresolved => eligible (no signal never hides the surface)'
+	);
+	$rule_all = array( 'settings' => array( 'ruleSet' => array( array( 'code' => 'ALL' ) ) ) );
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', $rule_all ), 'US' ),
+		true,
+		'ruleSet ALL matches every resolved country'
+	);
+	$rule_other = array( 'settings' => array( 'ruleSet' => array( array( 'code' => 'OTHER', 'regions' => array( 'br', 'jp' ) ) ) ) );
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', $rule_other ), 'BR' ),
+		true,
+		'ruleSet OTHER matches a listed region case-insensitively (br => BR)'
+	);
+	faz_assert_same(
+		Ab_Test::is_banner_geo_eligible( new Faz_Fake_Banner( 'gdpr', $rule_other ), 'US' ),
+		false,
+		'ruleSet OTHER does not match an unlisted region'
+	);
 
 	echo "\n== A/B test: settings sanitiser ==\n\n";
 
