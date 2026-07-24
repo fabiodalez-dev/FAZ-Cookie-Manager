@@ -103,11 +103,14 @@ class Controller {
 	}
 
 	/**
-	 * Schedule an async scan via background PHP-CLI process.
+	 * Schedule an async scan.
 	 *
-	 * The PHP built-in dev server is single-threaded, so we cannot make
-	 * loopback HTTP requests within a web request. Instead we spawn a
-	 * separate PHP-CLI process that bootstraps WordPress independently.
+	 * Web SAPIs (PHP-FPM/Apache/CGI) hand the scan to WP-Cron plus a
+	 * non-blocking loopback nudge — a child spawned with exec('… &') would be
+	 * reaped when the FastCGI request ends. The detached PHP-CLI/WP-CLI exec
+	 * spawn is the fast path only under the CLI SAPI (long-lived parent), and
+	 * a best-effort fallback when DISABLE_WP_CRON leaves cron unable to
+	 * self-trigger.
 	 *
 	 * @param int $max_pages Maximum pages to scan.
 	 * @return array Current scan info.
@@ -409,7 +412,9 @@ class Controller {
 	}
 
 	/**
-	 * WP-Cron callback — runs the actual scan (fallback for cron-capable servers).
+	 * WP-Cron callback — runs the actual scan. The PRIMARY path for every
+	 * web-SAPI-triggered scan (schedule_scan schedules this event and nudges
+	 * wp-cron.php); the CLI exec spawn is the exception, not the rule.
 	 */
 	public function run_scan_async() {
 		$max_pages = absint( get_option( 'faz_scan_max_pages', 20 ) );
