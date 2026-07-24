@@ -84,20 +84,25 @@ namespace {
 
 	echo "== is_same_origin_request (CCPA opt-out/rescind CSRF gate, #F2) ==\n";
 
-	// --- Fetch Metadata path (modern browsers) ---
+	// --- Fetch Metadata path (modern browsers): STRICT same-origin only ---
 	check( true === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'same-origin' ) ), '01 Sec-Fetch-Site: same-origin -> allowed' );
-	check( true === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'same-site' ) ), '02 Sec-Fetch-Site: same-site -> allowed' );
-	check( true === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'none' ) ), '03 Sec-Fetch-Site: none (direct navigation) -> allowed' );
+	check( false === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'same-site' ) ), '02 Sec-Fetch-Site: same-site -> REJECTED (sibling subdomain could replay the public nonce)' );
+	check( false === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'none' ) ), '03 Sec-Fetch-Site: none -> REJECTED (a POST can never be a user-initiated navigation)' );
 	check( false === $same_origin( array( 'HTTP_SEC_FETCH_SITE' => 'cross-site' ) ), '04 Sec-Fetch-Site: cross-site -> REJECTED (the CSRF case)' );
 
-	// --- Origin fallback (no Sec-Fetch-Site) ---
-	check( true === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.test' ) ), '05 no Sec-Fetch-Site, Origin host == site host -> allowed' );
-	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://evil.example.com' ) ), '06 no Sec-Fetch-Site, Origin host == attacker host -> REJECTED' );
+	// --- Origin fallback (no Sec-Fetch-Site): scheme + host + port must all match ---
+	check( true === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.test' ) ), '05 no Sec-Fetch-Site, Origin == site origin -> allowed' );
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://evil.example.com' ) ), '06 no Sec-Fetch-Site, attacker Origin -> REJECTED' );
 	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.test.evil.com' ) ), '07 look-alike host (example.test.evil.com) -> REJECTED' );
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://sub.example.test' ) ), '07b sibling subdomain Origin -> REJECTED (host-only match would let this through)' );
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'http://example.test' ) ), '07c scheme mismatch (http vs https site) -> REJECTED' );
+	check( false === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.test:8443' ) ), '07d port mismatch -> REJECTED' );
+	check( true === $same_origin( array( 'HTTP_ORIGIN' => 'https://example.test:443' ) ), '07e explicit default port equals implicit -> allowed' );
 
 	// --- Referer fallback (no Sec-Fetch-Site, no Origin) ---
-	check( true === $same_origin( array( 'HTTP_REFERER' => 'https://example.test/privacy/' ) ), '08 no Origin, Referer host == site host -> allowed' );
-	check( false === $same_origin( array( 'HTTP_REFERER' => 'https://evil.example.com/attack' ) ), '09 no Origin, Referer host == attacker host -> REJECTED' );
+	check( true === $same_origin( array( 'HTTP_REFERER' => 'https://example.test/privacy/' ) ), '08 no Origin, Referer origin == site origin -> allowed' );
+	check( false === $same_origin( array( 'HTTP_REFERER' => 'https://evil.example.com/attack' ) ), '09 no Origin, attacker Referer -> REJECTED' );
+	check( false === $same_origin( array( 'HTTP_REFERER' => 'https://sub.example.test/privacy/' ) ), '09b sibling-subdomain Referer -> REJECTED' );
 
 	// --- No cross-origin signal at all -> reject (cannot prove same-origin) ---
 	check( false === $same_origin( array() ), '10 no Sec-Fetch-Site / Origin / Referer -> REJECTED' );

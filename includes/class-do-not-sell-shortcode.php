@@ -151,33 +151,44 @@ class Do_Not_Sell_Shortcode {
 	 * cannot suppress its own Origin on a cross-origin POST, so this cannot be
 	 * spoofed away by the attacker's page.
 	 *
-	 * Prefers the Fetch Metadata signal (`Sec-Fetch-Site`): a cross-site form
-	 * POST reports `cross-site`, while the shortcode's own form reports
-	 * `same-origin`/`same-site` (a direct top-level navigation reports `none`).
-	 * When that header is absent (older clients), falls back to requiring the
-	 * `Origin` (or `Referer`) host to match the site host.
+	 * Prefers the Fetch Metadata signal (`Sec-Fetch-Site`): only `same-origin`
+	 * is accepted. `same-site` would admit sibling subdomains (a compromised
+	 * subdomain could scrape the public nonce and replay the mutation), and a
+	 * POST can never legitimately report `none` (that value is reserved for
+	 * user-initiated navigations). When the header is absent (older clients),
+	 * falls back to requiring the `Origin` (or `Referer`) scheme, host, AND
+	 * port to match home_url() — host alone would again let a sibling
+	 * subdomain or a different-scheme/port origin through.
 	 *
-	 * @return bool True when the request is same-origin (or same-site).
+	 * @return bool True when the request is same-origin.
 	 */
 	private function is_same_origin_request() {
 		if ( ! empty( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ) {
 			$fetch_site = sanitize_key( wp_unslash( $_SERVER['HTTP_SEC_FETCH_SITE'] ) );
-			return in_array( $fetch_site, array( 'same-origin', 'same-site', 'none' ), true );
+			return 'same-origin' === $fetch_site;
 		}
 
-		$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
-		$req_host  = '';
+		$site    = wp_parse_url( home_url( '/' ) );
+		$request = array();
 		if ( ! empty( $_SERVER['HTTP_ORIGIN'] ) ) {
-			$req_host = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ), PHP_URL_HOST );
+			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) );
 		} elseif ( ! empty( $_SERVER['HTTP_REFERER'] ) ) {
-			$req_host = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ), PHP_URL_HOST );
+			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) );
+		}
+		if ( ! is_array( $site ) || ! is_array( $request ) ) {
+			return false;
 		}
 
 		// No cross-origin signal at all: reject. A same-origin browser POST
 		// always sends at least a Referer, so this only rejects requests that
-		// cannot prove they came from this site.
-		return ! empty( $req_host ) && ! empty( $site_host )
-			&& strtolower( (string) $req_host ) === strtolower( (string) $site_host );
+		// cannot prove they came from this site. Ports default per scheme so
+		// an explicit ":443" and an implicit https origin still match.
+		return ! empty( $site['scheme'] ) && ! empty( $site['host'] )
+			&& ! empty( $request['scheme'] ) && ! empty( $request['host'] )
+			&& strtolower( $request['scheme'] ) === strtolower( $site['scheme'] )
+			&& strtolower( $request['host'] ) === strtolower( $site['host'] )
+			&& (int) ( isset( $request['port'] ) ? $request['port'] : ( 'https' === strtolower( $request['scheme'] ) ? 443 : 80 ) )
+				=== (int) ( isset( $site['port'] ) ? $site['port'] : ( 'https' === strtolower( $site['scheme'] ) ? 443 : 80 ) );
 	}
 
 	/**
