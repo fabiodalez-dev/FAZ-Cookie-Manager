@@ -143,11 +143,71 @@ class Do_Not_Sell_Shortcode {
 	}
 
 	/**
+	 * Whether the current AJAX request originates from this site.
+	 *
+	 * A CSRF control for the unauthenticated opt-out/rescind endpoints, whose
+	 * shared nopriv nonce cannot distinguish a same-origin submission from a
+	 * cross-site replay. A browser controls these request headers and a page
+	 * cannot suppress its own Origin on a cross-origin POST, so this cannot be
+	 * spoofed away by the attacker's page.
+	 *
+	 * Prefers the Fetch Metadata signal (`Sec-Fetch-Site`): only `same-origin`
+	 * is accepted. `same-site` would admit sibling subdomains (a compromised
+	 * subdomain could scrape the public nonce and replay the mutation), and a
+	 * POST can never legitimately report `none` (that value is reserved for
+	 * user-initiated navigations). When the header is absent (older clients),
+	 * falls back to requiring the `Origin` (or `Referer`) scheme, host, AND
+	 * port to match home_url() — host alone would again let a sibling
+	 * subdomain or a different-scheme/port origin through.
+	 *
+	 * @return bool True when the request is same-origin.
+	 */
+	private function is_same_origin_request() {
+		if ( ! empty( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ) {
+			$fetch_site = sanitize_key( wp_unslash( $_SERVER['HTTP_SEC_FETCH_SITE'] ) );
+			return 'same-origin' === $fetch_site;
+		}
+
+		$site    = wp_parse_url( home_url( '/' ) );
+		$request = array();
+		if ( ! empty( $_SERVER['HTTP_ORIGIN'] ) ) {
+			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) );
+		} elseif ( ! empty( $_SERVER['HTTP_REFERER'] ) ) {
+			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) );
+		}
+		if ( ! is_array( $site ) || ! is_array( $request ) ) {
+			return false;
+		}
+
+		// No cross-origin signal at all: reject. A same-origin browser POST
+		// always sends at least a Referer, so this only rejects requests that
+		// cannot prove they came from this site. Ports default per scheme so
+		// an explicit ":443" and an implicit https origin still match.
+		return ! empty( $site['scheme'] ) && ! empty( $site['host'] )
+			&& ! empty( $request['scheme'] ) && ! empty( $request['host'] )
+			&& strtolower( $request['scheme'] ) === strtolower( $site['scheme'] )
+			&& strtolower( $request['host'] ) === strtolower( $site['host'] )
+			&& (int) ( isset( $request['port'] ) ? $request['port'] : ( 'https' === strtolower( $request['scheme'] ) ? 443 : 80 ) )
+				=== (int) ( isset( $site['port'] ) ? $site['port'] : ( 'https' === strtolower( $site['scheme'] ) ? 443 : 80 ) );
+	}
+
+	/**
 	 * AJAX handler for the opt-out submission.
 	 */
 	public function handle_optout() {
 		if ( ! check_ajax_referer( self::AJAX_ACTION, 'nonce', false ) ) {
 			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ) );
+			return;
+		}
+
+		// The nopriv nonce is identical for every anonymous visitor and is
+		// rendered into the public shortcode page, so on its own it is spam
+		// hardening, not a CSRF control: an attacker can scrape it and replay it
+		// from a cross-site page to forge an opt-out audit record and plant the
+		// long-lived opt-out cookie in a victim's browser. Require the request to
+		// be same-origin before performing the state change.
+		if ( ! $this->is_same_origin_request() ) {
+			wp_send_json_error( __( 'This request must originate from this website.', 'faz-cookie-manager' ) );
 			return;
 		}
 
@@ -199,6 +259,13 @@ class Do_Not_Sell_Shortcode {
 	public function handle_rescind() {
 		if ( ! check_ajax_referer( self::RESCIND_ACTION, 'nonce', false ) ) {
 			wp_send_json_error( __( 'Invalid security token. Please refresh the page and try again.', 'faz-cookie-manager' ) );
+			return;
+		}
+
+		// Same CSRF hardening as handle_optout(): the anonymous nonce is shared,
+		// so require a same-origin request before forging an opt-back-in record.
+		if ( ! $this->is_same_origin_request() ) {
+			wp_send_json_error( __( 'This request must originate from this website.', 'faz-cookie-manager' ) );
 			return;
 		}
 

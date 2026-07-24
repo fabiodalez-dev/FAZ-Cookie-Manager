@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-07-20T22:35:59+00:00\n"
+"POT-Creation-Date: 2026-07-24T04:25:28+00:00\n"
 "PO-Revision-Date: 2026-04-02 13:06+0200\n"
 "Last-Translator: Yannic van Veen (Yard Digital Agency)\n"
 "Language-Team: Dutch\n"
@@ -82,7 +82,7 @@ msgstr "Geo-routing"
 msgid "Cookie Policy"
 msgstr "Cookiebeleid"
 
-#: admin/class-admin.php:263 admin/class-admin.php:2199 admin/views/base.php:25
+#: admin/class-admin.php:263 admin/class-admin.php:2213 admin/views/base.php:25
 #: admin/views/dashboard.php:157 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
@@ -96,12 +96,12 @@ msgstr "Import / Export"
 msgid "System Status"
 msgstr "Systeemstatus"
 
-#: admin/class-admin.php:491 admin/class-admin.php:2172
+#: admin/class-admin.php:491 admin/class-admin.php:2186
 #: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr "Geaccepteerd"
 
-#: admin/class-admin.php:492 admin/class-admin.php:2176
+#: admin/class-admin.php:492 admin/class-admin.php:2190
 #: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr "Geweigerd"
@@ -659,8 +659,7 @@ msgstr "Geen leveranciers gevonden."
 msgid "Failed to load vendor details."
 msgstr "Laden van leveranciersgegevens mislukt."
 
-#. translators: %1$d: current page, %2$d: total pages, %3$d: total vendor
-#. count
+#. translators: %1$d: current page, %2$d: total pages, %3$d: total vendor count
 #: admin/class-admin.php:672
 #, php-format
 msgid "Page %1$d of %2$d (%3$d vendors)"
@@ -737,8 +736,7 @@ msgstr "%d leverancier(s) vooraf aangevinkt vanuit cookiescan. Klik op Selectie 
 msgid "All %d auto-detected vendor(s) were already in your selection."
 msgstr "Alle %d automatisch gedetecteerde leverancier(s) stonden al in uw selectie."
 
-#. translators: %1$d: number of newly pre-ticked vendors, %2$d: number already
-#. selected
+#. translators: %1$d: number of newly pre-ticked vendors, %2$d: number already selected
 #: admin/class-admin.php:701
 #, php-format
 msgid "Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply."
@@ -951,8 +949,7 @@ msgstr "Ik verklaar een DPF / SCC / DPA-overeenkomst met ipinfo.io te hebben voo
 msgid "I attest to having a Standard Contract (PIPL Art. 38) or CAC security assessment (Art. 40) for cross-border data transfers OF data subject to PIPL, OR to not process any data that requires such mechanisms."
 msgstr "Ik verklaar een Standaardcontract (PIPL Art. 38) of CAC-beveiligingsbeoordeling (Art. 40) te hebben voor grensoverschrijdende gegevensoverdrachten van aan PIPL onderworpen gegevens, OF geen gegevens te verwerken waarvoor dergelijke mechanismen vereist zijn."
 
-#. translators: %1$s: localised timestamp, %2$s: WP user id of the attesting
-#. admin
+#. translators: %1$s: localised timestamp, %2$s: WP user id of the attesting admin
 #: admin/class-admin.php:774
 #, php-format
 msgid "Attested at %1$s by user ID %2$s"
@@ -1010,8 +1007,7 @@ msgstr "Alle %d gedetecteerde service(s) zijn al geselecteerd."
 msgid "Detected services left unticked, as you set them."
 msgstr "Gedetecteerde diensten niet aangevinkt gelaten, zoals u hebt ingesteld."
 
-#. translators: %1$d: number of newly pre-ticked services, %2$d: number of
-#. services already selected
+#. translators: %1$d: number of newly pre-ticked services, %2$d: number of services already selected
 #: admin/class-admin.php:798
 #, php-format
 msgid "Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit."
@@ -1499,6 +1495,10 @@ msgstr "en"
 msgid "filters."
 msgstr "filters."
 
+#: admin/class-admin.php:1636 admin/class-admin.php:1726
+msgid "Dismiss this notice"
+msgstr "Deze melding sluiten"
+
 #: admin/class-admin.php:1718
 msgid "Payment plugin detected"
 msgstr ""
@@ -1577,17 +1577,17 @@ msgstr "Uitschakelen…"
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic."
 msgstr "Geo-routing uitgeschakeld. De CDN-cache zou binnen enkele minuten na organisch verkeer weer beginnen te vullen."
 
-#: admin/class-admin.php:2122
+#: admin/class-admin.php:2130
 msgid "Cookie Consent Overview"
 msgstr "Cookie Consent Overzicht"
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2183
+#: admin/class-admin.php:2197
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr "%d toestemmingsinteracties in de afgelopen 30 dagen."
 
-#: admin/class-admin.php:2187
+#: admin/class-admin.php:2201
 msgid "View details"
 msgstr "Details bekijken"
 
@@ -2987,8 +2987,7 @@ msgstr "Sluiten (X) naast de knop Weigeren toestaan"
 msgid "Non-EU only"
 msgstr "Alleen niet-EU"
 
-#. translators: %1$s: EDPB Guidelines link, %2$s: Italian Garante
-#. Provvedimento link.
+#. translators: %1$s: EDPB Guidelines link, %2$s: Italian Garante Provvedimento link.
 #: admin/views/banner.php:617
 #, php-format
 msgid "<strong>Off by default — keep OFF for EU/EEA/UK visitors.</strong> The %1$s and the %2$s identify \"X close + labelled Reject on the same banner\" as a recognised dark pattern (unequal-weight dismissal paths). Safe to enable on banners targeted at US, Brazil, Canada or Australian traffic where this rule does not apply — typically used together with multi-banner geo-routing (Geo Targeting tab) to keep the X on a CCPA-style banner."
@@ -3111,9 +3110,7 @@ msgstr "Respecteer Global Privacy Control (GPC)"
 msgid "Geo source not configured"
 msgstr "Geo-bron niet geconfigureerd"
 
-#. translators: %1$s: Settings -> Geolocation link, %2$s: the
-#. faz_trust_cf_ipcountry_header filter name, %3$s: the add_filter() code
-#. snippet.
+#. translators: %1$s: Settings -> Geolocation link, %2$s: the faz_trust_cf_ipcountry_header filter name, %3$s: the add_filter() code snippet.
 #: admin/views/banner.php:830
 #, fuzzy, php-format
 msgid "No country signal is available on this install. Multi-banner geo-routing will resolve every visitor to \"unknown\" and fall back to your match-all / default banner. The usual fix is to configure %1$s with a free MaxMind GeoLite2 license key. If your site sits behind Cloudflare instead, the %2$s filter is available — note this is a developer code filter, NOT a setting in this screen: a developer adds %3$s in your theme or a code-snippets plugin. Without one of these, the targets you set below have no effect."
@@ -4809,14 +4806,12 @@ msgstr "Actieve plugins"
 msgid "Manage cookie preferences"
 msgstr "Beheer cookie-voorkeuren"
 
-#. translators: {name} is replaced with the cookie category name (appears
-#. twice, do not translate {name})
+#. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
 #: frontend/class-frontend.php:660
 msgid "{name} enabled, disable {name}"
 msgstr "{name} ingeschakeld, {name} uitschakelen"
 
-#. translators: {name} is replaced with the cookie category name (appears
-#. twice, do not translate {name})
+#. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
 #: frontend/class-frontend.php:662
 msgid "{name} disabled, enable {name}"
 msgstr "{name} uitgeschakeld, {name} inschakelen"
@@ -5077,12 +5072,12 @@ msgid "Other"
 msgstr "Anders"
 
 #: includes/class-do-not-sell-shortcode.php:71
-#: includes/class-do-not-sell-shortcode.php:188
+#: includes/class-do-not-sell-shortcode.php:237
 msgid "Your opt-out request has been received. We will not sell or share your personal information."
 msgstr "Uw opt-outverzoek is ontvangen. Wij zullen uw persoonlijke gegevens niet verkopen of delen."
 
 #: includes/class-do-not-sell-shortcode.php:72
-#: includes/class-do-not-sell-shortcode.php:230
+#: includes/class-do-not-sell-shortcode.php:286
 msgid "Your opt-out has been withdrawn. You may submit a new request at any time."
 msgstr "Uw opt-out is ingetrokken. U kunt op elk moment een nieuw verzoek indienen."
 
@@ -5115,30 +5110,36 @@ msgstr "Opt-out intrekken / weer aanmelden"
 msgid "As a US resident in a state with applicable privacy laws, you have the right to opt out of the sale of your personal information. Submit the form below to exercise this right."
 msgstr "Als inwoner van een Amerikaanse staat met toepasselijke privacywetten heeft u het recht om u af te melden voor de verkoop van uw persoonlijke gegevens. Vul het onderstaande formulier in om dit recht uit te oefenen."
 
-#: includes/class-do-not-sell-shortcode.php:150
-#: includes/class-do-not-sell-shortcode.php:201
+#: includes/class-do-not-sell-shortcode.php:188
+#: includes/class-do-not-sell-shortcode.php:250
 #: includes/class-dsar-shortcode.php:277
 msgid "Invalid security token. Please refresh the page and try again."
 msgstr "Ongeldig beveiligingstoken. Vernieuw de pagina en probeer het opnieuw."
 
-#: includes/class-do-not-sell-shortcode.php:158
+#: includes/class-do-not-sell-shortcode.php:199
+#: includes/class-do-not-sell-shortcode.php:257
+#, fuzzy
+msgid "This request must originate from this website."
+msgstr "De gevraagde taal is niet geconfigureerd voor deze site."
+
+#: includes/class-do-not-sell-shortcode.php:207
 msgid "You have already opted out. We will not sell or share your personal information."
 msgstr "U heeft zich al afgemeld. Wij zullen uw persoonlijke gegevens niet verkopen of delen."
 
-#: includes/class-do-not-sell-shortcode.php:169
-#: includes/class-do-not-sell-shortcode.php:213
+#: includes/class-do-not-sell-shortcode.php:218
+#: includes/class-do-not-sell-shortcode.php:269
 #: includes/class-dsar-shortcode.php:332
 msgid "Too many requests. Please wait 1 minute before submitting again."
 msgstr "Te veel verzoeken. Wacht 1 minuut voordat u opnieuw indient."
 
 #. translators: %s: site name
-#: includes/class-do-not-sell-shortcode.php:340
+#: includes/class-do-not-sell-shortcode.php:396
 #, php-format
 msgid "[%s] New CCPA/CPRA Do Not Sell or Share Opt-Out Request"
 msgstr "[%s] Nieuw CCPA/CPRA opt-outverzoek \"Niet verkopen of delen\""
 
 #. translators: 1: site name, 2: date/time, 3: IP hash
-#: includes/class-do-not-sell-shortcode.php:343
+#: includes/class-do-not-sell-shortcode.php:399
 #, php-format
 msgid ""
 "A visitor on %1$s has submitted a Do Not Sell or Share My Personal Information request.\n"
@@ -5259,8 +5260,7 @@ msgstr "We konden uw verzoek niet registreren vanwege een serverfout. Probeer he
 msgid "Your request has been received. We will respond within 30 days as required by law."
 msgstr "Uw verzoek is ontvangen. We zullen binnen 30 dagen reageren zoals wettelijk vereist."
 
-#. translators: 1: site name, 2: name, 3: email, 4: request type, 5: date, 6:
-#. message
+#. translators: 1: site name, 2: name, 3: email, 4: request type, 5: date, 6: message
 #: includes/class-dsar-shortcode.php:424
 #, php-format
 msgid ""
@@ -5306,8 +5306,7 @@ msgstr "[%1$s] Verzoek van betrokkene: %2$s"
 msgid "[%s] We received your data request"
 msgstr "[%s] We hebben uw gegevensverzoek ontvangen"
 
-#. translators: 1: first name, 2: site name, 3: human-readable request type
-#. (e.g. "Right of Access (Art. 15 GDPR)")
+#. translators: 1: first name, 2: site name, 3: human-readable request type (e.g. "Right of Access (Art. 15 GDPR)")
 #: includes/class-dsar-shortcode.php:467
 #, php-format
 msgid ""
@@ -5435,8 +5434,7 @@ msgid_plural "Deleted %d FAZ Cookie Manager privacy requests."
 msgstr[0] "Dit bestand is geen FAZ Cookie Manager-export."
 msgstr[1] "Dit bestand is geen FAZ Cookie Manager-export."
 
-#. translators: %d: number of meta entries that had script fields stripped
-#. during import.
+#. translators: %d: number of meta entries that had script fields stripped during import.
 #: includes/class-wp-cli-commands.php:333
 #, php-format
 msgid "Script meta field(s) (opt_in_script/opt_out_script) were stripped from %d imported entry because the current user lacks the unfiltered_html capability. Re-run as a super-admin to preserve script fields."
@@ -5503,7 +5501,3 @@ msgstr "Knop"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Link"
-
-#: admin/class-admin.php:1636 admin/class-admin.php:1726
-msgid "Dismiss this notice"
-msgstr "Deze melding sluiten"

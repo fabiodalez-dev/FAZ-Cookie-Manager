@@ -2117,6 +2117,14 @@ class Admin {
 	 * @return void
 	 */
 	public function register_dashboard_widget() {
+		// WordPress dashboard meta boxes carry no per-widget capability, and the
+		// dashboard is reachable by any role with `read` (e.g. Subscriber). The
+		// consent overview is admin-only operational data, so gate the widget on
+		// the same capability the plugin's admin pages require — otherwise a
+		// low-privilege user would see the aggregate accept/reject stats.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		wp_add_dashboard_widget(
 			'faz_consent_widget',
 			__( 'Cookie Consent Overview', 'faz-cookie-manager' ),
@@ -2134,6 +2142,12 @@ class Admin {
 	 * @return void
 	 */
 	public function render_dashboard_widget() {
+		// Defence in depth: the widget is only registered for admins, but never
+		// compute or emit the aggregate stats for a non-admin even if this
+		// callback is reached another way.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		// Cache the aggregation query for 5 minutes to avoid
 		// running a COUNT/SUM on every WP Dashboard page load.
 		$stats = get_transient( 'faz_dashboard_widget_stats' );

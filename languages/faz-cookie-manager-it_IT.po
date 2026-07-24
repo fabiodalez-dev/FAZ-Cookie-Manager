@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.5.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-07-20T22:35:59+00:00\n"
+"POT-Creation-Date: 2026-07-24T04:25:28+00:00\n"
 "PO-Revision-Date: 2026-03-14\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -82,7 +82,7 @@ msgstr "Geo-routing"
 msgid "Cookie Policy"
 msgstr "Informativa cookie"
 
-#: admin/class-admin.php:263 admin/class-admin.php:2199 admin/views/base.php:25
+#: admin/class-admin.php:263 admin/class-admin.php:2213 admin/views/base.php:25
 #: admin/views/dashboard.php:157 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
@@ -96,12 +96,12 @@ msgstr "Importa / Esporta"
 msgid "System Status"
 msgstr "Stato del sistema"
 
-#: admin/class-admin.php:491 admin/class-admin.php:2172
+#: admin/class-admin.php:491 admin/class-admin.php:2186
 #: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr "Accettato"
 
-#: admin/class-admin.php:492 admin/class-admin.php:2176
+#: admin/class-admin.php:492 admin/class-admin.php:2190
 #: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr "Rifiutato"
@@ -1499,6 +1499,10 @@ msgstr "e"
 msgid "filters."
 msgstr "filtri."
 
+#: admin/class-admin.php:1636 admin/class-admin.php:1726
+msgid "Dismiss this notice"
+msgstr "Ignora questo avviso"
+
 #: admin/class-admin.php:1718
 msgid "Payment plugin detected"
 msgstr ""
@@ -1577,17 +1581,17 @@ msgstr "Disabilitazione in corso…"
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic."
 msgstr "Geo-routing disabilitato. La cache CDN dovrebbe ricominciare a riempirsi entro pochi minuti dal traffico organico."
 
-#: admin/class-admin.php:2122
+#: admin/class-admin.php:2130
 msgid "Cookie Consent Overview"
 msgstr "Panoramica consenso cookie"
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2183
+#: admin/class-admin.php:2197
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr "%d interazioni di consenso negli ultimi 30 giorni."
 
-#: admin/class-admin.php:2187
+#: admin/class-admin.php:2201
 msgid "View details"
 msgstr "Visualizza dettagli"
 
@@ -5077,12 +5081,12 @@ msgid "Other"
 msgstr "Altro"
 
 #: includes/class-do-not-sell-shortcode.php:71
-#: includes/class-do-not-sell-shortcode.php:188
+#: includes/class-do-not-sell-shortcode.php:237
 msgid "Your opt-out request has been received. We will not sell or share your personal information."
 msgstr "La tua richiesta di opt-out è stata ricevuta. Non venderemo né condivideremo le tue informazioni personali."
 
 #: includes/class-do-not-sell-shortcode.php:72
-#: includes/class-do-not-sell-shortcode.php:230
+#: includes/class-do-not-sell-shortcode.php:286
 msgid "Your opt-out has been withdrawn. You may submit a new request at any time."
 msgstr "Il tuo opt-out è stato ritirato. Puoi inviare una nuova richiesta in qualsiasi momento."
 
@@ -5115,30 +5119,35 @@ msgstr "Ritira opt-out / rientra"
 msgid "As a US resident in a state with applicable privacy laws, you have the right to opt out of the sale of your personal information. Submit the form below to exercise this right."
 msgstr "In qualità di residente negli Stati Uniti in uno stato con leggi sulla privacy applicabili, hai il diritto di rinunciare alla vendita delle tue informazioni personali. Compila il modulo sottostante per esercitare questo diritto."
 
-#: includes/class-do-not-sell-shortcode.php:150
-#: includes/class-do-not-sell-shortcode.php:201
+#: includes/class-do-not-sell-shortcode.php:188
+#: includes/class-do-not-sell-shortcode.php:250
 #: includes/class-dsar-shortcode.php:277
 msgid "Invalid security token. Please refresh the page and try again."
 msgstr "Token di sicurezza non valido. Aggiorna la pagina e riprova."
 
-#: includes/class-do-not-sell-shortcode.php:158
+#: includes/class-do-not-sell-shortcode.php:199
+#: includes/class-do-not-sell-shortcode.php:257
+msgid "This request must originate from this website."
+msgstr "Questa richiesta deve provenire da questo sito web."
+
+#: includes/class-do-not-sell-shortcode.php:207
 msgid "You have already opted out. We will not sell or share your personal information."
 msgstr "Hai già effettuato l’opt-out. Non venderemo né condivideremo le tue informazioni personali."
 
-#: includes/class-do-not-sell-shortcode.php:169
-#: includes/class-do-not-sell-shortcode.php:213
+#: includes/class-do-not-sell-shortcode.php:218
+#: includes/class-do-not-sell-shortcode.php:269
 #: includes/class-dsar-shortcode.php:332
 msgid "Too many requests. Please wait 1 minute before submitting again."
 msgstr "Troppe richieste. Attendi 1 minuto prima di inviare di nuovo."
 
 #. translators: %s: site name
-#: includes/class-do-not-sell-shortcode.php:340
+#: includes/class-do-not-sell-shortcode.php:396
 #, php-format
 msgid "[%s] New CCPA/CPRA Do Not Sell or Share Opt-Out Request"
 msgstr "[%s] Nuova richiesta di opt-out CCPA/CPRA \"Non vendere né condividere\""
 
 #. translators: 1: site name, 2: date/time, 3: IP hash
-#: includes/class-do-not-sell-shortcode.php:343
+#: includes/class-do-not-sell-shortcode.php:399
 #, php-format
 msgid ""
 "A visitor on %1$s has submitted a Do Not Sell or Share My Personal Information request.\n"
@@ -5503,7 +5512,3 @@ msgstr "Pulsante"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Collegamento"
-
-#: admin/class-admin.php:1636 admin/class-admin.php:1726
-msgid "Dismiss this notice"
-msgstr "Ignora questo avviso"
