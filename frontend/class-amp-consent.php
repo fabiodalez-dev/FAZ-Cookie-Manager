@@ -354,11 +354,13 @@ class AMP_Consent {
 		// Cookie policy link.
 		$privacy_url = ! empty( $notice['privacyLink'] ) ? $notice['privacyLink'] : '/cookie-policy';
 
-		// Consent expiry (days).
-		$expiry_days = 365;
-		if ( isset( $banner_settings['config']['consentExpiry']['value'] ) ) {
-			$expiry_days = absint( $banner_settings['config']['consentExpiry']['value'] );
-		}
+		// NOTE on consent expiry: the banner's configured lifetime
+		// (settings.consentExpiry.value, law-clamped in class-frontend.php)
+		// cannot be enforced here — the amp-consent component persists the
+		// visitor's decision in AMP's own client storage and exposes no
+		// client-side TTL in its JSON config. A previous revision computed an
+		// $expiry_days value (from a wrong config path, at that) and never
+		// used it; removed rather than pretending the promise is applied.
 
 		// Build consent config.
 		$consent_config = array(

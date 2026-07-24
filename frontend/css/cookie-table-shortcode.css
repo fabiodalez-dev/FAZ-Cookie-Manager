@@ -92,3 +92,18 @@
 		border-radius: 4px;
 	}
 }
+
+/* Third-country (Schrems II) transfer disclosure line inside the banner /
+   cookie-table audit rows. Unobtrusive; purely informational. */
+.faz-audit-transfer {
+	display: block;
+	margin-top: 0.35em;
+	font-size: 0.85em;
+	line-height: 1.45;
+	color: #475569;
+}
+
+.faz-audit-transfer-country,
+.faz-audit-transfer-safeguard {
+	display: block;
+}

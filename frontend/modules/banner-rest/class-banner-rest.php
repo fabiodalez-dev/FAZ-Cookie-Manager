@@ -22,6 +22,7 @@ use FazCookie\Frontend\Modules\Shortcodes\Shortcodes;
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories;
 use FazCookie\Includes\Geolocation;
+use FazCookie\Includes\Ab_Test;
 use FazCookie\Frontend\Includes\Geo_Runtime;
 use WP_REST_Request;
 use WP_REST_Response;
@@ -73,6 +74,11 @@ class Banner_Rest {
 						'required'          => true,
 						'sanitize_callback' => array( $this, 'sanitize_language' ),
 						'validate_callback' => array( $this, 'validate_language' ),
+					),
+					'banner' => array(
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_title',
 					),
 				),
 			)
@@ -176,6 +182,19 @@ class Banner_Rest {
 				__( 'No active banner found.', 'faz-cookie-manager' ),
 				array( 'status' => 404 )
 			);
+		}
+
+		// A client-side language swap must keep the banner variant selected for
+		// the current page. Otherwise an Italian REST fetch after an A/B choice
+		// would silently replace variant B with the default banner A. Honour the
+		// requested slug only when it is the already-routed banner or a currently
+		// configured A/B peer with the same law/Do-Not-Sell model and geo scope.
+		$requested_slug = sanitize_title( (string) $request->get_param( 'banner' ) );
+		if ( '' !== $requested_slug && $requested_slug !== $banner->get_slug() ) {
+			$requested_variant = $this->resolve_requested_variant( $requested_slug, $banner, $country, $controller );
+			if ( $requested_variant ) {
+				$banner = $requested_variant;
+			}
 		}
 
 		// Force the language context for downstream helpers. The static cache
@@ -303,6 +322,49 @@ class Banner_Rest {
 	private function is_cache_compatibility_enabled() {
 		$settings = $this->get_faz_settings();
 		return ! empty( $settings['banner_control']['cache_compatibility'] );
+	}
+
+	/**
+	 * Resolve an A/B variant requested by the language-swap client.
+	 *
+	 * @param string            $requested_slug Requested current-page slug.
+	 * @param object            $default_banner Banner selected by legal routing.
+	 * @param string            $country        Visitor country or empty string.
+	 * @param Banner_Controller $controller     Banner controller.
+	 * @return object|false
+	 */
+	private function resolve_requested_variant( $requested_slug, $default_banner, $country, $controller ) {
+		if ( $this->is_cache_compatibility_enabled() ) {
+			return false;
+		}
+		$settings = $this->get_faz_settings();
+		$ab       = isset( $settings['banner_control']['ab_test'] ) && is_array( $settings['banner_control']['ab_test'] )
+			? $settings['banner_control']['ab_test'] : array();
+		$configured = isset( $ab['variants'] ) && is_array( $ab['variants'] ) ? $ab['variants'] : array();
+		if ( empty( $ab['status'] ) || count( $configured ) < 2 ) {
+			return false;
+		}
+
+		$valid          = $controller->filter_active_variant_slugs( $configured );
+		// A/B model + geo eligibility share ONE implementation with the initial
+		// server render (Frontend::maybe_apply_ab_test) via Ab_Test, so the first
+		// paint and this REST language-swap can never resolve a different variant
+		// (a legal-compliance requirement, not just consistency).
+		$required_model = Ab_Test::experiment_model( $default_banner );
+		$compatible     = array();
+		foreach ( $valid as $slug ) {
+			$candidate = $controller->get_active_banner_by_slug( $slug );
+			if ( ! $candidate
+				|| Ab_Test::experiment_model( $candidate ) !== $required_model
+				|| ! Ab_Test::is_banner_geo_eligible( $candidate, $country ) ) {
+				continue;
+			}
+			$compatible[ $slug ] = $candidate;
+		}
+
+		return count( $compatible ) >= 2 && isset( $compatible[ $requested_slug ] )
+			? $compatible[ $requested_slug ]
+			: false;
 	}
 
 	/**
@@ -488,6 +550,8 @@ class Banner_Rest {
 	 * @return array
 	 */
 	protected function build_i18n_payload() {
+		$settings = $this->get_faz_settings();
+		$age_min  = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
 		return array(
 			'privacy_region_label'                => __( 'We value your privacy', 'faz-cookie-manager' ),
 			'consent_saved'                       => __( 'Your cookie preferences have been saved.', 'faz-cookie-manager' ),
@@ -495,6 +559,12 @@ class Banner_Rest {
 			'customise_consent_preferences_label' => __( 'Customise Consent Preferences', 'faz-cookie-manager' ),
 			'service_consent_label'               => __( 'Service consent', 'faz-cookie-manager' ),
 			'vendor_consent_label'                => __( 'Vendor consent', 'faz-cookie-manager' ),
+			// Age gate (GDPR Art. 8) — sprintf'd for the swapped locale so the
+			// client-side language swap keeps the localized age-confirmation
+			// label instead of reverting to English.
+			// translators: %d is the minimum digital age of consent.
+			'age_confirm_label'                   => sprintf( __( 'I confirm I am at least %d years old', 'faz-cookie-manager' ), $age_min ),
+			'age_confirm_error'                   => __( 'Please confirm you meet the minimum age to accept optional cookies.', 'faz-cookie-manager' ),
 		);
 	}
 

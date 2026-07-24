@@ -31,6 +31,18 @@ async function getSettings(page: Page, nonce: string) {
   return response.json();
 }
 
+async function postSettings(page: Page, nonce: string, data: Record<string, unknown>) {
+  const response = await page.request.post(`${WP_BASE}/?rest_route=/faz/v1/settings`, {
+    headers: {
+      'X-WP-Nonce': nonce,
+      'Content-Type': 'application/json',
+    },
+    data,
+  });
+  expect(response.status()).toBe(200);
+  return response.json();
+}
+
 async function exportSettings(page: Page, nonce: string) {
   const response = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/settings/export`, {
     headers: { 'X-WP-Nonce': nonce },
@@ -158,34 +170,60 @@ test.describe.serial('v1.7.0 deep flows', () => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
 
-    const templates = page.locator('#faz-blocker-templates > button');
-    // Anchor on the card *name* element (`.faz-template-card-name`) so we
-    // match only the canonical "Google Analytics" template — not other
-    // Google-* templates whose auto-generated description happens to
-    // contain the substring "google analytics" case-insensitively (e.g.
-    // Site Kit by Google → "Blocks Site Kit by Google analytics tracking…").
-    // Playwright's `hasText` is a case-insensitive substring match by
-    // default; switching to a regex with a `$`-anchored, name-only locator
-    // gives the exact match the test originally intended.
-    const googleAnalyticsCard = templates.filter({
-      has: page.locator('.faz-template-card-name', { hasText: /^Google Analytics$/ }),
+    const nonce = await getAdminNonce(page);
+    const original = await getSettings(page, nonce);
+    const templateResponse = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/blocker-templates`, {
+      headers: { 'X-WP-Nonce': nonce },
     });
+    expect(templateResponse.status()).toBe(200);
+    const templateData = (await templateResponse.json()) as Array<{ name?: string; category?: string; patterns?: string[] }>;
+    const googleAnalyticsTemplate = templateData.find((template) => template.name === 'Google Analytics');
+    expect(googleAnalyticsTemplate).toBeDefined();
+    const expectedPatterns = googleAnalyticsTemplate?.patterns ?? [];
+    expect(expectedPatterns.length).toBeGreaterThan(0);
 
-    await expect(googleAnalyticsCard).toHaveCount(1);
-    await expect(googleAnalyticsCard).toBeVisible();
+    try {
+      await postSettings(page, nonce, {
+        script_blocking: {
+          ...(original.script_blocking ?? {}),
+          custom_rules: [],
+        },
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
 
-    const rules = page.locator('#faz-custom-rules-body tr');
-    // Wait for the custom-rules AJAX to settle before counting baseline.
-    await page.locator('#faz-custom-rules-body').waitFor({ state: 'visible', timeout: 10_000 });
-    const initialCount = await rules.count();
+      const templates = page.locator('#faz-blocker-templates > button');
+      // Anchor on the card *name* element (`.faz-template-card-name`) so we
+      // match only the canonical "Google Analytics" template — not other
+      // Google-* templates whose descriptions mention Google Analytics.
+      const googleAnalyticsCard = templates.filter({
+        has: page.locator('.faz-template-card-name', { hasText: /^Google Analytics$/ }),
+      });
 
-    await googleAnalyticsCard.click();
+      await expect(googleAnalyticsCard).toHaveCount(1);
+      await expect(googleAnalyticsCard).toBeVisible();
 
-    await expect(rules).toHaveCount(initialCount + 3);
+      const rules = page.locator('#faz-custom-rules-body tr');
+      await page.locator('#faz-custom-rules-body').waitFor({ state: 'attached', timeout: 10_000 });
+      await expect(rules).toHaveCount(0);
 
-    const firstNewRow = rules.nth(initialCount);
-    await expect(firstNewRow.locator('[data-rule="pattern"]')).toHaveValue(/google-analytics\.com|googletagmanager\.com/);
-    await expect(firstNewRow.locator('[data-rule="category"]')).toHaveValue('analytics');
+      await googleAnalyticsCard.click();
+
+      // Derive the count from the live REST template. Google Analytics has
+      // grown from 3 to 52 patterns, so a hard-coded historical count made
+      // this test fail while the UI was doing exactly the right thing.
+      await expect(rules).toHaveCount(expectedPatterns.length);
+
+      const firstNewRow = rules.first();
+      await expect(firstNewRow.locator('[data-rule="pattern"]')).toHaveValue(expectedPatterns[0]);
+      await expect(firstNewRow.locator('[data-rule="category"]')).toHaveValue(googleAnalyticsTemplate?.category ?? 'analytics');
+
+      await expect.poll(async () => {
+        const saved = await getSettings(page, nonce);
+        return saved.script_blocking?.custom_rules?.length ?? 0;
+      }).toBe(expectedPatterns.length);
+    } finally {
+      await postSettings(page, nonce, { script_blocking: original.script_blocking ?? {} });
+    }
   });
 
   test('REST import/export round-trip refreshes category and cookie data after cache prime', async ({ page, loginAsAdmin }) => {

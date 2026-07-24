@@ -22,7 +22,7 @@
 .distignore
 
 # Dev artifacts
-assets/
+/assets/
 biome.json
 CHANGELOG.md
 CLAUDE.md

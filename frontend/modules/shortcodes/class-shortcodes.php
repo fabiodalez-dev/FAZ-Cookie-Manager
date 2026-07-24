@@ -636,6 +636,22 @@ class Shortcodes {
 			$table_body .= '<div>' . wp_kses( $description, faz_allowed_html() ) . '</div>';
 			$table_body .= '</li>';
 
+			// Third-country (Schrems II) transfer disclosure — appended AFTER the
+			// is_wp_internal_cookie() guard above so a flagged admin-only cookie can
+			// never surface. Renders only when transfer.enabled is set.
+			$transfer_disclosure = $this->render_transfer_disclosure( $cookie );
+			if ( '' !== $transfer_disclosure ) {
+				// Resolve the row label in the banner language, matching the
+				// disclosure body (see render_transfer_disclosure()).
+				$switched       = $this->switch_to_banner_locale();
+				$transfer_label = esc_html__( 'Data transfer', 'faz-cookie-manager' );
+				$this->restore_banner_locale( $switched );
+				$table_body .= '<li class="faz-audit-transfer">';
+				$table_body .= '<div>' . $transfer_label . '</div>';
+				$table_body .= '<div>' . $transfer_disclosure . '</div>';
+				$table_body .= '</li>';
+			}
+
 			$html .= str_replace(
 				array(
 					'[CONTENT]',
@@ -939,10 +955,19 @@ class Shortcodes {
 			$description = isset( $description[ $this->language ] ) ? $description[ $this->language ] : '';
 			$duration    = isset( $duration[ $this->language ] ) ? $duration[ $this->language ] : '';
 
+			// Append the third-country transfer disclosure inside the description
+			// cell (keeps the fixed 3-column layout intact). Sits after the
+			// is_wp_internal_cookie() guard above so admin-only cookies never leak.
+			$desc_cell           = wp_kses( $description, faz_allowed_html() );
+			$transfer_disclosure = $this->render_transfer_disclosure( $cookie );
+			if ( '' !== $transfer_disclosure ) {
+				$desc_cell .= '<div class="faz-audit-transfer">' . $transfer_disclosure . '</div>';
+			}
+
 			$table_body .= '<tr>';
 			$table_body .= '<td>' . esc_html( $cookie['name'] ) . '</td>';
 			$table_body .= '<td>' . esc_html( $duration ) . '</td>';
-			$table_body .= '<td>' . wp_kses( $description, faz_allowed_html() ) . '</td>';
+			$table_body .= '<td>' . $desc_cell . '</td>';
 			$table_body .= '</tr>';
 		}
 		$table_body .= '</tbody>';
@@ -974,6 +999,131 @@ class Shortcodes {
 	}
 	public function faz_optout_close_label() {
 		return isset( $this->contents['optoutPopup']['elements']['closeButton'] ) ? $this->contents['optoutPopup']['elements']['closeButton'] : '';
+	}
+
+	/**
+	 * Resolve a multilingual { <lang> => string } map to the active banner
+	 * language with the same fallback chain the rest of the plugin uses:
+	 *
+	 *   active banner language → default language → first non-empty entry.
+	 *
+	 * @param mixed $map Multilingual value (array keyed by language, or scalar).
+	 * @return string Resolved plain value ('' when nothing usable).
+	 */
+	private function resolve_transfer_text( $map ) {
+		if ( is_string( $map ) ) {
+			return trim( $map );
+		}
+		if ( ! is_array( $map ) ) {
+			return '';
+		}
+		$lang = (string) $this->language;
+		if ( '' !== $lang && isset( $map[ $lang ] ) && is_string( $map[ $lang ] ) && '' !== trim( $map[ $lang ] ) ) {
+			return trim( $map[ $lang ] );
+		}
+		$default = faz_default_language();
+		if ( isset( $map[ $default ] ) && is_string( $map[ $default ] ) && '' !== trim( $map[ $default ] ) ) {
+			return trim( $map[ $default ] );
+		}
+		foreach ( $map as $value ) {
+			if ( is_string( $value ) && '' !== trim( $value ) ) {
+				return trim( $value );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Build the neutral third-country (Schrems II) transfer disclosure for a
+	 * single cookie's preference-center row.
+	 *
+	 * Purely informational (EDPB 03/2022): it names the fact that a service
+	 * transfers personal data to a third country and surfaces the admin-described
+	 * safeguard, so the visitor's existing category/service consent choice is
+	 * better-informed. It NEVER asserts the transfer is legally valid, adds no
+	 * friction to Reject/withdraw, gates no button and pre-ticks nothing.
+	 *
+	 * Returns '' unless transfer.enabled is set — so a fresh/existing install
+	 * with no flagged cookie renders exactly as before (default-OFF). The value
+	 * is a pure function of the cookie inventory (not the visitor's consent
+	 * state), so it is invariant across consent and Cache-Compatibility-Mode safe.
+	 *
+	 * The fixed labels are resolved in the banner's active language via the same
+	 * switch_to_locale( faz_wp_locale( $this->language ) ) mechanism the banner
+	 * template generator (class-template::generate()) and the banner REST
+	 * endpoint use, so they follow the banner language exactly like the
+	 * multilingual country/safeguard values above — instead of resolving against
+	 * whatever request locale happens to be active.
+	 *
+	 * @param array $cookie Prepared cookie data (must include the 'transfer' key
+	 *                      from Cookie::get_prepared_data()).
+	 * @return string HTML disclosure, or '' when not applicable.
+	 */
+	public function render_transfer_disclosure( $cookie ) {
+		$transfer = ( isset( $cookie['transfer'] ) && is_array( $cookie['transfer'] ) ) ? $cookie['transfer'] : array();
+		if ( empty( $transfer['enabled'] ) ) {
+			return '';
+		}
+		$country   = $this->resolve_transfer_text( isset( $transfer['countries'] ) ? $transfer['countries'] : array() );
+		$safeguard = $this->resolve_transfer_text( isset( $transfer['safeguard'] ) ? $transfer['safeguard'] : array() );
+
+		// Resolve the fixed labels in the banner language (see method docblock).
+		$switched = $this->switch_to_banner_locale();
+
+		$parts = array();
+		if ( '' !== $country ) {
+			$parts[] = '<span class="faz-audit-transfer-country">'
+				. esc_html__( 'This cookie may transfer personal data to:', 'faz-cookie-manager' )
+				. ' <strong>' . esc_html( $country ) . '</strong></span>';
+		} else {
+			// enabled but no recipient country named → single neutral line, no
+			// orphan "Label:" fragment (edge case in the design).
+			$parts[] = '<span class="faz-audit-transfer-country">'
+				. esc_html__( 'This cookie may transfer personal data to a country without an EU adequacy decision.', 'faz-cookie-manager' )
+				. '</span>';
+		}
+		if ( '' !== $safeguard ) {
+			$parts[] = '<span class="faz-audit-transfer-safeguard">'
+				. esc_html__( 'Safeguard:', 'faz-cookie-manager' ) . ' '
+				. wp_kses( $safeguard, faz_allowed_html() ) . '</span>';
+		}
+
+		$this->restore_banner_locale( $switched );
+		return implode( ' ', $parts );
+	}
+
+	/**
+	 * Switch the WordPress locale to the banner's active language so fixed
+	 * __()/esc_html__() plugin strings resolve in that language, mirroring
+	 * class-template::generate() and the banner REST endpoint (single source of
+	 * truth: faz_wp_locale()). No-op when the helpers are unavailable or the
+	 * target locale already matches the active one — so the common case where
+	 * the caller has already switched stays a byte-identical no-op.
+	 *
+	 * @return bool Whether a switch happened; pass it to restore_banner_locale().
+	 */
+	private function switch_to_banner_locale() {
+		if ( ! function_exists( 'faz_wp_locale' ) || ! function_exists( 'switch_to_locale' ) ) {
+			return false;
+		}
+		$target = faz_wp_locale( (string) $this->language );
+		if ( '' === $target || ( function_exists( 'get_locale' ) && $target === get_locale() ) ) {
+			return false;
+		}
+		return (bool) switch_to_locale( $target );
+	}
+
+	/**
+	 * Pair switch_to_banner_locale(): restore the previous locale when a switch
+	 * actually happened.
+	 *
+	 * @param bool $switched Return value of switch_to_banner_locale().
+	 * @return void
+	 */
+	private function restore_banner_locale( $switched ) {
+		if ( $switched && function_exists( 'restore_previous_locale' ) ) {
+			restore_previous_locale();
+		}
 	}
 
 }

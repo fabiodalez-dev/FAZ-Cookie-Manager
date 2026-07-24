@@ -315,24 +315,21 @@ test.describe('F050 — hash_ip() is proxy-aware via faz_resolve_client_ip()', (
   });
 
   test('Dsar_Shortcode::hash_ip() returns a 64-char hex string (no namespace crash)', () => {
-    // The IP_Hasher trait exposes a public WP_DEBUG-gated wrapper
-    // `debug_hash_ip()` specifically for this test. Calling that wrapper
-    // (instead of using ReflectionMethod::setAccessible on the private
-    // hash_ip()) means the assertion survives any future refactor of the
-    // trait's visibility, while keeping the hashing implementation private
-    // in production.
-    //
-    // The test toggles WP_DEBUG on inside the wpEval to make the wrapper
-    // return the real hash even if the test site is running without
-    // WP_DEBUG. The override stays scoped to this single eval call.
+    // wp-config.php normally defines WP_DEBUG=false before wp-cli boots, and a
+    // PHP constant cannot be redefined inside this eval. Exercise the private
+    // implementation directly instead of relying on the debug-only wrapper;
+    // this keeps production builds from exposing a hashing oracle merely so
+    // the E2E suite can validate the output shape.
     const result = wpEval(`
-      if ( ! defined( 'WP_DEBUG' ) ) { define( 'WP_DEBUG', true ); }
       $sc = new \\FazCookie\\Includes\\Dsar_Shortcode();
-      if ( ! method_exists( $sc, 'debug_hash_ip' ) ) {
-        echo 'fail:debug_hash_ip method missing';
+      $reflection = new ReflectionClass( $sc );
+      if ( ! $reflection->hasMethod( 'hash_ip' ) ) {
+        echo 'fail:hash_ip method missing';
         return;
       }
-      $hash = $sc->debug_hash_ip();
+      $method = $reflection->getMethod( 'hash_ip' );
+      $method->setAccessible( true );
+      $hash = $method->invoke( $sc );
       // hash_hmac( 'sha256', ... ) produces 64 hex chars.
       echo ( is_string( $hash ) && preg_match( '/^[a-f0-9]{64}$/', $hash ) ) ? 'ok' : 'fail:' . $hash;
     `).trim();

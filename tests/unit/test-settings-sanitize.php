@@ -43,6 +43,7 @@ namespace {
 		'banner_control' => array(
 			'per_service_consent' => false,
 			'per_cookie_consent'  => false,
+			'adblock_resilience'  => false,
 		),
 		'script_blocking' => array(
 			'aggressive_css_url_blocking' => false,
@@ -63,6 +64,7 @@ namespace {
 			'banner_control' => array(
 				'per_service_consent' => 'true',
 				'per_cookie_consent'  => 'true',
+				'adblock_resilience'  => '1',
 			),
 			'script_blocking' => array(
 				'aggressive_css_url_blocking' => 'true',
@@ -80,6 +82,34 @@ namespace {
 		$sanitized['banner_control']['per_cookie_consent'],
 		true,
 		'per_cookie_consent is a settable boolean (no longer hard-disabled)'
+	);
+	faz_assert_same(
+		$sanitized['banner_control']['adblock_resilience'],
+		true,
+		"adblock_resilience string '1' coerces to bool true (opt-in via settings)"
+	);
+
+	// adblock_resilience: empty string coerces to false, and it defaults to
+	// false when absent from the incoming payload (backward-compat for installs
+	// whose stored banner_control predates the key).
+	$adblock_off = Settings::sanitize(
+		array(
+			'banner_control' => array(
+				'adblock_resilience' => '',
+			),
+		),
+		$defaults
+	);
+	faz_assert_same(
+		$adblock_off['banner_control']['adblock_resilience'],
+		false,
+		"adblock_resilience empty string coerces to bool false"
+	);
+	$adblock_absent = Settings::sanitize( array(), $defaults );
+	faz_assert_same(
+		$adblock_absent['banner_control']['adblock_resilience'],
+		false,
+		'adblock_resilience defaults to false when absent (opt-in, default OFF)'
 	);
 	faz_assert_same(
 		$sanitized['script_blocking']['aggressive_css_url_blocking'],

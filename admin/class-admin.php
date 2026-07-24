@@ -274,6 +274,17 @@ class Admin {
 				'slug'  => self::ADMIN_SLUG . '-system-status',
 				'view'  => 'system-status',
 			),
+			// Guided setup wizard. Registered as a submenu so render_page() and
+			// the per-page JS auto-enqueue (assets/js/pages/setup.js) work; it is
+			// deliberately NOT added to the top-nav in base.php (matching the
+			// geo-routing precedent) to keep the chromeless wizard uncluttered and
+			// avoid a permanent nav entry once onboarding is complete. It stays
+			// reachable from the WordPress submenu for re-entry.
+			'setup'         => array(
+				'title' => __( 'Setup', 'faz-cookie-manager' ),
+				'slug'  => self::ADMIN_SLUG . '-setup',
+				'view'  => 'setup',
+			),
 		);
 	}
 
@@ -416,11 +427,16 @@ class Admin {
 		if ( false === faz_is_admin_page() ) {
 			return;
 		}
+		// filemtime as the cache-buster (same pattern as the per-page JS below):
+		// the ?ver only changes when the file actually changes, so browsers pick
+		// up stylesheet edits immediately instead of serving a stale copy until
+		// the next plugin-version bump.
+		$css_path = plugin_dir_path( __FILE__ ) . 'assets/css/faz-admin.css';
 		wp_enqueue_style(
 			'faz-admin',
 			plugin_dir_url( __FILE__ ) . 'assets/css/faz-admin.css',
 			array(),
-			$this->version
+			file_exists( $css_path ) ? (string) filemtime( $css_path ) : $this->version
 		);
 		// WordPress dashicons (for icon support in quick links, etc.).
 		wp_enqueue_style( 'dashicons' );
@@ -437,11 +453,13 @@ class Admin {
 		}
 
 		// Core utilities — wp-api-fetch on WordPress, polyfill on ClassicPress.
+		// filemtime cache-buster, same rationale as the admin stylesheet.
+		$js_path = plugin_dir_path( __FILE__ ) . 'assets/js/faz-admin.js';
 		wp_enqueue_script(
 			'faz-admin',
 			plugin_dir_url( __FILE__ ) . 'assets/js/faz-admin.js',
 			$this->get_script_dependencies(),
-			$this->version,
+			file_exists( $js_path ) ? (string) filemtime( $js_path ) : $this->version,
 			true
 		);
 
@@ -631,6 +649,8 @@ class Admin {
 						'dbFileInfo'               => __( '{file} ({size} KB) - Last updated: {date}', 'faz-cookie-manager' ),
 						'gvlUpdatedWithMeta'       => __( 'GVL updated: v{version} ({count} vendors)', 'faz-cookie-manager' ),
 						'noGeoipDb'                => __( 'No GeoIP database installed. Enter your license key and click "Update Database".', 'faz-cookie-manager' ),
+						'abTestWarnVariants'       => __( 'A/B testing needs at least 2 selected banner variants to run.', 'faz-cookie-manager' ),
+						'abTestWarnCache'          => __( 'A/B testing is disabled while Cache Compatibility Mode is on.', 'faz-cookie-manager' ),
 					),
 					// GCM page.
 					'gcm'                      => array(
@@ -642,6 +662,9 @@ class Admin {
 					'consentLogs'              => array(
 						/* translators: %1$s: start index, %2$s: end index, %3$s: total entries */
 						'showing'                  => __( 'Showing %1$s\u2013%2$s of %3$s', 'faz-cookie-manager' ),
+						// Humanized label for the reserved meta.age_affirmed audit key
+						// in the categories cell (rendered as a distinct audit pill).
+						'metaAgeAffirmed'          => __( 'Age affirmed', 'faz-cookie-manager' ),
 						'loadFailed'               => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
 						'exportOk'                 => __( 'CSV exported successfully.', 'faz-cookie-manager' ),
@@ -720,6 +743,37 @@ class Admin {
 						'selectBothDates'          => __( 'Please select both start and end dates.', 'faz-cookie-manager' ),
 						'startBeforeEnd'           => __( 'Start date must be before end date.', 'faz-cookie-manager' ),
 						'noCategoryData'           => __( 'No category data yet.', 'faz-cookie-manager' ),
+						'abTestNoData'              => __( 'No consents recorded for these variants yet. Results appear once visitors respond to the banner.', 'faz-cookie-manager' ),
+						/* translators: {accepted}: accepted count, {total}: total consent count. */
+						'abTestAcceptedOf'          => __( '{accepted} accepted of {total} consents', 'faz-cookie-manager' ),
+						'abTestLoadError'          => __( 'Could not load A/B test results.', 'faz-cookie-manager' ),
+					),
+					// Guided setup wizard (admin/assets/js/pages/setup.js).
+					'setup'                    => array(
+						'scan_starting'             => __( 'Starting scan…', 'faz-cookie-manager' ),
+						'scan_in_progress'          => __( 'A scan is already in progress…', 'faz-cookie-manager' ),
+						'scan_failed'               => __( 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.', 'faz-cookie-manager' ),
+						'scan_failed_notify'        => __( 'Cookie scan could not be started.', 'faz-cookie-manager' ),
+						'scan_running'              => __( 'Scanning your site… this can take a moment.', 'faz-cookie-manager' ),
+						/* translators: %d: seconds elapsed since the scan started. */
+						'scan_running_elapsed'      => __( 'Scanning your site… (%ds)', 'faz-cookie-manager' ),
+						/* translators: %d: number of cookies found by the quick scan. */
+						'scan_done_found'           => __( 'Scan complete — %d cookies found.', 'faz-cookie-manager' ),
+						/* translators: %1$d: cookies detected by this scan; %2$d: new rows added to the catalogue. */
+						'scan_done_found_new'       => __( 'Scan complete — %1$d cookies detected, %2$d new added to your catalogue.', 'faz-cookie-manager' ),
+						/* translators: %d: cookies detected by this scan (all already catalogued). */
+						'scan_done_no_new'          => __( 'Scan complete — %d cookies detected, none new (already in your catalogue).', 'faz-cookie-manager' ),
+						'scan_done_empty'           => __( 'Scan complete. No new cookies were found.', 'faz-cookie-manager' ),
+						'scan_slow'                 => __( 'The scan is still running in the background. You can finish setup now — results will appear on the Cookies page.', 'faz-cookie-manager' ),
+						'scan_status_error'         => __( 'Could not read the scan status. You can finish setup and check the Cookies page later.', 'faz-cookie-manager' ),
+						'finished'                  => __( 'Setup complete. Your cookie banner is ready.', 'faz-cookie-manager' ),
+						'finish_failed'             => __( 'Setup could not be saved. Please try again.', 'faz-cookie-manager' ),
+						/* translators: %s: name of the detected plugin (e.g. a cache plugin). */
+						'detected_named'            => __( 'Detected: %s', 'faz-cookie-manager' ),
+						'detected_google'           => __( 'Google tags detected on this site', 'faz-cookie-manager' ),
+						'detected_scan'             => __( 'Found by the cookie scan', 'faz-cookie-manager' ),
+						'detected_plugin'           => __( 'Active plugin detected', 'faz-cookie-manager' ),
+						'detected_enabled'          => __( 'Currently always allowed', 'faz-cookie-manager' ),
 					),
 					// System Status page.
 					'systemStatus'             => array(
@@ -2065,7 +2119,15 @@ class Admin {
 		if ( wp_doing_ajax() || is_network_admin() || ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		wp_safe_redirect( admin_url( 'admin.php?page=' . self::ADMIN_SLUG ) );
+		// A genuine fresh install lands on the guided setup wizard; every other
+		// activation (upgrade / re-activation) keeps the Dashboard target. The
+		// onboarding.completed flag defaults to true, so only the activator's
+		// fresh-install write (completed=false) routes here.
+		$onboarding = new \FazCookie\Admin\Modules\Settings\Includes\Onboarding();
+		$target     = $onboarding->is_complete()
+			? self::ADMIN_SLUG
+			: self::ADMIN_SLUG . '-setup';
+		wp_safe_redirect( admin_url( 'admin.php?page=' . $target ) );
 		exit;
 	}
 
@@ -2117,6 +2179,13 @@ class Admin {
 	 * @return void
 	 */
 	public function register_dashboard_widget() {
+		// The widget exposes aggregated consent statistics; keep it — and its
+		// render callback — visible only to users who manage the site. The WP
+		// dashboard itself is reachable by any logged-in role (e.g. Subscriber),
+		// so this gate is what prevents the data from leaking to them.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		wp_add_dashboard_widget(
 			'faz_consent_widget',
 			__( 'Cookie Consent Overview', 'faz-cookie-manager' ),
@@ -2134,6 +2203,11 @@ class Admin {
 	 * @return void
 	 */
 	public function render_dashboard_widget() {
+		// Defence in depth: never emit consent stats to a non-manager even if the
+		// callback is reached outside register_dashboard_widget()'s gate.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		// Cache the aggregation query for 5 minutes to avoid
 		// running a COUNT/SUM on every WP Dashboard page load.
 		$stats = get_transient( 'faz_dashboard_widget_stats' );

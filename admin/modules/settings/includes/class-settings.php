@@ -73,7 +73,22 @@ class Settings extends Store {
 				'default'  => 'en',
 			),
 			'onboarding'   => array(
-				'step' => 2,
+				// Legacy CookieYes-fork leftover; preserved but unread.
+				'step'      => 2,
+				// Guided setup wizard state. `completed` DEFAULTS TO TRUE so any
+				// install upgrading to this version (whose stored option predates
+				// these keys) is treated as already-onboarded and is NEVER nagged.
+				// The wizard is armed for exactly one path — a genuine fresh
+				// install — where Activator::install() explicitly writes
+				// completed=false through Settings::update(). See class-onboarding.php.
+				'completed' => true,
+				// Dashboard "Complete setup" card dismissed without finishing.
+				'dismissed' => false,
+				// Chosen jurisdiction, stored only for display / wizard re-entry
+				// pre-selection: '' | 'gdpr' | 'ccpa' | 'both'. The law is APPLIED
+				// to the default banner's applicableLaw / Do-Not-Sell fields — it
+				// is not itself a runtime setting.
+				'law'       => '',
 			),
 			'general'      => array(
 				'remove_data_on_uninstall' => false,
@@ -101,6 +116,31 @@ class Settings extends Store {
 				'per_service_consent'    => false,
 				'per_cookie_consent'     => false,
 				'cache_compatibility'    => false,
+				// Anti-adblock banner resilience. When enabled, a single
+				// deferred client-side check re-asserts the consent banner's
+				// visibility if an ad-block cosmetic filter list (e.g. EasyList
+				// Cookie) hides it. Purely keeps a legally required notice
+				// visible — never forces interaction, never a cookie wall.
+				// Distinct from 'alternative_asset_path' above, which only
+				// renames the script handle so network-level filters do not
+				// block the JavaScript itself. Default off.
+				'adblock_resilience'     => false,
+				// A/B testing of banner variants. When `status` is on and
+				// `variants` lists two or more EXISTING active banner slugs,
+				// each visitor is assigned one variant without a pre-consent
+				// experiment cookie. After a choice, the banner slug already stored
+				// in the consent record keeps the assignment stable. The accept-rate
+				// per variant is reported on the Dashboard from the consent log.
+				// The tool only ever chooses among banner rows the admin
+				// already created — every variant stays independently
+				// compliant (equal-weight buttons, opt-in categories); it is
+				// NOT a way to author dark patterns. Default off, so existing
+				// installs are unchanged. Server-side splitting is skipped
+				// under Cache Compatibility Mode (see Frontend::maybe_apply_ab_test).
+				'ab_test'                => array(
+					'status'   => false,
+					'variants' => array(),
+				),
 			),
 			'microsoft'    => array(
 				'uet_consent_mode' => false,
@@ -241,6 +281,11 @@ class Settings extends Store {
 			'whitelist_patterns',
 			'exempt_levels',
 			'payment_gateways',
+			// A/B test variant slug list (banner_control.ab_test.variants).
+			// Excluded so the recursive sanitiser hands the raw array to
+			// sanitize_option() instead of recursing into it against an empty
+			// default array (which would wipe every entry).
+			'variants',
 		);
 	}
 
@@ -331,6 +376,7 @@ class Settings extends Store {
 			case 'hide_from_bots':
 			case 'gtm_datalayer':
 			case 'alternative_asset_path':
+			case 'adblock_resilience':
 			case 'per_service_consent':
 			case 'cache_compatibility':
 			case 'aggressive_css_url_blocking':
@@ -342,6 +388,22 @@ class Settings extends Store {
 				// and the server-side shredder both gate it on per-service), but
 				// it is a plain boolean here.
 				$value = faz_sanitize_bool( $value );
+				break;
+			case 'completed':
+			case 'dismissed':
+				// Guided setup wizard flags (onboarding group). Plain booleans:
+				// `completed` gates the activation redirect + Dashboard card,
+				// `dismissed` hides the card without finishing. Without these
+				// explicit cases they would fall through to faz_sanitize_text and
+				// a truthy string like 'false' would survive as a non-empty string.
+				$value = faz_sanitize_bool( $value );
+				break;
+			case 'law':
+				// Chosen jurisdiction for the guided setup wizard. Whitelisted so
+				// a direct settings PUT cannot persist an arbitrary string; the
+				// banner-apply logic only ever reads one of these four values.
+				$allowed = array( '', 'gdpr', 'ccpa', 'both' );
+				$value   = in_array( $value, $allowed, true ) ? $value : '';
 				break;
 			case 'scan_frequency':
 				$allowed = array( 'daily', 'weekly', 'monthly' );
@@ -427,6 +489,23 @@ class Settings extends Store {
 				}, $value ), function ( $item ) {
 					return '' !== $item;
 				} ) );
+				break;
+			case 'variants':
+				// A/B test variant list: an array of banner slugs. Each slug is
+				// normalised with sanitize_title() (banner slugs are created via
+				// sanitize_title in the Banners controller), blanks dropped and
+				// duplicates removed. Storing a slug that no longer maps to a
+				// banner is harmless — the selector and the stats reporter both
+				// re-validate against the live banner rows at read time.
+				if ( ! is_array( $value ) ) {
+					$value = array();
+					break;
+				}
+				$value = array_values( array_unique( array_filter( array_map( function ( $item ) {
+					return is_scalar( $item ) ? sanitize_title( (string) $item ) : '';
+				}, $value ), function ( $item ) {
+					return '' !== $item;
+				} ) ) );
 				break;
 			case 'payment_gateways':
 				// Map of gateway-key => bool. Only known catalogue keys survive,

@@ -14,11 +14,13 @@ namespace FazCookie\Frontend;
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 use FazCookie\Admin\Modules\Banners\Includes\Controller;
+use FazCookie\Admin\Modules\Banners\Includes\Banner;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
 use FazCookie\Frontend\Modules\Consent_Logger\Consent_Logger;
 use FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest;
 use FazCookie\Includes\Geolocation;
+use FazCookie\Includes\Ab_Test;
 use FazCookie\Includes\Gvl;
 use FazCookie\Includes\Known_Providers;
 use FazCookie\Includes\Cookie_Table_Shortcode;
@@ -398,7 +400,7 @@ class Frontend {
 			// Inject template CSS as a proper inline style (nonce-compatible; no unsafe-inline needed).
 			// Utility rules appended AFTER boost_css_specificity() so they are NOT
 			// scoped inside #faz-consent — these classes are used on elements outside
-			// the banner container (consent-bridge iframe, age-gate overlay, blocked embeds).
+			// the banner container (consent-bridge iframe, blocked embeds).
 			// `_fazAddPlaceholder` inserts `.video-placeholder-{normal,youtube}` next
 			// to blocked iframes (outside #faz-consent), so the scoped template.json
 			// rules never reach them. Without this floor, placeholders for lazy-loaded
@@ -416,8 +418,15 @@ class Frontend {
 			$css .= '#faz-consent{border-style:none}';
 			$css .= '.faz-hidden{display:none!important;visibility:hidden!important}'
 				. '.faz-consent-bridge{width:0;height:0;border:0}'
-				. '.faz-age-gate-overlay{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}'
-				. '.faz-age-gate-modal{background:#fff;border-radius:8px;padding:24px 32px;max-width:420px;text-align:center}'
+				// Inline age-confirmation row (GDPR Art. 8) injected by script.js
+				// above the accept surfaces. Inherits the banner's text direction
+				// (RTL support) from its container. The [hidden] attribute keeps
+				// the validation message out of the flow until an un-affirmed
+				// accept reveals it.
+				. '.faz-age-confirm{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;margin:0 0 12px;font-size:13px;line-height:1.4}'
+				. '.faz-age-confirm-cb{margin:2px 0 0;flex:0 0 auto}'
+				. '.faz-age-confirm-label{cursor:pointer}'
+				. '.faz-age-confirm-error{flex-basis:100%;margin:2px 0 0;color:#b00020;font-size:12px}'
 				. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
 			$css_handle = $this->plugin_name . '-css';
 			wp_register_style( $css_handle, false, array(), $this->version );
@@ -619,6 +628,13 @@ class Frontend {
 									// category-level summary. When per-service consent is off there
 									// are no svc.*/ck.* entries and this adds nothing.
 									"try{var cm=document.cookie.match(/fazcookie-consent=([^;]+)/);if(cm){var cv=cm[1];try{cv=decodeURIComponent(cv)}catch(er){}cv.split(',').forEach(function(pr){var ci=pr.indexOf(':');if(ci<1)return;var ck=pr.substring(0,ci);if(ck.indexOf('svc.')===0||ck.indexOf('ck.')===0){c[ck]=pr.substring(ci+1)}})}}catch(er){}" .
+										// Age-gate accountability (GDPR Art. 5(2)/7(1)): when the
+										// visitor affirmed they meet the digital age of consent, fold
+										// the reserved meta.age_affirmed:yes key into the logged
+										// categories map so the record demonstrates the age was
+										// affirmed at consent time. get_consent_stats() skips the
+										// meta.* prefix so it never appears as a phantom category.
+										"if(d.ageAffirmed===true){c['meta.age_affirmed']='yes'}" .
 									"return c})()," .
 								"url:safeUrl," .
 								"banner_slug:_fazConsentLog.bannerSlug||''," .
@@ -824,6 +840,17 @@ class Frontend {
 		$visitor_country = $this->is_cache_compatibility_enabled() ? '' : $this->get_visitor_country();
 		$this->banner    = Controller::get_instance()->get_active_banner_for_country( $visitor_country );
 
+		// A/B testing of banner variants (Settings → Banner Control): when the
+		// admin has enabled the test with 2+ valid variants, replace the
+		// normally-selected banner with the visitor's persistently-assigned
+		// variant. No-op (returns the banner above) when the feature is off,
+		// under-configured, or Cache Compatibility Mode is on. Runs BEFORE the
+		// runtime law-routing block below so, in the common configuration
+		// (runtime geo-routing off → $runtime_ruleset is null → that block is
+		// skipped), the chosen variant is what ships; when runtime geo-routing
+		// IS active, jurisdiction compliance still wins over the A/B preference.
+		$this->banner = $this->maybe_apply_ab_test( $this->banner, $visitor_country );
+
 		// Runtime geo-routing (flag-gated): the resolved ruleset's MODEL decides
 		// which consent regime actually applies to this visitor. Prefer the
 		// active banner whose applicableLaw matches that model so the UI the
@@ -871,6 +898,110 @@ class Frontend {
 	}
 
 	/**
+	 * Apply the banner-variant A/B test to the selected banner.
+	 *
+	 * When Settings → Banner Control → A/B test is enabled and lists two or
+	 * more slugs that still resolve to ACTIVE banner rows, the visitor is
+	 * assigned one variant via a random split and that variant's banner replaces
+	 * the default selection. No experiment cookie is written before consent.
+	 * Once the visitor acts, the existing strictly-necessary consent record's
+	 * scoped banner slug keeps the assignment stable and the consent log records
+	 * which variant produced the decision (accountability).
+	 *
+	 * Compliance: the test only ever chooses among banner rows the admin
+	 * already created, each independently compliant (equal-weight buttons,
+	 * opt-in categories). It cannot author a dark pattern.
+	 *
+	 * Cache Compatibility Mode: a per-visitor SERVER-side random split is
+	 * fundamentally incompatible with full-page caching — the first anonymous
+	 * visitor's variant would be baked into the cached HTML and then served to
+	 * everyone, silently ending the experiment and making the persisted cookie
+	 * disagree with the served banner. So when that mode is on we skip the
+	 * split entirely and serve the normally-selected banner. (A future
+	 * cache-safe variant would have to run the split client-side in script.js;
+	 * until then A/B testing simply requires Cache Compatibility Mode off.)
+	 *
+	 * @since 1.25.0
+	 * @param Banner|false $default_banner  The banner selected before A/B.
+	 * @param string       $visitor_country Resolved visitor country. Used to keep
+	 *                                      variant selection within the same
+	 *                                      geo-eligibility as the normal banner
+	 *                                      selection: filters candidates through
+	 *                                      Ab_Test::is_banner_geo_eligible()
+	 *                                      (target_countries + ruleSet) so an A/B
+	 *                                      experiment can never surface a variant
+	 *                                      that normal routing would have hidden
+	 *                                      or excluded for this visitor.
+	 * @return Banner|false The variant banner, or $default_banner unchanged.
+	 */
+	private function maybe_apply_ab_test( $default_banner, $visitor_country ) {
+		// See docblock: no server-side split under Cache Compatibility Mode.
+		if ( false === $default_banner || $this->is_cache_compatibility_enabled() ) {
+			return $default_banner;
+		}
+
+		$ab = $this->settings->get( 'banner_control', 'ab_test' );
+		if ( ! is_array( $ab ) || empty( $ab['status'] ) ) {
+			return $default_banner;
+		}
+
+		$configured = ( isset( $ab['variants'] ) && is_array( $ab['variants'] ) ) ? $ab['variants'] : array();
+		if ( count( $configured ) < 2 ) {
+			return $default_banner;
+		}
+
+		// Re-validate the configured slugs against the LIVE banner rows so a
+		// variant whose banner was deleted or deactivated after setup drops out.
+		$controller = Controller::get_instance();
+		$valid      = $controller->filter_active_variant_slugs( $configured );
+		if ( count( $valid ) < 2 ) {
+			return $default_banner;
+		}
+
+		// An experiment may vary presentation, never the legal/geo regime. Keep
+		// only active banners with the same law + Do-Not-Sell model as the banner
+		// selected by normal routing, and which are eligible for this visitor.
+		// Without this gate a US-targeted CCPA variant could replace an EU GDPR
+		// banner (or a country-restricted variant could make is_geo_blocked() hide
+		// the notice entirely), turning an A/B setting into a compliance override.
+		$required_model = Ab_Test::experiment_model( $default_banner );
+		$compatible     = array();
+		foreach ( $valid as $slug ) {
+			$candidate = $controller->get_active_banner_by_slug( $slug );
+			if ( false === $candidate || Ab_Test::experiment_model( $candidate ) !== $required_model ) {
+				continue;
+			}
+			// Geo scope (target_countries) + ruleSet eligibility go through ONE
+			// shared implementation with the REST language-swap path
+			// (Ab_Test::is_banner_geo_eligible) so the initial server render and a
+			// later REST swap can never resolve a different variant for the same
+			// visitor. Case is normalised on both country and targets.
+			if ( ! Ab_Test::is_banner_geo_eligible( $candidate, $visitor_country ) ) {
+				continue;
+			}
+			$compatible[ $slug ] = $candidate;
+		}
+		$valid = array_keys( $compatible );
+		if ( count( $valid ) < 2 ) {
+			return $default_banner;
+		}
+
+		// Reuse the assignment already present in the strictly-necessary consent
+		// record. Creating a standalone A/B cookie before the visitor acts would
+		// itself be non-essential tracking under opt-in regimes. Before any action
+		// the split is intentionally stateless; the selected banner is still
+		// recorded with the eventual consent and becomes sticky from then on.
+		$consent       = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie() : array();
+		$stored_banner = isset( $consent['__scope.banner'] ) ? sanitize_title( (string) $consent['__scope.banner'] ) : '';
+		$chosen        = Ab_Test::pick_variant( $valid, $stored_banner, wp_rand( 0, count( $valid ) - 1 ) );
+		if ( '' === $chosen ) {
+			return $default_banner;
+		}
+
+		return isset( $compatible[ $chosen ] ) ? $compatible[ $chosen ] : $default_banner;
+	}
+
+	/**
 	 * Check if the banner should be blocked for this visitor based on geo rules.
 	 *
 	 * @return bool True if the banner should NOT be shown.
@@ -879,7 +1010,21 @@ class Frontend {
 		if ( ! $this->banner ) {
 			return false;
 		}
-		$settings = $this->banner->get_settings();
+		return $this->is_banner_geo_blocked( $this->banner, $this->get_visitor_country() );
+	}
+
+	/**
+	 * Check one banner's ruleSet against an already-resolved visitor country.
+	 *
+	 * Shared by the normal post-selection guard and A/B candidate filtering so
+	 * an experiment cannot choose a banner that the normal geo path would hide.
+	 *
+	 * @param Banner $banner  Banner to evaluate.
+	 * @param string $country ISO-3166 alpha-2 country code, or ''.
+	 * @return bool True when the banner must not be shown.
+	 */
+	private function is_banner_geo_blocked( $banner, $country ) {
+		$settings = $banner->get_settings();
 		$inner    = isset( $settings['settings'] ) && is_array( $settings['settings'] ) ? $settings['settings'] : array();
 		$rules    = isset( $inner['ruleSet'] ) && is_array( $inner['ruleSet'] ) ? $inner['ruleSet'] : array();
 		if ( empty( $rules ) ) {
@@ -893,7 +1038,6 @@ class Frontend {
 		// Without this, a ruleSet like [{code:ALL}, {code:US}] would emit
 		// no-cache headers but the runtime check on $rules[0] only would
 		// still let the first rule decide, asymmetrically.
-		$country = $this->get_visitor_country();
 		foreach ( $rules as $rule ) {
 			if ( ! is_array( $rule ) ) {
 				continue;
@@ -1737,6 +1881,11 @@ class Frontend {
 		$banner          = $this->banner;
 		$banner_settings = $banner->get_settings();
 
+		// Age gate (GDPR Art. 8) minimum age. Sanitizer clamps the persisted
+		// value to 13-18; default 16. Resolved once here so it feeds both the
+		// _ageGate store and the sprintf'd age-confirmation label below.
+		$age_min = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
+
 		// Consent-cookie lifetime, with a law-aware hard cap applied here so the
 		// EFFECTIVE expiry can never exceed the legal maximum regardless of any
 		// larger value an admin saved (the UI allows up to 10 years). The
@@ -1812,6 +1961,11 @@ class Frontend {
 				'cookie_consent_label'                  => __( 'Cookie consent', 'faz-cookie-manager' ),
 				'vendor_consent_label'                  => __( 'Vendor consent', 'faz-cookie-manager' ),
 				'third_party_cookie_note'               => __( 'These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually.', 'faz-cookie-manager' ),
+				// Age gate (GDPR Art. 8). The number is sprintf'd server-side so
+				// the label is correct per-locale with no JS string concatenation.
+				// translators: %d is the minimum digital age of consent.
+				'age_confirm_label'                     => sprintf( __( 'I confirm I am at least %d years old', 'faz-cookie-manager' ), $age_min ),
+				'age_confirm_error'                     => __( 'Please confirm you meet the minimum age to accept optional cookies.', 'faz-cookie-manager' ),
 			),
 			'_rtl'          => $this->is_rtl(),
 			'_language'     => faz_current_language(),
@@ -1970,15 +2124,24 @@ class Frontend {
 			$store['_cookieScripts'] = $cookie_scripts;
 		}
 
-		// Age gate (GDPR Art. 8).
+		// Age gate (GDPR Art. 8). Site-wide (not per-visitor/geo), so it is safe
+		// to bake into full-page caches; the checkbox is injected client-side
+		// from this JSON, so it is cache-safe and never baked into cached markup.
 		$age_gate = array(
 			'enabled' => ! empty( $settings['age_gate']['enabled'] ),
-			'minAge'  => isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16,
+			'minAge'  => $age_min,
 		);
 		$store['_ageGate'] = $age_gate;
 
 		// GTM Data Layer toggle.
 		$store['_gtmDataLayer'] = ! empty( $settings['banner_control']['gtm_datalayer'] );
+		// Anti-adblock banner resilience toggle. Emitted ONLY when true so the
+		// _fazConfig blob stays byte-identical for every default-off install
+		// (no behaviour change, no cache-diff). Site-wide static flag, safe
+		// under cache-compatibility mode.
+		if ( ! empty( $settings['banner_control']['adblock_resilience'] ) ) {
+			$store['_adblockResilience'] = true;
+		}
 		// Advanced Consent Mode (#165): mirror the server-side gtag exemption to
 		// the client blocker so dynamically-injected Google tags (which bypass
 		// the output buffer) are also allowed to load before consent.
@@ -4917,7 +5080,6 @@ class Frontend {
 			'.faz-hide',
 			'.faz-hidden',
 			'.faz-modal',
-			'.faz-age-gate',
 			'.faz-consent-bridge',
 			'#faz-cookie-wall',
 		);

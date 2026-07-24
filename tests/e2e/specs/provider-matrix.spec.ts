@@ -714,25 +714,36 @@ test.describe('Provider matrix scan and blocking', () => {
     }
   });
 
-  // Stripe is now always-allowed (get_always_allowed_gateway_patterns) so it
-  // executes on ALL pages regardless of consent — including non-checkout. This
-  // is the intended M27 behavior: payment gateway scripts must never be blocked
-  // to avoid breaking Stripe express buttons, Apple Pay, etc. The test verifies
-  // this design decision rather than expecting Stripe to be blocked.
-  test('15. Stripe is always-allowed even on non-checkout pages', async ({ page }) => {
+  test('15. explicitly enabled Stripe is allowed on non-checkout pages', async ({ page, browser, loginAsAdmin }) => {
     test.skip(IS_PHP_BUILT_IN_E2E, 'Fixture page is_singular() is unreliable on the PHP built-in server.');
-    resetProviderMatrixState();
-    await gotoFrontend(page, matrixUrl);
+    const nonce = await openSettingsPage(page, loginAsAdmin);
+    const original = await getSettings(page, nonce);
+    const visitor = await browser.newContext({ baseURL: WP_BASE });
+    try {
+      await postSettings(page, nonce, {
+        script_blocking: {
+          ...(original.script_blocking ?? {}),
+          payment_gateways: {
+            ...(original.script_blocking?.payment_gateways ?? {}),
+            stripe: true,
+          },
+        },
+      });
+      resetProviderMatrixState();
+      const visitorPage = await visitor.newPage();
+      await gotoFrontend(visitorPage, matrixUrl);
 
-    // Stripe script must execute (always-allowed) even without consent.
-    await expect
-      .poll(() => readProviderMatrixHits().stripe ?? 0, {
-        timeout: 10_000,
-        message: 'Stripe should have executed on a non-checkout page (always-allowed).',
-      })
-      .toBeGreaterThanOrEqual(1);
+      await expect
+        .poll(() => readProviderMatrixHits().stripe ?? 0, {
+          timeout: 10_000,
+          message: 'Explicitly enabled Stripe should execute on a non-checkout page.',
+        })
+        .toBeGreaterThanOrEqual(1);
 
-    // Verify it was NOT blocked (no type="text/plain" on Stripe scripts).
-    expect(await page.locator('script[type="text/plain"][src*="js.stripe.com"]').count()).toBe(0);
+      expect(await visitorPage.locator('script[type="text/plain"][src*="js.stripe.com"]').count()).toBe(0);
+    } finally {
+      await visitor.close();
+      await postSettings(page, nonce, { script_blocking: original.script_blocking ?? {} });
+    }
   });
 });

@@ -152,6 +152,7 @@ class Cookie extends Store {
 			'discovered'    => $this->is_discovered(),
 			'url_pattern'   => $this->get_url_pattern(),
 			'category'      => $this->get_category(),
+			'transfer'      => $this->get_transfer(),
 			'date_created'  => $this->get_date_created(),
 			'date_modified' => $this->get_date_modified(),
 		);
@@ -268,9 +269,18 @@ class Cookie extends Store {
 	/**
 	 * Return cookie meta data.
 	 *
-	 * Script keys (opt_in_script, opt_out_script) are preserved as-is because
-	 * sanitize_textarea_field() strips HTML tags, which would corrupt JS code.
-	 * These keys are admin-only and are JSON-encoded before reaching the browser.
+	 * Three key classes are handled distinctly on read:
+	 *   - Script keys (opt_in_script, opt_out_script) are preserved as-is
+	 *     because sanitize_textarea_field() strips HTML tags, which would
+	 *     corrupt JS code. These keys are admin-only and are JSON-encoded
+	 *     before reaching the browser.
+	 *   - Structured keys (transfer) hold an associative array, not a scalar.
+	 *     Running sanitize_textarea_field() over an array returns '' (PHP casts
+	 *     the array to an empty string), which would silently blank the whole
+	 *     third-country-transfer sub-object on every read/persist cycle. They
+	 *     are routed to a dedicated structural sanitiser instead.
+	 *   - Everything else is a scalar and is sanitised with
+	 *     sanitize_textarea_field() as before.
 	 *
 	 * @return array
 	 */
@@ -278,18 +288,23 @@ class Cookie extends Store {
 		if ( null !== $this->decoded_meta ) {
 			return $this->decoded_meta;
 		}
-		$meta        = array();
-		$raw         = $this->get_object_data( 'meta' );
-		$data        = is_string( $raw ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : array() );
-		$script_keys = array( 'opt_in_script', 'opt_out_script' );
+		$meta            = array();
+		$raw             = $this->get_object_data( 'meta' );
+		$data            = is_string( $raw ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : array() );
+		$script_keys     = array( 'opt_in_script', 'opt_out_script' );
+		$structured_keys = array( 'transfer' );
 		if ( ! is_array( $data ) ) {
 			$this->decoded_meta = $meta;
 			return $meta;
 		}
 		foreach ( $data as $key => $item ) {
-			$meta[ $key ] = in_array( $key, $script_keys, true )
-				? (string) $item
-				: sanitize_textarea_field( $item );
+			if ( in_array( $key, $script_keys, true ) ) {
+				$meta[ $key ] = (string) $item;
+			} elseif ( in_array( $key, $structured_keys, true ) ) {
+				$meta[ $key ] = $this->sanitize_transfer_meta( $item );
+			} else {
+				$meta[ $key ] = sanitize_textarea_field( $item );
+			}
 		}
 		$this->decoded_meta = $meta;
 		return $meta;
@@ -347,6 +362,159 @@ class Cookie extends Store {
 		$meta                    = $this->get_meta();
 		$meta['opt_out_script']  = (string) $script;
 		$this->set_meta( $meta );
+	}
+
+	/**
+	 * The disabled-by-default third-country transfer sub-object.
+	 *
+	 * A legacy cookie row whose meta JSON has no `transfer` key resolves to
+	 * this shape, so every downstream surface treats it as "no disclosure" and
+	 * renders byte-identically to a pre-feature install.
+	 *
+	 * @return array{enabled:bool,countries:array,safeguard:array}
+	 */
+	private function default_transfer() {
+		return self::sanitize_transfer_value( array() );
+	}
+
+	/**
+	 * Return the third-country (Schrems II) transfer disclosure for this cookie.
+	 *
+	 * Reads meta['transfer'] through the capability-aware get_meta() pipeline
+	 * (which routes the key through sanitize_transfer_meta() so its array value
+	 * is never corrupted). Any legacy / malformed value degrades to the disabled
+	 * default — never a fatal.
+	 *
+	 * Shape:
+	 *   [
+	 *     'enabled'   => bool,                 // the opt-in gate; default false
+	 *     'countries' => [ <lang> => string ], // e.g. ['en' => 'United States']
+	 *     'safeguard' => [ <lang> => string ], // e.g. ['en' => 'EU-US DPF']
+	 *   ]
+	 *
+	 * @return array
+	 */
+	public function get_transfer() {
+		$meta = $this->get_meta();
+		return isset( $meta['transfer'] ) && is_array( $meta['transfer'] )
+			? $meta['transfer']
+			: $this->default_transfer();
+	}
+
+	/**
+	 * Set the third-country transfer disclosure, merging into the existing meta.
+	 *
+	 * Routes through set_meta() — same single-source-of-truth invariant as
+	 * set_opt_in_script()/set_opt_out_script(). The value is structurally
+	 * cleaned by sanitize_transfer_meta() before it is stored.
+	 *
+	 * Reachable from the REST single-item update, the bulk-update endpoint and
+	 * settings import via the generic set_{key}() dispatch, because `transfer`
+	 * is a (non-readonly) schema property.
+	 *
+	 * @param array|string $data Transfer sub-object (or JSON-encoded string).
+	 * @return void
+	 */
+	public function set_transfer( $data ) {
+		if ( is_string( $data ) ) {
+			$decoded = json_decode( $data, true );
+			$data    = is_array( $decoded ) ? $decoded : array();
+		}
+		$meta             = $this->get_meta();
+		$meta['transfer'] = $this->sanitize_transfer_meta( $data );
+		$this->set_meta( $meta );
+	}
+
+	/**
+	 * Structurally sanitise the transfer sub-object.
+	 *
+	 * Idempotent: safe to run both on write (raw REST input) and on read (an
+	 * already-normalised array coming back through get_meta()). Coerces:
+	 *   - enabled   → strict bool (accepts "true"/"1"/1/true; everything else false)
+	 *   - countries → multilingual map of plain text (sanitize_text_field)
+	 *   - safeguard → multilingual map of limited HTML (wp_kses, faz_allowed_html)
+	 * A non-array input yields the disabled default so corrupt legacy JSON can
+	 * never fatal or leak.
+	 *
+	 * Safeguard passes through wp_kses (not raw) precisely because it is NOT a
+	 * script field: a low-privilege editor without unfiltered_html can still save
+	 * a cookie, so its safeguard text must be markup-filtered here.
+	 *
+	 * @param mixed $data Raw transfer value.
+	 * @return array{enabled:bool,countries:array,safeguard:array}
+	 */
+	private function sanitize_transfer_meta( $data ) {
+		return self::sanitize_transfer_value( $data );
+	}
+
+	/**
+	 * Shared pure coercion for the third-country transfer sub-object.
+	 *
+	 * This is public so the REST schema boundary and the model setter use the
+	 * exact same normalisation while still applying it twice as defence in
+	 * depth. Keeping the strict bool allowlist and multilingual-key rules here
+	 * avoids the two write paths drifting apart.
+	 *
+	 * `enabled` is a legal disclosure flag (it gates whether
+	 * render_transfer_disclosure() ever prints anything), so this deliberately
+	 * uses a strict ALLOWLIST rather than a lenient denylist: only an explicit
+	 * truthy value turns it on, everything else — including values we don't
+	 * recognise — resolves to false. That is the safer default for something
+	 * an admin must consciously opt into.
+	 *
+	 * @param mixed $data Raw transfer object or JSON string.
+	 * @return array{enabled:bool,countries:array,safeguard:array}
+	 */
+	public static function sanitize_transfer_value( $data ) {
+		if ( is_string( $data ) ) {
+			$decoded = json_decode( $data, true );
+			$data    = is_array( $decoded ) ? $decoded : array();
+		}
+		if ( ! is_array( $data ) ) {
+			$data = array();
+		}
+
+		$enabled = false;
+		if ( isset( $data['enabled'] ) ) {
+			$raw     = is_string( $data['enabled'] ) ? strtolower( trim( $data['enabled'] ) ) : $data['enabled'];
+			$enabled = in_array( $raw, array( true, 1, '1', 'true', 'yes', 'on' ), true );
+		}
+
+		return array(
+			'enabled'   => (bool) $enabled,
+			'countries' => self::sanitize_transfer_lang_map( isset( $data['countries'] ) ? $data['countries'] : array(), false ),
+			'safeguard' => self::sanitize_transfer_lang_map( isset( $data['safeguard'] ) ? $data['safeguard'] : array(), true ),
+		);
+	}
+
+	/**
+	 * Normalise a multilingual { <lang> => string } map. Mirrors the
+	 * shape/fallback contract of the existing description/duration fields.
+	 *
+	 * A bare string is wrapped under the default language so a single-language
+	 * admin payload (or a legacy scalar) still round-trips.
+	 *
+	 * @param mixed $map  Raw value (array keyed by language, or a scalar).
+	 * @param bool  $html Whether limited HTML is allowed in values.
+	 * @return array
+	 */
+	private static function sanitize_transfer_lang_map( $map, $html ) {
+		$out = array();
+		if ( is_array( $map ) ) {
+			foreach ( $map as $lang => $value ) {
+				if ( ! is_string( $value ) ) {
+					continue;
+				}
+				$lang_key = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $lang );
+				if ( '' === $lang_key ) {
+					continue;
+				}
+				$out[ $lang_key ] = $html ? wp_kses( $value, faz_allowed_html() ) : sanitize_text_field( $value );
+			}
+		} elseif ( is_string( $map ) && '' !== trim( $map ) ) {
+			$out[ faz_default_language() ] = $html ? wp_kses( $map, faz_allowed_html() ) : sanitize_text_field( $map );
+		}
+		return $out;
 	}
 
 	/**

@@ -45,6 +45,25 @@ class Renderer {
 	private static $cookie_list_cache = array();
 
 	/**
+	 * Per-request micro-cache for the collected third-country transfer
+	 * disclosures, keyed by language. Mirrors $cookie_list_cache; the shared
+	 * wp_cache (group faz_cookie_policy, 5 min TTL) backs it across requests.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $transfer_cache = array();
+
+	/**
+	 * Visitor-facing inventory shared only within the current request. The final
+	 * rendered surfaces retain their mandated five-minute object caches; keeping
+	 * this intermediate cache request-local prevents a late cache miss from
+	 * extending stale database rows for a second five-minute window.
+	 *
+	 * @var array<int,array<string,mixed>>|null
+	 */
+	private static $public_cookie_rows_cache = null;
+
+	/**
 	 * Public entry point used by the shortcode handler.
 	 *
 	 * @param array<string,string> $atts Shortcode attributes:
@@ -156,6 +175,11 @@ class Renderer {
 			// standalone so this branch is defensive — covered by tests.
 			$html = str_replace( $sentinel, (string) $html_value, $html );
 		}
+
+		// International data transfers (Schrems II) section — appended just
+		// before the disclaimer and gated on >=1 flagged cookie, so a site with
+		// no flagged transfer renders byte-identically to a pre-feature install.
+		$html .= self::international_transfers_section( $lang );
 
 		// Disclaimer block. Admin-configurable since 1.16.2: visibility
 		// + text are stored in the `disclaimer` sub-array of the
@@ -308,6 +332,16 @@ class Renderer {
 			'OFFICIAL_RESOURCES_URL' => esc_url( self::official_resources_url( $jurisdiction ) ),
 		);
 
+		// FR-07 accountability: fold a compact fingerprint of the flagged
+		// third-country-transfer data into the substitution data so the policy
+		// version hash bumps whenever a disclosure is added/edited/removed. Added
+		// ONLY when at least one cookie is flagged, so installs with no flag keep
+		// a byte-identical $data (and hash) — default-OFF is preserved.
+		$transfer_rows = self::collect_transfer_disclosures( $lang );
+		if ( ! empty( $transfer_rows ) ) {
+			$data['INTERNATIONAL_TRANSFERS_FP'] = sha1( (string) wp_json_encode( $transfer_rows ) );
+		}
+
 		// Jurisdiction-specific official body refs.
 		$data['EDPB_CONTACT']   = ( 'gdpr-strict' === $jurisdiction ) ? 'edpb@edpb.europa.eu' : '';
 		$data['CA_PIPC_CONTACT'] = ( 'ccpa-california' === $jurisdiction ) ? 'cppa@cppa.ca.gov' : '';
@@ -347,68 +381,11 @@ class Renderer {
 			return $cached;
 		}
 
-		global $wpdb;
-		$cookies_table   = $wpdb->prefix . 'faz_cookies';
-		$categories_table = $wpdb->prefix . 'faz_cookie_categories';
-
-		// Schema sanity: skip if either table is missing (e.g. unactivated install).
-		if ( ! self::table_exists( $cookies_table ) || ! self::table_exists( $categories_table ) ) {
-			return '';
-		}
-
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-		$rows = $wpdb->get_results(
-			// Column aliases bridge the legacy in-PHP names (cookie_name,
-			// cookie_domain, cookie_duration, cookie_description,
-			// category_name, category_description) to the actual schema
-			// (`name`, `domain`, `duration`, `description`, etc.). Without
-			// the aliases the SELECT errors out with "Unknown column
-			// 'c.cookie_name'" and build_cookie_list_html returned an empty
-			// string — meaning [faz_cookie_policy_complete] rendered without any
-			// inventory section at all. The downstream rendering loop reads
-			// $row['cookie_name'] etc., so the aliases keep it untouched.
-			"SELECT c.cookie_id, c.name AS cookie_name, c.domain AS cookie_domain,
-			        c.duration AS cookie_duration, c.description AS cookie_description,
-			        c.category AS category_id,
-			        cat.name AS category_name, cat.description AS category_description,
-			        cat.slug AS category_slug
-			   FROM `{$cookies_table}` AS c
-			   LEFT JOIN `{$categories_table}` AS cat ON c.category = cat.category_id
-			   ORDER BY cat.priority ASC, c.name ASC",
-			ARRAY_A
-		);
+		$rows = self::load_public_cookie_rows();
 
 		if ( empty( $rows ) ) {
 			$html = '';
 		} else {
-			// 1.16.2 — exclude WordPress-internal infrastructure cookies
-			// (wp-settings-*, wordpress_logged_in_*, wordpress_test_cookie,
-			// comment_author_*, etc.) AND the "wordpress-internal" admin
-			// category as a whole. These are strictly-necessary admin-only
-			// cookies that visitors never receive — listing them in the
-			// public Cookie Policy is misleading and bloats the page.
-			// Mirrors the same filter applied to the frontend banner
-			// (Frontend::is_wp_internal_cookie + 'wordpress-internal'
-			// category skip in prepare_frontend_categories).
-			$rows = array_values( array_filter( $rows, function ( $row ) {
-				// Skip the dedicated "wordpress-internal" admin category
-				// entirely — by convention it groups admin-only cookies
-				// that visitors never receive.
-				if ( 'wordpress-internal' === (string) ( $row['category_slug'] ?? '' ) ) {
-					return false;
-				}
-				$name = (string) ( $row['cookie_name'] ?? '' );
-				if ( class_exists( '\\FazCookie\\Frontend\\Frontend' )
-					&& \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name ) ) {
-					return false;
-				}
-				return true;
-			} ) );
-			if ( empty( $rows ) ) {
-				wp_cache_set( $cache_key, '', 'faz_cookie_policy', 5 * MINUTE_IN_SECONDS );
-				self::$cookie_list_cache[ $cache_key ] = '';
-				return '';
-			}
 			$grouped = array();
 			foreach ( $rows as $row ) {
 				// Categories' `name` and `description` columns store i18n
@@ -434,6 +411,26 @@ class Renderer {
 			$col_duration = esc_html__( 'Duration', 'faz-cookie-manager' );
 			$col_desc     = esc_html__( 'Description', 'faz-cookie-manager' );
 			$cookies_lbl  = esc_html__( 'cookies', 'faz-cookie-manager' );
+
+			$has_transfer = false;
+			foreach ( $rows as $row ) {
+				$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
+				if ( ! empty( $transfer['enabled'] ) ) {
+					$has_transfer = true;
+					break;
+				}
+			}
+			$transfer_to_fmt  = '';
+			$transfer_outside = '';
+			if ( $has_transfer ) {
+				// Resolve the fixed transfer labels only when at least one row uses
+				// them; unflagged inventories avoid an unnecessary locale switch.
+				$transfer_switched = self::switch_to_policy_locale( $lang );
+				/* translators: %s: recipient country name. */
+				$transfer_to_fmt  = esc_html__( 'Transfers personal data to: %s', 'faz-cookie-manager' );
+				$transfer_outside = esc_html__( 'Transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+				self::restore_policy_locale( $transfer_switched );
+			}
 
 			$parts = array();
 			foreach ( $grouped as $cat_name => $items ) {
@@ -492,7 +489,20 @@ class Renderer {
 					$parts[]  = '<td data-label="' . $col_domain . '">' . ( '' !== $domain ? esc_html( $domain ) : '&mdash;' ) . '</td>';
 					$parts[]  = '<td data-label="' . $col_duration . '">' . ( '' !== $duration ? esc_html( $duration ) : '&mdash;' ) . '</td>';
 					// Cookie description may contain HTML inside the JSON value.
-					$parts[]  = '<td data-label="' . $col_desc . '">' . wp_kses_post( $desc ) . '</td>';
+					$desc_cell = wp_kses_post( $desc );
+					// Third-country (Schrems II) per-row indicator. Neutral, purely
+					// transparency: names the recipient country (or a generic
+					// outside-EU/EEA line) so the row is self-explanatory; the
+					// dedicated section below carries the full Art. 44-49 framing.
+					$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
+					if ( ! empty( $transfer['enabled'] ) ) {
+						$t_country = self::resolve_i18n_array( $transfer['countries'], $lang );
+						$indicator = ( '' !== $t_country )
+							? sprintf( $transfer_to_fmt, esc_html( $t_country ) )
+							: $transfer_outside;
+						$desc_cell .= '<small class="faz-cookie-policy-transfer">' . $indicator . '</small>';
+					}
+					$parts[]  = '<td data-label="' . $col_desc . '">' . $desc_cell . '</td>';
 					$parts[]  = '</tr>';
 				}
 				$parts[] = '</tbody>';
@@ -544,6 +554,264 @@ class Renderer {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Resolve an already-decoded multilingual map ({ <lang> => string }) to the
+	 * active language. Same fallback chain as
+	 * Cookie_Table_Shortcode::resolve_transfer_text() (active language →
+	 * faz_default_language() → first non-empty entry) so the transfer
+	 * country/safeguard text matches between the banner preference-center and
+	 * the [faz_cookie_policy_complete] page on sites whose default language
+	 * isn't 'en'. Value is already a PHP array (the transfer countries/safeguard
+	 * sub-objects arrive decoded from the cookie meta JSON, not as a raw JSON
+	 * string).
+	 *
+	 * @param mixed  $map  Multilingual array, or a plain string.
+	 * @param string $lang Preferred language code.
+	 * @return string
+	 */
+	private static function resolve_i18n_array( $map, $lang ) {
+		if ( is_string( $map ) ) {
+			return $map;
+		}
+		if ( ! is_array( $map ) ) {
+			return '';
+		}
+		if ( is_string( $lang ) && '' !== $lang && isset( $map[ $lang ] ) && is_string( $map[ $lang ] ) && '' !== $map[ $lang ] ) {
+			return $map[ $lang ];
+		}
+		$default = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		if ( isset( $map[ $default ] ) && is_string( $map[ $default ] ) && '' !== $map[ $default ] ) {
+			return $map[ $default ];
+		}
+		foreach ( $map as $v ) {
+			if ( is_string( $v ) && '' !== $v ) {
+				return $v;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Decode a cookie's `meta` value and extract the normalised third-country
+	 * transfer sub-object. Mirrors Cookie::get_transfer()'s disabled default so
+	 * a legacy/absent/corrupt meta never fatals and never renders a disclosure.
+	 *
+	 * @param mixed $raw_meta The cookie's raw `meta` column (JSON string / array).
+	 * @return array{enabled:bool,countries:array,safeguard:array}
+	 */
+	private static function decode_transfer_meta( $raw_meta ) {
+		$default = array(
+			'enabled'   => false,
+			'countries' => array(),
+			'safeguard' => array(),
+		);
+		if ( is_array( $raw_meta ) ) {
+			$meta = $raw_meta;
+		} elseif ( is_string( $raw_meta ) && '' !== $raw_meta ) {
+			$meta = json_decode( $raw_meta, true );
+		} else {
+			$meta = null;
+		}
+		if ( ! is_array( $meta ) || ! isset( $meta['transfer'] ) || ! is_array( $meta['transfer'] ) ) {
+			return $default;
+		}
+		$transfer = $meta['transfer'];
+		return array(
+			'enabled'   => ! empty( $transfer['enabled'] ),
+			'countries' => ( isset( $transfer['countries'] ) && is_array( $transfer['countries'] ) ) ? $transfer['countries'] : array(),
+			'safeguard' => ( isset( $transfer['safeguard'] ) && is_array( $transfer['safeguard'] ) ) ? $transfer['safeguard'] : array(),
+		);
+	}
+
+	/**
+	 * Load the visitor-facing cookie inventory once for every policy surface.
+	 *
+	 * Both the table renderer and the international-transfer disclosure consume
+	 * the same JOIN. Sharing the raw, filtered rows prevents a second query when
+	 * both sections are rendered on a cache miss while preserving their existing
+	 * language-specific output caches.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private static function load_public_cookie_rows() {
+		if ( null !== self::$public_cookie_rows_cache ) {
+			return self::$public_cookie_rows_cache;
+		}
+
+		global $wpdb;
+		$cookies_table    = $wpdb->prefix . 'faz_cookies';
+		$categories_table = $wpdb->prefix . 'faz_cookie_categories';
+		if ( ! self::table_exists( $cookies_table ) || ! self::table_exists( $categories_table ) ) {
+			self::$public_cookie_rows_cache = array();
+			return self::$public_cookie_rows_cache;
+		}
+
+		// Column aliases preserve the legacy renderer field names while reading
+		// the current schema. Custom table names derive only from $wpdb->prefix.
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$rows = $wpdb->get_results(
+			"SELECT c.cookie_id, c.name AS cookie_name, c.domain AS cookie_domain,
+			        c.duration AS cookie_duration, c.description AS cookie_description,
+			        c.meta AS cookie_meta, c.category AS category_id,
+			        cat.name AS category_name, cat.description AS category_description,
+			        cat.slug AS category_slug
+			   FROM `{$cookies_table}` AS c
+			   LEFT JOIN `{$categories_table}` AS cat ON c.category = cat.category_id
+			   ORDER BY cat.priority ASC, c.name ASC",
+			ARRAY_A
+		);
+
+		$rows = array_values( array_filter( (array) $rows, function ( $row ) {
+			if ( 'wordpress-internal' === (string) ( $row['category_slug'] ?? '' ) ) {
+				return false;
+			}
+			$name = (string) ( $row['cookie_name'] ?? '' );
+			return ! class_exists( '\\FazCookie\\Frontend\\Frontend' )
+				|| ! \FazCookie\Frontend\Frontend::is_wp_internal_cookie( $name );
+		} ) );
+
+		self::$public_cookie_rows_cache = $rows;
+		return self::$public_cookie_rows_cache;
+	}
+
+	/**
+	 * Collect the flagged third-country transfer disclosures, resolved to $lang.
+	 *
+	 * Returns a list of [ name, country, safeguard ] for every cookie with
+	 * transfer.enabled=true, EXCLUDING the wordpress-internal category and any
+	 * WP-internal cookie (same guards as build_cookie_list_html) so an admin-only
+	 * cookie can never surface. Cached 5 min in the faz_cookie_policy group,
+	 * matching the cookie-list cache lifetime.
+	 *
+	 * @param string $lang Active policy language.
+	 * @return array<int,array{name:string,country:string,safeguard:string}>
+	 */
+	private static function collect_transfer_disclosures( $lang ) {
+		$cache_key = 'faz_cookie_policy_transfers_' . $lang;
+		if ( isset( self::$transfer_cache[ $cache_key ] ) ) {
+			return self::$transfer_cache[ $cache_key ];
+		}
+		$cached = wp_cache_get( $cache_key, 'faz_cookie_policy' );
+		if ( false !== $cached && is_array( $cached ) ) {
+			self::$transfer_cache[ $cache_key ] = $cached;
+			return $cached;
+		}
+
+		$rows = self::load_public_cookie_rows();
+
+		$out = array();
+		foreach ( (array) $rows as $row ) {
+			$name = (string) ( $row['cookie_name'] ?? '' );
+			$transfer = self::decode_transfer_meta( $row['cookie_meta'] ?? '' );
+			if ( empty( $transfer['enabled'] ) ) {
+				continue;
+			}
+			$out[] = array(
+				'name'      => $name,
+				'country'   => self::resolve_i18n_array( $transfer['countries'], $lang ),
+				'safeguard' => self::resolve_i18n_array( $transfer['safeguard'], $lang ),
+			);
+		}
+
+		wp_cache_set( $cache_key, $out, 'faz_cookie_policy', 5 * MINUTE_IN_SECONDS );
+		self::$transfer_cache[ $cache_key ] = $out;
+		return $out;
+	}
+
+	/**
+	 * Build the "International data transfers" policy section.
+	 *
+	 * Emits a neutral GDPR Art. 44-49 framing paragraph followed by a per-cookie
+	 * list of recipient country + admin-described safeguard. It states the FACT
+	 * that a transfer occurs and surfaces the safeguard — it NEVER asserts the
+	 * transfer is legally valid (that is the site controller's responsibility).
+	 * Returns '' when no cookie is flagged (empty-state), so the section and its
+	 * accountability fingerprint are absent on a default-OFF install.
+	 *
+	 * The fixed section labels are resolved in the policy language via the same
+	 * switch_to_locale( faz_wp_locale( $lang ) ) mechanism the banner template
+	 * generator (class-template::generate()) and the banner REST endpoint use,
+	 * so they follow $lang like the per-cookie country/safeguard values do —
+	 * instead of resolving against the ambient request locale (which differs
+	 * from $lang when the policy is rendered via the [faz_cookie_policy_complete
+	 * lang="…"] attribute or the preview REST endpoint).
+	 *
+	 * @param string $lang Active policy language.
+	 * @return string HTML section, or '' when nothing is flagged.
+	 */
+	private static function international_transfers_section( $lang ) {
+		$rows = self::collect_transfer_disclosures( $lang );
+		if ( empty( $rows ) ) {
+			return '';
+		}
+
+		// Resolve every fixed label in the policy language up front (see docblock),
+		// then build the markup after restoring the locale.
+		$switched         = self::switch_to_policy_locale( $lang );
+		$heading          = esc_html__( 'International data transfers', 'faz-cookie-manager' );
+		$intro            = esc_html__( 'Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice.', 'faz-cookie-manager' );
+		$recipient_label  = esc_html__( 'Recipient country:', 'faz-cookie-manager' );
+		$outside_label    = esc_html__( 'transfers personal data outside the EU/EEA', 'faz-cookie-manager' );
+		$safeguard_label  = esc_html__( 'Safeguard:', 'faz-cookie-manager' );
+		self::restore_policy_locale( $switched );
+
+		$parts   = array();
+		$parts[] = '<section class="faz-cookie-policy-transfers">';
+		$parts[] = '<h2 class="faz-cookie-policy-transfers-title">' . $heading . '</h2>';
+		$parts[] = '<p>' . $intro . '</p>';
+		$parts[] = '<ul class="faz-cookie-policy-transfers-list">';
+		foreach ( $rows as $r ) {
+			$line = '<code>' . esc_html( (string) $r['name'] ) . '</code>';
+			if ( '' !== (string) $r['country'] ) {
+				$line .= ' &mdash; ' . $recipient_label . ' ' . esc_html( (string) $r['country'] );
+			} else {
+				$line .= ' &mdash; ' . $outside_label;
+			}
+			if ( '' !== (string) $r['safeguard'] ) {
+				$line .= '. ' . $safeguard_label . ' ' . wp_kses_post( (string) $r['safeguard'] );
+			}
+			$parts[] = '<li>' . $line . '</li>';
+		}
+		$parts[] = '</ul>';
+		$parts[] = '</section>';
+		return "\n" . implode( "\n", $parts );
+	}
+
+	/**
+	 * Switch the WordPress locale to the policy language so fixed __()/esc_html__()
+	 * labels resolve in that language, mirroring class-template::generate() and the
+	 * banner REST endpoint (single source of truth: faz_wp_locale()). No-op when
+	 * the helpers are unavailable or the target locale already matches the active
+	 * one — so the common case (ambient locale already == $lang, e.g. WPML/Polylang
+	 * per-page) stays a byte-identical no-op.
+	 *
+	 * @param string $lang Policy language code.
+	 * @return bool Whether a switch happened; pass it to restore_policy_locale().
+	 */
+	private static function switch_to_policy_locale( $lang ) {
+		if ( ! function_exists( 'faz_wp_locale' ) || ! function_exists( 'switch_to_locale' ) ) {
+			return false;
+		}
+		$target = faz_wp_locale( (string) $lang );
+		if ( '' === $target || ( function_exists( 'get_locale' ) && $target === get_locale() ) ) {
+			return false;
+		}
+		return (bool) switch_to_locale( $target );
+	}
+
+	/**
+	 * Pair switch_to_policy_locale(): restore the previous locale when a switch
+	 * actually happened.
+	 *
+	 * @param bool $switched Return value of switch_to_policy_locale().
+	 * @return void
+	 */
+	private static function restore_policy_locale( $switched ) {
+		if ( $switched && function_exists( 'restore_previous_locale' ) ) {
+			restore_previous_locale();
+		}
 	}
 
 	/**

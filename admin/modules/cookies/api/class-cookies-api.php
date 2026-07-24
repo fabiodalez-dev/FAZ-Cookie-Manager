@@ -486,6 +486,22 @@ class Cookies_API extends API_Controller {
 					'type'        => 'string',
 					'context'     => array( 'view', 'edit' ),
 				),
+				'transfer'       => array(
+					'description'       => __( 'Third-country (Schrems II) personal-data transfer disclosure for this cookie.', 'faz-cookie-manager' ),
+					'type'              => 'object',
+					// Visible in both contexts: this is not sensitive raw JS, it is
+					// a transparency disclosure that the frontend store and the
+					// public Cookie Policy both consume from the 'view' context.
+					'context'           => array( 'view', 'edit' ),
+					// No unfiltered_html gate — not a script field. The safeguard
+					// text is still markup-filtered via wp_kses in the sanitiser.
+					'sanitize_callback' => array( __CLASS__, 'sanitize_transfer_field' ),
+					'properties'        => array(
+						'enabled'   => array( 'type' => 'boolean' ),
+						'countries' => array( 'type' => 'object' ),
+						'safeguard' => array( 'type' => 'object' ),
+					),
+				),
 				'opt_in_script'  => array(
 					'description'       => __( 'JavaScript executed when this cookie\'s category is accepted.', 'faz-cookie-manager' ),
 					'type'              => 'string',
@@ -669,6 +685,29 @@ class Cookies_API extends API_Controller {
 			);
 		}
 		return (string) $value;
+	}
+
+	/**
+	 * Structurally sanitise the third-country transfer schema property.
+	 *
+	 * Defence-in-depth for the REST boundary: coerces the incoming object into
+	 * the { enabled:bool, countries:{lang:text}, safeguard:{lang:html} } shape
+	 * before it reaches Cookie::set_transfer(). Both boundaries call the shared
+	 * Cookie::sanitize_transfer_value() helper, so defence in depth is retained
+	 * without duplicating coercion rules.
+	 *
+	 * Unlike sanitize_script_field this NEVER returns a WP_Error: the transfer
+	 * disclosure carries no unfiltered_html-gated content (the safeguard text is
+	 * markup-filtered, not executed), so an editor with manage_options may save
+	 * it. A non-object simply collapses to the disabled default.
+	 *
+	 * @param mixed           $value   Raw request value.
+	 * @param WP_REST_Request $request Request object (unused; REST signature).
+	 * @param string          $param   Parameter name (unused; REST signature).
+	 * @return array
+	 */
+	public static function sanitize_transfer_field( $value, $request = null, $param = '' ) {
+		return Cookie::sanitize_transfer_value( $value );
 	}
 
 	/**
