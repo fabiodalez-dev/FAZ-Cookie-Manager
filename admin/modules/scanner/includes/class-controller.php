@@ -48,6 +48,7 @@ class Controller {
 		'type'          => 'local',
 		'date'          => '',
 		'total_cookies' => 0,
+		'new_cookies'   => 0,
 		'pages_scanned' => 0,
 	);
 
@@ -1414,6 +1415,10 @@ class Controller {
 			'type'          => sanitize_text_field( $data['type'] ),
 			'date'          => sanitize_text_field( $data['date'] ),
 			'total_cookies' => absint( $data['total_cookies'] ),
+			// Rows actually added by the last scan — run_scan() passes it and
+			// scans/info surfaces it; without this whitelist entry the value
+			// was silently dropped before update_option.
+			'new_cookies'   => absint( $data['new_cookies'] ),
 			'pages_scanned' => absint( $data['pages_scanned'] ),
 		);
 

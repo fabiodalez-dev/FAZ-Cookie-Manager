@@ -50,7 +50,14 @@ function restore(snap: string): void {
   wpEval(`
     $snap = json_decode( base64_decode( '${b64}' ), true );
     if ( is_array( $snap['settings'] ) ) { update_option( 'faz_settings', $snap['settings'] ); }
-    if ( isset( $snap['gcm'] ) && is_array( $snap['gcm'] ) ) { update_option( 'faz_gcm_settings', $snap['gcm'] ); }
+    if ( isset( $snap['gcm'] ) && is_array( $snap['gcm'] ) ) {
+      update_option( 'faz_gcm_settings', $snap['gcm'] );
+    } else {
+      // The option did not exist at snapshot time (get_option returned false)
+      // — a wizard run may have created it; remove it so GCM state cannot
+      // leak into later tests.
+      delete_option( 'faz_gcm_settings' );
+    }
     if ( ! empty( $snap['banner_id'] ) && is_string( $snap['banner'] ) && '' !== $snap['banner'] ) {
       global $wpdb;
       $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => $snap['banner'] ), array( 'banner_id' => (int) $snap['banner_id'] ), array( '%s' ), array( '%d' ) );
@@ -290,6 +297,17 @@ test.describe('Guided setup wizard', () => {
     const snap = snapshot();
     try {
       forceIncomplete();
+      // Deterministic payment-gateway fixture: an already-enabled gateway is
+      // ALWAYS listed by the recommendations endpoint (source 'enabled',
+      // pre-checked), independent of what the scanner found. The test then
+      // UNTICKS it, proving the explicit { key: bool } payload genuinely
+      // disables a previously always-allowed gateway on Finish.
+      wpEval(`
+        $s = get_option( 'faz_settings' );
+        $s['script_blocking']['payment_gateways']['stripe'] = true;
+        update_option( 'faz_settings', $s );
+        echo 'seeded';
+      `);
       await loginAsAdmin(page);
       await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
 
@@ -302,10 +320,18 @@ test.describe('Guided setup wizard', () => {
       // Step 4 — GCM on.
       await page.click('#faz-setup-next');
       await page.locator('#faz-setup-gcm').check();
-      // Steps 5-7 — pass through (payment list may or may not be populated here;
-      // gateway persistence is covered by the PHP unit suite).
+      // Steps 5-6 — pass through; step 7 — untick the pre-checked Stripe row.
+      await page.click('#faz-setup-next'); // → 5 (TCF)
+      await page.click('#faz-setup-next'); // → 6 (geo)
+      await page.click('#faz-setup-next'); // → 7 (scan + payments)
+      await expect(page.locator('.faz-wizard-step[data-step="7"]')).toBeVisible();
+      const stripe = page.locator('#faz-setup-payments-list input[data-gateway="stripe"]');
+      await expect(stripe).toBeChecked({ timeout: 10_000 }); // pre-checked from stored state
+      await stripe.uncheck();
       await advanceToReview(page);
       await expect(page.locator('#faz-setup-review')).toContainText('Italian');
+      // The deselection of a previously-enabled gateway is disclosed.
+      await expect(page.locator('#faz-setup-review')).toContainText('Stripe');
 
       await page.click('#faz-setup-finish');
       await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
@@ -318,6 +344,7 @@ test.describe('Guided setup wizard', () => {
           'selected'    => isset( $s['languages']['selected'] ) ? $s['languages']['selected'] : array(),
           'per_service' => ! empty( $s['banner_control']['per_service_consent'] ),
           'gcm'         => ! empty( $g['status'] ),
+          'stripe'      => ! empty( $s['script_blocking']['payment_gateways']['stripe'] ),
         ) );
       `).trim();
       const persisted = JSON.parse(raw);
@@ -325,6 +352,8 @@ test.describe('Guided setup wizard', () => {
       expect(persisted.selected).toContain('it');
       expect(persisted.per_service).toBe(true);
       expect(persisted.gcm).toBe(true);
+      // Unticked in the wizard → genuinely disabled, not merge-kept true.
+      expect(persisted.stripe).toBe(false);
     } finally {
       restore(snap);
     }
