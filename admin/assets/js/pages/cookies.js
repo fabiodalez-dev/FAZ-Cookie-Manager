@@ -287,9 +287,19 @@
 			tdDesc.appendChild(descInput);
 			tr.appendChild(tdDesc);
 
-			// Sale / Sharing flags (CCPA/CPRA). The "necessary" category is never
-			// a sale or a share (it is exempt from the opt-out by definition), so
-			// we don't offer the toggles for it.
+			// Sale / Sharing flags (CCPA/CPRA). The column is hidden entirely on
+			// pure-GDPR sites (no active banner with a Do-Not-Sell surface —
+			// data-show-ccpa="0" from the PHP view): the flags would drive
+			// nothing visitor-facing there. Skipping the cell also means
+			// saveCategoryEdits() never sends the flags, so stored values are
+			// preserved for a later law switch.
+			var catTable = document.getElementById('faz-category-edit-table');
+			if (catTable && catTable.getAttribute('data-show-ccpa') === '0') {
+				tbody.appendChild(tr);
+				return;
+			}
+			// The "necessary" category is never a sale or a share (it is exempt
+			// from the opt-out by definition), so we don't offer its toggles.
 			var tdSaleShare = document.createElement('td');
 			if (cat.slug === 'necessary') {
 				var naSpan = document.createElement('span');

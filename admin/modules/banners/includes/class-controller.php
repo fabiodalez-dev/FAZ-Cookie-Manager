@@ -1080,6 +1080,40 @@ class Controller extends Base_Controller {
 		return $this->prepare_item( $item );
 	}
 	/**
+	 * Whether ANY active banner exposes the CCPA/CPRA Do-Not-Sell surface.
+	 *
+	 * True when an active row is stored under the ccpa (or legacy gdpr_ccpa)
+	 * law, or has the Do-Not-Sell entry point enabled (the "Both" wizard choice
+	 * stores applicableLaw='gdpr' WITH donotSell on). Used by the admin Cookies
+	 * page to hide the Sale/Sharing category column on pure-GDPR sites, where
+	 * the flags drive nothing visitor-facing.
+	 *
+	 * @return boolean
+	 */
+	public function has_do_not_sell_surface() {
+		global $wpdb;
+		if ( false === $this->table_exist() ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- read-only admin-page check over the plugin's own prefix+literal table; a handful of rows, no user input.
+		$rows = $wpdb->get_col( "SELECT `settings` FROM `{$wpdb->prefix}faz_banners` WHERE `status` = 1" );
+		foreach ( (array) $rows as $json ) {
+			$settings = json_decode( (string) $json, true );
+			if ( ! is_array( $settings ) ) {
+				continue;
+			}
+			$law = isset( $settings['settings']['applicableLaw'] ) ? $settings['settings']['applicableLaw'] : '';
+			if ( in_array( $law, array( 'ccpa', 'gdpr_ccpa' ), true ) ) {
+				return true;
+			}
+			if ( ! empty( $settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Load template from either a localhost or web app
 	 *
 	 * @param Banner $object Banner object.

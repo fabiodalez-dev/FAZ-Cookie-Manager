@@ -344,6 +344,13 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 	white-space: nowrap;
 	min-height: 40px;
 }
+/* The display rule above (a class selector) beats the UA `[hidden]` rule, so a
+   button toggled off with the hidden attribute — e.g. the setup wizard's Next
+   button on the final step — would stay visible and clickable. Re-assert hidden
+   with matching specificity. */
+.faz-btn[hidden] {
+	display: none;
+}
 .faz-btn:focus-visible {
 	outline: none;
 	box-shadow: 0 0 0 3px rgba(var(--faz-primary-rgb), 0.18);
@@ -1956,6 +1963,14 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	font-size: 20px;
 	color: var(--faz-text);
 }
+/* The step title receives programmatic focus (tabindex="-1") on step changes
+   for screen-reader feedback; it is never Tab-reachable, so the visible focus
+   ring/underline is pure noise — suppress it. */
+.faz-setup-step-title:focus {
+	outline: none;
+	box-shadow: none;
+	text-decoration: none;
+}
 .faz-setup-optional,
 .faz-setup-step-title .faz-setup-optional {
 	font-size: 14px;
@@ -2030,10 +2045,197 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	color: var(--faz-text-secondary);
 	font-size: 13.5px;
 }
+/* Indeterminate activity bar for the server-side quick scan. The crawl runs in
+   a background process with no per-page signal to poll, so the bar's motion —
+   paired with the live elapsed counter in the status text — is what tells the
+   admin the scan is progressing rather than frozen. */
+.faz-setup-scan-progress {
+	align-self: stretch;
+	width: 100%;
+	max-width: 340px;
+	height: 6px;
+	border-radius: 3px;
+	background: var(--faz-primary-light);
+	overflow: hidden;
+}
+.faz-setup-scan-progress .faz-setup-scan-bar {
+	width: 40%;
+	height: 100%;
+	border-radius: 3px;
+	background: var(--faz-primary);
+}
+.faz-setup-scan-progress.is-scanning .faz-setup-scan-bar {
+	animation: faz-scan-indeterminate 1.15s ease-in-out infinite;
+}
+@keyframes faz-scan-indeterminate {
+	0%   { margin-left: -40%; }
+	100% { margin-left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+	/* No sliding motion — hold a static half-filled bar so the indicator is
+	   still visibly present without animating. */
+	.faz-setup-scan-progress.is-scanning .faz-setup-scan-bar {
+		animation: none;
+		width: 100%;
+		opacity: 0.6;
+	}
+}
 .faz-setup-scan-note {
 	margin: 0;
 	color: var(--faz-text-muted);
 	font-size: 13px;
+}
+
+/* ── Wizard v2: optional-step widgets (language, toggles, TCF, geo, payments) ── */
+
+/* With 8 progress items the labels no longer fit on narrow admin viewports —
+   keep only the active step's label visible there. */
+@media (max-width: 1100px) {
+	.faz-wizard-progress-item:not(.is-active) .faz-wizard-progress-label {
+		display: none;
+	}
+}
+
+.faz-setup-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 16px;
+}
+.faz-setup-field > label,
+.faz-setup-field-label {
+	font-weight: 600;
+	font-size: 13px;
+	color: var(--faz-text);
+}
+.faz-setup-select,
+.faz-setup-input {
+	max-width: 340px;
+}
+.faz-setup-field-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	margin-top: 4px;
+}
+.faz-setup-field-grid .faz-setup-field {
+	flex: 0 1 220px;
+	margin-bottom: 0;
+}
+
+.faz-setup-toggle-list {
+	display: grid;
+	gap: 10px;
+	margin-bottom: 16px;
+}
+.faz-setup-toggle-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 12px 14px;
+	border: 1px solid var(--faz-border);
+	border-radius: 10px;
+	background: var(--faz-bg);
+	cursor: pointer;
+	transition: border-color var(--faz-transition), box-shadow var(--faz-transition);
+}
+.faz-setup-toggle-row:hover {
+	border-color: var(--faz-primary);
+}
+.faz-setup-toggle-row input[type="checkbox"] {
+	margin-top: 2px;
+	flex: 0 0 auto;
+}
+.faz-setup-toggle-body {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+.faz-setup-toggle-label {
+	font-weight: 600;
+	font-size: 13.5px;
+	color: var(--faz-text);
+}
+.faz-setup-toggle-help {
+	font-size: 12.5px;
+	color: var(--faz-text-secondary);
+	line-height: 1.5;
+}
+
+/* Detection badge — a quiet suggestion, never a nudge. */
+.faz-setup-badge {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: var(--faz-primary-light);
+	color: var(--faz-primary-strong);
+	font-size: 11.5px;
+	font-weight: 600;
+	vertical-align: middle;
+	white-space: nowrap;
+}
+
+.faz-setup-region-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.faz-setup-region-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border: 1px solid var(--faz-border);
+	border-radius: 999px;
+	background: var(--faz-bg-secondary);
+	font-size: 13px;
+	cursor: pointer;
+}
+.faz-setup-region-chip:has(input:checked) {
+	border-color: var(--faz-primary);
+	background: var(--faz-primary-soft);
+}
+
+.faz-setup-inline-error {
+	margin: 8px 0 0;
+	color: var(--faz-danger, #b32d2e);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+/* Informational inline notes (language English-fallback, cache/bot-skip
+   interaction): quieter than an error, still clearly attached to the field. */
+.faz-setup-inline-note {
+	margin: 8px 0 0;
+	padding: 8px 12px;
+	border-left: 3px solid var(--faz-primary);
+	background: var(--faz-primary-soft);
+	color: var(--faz-text-secondary);
+	font-size: 12.5px;
+	line-height: 1.5;
+	border-radius: 0 6px 6px 0;
+}
+
+/* Review-step interaction warnings (e.g. cache compatibility bypassing geo). */
+.faz-setup-review-item.faz-setup-review-warning {
+	border-left: 3px solid var(--faz-warning, #996800);
+	background: var(--faz-warning-soft, #fdf6e7);
+	color: var(--faz-text);
+	font-size: 12.5px;
+}
+
+.faz-setup-subtitle {
+	margin: 20px 0 6px;
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--faz-text);
+}
+.faz-setup-payments {
+	border-top: 1px solid var(--faz-border);
+	margin-top: 18px;
+	padding-top: 4px;
 }
 
 .faz-setup-review {

@@ -39,6 +39,29 @@ class Onboarding {
 	const LAWS = array( 'gdpr', 'ccpa', 'both' );
 
 	/**
+	 * Geo-targeting region keys the wizard accepts — must stay in sync with the
+	 * $region_labels list rendered on Settings → Geolocation (admin/views/settings.php).
+	 *
+	 * @var string[]
+	 */
+	const REGIONS = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch' );
+
+	/**
+	 * The banner_control switches the wizard is allowed to write. A strict
+	 * allowlist so a forged payload can never toggle switches the wizard UI
+	 * does not present (e.g. ab_test or status).
+	 *
+	 * @var string[]
+	 */
+	const BANNER_CONTROL_KEYS = array(
+		'per_service_consent',
+		'gtm_datalayer',
+		'hide_from_bots',
+		'cache_compatibility',
+		'adblock_resilience',
+	);
+
+	/**
 	 * Translate a chosen jurisdiction into the exact banner fields to write.
 	 *
 	 * The mapping is the single source of truth for the wizard's compliance
@@ -257,21 +280,32 @@ class Onboarding {
 	 * GDPR Art. 5(2)/7(1). On a fresh install these are already the defaults; the
 	 * wizard only re-asserts them so a completed setup is demonstrably compliant.
 	 *
-	 * @param string $law Chosen jurisdiction ('gdpr' | 'ccpa' | 'both').
+	 * @param string $law     Chosen jurisdiction ('gdpr' | 'ccpa' | 'both').
+	 * @param array  $options Optional wizard selections beyond the law step. Recognised
+	 *                        keys (all optional; anything else is ignored):
+	 *                        'language' (string), 'banner_control' (bool map limited to
+	 *                        BANNER_CONTROL_KEYS), 'gcm' (['enabled'=>bool]),
+	 *                        'microsoft' (['uet_consent_mode','clarity_consent']),
+	 *                        'iab' (['enabled','cmp_id','publisher_cc']),
+	 *                        'geolocation' (['geo_targeting','target_regions','default_behavior']),
+	 *                        'payment_gateways' (string[] of catalog keys to opt in).
 	 * @return array|WP_Error {
 	 *     @type bool   $success        True after banner and settings are persisted.
 	 *     @type bool   $banner_applied Whether the default banner was law-switched.
 	 *     @type string $law            The persisted, validated jurisdiction.
-	 *     @type string $warning        Reserved advisory message; currently ''.
+	 *     @type string $warning        Advisory message(s); '' when there are none.
 	 * }
 	 */
-	public function finish( $law ) {
+	public function finish( $law, $options = array() ) {
 		if ( ! in_array( $law, self::LAWS, true ) ) {
 			return new WP_Error(
 				'faz_invalid_onboarding_law',
 				__( 'Choose a valid privacy law before finishing setup.', 'faz-cookie-manager' ),
 				array( 'status' => 400 )
 			);
+		}
+		if ( ! is_array( $options ) ) {
+			$options = array();
 		}
 
 		$applied = $this->apply_law_to_default_banner( $law );
@@ -304,7 +338,18 @@ class Onboarding {
 		$all['onboarding']['dismissed'] = false;
 		$all['onboarding']['law']       = $law;
 
+		// Fold the optional step selections into the same settings write so a
+		// finished wizard is one atomic Settings::update (plus the separate GCM
+		// option below). Warnings collect advisory, non-fatal notes.
+		$warnings = $this->apply_options( $options, $all );
+
 		$settings_obj->update( $all );
+
+		// GCM lives in its own option (faz_gcm_settings) with its own sanitiser.
+		if ( isset( $options['gcm']['enabled'] ) ) {
+			$gcm = new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings();
+			$gcm->update( array( 'status' => (bool) $options['gcm']['enabled'] ) );
+		}
 
 		// Regenerate the cached banner template so the law change reaches the
 		// frontend on the next request (Settings::update already fires
@@ -318,8 +363,371 @@ class Onboarding {
 			'success'        => true,
 			'banner_applied' => true,
 			'law'            => $law,
-			'warning'        => '',
+			'warning'        => implode( ' ', $warnings ),
 		);
+	}
+
+	/**
+	 * Fold the optional wizard selections into the settings array (mutated in
+	 * place, persisted by the caller's single Settings::update). Every value is
+	 * validated against a strict allowlist here AND re-sanitised downstream by
+	 * Settings::sanitize, so a forged payload cannot write outside the wizard's
+	 * surface.
+	 *
+	 * @param array $options Raw options from the REST layer.
+	 * @param array $all     Full settings array to mutate.
+	 * @return string[] Advisory warnings for the wizard's success toast.
+	 */
+	private function apply_options( array $options, array &$all ) {
+		$warnings = array();
+
+		// Banner default language — validated against the Languages catalogue.
+		if ( isset( $options['language'] ) && is_string( $options['language'] ) && '' !== $options['language'] ) {
+			$lang      = strtolower( sanitize_text_field( $options['language'] ) );
+			$available = array();
+			if ( class_exists( '\\FazCookie\\Admin\\Modules\\Languages\\Includes\\Controller' ) ) {
+				$available = array_values( \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance()->get_languages() );
+			}
+			if ( in_array( $lang, $available, true ) ) {
+				if ( ! isset( $all['languages'] ) || ! is_array( $all['languages'] ) ) {
+					$all['languages'] = array();
+				}
+				$all['languages']['default'] = $lang;
+				$selected                    = isset( $all['languages']['selected'] ) && is_array( $all['languages']['selected'] )
+					? $all['languages']['selected']
+					: array();
+				if ( ! in_array( $lang, $selected, true ) ) {
+					$selected[] = $lang;
+				}
+				$all['languages']['selected'] = array_values( array_unique( $selected ) );
+			}
+		}
+
+		// Banner control switches — strict allowlist, boolean coercion.
+		if ( isset( $options['banner_control'] ) && is_array( $options['banner_control'] ) ) {
+			foreach ( self::BANNER_CONTROL_KEYS as $key ) {
+				if ( array_key_exists( $key, $options['banner_control'] ) ) {
+					$all['banner_control'][ $key ] = (bool) $options['banner_control'][ $key ];
+				}
+			}
+			// Enabling Cache Compatibility Mode pauses the server-side A/B
+			// banner split (Frontend::maybe_apply_ab_test skips under it). The
+			// wizard has no A/B surface, so on re-entry an admin with a running
+			// experiment would never learn why it stopped — say it.
+			if ( ! empty( $all['banner_control']['cache_compatibility'] )
+				&& ! empty( $all['banner_control']['ab_test']['status'] ) ) {
+				$warnings[] = __( 'Cache Compatibility Mode pauses the running A/B banner test: variants are only split server-side, which this mode disables.', 'faz-cookie-manager' );
+			}
+		}
+
+		// Microsoft consent signals (UET / Clarity).
+		if ( isset( $options['microsoft'] ) && is_array( $options['microsoft'] ) ) {
+			if ( ! isset( $all['microsoft'] ) || ! is_array( $all['microsoft'] ) ) {
+				$all['microsoft'] = array();
+			}
+			foreach ( array( 'uet_consent_mode', 'clarity_consent' ) as $key ) {
+				if ( array_key_exists( $key, $options['microsoft'] ) ) {
+					$all['microsoft'][ $key ] = (bool) $options['microsoft'][ $key ];
+				}
+			}
+		}
+
+		// IAB TCF. The frontend only activates TCF with a registered CMP ID >= 2
+		// (frontend/class-frontend.php), and the TC-string CmpId field is 12 bits
+		// (max 4095) — silently clamping an out-of-range ID would sign TC strings
+		// attributed to a DIFFERENT CMP. Refuse both cases and tell the admin why.
+		if ( isset( $options['iab'] ) && is_array( $options['iab'] ) ) {
+			if ( ! isset( $all['iab'] ) || ! is_array( $all['iab'] ) ) {
+				$all['iab'] = array();
+			}
+			$iab_enabled = ! empty( $options['iab']['enabled'] );
+			$cmp_id      = isset( $options['iab']['cmp_id'] ) ? absint( $options['iab']['cmp_id'] ) : 0;
+			if ( $cmp_id > 0 && $cmp_id <= 4095 ) {
+				$all['iab']['cmp_id'] = $cmp_id;
+			}
+			if ( isset( $options['iab']['publisher_cc'] ) ) {
+				// Format enforcement (2-letter uppercase) happens in Settings::sanitize_option.
+				$all['iab']['publisher_cc'] = (string) $options['iab']['publisher_cc'];
+			}
+			if ( $iab_enabled && ( $cmp_id < 2 || $cmp_id > 4095 ) ) {
+				$iab_enabled = false;
+				$warnings[]  = __( 'IAB TCF was not enabled: it requires a registered CMP ID between 2 and 4095. Add it under Settings and re-enable TCF there.', 'faz-cookie-manager' );
+			}
+			$all['iab']['enabled'] = $iab_enabled;
+		}
+
+		// Geo targeting.
+		if ( isset( $options['geolocation'] ) && is_array( $options['geolocation'] ) ) {
+			if ( ! isset( $all['geolocation'] ) || ! is_array( $all['geolocation'] ) ) {
+				$all['geolocation'] = array();
+			}
+			if ( array_key_exists( 'geo_targeting', $options['geolocation'] ) ) {
+				$all['geolocation']['geo_targeting'] = (bool) $options['geolocation']['geo_targeting'];
+			}
+			if ( isset( $options['geolocation']['target_regions'] ) && is_array( $options['geolocation']['target_regions'] ) ) {
+				$regions = array_values( array_intersect( array_map( 'sanitize_key', $options['geolocation']['target_regions'] ), self::REGIONS ) );
+				if ( ! empty( $regions ) ) {
+					$all['geolocation']['target_regions'] = $regions;
+				} elseif ( ! empty( $all['geolocation']['geo_targeting'] ) ) {
+					// Geo targeting with zero regions would hide the banner for
+					// everyone under 'no_banner' — keep the safe default set instead.
+					$all['geolocation']['target_regions'] = array( 'eu', 'uk' );
+				}
+			}
+			if ( isset( $options['geolocation']['default_behavior'] ) ) {
+				$behavior = sanitize_key( $options['geolocation']['default_behavior'] );
+				$all['geolocation']['default_behavior'] = in_array( $behavior, array( 'show_banner', 'no_banner' ), true ) ? $behavior : 'show_banner';
+			}
+		}
+
+		// Per-gateway payment opt-ins. Two accepted shapes:
+		//  - map  { key => bool }: the wizard's canonical form — the checkbox
+		//    state of every gateway it SHOWED, so unticking a previously
+		//    opted-in gateway genuinely disables it (the review must never
+		//    show "off" while the stored value stays on);
+		//  - list [ key, ... ]: legacy opt-in-only form, kept for
+		//    backward compatibility (missing keys keep their state).
+		// Gateways the wizard did not mention are never touched.
+		if ( isset( $options['payment_gateways'] ) && is_array( $options['payment_gateways'] ) ) {
+			$valid = self::payment_gateway_keys();
+			if ( ! isset( $all['script_blocking'] ) || ! is_array( $all['script_blocking'] ) ) {
+				$all['script_blocking'] = array();
+			}
+			if ( ! isset( $all['script_blocking']['payment_gateways'] ) || ! is_array( $all['script_blocking']['payment_gateways'] ) ) {
+				$all['script_blocking']['payment_gateways'] = array();
+			}
+			foreach ( $options['payment_gateways'] as $key => $value ) {
+				if ( is_int( $key ) ) {
+					// Legacy list form: each entry is a gateway key to enable.
+					$gateway = sanitize_key( $value );
+					$enabled = true;
+				} else {
+					$gateway = sanitize_key( $key );
+					$enabled = (bool) $value;
+				}
+				if ( in_array( $gateway, $valid, true ) ) {
+					$all['script_blocking']['payment_gateways'][ $gateway ] = $enabled;
+				}
+			}
+		}
+
+		return $warnings;
+	}
+
+	/**
+	 * The payment gateway keys the wizard may opt in.
+	 *
+	 * @return string[]
+	 */
+	public static function payment_gateway_keys() {
+		if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
+			return array_keys( \FazCookie\Frontend\Frontend::payment_gateway_catalog() );
+		}
+		return array( 'paypal', 'stripe', 'square', 'braintree', 'klarna', 'mollie', 'amazon_pay' );
+	}
+
+	/**
+	 * Environment-aware suggestions for the wizard: detected page-cache plugin,
+	 * Google tag presence, WooCommerce, payment gateways (from active plugins
+	 * and from cookies found by the scanner), and the site's language.
+	 *
+	 * Detection is read-only and conservative — a miss only means no suggestion
+	 * badge; every switch remains available manually.
+	 *
+	 * @return array {
+	 *     @type string $site_language Two-letter (or 'zh-hans'-style) code from the WP locale.
+	 *     @type string $cache_plugin  Human label of the detected page-cache plugin, or ''.
+	 *     @type bool   $google_tags   Whether Google tags (Site Kit / GA cookies) were detected.
+	 *     @type bool   $woocommerce   Whether WooCommerce is active.
+	 *     @type array  $gateways      List of ['key','label','source'] detected payment gateways.
+	 * }
+	 */
+	public function get_recommendations() {
+		return array(
+			'site_language' => self::site_language(),
+			'cache_plugin'  => self::detect_cache_plugin(),
+			'google_tags'   => self::detect_google_tags(),
+			'woocommerce'   => class_exists( 'WooCommerce' ),
+			'gateways'      => self::detect_gateways(),
+		);
+	}
+
+	/**
+	 * Map the WP locale to a Languages-catalogue code ('it_IT' → 'it').
+	 *
+	 * Public because the wizard view uses it to pre-select the language step.
+	 *
+	 * @return string
+	 */
+	public static function site_language() {
+		$locale = function_exists( 'get_user_locale' ) ? get_user_locale() : get_locale();
+		$locale = strtolower( (string) $locale );
+		// Chinese locales map onto the script-specific catalogue entries.
+		if ( 0 === strpos( $locale, 'zh_tw' ) || 0 === strpos( $locale, 'zh_hk' ) ) {
+			return 'zh-hant';
+		}
+		if ( 0 === strpos( $locale, 'zh' ) ) {
+			return 'zh-hans';
+		}
+		// Brazilian Portuguese has its own catalogue entry (and its own bundled
+		// banner translation) — plain 'pt' would serve the European variant.
+		if ( 0 === strpos( $locale, 'pt_br' ) ) {
+			return 'pt-br';
+		}
+		$parts = explode( '_', $locale );
+		return preg_match( '/^[a-z]{2,3}$/', $parts[0] ) ? $parts[0] : 'en';
+	}
+
+	/**
+	 * Detect an active full-page-cache plugin, using the same runtime signals as
+	 * the cache-purge integrations (admin/modules/cache/services/*).
+	 *
+	 * @return string Human-readable plugin name, or '' when none detected.
+	 */
+	private static function detect_cache_plugin() {
+		$signals = array(
+			'WP Rocket'            => function_exists( 'rocket_clean_domain' ),
+			'LiteSpeed Cache'      => class_exists( '\\LiteSpeed\\Purge' ),
+			'W3 Total Cache'       => function_exists( 'w3tc_pgcache_flush' ),
+			'WP Super Cache'       => function_exists( 'wp_cache_clean_cache' ),
+			'WP Fastest Cache'     => function_exists( 'wpfc_clear_all_cache' ),
+			'FlyingPress'          => class_exists( '\\FlyingPress\\Purge' ),
+			'Hummingbird'          => class_exists( '\\Hummingbird\\WP_Hummingbird' ),
+			'Breeze'               => class_exists( 'Breeze_Admin' ),
+			'Cache Enabler'        => class_exists( 'Cache_Enabler' ),
+			'SiteGround Optimizer' => function_exists( 'sg_cachepress_purge_cache' ),
+		);
+		foreach ( $signals as $label => $active ) {
+			if ( $active ) {
+				return $label;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Whether Google tags are plausibly present: a Google integration plugin is
+	 * active, or the scanner already found Google Analytics / Ads cookies.
+	 *
+	 * @return bool
+	 */
+	private static function detect_google_tags() {
+		if ( defined( 'GOOGLESITEKIT_VERSION' ) || class_exists( 'MonsterInsights' ) || function_exists( 'monsterinsights' ) ) {
+			return true;
+		}
+		foreach ( self::discovered_cookies() as $cookie ) {
+			$name = strtolower( $cookie['name'] );
+			if ( 0 === strpos( $name, '_ga' ) || '_gid' === $name || 0 === strpos( $name, '_gcl' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Detect payment gateways from active plugins and scanner-discovered cookies.
+	 *
+	 * @return array[] Each entry: ['key' => catalog key, 'label' => human name,
+	 *                 'source' => 'plugin'|'scan'].
+	 */
+	private static function detect_gateways() {
+		$catalog = array();
+		if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
+			$catalog = \FazCookie\Frontend\Frontend::payment_gateway_catalog();
+		}
+
+		// Active-plugin signals. Checked against the active_plugins option
+		// directly so no wp-admin/includes/plugin.php load is needed in REST.
+		$active_plugins = (array) get_option( 'active_plugins', array() );
+		$plugin_map     = array(
+			'stripe'     => array( 'woocommerce-gateway-stripe/woocommerce-gateway-stripe.php' ),
+			'paypal'     => array( 'woocommerce-paypal-payments/woocommerce-paypal-payments.php' ),
+			'mollie'     => array( 'mollie-payments-for-woocommerce/mollie-payments-for-woocommerce.php' ),
+			'square'     => array( 'woocommerce-square/woocommerce-square.php' ),
+			'braintree'  => array( 'woocommerce-paypal-powered-by-braintree/woocommerce-paypal-powered-by-braintree.php' ),
+			'klarna'     => array( 'klarna-payments-for-woocommerce/klarna-payments-for-woocommerce.php', 'klarna-checkout-for-woocommerce/klarna-checkout-for-woocommerce.php' ),
+			'amazon_pay' => array( 'woocommerce-gateway-amazon-payments-advanced/woocommerce-gateway-amazon-payments-advanced.php' ),
+		);
+
+		// Cookie/domain signals from the scanner's discoveries.
+		$scan_map = array(
+			'stripe'     => array( '__stripe', 'stripe.com' ),
+			'paypal'     => array( 'paypal' ),
+			'klarna'     => array( 'klarna' ),
+			'mollie'     => array( 'mollie' ),
+			'braintree'  => array( 'braintree' ),
+			'square'     => array( 'squareup.com' ),
+			'amazon_pay' => array( 'payments-amazon' ),
+		);
+		$discovered = self::discovered_cookies();
+
+		// Current opt-in state, so the wizard can pre-tick already-enabled
+		// gateways instead of showing them off while they stay always-allowed.
+		$settings_obj = new Settings();
+		$current      = $settings_obj->get( 'script_blocking' );
+		$current_map  = isset( $current['payment_gateways'] ) && is_array( $current['payment_gateways'] )
+			? $current['payment_gateways']
+			: array();
+
+		$found = array();
+		foreach ( self::payment_gateway_keys() as $key ) {
+			$label  = isset( $catalog[ $key ]['label'] ) ? $catalog[ $key ]['label'] : ucfirst( $key );
+			$source = '';
+			foreach ( isset( $plugin_map[ $key ] ) ? $plugin_map[ $key ] : array() as $plugin_file ) {
+				if ( in_array( $plugin_file, $active_plugins, true ) ) {
+					$source = 'plugin';
+					break;
+				}
+			}
+			if ( '' === $source && isset( $scan_map[ $key ] ) ) {
+				foreach ( $discovered as $cookie ) {
+					$haystack = strtolower( $cookie['name'] . ' ' . $cookie['domain'] );
+					foreach ( $scan_map[ $key ] as $needle ) {
+						if ( false !== strpos( $haystack, $needle ) ) {
+							$source = 'scan';
+							break 2;
+						}
+					}
+				}
+			}
+			// An already-enabled gateway is always listed (even without a fresh
+			// detection signal) so the wizard shows — and lets the admin change —
+			// its true stored state.
+			$enabled = ! empty( $current_map[ $key ] );
+			if ( '' !== $source || $enabled ) {
+				$found[] = array(
+					'key'     => $key,
+					'label'   => $label,
+					'source'  => '' !== $source ? $source : 'enabled',
+					'enabled' => $enabled,
+				);
+			}
+		}
+		return $found;
+	}
+
+	/**
+	 * Scanner-discovered cookies (name + domain), cached per request.
+	 *
+	 * @return array[] Each entry: ['name' => string, 'domain' => string].
+	 */
+	private static function discovered_cookies() {
+		static $rows = null;
+		if ( null !== $rows ) {
+			return $rows;
+		}
+		global $wpdb;
+		$table = $wpdb->prefix . 'faz_cookies';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- read-only detection over the plugin's own prefix+literal table; result is memoised for the request; no user input in the query.
+		$results = $wpdb->get_results( "SELECT name, domain FROM {$table} WHERE discovered = 1 LIMIT 500", ARRAY_A );
+		$rows    = array();
+		foreach ( is_array( $results ) ? $results : array() as $row ) {
+			$rows[] = array(
+				'name'   => isset( $row['name'] ) ? (string) $row['name'] : '',
+				'domain' => isset( $row['domain'] ) ? (string) $row['domain'] : '',
+			);
+		}
+		return $rows;
 	}
 
 	/**

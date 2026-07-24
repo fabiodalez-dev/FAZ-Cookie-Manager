@@ -30,13 +30,12 @@ function check(label, condition) {
 }
 
 function markup() {
+  const progress = [1, 2, 3, 4, 5, 6, 7, 8]
+    .map((n) => `<li class="faz-wizard-progress-item${n === 1 ? ' is-active' : ''}" data-progress="${n}"></li>`)
+    .join('');
   return `<!doctype html><html><body>
     <div id="faz-setup" data-dashboard-url="https://example.test/untrusted">
-      <ol>
-        <li class="faz-wizard-progress-item is-active" data-progress="1"></li>
-        <li class="faz-wizard-progress-item" data-progress="2"></li>
-        <li class="faz-wizard-progress-item" data-progress="3"></li>
-      </ol>
+      <ol>${progress}</ol>
       <section class="faz-wizard-step is-active" data-step="1">
         <label class="faz-setup-law-card is-selected">
           <input type="radio" name="faz-setup-law" value="gdpr" data-expiry="180 days" data-buttons="Equal Accept and Reject" checked>
@@ -55,14 +54,45 @@ function markup() {
         </label>
       </section>
       <section class="faz-wizard-step" data-step="2" hidden>
-        <button type="button" id="faz-setup-scan-btn">Scan</button>
-        <p id="faz-setup-scan-status"></p>
+        <select id="faz-setup-lang"><option value="en" selected>English</option><option value="it">Italian</option></select>
       </section>
       <section class="faz-wizard-step" data-step="3" hidden>
+        <label class="faz-setup-toggle-row">
+          <input type="checkbox" id="faz-setup-bc-per_service_consent" data-bc-key="per_service_consent">
+          <span class="faz-setup-toggle-body"><span class="faz-setup-toggle-label">Per-service toggles</span></span>
+        </label>
+      </section>
+      <section class="faz-wizard-step" data-step="4" hidden>
+        <label class="faz-setup-toggle-row"><input type="checkbox" id="faz-setup-gcm"><span class="faz-setup-toggle-body"><span class="faz-setup-toggle-label">GCM v2</span></span></label>
+        <label class="faz-setup-toggle-row"><input type="checkbox" id="faz-setup-ms-uet"><span class="faz-setup-toggle-body"><span class="faz-setup-toggle-label">UET</span></span></label>
+        <label class="faz-setup-toggle-row"><input type="checkbox" id="faz-setup-ms-clarity"><span class="faz-setup-toggle-body"><span class="faz-setup-toggle-label">Clarity</span></span></label>
+      </section>
+      <section class="faz-wizard-step" data-step="5" hidden>
+        <label class="faz-setup-toggle-row"><input type="checkbox" id="faz-setup-tcf"><span class="faz-setup-toggle-body"><span class="faz-setup-toggle-label">TCF</span></span></label>
+        <input type="number" id="faz-setup-tcf-cmpid">
+        <input type="text" id="faz-setup-tcf-cc">
+        <p id="faz-setup-tcf-error" hidden>CMP ID required</p>
+      </section>
+      <section class="faz-wizard-step" data-step="6" hidden>
+        <input type="checkbox" id="faz-setup-geo">
+        <label class="faz-setup-region-chip"><input type="checkbox" name="faz-setup-geo-region" value="eu" checked>EU</label>
+        <select id="faz-setup-geo-behavior"><option value="show_banner" selected>Show</option><option value="no_banner">Hide</option></select>
+      </section>
+      <section class="faz-wizard-step" data-step="7" hidden>
+        <button type="button" id="faz-setup-scan-btn">Scan</button>
+        <div id="faz-setup-scan-progress" hidden><div class="faz-setup-scan-bar"></div></div>
+        <p id="faz-setup-scan-status"></p>
+        <div id="faz-setup-payments" hidden><div id="faz-setup-payments-list"></div></div>
+      </section>
+      <section class="faz-wizard-step" data-step="8" hidden>
         <ul id="faz-setup-review"
           data-label-law="Law"
           data-label-effect="Model"
           data-label-expiry="Expiry"
+          data-label-language="Language"
+          data-label-options="Options"
+          data-label-geo="Geo"
+          data-label-payments="Payments"
           data-logging="Logging on"></ul>
       </section>
       <button type="button" id="faz-setup-back" hidden>Back</button>
@@ -70,6 +100,13 @@ function markup() {
       <button type="button" id="faz-setup-finish" hidden>Finish</button>
     </div>
   </body></html>`;
+}
+
+/** Click Next `times` times (the wizard has 8 steps; 7 clicks reach the review). */
+function clickNext(document, times) {
+  for (let i = 0; i < times; i++) {
+    document.getElementById('faz-setup-next').click();
+  }
 }
 
 function boot({ post, get } = {}) {
@@ -154,13 +191,12 @@ console.log('guided setup wizard (30 checks)');
 
   // Malicious-looking translated text must remain text in the review.
   both.closest('.faz-setup-law-card').querySelector('.faz-setup-law-effect').textContent = '<img src=x onerror=alert(1)>';
-  document.getElementById('faz-setup-next').click();
-  document.getElementById('faz-setup-next').click();
+  clickNext(document, 7);
   const review = document.getElementById('faz-setup-review');
-  check('09 two Next clicks reach the review step', !step(3).hidden);
+  check('09 seven Next clicks reach the review step (8-step wizard)', !step(8).hidden);
   check('10 Next is hidden on the final step', document.getElementById('faz-setup-next').hidden);
   check('11 Finish is visible on the final step', !document.getElementById('faz-setup-finish').hidden);
-  check('12 review contains all five promised configuration rows', review.children.length === 5);
+  check('12 review contains the six promised configuration rows', review.children.length === 6);
   check('13 review reflects the selected law, expiry, and exact controls', review.textContent.includes('Both') && review.textContent.includes('180 days') && review.textContent.includes('Equal buttons plus US opt-out'));
   check('14 review text is never reinterpreted as HTML', review.querySelector('img') === null && review.textContent.includes('<img'));
 }
@@ -180,13 +216,18 @@ console.log('guided setup wizard (30 checks)');
   const both = document.querySelector('input[value="both"]');
   both.checked = true;
   both.dispatchEvent(new app.window.Event('change', { bubbles: true }));
-  document.getElementById('faz-setup-next').click();
-  document.getElementById('faz-setup-next').click();
+  clickNext(document, 7);
   const finish = document.getElementById('faz-setup-finish');
   finish.click();
 
   check('15 Finish posts to the onboarding endpoint', app.calls.post[0]?.endpoint === 'settings/onboarding');
-  check('16 Finish sends only the requested law', JSON.stringify(app.calls.post[0]?.payload) === JSON.stringify({ law: 'both' }));
+  const sent = app.calls.post[0]?.payload || {};
+  check('16 Finish sends the law plus the structured option groups', sent.law === 'both'
+    && sent.banner_control && sent.banner_control.per_service_consent === false
+    && sent.gcm && sent.gcm.enabled === false
+    && sent.microsoft && sent.iab && sent.iab.enabled === false
+    && sent.geolocation && sent.geolocation.geo_targeting === false
+    && !('payment_gateways' in sent));
   check('17 Finish disables navigation while saving', finish.disabled && document.getElementById('faz-setup-back').disabled);
   finish.click();
   check('18 a second Finish click cannot submit twice', app.calls.post.length === 1);

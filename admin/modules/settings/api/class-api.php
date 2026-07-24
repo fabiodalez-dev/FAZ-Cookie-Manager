@@ -189,14 +189,60 @@ class Api extends Rest_Controller {
 					'callback'            => array( $this, 'complete_onboarding' ),
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
 					'args'                => array(
-						'law' => array(
+						'law'              => array(
 							'required'          => true,
 							'type'              => 'string',
 							'enum'              => Onboarding::LAWS,
 							'sanitize_callback' => 'sanitize_key',
 							'validate_callback' => 'rest_validate_request_arg',
 						),
+						// The optional step selections. Structural validation
+						// happens at the REST boundary; the value-level
+						// allowlists live in Onboarding::apply_options() and
+						// Settings::sanitize, so nothing here is trusted alone.
+						'language'         => array(
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+							'validate_callback' => 'rest_validate_request_arg',
+						),
+						'banner_control'   => array(
+							'type'              => 'object',
+							'validate_callback' => 'rest_validate_request_arg',
+						),
+						'gcm'              => array(
+							'type'              => 'object',
+							'validate_callback' => 'rest_validate_request_arg',
+						),
+						'microsoft'        => array(
+							'type'              => 'object',
+							'validate_callback' => 'rest_validate_request_arg',
+						),
+						'iab'              => array(
+							'type'              => 'object',
+							'validate_callback' => 'rest_validate_request_arg',
+						),
+						'geolocation'      => array(
+							'type'              => 'object',
+							'validate_callback' => 'rest_validate_request_arg',
+						),
+						'payment_gateways' => array(
+							// Map { gateway => bool } (canonical: explicit state of
+							// every gateway the wizard showed) or legacy string list.
+							'type'              => array( 'object', 'array' ),
+							'validate_callback' => 'rest_validate_request_arg',
+						),
 					),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/onboarding/recommendations',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_onboarding_recommendations' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
 				),
 			)
 		);
@@ -226,10 +272,29 @@ class Api extends Rest_Controller {
 			);
 		}
 
+		$options = array();
+		foreach ( array( 'language', 'banner_control', 'gcm', 'microsoft', 'iab', 'geolocation', 'payment_gateways' ) as $key ) {
+			$value = $request->get_param( $key );
+			if ( null !== $value ) {
+				$options[ $key ] = $value;
+			}
+		}
+
 		$onboarding = new Onboarding();
-		$result     = $onboarding->finish( $law );
+		$result     = $onboarding->finish( $law, $options );
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Environment-aware wizard suggestions: detected cache plugin, Google tags,
+	 * WooCommerce, payment gateways, and the site language. Read-only.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function get_onboarding_recommendations() {
+		$onboarding = new Onboarding();
+		return rest_ensure_response( $onboarding->get_recommendations() );
 	}
 	/**
 	 * Get a collection of items.

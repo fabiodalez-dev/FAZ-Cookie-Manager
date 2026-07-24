@@ -20,6 +20,26 @@ namespace FazCookie\Includes {
 	class Store {}
 }
 
+namespace FazCookie\Admin\Modules\Languages\Includes {
+	// Minimal stand-in so apply_options()'s language validation has a catalogue
+	// to check against without bootstrapping the real Languages module.
+	class Controller {
+		private static $instance = null;
+		public static function get_instance() {
+			if ( ! self::$instance ) {
+				self::$instance = new self();
+			}
+			return self::$instance;
+		}
+		public function get_languages() {
+			return array(
+				'English' => 'en',
+				'Italian' => 'it',
+			);
+		}
+	}
+}
+
 namespace {
 	if ( ! defined( 'ABSPATH' ) ) {
 		define( 'ABSPATH', __DIR__ );
@@ -169,6 +189,75 @@ namespace {
 	// (<=182 days) always applies to them.
 	faz_assert_same( $gdpr['applicableLaw'] !== 'ccpa', true, 'gdpr stays under the 182-day non-ccpa expiry clamp' );
 	faz_assert_same( $both['applicableLaw'] !== 'ccpa', true, 'both stays under the 182-day non-ccpa expiry clamp' );
+
+	echo "\n-- wizard v2: apply_options() allowlists and gates --\n";
+
+	// Shims the option-application path needs standalone.
+	if ( ! function_exists( 'sanitize_text_field' ) ) {
+		function sanitize_text_field( $value ) {
+			return trim( strip_tags( (string) $value ) );
+		}
+	}
+	if ( ! function_exists( 'sanitize_key' ) ) {
+		function sanitize_key( $key ) {
+			return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+		}
+	}
+
+	// Reflection: apply_options is private by design (only finish() calls it);
+	// invoking it directly keeps these tests free of the Banner/DB dependency.
+	$onb    = new Onboarding();
+	$method = new \ReflectionMethod( Onboarding::class, 'apply_options' );
+	$method->setAccessible( true );
+	$run_options = function ( array $options, array $all = array() ) use ( $onb, $method ) {
+		$warnings = $method->invokeArgs( $onb, array( $options, &$all ) );
+		return array( $all, $warnings );
+	};
+
+	// Language: valid catalogue code becomes default + joins selected; junk is ignored.
+	list( $all, ) = $run_options( array( 'language' => 'it' ), array( 'languages' => array( 'selected' => array( 'en' ), 'default' => 'en' ) ) );
+	faz_assert_same( $all['languages']['default'], 'it', 'language: valid code becomes the default' );
+	faz_assert_same( $all['languages']['selected'], array( 'en', 'it' ), 'language: default is appended to selected' );
+	list( $all, ) = $run_options( array( 'language' => 'xx' ), array( 'languages' => array( 'selected' => array( 'en' ), 'default' => 'en' ) ) );
+	faz_assert_same( $all['languages']['default'], 'en', 'language: unknown code is rejected' );
+
+	// Banner control: strict allowlist — status/ab_test can never be written here.
+	list( $all, ) = $run_options( array( 'banner_control' => array( 'per_service_consent' => 1, 'status' => false, 'ab_test' => array( 'status' => true ) ) ) );
+	faz_assert_same( $all['banner_control']['per_service_consent'], true, 'banner_control: allowlisted switch is applied (bool-coerced)' );
+	faz_assert_same( array_key_exists( 'status', $all['banner_control'] ), false, 'banner_control: status is NOT writable from the wizard' );
+	faz_assert_same( array_key_exists( 'ab_test', $all['banner_control'] ), false, 'banner_control: ab_test is NOT writable from the wizard' );
+
+	// IAB TCF: enabling without a registered CMP ID (>=2) is refused with a warning.
+	list( $all, $warnings ) = $run_options( array( 'iab' => array( 'enabled' => true, 'cmp_id' => 0 ) ) );
+	faz_assert_same( $all['iab']['enabled'], false, 'iab: enable without CMP ID is refused (frontend would ignore it)' );
+	faz_assert_same( count( $warnings ) === 1, true, 'iab: the refusal carries an advisory warning' );
+	list( $all, $warnings ) = $run_options( array( 'iab' => array( 'enabled' => true, 'cmp_id' => 300, 'publisher_cc' => 'it' ) ) );
+	faz_assert_same( $all['iab']['enabled'], true, 'iab: enable with a valid CMP ID sticks' );
+	faz_assert_same( $all['iab']['cmp_id'], 300, 'iab: CMP ID persisted as int' );
+	faz_assert_same( $warnings, array(), 'iab: no warning for a valid TCF configuration' );
+
+	// Geo: junk regions filtered by the whitelist; zero regions with targeting on
+	// falls back to the safe eu+uk set; behavior enum enforced.
+	list( $all, ) = $run_options( array( 'geolocation' => array( 'geo_targeting' => true, 'target_regions' => array( 'eu', 'mars', 'uk' ), 'default_behavior' => 'no_banner' ) ) );
+	faz_assert_same( $all['geolocation']['target_regions'], array( 'eu', 'uk' ), 'geo: unknown regions are filtered out' );
+	faz_assert_same( $all['geolocation']['default_behavior'], 'no_banner', 'geo: valid behavior is applied' );
+	list( $all, ) = $run_options( array( 'geolocation' => array( 'geo_targeting' => true, 'target_regions' => array( 'mars' ), 'default_behavior' => 'explode' ) ) );
+	faz_assert_same( $all['geolocation']['target_regions'], array( 'eu', 'uk' ), 'geo: all-junk regions fall back to the safe eu+uk set' );
+	faz_assert_same( $all['geolocation']['default_behavior'], 'show_banner', 'geo: unknown behavior falls back to show_banner' );
+
+	// Payment gateways: valid keys opt in, junk ignored, existing map preserved.
+	list( $all, ) = $run_options(
+		array( 'payment_gateways' => array( 'stripe', 'evil_gateway' ) ),
+		array( 'script_blocking' => array( 'payment_gateways' => array( 'paypal' => true, 'stripe' => false ) ) )
+	);
+	faz_assert_same( $all['script_blocking']['payment_gateways']['stripe'], true, 'payments: detected gateway is opted in' );
+	faz_assert_same( $all['script_blocking']['payment_gateways']['paypal'], true, 'payments: pre-existing opt-ins are preserved' );
+	faz_assert_same( array_key_exists( 'evil_gateway', $all['script_blocking']['payment_gateways'] ), false, 'payments: unknown gateway keys are ignored' );
+
+	// Constants stay in sync with the surfaces they mirror.
+	faz_assert_same( Onboarding::REGIONS, array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch' ), 'REGIONS matches the Settings → Geolocation region list' );
+	faz_assert_same( Onboarding::payment_gateway_keys(), array( 'paypal', 'stripe', 'square', 'braintree', 'klarna', 'mollie', 'amazon_pay' ), 'payment_gateway_keys falls back to the full catalogue standalone' );
+	faz_assert_same( in_array( 'status', Onboarding::BANNER_CONTROL_KEYS, true ), false, 'BANNER_CONTROL_KEYS never includes the master status switch' );
 
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";

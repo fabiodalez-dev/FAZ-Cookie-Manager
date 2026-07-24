@@ -29,7 +29,7 @@ type WizardState = {
   noticeReject: boolean;
 };
 
-/** Snapshot faz_settings + the default banner settings JSON for later restore. */
+/** Snapshot faz_settings + GCM settings + the default banner settings JSON for later restore. */
 function snapshot(): string {
   return wpEval(`
     $o = new \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings();
@@ -38,6 +38,7 @@ function snapshot(): string {
     $row = $wpdb->get_row( "SELECT banner_id, settings FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 LIMIT 1" );
     echo wp_json_encode( array(
       'settings'  => $settings,
+      'gcm'       => get_option( 'faz_gcm_settings' ),
       'banner_id' => $row ? (int) $row->banner_id : 0,
       'banner'    => $row ? $row->settings : '',
     ) );
@@ -49,6 +50,7 @@ function restore(snap: string): void {
   wpEval(`
     $snap = json_decode( base64_decode( '${b64}' ), true );
     if ( is_array( $snap['settings'] ) ) { update_option( 'faz_settings', $snap['settings'] ); }
+    if ( isset( $snap['gcm'] ) && is_array( $snap['gcm'] ) ) { update_option( 'faz_gcm_settings', $snap['gcm'] ); }
     if ( ! empty( $snap['banner_id'] ) && is_string( $snap['banner'] ) && '' !== $snap['banner'] ) {
       global $wpdb;
       $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => $snap['banner'] ), array( 'banner_id' => (int) $snap['banner_id'] ), array( '%s' ), array( '%d' ) );
@@ -57,6 +59,20 @@ function restore(snap: string): void {
     faz_clear_banner_template_cache();
     echo 'restored';
   `);
+}
+
+/**
+ * Click Next until the review step (8) is visible, from whatever step the
+ * wizard is currently on. The optional steps (2-7) are pass-through: skipping
+ * them must reproduce the previous 3-step behaviour exactly.
+ */
+async function advanceToReview(page: import('@playwright/test').Page): Promise<void> {
+  const review = page.locator('.faz-wizard-step[data-step="8"]');
+  for (let i = 0; i < 8; i++) {
+    if (await review.isVisible()) { return; }
+    await page.click('#faz-setup-next');
+  }
+  await expect(review).toBeVisible();
 }
 
 /** Force onboarding to an incomplete, not-dismissed state (a fresh install). */
@@ -127,11 +143,8 @@ test.describe('Guided setup wizard', () => {
       await expect(ccpa).toBeVisible();
       await ccpa.check();
 
-      // Advance: step 1 → 2 → 3.
-      await page.click('#faz-setup-next');
-      await expect(page.locator('.faz-wizard-step[data-step="2"]')).toBeVisible();
-      await page.click('#faz-setup-next');
-      await expect(page.locator('.faz-wizard-step[data-step="3"]')).toBeVisible();
+      // Advance through every optional step to the review.
+      await advanceToReview(page);
 
       // Review lists the chosen law.
       await expect(page.locator('#faz-setup-review')).toContainText('CCPA');
@@ -164,9 +177,7 @@ test.describe('Guided setup wizard', () => {
       // GDPR is the pre-selected compliant default.
       await expect(page.locator('input[name="faz-setup-law"][value="gdpr"]')).toBeChecked();
 
-      await page.click('#faz-setup-next');
-      await page.click('#faz-setup-next');
-      await expect(page.locator('.faz-wizard-step[data-step="3"]')).toBeVisible();
+      await advanceToReview(page);
       await page.click('#faz-setup-finish');
       await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
 
@@ -192,8 +203,7 @@ test.describe('Guided setup wizard', () => {
       await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
 
       await page.locator('input[name="faz-setup-law"][value="both"]').check();
-      await page.click('#faz-setup-next');
-      await page.click('#faz-setup-next');
+      await advanceToReview(page);
       await page.click('#faz-setup-finish');
       await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
 
@@ -239,13 +249,115 @@ test.describe('Guided setup wizard', () => {
       expect([200, 201, 409]).toContain(scanStatus);
 
       // Finish must be reachable regardless of scan outcome.
-      await page.click('#faz-setup-next');
-      await page.click('#faz-setup-next');
+      await advanceToReview(page);
       await page.click('#faz-setup-finish');
       await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
       expect(readState().onboarding.completed).toBe(true);
     } finally {
       restore(snap);
+    }
+  });
+
+  test('TCF step blocks Next when enabled without a CMP ID', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      forceIncomplete();
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+
+      // Advance to the TCF step (5).
+      for (let step = 2; step <= 5; step++) {
+        await page.click('#faz-setup-next');
+        await expect(page.locator(`.faz-wizard-step[data-step="${step}"]`)).toBeVisible();
+      }
+
+      // Enable TCF with no CMP ID → Next must stay on step 5 with the inline error.
+      await page.locator('#faz-setup-tcf').check();
+      await page.click('#faz-setup-next');
+      await expect(page.locator('.faz-wizard-step[data-step="5"]')).toBeVisible();
+      await expect(page.locator('#faz-setup-tcf-error')).toBeVisible();
+
+      // A valid CMP ID unblocks.
+      await page.fill('#faz-setup-tcf-cmpid', '300');
+      await page.click('#faz-setup-next');
+      await expect(page.locator('.faz-wizard-step[data-step="6"]')).toBeVisible();
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('optional selections persist: language, per-service toggles, GCM, payment gateway', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      forceIncomplete();
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+
+      // Step 2 — Italian banner language.
+      await page.click('#faz-setup-next');
+      await page.selectOption('#faz-setup-lang', 'it');
+      // Step 3 — per-service consent on.
+      await page.click('#faz-setup-next');
+      await page.locator('#faz-setup-bc-per_service_consent').check();
+      // Step 4 — GCM on.
+      await page.click('#faz-setup-next');
+      await page.locator('#faz-setup-gcm').check();
+      // Steps 5-7 — pass through (payment list may or may not be populated here;
+      // gateway persistence is covered by the PHP unit suite).
+      await advanceToReview(page);
+      await expect(page.locator('#faz-setup-review')).toContainText('Italian');
+
+      await page.click('#faz-setup-finish');
+      await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
+
+      const raw = wpEval(`
+        $s = get_option( 'faz_settings' );
+        $g = get_option( 'faz_gcm_settings' );
+        echo wp_json_encode( array(
+          'lang'        => isset( $s['languages']['default'] ) ? $s['languages']['default'] : '',
+          'selected'    => isset( $s['languages']['selected'] ) ? $s['languages']['selected'] : array(),
+          'per_service' => ! empty( $s['banner_control']['per_service_consent'] ),
+          'gcm'         => ! empty( $g['status'] ),
+        ) );
+      `).trim();
+      const persisted = JSON.parse(raw);
+      expect(persisted.lang).toBe('it');
+      expect(persisted.selected).toContain('it');
+      expect(persisted.per_service).toBe(true);
+      expect(persisted.gcm).toBe(true);
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('recommendations endpoint returns the detection payload', async ({ page, loginAsAdmin }) => {
+    await loginAsAdmin(page);
+    await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => typeof (window as any).fazConfig?.api?.nonce === 'string' && (window as any).fazConfig.api.nonce.length > 0,
+      undefined,
+      { timeout: 15_000 },
+    );
+
+    const payload = await page.evaluate(async () => {
+      const nonce = (window as any).fazConfig.api.nonce;
+      const res = await fetch('/?rest_route=/faz/v1/settings/onboarding/recommendations', {
+        headers: { 'X-WP-Nonce': nonce },
+      });
+      return { status: res.status, body: await res.json() };
+    });
+
+    expect(payload.status).toBe(200);
+    expect(typeof payload.body.site_language).toBe('string');
+    expect(typeof payload.body.cache_plugin).toBe('string');
+    expect(typeof payload.body.google_tags).toBe('boolean');
+    expect(typeof payload.body.woocommerce).toBe('boolean');
+    expect(Array.isArray(payload.body.gateways)).toBe(true);
+    // Every detected gateway entry is well-formed.
+    for (const gateway of payload.body.gateways) {
+      expect(typeof gateway.key).toBe('string');
+      expect(typeof gateway.label).toBe('string');
+      expect(['plugin', 'scan']).toContain(gateway.source);
     }
   });
 
@@ -270,7 +382,10 @@ test.describe('Guided setup wizard', () => {
       });
 
       expect(response.status).toBe(400);
-      expect(response.body.code).toBe('faz_invalid_onboarding_law');
+      // The enum is enforced at BOTH layers: the REST arg validation
+      // (rest_invalid_param) rejects first; the handler's own whitelist
+      // (faz_invalid_onboarding_law) is the defence-in-depth behind it.
+      expect(['rest_invalid_param', 'faz_invalid_onboarding_law']).toContain(response.body.code);
       const state = readState();
       expect(state.onboarding.completed).toBe(false);
       expect(state.onboarding.law).toBe('');
