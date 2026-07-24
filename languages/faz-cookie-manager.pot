@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-3.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FAZ Cookie Manager 1.23.0\n"
+"Project-Id-Version: FAZ Cookie Manager 1.24.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-21T08:54:05+00:00\n"
+"POT-Creation-Date: 2026-07-24T04:25:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -81,7 +81,7 @@ msgstr ""
 msgid "Cookie Policy"
 msgstr ""
 
-#: admin/class-admin.php:263 admin/class-admin.php:2199 admin/views/base.php:25
+#: admin/class-admin.php:263 admin/class-admin.php:2213 admin/views/base.php:25
 #: admin/views/dashboard.php:157 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
@@ -95,12 +95,12 @@ msgstr ""
 msgid "System Status"
 msgstr ""
 
-#: admin/class-admin.php:491 admin/class-admin.php:2172
+#: admin/class-admin.php:491 admin/class-admin.php:2186
 #: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr ""
 
-#: admin/class-admin.php:492 admin/class-admin.php:2176
+#: admin/class-admin.php:492 admin/class-admin.php:2190
 #: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr ""
@@ -1570,17 +1570,17 @@ msgstr ""
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic."
 msgstr ""
 
-#: admin/class-admin.php:2122
+#: admin/class-admin.php:2130
 msgid "Cookie Consent Overview"
 msgstr ""
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2183
+#: admin/class-admin.php:2197
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr ""
 
-#: admin/class-admin.php:2187
+#: admin/class-admin.php:2201
 msgid "View details"
 msgstr ""
 
@@ -5058,12 +5058,12 @@ msgid "Other"
 msgstr ""
 
 #: includes/class-do-not-sell-shortcode.php:71
-#: includes/class-do-not-sell-shortcode.php:188
+#: includes/class-do-not-sell-shortcode.php:237
 msgid "Your opt-out request has been received. We will not sell or share your personal information."
 msgstr ""
 
 #: includes/class-do-not-sell-shortcode.php:72
-#: includes/class-do-not-sell-shortcode.php:230
+#: includes/class-do-not-sell-shortcode.php:286
 msgid "Your opt-out has been withdrawn. You may submit a new request at any time."
 msgstr ""
 
@@ -5096,30 +5096,35 @@ msgstr ""
 msgid "As a US resident in a state with applicable privacy laws, you have the right to opt out of the sale of your personal information. Submit the form below to exercise this right."
 msgstr ""
 
-#: includes/class-do-not-sell-shortcode.php:150
-#: includes/class-do-not-sell-shortcode.php:201
+#: includes/class-do-not-sell-shortcode.php:188
+#: includes/class-do-not-sell-shortcode.php:250
 #: includes/class-dsar-shortcode.php:277
 msgid "Invalid security token. Please refresh the page and try again."
 msgstr ""
 
-#: includes/class-do-not-sell-shortcode.php:158
+#: includes/class-do-not-sell-shortcode.php:199
+#: includes/class-do-not-sell-shortcode.php:257
+msgid "This request must originate from this website."
+msgstr ""
+
+#: includes/class-do-not-sell-shortcode.php:207
 msgid "You have already opted out. We will not sell or share your personal information."
 msgstr ""
 
-#: includes/class-do-not-sell-shortcode.php:169
-#: includes/class-do-not-sell-shortcode.php:213
+#: includes/class-do-not-sell-shortcode.php:218
+#: includes/class-do-not-sell-shortcode.php:269
 #: includes/class-dsar-shortcode.php:332
 msgid "Too many requests. Please wait 1 minute before submitting again."
 msgstr ""
 
 #. translators: %s: site name
-#: includes/class-do-not-sell-shortcode.php:340
+#: includes/class-do-not-sell-shortcode.php:396
 #, php-format
 msgid "[%s] New CCPA/CPRA Do Not Sell or Share Opt-Out Request"
 msgstr ""
 
 #. translators: 1: site name, 2: date/time, 3: IP hash
-#: includes/class-do-not-sell-shortcode.php:343
+#: includes/class-do-not-sell-shortcode.php:399
 #, php-format
 msgid ""
 "A visitor on %1$s has submitted a Do Not Sell or Share My Personal Information request.\n"
