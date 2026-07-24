@@ -186,7 +186,15 @@ test.describe('CCPA opt-out form — security fixes', () => {
 
     const formPayload = { action: 'faz_dnsmpi_optout', nonce };
 
-    const res1 = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, { form: formPayload });
+    // Playwright's APIRequestContext sends no Fetch Metadata / Origin headers,
+    // so the strict same-origin gate on handle_optout() would reject these
+    // LEGITIMATE direct requests before the rate limiter under test is ever
+    // reached. Simulate what a real browser sends for the page's own form
+    // POST; cross-origin rejection coverage lives in the PHP unit suite
+    // (test-dnsmpi-csrf-php.php).
+    const sameOriginHeaders = { 'Sec-Fetch-Site': 'same-origin' };
+
+    const res1 = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, { form: formPayload, headers: sameOriginHeaders });
     const body1 = await res1.json() as { success: boolean };
     expect(body1.success, 'first CCPA opt-out should succeed').toBe(true);
 
@@ -208,6 +216,7 @@ test.describe('CCPA opt-out form — security fixes', () => {
 
     const res2 = await page.request.post(`${wpBaseURL}${AJAX_URL_PATH}`, {
       form: { action: 'faz_dnsmpi_optout', nonce: nonce2 },
+      headers: sameOriginHeaders,
     });
     const body2 = await res2.json() as { success: boolean; data?: string };
     expect(body2.success, 'second CCPA opt-out within 60 s must be blocked').toBe(false);
