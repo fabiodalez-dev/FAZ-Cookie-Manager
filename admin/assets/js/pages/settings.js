@@ -142,7 +142,10 @@
 					'Create at least two active banners on the Banner page to run an A/B test.'
 				);
 				container.appendChild(hint);
-				abVariantsReady = true;
+				// Fewer than two active banners renders no checkboxes, so
+				// serializeAbVariants() would return []. Keep abVariantsReady
+				// false (as the .catch() branch does) so saveSettings() preserves
+				// the server-stored variants instead of wiping them.
 				return;
 			}
 
