@@ -427,11 +427,16 @@ class Admin {
 		if ( false === faz_is_admin_page() ) {
 			return;
 		}
+		// filemtime as the cache-buster (same pattern as the per-page JS below):
+		// the ?ver only changes when the file actually changes, so browsers pick
+		// up stylesheet edits immediately instead of serving a stale copy until
+		// the next plugin-version bump.
+		$css_path = plugin_dir_path( __FILE__ ) . 'assets/css/faz-admin.css';
 		wp_enqueue_style(
 			'faz-admin',
 			plugin_dir_url( __FILE__ ) . 'assets/css/faz-admin.css',
 			array(),
-			$this->version
+			file_exists( $css_path ) ? (string) filemtime( $css_path ) : $this->version
 		);
 		// WordPress dashicons (for icon support in quick links, etc.).
 		wp_enqueue_style( 'dashicons' );
@@ -448,11 +453,13 @@ class Admin {
 		}
 
 		// Core utilities — wp-api-fetch on WordPress, polyfill on ClassicPress.
+		// filemtime cache-buster, same rationale as the admin stylesheet.
+		$js_path = plugin_dir_path( __FILE__ ) . 'assets/js/faz-admin.js';
 		wp_enqueue_script(
 			'faz-admin',
 			plugin_dir_url( __FILE__ ) . 'assets/js/faz-admin.js',
 			$this->get_script_dependencies(),
-			$this->version,
+			file_exists( $js_path ) ? (string) filemtime( $js_path ) : $this->version,
 			true
 		);
 
@@ -745,13 +752,25 @@ class Admin {
 						'scan_failed'               => __( 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.', 'faz-cookie-manager' ),
 						'scan_failed_notify'        => __( 'Cookie scan could not be started.', 'faz-cookie-manager' ),
 						'scan_running'              => __( 'Scanning your site… this can take a moment.', 'faz-cookie-manager' ),
+						/* translators: %d: seconds elapsed since the scan started. */
+						'scan_running_elapsed'      => __( 'Scanning your site… (%ds)', 'faz-cookie-manager' ),
 						/* translators: %d: number of cookies found by the quick scan. */
 						'scan_done_found'           => __( 'Scan complete — %d cookies found.', 'faz-cookie-manager' ),
+						/* translators: %1$d: cookies detected by this scan; %2$d: new rows added to the catalogue. */
+						'scan_done_found_new'       => __( 'Scan complete — %1$d cookies detected, %2$d new added to your catalogue.', 'faz-cookie-manager' ),
+						/* translators: %d: cookies detected by this scan (all already catalogued). */
+						'scan_done_no_new'          => __( 'Scan complete — %d cookies detected, none new (already in your catalogue).', 'faz-cookie-manager' ),
 						'scan_done_empty'           => __( 'Scan complete. No new cookies were found.', 'faz-cookie-manager' ),
 						'scan_slow'                 => __( 'The scan is still running in the background. You can finish setup now — results will appear on the Cookies page.', 'faz-cookie-manager' ),
 						'scan_status_error'         => __( 'Could not read the scan status. You can finish setup and check the Cookies page later.', 'faz-cookie-manager' ),
 						'finished'                  => __( 'Setup complete. Your cookie banner is ready.', 'faz-cookie-manager' ),
 						'finish_failed'             => __( 'Setup could not be saved. Please try again.', 'faz-cookie-manager' ),
+						/* translators: %s: name of the detected plugin (e.g. a cache plugin). */
+						'detected_named'            => __( 'Detected: %s', 'faz-cookie-manager' ),
+						'detected_google'           => __( 'Google tags detected on this site', 'faz-cookie-manager' ),
+						'detected_scan'             => __( 'Found by the cookie scan', 'faz-cookie-manager' ),
+						'detected_plugin'           => __( 'Active plugin detected', 'faz-cookie-manager' ),
+						'detected_enabled'          => __( 'Currently always allowed', 'faz-cookie-manager' ),
 					),
 					// System Status page.
 					'systemStatus'             => array(
@@ -2157,6 +2176,13 @@ class Admin {
 	 * @return void
 	 */
 	public function register_dashboard_widget() {
+		// The widget exposes aggregated consent statistics; keep it — and its
+		// render callback — visible only to users who manage the site. The WP
+		// dashboard itself is reachable by any logged-in role (e.g. Subscriber),
+		// so this gate is what prevents the data from leaking to them.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		wp_add_dashboard_widget(
 			'faz_consent_widget',
 			__( 'Cookie Consent Overview', 'faz-cookie-manager' ),
@@ -2174,6 +2200,11 @@ class Admin {
 	 * @return void
 	 */
 	public function render_dashboard_widget() {
+		// Defence in depth: never emit consent stats to a non-manager even if the
+		// callback is reached outside register_dashboard_widget()'s gate.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		// Cache the aggregation query for 5 minutes to avoid
 		// running a COUNT/SUM on every WP Dashboard page load.
 		$stats = get_transient( 'faz_dashboard_widget_stats' );
