@@ -113,25 +113,69 @@ class Controller {
 	 */
 	public function schedule_scan( $max_pages = 20 ) {
 		$max_pages = absint( $max_pages );
-		$abspath   = ABSPATH;
 
-		// Fallback for shared hosts where exec/system calls are disabled.
-		if ( ! $this->can_spawn_background_process() ) {
-			update_option( 'faz_scan_max_pages', $max_pages );
-
-			// If WP-Cron is disabled, run inline as a last-resort fallback.
-			if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
-				$this->run_scan( $max_pages );
+		// A background process spawned with exec( '… &' ) only survives when the
+		// parent is a long-lived CLI process (WP-CLI, real cron). Under a web
+		// SAPI (PHP-FPM/Apache/CGI) the detached child is tied to the FastCGI
+		// request worker and gets reaped when the request ends, so the scan dies
+		// silently mid-crawl. Only take the exec fast-path when we ARE the CLI
+		// SAPI; every web request goes through WP-Cron, which runs the scan in a
+		// separate loopback worker that outlives the triggering request.
+		if ( 'cli' === PHP_SAPI ) {
+			$cmd = $this->build_exec_scan_command( $max_pages );
+			if ( null !== $cmd ) {
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Required for background scan.
+				exec( $cmd ); // nosemgrep: php.lang.security.exec-use
 				return $this->get_info();
 			}
+		}
 
-			wp_clear_scheduled_hook( self::CRON_HOOK );
-			wp_schedule_single_event( time() + 1, self::CRON_HOOK );
+		// Web request path: hand the scan to WP-Cron.
+		update_option( 'faz_scan_max_pages', $max_pages );
 
+		// WP-Cron disabled — it will never self-trigger. Try a detached CLI
+		// spawn (best effort; may still be reaped under FPM), else run inline as
+		// the last resort so the scan is not lost.
+		if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
+			$cmd = $this->build_exec_scan_command( $max_pages );
+			if ( null !== $cmd ) {
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Required for background scan.
+				exec( $cmd ); // nosemgrep: php.lang.security.exec-use
+				return $this->get_info();
+			}
+			$this->run_scan( $max_pages );
 			return $this->get_info();
 		}
 
-		// Try WP-CLI first (most reliable).
+		wp_clear_scheduled_hook( self::CRON_HOOK );
+		wp_schedule_single_event( time() + 1, self::CRON_HOOK );
+
+		// Nudge WP-Cron with a non-blocking loopback so the scan starts now
+		// instead of waiting for the next polling request to tick cron.
+		$this->spawn_scan_cron();
+
+		return $this->get_info();
+	}
+
+	/**
+	 * Build the shell command that runs a scan in a detached background process,
+	 * or null when no usable CLI spawn exists on this host.
+	 *
+	 * Not usable when exec() is disabled, no WP-CLI is in PATH, the run-scan.php
+	 * bootstrap is absent (it is stripped from the wp.org ZIP), or no CLI PHP
+	 * interpreter can be resolved. Callers fall back to WP-Cron in those cases.
+	 *
+	 * @param int $max_pages Maximum number of pages to crawl (already absint'd by caller).
+	 * @return string|null Shell command ending in ' &', or null.
+	 */
+	private function build_exec_scan_command( $max_pages ) {
+		if ( ! $this->can_spawn_background_process() ) {
+			return null;
+		}
+
+		$abspath = ABSPATH;
+
+		// Prefer WP-CLI (most reliable when present).
 		$wp_cli = $this->find_wp_cli();
 		if ( $wp_cli ) {
 			// Build safe eval string — max_pages is already absint'd.
@@ -142,17 +186,15 @@ class Controller {
 				escapeshellarg( $eval_code ),
 				'--path=' . escapeshellarg( $abspath ),
 			);
-			$cmd = implode( ' ', $cmd_parts ) . ' > /dev/null 2>&1 &';
-		} else {
-			// Fallback: spawn PHP-CLI with bootstrap script.
-			$runner = ( defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : plugin_dir_path( __DIR__ ) . '../../../' ) . 'admin/modules/scanner/run-scan.php';
-			$runner = realpath( $runner );
-			if ( false === $runner || 0 !== strpos( $runner, realpath( FAZ_PLUGIN_BASEPATH ) ) ) {
-				return $this->get_info();
-			}
-			$php_bin = defined( 'PHP_BINARY' ) ? PHP_BINARY : '';
-			$php    = ( '' !== $php_bin ) ? $php_bin : 'php';
-			$cmd    = sprintf(
+			return implode( ' ', $cmd_parts ) . ' > /dev/null 2>&1 &';
+		}
+
+		// Fallback: spawn PHP-CLI with the bootstrap script.
+		$runner = ( defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : plugin_dir_path( __DIR__ ) . '../../../' ) . 'admin/modules/scanner/run-scan.php';
+		$runner = realpath( $runner );
+		$php    = $this->find_php_cli();
+		if ( false !== $runner && 0 === strpos( $runner, realpath( FAZ_PLUGIN_BASEPATH ) ) && '' !== $php ) {
+			return sprintf(
 				'%s %s %s %d > /dev/null 2>&1 &',
 				escapeshellarg( $php ),
 				escapeshellarg( $runner ),
@@ -161,10 +203,27 @@ class Controller {
 			);
 		}
 
-		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Required for background scan.
-		exec( $cmd ); // nosemgrep: php.lang.security.exec-use
+		return null;
+	}
 
-		return $this->get_info();
+	/**
+	 * Fire a non-blocking loopback request to wp-cron.php so a scheduled scan
+	 * event runs immediately in a fresh worker, rather than waiting for the next
+	 * front-end/admin request to tick WP-Cron. Best-effort: failure is harmless
+	 * because the polling requests will trigger the due event anyway.
+	 *
+	 * @return void
+	 */
+	private function spawn_scan_cron() {
+		$cron_url = site_url( '/wp-cron.php?doing_wp_cron=' . rawurlencode( sprintf( '%.22F', microtime( true ) ) ) );
+		wp_remote_post(
+			$cron_url,
+			array(
+				'timeout'   => 0.01,
+				'blocking'  => false,
+				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+			)
+		);
 	}
 
 	/**
@@ -283,6 +342,47 @@ class Controller {
 	}
 
 	/**
+	 * Resolve a PHP *CLI* interpreter for spawning the background scan.
+	 *
+	 * PHP_BINARY points at the current SAPI's executable, so under PHP-FPM/CGI
+	 * it is the php-fpm binary — running `php-fpm run-scan.php` does nothing.
+	 * Only trust PHP_BINARY when we are actually the CLI SAPI; otherwise derive
+	 * the CLI interpreter from PHP_BINDIR (compile-time, shared with FPM) and
+	 * common locations, then finally the shell PATH.
+	 *
+	 * @return string Absolute path to a PHP CLI binary, or 'php' as a last resort.
+	 */
+	private function find_php_cli() {
+		if ( 'cli' === PHP_SAPI && defined( 'PHP_BINARY' ) && '' !== PHP_BINARY ) {
+			return PHP_BINARY;
+		}
+
+		$candidates = array();
+		if ( defined( 'PHP_BINDIR' ) && '' !== PHP_BINDIR ) {
+			$candidates[] = rtrim( PHP_BINDIR, '/\\' ) . '/php';
+		}
+		$candidates[] = '/usr/local/bin/php';
+		$candidates[] = '/opt/homebrew/bin/php';
+		$candidates[] = '/usr/bin/php';
+		foreach ( $candidates as $candidate ) {
+			if ( @is_executable( $candidate ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- open_basedir may block the stat; treat as "not found".
+				return $candidate;
+			}
+		}
+
+		// Last resort: resolve from the shell PATH.
+		$output = array();
+		$code   = 0;
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec
+		exec( 'command -v php 2>/dev/null', $output, $code ); // nosemgrep: php.lang.security.exec-use
+		if ( 0 === $code && ! empty( $output[0] ) ) {
+			return trim( $output[0] );
+		}
+
+		return 'php';
+	}
+
+	/**
 	 * Check if shell process spawning is available on this host.
 	 *
 	 * @return bool
@@ -363,7 +463,11 @@ class Controller {
 
 			$total_cookies = count( $cookies );
 			$logger->log( 'Total unique cookies discovered: ' . $total_cookies );
-			$this->save_cookies( $cookies );
+			// new_cookies = rows actually ADDED to the catalogue this run.
+			// total_cookies counts every unique cookie this scan observed, so on
+			// a re-scan the two diverge — the wizard reports both to stay honest
+			// ("57 detected, none new" instead of a bare "57 found").
+			$new_cookies = $this->save_cookies( $cookies );
 
 			$scan_id = absint( get_option( 'faz_scan_counter', 0 ) ) + 1;
 			update_option( 'faz_scan_counter', $scan_id );
@@ -375,6 +479,7 @@ class Controller {
 					'type'          => 'local',
 					'date'          => current_time( 'mysql' ),
 					'total_cookies' => $total_cookies,
+					'new_cookies'   => $new_cookies,
 					'pages_scanned' => count( $pages ),
 				)
 			);
@@ -997,9 +1102,11 @@ class Controller {
 	 * Save discovered cookies to the database using the Cookie model.
 	 *
 	 * @param array $cookies Array of discovered cookie data arrays.
-	 * @return void
+	 * @return int Number of NEW cookie rows created (existing names are skipped,
+	 *             never overwritten — manual recategorisations always survive).
 	 */
 	public function save_cookies( $cookies ) {
+		$created = 0;
 		$logger = Scanner_Logger::get_instance();
 
 		$category_controller = Category_Controller::get_instance();
@@ -1124,11 +1231,14 @@ class Controller {
 			Cookie_Controller::get_instance()->create_item( $cookie );
 			$logger->log( '  CREATED: "' . $name . '"' );
 			$existing_names[ $name ] = true;
+			++$created;
 		}
 
 		// Flush cookie and category caches so the API returns fresh data.
 		Cookie_Controller::get_instance()->delete_cache();
 		Category_Controller::get_instance()->delete_cache();
+
+		return $created;
 	}
 
 	/**
