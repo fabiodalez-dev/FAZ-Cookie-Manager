@@ -1446,6 +1446,14 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 	background: var(--faz-danger-light);
 	color: var(--faz-danger);
 }
+/* Reserved audit keys (meta.*) in the consent-log categories cell: a
+   neutral/info pill visually distinct from the accepted/rejected colours —
+   these record accountability facts (e.g. age affirmation), not a category
+   consent decision. */
+.faz-cat-audit {
+	background: var(--faz-primary-light);
+	color: var(--faz-primary-strong);
+}
 
 /* ── Pagination ── */
 .faz-card-footer {

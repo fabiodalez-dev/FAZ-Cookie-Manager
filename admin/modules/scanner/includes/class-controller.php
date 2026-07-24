@@ -351,7 +351,9 @@ class Controller {
 	 * the CLI interpreter from PHP_BINDIR (compile-time, shared with FPM) and
 	 * common locations, then finally the shell PATH.
 	 *
-	 * @return string Absolute path to a PHP CLI binary, or 'php' as a last resort.
+	 * @return string Absolute path to a PHP CLI binary, or '' when none is
+	 *                resolvable — callers (build_exec_scan_command) treat ''
+	 *                as "no usable CLI spawn" and fall back to WP-Cron.
 	 */
 	private function find_php_cli() {
 		if ( 'cli' === PHP_SAPI && defined( 'PHP_BINARY' ) && '' !== PHP_BINARY ) {
@@ -380,7 +382,11 @@ class Controller {
 			return trim( $output[0] );
 		}
 
-		return 'php';
+		// Nothing resolvable. Return '' — NOT a blind 'php' literal, which
+		// would exec() an interpreter we never proved exists and make
+		// build_exec_scan_command()'s "no CLI → WP-Cron fallback" contract
+		// unreachable dead code.
+		return '';
 	}
 
 	/**

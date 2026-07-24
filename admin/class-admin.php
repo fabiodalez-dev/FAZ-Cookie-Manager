@@ -662,6 +662,9 @@ class Admin {
 					'consentLogs'              => array(
 						/* translators: %1$s: start index, %2$s: end index, %3$s: total entries */
 						'showing'                  => __( 'Showing %1$s\u2013%2$s of %3$s', 'faz-cookie-manager' ),
+						// Humanized label for the reserved meta.age_affirmed audit key
+						// in the categories cell (rendered as a distinct audit pill).
+						'metaAgeAffirmed'          => __( 'Age affirmed', 'faz-cookie-manager' ),
 						'loadFailed'               => __( 'Failed to load consent logs.', 'faz-cookie-manager' ),
 						'noLogs'                   => __( 'No consent logs found.', 'faz-cookie-manager' ),
 						'exportOk'                 => __( 'CSV exported successfully.', 'faz-cookie-manager' ),
