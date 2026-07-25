@@ -102,6 +102,13 @@ $faz_setup_laws = array(
 		'expiry' => __( 'Consent is remembered for up to 180 days.', 'faz-cookie-manager' ),
 		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, together with the US opt-out control.', 'faz-cookie-manager' ),
 	),
+	'popia' => array(
+		'title'  => __( 'POPIA (South Africa)', 'faz-cookie-manager' ),
+		'desc'   => __( 'For visitors covered by South Africa\'s Protection of Personal Information Act. POPIA follows an opt-in model: non-essential cookies stay blocked until the visitor gives voluntary, specific and informed consent (section 11(1)(a)), with equal-weight controls and no pre-ticked categories.', 'faz-cookie-manager' ),
+		'effect' => __( 'Opt-in model: no cookie is set before consent.', 'faz-cookie-manager' ),
+		'expiry' => __( 'Consent is remembered for up to 180 days.', 'faz-cookie-manager' ),
+		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, with no pre-ticked categories.', 'faz-cookie-manager' ),
+	),
 );
 
 /**
@@ -142,6 +149,7 @@ $faz_setup_geo_regions = array(
 	'au' => __( 'Australia', 'faz-cookie-manager' ),
 	'jp' => __( 'Japan', 'faz-cookie-manager' ),
 	'ch' => __( 'Switzerland', 'faz-cookie-manager' ),
+	'za' => __( 'South Africa', 'faz-cookie-manager' ),
 );
 $faz_wiz_geo_selected  = isset( $faz_wiz_geo['target_regions'] ) && is_array( $faz_wiz_geo['target_regions'] ) ? $faz_wiz_geo['target_regions'] : array( 'eu', 'uk' );
 

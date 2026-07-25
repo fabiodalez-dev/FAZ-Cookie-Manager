@@ -402,7 +402,7 @@ class Settings extends Store {
 				// Chosen jurisdiction for the guided setup wizard. Whitelisted so
 				// a direct settings PUT cannot persist an arbitrary string; the
 				// banner-apply logic only ever reads one of these four values.
-				$allowed = array( '', 'gdpr', 'ccpa', 'both' );
+				$allowed = array( '', 'gdpr', 'ccpa', 'both', 'popia' );
 				$value   = in_array( $value, $allowed, true ) ? $value : '';
 				break;
 			case 'scan_frequency':

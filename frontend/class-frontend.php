@@ -1358,6 +1358,7 @@ class Frontend {
 			'au' => array( 'AU' ),
 			'jp' => array( 'JP' ),
 			'ch' => array( 'CH' ),
+			'za' => array( 'ZA' ),
 		);
 
 		foreach ( $regions as $region ) {

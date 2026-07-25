@@ -36,7 +36,7 @@ class Onboarding {
 	 *
 	 * @var string[]
 	 */
-	const LAWS = array( 'gdpr', 'ccpa', 'both' );
+	const LAWS = array( 'gdpr', 'ccpa', 'both', 'popia' );
 
 	/**
 	 * Geo-targeting region keys the wizard accepts — must stay in sync with the
@@ -44,7 +44,7 @@ class Onboarding {
 	 *
 	 * @var string[]
 	 */
-	const REGIONS = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch' );
+	const REGIONS = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za' );
 
 	/**
 	 * The banner_control switches the wizard is allowed to write. A strict
@@ -113,6 +113,21 @@ class Onboarding {
 					'consentExpiry' => 180,
 					'noticeButtons' => true,
 				);
+			case 'popia':
+				// POPIA (South Africa) is an opt-in regime: section 11(1)(a)
+				// consent before non-essential processing, equal-weight
+				// controls, and no US-style Do-Not-Sell surface. The banner
+				// runtime has no dedicated 'popia' law id, so the stored
+				// model is the opt-in 'gdpr' shape — behaviourally identical
+				// for the visitor; the wizard records law='popia' so re-entry
+				// and the review reflect the actual choice.
+				return array(
+					'applicableLaw' => 'gdpr',
+					'donotSell'     => false,
+					'optoutPopup'   => false,
+					'consentExpiry' => 180,
+					'noticeButtons' => true,
+				);
 			default:
 				return null;
 		}
@@ -157,7 +172,13 @@ class Onboarding {
 			// Do not repurpose a country/law-specific banner. A fresh Banner starts
 			// from the bundled multilingual defaults and becomes the global fallback.
 			$banner = new Banner();
-			$name   = 'ccpa' === $law ? __( 'CCPA', 'faz-cookie-manager' ) : __( 'GDPR', 'faz-cookie-manager' );
+			if ( 'ccpa' === $law ) {
+				$name = __( 'CCPA', 'faz-cookie-manager' );
+			} elseif ( 'popia' === $law ) {
+				$name = __( 'POPIA', 'faz-cookie-manager' );
+			} else {
+				$name = __( 'GDPR', 'faz-cookie-manager' );
+			}
 			$banner->set_name( $name );
 			$banner->set_default( true );
 		}
