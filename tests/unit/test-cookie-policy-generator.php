@@ -234,11 +234,37 @@ assert_true(
 
 // ---------- Constants ----------
 
-assert_eq( count( Generator::JURISDICTIONS ), 3, '3 jurisdictions in scope v1' );
+assert_eq( count( Generator::JURISDICTIONS ), 4, '4 jurisdictions in scope (gdpr, ccpa, lgpd + popia added for wp.org review request)' );
 assert_eq( count( Generator::LANGUAGES ), 8, '8 languages in scope (en, it, fr, de, es, pt-BR, bg, cs)' );
 assert_eq( Generator::NATIVE_LANG['lgpd-brazil'], 'pt-BR', 'LGPD native lang is pt-BR' );
 assert_eq( Generator::NATIVE_LANG['gdpr-strict'], 'en', 'GDPR native lang is en' );
 assert_eq( Generator::NATIVE_LANG['ccpa-california'], 'en', 'CCPA native lang is en' );
+assert_eq( Generator::NATIVE_LANG['popia-southafrica'], 'en', 'POPIA native lang is en' );
+
+// ---------- POPIA templates (added for the wp.org South-Africa request) ----------
+
+// Every shipped language resolves to its own file — no silent fallback.
+foreach ( Generator::LANGUAGES as $popia_lang ) {
+	$popia_path = Generator::resolve_template_path( 'popia-southafrica', $popia_lang );
+	$normalized = is_string( $popia_path ) ? str_replace( '\\', '/', $popia_path ) : '';
+	assert_true(
+		'' !== $normalized && false !== strpos( $normalized, '/popia-southafrica/' . $popia_lang . '.md' ),
+		"POPIA template resolves for lang '{$popia_lang}'"
+	);
+}
+
+// Every POPIA template carries the placeholders the renderer substitutes,
+// and cites the Information Regulator (the POPIA supervisory authority).
+foreach ( Generator::LANGUAGES as $popia_lang ) {
+	$popia_path = Generator::resolve_template_path( 'popia-southafrica', $popia_lang );
+	$popia_body = is_string( $popia_path ) ? (string) file_get_contents( $popia_path ) : '';
+	assert_true(
+		false !== strpos( $popia_body, '{{COOKIE_CATEGORIES}}' )
+			&& false !== strpos( $popia_body, '{{COMPANY_NAME}}' )
+			&& false !== strpos( $popia_body, 'inforegulator.org.za' ),
+		"POPIA '{$popia_lang}' template has core placeholders + Information Regulator reference"
+	);
+}
 
 // ---------- Generator::policy_version_hash ----------
 

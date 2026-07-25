@@ -98,6 +98,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 						<option value="gdpr-strict"><?php esc_html_e( 'GDPR (EU / EEA / UK)', 'faz-cookie-manager' ); ?></option>
 						<option value="ccpa-california"><?php esc_html_e( 'CCPA / CPRA (California, USA)', 'faz-cookie-manager' ); ?></option>
 						<option value="lgpd-brazil"><?php esc_html_e( 'LGPD (Brazil)', 'faz-cookie-manager' ); ?></option>
+						<option value="popia-southafrica"><?php esc_html_e( 'POPIA (South Africa)', 'faz-cookie-manager' ); ?></option>
 					</select>
 					<div class="faz-help"><?php esc_html_e( 'Override per shortcode call with [faz_cookie_policy_complete jurisdiction="..."].', 'faz-cookie-manager' ); ?></div>
 				</div>

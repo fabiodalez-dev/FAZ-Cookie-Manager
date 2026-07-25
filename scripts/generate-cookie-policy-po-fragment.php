@@ -24,7 +24,7 @@ $header_source = (string) $argv[2];
 $destination   = (string) $argv[3];
 $root          = dirname( __DIR__ );
 $templates     = $root . '/admin/modules/cookie-policy-generator/templates';
-$jurisdictions = array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil' );
+$jurisdictions = array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil', 'popia-southafrica' );
 
 /**
  * Split a policy into its introduction plus H2 sections.

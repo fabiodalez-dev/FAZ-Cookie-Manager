@@ -100,8 +100,8 @@ assert_true( $hash_a !== $hash_b, 'gettext policy edits change the public policy
 $catalog_source = (string) file_get_contents( Template_Translations::CATALOG_FILE );
 assert_eq(
 	substr_count( $catalog_source, "'Cookie policy template:" ),
-	33,
-	'generated source exposes all 33 jurisdiction sections to WordPress gettext extraction'
+	44,
+	'generated source exposes all 44 jurisdiction sections to WordPress gettext extraction (10 gdpr + 13 ccpa + 10 lgpd + 11 popia)'
 );
 
 echo "\n--\n";

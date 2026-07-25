@@ -1,0 +1,72 @@
+# Cookie Policy
+
+**Ultimo aggiornamento:** {{LAST_UPDATED_DATE}}
+
+La presente Cookie Policy spiega come **{{COMPANY_NAME}}** ("noi", "nostro") utilizza cookie e tecnologie simili su questo sito web, in conformità al Protection of Personal Information Act, 2013 (POPIA) del Sudafrica e ai regolamenti emanati dall'Information Regulator.
+
+## Chi siamo
+
+Il soggetto responsabile (responsible party) del trattamento delle tue informazioni personali tramite cookie è:
+
+- **Soggetto responsabile:** {{COMPANY_NAME}}
+- **Indirizzo:** {{COMPANY_ADDRESS}}
+- **Email:** {{COMPANY_EMAIL}}
+- **Registro / numero di registrazione:** {{COMPANY_REGISTRY}}
+- **Information Officer:** {{DPO_NAME}} — {{DPO_EMAIL}}
+
+## Cosa sono i cookie
+
+I cookie sono piccoli file di testo salvati sul tuo dispositivo quando visiti il nostro sito. Ci permettono di riconoscere il tuo dispositivo nelle visite successive, ricordare le tue preferenze, misurare come viene utilizzato il sito e (con il tuo consenso) offrire pubblicità personalizzata.
+
+Utilizziamo anche tecnologie simili come **localStorage**, **sessionStorage** e **pixel tag**. Dove questa policy parla di "cookie", include anche queste tecnologie.
+
+## Base giuridica del trattamento
+
+Per i cookie **strettamente necessari**, il trattamento è giustificato dal perseguimento del nostro legittimo interesse a gestire un sito web sicuro e funzionante (POPIA, sezione 11(1)(f)) e non prevale sui tuoi interessi o diritti.
+
+Per **tutte le altre** categorie di cookie, il trattamento si basa sul tuo **consenso** ai sensi della sezione 11(1)(a) POPIA — una manifestazione di volontà libera, specifica e informata — raccolto tramite il cookie banner prima che venga impostato qualsiasi cookie non essenziale.
+
+Puoi revocare il consenso in qualsiasi momento tramite il link "Impostazioni cookie" o cancellando i cookie (POPIA, sezione 11(2)(b)). La revoca non pregiudica la liceità del trattamento effettuato prima della revoca.
+
+## Cookie utilizzati su questo sito
+
+{{COOKIE_CATEGORIES}}
+
+## Servizi di terze parti
+
+Con il tuo consenso, questo sito può caricare risorse dai seguenti servizi di terze parti, che impostano cookie propri:
+
+{{THIRD_PARTY_SERVICES}}
+
+Ogni terza parte è un soggetto responsabile autonomo (o operator, come definito nella sezione 1 POPIA) per i cookie che imposta; consulta le rispettive privacy policy. Quando una terza parte tratta informazioni personali al di fuori del Sudafrica, il trasferimento avviene alle condizioni della sezione 72 POPIA (protezione adeguata, accordo vincolante o tuo consenso).
+
+## Marketing diretto
+
+Non inviamo comunicazioni di marketing diretto elettronico non richieste. Ai sensi della sezione 69 POPIA, il marketing diretto elettronico verso chi non è cliente richiede il tuo consenso preventivo, e ogni comunicazione di marketing include un modo per rinunciare (opt-out).
+
+## Per quanto tempo conserviamo i dati
+
+I registri dei consensi e i dati analitici sono conservati per {{RETENTION_PERIOD}} dalla raccolta, in linea con i limiti di conservazione della sezione 14 POPIA. I cookie strettamente necessari sono conservati solo per la durata della sessione o per il tempo richiesto dalla funzione tecnica che svolgono. Consulta la tabella sopra per la durata specifica di ciascun cookie.
+
+## I tuoi diritti
+
+Ai sensi del POPIA (Capitolo 3, condizione 8, e sezioni 23-25) hai il diritto di:
+
+- essere informato della raccolta delle tue informazioni personali (sezione 18)
+- accedere alle informazioni personali che conserviamo su di te (sezione 23)
+- chiedere la correzione o la cancellazione di informazioni inesatte, irrilevanti, eccessive o ottenute illecitamente (sezione 24)
+- opporti al trattamento basato sul legittimo interesse (sezione 11(3))
+- opporti al trattamento per finalità di marketing diretto (sezione 11(3)(b) e sezione 69)
+- revocare il consenso in qualsiasi momento (sezione 11(2)(b))
+- non essere sottoposto a una decisione basata unicamente su un trattamento automatizzato (sezione 71)
+- presentare un reclamo all'Information Regulator (Sudafrica) — [https://inforegulator.org.za/](https://inforegulator.org.za/)
+
+Per esercitare questi diritti contatta il nostro Information Officer a **{{COMPANY_EMAIL}}**. Risponderemo entro un tempo ragionevole e comunque entro 30 giorni, come previsto dal Promotion of Access to Information Act, 2000 (PAIA) in combinato disposto con il POPIA.
+
+## Modifiche a questa policy
+
+Potremmo aggiornare questa Cookie Policy di tanto in tanto. La data di "Ultimo aggiornamento" in alto riflette la revisione più recente. Modifiche sostanziali attiveranno una nuova richiesta di consenso alla tua prossima visita.
+
+## Contatti
+
+Per qualsiasi domanda su questa Cookie Policy, contattaci a **{{COMPANY_EMAIL}}**.

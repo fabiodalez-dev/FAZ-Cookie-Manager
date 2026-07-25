@@ -40,6 +40,7 @@ class Generator {
 		'gdpr-strict',
 		'ccpa-california',
 		'lgpd-brazil',
+		'popia-southafrica',
 	);
 
 	/**
@@ -52,16 +53,19 @@ class Generator {
 
 	/**
 	 * Native language per jurisdiction (statutory bias):
-	 *   - gdpr-strict     → en (EU lingua franca for regulatory docs)
-	 *   - ccpa-california → en + es (CA bilingual mandate per §1798.130)
-	 *   - lgpd-brazil     → pt-BR
+	 *   - gdpr-strict       → en (EU lingua franca for regulatory docs)
+	 *   - ccpa-california   → en + es (CA bilingual mandate per §1798.130)
+	 *   - lgpd-brazil       → pt-BR
+	 *   - popia-southafrica → en (one of South Africa's official languages
+	 *                         and the language of the Act + Regulator guidance)
 	 *
 	 * @var array<string,string>
 	 */
 	const NATIVE_LANG = array(
-		'gdpr-strict'     => 'en',
-		'ccpa-california' => 'en',
-		'lgpd-brazil'     => 'pt-BR',
+		'gdpr-strict'       => 'en',
+		'ccpa-california'   => 'en',
+		'lgpd-brazil'       => 'pt-BR',
+		'popia-southafrica' => 'en',
 	);
 
 	/**
