@@ -42,7 +42,7 @@ Cada terceiro é uma parte responsável independente (ou operator, conforme a se
 
 ## Marketing direto
 
-Não enviamos marketing direto eletrônico não solicitado. Nos termos da seção 69 do POPIA, o marketing direto eletrônico a não clientes exige o seu consentimento prévio, e toda comunicação de marketing inclui uma forma de cancelamento (opt-out).
+Nos termos da seção 69 do POPIA, o marketing direto eletrônico a não clientes exige o seu consentimento prévio, e toda comunicação de marketing que você receber deve incluir uma forma de cancelamento (opt-out).
 
 ## Por quanto tempo conservamos os dados
 
@@ -59,9 +59,9 @@ Nos termos do POPIA (capítulo 3, condição 8, e seções 23-25), você tem o d
 - opor-se ao tratamento para fins de marketing direto (seções 11(3)(b) e 69)
 - retirar o consentimento a qualquer momento (seção 11(2)(b))
 - não ser submetido a uma decisão baseada unicamente em tratamento automatizado (seção 71)
-- apresentar uma reclamação ao Information Regulator (África do Sul) — [https://inforegulator.org.za/](https://inforegulator.org.za/)
+- apresentar uma reclamação ao Information Regulator (África do Sul) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-Para exercer esses direitos, contate nosso Information Officer em **{{COMPANY_EMAIL}}**. Responderemos em prazo razoável e, em qualquer caso, em até 30 dias, conforme previsto no Promotion of Access to Information Act, 2000 (PAIA) em conjunto com o POPIA.
+Para exercer esses direitos, contate-nos em **{{COMPANY_EMAIL}}**; se um Information Officer estiver indicado na seção "Quem somos" acima, você pode dirigir sua solicitação diretamente a ele. Responderemos em prazo razoável e, em qualquer caso, em até 30 dias, conforme previsto no Promotion of Access to Information Act, 2000 (PAIA) em conjunto com o POPIA.
 
 ## Alterações desta política
 

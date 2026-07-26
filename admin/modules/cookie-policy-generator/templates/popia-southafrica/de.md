@@ -42,7 +42,7 @@ Jeder Drittanbieter ist eine eigenständige verantwortliche Stelle (oder ein ope
 
 ## Direktmarketing
 
-Wir versenden kein unaufgefordertes elektronisches Direktmarketing. Nach Abschnitt 69 POPIA erfordert elektronisches Direktmarketing an Nichtkunden Ihre vorherige Einwilligung, und jede Marketingkommunikation enthält eine Abmeldemöglichkeit.
+Nach Abschnitt 69 POPIA erfordert elektronisches Direktmarketing an Nichtkunden Ihre vorherige Einwilligung, und jede Marketingkommunikation, die Sie erhalten, muss eine Abmeldemöglichkeit enthalten.
 
 ## Wie lange wir Daten aufbewahren
 
@@ -59,9 +59,9 @@ Nach dem POPIA (Kapitel 3, Bedingung 8, sowie Abschnitte 23-25) haben Sie das Re
 - der Verarbeitung zu Zwecken des Direktmarketings zu widersprechen (Abschnitt 11(3)(b) und Abschnitt 69)
 - Ihre Einwilligung jederzeit zu widerrufen (Abschnitt 11(2)(b))
 - keiner ausschließlich auf automatisierter Verarbeitung beruhenden Entscheidung unterworfen zu werden (Abschnitt 71)
-- eine Beschwerde beim Information Regulator (Südafrika) einzureichen — [https://inforegulator.org.za/](https://inforegulator.org.za/)
+- eine Beschwerde beim Information Regulator (Südafrika) einzureichen — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-Zur Ausübung dieser Rechte kontaktieren Sie unseren Information Officer unter **{{COMPANY_EMAIL}}**. Wir antworten innerhalb angemessener Frist, spätestens jedoch binnen 30 Tagen, wie im Promotion of Access to Information Act, 2000 (PAIA) in Verbindung mit dem POPIA vorgesehen.
+Zur Ausübung dieser Rechte kontaktieren Sie uns unter **{{COMPANY_EMAIL}}**; ist oben unter „Wer wir sind“ ein Information Officer benannt, können Sie Ihre Anfrage direkt an diese Person richten. Wir antworten innerhalb angemessener Frist, spätestens jedoch binnen 30 Tagen, wie im Promotion of Access to Information Act, 2000 (PAIA) in Verbindung mit dem POPIA vorgesehen.
 
 ## Änderungen dieser Richtlinie
 

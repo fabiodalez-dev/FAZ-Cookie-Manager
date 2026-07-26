@@ -76,7 +76,7 @@ class Generator {
 	 *   2. native lang of jurisdiction (if different)
 	 *   3. en (universal fallback)
 	 *
-	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil).
+	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil / popia-southafrica).
 	 * @param string $lang         BCP-47 (en / it / fr / de / es / pt-BR / bg / cs).
 	 * @return string|null Absolute path to .md file, or null if no template found.
 	 */

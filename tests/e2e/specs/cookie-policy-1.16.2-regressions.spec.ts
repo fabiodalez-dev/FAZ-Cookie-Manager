@@ -294,11 +294,12 @@ test.describe('Cookie Policy 1.16.2 — regression suite', () => {
     // which, after substitution, prints the full URL right after the
     // company name that's already named two clauses earlier. Pure
     // redundancy + ugly on long URLs. 1.16.3 drops the parenthetical
-    // from the 18 default scaffolds (6 langs × 3 jurisdictions). The
+    // from the default scaffolds (6 langs × the registered jurisdictions;
+    // popia-southafrica, added later, never carried it). The
     // placeholder still resolves if a section_overrides template uses
     // it — only the default body changed.
     const langs = ['en', 'it', 'fr', 'de', 'es', 'pt-BR'];
-    const jurisdictions = ['gdpr-strict', 'ccpa-california', 'lgpd-brazil'];
+    const jurisdictions = ['gdpr-strict', 'ccpa-california', 'lgpd-brazil', 'popia-southafrica'];
     for (const lang of langs) {
       for (const jurisdiction of jurisdictions) {
         const html = await callPreview({ settings: previewSettings({ default_lang: lang, jurisdiction }) });

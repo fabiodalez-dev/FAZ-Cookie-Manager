@@ -419,10 +419,13 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     expect(completeOut, 'complete emits disclaimer').toContain('faz-cookie-policy-disclaimer');
   });
 
-  test('6. 8 languages × 3 jurisdictions matrix renders without leftover tokens', async ({ page }) => {
-    // We exercise the shortcode directly via WP eval (avoids creating 24 pages).
+  test('6. 8 languages × 4 jurisdictions matrix renders without leftover tokens', async ({ page }) => {
+    // We exercise the shortcode directly via WP eval (avoids creating 32 pages).
+    // 32 WP-CLI round-trips (~1 s each) sit too close to the global 45 s cap —
+    // declare an explicit budget so a loaded CI runner cannot flake the matrix.
+    test.setTimeout(120_000);
     const langs = ['en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs'];
-    const jurisdictions = ['gdpr-strict', 'ccpa-california', 'lgpd-brazil'];
+    const jurisdictions = ['gdpr-strict', 'ccpa-california', 'lgpd-brazil', 'popia-southafrica'];
 
     for (const j of jurisdictions) {
       for (const l of langs) {
@@ -450,6 +453,13 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
         if (j === 'lgpd-brazil') {
           expect(out, `${j}/${l} mentions LGPD`).toMatch(/LGPD/);
           expect(out, `${j}/${l} mentions Encarregado`).toMatch(/Encarregado|DPO|Datenschutzbeauftragter|D[ée]l[ée]gu[ée]|Delegado/);
+        }
+        if (j === 'popia-southafrica') {
+          // The statutory citation is the load-bearing assert: a silent
+          // fallback to gdpr-strict would still pass the length/article/
+          // disclaimer checks above.
+          expect(out, `${j}/${l} mentions POPIA`).toMatch(/POPIA/);
+          expect(out, `${j}/${l} cites the Information Regulator`).toMatch(/inforegulator\.org\.za|Information Regulator/i);
         }
       }
     }

@@ -32,7 +32,7 @@ Transferts internationaux (Art. 33-36 LGPD) : pays à protection adéquate / cla
 
 Confirmation, accès, correction, anonymisation/effacement, portabilité, informations sur partages, informations sur conséquences du non-consentement, révocation (Art. 8 § 5).
 
-Contactez le DPO **{{DPO_EMAIL}}** ou le responsable **{{COMPANY_EMAIL}}**.
+Contactez le responsable **{{COMPANY_EMAIL}}** ou le DPO (Encarregado) désigné en haut de cette politique.
 
 ## Autorité
 

@@ -42,7 +42,7 @@ Cada tercero es una parte responsable independiente (u operator, según la secci
 
 ## Marketing directo
 
-No enviamos marketing directo electrónico no solicitado. Según la sección 69 de la POPIA, el marketing directo electrónico a quienes no son clientes requiere tu consentimiento previo, y toda comunicación de marketing incluye una forma de darse de baja.
+Según la sección 69 de la POPIA, el marketing directo electrónico a quienes no son clientes requiere tu consentimiento previo, y toda comunicación de marketing que recibas debe incluir una forma de darse de baja.
 
 ## Cuánto tiempo conservamos los datos
 
@@ -59,9 +59,9 @@ Conforme a la POPIA (capítulo 3, condición 8, y secciones 23-25) tienes derech
 - oponerte al tratamiento con fines de marketing directo (secciones 11(3)(b) y 69)
 - retirar tu consentimiento en cualquier momento (sección 11(2)(b))
 - no ser objeto de una decisión basada únicamente en un tratamiento automatizado (sección 71)
-- presentar una reclamación ante el Information Regulator (Sudáfrica) — [https://inforegulator.org.za/](https://inforegulator.org.za/)
+- presentar una reclamación ante el Information Regulator (Sudáfrica) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-Para ejercer estos derechos contacta con nuestro Information Officer en **{{COMPANY_EMAIL}}**. Responderemos en un plazo razonable y, en todo caso, dentro de 30 días, según lo previsto en la Promotion of Access to Information Act, 2000 (PAIA) en relación con la POPIA.
+Para ejercer estos derechos contáctanos en **{{COMPANY_EMAIL}}**; si en la sección "Quiénes somos" de arriba figura un Information Officer, puedes dirigirle tu solicitud directamente. Responderemos en un plazo razonable y, en todo caso, dentro de 30 días, según lo previsto en la Promotion of Access to Information Act, 2000 (PAIA) en relación con la POPIA.
 
 ## Cambios en esta política
 

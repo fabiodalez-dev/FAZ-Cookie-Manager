@@ -254,15 +254,17 @@ foreach ( Generator::LANGUAGES as $popia_lang ) {
 }
 
 // Every POPIA template carries the placeholders the renderer substitutes,
-// and cites the Information Regulator (the POPIA supervisory authority).
+// including the supervisory-authority URL placeholder (the literal
+// inforegulator.org.za lives only in Renderer::official_resources_url(),
+// matching the ccpa/lgpd single-source-of-truth pattern).
 foreach ( Generator::LANGUAGES as $popia_lang ) {
 	$popia_path = Generator::resolve_template_path( 'popia-southafrica', $popia_lang );
 	$popia_body = is_string( $popia_path ) ? (string) file_get_contents( $popia_path ) : '';
 	assert_true(
 		false !== strpos( $popia_body, '{{COOKIE_CATEGORIES}}' )
 			&& false !== strpos( $popia_body, '{{COMPANY_NAME}}' )
-			&& false !== strpos( $popia_body, 'inforegulator.org.za' ),
-		"POPIA '{$popia_lang}' template has core placeholders + Information Regulator reference"
+			&& false !== strpos( $popia_body, '{{OFFICIAL_RESOURCES_URL}}' ),
+		"POPIA '{$popia_lang}' template has core placeholders + Information Regulator URL placeholder"
 	);
 }
 
@@ -345,6 +347,31 @@ $rendered = Generator::substitute( $lgpd_scaffold, array(
 ) );
 assert_contains( $rendered, 'Encarregado', 'LGPD-pt-BR mentions Encarregado (Art. 41)' );
 assert_contains( $rendered, 'ANPD', 'LGPD-pt-BR mentions ANPD' );
+assert_false( strpos( $rendered, '{{' ) !== false, 'LGPD template: no leftover tokens' );
+
+// POPIA — every language renders through the substitution pipeline with no
+// leftover tokens, and the Information Regulator URL arrives via the
+// OFFICIAL_RESOURCES_URL data key (not hardcoded in the template).
+foreach ( Generator::LANGUAGES as $popia_lang ) {
+	$popia_path = Generator::resolve_template_path( 'popia-southafrica', $popia_lang );
+	assert_true( is_string( $popia_path ) && '' !== $popia_path, "popia-southafrica/{$popia_lang} template path resolvable before read" );
+	$popia_rendered = Generator::substitute( (string) file_get_contents( $popia_path ), array(
+		'COMPANY_NAME'         => 'ACME (Pty) Ltd',
+		'COMPANY_ADDRESS'      => '1 Adderley St, Cape Town, South Africa',
+		'COMPANY_EMAIL'        => 'privacy@acme.test',
+		'COMPANY_REGISTRY'     => '2019/123456/07',
+		'DPO_NAME'             => 'Thabo Nkosi',
+		'DPO_EMAIL'            => 'infoofficer@acme.test',
+		'COOKIE_CATEGORIES'    => '<dl></dl>',
+		'THIRD_PARTY_SERVICES' => 'GA4',
+		'LAST_UPDATED_DATE'    => '2026-05-20',
+		'RETENTION_PERIOD'     => '12 months',
+		'OFFICIAL_RESOURCES_URL' => 'https://inforegulator.org.za/',
+	) );
+	assert_contains( $popia_rendered, 'ACME (Pty) Ltd', "POPIA '{$popia_lang}': company name substituted" );
+	assert_contains( $popia_rendered, 'inforegulator.org.za', "POPIA '{$popia_lang}': Information Regulator cited after render" );
+	assert_false( strpos( $popia_rendered, '{{' ) !== false, "POPIA '{$popia_lang}' template: no leftover {{...}} tokens" );
+}
 
 // ---------- Summary ----------
 

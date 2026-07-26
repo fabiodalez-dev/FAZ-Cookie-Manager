@@ -32,7 +32,7 @@ Internationale Übermittlungen (Art. 33-36 LGPD): angemessenes Schutzniveau / St
 
 Bestätigung, Zugang, Berichtigung, Anonymisierung/Löschung, Portabilität, Informationen über Weitergabe, Informationen über Folgen der Nicht-Einwilligung, Widerruf (Art. 8 § 5).
 
-Kontaktieren Sie den DPO **{{DPO_EMAIL}}** oder den Verantwortlichen **{{COMPANY_EMAIL}}**.
+Kontaktieren Sie den Verantwortlichen unter **{{COMPANY_EMAIL}}** oder den am Anfang dieser Richtlinie benannten DPO (Encarregado).
 
 ## Behörde
 

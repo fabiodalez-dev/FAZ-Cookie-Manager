@@ -75,13 +75,13 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 			</div>
 			<div class="faz-card-body">
 				<div class="faz-form-group">
-					<label for="cp-dpo-name"><?php esc_html_e( 'DPO / Encarregado / Privacy Officer name', 'faz-cookie-manager' ); ?></label>
+					<label for="cp-dpo-name"><?php esc_html_e( 'DPO / Encarregado / Information Officer name', 'faz-cookie-manager' ); ?></label>
 					<input type="text" id="cp-dpo-name" name="dpo.name" class="faz-input">
 				</div>
 				<div class="faz-form-group">
 					<label for="cp-dpo-email"><?php esc_html_e( 'DPO email', 'faz-cookie-manager' ); ?></label>
 					<input type="email" id="cp-dpo-email" name="dpo.email" class="faz-input">
-					<div class="faz-help"><?php esc_html_e( 'Mandatory for LGPD (Art. 41) and recommended for GDPR.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Mandatory for LGPD (Art. 41), recommended for GDPR and for POPIA (Information Officer).', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>

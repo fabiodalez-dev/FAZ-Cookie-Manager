@@ -315,7 +315,7 @@ International transfers (Art. 33-36 LGPD) are subject to adequate-protection cou
 
 I — confirmation, II — access, III — correction, IV — anonymization/blocking/deletion, V — portability, VI — deletion, VII — info on sharing, VIII — info on non-consent consequences, IX — withdraw consent.
 
-Exercise these rights with the **DPO** at **{{DPO_EMAIL}}** or controller at **{{COMPANY_EMAIL}}**.',
+Exercise these rights by contacting the controller at **{{COMPANY_EMAIL}}** or the DPO (Encarregado) named at the top of this policy.',
 			'Cookie policy template: lgpd-brazil / section-7',
 			'faz-cookie-manager'
 		),
@@ -329,7 +329,7 @@ ANPD — Autoridade Nacional de Proteção de Dados: {{ANPD_CONTACT}}, [{{OFFICI
 		_x(
 			'## Contact
 
-**{{COMPANY_EMAIL}}** or **{{DPO_EMAIL}}**.',
+**{{COMPANY_EMAIL}}** (or the DPO named at the top of this policy).',
 			'Cookie policy template: lgpd-brazil / section-9',
 			'faz-cookie-manager'
 		),
@@ -398,7 +398,7 @@ Each third party is a separate responsible party (or operator, as defined in POP
 		_x(
 			'## Direct marketing
 
-We do not send you unsolicited electronic direct marketing. Under POPIA section 69, electronic direct marketing to non-customers requires your prior consent, and every marketing communication includes a way to opt out.',
+Under POPIA section 69, electronic direct marketing to non-customers requires your prior consent, and any marketing communication you receive must include a way to opt out.',
 			'Cookie policy template: popia-southafrica / section-6',
 			'faz-cookie-manager'
 		),
@@ -421,9 +421,9 @@ Under POPIA (Chapter 3, condition 8, and sections 23-25) you have the right to:
 - object to processing for direct marketing purposes (section 11(3)(b) and section 69)
 - withdraw consent at any time (section 11(2)(b))
 - not be subject to a decision based solely on automated processing (section 71)
-- submit a complaint to the Information Regulator (South Africa) — [https://inforegulator.org.za/](https://inforegulator.org.za/)
+- submit a complaint to the Information Regulator (South Africa) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-To exercise these rights contact our Information Officer at **{{COMPANY_EMAIL}}**. We will respond within a reasonable time and in any event within 30 days, as provided by the Promotion of Access to Information Act, 2000 (PAIA) read with POPIA.',
+To exercise these rights contact us at **{{COMPANY_EMAIL}}**; where an Information Officer is named under "Who we are" above, you may address your request to them directly. We will respond within a reasonable time and in any event within 30 days, as provided by the Promotion of Access to Information Act, 2000 (PAIA) read with POPIA.',
 			'Cookie policy template: popia-southafrica / section-8',
 			'faz-cookie-manager'
 		),

@@ -42,7 +42,7 @@ Každá třetí strana je samostatnou odpovědnou stranou (nebo operator ve smys
 
 ## Přímý marketing
 
-Nezasíláme nevyžádaný elektronický přímý marketing. Podle článku 69 POPIA vyžaduje elektronický přímý marketing vůči osobám, které nejsou zákazníky, váš předchozí souhlas a každé marketingové sdělení obsahuje možnost odhlášení.
+Podle článku 69 POPIA vyžaduje elektronický přímý marketing vůči osobám, které nejsou zákazníky, váš předchozí souhlas a každé marketingové sdělení, které obdržíte, musí obsahovat možnost odhlášení.
 
 ## Jak dlouho údaje uchováváme
 
@@ -59,9 +59,9 @@ Podle POPIA (kapitola 3, podmínka 8, a články 23-25) máte právo:
 - vznést námitku proti zpracování pro účely přímého marketingu (článek 11(3)(b) a článek 69)
 - kdykoli odvolat souhlas (článek 11(2)(b))
 - nebýt předmětem rozhodnutí založeného výhradně na automatizovaném zpracování (článek 71)
-- podat stížnost u úřadu Information Regulator (Jihoafrická republika) — [https://inforegulator.org.za/](https://inforegulator.org.za/)
+- podat stížnost u úřadu Information Regulator (Jihoafrická republika) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-Pro uplatnění těchto práv kontaktujte našeho Information Officer na **{{COMPANY_EMAIL}}**. Odpovíme v přiměřené lhůtě, nejpozději však do 30 dnů, jak stanoví Promotion of Access to Information Act, 2000 (PAIA) ve spojení s POPIA.
+Pro uplatnění těchto práv nás kontaktujte na **{{COMPANY_EMAIL}}**; je-li v části „Kdo jsme“ výše uveden Information Officer, můžete svou žádost směřovat přímo na něj. Odpovíme v přiměřené lhůtě, nejpozději však do 30 dnů, jak stanoví Promotion of Access to Information Act, 2000 (PAIA) ve spojení s POPIA.
 
 ## Změny těchto zásad
 

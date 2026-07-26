@@ -69,7 +69,7 @@ Você possui os seguintes direitos:
 - **VIII — Informação** sobre a possibilidade de não fornecer consentimento e suas consequências
 - **IX — Revogação do consentimento** (Art. 8, § 5º)
 
-Para exercer estes direitos, contate o Encarregado de Dados em **{{DPO_EMAIL}}** ou o controlador em **{{COMPANY_EMAIL}}**. Responderemos em prazo razoável conforme Art. 19 LGPD.
+Para exercer estes direitos, contate o controlador em **{{COMPANY_EMAIL}}** ou o Encarregado de Dados indicado no topo desta política. Responderemos em prazo razoável conforme Art. 19 LGPD.
 
 ## Autoridade Nacional de Proteção de Dados (ANPD)
 
@@ -89,4 +89,4 @@ Podemos atualizar esta Política periodicamente. A data "Última atualização" 
 
 ## Contato
 
-Para qualquer dúvida sobre esta Política de Cookies, contate **{{COMPANY_EMAIL}}** ou o Encarregado **{{DPO_EMAIL}}**.
+Para qualquer dúvida sobre esta Política de Cookies, contate **{{COMPANY_EMAIL}}** ou o Encarregado indicado no topo desta política.

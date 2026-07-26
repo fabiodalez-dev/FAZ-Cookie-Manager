@@ -49,7 +49,7 @@ Mezinárodní předávání osobních údajů (čl. 33–36 LGPD) probíhá výh
 
 I — potvrzení existence zpracování, II — přístup k údajům, III — oprava neúplných, nepřesných nebo zastaralých údajů, IV — anonymizace, blokování nebo výmaz nadbytečných, zbytečných nebo protiprávně zpracovávaných údajů, V — přenositelnost údajů, VI — výmaz osobních údajů zpracovávaných na základě souhlasu, VII — informace o subjektech, se kterými byly údaje sdíleny, VIII — informace o důsledcích odepření souhlasu, IX — odvolání souhlasu.
 
-Tato práva uplatněte u **pověřence pro ochranu osobních údajů (DPO)** na adrese **{{DPO_EMAIL}}** nebo u správce na adrese **{{COMPANY_EMAIL}}**.
+Tato práva uplatněte u správce na adrese **{{COMPANY_EMAIL}}** nebo u pověřence pro ochranu osobních údajů (DPO) uvedeného v horní části těchto zásad.
 
 ## Dozorový orgán
 
@@ -57,4 +57,4 @@ ANPD — Autoridade Nacional de Proteção de Dados (Národní úřad pro ochran
 
 ## Kontakt
 
-**{{COMPANY_EMAIL}}** nebo **{{DPO_EMAIL}}**.
+**{{COMPANY_EMAIL}}** (nebo DPO uvedený v horní části těchto zásad).
