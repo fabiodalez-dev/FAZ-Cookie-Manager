@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
@@ -155,37 +156,91 @@ test.describe.serial('v1.7.0 deep flows', () => {
   });
 
   test('clicking a blocker template adds the expected custom blocking rules', async ({ page, loginAsAdmin }) => {
-    await loginAsAdmin(page);
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+    // The expected row delta is however many patterns the template data file
+    // ships — PR #170 grew Google Analytics from 3 to 52 patterns, so a
+    // hardcoded "+3" rots every time the tracker database expands. Read the
+    // deployed template JSON (fall back to the repo copy) instead.
+    const templateRelPath = 'admin/modules/cookies/includes/blocker-templates/google-analytics.json';
+    const templateAbsPath = DEPLOY_PATH && existsSync(join(DEPLOY_PATH, templateRelPath))
+      ? join(DEPLOY_PATH, templateRelPath)
+      : join(__dirname, '..', '..', '..', templateRelPath);
+    const gaPatternCount = (JSON.parse(readFileSync(templateAbsPath, 'utf8')).patterns as string[]).length;
+    expect(gaPatternCount).toBeGreaterThan(0);
 
-    const templates = page.locator('#faz-blocker-templates > button');
-    // Anchor on the card *name* element (`.faz-template-card-name`) so we
-    // match only the canonical "Google Analytics" template — not other
-    // Google-* templates whose auto-generated description happens to
-    // contain the substring "google analytics" case-insensitively (e.g.
-    // Site Kit by Google → "Blocks Site Kit by Google analytics tracking…").
-    // Playwright's `hasText` is a case-insensitive substring match by
-    // default; switching to a regex with a `$`-anchored, name-only locator
-    // gives the exact match the test originally intended.
-    const googleAnalyticsCard = templates.filter({
-      has: page.locator('.faz-template-card-name', { hasText: /^Google Analytics$/ }),
-    });
+    // Clicking a template card SAVES the added rules (saveCustomRules runs in
+    // the click handler), so snapshot the option and restore it afterwards —
+    // otherwise every run permanently appends the template's patterns to the
+    // shared test site and pollutes every later baseline count.
+    const canRestore = canRunWpCli();
+    const rulesSnapshot = canRestore
+      ? execFileSync(
+        'wp',
+        ['eval', 'echo json_encode( get_option("faz_settings")["script_blocking"]["custom_rules"] ?? array() );', `--path=${WP_PATH}`],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ).trim()
+      : '';
 
-    await expect(googleAnalyticsCard).toHaveCount(1);
-    await expect(googleAnalyticsCard).toBeVisible();
+    try {
+      await loginAsAdmin(page);
+      // Arm the settle signal BEFORE navigating: the custom-rules baseline is
+      // populated by an async FAZ.get('settings') call, and the tbody itself
+      // is zero-height (Playwright-"hidden") when the site has no saved
+      // rules, so waiting for visibility deadlocks on an empty baseline.
+      const settingsSettled = page.waitForResponse(
+        (r) => /faz(\/|%2F)v1(\/|%2F)settings([?&/]|$)/.test(r.url()) && r.request().method() === 'GET',
+        { timeout: 15_000 },
+      );
+      await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
+      await settingsSettled;
 
-    const rules = page.locator('#faz-custom-rules-body tr');
-    // Wait for the custom-rules AJAX to settle before counting baseline.
-    await page.locator('#faz-custom-rules-body').waitFor({ state: 'visible', timeout: 10_000 });
-    const initialCount = await rules.count();
+      const templates = page.locator('#faz-blocker-templates > button');
+      // Anchor on the card *name* element (`.faz-template-card-name`) so we
+      // match only the canonical "Google Analytics" template — not other
+      // Google-* templates whose auto-generated description happens to
+      // contain the substring "google analytics" case-insensitively (e.g.
+      // Site Kit by Google → "Blocks Site Kit by Google analytics tracking…").
+      // Playwright's `hasText` is a case-insensitive substring match by
+      // default; switching to a regex with a `$`-anchored, name-only locator
+      // gives the exact match the test originally intended.
+      const googleAnalyticsCard = templates.filter({
+        has: page.locator('.faz-template-card-name', { hasText: /^Google Analytics$/ }),
+      });
 
-    await googleAnalyticsCard.click();
+      await expect(googleAnalyticsCard).toHaveCount(1);
+      await expect(googleAnalyticsCard).toBeVisible();
 
-    await expect(rules).toHaveCount(initialCount + 3);
+      const rules = page.locator('#faz-custom-rules-body tr');
+      const initialCount = await rules.count();
 
-    const firstNewRow = rules.nth(initialCount);
-    await expect(firstNewRow.locator('[data-rule="pattern"]')).toHaveValue(/google-analytics\.com|googletagmanager\.com/);
-    await expect(firstNewRow.locator('[data-rule="category"]')).toHaveValue('analytics');
+      await googleAnalyticsCard.click();
+
+      await expect(rules).toHaveCount(initialCount + gaPatternCount);
+
+      const firstNewRow = rules.nth(initialCount);
+      await expect(firstNewRow.locator('[data-rule="pattern"]')).toHaveValue(/google-analytics\.com|googletagmanager\.com/);
+      await expect(firstNewRow.locator('[data-rule="category"]')).toHaveValue('analytics');
+    } finally {
+      if (canRestore) {
+        // Round-trip the snapshot through a temp file — inlining JSON into a
+        // single-quoted PHP string literal breaks on quotes/backslashes.
+        const tmpDir = mkdtempSync(join(tmpdir(), 'faz-rules-'));
+        const snapshotFile = join(tmpDir, 'custom-rules.json');
+        writeFileSync(snapshotFile, rulesSnapshot || '[]');
+        try {
+          execFileSync(
+            'wp',
+            [
+              'eval',
+              `$s = get_option("faz_settings"); $s["script_blocking"]["custom_rules"] = json_decode( file_get_contents( ${JSON.stringify(snapshotFile)} ), true ); update_option("faz_settings", $s);`,
+              `--path=${WP_PATH}`,
+            ],
+            { stdio: ['ignore', 'ignore', 'pipe'] },
+          );
+        } finally {
+          rmSync(tmpDir, { recursive: true, force: true });
+        }
+      }
+    }
   });
 
   test('REST import/export round-trip refreshes category and cookie data after cache prime', async ({ page, loginAsAdmin }) => {
