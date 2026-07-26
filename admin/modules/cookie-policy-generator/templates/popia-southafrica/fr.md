@@ -58,7 +58,7 @@ En vertu du POPIA (chapitre 3, condition 8, et articles 23-25), vous avez le dro
 - vous opposer au traitement fondé sur l'intérêt légitime (article 11(3))
 - vous opposer au traitement à des fins de marketing direct (articles 11(3)(b) et 69)
 - retirer votre consentement à tout moment (article 11(2)(b))
-- ne pas faire l'objet d'une décision fondée uniquement sur un traitement automatisé (article 71)
+- ne pas faire l'objet — sous réserve des exceptions de l'article 71(2) — d'une décision fondée uniquement sur un traitement automatisé destiné à établir votre profil, lorsqu'elle produit des conséquences juridiques à votre égard ou vous affecte de manière substantielle (article 71)
 - déposer une plainte auprès de l'Information Regulator (Afrique du Sud) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
 Pour exercer ces droits, contactez-nous à **{{COMPANY_EMAIL}}** ; si un Information Officer est désigné dans la section « Qui sommes-nous » ci-dessus, vous pouvez lui adresser votre demande directement. Nous répondrons dans un délai raisonnable et en tout état de cause sous 30 jours, comme le prévoit le Promotion of Access to Information Act, 2000 (PAIA) lu conjointement avec le POPIA.

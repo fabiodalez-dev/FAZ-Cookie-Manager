@@ -54,7 +54,9 @@ class Generator {
 	/**
 	 * Native language per jurisdiction (statutory bias):
 	 *   - gdpr-strict       → en (EU lingua franca for regulatory docs)
-	 *   - ccpa-california   → en + es (CA bilingual mandate per §1798.130)
+	 *   - ccpa-california   → en (es ships as a translation, not a second
+	 *                         native fallback — resolve_template_path() uses
+	 *                         a single native lang per jurisdiction)
 	 *   - lgpd-brazil       → pt-BR
 	 *   - popia-southafrica → en (one of South Africa's official languages
 	 *                         and the language of the Act + Regulator guidance)

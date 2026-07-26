@@ -58,7 +58,7 @@ Under POPIA (Chapter 3, condition 8, and sections 23-25) you have the right to:
 - object to processing based on legitimate interest (section 11(3))
 - object to processing for direct marketing purposes (section 11(3)(b) and section 69)
 - withdraw consent at any time (section 11(2)(b))
-- not be subject to a decision based solely on automated processing (section 71)
+- not be subject — save for the exceptions in section 71(2) — to a decision based solely on automated processing intended to profile you, where it has legal consequences for you or affects you to a substantial degree (section 71)
 - submit a complaint to the Information Regulator (South Africa) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
 To exercise these rights contact us at **{{COMPANY_EMAIL}}**; where an Information Officer is named under "Who we are" above, you may address your request to them directly. We will respond within a reasonable time and in any event within 30 days, as provided by the Promotion of Access to Information Act, 2000 (PAIA) read with POPIA.
