@@ -61,7 +61,7 @@ Nos termos do POPIA (capítulo 3, condição 8, e seções 23-25), você tem o d
 - não ser submetido — ressalvadas as exceções da seção 71(2) — a uma decisão baseada unicamente em tratamento automatizado destinado a traçar o seu perfil, quando produza efeitos jurídicos sobre você ou o afete de forma substancial (seção 71)
 - apresentar uma reclamação ao Information Regulator (África do Sul) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-Para exercer esses direitos, contate-nos em **{{COMPANY_EMAIL}}**; se um Information Officer estiver indicado na seção "Quem somos" acima, você pode dirigir sua solicitação diretamente a ele. Responderemos em prazo razoável e, em qualquer caso, em até 30 dias, conforme previsto no Promotion of Access to Information Act, 2000 (PAIA) em conjunto com o POPIA.
+Para exercer esses direitos, contate-nos em **{{COMPANY_EMAIL}}**; se um Information Officer estiver indicado na seção "Quem somos" acima, você pode dirigir sua solicitação diretamente a ele. Responderemos assim que razoavelmente possível; para solicitações de acesso às suas informações pessoais, a seção 25 do Promotion of Access to Information Act, 2000 (PAIA) prevê um prazo de resposta de 30 dias.
 
 ## Alterações desta política
 

@@ -61,7 +61,7 @@ Ai sensi del POPIA (Capitolo 3, condizione 8, e sezioni 23-25) hai il diritto di
 - non essere sottoposto — salve le eccezioni della sezione 71(2) — a una decisione basata unicamente su un trattamento automatizzato volto a profilarti, quando produce conseguenze giuridiche nei tuoi confronti o ti riguarda in misura sostanziale (sezione 71)
 - presentare un reclamo all'Information Regulator (Sudafrica) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-Per esercitare questi diritti contattaci a **{{COMPANY_EMAIL}}**; se nella sezione "Chi siamo" qui sopra è indicato un Information Officer, puoi rivolgere la tua richiesta direttamente a questa figura. Risponderemo entro un tempo ragionevole e comunque entro 30 giorni, come previsto dal Promotion of Access to Information Act, 2000 (PAIA) in combinato disposto con il POPIA.
+Per esercitare questi diritti contattaci a **{{COMPANY_EMAIL}}**; se nella sezione "Chi siamo" qui sopra è indicato un Information Officer, puoi rivolgere la tua richiesta direttamente a questa figura. Risponderemo non appena ragionevolmente possibile; per le richieste di accesso alle tue informazioni personali, la sezione 25 del Promotion of Access to Information Act, 2000 (PAIA) prevede un termine di risposta di 30 giorni.
 
 ## Modifiche a questa policy
 

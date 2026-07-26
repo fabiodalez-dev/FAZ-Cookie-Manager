@@ -423,7 +423,7 @@ Under POPIA (Chapter 3, condition 8, and sections 23-25) you have the right to:
 - not be subject — save for the exceptions in section 71(2) — to a decision based solely on automated processing intended to profile you, where it has legal consequences for you or affects you to a substantial degree (section 71)
 - submit a complaint to the Information Regulator (South Africa) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-To exercise these rights contact us at **{{COMPANY_EMAIL}}**; where an Information Officer is named under "Who we are" above, you may address your request to them directly. We will respond within a reasonable time and in any event within 30 days, as provided by the Promotion of Access to Information Act, 2000 (PAIA) read with POPIA.',
+To exercise these rights contact us at **{{COMPANY_EMAIL}}**; where an Information Officer is named under "Who we are" above, you may address your request to them directly. We will respond as soon as reasonably practicable; for requests of access to your personal information, section 25 of the Promotion of Access to Information Act, 2000 (PAIA) provides a 30-day response period.',
 			'Cookie policy template: popia-southafrica / section-8',
 			'faz-cookie-manager'
 		),

@@ -61,7 +61,7 @@ Podle POPIA (kapitola 3, podmínka 8, a články 23-25) máte právo:
 - nebýt — s výhradou výjimek podle článku 71(2) — předmětem rozhodnutí založeného výhradně na automatizovaném zpracování určeném k profilování vaší osoby, pokud má vůči vám právní účinky nebo se vás podstatným způsobem dotýká (článek 71)
 - podat stížnost u úřadu Information Regulator (Jihoafrická republika) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
 
-Pro uplatnění těchto práv nás kontaktujte na **{{COMPANY_EMAIL}}**; je-li v části „Kdo jsme“ výše uveden Information Officer, můžete svou žádost směřovat přímo na něj. Odpovíme v přiměřené lhůtě, nejpozději však do 30 dnů, jak stanoví Promotion of Access to Information Act, 2000 (PAIA) ve spojení s POPIA.
+Pro uplatnění těchto práv nás kontaktujte na **{{COMPANY_EMAIL}}**; je-li v části „Kdo jsme“ výše uveden Information Officer, můžete svou žádost směřovat přímo na něj. Odpovíme, jakmile to bude rozumně možné; u žádostí o přístup k vašim osobním údajům stanoví článek 25 zákona Promotion of Access to Information Act, 2000 (PAIA) lhůtu pro odpověď 30 dnů.
 
 ## Změny těchto zásad
 
