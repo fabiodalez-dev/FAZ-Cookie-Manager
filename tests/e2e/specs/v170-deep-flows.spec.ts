@@ -180,18 +180,39 @@ test.describe.serial('v1.7.0 deep flows', () => {
       ).trim()
       : '';
 
+    // Fail fast on a non-JSON snapshot (a PHP notice, plugin output or a BOM
+    // on stdout would make the finally-restore json_decode to null and WIPE
+    // the option instead of restoring it). Throwing here — before the try
+    // block — means nothing has been mutated yet and no restore is attempted.
+    let snapshotRules: unknown = null;
+    if (canRestore) {
+      try {
+        snapshotRules = JSON.parse(rulesSnapshot || '[]');
+      } catch {
+        throw new Error(
+          `custom_rules snapshot is not valid JSON — aborting before mutating the site: ${rulesSnapshot.slice(0, 200)}`,
+        );
+      }
+    }
+    const expectedBaseline = Array.isArray(snapshotRules) ? snapshotRules.length : null;
+
     try {
       await loginAsAdmin(page);
       // Arm the settle signal BEFORE navigating: the custom-rules baseline is
       // populated by an async FAZ.get('settings') call, and the tbody itself
       // is zero-height (Playwright-"hidden") when the site has no saved
       // rules, so waiting for visibility deadlocks on an empty baseline.
+      // Promise.all keeps the response promise handled even when the
+      // navigation itself throws (a lone dangling waitForResponse would
+      // surface as an unhandled rejection 15s later).
       const settingsSettled = page.waitForResponse(
         (r) => /faz(\/|%2F)v1(\/|%2F)settings([?&/]|$)/.test(r.url()) && r.request().method() === 'GET',
         { timeout: 15_000 },
       );
-      await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
-      await settingsSettled;
+      await Promise.all([
+        settingsSettled,
+        page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' }),
+      ]);
 
       const templates = page.locator('#faz-blocker-templates > button');
       // Anchor on the card *name* element (`.faz-template-card-name`) so we
@@ -210,6 +231,23 @@ test.describe.serial('v1.7.0 deep flows', () => {
       await expect(googleAnalyticsCard).toBeVisible();
 
       const rules = page.locator('#faz-custom-rules-body tr');
+      // The rows render asynchronously AFTER the settings response resolves,
+      // and locator.count() has no auto-wait — anchor the baseline on the
+      // snapshot we just took (toHaveCount auto-retries), falling back to a
+      // stabilization poll when WP-CLI (and thus the snapshot) is missing.
+      if (expectedBaseline !== null) {
+        await expect(rules).toHaveCount(expectedBaseline);
+      } else {
+        let previousCount = -1;
+        await expect
+          .poll(async () => {
+            const current = await rules.count();
+            const stable = current === previousCount;
+            previousCount = current;
+            return stable;
+          }, { timeout: 10_000 })
+          .toBe(true);
+      }
       const initialCount = await rules.count();
 
       await googleAnalyticsCard.click();
@@ -236,6 +274,10 @@ test.describe.serial('v1.7.0 deep flows', () => {
             ],
             { stdio: ['ignore', 'ignore', 'pipe'] },
           );
+        } catch (restoreError) {
+          // Do not rethrow: an exception here would REPLACE the original
+          // test failure and hide the actual diagnosis. Surface as a warning.
+          console.warn('[v170-deep-flows] custom_rules restore failed:', restoreError);
         } finally {
           rmSync(tmpDir, { recursive: true, force: true });
         }
