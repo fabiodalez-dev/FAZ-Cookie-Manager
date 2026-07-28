@@ -180,11 +180,40 @@
 		});
 	}
 
+	// Blocking a submit without saying so reproduces the exact "the button
+	// does nothing" symptom this page already ships a watchdog notice for:
+	// the form carries `novalidate`, so the browser prints nothing on its
+	// own, and reportValidity()'s bubble is transient and never appears for
+	// a control the browser cannot focus (inside a collapsed <details>, or
+	// hidden by a conflicting stylesheet). Always leave a persistent message
+	// in the status line, naming the first offending field, and move focus
+	// to it so keyboard and screen-reader users land on the problem.
 	function validateForm() {
 		var form = document.getElementById('faz-cookie-policy-form');
+		if (!form) { return true; }
 		syncJurisdictionRequirements();
 		if (form.checkValidity()) { return true; }
+
+		var invalid = form.querySelector(':invalid');
+		var label = '';
+		if (invalid) {
+			var labelEl = invalid.id ? form.querySelector('label[for="' + invalid.id + '"]') : null;
+			label = labelEl ? (labelEl.textContent || '').trim() : (invalid.name || '');
+		}
+		setStatus(
+			label
+				? t( 'requiredMissing', 'Fill in the required fields before saving' ) + ': ' + label
+				: t( 'requiredMissingGeneric', 'Fill in the required fields before saving.' ),
+			'error'
+		);
 		form.reportValidity();
+		if (invalid && typeof invalid.focus === 'function') {
+			// Reveal the field first when it sits inside a collapsed section,
+			// otherwise focus() is a no-op and the message has nothing to point at.
+			var wrapper = invalid.closest ? invalid.closest('details') : null;
+			if (wrapper && !wrapper.open) { wrapper.open = true; }
+			invalid.focus();
+		}
 		return false;
 	}
 

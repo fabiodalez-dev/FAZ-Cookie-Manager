@@ -280,6 +280,40 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     wpEval(`update_option('faz_cookie_policy_data', json_decode('${restoreJson}', true));`);
   });
 
+  test('3d. A blocked Save reports why instead of doing nothing', async ({ page, loginAsAdmin }) => {
+    // The form carries `novalidate` and submits through JS, so when the
+    // client-side check refuses to submit the browser prints nothing on its
+    // own: without an explicit message the button silently does nothing —
+    // the very symptom this page ships a blocked-script watchdog for.
+    await loginAsAdmin(page);
+    await page.goto(ADMIN_PAGE, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => {
+        const el = document.getElementById('cp-company-name') as HTMLInputElement | null;
+        return el && el.value.length > 0;
+      },
+      undefined,
+      { timeout: 5000 },
+    );
+
+    // Clear a field the markup marks required, then submit.
+    await page.fill('#cp-company-name', '');
+    await page.click('form#faz-cookie-policy-form button[type=submit]');
+
+    const status = page.locator('#cp-save-status');
+    await expect(status, 'the status line explains the refusal').toContainText(/required/i, { timeout: 5000 });
+    await expect(status, 'and names the offending field').toContainText(/Legal entity name/i);
+    await expect(
+      page.locator('#cp-company-name'),
+      'focus moves to the offending field',
+    ).toBeFocused();
+
+    // Restore the seeded value so the serial suite downstream is unaffected.
+    await page.fill('#cp-company-name', FAKE_DATA.company.name);
+    await page.click('form#faz-cookie-policy-form button[type=submit]');
+    await expect(status).toContainText(/Saved/i, { timeout: 5000 });
+  });
+
   test('3c. Hardening: with the page JS blocked, Save does NOT native-submit to a blank admin.php', async ({ page, loginAsAdmin }) => {
     // Regression guard for the DigitalGdn report: when cookie-policy.js does
     // not run (JS conflict / cache-minify stripping admin scripts), a plain

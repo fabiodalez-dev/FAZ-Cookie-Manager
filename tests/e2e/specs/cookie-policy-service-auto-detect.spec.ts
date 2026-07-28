@@ -471,6 +471,20 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   });
 
   test('21. End-to-end save flow: auto-detect → submit form → option persisted with the suggested IDs', async () => {
+    // The company identity fields carry `required` in the markup and the
+    // page now honours it before submitting (every jurisdiction's template
+    // substitutes {{COMPANY_NAME}} / {{COMPANY_EMAIL}}, so saving without
+    // them publishes a policy that names nobody). This test is about the
+    // auto-detect → persist round-trip, not about partial saves, so seed a
+    // valid identity first.
+    wpEval(
+      `$d = (array) get_option('faz_cookie_policy_data', array());
+       $d['company'] = array_merge(
+         is_array($d['company'] ?? null) ? $d['company'] : array(),
+         array( 'name' => 'ACME Auto-detect', 'email' => 'privacy@acme-autodetect.test' )
+       );
+       update_option('faz_cookie_policy_data', $d, false);`,
+    );
     plantCookies([
       { name: 'cp_gtm', slug: 'cp-auto-save-gtm', domain: '.googletagmanager.com' },
       { name: 'cp_st',  slug: 'cp-auto-save-st',  domain: '.js.stripe.com' },
