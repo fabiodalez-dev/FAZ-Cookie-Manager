@@ -23,7 +23,42 @@
 	FAZ.ready(function () {
 		reloadDashboard();
 		initFilterBar();
+		initSetupCard();
 	});
+
+	/* ── "Complete setup" card ── */
+
+	// Reveal the onboarding nudge only when the guided wizard is incomplete AND
+	// not dismissed. onboarding.completed defaults to true, so upgrading installs
+	// (whose stored settings predate the wizard) never see the card.
+	function initSetupCard() {
+		var card = document.getElementById('faz-setup-card');
+		if (!card) { return; }
+
+		FAZ.get('settings').then(function (settings) {
+			var onboarding = (settings && settings.onboarding) || {};
+			if (onboarding.completed === true || onboarding.dismissed === true) {
+				return; // stays hidden
+			}
+			card.hidden = false;
+
+			var dismissBtn = document.getElementById('faz-setup-card-dismiss');
+			if (dismissBtn) {
+				dismissBtn.addEventListener('click', function () {
+					dismissBtn.disabled = true;
+					// Merges via faz_merge_settings — only the flag is written.
+					FAZ.post('settings', { onboarding: { dismissed: true } }).then(function () {
+						card.hidden = true;
+					}).catch(function () {
+						dismissBtn.disabled = false;
+						FAZ.notify(__('setup.dismiss_failed', 'Could not dismiss. Please try again.'), 'error');
+					});
+				});
+			}
+		}).catch(function () {
+			// Non-fatal: if settings can't be read, leave the card hidden.
+		});
+	}
 
 	/* ── Filter bar ── */
 
@@ -79,20 +114,27 @@
 		}
 	}
 
+	// Shared label vocabulary for a "days" window — used by both the main
+	// filter bar (updateRangeLabel) and the A/B Test Results card, which
+	// queries its own days window independently (see loadAbTestStats).
+	function rangeLabelForDays(days) {
+		var map = {
+			1: 'Last 24 Hours',
+			7: 'Last 7 Days',
+			30: 'Last 30 Days',
+			365: 'Last Year',
+			0: 'All Time'
+		};
+		return map[days] || ('Last ' + days + ' Days');
+	}
+
 	function updateRangeLabel() {
 		var text;
 
 		if (currentFilter.from && currentFilter.to) {
 			text = formatDateRange(currentFilter.from, currentFilter.to);
 		} else {
-			var map = {
-				1: 'Last 24 Hours',
-				7: 'Last 7 Days',
-				30: 'Last 30 Days',
-				365: 'Last Year',
-				0: 'All Time'
-			};
-			text = map[currentFilter.days] || ('Last ' + currentFilter.days + ' Days');
+			text = rangeLabelForDays(currentFilter.days);
 		}
 
 		var ids = ['faz-chart-range-label', 'faz-consent-range-label', 'faz-consent-stats-range-label'];
@@ -131,6 +173,7 @@
 		loadStats(params);
 		loadChart(params);
 		loadConsentStats(params);
+		loadAbTestStats(params);
 	}
 
 	/* ── Stats + Donut ── */
@@ -455,6 +498,115 @@
 			}
 		}).catch(function () {
 			// Silently fail — stats card shows default dashes.
+		});
+	}
+
+	/* ── A/B Test Results ── */
+
+	function loadAbTestStats(params) {
+		var card = document.getElementById('faz-abtest-card');
+		var body = document.getElementById('faz-abtest-body');
+		if (!card || !body) return;
+
+		// The A/B route reports by day window only; a custom from/to range falls
+		// back to all-time (days = 0) so the panel stays simple and correct.
+		var abParams = { days: (params && typeof params.days !== 'undefined') ? params.days : 0 };
+
+		// Reflect the actual A/B query window in the card header — it does not
+		// necessarily match the main filter bar (custom ranges collapse to
+		// all-time here), so it must be derived from abParams, not currentFilter.
+		var rangeLabelEl = document.getElementById('faz-abtest-range-label');
+		if (rangeLabelEl) rangeLabelEl.textContent = rangeLabelForDays(abParams.days);
+
+		FAZ.get('consent_logs/ab_test', abParams).then(function (data) {
+			var variants = (data && Array.isArray(data.variants)) ? data.variants : [];
+
+			// Hide the whole card unless the test is enabled with 2+ variants.
+			if (!data || !data.enabled || variants.length < 2) {
+				card.hidden = true;
+				return;
+			}
+			card.hidden = false;
+
+			while (body.firstChild) { body.removeChild(body.firstChild); }
+
+			var totalConsents = variants.reduce(function (sum, v) {
+				return sum + (parseInt(v.total, 10) || 0);
+			}, 0);
+
+			if (totalConsents === 0) {
+				var empty = document.createElement('p');
+				empty.style.color = 'var(--faz-text-muted)';
+				empty.textContent = __(
+					'dashboard.abTestNoData',
+					'No consents recorded for these variants yet. Results appear once visitors respond to the banner.'
+				);
+				body.appendChild(empty);
+				return;
+			}
+
+			variants.forEach(function (v) {
+				var total = parseInt(v.total, 10) || 0;
+				var rate = (typeof v.accept_rate !== 'undefined') ? Number(v.accept_rate) : 0;
+				if (!isFinite(rate)) rate = 0;
+				var name = String(v.name || v.slug || '');
+
+				var wrap = document.createElement('div');
+				wrap.className = 'faz-category-bar-wrap';
+
+				var barLabel = document.createElement('div');
+				barLabel.className = 'faz-category-bar-label';
+				var nameSpan = document.createElement('span');
+				nameSpan.textContent = name;
+				var pctSpan = document.createElement('span');
+				pctSpan.textContent = Math.round(rate) + '%';
+				barLabel.appendChild(nameSpan);
+				barLabel.appendChild(pctSpan);
+
+				var barOuter = document.createElement('div');
+				barOuter.className = 'faz-category-bar';
+				var barFill = document.createElement('div');
+				barFill.className = 'faz-category-bar-fill';
+				barFill.style.width = Math.max(0, Math.min(100, rate)) + '%';
+				barOuter.appendChild(barFill);
+
+				var meta = document.createElement('div');
+				meta.style.color = 'var(--faz-text-muted)';
+				meta.style.fontSize = '12px';
+				meta.style.marginTop = '2px';
+				meta.textContent = __('dashboard.abTestAcceptedOf', '{accepted} accepted of {total} consents')
+					.replace('{accepted}', (parseInt(v.accepted, 10) || 0).toLocaleString())
+					.replace('{total}', total.toLocaleString());
+
+				wrap.appendChild(barLabel);
+				wrap.appendChild(barOuter);
+				wrap.appendChild(meta);
+				body.appendChild(wrap);
+			});
+		}).catch(function () {
+			// The stats request failed — this is NOT the same as "A/B test off".
+			// Check the settings context directly (banner_control.ab_test.status)
+			// so an admin who enabled the test can tell a real REST failure apart
+			// from the legitimate off/<2-variants branch above.
+			FAZ.get('settings').then(function (settings) {
+				var ab = settings && settings.banner_control && settings.banner_control.ab_test;
+				var enabled = !!(ab && ab.status);
+
+				if (!enabled) {
+					card.hidden = true;
+					return;
+				}
+
+				card.hidden = false;
+				while (body.firstChild) { body.removeChild(body.firstChild); }
+				var errEl = document.createElement('p');
+				errEl.style.color = 'var(--faz-text-muted)';
+				errEl.textContent = __('dashboard.abTestLoadError', 'Could not load A/B test results.');
+				body.appendChild(errEl);
+			}).catch(function () {
+				// Can't even confirm the enabled state — fall back to hiding.
+				card.hidden = true;
+			});
 		});
 	}
 

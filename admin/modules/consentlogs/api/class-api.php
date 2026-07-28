@@ -109,6 +109,30 @@ class Api extends Rest_Controller {
 			)
 		);
 
+		// GET /consent_logs/ab_test - accept-rate per banner variant (admin only).
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/ab_test',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_ab_test_stats' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+					'args'                => array(
+						'days' => array(
+							'description'       => __( 'Look-back window in days; 0 means all time.', 'faz-cookie-manager' ),
+							'type'              => 'integer',
+							'default'           => 30,
+							'minimum'           => 0,
+							'maximum'           => 3650,
+							'sanitize_callback' => 'absint',
+							'validate_callback' => 'rest_validate_request_arg',
+						),
+					),
+				),
+			)
+		);
+
 		// GET /consent_logs/export - CSV export (admin only).
 		register_rest_route(
 			$this->namespace,
@@ -183,6 +207,60 @@ class Api extends Rest_Controller {
 		$days  = max( 1, min( 365, absint( $request->get_param( 'days' ) ) ) );
 		$stats = Controller::get_instance()->get_consent_stats( $days );
 		return rest_ensure_response( $stats );
+	}
+
+	/**
+	 * Accept-rate per banner variant for the A/B test Dashboard panel.
+	 *
+	 * Reads the configured A/B variant slugs from settings, resolves each to a
+	 * display name from the banner rows, and returns the per-variant accept
+	 * stats from the consent log. `enabled` reflects the settings toggle so the
+	 * Dashboard can hide the panel entirely when the test is off.
+	 *
+	 * @since 1.25.0
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response
+	 */
+	public function get_ab_test_stats( $request ) {
+		$settings = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
+		$ab       = $settings->get( 'banner_control', 'ab_test' );
+		$enabled  = is_array( $ab ) && ! empty( $ab['status'] );
+		$variants = ( is_array( $ab ) && isset( $ab['variants'] ) && is_array( $ab['variants'] ) )
+			? array_values( $ab['variants'] )
+			: array();
+
+		$days = absint( $request->get_param( 'days' ) );
+
+		// slug => display name from the banner rows. Include inactive rows too,
+		// so a just-deactivated variant still shows its accumulated results with
+		// a readable name.
+		$names             = array();
+		$banner_controller = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance();
+		$items             = $banner_controller->get_items();
+		if ( is_array( $items ) ) {
+			foreach ( $items as $item ) {
+				if ( isset( $item->slug ) ) {
+					$names[ (string) $item->slug ] = isset( $item->name ) && '' !== (string) $item->name
+						? (string) $item->name
+						: (string) $item->slug;
+				}
+			}
+		}
+
+		$stats = Controller::get_instance()->get_ab_test_stats( $variants, $days );
+		foreach ( $stats as &$row ) {
+			$slug        = isset( $row['slug'] ) ? (string) $row['slug'] : '';
+			$row['name'] = isset( $names[ $slug ] ) ? $names[ $slug ] : $slug;
+		}
+		unset( $row );
+
+		return rest_ensure_response(
+			array(
+				'enabled'  => $enabled,
+				'days'     => $days,
+				'variants' => $stats,
+			)
+		);
 	}
 
 	/**

@@ -222,3 +222,36 @@ details.faz-cookie-policy-details > summary.faz-cookie-policy-summary > .faz-coo
 	font-size: 0.9em;
 	line-height: 1.55;
 }
+
+/* 3. International data transfers (Schrems II) — neutral transparency block.
+   Purely informational: it never gates or reweights any consent control. */
+.faz-cookie-policy-transfers {
+	margin-top: 2em;
+	padding: 1em 1.15em;
+	background: var(--faz-transfer-bg, #f1f5f9);
+	border-left: 4px solid var(--faz-transfer-accent, #64748b);
+	border-radius: 4px;
+}
+
+.faz-cookie-policy-transfers-title {
+	margin: 0 0 0.4em;
+	font-size: 1.15em;
+}
+
+.faz-cookie-policy-transfers-list {
+	margin: 0.6em 0 0;
+	padding-left: 1.2em;
+	line-height: 1.55;
+}
+
+.faz-cookie-policy-transfers-list code {
+	font-size: 0.92em;
+}
+
+/* Per-row indicator inside the cookie inventory table. */
+.faz-cookie-policy-transfer {
+	display: block;
+	margin-top: 0.35em;
+	font-size: 0.82em;
+	color: var(--faz-transfer-fg, #475569);
+}

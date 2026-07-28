@@ -37,7 +37,28 @@ function restoreSettingsOption(encoded: string): void {
   wpEval(`
     $restored = json_decode( base64_decode( '${encoded}' ), true );
     update_option( 'faz_settings', is_array( $restored ) ? $restored : array() );
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+    }
     echo 'ok';
+  `);
+}
+
+function setStripeGatewayEnabled(enabled: boolean): void {
+  wpEval(`
+    $settings = get_option( 'faz_settings', array() );
+    if ( ! is_array( $settings ) ) { $settings = array(); }
+    if ( ! isset( $settings['script_blocking'] ) || ! is_array( $settings['script_blocking'] ) ) {
+      $settings['script_blocking'] = array();
+    }
+    if ( ! isset( $settings['script_blocking']['payment_gateways'] ) || ! is_array( $settings['script_blocking']['payment_gateways'] ) ) {
+      $settings['script_blocking']['payment_gateways'] = array();
+    }
+    $settings['script_blocking']['payment_gateways']['stripe'] = ${enabled ? 'true' : 'false'};
+    update_option( 'faz_settings', $settings, false );
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+    }
   `);
 }
 
@@ -504,35 +525,41 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
   });
 
   // --- 9. Gateway pattern caching (Stripe vs analytics) ---
-  test('always-allowed gateway cache does not break blocking or whitelisting behavior', async ({ page }) => {
-    await page.context().clearCookies();
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
+  test('explicitly enabled gateway cache does not break blocking or whitelisting behavior', async ({ page }) => {
+    const originalSettings = backupSettingsOption();
+    setStripeGatewayEnabled(true);
+    try {
+      await page.context().clearCookies();
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
 
-    const scriptState = await page.evaluate(() => {
-      const stripeScript = document.createElement('script');
-      stripeScript.id = 'faz-probe-stripe';
-      stripeScript.src = 'https://js.stripe.com/v3/';
-      document.head.appendChild(stripeScript);
+      const scriptState = await page.evaluate(() => {
+        const stripeScript = document.createElement('script');
+        stripeScript.id = 'faz-probe-stripe';
+        stripeScript.src = 'https://js.stripe.com/v3/';
+        document.head.appendChild(stripeScript);
 
-      const analyticsScript = document.createElement('script');
-      analyticsScript.id = 'faz-probe-analytics';
-      analyticsScript.setAttribute('data-fazcookie', 'fazcookie-analytics');
-      analyticsScript.textContent = 'window.__fazAnalyticsProbeExecuted = true;';
-      document.head.appendChild(analyticsScript);
+        const analyticsScript = document.createElement('script');
+        analyticsScript.id = 'faz-probe-analytics';
+        analyticsScript.setAttribute('data-fazcookie', 'fazcookie-analytics');
+        analyticsScript.textContent = 'window.__fazAnalyticsProbeExecuted = true;';
+        document.head.appendChild(analyticsScript);
 
-      const stripe = document.getElementById('faz-probe-stripe') as HTMLScriptElement | null;
-      const analytics = document.getElementById('faz-probe-analytics') as HTMLScriptElement | null;
-      return {
-        stripeType: stripe?.type ?? '',
-        analyticsType: analytics?.type ?? '',
-        analyticsExecuted: !!(window as any).__fazAnalyticsProbeExecuted,
-      };
-    });
+        const stripe = document.getElementById('faz-probe-stripe') as HTMLScriptElement | null;
+        const analytics = document.getElementById('faz-probe-analytics') as HTMLScriptElement | null;
+        return {
+          stripeType: stripe?.type ?? '',
+          analyticsType: analytics?.type ?? '',
+          analyticsExecuted: !!(window as any).__fazAnalyticsProbeExecuted,
+        };
+      });
 
-    expect(scriptState.stripeType).not.toBe('javascript/blocked');
-    expect(scriptState.analyticsType).toBe('javascript/blocked');
-    expect(scriptState.analyticsExecuted).toBe(false);
+      expect(scriptState.stripeType).not.toBe('javascript/blocked');
+      expect(scriptState.analyticsType).toBe('javascript/blocked');
+      expect(scriptState.analyticsExecuted).toBe(false);
+    } finally {
+      restoreSettingsOption(originalSettings);
+    }
   });
 
   // --- 10. Plugin Check escaping (XSS prevention) ---
