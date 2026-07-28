@@ -184,6 +184,10 @@ class Cookie_Policy_Api {
 	public function set_settings( WP_REST_Request $request ) {
 		$body = (array) $request->get_json_params();
 		$clean = $this->sanitize_settings( $body );
+		$missing = Generator::missing_required_settings( (string) $clean['jurisdiction'], $clean );
+		if ( $missing ) {
+			return $this->missing_required_error( $missing );
+		}
 		update_option( self::OPTION, $clean, false );
 		return new WP_REST_Response( array( 'saved' => true, 'data' => $clean ), 200 );
 	}
@@ -198,13 +202,30 @@ class Cookie_Policy_Api {
 	 * @param WP_REST_Request $request
 	 */
 	public function preview( WP_REST_Request $request ) {
-		$body = (array) $request->get_json_params();
+		$body     = (array) $request->get_json_params();
 		$override = isset( $body['settings'] ) && is_array( $body['settings'] )
 			? $this->sanitize_settings( $body['settings'] )
 			: null;
+		$settings = null !== $override
+			? $override
+			: (array) get_option( self::OPTION, array() );
+		$requested_jurisdiction = isset( $body['jurisdiction'] ) && is_scalar( $body['jurisdiction'] )
+			? sanitize_text_field( (string) $body['jurisdiction'] )
+			: '';
+		if ( ! in_array( $requested_jurisdiction, Generator::JURISDICTIONS, true ) ) {
+			$requested_jurisdiction = '';
+		}
+		$saved_jurisdiction = isset( $settings['jurisdiction'] ) && is_scalar( $settings['jurisdiction'] )
+			? (string) $settings['jurisdiction']
+			: '';
+		$jurisdiction = '' !== $requested_jurisdiction ? $requested_jurisdiction : $saved_jurisdiction;
+		$missing      = Generator::missing_required_settings( $jurisdiction, $settings );
+		if ( $missing ) {
+			return $this->missing_required_error( $missing );
+		}
 
 		$filter = null;
-		if ( $override ) {
+		if ( null !== $override ) {
 			// Temporarily swap the option so Renderer reads the preview payload.
 			// We use a filter — no DB write happens; pre_option_<key> short-circuits get_option.
 			$filter = function ( $value ) use ( $override ) {
@@ -224,12 +245,30 @@ class Cookie_Policy_Api {
 			);
 			$html = Renderer::render( $atts );
 		} finally {
-			if ( $filter ) {
+			if ( null !== $filter ) {
 				remove_filter( 'pre_option_' . self::OPTION, $filter );
 			}
 		}
 
 		return new WP_REST_Response( array( 'html' => $html ), 200 );
+	}
+
+	/**
+	 * Build the REST error returned when a jurisdiction-specific policy would
+	 * otherwise be rendered with mandatory declarations removed.
+	 *
+	 * @param string[] $missing Missing settings dot-paths.
+	 * @return WP_Error
+	 */
+	private function missing_required_error( array $missing ) {
+		return new WP_Error(
+			'faz_cookie_policy_missing_required',
+			__( 'Complete all fields required for the selected jurisdiction before saving or previewing the Cookie Policy.', 'faz-cookie-manager' ),
+			array(
+				'status' => 400,
+				'fields' => array_values( $missing ),
+			)
+		);
 	}
 
 	/**
@@ -300,12 +339,12 @@ class Cookie_Policy_Api {
 		$company = is_array( $in['company'] ?? null ) ? $in['company'] : array();
 		$out['company']['name']     = $this->trim_clip( $company['name'] ?? '', 200 );
 		$out['company']['address']  = $this->trim_clip( $company['address'] ?? '', 500 );
-		$out['company']['email']    = sanitize_email( (string) ( $company['email'] ?? '' ) );
+		$out['company']['email']    = sanitize_email( is_scalar( $company['email'] ?? null ) ? (string) $company['email'] : '' );
 		$out['company']['registry'] = $this->trim_clip( $company['registry'] ?? '', 100 );
 
 		$dpo = is_array( $in['dpo'] ?? null ) ? $in['dpo'] : array();
 		$out['dpo']['name']    = $this->trim_clip( $dpo['name'] ?? '', 200 );
-		$out['dpo']['email']   = sanitize_email( (string) ( $dpo['email'] ?? '' ) );
+		$out['dpo']['email']   = sanitize_email( is_scalar( $dpo['email'] ?? null ) ? (string) $dpo['email'] : '' );
 		$out['dpo']['address'] = $this->trim_clip( $dpo['address'] ?? '', 500 );
 
 		// Allowlist of recognised third-party services. Kept FLAT here for
@@ -342,14 +381,15 @@ class Cookie_Policy_Api {
 			'onesignal', 'pushwoosh', 'fcm',
 		);
 		$services = is_array( $in['third_party_services'] ?? null ) ? $in['third_party_services'] : array();
+		$services = array_filter( $services, 'is_scalar' );
 		$out['third_party_services'] = array_values( array_intersect( $allowed_services, array_map( 'sanitize_text_field', $services ) ) );
 
-		if ( isset( $in['retention_months'] ) ) {
+		if ( isset( $in['retention_months'] ) && is_scalar( $in['retention_months'] ) ) {
 			$months = (int) $in['retention_months'];
 			$out['retention_months'] = max( 1, min( 120, $months ) );
 		}
 
-		if ( isset( $in['privacy_policy_url'] ) ) {
+		if ( isset( $in['privacy_policy_url'] ) && is_scalar( $in['privacy_policy_url'] ) ) {
 			$url = esc_url_raw( (string) $in['privacy_policy_url'] );
 			if ( '' !== $url && filter_var( $url, FILTER_VALIDATE_URL ) ) {
 				$out['privacy_policy_url'] = $url;

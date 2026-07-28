@@ -100,8 +100,30 @@ assert_true( $hash_a !== $hash_b, 'gettext policy edits change the public policy
 $catalog_source = (string) file_get_contents( Template_Translations::CATALOG_FILE );
 assert_eq(
 	substr_count( $catalog_source, "'Cookie policy template:" ),
-	33,
-	'generated source exposes all 33 jurisdiction sections to WordPress gettext extraction'
+	44,
+	'generated source exposes all 44 jurisdiction sections to WordPress gettext extraction (10 gdpr + 13 ccpa + 10 lgpd + 11 popia)'
+);
+
+$fragment_path = tempnam( sys_get_temp_dir(), 'faz-policy-po-' );
+$fragment_log  = array();
+$fragment_exit = 1;
+$fragment_cmd  = escapeshellarg( PHP_BINARY ) . ' '
+	. escapeshellarg( dirname( __DIR__, 2 ) . '/scripts/generate-cookie-policy-po-fragment.php' ) . ' it '
+	. escapeshellarg( dirname( __DIR__, 2 ) . '/languages/faz-cookie-manager-it_IT.po' ) . ' '
+	. escapeshellarg( $fragment_path ) . ' 2>&1';
+exec( $fragment_cmd, $fragment_log, $fragment_exit );
+$fragment_source = is_readable( $fragment_path ) ? (string) file_get_contents( $fragment_path ) : '';
+if ( is_string( $fragment_path ) && file_exists( $fragment_path ) ) {
+	unlink( $fragment_path );
+}
+assert_eq( $fragment_exit, 0, 'PO fragment generation remains usable when one legacy jurisdiction is structurally stale' );
+assert_true(
+	false !== strpos( implode( "\n", $fragment_log ), 'Skipped ccpa-california/it' ),
+	'PO fragment generation reports skipped unsafe jurisdiction merges'
+);
+assert_true(
+	false !== strpos( $fragment_source, 'Cookie policy template: popia-southafrica / introduction' ),
+	'PO fragment retains safely aligned jurisdictions after a skip'
 );
 
 echo "\n--\n";

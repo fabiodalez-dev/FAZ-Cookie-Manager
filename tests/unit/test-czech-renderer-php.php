@@ -6,10 +6,11 @@
  *  - Renderer::format_date('cs') = "D. <genitive-month> YYYY"
  *  - Renderer::month_names('cs') genitive forms, 12 entries
  *  - Renderer::format_retention(..., 'cs') + boundary inputs (0, negative, huge)
- *  - Renderer::jurisdiction_display_name(..., 'cs') across all 3 jurisdictions
+ *  - Renderer::jurisdiction_display_name(..., 'cs') across every jurisdiction
+ *    in Generator::JURISDICTIONS
  *  - Renderer::language_display_name('cs', ...) endonym
- *  - Generator::resolve_template_path('...', 'cs') across gdpr-strict / ccpa /
- *    lgpd, plus unknown-lang → fallback, and "cs present in every map".
+ *  - Generator::resolve_template_path('...', 'cs') across every registered
+ *    jurisdiction, plus unknown-lang → fallback, and "cs present in every map".
  *
  * The five Renderer helpers under test are `private static`, so they are
  * invoked here via ReflectionMethod — deterministic, no browser, no DB.
@@ -217,6 +218,11 @@ assert_eq(
 	'LGPD (Brazílie)',
 	'jurisdiction_display_name(lgpd, cs) localises Brazil → "Brazílie"'
 );
+assert_eq(
+	faz_call_renderer( 'jurisdiction_display_name', array( 'popia-southafrica', 'cs' ) ),
+	'POPIA (Jihoafrická republika)',
+	'jurisdiction_display_name(popia, cs) localises South Africa → "Jihoafrická republika"'
+);
 // cs differs from en for the same jurisdiction (proves the cs key is wired,
 // not silently falling back to en).
 $gdpr_en = faz_call_renderer( 'jurisdiction_display_name', array( 'gdpr-strict', 'en' ) );
@@ -253,7 +259,7 @@ assert_eq(
 
 // ---------- resolve_template_path('...', 'cs') across jurisdictions ----------
 
-foreach ( array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil' ) as $j ) {
+foreach ( Generator::JURISDICTIONS as $j ) {
 	$p = Generator::resolve_template_path( $j, 'cs' );
 	assert_true( is_string( $p ) && '' !== $p, "resolve_template_path($j, cs) resolves to a path" );
 	$norm = is_string( $p ) ? str_replace( '\\', '/', $p ) : '';
@@ -329,9 +335,10 @@ foreach ( $all_langs as $L ) {
 }
 assert_eq( count( array_unique( $endonyms ) ), count( $all_langs ), 'all 8 endonyms are distinct' );
 
-// jurisdiction_display_name: cs present in all 3 jurisdiction maps (differs
-// from en for each), proving the cs key is wired everywhere.
-foreach ( array( 'gdpr-strict', 'ccpa-california', 'lgpd-brazil' ) as $j ) {
+// jurisdiction_display_name: cs present in every jurisdiction map (differs
+// from en for each), proving the cs key is wired everywhere. Registry-driven
+// so a future jurisdiction cannot land without cs coverage.
+foreach ( Generator::JURISDICTIONS as $j ) {
 	$cs_v = faz_call_renderer( 'jurisdiction_display_name', array( $j, 'cs' ) );
 	assert_true( is_string( $cs_v ) && '' !== $cs_v && $cs_v !== $j, "jurisdiction_display_name($j, cs) present (not raw key)" );
 }

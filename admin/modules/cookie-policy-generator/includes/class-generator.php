@@ -40,6 +40,7 @@ class Generator {
 		'gdpr-strict',
 		'ccpa-california',
 		'lgpd-brazil',
+		'popia-southafrica',
 	);
 
 	/**
@@ -52,17 +53,73 @@ class Generator {
 
 	/**
 	 * Native language per jurisdiction (statutory bias):
-	 *   - gdpr-strict     → en (EU lingua franca for regulatory docs)
-	 *   - ccpa-california → en + es (CA bilingual mandate per §1798.130)
-	 *   - lgpd-brazil     → pt-BR
+	 *   - gdpr-strict       → en (EU lingua franca for regulatory docs)
+	 *   - ccpa-california   → en (es ships as a translation, not a second
+	 *                         native fallback — resolve_template_path() uses
+	 *                         a single native lang per jurisdiction)
+	 *   - lgpd-brazil       → pt-BR
+	 *   - popia-southafrica → en (one of South Africa's official languages
+	 *                         and the language of the Act + Regulator guidance)
 	 *
 	 * @var array<string,string>
 	 */
 	const NATIVE_LANG = array(
-		'gdpr-strict'     => 'en',
-		'ccpa-california' => 'en',
-		'lgpd-brazil'     => 'pt-BR',
+		'gdpr-strict'       => 'en',
+		'ccpa-california'   => 'en',
+		'lgpd-brazil'       => 'pt-BR',
+		'popia-southafrica' => 'en',
 	);
+
+	/**
+	 * Return jurisdiction-specific settings that must be present before a
+	 * complete saved-configuration policy can be previewed, saved, or published.
+	 *
+	 * POPIA section 18 requires the responsible party's identity and address
+	 * in the collection notice. The POPIA scaffold also publishes the
+	 * Information Officer and relies on the separate privacy notice
+	 * for recipient/safeguard detail, so those fields must not silently vanish
+	 * through Renderer::strip_empty_label_lines().
+	 *
+	 * @param string $jurisdiction Effective jurisdiction id.
+	 * @param array  $settings     Cookie Policy settings.
+	 * @return string[] Missing dot-paths.
+	 */
+	public static function missing_required_settings( $jurisdiction, array $settings ) {
+		if ( 'popia-southafrica' !== $jurisdiction ) {
+			return array();
+		}
+
+		$company = is_array( $settings['company'] ?? null ) ? $settings['company'] : array();
+		$dpo     = is_array( $settings['dpo'] ?? null ) ? $settings['dpo'] : array();
+		$values  = array(
+			'company.name'       => $company['name'] ?? '',
+			'company.address'    => $company['address'] ?? '',
+			'company.email'      => $company['email'] ?? '',
+			'dpo.name'           => $dpo['name'] ?? '',
+			'dpo.email'          => $dpo['email'] ?? '',
+			'privacy_policy_url' => $settings['privacy_policy_url'] ?? '',
+		);
+
+		$missing = array();
+		foreach ( $values as $path => $value ) {
+			if ( ! is_scalar( $value ) ) {
+				$missing[] = $path;
+				continue;
+			}
+			$value   = trim( (string) $value );
+			$invalid = '' === $value;
+			if ( in_array( $path, array( 'company.email', 'dpo.email' ), true ) ) {
+				$invalid = $invalid || false === filter_var( $value, FILTER_VALIDATE_EMAIL );
+			} elseif ( 'privacy_policy_url' === $path ) {
+				$scheme  = strtolower( (string) parse_url( $value, PHP_URL_SCHEME ) );
+				$invalid = $invalid || false === filter_var( $value, FILTER_VALIDATE_URL ) || ! in_array( $scheme, array( 'http', 'https' ), true );
+			}
+			if ( $invalid ) {
+				$missing[] = $path;
+			}
+		}
+		return $missing;
+	}
 
 	/**
 	 * Resolve the template file path for a jurisdiction+lang pair.
@@ -72,7 +129,7 @@ class Generator {
 	 *   2. native lang of jurisdiction (if different)
 	 *   3. en (universal fallback)
 	 *
-	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil).
+	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil / popia-southafrica).
 	 * @param string $lang         BCP-47 (en / it / fr / de / es / pt-BR / bg / cs).
 	 * @return string|null Absolute path to .md file, or null if no template found.
 	 */

@@ -87,6 +87,11 @@ class Renderer {
 
 		// FR-03 step 2: resolve jurisdiction.
 		$jurisdiction = self::resolve_jurisdiction( $atts, $settings );
+		$has_shortcode_override = ! empty( $atts['jurisdiction'] )
+			&& in_array( $atts['jurisdiction'], Generator::JURISDICTIONS, true );
+		if ( ! $has_shortcode_override && Generator::missing_required_settings( $jurisdiction, $settings ) ) {
+			return self::incomplete_configuration_notice();
+		}
 
 		// FR-03 step 3: load scaffold.
 		$template_path = Generator::resolve_template_path( $jurisdiction, $lang );
@@ -152,6 +157,10 @@ class Renderer {
 		// trailing whitespace/em-dashes/commas, visually broken on the public
 		// policy page. Reported by Gooloo on 1.16.1.
 		$markdown = self::strip_empty_label_lines( $markdown );
+		// Same class of defect for inline links: an empty URL placeholder
+		// would otherwise leave literal `[label]()` markdown in the output
+		// (markdown_to_html only builds an anchor when the URL is non-empty).
+		$markdown = self::strip_empty_markdown_links( $markdown );
 		// By default drop the scaffold's leading H1 ("# Cookie Policy") so the
 		// rendered policy does not duplicate the WordPress page title it is
 		// usually placed inside. `show_title="true"` keeps it. The policy stays
@@ -315,17 +324,17 @@ class Renderer {
 		$dpo     = (array) ( $settings['dpo'] ?? array() );
 
 		$data = array(
-			'COMPANY_NAME'           => esc_html( (string) ( $company['name'] ?? '' ) ),
-			'COMPANY_ADDRESS'        => esc_html( (string) ( $company['address'] ?? '' ) ),
-			'COMPANY_EMAIL'          => esc_html( (string) ( $company['email'] ?? '' ) ),
-			'COMPANY_REGISTRY'       => esc_html( (string) ( $company['registry'] ?? '' ) ),
-			'DPO_EMAIL'              => esc_html( (string) ( $dpo['email'] ?? '' ) ),
-			'DPO_NAME'               => esc_html( (string) ( $dpo['name'] ?? '' ) ),
+			'COMPANY_NAME'           => esc_html( self::scalar_string( $company['name'] ?? '' ) ),
+			'COMPANY_ADDRESS'        => esc_html( self::scalar_string( $company['address'] ?? '' ) ),
+			'COMPANY_EMAIL'          => esc_html( self::scalar_string( $company['email'] ?? '' ) ),
+			'COMPANY_REGISTRY'       => esc_html( self::scalar_string( $company['registry'] ?? '' ) ),
+			'DPO_EMAIL'              => esc_html( self::scalar_string( $dpo['email'] ?? '' ) ),
+			'DPO_NAME'               => esc_html( self::scalar_string( $dpo['name'] ?? '' ) ),
 			'COOKIE_CATEGORIES'      => self::build_cookie_list_html( $lang ),
 			'THIRD_PARTY_SERVICES'   => self::build_services_list( $settings ),
 			'LAST_UPDATED_DATE'      => esc_html( self::format_date( $lang ) ),
 			'COOKIE_POLICY_URL'      => esc_url( self::current_url() ),
-			'PRIVACY_POLICY_URL'     => esc_url( (string) ( $settings['privacy_policy_url'] ?? '' ) ),
+			'PRIVACY_POLICY_URL'     => esc_url( self::privacy_policy_url( $settings ) ),
 			'RETENTION_PERIOD'       => esc_html( self::format_retention( $settings, $lang ) ),
 			'JURISDICTION_NAME'      => esc_html( self::jurisdiction_display_name( $jurisdiction, $lang ) ),
 			'LANGUAGE_NAME'          => esc_html( self::language_display_name( $lang, $lang ) ),
@@ -343,9 +352,10 @@ class Renderer {
 		}
 
 		// Jurisdiction-specific official body refs.
-		$data['EDPB_CONTACT']   = ( 'gdpr-strict' === $jurisdiction ) ? 'edpb@edpb.europa.eu' : '';
+		$data['EDPB_CONTACT']    = ( 'gdpr-strict' === $jurisdiction ) ? 'edpb@edpb.europa.eu' : '';
 		$data['CA_PIPC_CONTACT'] = ( 'ccpa-california' === $jurisdiction ) ? 'cppa@cppa.ca.gov' : '';
-		$data['ANPD_CONTACT']   = ( 'lgpd-brazil' === $jurisdiction ) ? 'comunicacao@anpd.gov.br' : '';
+		$data['ANPD_CONTACT']    = ( 'lgpd-brazil' === $jurisdiction ) ? 'comunicacao@anpd.gov.br' : '';
+		$data['INFOREG_CONTACT'] = ( 'popia-southafrica' === $jurisdiction ) ? 'POPIAComplaints@inforegulator.org.za' : '';
 
 		/**
 		 * Filter the data array passed to the template substitution.
@@ -361,6 +371,17 @@ class Renderer {
 		 * @param array  $settings     Admin settings raw.
 		 */
 		return (array) apply_filters( 'faz_cookie_policy_data', $data, $jurisdiction, $lang, $settings );
+	}
+
+	/**
+	 * Convert option data to a string without triggering array/object coercion
+	 * warnings when an option was written outside the REST schema.
+	 *
+	 * @param mixed $value Option value.
+	 * @return string
+	 */
+	private static function scalar_string( $value ) {
+		return is_scalar( $value ) ? (string) $value : '';
 	}
 
 	/**
@@ -874,6 +895,49 @@ class Renderer {
 	}
 
 	/**
+	 * Resolve the separate privacy-notice URL for the policy body.
+	 *
+	 * Prefers the generator's own field; falls back to the WordPress core
+	 * privacy-policy page (Settings → Privacy) so a site that already declared
+	 * one there does not have to retype it. Returns '' when neither is set —
+	 * strip_empty_markdown_links() then degrades the link to plain text.
+	 *
+	 * @param array $settings Cookie Policy settings.
+	 * @return string
+	 */
+	private static function privacy_policy_url( array $settings ) {
+		$configured = trim( self::scalar_string( $settings['privacy_policy_url'] ?? '' ) );
+		if ( '' !== $configured ) {
+			return $configured;
+		}
+		return function_exists( 'get_privacy_policy_url' ) ? (string) get_privacy_policy_url() : '';
+	}
+
+	/**
+	 * Degrade markdown links whose URL placeholder resolved to nothing.
+	 *
+	 * `Generator::substitute()` blanks unknown/empty tokens, so a template
+	 * line like `[Privacy Policy]({{PRIVACY_POLICY_URL}})` becomes
+	 * `[Privacy Policy]()` — which markdown_to_html() will NOT turn into an
+	 * anchor (the URL is empty), leaving raw markdown syntax visible in a
+	 * published legal document. Rewrite those to their plain label so the
+	 * sentence still reads correctly. Falls back to the original markdown on
+	 * PCRE error, like the sibling strip helpers.
+	 *
+	 * @param string $markdown Policy markdown, post-substitution.
+	 * @return string
+	 */
+	private static function strip_empty_markdown_links( $markdown ) {
+		if ( ! is_string( $markdown ) || '' === $markdown ) {
+			return (string) $markdown;
+		}
+		// `[label]()` and `[label](   )` → `label`. The label class excludes
+		// brackets so nested/malformed pairs are left untouched.
+		$cleaned = preg_replace( '/\[([^\]\[\n]*)\]\([ \t]*\)/', '$1', $markdown );
+		return null === $cleaned ? $markdown : $cleaned;
+	}
+
+	/**
 	 * Remove bullet lines whose only content is an empty "**Label:**" run.
 	 *
 	 * Strips list items that render as a bold label with no value (plus any
@@ -1103,6 +1167,21 @@ class Renderer {
 	}
 
 	/**
+	 * Admin-only notice used instead of publishing a policy whose mandatory
+	 * jurisdiction-specific identity/contact declarations are empty.
+	 *
+	 * @return string
+	 */
+	private static function incomplete_configuration_notice() {
+		if ( current_user_can( 'manage_options' ) ) {
+			return '<div class="faz-cookie-policy-empty notice notice-warning"><p>'
+				. esc_html__( 'FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy.', 'faz-cookie-manager' )
+				. '</p></div>';
+		}
+		return '';
+	}
+
+	/**
 	 * FR-07 compute the policy version hash. The hash is exposed in two ways:
 	 *
 	 *  1. As a <meta name="faz-policy-version"> in <head>, when wp_head has
@@ -1277,7 +1356,8 @@ class Renderer {
 	 * @return string Localised retention label; defaults to 12 months.
 	 */
 	private static function format_retention( array $settings, $lang ) {
-		$months = (int) ( $settings['retention_months'] ?? 12 );
+		$value  = $settings['retention_months'] ?? 12;
+		$months = is_scalar( $value ) ? (int) $value : 12;
 		if ( $months <= 0 ) { $months = 12; }
 		$labels = array(
 			'en'    => '%d months',
@@ -1301,9 +1381,10 @@ class Renderer {
 	 */
 	private static function jurisdiction_display_name( $jurisdiction, $lang ) {
 		$names = array(
-			'gdpr-strict'     => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)' ),
-			'ccpa-california' => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)' ),
-			'lgpd-brazil'     => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)' ),
+			'gdpr-strict'       => array( 'en' => 'GDPR (EU/EEA/UK)', 'it' => 'GDPR (UE/SEE/UK)', 'fr' => 'RGPD (UE/EEE/UK)', 'de' => 'DSGVO (EU/EWR/UK)', 'es' => 'RGPD (UE/EEE/UK)', 'pt-BR' => 'GDPR (UE/EEE/UK)', 'bg' => 'GDPR (ЕС/ЕИП/Обединеното кралство)', 'cs' => 'GDPR (EU/EHP/UK)' ),
+			'ccpa-california'   => array( 'en' => 'CCPA/CPRA (California)', 'it' => 'CCPA/CPRA (California)', 'fr' => 'CCPA/CPRA (Californie)', 'de' => 'CCPA/CPRA (Kalifornien)', 'es' => 'CCPA/CPRA (California)', 'pt-BR' => 'CCPA/CPRA (Califórnia)', 'bg' => 'CCPA/CPRA (Калифорния)', 'cs' => 'CCPA/CPRA (Kalifornie)' ),
+			'lgpd-brazil'       => array( 'en' => 'LGPD (Brazil)', 'it' => 'LGPD (Brasile)', 'fr' => 'LGPD (Brésil)', 'de' => 'LGPD (Brasilien)', 'es' => 'LGPD (Brasil)', 'pt-BR' => 'LGPD (Brasil)', 'bg' => 'LGPD (Бразилия)', 'cs' => 'LGPD (Brazílie)' ),
+			'popia-southafrica' => array( 'en' => 'POPIA (South Africa)', 'it' => 'POPIA (Sudafrica)', 'fr' => 'POPIA (Afrique du Sud)', 'de' => 'POPIA (Südafrika)', 'es' => 'POPIA (Sudáfrica)', 'pt-BR' => 'POPIA (África do Sul)', 'bg' => 'POPIA (Южна Африка)', 'cs' => 'POPIA (Jihoafrická republika)' ),
 		);
 		return $names[ $jurisdiction ][ $lang ] ?? $names[ $jurisdiction ]['en'] ?? $jurisdiction;
 	}
@@ -1338,9 +1419,10 @@ class Renderer {
 	 */
 	private static function official_resources_url( $jurisdiction ) {
 		$urls = array(
-			'gdpr-strict'     => 'https://edpb.europa.eu/',
-			'ccpa-california' => 'https://cppa.ca.gov/',
-			'lgpd-brazil'     => 'https://www.gov.br/anpd/pt-br',
+			'gdpr-strict'       => 'https://edpb.europa.eu/',
+			'ccpa-california'   => 'https://cppa.ca.gov/',
+			'lgpd-brazil'       => 'https://www.gov.br/anpd/pt-br',
+			'popia-southafrica' => 'https://inforegulator.org.za/',
 		);
 		return $urls[ $jurisdiction ] ?? '';
 	}

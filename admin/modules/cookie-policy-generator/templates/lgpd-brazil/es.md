@@ -32,7 +32,7 @@ Transferencias internacionales (Art. 33-36 LGPD): países con protección adecua
 
 Confirmación, acceso, corrección, anonimización/eliminación, portabilidad, información sobre compartir, información sobre consecuencias de no consentir, revocación (Art. 8 § 5).
 
-Contacte al DPO **{{DPO_EMAIL}}** o al controlador **{{COMPANY_EMAIL}}**.
+Contacte al controlador en **{{COMPANY_EMAIL}}** o al DPO (Encarregado) indicado al inicio de esta política.
 
 ## Autoridad
 

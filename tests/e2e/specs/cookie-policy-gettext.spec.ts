@@ -55,9 +55,10 @@ function renderFacts(opts: RenderOpts): Facts {
   const locale = opts.locale ?? '';
   const raw = wpEval(`
     update_option( 'faz_cookie_policy_data', array(
-      'company'    => array( 'name' => ${JSON.stringify(company)}, 'email' => 'dpo@acme.test' ),
-      'dpo'        => array( 'name' => 'DPO', 'email' => 'dpo@acme.test' ),
-      'disclaimer' => array( 'show' => ${show} ),
+      'company'    => array( 'name' => ${JSON.stringify(company)}, 'address' => '1 Test Street, Cape Town', 'email' => 'dpo@acme.test' ),
+      'dpo'                => array( 'name' => 'DPO', 'email' => 'dpo@acme.test' ),
+      'privacy_policy_url' => 'https://acme.test/privacy',
+      'disclaimer'         => array( 'show' => ${show} ),
     ) );
     ${locale ? `switch_to_locale( '${locale}' );` : ''}
     $html = ${RENDERER}::render( array( 'jurisdiction' => '${jurisdiction}', 'lang' => '${opts.lang}' ) );
@@ -170,16 +171,17 @@ test.describe('Cookie Policy gettext pipeline (#186)', () => {
     expect(a.version).not.toBe(b.version);
   });
 
-  test('08 all three jurisdictions render a distinct, well-formed policy', () => {
+  test('08 all registered jurisdictions render a distinct, well-formed policy', () => {
     const g = renderFacts({ jurisdiction: 'gdpr-strict', lang: 'en', companyName: 'Multi Co' });
     const c = renderFacts({ jurisdiction: 'ccpa-california', lang: 'en', companyName: 'Multi Co' });
     const l = renderFacts({ jurisdiction: 'lgpd-brazil', lang: 'en', companyName: 'Multi Co' });
-    for (const f of [g, c, l]) {
+    const p = renderFacts({ jurisdiction: 'popia-southafrica', lang: 'en', companyName: 'Multi Co' });
+    for (const f of [g, c, l, p]) {
       expect(f.article).toBe(true);
       expect(f.len).toBeGreaterThan(3000);
       expect(f.rawPlaceholder).toBe(false);
     }
-    expect(new Set([g.version, c.version, l.version]).size).toBe(3);
+    expect(new Set([g.version, c.version, l.version, p.version]).size).toBe(4);
   });
 
   test('09 the legal disclaimer is shown by default', () => {

@@ -395,6 +395,62 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     }
   });
 
+  test('5b. explicit POPIA shortcode override never collapses the public page to an empty string', () => {
+    const incomplete = JSON.stringify({
+      jurisdiction: 'gdpr-strict',
+      company: { name: 'Shortcode Override Co', address: '', email: 'privacy@override.test' },
+      dpo: { name: '', email: '' },
+      privacy_policy_url: '',
+    }).replace(/'/g, "\\'");
+    const restore = JSON.stringify(FAKE_DATA).replace(/'/g, "\\'");
+
+    try {
+      wpEval(`update_option('faz_cookie_policy_data', json_decode('${incomplete}', true));`);
+      const overridden = wpEval(
+        `echo do_shortcode('[faz_cookie_policy_complete jurisdiction="popia-southafrica" lang="en"]');`,
+      ).trim();
+      expect(overridden.length, 'explicit shortcode override returned an empty public policy').toBeGreaterThan(400);
+      expect(overridden, 'explicit shortcode override did not render POPIA').toContain('data-jurisdiction="popia-southafrica"');
+
+      wpEval(`$d = json_decode('${incomplete}', true); $d['jurisdiction'] = 'popia-southafrica'; update_option('faz_cookie_policy_data', $d);`);
+      const savedJurisdiction = wpEval(`echo do_shortcode('[faz_cookie_policy_complete lang="en"]');`).trim();
+      expect(savedJurisdiction, 'incomplete saved POPIA configuration must remain blocked').toBe('');
+    } finally {
+      wpEval(`update_option('faz_cookie_policy_data', json_decode('${restore}', true));`);
+    }
+  });
+
+  test('5c. preview without settings returns the same structured 400 contract for incomplete POPIA', async ({ page, loginAsAdmin }) => {
+    const incomplete = JSON.stringify({
+      jurisdiction: 'popia-southafrica',
+      company: { name: 'REST Contract Co', address: '', email: 'privacy@rest.test' },
+      dpo: { name: '', email: '' },
+      privacy_policy_url: '',
+    }).replace(/'/g, "\\'");
+    const restore = JSON.stringify(FAKE_DATA).replace(/'/g, "\\'");
+
+    try {
+      wpEval(`update_option('faz_cookie_policy_data', json_decode('${incomplete}', true));`);
+      await loginAsAdmin(page);
+      await page.goto(ADMIN_PAGE, { waitUntil: 'domcontentloaded' });
+      const nonce = await page.evaluate(
+        () => (window as unknown as { fazConfig?: { api?: { nonce?: string } } }).fazConfig?.api?.nonce ?? '',
+      );
+      const response = await page.request.post('/wp-json/faz/v1/cookie-policy/preview', {
+        headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+        data: {},
+      });
+      expect(response.status()).toBe(400);
+      const body = await response.json() as { code?: string; data?: { fields?: string[] } };
+      expect(body.code).toBe('faz_cookie_policy_missing_required');
+      expect(body.data?.fields).toEqual(expect.arrayContaining([
+        'company.address', 'dpo.name', 'dpo.email', 'privacy_policy_url',
+      ]));
+    } finally {
+      wpEval(`update_option('faz_cookie_policy_data', json_decode('${restore}', true));`);
+    }
+  });
+
   test('6b. legacy [faz_cookie_policy] shortcode still registered + renders alongside [faz_cookie_policy_complete]', () => {
     // Regression guard for PR #116 review feedback (2026-05-20): the
     // generator must NOT shadow the long-standing faz_cookie_policy
@@ -419,10 +475,13 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     expect(completeOut, 'complete emits disclaimer').toContain('faz-cookie-policy-disclaimer');
   });
 
-  test('6. 8 languages × 3 jurisdictions matrix renders without leftover tokens', async ({ page }) => {
-    // We exercise the shortcode directly via WP eval (avoids creating 24 pages).
+  test('6. 8 languages × 4 jurisdictions matrix renders without leftover tokens', async ({ page }) => {
+    // We exercise the shortcode directly via WP eval (avoids creating 32 pages).
+    // 32 WP-CLI round-trips (~1 s each) sit too close to the global 45 s cap —
+    // declare an explicit budget so a loaded CI runner cannot flake the matrix.
+    test.setTimeout(120_000);
     const langs = ['en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs'];
-    const jurisdictions = ['gdpr-strict', 'ccpa-california', 'lgpd-brazil'];
+    const jurisdictions = ['gdpr-strict', 'ccpa-california', 'lgpd-brazil', 'popia-southafrica'];
 
     for (const j of jurisdictions) {
       for (const l of langs) {
@@ -451,7 +510,45 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
           expect(out, `${j}/${l} mentions LGPD`).toMatch(/LGPD/);
           expect(out, `${j}/${l} mentions Encarregado`).toMatch(/Encarregado|DPO|Datenschutzbeauftragter|D[ée]l[ée]gu[ée]|Delegado/);
         }
+        if (j === 'popia-southafrica') {
+          // The statutory citation is the load-bearing assert: a silent
+          // fallback to gdpr-strict would still pass the length/article/
+          // disclaimer checks above.
+          expect(out, `${j}/${l} mentions POPIA`).toMatch(/POPIA/);
+          expect(out, `${j}/${l} cites the Information Regulator`).toMatch(/inforegulator\.org\.za|Information Regulator/i);
+        }
       }
+    }
+  });
+
+  test('6d. A shortcode jurisdiction override with an incomplete config leaks no raw markdown', () => {
+    // The renderer only hard-blocks an incomplete jurisdiction when it was
+    // chosen in settings; a `jurisdiction="…"` shortcode override renders
+    // anyway (a blank policy page would be worse than a degraded one). That
+    // path must still not publish literal `[label]()` markdown when a URL
+    // placeholder resolves to nothing — markdown_to_html builds no anchor for
+    // an empty URL, so the syntax would otherwise survive into the document.
+    const snapshot = wpEval(`echo wp_json_encode( get_option('faz_cookie_policy_data', array()) );`).trim();
+    const b64 = Buffer.from(snapshot, 'utf8').toString('base64');
+    try {
+      // GDPR-shaped settings: no Information Officer, no separate privacy URL.
+      wpEval(`
+        update_option( 'wp_page_for_privacy_policy', 0 );
+        update_option( 'faz_cookie_policy_data', array(
+          'jurisdiction'       => 'gdpr-strict',
+          'company'            => array( 'name' => 'ACME', 'address' => '1 Test St', 'email' => 'privacy@acme.test' ),
+          'dpo'                => array( 'name' => '', 'email' => '' ),
+          'privacy_policy_url' => '',
+        ) );
+      `);
+      const out = wpEval(`echo do_shortcode('[faz_cookie_policy_complete jurisdiction="popia-southafrica"]');`);
+
+      expect(out.length, 'override still renders a policy (not a blank page)').toBeGreaterThan(400);
+      expect(out, 'no literal [label]() markdown survives').not.toMatch(/\[[^\]\n]*\]\(\s*\)/);
+      expect(out, 'no anchor with an empty href').not.toMatch(/<a[^>]+href=""/);
+      expect(out, 'no leftover {{TOKEN}}').not.toMatch(/\{\{[A-Z_][A-Z0-9_]*\}\}/);
+    } finally {
+      wpEval(`update_option( 'faz_cookie_policy_data', json_decode( base64_decode('${b64}'), true ) );`);
     }
   });
 

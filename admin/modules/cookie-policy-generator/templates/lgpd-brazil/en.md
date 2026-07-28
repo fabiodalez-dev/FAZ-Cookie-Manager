@@ -47,7 +47,7 @@ International transfers (Art. 33-36 LGPD) are subject to adequate-protection cou
 
 I — confirmation, II — access, III — correction, IV — anonymization/blocking/deletion, V — portability, VI — deletion, VII — info on sharing, VIII — info on non-consent consequences, IX — withdraw consent.
 
-Exercise these rights with the **DPO** at **{{DPO_EMAIL}}** or controller at **{{COMPANY_EMAIL}}**.
+Exercise these rights by contacting the controller at **{{COMPANY_EMAIL}}** or the DPO (Encarregado) named at the top of this policy.
 
 ## Supervisory authority
 
@@ -55,4 +55,4 @@ ANPD — Autoridade Nacional de Proteção de Dados: {{ANPD_CONTACT}}, [{{OFFICI
 
 ## Contact
 
-**{{COMPANY_EMAIL}}** or **{{DPO_EMAIL}}**.
+**{{COMPANY_EMAIL}}** (or the DPO named at the top of this policy).

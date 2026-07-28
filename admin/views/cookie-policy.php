@@ -75,13 +75,13 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 			</div>
 			<div class="faz-card-body">
 				<div class="faz-form-group">
-					<label for="cp-dpo-name"><?php esc_html_e( 'DPO / Encarregado / Privacy Officer name', 'faz-cookie-manager' ); ?></label>
+					<label for="cp-dpo-name"><?php esc_html_e( 'DPO / Encarregado / Information Officer name', 'faz-cookie-manager' ); ?></label>
 					<input type="text" id="cp-dpo-name" name="dpo.name" class="faz-input">
 				</div>
 				<div class="faz-form-group">
-					<label for="cp-dpo-email"><?php esc_html_e( 'DPO email', 'faz-cookie-manager' ); ?></label>
+					<label for="cp-dpo-email"><?php esc_html_e( 'DPO / Encarregado / Information Officer email', 'faz-cookie-manager' ); ?></label>
 					<input type="email" id="cp-dpo-email" name="dpo.email" class="faz-input">
-					<div class="faz-help"><?php esc_html_e( 'Mandatory for LGPD (Art. 41) and recommended for GDPR.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help"><?php esc_html_e( 'Mandatory for LGPD (Art. 41). Under POPIA, the head of a public or private body is the Information Officer by default; name and contact email are required by this POPIA template. Recommended for GDPR where no DPO is legally required.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>
@@ -98,6 +98,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 						<option value="gdpr-strict"><?php esc_html_e( 'GDPR (EU / EEA / UK)', 'faz-cookie-manager' ); ?></option>
 						<option value="ccpa-california"><?php esc_html_e( 'CCPA / CPRA (California, USA)', 'faz-cookie-manager' ); ?></option>
 						<option value="lgpd-brazil"><?php esc_html_e( 'LGPD (Brazil)', 'faz-cookie-manager' ); ?></option>
+						<option value="popia-southafrica"><?php esc_html_e( 'POPIA (South Africa)', 'faz-cookie-manager' ); ?></option>
 					</select>
 					<div class="faz-help"><?php esc_html_e( 'Override per shortcode call with [faz_cookie_policy_complete jurisdiction="..."].', 'faz-cookie-manager' ); ?></div>
 				</div>
@@ -163,11 +164,12 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 			</div>
 			<div class="faz-card-body">
 				<div class="faz-form-group">
-					<label for="cp-retention-months"><?php esc_html_e( 'Default retention period (months)', 'faz-cookie-manager' ); ?></label>
+					<label for="cp-retention-months"><?php esc_html_e( 'Declared fallback retention period (months)', 'faz-cookie-manager' ); ?></label>
 					<input type="number" id="cp-retention-months" name="retention_months" class="faz-input" min="1" max="120" step="1" value="12" style="max-width:8em;">
+					<div class="faz-help"><?php esc_html_e( 'Used only as a policy declaration when no shorter cookie-specific period applies. It does not change consent-log or third-party analytics retention settings.', 'faz-cookie-manager' ); ?></div>
 				</div>
 				<div class="faz-form-group">
-					<label for="cp-privacy-policy-url"><?php esc_html_e( 'Separate Privacy Policy URL (optional)', 'faz-cookie-manager' ); ?></label>
+					<label for="cp-privacy-policy-url"><?php esc_html_e( 'Separate Privacy Policy URL (required for POPIA)', 'faz-cookie-manager' ); ?></label>
 					<input type="url" id="cp-privacy-policy-url" name="privacy_policy_url" class="faz-input" placeholder="<?php echo esc_attr__( 'https://example.com/privacy', 'faz-cookie-manager' ); ?>">
 				</div>
 			</div>
