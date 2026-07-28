@@ -22,10 +22,10 @@ const IS_PHP_BUILT_IN_E2E = (process.env.FAZ_E2E_SERVER ?? 'php-built-in').toLow
 type SettingsPayload = Record<string, any>;
 type CategoryConsentState = Record<string, boolean>;
 
-// Stripe is excluded from this matrix because it is always-whitelisted as a
-// payment gateway (get_always_allowed_gateway_patterns). Testing Stripe
-// blocking here would always fail — and it should, because blocking payment
-// scripts breaks checkout.
+// Stripe is excluded from this category matrix because gateway behavior has a
+// separate context axis: it is exempt on checkout or after an explicit admin
+// opt-in, and blocked otherwise. Mixing that axis into the 16 category
+// combinations would make this test validate two independent state machines.
 const OBSERVED_CATEGORY_PROVIDERS = [
   { slug: 'analytics', cookieName: '_ga', hitKey: 'ga-monsterinsights' },
   { slug: 'marketing', cookieName: '_fbp', hitKey: 'facebook-pixel' },
@@ -122,7 +122,7 @@ async function gotoFrontend(page: Page, url: string): Promise<void> {
   await page.locator('body').waitFor({ state: 'visible' });
 }
 
-async function waitForCookie(page: Page, name: string, timeout = 20_000): Promise<void> {
+async function waitForCookie(page: Page, name: string, timeout = 30_000): Promise<void> {
   await page.waitForFunction(
     (cookieName) => document.cookie.split(';').some((chunk) => chunk.trim().startsWith(`${cookieName}=`)),
     name,
@@ -369,7 +369,9 @@ test.describe('Blocking compliance coverage', () => {
             // race their fetches in parallel — occasional iterations
             // observe a hit-count of 0 for a provider whose fetch was
             // still in flight. Poll until every granted provider's hit is
-            // visible (or 5s elapses, which would indicate a real bug).
+            // visible. The full 1,000+ case shared-install run can have PHP-FPM
+            // and browser work queued behind scanner tests, so use a bounded
+            // 15s poll rather than treating normal suite load as a product bug.
             const expectedHitKeys = OBSERVED_CATEGORY_PROVIDERS
               .filter((p) => consentState[p.slug])
               .map((p) => p.hitKey);
@@ -382,7 +384,7 @@ test.describe('Blocking compliance coverage', () => {
                   },
                   {
                     intervals: [200, 400, 800],
-                    timeout: 5_000,
+                    timeout: 15_000,
                     message: `Waiting for provider-matrix hits: ${expectedHitKeys.join(', ')}`,
                   },
                 )

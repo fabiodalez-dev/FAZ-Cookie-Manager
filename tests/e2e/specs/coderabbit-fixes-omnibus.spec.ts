@@ -38,6 +38,38 @@ function currentRevision(): string {
   return String(Number.isFinite(parsed) && parsed > 0 ? parsed : 1);
 }
 
+function backupSettingsOption(): string {
+  return wpEval(`echo base64_encode( wp_json_encode( get_option( 'faz_settings', array() ) ) );`).trim();
+}
+
+function restoreSettingsOption(encoded: string): void {
+  wpEval(`
+    $restored = json_decode( base64_decode( ${JSON.stringify(encoded)} ), true );
+    update_option( 'faz_settings', is_array( $restored ) ? $restored : array(), false );
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+    }
+  `);
+}
+
+function setStripeGatewayEnabled(enabled: boolean): void {
+  wpEval(`
+    $settings = get_option( 'faz_settings', array() );
+    if ( ! is_array( $settings ) ) { $settings = array(); }
+    if ( ! isset( $settings['script_blocking'] ) || ! is_array( $settings['script_blocking'] ) ) {
+      $settings['script_blocking'] = array();
+    }
+    if ( ! isset( $settings['script_blocking']['payment_gateways'] ) || ! is_array( $settings['script_blocking']['payment_gateways'] ) ) {
+      $settings['script_blocking']['payment_gateways'] = array();
+    }
+    $settings['script_blocking']['payment_gateways']['stripe'] = ${enabled ? 'true' : 'false'};
+    update_option( 'faz_settings', $settings, false );
+    if ( class_exists( '\\FazCookie\\Includes\\Cache' ) ) {
+      \\FazCookie\\Includes\\Cache::invalidate_cache_group( 'settings' );
+    }
+  `);
+}
+
 test.describe('CodeRabbit PR #79 omnibus', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -76,29 +108,34 @@ test.describe('CodeRabbit PR #79 omnibus', () => {
       return JSON.parse(raw) as string[];
     }
 
-    // Always-allowed payment-gateway cookies (Stripe) are exempt from the
-    // shredder regardless of the user whitelist, so they are the BASELINE of the
-    // output. Capture it (empty user whitelist → gateway cookies only).
-    const gatewayBaseline = callHelper([]);
-    expect(
-      gatewayBaseline,
-      'always-allowed gateway cookies are exempt even with no user whitelist',
-    ).toEqual(expect.arrayContaining(['__stripe_mid', '__stripe_sid']));
+    const originalSettings = backupSettingsOption();
+    setStripeGatewayEnabled(true);
+    try {
+      // With the explicit non-checkout gateway opt-in enabled, Stripe cookies
+      // are exempt regardless of the user whitelist and form the baseline.
+      const gatewayBaseline = callHelper([]);
+      expect(
+        gatewayBaseline,
+        'explicitly enabled gateway cookies are exempt even with no user whitelist',
+      ).toEqual(expect.arrayContaining(['__stripe_mid', '__stripe_sid']));
 
-    // A sub-3-char needle ('js') matches no user-whitelisted provider, so the
-    // output is exactly the gateway baseline — no extra provider cookies.
-    expect(callHelper(['js'])).toEqual(gatewayBaseline);
+      // A sub-3-char needle ('js') matches no user-whitelisted provider, so the
+      // output is exactly the gateway baseline — no extra provider cookies.
+      expect(callHelper(['js'])).toEqual(gatewayBaseline);
 
-    // "google-analytics" matches a known provider → its cookies are added ON TOP
-    // of the gateway baseline.
-    const whenGa = callHelper(['google-analytics']);
-    expect(
-      whenGa.length,
-      '"google-analytics" should add at least one provider cookie beyond the gateway baseline',
-    ).toBeGreaterThan(gatewayBaseline.length);
+      // "google-analytics" matches a known provider → its cookies are added ON TOP
+      // of the gateway baseline.
+      const whenGa = callHelper(['google-analytics']);
+      expect(
+        whenGa.length,
+        '"google-analytics" should add at least one provider cookie beyond the gateway baseline',
+      ).toBeGreaterThan(gatewayBaseline.length);
 
-    // A needle nobody ships matches no provider → output stays the gateway baseline.
-    expect(callHelper(['long-needle-nobody-ships'])).toEqual(gatewayBaseline);
+      // A needle nobody ships matches no provider → output stays the gateway baseline.
+      expect(callHelper(['long-needle-nobody-ships'])).toEqual(gatewayBaseline);
+    } finally {
+      restoreSettingsOption(originalSettings);
+    }
   });
 
   /**

@@ -1,0 +1,26 @@
+{
+    "necessary": {
+        "name": "Nezbytné",
+        "description": "<p>Nezbytné cookies jsou zásadní pro základní funkce webu a bez nich nemůže web fungovat zamýšleným způsobem. Tyto cookies neukládají žádné osobní údaje.</p>"
+    },
+    "functional": {
+        "name": "Funkční",
+        "description": "<p>Funkční cookies pomáhají vykonávat určité funkce, například sdílení obsahu webu na sociálních sítích, sbírání zpětné vazby a další funkce třetích stran.</p>"
+    },
+    "analytics": {
+        "name": "Analytické",
+        "description": "<p>Analytické cookies slouží k pochopení toho, jak návštěvníci s webem pracují. Tyto cookies poskytují informace o počtu návštěvníků, míře okamžitého opuštění, zdroji návštěvnosti atd.</p>"
+    },
+    "performance": {
+        "name": "Výkonnostní",
+        "description": "<p>Výkonnostní cookies se používají k pochopení a analýze klíčových výkonnostních ukazatelů webu, což pomáhá nabídnout návštěvníkům lepší uživatelský zážitek.</p>"
+    },
+    "uncategorized": {
+        "name": "Nezařazené",
+        "description": "<p>Cookies, které zatím nebyly zařazeny do žádné kategorie.</p>"
+    },
+    "marketing": {
+        "name": "Marketingové",
+        "description": "<p>Marketingové cookies se používají k zobrazování reklam na míru na základě dříve navštívených stránek a k analýze účinnosti reklamních kampaní.</p>"
+    }
+}

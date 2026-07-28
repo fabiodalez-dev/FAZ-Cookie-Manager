@@ -22,25 +22,41 @@ defined( 'ABSPATH' ) || exit;
 		<template id="faz-cookies-script-blocked-text"><?php esc_html_e( 'The Cookies page editor did not load, so its buttons will not work. A browser privacy shield or ad blocker is most likely blocking its script (the filename contains the word “cookie”, which some block lists match). Allow scripts for /wp-admin in this browser — or pause the shield for this page — then reload.', 'faz-cookie-manager' ); ?></template>
 	</div>
 
+	<?php
+	// The Sale/Sharing flags only drive the CCPA/CPRA Do-Not-Sell opt-out. On a
+	// pure-GDPR site (no active banner with a Do-Not-Sell surface) they have no
+	// visitor-facing effect, so the column is hidden to keep the editor focused.
+	// Stored flags are preserved either way: cookies.js only PUTs the flags for
+	// rows that actually render the toggles.
+	$faz_show_ccpa_col = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->has_do_not_sell_surface();
+	?>
 	<!-- Cookie Categories Editor -->
 	<div class="faz-card" style="margin-bottom:16px;">
 		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Cookie Categories', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
-			<div class="faz-help" style="margin-bottom:12px;"><?php esc_html_e( 'Edit the display name and description for each cookie category, and flag whether it involves the sale or sharing of personal data. Names and descriptions are shown to visitors in the cookie preference center; the sale/sharing flags drive the CCPA/CPRA "Do Not Sell or Share" opt-out.', 'faz-cookie-manager' ); ?></div>
+			<div class="faz-help" style="margin-bottom:12px;">
+				<?php if ( $faz_show_ccpa_col ) : ?>
+					<?php esc_html_e( 'Edit the display name and description for each cookie category, and flag whether it involves the sale or sharing of personal data. Names and descriptions are shown to visitors in the cookie preference center; the sale/sharing flags drive the CCPA/CPRA "Do Not Sell or Share" opt-out.', 'faz-cookie-manager' ); ?>
+				<?php else : ?>
+					<?php esc_html_e( 'Edit the display name and description for each cookie category. Names and descriptions are shown to visitors in the cookie preference center.', 'faz-cookie-manager' ); ?>
+				<?php endif; ?>
+			</div>
 			<div class="faz-table-wrap">
-				<table class="faz-table" id="faz-category-edit-table">
+				<table class="faz-table" id="faz-category-edit-table" data-show-ccpa="<?php echo esc_attr( $faz_show_ccpa_col ? '1' : '0' ); ?>">
 					<thead>
 						<tr>
 							<th style="width:120px;"><?php esc_html_e( 'Slug', 'faz-cookie-manager' ); ?></th>
 							<th style="width:200px;"><?php esc_html_e( 'Display Name', 'faz-cookie-manager' ); ?></th>
 							<th><?php esc_html_e( 'Description', 'faz-cookie-manager' ); ?></th>
-							<th style="width:160px;" title="<?php esc_attr_e( 'CPRA distinguishes a sale (for valuable consideration) from sharing (for cross-context behavioural advertising). A category flagged for either is covered by the visitor Do Not Sell or Share opt-out.', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Sale / Sharing (CCPA)', 'faz-cookie-manager' ); ?></th>
+							<?php if ( $faz_show_ccpa_col ) : ?>
+								<th style="width:160px;" title="<?php esc_attr_e( 'CPRA distinguishes a sale (for valuable consideration) from sharing (for cross-context behavioural advertising). A category flagged for either is covered by the visitor Do Not Sell or Share opt-out.', 'faz-cookie-manager' ); ?>"><?php esc_html_e( 'Sale / Sharing (CCPA)', 'faz-cookie-manager' ); ?></th>
+							<?php endif; ?>
 						</tr>
 					</thead>
 					<tbody id="faz-category-edit-rows">
-						<tr><td colspan="4" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
+						<tr><td colspan="<?php echo esc_attr( $faz_show_ccpa_col ? '4' : '3' ); ?>" style="color:var(--faz-text-muted);"><?php esc_html_e( 'Loading...', 'faz-cookie-manager' ); ?></td></tr>
 					</tbody>
 				</table>
 			</div>

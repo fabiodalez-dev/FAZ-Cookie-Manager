@@ -321,6 +321,7 @@ class Api extends Rest_Controller {
 			'type'          => 'local',
 			'date'          => '',
 			'total_cookies' => 0,
+			'new_cookies'   => 0,
 			'pages_scanned' => 0,
 		);
 		$data = get_option( 'faz_scan_details', $defaults );
@@ -334,6 +335,10 @@ class Api extends Rest_Controller {
 			'type'          => isset( $data['type'] ) ? sanitize_text_field( $data['type'] ) : 'local',
 			'date'          => isset( $data['date'] ) ? sanitize_text_field( $data['date'] ) : '',
 			'total_cookies' => isset( $data['total_cookies'] ) ? absint( $data['total_cookies'] ) : 0,
+			// Rows actually ADDED by the last completed scan. -1 when the stored
+			// state predates this field, so clients can tell "0 new" apart from
+			// "unknown" and fall back to the plain found-count copy.
+			'new_cookies'   => isset( $data['new_cookies'] ) ? absint( $data['new_cookies'] ) : -1,
 			'pages_scanned' => isset( $data['pages_scanned'] ) ? absint( $data['pages_scanned'] ) : 0,
 		);
 		return rest_ensure_response( $safe );

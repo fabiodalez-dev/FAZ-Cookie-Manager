@@ -159,9 +159,25 @@
 				var catKeys = Object.keys(cats);
 				catKeys.forEach(function (k, i) {
 					var catBadge = document.createElement('span');
-					var accepted = cats[k] === 'yes' || cats[k] === true || cats[k] === 'true';
-					catBadge.className = 'faz-cat-pill ' + (accepted ? 'faz-cat-yes' : 'faz-cat-no');
-					catBadge.textContent = k;
+					if (k.indexOf('meta.') === 0) {
+						// Reserved audit keys (e.g. meta.age_affirmed) are folded into
+						// the categories map for GDPR accountability. Render them as a
+						// distinct, human-labelled audit pill instead of the raw
+						// internal key — the persisted JSON and the CSV export keep
+						// the raw key (machine-readable evidence); only the display
+						// here is humanized. Unknown future meta.* keys degrade to an
+						// auto-humanized label.
+						var metaKey = k.slice(5);
+						var metaLabel = metaKey === 'age_affirmed'
+							? __('consentLogs.metaAgeAffirmed', 'Age affirmed')
+							: metaKey.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+						catBadge.className = 'faz-cat-pill faz-cat-audit';
+						catBadge.textContent = metaLabel;
+					} else {
+						var accepted = cats[k] === 'yes' || cats[k] === true || cats[k] === 'true';
+						catBadge.className = 'faz-cat-pill ' + (accepted ? 'faz-cat-yes' : 'faz-cat-no');
+						catBadge.textContent = k;
+					}
 					tdCats.appendChild(catBadge);
 					if (i < catKeys.length - 1) {
 						tdCats.appendChild(document.createTextNode(' '));

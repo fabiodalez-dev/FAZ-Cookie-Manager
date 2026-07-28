@@ -405,6 +405,22 @@ class Activator {
 		self::check_for_upgrade();
 		if ( true === faz_first_time_install() ) {
 			add_option( 'faz_first_time_activated_plugin', 'true' );
+			// Arm the guided setup wizard for genuine fresh installs ONLY. The
+			// onboarding.completed flag defaults to true in Settings::get_defaults(),
+			// so every UPGRADING install (whose stored option lacks the key) is
+			// treated as already-onboarded and is never nagged. This explicit
+			// write — reachable exclusively from the first-time-install branch —
+			// is the single thing that flips it to false and surfaces the wizard
+			// (activation redirect + Dashboard "Complete setup" card). Written
+			// through Settings::update() so the full sanitised defaults land in
+			// faz_settings; ensure_default_settings() below then no-ops because
+			// the option now exists.
+			$faz_settings                          = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
+			$faz_onboarding                        = $faz_settings->get_defaults();
+			$faz_onboarding['onboarding']['completed'] = false;
+			$faz_onboarding['onboarding']['dismissed'] = false;
+			$faz_onboarding['onboarding']['law']       = '';
+			$faz_settings->update( $faz_onboarding, false );
 		}
 		self::ensure_default_settings();
 		self::install_all_tables();

@@ -57,7 +57,6 @@ define( 'FAZ_PLUGIN_BASEPATH', plugin_dir_path( __FILE__ ) );
 define( 'FAZ_PLUGIN_FILENAME', __FILE__ );
 define( 'FAZ_POST_TYPE', 'cookielawinfo' );
 define( 'FAZ_DEFAULT_LANGUAGE', faz_set_default_language() );
-
 /** Stub for backward compat — cloud URLs removed. */
 if ( ! defined( 'FAZ_APP_URL' ) ) {
 	define( 'FAZ_APP_URL', '' );
@@ -492,6 +491,14 @@ $faz_loader->run();
 // module toggle); the admin tab is wired in admin/class-admin.php
 // alongside the other module pages.
 \FazCookie\Admin\Modules\Cookie_Policy_Generator\Cookie_Policy_Generator::get_instance()->init();
+
+// Register the scanner's WP-Cron hooks on EVERY request, not only inside the
+// admin/REST module loader. wp-cron.php runs in a front-end context where the
+// admin modules are never loaded, so a scan scheduled from the admin would fire
+// its cron event with no callback attached and silently do nothing. Registering
+// here (a pair of cheap add_action calls) guarantees the loopback cron worker
+// has the handler.
+\FazCookie\Admin\Modules\Scanner\Includes\Controller::register_cron_hook();
 
 /**
  * Force every /faz/v1/* REST response out of the LiteSpeed / CDN cache.
