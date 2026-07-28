@@ -373,6 +373,8 @@ For **strictly necessary** cookies, processing is justified because it is necess
 
 For **all other** cookie categories, processing is based on your **consent** under POPIA section 11(1)(a) — a voluntary, specific and informed expression of will — collected via the cookie banner before any non-essential cookie is set.
 
+Personal information collected through these technologies may include online identifiers, device and browser information, usage events, approximate location, and the preferences described in the cookie table and our separate Privacy Policy. Providing information through non-essential technologies is voluntary; if you refuse, the related analytics, personalization, or advertising functions will not operate. Processing needed to deliver and secure the website is necessary for those technical functions, and blocking it may prevent parts of the site from working.
+
 You can withdraw consent at any time using the "Cookie settings" link or by clearing your cookies (POPIA section 11(2)(b)). Withdrawal does not affect the lawfulness of processing carried out before withdrawal.',
 			'Cookie policy template: popia-southafrica / section-3',
 			'faz-cookie-manager'
@@ -387,11 +389,11 @@ You can withdraw consent at any time using the "Cookie settings" link or by clea
 		_x(
 			'## Third-party services
 
-Where you give consent, this site may load resources from the following third-party services, which set their own cookies:
+Where you give consent, this site may load resources from or transmit personal information to the following third-party services. Depending on their configuration, they may use cookies or other technologies:
 
 {{THIRD_PARTY_SERVICES}}
 
-Each third party is a separate responsible party (or operator, as defined in POPIA section 1) for the cookies it sets; please consult their respective privacy policies. Where a third party processes personal information outside South Africa, the transfer takes place under the conditions of POPIA section 72 (adequate protection, binding agreement, or your consent).',
+The legal role of each third party depends on the actual arrangement: it may determine its own purposes as a separate responsible party or process information on our behalf as an operator under a contract or mandate. Before transferring personal information outside South Africa, we require a substantially similar level of protection through applicable law, binding corporate rules, or a binding agreement, or rely on another ground permitted by POPIA section 72. Recipient and safeguard details are provided in our [Privacy Policy]({{PRIVACY_POLICY_URL}}).',
 			'Cookie policy template: popia-southafrica / section-5',
 			'faz-cookie-manager'
 		),
@@ -405,7 +407,7 @@ Under POPIA section 69, electronic direct marketing to non-customers requires yo
 		_x(
 			'## How long we keep data
 
-Consent records and analytics data are retained for {{RETENTION_PERIOD}} from collection, in line with the retention limits of POPIA section 14. Strictly necessary cookies are retained only for the duration of the session or as required for the technical function they serve. See the table above for the specific lifetime of each cookie.',
+Personal information collected directly by us through cookies is retained only for as long as necessary for the stated purpose and, where no shorter cookie-specific period is shown, for no longer than the declared fallback period of {{RETENTION_PERIOD}}, unless a longer period is authorised or required by law. See the table above for each cookie\'s lifetime and the Privacy Policy for retention controlled by third parties. Under POPIA section 14, information that is no longer authorised for retention is deleted, destroyed, or de-identified as soon as reasonably practicable.',
 			'Cookie policy template: popia-southafrica / section-7',
 			'faz-cookie-manager'
 		),
@@ -421,7 +423,7 @@ Under POPIA (Chapter 3, condition 8, and sections 23-25) you have the right to:
 - object to processing for direct marketing purposes (section 11(3)(b) and section 69)
 - withdraw consent at any time (section 11(2)(b))
 - not be subject — save for the exceptions in section 71(2) — to a decision based solely on automated processing intended to profile you, where it has legal consequences for you or affects you to a substantial degree (section 71)
-- submit a complaint to the Information Regulator (South Africa) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
+- submit a complaint to the Information Regulator (South Africa) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}); complaints email: **{{INFOREG_CONTACT}}**
 
 To exercise these rights contact us at **{{COMPANY_EMAIL}}**; where an Information Officer is named under "Who we are" above, you may address your request to them directly. We will respond as soon as reasonably practicable; for requests of access to your personal information, section 25 of the Promotion of Access to Information Act, 2000 (PAIA) provides a 30-day response period.',
 			'Cookie policy template: popia-southafrica / section-8',
@@ -430,7 +432,7 @@ To exercise these rights contact us at **{{COMPANY_EMAIL}}**; where an Informati
 		_x(
 			'## Changes to this policy
 
-We may update this Cookie Policy from time to time. The "Last updated" date at the top reflects the most recent revision. Material changes will trigger a re-consent prompt on your next visit.',
+We may update this Cookie Policy from time to time. The "Last updated" date at the top reflects the most recent revision. A change that affects the scope or validity of consent may require a new choice through the cookie banner; you can review or change your current choice at any time through "Cookie settings".',
 			'Cookie policy template: popia-southafrica / section-9',
 			'faz-cookie-manager'
 		),

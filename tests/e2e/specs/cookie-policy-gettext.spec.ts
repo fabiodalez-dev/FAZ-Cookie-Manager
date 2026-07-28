@@ -55,9 +55,10 @@ function renderFacts(opts: RenderOpts): Facts {
   const locale = opts.locale ?? '';
   const raw = wpEval(`
     update_option( 'faz_cookie_policy_data', array(
-      'company'    => array( 'name' => ${JSON.stringify(company)}, 'email' => 'dpo@acme.test' ),
-      'dpo'        => array( 'name' => 'DPO', 'email' => 'dpo@acme.test' ),
-      'disclaimer' => array( 'show' => ${show} ),
+      'company'    => array( 'name' => ${JSON.stringify(company)}, 'address' => '1 Test Street, Cape Town', 'email' => 'dpo@acme.test' ),
+      'dpo'                => array( 'name' => 'DPO', 'email' => 'dpo@acme.test' ),
+      'privacy_policy_url' => 'https://acme.test/privacy',
+      'disclaimer'         => array( 'show' => ${show} ),
     ) );
     ${locale ? `switch_to_locale( '${locale}' );` : ''}
     $html = ${RENDERER}::render( array( 'jurisdiction' => '${jurisdiction}', 'lang' => '${opts.lang}' ) );

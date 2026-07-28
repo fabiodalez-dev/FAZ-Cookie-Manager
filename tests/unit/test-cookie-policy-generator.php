@@ -254,19 +254,62 @@ foreach ( Generator::LANGUAGES as $popia_lang ) {
 }
 
 // Every POPIA template carries the placeholders the renderer substitutes,
-// including the supervisory-authority URL placeholder (the literal
-// inforegulator.org.za lives only in Renderer::official_resources_url(),
-// matching the ccpa/lgpd single-source-of-truth pattern).
+// including the supervisory-authority URL/contact placeholders (the literal
+// values live in the Renderer data-building path, matching the ccpa/lgpd
+// single-source-of-truth pattern).
+$popia_token_reference = null;
 foreach ( Generator::LANGUAGES as $popia_lang ) {
 	$popia_path = Generator::resolve_template_path( 'popia-southafrica', $popia_lang );
 	$popia_body = is_string( $popia_path ) ? (string) file_get_contents( $popia_path ) : '';
+	$popia_token_matches = array();
+	preg_match_all( '/\{\{[A-Z][A-Z0-9_]*\}\}/', $popia_body, $popia_token_matches );
+	$popia_tokens = $popia_token_matches[0] ?? array();
+	sort( $popia_tokens, SORT_STRING );
+	if ( null === $popia_token_reference ) {
+		$popia_token_reference = $popia_tokens;
+	}
+	assert_eq( $popia_tokens, $popia_token_reference, "POPIA '{$popia_lang}' placeholder multiset matches the English scaffold" );
 	assert_true(
 		false !== strpos( $popia_body, '{{COOKIE_CATEGORIES}}' )
 			&& false !== strpos( $popia_body, '{{COMPANY_NAME}}' )
-			&& false !== strpos( $popia_body, '{{OFFICIAL_RESOURCES_URL}}' ),
-		"POPIA '{$popia_lang}' template has core placeholders + Information Regulator URL placeholder"
+			&& false !== strpos( $popia_body, '{{OFFICIAL_RESOURCES_URL}}' )
+			&& false !== strpos( $popia_body, '{{INFOREG_CONTACT}}' )
+			&& false !== strpos( $popia_body, '{{PRIVACY_POLICY_URL}}' ),
+		"POPIA '{$popia_lang}' template has core, Regulator, and privacy-notice placeholders"
 	);
 }
+
+// POPIA cannot be published with its section-18 identity/contact rows or the
+// linked recipient/safeguard notice silently stripped. Other jurisdictions
+// retain their existing optional-field behaviour.
+$complete_popia_settings = array(
+	'company'            => array( 'name' => 'ACME', 'address' => 'Cape Town', 'email' => 'privacy@acme.test' ),
+	'dpo'                => array( 'name' => 'Thabo Nkosi', 'email' => 'io@acme.test' ),
+	'privacy_policy_url' => 'https://acme.test/privacy',
+);
+assert_eq( Generator::missing_required_settings( 'popia-southafrica', $complete_popia_settings ), array(), 'Complete POPIA settings pass jurisdiction validation' );
+assert_eq(
+	Generator::missing_required_settings( 'popia-southafrica', array( 'company' => array( 'name' => 'ACME' ) ) ),
+	array( 'company.address', 'company.email', 'dpo.name', 'dpo.email', 'privacy_policy_url' ),
+	'POPIA validation reports every missing mandatory field'
+);
+$invalid_popia_settings                       = $complete_popia_settings;
+$invalid_popia_settings['dpo']['email']       = 'not-an-email';
+$invalid_popia_settings['privacy_policy_url'] = 'javascript:alert(1)';
+assert_eq(
+	Generator::missing_required_settings( 'popia-southafrica', $invalid_popia_settings ),
+	array( 'dpo.email', 'privacy_policy_url' ),
+	'POPIA validation rejects malformed officer contacts and non-HTTP privacy URLs'
+);
+$non_scalar_popia_settings                       = $complete_popia_settings;
+$non_scalar_popia_settings['company']['name']    = array( 'ACME' );
+$non_scalar_popia_settings['privacy_policy_url'] = array( 'https://acme.test/privacy' );
+assert_eq(
+	Generator::missing_required_settings( 'popia-southafrica', $non_scalar_popia_settings ),
+	array( 'company.name', 'privacy_policy_url' ),
+	'POPIA validation rejects non-scalar option values without string coercion'
+);
+assert_eq( Generator::missing_required_settings( 'gdpr-strict', array() ), array(), 'POPIA-only requirements do not alter existing jurisdictions' );
 
 // ---------- Generator::policy_version_hash ----------
 
@@ -351,7 +394,8 @@ assert_false( strpos( $rendered, '{{' ) !== false, 'LGPD template: no leftover t
 
 // POPIA — every language renders through the substitution pipeline with no
 // leftover tokens, and the Information Regulator URL arrives via the
-// OFFICIAL_RESOURCES_URL data key (not hardcoded in the template).
+// OFFICIAL_RESOURCES_URL and INFOREG_CONTACT data keys (not hardcoded in the
+// template).
 foreach ( Generator::LANGUAGES as $popia_lang ) {
 	$popia_path = Generator::resolve_template_path( 'popia-southafrica', $popia_lang );
 	assert_true( is_string( $popia_path ) && '' !== $popia_path, "popia-southafrica/{$popia_lang} template path resolvable before read" );
@@ -362,14 +406,18 @@ foreach ( Generator::LANGUAGES as $popia_lang ) {
 		'COMPANY_REGISTRY'     => '2019/123456/07',
 		'DPO_NAME'             => 'Thabo Nkosi',
 		'DPO_EMAIL'            => 'infoofficer@acme.test',
+		'INFOREG_CONTACT'      => 'POPIAComplaints@inforegulator.org.za',
 		'COOKIE_CATEGORIES'    => '<dl></dl>',
 		'THIRD_PARTY_SERVICES' => 'GA4',
 		'LAST_UPDATED_DATE'    => '2026-05-20',
 		'RETENTION_PERIOD'     => '12 months',
 		'OFFICIAL_RESOURCES_URL' => 'https://inforegulator.org.za/',
+		'PRIVACY_POLICY_URL'     => 'https://acme.test/privacy',
 	) );
 	assert_contains( $popia_rendered, 'ACME (Pty) Ltd', "POPIA '{$popia_lang}': company name substituted" );
 	assert_contains( $popia_rendered, 'inforegulator.org.za', "POPIA '{$popia_lang}': Information Regulator cited after render" );
+	assert_contains( $popia_rendered, 'POPIAComplaints@inforegulator.org.za', "POPIA '{$popia_lang}': Regulator complaint contact injected" );
+	assert_contains( $popia_rendered, 'https://acme.test/privacy', "POPIA '{$popia_lang}': separate privacy notice linked" );
 	assert_false( strpos( $popia_rendered, '{{' ) !== false, "POPIA '{$popia_lang}' template: no leftover {{...}} tokens" );
 }
 

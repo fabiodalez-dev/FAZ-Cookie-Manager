@@ -11,6 +11,11 @@
  * retained:
  *   msgcat --use-first /tmp/policy-cs.po languages/faz-cookie-manager-cs_CZ.po
  *
+ * A jurisdiction is omitted, with an explicit STDERR warning, when its
+ * translated template no longer has the same section/placeholder structure
+ * as the canonical English template. Other safe jurisdictions are still
+ * emitted so one legacy template cannot make the whole locale resync unusable.
+ *
  * @package FazCookie\Build
  */
 
@@ -76,6 +81,7 @@ if ( false === $header_end ) {
 }
 $header  = rtrim( substr( $existing_po, 0, $header_end ) );
 $entries = array();
+$skipped = array();
 foreach ( $jurisdictions as $jurisdiction ) {
 	$source_path      = $templates . '/' . $jurisdiction . '/en.md';
 	$translation_path = $templates . '/' . $jurisdiction . '/' . $lang . '.md';
@@ -86,22 +92,36 @@ foreach ( $jurisdictions as $jurisdiction ) {
 	$source_sections = faz_policy_po_sections( (string) file_get_contents( $source_path ) );
 	$local_sections  = faz_policy_po_sections( (string) file_get_contents( $translation_path ) );
 	if ( count( $source_sections ) !== count( $local_sections ) ) {
-		fwrite( STDERR, "Section-count mismatch for {$jurisdiction}/{$lang}; refusing an unsafe positional merge.\n" );
-		exit( 1 );
+		$skipped[] = "{$jurisdiction}/{$lang}: section count " . count( $local_sections ) . ' != ' . count( $source_sections );
+		continue;
 	}
 
+	$jurisdiction_entries = array();
+	$placeholder_mismatch = false;
 	foreach ( $source_sections as $index => $source ) {
 		$translation = $local_sections[ $index ];
 		if ( faz_policy_po_tokens( $source ) !== faz_policy_po_tokens( $translation ) ) {
-			fwrite( STDERR, "Placeholder mismatch for {$jurisdiction}/{$lang} section {$index}.\n" );
-			exit( 1 );
+			$skipped[] = "{$jurisdiction}/{$lang}: placeholder mismatch in section {$index}";
+			$placeholder_mismatch = true;
+			break;
 		}
 		$section_name = 0 === $index ? 'introduction' : 'section-' . $index;
 		$context      = 'Cookie policy template: ' . $jurisdiction . ' / ' . $section_name;
-		$entries[]    = 'msgctxt ' . faz_policy_po_quote( $context ) . "\n"
+		$jurisdiction_entries[] = 'msgctxt ' . faz_policy_po_quote( $context ) . "\n"
 			. 'msgid ' . faz_policy_po_quote( $source ) . "\n"
 			. 'msgstr ' . faz_policy_po_quote( $translation ) . "\n";
 	}
+	if ( ! $placeholder_mismatch ) {
+		$entries = array_merge( $entries, $jurisdiction_entries );
+	}
+}
+
+if ( ! $entries ) {
+	fwrite( STDERR, "No policy sections could be merged safely; no fragment was written.\n" );
+	foreach ( $skipped as $reason ) {
+		fwrite( STDERR, "Skipped {$reason}.\n" );
+	}
+	exit( 1 );
 }
 
 $written = file_put_contents( $destination, $header . "\n\n" . implode( "\n", $entries ) );
@@ -110,4 +130,7 @@ if ( false === $written ) {
 	exit( 1 );
 }
 
-fwrite( STDOUT, "Generated {$destination} with " . count( $entries ) . " policy sections.\n" );
+fwrite( STDOUT, "Generated {$destination} with " . count( $entries ) . " safely matched policy sections.\n" );
+foreach ( $skipped as $reason ) {
+	fwrite( STDERR, "Skipped {$reason}; update that template before including it in the PO fragment.\n" );
+}

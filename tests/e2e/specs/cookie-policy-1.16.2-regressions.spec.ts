@@ -85,10 +85,10 @@ function previewSettings(overrides: Record<string, unknown> = {}): Record<string
       email: 'test@acme.test',
       registry: '',
     },
-    dpo: { name: '', email: '', address: '' },
+    dpo: { name: 'Test Information Officer', email: 'io@acme.test', address: '' },
     third_party_services: [],
     retention_months: 12,
-    privacy_policy_url: '',
+    privacy_policy_url: 'https://acme.test/privacy',
     disclaimer: { show: true, text: '' },
     ...overrides,
   };

@@ -166,6 +166,28 @@
 		return out;
 	}
 
+	function syncJurisdictionRequirements() {
+		var jurisdiction = document.getElementById('cp-jurisdiction');
+		var popia = !!jurisdiction && jurisdiction.value === 'popia-southafrica';
+		[
+			'company.address', 'dpo.name', 'dpo.email', 'privacy_policy_url'
+		].forEach(function (name) {
+			var field = document.querySelector('[name="' + name + '"]');
+			if (!field) { return; }
+			field.required = popia;
+			if (popia) { field.setAttribute('aria-required', 'true'); }
+			else { field.removeAttribute('aria-required'); }
+		});
+	}
+
+	function validateForm() {
+		var form = document.getElementById('faz-cookie-policy-form');
+		syncJurisdictionRequirements();
+		if (form.checkValidity()) { return true; }
+		form.reportValidity();
+		return false;
+	}
+
 	function writeForm(settings) {
 		// Scalar fields.
 		[
@@ -196,6 +218,7 @@
 		// Programmatic .checked above does not fire 'change', so the map is
 		// not about to be repopulated by this write.
 		userUntickedServices = Object.create(null);
+		syncJurisdictionRequirements();
 	}
 
 	// ---------- services list (renders the checkboxes) ----------
@@ -558,6 +581,11 @@
 		// data at all). Both rendering passes preserve the checkbox
 		// state because writeForm() runs after the second render.
 		renderServicesList();
+		var jurisdictionSelect = document.getElementById('cp-jurisdiction');
+		if (jurisdictionSelect) {
+			jurisdictionSelect.addEventListener('change', syncJurisdictionRequirements);
+			syncJurisdictionRequirements();
+		}
 
 		// Bind + disable Auto-detect BEFORE the Promise.all fires. If
 		// the user clicks the button during hydration, writeForm(settings)
@@ -652,6 +680,7 @@
 				setStatus(t( 'loadFailed', 'Settings did not load — reload the page before saving.' ), 'error');
 				return;
 			}
+			if (!validateForm()) { return; }
 			var payload = readForm();
 			setStatus(t( 'saving', 'Saving…' ), '');
 			api('POST', 'settings', payload)
@@ -667,6 +696,7 @@
 		});
 
 		document.getElementById('cp-preview-btn').addEventListener('click', function () {
+			if (!validateForm()) { return; }
 			// Race-condition guard: if the user clicks Preview multiple times
 			// quickly the responses may resolve out of order. We capture the
 			// pre-increment id and only commit results whose id is still the

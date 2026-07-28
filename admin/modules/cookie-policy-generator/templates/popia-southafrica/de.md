@@ -26,6 +26,8 @@ Bei **unbedingt erforderlichen** Cookies ist die Verarbeitung durch unser berech
 
 Bei **allen anderen** Cookie-Kategorien beruht die Verarbeitung auf Ihrer **Einwilligung** nach Abschnitt 11(1)(a) POPIA — einer freiwilligen, spezifischen und informierten Willensbekundung —, die über das Cookie-Banner eingeholt wird, bevor ein nicht wesentliches Cookie gesetzt wird.
 
+Die über diese Technologien erhobenen personenbezogenen Informationen können Online-Kennungen, Geräte- und Browserinformationen, Nutzungsereignisse, den ungefähren Standort sowie die in der Cookie-Tabelle und unserer gesonderten Datenschutzerklärung beschriebenen Präferenzen umfassen. Die Bereitstellung von Informationen über nicht erforderliche Technologien ist freiwillig; bei einer Ablehnung funktionieren die zugehörigen Analyse-, Personalisierungs- oder Werbefunktionen nicht. Die zur Bereitstellung und Absicherung der Website erforderliche Verarbeitung ist für diese technischen Funktionen notwendig; ihre Blockierung kann dazu führen, dass Teile der Website nicht funktionieren.
+
 Sie können Ihre Einwilligung jederzeit über den Link „Cookie-Einstellungen" oder durch Löschen Ihrer Cookies widerrufen (POPIA, Abschnitt 11(2)(b)). Der Widerruf berührt nicht die Rechtmäßigkeit der vor dem Widerruf erfolgten Verarbeitung.
 
 ## Auf dieser Website verwendete Cookies
@@ -34,11 +36,11 @@ Sie können Ihre Einwilligung jederzeit über den Link „Cookie-Einstellungen" 
 
 ## Dienste von Drittanbietern
 
-Mit Ihrer Einwilligung kann diese Website Ressourcen der folgenden Drittanbieter laden, die eigene Cookies setzen:
+Mit Ihrer Einwilligung kann diese Website Ressourcen der folgenden Drittanbieter laden oder personenbezogene Informationen an sie übermitteln. Je nach Konfiguration können diese Dienste Cookies oder andere Technologien verwenden:
 
 {{THIRD_PARTY_SERVICES}}
 
-Jeder Drittanbieter ist eine eigenständige verantwortliche Stelle (oder ein operator im Sinne von Abschnitt 1 POPIA) für die von ihm gesetzten Cookies; bitte konsultieren Sie die jeweiligen Datenschutzerklärungen. Verarbeitet ein Drittanbieter personenbezogene Informationen außerhalb Südafrikas, erfolgt die Übermittlung unter den Bedingungen von Abschnitt 72 POPIA (angemessenes Schutzniveau, bindende Vereinbarung oder Ihre Einwilligung).
+Die rechtliche Rolle jedes Drittanbieters hängt von der tatsächlichen Vereinbarung ab: Er kann eigene Zwecke als eigenständige verantwortliche Stelle festlegen oder Informationen in unserem Auftrag als operator aufgrund eines Vertrags oder Mandats verarbeiten. Vor einer Übermittlung personenbezogener Informationen aus Südafrika verlangen wir durch anwendbares Recht, verbindliche interne Datenschutzvorschriften oder eine bindende Vereinbarung ein im Wesentlichen vergleichbares Schutzniveau oder stützen uns auf einen anderen nach Abschnitt 72 POPIA zulässigen Grund. Einzelheiten zu Empfängern und Garantien finden Sie in unserer [Datenschutzerklärung]({{PRIVACY_POLICY_URL}}).
 
 ## Direktmarketing
 
@@ -46,7 +48,7 @@ Nach Abschnitt 69 POPIA erfordert elektronisches Direktmarketing an Nichtkunden 
 
 ## Wie lange wir Daten aufbewahren
 
-Einwilligungsnachweise und Analysedaten werden für {{RETENTION_PERIOD}} ab der Erhebung aufbewahrt, im Einklang mit den Aufbewahrungsgrenzen von Abschnitt 14 POPIA. Unbedingt erforderliche Cookies werden nur für die Dauer der Sitzung oder solange aufbewahrt, wie es ihre technische Funktion erfordert. Die spezifische Lebensdauer jedes Cookies entnehmen Sie der obigen Tabelle.
+Von uns unmittelbar über Cookies erhobene personenbezogene Informationen werden nur so lange aufbewahrt, wie es für den angegebenen Zweck erforderlich ist, und — sofern keine kürzere Cookie-spezifische Dauer angegeben ist — höchstens für den erklärten Auffangzeitraum von {{RETENTION_PERIOD}}, es sei denn, eine längere Dauer ist gesetzlich erlaubt oder vorgeschrieben. Die Lebensdauer jedes Cookies finden Sie in der obigen Tabelle; für von Dritten kontrollierte Fristen gilt die Datenschutzerklärung. Nach Abschnitt 14 POPIA werden Informationen, deren Aufbewahrung nicht mehr zulässig ist, so bald wie vernünftigerweise möglich gelöscht, vernichtet oder de-identifiziert.
 
 ## Ihre Rechte
 
@@ -59,13 +61,13 @@ Nach dem POPIA (Kapitel 3, Bedingung 8, sowie Abschnitte 23-25) haben Sie das Re
 - der Verarbeitung zu Zwecken des Direktmarketings zu widersprechen (Abschnitt 11(3)(b) und Abschnitt 69)
 - Ihre Einwilligung jederzeit zu widerrufen (Abschnitt 11(2)(b))
 - vorbehaltlich der Ausnahmen in Abschnitt 71(2) keiner Entscheidung unterworfen zu werden, die ausschließlich auf einer automatisierten Verarbeitung zur Erstellung Ihres Profils beruht und rechtliche Folgen für Sie hat oder Sie in erheblichem Maße beeinträchtigt (Abschnitt 71)
-- eine Beschwerde beim Information Regulator (Südafrika) einzureichen — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
+- eine Beschwerde beim Information Regulator (Südafrika) einzureichen — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}); Beschwerde-E-Mail: **{{INFOREG_CONTACT}}**
 
 Zur Ausübung dieser Rechte kontaktieren Sie uns unter **{{COMPANY_EMAIL}}**; ist oben unter „Wer wir sind“ ein Information Officer benannt, können Sie Ihre Anfrage direkt an diese Person richten. Wir antworten, sobald dies vernünftigerweise möglich ist; für Anträge auf Zugang zu Ihren personenbezogenen Informationen sieht Abschnitt 25 des Promotion of Access to Information Act, 2000 (PAIA) eine Frist von 30 Tagen vor.
 
 ## Änderungen dieser Richtlinie
 
-Wir können diese Cookie-Richtlinie von Zeit zu Zeit aktualisieren. Das Datum „Zuletzt aktualisiert" oben gibt die letzte Überarbeitung wieder. Wesentliche Änderungen lösen bei Ihrem nächsten Besuch eine erneute Einwilligungsabfrage aus.
+Wir können diese Cookie-Richtlinie von Zeit zu Zeit aktualisieren. Das Datum „Zuletzt aktualisiert" oben gibt die letzte Überarbeitung wieder. Eine Änderung, die den Umfang oder die Gültigkeit der Einwilligung betrifft, kann eine neue Entscheidung über das Cookie-Banner erfordern; Ihre aktuelle Auswahl können Sie jederzeit über „Cookie-Einstellungen" prüfen oder ändern.
 
 ## Kontakt
 

@@ -26,6 +26,8 @@ U **nezbytně nutných** souborů cookie je zpracování odůvodněno naším op
 
 U **všech ostatních** kategorií souborů cookie je zpracování založeno na vašem **souhlasu** podle článku 11(1)(a) POPIA — dobrovolném, konkrétním a informovaném projevu vůle — získaném prostřednictvím cookie lišty předtím, než je uložen jakýkoli nepodstatný soubor cookie.
 
+Osobní informace shromažďované prostřednictvím těchto technologií mohou zahrnovat online identifikátory, informace o zařízení a prohlížeči, události používání, přibližnou polohu a preference popsané v tabulce souborů cookie a v našich samostatných Zásadách ochrany osobních údajů. Poskytnutí informací prostřednictvím nepodstatných technologií je dobrovolné; pokud je odmítnete, související analytické, personalizační nebo reklamní funkce nebudou fungovat. Zpracování nezbytné k poskytování a zabezpečení webu je pro tyto technické funkce nutné a jeho blokování může zabránit fungování některých částí webu.
+
 Souhlas můžete kdykoli odvolat pomocí odkazu „Nastavení souborů cookie" nebo smazáním souborů cookie (POPIA, článek 11(2)(b)). Odvolání nemá vliv na zákonnost zpracování provedeného před odvoláním.
 
 ## Soubory cookie používané na tomto webu
@@ -34,11 +36,11 @@ Souhlas můžete kdykoli odvolat pomocí odkazu „Nastavení souborů cookie" n
 
 ## Služby třetích stran
 
-S vaším souhlasem může tento web načítat zdroje od následujících služeb třetích stran, které ukládají vlastní soubory cookie:
+S vaším souhlasem může tento web načítat zdroje od následujících služeb třetích stran nebo jim předávat osobní informace. V závislosti na konfiguraci mohou tyto služby používat soubory cookie nebo jiné technologie:
 
 {{THIRD_PARTY_SERVICES}}
 
-Každá třetí strana je samostatnou odpovědnou stranou (nebo operator ve smyslu článku 1 POPIA) za soubory cookie, které ukládá; přečtěte si prosím jejich zásady ochrany osobních údajů. Pokud třetí strana zpracovává osobní informace mimo Jihoafrickou republiku, přenos probíhá za podmínek článku 72 POPIA (odpovídající ochrana, závazná dohoda nebo váš souhlas).
+Právní role každé třetí strany závisí na skutečném ujednání: může určovat vlastní účely jako samostatná odpovědná strana nebo zpracovávat informace naším jménem jako operator na základě smlouvy či pověření. Před přenosem osobních informací mimo Jihoafrickou republiku vyžadujeme v zásadě obdobnou úroveň ochrany prostřednictvím použitelného práva, závazných podnikových pravidel nebo závazné dohody, případně se opíráme o jiný důvod povolený článkem 72 POPIA. Podrobnosti o příjemcích a zárukách jsou uvedeny v našich [Zásadách ochrany osobních údajů]({{PRIVACY_POLICY_URL}}).
 
 ## Přímý marketing
 
@@ -46,7 +48,7 @@ Podle článku 69 POPIA vyžaduje elektronický přímý marketing vůči osobá
 
 ## Jak dlouho údaje uchováváme
 
-Záznamy o souhlasech a analytická data uchováváme po dobu {{RETENTION_PERIOD}} od jejich shromáždění, v souladu s limity uchovávání dle článku 14 POPIA. Nezbytně nutné soubory cookie jsou uchovávány pouze po dobu relace nebo po dobu vyžadovanou jejich technickou funkcí. Konkrétní životnost jednotlivých souborů cookie najdete v tabulce výše.
+Osobní informace, které shromažďujeme přímo prostřednictvím souborů cookie, uchováváme pouze po dobu nezbytnou pro uvedený účel a, není-li uvedena kratší konkrétní doba, nejdéle po deklarovanou náhradní dobu {{RETENTION_PERIOD}}, ledaže delší dobu povoluje nebo vyžaduje zákon. Dobu platnosti jednotlivých souborů cookie najdete v tabulce výše a doby řízené třetími stranami v Zásadách ochrany osobních údajů. Podle článku 14 POPIA jsou informace, jejichž uchovávání již není povoleno, co nejdříve přiměřeně odstraněny, zničeny nebo zbaveny identifikátorů.
 
 ## Vaše práva
 
@@ -59,13 +61,13 @@ Podle POPIA (kapitola 3, podmínka 8, a články 23-25) máte právo:
 - vznést námitku proti zpracování pro účely přímého marketingu (článek 11(3)(b) a článek 69)
 - kdykoli odvolat souhlas (článek 11(2)(b))
 - nebýt — s výhradou výjimek podle článku 71(2) — předmětem rozhodnutí založeného výhradně na automatizovaném zpracování určeném k profilování vaší osoby, pokud má vůči vám právní účinky nebo se vás podstatným způsobem dotýká (článek 71)
-- podat stížnost u úřadu Information Regulator (Jihoafrická republika) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
+- podat stížnost u úřadu Information Regulator (Jihoafrická republika) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}); e-mail pro stížnosti: **{{INFOREG_CONTACT}}**
 
 Pro uplatnění těchto práv nás kontaktujte na **{{COMPANY_EMAIL}}**; je-li v části „Kdo jsme“ výše uveden Information Officer, můžete svou žádost směřovat přímo na něj. Odpovíme, jakmile to bude rozumně možné; u žádostí o přístup k vašim osobním údajům stanoví článek 25 zákona Promotion of Access to Information Act, 2000 (PAIA) lhůtu pro odpověď 30 dnů.
 
 ## Změny těchto zásad
 
-Tyto Zásady používání souborů cookie můžeme čas od času aktualizovat. Datum „Poslední aktualizace" nahoře odráží nejnovější revizi. Podstatné změny vyvolají při vaší příští návštěvě novou žádost o souhlas.
+Tyto Zásady používání souborů cookie můžeme čas od času aktualizovat. Datum „Poslední aktualizace" nahoře odráží nejnovější revizi. Změna, která ovlivní rozsah nebo platnost souhlasu, může vyžadovat novou volbu prostřednictvím cookie lišty; svou aktuální volbu můžete kdykoli zkontrolovat nebo změnit v „Nastavení souborů cookie".
 
 ## Kontakt
 

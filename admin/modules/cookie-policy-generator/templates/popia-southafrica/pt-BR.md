@@ -26,6 +26,8 @@ Para os cookies **estritamente necessários**, o tratamento se justifica pelo no
 
 Para **todas as demais** categorias de cookies, o tratamento se baseia no seu **consentimento** nos termos da seção 11(1)(a) do POPIA — uma manifestação de vontade livre, específica e informada — coletado por meio do banner de cookies antes da instalação de qualquer cookie não essencial.
 
+As informações pessoais coletadas por meio dessas tecnologias podem incluir identificadores online, informações do dispositivo e do navegador, eventos de uso, localização aproximada e as preferências descritas na tabela de cookies e em nossa Política de Privacidade separada. O fornecimento de informações por tecnologias não essenciais é voluntário; se você recusar, as funções relacionadas de análise, personalização ou publicidade não funcionarão. O tratamento necessário para fornecer e proteger o site é indispensável para essas funções técnicas, e seu bloqueio pode impedir o funcionamento de partes do site.
+
 Você pode retirar o consentimento a qualquer momento pelo link «Configurações de cookies» ou apagando seus cookies (POPIA, seção 11(2)(b)). A retirada não afeta a licitude do tratamento realizado antes dela.
 
 ## Cookies utilizados neste site
@@ -34,11 +36,11 @@ Você pode retirar o consentimento a qualquer momento pelo link «Configuraçõe
 
 ## Serviços de terceiros
 
-Com o seu consentimento, este site pode carregar recursos dos seguintes serviços de terceiros, que instalam seus próprios cookies:
+Com o seu consentimento, este site pode carregar recursos dos seguintes serviços de terceiros ou transmitir informações pessoais a eles. Dependendo da configuração, esses serviços podem usar cookies ou outras tecnologias:
 
 {{THIRD_PARTY_SERVICES}}
 
-Cada terceiro é uma parte responsável independente (ou operator, conforme a seção 1 do POPIA) pelos cookies que instala; consulte as respectivas políticas de privacidade. Quando um terceiro trata informações pessoais fora da África do Sul, a transferência ocorre nas condições da seção 72 do POPIA (proteção adequada, acordo vinculante ou seu consentimento).
+A função jurídica de cada terceiro depende do acordo efetivo: ele pode determinar finalidades próprias como parte responsável independente ou tratar informações em nosso nome como operator nos termos de um contrato ou mandato. Antes de transferir informações pessoais para fora da África do Sul, exigimos um nível de proteção substancialmente semelhante por meio da legislação aplicável, normas corporativas vinculantes ou um acordo vinculante, ou nos baseamos em outro fundamento permitido pela seção 72 do POPIA. Os detalhes sobre destinatários e salvaguardas constam de nossa [Política de Privacidade]({{PRIVACY_POLICY_URL}}).
 
 ## Marketing direto
 
@@ -46,7 +48,7 @@ Nos termos da seção 69 do POPIA, o marketing direto eletrônico a não cliente
 
 ## Por quanto tempo conservamos os dados
 
-Os registros de consentimento e os dados analíticos são conservados por {{RETENTION_PERIOD}} a partir da coleta, em linha com os limites de retenção da seção 14 do POPIA. Os cookies estritamente necessários são conservados apenas pela duração da sessão ou pelo tempo exigido pela função técnica que desempenham. Consulte a tabela acima para a duração específica de cada cookie.
+As informações pessoais coletadas diretamente por nós por meio de cookies são conservadas somente pelo tempo necessário à finalidade declarada e, quando não houver um prazo específico menor, por no máximo o período residual declarado de {{RETENTION_PERIOD}}, salvo se um prazo maior for autorizado ou exigido por lei. Consulte a tabela acima para a duração de cada cookie e a Política de Privacidade para prazos controlados por terceiros. Nos termos da seção 14 do POPIA, as informações cuja retenção deixou de ser autorizada são apagadas, destruídas ou desidentificadas assim que razoavelmente possível.
 
 ## Seus direitos
 
@@ -59,13 +61,13 @@ Nos termos do POPIA (capítulo 3, condição 8, e seções 23-25), você tem o d
 - opor-se ao tratamento para fins de marketing direto (seções 11(3)(b) e 69)
 - retirar o consentimento a qualquer momento (seção 11(2)(b))
 - não ser submetido — ressalvadas as exceções da seção 71(2) — a uma decisão baseada unicamente em tratamento automatizado destinado a traçar o seu perfil, quando produza efeitos jurídicos sobre você ou o afete de forma substancial (seção 71)
-- apresentar uma reclamação ao Information Regulator (África do Sul) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
+- apresentar uma reclamação ao Information Regulator (África do Sul) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}); e-mail para reclamações: **{{INFOREG_CONTACT}}**
 
 Para exercer esses direitos, contate-nos em **{{COMPANY_EMAIL}}**; se um Information Officer estiver indicado na seção "Quem somos" acima, você pode dirigir sua solicitação diretamente a ele. Responderemos assim que razoavelmente possível; para solicitações de acesso às suas informações pessoais, a seção 25 do Promotion of Access to Information Act, 2000 (PAIA) prevê um prazo de resposta de 30 dias.
 
 ## Alterações desta política
 
-Podemos atualizar esta Política de Cookies periodicamente. A data de «Última atualização» no topo reflete a revisão mais recente. Alterações substanciais acionarão um novo pedido de consentimento na sua próxima visita.
+Podemos atualizar esta Política de Cookies periodicamente. A data de «Última atualização» no topo reflete a revisão mais recente. Uma alteração que afete o alcance ou a validade do consentimento pode exigir uma nova escolha pelo banner de cookies; você pode revisar ou alterar sua escolha atual a qualquer momento em «Configurações de cookies».
 
 ## Contato
 

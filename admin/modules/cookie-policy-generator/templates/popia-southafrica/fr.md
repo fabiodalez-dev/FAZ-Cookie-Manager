@@ -26,6 +26,8 @@ Pour les cookies **strictement nécessaires**, le traitement est justifié par l
 
 Pour **toutes les autres** catégories de cookies, le traitement repose sur votre **consentement** au sens de l'article 11(1)(a) du POPIA — une manifestation de volonté libre, spécifique et éclairée — recueilli via le bandeau cookies avant le dépôt de tout cookie non essentiel.
 
+Les informations personnelles collectées au moyen de ces technologies peuvent comprendre des identifiants en ligne, des informations sur l'appareil et le navigateur, des événements d'utilisation, une localisation approximative et les préférences décrites dans le tableau des cookies et notre Politique de confidentialité distincte. La fourniture d'informations au moyen de technologies non essentielles est facultative ; en cas de refus, les fonctions d'analyse, de personnalisation ou de publicité concernées ne fonctionneront pas. Le traitement nécessaire à la fourniture et à la sécurisation du site est requis pour ces fonctions techniques, et son blocage peut empêcher certaines parties du site de fonctionner.
+
 Vous pouvez retirer votre consentement à tout moment via le lien « Paramètres des cookies » ou en supprimant vos cookies (POPIA, article 11(2)(b)). Le retrait n'affecte pas la licéité du traitement effectué avant le retrait.
 
 ## Cookies utilisés sur ce site
@@ -34,11 +36,11 @@ Vous pouvez retirer votre consentement à tout moment via le lien « Paramètres
 
 ## Services tiers
 
-Avec votre consentement, ce site peut charger des ressources depuis les services tiers suivants, qui déposent leurs propres cookies :
+Avec votre consentement, ce site peut charger des ressources depuis les services tiers suivants ou leur transmettre des informations personnelles. Selon leur configuration, ces services peuvent utiliser des cookies ou d'autres technologies :
 
 {{THIRD_PARTY_SERVICES}}
 
-Chaque tiers est une partie responsable distincte (ou un operator, au sens de l'article 1 du POPIA) pour les cookies qu'il dépose ; veuillez consulter leurs politiques de confidentialité respectives. Lorsqu'un tiers traite des informations personnelles en dehors de l'Afrique du Sud, le transfert a lieu dans les conditions de l'article 72 du POPIA (protection adéquate, accord contraignant ou votre consentement).
+Le rôle juridique de chaque tiers dépend de l'accord réel : il peut déterminer ses propres finalités en tant que partie responsable distincte ou traiter des informations pour notre compte en tant qu'operator dans le cadre d'un contrat ou d'un mandat. Avant tout transfert d'informations personnelles hors d'Afrique du Sud, nous exigeons un niveau de protection substantiellement similaire au moyen de la loi applicable, de règles d'entreprise contraignantes ou d'un accord contraignant, ou nous nous fondons sur un autre motif autorisé par l'article 72 du POPIA. Les détails sur les destinataires et les garanties figurent dans notre [Politique de confidentialité]({{PRIVACY_POLICY_URL}}).
 
 ## Marketing direct
 
@@ -46,7 +48,7 @@ En vertu de l'article 69 du POPIA, le marketing direct électronique auprès de 
 
 ## Durée de conservation des données
 
-Les registres de consentement et les données analytiques sont conservés pendant {{RETENTION_PERIOD}} à compter de la collecte, conformément aux limites de conservation de l'article 14 du POPIA. Les cookies strictement nécessaires ne sont conservés que pour la durée de la session ou le temps requis par leur fonction technique. Consultez le tableau ci-dessus pour la durée de vie de chaque cookie.
+Les informations personnelles que nous collectons directement au moyen de cookies ne sont conservées que pendant la durée nécessaire à la finalité indiquée et, lorsqu'aucune durée spécifique plus courte n'est affichée, pendant une durée n'excédant pas la période résiduelle déclarée de {{RETENTION_PERIOD}}, sauf si une durée plus longue est autorisée ou imposée par la loi. Consultez le tableau ci-dessus pour la durée de chaque cookie et la Politique de confidentialité pour les durées contrôlées par des tiers. Conformément à l'article 14 du POPIA, les informations dont la conservation n'est plus autorisée sont supprimées, détruites ou dépersonnalisées dès que cela est raisonnablement possible.
 
 ## Vos droits
 
@@ -59,13 +61,13 @@ En vertu du POPIA (chapitre 3, condition 8, et articles 23-25), vous avez le dro
 - vous opposer au traitement à des fins de marketing direct (articles 11(3)(b) et 69)
 - retirer votre consentement à tout moment (article 11(2)(b))
 - ne pas faire l'objet — sous réserve des exceptions de l'article 71(2) — d'une décision fondée uniquement sur un traitement automatisé destiné à établir votre profil, lorsqu'elle produit des conséquences juridiques à votre égard ou vous affecte de manière substantielle (article 71)
-- déposer une plainte auprès de l'Information Regulator (Afrique du Sud) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})
+- déposer une plainte auprès de l'Information Regulator (Afrique du Sud) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}) ; e-mail pour les plaintes : **{{INFOREG_CONTACT}}**
 
 Pour exercer ces droits, contactez-nous à **{{COMPANY_EMAIL}}** ; si un Information Officer est désigné dans la section « Qui sommes-nous » ci-dessus, vous pouvez lui adresser votre demande directement. Nous répondrons dès que raisonnablement possible ; pour les demandes d'accès à vos informations personnelles, l'article 25 du Promotion of Access to Information Act, 2000 (PAIA) prévoit un délai de réponse de 30 jours.
 
 ## Modifications de cette politique
 
-Nous pouvons mettre à jour cette Politique de cookies de temps à autre. La date de « Dernière mise à jour » en haut reflète la révision la plus récente. Les modifications substantielles déclencheront une nouvelle demande de consentement lors de votre prochaine visite.
+Nous pouvons mettre à jour cette Politique de cookies de temps à autre. La date de « Dernière mise à jour » en haut reflète la révision la plus récente. Une modification qui affecte la portée ou la validité du consentement peut nécessiter un nouveau choix au moyen du bandeau cookies ; vous pouvez consulter ou modifier votre choix actuel à tout moment via « Paramètres des cookies ».
 
 ## Contact
 
