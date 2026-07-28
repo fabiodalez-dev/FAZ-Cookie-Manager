@@ -179,10 +179,17 @@ class Do_Not_Sell_Shortcode {
 			return false;
 		}
 
-		// No cross-origin signal at all: reject. A same-origin browser POST
-		// always sends at least a Referer, so this only rejects requests that
-		// cannot prove they came from this site. Ports default per scheme so
-		// an explicit ":443" and an implicit https origin still match.
+		// No usable origin signal at all: reject, because nothing proves the
+		// request came from this site. Browsers attach `Origin` to every
+		// non-GET fetch/XHR — including same-origin ones — so the normal
+		// submission carries it even under `Referrer-Policy: no-referrer`.
+		// The residual gap is a client old enough to send neither
+		// `Sec-Fetch-Site` (Chrome 76+, Firefox 90+, Safari 16.4+) nor
+		// `Origin` on a same-origin POST, on a site that also suppresses the
+		// Referer: there the opt-out is refused rather than silently
+		// accepted, which is the safe direction for a state change.
+		// Ports default per scheme so an explicit ":443" and an implicit
+		// https origin still match.
 		return ! empty( $site['scheme'] ) && ! empty( $site['host'] )
 			&& ! empty( $request['scheme'] ) && ! empty( $request['host'] )
 			&& strtolower( $request['scheme'] ) === strtolower( $site['scheme'] )
