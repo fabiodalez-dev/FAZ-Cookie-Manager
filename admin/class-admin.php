@@ -2179,10 +2179,11 @@ class Admin {
 	 * @return void
 	 */
 	public function register_dashboard_widget() {
-		// The widget exposes aggregated consent statistics; keep it — and its
-		// render callback — visible only to users who manage the site. The WP
-		// dashboard itself is reachable by any logged-in role (e.g. Subscriber),
-		// so this gate is what prevents the data from leaking to them.
+		// WordPress dashboard meta boxes carry no per-widget capability, and the
+		// dashboard is reachable by any role with `read` (e.g. Subscriber). The
+		// consent overview is admin-only operational data, so gate the widget on
+		// the same capability the plugin's admin pages require — otherwise a
+		// low-privilege user would see the aggregate accept/reject stats.
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
@@ -2203,8 +2204,9 @@ class Admin {
 	 * @return void
 	 */
 	public function render_dashboard_widget() {
-		// Defence in depth: never emit consent stats to a non-manager even if the
-		// callback is reached outside register_dashboard_widget()'s gate.
+		// Defence in depth: the widget is only registered for admins, but never
+		// compute or emit the aggregate stats for a non-admin even if this
+		// callback is reached another way.
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
