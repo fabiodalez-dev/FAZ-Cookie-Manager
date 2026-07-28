@@ -2,7 +2,7 @@
 
 **Poslední aktualizace:** {{LAST_UPDATED_DATE}}
 
-Tyto Zásady používání souborů cookie vysvětlují, jak **{{COMPANY_NAME}}** („my", „nás", „naše") používá soubory cookie a podobné technologie na tomto webu v souladu se zákonem Protection of Personal Information Act, 2013 (POPIA) Jihoafrické republiky a předpisy vydanými úřadem Information Regulator.
+Tyto Zásady používání souborů cookie vysvětlují, jak **{{COMPANY_NAME}}** („my“, „nás“, „naše“) používá soubory cookie a podobné technologie na tomto webu v souladu se zákonem Protection of Personal Information Act, 2013 (POPIA) Jihoafrické republiky a předpisy vydanými úřadem Information Regulator.
 
 ## Kdo jsme
 
@@ -18,7 +18,7 @@ Odpovědnou stranou (responsible party) za zpracování vašich osobních inform
 
 Soubory cookie jsou malé textové soubory ukládané do vašeho zařízení při návštěvě našeho webu. Umožňují nám rozpoznat vaše zařízení při dalších návštěvách, zapamatovat si vaše předvolby, měřit používání webu a (s vaším souhlasem) zobrazovat personalizovanou reklamu.
 
-Používáme také podobné technologie, jako jsou **localStorage**, **sessionStorage** a **pixelové značky**. Kde tyto zásady hovoří o „souborech cookie", zahrnují i tyto technologie.
+Používáme také podobné technologie, jako jsou **localStorage**, **sessionStorage** a **pixelové značky**. Kde tyto zásady hovoří o „souborech cookie“, zahrnují i tyto technologie.
 
 ## Právní základ zpracování
 
@@ -28,7 +28,7 @@ U **všech ostatních** kategorií souborů cookie je zpracování založeno na 
 
 Osobní informace shromažďované prostřednictvím těchto technologií mohou zahrnovat online identifikátory, informace o zařízení a prohlížeči, události používání, přibližnou polohu a preference popsané v tabulce souborů cookie a v našich samostatných Zásadách ochrany osobních údajů. Poskytnutí informací prostřednictvím nepodstatných technologií je dobrovolné; pokud je odmítnete, související analytické, personalizační nebo reklamní funkce nebudou fungovat. Zpracování nezbytné k poskytování a zabezpečení webu je pro tyto technické funkce nutné a jeho blokování může zabránit fungování některých částí webu.
 
-Souhlas můžete kdykoli odvolat pomocí odkazu „Nastavení souborů cookie" nebo smazáním souborů cookie (POPIA, článek 11(2)(b)). Odvolání nemá vliv na zákonnost zpracování provedeného před odvoláním.
+Souhlas můžete kdykoli odvolat pomocí odkazu „Nastavení souborů cookie“ nebo smazáním souborů cookie (POPIA, článek 11(2)(b)). Odvolání nemá vliv na zákonnost zpracování provedeného před odvoláním.
 
 ## Soubory cookie používané na tomto webu
 
@@ -67,7 +67,7 @@ Pro uplatnění těchto práv nás kontaktujte na **{{COMPANY_EMAIL}}**; je-li v
 
 ## Změny těchto zásad
 
-Tyto Zásady používání souborů cookie můžeme čas od času aktualizovat. Datum „Poslední aktualizace" nahoře odráží nejnovější revizi. Změna, která ovlivní rozsah nebo platnost souhlasu, může vyžadovat novou volbu prostřednictvím cookie lišty; svou aktuální volbu můžete kdykoli zkontrolovat nebo změnit v „Nastavení souborů cookie".
+Tyto Zásady používání souborů cookie můžeme čas od času aktualizovat. Datum „Poslední aktualizace“ nahoře odráží nejnovější revizi. Změna, která ovlivní rozsah nebo platnost souhlasu, může vyžadovat novou volbu prostřednictvím cookie lišty; svou aktuální volbu můžete kdykoli zkontrolovat nebo změnit v „Nastavení souborů cookie“.
 
 ## Kontakt
 

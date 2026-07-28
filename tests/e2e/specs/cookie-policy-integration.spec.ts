@@ -413,8 +413,9 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
       expect(overridden, 'explicit shortcode override did not render POPIA').toContain('data-jurisdiction="popia-southafrica"');
 
       wpEval(`$d = json_decode('${incomplete}', true); $d['jurisdiction'] = 'popia-southafrica'; update_option('faz_cookie_policy_data', $d);`);
-      const savedJurisdiction = wpEval(`echo do_shortcode('[faz_cookie_policy_complete lang="en"]');`).trim();
-      expect(savedJurisdiction, 'incomplete saved POPIA configuration must remain blocked').toBe('');
+      const savedJurisdiction = wpEval(`wp_set_current_user(1); echo do_shortcode('[faz_cookie_policy_complete lang="en"]');`).trim();
+      expect(savedJurisdiction, 'incomplete saved POPIA configuration shows the admin notice').toContain('faz-cookie-policy-empty');
+      expect(savedJurisdiction, 'incomplete saved POPIA configuration does not render the policy').not.toContain('<article class="faz-cookie-policy"');
     } finally {
       wpEval(`update_option('faz_cookie_policy_data', json_decode('${restore}', true));`);
     }
@@ -530,6 +531,8 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
     // an empty URL, so the syntax would otherwise survive into the document.
     const snapshot = wpEval(`echo wp_json_encode( get_option('faz_cookie_policy_data', array()) );`).trim();
     const b64 = Buffer.from(snapshot, 'utf8').toString('base64');
+    const privacyPageSnapshot = wpEval(`echo wp_json_encode( get_option( 'wp_page_for_privacy_policy', 0 ) );`).trim();
+    const privacyPageB64 = Buffer.from(privacyPageSnapshot, 'utf8').toString('base64');
     try {
       // GDPR-shaped settings: no Information Officer, no separate privacy URL.
       wpEval(`
@@ -548,6 +551,7 @@ test.describe('Cookie Policy Generator — admin integration (Spec 002)', () => 
       expect(out, 'no anchor with an empty href').not.toMatch(/<a[^>]+href=""/);
       expect(out, 'no leftover {{TOKEN}}').not.toMatch(/\{\{[A-Z_][A-Z0-9_]*\}\}/);
     } finally {
+      wpEval(`update_option( 'wp_page_for_privacy_policy', json_decode( base64_decode('${privacyPageB64}'), true ) );`);
       wpEval(`update_option( 'faz_cookie_policy_data', json_decode( base64_decode('${b64}'), true ) );`);
     }
   });

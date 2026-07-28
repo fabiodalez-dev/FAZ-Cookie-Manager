@@ -63,7 +63,7 @@ Conforme a la POPIA (capítulo 3, condición 8, y secciones 23-25) tienes derech
 - no ser objeto — salvo las excepciones de la sección 71(2) — de una decisión basada únicamente en un tratamiento automatizado destinado a elaborar tu perfil, cuando produzca efectos jurídicos sobre ti o te afecte de manera sustancial (sección 71)
 - presentar una reclamación ante el Information Regulator (Sudáfrica) — [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}}); correo para reclamaciones: **{{INFOREG_CONTACT}}**
 
-Para ejercer estos derechos contáctanos en **{{COMPANY_EMAIL}}**; si en la sección "Quiénes somos" de arriba figura un Information Officer, puedes dirigirle tu solicitud directamente. Responderemos tan pronto como sea razonablemente posible; para las solicitudes de acceso a tu información personal, la sección 25 de la Promotion of Access to Information Act, 2000 (PAIA) prevé un plazo de respuesta de 30 días.
+Para ejercer estos derechos contáctanos en **{{COMPANY_EMAIL}}**; si en la sección «Quiénes somos» de arriba figura un Information Officer, puedes dirigirle tu solicitud directamente. Responderemos tan pronto como sea razonablemente posible; para las solicitudes de acceso a tu información personal, la sección 25 de la Promotion of Access to Information Act, 2000 (PAIA) prevé un plazo de respuesta de 30 días.
 
 ## Cambios en esta política
 

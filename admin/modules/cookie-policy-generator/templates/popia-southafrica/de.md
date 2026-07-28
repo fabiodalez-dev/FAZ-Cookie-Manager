@@ -2,7 +2,7 @@
 
 **Zuletzt aktualisiert:** {{LAST_UPDATED_DATE}}
 
-Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** („wir", „uns", „unser") Cookies und ähnliche Technologien auf dieser Website verwendet, in Übereinstimmung mit dem Protection of Personal Information Act, 2013 (POPIA) von Südafrika und den vom Information Regulator erlassenen Vorschriften.
+Diese Cookie-Richtlinie erklärt, wie **{{COMPANY_NAME}}** („wir“, „uns“, „unser“) Cookies und ähnliche Technologien auf dieser Website verwendet, in Übereinstimmung mit dem Protection of Personal Information Act, 2013 (POPIA) von Südafrika und den vom Information Regulator erlassenen Vorschriften.
 
 ## Wer wir sind
 
@@ -18,7 +18,7 @@ Die verantwortliche Stelle (responsible party) für die Verarbeitung Ihrer perso
 
 Cookies sind kleine Textdateien, die beim Besuch unserer Website auf Ihrem Gerät gespeichert werden. Sie ermöglichen es uns, Ihr Gerät bei späteren Besuchen wiederzuerkennen, Ihre Einstellungen zu speichern, die Nutzung der Website zu messen und (mit Ihrer Einwilligung) personalisierte Werbung auszuspielen.
 
-Wir verwenden auch ähnliche Technologien wie **localStorage**, **sessionStorage** und **Pixel-Tags**. Wo diese Richtlinie von „Cookies" spricht, sind diese Technologien mit umfasst.
+Wir verwenden auch ähnliche Technologien wie **localStorage**, **sessionStorage** und **Pixel-Tags**. Wo diese Richtlinie von „Cookies“ spricht, sind diese Technologien mit umfasst.
 
 ## Rechtsgrundlage der Verarbeitung
 
@@ -28,7 +28,7 @@ Bei **allen anderen** Cookie-Kategorien beruht die Verarbeitung auf Ihrer **Einw
 
 Die über diese Technologien erhobenen personenbezogenen Informationen können Online-Kennungen, Geräte- und Browserinformationen, Nutzungsereignisse, den ungefähren Standort sowie die in der Cookie-Tabelle und unserer gesonderten Datenschutzerklärung beschriebenen Präferenzen umfassen. Die Bereitstellung von Informationen über nicht erforderliche Technologien ist freiwillig; bei einer Ablehnung funktionieren die zugehörigen Analyse-, Personalisierungs- oder Werbefunktionen nicht. Die zur Bereitstellung und Absicherung der Website erforderliche Verarbeitung ist für diese technischen Funktionen notwendig; ihre Blockierung kann dazu führen, dass Teile der Website nicht funktionieren.
 
-Sie können Ihre Einwilligung jederzeit über den Link „Cookie-Einstellungen" oder durch Löschen Ihrer Cookies widerrufen (POPIA, Abschnitt 11(2)(b)). Der Widerruf berührt nicht die Rechtmäßigkeit der vor dem Widerruf erfolgten Verarbeitung.
+Sie können Ihre Einwilligung jederzeit über den Link „Cookie-Einstellungen“ oder durch Löschen Ihrer Cookies widerrufen (POPIA, Abschnitt 11(2)(b)). Der Widerruf berührt nicht die Rechtmäßigkeit der vor dem Widerruf erfolgten Verarbeitung.
 
 ## Auf dieser Website verwendete Cookies
 
@@ -67,7 +67,7 @@ Zur Ausübung dieser Rechte kontaktieren Sie uns unter **{{COMPANY_EMAIL}}**; is
 
 ## Änderungen dieser Richtlinie
 
-Wir können diese Cookie-Richtlinie von Zeit zu Zeit aktualisieren. Das Datum „Zuletzt aktualisiert" oben gibt die letzte Überarbeitung wieder. Eine Änderung, die den Umfang oder die Gültigkeit der Einwilligung betrifft, kann eine neue Entscheidung über das Cookie-Banner erfordern; Ihre aktuelle Auswahl können Sie jederzeit über „Cookie-Einstellungen" prüfen oder ändern.
+Wir können diese Cookie-Richtlinie von Zeit zu Zeit aktualisieren. Das Datum „Zuletzt aktualisiert“ oben gibt die letzte Überarbeitung wieder. Eine Änderung, die den Umfang oder die Gültigkeit der Einwilligung betrifft, kann eine neue Entscheidung über das Cookie-Banner erfordern; Ihre aktuelle Auswahl können Sie jederzeit über „Cookie-Einstellungen“ prüfen oder ändern.
 
 ## Kontakt
 
