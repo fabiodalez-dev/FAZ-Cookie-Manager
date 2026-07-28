@@ -6313,7 +6313,7 @@ class Frontend {
 			}
 
 			// Insert a placeholder BEFORE the widget container, and hide it.
-			$content = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#(<(?:div|blockquote|span)\b)([^>]*\bid\s*=\s*["\']' . preg_quote( $id_prefix, '#' ) . '[^"\']*["\'][^>]*)>#i',
 				function ( $m ) use ( $category, $info ) {
 					// Skip if already processed.
@@ -6323,10 +6323,21 @@ class Frontend {
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
 					// Placeholder before + hidden original element.
 					$blocked = $m[1] . $m[2] . ' data-faz-category="' . esc_attr( $category ) . '">';
-				return $placeholder . self::faz_add_hidden_class( $blocked );
+					return $placeholder . self::faz_add_hidden_class( $blocked );
 				},
 				$content
 			);
+			// A PCRE failure returns null. filter_content_blocking() is hooked
+			// to the_content / widget_text / widget_block_content, and a null
+			// return there does not pass the content through — it renders as an
+			// empty string, silently blanking the post body. Keep the unblocked
+			// HTML instead, matching the scripts/iframes passes in
+			// filter_content_blocking().
+			if ( null !== $result ) {
+				$content = $result;
+			} else {
+				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in process_social_embeds (' . $id_prefix . ')' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 		}
 
 		return $content;
