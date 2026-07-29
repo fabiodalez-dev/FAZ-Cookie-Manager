@@ -7,6 +7,15 @@ const isCI = Boolean(process.env.CI);
 // REST nonce across the implied cross-host redirect.
 const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
+// Several specs skip fixture-page tests when the site is served by PHP's
+// built-in server, whose is_singular() handling is unreliable. That check
+// reads FAZ_E2E_SERVER and defaults to 'php-built-in', so on the documented
+// nginx + PHP-FPM stack the tests silently opted themselves out — which is
+// how a provider script running before consent went unnoticed. Default to
+// nginx here, matching the documented setup; export FAZ_E2E_SERVER=php-built-in
+// to get the old behaviour back.
+process.env.FAZ_E2E_SERVER = process.env.FAZ_E2E_SERVER ?? 'nginx';
+
 export default defineConfig({
   testDir: './specs',
   timeout: 45_000,

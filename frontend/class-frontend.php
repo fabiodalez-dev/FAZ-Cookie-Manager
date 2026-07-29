@@ -4287,6 +4287,18 @@ class Frontend {
 			}
 		}
 
+		// A pattern that already ends on a separator carries its own right-hand
+		// boundary: `js.hs-scripts.com/` cannot be a prefix of a longer domain
+		// label, because the slash has closed it. Demanding another separator
+		// after it means the pattern can only ever match at the very end of a
+		// URL — so a perfectly ordinary `js.hs-scripts.com/12345.js` was left
+		// unblocked, the next character being `1`. Twenty of the shipped
+		// provider definitions carry at least one pattern in this shape.
+		$last_char = substr( $target, $index + $length - 1, 1 );
+		if ( '' !== $last_char && preg_match( '/[\/.:\?#=&]/', $last_char ) ) {
+			return true;
+		}
+
 		$after_pos = $index + $length;
 		if ( $after_pos < strlen( $target ) ) {
 			$after = substr( $target, $after_pos, 1 );

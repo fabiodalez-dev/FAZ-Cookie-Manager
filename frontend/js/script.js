@@ -4899,6 +4899,13 @@ function _fazGetProviderMatchTarget(target) {
 
 function _fazHasProviderBoundary(target, index, length) {
     if (index > 0 && !/[\/\.\:\s"'`=;,(<{\[]/.test(target.charAt(index - 1))) return false;
+    // A pattern ending on a separator already carries its own right-hand
+    // boundary — `js.hs-scripts.com/` cannot be the prefix of a longer domain
+    // label once the slash has closed it. Requiring a further separator after
+    // it would only ever match at the end of a URL, leaving an ordinary
+    // `js.hs-scripts.com/12345.js` unblocked. Mirrors the PHP
+    // Frontend::has_provider_boundary().
+    if (/[\/\.\:\?\#=&]/.test(target.charAt(index + length - 1))) return true;
     var afterPos = index + length;
     if (afterPos < target.length && !/[\/\.\:\?\#\s"'=;,&)<}\]]/.test(target.charAt(afterPos))) return false;
     return true;
