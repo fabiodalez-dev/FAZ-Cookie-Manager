@@ -81,3 +81,4 @@ cookies.txt
 # Local agent instructions — never committed to wp.org/GitHub releases
 CLAUDE.md
 .claude/
+tests/compliance/traces/
