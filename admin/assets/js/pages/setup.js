@@ -27,15 +27,9 @@
 	var TOTAL_STEPS = 8;
 	var SCAN_STEP = 7;          // the step hosting the scan + payment suggestions
 	var TCF_STEP = 5;           // the step whose Next is gated on a valid CMP ID
-	var SCAN_POLL_INTERVAL = 3000; // ms between scan-status polls
-	var SCAN_POLL_TIMEOUT = 90000; // give up polling after 90s (scan runs on regardless)
 
 	var root, steps, progressItems, backBtn, nextBtn, finishBtn;
 	var currentStep = 1;
-	var scanPollTimer = null;
-	var scanPollDeadline = 0;
-	var scanElapsedTimer = null;
-	var scanStartedAt = 0;
 	var finishing = false;
 	var recommendations = null; // last recommendations payload (or null)
 	// Checked-state of every persisted toggle at page load, so the review can
@@ -339,7 +333,7 @@
 		wrap.hidden = false;
 	}
 
-	/* ── Quick scan (optional, non-blocking) ── */
+	/* ── Cookie scan (shared browser engine) ── */
 
 	function bindScan() {
 		var btn = document.getElementById('faz-setup-scan-btn');
@@ -354,115 +348,83 @@
 		if (el) { el.textContent = message || ''; }
 	}
 
-	// Animated activity indicator for the server-side scan. The crawl runs in a
-	// background process, so there is no reliable per-page signal to poll; an
-	// indeterminate bar plus a live elapsed counter shows the scan is alive and
-	// moving rather than frozen. Cleared on completion, failure, or step change.
+	// The scan reports real per-page progress, so the bar is determinate — which
+	// means role="progressbar" must carry a value, not just animate.
+	function setScanProgress(pct) {
+		var value = Math.max(0, Math.min(100, Math.round(pct)));
+		var wrap = document.getElementById('faz-setup-scan-progress');
+		var bar = wrap ? wrap.querySelector('.faz-setup-scan-bar') : null;
+		if (bar) { bar.style.width = value + '%'; }
+		if (wrap) {
+			wrap.setAttribute('aria-valuenow', String(value));
+			wrap.setAttribute('aria-valuemin', '0');
+			wrap.setAttribute('aria-valuemax', '100');
+		}
+	}
+
 	function startScanActivity() {
-		var bar = document.getElementById('faz-setup-scan-progress');
-		if (bar) { bar.hidden = false; bar.classList.add('is-scanning'); }
-		scanStartedAt = Date.now();
-		if (scanElapsedTimer) { clearInterval(scanElapsedTimer); }
-		var render = function () {
-			var secs = Math.max(0, Math.round((Date.now() - scanStartedAt) / 1000));
-			setScanStatus(interpolate(__('setup.scan_running_elapsed', 'Scanning your site… (%ds)'), secs));
-		};
-		render();
-		scanElapsedTimer = setInterval(render, 1000);
+		var wrap = document.getElementById('faz-setup-scan-progress');
+		if (wrap) { wrap.hidden = false; }
+		setScanProgress(0);
 	}
 
+	// Also called on step change, so leaving the scan step tidies the UI.
 	function stopScanActivity() {
-		var bar = document.getElementById('faz-setup-scan-progress');
-		if (bar) { bar.classList.remove('is-scanning'); bar.hidden = true; }
-		if (scanElapsedTimer) { clearInterval(scanElapsedTimer); scanElapsedTimer = null; }
+		var wrap = document.getElementById('faz-setup-scan-progress');
+		if (wrap) { wrap.hidden = true; }
 	}
 
+	/**
+	 * Run the same browser-based scan the Cookies page runs.
+	 *
+	 * Deliberately not the server-side `scans` endpoint this step used to call:
+	 * a PHP crawl reads Set-Cookie headers only, so it reported a couple of
+	 * cookies on sites that actually set dozens — everything written by
+	 * Analytics, ad pixels or embeds is invisible to it. The shared engine loads
+	 * pages in hidden iframes and therefore observes what a real visitor gets.
+	 *
+	 * The trade-off is that the crawl now lives in this tab: navigating away
+	 * ends it, which the step copy states plainly.
+	 */
 	function startScan(btn) {
+		if (!window.FAZ || !FAZ.scanEngine || typeof FAZ.scanEngine.run !== 'function') {
+			// The engine script was blocked (ad blockers match "cookie"/"scan"
+			// filenames). Say so rather than failing mutely.
+			setScanStatus(__('setup.scan_engine_missing', 'The scanner could not load. You can skip this step and run a full scan on the Cookies page.'));
+			return;
+		}
+
 		btn.disabled = true;
 		setScanStatus(__('setup.scan_starting', 'Starting scan…'));
+		startScanActivity();
 
-		FAZ.post('scans', { max_pages: 20 }).then(function (info) {
-			// A fresh scan was accepted (status 'scanning') — begin polling.
-			pollScan(btn);
-		}).catch(function (err) {
-			var status = err && (err.data && err.data.status || err.status);
-			if (status === 409) {
-				// A scan is already running — attach to it rather than double-trigger.
-				setScanStatus(__('setup.scan_in_progress', 'A scan is already in progress…'));
-				pollScan(btn);
-				return;
-			}
-			// Any other failure is non-fatal: the scan is optional.
+		FAZ.scanEngine.run({ maxPages: 20 }, {
+			status: setScanStatus,
+			progress: setScanProgress,
+			pages: function () {},
+		}).then(function (res) {
 			stopScanActivity();
 			btn.disabled = false;
-			setScanStatus(__('setup.scan_failed', 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.'));
+			var found = (res && typeof res.total === 'number') ? res.total : 0;
+			setScanStatus(
+				found > 0
+					? interpolate(__('setup.scan_done_found', 'Scan complete — %d cookies found.'), found)
+					: __('setup.scan_done_empty', 'Scan complete. No new cookies were found.')
+			);
+			// The scan may have discovered payment-gateway cookies — refresh the
+			// suggestions so the payments block reflects them.
+			loadRecommendations();
+		}).catch(function (err) {
+			stopScanActivity();
+			btn.disabled = false;
+			console.error('[FAZ Setup] Scan failed:', err);
+			setScanStatus((err && err.message) || __('setup.scan_failed', 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.'));
 			FAZ.notify(__('setup.scan_failed_notify', 'Cookie scan could not be started.'), 'error');
 		});
 	}
 
-	function pollScan(btn) {
-		if (scanPollTimer) { clearTimeout(scanPollTimer); }
-		scanPollDeadline = Date.now() + SCAN_POLL_TIMEOUT;
-		startScanActivity();
-
-		var tick = function () {
-			FAZ.get('scans/info').then(function (info) {
-				var scanStatus = info && info.status;
-				if (scanStatus && scanStatus !== 'scanning') {
-					var found = (info && typeof info.total_cookies === 'number') ? info.total_cookies : 0;
-					// Rows actually ADDED this run; -1 = server state predates the
-					// field. "57 found" alone misleads on re-scans, where all 57
-					// may already be in the catalogue.
-					var added = (info && typeof info.new_cookies === 'number') ? info.new_cookies : -1;
-					stopScanActivity();
-					var doneMessage;
-					if (found <= 0) {
-						doneMessage = __('setup.scan_done_empty', 'Scan complete. No new cookies were found.');
-					} else if (added > 0) {
-						doneMessage = interpolate2(
-							__('setup.scan_done_found_new', 'Scan complete — %1$d cookies detected, %2$d new added to your catalogue.'),
-							found, added
-						);
-					} else if (added === 0) {
-						doneMessage = interpolate(
-							__('setup.scan_done_no_new', 'Scan complete — %d cookies detected, none new (already in your catalogue).'),
-							found
-						);
-					} else {
-						doneMessage = interpolate(__('setup.scan_done_found', 'Scan complete — %d cookies found.'), found);
-					}
-					setScanStatus(doneMessage);
-					btn.disabled = false;
-					// The scan may have discovered payment-gateway cookies —
-					// refresh the suggestions so the payments block reflects them.
-					loadRecommendations();
-					return;
-				}
-				if (Date.now() >= scanPollDeadline) {
-					// Scan keeps running server-side; stop polling so the wizard
-					// stays responsive. Finishing never waited for it anyway.
-					stopScanActivity();
-					setScanStatus(__('setup.scan_slow', 'The scan is still running in the background. You can finish setup now — results will appear on the Cookies page.'));
-					btn.disabled = false;
-					return;
-				}
-				scanPollTimer = setTimeout(tick, SCAN_POLL_INTERVAL);
-			}).catch(function () {
-				stopScanActivity();
-				btn.disabled = false;
-				setScanStatus(__('setup.scan_status_error', 'Could not read the scan status. You can finish setup and check the Cookies page later.'));
-			});
-		};
-
-		scanPollTimer = setTimeout(tick, SCAN_POLL_INTERVAL);
-	}
-
 	function interpolate(template, num) {
 		return String(template).replace('%d', String(num));
-	}
-
-	function interpolate2(template, first, second) {
-		return String(template).replace('%1$d', String(first)).replace('%2$d', String(second));
 	}
 
 	function interpolateStr(template, value) {

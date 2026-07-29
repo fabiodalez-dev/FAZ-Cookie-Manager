@@ -576,6 +576,10 @@ class Admin {
 						'staleLoadFailed'          => __( 'Failed to load cookies for stale cleanup.', 'faz-cookie-manager' ),
 						'scanStarted'              => __( 'Scanning...', 'faz-cookie-manager' ),
 						'scanSite'                 => __( 'Scan Site', 'faz-cookie-manager' ),
+						'scanFailed'               => __( 'Scan failed.', 'faz-cookie-manager' ),
+						'noPagesFound'             => __( 'No pages found to scan.', 'faz-cookie-manager' ),
+						'discoverFailed'           => __( 'Failed to discover pages.', 'faz-cookie-manager' ),
+						'scanSaveFailed'           => __( 'Scan finished but failed to save results.', 'faz-cookie-manager' ),
 						'discoveringPages'         => __( 'Discovering pages...', 'faz-cookie-manager' ),
 						'enrichingServer'          => __( 'Enriching with server scan...', 'faz-cookie-manager' ),
 						'savingResults'            => __( 'Saving results...', 'faz-cookie-manager' ),
@@ -751,21 +755,12 @@ class Admin {
 					// Guided setup wizard (admin/assets/js/pages/setup.js).
 					'setup'                    => array(
 						'scan_starting'             => __( 'Starting scan…', 'faz-cookie-manager' ),
-						'scan_in_progress'          => __( 'A scan is already in progress…', 'faz-cookie-manager' ),
 						'scan_failed'               => __( 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.', 'faz-cookie-manager' ),
 						'scan_failed_notify'        => __( 'Cookie scan could not be started.', 'faz-cookie-manager' ),
-						'scan_running'              => __( 'Scanning your site… this can take a moment.', 'faz-cookie-manager' ),
-						/* translators: %d: seconds elapsed since the scan started. */
-						'scan_running_elapsed'      => __( 'Scanning your site… (%ds)', 'faz-cookie-manager' ),
-						/* translators: %d: number of cookies found by the quick scan. */
+						'scan_engine_missing'       => __( 'The scanner could not load. You can skip this step and run a full scan on the Cookies page.', 'faz-cookie-manager' ),
+						/* translators: %d: number of cookies found by the scan. */
 						'scan_done_found'           => __( 'Scan complete — %d cookies found.', 'faz-cookie-manager' ),
-						/* translators: %1$d: cookies detected by this scan; %2$d: new rows added to the catalogue. */
-						'scan_done_found_new'       => __( 'Scan complete — %1$d cookies detected, %2$d new added to your catalogue.', 'faz-cookie-manager' ),
-						/* translators: %d: cookies detected by this scan (all already catalogued). */
-						'scan_done_no_new'          => __( 'Scan complete — %d cookies detected, none new (already in your catalogue).', 'faz-cookie-manager' ),
 						'scan_done_empty'           => __( 'Scan complete. No new cookies were found.', 'faz-cookie-manager' ),
-						'scan_slow'                 => __( 'The scan is still running in the background. You can finish setup now — results will appear on the Cookies page.', 'faz-cookie-manager' ),
-						'scan_status_error'         => __( 'Could not read the scan status. You can finish setup and check the Cookies page later.', 'faz-cookie-manager' ),
 						'finished'                  => __( 'Setup complete. Your cookie banner is ready.', 'faz-cookie-manager' ),
 						'finish_failed'             => __( 'Setup could not be saved. Please try again.', 'faz-cookie-manager' ),
 						/* translators: %s: name of the detected plugin (e.g. a cache plugin). */
@@ -992,6 +987,26 @@ class Admin {
 
 				if ( file_exists( $page_js ) ) {
 					$page_deps = array( 'faz-admin' );
+
+					// The browser-based scan engine is shared by the Cookies page
+					// and the setup wizard. It has to run in a browser — a
+					// server-side crawl only sees Set-Cookie headers and misses
+					// everything JavaScript writes — so both surfaces load the
+					// same module rather than each having its own idea of a scan.
+					if ( in_array( $page['view'], array( 'cookies', 'setup' ), true ) ) {
+						$engine_js = plugin_dir_path( __FILE__ ) . 'assets/js/modules/scan-engine.js';
+						if ( file_exists( $engine_js ) ) {
+							wp_enqueue_script(
+								'faz-scan-engine',
+								plugin_dir_url( __FILE__ ) . 'assets/js/modules/scan-engine.js',
+								array( 'faz-admin' ),
+								filemtime( $engine_js ),
+								true
+							);
+							$page_deps[] = 'faz-scan-engine';
+						}
+					}
+
 					// Add FilePond as an explicit dependency if enqueued (ClassicPress).
 					if ( 'banner' === $page['view'] ) {
 						foreach ( array( 'filepond', 'wp-filepond' ) as $fp ) {

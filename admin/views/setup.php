@@ -356,7 +356,7 @@ $faz_setup_step_titles = array(
 			<!-- Step 7 — Find cookies (optional) + payment compatibility -->
 			<section class="faz-wizard-step" data-step="7" hidden aria-labelledby="faz-setup-step7-title">
 				<h2 id="faz-setup-step7-title" class="faz-setup-step-title" tabindex="-1"><?php esc_html_e( 'Find your cookies', 'faz-cookie-manager' ); ?> <span class="faz-setup-optional"><?php esc_html_e( '(optional)', 'faz-cookie-manager' ); ?></span></h2>
-				<p class="faz-setup-step-lead"><?php esc_html_e( 'A quick server-side scan looks at a sample of your pages to discover cookies and categorise them automatically. It is optional — you can always run it later, and finishing setup never waits for it.', 'faz-cookie-manager' ); ?></p>
+				<p class="faz-setup-step-lead"><?php esc_html_e( 'A scan visits a sample of your pages in the background of this tab and loads them the way a visitor would, so it sees the cookies your scripts actually set — including the ones written by analytics, advertising and embedded players. It is optional, and you can always run it later from the Cookies page. Keep this tab open while it runs.', 'faz-cookie-manager' ); ?></p>
 
 				<div class="faz-setup-scan">
 					<button type="button" class="faz-btn faz-btn-secondary" id="faz-setup-scan-btn">
@@ -370,8 +370,8 @@ $faz_setup_step_titles = array(
 				</div>
 
 				<p class="faz-setup-scan-note">
-					<?php esc_html_e( 'A quick scan may not catch cookies set later by JavaScript.', 'faz-cookie-manager' ); ?>
-					<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-cookies' ) ); ?>"><?php esc_html_e( 'Do a full browser scan on the Cookies page', 'faz-cookie-manager' ); ?></a>.
+					<?php esc_html_e( 'This scan covers a sample of your pages. To scan the whole site, or to re-scan after adding a service,', 'faz-cookie-manager' ); ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=faz-cookie-manager-cookies' ) ); ?>"><?php esc_html_e( 'use the Cookies page', 'faz-cookie-manager' ); ?></a>.
 				</p>
 
 				<!-- Payment compatibility recommendations (revealed by setup.js when
@@ -419,3 +419,6 @@ $faz_setup_step_titles = array(
 		</div>
 	</div>
 </div>
+
+<!-- Hidden iframe container for the browser-based cookie scan (shared engine). -->
+<div id="faz-scan-frame" style="display:none;position:absolute;left:-9999px;"></div>

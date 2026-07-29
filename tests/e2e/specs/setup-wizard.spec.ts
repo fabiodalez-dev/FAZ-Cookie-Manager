@@ -228,32 +228,28 @@ test.describe('Guided setup wizard', () => {
     }
   });
 
-  test('quick scan is optional and non-blocking (POST /scans returns scanning or 409)', async ({ page, loginAsAdmin }) => {
+  // The wizard used to call the server-side `POST /scans` endpoint, which reads
+  // Set-Cookie headers and therefore reported a couple of cookies on sites that
+  // set dozens — everything written by JavaScript was invisible to it. It now
+  // drives the same browser engine the Cookies page uses. Both preconditions
+  // below are ways that switch can fail *silently*: without the engine the
+  // button does nothing, and without the iframe container every page is
+  // recorded as `missingContainer` and the scan returns empty.
+  test('quick scan is optional and non-blocking (drives the shared browser scan engine)', async ({ page, loginAsAdmin }) => {
     const snap = snapshot();
     try {
       forceIncomplete();
       await loginAsAdmin(page);
       await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
 
-      // Wait for the admin nonce so the direct REST probe authenticates.
-      await page.waitForFunction(
-        () => typeof (window as any).fazConfig?.api?.nonce === 'string' && (window as any).fazConfig.api.nonce.length > 0,
-        undefined,
-        { timeout: 15_000 },
-      );
-
-      const scanStatus = await page.evaluate(async () => {
-        const nonce = (window as any).fazConfig?.api?.nonce ?? '';
-        const res = await fetch('/?rest_route=/faz/v1/scans', {
-          method: 'POST',
-          headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ max_pages: 20 }),
-        });
-        return res.status;
-      });
-      // Either accepted (2xx) or already-in-progress (409) — both are non-fatal
-      // and the wizard lets the admin Finish regardless.
-      expect([200, 201, 409]).toContain(scanStatus);
+      const wiring = await page.evaluate(() => ({
+        engine: typeof (window as any).FAZ?.scanEngine?.run === 'function',
+        frame: !!document.getElementById('faz-scan-frame'),
+        button: !!document.getElementById('faz-setup-scan-btn'),
+      }));
+      expect(wiring.engine, 'the shared scan engine is loaded on the wizard page').toBe(true);
+      expect(wiring.frame, 'the wizard ships the #faz-scan-frame iframe host').toBe(true);
+      expect(wiring.button, 'the scan step exposes its trigger').toBe(true);
 
       // Finish must be reachable regardless of scan outcome.
       await advanceToReview(page);
