@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.12.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-07-29T15:51:08+00:00\n"
+"POT-Creation-Date: 2026-07-29T16:56:17+00:00\n"
 "PO-Revision-Date: 2026-04-20 00:00+0200\n"
 "Last-Translator: \n"
 "Language-Team: Croatian\n"
@@ -82,7 +82,7 @@ msgstr "Geo-usmjeravanje"
 msgid "Cookie Policy"
 msgstr "Pravila o kolačićima"
 
-#: admin/class-admin.php:263 admin/class-admin.php:2290 admin/views/base.php:25
+#: admin/class-admin.php:263 admin/class-admin.php:2291 admin/views/base.php:25
 #: admin/views/dashboard.php:201 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
@@ -100,12 +100,12 @@ msgstr "Status sustava"
 msgid "Setup"
 msgstr ""
 
-#: admin/class-admin.php:509 admin/class-admin.php:2263
+#: admin/class-admin.php:509 admin/class-admin.php:2264
 #: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr "Prihvaćeno"
 
-#: admin/class-admin.php:510 admin/class-admin.php:2267
+#: admin/class-admin.php:510 admin/class-admin.php:2268
 #: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr "Odbijeno"
@@ -114,19 +114,19 @@ msgstr "Odbijeno"
 msgid "total responses"
 msgstr "ukupno odgovora"
 
-#: admin/class-admin.php:513 admin/class-admin.php:640
+#: admin/class-admin.php:513 admin/class-admin.php:641
 msgid "Settings saved successfully."
 msgstr "Postavke su uspješno spremljene."
 
-#: admin/class-admin.php:514 admin/class-admin.php:641
+#: admin/class-admin.php:514 admin/class-admin.php:642
 msgid "Failed to save settings."
 msgstr "Spremanje postavki nije uspjelo."
 
-#: admin/class-admin.php:515 admin/class-admin.php:639
+#: admin/class-admin.php:515 admin/class-admin.php:640
 msgid "Failed to load settings."
 msgstr "Učitavanje postavki nije uspjelo."
 
-#: admin/class-admin.php:518 admin/class-admin.php:832
+#: admin/class-admin.php:518 admin/class-admin.php:833
 msgid "Saving…"
 msgstr "Spremanje…"
 
@@ -231,7 +231,7 @@ msgstr "Nema pronađenih kolačića."
 msgid "Edit"
 msgstr "Uredi"
 
-#: admin/class-admin.php:554 admin/class-admin.php:784
+#: admin/class-admin.php:554 admin/class-admin.php:785
 msgid "Delete"
 msgstr "Izbriši"
 
@@ -345,1358 +345,1362 @@ msgid "Scan finished but failed to save results."
 msgstr ""
 
 #: admin/class-admin.php:583
+msgid "The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked."
+msgstr ""
+
+#: admin/class-admin.php:584
 msgid "Discovering pages..."
 msgstr "Otkrivanje stranica..."
 
-#: admin/class-admin.php:584
+#: admin/class-admin.php:585
 msgid "Enriching with server scan..."
 msgstr "Obogaćivanje putem skeniranja poslužitelja..."
 
-#: admin/class-admin.php:585
+#: admin/class-admin.php:586
 msgid "Saving results..."
 msgstr "Spremanje rezultata..."
 
-#: admin/class-admin.php:586
+#: admin/class-admin.php:587
 msgid "No cookies to process."
 msgstr "Nema kolačića za obradu."
 
-#: admin/class-admin.php:587
+#: admin/class-admin.php:588
 msgid "No uncategorized cookies to process."
 msgstr "Nema nekategoriziranih kolačića za obradu."
 
-#: admin/class-admin.php:588
+#: admin/class-admin.php:589
 msgid "No cookies could be auto-categorized."
 msgstr "Nijedan kolačić nije mogao biti automatski kategoriziran."
 
-#: admin/class-admin.php:589
+#: admin/class-admin.php:590
 msgid "Auto-categorize failed."
 msgstr "Automatska kategorizacija nije uspjela."
 
-#: admin/class-admin.php:590
+#: admin/class-admin.php:591
 msgid "No definitions downloaded yet. Click \"Update Definitions\" to download."
 msgstr "Još nisu preuzete definicije. Kliknite „Ažuriraj definicije“ za preuzimanje."
 
-#: admin/class-admin.php:591
+#: admin/class-admin.php:592
 msgid "Could not load definitions status."
 msgstr "Nije moguće učitati status definicija."
 
-#: admin/class-admin.php:592
+#: admin/class-admin.php:593
 msgid "Downloading definitions from GitHub..."
 msgstr "Preuzimanje definicija s GitHuba..."
 
-#: admin/class-admin.php:593
+#: admin/class-admin.php:594
 msgid "Definitions updated."
 msgstr "Definicije ažurirane."
 
-#: admin/class-admin.php:594
+#: admin/class-admin.php:595
 msgid "Update failed."
 msgstr "Ažuriranje nije uspjelo."
 
-#: admin/class-admin.php:595
+#: admin/class-admin.php:596
 msgid "Update failed. Check your network connection."
 msgstr "Ažuriranje nije uspjelo. Provjerite mrežnu vezu."
 
-#: admin/class-admin.php:596
+#: admin/class-admin.php:597
 msgid "— Select —"
 msgstr "— Odaberi —"
 
-#: admin/class-admin.php:597 admin/views/banner.php:252
+#: admin/class-admin.php:598 admin/views/banner.php:252
 msgid "Remove"
 msgstr "Ukloni"
 
-#: admin/class-admin.php:598
+#: admin/class-admin.php:599
 msgid "rule(s) incomplete — fill in both pattern and category."
 msgstr "pravilo/a nepotpuno/a — ispunite i uzorak i kategoriju."
 
-#: admin/class-admin.php:599
+#: admin/class-admin.php:600
 msgid "Custom rules saved."
 msgstr "Prilagođena pravila spremljena."
 
-#: admin/class-admin.php:600
+#: admin/class-admin.php:601
 msgid "Failed to save custom rules."
 msgstr "Spremanje prilagođenih pravila nije uspjelo."
 
-#: admin/class-admin.php:601
+#: admin/class-admin.php:602
 msgid "No templates available."
 msgstr "Nema dostupnih predložaka."
 
-#: admin/class-admin.php:602
+#: admin/class-admin.php:603
 msgid "No patterns or cookies in template."
 msgstr "Nema uzoraka ni kolačića u predlošku."
 
-#: admin/class-admin.php:603
+#: admin/class-admin.php:604
 msgid "not found — cookies not added."
 msgstr "nije pronađeno — kolačići nisu dodani."
 
-#: admin/class-admin.php:604
+#: admin/class-admin.php:605
 msgid "Failed to create cookies from template."
 msgstr "Stvaranje kolačića iz predloška nije uspjelo."
 
-#: admin/class-admin.php:605
+#: admin/class-admin.php:606
 msgid "Failed to load templates."
 msgstr "Učitavanje predložaka nije uspjelo."
 
-#: admin/class-admin.php:606
+#: admin/class-admin.php:607
 msgid "Shortcode copied!"
 msgstr "Shortcode kopiran!"
 
-#: admin/class-admin.php:607
+#: admin/class-admin.php:608
 msgid "No scan logs available."
 msgstr "Nema dostupnih zapisnika skeniranja."
 
-#: admin/class-admin.php:608
+#: admin/class-admin.php:609
 msgid "Failed to download debug log."
 msgstr "Preuzimanje debug zapisnika nije uspjelo."
 
-#: admin/class-admin.php:609
+#: admin/class-admin.php:610
 msgid "Clear all scanner debug logs?"
 msgstr "Obrisati sve zapisnike za otklanjanje pogrešaka skenera?"
 
-#: admin/class-admin.php:610
+#: admin/class-admin.php:611
 msgid "Debug logs cleared."
 msgstr "Dnevnici za otklanjanje pogrešaka obrisani."
 
-#: admin/class-admin.php:611
+#: admin/class-admin.php:612
 msgid "Failed to clear debug logs."
 msgstr "Brisanje debug zapisnika nije uspjelo."
 
 #. translators: %s: preset name
-#: admin/class-admin.php:616
+#: admin/class-admin.php:617
 #, php-format
 msgid "Preset applied: %s"
 msgstr "Primijenjena predodređena postavka: %s"
 
-#: admin/class-admin.php:617
+#: admin/class-admin.php:618
 msgid "Failed to load banner settings."
 msgstr "Učitavanje postavki bannera nije uspjelo."
 
-#: admin/class-admin.php:618
+#: admin/class-admin.php:619
 msgid "Banner settings saved."
 msgstr "Postavke bannera su spremljene."
 
-#: admin/class-admin.php:619
+#: admin/class-admin.php:620
 msgid "Failed to save banner settings."
 msgstr "Spremanje postavki bannera nije uspjelo."
 
-#: admin/class-admin.php:621
+#: admin/class-admin.php:622
 msgid "Cookie banner enabled."
 msgstr "Banner kolačića omogućen."
 
-#: admin/class-admin.php:622
+#: admin/class-admin.php:623
 msgid "Cookie banner disabled."
 msgstr "Banner kolačića onemogućen."
 
-#: admin/class-admin.php:623
+#: admin/class-admin.php:624
 msgid "Failed to update banner status."
 msgstr "Ažuriranje statusa bannera nije uspjelo."
 
-#: admin/class-admin.php:625
+#: admin/class-admin.php:626
 msgid "Accessibility: low colour contrast"
 msgstr "Pristupačnost: slabi kontrast boja"
 
-#: admin/class-admin.php:626
+#: admin/class-admin.php:627
 msgid "These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:"
 msgstr "Ovi parovi boja ne dosežu WCAG AA minimum od 4,5:1 i mogu biti teško čitljivi:"
 
-#: admin/class-admin.php:627
+#: admin/class-admin.php:628
 msgid "Title vs banner background"
 msgstr "Naslov nasuprot pozadini bannera"
 
-#: admin/class-admin.php:628
+#: admin/class-admin.php:629
 msgid "Description vs banner background"
 msgstr "Opis nasuprot pozadini bannera"
 
-#: admin/class-admin.php:629
+#: admin/class-admin.php:630
 msgid "Link vs banner background"
 msgstr "Veza nasuprot pozadini bannera"
 
-#: admin/class-admin.php:630
+#: admin/class-admin.php:631
 msgid "Accept button text vs its background"
 msgstr "Tekst gumba Prihvati u odnosu na pozadinu"
 
-#: admin/class-admin.php:631
+#: admin/class-admin.php:632
 msgid "Reject button text vs its background"
 msgstr "Tekst gumba Odbij u odnosu na pozadinu"
 
-#: admin/class-admin.php:632
+#: admin/class-admin.php:633
 msgid "Settings button text vs its background"
 msgstr "Tekst gumba postavki naspram njegove pozadine"
 
-#: admin/class-admin.php:633
+#: admin/class-admin.php:634
 msgid "Save button text vs its background"
 msgstr "Tekst gumba Spremi u odnosu na pozadinu"
 
-#: admin/class-admin.php:634
+#: admin/class-admin.php:635
 msgid "Category label vs banner background"
 msgstr "Oznaka kategorije nasuprot pozadini bannera"
 
-#: admin/class-admin.php:635
+#: admin/class-admin.php:636
 msgid "Do Not Sell text vs banner background"
 msgstr "Tekst «Ne prodaj» nasuprot pozadini bannera"
 
-#: admin/class-admin.php:642 admin/class-admin.php:711
+#: admin/class-admin.php:643 admin/class-admin.php:712
 msgid "GVL updated."
 msgstr "GVL je ažuriran."
 
-#: admin/class-admin.php:643 admin/class-admin.php:713
+#: admin/class-admin.php:644 admin/class-admin.php:714
 msgid "Failed to update GVL."
 msgstr "Ažuriranje GVL-a nije uspjelo."
 
-#: admin/class-admin.php:644
+#: admin/class-admin.php:645
 msgid "Please enter a MaxMind license key first."
 msgstr "Najprije unesite MaxMind licencijski ključ."
 
-#: admin/class-admin.php:645
+#: admin/class-admin.php:646
 msgid "GeoIP database updated successfully."
 msgstr "GeoIP baza podataka je uspješno ažurirana."
 
-#: admin/class-admin.php:646
+#: admin/class-admin.php:647
 msgid "Failed to update database."
 msgstr "Ažuriranje baze podataka nije uspjelo."
 
-#: admin/class-admin.php:647 admin/class-admin.php:693
+#: admin/class-admin.php:648 admin/class-admin.php:694
 msgid "No GVL data downloaded yet. Click \"Update GVL Now\" to download."
 msgstr "Još nisu preuzeti GVL podaci. Kliknite „Ažuriraj GVL sada“ za preuzimanje."
 
-#: admin/class-admin.php:648
+#: admin/class-admin.php:649
 msgid "No GVL data available."
 msgstr "Nema dostupnih GVL podataka."
 
-#: admin/class-admin.php:649 admin/class-admin.php:714
+#: admin/class-admin.php:650 admin/class-admin.php:715
 msgid "GVL Version: "
 msgstr "Verzija GVL-a: "
 
-#: admin/class-admin.php:650 admin/class-admin.php:715
+#: admin/class-admin.php:651 admin/class-admin.php:716
 msgid "Vendors: "
 msgstr "Dobavljači: "
 
-#: admin/class-admin.php:651 admin/class-admin.php:716
+#: admin/class-admin.php:652 admin/class-admin.php:717
 msgid "Last Updated: "
 msgstr "Zadnje ažuriranje: "
 
-#: admin/class-admin.php:652
+#: admin/class-admin.php:653
 msgid "Database: "
 msgstr "Baza podataka: "
 
-#: admin/class-admin.php:653
+#: admin/class-admin.php:654
 msgid "{file} ({size} KB) - Last updated: {date}"
 msgstr "{file} ({size} KB) - Zadnje ažuriranje: {date}"
 
-#: admin/class-admin.php:654 admin/class-admin.php:712
+#: admin/class-admin.php:655 admin/class-admin.php:713
 msgid "GVL updated: v{version} ({count} vendors)"
 msgstr "GVL ažuriran: v{version} ({count} dobavljača)"
 
-#: admin/class-admin.php:655
+#: admin/class-admin.php:656
 msgid "No GeoIP database installed. Enter your license key and click \"Update Database\"."
 msgstr "Nije instalirana GeoIP baza podataka. Unesite licencni ključ i kliknite „Ažuriraj bazu podataka“."
 
-#: admin/class-admin.php:656
+#: admin/class-admin.php:657
 msgid "A/B testing needs at least 2 selected banner variants to run."
 msgstr ""
 
-#: admin/class-admin.php:657
+#: admin/class-admin.php:658
 msgid "A/B testing is disabled while Cache Compatibility Mode is on."
 msgstr ""
 
-#: admin/class-admin.php:661
+#: admin/class-admin.php:662
 msgid "Failed to load GCM settings."
 msgstr "Učitavanje GCM postavki nije uspjelo."
 
-#: admin/class-admin.php:662
+#: admin/class-admin.php:663
 msgid "GCM settings saved successfully."
 msgstr "GCM postavke su uspješno spremljene."
 
-#: admin/class-admin.php:663
+#: admin/class-admin.php:664
 msgid "Failed to save GCM settings."
 msgstr "Spremanje GCM postavki nije uspjelo."
 
 #. translators: %1$s: start index, %2$s: end index, %3$s: total entries
-#: admin/class-admin.php:668
+#: admin/class-admin.php:669
 #, php-format
 msgid "Showing %1$s\\u2013%2$s of %3$s"
 msgstr "Prikazuje se %1$s–%2$s od %3$s"
 
-#: admin/class-admin.php:671
+#: admin/class-admin.php:672
 msgid "Age affirmed"
 msgstr ""
 
-#: admin/class-admin.php:672
+#: admin/class-admin.php:673
 msgid "Failed to load consent logs."
 msgstr "Učitavanje zapisnika pristanka nije uspjelo."
 
-#: admin/class-admin.php:673
+#: admin/class-admin.php:674
 msgid "No consent logs found."
 msgstr "Nisu pronađeni zapisnici pristanka."
 
-#: admin/class-admin.php:674
+#: admin/class-admin.php:675
 msgid "CSV exported successfully."
 msgstr "CSV uspješno izvezen."
 
-#: admin/class-admin.php:675
+#: admin/class-admin.php:676
 msgid "Failed to export CSV."
 msgstr "Izvoz CSV-a nije uspio."
 
-#: admin/class-admin.php:676
+#: admin/class-admin.php:677
 msgid "← Prev"
 msgstr "← Preth"
 
-#: admin/class-admin.php:677
+#: admin/class-admin.php:678
 msgid "Next →"
 msgstr "Dalje →"
 
-#: admin/class-admin.php:681
+#: admin/class-admin.php:682
 msgid "Failed to load languages."
 msgstr "Učitavanje jezika nije uspjelo."
 
-#: admin/class-admin.php:682
+#: admin/class-admin.php:683
 msgid "No languages selected. Add one below."
 msgstr "Nije odabran nijedan jezik. Dodajte jedan u nastavku."
 
-#: admin/class-admin.php:683
+#: admin/class-admin.php:684
 msgid "At least one language must be selected."
 msgstr "Mora biti odabran barem jedan jezik."
 
-#: admin/class-admin.php:684
+#: admin/class-admin.php:685
 msgid "Added"
 msgstr "Dodano"
 
-#: admin/class-admin.php:685
+#: admin/class-admin.php:686
 msgid "No languages found."
 msgstr "Nisu pronađeni jezici."
 
 #. translators: %s: language name
-#: admin/class-admin.php:687
+#: admin/class-admin.php:688
 #, php-format
 msgid "Remove %s"
 msgstr "Ukloni %s"
 
-#: admin/class-admin.php:688
+#: admin/class-admin.php:689
 msgid "Languages saved successfully."
 msgstr "Jezici su uspješno spremljeni."
 
-#: admin/class-admin.php:689
+#: admin/class-admin.php:690
 msgid "Failed to save languages."
 msgstr "Spremanje jezika nije uspjelo."
 
-#: admin/class-admin.php:694
+#: admin/class-admin.php:695
 msgid "Failed to load GVL status."
 msgstr "Učitavanje statusa GVL-a nije uspjelo."
 
-#: admin/class-admin.php:695
+#: admin/class-admin.php:696
 msgid "Failed to load vendors. Make sure GVL is downloaded."
 msgstr "Učitavanje dobavljača nije uspjelo. Provjerite je li GVL preuzet."
 
-#: admin/class-admin.php:696
+#: admin/class-admin.php:697
 msgid "No vendors found."
 msgstr "Nisu pronađeni dobavljači."
 
-#: admin/class-admin.php:697
+#: admin/class-admin.php:698
 msgid "Failed to load vendor details."
 msgstr "Učitavanje podataka o dobavljaču nije uspjelo."
 
 #. translators: %1$d: current page, %2$d: total pages, %3$d: total vendor count
-#: admin/class-admin.php:699
+#: admin/class-admin.php:700
 #, php-format
 msgid "Page %1$d of %2$d (%3$d vendors)"
 msgstr "Stranica %1$d od %2$d (%3$d pružatelja)"
 
 #. translators: %d: number of selected vendors (singular)
-#: admin/class-admin.php:701
+#: admin/class-admin.php:702
 #, php-format
 msgid "Selected: %d vendor"
 msgstr "Odabrano: %d dobavljač"
 
 #. translators: %d: number of selected vendors (plural)
-#: admin/class-admin.php:703
+#: admin/class-admin.php:704
 #, php-format
 msgid "Selected: %d vendors"
 msgstr "Odabrano: %d dobavljača"
 
 #. translators: %d: number of vendors saved
-#: admin/class-admin.php:705
+#: admin/class-admin.php:706
 #, php-format
 msgid "Saved %d vendor(s)."
 msgstr "Spremljeno %d dobavljač(a)."
 
-#: admin/class-admin.php:706
+#: admin/class-admin.php:707
 msgid "Could not load your saved selection — reload before changing it."
 msgstr "Nije moguće učitati vašu spremljenu odabir — osvježite stranicu prije izmjene."
 
-#: admin/class-admin.php:707
+#: admin/class-admin.php:708
 msgid "Your saved selection has not loaded yet — reload the page before saving."
 msgstr "Vaš spremljeni odabir još nije učitan — ponovo učitajte stranicu prije spremanja."
 
-#: admin/class-admin.php:708
+#: admin/class-admin.php:709
 msgid "vendor(s) saved."
 msgstr "dobavljač/i spremljeni."
 
-#: admin/class-admin.php:709
+#: admin/class-admin.php:710
 msgid "Saved {count} vendor(s)."
 msgstr "Spremljeno {count} dobavljač(a)."
 
-#: admin/class-admin.php:710
+#: admin/class-admin.php:711
 msgid "Failed to save selection."
 msgstr "Spremanje odabira nije uspjelo."
 
-#: admin/class-admin.php:718 admin/class-admin.php:840
+#: admin/class-admin.php:719 admin/class-admin.php:841
 msgid "Scanning cookie inventory…"
 msgstr "Skeniranje inventara kolačića…"
 
-#: admin/class-admin.php:719 admin/views/cookie-policy.php:133
+#: admin/class-admin.php:720 admin/views/cookie-policy.php:133
 #: admin/views/gvl.php:52
 msgid "Loading saved selection…"
 msgstr "Učitavanje spremljenog odabira…"
 
-#: admin/class-admin.php:720
+#: admin/class-admin.php:721
 msgid "Update the Global Vendor List first, then try Auto-detect again."
 msgstr "Prvo ažurirajte Global Vendor List, zatim pokušajte ponovo s automatskim otkrivanjem."
 
-#: admin/class-admin.php:721 admin/class-admin.php:841
+#: admin/class-admin.php:722 admin/class-admin.php:842
 msgid "No scanner data yet. Run the cookie scanner first."
 msgstr "Još nema podataka skenera. Prvo pokrenite skener kolačića."
 
-#: admin/class-admin.php:722
+#: admin/class-admin.php:723
 msgid "No matching ad-tech vendors were found in the scanned cookies."
 msgstr "Nisu pronađeni odgovarajući ad-tech dobavljači među skeniranim kolačićima."
 
 #. translators: %d: number of vendors pre-ticked from the cookie scan
-#: admin/class-admin.php:724
+#: admin/class-admin.php:725
 #, php-format
 msgid "Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply."
 msgstr "Unaprijed označeno %d dobavljača iz skeniranja kolačića. Kliknite Spremi odabir za primjenu."
 
 #. translators: %d: number of auto-detected vendors already in the selection
-#: admin/class-admin.php:726
+#: admin/class-admin.php:727
 #, php-format
 msgid "All %d auto-detected vendor(s) were already in your selection."
 msgstr "Svi %d automatski otkriveni dobavljač/i već su bili u vašem odabiru."
 
 #. translators: %1$d: number of newly pre-ticked vendors, %2$d: number already selected
-#: admin/class-admin.php:728
+#: admin/class-admin.php:729
 #, php-format
 msgid "Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply."
 msgstr "Unaprijed označeno %1$d novih dobavljača, %2$d je već bilo odabrano. Kliknite Spremi odabir za primjenu."
 
-#: admin/class-admin.php:729
+#: admin/class-admin.php:730
 msgid "Auto-detect failed. Check the cookie scanner and try again."
 msgstr "Automatsko otkrivanje nije uspjelo. Provjerite skener kolačića i pokušajte ponovo."
 
-#: admin/class-admin.php:733
+#: admin/class-admin.php:734
 msgid "Exporting..."
 msgstr "Izvoz u tijeku..."
 
-#: admin/class-admin.php:734
+#: admin/class-admin.php:735
 msgid "Settings exported successfully."
 msgstr "Postavke su uspješno izvezene."
 
-#: admin/class-admin.php:735
+#: admin/class-admin.php:736
 msgid "Export failed."
 msgstr "Izvoz nije uspio."
 
-#: admin/class-admin.php:736
+#: admin/class-admin.php:737
 msgid "Invalid JSON file."
 msgstr "Nevažeća JSON datoteka."
 
-#: admin/class-admin.php:737
+#: admin/class-admin.php:738
 msgid "This file is not a FAZ Cookie Manager export."
 msgstr "Ova datoteka nije izvoz FAZ Cookie Managera."
 
-#: admin/class-admin.php:738
+#: admin/class-admin.php:739
 msgid "This will overwrite your current settings. Continue?"
 msgstr "Ovo će prebrisati vaše trenutne postavke. Nastaviti?"
 
-#: admin/class-admin.php:739
+#: admin/class-admin.php:740
 msgid "Importing..."
 msgstr "Uvoz u tijeku..."
 
-#: admin/class-admin.php:740
+#: admin/class-admin.php:741
 msgid "Import completed successfully. Reloading..."
 msgstr "Uvoz uspješno dovršen. Učitavanje..."
 
-#: admin/class-admin.php:741
+#: admin/class-admin.php:742
 msgid "Settings imported successfully."
 msgstr "Postavke su uspješno uvezene."
 
 #. translators: %s: low-level error message surfaced from the import endpoint
-#: admin/class-admin.php:743
+#: admin/class-admin.php:744
 #, php-format
 msgid "Import failed: %s"
 msgstr "Uvoz nije uspio: %s"
 
-#: admin/class-admin.php:747
+#: admin/class-admin.php:748
 msgid "Please select both start and end dates."
 msgstr "Odaberi i početni i završni datum."
 
-#: admin/class-admin.php:748
+#: admin/class-admin.php:749
 msgid "Start date must be before end date."
 msgstr "Datum početka mora biti prije datuma završetka."
 
-#: admin/class-admin.php:749
+#: admin/class-admin.php:750
 msgid "No category data yet."
 msgstr "Još nema podataka o kategorijama."
 
-#: admin/class-admin.php:750
+#: admin/class-admin.php:751
 #, fuzzy
 msgid "No consents recorded for these variants yet. Results appear once visitors respond to the banner."
 msgstr "Još nema podataka o privolama.<br>Podaci će se pojaviti kada posjetitelji odgovore na banner."
 
 #. translators: {accepted}: accepted count, {total}: total consent count.
-#: admin/class-admin.php:752
+#: admin/class-admin.php:753
 msgid "{accepted} accepted of {total} consents"
 msgstr ""
 
-#: admin/class-admin.php:753
+#: admin/class-admin.php:754
 #, fuzzy
 msgid "Could not load A/B test results."
 msgstr "Nije moguće učitati status definicija."
 
-#: admin/class-admin.php:757
+#: admin/class-admin.php:758
 msgid "Starting scan…"
 msgstr ""
 
-#: admin/class-admin.php:758
+#: admin/class-admin.php:759
 msgid "The scan could not be started. You can skip this step or run a full scan on the Cookies page."
 msgstr ""
 
-#: admin/class-admin.php:759
+#: admin/class-admin.php:760
 #, fuzzy
 msgid "Cookie scan could not be started."
 msgstr "Nijedan kolačić nije mogao biti automatski kategoriziran."
 
-#: admin/class-admin.php:760
+#: admin/class-admin.php:761
 msgid "The scanner could not load. You can skip this step and run a full scan on the Cookies page."
 msgstr ""
 
 #. translators: %d: number of cookies found by the scan.
-#: admin/class-admin.php:762
+#: admin/class-admin.php:763
 #, fuzzy, php-format
 msgid "Scan complete — %d cookies found."
 msgstr "Ukupno pronađenih kolačića."
 
-#: admin/class-admin.php:763
+#: admin/class-admin.php:764
 msgid "Scan complete. No new cookies were found."
 msgstr ""
 
-#: admin/class-admin.php:764
+#: admin/class-admin.php:765
 msgid "Setup complete. Your cookie banner is ready."
 msgstr ""
 
-#: admin/class-admin.php:765
+#: admin/class-admin.php:766
 #: admin/modules/settings/includes/class-onboarding.php:257
 #, fuzzy
 msgid "Setup could not be saved. Please try again."
 msgstr "Mrežna pogreška. Pokušajte ponovo."
 
 #. translators: %s: name of the detected plugin (e.g. a cache plugin).
-#: admin/class-admin.php:767
+#: admin/class-admin.php:768
 #, php-format
 msgid "Detected: %s"
 msgstr ""
 
-#: admin/class-admin.php:768
+#: admin/class-admin.php:769
 msgid "Google tags detected on this site"
 msgstr ""
 
-#: admin/class-admin.php:769
+#: admin/class-admin.php:770
 msgid "Found by the cookie scan"
 msgstr ""
 
-#: admin/class-admin.php:770
+#: admin/class-admin.php:771
 msgid "Active plugin detected"
 msgstr ""
 
-#: admin/class-admin.php:771
+#: admin/class-admin.php:772
 msgid "Currently always allowed"
 msgstr ""
 
-#: admin/class-admin.php:775
+#: admin/class-admin.php:776
 msgid "Status copied to clipboard!"
 msgstr "Status kopiran u međuspremnik!"
 
-#: admin/class-admin.php:780
+#: admin/class-admin.php:781
 msgid "Country"
 msgstr "Zemlja"
 
-#: admin/class-admin.php:781
+#: admin/class-admin.php:782
 msgid "Ruleset override"
 msgstr "Nadjačavanje skupa pravila"
 
-#: admin/class-admin.php:782
+#: admin/class-admin.php:783
 msgid "Delta fields"
 msgstr "Delta polja"
 
-#: admin/class-admin.php:783
+#: admin/class-admin.php:784
 msgid "Action"
 msgstr "Radnja"
 
-#: admin/class-admin.php:785
+#: admin/class-admin.php:786
 msgid "(auto-detect)"
 msgstr "(automatsko otkrivanje)"
 
 #. translators: %d: number of country overrides configured
-#: admin/class-admin.php:787
+#: admin/class-admin.php:788
 #, php-format
 msgid "%d override configured."
 msgstr "%d nadjačavanje konfigurirano."
 
 #. translators: %d: number of country overrides configured
-#: admin/class-admin.php:789
+#: admin/class-admin.php:790
 #, php-format
 msgid "%d overrides configured."
 msgstr "%d nadjačavanja konfigurirana."
 
-#: admin/class-admin.php:790
+#: admin/class-admin.php:791
 msgid "Add override"
 msgstr "Dodaj nadjačavanje"
 
-#: admin/class-admin.php:791
+#: admin/class-admin.php:792
 #, fuzzy
 msgid "No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only."
 msgstr "Nema konfiguriranih nadjačavanja po državi. Dodatak automatski detektira skup pravila prema zemlji i saveznoj državi SAD-a."
 
-#: admin/class-admin.php:792
+#: admin/class-admin.php:793
 msgid "Remove this override?"
 msgstr "Ukloniti ovo nadjačavanje?"
 
-#: admin/class-admin.php:794
+#: admin/class-admin.php:795
 msgid "Runtime rule-set application"
 msgstr ""
 
-#: admin/class-admin.php:795 admin/class-admin.php:804
+#: admin/class-admin.php:796 admin/class-admin.php:805
 #, fuzzy
 msgid "✅ active"
 msgstr "Neaktivno"
 
-#: admin/class-admin.php:796
+#: admin/class-admin.php:797
 msgid "⚪ off — catalogue is preview/reference only"
 msgstr ""
 
-#: admin/class-admin.php:797
+#: admin/class-admin.php:798
 msgid "Catalog rulesets"
 msgstr ""
 
-#: admin/class-admin.php:798
+#: admin/class-admin.php:799
 #, fuzzy
 msgid "Fallback ruleset"
 msgstr "Potpuni JSON skup pravila"
 
-#: admin/class-admin.php:799
+#: admin/class-admin.php:800
 msgid "ipinfo opt-in"
 msgstr ""
 
-#: admin/class-admin.php:800
+#: admin/class-admin.php:801
 #, fuzzy
 msgid "ipinfo API key"
 msgstr "API ključ"
 
-#: admin/class-admin.php:801
+#: admin/class-admin.php:802
 msgid "Schema migration v2"
 msgstr ""
 
-#: admin/class-admin.php:802
+#: admin/class-admin.php:803
 msgid "Pending columns"
 msgstr ""
 
-#: admin/class-admin.php:803
+#: admin/class-admin.php:804
 msgid "Migration disabled"
 msgstr ""
 
-#: admin/class-admin.php:805
+#: admin/class-admin.php:806
 msgid "⚪ disabled"
 msgstr ""
 
-#: admin/class-admin.php:806
+#: admin/class-admin.php:807
 #, fuzzy
 msgid "✅ configured"
 msgstr "Konfiguriraj"
 
-#: admin/class-admin.php:807
+#: admin/class-admin.php:808
 msgid "⚪ not set"
 msgstr ""
 
-#: admin/class-admin.php:808
+#: admin/class-admin.php:809
 msgid "✅ complete"
 msgstr ""
 
-#: admin/class-admin.php:809
+#: admin/class-admin.php:810
 msgid "⚠️ incomplete"
 msgstr ""
 
-#: admin/class-admin.php:811
+#: admin/class-admin.php:812
 msgid "Resolved ruleset"
 msgstr "Razriješeni skup pravila"
 
-#: admin/class-admin.php:812
+#: admin/class-admin.php:813
 msgid "Full ruleset JSON"
 msgstr "Potpuni JSON skup pravila"
 
-#: admin/class-admin.php:814
+#: admin/class-admin.php:815
 msgid "Settings saved."
 msgstr "Postavke su spremljene."
 
-#: admin/class-admin.php:815
+#: admin/class-admin.php:816
 msgid "API key"
 msgstr "API ključ"
 
-#: admin/class-admin.php:816
+#: admin/class-admin.php:817
 msgid "(stored — leave blank to keep)"
 msgstr "(pohranjeno — ostavite prazno za zadržavanje)"
 
-#: admin/class-admin.php:817
+#: admin/class-admin.php:818
 msgid "token from ipinfo.io/account/token"
 msgstr "token s ipinfo.io/account/token"
 
-#: admin/class-admin.php:818
+#: admin/class-admin.php:819
 msgid "Enable ipinfo.io VPN detection"
 msgstr "Omogući otkrivanje VPN-a putem ipinfo.io"
 
-#: admin/class-admin.php:819
+#: admin/class-admin.php:820
 msgid "I attest to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs (required for opt-in)"
 msgstr "Izjavljujem da imam sporazum DPF / SCC / DPA s ipinfo.io za prekogranični prijenos podataka IP adresa posjetitelja iz EU/UK (obavezno za opt-in)"
 
-#: admin/class-admin.php:821
+#: admin/class-admin.php:822
 msgid "I attest to having a Standard Contract (PIPL Art. 38) or CAC security assessment (Art. 40) for cross-border data transfers OF data subject to PIPL, OR to not process any data that requires such mechanisms."
 msgstr "Izjavljujem da imam Standardni ugovor (PIPL čl. 38) ili CAC sigurnosnu procjenu (čl. 40) za prekogranične prijenose podataka koji podliježu PIPL-u, ILI da ne obrađujem podatke koji zahtijevaju takve mehanizme."
 
 #. translators: %1$s: localised timestamp, %2$s: WP user id of the attesting admin
-#: admin/class-admin.php:823
+#: admin/class-admin.php:824
 #, php-format
 msgid "Attested at %1$s by user ID %2$s"
 msgstr "Potvrđeno %1$s od korisnika s ID-om %2$s"
 
-#: admin/class-admin.php:825
+#: admin/class-admin.php:826
 msgid "Save"
 msgstr "Spremi"
 
 #. translators: %s: low-level error message from the REST endpoint
-#: admin/class-admin.php:827
+#: admin/class-admin.php:828
 #, php-format
 msgid "Error: %s"
 msgstr "Greška: %s"
 
-#: admin/class-admin.php:831
+#: admin/class-admin.php:832
 msgid "Load failed"
 msgstr "Učitavanje nije uspjelo"
 
-#: admin/class-admin.php:833
+#: admin/class-admin.php:834
 msgid "Saved."
 msgstr "Spremljeno."
 
-#: admin/class-admin.php:834
+#: admin/class-admin.php:835
 msgid "Save failed"
 msgstr "Spremanje nije uspjelo"
 
-#: admin/class-admin.php:835
+#: admin/class-admin.php:836
 msgid "Preview failed"
 msgstr "Pregled nije uspio"
 
-#: admin/class-admin.php:836
+#: admin/class-admin.php:837
 msgid "The generator could not start on this page. Please reload; if it persists, a plugin or theme conflict is likely."
 msgstr ""
 
-#: admin/class-admin.php:838
+#: admin/class-admin.php:839
 msgid "Detected"
 msgstr "Otkriveno"
 
-#: admin/class-admin.php:839
+#: admin/class-admin.php:840
 msgid "The cookie scanner observed a tracking domain for this service on your site."
 msgstr "Skener kolačića uočio je domenu za praćenje za ovu uslugu na vašoj stranici."
 
-#: admin/class-admin.php:842
+#: admin/class-admin.php:843
 msgid "No matching services found among scanned cookies."
 msgstr "Nisu pronađene odgovarajuće usluge među skeniranim kolačićima."
 
 #. translators: %d: number of detected services already selected
-#: admin/class-admin.php:844
+#: admin/class-admin.php:845
 #, php-format
 msgid "All %d detected service(s) are already selected."
 msgstr "Svi %d otkriveni servis/i već su odabrani."
 
-#: admin/class-admin.php:845
+#: admin/class-admin.php:846
 msgid "Detected services left unticked, as you set them."
 msgstr "Otkrivene usluge ostavljene neoznačenima, kako ste ih postavili."
 
 #. translators: %1$d: number of newly pre-ticked services, %2$d: number of services already selected
-#: admin/class-admin.php:847
+#: admin/class-admin.php:848
 #, php-format
 msgid "Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit."
 msgstr "Unaprijed označeno %1$d novih usluga, %2$d je već bilo odabrano. Kliknite Spremi za potvrdu."
 
-#: admin/class-admin.php:848
+#: admin/class-admin.php:849
 msgid "Auto-detect failed"
 msgstr "Automatsko otkrivanje nije uspjelo"
 
-#: admin/class-admin.php:850
+#: admin/class-admin.php:851
 msgid "Analytics"
 msgstr "Analitika"
 
-#: admin/class-admin.php:851
+#: admin/class-admin.php:852
 msgid "Heatmaps & session recording"
 msgstr "Heatmape i snimanje sesije"
 
-#: admin/class-admin.php:852
+#: admin/class-admin.php:853
 msgid "Advertising pixels"
 msgstr "Oglašivački pikseli"
 
-#: admin/class-admin.php:853
+#: admin/class-admin.php:854
 msgid "CDN, edge & performance"
 msgstr "CDN, edge i performanse"
 
-#: admin/class-admin.php:854
+#: admin/class-admin.php:855
 msgid "Anti-bot & forms"
 msgstr "Anti-bot i obrasci"
 
-#: admin/class-admin.php:855
+#: admin/class-admin.php:856
 msgid "Maps, embeds & media"
 msgstr "Karte, ugrađeni sadržaji i mediji"
 
-#: admin/class-admin.php:856
+#: admin/class-admin.php:857
 msgid "Chat & support"
 msgstr "Chat i podrška"
 
-#: admin/class-admin.php:857
+#: admin/class-admin.php:858
 msgid "Email & marketing automation"
 msgstr "E-pošta i marketinška automatizacija"
 
-#: admin/class-admin.php:858
+#: admin/class-admin.php:859
 msgid "Payments & commerce"
 msgstr "Plaćanja i trgovina"
 
-#: admin/class-admin.php:859
+#: admin/class-admin.php:860
 msgid "Social sign-in & auth"
 msgstr "Društvena prijava i autentifikacija"
 
-#: admin/class-admin.php:860
+#: admin/class-admin.php:861
 msgid "Error & RUM monitoring"
 msgstr "Praćenje grešaka i RUM"
 
-#: admin/class-admin.php:861
+#: admin/class-admin.php:862
 msgid "Personalisation & A/B testing"
 msgstr "Personalizacija i A/B testiranje"
 
-#: admin/class-admin.php:862
+#: admin/class-admin.php:863
 msgid "Push notifications"
 msgstr "Push obavijesti"
 
-#: admin/class-admin.php:866
+#: admin/class-admin.php:867
 msgid "Google Analytics 4"
 msgstr "Google Analytics 4"
 
-#: admin/class-admin.php:867
+#: admin/class-admin.php:868
 msgid "Google Tag Manager"
 msgstr "Google Tag Manager"
 
-#: admin/class-admin.php:868
+#: admin/class-admin.php:869
 msgid "Matomo Analytics"
 msgstr "Matomo Analytics"
 
-#: admin/class-admin.php:869
+#: admin/class-admin.php:870
 msgid "Plausible Analytics"
 msgstr "Plausible Analytics"
 
-#: admin/class-admin.php:870
+#: admin/class-admin.php:871
 msgid "Mixpanel"
 msgstr "Mixpanel"
 
-#: admin/class-admin.php:871
+#: admin/class-admin.php:872
 msgid "Amplitude"
 msgstr "Amplitude"
 
-#: admin/class-admin.php:872
+#: admin/class-admin.php:873
 msgid "Heap"
 msgstr "Heap"
 
-#: admin/class-admin.php:873
+#: admin/class-admin.php:874
 msgid "Fathom Analytics"
 msgstr "Fathom Analytics"
 
-#: admin/class-admin.php:874
+#: admin/class-admin.php:875
 msgid "Statcounter"
 msgstr "Statcounter"
 
-#: admin/class-admin.php:876
+#: admin/class-admin.php:877
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:877 admin/views/system-status.php:91
+#: admin/class-admin.php:878 admin/views/system-status.php:91
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
-#: admin/class-admin.php:878
+#: admin/class-admin.php:879
 msgid "Mouseflow"
 msgstr "Mouseflow"
 
-#: admin/class-admin.php:879
+#: admin/class-admin.php:880
 msgid "Smartlook"
 msgstr "Smartlook"
 
-#: admin/class-admin.php:880
+#: admin/class-admin.php:881
 msgid "Lucky Orange"
 msgstr "Lucky Orange"
 
-#: admin/class-admin.php:881
+#: admin/class-admin.php:882
 msgid "FullStory"
 msgstr "FullStory"
 
-#: admin/class-admin.php:882
+#: admin/class-admin.php:883
 msgid "LogRocket"
 msgstr "LogRocket"
 
-#: admin/class-admin.php:883
+#: admin/class-admin.php:884
 msgid "Crazy Egg"
 msgstr "Crazy Egg"
 
-#: admin/class-admin.php:885
+#: admin/class-admin.php:886
 msgid "Google Ads"
 msgstr "Google Ads"
 
-#: admin/class-admin.php:886
+#: admin/class-admin.php:887
 msgid "Meta (Facebook) Pixel"
 msgstr "Meta (Facebook) Pixel"
 
-#: admin/class-admin.php:887
+#: admin/class-admin.php:888
 msgid "TikTok Pixel"
 msgstr "TikTok Pixel"
 
-#: admin/class-admin.php:888
+#: admin/class-admin.php:889
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:889 admin/views/system-status.php:90
+#: admin/class-admin.php:890 admin/views/system-status.php:90
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
-#: admin/class-admin.php:890
+#: admin/class-admin.php:891
 msgid "Twitter (X) Pixel"
 msgstr "Twitter (X) Pixel"
 
-#: admin/class-admin.php:891
+#: admin/class-admin.php:892
 msgid "Pinterest Tag"
 msgstr "Pinterest Tag"
 
-#: admin/class-admin.php:892
+#: admin/class-admin.php:893
 msgid "Reddit Pixel"
 msgstr "Reddit Pixel"
 
-#: admin/class-admin.php:893
+#: admin/class-admin.php:894
 msgid "Snapchat Pixel"
 msgstr "Snapchat Pixel"
 
-#: admin/class-admin.php:894
+#: admin/class-admin.php:895
 msgid "Quora Pixel"
 msgstr "Quora Pixel"
 
-#: admin/class-admin.php:895
+#: admin/class-admin.php:896
 msgid "Outbrain"
 msgstr "Outbrain"
 
-#: admin/class-admin.php:896
+#: admin/class-admin.php:897
 msgid "Taboola"
 msgstr "Taboola"
 
-#: admin/class-admin.php:897
+#: admin/class-admin.php:898
 msgid "Criteo"
 msgstr "Criteo"
 
-#: admin/class-admin.php:899
+#: admin/class-admin.php:900
 msgid "Cloudflare"
 msgstr "Cloudflare"
 
-#: admin/class-admin.php:900
+#: admin/class-admin.php:901
 msgid "Fastly"
 msgstr "Fastly"
 
-#: admin/class-admin.php:901
+#: admin/class-admin.php:902
 msgid "Akamai"
 msgstr "Akamai"
 
-#: admin/class-admin.php:902
+#: admin/class-admin.php:903
 msgid "Amazon CloudFront"
 msgstr "Amazon CloudFront"
 
-#: admin/class-admin.php:903
+#: admin/class-admin.php:904
 msgid "BunnyCDN"
 msgstr "BunnyCDN"
 
-#: admin/class-admin.php:904
+#: admin/class-admin.php:905
 msgid "jsDelivr"
 msgstr "jsDelivr"
 
-#: admin/class-admin.php:906
+#: admin/class-admin.php:907
 msgid "Google reCAPTCHA"
 msgstr "Google reCAPTCHA"
 
-#: admin/class-admin.php:907
+#: admin/class-admin.php:908
 msgid "hCaptcha"
 msgstr "hCaptcha"
 
-#: admin/class-admin.php:908
+#: admin/class-admin.php:909
 msgid "Cloudflare Turnstile"
 msgstr "Cloudflare Turnstile"
 
-#: admin/class-admin.php:909
+#: admin/class-admin.php:910
 msgid "Akismet"
 msgstr "Akismet"
 
-#: admin/class-admin.php:911
+#: admin/class-admin.php:912
 msgid "Google Maps"
 msgstr "Google Maps"
 
-#: admin/class-admin.php:912
+#: admin/class-admin.php:913
 msgid "Mapbox"
 msgstr "Mapbox"
 
-#: admin/class-admin.php:913
+#: admin/class-admin.php:914
 msgid "OpenStreetMap"
 msgstr "OpenStreetMap"
 
-#: admin/class-admin.php:914
+#: admin/class-admin.php:915
 msgid "YouTube (embed)"
 msgstr "YouTube (ugrađen)"
 
-#: admin/class-admin.php:915
+#: admin/class-admin.php:916
 msgid "Vimeo (embed)"
 msgstr "Vimeo (ugrađen)"
 
-#: admin/class-admin.php:916
+#: admin/class-admin.php:917
 msgid "Twitter / X (embed)"
 msgstr "Twitter / X (ugradnja)"
 
-#: admin/class-admin.php:917
+#: admin/class-admin.php:918
 msgid "Instagram (embed)"
 msgstr "Instagram (ugrađeno)"
 
-#: admin/class-admin.php:918
+#: admin/class-admin.php:919
 msgid "Spotify (embed)"
 msgstr "Spotify (ugrađen)"
 
-#: admin/class-admin.php:919
+#: admin/class-admin.php:920
 msgid "SoundCloud (embed)"
 msgstr "SoundCloud (ugrađen)"
 
-#: admin/class-admin.php:920
+#: admin/class-admin.php:921
 msgid "Wistia"
 msgstr "Wistia"
 
-#: admin/class-admin.php:921
+#: admin/class-admin.php:922
 msgid "Brightcove"
 msgstr "Brightcove"
 
-#: admin/class-admin.php:922
+#: admin/class-admin.php:923
 msgid "JW Player"
 msgstr "JW Player"
 
-#: admin/class-admin.php:924
+#: admin/class-admin.php:925
 msgid "Intercom"
 msgstr "Intercom"
 
-#: admin/class-admin.php:925
+#: admin/class-admin.php:926
 msgid "Zendesk Chat"
 msgstr "Zendesk Chat"
 
-#: admin/class-admin.php:926
+#: admin/class-admin.php:927
 msgid "Crisp"
 msgstr "Crisp"
 
-#: admin/class-admin.php:927
+#: admin/class-admin.php:928
 msgid "LiveChat"
 msgstr "LiveChat"
 
-#: admin/class-admin.php:928
+#: admin/class-admin.php:929
 msgid "Tawk.to"
 msgstr "Tawk.to"
 
-#: admin/class-admin.php:929
+#: admin/class-admin.php:930
 msgid "Drift"
 msgstr "Drift"
 
-#: admin/class-admin.php:930
+#: admin/class-admin.php:931
 msgid "HubSpot Chat"
 msgstr "HubSpot Chat"
 
-#: admin/class-admin.php:931
+#: admin/class-admin.php:932
 msgid "Tidio"
 msgstr "Tidio"
 
-#: admin/class-admin.php:933
+#: admin/class-admin.php:934
 msgid "Mailchimp"
 msgstr "Mailchimp"
 
-#: admin/class-admin.php:934
+#: admin/class-admin.php:935
 msgid "ActiveCampaign"
 msgstr "ActiveCampaign"
 
-#: admin/class-admin.php:935
+#: admin/class-admin.php:936
 msgid "ConvertKit / Kit"
 msgstr "ConvertKit / Kit"
 
-#: admin/class-admin.php:936
+#: admin/class-admin.php:937
 msgid "HubSpot"
 msgstr "HubSpot"
 
-#: admin/class-admin.php:937
+#: admin/class-admin.php:938
 msgid "Brevo (Sendinblue)"
 msgstr "Brevo (Sendinblue)"
 
-#: admin/class-admin.php:938
+#: admin/class-admin.php:939
 msgid "Klaviyo"
 msgstr "Klaviyo"
 
-#: admin/class-admin.php:939
+#: admin/class-admin.php:940
 msgid "Salesforce Pardot"
 msgstr "Salesforce Pardot"
 
-#: admin/class-admin.php:940
+#: admin/class-admin.php:941
 msgid "Adobe Marketo Engage"
 msgstr "Adobe Marketo Engage"
 
-#: admin/class-admin.php:941
+#: admin/class-admin.php:942
 msgid "Adobe Analytics"
 msgstr "Adobe Analytics"
 
-#: admin/class-admin.php:943
+#: admin/class-admin.php:944
 msgid "Stripe"
 msgstr "Stripe"
 
-#: admin/class-admin.php:944
+#: admin/class-admin.php:945
 msgid "PayPal"
 msgstr "PayPal"
 
-#: admin/class-admin.php:945
+#: admin/class-admin.php:946
 msgid "Square"
 msgstr "Square"
 
-#: admin/class-admin.php:946
+#: admin/class-admin.php:947
 msgid "Shopify"
 msgstr "Shopify"
 
-#: admin/class-admin.php:948
+#: admin/class-admin.php:949
 msgid "Sign in with Google"
 msgstr "Prijava putem Googlea"
 
-#: admin/class-admin.php:949
+#: admin/class-admin.php:950
 msgid "Sign in with Apple"
 msgstr "Prijava putem Applea"
 
-#: admin/class-admin.php:950
+#: admin/class-admin.php:951
 msgid "Sign in with Facebook"
 msgstr "Prijava putem Facebooka"
 
-#: admin/class-admin.php:951
+#: admin/class-admin.php:952
 msgid "Auth0"
 msgstr "Auth0"
 
-#: admin/class-admin.php:952
+#: admin/class-admin.php:953
 msgid "Okta"
 msgstr "Okta"
 
-#: admin/class-admin.php:954
+#: admin/class-admin.php:955
 msgid "Sentry"
 msgstr "Sentry"
 
-#: admin/class-admin.php:955
+#: admin/class-admin.php:956
 msgid "New Relic"
 msgstr "New Relic"
 
-#: admin/class-admin.php:956
+#: admin/class-admin.php:957
 msgid "Datadog"
 msgstr "Datadog"
 
-#: admin/class-admin.php:957
+#: admin/class-admin.php:958
 msgid "Bugsnag"
 msgstr "Bugsnag"
 
-#: admin/class-admin.php:958
+#: admin/class-admin.php:959
 msgid "Raygun"
 msgstr "Raygun"
 
-#: admin/class-admin.php:960
+#: admin/class-admin.php:961
 msgid "Optimizely"
 msgstr "Optimizely"
 
-#: admin/class-admin.php:961
+#: admin/class-admin.php:962
 msgid "VWO"
 msgstr "VWO"
 
-#: admin/class-admin.php:962
+#: admin/class-admin.php:963
 msgid "Convert.com"
 msgstr "Convert.com"
 
-#: admin/class-admin.php:963
+#: admin/class-admin.php:964
 msgid "AB Tasty"
 msgstr "AB Tasty"
 
-#: admin/class-admin.php:965
+#: admin/class-admin.php:966
 msgid "OneSignal"
 msgstr "OneSignal"
 
-#: admin/class-admin.php:966
+#: admin/class-admin.php:967
 msgid "Pushwoosh"
 msgstr "Pushwoosh"
 
-#: admin/class-admin.php:967
+#: admin/class-admin.php:968
 msgid "Firebase Cloud Messaging"
 msgstr "Firebase Cloud Messaging"
 
-#: admin/class-admin.php:1351 admin/class-admin.php:1352
-#: admin/class-admin.php:1381 admin/class-admin.php:1382
+#: admin/class-admin.php:1352 admin/class-admin.php:1353
+#: admin/class-admin.php:1382 admin/class-admin.php:1383
 msgid "FAZ Cookie"
 msgstr "FAZ Cookie"
 
-#: admin/class-admin.php:1403
+#: admin/class-admin.php:1404
 msgid "FAZ Cookie Manager — Network"
 msgstr "FAZ Cookie Manager — mreža"
 
-#: admin/class-admin.php:1405
+#: admin/class-admin.php:1406
 msgid "Multisite Configuration"
 msgstr "Multisite konfiguracija"
 
-#: admin/class-admin.php:1406
+#: admin/class-admin.php:1407
 msgid "FAZ Cookie Manager is network-activated. Each subsite has its own independent configuration."
 msgstr "FAZ Cookie Manager aktiviran je na razini mreže. Svaka podstranica ima vlastitu neovisnu konfiguraciju."
 
-#: admin/class-admin.php:1407
+#: admin/class-admin.php:1408
 msgid "Navigate to each subsite's admin panel to configure the cookie banner, categories, and settings."
 msgstr "Otvorite administracijsko sučelje svake podstranice za konfiguraciju bannera za kolačiće, kategorija i postavki."
 
-#: admin/class-admin.php:1409
+#: admin/class-admin.php:1410
 msgid "Active Sites"
 msgstr "Aktivne stranice"
 
-#: admin/class-admin.php:1413
+#: admin/class-admin.php:1414
 msgid "Site"
 msgstr "Stranica"
 
-#: admin/class-admin.php:1414 admin/views/banner.php:110
+#: admin/class-admin.php:1415 admin/views/banner.php:110
 msgid "Banner Status"
 msgstr "Status bannera"
 
-#: admin/class-admin.php:1415 admin/views/cookies.php:133
+#: admin/class-admin.php:1416 admin/views/cookies.php:133
 #: admin/views/cookies.php:190
 msgid "Actions"
 msgstr "Radnje"
 
-#: admin/class-admin.php:1452
+#: admin/class-admin.php:1453
 msgid "Active"
 msgstr "Aktivno"
 
-#: admin/class-admin.php:1454
+#: admin/class-admin.php:1455
 msgid "Inactive"
 msgstr "Neaktivno"
 
-#: admin/class-admin.php:1457
+#: admin/class-admin.php:1458
 msgid "Configure"
 msgstr "Konfiguriraj"
 
-#: admin/class-admin.php:1700
+#: admin/class-admin.php:1701
 msgid "WooCommerce detected"
 msgstr "WooCommerce je detektiran"
 
-#: admin/class-admin.php:1701
+#: admin/class-admin.php:1702
 msgid "FAZ Cookie Manager automatically whitelists WooCommerce core scripts and payment gateway scripts (PayPal, Stripe, Mollie, etc.) on checkout and cart pages so your store keeps working. This can be customised via the"
 msgstr "FAZ Cookie Manager automatski stavlja na bijelu listu osnovne WooCommerce skripte i skripte platnih sustava (PayPal, Stripe, Mollie itd.) na stranicama naplate i košarice kako bi trgovina nastavila raditi. Ovo se može prilagoditi putem"
 
-#: admin/class-admin.php:1702
+#: admin/class-admin.php:1703
 msgid "and"
 msgstr "i"
 
-#: admin/class-admin.php:1703
+#: admin/class-admin.php:1704
 msgid "filters."
 msgstr "filtera."
 
-#: admin/class-admin.php:1705 admin/class-admin.php:1795
+#: admin/class-admin.php:1706 admin/class-admin.php:1796
 msgid "Dismiss this notice"
 msgstr "Odbaci ovu obavijest"
 
-#: admin/class-admin.php:1787
+#: admin/class-admin.php:1788
 msgid "Payment plugin detected"
 msgstr ""
 
 #. translators: %s: comma-separated list of detected payment plugin names.
-#: admin/class-admin.php:1790
+#: admin/class-admin.php:1791
 #, php-format
 msgid "FAZ Cookie Manager blocks payment provider scripts (PayPal, Stripe, …) until consent, so a payment form in %s can fail with an error like \"paypal is not defined\" until you authorise the provider. If your payment forms are broken, enable the specific gateway under Settings → Script Blocking → Payment gateways (it loads that provider's scripts before consent — your decision and responsibility)."
 msgstr ""
 
-#: admin/class-admin.php:1793
+#: admin/class-admin.php:1794
 msgid "Open settings"
 msgstr ""
 
-#: admin/class-admin.php:1823
+#: admin/class-admin.php:1824
 msgid "Cookie definitions are using the built-in snapshot. Download the latest version from GitHub for improved categorization."
 msgstr "Definicije kolačića koriste ugrađenu snimku. Preuzmite najnoviju verziju s GitHuba za poboljšanu kategorizaciju."
 
-#: admin/class-admin.php:1825
+#: admin/class-admin.php:1826
 msgid "Update Cookie Definitions"
 msgstr "Ažuriraj definicije kolačića"
 
 #. translators: %d: number of new cookies found
-#: admin/class-admin.php:1848
+#: admin/class-admin.php:1849
 #, php-format
 msgid "Scheduled scan found %d new cookie(s)."
 msgstr "Zakazano skeniranje pronašlo je %d novih kolačića."
 
-#: admin/class-admin.php:1852
+#: admin/class-admin.php:1853
 msgid "Review now"
 msgstr "Pregledaj sada"
 
 #. translators: %s: comma-separated list of service names
-#: admin/class-admin.php:1888
+#: admin/class-admin.php:1889
 #, php-format
 msgid "FAZ Cookie Manager detected services on your site that are not covered by any selected IAB vendor: %s."
 msgstr "FAZ Cookie Manager detektirao je usluge na vašoj stranici koje nisu pokrivene nijednim odabranim IAB dobavljačem: %s."
 
-#: admin/class-admin.php:1892
+#: admin/class-admin.php:1893
 msgid "Add the matching vendors to ensure proper TCF consent for these services."
 msgstr "Dodajte odgovarajuće dobavljače kako biste osigurali ispravnu TCF privolu za ove usluge."
 
-#: admin/class-admin.php:1894
+#: admin/class-admin.php:1895
 msgid "Go to Vendor List"
 msgstr "Idi na popis dobavljača"
 
-#: admin/class-admin.php:1896 admin/views/dashboard.php:30
+#: admin/class-admin.php:1897 admin/views/dashboard.php:30
 msgid "Dismiss"
 msgstr "Odbaci"
 
-#: admin/class-admin.php:2024
+#: admin/class-admin.php:2025
 msgid "FAZ Cookie Manager — Geo-routing is on but has no effect"
 msgstr "FAZ Cookie Manager — Geo-usmjeravanje je uključeno ali nema učinka"
 
-#: admin/class-admin.php:2025
+#: admin/class-admin.php:2026
 msgid "Geo-routing is enabled in Settings with \"Hide banner outside target regions\" as the default behaviour, but no target regions are selected and none of your banners has a target-countries list. In this configuration the plugin tells the CDN that every page is country-dependent (so no full-page cache is kept) while the geo-routing gate has nothing to target, so it can never actually fire. The most common symptom is \"X-Cdn-Cache-Status: MISS\" on every page, and a Lighthouse drop."
 msgstr "Geo-usmjeravanje je omogućeno u Postavkama s \"Sakrij banner izvan ciljnih regija\" kao zadanim ponašanjem, ali nisu odabrane ciljne regije i nijedan vaš banner nema popis ciljnih zemalja. U ovoj konfiguraciji dodatak govori CDN-u da svaka stranica ovisi o državi (stoga se ne čuva predmemorija cijele stranice), dok geo-usmjeravajući prolaz nema ništa za ciljanje i stoga se nikada ne može aktivirati. Najčešći simptom je \"X-Cdn-Cache-Status: MISS\" na svakoj stranici i pad Lighthouse ocjene."
 
-#: admin/class-admin.php:2026
+#: admin/class-admin.php:2027
 msgid "If you do NOT need per-country banners, the safe fix is to disable Geo-routing. If you DO want per-country banners, select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner — the warning will clear on its own."
 msgstr "Ako ne trebate bannere po zemljama, sigurno rješenje je onemogućiti Geo-usmjeravanje. Ako ipak želite bannere po zemljama, odaberite jednu ili više ciljanih regija u Postavkama → Geolokacija ili dodajte popis ciljanih zemalja barem jednom banneru — upozorenje će nestati samo od sebe."
 
-#: admin/class-admin.php:2030 admin/class-admin.php:2072
+#: admin/class-admin.php:2031 admin/class-admin.php:2073
 msgid "Disable Geo-routing now"
 msgstr "Onemogući geo-usmjeravanje sada"
 
-#: admin/class-admin.php:2032
+#: admin/class-admin.php:2033
 msgid "Open Geo-routing settings"
 msgstr "Otvori postavke geo-usmjeravanja"
 
-#: admin/class-admin.php:2070
+#: admin/class-admin.php:2071
 msgid "Disabling…"
 msgstr "Onemogućavanje…"
 
-#: admin/class-admin.php:2071
+#: admin/class-admin.php:2072
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic."
 msgstr "Geo-usmjeravanje je onemogućeno. CDN predmemorija trebala bi se početi puniti u roku od nekoliko minuta od organskog prometa."
 
-#: admin/class-admin.php:2207
+#: admin/class-admin.php:2208
 msgid "Cookie Consent Overview"
 msgstr "Pregled privola za kolačiće"
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2274
+#: admin/class-admin.php:2275
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr "%d interakcija s privolom u zadnjih 30 dana."
 
-#: admin/class-admin.php:2278
+#: admin/class-admin.php:2279
 msgid "View details"
 msgstr "Prikaži detalje"
 
@@ -2327,7 +2331,7 @@ msgid ""
 "\n"
 "For **strictly necessary** cookies, processing is justified because it is necessary to pursue our legitimate interests in operating a secure, functional website (POPIA section 11(1)(f)) and does not override your interests or rights.\n"
 "\n"
-"For **all other** cookie categories, processing is based on your **consent** under POPIA section 11(1)(a) — a voluntary, specific and informed expression of will — collected via the cookie banner before any non-essential cookie is set.\n"
+"For the **non-essential categories configured behind our cookie banner**, processing is based on your **consent** under POPIA section 11(1)(a) — a voluntary, specific and informed expression of will — collected before those cookies are set. POPIA section 11(1)(b)-(f) permits other lawful justifications; this policy uses consent for these configured categories and must be adapted if our actual processing relies on a different justification.\n"
 "\n"
 "Personal information collected through these technologies may include online identifiers, device and browser information, usage events, approximate location, and the preferences described in the cookie table and our separate Privacy Policy. Providing information through non-essential technologies is voluntary; if you refuse, the related analytics, personalization, or advertising functions will not operate. Processing needed to deliver and secure the website is necessary for those technical functions, and blocking it may prevent parts of the site from working.\n"
 "\n"
@@ -2769,11 +2773,21 @@ msgstr ""
 msgid "The cookie banner could not be created. Please try again."
 msgstr "Došlo je do pogreške. Pokušajte ponovo."
 
-#: admin/modules/settings/includes/class-onboarding.php:440
+#: admin/modules/settings/includes/class-onboarding.php:378
+#, fuzzy
+msgid "Google Consent Mode settings could not be saved. Please try again."
+msgstr "Mrežna pogreška. Pokušajte ponovo."
+
+#: admin/modules/settings/includes/class-onboarding.php:390
+#, fuzzy
+msgid "Setup settings could not be saved. Please try again."
+msgstr "Mrežna pogreška. Pokušajte ponovo."
+
+#: admin/modules/settings/includes/class-onboarding.php:460
 msgid "Cache Compatibility Mode pauses the running A/B banner test: variants are only split server-side, which this mode disables."
 msgstr ""
 
-#: admin/modules/settings/includes/class-onboarding.php:475
+#: admin/modules/settings/includes/class-onboarding.php:495
 msgid "IAB TCF was not enabled: it requires a registered CMP ID between 2 and 4095. Add it under Settings and re-enable TCF there."
 msgstr ""
 
@@ -5072,7 +5086,7 @@ msgstr "GDPR (EU / EGP / UK)"
 msgid "For visitors in the European Union, EEA, or United Kingdom. Non-essential cookies stay blocked until the visitor actively opts in — nothing is pre-ticked, and Accept and Reject carry equal weight."
 msgstr ""
 
-#: admin/views/setup.php:87 admin/views/setup.php:108
+#: admin/views/setup.php:87
 msgid "Opt-in model: no cookie is set before consent."
 msgstr ""
 
@@ -5122,7 +5136,11 @@ msgid "Equal-weight Accept and Reject buttons are shown, together with the US op
 msgstr ""
 
 #: admin/views/setup.php:107
-msgid "For visitors covered by South Africa's Protection of Personal Information Act. POPIA follows an opt-in model: non-essential cookies stay blocked until the visitor gives voluntary, specific and informed consent (section 11(1)(a)), with equal-weight controls and no pre-ticked categories."
+msgid "For visitors covered by South Africa's Protection of Personal Information Act. This conservative preset uses voluntary, specific and informed consent under section 11(1)(a) for non-essential cookies. POPIA also permits other lawful justifications under section 11(1)(b)-(f), which must be assessed and documented separately."
+msgstr ""
+
+#: admin/views/setup.php:108
+msgid "Consent-based preset: non-essential cookies stay blocked until consent."
 msgstr ""
 
 #: admin/views/setup.php:120
