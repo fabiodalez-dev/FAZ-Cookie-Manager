@@ -172,8 +172,8 @@ namespace {
 	faz_assert_same( $both['noticeButtons'], true, 'both -> equal-weight notice controls visible' );
 
 	$popia = Onboarding::map_law_to_banner_fields( 'popia' );
-	faz_assert_same( $popia['applicableLaw'], 'gdpr', 'popia -> stored as the opt-in gdpr model (runtime has no popia law id)' );
-	faz_assert_same( $popia['donotSell'], false, 'popia -> no US Do-Not-Sell surface (POPIA is opt-in, not opt-out)' );
+	faz_assert_same( $popia['applicableLaw'], 'gdpr', 'popia consent preset -> stored as the gdpr-shaped model (runtime has no popia law id)' );
+	faz_assert_same( $popia['donotSell'], false, 'popia consent preset -> no US Do-Not-Sell surface' );
 	faz_assert_same( $popia['optoutPopup'], false, 'popia -> opt-out popup off' );
 	faz_assert_same( $popia['consentExpiry'], 180, 'popia -> conservative 180-day consent lifetime' );
 	faz_assert_same( $popia['noticeButtons'], true, 'popia -> equal-weight notice controls visible' );

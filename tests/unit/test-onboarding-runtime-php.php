@@ -2,7 +2,7 @@
 /**
  * Runtime-oriented unit tests for the guided setup wizard.
  *
- * These 25 checks execute the real Onboarding class against an in-memory
+ * These 26 checks execute the real Onboarding class against an in-memory
  * Banner/Controller/Settings implementation. They cover exact persisted law
  * models, multilingual/custom-content preservation, the targeted-only fallback
  * case, and the atomic failure path where Store::save() returns an ID even
@@ -260,6 +260,16 @@ namespace FazCookie\Admin\Modules\Settings\Includes {
 	class Settings {
 		public static $storage = array();
 		public static $updates = 0;
+		public static $corrupt_next_update = false;
+
+		public function get_defaults() {
+			return self::$storage;
+		}
+
+		public static function sanitize( $settings, $defaults ) {
+			unset( $defaults );
+			return $settings;
+		}
 
 		public function get( $key = '' ) {
 			if ( '' === $key ) {
@@ -269,8 +279,12 @@ namespace FazCookie\Admin\Modules\Settings\Includes {
 		}
 
 		public function update( $value ) {
-			self::$storage = $value;
 			self::$updates++;
+			if ( self::$corrupt_next_update ) {
+				self::$corrupt_next_update = false;
+				return;
+			}
+			self::$storage = $value;
 		}
 	}
 }
@@ -323,7 +337,7 @@ namespace {
 		return $out;
 	}
 
-	echo "\n== Onboarding persisted runtime (25 new checks) ==\n\n";
+	echo "\n== Onboarding persisted runtime (26 new checks) ==\n\n";
 	$controller = Controller::get_instance();
 	$onboarding = new Onboarding();
 	$custom_contents = array(
@@ -398,16 +412,41 @@ namespace {
 		'finish remains incomplete when the banner update did not persist'
 	);
 
+	// A silent settings write failure must not be reported as a completed wizard.
+	$controller->reset();
+	faz_seed_runtime_banner( 'gdpr', array(), true, $custom_contents );
+	Settings::$storage = array(
+		'banner_control' => array( 'status' => true ),
+		'consent_logs'   => array( 'status' => true ),
+		'onboarding'     => array( 'completed' => false, 'dismissed' => false, 'law' => '' ),
+	);
+	Settings::$updates = 0;
+	Settings::$corrupt_next_update = true;
+	$GLOBALS['faz_onboarding_runtime_cache_clears'] = 0;
+	$before = Settings::$storage;
+	$failure = $onboarding->finish( 'ccpa' );
+	faz_runtime_assert_same(
+		array(
+			is_wp_error( $failure ),
+			is_wp_error( $failure ) ? $failure->get_error_code() : '',
+			Settings::$storage,
+			Settings::$updates,
+			$GLOBALS['faz_onboarding_runtime_cache_clears'],
+		),
+		array( true, 'faz_onboarding_settings_save_failed', $before, 1, 0 ),
+		'finish rejects a settings write that does not survive read-back'
+	);
+
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";
 	echo "Passed: $tests_passed\n";
 	echo "Failed: $tests_failed\n\n";
-	if ( 25 !== $tests_run ) {
-		echo "\033[31mFAIL: expected exactly 25 checks\033[0m\n";
+	if ( 26 !== $tests_run ) {
+		echo "\033[31mFAIL: expected exactly 26 checks\033[0m\n";
 		exit( 1 );
 	}
 	if ( $tests_failed > 0 ) {
 		exit( 1 );
 	}
-	echo "\033[32m25 passed, 0 failed\033[0m\n";
+	echo "\033[32m26 passed, 0 failed\033[0m\n";
 }
