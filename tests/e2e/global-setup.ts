@@ -1,4 +1,5 @@
 import { request } from '@playwright/test';
+import { assertPrerequisites } from './utils/preflight';
 import { getWpLoginPath } from './utils/wp-auth';
 import { wpEval } from './utils/wp-env';
 
@@ -36,15 +37,21 @@ async function globalSetup(): Promise<void> {
 
   await api.dispose();
 
+  // Reachable, and the credentials work. Now hold the environment itself to
+  // the suite's requirements — deployment freshness, server, permalinks,
+  // WP_DEBUG, fixtures, and the plugin settings specs presume — so a dirty
+  // or stale environment fails here, named, instead of surfacing later as a
+  // handful of assertions that look like product regressions.
+  await assertPrerequisites(baseURL);
+
   // Reset the active banner to a known clean shape and remove any secondary
   // banners left over by previous runs. Without this reset, specs that mutate
   // the active banner (CB-OV close-button override, multi-banner geo-routing)
   // can leave it in classic+pushdown across runs, which cascades into a
   // 14-fail run because later specs presuppose box+popup.
   //
-  // WP_PATH may be unset on certain environments (e.g., dev machines that
-  // run only individual specs). When unset, skip silently — wp-env throws
-  // a clear error from any spec that needs it.
+  // WP_PATH is guaranteed by the preflight above, except when it was skipped
+  // wholesale via FAZ_E2E_SKIP_PREFLIGHT — hence the guard remains.
   if (process.env.WP_PATH) {
     try {
       wpEval(`
