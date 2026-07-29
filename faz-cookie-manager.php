@@ -414,6 +414,34 @@ function faz_maybe_invalidate_stale_consent_cookie() {
 
 add_action( 'init', 'faz_maybe_invalidate_stale_consent_cookie', 1 );
 
+/**
+ * Drop the cached banner when the site address changes.
+ *
+ * The rendered banner is cached in faz_banner_template with absolute plugin
+ * asset URLs baked in, so moving the site to a different address leaves the
+ * cache pointing at the old one — the browser then requests the icon from the
+ * previous host. This catches the deliberate move (Settings → General, WP-CLI,
+ * multisite domain edit). A restored database bypasses update_option entirely,
+ * which is why Frontend also repairs a stale origin at render time. Reported as
+ * issue #195 after a WPVivid restore from a localhost build.
+ *
+ * Loads the helper defensively: it lives in a plain-function file, not a class,
+ * so the autoloader will not pull it in on its own.
+ *
+ * @return void
+ */
+function faz_flush_banner_template_on_address_change() {
+	if ( ! function_exists( 'faz_clear_banner_template_cache' ) ) {
+		require_once FAZ_PLUGIN_BASEPATH . 'includes/class-i18n-helpers.php';
+	}
+	if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+		faz_clear_banner_template_cache();
+	}
+}
+
+add_action( 'update_option_siteurl', 'faz_flush_banner_template_on_address_change' );
+add_action( 'update_option_home', 'faz_flush_banner_template_on_address_change' );
+
 require_once FAZ_PLUGIN_BASEPATH . 'class-autoloader.php';
 
 $autoloader = new \FazCookie\Autoloader();

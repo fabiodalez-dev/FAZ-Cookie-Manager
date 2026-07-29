@@ -1432,6 +1432,16 @@ class Frontend {
 			}
 		}
 
+		// Same class of defect one level up: the cached HTML carries the plugin
+		// origin (scheme + host + port) that was current when it was generated,
+		// so a site restored at a different address keeps requesting assets from
+		// the old one. A backup restore rewrites the siteurl row directly, so
+		// the update_option_siteurl hook in the bootstrap never fires — this is
+		// the net that catches it. Issue #195: a WPVivid restore of a localhost
+		// build left the live site asking https://localhost for the revisit
+		// icon, which browsers surface as a local-network access prompt.
+		$html = $this->repair_stale_asset_origin( $html );
+
 		// `<script type="text/template">` is the W3C-recommended way to
 		// embed inert HTML templates in the page (browsers do NOT execute
 		// it — `type` is not `text/javascript` or `module`). The banner
@@ -1444,6 +1454,86 @@ class Frontend {
 		echo wp_kses( $html, faz_allowed_html() );
 		echo '</script>';
 	}
+
+	/**
+	 * Rewrite plugin-asset URLs left over from a previous site address.
+	 *
+	 * The cached banner HTML embeds absolute URLs to this plugin's own assets
+	 * (the revisit icon, the close icon). They are generated from
+	 * FAZ_PLUGIN_URL, so they carry whatever origin the site had when the
+	 * template was built. Restore that database at a different address —
+	 * localhost build → live server, staging → production — and the cache
+	 * keeps pointing at the old origin: the browser then issues a
+	 * cross-origin request for the icon, which for a localhost origin trips
+	 * the private-network access prompt (issue #195).
+	 *
+	 * Only URLs whose path matches this plugin's own directory are touched,
+	 * and only when their origin differs from the current one, so a CDN or
+	 * asset-rewriting layer that already produced a different (and correct)
+	 * origin is left alone: FAZ_PLUGIN_URL reflects that rewrite too, so the
+	 * origins match and nothing happens.
+	 *
+	 * Repairs the stored option as well, so the work happens once rather than
+	 * on every request.
+	 *
+	 * @param string $html Cached banner HTML.
+	 * @return string HTML with a current asset origin.
+	 */
+	private function repair_stale_asset_origin( $html ) {
+		if ( ! is_string( $html ) || '' === $html || ! defined( 'FAZ_PLUGIN_URL' ) ) {
+			return (string) $html;
+		}
+
+		$current = wp_parse_url( FAZ_PLUGIN_URL );
+		if ( empty( $current['scheme'] ) || empty( $current['host'] ) || empty( $current['path'] ) ) {
+			return $html;
+		}
+		$current_origin = $current['scheme'] . '://' . $current['host']
+			. ( empty( $current['port'] ) ? '' : ':' . $current['port'] );
+		$plugin_path    = $current['path'];
+
+		// Collect the distinct origins the cached HTML uses for OUR assets.
+		$pattern = '#(https?://[^/"\'\s>]+)' . preg_quote( $plugin_path, '#' ) . '#i';
+		if ( ! preg_match_all( $pattern, $html, $matches ) ) {
+			return $html;
+		}
+		$stale = array_values( array_unique( array_diff( $matches[1], array( $current_origin ) ) ) );
+		if ( ! $stale ) {
+			return $html;
+		}
+
+		$rewrite = static function ( $subject ) use ( $stale, $plugin_path, $current_origin ) {
+			foreach ( $stale as $origin ) {
+				$subject = str_replace( $origin . $plugin_path, $current_origin . $plugin_path, $subject );
+			}
+			return $subject;
+		};
+
+		$html = $rewrite( $html );
+
+		// Persist the repair so later requests skip this entirely.
+		$cache_key = apply_filters( 'faz_banner_template_cache_key', 'faz_banner_template' );
+		$stored    = get_option( $cache_key, array() );
+		if ( is_array( $stored ) ) {
+			$repaired = false;
+			foreach ( $stored as $lang => $tpl ) {
+				if ( ! isset( $tpl['html'] ) || ! is_string( $tpl['html'] ) ) {
+					continue;
+				}
+				$fixed = $rewrite( $tpl['html'] );
+				if ( $fixed !== $tpl['html'] ) {
+					$stored[ $lang ]['html'] = $fixed;
+					$repaired                = true;
+				}
+			}
+			if ( $repaired ) {
+				update_option( $cache_key, $stored );
+			}
+		}
+
+		return $html;
+	}
+
 	/**
 	 * Get gcm data
 	 *
