@@ -517,8 +517,9 @@ test.describe('PR #39: v1.7.0 additional features', () => {
 
 test.describe('P1 fix: per-service cookie shredding', () => {
 
-  // 1.18.2 HOTFIX: per-service consent is force-disabled — _services is no longer exposed. Re-enable with the feature.
-  test.skip('frontend _services include cookies array when per_service_consent enabled', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+  // Parked in 1.18.2 while per-service consent was force-disabled; the
+  // feature came back and these pass again (re-enabled 2026-07-29).
+  test('frontend _services include cookies array when per_service_consent enabled', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
@@ -555,9 +556,9 @@ test.describe('P1 fix: per-service cookie shredding', () => {
     }
   });
 
-  // 1.18.2 HOTFIX: per-service consent is force-disabled — get_service_consent() returns
-  // empty so PHP no longer shreds svc.*-denied cookies. Re-enable with the feature.
-  test.skip('per-service denial shreds matching cookies via PHP', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+  // Parked in 1.18.2 while per-service consent was force-disabled; the
+  // feature came back and these pass again (re-enabled 2026-07-29).
+  test('per-service denial shreds matching cookies via PHP', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
     // Simulate: accept all cookies, then set svc.hotjar:no in the consent cookie.
     // The PHP shredding on next page load should delete Hotjar cookies.
     await loginAsAdmin(page);
