@@ -49,7 +49,7 @@ This plugin assists consent and privacy workflows. It does not itself create, pr
 * **Italian Garante Privacy** -- 6-month consent expiry setting and consent logging controls
 * **EDPB Guidelines** -- No scroll-as-consent, no pre-checked categories, equal button prominence options
 * **LGPD** (Brazil General Data Protection Law) -- Consent-based model
-* **POPIA** (South Africa Protection of Personal Information Act) -- Opt-in consent
+* **POPIA** (South Africa Protection of Personal Information Act) -- Conservative consent-based preset under s.11(1)(a); other s.11(1)(b)-(f) justifications require separate assessment
 
 = Try it Live =
 
@@ -333,7 +333,7 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.25.0 =
-* Added: POPIA (South Africa) jurisdiction - a POPIA law choice in the setup wizard, a ZA geo region, and Cookie Policy templates in every bundled language covering s.11(1)(a) consent, the Information Officer, data-subject rights under s.23-25, objection under s.11(3), and the PAIA s.25 30-day access window.
+* Added: POPIA (South Africa) jurisdiction - a conservative s.11(1)(a) consent-based setup preset (with explicit notice that POPIA also permits the s.11(1)(b)-(f) justifications), a ZA geo region, and Cookie Policy templates in every bundled language covering the Information Officer, data-subject rights under s.23-25, objection under s.11(3), and the PAIA s.25 30-day access window.
 * Added: guided first-run setup wizard (8 steps) - detects the environment (multilingual plugin, page cache, WooCommerce, existing consent data) and configures jurisdiction-correct defaults, pre-selecting the more protective option and never touching consent expiry or equal-weight buttons. Upgrading installs are treated as already onboarded and are never nagged.
 * Added: A/B testing of banner variants - run two or more active banners with a persistent random split and read the accept rate per variant on the Dashboard. Only active, independently compliant banners take part. Default off; skipped under Cache Compatibility Mode.
 * Added: inline age-appropriate consent gate (GDPR Art. 8) - an optional age-confirmation checkbox that gates only the accept path, never Reject, withdraw or close, so button weight stays equal. Self-declared affirmation only, not a substitute for the parental-consent verification Art. 8(2) requires. Default off.
@@ -343,7 +343,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Security: the consent dashboard widget is now gated on capability, and the CCPA opt-out endpoints enforce a strict same-origin (Fetch Metadata with Referer fallback) check.
 * Fixed: provider scripts whose blocking pattern ends on a separator were never blocked - the HubSpot tracker ran before consent (#196). A pattern such as js.hs-scripts.com/ already carries its own right-hand boundary, so demanding another separator after it meant js.hs-scripts.com/12345.js went unblocked. Twenty shipped provider definitions were affected; fixed in both the PHP and JavaScript matchers.
 * Fixed: a banner cached under a previous site address kept requesting assets from the old origin (#195) - an address change now drops the cache, and a render-time repair rewrites and persists a stale origin, which also covers a restored database that never fires the hook.
-* Fixed: the setup wizard's scan reported a fraction of the cookies the Cookies page found. The wizard called a server-side endpoint that reads Set-Cookie headers, and PHP does not execute JavaScript, so cookies written by analytics, advertising and embedded players were invisible to it. The browser-based engine the Cookies page already used - it loads pages in hidden iframes and therefore sees what a visitor receives - is now shared by both, so they cannot disagree; the wizard shows real per-page progress and asks you to keep the tab open while it runs.
+* Fixed: the setup wizard's scan reported a fraction of the cookies the Cookies page found. The browser engine is now shared by both surfaces, retries public paths through the admin origin when home/admin hosts differ, and refuses to import misleading server-only findings when no page is observable. Wizard completion also reads banner/GCM/settings writes back before reporting success.
 * Fixed: a blocked Cookie Policy save now names the offending field, opens its section and focuses it, instead of doing nothing; background scans under a web SAPI run through WP-Cron with honest counts; third-country transfer labels resolve in the banner or policy language rather than the ambient request locale.
 
 = 1.24.0 =

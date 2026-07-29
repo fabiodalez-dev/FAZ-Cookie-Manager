@@ -24,7 +24,7 @@ Používáme také podobné technologie, jako jsou **localStorage**, **sessionSt
 
 U **nezbytně nutných** souborů cookie je zpracování odůvodněno naším oprávněným zájmem na provozu bezpečného a funkčního webu (POPIA, článek 11(1)(f)) a nepřevažuje nad vašimi zájmy či právy.
 
-U **všech ostatních** kategorií souborů cookie je zpracování založeno na vašem **souhlasu** podle článku 11(1)(a) POPIA — dobrovolném, konkrétním a informovaném projevu vůle — získaném prostřednictvím cookie lišty předtím, než je uložen jakýkoli nepodstatný soubor cookie.
+U **nepodstatných kategorií nakonfigurovaných za naší cookie lištou** je zpracování založeno na vašem **souhlasu** podle článku 11(1)(a) POPIA — dobrovolném, konkrétním a informovaném projevu vůle — získaném před uložením těchto souborů cookie. Článek 11(1)(b)-(f) POPIA připouští i jiné zákonné důvody; tyto zásady používají pro nakonfigurované kategorie souhlas a musí být upraveny, pokud skutečné zpracování vychází z jiného důvodu.
 
 Osobní informace shromažďované prostřednictvím těchto technologií mohou zahrnovat online identifikátory, informace o zařízení a prohlížeči, události používání, přibližnou polohu a preference popsané v tabulce souborů cookie a v našich samostatných Zásadách ochrany osobních údajů. Poskytnutí informací prostřednictvím nepodstatných technologií je dobrovolné; pokud je odmítnete, související analytické, personalizační nebo reklamní funkce nebudou fungovat. Zpracování nezbytné k poskytování a zabezpečení webu je pro tyto technické funkce nutné a jeho blokování může zabránit fungování některých částí webu.
 

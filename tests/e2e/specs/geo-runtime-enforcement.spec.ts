@@ -7,7 +7,7 @@
  * left them "yes"). This spec asserts the actual browser EFFECT, not the PHP
  * data:
  *
- *   - With the flag on and the visitor routed to an opt-in ruleset (POPIA/ZA),
+ *   - With the flag on and the visitor routed to the consent-based POPIA/ZA preset,
  *     a server-side blocked analytics script stays `type="text/plain"` on the
  *     very first visit (the script does NOT run).
  *   - `_fazConfig._runtimeGeo` is true and `_activeLaw` is the ruleset-model law
@@ -58,7 +58,7 @@ if ( 1 === preg_match( '/^[A-Z]{2}$/', $faz_e2e_cc ) ) {
 // ruleset no longer drives the live banner — these enforcement assertions can no
 // longer hold. Skipped until the runtime is reworked and re-enabled (see the
 // CHANGELOG 1.18.2 entry); flip back to test.describe(...) at that point.
-test.describe.skip('geo-runtime enforcement (flag on, POPIA/ZA opt-in)', () => {
+test.describe.skip('geo-runtime enforcement (flag on, POPIA/ZA consent preset)', () => {
   test.beforeAll(() => {
     if (!existsSync(MU_DIR)) {
       mkdirSync(MU_DIR, { recursive: true });
@@ -80,7 +80,7 @@ test.describe.skip('geo-runtime enforcement (flag on, POPIA/ZA opt-in)', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     // The runtime ruleset is applied: store flags it and the enforced law is the
-    // POPIA model (opt-in → 'gdpr'), proving banner selection followed the ruleset.
+    // POPIA consent preset (strict shape → 'gdpr'), proving banner selection followed the ruleset.
     // The localized store is the global `_fazConfig` (script.js aliases it to the
     // module-scoped const `_fazStore`, which is NOT a window global).
     const store = await page.evaluate(() => ({

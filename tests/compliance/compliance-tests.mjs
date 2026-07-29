@@ -2293,15 +2293,12 @@ async function testTogglePersistence(browser) {
 // 15. POPIA — SOUTH AFRICA [ZA01-ZA09]
 // ====================================================================
 //
-// POPIA section 11(1)(a) makes consent the lawful basis for every
-// non-essential technology, and defines it as "voluntary, specific and
-// informed". That is an opt-in regime: nothing non-essential may run
-// before the visitor acts, no category may arrive pre-ticked, and
-// refusing must be no harder than accepting. The rest of the suite
-// proves those properties for the GDPR banner; this section proves the
-// POPIA choice actually produces them rather than a weaker shape — the
-// jurisdiction ships a geo ruleset, a wizard law and a policy
-// scaffold, but nothing asserted its runtime behaviour.
+// This plugin's conservative POPIA preset chooses consent under section
+// 11(1)(a) for non-essential technologies. POPIA also permits the lawful
+// justifications in section 11(1)(b)-(f); this suite tests the behaviour
+// promised by the preset, not a claim that consent is POPIA's only basis.
+// Nothing non-essential may run before the visitor acts, no category may
+// arrive pre-ticked, and refusing must be no harder than accepting.
 //
 // The law is applied through the plugin's own onboarding endpoint (the
 // path the setup wizard uses), and the previous law is restored in a
@@ -2340,8 +2337,8 @@ async function testPopiaSouthAfrica(browser) {
 			!!applied && applied.banner_applied === true && applied.law === 'popia',
 			applied ? JSON.stringify(applied).slice(0, 120) : 'no response');
 
-		// The runtime has no dedicated "popia" banner law: POPIA is opt-in, so
-		// it maps onto the opt-in shape. What matters for compliance is the
+		// The runtime has no dedicated "popia" banner law, so the plugin's
+		// consent-based preset maps onto the strict opt-in shape. What matters is the
 		// SHAPE, not the label. Read the exact paths Onboarding writes and
 		// FAIL when a key is absent — an assertion that silently passes on
 		// `undefined` proves nothing.
@@ -2365,13 +2362,13 @@ async function testPopiaSouthAfrica(browser) {
 			};
 		});
 
-		test('ZA02 POPIA yields the opt-in consent model (s.11(1)(a))',
+		test('ZA02 POPIA preset yields its consent model (s.11(1)(a))',
 			!!banner && typeof banner.law === 'string' && banner.law !== '' && banner.law !== 'ccpa',
 			banner ? `banner="${banner.name}" applicableLaw=${JSON.stringify(banner.law)}` : 'default banner unreadable');
 
-		// A Do-Not-Sell link is an artefact of US opt-out statutes. Under an
-		// opt-in regime it is meaningless and misleading.
-		test('ZA03 No Do-Not-Sell opt-out artefact under an opt-in law',
+		// A Do-Not-Sell link is an artefact of US opt-out statutes and does not
+		// belong in this consent-based POPIA preset.
+		test('ZA03 No US Do-Not-Sell artefact in the POPIA preset',
 			!!banner && banner.donotSell === false && banner.optoutPopup === false,
 			banner ? `donotSell=${JSON.stringify(banner.donotSell)} optoutPopup=${JSON.stringify(banner.optoutPopup)}` : '');
 

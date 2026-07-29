@@ -24,7 +24,7 @@ We also use similar technologies such as **localStorage**, **sessionStorage**, a
 
 For **strictly necessary** cookies, processing is justified because it is necessary to pursue our legitimate interests in operating a secure, functional website (POPIA section 11(1)(f)) and does not override your interests or rights.
 
-For **all other** cookie categories, processing is based on your **consent** under POPIA section 11(1)(a) — a voluntary, specific and informed expression of will — collected via the cookie banner before any non-essential cookie is set.
+For the **non-essential categories configured behind our cookie banner**, processing is based on your **consent** under POPIA section 11(1)(a) — a voluntary, specific and informed expression of will — collected before those cookies are set. POPIA section 11(1)(b)-(f) permits other lawful justifications; this policy uses consent for these configured categories and must be adapted if our actual processing relies on a different justification.
 
 Personal information collected through these technologies may include online identifiers, device and browser information, usage events, approximate location, and the preferences described in the cookie table and our separate Privacy Policy. Providing information through non-essential technologies is voluntary; if you refuse, the related analytics, personalization, or advertising functions will not operate. Processing needed to deliver and secure the website is necessary for those technical functions, and blocking it may prevent parts of the site from working.
 

@@ -24,7 +24,7 @@ Também utilizamos tecnologias semelhantes, como **localStorage**, **sessionStor
 
 Para os cookies **estritamente necessários**, o tratamento se justifica pelo nosso interesse legítimo em operar um site seguro e funcional (POPIA, seção 11(1)(f)) e não prevalece sobre seus interesses ou direitos.
 
-Para **todas as demais** categorias de cookies, o tratamento se baseia no seu **consentimento** nos termos da seção 11(1)(a) do POPIA — uma manifestação de vontade livre, específica e informada — coletado por meio do banner de cookies antes da instalação de qualquer cookie não essencial.
+Para as **categorias não essenciais configuradas atrás do nosso banner de cookies**, o tratamento se baseia no seu **consentimento** nos termos da seção 11(1)(a) do POPIA — uma manifestação de vontade livre, específica e informada — coletado antes da instalação desses cookies. A seção 11(1)(b)-(f) do POPIA permite outras justificativas lícitas; esta política usa o consentimento para as categorias configuradas e deve ser adaptada se o tratamento efetivo se basear em outra justificativa.
 
 As informações pessoais coletadas por meio dessas tecnologias podem incluir identificadores online, informações do dispositivo e do navegador, eventos de uso, localização aproximada e as preferências descritas na tabela de cookies e em nossa Política de Privacidade separada. O fornecimento de informações por tecnologias não essenciais é voluntário; se você recusar, as funções relacionadas de análise, personalização ou publicidade não funcionarão. O tratamento necessário para fornecer e proteger o site é indispensável para essas funções técnicas, e seu bloqueio pode impedir o funcionamento de partes do site.
 

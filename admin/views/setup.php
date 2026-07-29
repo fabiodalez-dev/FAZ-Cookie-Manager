@@ -104,8 +104,8 @@ $faz_setup_laws = array(
 	),
 	'popia' => array(
 		'title'  => __( 'POPIA (South Africa)', 'faz-cookie-manager' ),
-		'desc'   => __( 'For visitors covered by South Africa\'s Protection of Personal Information Act. POPIA follows an opt-in model: non-essential cookies stay blocked until the visitor gives voluntary, specific and informed consent (section 11(1)(a)), with equal-weight controls and no pre-ticked categories.', 'faz-cookie-manager' ),
-		'effect' => __( 'Opt-in model: no cookie is set before consent.', 'faz-cookie-manager' ),
+		'desc'   => __( 'For visitors covered by South Africa\'s Protection of Personal Information Act. This conservative preset uses voluntary, specific and informed consent under section 11(1)(a) for non-essential cookies. POPIA also permits other lawful justifications under section 11(1)(b)-(f), which must be assessed and documented separately.', 'faz-cookie-manager' ),
+		'effect' => __( 'Consent-based preset: non-essential cookies stay blocked until consent.', 'faz-cookie-manager' ),
 		'expiry' => __( 'Consent is remembered for up to 180 days.', 'faz-cookie-manager' ),
 		'buttons' => __( 'Equal-weight Accept and Reject buttons are shown, with no pre-ticked categories.', 'faz-cookie-manager' ),
 	),
