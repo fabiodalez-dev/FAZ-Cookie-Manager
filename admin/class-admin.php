@@ -580,6 +580,7 @@ class Admin {
 						'noPagesFound'             => __( 'No pages found to scan.', 'faz-cookie-manager' ),
 						'discoverFailed'           => __( 'Failed to discover pages.', 'faz-cookie-manager' ),
 						'scanSaveFailed'           => __( 'Scan finished but failed to save results.', 'faz-cookie-manager' ),
+						'browserScanUnavailable'   => __( 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.', 'faz-cookie-manager' ),
 						'discoveringPages'         => __( 'Discovering pages...', 'faz-cookie-manager' ),
 						'enrichingServer'          => __( 'Enriching with server scan...', 'faz-cookie-manager' ),
 						'savingResults'            => __( 'Saving results...', 'faz-cookie-manager' ),
