@@ -119,7 +119,19 @@
 		if (diagnostics.invalidUrl > 0) {
 			hints.push('invalid URLs discovered');
 		}
+		if (diagnostics.originRebased > 0) {
+			hints.push('public URLs were retried through the WordPress admin origin');
+		}
 		return hints.length ? ' Possible blockers: ' + hints.join('; ') + '.' : '';
+	}
+
+	// A server-side enrichment pass is useful only after at least one page was
+	// actually observable in the browser. If every iframe failed and produced no
+	// browser evidence, importing the server fallback would recreate the old,
+	// misleading "one or two cookies found" result that this engine replaced.
+	function browserScanUnavailable(diagnostics, pagesScanned, cookies, scripts) {
+		return !!diagnostics && pagesScanned > 0 && diagnostics.totalIssues >= pagesScanned
+			&& cookies.length === 0 && scripts.length === 0;
 	}
 
 	/**
@@ -246,6 +258,21 @@
 					scanMetrics.cookiesFound = collectedCookies.length;
 					scanMetrics.scriptsFound = collectedScripts.length;
 
+					if (browserScanUnavailable(
+						diagnostics,
+						scanMetrics.pagesScanned,
+						collectedCookies,
+						collectedScripts
+					)) {
+						var browserError = new Error(
+							__('cookies.browserScanUnavailable', 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.')
+							+ buildScanDiagnosticsHint(diagnostics, 0)
+						);
+						browserError.stage = 'browser';
+						reject(browserError);
+						return;
+					}
+
 					// Server-side pass on the HOMEPAGE catches data-src / deferred
 					// scripts an iframe never requests. Site root, not urls[0],
 					// which may be a WooCommerce page after priority prepending.
@@ -360,6 +387,7 @@
 		var diagnostics = {
 			invalidUrl: 0,
 			crossOrigin: 0,
+			originRebased: 0,
 			missingContainer: 0,
 			iframeInaccessible: 0,
 			iframeTimeout: 0,
@@ -430,6 +458,9 @@
 
 				var foundNew = false;
 				var issue = pageResult.issue || '';
+				if (pageResult.originRebased) {
+					diagnostics.originRebased++;
+				}
 				if (issue && Object.prototype.hasOwnProperty.call(diagnostics, issue)) {
 					diagnostics[issue]++;
 					diagnostics.totalIssues++;
@@ -494,12 +525,12 @@
 		var loadTimeoutMs = (typeof options.loadTimeoutMs === 'number' && options.loadTimeoutMs > 0) ? options.loadTimeoutMs : IFRAME_LOAD_TIMEOUT;
 		var settleTimeoutMs = (typeof options.settleTimeoutMs === 'number' && options.settleTimeoutMs > 0) ? options.settleTimeoutMs : 1700;
 
-		function emptyResult(issue) {
-			return { cookies: [], scripts: [], issue: issue || '' };
+		function emptyResult(issue, originRebased) {
+			return { cookies: [], scripts: [], issue: issue || '', originRebased: !!originRebased };
 		}
 		var hadAccessError = false;
 
-		// Validate URL: only allow http/https same-origin pages.
+		// Validate URL: only HTTP(S) pages can be observed or safely rebased.
 		var parsedUrl;
 		try {
 			parsedUrl = new URL(url, window.location.origin);
@@ -516,26 +547,30 @@
 			currentUrl = window.location;
 		}
 
-		function normalizedHostPort(u) {
-			var hostname = String(u.hostname || '').toLowerCase().replace(/^www\./, '');
-			var port = u.port;
-			if (!port) {
-				port = (u.protocol === 'https:') ? '443' : '80';
-			}
-			return hostname + ':' + port;
-		}
-
 		var isHttpProtocol = (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:');
-		var isSameOriginHttp = isHttpProtocol &&
-			parsedUrl.protocol === currentUrl.protocol &&
-			normalizedHostPort(parsedUrl) === normalizedHostPort(currentUrl);
-
-		if (!isSameOriginHttp) {
+		if (!isHttpProtocol) {
 			done(emptyResult('crossOrigin'));
 			return;
 		}
+
+		// WordPress can legitimately expose wp-admin and the public home URL on
+		// different hostnames (www/apex, reverse proxy, mapped admin domain). The
+		// browser cannot read a cross-origin iframe, but the admin origin often
+		// serves the same front-controller paths. Retry the discovered path through
+		// the exact admin origin; canonical redirects remain safely detectable as
+		// iframeInaccessible, while compatible aliases become fully observable.
+		var originRebased = parsedUrl.origin !== currentUrl.origin;
+		var observableUrl = parsedUrl;
+		if (originRebased) {
+			try {
+				observableUrl = new URL(parsedUrl.pathname + parsedUrl.search + parsedUrl.hash, currentUrl.origin);
+			} catch (_unused3) {
+				done(emptyResult('crossOrigin'));
+				return;
+			}
+		}
 		if (!container) {
-			done(emptyResult('missingContainer'));
+			done(emptyResult('missingContainer', originRebased));
 			return;
 		}
 
@@ -550,7 +585,7 @@
 		var lastRead = null;
 
 		function readIframe() {
-			var result = { cookies: [], scripts: [], issue: '' };
+			var result = { cookies: [], scripts: [], issue: '', originRebased: originRebased };
 			try {
 				var doc = iframe.contentDocument || iframe.contentWindow.document;
 
@@ -640,10 +675,10 @@
 		});
 
 		// Timeout fallback in case load never fires (e.g. network error, 404).
-		timer = setTimeout(function () { finish(emptyResult('iframeTimeout')); }, loadTimeoutMs);
+		timer = setTimeout(function () { finish(emptyResult('iframeTimeout', originRebased)); }, loadTimeoutMs);
 
 		// Navigate the iframe — append scan param to disable script blocking.
-		var scanUrl = new URL(parsedUrl.href);
+		var scanUrl = new URL(observableUrl.href);
 		scanUrl.searchParams.set('faz_scanning', '1');
 		iframe.src = scanUrl.href;
 	}

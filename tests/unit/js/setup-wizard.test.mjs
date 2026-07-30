@@ -109,7 +109,7 @@ function clickNext(document, times) {
   }
 }
 
-function boot({ post, get } = {}) {
+function boot({ post, get, scanRun } = {}) {
   const dom = new JSDOM(markup(), {
     runScripts: 'outside-only',
     url: 'https://example.test/wp-admin/admin.php?page=faz-cookie-manager-setup',
@@ -141,6 +141,9 @@ function boot({ post, get } = {}) {
     },
     notify(message, type) { calls.notify.push({ message, type }); },
   };
+  if (scanRun) {
+    window.FAZ.scanEngine = { run: scanRun };
+  }
   window.eval(SCRIPT);
 
   return {
@@ -238,61 +241,56 @@ console.log('guided setup wizard (30 checks)');
   check('20 successful save schedules the fixed dashboard redirect after 700ms', app.timers.some((timer) => timer.active && timer.delay === 700));
 }
 
-// Optional scan: accepted/running/completed, 409 attach, and hard failure (10 checks).
+// Optional scan: shared-engine progress/completion, diagnostics failure, and
+// blocked/missing engine (10 checks).
 {
-  let infoReads = 0;
+  let resolveScan;
+  let receivedOptions;
+  let receivedHooks;
   const app = boot({
-    post(endpoint) {
-      return endpoint === 'scans' ? Promise.resolve({ status: 'scanning' }) : Promise.resolve({});
-    },
-    get(endpoint) {
-      if (endpoint !== 'scans/info') return Promise.resolve({});
-      infoReads += 1;
-      return Promise.resolve(infoReads === 1
-        ? { status: 'scanning' }
-        : { status: 'complete', total_cookies: 4 });
+    scanRun(options, hooks) {
+      receivedOptions = options;
+      receivedHooks = hooks;
+      return new Promise((resolvePromise) => { resolveScan = resolvePromise; });
     },
   });
   const button = app.document.getElementById('faz-setup-scan-btn');
   const status = app.document.getElementById('faz-setup-scan-status');
+  const progress = app.document.getElementById('faz-setup-scan-progress');
   button.click();
-  check('21 scan posts the canonical 20-page request', JSON.stringify(app.calls.post[0]) === JSON.stringify({ endpoint: 'scans', payload: { max_pages: 20 } }));
+  check('21 scan invokes the shared engine with the canonical 20-page request', receivedOptions?.maxPages === 20);
   check('22 scan button disables immediately', button.disabled);
   check('23 scan exposes the starting status immediately', status.textContent.includes('Starting scan'));
+  receivedHooks.status('3/20 pages | 4 cookies');
+  receivedHooks.progress(35);
+  check('24 engine status is rendered in the wizard', status.textContent.includes('3/20 pages'));
+  check('25 engine progress is determinate and accessible', progress.getAttribute('aria-valuenow') === '35'
+    && progress.querySelector('.faz-setup-scan-bar').style.width === '35%');
+  resolveScan({ total: 4, diagnostics: { totalIssues: 0 } });
   await flush();
-  check('24 accepted scan switches to the running status', status.textContent.includes('Scanning your site'));
-  check('25 first status poll is scheduled after 3000ms', app.timers.some((timer) => timer.active && timer.delay === 3000));
-
-  app.runTimer(3000);
-  await flush();
-  check('26 a still-running response schedules another poll', infoReads === 1 && app.timers.some((timer) => timer.active && timer.delay === 3000));
-  app.runTimer(3000);
-  await flush();
-  check('27 completed scan reports the discovered-cookie count', status.textContent.includes('4 cookies found'));
-  check('28 completed scan re-enables its button', !button.disabled);
+  check('26 completed scan reports the discovered-cookie count', status.textContent.includes('4 cookies found'));
+  check('27 completed scan re-enables its button and hides progress', !button.disabled && progress.hidden);
 }
 
 {
+  const failure = new Error('Public site and admin origins differ.');
   const app = boot({
-    post(endpoint) {
-      return endpoint === 'scans' ? Promise.reject({ data: { status: 409 } }) : Promise.resolve({});
-    },
-  });
-  app.document.getElementById('faz-setup-scan-btn').click();
-  await flush();
-  check('29 HTTP 409 attaches to the existing scan instead of failing', app.timers.some((timer) => timer.active && timer.delay === 3000) && app.calls.notify.length === 0);
-}
-
-{
-  const app = boot({
-    post(endpoint) {
-      return endpoint === 'scans' ? Promise.reject({ status: 500 }) : Promise.resolve({});
-    },
+    scanRun() { return Promise.reject(failure); },
   });
   const button = app.document.getElementById('faz-setup-scan-btn');
   button.click();
   await flush();
-  check('30 hard scan failure is non-blocking and visible', !button.disabled && app.calls.notify.some((item) => item.type === 'error'));
+  check('28 browser-engine failure is non-blocking and visible', !button.disabled
+    && app.document.getElementById('faz-setup-scan-status').textContent.includes('origins differ')
+    && app.calls.notify.some((item) => item.type === 'error'));
+}
+
+{
+  const app = boot();
+  const button = app.document.getElementById('faz-setup-scan-btn');
+  button.click();
+  check('29 a missing or blocked engine leaves the optional scan usable', !button.disabled);
+  check('30 a missing or blocked engine explains the fallback', app.document.getElementById('faz-setup-scan-status').textContent.includes('could not load'));
 }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);

@@ -114,13 +114,13 @@ class Onboarding {
 					'noticeButtons' => true,
 				);
 			case 'popia':
-				// POPIA (South Africa) is an opt-in regime: section 11(1)(a)
-				// consent before non-essential processing, equal-weight
-				// controls, and no US-style Do-Not-Sell surface. The banner
-				// runtime has no dedicated 'popia' law id, so the stored
-				// model is the opt-in 'gdpr' shape — behaviourally identical
-				// for the visitor; the wizard records law='popia' so re-entry
-				// and the review reflect the actual choice.
+				// This conservative POPIA preset deliberately uses consent under
+				// section 11(1)(a) for non-essential processing. POPIA also permits
+				// the other justifications in section 11(1)(b)-(f); sites relying on
+				// one of those must configure and document it separately. The banner
+				// runtime has no dedicated 'popia' law id, so this consent-based
+				// preset uses the GDPR-shaped runtime controls while the wizard keeps
+				// law='popia' for re-entry and review.
 				return array(
 					'applicableLaw' => 'gdpr',
 					'donotSell'     => false,
@@ -359,17 +359,37 @@ class Onboarding {
 		$all['onboarding']['dismissed'] = false;
 		$all['onboarding']['law']       = $law;
 
-		// Fold the optional step selections into the same settings write so a
-		// finished wizard is one atomic Settings::update (plus the separate GCM
-		// option below). Warnings collect advisory, non-fatal notes.
+		// Fold the optional step selections into the same settings write. Warnings
+		// collect advisory, non-fatal notes.
 		$warnings = $this->apply_options( $options, $all );
 
-		$settings_obj->update( $all );
-
 		// GCM lives in its own option (faz_gcm_settings) with its own sanitiser.
+		// Verify it before marking onboarding complete: update_option() returning
+		// false is ambiguous (unchanged value vs write failure), so the reliable
+		// contract is a fresh, sanitised read-back.
 		if ( isset( $options['gcm']['enabled'] ) ) {
-			$gcm = new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings();
-			$gcm->update( array( 'status' => (bool) $options['gcm']['enabled'] ) );
+			$gcm             = new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings();
+			$expected_status = (bool) $options['gcm']['enabled'];
+			$gcm->update( array( 'status' => $expected_status ) );
+			$persisted_gcm = ( new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings() )->get();
+			if ( ! is_array( $persisted_gcm ) || ! array_key_exists( 'status', $persisted_gcm ) || $expected_status !== (bool) $persisted_gcm['status'] ) {
+				return new WP_Error(
+					'faz_onboarding_gcm_save_failed',
+					__( 'Google Consent Mode settings could not be saved. Please try again.', 'faz-cookie-manager' ),
+					array( 'status' => 500 )
+				);
+			}
+		}
+
+		$expected_settings = Settings::sanitize( $all, $settings_obj->get_defaults() );
+		$settings_obj->update( $all );
+		$persisted_settings = ( new Settings() )->get();
+		if ( $expected_settings !== $persisted_settings ) {
+			return new WP_Error(
+				'faz_onboarding_settings_save_failed',
+				__( 'Setup settings could not be saved. Please try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
 		}
 
 		// Regenerate the cached banner template so the law change reaches the
