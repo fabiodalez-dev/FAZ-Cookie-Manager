@@ -249,6 +249,17 @@ class Settings extends Store {
 	 */
 	private static $cached_settings = null;
 
+	/**
+	 * Drop the request-local settings cache after an external transaction is
+	 * rolled back. Without this, a failed multi-store wizard save could expose
+	 * the uncommitted value for the remainder of the request.
+	 *
+	 * @return void
+	 */
+	public static function clear_cache() {
+		self::$cached_settings = null;
+	}
+
 	public function get( $group = '', $key = '' ) {
 		if ( null === self::$cached_settings ) {
 			$settings = get_option( 'faz_settings', $this->data );

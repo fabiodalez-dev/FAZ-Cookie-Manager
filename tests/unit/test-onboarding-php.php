@@ -234,6 +234,11 @@ namespace {
 	faz_assert_same( $all['banner_control']['per_service_consent'], true, 'banner_control: allowlisted switch is applied (bool-coerced)' );
 	faz_assert_same( array_key_exists( 'status', $all['banner_control'] ), false, 'banner_control: status is NOT writable from the wizard' );
 	faz_assert_same( array_key_exists( 'ab_test', $all['banner_control'] ), false, 'banner_control: ab_test is NOT writable from the wizard' );
+	list( $all, ) = $run_options( array( 'banner_control' => array( 'cache_compatibility' => 'false' ) ) );
+	faz_assert_same( $all['banner_control']['cache_compatibility'], false, "banner_control: string 'false' cannot turn a switch on" );
+
+	list( $all, ) = $run_options( array( 'microsoft' => array( 'uet_consent_mode' => 'false', 'clarity_consent' => '0' ) ) );
+	faz_assert_same( array( $all['microsoft']['uet_consent_mode'], $all['microsoft']['clarity_consent'] ), array( false, false ), 'microsoft: false-like strings remain disabled' );
 
 	// IAB TCF: enabling without a registered CMP ID (>=2) is refused with a warning.
 	list( $all, $warnings ) = $run_options( array( 'iab' => array( 'enabled' => true, 'cmp_id' => 0 ) ) );
@@ -243,6 +248,8 @@ namespace {
 	faz_assert_same( $all['iab']['enabled'], true, 'iab: enable with a valid CMP ID sticks' );
 	faz_assert_same( $all['iab']['cmp_id'], 300, 'iab: CMP ID persisted as int' );
 	faz_assert_same( $warnings, array(), 'iab: no warning for a valid TCF configuration' );
+	list( $all, ) = $run_options( array( 'iab' => array( 'enabled' => 'false', 'cmp_id' => 300 ) ) );
+	faz_assert_same( $all['iab']['enabled'], false, "iab: string 'false' cannot enable TCF" );
 
 	// Geo: junk regions filtered by the whitelist; zero regions with targeting on
 	// falls back to the safe eu+uk set; behavior enum enforced.
@@ -252,6 +259,8 @@ namespace {
 	list( $all, ) = $run_options( array( 'geolocation' => array( 'geo_targeting' => true, 'target_regions' => array( 'mars' ), 'default_behavior' => 'explode' ) ) );
 	faz_assert_same( $all['geolocation']['target_regions'], array( 'eu', 'uk' ), 'geo: all-junk regions fall back to the safe eu+uk set' );
 	faz_assert_same( $all['geolocation']['default_behavior'], 'show_banner', 'geo: unknown behavior falls back to show_banner' );
+	list( $all, ) = $run_options( array( 'geolocation' => array( 'geo_targeting' => 'false' ) ) );
+	faz_assert_same( $all['geolocation']['geo_targeting'], false, "geo: string 'false' cannot enable targeting" );
 
 	// Payment gateways: valid keys opt in, junk ignored, existing map preserved.
 	list( $all, ) = $run_options(
@@ -261,6 +270,13 @@ namespace {
 	faz_assert_same( $all['script_blocking']['payment_gateways']['stripe'], true, 'payments: detected gateway is opted in' );
 	faz_assert_same( $all['script_blocking']['payment_gateways']['paypal'], true, 'payments: pre-existing opt-ins are preserved' );
 	faz_assert_same( array_key_exists( 'evil_gateway', $all['script_blocking']['payment_gateways'] ), false, 'payments: unknown gateway keys are ignored' );
+	list( $all, ) = $run_options( array( 'payment_gateways' => array( 'stripe' => 'false' ) ) );
+	faz_assert_same( $all['script_blocking']['payment_gateways']['stripe'], false, "payments: string 'false' disables the gateway" );
+
+	// Site-locale mapping is independent of the logged-in administrator locale.
+	faz_assert_same( Onboarding::language_from_locale( 'it_IT' ), 'it', 'site locale: it_IT maps to Italian' );
+	faz_assert_same( Onboarding::language_from_locale( 'pt_BR' ), 'pt-br', 'site locale: pt_BR keeps the Brazilian catalogue variant' );
+	faz_assert_same( Onboarding::language_from_locale( 'zh_TW' ), 'zh-hant', 'site locale: Traditional Chinese maps to zh-hant' );
 
 	// Constants stay in sync with the surfaces they mirror.
 	faz_assert_same( Onboarding::REGIONS, array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za' ), 'REGIONS matches the Settings → Geolocation region list (za added with POPIA)' );

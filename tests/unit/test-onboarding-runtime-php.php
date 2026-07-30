@@ -2,7 +2,7 @@
 /**
  * Runtime-oriented unit tests for the guided setup wizard.
  *
- * These 26 checks execute the real Onboarding class against an in-memory
+ * These checks execute the real Onboarding class against an in-memory
  * Banner/Controller/Settings implementation. They cover exact persisted law
  * models, multilingual/custom-content preservation, the targeted-only fallback
  * case, and the atomic failure path where Store::save() returns an ID even
@@ -51,9 +51,41 @@ namespace {
 		return $value instanceof WP_Error;
 	}
 
+	function faz_sanitize_bool( $value ) {
+		return filter_var( $value, FILTER_VALIDATE_BOOLEAN );
+	}
+
 	$GLOBALS['faz_onboarding_runtime_cache_clears'] = 0;
 	function faz_clear_banner_template_cache() {
 		$GLOBALS['faz_onboarding_runtime_cache_clears']++;
+	}
+
+	class Faz_Runtime_Wpdb {
+		private $snapshot = null;
+
+		public function query( $sql ) {
+			$command = strtoupper( trim( $sql ) );
+			if ( 'START TRANSACTION' === $command ) {
+				$this->snapshot = array(
+					'banners' => \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->snapshot_state(),
+					'settings' => \FazCookie\Admin\Modules\Settings\Includes\Settings::$storage,
+					'gcm'      => \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings::$storage,
+				);
+				return 0;
+			}
+			if ( 'ROLLBACK' === $command && is_array( $this->snapshot ) ) {
+				\FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance()->restore_state( $this->snapshot['banners'] );
+				\FazCookie\Admin\Modules\Settings\Includes\Settings::$storage = $this->snapshot['settings'];
+				\FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings::$storage = $this->snapshot['gcm'];
+				$this->snapshot = null;
+				return 0;
+			}
+			if ( 'COMMIT' === $command ) {
+				$this->snapshot = null;
+				return 0;
+			}
+			return 0;
+		}
 	}
 }
 
@@ -76,6 +108,17 @@ namespace FazCookie\Admin\Modules\Banners\Includes {
 			$this->next_id           = 1;
 			$this->corrupt_next_save = false;
 		}
+
+		public function snapshot_state() {
+			return array( 'rows' => $this->rows, 'next_id' => $this->next_id );
+		}
+
+		public function restore_state( $state ) {
+			$this->rows    = $state['rows'];
+			$this->next_id = $state['next_id'];
+		}
+
+		public function delete_cache() {}
 
 		public function persist( Banner $banner ) {
 			$id = $banner->get_id();
@@ -286,6 +329,27 @@ namespace FazCookie\Admin\Modules\Settings\Includes {
 			}
 			self::$storage = $value;
 		}
+
+		public static function clear_cache() {}
+	}
+}
+
+namespace FazCookie\Admin\Modules\Gcm\Includes {
+	class Gcm_Settings {
+		public static $storage = array( 'status' => false );
+		public static $corrupt_next_update = false;
+
+		public function update( $value ) {
+			if ( self::$corrupt_next_update ) {
+				self::$corrupt_next_update = false;
+				return;
+			}
+			self::$storage = array( 'status' => ! empty( $value['status'] ) );
+		}
+
+		public function get() {
+			return self::$storage;
+		}
 	}
 }
 
@@ -296,6 +360,9 @@ namespace {
 	use FazCookie\Admin\Modules\Banners\Includes\Controller;
 	use FazCookie\Admin\Modules\Settings\Includes\Onboarding;
 	use FazCookie\Admin\Modules\Settings\Includes\Settings;
+	use FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings;
+
+	$GLOBALS['wpdb'] = new Faz_Runtime_Wpdb();
 
 	$tests_run = 0;
 	$tests_passed = 0;
@@ -337,7 +404,7 @@ namespace {
 		return $out;
 	}
 
-	echo "\n== Onboarding persisted runtime (26 new checks) ==\n\n";
+	echo "\n== Onboarding persisted runtime ==\n\n";
 	$controller = Controller::get_instance();
 	$onboarding = new Onboarding();
 	$custom_contents = array(
@@ -373,6 +440,26 @@ namespace {
 	faz_runtime_assert_same( faz_button_statuses( $gdpr ), array( 'accept' => true, 'reject' => true, 'settings' => true, 'readMore' => true ), 'GDPR restores every equal-weight notice control' );
 	faz_runtime_assert_same( array( ! empty( $gdpr['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] ), ! empty( $gdpr['config']['optoutPopup']['status'] ) ), array( false, false ), 'GDPR removes the US opt-out control and popup' );
 
+	// Reopening a completed wizard on the same consent model must not erase the
+	// admin's custom lifetime or per-button visibility.
+	$gdpr['settings']['consentExpiry'] = array( 'status' => false, 'value' => 90 );
+	$gdpr['config']['notice']['elements']['buttons']['elements']['reject']['status'] = false;
+	$gdpr['config']['notice']['elements']['buttons']['elements']['readMore']['status'] = false;
+	$persisted->set_settings( $gdpr );
+	$persisted->save();
+	$result = $onboarding->apply_law_to_default_banner( 'both', true );
+	$preserved = ( new Banner( $global_id ) )->get_settings();
+	faz_runtime_assert_same( $result, true, 'same-model re-entry application succeeds' );
+	faz_runtime_assert_same( $preserved['settings']['consentExpiry'], array( 'status' => false, 'value' => 90 ), 'same-model re-entry preserves custom consent expiry' );
+	faz_runtime_assert_same( faz_button_statuses( $preserved ), array( 'accept' => true, 'reject' => false, 'settings' => true, 'readMore' => false ), 'same-model re-entry preserves individual notice buttons' );
+	$result = $onboarding->apply_law_to_default_banner( 'ccpa', true );
+	$switched = ( new Banner( $global_id ) )->get_settings();
+	faz_runtime_assert_same(
+		array( $result, $switched['settings']['consentExpiry'], faz_button_statuses( $switched ) ),
+		array( true, array( 'status' => true, 'value' => 365 ), array( 'accept' => false, 'reject' => false, 'settings' => false, 'readMore' => false ) ),
+		'an opt-in to opt-out model switch reapplies the canonical preset'
+	);
+
 	// With only a targeted row, onboarding must create a separate global fallback.
 	$controller->reset();
 	$targeted = faz_seed_runtime_banner( 'gdpr', array( 'US' ), false, $custom_contents );
@@ -400,6 +487,7 @@ namespace {
 	$before = Settings::$storage;
 	$controller->corrupt_next_save = true;
 	$failure = $onboarding->finish( 'ccpa' );
+	$banner_after_failure = $controller->get_active_banner();
 	faz_runtime_assert_same(
 		array(
 			is_wp_error( $failure ),
@@ -432,21 +520,42 @@ namespace {
 			Settings::$storage,
 			Settings::$updates,
 			$GLOBALS['faz_onboarding_runtime_cache_clears'],
+			$banner_after_failure->get_law(),
 		),
-		array( true, 'faz_onboarding_settings_save_failed', $before, 1, 0 ),
-		'finish rejects a settings write that does not survive read-back'
+		array( true, 'faz_onboarding_settings_save_failed', $before, 1, 0, 'gdpr' ),
+		'finish rolls the banner back when the settings write does not survive read-back'
+	);
+
+	// A later-store GCM failure must roll back the already-written banner too.
+	$controller->reset();
+	faz_seed_runtime_banner( 'gdpr', array(), true, $custom_contents );
+	Settings::$storage = array( 'onboarding' => array( 'completed' => false, 'law' => '' ) );
+	Settings::$updates = 0;
+	Settings::$corrupt_next_update = false;
+	Gcm_Settings::$storage = array( 'status' => false );
+	Gcm_Settings::$corrupt_next_update = true;
+	$failure = $onboarding->finish( 'ccpa', array( 'gcm' => array( 'enabled' => true ) ) );
+	faz_runtime_assert_same(
+		array(
+			is_wp_error( $failure ) ? $failure->get_error_code() : '',
+			$controller->get_active_banner()->get_law(),
+			Settings::$storage['onboarding']['completed'],
+			Gcm_Settings::$storage['status'],
+		),
+		array( 'faz_onboarding_gcm_save_failed', 'gdpr', false, false ),
+		'GCM read-back failure rolls back banner, settings, and GCM together'
 	);
 
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";
 	echo "Passed: $tests_passed\n";
 	echo "Failed: $tests_failed\n\n";
-	if ( 26 !== $tests_run ) {
-		echo "\033[31mFAIL: expected exactly 26 checks\033[0m\n";
+	if ( 31 !== $tests_run ) {
+		echo "\033[31mFAIL: expected exactly 31 checks\033[0m\n";
 		exit( 1 );
 	}
 	if ( $tests_failed > 0 ) {
 		exit( 1 );
 	}
-	echo "\033[32m26 passed, 0 failed\033[0m\n";
+	echo "\033[32m31 passed, 0 failed\033[0m\n";
 }

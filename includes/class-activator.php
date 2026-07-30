@@ -417,6 +417,17 @@ class Activator {
 			// the option now exists.
 			$faz_settings                          = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
 			$faz_onboarding                        = $faz_settings->get_defaults();
+			// Seed the wizard language from the SITE locale, not the activating
+			// administrator's profile locale. Keep English selected as a fallback.
+			if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Onboarding' )
+				&& class_exists( '\\FazCookie\\Admin\\Modules\\Languages\\Includes\\Controller' ) ) {
+				$faz_site_language = \FazCookie\Admin\Modules\Settings\Includes\Onboarding::site_language();
+				$faz_languages     = array_values( \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance()->get_languages() );
+				if ( in_array( $faz_site_language, $faz_languages, true ) ) {
+					$faz_onboarding['languages']['default']  = $faz_site_language;
+					$faz_onboarding['languages']['selected'] = array_values( array_unique( array( 'en', $faz_site_language ) ) );
+				}
+			}
 			$faz_onboarding['onboarding']['completed'] = false;
 			$faz_onboarding['onboarding']['dismissed'] = false;
 			$faz_onboarding['onboarding']['law']       = '';

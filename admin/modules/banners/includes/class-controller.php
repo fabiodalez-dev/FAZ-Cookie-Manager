@@ -324,8 +324,15 @@ class Controller extends Base_Controller {
 		// releases its row lock at end-of-statement, BEFORE the
 		// subsequent UPDATE runs. Mirrors the transaction wrapper
 		// delete_item has carried since F112.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$wpdb->query( 'START TRANSACTION' );
+		// A higher-level operation (currently the onboarding wizard) may need to
+		// include this banner write in a wider transaction together with options.
+		// MySQL's START TRANSACTION implicitly commits an existing transaction, so
+		// only own the boundary when no caller explicitly manages it.
+		$owns_transaction = empty( $GLOBALS['faz_external_db_transaction'] );
+		if ( $owns_transaction ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( 'START TRANSACTION' );
+		}
 		$updated = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.NotPrepared
 			$wpdb->prefix . 'faz_banners',
 			$data,
@@ -342,8 +349,10 @@ class Controller extends Base_Controller {
 			)
 		);
 		if ( false === $updated ) {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-			$wpdb->query( 'ROLLBACK' );
+			if ( $owns_transaction ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->query( 'ROLLBACK' );
+			}
 			return;
 		}
 		// Default-flag invariants. Both branches run AFTER the current
@@ -368,8 +377,10 @@ class Controller extends Base_Controller {
 			$this->promote_fallback_default( $banner->get_id() );
 			$invariant_fired = true;
 		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$wpdb->query( 'COMMIT' );
+		if ( $owns_transaction ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->query( 'COMMIT' );
+		}
 		if ( $updated > 0 || $invariant_fired ) {
 			$this->delete_cache();
 		}

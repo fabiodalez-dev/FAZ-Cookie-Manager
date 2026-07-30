@@ -142,14 +142,17 @@ class Onboarding {
 	 * the normal Banner::set_settings()/save() path so cache invalidation and the
 	 * standard sanitisation cascade run exactly as they do for a manual save.
 	 *
-	 * @param string $law One of self::LAWS.
+	 * @param string $law                     One of self::LAWS.
+	 * @param bool   $preserve_existing_model Preserve expiry/buttons when the
+	 *                                         persisted banner already uses the
+	 *                                         selected consent model.
 	 * If no global/default banner is available (for example, an install contains
 	 * only country-targeted banners), a new default banner is created instead of
 	 * overwriting one of those specialised rows.
 	 *
 	 * @return true|WP_Error True on success; WP_Error when validation or creation fails.
 	 */
-	public function apply_law_to_default_banner( $law ) {
+	public function apply_law_to_default_banner( $law, $preserve_existing_model = false ) {
 		$fields = self::map_law_to_banner_fields( $law );
 		if ( null === $fields ) {
 			return new WP_Error(
@@ -191,29 +194,44 @@ class Onboarding {
 		if ( ! isset( $properties['settings'] ) || ! is_array( $properties['settings'] ) ) {
 			$properties['settings'] = array();
 		}
+		$preserve_existing_model = $preserve_existing_model
+			&& ( $properties['settings']['applicableLaw'] ?? '' ) === $fields['applicableLaw'];
+		$expected_fields         = $fields;
+		if ( $preserve_existing_model ) {
+			$expected_fields['consentExpiryStatus'] = ! empty( $properties['settings']['consentExpiry']['status'] );
+			$expected_fields['consentExpiry']       = (int) ( $properties['settings']['consentExpiry']['value'] ?? 0 );
+			$expected_fields['noticeButtonStatuses'] = array();
+			foreach ( array( 'accept', 'reject', 'settings', 'readMore' ) as $button ) {
+				$expected_fields['noticeButtonStatuses'][ $button ] = ! empty( $properties['config']['notice']['elements']['buttons']['elements'][ $button ]['status'] );
+			}
+		}
 		$properties['settings']['applicableLaw'] = $fields['applicableLaw'];
-		self::set_nested(
-			$properties,
-			array( 'settings', 'consentExpiry', 'status' ),
-			true
-		);
-		self::set_nested(
-			$properties,
-			array( 'settings', 'consentExpiry', 'value' ),
-			$fields['consentExpiry']
-		);
+		if ( ! $preserve_existing_model ) {
+			self::set_nested(
+				$properties,
+				array( 'settings', 'consentExpiry', 'status' ),
+				true
+			);
+			self::set_nested(
+				$properties,
+				array( 'settings', 'consentExpiry', 'value' ),
+				$fields['consentExpiry']
+			);
+		}
 
 		// A pure CCPA banner is an opt-out notice. Leaving the GDPR Accept/Reject
 		// controls visible is not merely cosmetic: the CCPA runtime interprets its
 		// opt-out checkbox, so a GDPR-style "Reject" click could be logged as a
 		// rejection while optional categories remained allowed. GDPR and Both use
 		// the normal equal-weight notice controls; CCPA exposes Do Not Sell only.
-		foreach ( array( 'accept', 'reject', 'settings', 'readMore' ) as $button ) {
-			self::set_nested(
-				$properties,
-				array( 'config', 'notice', 'elements', 'buttons', 'elements', $button, 'status' ),
-				$fields['noticeButtons']
-			);
+		if ( ! $preserve_existing_model ) {
+			foreach ( array( 'accept', 'reject', 'settings', 'readMore' ) as $button ) {
+				self::set_nested(
+					$properties,
+					array( 'config', 'notice', 'elements', 'buttons', 'elements', $button, 'status' ),
+					$fields['noticeButtons']
+				);
+			}
 		}
 
 		// Canonical Do-Not-Sell flag: the nested buttons.elements.donotSell branch
@@ -251,7 +269,7 @@ class Onboarding {
 		// database UPDATE fails. Re-read the row and verify every promised field so
 		// onboarding cannot be marked complete on a half-persisted configuration.
 		$persisted = new Banner( (int) $saved_id );
-		if ( ! self::banner_matches_law_fields( $persisted, $fields ) ) {
+		if ( ! self::banner_matches_law_fields( $persisted, $expected_fields ) ) {
 			return new WP_Error(
 				'faz_onboarding_banner_save_failed',
 				__( 'Setup could not be saved. Please try again.', 'faz-cookie-manager' ),
@@ -279,16 +297,22 @@ class Onboarding {
 			return false;
 		}
 		$buttons = $properties['config']['notice']['elements']['buttons']['elements'] ?? array();
-		foreach ( array( 'accept', 'reject', 'settings', 'readMore' ) as $button ) {
+		$expected_buttons = isset( $fields['noticeButtonStatuses'] )
+			? $fields['noticeButtonStatuses']
+			: array_fill_keys( array( 'accept', 'reject', 'settings', 'readMore' ), $fields['noticeButtons'] );
+		foreach ( $expected_buttons as $button => $expected_status ) {
 			$status = ! empty( $buttons[ $button ]['status'] );
-			if ( $status !== $fields['noticeButtons'] ) {
+			if ( $status !== $expected_status ) {
 				return false;
 			}
 		}
+		$expected_expiry_status = array_key_exists( 'consentExpiryStatus', $fields )
+			? $fields['consentExpiryStatus']
+			: true;
 
 		return ( $properties['settings']['applicableLaw'] ?? '' ) === $fields['applicableLaw']
 			&& (int) ( $properties['settings']['consentExpiry']['value'] ?? 0 ) === $fields['consentExpiry']
-			&& ! empty( $properties['settings']['consentExpiry']['status'] )
+			&& ( ! empty( $properties['settings']['consentExpiry']['status'] ) ) === $expected_expiry_status
 			&& ( ! empty( $buttons['donotSell']['status'] ) ) === $fields['donotSell']
 			&& ( ! empty( $properties['config']['optoutPopup']['status'] ) ) === $fields['optoutPopup'];
 	}
@@ -329,65 +353,94 @@ class Onboarding {
 			$options = array();
 		}
 
-		$applied = $this->apply_law_to_default_banner( $law );
-		if ( is_wp_error( $applied ) ) {
-			// Never mark onboarding complete when no banner was configured. The
-			// wizard's success state must mean the requested setup actually exists.
-			return $applied;
-		}
-
 		$settings_obj = new Settings();
-		$all          = $settings_obj->get();
-		if ( ! is_array( $all ) ) {
-			$all = array();
+		$transaction = $this->begin_transaction();
+		if ( is_wp_error( $transaction ) ) {
+			return $transaction;
 		}
 
-		// Accountability baseline — banner shown, consent recorded.
-		if ( ! isset( $all['banner_control'] ) || ! is_array( $all['banner_control'] ) ) {
-			$all['banner_control'] = array();
-		}
-		$all['banner_control']['status'] = true;
-		if ( ! isset( $all['consent_logs'] ) || ! is_array( $all['consent_logs'] ) ) {
-			$all['consent_logs'] = array();
-		}
-		$all['consent_logs']['status'] = true;
+		try {
+			$all = $settings_obj->get();
+			if ( ! is_array( $all ) ) {
+				$all = array();
+			}
+			// On a completed setup, reopening the same opt-in/opt-out model is
+			// non-destructive: keep the admin's expiry and individual button choices.
+			// A first setup or an actual model switch still applies the canonical preset.
+			$preserve_model = ! empty( $all['onboarding']['completed'] );
+			$applied        = $this->apply_law_to_default_banner( $law, $preserve_model );
+			if ( is_wp_error( $applied ) ) {
+				$this->rollback_transaction();
+				return $applied;
+			}
 
-		if ( ! isset( $all['onboarding'] ) || ! is_array( $all['onboarding'] ) ) {
-			$all['onboarding'] = array();
-		}
-		$all['onboarding']['completed'] = true;
-		$all['onboarding']['dismissed'] = false;
-		$all['onboarding']['law']       = $law;
+			// Accountability baseline — banner shown, consent recorded.
+			if ( ! isset( $all['banner_control'] ) || ! is_array( $all['banner_control'] ) ) {
+				$all['banner_control'] = array();
+			}
+			$all['banner_control']['status'] = true;
+			if ( ! isset( $all['consent_logs'] ) || ! is_array( $all['consent_logs'] ) ) {
+				$all['consent_logs'] = array();
+			}
+			$all['consent_logs']['status'] = true;
 
-		// Fold the optional step selections into the same settings write. Warnings
-		// collect advisory, non-fatal notes.
-		$warnings = $this->apply_options( $options, $all );
+			if ( ! isset( $all['onboarding'] ) || ! is_array( $all['onboarding'] ) ) {
+				$all['onboarding'] = array();
+			}
+			$all['onboarding']['completed'] = true;
+			$all['onboarding']['dismissed'] = false;
+			$all['onboarding']['law']       = $law;
 
-		// GCM lives in its own option (faz_gcm_settings) with its own sanitiser.
-		// Verify it before marking onboarding complete: update_option() returning
-		// false is ambiguous (unchanged value vs write failure), so the reliable
-		// contract is a fresh, sanitised read-back.
-		if ( isset( $options['gcm']['enabled'] ) ) {
-			$gcm             = new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings();
-			$expected_status = (bool) $options['gcm']['enabled'];
-			$gcm->update( array( 'status' => $expected_status ) );
-			$persisted_gcm = ( new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings() )->get();
-			if ( ! is_array( $persisted_gcm ) || ! array_key_exists( 'status', $persisted_gcm ) || $expected_status !== (bool) $persisted_gcm['status'] ) {
+			// Fold the optional step selections into the same settings write. Warnings
+			// collect advisory, non-fatal notes.
+			$warnings = $this->apply_options( $options, $all );
+
+			// GCM lives in its own option (faz_gcm_settings) with its own sanitiser.
+			// Verify it before marking onboarding complete: update_option() returning
+			// false is ambiguous (unchanged value vs write failure), so the reliable
+			// contract is a fresh, sanitised read-back.
+			if ( isset( $options['gcm']['enabled'] ) ) {
+				$gcm             = new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings();
+				$expected_status = faz_sanitize_bool( $options['gcm']['enabled'] );
+				$gcm->update( array( 'status' => $expected_status ) );
+				$persisted_gcm = ( new \FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings() )->get();
+				if ( ! is_array( $persisted_gcm ) || ! array_key_exists( 'status', $persisted_gcm ) || $expected_status !== faz_sanitize_bool( $persisted_gcm['status'] ) ) {
+					$error = new WP_Error(
+						'faz_onboarding_gcm_save_failed',
+						__( 'Google Consent Mode settings could not be saved. Please try again.', 'faz-cookie-manager' ),
+						array( 'status' => 500 )
+					);
+					$this->rollback_transaction();
+					return $error;
+				}
+			}
+
+			$expected_settings = Settings::sanitize( $all, $settings_obj->get_defaults() );
+			$settings_obj->update( $all );
+			$persisted_settings = ( new Settings() )->get();
+			if ( $expected_settings !== $persisted_settings ) {
+				$error = new WP_Error(
+					'faz_onboarding_settings_save_failed',
+					__( 'Setup settings could not be saved. Please try again.', 'faz-cookie-manager' ),
+					array( 'status' => 500 )
+				);
+				$this->rollback_transaction();
+				return $error;
+			}
+
+			if ( ! $this->commit_transaction() ) {
+				$this->rollback_transaction();
 				return new WP_Error(
-					'faz_onboarding_gcm_save_failed',
-					__( 'Google Consent Mode settings could not be saved. Please try again.', 'faz-cookie-manager' ),
+					'faz_onboarding_transaction_failed',
+					__( 'Setup could not be committed. Please try again.', 'faz-cookie-manager' ),
 					array( 'status' => 500 )
 				);
 			}
-		}
-
-		$expected_settings = Settings::sanitize( $all, $settings_obj->get_defaults() );
-		$settings_obj->update( $all );
-		$persisted_settings = ( new Settings() )->get();
-		if ( $expected_settings !== $persisted_settings ) {
+		} catch ( \Throwable $error ) {
+			$this->rollback_transaction();
 			return new WP_Error(
-				'faz_onboarding_settings_save_failed',
-				__( 'Setup settings could not be saved. Please try again.', 'faz-cookie-manager' ),
+				'faz_onboarding_save_failed',
+				__( 'Setup could not be saved. Please try again.', 'faz-cookie-manager' ),
 				array( 'status' => 500 )
 			);
 		}
@@ -406,6 +459,44 @@ class Onboarding {
 			'law'            => $law,
 			'warning'        => implode( ' ', $warnings ),
 		);
+	}
+
+	/**
+	 * Open the transaction shared by the banner and option writes.
+	 *
+	 * @return true|WP_Error
+	 */
+	private function begin_transaction() {
+		global $wpdb;
+		if ( ! isset( $wpdb ) || false === $wpdb->query( 'START TRANSACTION' ) ) { // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			unset( $GLOBALS['faz_external_db_transaction'] );
+			return new WP_Error(
+				'faz_onboarding_transaction_failed',
+				__( 'Setup could not start a safe save operation. Please try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
+		$GLOBALS['faz_external_db_transaction'] = true;
+		return true;
+	}
+
+	/** @return bool Whether MySQL committed the complete wizard state. */
+	private function commit_transaction() {
+		global $wpdb;
+		$committed = isset( $wpdb ) && false !== $wpdb->query( 'COMMIT' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		unset( $GLOBALS['faz_external_db_transaction'] );
+		return $committed;
+	}
+
+	/** @return void */
+	private function rollback_transaction() {
+		global $wpdb;
+		if ( isset( $wpdb ) ) {
+			$wpdb->query( 'ROLLBACK' ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		}
+		unset( $GLOBALS['faz_external_db_transaction'] );
+		Settings::clear_cache();
+		Banner_Controller::get_instance()->delete_cache();
 	}
 
 	/**
@@ -448,7 +539,7 @@ class Onboarding {
 		if ( isset( $options['banner_control'] ) && is_array( $options['banner_control'] ) ) {
 			foreach ( self::BANNER_CONTROL_KEYS as $key ) {
 				if ( array_key_exists( $key, $options['banner_control'] ) ) {
-					$all['banner_control'][ $key ] = (bool) $options['banner_control'][ $key ];
+					$all['banner_control'][ $key ] = faz_sanitize_bool( $options['banner_control'][ $key ] );
 				}
 			}
 			// Enabling Cache Compatibility Mode pauses the server-side A/B
@@ -468,7 +559,7 @@ class Onboarding {
 			}
 			foreach ( array( 'uet_consent_mode', 'clarity_consent' ) as $key ) {
 				if ( array_key_exists( $key, $options['microsoft'] ) ) {
-					$all['microsoft'][ $key ] = (bool) $options['microsoft'][ $key ];
+					$all['microsoft'][ $key ] = faz_sanitize_bool( $options['microsoft'][ $key ] );
 				}
 			}
 		}
@@ -481,7 +572,7 @@ class Onboarding {
 			if ( ! isset( $all['iab'] ) || ! is_array( $all['iab'] ) ) {
 				$all['iab'] = array();
 			}
-			$iab_enabled = ! empty( $options['iab']['enabled'] );
+			$iab_enabled = isset( $options['iab']['enabled'] ) && faz_sanitize_bool( $options['iab']['enabled'] );
 			$cmp_id      = isset( $options['iab']['cmp_id'] ) ? absint( $options['iab']['cmp_id'] ) : 0;
 			if ( $cmp_id > 0 && $cmp_id <= 4095 ) {
 				$all['iab']['cmp_id'] = $cmp_id;
@@ -503,7 +594,7 @@ class Onboarding {
 				$all['geolocation'] = array();
 			}
 			if ( array_key_exists( 'geo_targeting', $options['geolocation'] ) ) {
-				$all['geolocation']['geo_targeting'] = (bool) $options['geolocation']['geo_targeting'];
+				$all['geolocation']['geo_targeting'] = faz_sanitize_bool( $options['geolocation']['geo_targeting'] );
 			}
 			if ( isset( $options['geolocation']['target_regions'] ) && is_array( $options['geolocation']['target_regions'] ) ) {
 				$regions = array_values( array_intersect( array_map( 'sanitize_key', $options['geolocation']['target_regions'] ), self::REGIONS ) );
@@ -544,7 +635,7 @@ class Onboarding {
 					$enabled = true;
 				} else {
 					$gateway = sanitize_key( $key );
-					$enabled = (bool) $value;
+					$enabled = faz_sanitize_bool( $value );
 				}
 				if ( in_array( $gateway, $valid, true ) ) {
 					$all['script_blocking']['payment_gateways'][ $gateway ] = $enabled;
@@ -601,7 +692,17 @@ class Onboarding {
 	 * @return string
 	 */
 	public static function site_language() {
-		$locale = function_exists( 'get_user_locale' ) ? get_user_locale() : get_locale();
+		$locale = function_exists( 'get_locale' ) ? get_locale() : 'en_US';
+		return self::language_from_locale( $locale );
+	}
+
+	/**
+	 * Convert a WordPress locale to the banner catalogue code.
+	 *
+	 * @param string $locale WordPress locale.
+	 * @return string
+	 */
+	public static function language_from_locale( $locale ) {
 		$locale = strtolower( (string) $locale );
 		// Chinese locales map onto the script-specific catalogue entries.
 		if ( 0 === strpos( $locale, 'zh_tw' ) || 0 === strpos( $locale, 'zh_hk' ) ) {

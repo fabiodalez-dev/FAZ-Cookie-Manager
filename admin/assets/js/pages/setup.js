@@ -32,6 +32,7 @@
 	var currentStep = 1;
 	var finishing = false;
 	var recommendations = null; // last recommendations payload (or null)
+	var geoRegionsTouched = false;
 	// Checked-state of every persisted toggle at page load, so the review can
 	// honestly list ON→OFF transitions ("Being turned off") — a deselection is
 	// applied exactly like a selection and must be just as visible.
@@ -49,6 +50,7 @@
 
 		captureInitialToggleState();
 		bindLawSelection();
+		bindGeoRegions();
 		bindNavigation();
 		bindScan();
 		bindTcfFields();
@@ -112,7 +114,31 @@
 				});
 				var label = input.closest('.faz-setup-law-card');
 				if (label) { label.classList.add('is-selected'); }
+				applyLawRegionDefaults(input.value);
 			});
+		});
+	}
+
+	// Until the admin edits the region chips, keep their defaults aligned with
+	// the jurisdiction selected in step 1. Once touched, their explicit choice
+	// always wins across further law changes.
+	function bindGeoRegions() {
+		root.querySelectorAll('input[name="faz-setup-geo-region"]').forEach(function (input) {
+			input.addEventListener('change', function () { geoRegionsTouched = true; });
+		});
+	}
+
+	function applyLawRegionDefaults(law) {
+		if (geoRegionsTouched) { return; }
+		var regionsByLaw = {
+			gdpr: ['eu', 'uk'],
+			ccpa: ['us'],
+			both: ['eu', 'uk', 'us'],
+			popia: ['za']
+		};
+		var selected = regionsByLaw[law] || regionsByLaw.gdpr;
+		root.querySelectorAll('input[name="faz-setup-geo-region"]').forEach(function (input) {
+			input.checked = selected.indexOf(input.value) !== -1;
 		});
 	}
 
@@ -533,7 +559,7 @@
 			if (el && initialToggleState[id] === true && !el.checked) { pushRowLabel(el, disabledLabels); }
 		});
 		root.querySelectorAll('#faz-setup-payments-list input[data-was-enabled]').forEach(function (input) {
-			if (!input.checked) { pushRowLabel(input, disabledLabels, true); }
+			if (!input.checked) { pushRowLabel(input, disabledLabels); }
 		});
 		if (disabledLabels.length) {
 			addReviewItem(list, list.getAttribute('data-label-disabled'), disabledLabels.join(' · '));
@@ -560,7 +586,7 @@
 		// Payment gateways opted in.
 		var gatewayNames = [];
 		root.querySelectorAll('#faz-setup-payments-list input[data-gateway]:checked').forEach(function (input) {
-			pushRowLabel(input, gatewayNames, true);
+			pushRowLabel(input, gatewayNames);
 		});
 		if (gatewayNames.length) {
 			addReviewItem(list, list.getAttribute('data-label-payments'), gatewayNames.join(', '));
@@ -595,7 +621,7 @@
 	}
 
 	// The visible label of a toggle row, minus any detection badge.
-	function pushRowLabel(input, target, stripBadge) {
+	function pushRowLabel(input, target) {
 		var row = input.closest('.faz-setup-toggle-row');
 		var label = row ? row.querySelector('.faz-setup-toggle-label') : null;
 		if (!label) { return; }

@@ -29,7 +29,7 @@ type WizardState = {
   noticeReject: boolean;
 };
 
-/** Snapshot faz_settings + GCM settings + the default banner settings JSON for later restore. */
+/** Snapshot wizard state, site locale, GCM, and default banner for later restore. */
 function snapshot(): string {
   return wpEval(`
     $o = new \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings();
@@ -37,8 +37,9 @@ function snapshot(): string {
     global $wpdb;
     $row = $wpdb->get_row( "SELECT banner_id, settings FROM {$wpdb->prefix}faz_banners WHERE banner_default = 1 LIMIT 1" );
     echo wp_json_encode( array(
-      'settings'  => $settings,
-      'gcm'       => get_option( 'faz_gcm_settings' ),
+	  'settings'  => $settings,
+	  'gcm'       => get_option( 'faz_gcm_settings' ),
+	  'wplang'    => get_option( 'WPLANG', false ),
       'banner_id' => $row ? (int) $row->banner_id : 0,
       'banner'    => $row ? $row->settings : '',
     ) );
@@ -50,14 +51,15 @@ function restore(snap: string): void {
   wpEval(`
     $snap = json_decode( base64_decode( '${b64}' ), true );
     if ( is_array( $snap['settings'] ) ) { update_option( 'faz_settings', $snap['settings'] ); }
-    if ( isset( $snap['gcm'] ) && is_array( $snap['gcm'] ) ) {
+	if ( isset( $snap['gcm'] ) && is_array( $snap['gcm'] ) ) {
       update_option( 'faz_gcm_settings', $snap['gcm'] );
     } else {
       // The option did not exist at snapshot time (get_option returned false)
       // — a wizard run may have created it; remove it so GCM state cannot
       // leak into later tests.
-      delete_option( 'faz_gcm_settings' );
-    }
+	  delete_option( 'faz_gcm_settings' );
+	}
+	if ( false === $snap['wplang'] ) { delete_option( 'WPLANG' ); } else { update_option( 'WPLANG', $snap['wplang'] ); }
     if ( ! empty( $snap['banner_id'] ) && is_string( $snap['banner'] ) && '' !== $snap['banner'] ) {
       global $wpdb;
       $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => $snap['banner'] ), array( 'banner_id' => (int) $snap['banner_id'] ), array( '%s' ), array( '%d' ) );
@@ -223,6 +225,77 @@ test.describe('Guided setup wizard', () => {
       expect(state.expiry).toBe(180);
       expect(state.noticeAccept).toBe(true);
       expect(state.noticeReject).toBe(true);
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('fresh setup preselects the site language, not the administrator language', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      wpEval(`
+        update_option( 'WPLANG', 'it_IT' );
+        $o = new \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings();
+        $all = $o->get();
+        $all['languages']['default'] = 'en';
+        $all['languages']['selected'] = array( 'en' );
+        $all['onboarding'] = array( 'completed' => false, 'dismissed' => false, 'law' => '' );
+        $o->update( $all );
+        echo get_locale();
+      `);
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+      await page.click('#faz-setup-next');
+      await expect(page.locator('#faz-setup-lang')).toHaveValue('it');
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('law selection aligns untouched geo regions with POPIA', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      forceIncomplete();
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+      await page.locator('input[name="faz-setup-law"][value="popia"]').check();
+      for (let step = 2; step <= 6; step++) { await page.click('#faz-setup-next'); }
+      await expect(page.locator('.faz-wizard-step[data-step="6"]')).toBeVisible();
+      await expect(page.locator('input[name="faz-setup-geo-region"][value="za"]')).toBeChecked();
+      await expect(page.locator('input[name="faz-setup-geo-region"][value="eu"]')).not.toBeChecked();
+      await expect(page.locator('input[name="faz-setup-geo-region"][value="uk"]')).not.toBeChecked();
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('same-model re-entry preserves custom expiry and notice controls', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      wpEval(`
+        $o = new \\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings();
+        $all = $o->get();
+        $all['onboarding'] = array( 'completed' => true, 'dismissed' => false, 'law' => 'gdpr' );
+        $o->update( $all );
+        $b = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->get_active_banner();
+        $s = $b->get_settings();
+        $s['settings']['applicableLaw'] = 'gdpr';
+        $s['settings']['consentExpiry'] = array( 'status' => true, 'value' => 90 );
+        $s['config']['notice']['elements']['buttons']['elements']['accept']['status'] = true;
+        $s['config']['notice']['elements']['buttons']['elements']['reject']['status'] = false;
+        $b->set_settings( $s );
+        $b->save();
+        echo 'seeded';
+      `);
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+      await advanceToReview(page);
+      await page.click('#faz-setup-finish');
+      await page.waitForURL(/page=faz-cookie-manager$/, { timeout: 15_000 });
+      const state = readState();
+      expect(state.expiry).toBe(90);
+      expect(state.noticeAccept).toBe(true);
+      expect(state.noticeReject).toBe(false);
     } finally {
       restore(snap);
     }
@@ -414,6 +487,53 @@ test.describe('Guided setup wizard', () => {
       const state = readState();
       expect(state.onboarding.completed).toBe(false);
       expect(state.onboarding.law).toBe('');
+    } finally {
+      restore(snap);
+    }
+  });
+
+  test('REST payload normalizes false-like nested booleans without enabling features', async ({ page, loginAsAdmin }) => {
+    const snap = snapshot();
+    try {
+      forceIncomplete();
+      await loginAsAdmin(page);
+      await page.goto(SETUP_URL, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(
+        () => typeof (window as any).fazConfig?.api?.nonce === 'string' && (window as any).fazConfig.api.nonce.length > 0,
+      );
+      const response = await page.evaluate(async () => {
+        const nonce = (window as any).fazConfig.api.nonce;
+        const res = await fetch('/?rest_route=/faz/v1/settings/onboarding', {
+          method: 'POST',
+          headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            law: 'gdpr',
+            banner_control: { cache_compatibility: 'false' },
+            gcm: { enabled: 'false' },
+            microsoft: { uet_consent_mode: 'false', clarity_consent: '0' },
+            iab: { enabled: 'false', cmp_id: 300, publisher_cc: 'IT' },
+            geolocation: { geo_targeting: 'false', target_regions: ['us'], default_behavior: 'show_banner' },
+            payment_gateways: { stripe: 'false' },
+          }),
+        });
+        return { status: res.status, body: await res.json() };
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      const raw = wpEval(`
+        $s = get_option( 'faz_settings' );
+        $g = get_option( 'faz_gcm_settings' );
+        echo wp_json_encode( array(
+          'cache'   => ! empty( $s['banner_control']['cache_compatibility'] ),
+          'gcm'     => ! empty( $g['status'] ),
+          'uet'     => ! empty( $s['microsoft']['uet_consent_mode'] ),
+          'clarity' => ! empty( $s['microsoft']['clarity_consent'] ),
+          'iab'     => ! empty( $s['iab']['enabled'] ),
+          'geo'     => ! empty( $s['geolocation']['geo_targeting'] ),
+          'stripe'  => ! empty( $s['script_blocking']['payment_gateways']['stripe'] ),
+        ) );
+      `).trim();
+      expect(JSON.parse(raw)).toEqual({ cache: false, gcm: false, uet: false, clarity: false, iab: false, geo: false, stripe: false });
     } finally {
       restore(snap);
     }

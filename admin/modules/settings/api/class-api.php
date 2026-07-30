@@ -206,24 +206,53 @@ class Api extends Rest_Controller {
 							'validate_callback' => 'rest_validate_request_arg',
 						),
 						'banner_control'   => array(
-							'type'              => 'object',
-							'validate_callback' => 'rest_validate_request_arg',
+							'type'                 => 'object',
+							'properties'           => array_fill_keys(
+								Onboarding::BANNER_CONTROL_KEYS,
+								array( 'type' => 'boolean' )
+							),
+							'additionalProperties' => false,
+							'validate_callback'    => 'rest_validate_request_arg',
 						),
 						'gcm'              => array(
-							'type'              => 'object',
-							'validate_callback' => 'rest_validate_request_arg',
+							'type'                 => 'object',
+							'properties'           => array(
+								'enabled' => array( 'type' => 'boolean' ),
+							),
+							'additionalProperties' => false,
+							'validate_callback'    => 'rest_validate_request_arg',
 						),
 						'microsoft'        => array(
-							'type'              => 'object',
-							'validate_callback' => 'rest_validate_request_arg',
+							'type'                 => 'object',
+							'properties'           => array(
+								'uet_consent_mode' => array( 'type' => 'boolean' ),
+								'clarity_consent'  => array( 'type' => 'boolean' ),
+							),
+							'additionalProperties' => false,
+							'validate_callback'    => 'rest_validate_request_arg',
 						),
 						'iab'              => array(
-							'type'              => 'object',
-							'validate_callback' => 'rest_validate_request_arg',
+							'type'                 => 'object',
+							'properties'           => array(
+								'enabled'      => array( 'type' => 'boolean' ),
+								'cmp_id'       => array( 'type' => 'integer', 'minimum' => 0, 'maximum' => 4095 ),
+								'publisher_cc' => array( 'type' => 'string', 'pattern' => '^[A-Za-z]{0,2}$' ),
+							),
+							'additionalProperties' => false,
+							'validate_callback'    => 'rest_validate_request_arg',
 						),
 						'geolocation'      => array(
-							'type'              => 'object',
-							'validate_callback' => 'rest_validate_request_arg',
+							'type'                 => 'object',
+							'properties'           => array(
+								'geo_targeting'    => array( 'type' => 'boolean' ),
+								'target_regions'   => array(
+									'type'  => 'array',
+									'items' => array( 'type' => 'string', 'enum' => Onboarding::REGIONS ),
+								),
+								'default_behavior' => array( 'type' => 'string', 'enum' => array( 'show_banner', 'no_banner' ) ),
+							),
+							'additionalProperties' => false,
+							'validate_callback'    => 'rest_validate_request_arg',
 						),
 						'payment_gateways' => array(
 							// Map { gateway => bool } (canonical: explicit state of

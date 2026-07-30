@@ -59,6 +59,19 @@ $faz_wiz_languages = array( 'English' => 'en' );
 if ( class_exists( '\\FazCookie\\Admin\\Modules\\Languages\\Includes\\Controller' ) ) {
 	$faz_wiz_languages = \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance()->get_languages();
 }
+// Recovery for fresh installs activated by 1.25.0 before the locale fix: that
+// version persisted the untouched English defaults, making the stored value
+// indistinguishable from an intentional choice unless onboarding is still in
+// its pristine incomplete state. In that one state, prefer the SITE language.
+$faz_wiz_onboarding = isset( $faz_wiz_settings['onboarding'] ) && is_array( $faz_wiz_settings['onboarding'] ) ? $faz_wiz_settings['onboarding'] : array();
+$faz_wiz_selected   = isset( $faz_wiz_settings['languages']['selected'] ) && is_array( $faz_wiz_settings['languages']['selected'] ) ? array_values( $faz_wiz_settings['languages']['selected'] ) : array();
+$faz_wiz_pristine   = empty( $faz_wiz_onboarding['completed'] )
+	&& empty( $faz_wiz_onboarding['law'] )
+	&& 'en' === $faz_wiz_lang
+	&& array( 'en' ) === $faz_wiz_selected;
+if ( $faz_wiz_pristine && in_array( $faz_site_lang, array_values( $faz_wiz_languages ), true ) ) {
+	$faz_wiz_lang = $faz_site_lang;
+}
 $faz_wiz_bundled = array();
 foreach ( (array) glob( FAZ_PLUGIN_BASEPATH . 'admin/modules/banners/includes/contents/*.json' ) as $faz_wiz_lang_file ) {
 	$faz_wiz_code = basename( $faz_wiz_lang_file, '.json' );
