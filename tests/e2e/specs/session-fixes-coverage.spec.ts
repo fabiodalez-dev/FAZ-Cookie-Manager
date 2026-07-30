@@ -23,7 +23,7 @@ import {
 } from '../utils/faz-api';
 import { wpEval } from '../utils/wp-env';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
 function b64(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64');

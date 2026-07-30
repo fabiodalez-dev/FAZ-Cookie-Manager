@@ -4,7 +4,7 @@
 Suite end-to-end stabile per validare il plugin cookie in ambiente WordPress reale, con output adatto a CI.
 
 ## Requisiti
-- WordPress avviato (default: `http://localhost:9998`)
+- WordPress avviato (default: `http://127.0.0.1:9998`)
 - Plugin FAZ Cookie Manager attivo
 - Utente admin disponibile
 

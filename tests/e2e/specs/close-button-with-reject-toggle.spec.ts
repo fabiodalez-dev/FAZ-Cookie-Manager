@@ -247,7 +247,7 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
     const ctx = await browser.newContext();
     try {
       const page = await ctx.newPage();
-      await page.goto(`${process.env.WP_BASE_URL ?? 'http://localhost:9998'}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998'}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
       await expect(
         page.locator('[data-faz-tag="close-button"]').first(),
@@ -288,7 +288,7 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
     const ctx = await browser.newContext();
     try {
       const page = await ctx.newPage();
-      await page.goto(`${process.env.WP_BASE_URL ?? 'http://localhost:9998'}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998'}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
       await expect(
         page.locator('[data-faz-tag="reject-button"]').first(),
@@ -337,7 +337,7 @@ test.describe.serial('Close button per-banner override vs Garante/EDPB dark-patt
     const ctx = await browser.newContext();
     try {
       const page = await ctx.newPage();
-      await page.goto(`${process.env.WP_BASE_URL ?? 'http://localhost:9998'}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998'}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('[data-faz-tag="notice"]')).toBeVisible();
       await expect(page.locator('[data-faz-tag="close-button"]').first()).toBeAttached();
 

@@ -130,6 +130,38 @@ async function loginAdmin(page) {
 	await page.waitForLoadState('domcontentloaded');
 }
 
+async function replaceGcmSettings(browser, nextSettings) {
+	const { ctx, page } = await freshPage(browser, { traceName: 'compliance-gcm-settings' });
+	try {
+		await loginAdmin(page);
+		await page.goto(SITE + '/wp-admin/admin.php?page=faz-cookie-manager-settings', { waitUntil: 'domcontentloaded' });
+		await page.waitForFunction(() => typeof window.fazConfig?.api?.nonce === 'string' && window.fazConfig.api.nonce.length > 0);
+		const result = await page.evaluate(async (settings) => {
+			const nonce = window.fazConfig.api.nonce;
+			const currentResponse = await fetch('/?rest_route=/faz/v1/gcm/', {
+				headers: { 'X-WP-Nonce': nonce },
+			});
+			const current = await currentResponse.json().catch(() => null);
+			if (!currentResponse.ok || !current) {
+				throw new Error(`Cannot snapshot GCM settings (HTTP ${currentResponse.status})`);
+			}
+			const updateResponse = await fetch('/?rest_route=/faz/v1/gcm/', {
+				method: 'POST',
+				headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+				body: JSON.stringify(settings),
+			});
+			const updated = await updateResponse.json().catch(() => null);
+			if (!updateResponse.ok) {
+				throw new Error(`Cannot update GCM settings (HTTP ${updateResponse.status})`);
+			}
+			return { current, updated };
+		}, nextSettings);
+		return result.current;
+	} finally {
+		await ctx.close();
+	}
+}
+
 function shouldRun(sectionKey) {
 	if (!SECTION_FILTER) return true;
 	return sectionKey.toLowerCase().includes(SECTION_FILTER.toLowerCase());
@@ -757,38 +789,68 @@ async function testGoogleConsentMode(browser) {
 	if (!shouldRun('gcm')) return;
 	startSection('8. GOOGLE CONSENT MODE [GC01-GC05]');
 
-	const { ctx, page } = await freshPage(browser);
-
-	// Intercept dataLayer pushes
-	await page.addInitScript(() => {
-		window._gcmCaptures = [];
-		const origPush = Array.prototype.push;
-		Object.defineProperty(window, 'dataLayer', {
-			configurable: true,
-			set(val) {
-				this._dl = val;
-				if (Array.isArray(val)) {
-					val.push = function (...args) {
-						window._gcmCaptures.push(...args);
-						return origPush.apply(this, args);
-					};
-				}
-			},
-			get() { return this._dl; },
-		});
-	});
-
-	await gotoFront(page);
-	await waitForBanner(page);
-	await page.waitForTimeout(1000);
-
-	// Check if GCM is active
-	const gcmActive = await page.evaluate(() => typeof window.gtag === 'function' || window.dataLayer !== undefined);
-	if (!gcmActive) {
-		test('GC01-GC05', true, 'GCM not enabled in settings — skipped (not required)');
-		await ctx.close();
+	const testSettings = {
+		status: true,
+		default_settings: [{
+			ad_storage: 'denied',
+			analytics_storage: 'denied',
+			ad_user_data: 'denied',
+			ad_personalization: 'denied',
+			functionality_storage: 'denied',
+			personalization_storage: 'denied',
+			security_storage: 'granted',
+			analytics: 'denied',
+			marketing: 'denied',
+			functional: 'denied',
+			necessary: 'granted',
+			regions: 'All',
+		}],
+		wait_for_update: 500,
+		url_passthrough: true,
+		ads_data_redaction: true,
+	};
+	let previousSettings;
+	try {
+		previousSettings = await replaceGcmSettings(browser, testSettings);
+	} catch (err) {
+		test('GC00 GCM test fixture configured', false, err.message);
 		return;
 	}
+
+	try {
+		const { ctx, page } = await freshPage(browser);
+
+		// Intercept dataLayer pushes.
+		await page.addInitScript(() => {
+			window._gcmCaptures = [];
+			const origPush = Array.prototype.push;
+			Object.defineProperty(window, 'dataLayer', {
+				configurable: true,
+				set(val) {
+					this._dl = val;
+					if (Array.isArray(val)) {
+						val.push = function (...args) {
+							window._gcmCaptures.push(...args);
+							return origPush.apply(this, args);
+						};
+					}
+				},
+				get() { return this._dl; },
+			});
+		});
+
+		await gotoFront(page);
+		await waitForBanner(page);
+		await page.waitForTimeout(1000);
+
+		// The section provisions GCM explicitly, so absence is a real failure,
+		// not an environment-dependent skip.
+		const gcmActive = await page.evaluate(() => typeof window.gtag === 'function' || window.dataLayer !== undefined);
+		if (!gcmActive) {
+			test('GC01-GC05', false, 'GCM was enabled by the test but no consent API was emitted');
+			await ctx.close();
+			return;
+		}
 
 	// GC01 — Default denied signals
 	const defaultSignals = await page.evaluate(() => {
@@ -846,7 +908,14 @@ async function testGoogleConsentMode(browser) {
 		test('GC02 consent update after accept', false, 'no update command in dataLayer');
 	}
 
-	await ctx.close();
+		await ctx.close();
+	} finally {
+		try {
+			await replaceGcmSettings(browser, previousSettings);
+		} catch (err) {
+			test('GC99 GCM fixture restored', false, err.message);
+		}
+	}
 }
 
 async function testIABTCF(browser) {
@@ -1609,13 +1678,13 @@ async function testFunctionalScenarios(browser) {
 		await waitForBanner(page);
 		await page.waitForTimeout(500);
 
-		const gcmExists = await page.evaluate(() => typeof window.gtag === 'function' || window.dataLayer !== undefined);
-		if (gcmExists) {
-			const defaultCmd = await page.evaluate(() => {
-				const all = [...(window.dataLayer || []), ...(window._gcmLog || [])];
-				// gtag() pushes Arguments objects (not Arrays), so don't use Array.isArray
-				return all.some(e => e && e[0] === 'consent' && e[1] === 'default');
-			});
+		const defaultCmd = await page.evaluate(() => {
+			const all = [...(window.dataLayer || []), ...(window._gcmLog || [])];
+			// A generic dataLayer can come from unrelated Google integrations.
+			// Only an actual consent-default command proves this plugin's GCM is on.
+			return all.some(e => e && e[0] === 'consent' && e[1] === 'default');
+		});
+		if (defaultCmd) {
 			test('TF17 GCM default denied signal sent', defaultCmd);
 
 			await page.click('[data-faz-tag="accept-button"]');
@@ -1626,7 +1695,7 @@ async function testFunctionalScenarios(browser) {
 			});
 			test('TF17b GCM update signal after accept', updateCmd);
 		} else {
-			test('TF17 GCM signals', true, 'GCM not enabled — skipped');
+			test('TF17 GCM signals', true, 'GCM not enabled — covered by the dedicated self-provisioning GCM section');
 		}
 		await ctx.close();
 	}
@@ -2363,7 +2432,7 @@ async function testPopiaSouthAfrica(browser) {
 		});
 
 		test('ZA02 POPIA preset yields its consent model (s.11(1)(a))',
-			!!banner && typeof banner.law === 'string' && banner.law !== '' && banner.law !== 'ccpa',
+			!!banner && banner.law === 'gdpr',
 			banner ? `banner="${banner.name}" applicableLaw=${JSON.stringify(banner.law)}` : 'default banner unreadable');
 
 		// A Do-Not-Sell link is an artefact of US opt-out statutes and does not

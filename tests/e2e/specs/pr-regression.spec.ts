@@ -9,7 +9,7 @@ import { completeAdminLogin, expect, test } from '../fixtures/wp-fixture';
 import { getWpLoginPath } from '../utils/wp-auth';
 import { wpEval } from '../utils/wp-env';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const WP_ADMIN_USER = process.env.WP_ADMIN_USER ?? 'admin';
 const WP_ADMIN_PASS = process.env.WP_ADMIN_PASS ?? 'admin';
 const WP_LOGIN_PATH = getWpLoginPath();

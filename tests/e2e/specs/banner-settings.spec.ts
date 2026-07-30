@@ -6,7 +6,7 @@ import { fazApiPut } from '../utils/faz-api';
 
 /* ─── Helpers ──────────────────────────────────────────────── */
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const WP_LOGIN_PATH = getWpLoginPath();
 
 async function getAdminNonce(page: Page): Promise<string> {
@@ -342,7 +342,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
 
   test.beforeAll(async ({ browser }) => {
     // Capture original banner data so we can restore it after all tests
-    const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+    const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
     const ctx = await browser.newContext({ baseURL });
     const page = await ctx.newPage();
     await page.goto(WP_LOGIN_PATH, { waitUntil: 'domcontentloaded' });
@@ -361,7 +361,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
 
   test.afterAll(async ({ browser }) => {
     if (!originalBanner) return;
-    const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+    const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
     const ctx = await browser.newContext({ baseURL });
     const page = await ctx.newPage();
     await page.goto(WP_LOGIN_PATH, { waitUntil: 'domcontentloaded' });

@@ -26,7 +26,7 @@ import {
   wpEval,
 } from '../utils/wp-env';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const SERVER_SCAN_PORT = Number(process.env.FAZ_SERVER_SCAN_LAB_PORT ?? 10080);
 const SERVER_SCAN_BASE = `http://127.0.0.1:${SERVER_SCAN_PORT}`;
 const SITE_HOST = new URL(WP_BASE).hostname;

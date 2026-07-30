@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const DEPLOY_PATH = process.env.FAZ_PLUGIN_DEPLOY_PATH ?? '';
 // WP_PATH resolution order:
 //   1. WP_PATH env var (explicit, preferred)

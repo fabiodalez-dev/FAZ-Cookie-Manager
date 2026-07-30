@@ -87,9 +87,11 @@ class Renderer {
 
 		// FR-03 step 2: resolve jurisdiction.
 		$jurisdiction = self::resolve_jurisdiction( $atts, $settings );
-		$has_shortcode_override = ! empty( $atts['jurisdiction'] )
-			&& in_array( $atts['jurisdiction'], Generator::JURISDICTIONS, true );
-		if ( ! $has_shortcode_override && Generator::missing_required_settings( $jurisdiction, $settings ) ) {
+		// Validate the jurisdiction that will actually be rendered. A shortcode
+		// override changes the legal regime, but it must never bypass that
+		// regime's mandatory fields (notably the POPIA operator and Information
+		// Officer details).
+		if ( Generator::missing_required_settings( $jurisdiction, $settings ) ) {
 			return self::incomplete_configuration_notice();
 		}
 

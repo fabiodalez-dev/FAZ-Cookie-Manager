@@ -15,7 +15,7 @@ import type { BrowserContext } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 
-const WP_BASE = process.env.WP_BASE_URL || 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL || 'http://127.0.0.1:9998';
 const INLINE_TEST_URL = `/?faz_inline_probe=${Date.now()}`;
 
 // Create a mu-plugin that injects an analytics-pattern inline script

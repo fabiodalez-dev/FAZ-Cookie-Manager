@@ -12,7 +12,7 @@ import {
 } from '../utils/wp-env';
 import { fazApiPut } from '../utils/faz-api';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const REPO_ROOT = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 const PRESET_DIR = join(REPO_ROOT, 'admin', 'modules', 'banners', 'includes', 'presets');
 

@@ -4638,14 +4638,22 @@ class Frontend {
 	 * @return string Modified attributes string.
 	 */
 	private function set_script_type_plain( $attrs ) {
-		if ( preg_match( '/type\s*=\s*["\']([^"\']*)["\']/i', $attrs, $tm ) ) {
+		$type_match = preg_match( '/type\s*=\s*["\']([^"\']*)["\']/i', $attrs, $tm );
+		if ( 1 === $type_match ) {
 			$original = $tm[1];
-			$attrs    = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/i', 'type="text/plain"', $attrs );
+			$replaced = preg_replace( '/type\s*=\s*["\'][^"\']*["\']/i', 'type="text/plain"', $attrs );
+			if ( null === $replaced ) {
+				return self::script_attrs_type_plain_without_regex( $attrs );
+			}
+			$attrs = $replaced;
 			// Preserve non-default types (e.g. "module") so JS can restore them.
 			if ( 'text/plain' !== $original && 'text/javascript' !== $original && '' !== $original ) {
 				$attrs .= ' data-faz-original-type="' . esc_attr( $original ) . '"';
 			}
 			return $attrs;
+		}
+		if ( false === $type_match ) {
+			return self::script_attrs_type_plain_without_regex( $attrs );
 		}
 		return $attrs . ' type="text/plain"';
 	}
@@ -5222,7 +5230,7 @@ class Frontend {
 			'.faz-service-',
 		);
 
-		return preg_replace_callback(
+		$scoped = preg_replace_callback(
 			'/([^{}]+?)(\{)/',
 			function ( $m ) use ( $container_classes, $sibling_prefixes, $modal_prefixes ) {
 				$raw = $m[1];
@@ -5294,6 +5302,7 @@ class Frontend {
 			},
 			$css
 		);
+		return is_string( $scoped ) ? $scoped : $css;
 	}
 
 	/**
@@ -5814,20 +5823,7 @@ class Frontend {
 				}
 
 				if ( $should_block ) {
-					// Replace any type attribute with text/plain, saving the original.
-					if ( preg_match( '/type\s*=\s*[\'"]([^\'"]*)[\'"]/', $tag, $type_match ) ) {
-						$original_type = $type_match[1];
-						$tag = preg_replace( '/type\s*=\s*[\'"][^\'"]*[\'"]/', 'type="text/plain"', $tag, 1 );
-						if ( 'text/plain' !== $original_type && 'text/javascript' !== $original_type ) {
-							$tag = str_replace( '<script ', '<script data-faz-original-type="' . esc_attr( $original_type ) . '" ', $tag );
-						}
-					} else {
-						$tag = str_replace( '<script ', '<script type="text/plain" ', $tag );
-					}
-					// Add category attribute.
-					if ( false === strpos( $tag, 'data-faz-category' ) ) {
-						$tag = str_replace( '<script ', '<script data-faz-category="' . esc_attr( $category ) . '" ', $tag );
-					}
+					$tag = $this->block_script_tag_safely( $tag, $category, 'script handle ' . $handle );
 				}
 				break;
 			}
@@ -5949,18 +5945,7 @@ class Frontend {
 			}
 
 			if ( $should_block ) {
-				$tag = preg_replace_callback(
-					'/<script\b([^>]*)>/i',
-					function ( $mm ) use ( $category ) {
-						$new_attrs = $this->set_script_type_plain( $mm[1] );
-						if ( false === strpos( $new_attrs, 'data-faz-category' ) ) {
-							$new_attrs .= ' data-faz-category="' . esc_attr( $category ) . '"';
-						}
-						return '<script' . $new_attrs . '>';
-					},
-					$tag,
-					1
-				);
+				$tag = $this->block_script_tag_safely( $tag, $category, 'inline script handle ' . $handle );
 			}
 			break;
 		}
@@ -6014,10 +5999,7 @@ class Frontend {
 				}
 
 				if ( $should_block ) {
-					$tag = preg_replace( '/(^|\s)href\s*=\s*/i', '$1data-faz-href=', $tag, 1 );
-					if ( false === strpos( $tag, 'data-faz-category' ) ) {
-						$tag = str_replace( '<link ', '<link data-faz-category="' . esc_attr( $category ) . '" ', $tag );
-					}
+					$tag = self::block_link_tag_without_regex( $tag, $category );
 				}
 				break;
 			}
@@ -6525,7 +6507,7 @@ class Frontend {
 			}
 
 			// Insert a placeholder BEFORE the social element, and hide the element.
-			$content = preg_replace_callback(
+			$result = preg_replace_callback(
 				'#(<(?:div|blockquote|span)\b)([^>]*class\s*=\s*["\'][^"\']*\b' . preg_quote( $class, '#' ) . '\b[^"\']*["\'][^>]*)>#i',
 				function ( $m ) use ( $category, $info ) {
 					// Skip if already processed.
@@ -6539,6 +6521,14 @@ class Frontend {
 				},
 				$content
 			);
+			// preg_replace_callback() returns null on a PCRE error. Preserve the
+			// original HTML so content filters and the full-page output buffer can
+			// never turn the response into an empty page.
+			if ( null !== $result ) {
+				$content = $result;
+			} else {
+				error_log( '[FAZ Cookie Manager] PCRE error ' . preg_last_error() . ' in process_social_embeds (' . $class . ')' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
 		}
 
 		// Smash Balloon Instagram Feed renders as <div id="sb_instagram" ...>
@@ -6721,12 +6711,225 @@ class Frontend {
 	 * @return string
 	 */
 	private static function faz_add_hidden_class( string $html ): string {
+		// Every branch coalesces to $html because preg_replace() returns null on
+		// a PCRE error, and this method declares a non-nullable string return —
+		// so an unguarded null would be a TypeError, i.e. a fatal on the front
+		// end, rather than merely a missing class. Returning the markup
+		// unchanged only costs the hidden class: the element is still a blocked
+		// placeholder, so nothing is exposed.
 		if ( preg_match( '/\bclass\s*=\s*"/', $html ) ) {
-			return preg_replace( '/\bclass\s*=\s*"([^"]*)"/i', 'class="$1 faz-hidden"', $html, 1 );
+			return preg_replace( '/\bclass\s*=\s*"([^"]*)"/i', 'class="$1 faz-hidden"', $html, 1 ) ?? $html;
 		}
 		if ( preg_match( '/\bclass\s*=\s*\'([^\']*)\'/i', $html ) ) {
-			return preg_replace( '/\bclass\s*=\s*\'([^\']*)\'/i', 'class=\'$1 faz-hidden\'', $html, 1 );
+			return preg_replace( '/\bclass\s*=\s*\'([^\']*)\'/i', 'class=\'$1 faz-hidden\'', $html, 1 ) ?? $html;
 		}
-		return preg_replace( '/(<\w+)(\s|>)/', '$1 class="faz-hidden"$2', $html, 1 );
+		return preg_replace( '/(<\w+)(\s|>)/', '$1 class="faz-hidden"$2', $html, 1 ) ?? $html;
+	}
+
+	/**
+	 * Neutralise one script tag and retain the original markup on PCRE failure.
+	 *
+	 * @param string $tag      Complete script tag.
+	 * @param string $category Consent category.
+	 * @param string $context  Diagnostic context for the error log.
+	 * @return string
+	 */
+	private function block_script_tag_safely( string $tag, string $category, string $context ): string {
+		$blocked = preg_replace_callback(
+			'/<script\b([^>]*)>/i',
+			function ( $match ) use ( $category ) {
+				$new_attrs = $this->set_script_type_plain( $match[1] );
+				if ( false === strpos( $new_attrs, 'data-faz-category' ) ) {
+					$new_attrs .= ' data-faz-category="' . esc_attr( $category ) . '"';
+				}
+				return '<script' . $new_attrs . '>';
+			},
+			$tag,
+			1
+		);
+		if ( null !== $blocked ) {
+			return $blocked;
+		}
+
+		// Returning null from a WordPress tag filter removes the resource
+		// entirely. Keep the tag inert instead, without relying on PCRE again.
+		$error = preg_last_error();
+		$tag   = self::block_script_tag_without_regex( $tag, $category );
+		error_log( '[FAZ Cookie Manager] PCRE error ' . $error . ' while blocking ' . $context ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		return $tag;
+	}
+
+	/**
+	 * Fail-closed script neutralisation for the rare case where PCRE itself is
+	 * unavailable (for example, an exhausted backtrack limit).
+	 *
+	 * This deliberately uses only string operations. Injecting text/plain
+	 * before the existing attributes makes the script inert, while preserving
+	 * a non-default original type lets the frontend restore modules and other
+	 * specialised script types after consent.
+	 *
+	 * @param string $tag      Complete script tag.
+	 * @param string $category Consent category.
+	 * @return string
+	 */
+	private static function block_script_tag_without_regex( string $tag, string $category ): string {
+		$script_pos = stripos( $tag, '<script' );
+		if ( false === $script_pos ) {
+			return $tag;
+		}
+
+		$open_end    = strpos( $tag, '>', $script_pos );
+		$opening_tag = false === $open_end
+			? substr( $tag, $script_pos )
+			: substr( $tag, $script_pos, $open_end - $script_pos + 1 );
+		$attrs       = substr( $opening_tag, strlen( '<script' ), -1 );
+		$replacement = '<script' . self::script_attrs_type_plain_without_regex( $attrs );
+		if ( '' !== $category && false === stripos( $opening_tag, 'data-faz-category' ) ) {
+			$replacement = '<script data-faz-category="' . esc_attr( $category ) . '"' . substr( $replacement, strlen( '<script' ) );
+		}
+
+		return substr_replace( $tag, $replacement . '>', $script_pos, strlen( $opening_tag ) );
+	}
+
+	/**
+	 * Prefix script attributes with an inert type without using PCRE.
+	 *
+	 * @param string $attrs Script attributes.
+	 * @return string
+	 */
+	private static function script_attrs_type_plain_without_regex( string $attrs ): string {
+		$opening_tag  = '<script' . $attrs . '>';
+		$original_type = self::script_type_without_regex( $opening_tag );
+		$replacement   = ' type="text/plain"';
+		if ( '' !== $original_type
+			&& 'text/plain' !== strtolower( $original_type )
+			&& 'text/javascript' !== strtolower( $original_type )
+			&& false === stripos( $attrs, 'data-faz-original-type' ) ) {
+			$replacement .= ' data-faz-original-type="' . esc_attr( $original_type ) . '"';
+		}
+		return $replacement . $attrs;
+	}
+
+	/**
+	 * Rename a stylesheet href without PCRE so a regex failure cannot remove
+	 * the entire link tag from WordPress output.
+	 *
+	 * @param string $tag      Complete link tag.
+	 * @param string $category Consent category.
+	 * @return string
+	 */
+	private static function block_link_tag_without_regex( string $tag, string $category ): string {
+		$link_pos = stripos( $tag, '<link' );
+		if ( false === $link_pos ) {
+			return $tag;
+		}
+		$open_end = strpos( $tag, '>', $link_pos );
+		$opening  = false === $open_end
+			? substr( $tag, $link_pos )
+			: substr( $tag, $link_pos, $open_end - $link_pos + 1 );
+		$href_pos = self::attribute_name_position_without_regex( $opening, 'href' );
+		if ( false !== $href_pos ) {
+			$tag = substr_replace( $tag, 'data-faz-href', $link_pos + $href_pos, strlen( 'href' ) );
+		}
+		if ( false === stripos( $opening, 'data-faz-category' ) ) {
+			$tag = substr_replace(
+				$tag,
+				'<link data-faz-category="' . esc_attr( $category ) . '"',
+				$link_pos,
+				strlen( '<link' )
+			);
+		}
+		return $tag;
+	}
+
+	/**
+	 * Locate a standalone attribute name in an opening HTML tag.
+	 *
+	 * @param string $opening_tag Opening tag.
+	 * @param string $attribute   Attribute name.
+	 * @return int|false
+	 */
+	private static function attribute_name_position_without_regex( string $opening_tag, string $attribute ) {
+		$length = strlen( $opening_tag );
+		$cursor = 0;
+		$attr_length = strlen( $attribute );
+		while ( $cursor < $length ) {
+			$pos = stripos( $opening_tag, $attribute, $cursor );
+			if ( false === $pos ) {
+				return false;
+			}
+			$before = $pos > 0 ? $opening_tag[ $pos - 1 ] : '';
+			$after  = $pos + $attr_length < $length ? $opening_tag[ $pos + $attr_length ] : '';
+			if ( ctype_space( $before ) && ( '=' === $after || ctype_space( $after ) ) ) {
+				$value_pos = $pos + $attr_length;
+				while ( $value_pos < $length && ctype_space( $opening_tag[ $value_pos ] ) ) {
+					$value_pos++;
+				}
+				if ( $value_pos < $length && '=' === $opening_tag[ $value_pos ] ) {
+					return $pos;
+				}
+			}
+			$cursor = $pos + $attr_length;
+		}
+		return false;
+	}
+
+	/**
+	 * Read the opening script tag's type attribute without PCRE.
+	 *
+	 * Handles quoted and unquoted HTML attribute values and ignores names such
+	 * as data-type. It is intentionally narrow: the normal path uses the common
+	 * attribute helpers; this parser exists only for the PCRE-failure fallback.
+	 *
+	 * @param string $opening_tag Opening script tag.
+	 * @return string
+	 */
+	private static function script_type_without_regex( string $opening_tag ): string {
+		$length = strlen( $opening_tag );
+		$cursor = 0;
+		while ( $cursor < $length ) {
+			$pos = stripos( $opening_tag, 'type', $cursor );
+			if ( false === $pos ) {
+				return '';
+			}
+
+			$attribute_pos = self::attribute_name_position_without_regex( $opening_tag, 'type' );
+			if ( false === $attribute_pos || $attribute_pos !== $pos ) {
+				$cursor = $pos + 4;
+				continue;
+			}
+
+			$value_pos = $pos + 4;
+			while ( $value_pos < $length && ctype_space( $opening_tag[ $value_pos ] ) ) {
+				$value_pos++;
+			}
+			if ( $value_pos >= $length || '=' !== $opening_tag[ $value_pos ] ) {
+				$cursor = $pos + 4;
+				continue;
+			}
+			$value_pos++;
+			while ( $value_pos < $length && ctype_space( $opening_tag[ $value_pos ] ) ) {
+				$value_pos++;
+			}
+			if ( $value_pos >= $length ) {
+				return '';
+			}
+
+			$quote = $opening_tag[ $value_pos ];
+			if ( '"' === $quote || "'" === $quote ) {
+				$value_pos++;
+				$value_end = strpos( $opening_tag, $quote, $value_pos );
+				return false === $value_end ? '' : substr( $opening_tag, $value_pos, $value_end - $value_pos );
+			}
+
+			$value_end = $value_pos;
+			while ( $value_end < $length
+				&& ! ctype_space( $opening_tag[ $value_end ] )
+				&& '>' !== $opening_tag[ $value_end ] ) {
+				$value_end++;
+			}
+			return substr( $opening_tag, $value_pos, $value_end - $value_pos );
+		}
+		return '';
 	}
 }

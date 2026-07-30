@@ -669,7 +669,7 @@ class Onboarding {
 	 * Detect payment gateways from active plugins and scanner-discovered cookies.
 	 *
 	 * @return array[] Each entry: ['key' => catalog key, 'label' => human name,
-	 *                 'source' => 'plugin'|'scan'].
+	 *                 'source' => 'plugin'|'scan'|'enabled'].
 	 */
 	private static function detect_gateways() {
 		$catalog = array();

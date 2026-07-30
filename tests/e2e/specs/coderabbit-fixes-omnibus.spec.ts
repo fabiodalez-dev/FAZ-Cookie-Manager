@@ -22,7 +22,7 @@ import { fazApiGet, fazApiPost, fazApiPut, getAdminNonce } from '../utils/faz-ap
 import { resetProviderMatrixState, enableProviderMatrixCustomScenario, ensureFixturePlugin, wpEval } from '../utils/wp-env';
 import { clickFirstVisible } from '../utils/ui';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
 async function openAdminSettings(page: Page): Promise<string> {
   await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });

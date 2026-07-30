@@ -4,7 +4,7 @@
  */
 import { expect, test } from '../fixtures/wp-fixture';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
 /* ─── Helpers ──────────────────────────────────── */
 

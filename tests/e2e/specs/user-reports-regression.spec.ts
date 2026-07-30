@@ -33,7 +33,7 @@ import {
 	wpEval,
 } from '../utils/wp-env';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
 async function getAdminNonce(page: Page): Promise<string> {
 	return page.evaluate(() => (window as unknown as { fazConfig?: { api?: { nonce?: string } } }).fazConfig?.api?.nonce ?? '');

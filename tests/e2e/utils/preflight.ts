@@ -3,8 +3,8 @@
  *
  * Every requirement below has, at some point, been the real reason for a red
  * run that read like a product regression: the Stripe gateway left off by an
- * earlier spec, Google Consent Mode disabled, WP_DEBUG missing so a debug-only
- * helper returned an empty string, the suite pointed at a stale `php -S` on
+ * earlier spec, WP_DEBUG missing so a debug-only helper returned an empty
+ * string, the suite pointed at a stale `php -S` on
  * IPv6 instead of nginx, an edit tested without ever being rsynced to the site.
  * Each cost more to diagnose than it should have, because the failure surfaced
  * deep inside an assertion instead of at the door.
@@ -184,7 +184,6 @@ export async function assertPrerequisites(baseURL: string): Promise<void> {
       $settings = (array) get_option( 'faz_settings', array() );
       $gateways = isset( $settings['script_blocking']['payment_gateways'] )
         ? (array) $settings['script_blocking']['payment_gateways'] : array();
-      $gcm = (array) get_option( 'faz_gcm_settings', array() );
       echo wp_json_encode( array(
         'debug'      => (bool) ( defined( 'WP_DEBUG' ) && WP_DEBUG ),
         'permalinks' => (string) get_option( 'permalink_structure' ),
@@ -192,7 +191,6 @@ export async function assertPrerequisites(baseURL: string): Promise<void> {
         'active'     => array_map( function ( $p ) { return strtok( $p, '/' ); },
                           array_values( (array) get_option( 'active_plugins', array() ) ) ),
         'stripe'     => ! empty( $gateways['stripe'] ),
-        'gcm'        => ! empty( $gcm['status'] ),
       ) );
     `);
   } catch (err) {
@@ -209,7 +207,6 @@ export async function assertPrerequisites(baseURL: string): Promise<void> {
     version: string;
     active: string[];
     stripe: boolean;
-    gcm: boolean;
   };
   try {
     wp = JSON.parse(probe);
@@ -278,15 +275,6 @@ export async function assertPrerequisites(baseURL: string): Promise<void> {
     `);
     repaired.push('payment gateway "stripe": off → on');
   }
-  if (!wp.gcm) {
-    wpEval(`
-      $g = (array) get_option( 'faz_gcm_settings', array() );
-      $g['status'] = true;
-      update_option( 'faz_gcm_settings', $g );
-    `);
-    repaired.push('Google Consent Mode: off → on');
-  }
-
   console.log('\n  E2E preflight');
   ok.forEach((line) => console.log(`  ${line}`));
   repaired.forEach((line) => console.log(`  ${FIX} repaired ${line}`));

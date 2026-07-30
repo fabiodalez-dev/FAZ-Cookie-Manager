@@ -4,7 +4,7 @@ import { getWpLoginPath } from './utils/wp-auth';
 import { wpEval } from './utils/wp-env';
 
 async function globalSetup(): Promise<void> {
-  const baseURL = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+  const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
   const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
   const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';
 

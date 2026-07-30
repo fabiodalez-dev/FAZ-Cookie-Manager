@@ -382,7 +382,7 @@ test.describe('Guided setup wizard', () => {
     for (const gateway of payload.body.gateways) {
       expect(typeof gateway.key).toBe('string');
       expect(typeof gateway.label).toBe('string');
-      expect(['plugin', 'scan']).toContain(gateway.source);
+      expect(['plugin', 'scan', 'enabled']).toContain(gateway.source);
     }
   });
 

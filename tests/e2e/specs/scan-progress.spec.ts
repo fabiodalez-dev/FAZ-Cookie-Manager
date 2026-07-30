@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { getWpLoginPath } from '../utils/wp-auth';
 
-const BASE = process.env.WP_BASE_URL || 'http://localhost:9998';
+const BASE = process.env.WP_BASE_URL || 'http://127.0.0.1:9998';
 const USER = process.env.WP_ADMIN_USER || 'admin';
 const PASS = process.env.WP_ADMIN_PASS || 'admin';
 const WP_LOGIN_PATH = getWpLoginPath();

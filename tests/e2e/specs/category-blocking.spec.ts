@@ -12,7 +12,7 @@ import { expect, test } from '../fixtures/wp-fixture';
 import { resetDefaultBannerState } from '../utils/seed-defaults';
 import { clickFirstVisible } from '../utils/ui';
 
-const WP_BASE = process.env.WP_BASE_URL ?? 'http://localhost:9998';
+const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
 /** Categories to test — necessary is always allowed, others require consent. */
 const CATEGORIES = ['necessary', 'functional', 'analytics', 'marketing', 'performance'] as const;

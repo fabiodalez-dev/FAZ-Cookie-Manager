@@ -46,6 +46,19 @@ namespace FazCookie\Includes {
 			return array();
 		}
 	}
+
+}
+
+namespace FazCookie\Frontend\Includes {
+
+	class Placeholder_Builder {
+		public static function is_embed_service( $service_id ) {
+			return in_array( $service_id, array( 'youtube', 'vimeo' ), true );
+		}
+		public static function build_social( $service_id, $service_name, $category ) {
+			return '<div data-placeholder="' . $service_id . '"></div>';
+		}
+	}
 }
 
 namespace {
@@ -93,6 +106,11 @@ namespace {
 	if ( ! function_exists( 'sanitize_key' ) ) {
 		function sanitize_key( $key ) {
 			return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
+		}
+	}
+	if ( ! function_exists( 'esc_attr' ) ) {
+		function esc_attr( $value ) {
+			return htmlspecialchars( (string) $value, ENT_QUOTES, 'UTF-8' );
 		}
 	}
 	if ( ! function_exists( 'apply_filters' ) ) {
@@ -332,6 +350,45 @@ namespace {
 	$cat_ids = array_keys( $cat );
 	sort( $cat_ids );
 	assert_eq( $cat_ids, $enf_ids, 'D11 catalogue membership equals the enforceable set (UI ⇄ enforcement consistency)' );
+
+	// ===== Group E — social-embed PCRE failure preserves page content =====
+	$fe       = faz_arrange( '', false );
+	$content  = '<div ' . str_repeat( 'data-probe="xxxxxxxxxxxxxxxx" ', 200 ) . 'class="instagram-media">Visible content</div>';
+	$old_bt   = ini_get( 'pcre.backtrack_limit' );
+	ini_set( 'pcre.backtrack_limit', '1' );
+	$filtered = faz_call( $fe, 'process_social_embeds', array( $content, array( 'marketing' ) ) );
+	ini_set( 'pcre.backtrack_limit', (string) $old_bt );
+	assert_eq( $filtered, $content, 'E1 PCRE failure in a social detector preserves the original page content' );
+
+	$module_tag = '<script defer data-type="ignored" type = "module" src="https://tracker.test/app.js"></script>';
+	$blocked_module = faz_call( $fe, 'block_script_tag_without_regex', array( $module_tag, 'analytics' ) );
+	assert_eq( false !== strpos( $blocked_module, 'type="text/plain"' ), true, 'E2 non-regex script fallback remains fail-closed' );
+	assert_eq( false !== strpos( $blocked_module, 'data-faz-category="analytics"' ), true, 'E3 non-regex script fallback keeps the consent category' );
+	assert_eq( false !== strpos( $blocked_module, 'data-faz-original-type="module"' ), true, 'E4 non-regex script fallback preserves type=module for post-consent restore' );
+	assert_eq( false !== strpos( $blocked_module, 'src="https://tracker.test/app.js"' ), true, 'E5 non-regex script fallback preserves the original script attributes' );
+
+	$old_bt = ini_get( 'pcre.backtrack_limit' );
+	ini_set( 'pcre.backtrack_limit', '1' );
+	$hidden_fallback = faz_call( $fe, 'faz_add_hidden_class', array( '<div ' . str_repeat( 'data-x="long-value" ', 200 ) . '>Visible</div>' ) );
+	ini_set( 'pcre.backtrack_limit', (string) $old_bt );
+	assert_eq( is_string( $hidden_fallback ) && '' !== $hidden_fallback, true, 'E6 faz_add_hidden_class always returns non-empty HTML after a PCRE failure' );
+
+	$blocked_link = faz_call(
+		$fe,
+		'block_link_tag_without_regex',
+		array( '<link rel="stylesheet" data-href="ignored" href = "https://fonts.test/site.css">', 'functional' )
+	);
+	assert_eq( false !== strpos( $blocked_link, 'data-faz-href = "https://fonts.test/site.css"' ), true, 'E7 non-regex stylesheet fallback parks href without matching data-href' );
+	assert_eq( false !== strpos( $blocked_link, 'data-faz-category="functional"' ), true, 'E8 non-regex stylesheet fallback keeps the consent category' );
+
+	$long_module_tag = '<script ' . str_repeat( 'data-probe="xxxxxxxxxxxxxxxx" ', 200 ) . 'type="module" src="https://tracker.test/module.js"></script>';
+	$old_bt = ini_get( 'pcre.backtrack_limit' );
+	ini_set( 'pcre.backtrack_limit', '1' );
+	$safely_blocked = faz_call( $fe, 'block_script_tag_safely', array( $long_module_tag, 'analytics', 'unit-test module' ) );
+	ini_set( 'pcre.backtrack_limit', (string) $old_bt );
+	assert_eq( false !== strpos( $safely_blocked, 'type="text/plain"' ), true, 'E9 real safe-block path stays inert when its outer PCRE fails' );
+	assert_eq( false !== strpos( $safely_blocked, 'data-faz-original-type="module"' ), true, 'E10 real safe-block path preserves module type through its PCRE fallback' );
+	assert_eq( false !== strpos( $safely_blocked, 'src="https://tracker.test/module.js"' ), true, 'E11 real safe-block path never drops the script resource' );
 
 	echo "\n";
 	echo "  Passed: {$tests_passed}\n";
