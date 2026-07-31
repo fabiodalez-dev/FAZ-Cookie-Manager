@@ -140,8 +140,28 @@ if ( ! function_exists( 'update_option' ) ) {
 	// Writes into the same map get_option() reads. `$autoload` is accepted and
 	// recorded so a test can assert the ledger asks for autoload=false.
 	function update_option( $name, $value, $autoload = null ) {
+		if ( ! empty( $GLOBALS['faz_test_state']['fail_updates'][ $name ] ) ) {
+			$GLOBALS['faz_test_state']['fail_updates'][ $name ]--;
+			return false;
+		}
 		$GLOBALS['faz_test_state']['options'][ $name ]  = $value;
 		$GLOBALS['faz_test_state']['autoload'][ $name ] = $autoload;
+		return true;
+	}
+}
+if ( ! function_exists( 'add_option' ) ) {
+	function add_option( $name, $value, $deprecated = '', $autoload = null ) {
+		if ( array_key_exists( $name, $GLOBALS['faz_test_state']['options'] ) ) {
+			return false;
+		}
+		$GLOBALS['faz_test_state']['options'][ $name ]  = $value;
+		$GLOBALS['faz_test_state']['autoload'][ $name ] = $autoload;
+		return true;
+	}
+}
+if ( ! function_exists( 'delete_option' ) ) {
+	function delete_option( $name ) {
+		unset( $GLOBALS['faz_test_state']['options'][ $name ] );
 		return true;
 	}
 }
@@ -312,6 +332,7 @@ function faz_reset_renderer_statics() {
 /** Wipe both options and the renderer caches — a clean install, every time. */
 function faz_reset_world() {
 	$GLOBALS['faz_test_state']['options'] = array();
+	$GLOBALS['faz_test_state']['fail_updates'] = array();
 	$GLOBALS['faz_test_state']['now']     = '2026-06-03 09:41:00';
 	$GLOBALS['wpdb']->rows                = array();
 	$GLOBALS['wpdb']->tables_present      = true;
@@ -501,6 +522,97 @@ $day_two = Version_Ledger::current_hash();
 
 assert_true( '' !== $day_one, 'the day-one render produced a hash' );
 assert_same( $day_one, $day_two, 'a new calendar day does not move the hash (LAST_UPDATED_DATE stays volatile)' );
+
+// ---------------------------------------------------------------------------
+// (g) A saved non-default variant participates in the review token.
+// ---------------------------------------------------------------------------
+echo "\n-- saved jurisdiction/language variants participate in review --\n";
+
+faz_reset_world();
+$variant_settings = faz_fx_gdpr_settings();
+$variant_settings['section_overrides'] = array(
+	'gdpr-strict' => array(
+		'it' => array(
+			'1' => array(
+				'anchor' => '## Chi siamo',
+				'text'   => "## Chi siamo\nLa versione italiana personalizzata di {{COMPANY_NAME}}.",
+			),
+		),
+	),
+);
+$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'] = $variant_settings;
+faz_reset_renderer_statics();
+$default_before = Version_Ledger::current_hash();
+$review_before  = Version_Ledger::review_hash();
+Version_Ledger::acknowledge( $review_before );
+
+$variant_settings['section_overrides']['gdpr-strict']['it']['1']['text'] = "## Chi siamo\nTesto italiano aggiornato per {{COMPANY_NAME}}.";
+$GLOBALS['faz_test_state']['options']['faz_cookie_policy_data'] = $variant_settings;
+faz_reset_renderer_statics();
+$default_after = Version_Ledger::current_hash();
+$variant_change = Version_Ledger::evaluate();
+
+assert_same( $default_before, $default_after, 'editing only Italian leaves the default English render hash unchanged' );
+assert_true( $review_before !== $variant_change['current'], 'the aggregate review token changes for the saved Italian variant' );
+assert_same( 'changed', $variant_change['status'], 'a non-default variant change surfaces the review notice' );
+
+// ---------------------------------------------------------------------------
+// (h) Retry after the bump but before ledger persistence never bumps twice.
+// ---------------------------------------------------------------------------
+echo "\n-- material-change retries are idempotent after a partial failure --\n";
+
+$material_hash = $variant_change['current'];
+$revision      = 7;
+$bump_calls    = 0;
+$read_revision = static function () use ( &$revision ) { return $revision; };
+$bump_revision = static function ( $before ) use ( &$revision, &$bump_calls ) {
+	$bump_calls++;
+	$revision = $before + 1;
+	return $revision;
+};
+
+// Simulate the precise dangerous window: revision persisted, then the ledger
+// write fails. The pending intent must make the next HTTP attempt resumable.
+$GLOBALS['faz_test_state']['fail_updates'][ Version_Ledger::OPTION ] = 1;
+$partial = Version_Ledger::acknowledge_material( $material_hash, $read_revision, $bump_revision );
+assert_same( false, $partial['success'], 'the first request reports the failed ledger write' );
+assert_same( 8, $revision, 'the consent revision was already persisted once' );
+assert_true( null !== get_option( Version_Ledger::PENDING_OPTION, null ), 'the recovery intent remains stored' );
+
+$retry = Version_Ledger::acknowledge_material( $material_hash, $read_revision, $bump_revision );
+assert_same( true, $retry['success'], 'a retry resumes and completes the same decision' );
+assert_same( true, $retry['replayed'], 'the API result identifies the resumed operation' );
+assert_same( 8, $revision, 'the retry does not increment consent revision again' );
+assert_same( 1, $bump_calls, 'the irreversible bump callback ran exactly once' );
+assert_same( $material_hash, Version_Ledger::acknowledged_hash(), 'the resumed request finishes the ledger acknowledgement' );
+assert_same( null, get_option( Version_Ledger::PENDING_OPTION, null ), 'the recovery intent is removed after completion' );
+
+// An abandoned intent that never reached the bump may be superseded by the
+// current version. Otherwise one failed old click would 500 every later policy
+// decision forever.
+$old_hash = '111111.222222';
+$new_hash = '333333.444444';
+$revision = 10;
+$GLOBALS['faz_test_state']['options'][ Version_Ledger::PENDING_OPTION ] = array(
+	'hash'            => $old_hash,
+	'revision_before' => 10,
+	'revision_after'  => 0,
+	'started_at'      => time(),
+);
+$replacement_bumps = 0;
+$replacement = Version_Ledger::acknowledge_material(
+	$new_hash,
+	static function () use ( &$revision ) { return $revision; },
+	static function ( $before ) use ( &$revision, &$replacement_bumps ) {
+		$replacement_bumps++;
+		$revision = $before + 1;
+		return $revision;
+	}
+);
+assert_same( true, $replacement['success'], 'a newer token replaces an abandoned pre-bump intent' );
+assert_same( 11, $revision, 'the replacement decision performs one revision bump' );
+assert_same( 1, $replacement_bumps, 'the abandoned intent does not add a phantom bump' );
+assert_same( $new_hash, Version_Ledger::acknowledged_hash(), 'the newer review token is the one acknowledged' );
 
 // ---------------------------------------------------------------------------
 echo "\n────────────────────────────────────────────────────────────\n";

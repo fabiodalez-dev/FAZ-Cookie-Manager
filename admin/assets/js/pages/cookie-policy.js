@@ -736,10 +736,8 @@
 	 *  - minor    → acknowledge only. Stored consents are untouched, so nobody
 	 *               is re-prompted. This is the primary button on purpose: most
 	 *               version moves are a template tweak or a translation update.
-	 *  - material → confirm, then bump the consent revision through the EXISTING
-	 *               settings/invalidate-consents endpoint, then acknowledge. The
-	 *               order matters: acknowledging first would leave the notice
-	 *               gone and the visitors un-prompted if the bump then failed.
+	 *  - material → confirm, then call one recoverable server-side operation
+	 *               that bumps the consent revision and acknowledges the token.
 	 *  - dismiss  → hide for this page load only. Nothing is persisted, so the
 	 *               notice comes back until one of the two decisions is made.
 	 *               That is the design: an undecided policy change should keep
@@ -772,41 +770,14 @@
 			}
 		}
 
-		// POST to a path that is NOT under this module's REST base. api() would
-		// prefix it with 'cookie-policy/' and 404. Mirrors api()'s structure so
-		// the same fetch fallback applies when faz-admin.js has not loaded: a
-		// bare window.FAZ.post() would throw a *synchronous* TypeError, which
-		// .catch() cannot see, leaving a button that does nothing and says
-		// nothing.
-		function postAbsolute(path, body) {
-			var FAZ = window.FAZ;
-			if (FAZ && typeof FAZ.post === 'function') {
-				return FAZ.post(path, body || {});
-			}
-			return fetch(REST_URL.replace(/cookie-policy\/?$/, '') + path, {
-				method:      'POST',
-				credentials: 'same-origin',
-				headers:     { 'X-WP-Nonce': REST_NONCE, 'Content-Type': 'application/json' },
-				body:        JSON.stringify(body || {})
-			}).then(function (r) {
-				if (!r.ok) {
-					return r.json().then(function (j) { throw new Error(j.message || 'HTTP ' + r.status); });
-				}
-				return r.json();
-			});
-		}
-
 		function acknowledge() {
 			// api() prefixes 'cookie-policy/' — correct for this route — and
 			// carries the fetch fallback.
 			return api('POST', 'acknowledge-version', { hash: hash });
 		}
 
-		// settings/invalidate-consents is NOT idempotent: each call bumps
-		// general.consent_revision, and every bump re-prompts every returning
-		// visitor. A double click would therefore ask the whole audience twice
-		// for one decision. Guard the whole notice, not just the button that
-		// was clicked, because "minor" and "material" both write the ledger.
+		// The server also makes material retries idempotent. This guard still
+		// prevents confusing concurrent decisions from the same notice.
 		var versionBusy = false;
 		function setVersionBusy(state, btn, label) {
 			versionBusy = state;
@@ -841,8 +812,7 @@
 				);
 				if (!proceed) { return; }
 				setVersionBusy(true, materialBtn, t('versionSaving', 'Saving…'));
-				postAbsolute('settings/invalidate-consents', {})
-					.then(function () { return acknowledge(); })
+				api('POST', 'acknowledge-material-version', { hash: hash })
 					.then(function () {
 						hideNotice();
 						notifyOk(t('versionMaterialDone', 'Consents invalidated — returning visitors will be asked again.'));

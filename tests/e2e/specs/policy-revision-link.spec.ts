@@ -4,7 +4,8 @@
  * The unit suite proves the ledger arithmetic. What it cannot prove is the part
  * that matters to a visitor: that clicking "Material change" actually makes a
  * consented browser see the banner again, and that clicking "Minor change" does
- * not. Those two outcomes travel through the admin page, two REST endpoints, the
+ * not. Those two outcomes travel through the admin page, the recoverable REST
+ * decision endpoint, the
  * stored consent revision and the frontend script — so they are asserted here,
  * end to end, with a real browser holding a real consent cookie.
  *

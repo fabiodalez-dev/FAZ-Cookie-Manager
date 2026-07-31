@@ -156,6 +156,25 @@ class Cookie_Policy_Api {
 				),
 			),
 		) );
+
+		// Material changes are one recoverable server-side operation. The ledger
+		// persists an intent before bumping consent_revision, so retries after a
+		// lost response cannot invalidate all visitors twice.
+		register_rest_route( $ns, "/{$base}/acknowledge-material-version", array(
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'acknowledge_material_version' ),
+			'permission_callback' => array( $this, 'check_admin_write' ),
+			'args'                => array(
+				'hash' => array(
+					'required'          => true,
+					'type'              => 'string',
+					'validate_callback' => static function ( $value ) {
+						return is_string( $value ) && (bool) preg_match( Version_Ledger::HASH_PATTERN, $value );
+					},
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+			),
+		) );
 	}
 
 	/**
@@ -180,6 +199,19 @@ class Cookie_Policy_Api {
 				'acknowledged' => $ok ? $hash : '',
 			)
 		);
+	}
+
+	/** POST /cookie-policy/acknowledge-material-version. */
+	public function acknowledge_material_version( WP_REST_Request $request ) {
+		$result = Version_Ledger::acknowledge_material( (string) $request->get_param( 'hash' ) );
+		if ( empty( $result['success'] ) ) {
+			return new WP_Error(
+				'material_version_not_saved',
+				__( 'The consent revision could not be updated safely. Retry the operation.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
+		return rest_ensure_response( $result );
 	}
 
 	/**
