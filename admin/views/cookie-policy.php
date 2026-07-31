@@ -137,6 +137,58 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 			</details>
 		</div>
 
+		<!-- 4b. Policy text — ADVANCED. Collapsed by default: the shipped
+		     sections are reviewed and most sites should leave them alone.
+		     Exists because the operator is the one who knows their own
+		     processing, and because a policy may be needed in a language the
+		     plugin ships no template for. -->
+		<div class="faz-card">
+			<details>
+				<summary class="faz-card-header" style="cursor:pointer; list-style:revert;">
+					<h3 style="display:inline-block; margin:0;">
+						<?php esc_html_e( 'Policy text', 'faz-cookie-manager' ); ?>
+						<span style="font-weight:normal; font-size:12px; color:#666; margin-left:6px;">
+							<?php esc_html_e( '— advanced, optional', 'faz-cookie-manager' ); ?>
+						</span>
+					</h3>
+				</summary>
+				<div class="faz-card-body">
+					<div class="faz-help" style="margin-bottom:.75rem;">
+						<?php echo wp_kses_post( __( '<strong>You probably don\'t need this.</strong> The shipped sections are reviewed starting points. Fill a box only to replace that section with your own wording — placeholders such as <code>{{COMPANY_NAME}}</code> keep working inside it. Text you write here is <strong>your</strong> document, so review the disclaimer setting below accordingly. Leave a box empty to keep the shipped text.', 'faz-cookie-manager' ) ); ?>
+					</div>
+					<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:.75rem;">
+						<div class="faz-form-group" style="margin:0;">
+							<label for="cp-override-jurisdiction"><?php esc_html_e( 'Jurisdiction', 'faz-cookie-manager' ); ?></label>
+							<select id="cp-override-jurisdiction" class="faz-select">
+								<option value="gdpr-strict"><?php esc_html_e( 'GDPR (EU / EEA / UK)', 'faz-cookie-manager' ); ?></option>
+								<option value="ccpa-california"><?php esc_html_e( 'CCPA / CPRA (California, USA)', 'faz-cookie-manager' ); ?></option>
+								<option value="lgpd-brazil"><?php esc_html_e( 'LGPD (Brazil)', 'faz-cookie-manager' ); ?></option>
+								<option value="popia-southafrica"><?php esc_html_e( 'POPIA (South Africa)', 'faz-cookie-manager' ); ?></option>
+							</select>
+						</div>
+						<div class="faz-form-group" style="margin:0;">
+							<label for="cp-override-lang"><?php esc_html_e( 'Language', 'faz-cookie-manager' ); ?></label>
+							<select id="cp-override-lang" class="faz-select">
+								<?php
+								foreach ( \FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator::LANGUAGES as $faz_cp_lang ) {
+									printf(
+										'<option value="%1$s">%1$s</option>',
+										esc_attr( $faz_cp_lang )
+									);
+								}
+								?>
+							</select>
+						</div>
+						<button class="faz-btn faz-btn-secondary faz-btn-sm" id="cp-override-load" type="button">
+							<?php esc_html_e( 'Load sections', 'faz-cookie-manager' ); ?>
+						</button>
+						<span id="cp-override-status" aria-live="polite" aria-atomic="true" style="color:var(--faz-text-secondary);font-size:12px;"></span>
+					</div>
+					<div id="cp-override-sections" class="faz-form-group"></div>
+				</div>
+			</details>
+		</div>
+
 		<!-- 5. Cookies link (read-only — list pulled at render time) -->
 		<div class="faz-card">
 			<div class="faz-card-header">

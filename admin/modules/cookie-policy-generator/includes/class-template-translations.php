@@ -144,7 +144,7 @@ class Template_Translations {
 	 * @param string $scaffold Markdown scaffold.
 	 * @return string[]
 	 */
-	private static function split_sections( $scaffold ) {
+	public static function split_sections( $scaffold ) {
 		if ( ! is_string( $scaffold ) || '' === trim( $scaffold ) ) {
 			return array();
 		}

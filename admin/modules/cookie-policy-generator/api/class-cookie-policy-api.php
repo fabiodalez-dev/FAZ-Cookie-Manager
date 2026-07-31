@@ -20,6 +20,8 @@ namespace FazCookie\Admin\Modules\Cookie_Policy_Generator\Api;
 
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer;
+use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Section_Overrides;
+use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Template_Translations;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_Error;
@@ -86,6 +88,32 @@ class Cookie_Policy_Api {
 			'methods'             => 'GET',
 			'callback'            => array( $this, 'suggest_services' ),
 			'permission_callback' => array( $this, 'check_admin_read' ),
+		) );
+
+		// GET /cookie-policy/scaffold — the section list for one
+		// (jurisdiction, language) pair, so the editor can show what it is
+		// about to replace. Read-only; the admin cannot edit a section they
+		// cannot see.
+		register_rest_route( $ns, "/{$base}/scaffold", array(
+			'methods'             => 'GET',
+			'callback'            => array( $this, 'get_scaffold' ),
+			'permission_callback' => array( $this, 'check_admin_read' ),
+			'args'                => array(
+				'jurisdiction' => array(
+					'type'              => 'string',
+					'required'          => true,
+					'validate_callback' => static function ( $value ) {
+						return in_array( (string) $value, Generator::JURISDICTIONS, true );
+					},
+				),
+				'lang'         => array(
+					'type'              => 'string',
+					'required'          => true,
+					'validate_callback' => static function ( $value ) {
+						return in_array( (string) $value, Generator::LANGUAGES, true );
+					},
+				),
+			),
 		) );
 
 		// GET /cookie-policy/detected-services — same scan-derived list
@@ -163,6 +191,49 @@ class Cookie_Policy_Api {
 	 */
 	public function check_admin( $request ) {
 		return $this->check_admin_write( $request );
+	}
+
+	/**
+	 * List the sections of the effective scaffold for one jurisdiction and
+	 * language, together with any override already stored for each.
+	 *
+	 * `template_lang` reports which bundled file actually supplied the text.
+	 * It differs from the requested language whenever the plugin ships no
+	 * template for it — a language registered for translation, for instance —
+	 * and the editor says so rather than letting the admin wonder why the
+	 * English wording is in front of them.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function get_scaffold( WP_REST_Request $request ) {
+		$jurisdiction = (string) $request->get_param( 'jurisdiction' );
+		$lang         = (string) $request->get_param( 'lang' );
+
+		$path = Generator::resolve_template_path( $jurisdiction, $lang );
+		if ( ! $path || ! is_readable( $path ) ) {
+			return new WP_Error(
+				'faz_scaffold_missing',
+				__( 'No policy template is available for that jurisdiction and language.', 'faz-cookie-manager' ),
+				array( 'status' => 404 )
+			);
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled template from disk.
+		$scaffold = (string) file_get_contents( $path );
+		$scaffold = Template_Translations::apply( $jurisdiction, $lang, $scaffold );
+
+		$settings = array_replace_recursive( $this->default_settings(), (array) get_option( self::OPTION, array() ) );
+
+		return new WP_REST_Response(
+			array(
+				'jurisdiction'  => $jurisdiction,
+				'lang'          => $lang,
+				'template_lang' => basename( $path, '.md' ),
+				'sections'      => Section_Overrides::describe( $jurisdiction, $lang, $scaffold, $settings ),
+			),
+			200
+		);
 	}
 
 	/**
@@ -434,24 +505,23 @@ class Cookie_Policy_Api {
 			}
 		}
 
-		if ( isset( $in['section_overrides'] ) && is_array( $in['section_overrides'] ) ) {
-			$cleaned = array();
-			foreach ( $in['section_overrides'] as $k => $v ) {
-				if ( ! is_string( $k ) || ! is_string( $v ) ) {
-					continue;
+		if ( isset( $in['section_overrides'] ) ) {
+			// Keyed by jurisdiction AND language: a flat key would mean editing
+			// the English GDPR policy silently rewrote the Italian POPIA one.
+			// Section bodies are Markdown that REPLACES a template section, so
+			// they need newlines and lists intact — trim_clip() runs
+			// sanitize_text_field(), which collapses whitespace and strips
+			// newlines, hence the multiline-safe variant here.
+			$out['section_overrides'] = Section_Overrides::sanitize(
+				$in['section_overrides'],
+				Generator::JURISDICTIONS,
+				Generator::LANGUAGES,
+				// Closure, not array($this,'…'): trim_clip_multiline() is private,
+				// so a plain callable would be uninvokable from another class.
+				function ( $value, $max ) {
+					return $this->trim_clip_multiline( $value, $max );
 				}
-				$key = preg_replace( '/[^a-z0-9_]/', '', strtolower( $k ) );
-				if ( '' === $key || strlen( $key ) > 64 ) {
-					continue;
-				}
-				// Section overrides are markdown bodies that REPLACE a template
-				// section — they need newlines, lists, paragraphs intact.
-				// trim_clip() uses sanitize_text_field() which collapses
-				// whitespace and strips newlines; for this field we use the
-				// multiline-safe variant.
-				$cleaned[ $key ] = $this->trim_clip_multiline( $v, 5000 );
-			}
-			$out['section_overrides'] = $cleaned;
+			);
 		}
 
 		return $out;

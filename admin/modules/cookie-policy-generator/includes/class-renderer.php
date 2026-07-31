@@ -115,6 +115,13 @@ class Renderer {
 		}
 		$scaffold = Template_Translations::apply( $jurisdiction, $lang, $scaffold );
 
+		// Administrator-authored sections win over both the bundled template and
+		// any translation: an explicit editorial decision is the most specific
+		// source there is. Applied here — after gettext, before substitution —
+		// so custom text still gets placeholders resolved and passes through the
+		// same escaping as shipped text, with no second sanitisation path.
+		$scaffold = Section_Overrides::apply( $jurisdiction, $lang, $scaffold, $settings );
+
 		// FR-03 step 5: build data.
 		$data = self::build_data( $settings, $jurisdiction, $lang );
 

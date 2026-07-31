@@ -19,6 +19,12 @@
 	var root = document.getElementById('faz-cookie-policy-app');
 	if (!root) { return; }
 
+	// Every stored override, keyed [jurisdiction][lang][index]. Hydrated from
+	// the saved settings and serialised back WHOLE on save — serialising only
+	// the textareas currently on screen would wipe every other pair's text the
+	// first time someone saved while looking at a different one.
+	var sectionOverrides = {};
+
 	var REST_URL   = root.dataset.fazRestUrl || '';
 	var REST_NONCE = root.dataset.fazRestNonce || '';
 
@@ -163,6 +169,7 @@
 			if (el.type === 'number') { v = parseInt(v, 10); if (isNaN(v)) { v = 0; } }
 			setDeep(out, name, v);
 		});
+		out.section_overrides = sectionOverrides;
 		return out;
 	}
 
@@ -218,6 +225,16 @@
 	}
 
 	function writeForm(settings) {
+		// PHP serialises an empty array() as `[]`, and `typeof [] === 'object'`,
+		// so a naive check hands us an Array. Named properties CAN be set on an
+		// Array — and JSON.stringify() then drops every one of them, so the save
+		// would post an empty map with no error anywhere. Reject arrays explicitly.
+		var storedOverrides = settings && settings.section_overrides;
+		sectionOverrides = (storedOverrides && typeof storedOverrides === 'object' && !Array.isArray(storedOverrides))
+			? storedOverrides
+			: {};
+		renderOverrideSections(null);
+
 		// Scalar fields.
 		[
 			'company.name', 'company.address', 'company.email', 'company.registry',
@@ -600,6 +617,95 @@
 			});
 	}
 
+	/* ── Policy text overrides ── */
+
+	// Reach (or create) the bucket for one jurisdiction/language pair.
+	function overrideBucket(jurisdiction, lang, create) {
+		if (!sectionOverrides[jurisdiction]) {
+			if (!create) { return null; }
+			sectionOverrides[jurisdiction] = {};
+		}
+		if (!sectionOverrides[jurisdiction][lang]) {
+			if (!create) { return null; }
+			sectionOverrides[jurisdiction][lang] = {};
+		}
+		return sectionOverrides[jurisdiction][lang];
+	}
+
+	function setOverrideStatus(msg) {
+		var el = document.getElementById('cp-override-status');
+		if (el) { el.textContent = msg || ''; }
+	}
+
+	// One textarea per scaffold section. The shipped text is the *placeholder*,
+	// not the value: an empty box has to mean "keep what ships", so that a
+	// plugin update can still improve wording nobody deliberately replaced.
+	function renderOverrideSections(data) {
+		var host = document.getElementById('cp-override-sections');
+		if (!host) { return; }
+		host.innerHTML = '';
+		if (!data || !Array.isArray(data.sections)) { return; }
+
+		if (data.template_lang && data.template_lang !== data.lang) {
+			var note = document.createElement('p');
+			note.className = 'faz-help';
+			note.textContent = (FAZ_I18N.overrideFallback || 'No template ships for this language, so the sections below show the bundled fallback. What you write is still stored against the language you picked.');
+			host.appendChild(note);
+		}
+
+		var bucket = overrideBucket(data.jurisdiction, data.lang, false) || {};
+
+		data.sections.forEach(function (section) {
+			var wrap = document.createElement('div');
+			wrap.className = 'faz-form-group';
+
+			var label = document.createElement('label');
+			label.setAttribute('for', 'cp-override-' + section.index);
+			label.textContent = section.anchor || ('#' + section.index);
+			wrap.appendChild(label);
+
+			var ta = document.createElement('textarea');
+			ta.id = 'cp-override-' + section.index;
+			ta.className = 'faz-textarea';
+			ta.rows = 6;
+			ta.placeholder = section.shipped;
+			var stored = bucket[String(section.index)];
+			ta.value = (stored && stored.text) ? stored.text : '';
+
+			ta.addEventListener('input', function () {
+				var target = overrideBucket(data.jurisdiction, data.lang, true);
+				if (ta.value.trim() === '') {
+					// Clearing the box removes the override rather than storing an
+					// empty string, which would blank the section instead.
+					delete target[String(section.index)];
+				} else {
+					// The anchor travels with the text so the server can detect a
+					// scaffold that moved under it and fall back to shipped wording.
+					target[String(section.index)] = { anchor: section.anchor, text: ta.value };
+				}
+			});
+
+			wrap.appendChild(ta);
+			host.appendChild(wrap);
+		});
+	}
+
+	function loadOverrideSections() {
+		var jEl = document.getElementById('cp-override-jurisdiction');
+		var lEl = document.getElementById('cp-override-lang');
+		if (!jEl || !lEl) { return; }
+		setOverrideStatus(FAZ_I18N.overrideLoading || 'Loading…');
+		api('GET', 'scaffold?jurisdiction=' + encodeURIComponent(jEl.value) + '&lang=' + encodeURIComponent(lEl.value))
+			.then(function (data) {
+				renderOverrideSections(data);
+				setOverrideStatus('');
+			})
+			.catch(function (err) {
+				renderOverrideSections(null);
+				setOverrideStatus((err && err.message) || FAZ_I18N.overrideLoadFailed || 'Could not load the sections.');
+			});
+	}
+
 	function init() {
 	  try {
 		// Initial render runs sync (badges absent because detected set is
@@ -626,6 +732,11 @@
 		if (autoDetectBtn) {
 			autoDetectBtn.disabled = true;
 			autoDetectBtn.addEventListener('click', autoDetectServices);
+		}
+
+		var overrideLoadBtn = document.getElementById('cp-override-load');
+		if (overrideLoadBtn) {
+			overrideLoadBtn.addEventListener('click', loadOverrideSections);
 		}
 
 		// Track the admin's manual tick/untick of service checkboxes so

@@ -836,6 +836,10 @@ class Admin {
 						'previewFailed'            => __( 'Preview failed', 'faz-cookie-manager' ),
 						'initFailed'               => __( 'The generator could not start on this page. Please reload; if it persists, a plugin or theme conflict is likely.', 'faz-cookie-manager' ),
 						// Auto-detect-from-cookie-scan button + Detected badge.
+						// Policy-text override editor.
+						'overrideLoading'          => __( 'Loading…', 'faz-cookie-manager' ),
+						'overrideLoadFailed'       => __( 'Could not load the sections.', 'faz-cookie-manager' ),
+						'overrideFallback'         => __( 'No template ships for this language, so the sections below show the bundled fallback. What you write is still stored against the language you picked.', 'faz-cookie-manager' ),
 						'svcDetectedBadge'         => __( 'Detected', 'faz-cookie-manager' ),
 						'svcDetectedTooltip'       => __( 'The cookie scanner observed a tracking domain for this service on your site.', 'faz-cookie-manager' ),
 						'svcAutoDetectScanning'    => __( 'Scanning cookie inventory…', 'faz-cookie-manager' ),
