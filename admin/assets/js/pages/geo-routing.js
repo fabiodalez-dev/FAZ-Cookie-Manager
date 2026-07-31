@@ -84,18 +84,26 @@
 	// back to raw fetch for the edge case where faz-admin.js hasn't
 	// loaded yet (e.g. async load race in the WP admin head).
 	//
-	// All paths passed in are unprefixed (e.g. 'preview', 'overrides/IT');
-	// FAZ.api() prefixes 'faz/v1/' itself, the raw-fetch path uses the
-	// fully-qualified REST_URL injected by class-admin.php.
+	// All paths passed in are unprefixed and module-relative (e.g. 'preview',
+	// 'overrides/IT'). The two transports need different amounts of prefix,
+	// which is what issue #198 caught: every route here is registered under
+	// `faz/v1/geo/`, but FAZ.get() only prepends `faz/v1/`, so the module
+	// segment has to be added here. The raw-fetch fallback needs no such fix —
+	// its REST_URL is already `rest_url('faz/v1/geo/')`. Because FAZ is loaded
+	// in practice, the broken branch was the one that always ran, and every tab
+	// on the page 404'd.
+	var MODULE_BASE = 'geo/';
+
 	function api(method, path, body) {
 		var FAZ = window.FAZ;
 		var verb = String(method || 'GET').toUpperCase();
 		if (FAZ && typeof FAZ.api === 'function') {
+			var scoped = MODULE_BASE + String(path).replace(/^\//, '');
 			switch (verb) {
-				case 'GET':    return FAZ.get(path);
-				case 'POST':   return FAZ.post(path, body || {});
-				case 'PUT':    return FAZ.put(path, body || {});
-				case 'DELETE': return FAZ.del(path);
+				case 'GET':    return FAZ.get(scoped);
+				case 'POST':   return FAZ.post(scoped, body || {});
+				case 'PUT':    return FAZ.put(scoped, body || {});
+				case 'DELETE': return FAZ.del(scoped);
 			}
 		}
 		return fetch(REST_URL + path, {
