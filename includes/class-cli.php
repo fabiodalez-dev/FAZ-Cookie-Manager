@@ -300,6 +300,11 @@ class CLI {
 			wp_add_privacy_policy_content( 'FAZ Cookie Manager', $content );
 		});
 
+		// Consume every plugin's registered privacy-policy content (FAZ's own
+		// included) into the faz_privacy_content_snapshot option. Runs only on
+		// genuine wp-admin requests, on FAZ screens — see Content_Collector.
+		\FazCookie\Admin\Modules\Privacy_Policy_Generator\Includes\Content_Collector::register_hooks();
+
 		// Register personal data exporter.
 		add_filter( 'wp_privacy_personal_data_exporters', function ( $exporters ) {
 			$exporters['faz-cookie-manager'] = array(
