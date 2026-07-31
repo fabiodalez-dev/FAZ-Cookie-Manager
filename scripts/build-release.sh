@@ -294,19 +294,18 @@ cyan "Sanity checks"
 
 # Every shipped file must be one git knows about.
 #
-# This script rsyncs the working tree rather than using `git archive`, so
-# anything sitting untracked in the plugin directory ships too. That is how a
-# security-scan report directory reached all three 1.25.0 ZIPs and the GitHub
-# release assets, caught only by eyeballing the SVN staging diff. The exclude
-# list is the safety net for artefacts we know about; this is the backstop for
-# the ones nobody thought of, and it fails the build rather than the review.
+# copy_plugin() starts from `git archive HEAD`, then applies the release-shape
+# excludes. Comparing the ZIP with that SAME repository remains a useful
+# backstop against a staging/ZIP bug. Use PLUGIN_SRC here too: release worktrees
+# and CI callers intentionally override it, and consulting PROJECT_ROOT instead
+# compares the package against a different checkout.
 # LC_ALL=C must wrap `comm` itself, not just the two `sort`s: comm compares
 # with the *current* locale, so C-sorted input fed to a UTF-8 comm reports
 # almost every line as divergent.
 untracked_in_zip=$(
     LC_ALL=C comm -23 \
         <(unzip -Z1 "${WPORG_ZIP}" | sed "s#^${PLUGIN_SLUG}/##" | grep -v '/$' | grep -v '^$' | LC_ALL=C sort -u) \
-        <(git -C "${PROJECT_ROOT}/${PLUGIN_SLUG}" ls-files | LC_ALL=C sort -u)
+        <(git -C "${PLUGIN_SRC}" ls-files | LC_ALL=C sort -u)
 )
 # The other direction: a tracked file that the ZIP is MISSING. This is the
 # 1.20.0 near-miss — exclude patterns silently dropped frontend/images/cookie.png,
@@ -317,7 +316,7 @@ untracked_in_zip=$(
 missing_from_zip=$(
     LC_ALL=C comm -13 \
         <(unzip -Z1 "${WPORG_ZIP}" | sed "s#^${PLUGIN_SLUG}/##" | grep -v '/$' | grep -v '^$' | LC_ALL=C sort -u) \
-        <(git -C "${PROJECT_ROOT}/${PLUGIN_SLUG}" ls-files | LC_ALL=C sort -u)
+        <(git -C "${PLUGIN_SRC}" ls-files | LC_ALL=C sort -u)
 )
 # Everything legitimately absent is absent because an exclude says so. Rather
 # than re-implement rsync's matching, ask the staged tree: a tracked file that
