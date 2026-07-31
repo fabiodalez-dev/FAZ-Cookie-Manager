@@ -194,6 +194,15 @@ cp "${PLUGIN_SRC}/.wordpress-org/"banner-*.jpg assets/ 2>/dev/null || true
 cp "${PLUGIN_SRC}/.wordpress-org/"icon-*.png assets/ 2>/dev/null || true
 cp "${PLUGIN_SRC}/.wordpress-org/"icon-*.jpg assets/ 2>/dev/null || true
 
+# The Playground blueprint drives the "Live Preview" button on the plugin's
+# wp.org directory page. It has existed in .wordpress-org/blueprints/ for
+# releases without ever being copied here, so the button has been falling back
+# to a default preview the whole time. wp.org reads it from assets/blueprints/.
+if [[ -d "${PLUGIN_SRC}/.wordpress-org/blueprints" ]]; then
+    mkdir -p assets/blueprints
+    cp "${PLUGIN_SRC}/.wordpress-org/blueprints/"*.json assets/blueprints/ 2>/dev/null || true
+fi
+
 if [[ "${NO_TAG}" == "0" ]]; then
     cyan "═══ Apply: svn cp trunk → tags/${VERSION} ═══"
     if [[ -d "tags/${VERSION}" ]]; then
