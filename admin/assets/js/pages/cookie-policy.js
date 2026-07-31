@@ -772,34 +772,76 @@
 			}
 		}
 
+		// POST to a path that is NOT under this module's REST base. api() would
+		// prefix it with 'cookie-policy/' and 404. Mirrors api()'s structure so
+		// the same fetch fallback applies when faz-admin.js has not loaded: a
+		// bare window.FAZ.post() would throw a *synchronous* TypeError, which
+		// .catch() cannot see, leaving a button that does nothing and says
+		// nothing.
+		function postAbsolute(path, body) {
+			var FAZ = window.FAZ;
+			if (FAZ && typeof FAZ.post === 'function') {
+				return FAZ.post(path, body || {});
+			}
+			return fetch(REST_URL.replace(/cookie-policy\/?$/, '') + path, {
+				method:      'POST',
+				credentials: 'same-origin',
+				headers:     { 'X-WP-Nonce': REST_NONCE, 'Content-Type': 'application/json' },
+				body:        JSON.stringify(body || {})
+			}).then(function (r) {
+				if (!r.ok) {
+					return r.json().then(function (j) { throw new Error(j.message || 'HTTP ' + r.status); });
+				}
+				return r.json();
+			});
+		}
+
 		function acknowledge() {
-			// Not routed through api(): that helper prefixes every path with
-			// 'cookie-policy/', which is right here but wrong for the settings
-			// endpoint below, so both calls use window.FAZ.post for symmetry.
-			return window.FAZ.post('cookie-policy/acknowledge-version', { hash: hash });
+			// api() prefixes 'cookie-policy/' — correct for this route — and
+			// carries the fetch fallback.
+			return api('POST', 'acknowledge-version', { hash: hash });
+		}
+
+		// settings/invalidate-consents is NOT idempotent: each call bumps
+		// general.consent_revision, and every bump re-prompts every returning
+		// visitor. A double click would therefore ask the whole audience twice
+		// for one decision. Guard the whole notice, not just the button that
+		// was clicked, because "minor" and "material" both write the ledger.
+		var versionBusy = false;
+		function setVersionBusy(state, btn, label) {
+			versionBusy = state;
+			var FAZ = window.FAZ;
+			[minorBtn, materialBtn, dismissBtn].forEach(function (b) {
+				if (b) { b.disabled = state; }
+			});
+			if (btn && FAZ && typeof FAZ.btnLoading === 'function') {
+				FAZ.btnLoading(btn, state, label);
+			}
 		}
 
 		if (minorBtn) {
 			minorBtn.addEventListener('click', function () {
+				if (versionBusy) { return; }
+				setVersionBusy(true, minorBtn, t('versionSaving', 'Saving…'));
 				acknowledge()
 					.then(function () {
 						hideNotice();
 						notifyOk(t('versionMinorDone', 'Version confirmed. Existing consents are unchanged.'));
 					})
-					.catch(notifyError);
+					.catch(notifyError)
+					.then(function () { setVersionBusy(false, minorBtn, ''); });
 			});
 		}
 
 		if (materialBtn) {
 			materialBtn.addEventListener('click', function () {
+				if (versionBusy) { return; }
 				var proceed = window.confirm(
 					t('versionMaterialConfirm', 'All returning visitors will be shown the consent banner again on their next visit. Continue?')
 				);
 				if (!proceed) { return; }
-				// NOTE: 'settings/invalidate-consents' must NOT go through api() —
-				// it would become 'cookie-policy/settings/invalidate-consents' and
-				// 404. This is the single caller of the consent bump in this file.
-				window.FAZ.post('settings/invalidate-consents', {})
+				setVersionBusy(true, materialBtn, t('versionSaving', 'Saving…'));
+				postAbsolute('settings/invalidate-consents', {})
 					.then(function () { return acknowledge(); })
 					.then(function () {
 						hideNotice();
@@ -807,7 +849,8 @@
 					})
 					// Leave the notice up on failure: the operator asked for a
 					// re-prompt and did not get one, so the decision is still open.
-					.catch(notifyError);
+					.catch(notifyError)
+					.then(function () { setVersionBusy(false, materialBtn, ''); });
 			});
 		}
 

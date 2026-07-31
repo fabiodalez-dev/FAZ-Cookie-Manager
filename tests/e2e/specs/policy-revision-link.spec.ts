@@ -122,7 +122,14 @@ test.afterAll(async ({ browser, wpCreds }) => {
     // acknowledged, so acknowledge once more — otherwise the next suite that
     // opens this page inherits a notice this one created.
     await page.goto(ADMIN_PAGE, { waitUntil: 'domcontentloaded' });
-    const hash = await page.locator(NOTICE).getAttribute('data-current-hash').catch(() => null);
+    // count() first: "no notice" is an expected outcome here (restoring the
+    // settings can land back on an already-acknowledged hash), and calling
+    // getAttribute() on an absent locator would burn Playwright's full 30s
+    // default timeout in teardown before the catch swallowed it.
+    const noticeEl = page.locator(NOTICE);
+    const hash = (await noticeEl.count()) > 0
+      ? await noticeEl.getAttribute('data-current-hash', { timeout: 5_000 }).catch(() => null)
+      : null;
     if (hash) {
       await fazApiPost(page, nonce, 'cookie-policy/acknowledge-version', { hash });
     }
