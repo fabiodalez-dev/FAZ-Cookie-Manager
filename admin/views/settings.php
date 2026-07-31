@@ -467,6 +467,49 @@ defined( 'ABSPATH' ) || exit;
 
 	<div class="faz-card">
 		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Footer legal links', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="legal_links.enabled">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Show legal links in the footer', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php esc_html_e( 'Off by default. When enabled, the pages you select below are printed as a small navigation block in your theme footer (via wp_footer). The markup is identical for every visitor — it does not depend on consent, login state or country — so it stays safe to serve from a page cache.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Pages to link', 'faz-cookie-manager' ); ?></label>
+				<?php
+				// Server-rendered on purpose: the list is static for the request,
+				// so saveSettings() never has to guard against an async list that
+				// has not loaded yet (unlike the A/B-test variant checkboxes).
+				// NOTE: these inputs deliberately carry NO data-path — FAZ.serializeForm
+				// must skip them; settings.js collects them through its own serializer.
+				$faz_legal_pages = get_pages( array( 'post_status' => 'publish' ) );
+				?>
+				<?php if ( empty( $faz_legal_pages ) ) : ?>
+					<div class="faz-help"><?php esc_html_e( 'No published pages yet. Publish your Cookie Policy or Privacy Policy page first.', 'faz-cookie-manager' ); ?></div>
+				<?php else : ?>
+					<div id="faz-legal-links-pages" style="max-height:260px;overflow:auto;padding:8px;border-radius:6px;background:var(--faz-bg-secondary);">
+						<?php foreach ( $faz_legal_pages as $faz_legal_page ) : ?>
+							<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+								<label class="faz-checkbox" style="flex:1;min-width:0;">
+									<input type="checkbox" class="faz-legal-link-page" value="<?php echo esc_attr( $faz_legal_page->ID ); ?>">
+									<span style="margin-left:6px;"><?php echo esc_html( $faz_legal_page->post_title ); ?></span>
+								</label>
+								<input type="text" class="faz-input faz-input-sm faz-legal-link-label" data-page-id="<?php echo esc_attr( $faz_legal_page->ID ); ?>" placeholder="<?php esc_attr_e( 'Custom label (optional)', 'faz-cookie-manager' ); ?>" style="max-width:220px;">
+							</div>
+						<?php endforeach; ?>
+					</div>
+					<div class="faz-help"><?php esc_html_e( 'Links appear in the order the pages are listed here. Leave the label empty to use the page title, so renaming the page keeps the footer link in sync. Unpublishing a page removes its link immediately, with no need to save again.', 'faz-cookie-manager' ); ?></div>
+				<?php endif; ?>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
 			<h3><?php esc_html_e( 'Force re-consent', 'faz-cookie-manager' ); ?></h3>
 		</div>
 		<div class="faz-card-body">
