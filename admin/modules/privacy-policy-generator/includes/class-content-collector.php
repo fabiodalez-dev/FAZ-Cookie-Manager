@@ -387,7 +387,7 @@ class Content_Collector {
 	/**
 	 * Sanitise one block body.
 	 *
-	 * Order matters and is load-bearing: kses, then clip, then trim, and the
+	 * Order matters and is load-bearing: kses, then HTML-aware clip, then trim, and the
 	 * hash is taken on the FINAL stored string. Hashing the producer's raw
 	 * text instead would make every block whose text kses touches re-hash
 	 * differently from what is stored, producing a phantom "updated" — and a
@@ -398,7 +398,35 @@ class Content_Collector {
 	 * @return string
 	 */
 	private static function sanitize_html( $html ) {
-		return trim( self::clip( \wp_kses_post( (string) $html ), self::MAX_HTML ) );
+		$html = \wp_kses_post( (string) $html );
+		if ( self::length( $html ) <= self::MAX_HTML ) {
+			return trim( $html );
+		}
+
+		// A character slice can end inside `<a href="…` or leave an open
+		// element. Rebalance after clipping, then reduce the text budget by the
+		// closing tags that balancing added until the final stored HTML fits.
+		$budget = self::MAX_HTML;
+		while ( $budget > 0 ) {
+			$clipped    = self::clip( $html, $budget );
+			$last_open  = strrpos( $clipped, '<' );
+			$last_close = strrpos( $clipped, '>' );
+			if ( false !== $last_open && ( false === $last_close || $last_open > $last_close ) ) {
+				$clipped = substr( $clipped, 0, $last_open );
+			}
+			$balanced = function_exists( 'force_balance_tags' ) ? \force_balance_tags( $clipped ) : $clipped;
+			$length   = self::length( $balanced );
+			if ( $length <= self::MAX_HTML ) {
+				return trim( $balanced );
+			}
+			$budget -= max( 1, $length - self::MAX_HTML );
+		}
+		return '';
+	}
+
+	/** Character length, multibyte-aware where possible. */
+	private static function length( $text ) {
+		return function_exists( 'mb_strlen' ) ? mb_strlen( (string) $text ) : strlen( (string) $text );
 	}
 
 	/**
@@ -495,23 +523,23 @@ class Content_Collector {
 		$blocks  = $stored_blocks;
 		$matched = array();
 
-		// PASS 1 — match on the text itself. This is what carries a block
-		// across a rename or a translated plugin name: the declaration did not
-		// change, only the label on it.
-		$unmatched = array();
+		// PASS 1 — exact identity first. This must precede hash-only matching:
+		// two unrelated plugins can publish identical boilerplate, and incoming
+		// order must never swap their names (or operator overrides) between ids.
+		$remaining = array();
 		foreach ( $incoming as $entry ) {
 			$id = null;
 			foreach ( $blocks as $candidate_id => $block ) {
 				if ( isset( $matched[ $candidate_id ] ) ) {
 					continue;
 				}
-				if ( $block['source_hash'] === $entry['hash'] ) {
+				if ( $block['plugin_name'] === $entry['name'] && $block['source_hash'] === $entry['hash'] ) {
 					$id = $candidate_id;
 					break;
 				}
 			}
 			if ( null === $id ) {
-				$unmatched[] = $entry;
+				$remaining[] = $entry;
 				continue;
 			}
 
@@ -522,7 +550,33 @@ class Content_Collector {
 			$blocks[ $id ]['removed']     = 0;
 		}
 
-		// PASS 2 — match on the plugin name. This is what carries a block
+		// PASS 2 — hash-only rename carry-forward, but only when the hash is
+		// unique on both sides. Shared boilerplate is not an identity key.
+		$unmatched = array();
+		foreach ( $remaining as $entry ) {
+			$candidates = array();
+			foreach ( $blocks as $candidate_id => $block ) {
+				if ( ! isset( $matched[ $candidate_id ] ) && $block['source_hash'] === $entry['hash'] ) {
+					$candidates[] = $candidate_id;
+				}
+			}
+			$rivals = 0;
+			foreach ( $remaining as $other ) {
+				if ( $other['hash'] === $entry['hash'] ) {
+					++$rivals;
+				}
+			}
+			if ( 1 !== count( $candidates ) || 1 !== $rivals ) {
+				$unmatched[] = $entry;
+				continue;
+			}
+			$id = $candidates[0];
+			$matched[ $id ] = true;
+			$blocks[ $id ]['plugin_name'] = $entry['name'];
+			$blocks[ $id ]['removed']     = 0;
+		}
+
+		// PASS 3 — match on the plugin name. This is what carries a block
 		// across a rewritten declaration.
 		//
 		// Only a name that is unambiguous on BOTH sides may match: one
@@ -566,7 +620,7 @@ class Content_Collector {
 			$blocks[ $id ]['removed']     = 0;
 		}
 
-		// PASS 3 — anything still unclaimed is a producer seen for the first
+		// PASS 4 — anything still unclaimed is a producer seen for the first
 		// time. The cap refuses new blocks; it never truncates the map,
 		// because truncation could evict a block the operator has edited.
 		foreach ( $still as $entry ) {
@@ -589,7 +643,7 @@ class Content_Collector {
 			$matched[ $id ] = true;
 		}
 
-		// PASS 4 — stored blocks nobody claimed: the producer is gone. Drop
+		// PASS 5 — stored blocks nobody claimed: the producer is gone. Drop
 		// the untouched ones, keep and flag the ones the operator rewrote.
 		foreach ( $blocks as $id => $block ) {
 			if ( isset( $matched[ $id ] ) ) {

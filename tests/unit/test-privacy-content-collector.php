@@ -67,6 +67,26 @@ if ( ! function_exists( 'wp_kses_post' ) ) {
 		return preg_replace( '#<script\b[^>]*>.*?</script>#is', '', (string) $value );
 	}
 }
+if ( ! function_exists( 'force_balance_tags' ) ) {
+	function force_balance_tags( $html ) {
+		$stack = array();
+		preg_match_all( '#</?([a-z0-9]+)\b[^>]*>#i', (string) $html, $tags );
+		foreach ( $tags[0] as $i => $tag ) {
+			$name = strtolower( $tags[1][ $i ] );
+			if ( preg_match( '#^</#', $tag ) ) {
+				if ( end( $stack ) === $name ) {
+					array_pop( $stack );
+				}
+			} elseif ( ! preg_match( '#/\s*>$#', $tag ) && ! in_array( $name, array( 'br', 'hr', 'img', 'input' ), true ) ) {
+				$stack[] = $name;
+			}
+		}
+		while ( $stack ) {
+			$html .= '</' . array_pop( $stack ) . '>';
+		}
+		return $html;
+	}
+}
 if ( ! function_exists( 'sanitize_title' ) ) {
 	function sanitize_title( $title ) {
 		$title = strtolower( (string) $title );
@@ -525,6 +545,34 @@ $snapshot                       = Content_Collector::collect();
 faz_pc_eq( count( $snapshot['blocks'] ), Content_Collector::MAX_BLOCKS, 'A block past the cap is refused, never squeezed in' );
 faz_pc_eq( isset( $snapshot['blocks']['one-too-many'] ), false, 'The overflow block is the one refused' );
 faz_pc_eq( $snapshot['blocks']['plugin-0']['override']['text'], $own, 'The cap never evicts an operator-edited block' );
+
+// ---------------------------------------------------------------------------
+// 14. Equal source text never swaps distinct plugin identities.
+// ---------------------------------------------------------------------------
+
+$shared = '<p>We process account identifiers.</p>';
+faz_pc_reset( array( faz_pc_entry( 'Plugin Alpha', $shared ), faz_pc_entry( 'Plugin Beta', $shared ) ) );
+Content_Collector::collect();
+Content_Collector::set_override( 'plugin-alpha', '<p>Alpha operator wording.</p>' );
+Content_Collector::set_override( 'plugin-beta', '<p>Beta operator wording.</p>' );
+
+$GLOBALS['faz_pc_registered'] = array( faz_pc_entry( 'Plugin Beta', $shared ), faz_pc_entry( 'Plugin Alpha', $shared ) );
+$snapshot = Content_Collector::collect();
+faz_pc_eq( $snapshot['blocks']['plugin-alpha']['plugin_name'], 'Plugin Alpha', 'reversed equal text keeps Alpha on the Alpha id' );
+faz_pc_eq( $snapshot['blocks']['plugin-beta']['plugin_name'], 'Plugin Beta', 'reversed equal text keeps Beta on the Beta id' );
+faz_pc_eq( Content_Collector::effective_blocks()['plugin-alpha']['html'], '<p>Alpha operator wording.</p>', 'Alpha keeps its own override' );
+faz_pc_eq( Content_Collector::effective_blocks()['plugin-beta']['html'], '<p>Beta operator wording.</p>', 'Beta keeps its own override' );
+
+// ---------------------------------------------------------------------------
+// 15. Oversized HTML is clipped without a partial or dangling tag.
+// ---------------------------------------------------------------------------
+
+faz_pc_reset( array( faz_pc_entry( 'Large HTML', '<p>' . str_repeat( 'x', Content_Collector::MAX_HTML ) . '</p>' ) ) );
+$snapshot = Content_Collector::collect();
+$large    = $snapshot['blocks']['large-html']['source_html'];
+faz_pc_true( strlen( $large ) <= Content_Collector::MAX_HTML, 'balanced oversized HTML stays within MAX_HTML' );
+faz_pc_true( substr( $large, -4 ) === '</p>', 'an element clipped in its text is closed cleanly' );
+faz_pc_eq( substr_count( $large, '<p>' ), substr_count( $large, '</p>' ), 'stored oversized HTML has balanced paragraph tags' );
 
 echo "\n--\nTests:  {$faz_pc_run}\nPassed: {$faz_pc_passed}\nFailed: {$faz_pc_failed}\n\n";
 if ( $faz_pc_failed > 0 ) {

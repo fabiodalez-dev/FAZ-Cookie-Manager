@@ -87,9 +87,11 @@ in-memory comparison. The option is written only when the diff reports a materia
 The same semantics already shipped for the Cookie Policy in `Section_Overrides`, reused rather than
 reinvented:
 
-- Each collected block is a section. Its identity anchor is the plugin, matched first by the text
-  itself (so a rename or a translated display name carries the block forward) and then by display name
-  (so a rewritten declaration updates the block it belongs to).
+- Each collected block is a section. Identity matching is deliberately ordered: exact display
+  name + source hash first; hash-only rename carry-forward only when that hash is unique on both
+  sides; then name-only rewrite carry-forward, again only when unique on both sides. This prevents
+  two plugins that publish identical boilerplate from exchanging ids and operator overrides when
+  WordPress returns them in a different order.
 - The collected text is the **placeholder**, not the saved value. An empty override box means "keep
   receiving updates".
 - An operator who rewrites a block keeps their wording; the block stops tracking upstream. The anchor
@@ -136,7 +138,8 @@ site ever deactivated as a live block, so they are dropped on the way in.
 
 ## Sanitisation boundary
 
-Each collected body goes through `wp_kses_post()`, then a character clip, then a trim — and the
+Each collected body goes through `wp_kses_post()`, then an HTML-aware character clip that removes a
+partial trailing tag and balances open elements within the same budget, then a trim — and the
 `source_hash` is computed on that **final stored string**.
 
 The order is load-bearing. Hashing the producer's raw text instead would make every block whose text
