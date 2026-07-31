@@ -154,11 +154,22 @@ class Generator {
 	 * for recipient/safeguard detail, so those fields must not silently vanish
 	 * through Renderer::strip_empty_label_lines().
 	 *
-	 * @param string $jurisdiction Effective jurisdiction id.
-	 * @param array  $settings     Cookie Policy settings.
+	 * @param string               $jurisdiction Effective jurisdiction id.
+	 * @param array                $settings     Cookie Policy settings.
+	 * @param Document_Config|null $doc          Optional document being rendered.
+	 *                                           Null (or the cookie policy) keeps
+	 *                                           the behaviour below; any other
+	 *                                           document has no mandatory fields
+	 *                                           yet, because registry-driven
+	 *                                           gating is a later step of the plan
+	 *                                           and inventing rules here would
+	 *                                           change refusal output.
 	 * @return string[] Missing dot-paths.
 	 */
-	public static function missing_required_settings( $jurisdiction, array $settings ) {
+	public static function missing_required_settings( $jurisdiction, array $settings, ?Document_Config $doc = null ) {
+		if ( null !== $doc && 'cookie-policy' !== $doc->slug() ) {
+			return array();
+		}
 		if ( 'popia-southafrica' !== $jurisdiction ) {
 			return array();
 		}
@@ -203,26 +214,32 @@ class Generator {
 	 *   2. native lang of jurisdiction (if different)
 	 *   3. en (universal fallback)
 	 *
-	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil / popia-southafrica).
-	 * @param string $lang         BCP-47 language code. Languages without a
-	 *                             bundled file use the jurisdiction fallback.
+	 * @param string               $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil / popia-southafrica).
+	 * @param string               $lang         BCP-47 language code. Languages without
+	 *                                           a bundled file use the jurisdiction
+	 *                                           fallback.
+	 * @param Document_Config|null $doc          Optional document being rendered. Null
+	 *                                           resolves against the cookie-policy
+	 *                                           constants below, which remain the
+	 *                                           cookie policy's source of truth.
 	 * @return string|null Absolute path to .md file, or null if no template found.
 	 */
-	public static function resolve_template_path( $jurisdiction, $lang ) {
-		if ( ! in_array( $jurisdiction, self::JURISDICTIONS, true ) ) {
+	public static function resolve_template_path( $jurisdiction, $lang, ?Document_Config $doc = null ) {
+		$jurisdictions = null === $doc ? self::JURISDICTIONS : $doc->jurisdictions();
+		if ( ! in_array( $jurisdiction, $jurisdictions, true ) ) {
 			return null;
 		}
+		// Native fallback if different from requested.
+		$native = null === $doc ? ( self::NATIVE_LANG[ $jurisdiction ] ?? 'en' ) : $doc->native_lang( $jurisdiction );
 		// Defense-in-depth path-traversal hardening. A valid BCP-47 code is safe
 		// to compose into a candidate path; a language with no shipped file then
 		// follows the documented native/en fallback chain.
 		$lang = self::normalize_language_code( $lang );
 		if ( '' === $lang ) {
-			$lang = self::NATIVE_LANG[ $jurisdiction ] ?? 'en';
+			$lang = $native;
 		}
-		$dir = self::templates_dir() . '/' . $jurisdiction;
+		$dir = ( null === $doc ? self::templates_dir() : $doc->templates_dir() ) . '/' . $jurisdiction;
 		$candidates = array( $lang );
-		// Native fallback if different from requested.
-		$native = self::NATIVE_LANG[ $jurisdiction ] ?? 'en';
 		if ( $native !== $lang ) {
 			$candidates[] = $native;
 		}

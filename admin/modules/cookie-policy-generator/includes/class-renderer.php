@@ -25,6 +25,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// The document registry is a hard dependency of render(), and the renderer is
+// routinely loaded by hand (unit suites, CLI tools) with no autoloader and no
+// plugin bootstrap. Pull both files in here so that loading this one file is
+// enough to render, exactly as it was before the registry existed.
+require_once __DIR__ . '/class-document-config.php';
+require_once __DIR__ . '/class-document-registry.php';
+
 /**
  * Cookie policy renderer.
  *
@@ -72,7 +79,26 @@ class Renderer {
 	 * @return string HTML (already wp_kses_post'd, safe to echo).
 	 */
 	public static function render( $atts = array() ) {
-		$settings = (array) get_option( self::SETTINGS_OPTION, array() );
+		return self::render_for( Document_Registry::get( 'cookie-policy' ), $atts );
+	}
+
+	/**
+	 * Render one registered document.
+	 *
+	 * This is render()'s pipeline, with every cookie-policy-specific coordinate
+	 * (settings option, template tree, gettext catalogue, mandatory fields,
+	 * token builder, wrapper class) read from the document config instead of
+	 * being hardcoded. For the cookie policy the two paths are byte-identical —
+	 * pinned by tests/unit/test-cookie-policy-golden-render.php.
+	 *
+	 * @param Document_Config      $doc  Document to render.
+	 * @param array<string,string> $atts Shortcode attributes:
+	 *                                   - 'lang' (optional)
+	 *                                   - 'jurisdiction' (optional)
+	 * @return string HTML (already kses'd, safe to echo).
+	 */
+	public static function render_for( Document_Config $doc, $atts = array() ) {
+		$settings = (array) get_option( $doc->option(), array() );
 
 		// Merge a minimal structural baseline so substitution doesn't trip on
 		// missing keys when the option is absent. See baseline_defaults() —
@@ -86,17 +112,17 @@ class Renderer {
 		$lang = self::resolve_lang( $atts, $settings );
 
 		// FR-03 step 2: resolve jurisdiction.
-		$jurisdiction = self::resolve_jurisdiction( $atts, $settings );
+		$jurisdiction = self::resolve_jurisdiction( $atts, $settings, $doc );
 		// Validate the jurisdiction that will actually be rendered. A shortcode
 		// override changes the legal regime, but it must never bypass that
 		// regime's mandatory fields (notably the POPIA operator and Information
 		// Officer details).
-		if ( Generator::missing_required_settings( $jurisdiction, $settings ) ) {
+		if ( $doc->missing_required_settings( $jurisdiction, $settings ) ) {
 			return self::incomplete_configuration_notice();
 		}
 
 		// FR-03 step 3: load scaffold.
-		$template_path = Generator::resolve_template_path( $jurisdiction, $lang );
+		$template_path = Generator::resolve_template_path( $jurisdiction, $lang, $doc );
 		if ( null === $template_path ) {
 			// NFR-03 graceful no-op + admin notice.
 			return self::no_template_notice( $jurisdiction, $lang );
@@ -113,7 +139,7 @@ class Renderer {
 		if ( '' === $scaffold ) {
 			return self::no_template_notice( $jurisdiction, $lang );
 		}
-		$scaffold = Template_Translations::apply( $jurisdiction, $lang, $scaffold );
+		$scaffold = Template_Translations::apply( $jurisdiction, $lang, $scaffold, $doc );
 
 		// Administrator-authored sections win over both the bundled template and
 		// any translation: an explicit editorial decision is the most specific
@@ -123,7 +149,7 @@ class Renderer {
 		$scaffold = Section_Overrides::apply( $jurisdiction, $lang, $scaffold, $settings );
 
 		// FR-03 step 5: build data.
-		$data = self::build_data( $settings, $jurisdiction, $lang );
+		$data = $doc->build_data( $settings, $jurisdiction, $lang );
 
 		// FR-03 step 6+7: substitute + convert.
 		//
@@ -137,7 +163,7 @@ class Renderer {
 		// sentinel back for the real HTML. Standalone-line sentinels get the
 		// surrounding `<p>` wrapper stripped so the injected block sits at the
 		// right nesting level.
-		$html_tokens   = array_intersect_key( $data, array_flip( Generator::HTML_TOKENS ) );
+		$html_tokens   = array_intersect_key( $data, array_flip( $doc->html_tokens() ) );
 		$data_for_md   = $data;
 		foreach ( array_keys( $html_tokens ) as $token_name ) {
 			$data_for_md[ $token_name ] = Generator::html_token_sentinel( $token_name );
@@ -212,7 +238,7 @@ class Renderer {
 		$policy_version = self::register_version_meta( $template_path, $data, $scaffold );
 
 		// Wrap in <article> per NFR-02-X accessibility.
-		$wrapper_open  = '<article class="faz-cookie-policy" lang="' . esc_attr( $lang )
+		$wrapper_open  = '<article class="' . esc_attr( $doc->wrapper_class() ) . '" lang="' . esc_attr( $lang )
 			. '" data-jurisdiction="' . esc_attr( $jurisdiction )
 			. '" data-faz-policy-version="' . esc_attr( $policy_version ) . '">';
 		$wrapper_close = '</article>';
@@ -304,31 +330,42 @@ class Renderer {
 	}
 
 	/**
-	 * Resolve effective jurisdiction. Explicit > admin default > gdpr-strict.
+	 * Resolve effective jurisdiction. Explicit > admin default > first supported.
 	 *
-	 * @param array $atts
-	 * @param array $settings
+	 * The final fallback is the document's FIRST declared jurisdiction — for the
+	 * cookie policy that is 'gdpr-strict', the same value this method returned
+	 * when it was hardcoded.
+	 *
+	 * @param array           $atts
+	 * @param array           $settings
+	 * @param Document_Config $doc Document being rendered.
 	 * @return string
 	 */
-	private static function resolve_jurisdiction( array $atts, array $settings ) {
-		if ( ! empty( $atts['jurisdiction'] ) && in_array( $atts['jurisdiction'], Generator::JURISDICTIONS, true ) ) {
+	private static function resolve_jurisdiction( array $atts, array $settings, Document_Config $doc ) {
+		$jurisdictions = $doc->jurisdictions();
+		if ( ! empty( $atts['jurisdiction'] ) && in_array( $atts['jurisdiction'], $jurisdictions, true ) ) {
 			return (string) $atts['jurisdiction'];
 		}
-		if ( ! empty( $settings['jurisdiction'] ) && in_array( $settings['jurisdiction'], Generator::JURISDICTIONS, true ) ) {
+		if ( ! empty( $settings['jurisdiction'] ) && in_array( $settings['jurisdiction'], $jurisdictions, true ) ) {
 			return (string) $settings['jurisdiction'];
 		}
-		return 'gdpr-strict';
+		return (string) $jurisdictions[0];
 	}
 
 	/**
 	 * Build the substitution-data array.
+	 *
+	 * Internal API: public only because Document_Registry registers it as the
+	 * cookie policy's `data_builder` callable, which PHP cannot invoke on a
+	 * private method from outside the class. Not part of the plugin's public
+	 * surface — call it through Document_Config::build_data().
 	 *
 	 * @param array  $settings    Admin form payload.
 	 * @param string $jurisdiction
 	 * @param string $lang
 	 * @return array<string,string>
 	 */
-	private static function build_data( array $settings, $jurisdiction, $lang ) {
+	public static function build_data( array $settings, $jurisdiction, $lang ) {
 		$company = (array) ( $settings['company'] ?? array() );
 		$dpo     = (array) ( $settings['dpo'] ?? array() );
 
