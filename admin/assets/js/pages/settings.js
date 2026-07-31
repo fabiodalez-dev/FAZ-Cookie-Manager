@@ -228,16 +228,38 @@
 	 * Collect the checked footer legal links, in DOM order, as
 	 * [{ page_id, label }]. DOM order is the rendered order, which is what the
 	 * admin sees on screen.
+	 *
+	 * Entries whose page has no row on this screen are carried over untouched.
+	 * The view renders only published pages and only the first 200 of them, so a
+	 * stored page can legitimately have no checkbox — and an absent checkbox is
+	 * not the admin unticking it, it is the admin never having been shown it.
+	 * Inferring "unchecked" from "not rendered" would silently delete links on
+	 * save. Carrying them over also matches how the renderer treats publish
+	 * state: the stored list is the admin's intent, publish state is applied at
+	 * render time, so unpublishing hides a link and republishing brings it back.
+	 *
+	 * @param {Array} stored The currently stored link_items, used as the source
+	 *                       for entries that have no row on screen.
 	 */
-	function serializeLegalLinks() {
+	function serializeLegalLinks(stored) {
 		var items = [];
 		var container = document.getElementById('faz-legal-links-pages');
 		if (!container) return items;
+		var rendered = {};
+		container.querySelectorAll('input.faz-legal-link-page').forEach(function (cb) {
+			rendered[String(cb.value || '')] = true;
+		});
 		container.querySelectorAll('input.faz-legal-link-page:checked').forEach(function (cb) {
 			var pageId = parseInt(cb.value, 10);
 			if (!pageId) return;
 			var labelInput = container.querySelector('input.faz-legal-link-label[data-page-id="' + cb.value + '"]');
 			items.push({ page_id: pageId, label: ((labelInput && labelInput.value) || '').trim() });
+		});
+		(Array.isArray(stored) ? stored : []).forEach(function (item) {
+			if (!item) return;
+			var pageId = parseInt(item.page_id, 10);
+			if (!pageId || rendered[String(pageId)]) return;
+			items.push({ page_id: pageId, label: typeof item.label === 'string' ? item.label : '' });
 		});
 		return items;
 	}
@@ -343,15 +365,19 @@
 			// below is a per-group Object.assign, both keys must travel together
 			// or a partial group would replace only one of them.
 			formData.legal_links = formData.legal_links || {};
+			var storedLegalLinks = (current.legal_links && Array.isArray(current.legal_links.link_items))
+				? current.legal_links.link_items
+				: [];
 			if (document.getElementById('faz-legal-links-pages')) {
-				formData.legal_links.link_items = serializeLegalLinks();
+				// The stored list is passed in so entries whose page is not among the
+				// rendered rows (unpublished, or beyond the view's 200-page cap)
+				// survive the save instead of being read as "unticked".
+				formData.legal_links.link_items = serializeLegalLinks(storedLegalLinks);
 			} else {
 				// The site has no published pages, so the view rendered no rows at
 				// all — serializing would report "nothing selected" and wipe a list
 				// the admin configured while pages still existed.
-				formData.legal_links.link_items = (current.legal_links && Array.isArray(current.legal_links.link_items))
-					? current.legal_links.link_items
-					: [];
+				formData.legal_links.link_items = storedLegalLinks;
 			}
 
 			// Deep merge form data into current settings

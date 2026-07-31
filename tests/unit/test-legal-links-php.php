@@ -112,9 +112,16 @@ namespace {
 			return 'https://example.test';
 		}
 	}
+	// Backed by a global so a test can seed a stored faz_settings payload and
+	// exercise the code paths that read the LIVE settings (the enqueue gate)
+	// rather than an injected config. Settings::clear_cache() must be called
+	// after every reseed — Settings::get() memoises in a static.
+	$GLOBALS['faz_test_options'] = array();
 	if ( ! function_exists( 'get_option' ) ) {
 		function get_option( $name, $default = false ) {
-			return $default;
+			return array_key_exists( $name, $GLOBALS['faz_test_options'] )
+				? $GLOBALS['faz_test_options'][ $name ]
+				: $default;
 		}
 	}
 	if ( ! function_exists( 'update_option' ) ) {
@@ -173,6 +180,32 @@ namespace {
 		function get_the_title( $post = null ) {
 			return ( is_object( $post ) && isset( $post->post_title ) ) ? $post->post_title : '';
 		}
+	}
+
+	// ---------- Enqueue stubs, recording instead of enqueuing ----------
+
+	$GLOBALS['faz_test_enqueued'] = array();
+	if ( ! function_exists( 'is_admin' ) ) {
+		function is_admin() {
+			return ! empty( $GLOBALS['faz_test_is_admin'] );
+		}
+	}
+	if ( ! function_exists( 'plugins_url' ) ) {
+		function plugins_url( $path = '', $plugin = '' ) {
+			return 'https://example.test/wp-content/plugins/faz-cookie-manager/' . ltrim( (string) $path, '/' );
+		}
+	}
+	if ( ! function_exists( 'wp_enqueue_style' ) ) {
+		function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = false, $media = 'all' ) {
+			$GLOBALS['faz_test_enqueued'][] = $handle;
+			return true;
+		}
+	}
+	if ( ! defined( 'FAZ_PLUGIN_FILENAME' ) ) {
+		define( 'FAZ_PLUGIN_FILENAME', __DIR__ . '/../../faz-cookie-manager.php' );
+	}
+	if ( ! defined( 'FAZ_VERSION' ) ) {
+		define( 'FAZ_VERSION', '1.26.0' );
 	}
 
 	require_once __DIR__ . '/../../includes/class-store.php';
@@ -372,6 +405,89 @@ namespace {
 	$absent = Settings::sanitize( array(), $defaults );
 	faz_assert_same( $absent['legal_links']['enabled'], false, 'legal_links defaults to OFF when absent from the payload' );
 	faz_assert_same( $absent['legal_links']['link_items'], array(), 'link_items defaults to an empty list when absent' );
+
+	// ---------- The stylesheet follows the OUTPUT, not the option ----------
+	//
+	// enabled + a non-empty link_items is NOT sufficient: every configured page
+	// may since have been unpublished or deleted, in which case build_html()
+	// returns '' and a stylesheet for markup that never appears would be pure
+	// dead weight on every page of the site.
+
+	echo "\n== Footer legal links: stylesheet gating ==\n\n";
+
+	/**
+	 * Seed the stored settings, reset the caches and run maybe_enqueue_styles().
+	 *
+	 * @param array $legal_links The legal_links group to store.
+	 * @return array Handles enqueued during the call.
+	 */
+	function faz_test_enqueue_with( $legal_links ) {
+		$GLOBALS['faz_test_options']['faz_settings'] = array( 'legal_links' => $legal_links );
+		Settings::clear_cache();
+		$GLOBALS['faz_test_enqueued'] = array();
+		// A fresh instance each time: the memo is per-request by design.
+		$instance = new Legal_Links();
+		$instance->maybe_enqueue_styles();
+		return $GLOBALS['faz_test_enqueued'];
+	}
+
+	faz_assert_same(
+		faz_test_enqueue_with( array( 'enabled' => false, 'link_items' => array( array( 'page_id' => 10, 'label' => '' ) ) ) ),
+		array(),
+		'feature OFF enqueues no stylesheet'
+	);
+
+	faz_assert_same(
+		faz_test_enqueue_with( array( 'enabled' => true, 'link_items' => array() ) ),
+		array(),
+		'enabled with an empty list enqueues no stylesheet'
+	);
+
+	faz_assert_same(
+		faz_test_enqueue_with(
+			array(
+				'enabled'    => true,
+				'link_items' => array(
+					array( 'page_id' => 12, 'label' => '' ),
+					array( 'page_id' => 99, 'label' => '' ),
+				),
+			)
+		),
+		array(),
+		'enabled but every page unpublished or deleted: no stylesheet for markup that never renders'
+	);
+
+	faz_assert_same(
+		faz_test_enqueue_with( array( 'enabled' => true, 'link_items' => array( array( 'page_id' => 10, 'label' => '' ) ) ) ),
+		array( 'faz-legal-links' ),
+		'a page that really renders does enqueue the stylesheet'
+	);
+
+	$GLOBALS['faz_test_is_admin'] = true;
+	faz_assert_same(
+		faz_test_enqueue_with( array( 'enabled' => true, 'link_items' => array( array( 'page_id' => 10, 'label' => '' ) ) ) ),
+		array(),
+		'admin requests never enqueue the frontend stylesheet'
+	);
+	$GLOBALS['faz_test_is_admin'] = false;
+
+	// The memo must not change what gets printed: render() after an enqueue pass
+	// has to emit exactly what a fresh build produces, or the cached value would
+	// be a source of drift between the two hooks.
+	$GLOBALS['faz_test_options']['faz_settings'] = array(
+		'legal_links' => array( 'enabled' => true, 'link_items' => array( array( 'page_id' => 10, 'label' => '' ) ) ),
+	);
+	Settings::clear_cache();
+	$memoised = new Legal_Links();
+	$memoised->maybe_enqueue_styles();
+	ob_start();
+	$memoised->render();
+	$rendered = ob_get_clean();
+	faz_assert_same(
+		$rendered,
+		$memoised->build_html( array( 'enabled' => true, 'link_items' => array( array( 'page_id' => 10, 'label' => '' ) ) ) ),
+		'render() after the enqueue pass prints exactly the freshly built markup'
+	);
 
 	echo "\n────────────────────────────────────────────\n";
 	echo "$tests_passed passed, $tests_failed failed (of $tests_run)\n";

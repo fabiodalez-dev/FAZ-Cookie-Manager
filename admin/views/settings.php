@@ -486,7 +486,23 @@ defined( 'ABSPATH' ) || exit;
 				// has not loaded yet (unlike the A/B-test variant checkboxes).
 				// NOTE: these inputs deliberately carry NO data-path — FAZ.serializeForm
 				// must skip them; settings.js collects them through its own serializer.
-				$faz_legal_pages = get_pages( array( 'post_status' => 'publish' ) );
+				//
+				// 'number' bounds both the query and the DOM: without it a site with
+				// thousands of published pages pays for an unbounded query and then
+				// renders two inputs per page into this screen. 200 is far above what
+				// a legal-links footer needs (the stored list is capped at 20) while
+				// still covering ordinary sites in full.
+				//
+				// The cap means a stored page can fall outside the rendered rows on a
+				// very large site. serializeLegalLinks() in settings.js therefore keeps
+				// any stored entry that has no row here, so saving this screen can
+				// never silently drop a link the admin was never shown.
+				$faz_legal_pages = get_pages(
+					array(
+						'post_status' => 'publish',
+						'number'      => 200,
+					)
+				);
 				?>
 				<?php if ( empty( $faz_legal_pages ) ) : ?>
 					<div class="faz-help"><?php esc_html_e( 'No published pages yet. Publish your Cookie Policy or Privacy Policy page first.', 'faz-cookie-manager' ); ?></div>

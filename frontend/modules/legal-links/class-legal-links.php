@@ -37,6 +37,21 @@ class Legal_Links {
 	const MAX_LINKS = 20;
 
 	/**
+	 * Memoised build_html() output for the current request.
+	 *
+	 * Shared by maybe_enqueue_styles() (wp_enqueue_scripts) and render()
+	 * (wp_footer) so both agree on whether anything will actually be printed,
+	 * and so the page/permalink lookups happen once per request rather than
+	 * twice. Null means "not built yet"; '' is a real, cached "renders nothing".
+	 *
+	 * Only ever holds the result of the live-settings build. build_html() with
+	 * an injected $config (the unit tests) deliberately bypasses this.
+	 *
+	 * @var string|null
+	 */
+	private $html = null;
+
+	/**
 	 * Constructor. Wires the footer output and the stylesheet.
 	 */
 	public function __construct() {
@@ -59,7 +74,19 @@ class Legal_Links {
 		// build_html() escapes every interpolated value at the point of
 		// concatenation (esc_url / esc_html / esc_attr__), and the surrounding
 		// markup is a literal — nothing here is unescaped.
-		echo $this->build_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		echo $this->get_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	}
+
+	/**
+	 * build_html() against the live settings, built at most once per request.
+	 *
+	 * @return string
+	 */
+	private function get_html(): string {
+		if ( null === $this->html ) {
+			$this->html = $this->build_html();
+		}
+		return $this->html;
 	}
 
 	/**
@@ -146,9 +173,16 @@ class Legal_Links {
 	/**
 	 * Enqueue the (tiny) stylesheet, but only when the feature is actually on.
 	 *
-	 * Mirrors Cookie_Policy_Generator::maybe_enqueue_frontend_assets(). The
-	 * enabled/empty check reads the same option the renderer does, so a site
-	 * that never turned the feature on ships zero extra bytes.
+	 * Mirrors Cookie_Policy_Generator::maybe_enqueue_frontend_assets(), but
+	 * gates on the ACTUAL rendered output rather than on enabled/link_items:
+	 * a list whose every page has since been deleted, unpublished or left
+	 * unlabelled is still "enabled and non-empty" while rendering nothing, and
+	 * would otherwise ship a stylesheet for markup that never appears.
+	 *
+	 * Building here rather than at wp_footer costs nothing extra — the result is
+	 * memoised and render() reuses it, so the page lookups happen once either
+	 * way — and a site that never turned the feature on still short-circuits on
+	 * the enabled flag before touching a single page.
 	 *
 	 * @return void
 	 */
@@ -156,8 +190,7 @@ class Legal_Links {
 		if ( is_admin() ) {
 			return;
 		}
-		$config = Settings::get_instance()->get( 'legal_links' );
-		if ( empty( $config['enabled'] ) || empty( $config['link_items'] ) ) {
+		if ( '' === $this->get_html() ) {
 			return;
 		}
 		wp_enqueue_style(
