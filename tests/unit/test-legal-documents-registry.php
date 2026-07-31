@@ -397,6 +397,72 @@ assert_true(
 	'the shipped shape is accepted'
 );
 
+// native_lang must name every jurisdiction and nothing else. The missing-key
+// case is the one with teeth: native_lang() would answer 'en' and the document
+// would render in the wrong language with no error anywhere.
+$faz_short_langs = Generator::NATIVE_LANG;
+unset( $faz_short_langs['lgpd-brazil'] );
+assert_true(
+	faz_rejects( array_merge( faz_valid_config_array(), array( 'native_lang' => $faz_short_langs ) ) ),
+	'a jurisdiction with no native_lang entry is rejected'
+);
+assert_true(
+	faz_rejects(
+		array_merge(
+			faz_valid_config_array(),
+			array( 'native_lang' => array_merge( Generator::NATIVE_LANG, array( 'not-a-jurisdiction' => 'fr' ) ) )
+		)
+	),
+	'a native_lang entry for an undeclared jurisdiction is rejected'
+);
+
+// ===========================================================================
+echo "\n\033[1mDocument_Config — the required_fields callback receives the document\033[0m\n";
+// ===========================================================================
+
+// Generator::missing_required_settings() gates on the document it is handed.
+// The gate only works if Document_Config actually passes it, so assert through
+// the config rather than by calling the Generator directly.
+$faz_other_doc = new Document_Config(
+	array_merge( faz_valid_config_array(), array( 'slug' => 'privacy-policy' ) )
+);
+assert_true(
+	array() === $faz_other_doc->missing_required_settings( 'popia-southafrica', array() ),
+	'a document other than the cookie policy gets no cookie-policy mandatory fields'
+);
+assert_true(
+	in_array( 'company.name', $config->missing_required_settings( 'popia-southafrica', array() ), true ),
+	'…while the cookie policy itself still gets the POPIA mandatory fields'
+);
+
+// ===========================================================================
+echo "\n\033[1mTemplate_Translations — the catalogue path stays inside the plugin\033[0m\n";
+// ===========================================================================
+
+// catalogue_for_current_locale() require()s a path that now arrives from a
+// Document_Config. Prove the confinement executes: a catalogue outside the
+// plugin tree must never be included, not merely produce no translations.
+$faz_outside_catalog = rtrim( sys_get_temp_dir(), '/' ) . '/faz-outside-catalog.php';
+file_put_contents(
+	$faz_outside_catalog,
+	"<?php\n\$GLOBALS['faz_outside_catalog_was_required'] = true;\nreturn array();\n"
+);
+$faz_outside_doc = new Document_Config(
+	array_merge( faz_valid_config_array(), array( 'gettext_catalog' => $faz_outside_catalog ) )
+);
+$faz_en_path     = Generator::resolve_template_path( 'gdpr-strict', 'en' );
+$faz_en_scaffold = (string) file_get_contents( $faz_en_path );
+$faz_outside_out = Template_Translations::apply( 'gdpr-strict', 'en', $faz_en_scaffold, $faz_outside_doc );
+assert_true(
+	! isset( $GLOBALS['faz_outside_catalog_was_required'] ),
+	'a catalogue outside the plugin tree is never require()d'
+);
+assert_true(
+	$faz_outside_out === $faz_en_scaffold,
+	'a refused catalogue leaves the bundled scaffold untouched'
+);
+unlink( $faz_outside_catalog );
+
 // ===========================================================================
 echo "\n\033[1mGenerator::resolve_template_path() — with and without \$doc\033[0m\n";
 // ===========================================================================

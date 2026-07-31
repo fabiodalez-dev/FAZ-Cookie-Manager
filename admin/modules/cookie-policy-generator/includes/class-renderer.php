@@ -25,10 +25,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// The document registry is a hard dependency of render(), and the renderer is
-// routinely loaded by hand (unit suites, CLI tools) with no autoloader and no
-// plugin bootstrap. Pull both files in here so that loading this one file is
-// enough to render, exactly as it was before the registry existed.
+// The renderer is routinely loaded by hand (unit suites, CLI tools) with no
+// autoloader and no plugin bootstrap, so every class the render pipeline hard-
+// depends on is pulled in here: loading this one file has to be enough to
+// render. Document_Registry::build() reads its coordinates off Generator and
+// Template_Translations, so requiring only the two registry files would move
+// the old "Class not found" fatal from render() into the registry instead of
+// removing it.
+require_once __DIR__ . '/class-generator.php';
+require_once __DIR__ . '/class-template-translations.php';
+require_once __DIR__ . '/class-section-overrides.php';
 require_once __DIR__ . '/class-document-config.php';
 require_once __DIR__ . '/class-document-registry.php';
 
@@ -79,7 +85,15 @@ class Renderer {
 	 * @return string HTML (already wp_kses_post'd, safe to echo).
 	 */
 	public static function render( $atts = array() ) {
-		return self::render_for( Document_Registry::get( 'cookie-policy' ), $atts );
+		$doc = Document_Registry::get( 'cookie-policy' );
+		if ( ! $doc instanceof Document_Config ) {
+			// Unreachable while the registry is the hardcoded array it is today,
+			// but render() is a shortcode callback: a missing document must
+			// degrade to an empty string on a public page, never to a TypeError
+			// that takes the whole post down with it.
+			return '';
+		}
+		return self::render_for( $doc, $atts );
 	}
 
 	/**

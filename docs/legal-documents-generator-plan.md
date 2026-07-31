@@ -72,13 +72,21 @@ Document_Config (per document type):
     native_lang     map jurisdiction → lang
     html_tokens     string[]  — tokens protected from markdown_to_html()
     gettext_catalog absolute path to the generated _x() catalogue file
-    rest_base       'legal-documents/privacy-policy' | (cookie-policy keeps its own API)
     data_builder    callable( array $settings, string $jurisdiction, string $lang ) : array
-    required_fields callable( string $jurisdiction, array $settings ) : string[]  (missing dot-paths)
-    disclaimer_key  which default disclaimer text to use
+    required_fields callable( string $jurisdiction, array $settings, Document_Config $doc ) : string[]
+                    (missing dot-paths; $doc lets one shared callback tell the
+                     documents apart — a callback declaring only the first two
+                     parameters keeps working)
     wrapper_class   'faz-privacy-policy' etc. (cookie policy keeps 'faz-cookie-policy')
+
+    LATER STEPS — deliberately NOT in the shipped Document_Config yet, because a
+    validated field nothing reads is a contract with no implementation behind it:
+    rest_base       'legal-documents/privacy-policy' | (cookie-policy keeps its own API)
+    disclaimer_key  which default disclaimer text to use
     filter_tag      'faz_privacy_policy_data' etc. (cookie policy keeps 'faz_cookie_policy_data')
 ```
+
+`native_lang` must name **exactly** the declared `jurisdictions` — no missing key, no unknown key. The constructor refuses both: a missing entry would silently resolve to `en` and publish a legal text in the wrong language, with nothing anywhere reporting it.
 
 The registry is a hardcoded PHP array inside the class — **no** `apply_filters` on the registry itself in v1. Opening document registration to third parties before the shape is proven invites support burden and a compat contract we can't yet honour. Add a filter later if demand appears.
 
@@ -153,7 +161,13 @@ admin/modules/cookie-policy-generator/          ← directory name UNCHANGED (se
 - `[faz_privacy_policy_complete]` — NOT `[faz_privacy_policy]`: symmetric with `[faz_cookie_policy_complete]`, and it leaves the unsuffixed name free forever (the cookie side has a legacy unsuffixed shortcode; keeping the naming rule "engine documents end in `_complete`" is worth more than a shorter name). Verified: no `faz_privacy_policy*`, `faz_terms*`, `faz_disclaimer*` shortcode exists today.
 - `[faz_terms_conditions_complete]`, `[faz_disclaimer_complete]` (P1b).
 
-**REST** — new namespace path, one generic controller: `faz/v1/legal-documents/(?P<document>[a-z-]+)/settings|preview|scaffold` with the document slug validated against `Document_Registry::slugs()` minus `cookie-policy`. The existing `faz/v1/cookie-policy/*` routes are **frozen**: same class, same responses, byte-identical. The new controller reuses the old one's `check_admin_read`/`check_admin_write` pattern (`current_user_can( 'manage_options' )` + nonce), `trim_clip`/`trim_clip_multiline` helpers (moved to a shared trait or small `Api_Helpers` class), and the same sanitise-against-defaults strategy. `suggest-services`/`detected-services` stay cookie-policy-only (they are scanner-driven and cookie-specific).
+**REST** — new namespace path, one generic controller registering three separate routes rather than one alternation (an un-grouped `a|b|c` in a route regex matches things nobody intends, including an empty document slug):
+
+- `faz/v1/legal-documents/(?P<document>[a-z-]+)/settings`
+- `faz/v1/legal-documents/(?P<document>[a-z-]+)/preview`
+- `faz/v1/legal-documents/(?P<document>[a-z-]+)/scaffold`
+
+The document slug is validated against `Document_Registry::slugs()` minus `cookie-policy`. The existing `faz/v1/cookie-policy/*` routes are **frozen**: same class, same responses, byte-identical. The new controller reuses the old one's `check_admin_read`/`check_admin_write` pattern, `trim_clip`/`trim_clip_multiline` helpers (moved to a shared trait or small `Api_Helpers` class), and the same sanitise-against-defaults strategy. Every **write** route (`settings`, `acknowledge`, and any added later) checks `current_user_can( 'manage_options' )` **and** verifies the nonce through `faz_verify_nonce()` — both, not either; tests cover missing nonce, invalid nonce, and an authenticated user without the capability. `suggest-services`/`detected-services` stay cookie-policy-only (they are scanner-driven and cookie-specific).
 
 **Blocks** — one new block `faz/legal-document` with attributes `document` (enum from registry, default `privacy-policy`), `jurisdiction`, `lang`, `show_title`. Server-rendered via `Renderer::render_for()`. Registered in `includes/blocks/class-blocks.php` next to the existing three; the legacy `faz/cookie-policy` block is untouched. (`register_block_type` with array config is WP 5.0-safe — same call pattern already shipping.)
 
@@ -297,7 +311,7 @@ Admin-controlled, never automatic — by design *and* because an automatic link 
    §6 gains an E2E assertion: acknowledging a *material* change to Terms leaves `consent_revision` untouched and does not re-show the banner to a visitor holding a valid consent cookie.
 3. **Upgrade neutrality**: on first load after the 1.27.0 upgrade the ledger is empty → it is seeded silently with current hashes, so the feature's own arrival never generates a prompt.
 
-**Files:** `includes/class-version-ledger.php` (new, inside the module), notice rendering inside `legal-documents.php` + the cookie-policy view, one new REST route `faz/v1/legal-documents/acknowledge` (POST, admin, nonce), JS in `legal-documents.js`. No frontend files change at all — the consent-revision plumbing already exists end-to-end.
+**Files:** `includes/class-version-ledger.php` (new, inside the module), notice rendering inside `legal-documents.php` + the cookie-policy view, one new REST route `faz/v1/legal-documents/acknowledge` (POST; `manage_options` **and** `faz_verify_nonce()`, per §4), JS in `legal-documents.js`. No frontend files change at all — the consent-revision plumbing already exists end-to-end.
 
 **Acceptance:** editing a section override surfaces the notice; "minor" silences it without touching consent; "material" demonstrably re-shows the banner to a visitor with a prior consent cookie (E2E); plugin upgrade alone never prompts. **Done means:** the operator has a one-click, fully-informed path from "policy text changed" to "visitors re-consent", and no path where it happens without them.
 

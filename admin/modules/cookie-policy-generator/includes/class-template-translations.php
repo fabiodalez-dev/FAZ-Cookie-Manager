@@ -141,7 +141,22 @@ class Template_Translations {
 			return $catalogues[ $key ];
 		}
 
-		$loaded = require $catalog_file;
+		// This is a require of a path that now comes from a Document_Config, so
+		// it is confined to the plugin tree before it executes. Nothing outside
+		// the plugin can reach this path today — the registry is a hardcoded
+		// array — but a `require` whose argument is configuration is exactly the
+		// line that must not depend on the registry staying hardcoded. The bound
+		// is the plugin root rather than this directory: each document type gets
+		// its own module directory, and its catalogue ships beside it.
+		$catalog_real = realpath( (string) $catalog_file );
+		$plugin_root  = realpath( dirname( __DIR__, 4 ) );
+		if ( false === $catalog_real || false === $plugin_root
+			|| 0 !== strpos( $catalog_real, $plugin_root . DIRECTORY_SEPARATOR ) ) {
+			$catalogues[ $key ] = array();
+			return $catalogues[ $key ];
+		}
+
+		$loaded = require $catalog_real;
 
 		$catalogues[ $key ] = is_array( $loaded ) ? $loaded : array();
 		return $catalogues[ $key ];

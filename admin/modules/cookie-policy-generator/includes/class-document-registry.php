@@ -23,6 +23,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// build() reads every coordinate off these four classes, and this file is
+// reachable without an autoloader (unit suites, CLI tools). Requiring them here
+// as well as in class-renderer.php makes either file a valid entry point; the
+// renderer cycle is safe because no class is referenced at file scope.
+require_once __DIR__ . '/class-document-config.php';
+require_once __DIR__ . '/class-generator.php';
+require_once __DIR__ . '/class-template-translations.php';
+require_once __DIR__ . '/class-renderer.php';
+
 /**
  * Static registry of Document_Config value objects.
  *
@@ -99,9 +108,10 @@ class Document_Registry {
 					'gettext_catalog' => Template_Translations::CATALOG_FILE,
 					'wrapper_class'   => 'faz-cookie-policy',
 					'data_builder'    => array( Renderer::class, 'build_data' ),
-					// Invoked with two arguments, so Generator's own trailing
-					// $doc parameter stays null and the existing POPIA-only
-					// gating runs verbatim — no recursion back into the registry.
+					// Receives this config as its third argument, so Generator's
+					// per-document gate sees 'cookie-policy' and falls through to
+					// the existing POPIA-only rules verbatim. It reads the slug
+					// off the object it was handed — no recursion back here.
 					'required_fields' => array( Generator::class, 'missing_required_settings' ),
 				)
 			),

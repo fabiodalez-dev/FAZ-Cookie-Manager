@@ -113,7 +113,12 @@ class Document_Config {
 	private $data_builder;
 
 	/**
-	 * callable( string $jurisdiction, array $settings ): string[]
+	 * callable( string $jurisdiction, array $settings, Document_Config $doc ): string[]
+	 *
+	 * The document is passed as the third argument so a shared callback can tell
+	 * which document it is validating. A callback that only declares the first
+	 * two parameters keeps working — PHP ignores surplus arguments to userland
+	 * functions.
 	 *
 	 * @var callable
 	 */
@@ -150,6 +155,24 @@ class Document_Config {
 			if ( ! is_string( $lang ) || '' === $lang ) {
 				throw new \InvalidArgumentException( 'Document_Config: every "native_lang" value must be a non-empty string.' );
 			}
+		}
+		// The map must name every declared jurisdiction and nothing else. A
+		// missing key is the dangerous one: native_lang() would answer 'en' and
+		// the document would quietly fall back to English instead of the
+		// jurisdiction's real language — a wrong-language legal text that no
+		// error ever reports. An extra key is dead config and just as likely a
+		// typo, so both are refused here, where the registry is built.
+		$missing_langs = array_diff( $config['jurisdictions'], array_keys( $config['native_lang'] ) );
+		if ( array() !== $missing_langs ) {
+			throw new \InvalidArgumentException(
+				sprintf( 'Document_Config: "native_lang" has no entry for %s.', implode( ', ', $missing_langs ) )
+			);
+		}
+		$unknown_langs = array_diff( array_keys( $config['native_lang'] ), $config['jurisdictions'] );
+		if ( array() !== $unknown_langs ) {
+			throw new \InvalidArgumentException(
+				sprintf( 'Document_Config: "native_lang" names unknown jurisdiction(s) %s.', implode( ', ', $unknown_langs ) )
+			);
 		}
 
 		if ( ! isset( $config['html_tokens'] ) || ! is_array( $config['html_tokens'] ) ) {
@@ -281,11 +304,15 @@ class Document_Config {
 	/**
 	 * Settings this document's jurisdiction cannot legally do without.
 	 *
+	 * Passes $this to the callback so a callback shared between documents — as
+	 * Generator::missing_required_settings() is meant to be — can gate on the
+	 * document it was handed. Without it that gate never runs.
+	 *
 	 * @param string $jurisdiction Effective jurisdiction.
 	 * @param array  $settings     Saved settings for this document.
 	 * @return string[] Missing dot-paths.
 	 */
 	public function missing_required_settings( $jurisdiction, array $settings ) {
-		return (array) call_user_func( $this->required_fields, $jurisdiction, $settings );
+		return (array) call_user_func( $this->required_fields, $jurisdiction, $settings, $this );
 	}
 }
