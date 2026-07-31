@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.0
-Stable tag: 1.25.0
+Stable tag: 1.26.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -338,6 +338,13 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.26.0 =
+* Added: Cookie Policy change review linked to consent revision. Mark a change minor to keep existing consents, or material to re-show the banner. The review token includes the default policy and every saved jurisdiction/language override variant.
+* Added: opt-in footer legal links with ordered page selections and optional custom labels. Output is visitor-invariant and cache-safe; unpublished or unavailable selections remain visible in Settings so they can be removed, but never render publicly.
+* Added: a safe snapshot collector for privacy-policy text registered by installed plugins, preserving operator wording while tracking upstream changes.
+* Changed: the legal-document renderer now reads validated document coordinates from a registry while the existing Cookie Policy output remains byte-identical under the golden suite.
+* Fixed: material-change retries are idempotent after partial failure, identical third-party policy text cannot exchange plugin identities or overrides, oversized collected HTML stays balanced, and the REST route guard must exercise visible tabs.
+
 = 1.25.0 =
 * Added: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps the normal placeholder substitution pipeline, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.
 * Added: POPIA (South Africa) jurisdiction - a conservative s.11(1)(a) consent-based setup preset (with explicit notice that POPIA also permits the s.11(1)(b)-(f) justifications), a ZA geo region, and Cookie Policy templates in every bundled language covering the Information Officer, data-subject rights under s.23-25, objection under s.11(3), and the PAIA s.25 30-day access window.
@@ -422,13 +429,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 = 1.18.1 =
 * Fix: the Cookies admin "Scan Site" and "Auto-categorize" dropdown menus are no longer clipped by the card's rounded-corner overflow — the menu now drops over the table below and shows all options.
 
-= 1.18.0 =
-* Feature: geo-routing runtime (opt-in). With the `faz_geo_ruleset_runtime` filter enabled, the resolved per-jurisdiction ruleset drives the live banner — pre-consent default state, script blocking, Google Consent Mode v2 defaults and banner selection follow the visitor's jurisdiction (GDPR, CCPA/CPRA, Quebec Law 25, POPIA, LGPD, …). Off by default: existing sites are unchanged until you enable the filter.
-* Feature: GeoLite2 edition choice (Country vs City) under Settings > GeoIP Database. Country (~10 MB) stays the default; City (~60 MB) adds province/state detection needed by sub-national rules such as Quebec's Law 25. The UI explains the size/use trade-off, and the existing Country download keeps working exactly as before.
-* Feature: granular per-cookie consent toggles (opt-in, requires per-service consent). A nested toggle for each cookie a service declares, so visitors can opt out of specific cookies within an accepted service. A denied cookie is deleted whenever it appears — the same enforcement used for per-service opt-out.
-* Fix: GeoLite2 database activation is validated and atomic. A corrupt or wrong-edition download is rejected instead of silently breaking lookups; the previous database is preserved on error, and the edition preference is saved only after a successful download.
-* Translations: all six bundled locales (Italian, French, German, Dutch, Croatian, Czech) completed and re-synced (1144 strings each).
-* Hardening: per-cookie consent keys escape special characters so an exotic custom cookie name can't corrupt the consent cookie; runtime geo-routing custom saves honour the visitor's per-category toggles and fail closed when an opt-in ruleset has no matching banner; the GeoLite2 edition setting is whitelisted on save.
 
 = Older versions =
 Older releases (1.14.x and earlier) are listed in the full changelog on GitHub, linked at the top of this section.

@@ -516,11 +516,15 @@ defined( 'ABSPATH' ) || exit;
 					$faz_selected_ids[ $faz_page_id ] = true;
 					$faz_post = get_post( $faz_page_id );
 					if ( ! $faz_post || 'page' !== $faz_post->post_type ) {
+						/* translators: %d: WordPress page ID. */
 						$faz_title = sprintf( __( 'Page #%d (unavailable)', 'faz-cookie-manager' ), $faz_page_id );
 					} else {
-						$faz_title = '' !== trim( (string) $faz_post->post_title )
-							? $faz_post->post_title
-							: sprintf( __( 'Page #%d (untitled)', 'faz-cookie-manager' ), $faz_page_id );
+						if ( '' !== trim( (string) $faz_post->post_title ) ) {
+							$faz_title = $faz_post->post_title;
+						} else {
+							/* translators: %d: WordPress page ID. */
+							$faz_title = sprintf( __( 'Page #%d (untitled)', 'faz-cookie-manager' ), $faz_page_id );
+						}
 						if ( 'publish' !== $faz_post->post_status ) {
 							$faz_status = get_post_status_object( $faz_post->post_status );
 							$faz_title .= sprintf(

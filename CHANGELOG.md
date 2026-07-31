@@ -2,6 +2,21 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.26.0] — 2026-07-31
+
+### Added
+- **Cookie Policy change review linked to consent revision.** When the effective policy changes, the Cookie Policy screen asks the administrator to classify it as minor or material. Minor changes acknowledge the new review token without disturbing visitors; material changes invalidate prior cookie consents and re-show the banner. The review token covers the default policy plus every jurisdiction/language variant with saved overrides, so editing only a non-default translation cannot pass unnoticed.
+- **Opt-in footer legal links.** Settings can now publish an invariant, cache-safe legal navigation in `wp_footer`, with ordered page selections and optional custom labels. Unpublished, deleted and out-of-window selections remain visible in the picker so they can always be removed; only published pages render publicly, and an empty list emits no empty navigation.
+- **Privacy Policy content collection foundation.** The plugin snapshots the policy text that installed plugins register through WordPress core on genuine FAZ admin requests. Operator overrides remain attached to stable block identities, upstream changes are tracked without overwriting authored wording, and the snapshot stays frontend-invariant.
+
+### Changed
+- **The legal-document renderer is now registry-driven without changing Cookie Policy output.** A validated `Document_Config`/`Document_Registry` supplies template, jurisdiction, language, builder and wrapper coordinates to `Renderer::render_for()`. The legacy `Renderer::render()` entry point remains byte-identical across the golden fixture matrix and fails safely if its registry entry is unavailable.
+
+### Fixed
+- **Material-change retries can no longer invalidate visitors twice.** The server persists a recovery intent before increasing `consent_revision`, verifies each write, resumes after a lost response or partial failure, and safely supersedes an abandoned pre-bump intent when a newer policy version is reviewed.
+- **Equal third-party privacy text no longer swaps plugin identities or overrides.** Reconciliation now prefers exact name+hash matches and permits hash-only/name-only carry-forward only when unique on both sides. Oversized collected HTML is clipped without cutting through a tag and is balanced within the storage limit.
+- **REST route regression coverage cannot pass without exercising its tabs.** Every tabbed admin page must expose and visit at least one visible tab before the guard accepts its FAZ REST calls.
+
 ## [1.25.0] — 2026-07-29
 
 ### Added
