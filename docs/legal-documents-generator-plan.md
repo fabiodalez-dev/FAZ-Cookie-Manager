@@ -98,6 +98,9 @@ The registry is a hardcoded PHP array inside the class — **no** `apply_filters
 >
 > What must NOT happen is registering `array( Renderer::class, '<private method>' )` and calling it from elsewhere. `Closure::fromCallable()` inside `Renderer` would also work (it binds scope at creation), but it buys nothing over option 1 and hides the coupling. Whichever is chosen, §6 gains a test that actually executes each registered document's builder — a visibility fatal must surface in the suite, not in production.
 
+The shipped Cookie Policy registry slice chooses option 3: it registers the public
+`Renderer::build_data()` entry point, which composes the private inventory helpers internally.
+
 ### 3.2 How the four engine classes become document-aware
 
 Every existing public signature keeps working unchanged. The document dimension is added via new methods / optional trailing parameters that default to the cookie-policy config.
@@ -105,7 +108,7 @@ Every existing public signature keeps working unchanged. The document dimension 
 | Class | Change | BC guarantee |
 |---|---|---|
 | `Generator` | `resolve_template_path( $jurisdiction, $lang, ?Document_Config $doc = null )`; null → cookie-policy behaviour byte-identical (same dir, same `JURISDICTIONS`/`NATIVE_LANG` consts, which stay as the cookie-policy config's source of truth). `substitute()`, `markdown_to_html()`, `policy_version_hash()`, `normalize_language_code()` are already generic — **no change**. `missing_required_settings()` grows a `$doc` param; null keeps the current POPIA-only behaviour. | Existing constants unreferenced-from-outside stay; unit tests pass unmodified |
-| `Renderer` | Extract the pipeline body of `render()` into `render_for( Document_Config $doc, array $atts )`. `render( $atts )` resolves `Document_Registry::get( 'cookie-policy' )`, returns a safe empty string if the registry entry is unavailable, otherwise delegates to `render_for()`. Settings option and data builder read from `$doc`; later phases adopt the remaining config fields as they are implemented. `build_cookie_list_html()`, `collect_transfer_disclosures()`, `build_services_list()` stay private and can be composed by the public cookie-policy builder entry point. | `Renderer::render()` output byte-identical (golden-file test) and never type-errors on a missing registry entry |
+| `Renderer` | Extract the pipeline body of `render()` into `render_for( Document_Config $doc, array $atts )`. `render( $atts )` resolves the Cookie Policy config, guards a missing/invalid registry entry with a safe empty string, then delegates. In the shipped registry slice, settings option, template coordinates, catalogue, required-fields callback, public data builder and wrapper class read from `$doc`; `disclaimer_key` and `filter_tag` remain deferred with their config fields. The cookie-specific inventory helpers stay private behind `Renderer::build_data()`. | `Renderer::render()` output byte-identical (golden-file test); an invalid registry state never causes a public-page `TypeError` |
 | `Section_Overrides` | **No change.** It already receives `$settings`; each document's own option carries its own `section_overrides[jurisdiction][lang][index]` subtree. Existing cookie-policy overrides never move, never re-key. | Untouched file |
 | `Template_Translations` | `apply( $jurisdiction, $lang, $scaffold, ?Document_Config $doc = null )`; catalogue path + English source path come from `$doc`; null → current constants. `split_sections()` and the placeholder-parity guards are already generic. | Existing gettext tests pass unmodified |
 
