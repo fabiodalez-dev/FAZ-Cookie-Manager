@@ -93,6 +93,25 @@ if [[ "${FAZ_VERSION_CONST}" != "${VERSION}" ]]; then
     exit 1
 fi
 
+# The ZIPs are built from `git archive HEAD` (see copy_plugin), so uncommitted
+# work is silently absent from them. That is the right default for a release —
+# the package must equal the commit it claims to be — but it makes a dirty tree
+# a trap during local experiments, where the edit you are testing simply is not
+# in the ZIP. Say so loudly; --allow-dirty is for local iteration only and must
+# never be used by the publish flow.
+ALLOW_DIRTY="${ALLOW_DIRTY:-false}"
+if [[ -n "$(git -C "${PLUGIN_SRC}" status --porcelain 2>/dev/null)" ]]; then
+    if [[ "${ALLOW_DIRTY}" == "true" ]]; then
+        red "WARNING: working tree is dirty; the ZIPs contain HEAD, not your edits."
+    else
+        red "FAIL: working tree is dirty. The ZIPs are built from HEAD, so uncommitted"
+        red "      changes would NOT be in them. Commit first, or re-run with ALLOW_DIRTY=true"
+        red "      if you are only experimenting locally."
+        git -C "${PLUGIN_SRC}" status --short >&2
+        exit 1
+    fi
+fi
+
 COMMON_EXCLUDES=(
     "faz-cookie-manager/.git/*"
     "faz-cookie-manager/.github/*"
@@ -179,22 +198,20 @@ copy_plugin() {
         fi
         rsync_args+=(--exclude="${pattern}")
     done
-    rsync "${rsync_args[@]}" "${PLUGIN_SRC}/" "${dest}/${PLUGIN_SLUG}/"
+    # Source from `git archive HEAD`, never the working tree. Rsyncing the
+    # working tree means anything untracked sitting in the plugin directory
+    # ships by default — that is how a stray Playwright screenshot reached SVN
+    # trunk in 1.19.2 and a security-scan report directory reached all three
+    # 1.25.0 ZIPs and the GitHub release assets. Both were caught by a human
+    # reading a diff. Archiving the commit makes the whole class impossible
+    # rather than merely detectable, and guarantees the ZIP matches the tag.
+    local archive_src="${TMP_ROOT}/gitarchive"
+    rm -rf "${archive_src}"
+    mkdir -p "${archive_src}"
+    git -C "${PLUGIN_SRC}" archive HEAD | tar -x -C "${archive_src}"
+    rsync "${rsync_args[@]}" "${archive_src}/" "${dest}/${PLUGIN_SLUG}/"
+    rm -rf "${archive_src}"
     find "${dest}/${PLUGIN_SLUG}" -type d -empty -delete
-}
-
-zip_from_project_root() {
-    local zip_file="$1"
-    shift
-    local excludes=("${COMMON_EXCLUDES[@]}" "$@")
-    local zip_args=(-r "${zip_file}" "${PLUGIN_SLUG}/")
-
-    for pattern in "${excludes[@]}"; do
-        zip_args+=(-x "${pattern}")
-    done
-
-    rm -f "${zip_file}"
-    ( cd "${PROJECT_ROOT}" && zip -q "${zip_args[@]}" )
 }
 
 zip_stage() {
@@ -291,6 +308,33 @@ untracked_in_zip=$(
         <(unzip -Z1 "${WPORG_ZIP}" | sed "s#^${PLUGIN_SLUG}/##" | grep -v '/$' | grep -v '^$' | LC_ALL=C sort -u) \
         <(git -C "${PROJECT_ROOT}/${PLUGIN_SLUG}" ls-files | LC_ALL=C sort -u)
 )
+# The other direction: a tracked file that the ZIP is MISSING. This is the
+# 1.20.0 near-miss — exclude patterns silently dropped frontend/images/cookie.png,
+# the referenced default banner logo, and committing that to SVN would have
+# deleted it for every live install. A human spotted the `D` in the staging
+# diff. Comparing the two sets catches it without one, for every tracked file
+# rather than the three that happen to have a named assert below.
+missing_from_zip=$(
+    LC_ALL=C comm -13 \
+        <(unzip -Z1 "${WPORG_ZIP}" | sed "s#^${PLUGIN_SLUG}/##" | grep -v '/$' | grep -v '^$' | LC_ALL=C sort -u) \
+        <(git -C "${PROJECT_ROOT}/${PLUGIN_SLUG}" ls-files | LC_ALL=C sort -u)
+)
+# Everything legitimately absent is absent because an exclude says so. Rather
+# than re-implement rsync's matching, ask the staged tree: a tracked file that
+# survived staging but is missing from the ZIP is a packaging bug.
+unexpectedly_missing=""
+while IFS= read -r f; do
+    [[ -z "${f}" ]] && continue
+    if [[ -e "${WPORG_STAGE}/${PLUGIN_SLUG}/${f}" ]]; then
+        unexpectedly_missing+="${f}"$'\n'
+    fi
+done <<< "${missing_from_zip}"
+if [[ -n "${unexpectedly_missing//[[:space:]]/}" ]]; then
+    red "FAIL: files staged for release are missing from the wp.org ZIP:"
+    printf '  %s\n' ${unexpectedly_missing} >&2
+    exit 1
+fi
+
 if [[ -n "${untracked_in_zip}" ]]; then
     red "FAIL: the wp.org ZIP ships files git does not track:"
     printf '  %s\n' ${untracked_in_zip} >&2
