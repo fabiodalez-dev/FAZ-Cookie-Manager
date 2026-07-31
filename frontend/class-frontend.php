@@ -136,6 +136,10 @@ class Frontend {
 		new Cookie_Policy_Shortcode();
 		new Do_Not_Sell_Shortcode();
 		new Cookie_Settings_Shortcode();
+		// Opt-in footer legal-links nav. Self-gating: it renders nothing at all
+		// unless legal_links.enabled is on and at least one published page is
+		// selected, so instantiating it unconditionally costs one option read.
+		new \FazCookie\Frontend\Modules\Legal_Links\Legal_Links();
 		new AMP_Consent();
 		new Translation_Compat();
 		add_action( 'init', array( $this, 'load_banner' ) );

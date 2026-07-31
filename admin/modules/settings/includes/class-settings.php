@@ -149,6 +149,19 @@ class Settings extends Store {
 			'site_links'   => array(
 				'sites' => array(),
 			),
+			// Optional legal-links <nav> printed on wp_footer (Cookie Policy,
+			// Privacy Policy, Imprint, …). Default OFF so no existing install
+			// suddenly grows a footer element it never asked for. The rendered
+			// markup depends ONLY on this option plus each page's publish
+			// state — never on consent, login or geo — so it stays a single
+			// cached variant under Cache Compatibility Mode.
+			'legal_links'  => array(
+				'enabled'    => false,
+				// List of array( 'page_id' => int, 'label' => string ).
+				// An empty label means "use the page title", so a renamed page
+				// keeps the footer link in sync without an admin save.
+				'link_items' => array(),
+			),
 			'iab'          => array(
 				'enabled'               => false,
 				'publisher_cc'          => '',
@@ -297,6 +310,16 @@ class Settings extends Store {
 			// sanitize_option() instead of recursing into it against an empty
 			// default array (which would wipe every entry).
 			'variants',
+			// Footer legal links (legal_links.link_items): a list of
+			// array( page_id, label ) structs. Same reason as 'variants' above —
+			// without this entry the recursive sanitiser would walk each stored
+			// row against the EMPTY default array and drop every one of them on
+			// the next save of any setting. Deliberately named 'link_items'
+			// rather than a generic 'items'/'pages': get_excludes() and
+			// sanitize_option() match by bare key name across the WHOLE settings
+			// tree, so a generic name would hijack any future group that happens
+			// to use it.
+			'link_items',
 		);
 	}
 
@@ -517,6 +540,51 @@ class Settings extends Store {
 				}, $value ), function ( $item ) {
 					return '' !== $item;
 				} ) ) );
+				break;
+			case 'link_items':
+				// Footer legal links: a list of array( page_id, label ). Only the
+				// two known keys survive, page IDs are deduplicated (the same page
+				// twice would print the same link twice) and the whole list is
+				// capped at 20 rows — a footer nav is a handful of legal pages, and
+				// the cap keeps a crafted settings PUT from bloating every cached
+				// page on the site. A blank label is legitimate: the renderer falls
+				// back to the live page title.
+				if ( ! is_array( $value ) ) {
+					$value = array();
+					break;
+				}
+				$clean = array();
+				$seen  = array();
+				foreach ( $value as $item ) {
+					if ( count( $clean ) >= 20 ) {
+						break;
+					}
+					if ( ! is_array( $item ) ) {
+						continue;
+					}
+					// Deliberately (int) and not absint(): absint(-5) is 5, so a
+					// negative ID would silently become a link to a DIFFERENT,
+					// real page. A malformed ID must drop out, not be rounded
+					// into a valid one.
+					$page_id = (int) ( isset( $item['page_id'] ) ? $item['page_id'] : 0 );
+					if ( $page_id < 1 || isset( $seen[ $page_id ] ) ) {
+						continue;
+					}
+					$seen[ $page_id ] = true;
+					$label            = sanitize_text_field( (string) ( isset( $item['label'] ) ? $item['label'] : '' ) );
+					// mb_substr keeps a multibyte label from being cut mid-character;
+					// mbstring is not guaranteed on every host, hence the fallback.
+					if ( function_exists( 'mb_substr' ) ) {
+						$label = mb_substr( $label, 0, 120 );
+					} else {
+						$label = substr( $label, 0, 120 );
+					}
+					$clean[] = array(
+						'page_id' => $page_id,
+						'label'   => $label,
+					);
+				}
+				$value = $clean;
 				break;
 			case 'payment_gateways':
 				// Map of gateway-key => bool. Only known catalogue keys survive,

@@ -101,6 +101,7 @@
 			}
 			FAZ.populateForm(form, data);
 			populateTargetRegions(data);
+			hydrateLegalLinks(data.legal_links);
 			renderAbVariants(data);
 			applyShowIf();
 		}).catch(function () {
@@ -195,6 +196,56 @@
 		return slugs;
 	}
 
+	/**
+	 * Tick the footer legal-link rows that are already stored and fill in their
+	 * custom labels.
+	 *
+	 * The page rows are server-rendered by admin/views/settings.php, so unlike
+	 * the A/B-test variant list there is no async readiness to guard against:
+	 * by the time this runs the checkboxes are guaranteed to be in the DOM.
+	 *
+	 * @param {Object} group The legal_links settings group.
+	 */
+	function hydrateLegalLinks(group) {
+		var container = document.getElementById('faz-legal-links-pages');
+		if (!container) return;
+		var stored = (group && Array.isArray(group.link_items)) ? group.link_items : [];
+		var labels = {};
+		stored.forEach(function (item) {
+			if (!item) return;
+			labels[String(item.page_id)] = typeof item.label === 'string' ? item.label : '';
+		});
+		container.querySelectorAll('input.faz-legal-link-page').forEach(function (cb) {
+			var key = String(cb.value || '');
+			var isStored = Object.prototype.hasOwnProperty.call(labels, key);
+			cb.checked = isStored;
+			var labelInput = container.querySelector('input.faz-legal-link-label[data-page-id="' + key + '"]');
+			if (labelInput) labelInput.value = isStored ? labels[key] : '';
+		});
+	}
+
+	/**
+	 * Collect the checked footer legal links, in DOM order, as
+	 * [{ page_id, label }]. DOM order is the rendered order, which is what the
+	 * admin sees on screen.
+	 *
+	 * The PHP view guarantees a row for every stored selection, including a
+	 * deleted/unpublished page or one beyond the published-page query cap. An
+	 * unchecked row can therefore always mean an explicit removal.
+	 */
+	function serializeLegalLinks() {
+		var items = [];
+		var container = document.getElementById('faz-legal-links-pages');
+		if (!container) return items;
+		container.querySelectorAll('input.faz-legal-link-page:checked').forEach(function (cb) {
+			var pageId = parseInt(cb.value, 10);
+			if (!pageId) return;
+			var labelInput = container.querySelector('input.faz-legal-link-label[data-page-id="' + cb.value + '"]');
+			items.push({ page_id: pageId, label: ((labelInput && labelInput.value) || '').trim() });
+		});
+		return items;
+	}
+
 	/** Populate target region checkboxes from the stored array */
 	function populateTargetRegions(data) {
 		var regions = (data.geolocation && Array.isArray(data.geolocation.target_regions))
@@ -286,6 +337,26 @@
 					&& Array.isArray(current.banner_control.ab_test.variants))
 					? current.banner_control.ab_test.variants
 					: [];
+			}
+
+			// Footer legal links: the page rows carry no data-path (so the generic
+			// serializer skips them), but they ARE server-rendered, so no
+			// readiness guard is needed the way ab_test.variants needs one — the
+			// checkboxes exist as soon as the page does. The enabled flag comes
+			// through data-path, so formData already carries it; because the merge
+			// below is a per-group Object.assign, both keys must travel together
+			// or a partial group would replace only one of them.
+			formData.legal_links = formData.legal_links || {};
+			var storedLegalLinks = (current.legal_links && Array.isArray(current.legal_links.link_items))
+				? current.legal_links.link_items
+				: [];
+			if (document.getElementById('faz-legal-links-pages')) {
+				formData.legal_links.link_items = serializeLegalLinks();
+			} else {
+				// The site has no published pages, so the view rendered no rows at
+				// all — serializing would report "nothing selected" and wipe a list
+				// the admin configured while pages still existed.
+				formData.legal_links.link_items = storedLegalLinks;
 			}
 
 			// Deep merge form data into current settings

@@ -1,0 +1,25 @@
+/*!
+ * FAZ Cookie Manager — footer legal links.
+ *
+ * Deliberately colourless: the nav is printed inside the host theme's footer,
+ * so link colour, font family and background must keep inheriting from the
+ * theme. No !important anywhere — a theme that wants to restyle this nav
+ * should win without a specificity fight.
+ */
+.faz-legal-links {
+	margin: 1em 0;
+	font-size: .85em;
+}
+
+.faz-legal-links-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5em 1.25em;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.faz-legal-links-item a {
+	text-decoration: underline;
+}
