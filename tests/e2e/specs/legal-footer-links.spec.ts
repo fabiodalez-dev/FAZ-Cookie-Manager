@@ -148,4 +148,27 @@ test.describe('Footer legal links', () => {
       await context.close();
     }
   });
+
+  test('an unpublished stored page remains visible and can be removed', async () => {
+    wp(['post', 'update', String(fixtureId), '--post_status=draft']);
+    await postSettings(admin, nonce, {
+      legal_links: { enabled: true, link_items: [{ page_id: fixtureId, label: 'Old legal page' }] },
+    });
+
+    await admin.goto('/wp-admin/admin.php?page=faz-cookie-manager-settings', { waitUntil: 'domcontentloaded' });
+    const row = admin.locator(`input.faz-legal-link-page[value="${fixtureId}"]`);
+    await expect(row).toBeVisible();
+    await expect(row).toBeChecked();
+    await row.uncheck();
+
+    const saved = admin.waitForResponse((response) =>
+      response.url().includes('faz/v1/settings') && response.request().method() === 'POST',
+    );
+    await admin.locator('#faz-settings-save').click();
+    expect((await saved).status()).toBe(200);
+
+    const current = await getSettings(admin, nonce);
+    const group = current.legal_links as { link_items?: Array<{ page_id: number }> } | undefined;
+    expect(group?.link_items ?? []).not.toContainEqual(expect.objectContaining({ page_id: fixtureId }));
+  });
 });
