@@ -95,7 +95,11 @@ async function visitAllTabs(page: Page, selector: string): Promise<void> {
     if (!(await tab.isVisible().catch(() => false))) {
       continue;
     }
-    await tab.click().catch(() => undefined);
+    // Deliberately not caught. A visible tab that cannot be clicked means this
+    // spec never exercises that tab's REST calls, and a guard that quietly
+    // skips the thing it is guarding is worse than no guard — it reports
+    // success for coverage it did not achieve.
+    await tab.click();
     // Let the tab's XHRs start and settle; networkidle would hang on pages
     // that keep a long-poll open, so a short settle window is enough here.
     await page.waitForTimeout(400);
@@ -165,11 +169,25 @@ test.describe('Admin pages call REST routes that exist (#198)', () => {
       'pipl-attestation',
     ];
 
-    const unscoped = seen.filter((url) =>
-      REGRESSION_PATHS.some(
-        (p) => url.includes(`/faz/v1/${p}`) || url.includes(`rest_route=/faz/v1/${p}`),
-      ),
-    );
+    // Compare against the decoded URL as well as the raw one. Without pretty
+    // permalinks WordPress addresses the API as `?rest_route=%2Ffaz%2Fv1%2F…`,
+    // and a raw-substring check would miss the regression entirely on exactly
+    // the sites most likely to hit it. The preflight enforces pretty permalinks
+    // here, so this is latent today — but a guard that only works under one
+    // permalink setting is not a guard.
+    const unscoped = seen.filter((url) => {
+      let decoded = url;
+      try {
+        decoded = decodeURIComponent(url);
+      } catch {
+        // Malformed escape sequence: fall back to the raw URL rather than
+        // dropping the request from the check.
+      }
+      return REGRESSION_PATHS.some(
+        (p) =>
+          decoded.includes(`/faz/v1/${p}`) || decoded.includes(`rest_route=/faz/v1/${p}`),
+      );
+    });
 
     expect(
       unscoped,
