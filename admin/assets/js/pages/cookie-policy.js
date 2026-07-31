@@ -727,8 +727,98 @@
 			});
 	}
 
+	// ---------- policy-version review notice ----------
+
+	/**
+	 * Wire the "your Cookie Policy has changed" notice, when the view rendered
+	 * one. Two real choices and an escape hatch:
+	 *
+	 *  - minor    → acknowledge only. Stored consents are untouched, so nobody
+	 *               is re-prompted. This is the primary button on purpose: most
+	 *               version moves are a template tweak or a translation update.
+	 *  - material → confirm, then bump the consent revision through the EXISTING
+	 *               settings/invalidate-consents endpoint, then acknowledge. The
+	 *               order matters: acknowledging first would leave the notice
+	 *               gone and the visitors un-prompted if the bump then failed.
+	 *  - dismiss  → hide for this page load only. Nothing is persisted, so the
+	 *               notice comes back until one of the two decisions is made.
+	 *               That is the design: an undecided policy change should keep
+	 *               asking.
+	 *
+	 * The hash sent is the one the server rendered into the notice, i.e. the one
+	 * the operator actually looked at — see the endpoint docblock.
+	 */
+	function wireVersionNotice() {
+		var notice = document.getElementById('faz-cp-version-notice');
+		if (!notice) { return; }
+
+		var hash = (notice.dataset && notice.dataset.currentHash) || '';
+		var minorBtn = document.getElementById('faz-cp-version-minor');
+		var materialBtn = document.getElementById('faz-cp-version-material');
+		var dismissBtn = document.getElementById('faz-cp-version-dismiss');
+
+		function hideNotice() { notice.style.display = 'none'; }
+
+		function notifyError(err) {
+			var message = (err && err.message) ? err.message : String(err);
+			if (window.FAZ && typeof window.FAZ.notify === 'function') {
+				window.FAZ.notify(t('saveFailed', 'Save failed') + ': ' + message, 'error');
+			}
+		}
+
+		function notifyOk(message) {
+			if (window.FAZ && typeof window.FAZ.notify === 'function') {
+				window.FAZ.notify(message, 'success');
+			}
+		}
+
+		function acknowledge() {
+			// Not routed through api(): that helper prefixes every path with
+			// 'cookie-policy/', which is right here but wrong for the settings
+			// endpoint below, so both calls use window.FAZ.post for symmetry.
+			return window.FAZ.post('cookie-policy/acknowledge-version', { hash: hash });
+		}
+
+		if (minorBtn) {
+			minorBtn.addEventListener('click', function () {
+				acknowledge()
+					.then(function () {
+						hideNotice();
+						notifyOk(t('versionMinorDone', 'Version confirmed. Existing consents are unchanged.'));
+					})
+					.catch(notifyError);
+			});
+		}
+
+		if (materialBtn) {
+			materialBtn.addEventListener('click', function () {
+				var proceed = window.confirm(
+					t('versionMaterialConfirm', 'All returning visitors will be shown the consent banner again on their next visit. Continue?')
+				);
+				if (!proceed) { return; }
+				// NOTE: 'settings/invalidate-consents' must NOT go through api() —
+				// it would become 'cookie-policy/settings/invalidate-consents' and
+				// 404. This is the single caller of the consent bump in this file.
+				window.FAZ.post('settings/invalidate-consents', {})
+					.then(function () { return acknowledge(); })
+					.then(function () {
+						hideNotice();
+						notifyOk(t('versionMaterialDone', 'Consents invalidated — returning visitors will be asked again.'));
+					})
+					// Leave the notice up on failure: the operator asked for a
+					// re-prompt and did not get one, so the decision is still open.
+					.catch(notifyError);
+			});
+		}
+
+		if (dismissBtn) {
+			dismissBtn.addEventListener('click', hideNotice);
+		}
+	}
+
 	function init() {
 	  try {
+		wireVersionNotice();
 		// Initial render runs sync (badges absent because detected set is
 		// empty); the /detected-services fetch below re-renders with the
 		// "Detected" badges painted in. This keeps the page interactive

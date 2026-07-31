@@ -55,6 +55,45 @@ $faz_cp_bundled_language_names = array(
 		<template id="faz-cp-script-blocked-text"><?php esc_html_e( 'The Cookie Policy editor did not load, so Save and Preview will not work on this page. A browser privacy shield or ad blocker is most likely blocking its script (the filename contains the word “cookie”, which some block lists match). Allow scripts for /wp-admin in this browser — or pause the shield for this page — then reload.', 'faz-cookie-manager' ); ?></template>
 	</div>
 
+	<?php
+	/*
+	 * Policy-version review. evaluate() compares the hash the renderer stamps on
+	 * the current policy against the last one the operator confirmed; on a fresh
+	 * install (or the first load after this feature ships) it silently adopts the
+	 * current hash, which is why an update never greets anyone with this notice.
+	 *
+	 * Only the 'changed' status renders anything. The decision it asks for is one
+	 * the plugin must not take on its own: re-prompting every visitor has a real
+	 * cost, and not re-prompting after a substantive rewrite is a compliance
+	 * failure. The low-consequence path is therefore the visually primary button —
+	 * a nag that pushes towards invalidation would train operators to click the
+	 * loud button without reading it.
+	 */
+	$faz_cp_ledger = \FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Version_Ledger::evaluate();
+	?>
+	<?php if ( 'changed' === $faz_cp_ledger['status'] ) : ?>
+	<div id="faz-cp-version-notice" class="notice notice-warning inline" data-current-hash="<?php echo esc_attr( $faz_cp_ledger['current'] ); ?>">
+		<p>
+			<?php
+			echo esc_html(
+				sprintf(
+					/* translators: 1: previously confirmed version, 2: current version. */
+					__( 'Your Cookie Policy has changed since you last confirmed it (version %1$s → %2$s).', 'faz-cookie-manager' ),
+					$faz_cp_ledger['acknowledged'],
+					$faz_cp_ledger['current']
+				)
+			);
+			?>
+		</p>
+		<p><?php esc_html_e( 'FAZ never re-asks visitors automatically — you decide whether this change is material. Template and translation updates shipped with the plugin also move this version and are usually minor.', 'faz-cookie-manager' ); ?></p>
+		<p>
+			<button type="button" class="faz-btn faz-btn-primary" id="faz-cp-version-minor"><?php esc_html_e( 'This was a minor change — keep existing consents', 'faz-cookie-manager' ); ?></button>
+			<button type="button" class="faz-btn faz-btn-secondary" id="faz-cp-version-material"><?php esc_html_e( 'Material change — ask visitors to consent again', 'faz-cookie-manager' ); ?></button>
+			<button type="button" class="faz-btn faz-btn-secondary" id="faz-cp-version-dismiss"><?php esc_html_e( 'Decide later', 'faz-cookie-manager' ); ?></button>
+		</p>
+	</div>
+	<?php endif; ?>
+
 	<?php /* onsubmit="return false" is a no-JS / broken-JS safety net: the form is
 		saved entirely by cookie-policy.js (it preventDefault()s and POSTs via REST).
 		If that script never runs — a JS conflict from another plugin/theme, or a
