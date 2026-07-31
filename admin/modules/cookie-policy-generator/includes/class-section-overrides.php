@@ -25,7 +25,7 @@
  * failure mode — landing the operator's wording on the wrong section is not.
  *
  * @package FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes
- * @since   1.26.0
+ * @since   1.25.0
  */
 
 namespace FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes;
@@ -89,7 +89,7 @@ class Section_Overrides {
 				continue;
 			}
 			$anchor = isset( $entry['anchor'] ) ? trim( (string) $entry['anchor'] ) : '';
-			if ( '' !== $anchor && self::first_line( $sections[ $i ] ) !== $anchor ) {
+			if ( '' === $anchor || self::first_line( $sections[ $i ] ) !== $anchor ) {
 				// The scaffold moved under this override — keep the shipped text.
 				continue;
 			}
@@ -133,20 +133,23 @@ class Section_Overrides {
 	 * @param string $lang         Policy language key.
 	 * @param string $scaffold     Effective Markdown scaffold (post-gettext).
 	 * @param array  $settings     Cookie Policy settings.
-	 * @return array<int,array{index:int,anchor:string,shipped:string,override:string}>
+	 * @return array<int,array{index:int,anchor:string,shipped:string,override:string,active:bool}>
 	 */
 	public static function describe( $jurisdiction, $lang, $scaffold, $settings ) {
 		$sections = Template_Translations::split_sections( $scaffold );
 		$entries  = self::entries_for( $jurisdiction, $lang, $settings );
 		$out      = array();
 		foreach ( $sections as $i => $section ) {
-			$stored   = isset( $entries[ $i ] ) ? $entries[ $i ] : ( isset( $entries[ (string) $i ] ) ? $entries[ (string) $i ] : array() );
-			$override = is_array( $stored ) && isset( $stored['text'] ) ? (string) $stored['text'] : '';
-			$out[]    = array(
+			$stored        = isset( $entries[ $i ] ) ? $entries[ $i ] : ( isset( $entries[ (string) $i ] ) ? $entries[ (string) $i ] : array() );
+			$override      = is_array( $stored ) && isset( $stored['text'] ) ? (string) $stored['text'] : '';
+			$anchor        = self::first_line( $section );
+			$stored_anchor = is_array( $stored ) && isset( $stored['anchor'] ) ? trim( (string) $stored['anchor'] ) : '';
+			$out[]         = array(
 				'index'    => (int) $i,
-				'anchor'   => self::first_line( $section ),
+				'anchor'   => $anchor,
 				'shipped'  => (string) $section,
 				'override' => $override,
+				'active'   => '' !== trim( $override ) && '' !== $stored_anchor && $stored_anchor === $anchor,
 			);
 		}
 		return $out;
@@ -168,7 +171,7 @@ class Section_Overrides {
 	public static function placeholder_warnings( $jurisdiction, $lang, $scaffold, $settings ) {
 		$warnings = array();
 		foreach ( self::describe( $jurisdiction, $lang, $scaffold, $settings ) as $row ) {
-			if ( '' === $row['override'] ) {
+			if ( '' === $row['override'] || empty( $row['active'] ) ) {
 				continue;
 			}
 			$shipped_tokens  = self::tokens( $row['shipped'] );
@@ -252,6 +255,12 @@ class Section_Overrides {
 						continue;
 					}
 					$anchor = isset( $entry['anchor'] ) ? call_user_func( $clip, (string) $entry['anchor'], self::MAX_ANCHOR ) : '';
+					if ( '' === trim( (string) $anchor ) ) {
+						// An anchor is the safety contract: without it an old
+						// override could silently land on a different legal
+						// section after a scaffold update.
+						continue;
+					}
 					$kept[ (string) (int) $index ] = array(
 						'anchor' => trim( (string) $anchor ),
 						'text'   => (string) $text,

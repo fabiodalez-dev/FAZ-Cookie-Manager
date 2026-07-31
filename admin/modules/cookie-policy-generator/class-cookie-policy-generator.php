@@ -103,7 +103,8 @@ class Cookie_Policy_Generator {
 	 * `[faz_cookie_policy_complete]` shortcode callback.
 	 *
 	 * Attributes:
-	 *   - lang         (en, it, fr, de, es, pt-BR, bg, cs) — override visitor locale
+	 *   - lang         (any valid BCP-47 code) — override visitor locale; when
+	 *                    no template ships, the jurisdiction fallback is used
 	 *   - jurisdiction (gdpr-strict, ccpa-california, lgpd-brazil, popia-southafrica)
 	 *
 	 * Both are optional. Without them the renderer falls back to WP get_locale

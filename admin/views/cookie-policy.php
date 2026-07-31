@@ -14,6 +14,27 @@ defined( 'ABSPATH' ) || exit;
 
 $rest_nonce = wp_create_nonce( 'wp_rest' );
 $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
+
+$faz_cp_generator = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Generator';
+$faz_cp_languages = $faz_cp_generator::policy_languages();
+$faz_cp_language_names = array();
+$faz_cp_language_controller = \FazCookie\Admin\Modules\Languages\Includes\Controller::get_instance();
+foreach ( $faz_cp_language_controller->get_languages() as $faz_cp_language_name => $faz_cp_language_code ) {
+	$faz_cp_canonical_code = $faz_cp_generator::normalize_language_code( $faz_cp_language_code );
+	if ( '' !== $faz_cp_canonical_code ) {
+		$faz_cp_language_names[ $faz_cp_canonical_code ] = (string) $faz_cp_language_name;
+	}
+}
+$faz_cp_bundled_language_names = array(
+	'en'    => __( 'English', 'faz-cookie-manager' ),
+	'it'    => __( 'Italian', 'faz-cookie-manager' ),
+	'fr'    => __( 'French', 'faz-cookie-manager' ),
+	'de'    => __( 'German', 'faz-cookie-manager' ),
+	'es'    => __( 'Spanish', 'faz-cookie-manager' ),
+	'pt-BR' => __( 'Portuguese (Brazil)', 'faz-cookie-manager' ),
+	'bg'    => __( 'Bulgarian', 'faz-cookie-manager' ),
+	'cs'    => __( 'Czech', 'faz-cookie-manager' ),
+);
 ?>
 <div id="faz-cookie-policy-app"
      data-faz-rest-url="<?php echo esc_url( $rest_url ); ?>"
@@ -170,10 +191,13 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 							<label for="cp-override-lang"><?php esc_html_e( 'Language', 'faz-cookie-manager' ); ?></label>
 							<select id="cp-override-lang" class="faz-select">
 								<?php
-								foreach ( \FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator::LANGUAGES as $faz_cp_lang ) {
+								foreach ( $faz_cp_languages as $faz_cp_lang ) {
+									$faz_cp_label = $faz_cp_bundled_language_names[ $faz_cp_lang ]
+										?? ( $faz_cp_language_names[ $faz_cp_lang ] ?? $faz_cp_lang );
 									printf(
-										'<option value="%1$s">%1$s</option>',
-										esc_attr( $faz_cp_lang )
+										'<option value="%1$s">%2$s (%1$s)</option>',
+										esc_attr( $faz_cp_lang ),
+										esc_html( $faz_cp_label )
 									);
 								}
 								?>
@@ -237,14 +261,17 @@ $rest_url   = esc_url( rest_url( 'faz/v1/cookie-policy/' ) );
 					<label for="cp-default-lang"><?php esc_html_e( 'Force a specific language (otherwise follows visitor locale)', 'faz-cookie-manager' ); ?></label>
 					<select id="cp-default-lang" name="default_lang" class="faz-select">
 						<option value=""><?php esc_html_e( 'Follow visitor locale (recommended)', 'faz-cookie-manager' ); ?></option>
-						<option value="en"><?php esc_html_e( 'English', 'faz-cookie-manager' ); ?></option>
-						<option value="it"><?php esc_html_e( 'Italian', 'faz-cookie-manager' ); ?></option>
-						<option value="fr"><?php esc_html_e( 'French', 'faz-cookie-manager' ); ?></option>
-						<option value="de"><?php esc_html_e( 'German', 'faz-cookie-manager' ); ?></option>
-						<option value="es"><?php esc_html_e( 'Spanish', 'faz-cookie-manager' ); ?></option>
-						<option value="pt-BR"><?php esc_html_e( 'Portuguese (Brazil)', 'faz-cookie-manager' ); ?></option>
-						<option value="bg"><?php esc_html_e( 'Bulgarian', 'faz-cookie-manager' ); ?></option>
-						<option value="cs"><?php esc_html_e( 'Czech', 'faz-cookie-manager' ); ?></option>
+						<?php
+						foreach ( $faz_cp_languages as $faz_cp_lang ) {
+							$faz_cp_label = $faz_cp_bundled_language_names[ $faz_cp_lang ]
+								?? ( $faz_cp_language_names[ $faz_cp_lang ] ?? $faz_cp_lang );
+							printf(
+								'<option value="%1$s">%2$s (%1$s)</option>',
+								esc_attr( $faz_cp_lang ),
+								esc_html( $faz_cp_label )
+							);
+						}
+						?>
 					</select>
 				</div>
 			</div>

@@ -1241,13 +1241,13 @@ class Renderer {
 	// ---------- Lang helpers ----------
 
 	/**
-	 * Whether the given language is a supported policy template language.
+	 * Whether the given language can identify an administrator-authored policy.
 	 *
 	 * @param string $lang Language code (normalised before comparison).
-	 * @return bool True when the language is in Generator::LANGUAGES.
+	 * @return bool
 	 */
 	private static function is_supported_lang( $lang ) {
-		return in_array( self::normalize_lang( (string) $lang ), Generator::LANGUAGES, true );
+		return Generator::is_valid_policy_language( $lang );
 	}
 
 	/**
@@ -1258,15 +1258,7 @@ class Renderer {
 	 * @return string Normalised language code.
 	 */
 	private static function normalize_lang( $lang ) {
-		$lang = (string) $lang;
-		// Normalize underscores → hyphens (pt_BR → pt-BR).
-		$lang = str_replace( '_', '-', $lang );
-		// Lower the language part, upper the region part if present (it-IT, pt-BR).
-		if ( strpos( $lang, '-' ) !== false ) {
-			$parts = explode( '-', $lang, 2 );
-			return strtolower( $parts[0] ) . '-' . strtoupper( $parts[1] );
-		}
-		return strtolower( $lang );
+		return Generator::normalize_language_code( $lang );
 	}
 
 	/**

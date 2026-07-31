@@ -32,6 +32,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 | Geo-targeting | No | Yes | **Yes** |
 | Multi-language (180+) | No | Yes | **Yes** |
 | Cookie Policy generator | Paid add-on | Yes | **Yes (NEW in 1.16.0)** |
+| Editable Cookie Policy sections, per language | Paid add-on | Yes | **Yes** |
 | Guided setup wizard | Rarely | Yes | **Yes (NEW in 1.25.0)** |
 | A/B testing of banner variants | No | Rarely | **Yes (NEW in 1.25.0)** |
 | Schrems II per-cookie transfer disclosure | No | Rarely | **Yes (NEW in 1.25.0)** |
@@ -251,6 +252,7 @@ Generate a jurisdiction-aware Cookie Policy page directly from your admin — no
 
 - **Jurisdiction-aware templates**: GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil), POPIA (South Africa). Each shipped with its own template scaffold, legal references, and required sections for that framework.
 - **Multilingual out of the box**: en, it, fr, de, es, pt-BR, bg, cs. Override per render with `[faz_cookie_policy_complete lang="it"]` or let the visitor's browser language drive the choice. All 32 scaffolds (4 jurisdictions × 8 languages) ship as reviewed per-language templates; the 24 GDPR/CCPA/LGPD scaffolds are additionally exposed section-by-section through the plugin POT/PO catalogues (the POPIA sections join at the next catalogue resync), and a safe bundled translation remains the fallback when an entry is missing or drops a required placeholder.
+- **Editable section text, per jurisdiction and language**: open **Policy text** in the Cookie Policy admin screen and replace only the sections that need your wording. The shipped text stays in each empty textarea as a placeholder, so plugin updates can still improve anything you did not deliberately replace. Placeholders such as `{{COMPANY_NAME}}` keep working. You can author a policy in any language from the site-wide catalogue — for example Slovak (`sk`) — even when no Markdown template ships for it; the reviewed jurisdiction scaffold remains the visible fallback for untouched sections.
 - **Auto-populated cookie inventory**: pulls live from `wp_faz_cookies`, so anything the scanner adds is reflected at the next render with its category, duration, and description.
 - **Filled with your company data**: name, address, DPO email, third-party services, retention period. Configured once via the admin form, stored in `faz_cookie_policy_data`. Never seeded from `admin_email` or `blogname` (PII protection — operator must explicitly fill the form).
 - **Legal disclaimer**: generated policies show a localized warning by default that the templates are starting points, not legal advice. The administrator can hide it or replace it with reviewed custom text from the Cookie Policy settings.
@@ -608,6 +610,7 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
 ### 1.25.0 — 2026-07-29
+- **Added**: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps normal `{{PLACEHOLDER}}` substitution, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.
 - **Added**: POPIA (South Africa) jurisdiction — a conservative s.11(1)(a) consent-based setup preset (with explicit notice that POPIA also permits the s.11(1)(b)-(f) justifications), a ZA geo region, and Cookie Policy templates in every bundled language covering the Information Officer, data-subject rights under s.23–25, objection under s.11(3), and the PAIA s.25 30-day access window.
 - **Added**: guided first-run setup wizard (8 steps) — detects the environment (multilingual plugin, page cache, WooCommerce, existing consent data) and configures jurisdiction-correct defaults, pre-selecting the more protective option. First setup—or switching between opt-in and opt-out models—applies the canonical expiry and notice controls shown in the review; reopening the wizard without changing consent model preserves custom expiry and button visibility. Upgrading installs are treated as already onboarded and are never nagged.
 - **Added**: A/B testing of banner variants — run two or more *active* banners with a persistent random split and read the accept rate per variant on the Dashboard. Default off; skipped under Cache Compatibility Mode.

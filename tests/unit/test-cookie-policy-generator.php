@@ -197,14 +197,19 @@ assert_true(
 	'ccpa-california/es.md found (CA bilingual mandate)'
 );
 
-// Fallback chain: zh (unsupported) → native of jurisdiction → en
+// Fallback chain: a valid language with no bundled file → native → en.
 assert_true(
 	null !== Generator::resolve_template_path( 'gdpr-strict', 'zh' ),
-	'Unsupported lang falls back to en (gdpr)'
+	'Unbundled valid lang falls back to en (gdpr)'
 );
 assert_true(
 	null !== Generator::resolve_template_path( 'lgpd-brazil', 'zh' ),
-	'Unsupported lang falls back to pt-BR (lgpd native)'
+	'Unbundled valid lang falls back to pt-BR (lgpd native)'
+);
+assert_contains(
+	str_replace( '\\', '/', (string) Generator::resolve_template_path( 'gdpr-strict', 'sk' ) ),
+	'/gdpr-strict/en.md',
+	'Slovak policy editing uses the reviewed GDPR fallback scaffold'
 );
 
 // Unknown jurisdiction → null
@@ -236,6 +241,11 @@ assert_true(
 
 assert_eq( count( Generator::JURISDICTIONS ), 4, '4 jurisdictions in scope (gdpr, ccpa, lgpd + popia added for wp.org review request)' );
 assert_eq( count( Generator::LANGUAGES ), 8, '8 languages in scope (en, it, fr, de, es, pt-BR, bg, cs)' );
+assert_eq( Generator::normalize_language_code( 'pt_br' ), 'pt-BR', 'Policy language canonicalises locale-style region codes' );
+assert_eq( Generator::normalize_language_code( 'sr-latn' ), 'sr-Latn', 'Policy language canonicalises script subtags' );
+assert_eq( Generator::normalize_language_code( 'sk' ), 'sk', 'Slovak is a valid administrator-authored policy language' );
+assert_true( Generator::is_valid_policy_language( 'sk' ), 'Slovak passes policy-language validation without a bundled template' );
+assert_false( Generator::is_valid_policy_language( '../../../wp-config' ), 'Path traversal is not a valid policy language' );
 assert_eq( Generator::NATIVE_LANG['lgpd-brazil'], 'pt-BR', 'LGPD native lang is pt-BR' );
 assert_eq( Generator::NATIVE_LANG['gdpr-strict'], 'en', 'GDPR native lang is en' );
 assert_eq( Generator::NATIVE_LANG['ccpa-california'], 'en', 'CCPA native lang is en' );

@@ -48,6 +48,10 @@
 	// one. Mirrors the GVL admin page's autoDetectRequestId (PR #127).
 	var autoDetectRequestId = 0;
 
+	// Discard an older scaffold response when the administrator switches the
+	// jurisdiction/language selectors before it returns.
+	var overrideRequestId = 0;
+
 	// Service IDs the admin manually UNTICKED during this session (since the
 	// last hydration / save). Auto-detect consults this so a re-run does not
 	// silently re-tick a detected service the admin deliberately removed
@@ -652,6 +656,17 @@
 			note.textContent = (FAZ_I18N.overrideFallback || 'No template ships for this language, so the sections below show the bundled fallback. What you write is still stored against the language you picked.');
 			host.appendChild(note);
 		}
+		if (Array.isArray(data.warnings)) {
+			data.warnings.forEach(function (warning) {
+				if (typeof warning !== 'string' || warning.trim() === '') { return; }
+				var notice = document.createElement('div');
+				notice.className = 'notice notice-warning inline';
+				var message = document.createElement('p');
+				message.textContent = warning;
+				notice.appendChild(message);
+				host.appendChild(notice);
+			});
+		}
 
 		var bucket = overrideBucket(data.jurisdiction, data.lang, false) || {};
 
@@ -694,13 +709,19 @@
 		var jEl = document.getElementById('cp-override-jurisdiction');
 		var lEl = document.getElementById('cp-override-lang');
 		if (!jEl || !lEl) { return; }
+		overrideRequestId += 1;
+		var myReqId = overrideRequestId;
+		var jurisdiction = jEl.value;
+		var lang = lEl.value;
 		setOverrideStatus(FAZ_I18N.overrideLoading || 'Loading…');
-		api('GET', 'scaffold?jurisdiction=' + encodeURIComponent(jEl.value) + '&lang=' + encodeURIComponent(lEl.value))
+		api('GET', 'scaffold?jurisdiction=' + encodeURIComponent(jurisdiction) + '&lang=' + encodeURIComponent(lang))
 			.then(function (data) {
+				if (myReqId !== overrideRequestId || jEl.value !== jurisdiction || lEl.value !== lang) { return; }
 				renderOverrideSections(data);
 				setOverrideStatus('');
 			})
 			.catch(function (err) {
+				if (myReqId !== overrideRequestId || jEl.value !== jurisdiction || lEl.value !== lang) { return; }
 				renderOverrideSections(null);
 				setOverrideStatus((err && err.message) || FAZ_I18N.overrideLoadFailed || 'Could not load the sections.');
 			});
@@ -738,6 +759,15 @@
 		if (overrideLoadBtn) {
 			overrideLoadBtn.addEventListener('click', loadOverrideSections);
 		}
+		['cp-override-jurisdiction', 'cp-override-lang'].forEach(function (id) {
+			var selector = document.getElementById(id);
+			if (!selector) { return; }
+			selector.addEventListener('change', function () {
+				overrideRequestId += 1;
+				renderOverrideSections(null);
+				setOverrideStatus('');
+			});
+		});
 
 		// Track the admin's manual tick/untick of service checkboxes so
 		// Auto-detect can skip a detected service the admin deliberately

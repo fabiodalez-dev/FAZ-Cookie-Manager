@@ -110,7 +110,8 @@ class Cookie_Policy_Api {
 					'type'              => 'string',
 					'required'          => true,
 					'validate_callback' => static function ( $value ) {
-						return in_array( (string) $value, Generator::LANGUAGES, true );
+						$language = Generator::normalize_language_code( $value );
+						return '' !== $language && in_array( $language, Generator::policy_languages(), true );
 					},
 				),
 			),
@@ -208,7 +209,7 @@ class Cookie_Policy_Api {
 	 */
 	public function get_scaffold( WP_REST_Request $request ) {
 		$jurisdiction = (string) $request->get_param( 'jurisdiction' );
-		$lang         = (string) $request->get_param( 'lang' );
+		$lang         = Generator::normalize_language_code( $request->get_param( 'lang' ) );
 
 		$path = Generator::resolve_template_path( $jurisdiction, $lang );
 		if ( ! $path || ! is_readable( $path ) ) {
@@ -231,6 +232,7 @@ class Cookie_Policy_Api {
 				'lang'          => $lang,
 				'template_lang' => basename( $path, '.md' ),
 				'sections'      => Section_Overrides::describe( $jurisdiction, $lang, $scaffold, $settings ),
+				'warnings'      => Section_Overrides::placeholder_warnings( $jurisdiction, $lang, $scaffold, $settings ),
 			),
 			200
 		);
@@ -379,7 +381,7 @@ class Cookie_Policy_Api {
 			'retention_months'     => 12,
 			'privacy_policy_url'   => '',
 			'language_priority'    => array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR' ),
-			'section_overrides'    => array(), // section_id → free-form markdown
+			'section_overrides'    => array(), // jurisdiction → language → section index → anchor/text
 			// Admin-editable disclaimer (1.16.2). `show=true` + empty `text`
 			// reproduces the pre-1.16.2 behaviour: standard FAZ disclaimer in
 			// the active language. Set `show=false` to hide entirely.
@@ -403,8 +405,11 @@ class Cookie_Policy_Api {
 		if ( isset( $in['jurisdiction'] ) && in_array( $in['jurisdiction'], Generator::JURISDICTIONS, true ) ) {
 			$out['jurisdiction'] = (string) $in['jurisdiction'];
 		}
-		if ( isset( $in['default_lang'] ) && ( '' === $in['default_lang'] || in_array( $in['default_lang'], Generator::LANGUAGES, true ) ) ) {
-			$out['default_lang'] = (string) $in['default_lang'];
+		if ( isset( $in['default_lang'] ) ) {
+			$default_lang = '' === $in['default_lang'] ? '' : Generator::normalize_language_code( $in['default_lang'] );
+			if ( '' === $in['default_lang'] || in_array( $default_lang, Generator::policy_languages(), true ) ) {
+				$out['default_lang'] = $default_lang;
+			}
 		}
 
 		$company = is_array( $in['company'] ?? null ) ? $in['company'] : array();
@@ -470,8 +475,9 @@ class Cookie_Policy_Api {
 		if ( isset( $in['language_priority'] ) && is_array( $in['language_priority'] ) ) {
 			$cleaned = array();
 			foreach ( $in['language_priority'] as $l ) {
-				if ( is_string( $l ) && in_array( $l, Generator::LANGUAGES, true ) && ! in_array( $l, $cleaned, true ) ) {
-					$cleaned[] = $l;
+				$language = is_string( $l ) ? Generator::normalize_language_code( $l ) : '';
+				if ( in_array( $language, Generator::policy_languages(), true ) && ! in_array( $language, $cleaned, true ) ) {
+					$cleaned[] = $language;
 				}
 			}
 			if ( ! empty( $cleaned ) ) {
@@ -515,7 +521,7 @@ class Cookie_Policy_Api {
 			$out['section_overrides'] = Section_Overrides::sanitize(
 				$in['section_overrides'],
 				Generator::JURISDICTIONS,
-				Generator::LANGUAGES,
+				Generator::policy_languages(),
 				// Closure, not array($this,'…'): trim_clip_multiline() is private,
 				// so a plain callable would be uninvokable from another class.
 				function ( $value, $max ) {

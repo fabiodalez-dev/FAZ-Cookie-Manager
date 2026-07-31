@@ -52,6 +52,80 @@ class Generator {
 	const LANGUAGES = array( 'en', 'it', 'fr', 'de', 'es', 'pt-BR', 'bg', 'cs' );
 
 	/**
+	 * Canonicalise and validate a policy language code.
+	 *
+	 * LANGUAGES above intentionally remains the list of Markdown templates that
+	 * actually ship with the plugin. Administrator-authored section overrides,
+	 * however, may target any well-formed BCP-47-style language code and use the
+	 * jurisdiction's bundled template as their placeholder/fallback. Keeping
+	 * those two concepts separate is what makes a full Slovak override possible
+	 * without pretending that a Slovak scaffold ships in the plugin.
+	 *
+	 * @param mixed $lang Raw language code.
+	 * @return string Canonical code, or an empty string when invalid.
+	 */
+	public static function normalize_language_code( $lang ) {
+		if ( ! is_scalar( $lang ) ) {
+			return '';
+		}
+		$lang = trim( str_replace( '_', '-', (string) $lang ) );
+		if ( ! preg_match( '/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/D', $lang ) ) {
+			return '';
+		}
+
+		$parts    = explode( '-', $lang );
+		$parts[0] = strtolower( $parts[0] );
+		for ( $i = 1, $count = count( $parts ); $i < $count; $i++ ) {
+			if ( 2 === strlen( $parts[ $i ] ) || ctype_digit( $parts[ $i ] ) ) {
+				$parts[ $i ] = strtoupper( $parts[ $i ] );
+			} elseif ( 4 === strlen( $parts[ $i ] ) ) {
+				$parts[ $i ] = ucfirst( strtolower( $parts[ $i ] ) );
+			} else {
+				$parts[ $i ] = strtolower( $parts[ $i ] );
+			}
+		}
+		return implode( '-', $parts );
+	}
+
+	/**
+	 * Whether a language can be selected for a generated policy.
+	 *
+	 * @param mixed $lang Raw language code.
+	 * @return bool
+	 */
+	public static function is_valid_policy_language( $lang ) {
+		return '' !== self::normalize_language_code( $lang );
+	}
+
+	/**
+	 * Languages offered by the Cookie Policy editors.
+	 *
+	 * The site-wide Languages module already owns the broad language catalogue.
+	 * Pull its codes here when available, while keeping the eight shipped
+	 * templates first and retaining a dependency-free fallback for unit tests
+	 * and unusually early bootstrap contexts.
+	 *
+	 * @return string[]
+	 */
+	public static function policy_languages() {
+		$languages = self::LANGUAGES;
+		$controller_class = '\\FazCookie\\Admin\\Modules\\Languages\\Includes\\Controller';
+		if ( class_exists( $controller_class ) ) {
+			$controller = $controller_class::get_instance();
+			$catalogue  = is_object( $controller ) ? $controller->get_languages() : array();
+			if ( is_array( $catalogue ) ) {
+				foreach ( $catalogue as $code ) {
+					$canonical = self::normalize_language_code( $code );
+					if ( '' !== $canonical && ! in_array( $canonical, $languages, true ) ) {
+						$languages[] = $canonical;
+					}
+				}
+			}
+		}
+		return $languages;
+	}
+
+	/**
 	 * Native language per jurisdiction (statutory bias):
 	 *   - gdpr-strict       → en (EU lingua franca for regulatory docs)
 	 *   - ccpa-california   → en (es ships as a translation, not a second
@@ -130,20 +204,19 @@ class Generator {
 	 *   3. en (universal fallback)
 	 *
 	 * @param string $jurisdiction Ruleset id (gdpr-strict / ccpa-california / lgpd-brazil / popia-southafrica).
-	 * @param string $lang         BCP-47 (en / it / fr / de / es / pt-BR / bg / cs).
+	 * @param string $lang         BCP-47 language code. Languages without a
+	 *                             bundled file use the jurisdiction fallback.
 	 * @return string|null Absolute path to .md file, or null if no template found.
 	 */
 	public static function resolve_template_path( $jurisdiction, $lang ) {
 		if ( ! in_array( $jurisdiction, self::JURISDICTIONS, true ) ) {
 			return null;
 		}
-		// Defense-in-depth path-traversal hardening: even though only callers
-		// inside the module reach this method, an external integrator could
-		// theoretically pass a `lang` like "../../../wp-config" via a filter
-		// or future REST endpoint. Validate against the whitelist before
-		// composing any file path.
-		$lang = (string) $lang;
-		if ( ! in_array( $lang, self::LANGUAGES, true ) ) {
+		// Defense-in-depth path-traversal hardening. A valid BCP-47 code is safe
+		// to compose into a candidate path; a language with no shipped file then
+		// follows the documented native/en fallback chain.
+		$lang = self::normalize_language_code( $lang );
+		if ( '' === $lang ) {
 			$lang = self::NATIVE_LANG[ $jurisdiction ] ?? 'en';
 		}
 		$dir = self::templates_dir() . '/' . $jurisdiction;
