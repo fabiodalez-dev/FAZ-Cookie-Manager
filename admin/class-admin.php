@@ -835,6 +835,10 @@ class Admin {
 						'saveFailed'               => __( 'Save failed', 'faz-cookie-manager' ),
 						'previewFailed'            => __( 'Preview failed', 'faz-cookie-manager' ),
 						'initFailed'               => __( 'The generator could not start on this page. Please reload; if it persists, a plugin or theme conflict is likely.', 'faz-cookie-manager' ),
+						// Policy-version review notice.
+						'versionMinorDone'         => __( 'Version confirmed. Existing consents are unchanged.', 'faz-cookie-manager' ),
+						'versionMaterialConfirm'   => __( 'All returning visitors will be shown the consent banner again on their next visit. Continue?', 'faz-cookie-manager' ),
+						'versionMaterialDone'      => __( 'Consents invalidated — returning visitors will be asked again.', 'faz-cookie-manager' ),
 						// Auto-detect-from-cookie-scan button + Detected badge.
 						// Policy-text override editor.
 						'overrideLoading'          => __( 'Loading…', 'faz-cookie-manager' ),

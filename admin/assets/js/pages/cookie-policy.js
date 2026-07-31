@@ -727,8 +727,111 @@
 			});
 	}
 
+	// ---------- policy-version review notice ----------
+
+	/**
+	 * Wire the "your Cookie Policy has changed" notice, when the view rendered
+	 * one. Two real choices and an escape hatch:
+	 *
+	 *  - minor    → acknowledge only. Stored consents are untouched, so nobody
+	 *               is re-prompted. This is the primary button on purpose: most
+	 *               version moves are a template tweak or a translation update.
+	 *  - material → confirm, then call one recoverable server-side operation
+	 *               that bumps the consent revision and acknowledges the token.
+	 *  - dismiss  → hide for this page load only. Nothing is persisted, so the
+	 *               notice comes back until one of the two decisions is made.
+	 *               That is the design: an undecided policy change should keep
+	 *               asking.
+	 *
+	 * The hash sent is the one the server rendered into the notice, i.e. the one
+	 * the operator actually looked at — see the endpoint docblock.
+	 */
+	function wireVersionNotice() {
+		var notice = document.getElementById('faz-cp-version-notice');
+		if (!notice) { return; }
+
+		var hash = (notice.dataset && notice.dataset.currentHash) || '';
+		var minorBtn = document.getElementById('faz-cp-version-minor');
+		var materialBtn = document.getElementById('faz-cp-version-material');
+		var dismissBtn = document.getElementById('faz-cp-version-dismiss');
+
+		function hideNotice() { notice.style.display = 'none'; }
+
+		function notifyError(err) {
+			var message = (err && err.message) ? err.message : String(err);
+			if (window.FAZ && typeof window.FAZ.notify === 'function') {
+				window.FAZ.notify(t('saveFailed', 'Save failed') + ': ' + message, 'error');
+			}
+		}
+
+		function notifyOk(message) {
+			if (window.FAZ && typeof window.FAZ.notify === 'function') {
+				window.FAZ.notify(message, 'success');
+			}
+		}
+
+		function acknowledge() {
+			// api() prefixes 'cookie-policy/' — correct for this route — and
+			// carries the fetch fallback.
+			return api('POST', 'acknowledge-version', { hash: hash });
+		}
+
+		// The server also makes material retries idempotent. This guard still
+		// prevents confusing concurrent decisions from the same notice.
+		var versionBusy = false;
+		function setVersionBusy(state, btn, label) {
+			versionBusy = state;
+			var FAZ = window.FAZ;
+			[minorBtn, materialBtn, dismissBtn].forEach(function (b) {
+				if (b) { b.disabled = state; }
+			});
+			if (btn && FAZ && typeof FAZ.btnLoading === 'function') {
+				FAZ.btnLoading(btn, state, label);
+			}
+		}
+
+		if (minorBtn) {
+			minorBtn.addEventListener('click', function () {
+				if (versionBusy) { return; }
+				setVersionBusy(true, minorBtn, t('versionSaving', 'Saving…'));
+				acknowledge()
+					.then(function () {
+						hideNotice();
+						notifyOk(t('versionMinorDone', 'Version confirmed. Existing consents are unchanged.'));
+					})
+					.catch(notifyError)
+					.then(function () { setVersionBusy(false, minorBtn, ''); });
+			});
+		}
+
+		if (materialBtn) {
+			materialBtn.addEventListener('click', function () {
+				if (versionBusy) { return; }
+				var proceed = window.confirm(
+					t('versionMaterialConfirm', 'All returning visitors will be shown the consent banner again on their next visit. Continue?')
+				);
+				if (!proceed) { return; }
+				setVersionBusy(true, materialBtn, t('versionSaving', 'Saving…'));
+				api('POST', 'acknowledge-material-version', { hash: hash })
+					.then(function () {
+						hideNotice();
+						notifyOk(t('versionMaterialDone', 'Consents invalidated — returning visitors will be asked again.'));
+					})
+					// Leave the notice up on failure: the operator asked for a
+					// re-prompt and did not get one, so the decision is still open.
+					.catch(notifyError)
+					.then(function () { setVersionBusy(false, materialBtn, ''); });
+			});
+		}
+
+		if (dismissBtn) {
+			dismissBtn.addEventListener('click', hideNotice);
+		}
+	}
+
 	function init() {
 	  try {
+		wireVersionNotice();
 		// Initial render runs sync (badges absent because detected set is
 		// empty); the /detected-services fetch below re-renders with the
 		// "Detected" badges painted in. This keeps the page interactive

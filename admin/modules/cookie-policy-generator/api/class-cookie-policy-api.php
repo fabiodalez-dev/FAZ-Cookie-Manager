@@ -22,8 +22,10 @@ use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Section_Overrides;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Template_Translations;
+use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Version_Ledger;
 use WP_REST_Request;
 use WP_REST_Response;
+use WP_REST_Server;
 use WP_Error;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -128,6 +130,88 @@ class Cookie_Policy_Api {
 			'callback'            => array( $this, 'detected_services' ),
 			'permission_callback' => array( $this, 'check_admin_read' ),
 		) );
+
+		// POST /cookie-policy/acknowledge-version — record that the
+		// administrator has seen the current policy version. Bound to the two
+		// buttons of the "your policy changed" notice; there is no automatic
+		// caller. Deliberately does NOT touch consent: invalidating stored
+		// consents is a separate, already-existing endpoint
+		// (POST faz/v1/settings/invalidate-consents), and the material-change
+		// button calls that one FIRST and this one second. Keeping the two
+		// apart is what makes "minor change" possible at all.
+		register_rest_route( $ns, "/{$base}/acknowledge-version", array(
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'acknowledge_version' ),
+				'permission_callback' => array( $this, 'check_admin_write' ),
+				'args'                => array(
+					'hash' => array(
+						'required'          => true,
+						'type'              => 'string',
+						'validate_callback' => static function ( $value ) {
+							return is_string( $value ) && (bool) preg_match( Version_Ledger::HASH_PATTERN, $value );
+						},
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			),
+		) );
+
+		// Material changes are one recoverable server-side operation. The ledger
+		// persists an intent before bumping consent_revision, so retries after a
+		// lost response cannot invalidate all visitors twice.
+		register_rest_route( $ns, "/{$base}/acknowledge-material-version", array(
+			'methods'             => WP_REST_Server::CREATABLE,
+			'callback'            => array( $this, 'acknowledge_material_version' ),
+			'permission_callback' => array( $this, 'check_admin_write' ),
+			'args'                => array(
+				'hash' => array(
+					'required'          => true,
+					'type'              => 'string',
+					'validate_callback' => static function ( $value ) {
+						return is_string( $value ) && (bool) preg_match( Version_Ledger::HASH_PATTERN, $value );
+					},
+					'sanitize_callback' => 'sanitize_text_field',
+				),
+			),
+		) );
+	}
+
+	/**
+	 * POST /cookie-policy/acknowledge-version.
+	 *
+	 * Stores the hash the CLIENT saw, not a fresh server-side recompute. If the
+	 * policy changed again between rendering the notice and clicking the button,
+	 * acknowledging the older hash is the honest outcome: the next page load
+	 * compares against it, finds a difference, and asks again. Recomputing here
+	 * would silently swallow that second change.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function acknowledge_version( WP_REST_Request $request ) {
+		$hash = (string) $request->get_param( 'hash' );
+		$ok   = Version_Ledger::acknowledge( $hash );
+
+		return rest_ensure_response(
+			array(
+				'success'      => $ok,
+				'acknowledged' => $ok ? $hash : '',
+			)
+		);
+	}
+
+	/** POST /cookie-policy/acknowledge-material-version. */
+	public function acknowledge_material_version( WP_REST_Request $request ) {
+		$result = Version_Ledger::acknowledge_material( (string) $request->get_param( 'hash' ) );
+		if ( empty( $result['success'] ) ) {
+			return new WP_Error(
+				'material_version_not_saved',
+				__( 'The consent revision could not be updated safely. Retry the operation.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
+		return rest_ensure_response( $result );
 	}
 
 	/**
