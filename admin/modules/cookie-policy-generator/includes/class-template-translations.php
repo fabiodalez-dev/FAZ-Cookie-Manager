@@ -37,23 +37,28 @@ class Template_Translations {
 	 * cannot remove controller contacts, the cookie inventory, retention
 	 * information, or statutory-resource tokens.
 	 *
-	 * @param string $jurisdiction     Jurisdiction template key.
-	 * @param string $lang             Effective policy language.
-	 * @param string $bundled_scaffold Localized Markdown loaded from disk.
+	 * @param string               $jurisdiction     Jurisdiction template key.
+	 * @param string               $lang             Effective policy language.
+	 * @param string               $bundled_scaffold Localized Markdown from disk.
+	 * @param Document_Config|null $doc              Optional document being
+	 *                                               rendered. Null keeps the
+	 *                                               cookie-policy catalogue and
+	 *                                               template tree.
 	 * @return string Effective localized Markdown.
 	 */
-	public static function apply( $jurisdiction, $lang, $bundled_scaffold ) {
+	public static function apply( $jurisdiction, $lang, $bundled_scaffold, ?Document_Config $doc = null ) {
 		if ( ! is_string( $bundled_scaffold ) || '' === $bundled_scaffold ) {
 			return (string) $bundled_scaffold;
 		}
 		if ( ! self::locale_matches_policy_lang( $lang ) || ! function_exists( '_x' ) ) {
 			return $bundled_scaffold;
 		}
-		if ( ! is_readable( self::CATALOG_FILE ) ) {
+		$catalog_file = null === $doc ? self::CATALOG_FILE : $doc->gettext_catalog();
+		if ( ! is_readable( $catalog_file ) ) {
 			return $bundled_scaffold;
 		}
 
-		$source_path = Generator::resolve_template_path( $jurisdiction, 'en' );
+		$source_path = Generator::resolve_template_path( $jurisdiction, 'en', $doc );
 		if ( ! is_string( $source_path ) || ! is_readable( $source_path ) ) {
 			return $bundled_scaffold;
 		}
@@ -62,7 +67,7 @@ class Template_Translations {
 		$source_scaffold = (string) file_get_contents( $source_path );
 		$source_sections = self::split_sections( $source_scaffold );
 		$local_sections  = self::split_sections( $bundled_scaffold );
-		$catalogue       = self::catalogue_for_current_locale();
+		$catalogue       = self::catalogue_for_current_locale( $catalog_file );
 		$translated      = isset( $catalogue[ $jurisdiction ] ) && is_array( $catalogue[ $jurisdiction ] )
 			? $catalogue[ $jurisdiction ]
 			: array();
@@ -121,21 +126,40 @@ class Template_Translations {
 	 * Load the generated gettext catalogue for the active locale.
 	 *
 	 * A locale-keyed cache remains correct when WPML/Polylang or core
-	 * switch_to_locale() changes language during the same request.
+	 * switch_to_locale() changes language during the same request. The catalogue
+	 * path is part of the key as well: with one catalogue per document type, a
+	 * locale-only key would let the first document rendered on a request serve
+	 * its sections to every other document rendered after it.
 	 *
+	 * @param string $catalog_file Absolute path to the generated catalogue.
 	 * @return array<string,array<int,string>>
 	 */
-	private static function catalogue_for_current_locale() {
+	private static function catalogue_for_current_locale( $catalog_file ) {
 		static $catalogues = array();
-		$locale            = self::current_locale();
-		if ( isset( $catalogues[ $locale ] ) ) {
-			return $catalogues[ $locale ];
+		$key               = self::current_locale() . '|' . (string) $catalog_file;
+		if ( isset( $catalogues[ $key ] ) ) {
+			return $catalogues[ $key ];
 		}
 
-		$loaded = require self::CATALOG_FILE;
+		// This is a require of a path that now comes from a Document_Config, so
+		// it is confined to the plugin tree before it executes. Nothing outside
+		// the plugin can reach this path today — the registry is a hardcoded
+		// array — but a `require` whose argument is configuration is exactly the
+		// line that must not depend on the registry staying hardcoded. The bound
+		// is the plugin root rather than this directory: each document type gets
+		// its own module directory, and its catalogue ships beside it.
+		$catalog_real = realpath( (string) $catalog_file );
+		$plugin_root  = realpath( dirname( __DIR__, 4 ) );
+		if ( false === $catalog_real || false === $plugin_root
+			|| 0 !== strpos( $catalog_real, $plugin_root . DIRECTORY_SEPARATOR ) ) {
+			$catalogues[ $key ] = array();
+			return $catalogues[ $key ];
+		}
 
-		$catalogues[ $locale ] = is_array( $loaded ) ? $loaded : array();
-		return $catalogues[ $locale ];
+		$loaded = require $catalog_real;
+
+		$catalogues[ $key ] = is_array( $loaded ) ? $loaded : array();
+		return $catalogues[ $key ];
 	}
 
 	/**
