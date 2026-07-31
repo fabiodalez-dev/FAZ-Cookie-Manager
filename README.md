@@ -32,6 +32,10 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 | Geo-targeting | No | Yes | **Yes** |
 | Multi-language (180+) | No | Yes | **Yes** |
 | Cookie Policy generator | Paid add-on | Yes | **Yes (NEW in 1.16.0)** |
+| Guided setup wizard | Rarely | Yes | **Yes (NEW in 1.25.0)** |
+| A/B testing of banner variants | No | Rarely | **Yes (NEW in 1.25.0)** |
+| Schrems II per-cookie transfer disclosure | No | Rarely | **Yes (NEW in 1.25.0)** |
+| Age-appropriate consent (GDPR Art. 8) | No | Rarely | **Yes (NEW in 1.25.0)** |
 | Cloud dependency | No | **Yes** | **No** |
 | Price | Free | $10-50/mo | **Free forever** |
 
@@ -157,6 +161,16 @@ Automatic updates are handled by WordPress — no manual steps needed.
 
 ## Features (detailed)
 
+### Guided Setup Wizard (NEW in 1.25.0)
+
+An eight-step first run that configures the plugin for your jurisdiction instead of leaving you on a generic default.
+
+- **Environment detection**: finds your multilingual plugin, page cache, WooCommerce and any pre-existing consent data, and adapts the recommendations to what it sees.
+- **Plain-language choices**: every option explains what it does and what it costs. The more protective option is pre-selected; nothing nudges toward weaker settings.
+- **Never nags an existing install**: upgrading sites are treated as already onboarded. The wizard arms itself only on a genuine fresh install, with a dismissible re-entry card on the Dashboard.
+- **Atomic finish**: the wizard's writes run inside a database transaction, so a failure rolls back rather than leaving the banner half-configured.
+- **Real cookie scan**: the optional scan step runs the same browser-based engine as the Cookies page, so it sees what a visitor's browser sees — including cookies written by JavaScript.
+
 ### Cookie Banner
 
 - **Three banner types**: Classic (bar), Popup (modal), Box (widget)
@@ -184,6 +198,16 @@ Automatic updates are handled by WordPress — no manual steps needed.
 - **Read More** -- links to privacy policy (configurable: button or link, nofollow, new tab)
 - **Do Not Sell** -- CCPA opt-out button (only in CCPA mode)
 
+### Age-Appropriate Consent — GDPR Art. 8 (NEW in 1.25.0)
+
+An optional age-confirmation checkbox rendered directly above the Accept/Reject buttons.
+
+- **Gates only the accept path**: Reject, withdraw and close are never gated, and Accept is never disabled while Reject stays active — button weight stays equal (EDPB 03/2022).
+- **Affirmative action**: the box renders unchecked. An un-affirmed accept shows an inline message, moves focus to the checkbox, announces politely, and writes no consent.
+- **Accountability**: the affirmation is folded into the existing consent-log record, with no new column and no phantom category in the stats.
+- **Honest about its limits**: this is a self-declared affirmation. It is **not** a substitute for the parental-consent verification Art. 8(2) requires.
+- Off by default; existing sites are unchanged until enabled.
+
 ### Cookie Management
 
 - **Cookie list**: Full CRUD for cookies -- name, domain, duration, description, category, URL pattern
@@ -191,6 +215,16 @@ Automatic updates are handled by WordPress — no manual steps needed.
 - **Per-category prior consent**: Each category has a configurable `prior_consent` flag. Set to OFF for first-party analytics cookies that meet the Garante Privacy exemption (first-party only, aggregated data, anonymized IP, no cross-referencing)
 - **Audit table**: Per-category cookie listing embedded in the preference center
 - **Multilingual descriptions**: Cookie description and duration stored per-language
+
+### Third-Country Transfer Disclosure — Schrems II (NEW in 1.25.0)
+
+Flag, per cookie, that a service transfers personal data to a country without an EU adequacy decision.
+
+- **Where it shows**: the preference-center cookie declaration and the generated Cookie Policy, so a visitor sees it before deciding.
+- **Neutral wording**: it names the fact and the safeguard you describe. It never asserts that the safeguard is legally sufficient — that assessment stays yours.
+- **Safe by construction**: WordPress-internal and necessary-admin cookies can never surface, and the disclosure is invariant across consent state, so Cache Compatibility Mode is unaffected.
+- **No schema change**: stored in the existing `wp_faz_cookies.meta` JSON, reachable through the REST API and the bulk editor.
+- Off by default.
 
 ### Cookie Scanner
 
@@ -300,6 +334,16 @@ Stores proof of consent in a local database table for GDPR accountability:
 - **Pagination** and **search** in admin UI
 - **CSV export** with date-stamped filename
 - **Retention period**: Configurable (default: 12 months)
+
+### A/B Testing of Banner Variants (NEW in 1.25.0)
+
+Run two or more of your existing banners at once and find out which wording people actually accept.
+
+- **Persistent split**: a sticky cookie assigns each visitor a variant, so the same person always sees the same banner.
+- **Cannot author a dark pattern**: only *active* banners take part, and each one is independently compliant — you are choosing between lawful designs, not degrading one.
+- **Honest denominator**: the accept rate is accepted/decisions with a documented denominator and a per-status breakdown, so a CCPA variant's rate is not diluted by Do-Not-Sell opt-outs.
+- **Read from the consent log**: no extra tracking, no external service. Results appear on the Dashboard.
+- Off by default, and skipped under Cache Compatibility Mode so cached HTML stays visitor-invariant.
 
 ### Pageview Analytics
 
