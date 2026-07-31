@@ -87,9 +87,10 @@ function collect(page: Page): Collected {
 }
 
 /** Click through every tab so tab-scoped REST calls actually fire. */
-async function visitAllTabs(page: Page, selector: string): Promise<void> {
+async function visitAllTabs(page: Page, selector: string): Promise<number> {
   const tabs = page.locator(selector);
   const count = await tabs.count();
+  let visited = 0;
   for (let i = 0; i < count; i++) {
     const tab = tabs.nth(i);
     if (!(await tab.isVisible().catch(() => false))) {
@@ -100,10 +101,12 @@ async function visitAllTabs(page: Page, selector: string): Promise<void> {
     // skips the thing it is guarding is worse than no guard — it reports
     // success for coverage it did not achieve.
     await tab.click();
+    visited++;
     // Let the tab's XHRs start and settle; networkidle would hang on pages
     // that keep a long-poll open, so a short settle window is enough here.
     await page.waitForTimeout(400);
   }
+  return visited;
 }
 
 test.describe('Admin pages call REST routes that exist (#198)', () => {
@@ -123,7 +126,11 @@ test.describe('Admin pages call REST routes that exist (#198)', () => {
 
       const tabSelector = TABBED_PAGES[slug];
       if (tabSelector) {
-        await visitAllTabs(page, tabSelector);
+        const visited = await visitAllTabs(page, tabSelector);
+        expect(
+          visited,
+          `${slug} exposes no visible tab for selector "${tabSelector}"; REST coverage was not exercised`,
+        ).toBeGreaterThan(0);
       }
 
       expect(
@@ -157,7 +164,8 @@ test.describe('Admin pages call REST routes that exist (#198)', () => {
       waitUntil: 'domcontentloaded',
     });
     await page.waitForTimeout(1500);
-    await visitAllTabs(page, 'button[data-tab], .faz-tab');
+    const visited = await visitAllTabs(page, 'button[data-tab], .faz-tab');
+    expect(visited, 'geo-routing exposes no visible tab; the route guard exercised nothing').toBeGreaterThan(0);
 
     // The six endpoints named in the issue must never be requested unscoped.
     const REGRESSION_PATHS = [
