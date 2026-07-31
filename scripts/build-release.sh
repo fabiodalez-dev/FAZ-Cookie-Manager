@@ -124,6 +124,8 @@ COMMON_EXCLUDES=(
     "faz-cookie-manager/phpstan.neon"
     "faz-cookie-manager/phpstan-bootstrap.php"
     "faz-cookie-manager/.DS_Store"
+    "faz-cookie-manager/.security-tools/*"
+    "faz-cookie-manager/CLAUDE-SECURITY-*"
     "faz-cookie-manager/**/.DS_Store"
     "faz-cookie-manager/docs/*"
     "faz-cookie-manager/scripts/*"
@@ -272,6 +274,30 @@ cp "${PLUGIN_SRC}/README.md" "${CP_STAGE}/${PLUGIN_SLUG}/README.md"
 zip_stage "${CP_STAGE}" "${CP_ZIP}"
 
 cyan "Sanity checks"
+
+# Every shipped file must be one git knows about.
+#
+# This script rsyncs the working tree rather than using `git archive`, so
+# anything sitting untracked in the plugin directory ships too. That is how a
+# security-scan report directory reached all three 1.25.0 ZIPs and the GitHub
+# release assets, caught only by eyeballing the SVN staging diff. The exclude
+# list is the safety net for artefacts we know about; this is the backstop for
+# the ones nobody thought of, and it fails the build rather than the review.
+# LC_ALL=C must wrap `comm` itself, not just the two `sort`s: comm compares
+# with the *current* locale, so C-sorted input fed to a UTF-8 comm reports
+# almost every line as divergent.
+untracked_in_zip=$(
+    LC_ALL=C comm -23 \
+        <(unzip -Z1 "${WPORG_ZIP}" | sed "s#^${PLUGIN_SLUG}/##" | grep -v '/$' | grep -v '^$' | LC_ALL=C sort -u) \
+        <(git -C "${PROJECT_ROOT}/${PLUGIN_SLUG}" ls-files | LC_ALL=C sort -u)
+)
+if [[ -n "${untracked_in_zip}" ]]; then
+    red "FAIL: the wp.org ZIP ships files git does not track:"
+    printf '  %s\n' ${untracked_in_zip} >&2
+    red "Move them out of ${PLUGIN_SLUG}/ or add them to COMMON_EXCLUDES."
+    exit 1
+fi
+
 assert_not_contains "${WPORG_ZIP}" 'run-scan\.php'
 assert_not_contains "${WPORG_ZIP}" 'cp-api-fetch-polyfill\.js'
 # The default banner logo is a referenced raster asset (admin/class-admin.php
