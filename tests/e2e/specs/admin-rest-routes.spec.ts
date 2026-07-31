@@ -1,0 +1,184 @@
+import { expect, test } from '../fixtures/wp-fixture';
+import type { Page, Response, ConsoleMessage } from '@playwright/test';
+
+/**
+ * Guard against issue #198: an admin page calling REST paths that no route
+ * matches.
+ *
+ * The Geo-routing module registers its routes under `faz/v1/geo/…`, but its
+ * page script called `FAZ.get('status')`, and FAZ.get() only prepends
+ * `faz/v1/`. Every tab rendered "No route was found matching the URL and
+ * request method." Nothing failed at build time, no PHP error was logged, and
+ * the admin page looked fine until you opened a tab — so it reached a released
+ * version and a user had to report it.
+ *
+ * A static check on the JS would be fragile (paths are composed at runtime).
+ * This instead asserts the observable symptom: load each admin screen as an
+ * administrator and require that no faz/v1 request comes back 4xx/5xx and that
+ * the routing error never appears in the console.
+ *
+ * Scope note: only the two modules that namespace their routes (`geo`,
+ * `cookie-policy`) can exhibit this particular bug today, but the check is
+ * written against every admin page so a future module gets the guard for free.
+ */
+
+/** Every registered FAZ admin screen, including the ones outside the nav. */
+const ADMIN_PAGES = [
+  'faz-cookie-manager',
+  'faz-cookie-manager-banner',
+  'faz-cookie-manager-cookies',
+  'faz-cookie-manager-consent-logs',
+  'faz-cookie-manager-gcm',
+  'faz-cookie-manager-languages',
+  'faz-cookie-manager-gvl',
+  'faz-cookie-manager-geo-routing',
+  'faz-cookie-manager-cookie-policy',
+  'faz-cookie-manager-settings',
+  'faz-cookie-manager-import-export',
+  'faz-cookie-manager-system-status',
+];
+
+/** Tabs are rendered client-side, so a page's REST calls fire per tab. */
+const TABBED_PAGES: Record<string, string> = {
+  'faz-cookie-manager-geo-routing': 'button[data-tab], .faz-tab',
+  'faz-cookie-manager-cookie-policy': 'button[data-tab], .faz-tab',
+  'faz-cookie-manager-banner': 'button.faz-tab',
+  'faz-cookie-manager-settings': 'button[data-tab], .faz-tab',
+};
+
+const isFazRest = (url: string): boolean =>
+  url.includes('/faz/v1/') || url.includes('rest_route=%2Ffaz%2Fv1') || url.includes('rest_route=/faz/v1');
+
+/** Strip the origin so failures read as `faz/v1/status`, not a 200-char URL. */
+const shortUrl = (url: string): string => {
+  try {
+    const u = new URL(url);
+    return u.pathname + (u.search || '');
+  } catch {
+    return url;
+  }
+};
+
+interface Collected {
+  failures: string[];
+  routingErrors: string[];
+}
+
+function collect(page: Page): Collected {
+  const out: Collected = { failures: [], routingErrors: [] };
+
+  page.on('response', (response: Response) => {
+    const url = response.url();
+    if (!isFazRest(url) || response.status() < 400) {
+      return;
+    }
+    out.failures.push(`${response.status()} ${response.request().method()} ${shortUrl(url)}`);
+  });
+
+  page.on('console', (msg: ConsoleMessage) => {
+    const text = msg.text();
+    // The exact string WordPress returns for rest_no_route.
+    if (text.includes('No route was found matching the URL')) {
+      out.routingErrors.push(text);
+    }
+  });
+
+  return out;
+}
+
+/** Click through every tab so tab-scoped REST calls actually fire. */
+async function visitAllTabs(page: Page, selector: string): Promise<void> {
+  const tabs = page.locator(selector);
+  const count = await tabs.count();
+  for (let i = 0; i < count; i++) {
+    const tab = tabs.nth(i);
+    if (!(await tab.isVisible().catch(() => false))) {
+      continue;
+    }
+    await tab.click().catch(() => undefined);
+    // Let the tab's XHRs start and settle; networkidle would hang on pages
+    // that keep a long-poll open, so a short settle window is enough here.
+    await page.waitForTimeout(400);
+  }
+}
+
+test.describe('Admin pages call REST routes that exist (#198)', () => {
+  for (const slug of ADMIN_PAGES) {
+    test(`${slug}: no failed faz/v1 request`, async ({ page, wpBaseURL, loginAsAdmin }) => {
+      await loginAsAdmin(page);
+
+      const collected = collect(page);
+
+      await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=${slug}`, {
+        waitUntil: 'domcontentloaded',
+      });
+      await expect(page.locator('#wpadminbar')).toBeVisible();
+
+      // Give the page's own boot requests time to complete.
+      await page.waitForTimeout(1200);
+
+      const tabSelector = TABBED_PAGES[slug];
+      if (tabSelector) {
+        await visitAllTabs(page, tabSelector);
+      }
+
+      expect(
+        collected.failures,
+        `${slug} issued FAZ REST requests that failed:\n  ${collected.failures.join('\n  ')}`,
+      ).toEqual([]);
+
+      expect(
+        collected.routingErrors,
+        `${slug} surfaced a rest_no_route error to the console:\n  ${collected.routingErrors.join('\n  ')}`,
+      ).toEqual([]);
+    });
+  }
+
+  test('geo-routing reaches its namespaced routes, not the bare ones', async ({
+    page,
+    wpBaseURL,
+    loginAsAdmin,
+  }) => {
+    await loginAsAdmin(page);
+
+    const seen: string[] = [];
+    page.on('request', (request) => {
+      const url = request.url();
+      if (isFazRest(url)) {
+        seen.push(shortUrl(url));
+      }
+    });
+
+    await page.goto(`${wpBaseURL}/wp-admin/admin.php?page=faz-cookie-manager-geo-routing`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForTimeout(1500);
+    await visitAllTabs(page, 'button[data-tab], .faz-tab');
+
+    // The six endpoints named in the issue must never be requested unscoped.
+    const REGRESSION_PATHS = [
+      'status',
+      'rulesets',
+      'overrides',
+      'ipinfo-settings',
+      'preview',
+      'pipl-attestation',
+    ];
+
+    const unscoped = seen.filter((url) =>
+      REGRESSION_PATHS.some(
+        (p) => url.includes(`/faz/v1/${p}`) || url.includes(`rest_route=/faz/v1/${p}`),
+      ),
+    );
+
+    expect(
+      unscoped,
+      `geo-routing requested unscoped paths (the #198 regression):\n  ${unscoped.join('\n  ')}`,
+    ).toEqual([]);
+
+    // And it must actually have talked to the module, so the assertion above
+    // is not passing merely because nothing was requested at all.
+    const scoped = seen.filter((url) => url.includes('geo/') || url.includes('geo%2F'));
+    expect(scoped.length, `geo-routing made no namespaced REST call; observed:\n  ${seen.join('\n  ')}`).toBeGreaterThan(0);
+  });
+});
