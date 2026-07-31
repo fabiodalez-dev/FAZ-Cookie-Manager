@@ -34,6 +34,7 @@ Most cookie consent plugins follow the same pattern: a free version with cripple
 | Cookie Policy generator | Paid add-on | Yes | **Yes (NEW in 1.16.0)** |
 | Editable Cookie Policy sections, per language | Paid add-on | Yes | **Yes** |
 | Guided setup wizard | Rarely | Yes | **Yes (NEW in 1.25.0)** |
+| Editable Cookie Policy text (any language) | No | Rarely | **Yes (NEW in 1.25.0)** |
 | A/B testing of banner variants | No | Rarely | **Yes (NEW in 1.25.0)** |
 | Schrems II per-cookie transfer disclosure | No | Rarely | **Yes (NEW in 1.25.0)** |
 | Age-appropriate consent (GDPR Art. 8) | No | Rarely | **Yes (NEW in 1.25.0)** |
@@ -618,6 +619,7 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 - **Added**: per-cookie Schrems II third-country transfer disclosure, shown in the preference-center declaration and the generated Cookie Policy. Neutral wording — names the fact and the admin-described safeguard, never asserts legal validity. Default off.
 - **Added**: opt-in banner resilience against ad-block cosmetic filter lists — one deferred re-assert that keeps the mandatory notice visible, with no loop and no cookie wall. Default off.
 - **Added**: placeholder blocking for Smash Balloon Instagram Feed and the Elementor Video widget — contributed by [@roboes](https://github.com/roboes) (#190).
+- **Added**: the generated Cookie Policy text is now editable — one box per section, per jurisdiction and per language, on a collapsed **Policy text** card. An empty box keeps the reviewed shipped text; placeholders keep resolving inside your own wording. Languages the plugin ships no template for can be selected too, so a policy can be written in any language without editing plugin files. Each override remembers the heading it was written against and deactivates if a later release reorders the templates.
 - **Changed**: a `jurisdiction="…"` shortcode override no longer bypasses that jurisdiction's mandatory fields. It previously rendered even with those fields unset, on the reasoning that a degraded policy beat a blank page — the wrong trade for a legal document. Administrators now see the configuration notice; anonymous visitors receive nothing, so an incomplete policy is never published. **If you use a shortcode override, fill in that jurisdiction's required fields.**
 - **Security**: the consent dashboard widget is gated on capability, and the CCPA opt-out endpoints now enforce a strict same-origin (Fetch Metadata + Referer) check.
 - **Fixed**: provider scripts whose blocking pattern ends on a separator were never blocked — the HubSpot tracker ran before consent (#196). A pattern like `js.hs-scripts.com/` already carries its own right-hand boundary, so demanding another separator after it meant `js.hs-scripts.com/12345.js` went unblocked. Twenty shipped provider definitions were affected; fixed in both the PHP and JavaScript matchers.
