@@ -14,7 +14,9 @@ I verified the claim against the code, and it holds — with one honest qualifie
 - `Generator` is pure-static and pure-function: `resolve_template_path()`, `substitute()`, `markdown_to_html()`, `policy_version_hash()` contain **zero** cookie-specific logic. The cookie-specific parts are exactly three constants (`JURISDICTIONS`, `HTML_TOKENS`, `NATIVE_LANG`) and one hardcoded directory (`templates_dir()`).
 - `Section_Overrides` operates on a `$settings` array passed in — it is **already document-agnostic**. If each document gets its own settings option, overrides gain the document dimension for free, with zero re-keying of existing data.
 - `Template_Translations` is parameterised by everything except `CATALOG_FILE` and the English source path — two values.
-- `Renderer` is the only genuinely coupled class: `SETTINGS_OPTION`, `build_data()`'s token set, `build_cookie_list_html()`, `collect_transfer_disclosures()`, and `disclaimer()` are cookie-policy-specific. But its pipeline (resolve lang → resolve jurisdiction → load scaffold → gettext → overrides → substitute → markdown → disclaimer → kses → hash) is exactly the pipeline every document needs.
+- `Renderer` is the only genuinely coupled class: `SETTINGS_OPTION`, `build_data()`'s token set, `build_cookie_list_html()`, `collect_transfer_disclosures()`, and `disclaimer()` are cookie-policy-specific. But its pipeline (resolve lang → resolve jurisdiction → load scaffold → gettext → overrides → substitute → markdown → transfers → disclaimer → **hash → wrapper → kses**) is the pipeline every document needs.
+
+> The tail order matters and is easy to get wrong: `register_version_meta()` runs at `class-renderer.php:212`, **before** `wp_kses()` at line 235. The hash is therefore computed over the pre-sanitisation HTML. Reordering it — for instance "tidying" the wrapper and the sanitiser into one step after hashing — moves `data-faz-policy-version` on every install and breaks the byte-for-byte guarantee the golden test enforces.
 
 **The qualifier:** "most remaining work is editorial" is true for the programme as a whole (~70% editorial by effort), but P0a specifically has a real architectural core that the brief underestimates: a Privacy Policy needs a **new admin data model** (processing activities with purposes, legal bases, data categories, recipients, retention — none of which exist today) plus per-jurisdiction **required-field gating** that today only exists for POPIA (`Generator::missing_required_settings()` returns `array()` for every other jurisdiction). That is form UI + sanitisation + refusal logic, not template text. Call P0a roughly 45% architectural / 55% editorial; P1b is genuinely ~90% editorial.
 
@@ -55,7 +57,7 @@ I verified the brief against the code. Corrections and additions that materially
 
 A **registry** (`Document_Registry`) returning immutable **`Document_Config`** value objects. Not an interface hierarchy — the documents differ in *data*, not *behaviour*; the one behavioural difference (which tokens get built) is a callable in the config. Not a bare config array — a value object gives typed accessors, defaults, and a single place to validate registry entries at boot.
 
-```
+```text
 FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Document_Registry
     ::get( string $slug ) : ?Document_Config
     ::all() : Document_Config[]
@@ -80,6 +82,13 @@ Document_Config (per document type):
 
 The registry is a hardcoded PHP array inside the class — **no** `apply_filters` on the registry itself in v1. Opening document registration to third parties before the shape is proven invites support burden and a compat contract we can't yet honour. Add a filter later if demand appears.
 
+> **`data_builder` visibility — a real PHP constraint, not a style preference.** The cookie-policy builder needs `build_cookie_list_html()`, `collect_transfer_disclosures()` and `build_services_list()`, which are `private static` on `Renderer`. An array callable such as `array( Renderer::class, 'build_cookie_data' )` stored in the registry and **invoked from `Document_Registry`** fails the visibility check: for string/array callables PHP resolves visibility at the *call site*, not where the callable was created. Two acceptable resolutions, pick one and stay with it:
+>
+> 1. **Dispatch inside `Renderer`** — the registry stores a document slug or a small identifier, and `render_for()` selects the builder internally. Simplest, keeps every private helper private, and is the recommended option.
+> 2. **A dedicated builder class per document** with a `public static build()` — move the three helpers with it.
+>
+> What must NOT happen is registering `array( Renderer::class, '<private method>' )` and calling it from elsewhere. `Closure::fromCallable()` inside `Renderer` would also work (it binds scope at creation), but it buys nothing over option 1 and hides the coupling. Whichever is chosen, §6 gains a test that actually executes each registered document's builder — a visibility fatal must surface in the suite, not in production.
+
 ### 3.2 How the four engine classes become document-aware
 
 Every existing public signature keeps working unchanged. The document dimension is added via new methods / optional trailing parameters that default to the cookie-policy config.
@@ -95,7 +104,7 @@ New shared data builder: `Document_Data::base_tokens( $settings, $jurisdiction, 
 
 ### 3.3 Directory layout
 
-```
+```text
 admin/modules/cookie-policy-generator/          ← directory name UNCHANGED (see below)
   class-cookie-policy-generator.php             ← unchanged (cookie-policy bootstrap)
   class-legal-documents.php                     ← NEW: bootstrap for the additional documents
@@ -252,7 +261,7 @@ The four-bucket jurisdiction model (GDPR/CCPA/LGPD/POPIA) is a *privacy-law* tax
 
 **Acceptance criteria**
 
-- `[faz_privacy_policy_complete]` renders a complete GDPR policy in all bundled languages once required fields are saved; renders the incomplete-configuration notice otherwise.
+- `[faz_privacy_policy_complete]` renders a complete GDPR policy **in English plus every language whose translation has passed review** once required fields are saved; renders the incomplete-configuration notice otherwise. Languages still awaiting review resolve through the documented fallback chain (requested → jurisdiction native → en) and must never render half-translated text. This deliberately does *not* require all 32 jurisdiction × language combinations before 1.26.0 — see the release plan (§8), which stages the remainder as editorial review completes. The two statements are the same gate, phrased once here and once there; if you change one, change both.
 - `data-faz-policy-version` hash present and stable across reloads; changes when a template, an override, or material settings change; does not change with the calendar date.
 - Section overrides editable per jurisdiction × language with anchor drift protection; placeholder warnings surface.
 - `wp plugin check faz-cookie-manager --categories=plugin_repo` → 0 ERRORS on the wp.org-shape ZIP.
@@ -274,11 +283,17 @@ Admin-controlled, never automatic — by design *and* because an automatic link 
 
 **Mechanism**
 
-1. **Ledger** `faz_legal_doc_acknowledged` (§4.1): per document, the last hash the admin acknowledged. Hash tracked = the document's *default* render combination (saved jurisdiction + saved/default language) — the same combination the version meta already exposes. Tracking all j×l combos would multiply prompts without changing the decision; the limitation is documented in the UI copy.
+1. **Ledger** `faz_legal_doc_acknowledged` (§4.1): per document, the last hash the admin acknowledged. Hash tracked = the document's *default* render combination (saved jurisdiction + saved/default language) — the same combination the version meta already exposes. Tracking all j×l combos would multiply prompts without changing the decision.
+
+   **This is a real blind spot, and it must be stated rather than glossed.** Overrides are keyed `[jurisdiction][lang][index]`, so an operator who rewrites only the French text, or only a non-default jurisdiction, changes that variant's `data-faz-policy-version` and gets **no notice at all**. Two obligations follow: the UI copy says plainly which combination is being watched, and §6 gains a test asserting the documented behaviour — that editing a non-default variant does *not* raise the notice — so the limitation is pinned rather than accidental. If real use shows operators editing non-default variants routinely, widen the ledger to every combination that has a saved override, which is a strictly smaller set than every j×l pair.
 2. **Detection**: on Legal Documents / Cookie Policy admin page load (admin-side only — zero frontend cost), compute current hash via the existing `policy_version_hash()` path; when it differs from the ledger, show a notice: *"Your Privacy Policy has changed since you last confirmed it (version a1b2c3 → d4e5f6)."* with three actions:
    - **"This was a minor change"** → records the new hash in the ledger. Nothing else.
    - **"Material change — re-ask consent"** → calls the **existing** `invalidate_consents` endpoint (settings API, verified in `admin/modules/settings/api/class-api.php:998`), which bumps `general.consent_revision` (existing frontend mechanics in `script.js` ~343 then re-show the banner to returning visitors), then records the hash. A confirm dialog states the consequence (all returning visitors re-prompted).
    - Dismiss → notice returns next page load.
+
+   **The re-consent action is offered for cookie-consent documents ONLY.** `general.consent_revision` governs the *cookie* banner. Terms & Conditions and the generic Disclaimer are contractual documents that have nothing to do with the ePrivacy consent a visitor gave for cookies; wiring their acknowledgment to that counter would re-prompt every returning visitor for cookie consent because a contract clause changed. That is both wrong in substance and a straight path to consent fatigue, which is itself a compliance problem — a banner people dismiss reflexively is not informed consent.
+   So the registry carries a per-document flag (`affects_cookie_consent`, true for cookie-policy, false for terms-conditions and disclaimer). When false, the notice offers only "record this change" and the re-consent action is not rendered at all — not rendered-and-disabled, absent. The Privacy Policy sits in between: it is where the cookie disclosures are legally framed, so it defaults to true, but the flag makes that an explicit decision rather than an accident of implementation.
+   §6 gains an E2E assertion: acknowledging a *material* change to Terms leaves `consent_revision` untouched and does not re-show the banner to a visitor holding a valid consent cookie.
 3. **Upgrade neutrality**: on first load after the 1.27.0 upgrade the ledger is empty → it is seeded silently with current hashes, so the feature's own arrival never generates a prompt.
 
 **Files:** `includes/class-version-ledger.php` (new, inside the module), notice rendering inside `legal-documents.php` + the cookie-policy view, one new REST route `faz/v1/legal-documents/acknowledge` (POST, admin, nonce), JS in `legal-documents.js`. No frontend files change at all — the consent-revision plumbing already exists end-to-end.
@@ -350,11 +365,11 @@ Test runners in place: PHP units via `scripts/run-unit-tests.sh` (`npm run test:
 | R1 | **Legal**: a generated Privacy Policy asserts facts about all processing; a wrong/incomplete policy exposes the site operator (and reputationally, us) | Medium / **High** | Refusal gating (§P0a) — no render without operator-supplied mandatory facts; never invent or seed data; strengthened per-document disclaimer; jurisdiction-fixed rights text is reviewed editorial content, not generated claims; "reviewed starting point" framing everywhere in UI + readme |
 | R2 | **BC break** on the shipped cookie policy during the Renderer/Generator refactor (output, hash, option shape, REST) | Medium / **High** | Golden-render fixture test (§6) as a hard gate; `Section_Overrides` and cookie-policy API/templates untouched; all new params defaulted; frozen `faz/v1/cookie-policy/*`; existing suites unmodified |
 | R3 | **Plugin Check / wp.org review**: new dirs missing `index.php`, unescaped output in new views, unprepared queries, or the static WP-version rule | Medium / High | No new WP APIs beyond the 5.0-safe set already in use (no `%i`, no `wp_cache_*` newcomers — the R2-adjacent memory items); registry test asserts `index.php` presence; 0-ERRORS check is a release-blocking step; **no** new outbound HTTP anywhere, so "External Services" in readme.txt is untouched |
-| R4 | **i18n drift**: 3 new gettext catalogues + admin UI strings desync .pot/.po/.mo; scaffold translations lag EN scaffold edits | High / Medium | One resync per release at the end (make-pot → msgmerge cs/de/fr/hr/it/nl → translate it_IT → msgfmt), exactly once per the standing rule; catalogue generation scripted (`generate-legal-doc-gettext-catalog.php`) not hand-edited; `Template_Translations` placeholder-parity guard already rejects broken PO entries section-by-section; staged languages ride the documented fallback chain instead of shipping unreviewed text |
+| R4 | **i18n drift**: 3 new gettext catalogues + admin UI strings desync .pot/.po/.mo; scaffold translations lag EN scaffold edits | High / Medium | One resync per release at the end (make-pot → msgmerge over the **UI locale catalogues** `cs_CZ de_DE fr_FR hr_HR it_IT nl_NL`, i.e. exactly the `.po` files in `languages/` → translate it_IT → msgfmt), exactly once per the standing rule. Note these are a different set from the **policy template languages** (`en it fr de es pt-BR bg cs`, `Generator::LANGUAGES`): the first is which locales the plugin's interface is translated into, the second is which languages a policy scaffold ships in. They overlap but neither contains the other, and conflating them produces a resync that touches the wrong files; catalogue generation scripted (`generate-legal-doc-gettext-catalog.php`) not hand-edited; `Template_Translations` placeholder-parity guard already rejects broken PO entries section-by-section; staged languages ride the documented fallback chain instead of shipping unreviewed text |
 | R5 | **Scope creep** toward the competitor's checklist (age gate, announcement bar, force agreement, DMCA/COPPA/EULA) | High / Medium | §5 P2b/P3 rejections and §9 non-goals are part of this committed plan; registry leaves later document types cheap *if* ever justified, so "no" now costs nothing |
 | R6 | **Editorial quality** of 32+ privacy scaffolds; machine-assisted translations shipping unreviewed | Medium / High | EN scaffolds first with real review; non-EN jurisdictions/languages ship only when reviewed — the fallback chain makes partial shipping safe and invisible-to-broken; per-language rollout tracked in CHANGELOG |
 | R7 | **Consent-revision misuse** (P1a): operator bumps revision casually, causing mass re-prompt fatigue | Low / Medium | Explicit confirm dialog with stated consequence; "minor change" path is the visually primary action; never automatic |
-| R8 | **readme.txt changelog cap** (~5,000 words, 13 entries kept) squeezed by two feature-heavy releases | High / Low | Terse entries (≤300 words), full detail in CHANGELOG.md + GitHub; run the standing `awk … | wc -w` check before SVN |
+| R8 | **readme.txt changelog cap** (~5,000 words, 13 entries kept) squeezed by two feature-heavy releases | High / Low | Terse entries (≤300 words), full detail in CHANGELOG.md + GitHub; run the standing `awk … \| wc -w` word-count check before SVN |
 | R9 | Admin JS page bloat / boot-flag mismatch (the `fazCpBooted` watchdog pattern) | Low / Low | Mirror the existing per-page JS pattern exactly; boot-flag entry added in the same commit as the page registration |
 
 ---
