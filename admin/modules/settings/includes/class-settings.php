@@ -384,6 +384,33 @@ class Settings extends Store {
 				}
 			}
 		}
+
+		// Structural dependency between two banner_control flags. Enforced in the
+		// server-side sanitiser rather than the admin JS so it also holds for REST
+		// updates, imports and programmatic writes.
+		//
+		// NOTE: this method recurses into every nested array, so this block runs at
+		// each level, not only at the top. The isset() guard is what keeps it a
+		// no-op below the root — do not add an invariant here that could match a
+		// nested key of the same name.
+		//
+		// Deliberately NOT enforced here: turning Cache Compatibility Mode off when
+		// geo-targeting or IAB TCF is on. That combination is supported by design —
+		// the frontend neutralises per-visitor resolution under cache mode instead
+		// of failing (banner-rest and amp-consent skip country/ruleset lookup,
+		// class-frontend forces the conservative gdpr_applies=true for TCF). Forcing
+		// the flag off would silently revert an administrator's choice on every
+		// save, including saves that never touched it, and would strip the setting
+		// from installs already running the combination. The admin is warned in
+		// settings.js instead, matching how Cache Compatibility Mode pausing the A/B
+		// split is surfaced.
+		if ( isset( $result['banner_control'] ) && is_array( $result['banner_control'] ) ) {
+			// A per-cookie choice is nested below a service and cannot be enforced
+			// coherently when service-level consent is disabled.
+			if ( ! empty( $result['banner_control']['per_cookie_consent'] ) ) {
+				$result['banner_control']['per_service_consent'] = true;
+			}
+		}
 		return $result;
 	}
 
@@ -593,7 +620,9 @@ class Settings extends Store {
 				$gateway_keys = self::payment_gateway_keys();
 				$clean = array();
 				foreach ( $gateway_keys as $gw_key ) {
-					$clean[ $gw_key ] = ( is_array( $value ) && ! empty( $value[ $gw_key ] ) );
+					$clean[ $gw_key ] = is_array( $value ) && array_key_exists( $gw_key, $value )
+						? faz_sanitize_bool( $value[ $gw_key ] )
+						: false;
 				}
 				$value = $clean;
 				break;

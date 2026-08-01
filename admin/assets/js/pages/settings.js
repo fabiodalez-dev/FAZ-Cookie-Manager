@@ -398,15 +398,39 @@
 				}
 			}
 
+			var saveWarnings = [];
+			if (abTestWarning) { saveWarnings.push(abTestWarning); }
+
+			// Cache Compatibility Mode is compatible with geo-targeting and IAB TCF
+			// — the frontend deliberately resolves both conservatively so the
+			// rendered output stays identical for every visitor — but the result is
+			// not what the settings screen alone suggests. Say so rather than
+			// silently overriding the choice, or letting the success toast imply
+			// per-country routing is still happening.
+			if (current.banner_control && current.banner_control.cache_compatibility) {
+				if (current.geolocation && current.geolocation.geo_targeting) {
+					saveWarnings.push(__(
+						'settings.cacheCompatWarnGeo',
+						'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.'
+					));
+				}
+				if (current.iab && current.iab.enabled) {
+					saveWarnings.push(__(
+						'settings.cacheCompatWarnIab',
+						'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.'
+					));
+				}
+			}
+
 			return FAZ.post('settings', current).then(function () {
-				return abTestWarning;
+				return saveWarnings;
 			});
-		}).then(function (abTestWarning) {
+		}).then(function (saveWarnings) {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saved', 'Settings saved successfully.'));
-			if (abTestWarning) {
-				FAZ.notify(abTestWarning, 'warning');
-			}
+			(saveWarnings || []).forEach(function (message) {
+				FAZ.notify(message, 'warning');
+			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');

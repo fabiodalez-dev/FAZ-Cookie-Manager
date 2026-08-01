@@ -44,6 +44,13 @@ namespace {
 			'per_service_consent' => false,
 			'per_cookie_consent'  => false,
 			'adblock_resilience'  => false,
+			'cache_compatibility' => false,
+		),
+		'geolocation' => array(
+			'geo_targeting' => false,
+		),
+		'iab' => array(
+			'enabled' => false,
 		),
 		'script_blocking' => array(
 			'aggressive_css_url_blocking' => false,
@@ -136,6 +143,7 @@ namespace {
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['paypal'], true, "payment gateway 'paypal' string '1' coerces to bool true" );
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['stripe'], false, "payment gateway 'stripe' int 0 coerces to bool false" );
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['amazon_pay'], true, "payment gateway 'amazon_pay' string 'yes' coerces to bool true" );
+	faz_assert_same( Settings::sanitize_option( 'payment_gateways', array( 'paypal' => 'false' ) )['paypal'], false, "payment gateway string 'false' coerces to bool false" );
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['braintree'], false, 'unset payment gateway defaults to false' );
 	faz_assert_same( array_key_exists( 'evilkey', $gw_sanitized['script_blocking']['payment_gateways'] ), false, 'unknown payment-gateway key is dropped (injection-safe)' );
 
@@ -150,6 +158,35 @@ namespace {
 		false,
 		'aggressive_css_url_blocking defaults off'
 	);
+
+	$cookie_dependency = Settings::sanitize(
+		array(
+			'banner_control' => array(
+				'per_service_consent' => false,
+				'per_cookie_consent'  => true,
+			),
+		),
+		$defaults
+	);
+	faz_assert_same( $cookie_dependency['banner_control']['per_service_consent'], true, 'per-cookie consent forces its required per-service layer on' );
+
+	$geo_cache = Settings::sanitize(
+		array(
+			'banner_control' => array( 'cache_compatibility' => true ),
+			'geolocation'    => array( 'geo_targeting' => true ),
+		),
+		$defaults
+	);
+	faz_assert_same( $geo_cache['banner_control']['cache_compatibility'], true, 'cache mode survives a save while geo-targeting is on (frontend neutralises geo instead)' );
+
+	$iab_cache = Settings::sanitize(
+		array(
+			'banner_control' => array( 'cache_compatibility' => true ),
+			'iab'            => array( 'enabled' => true ),
+		),
+		$defaults
+	);
+	faz_assert_same( $iab_cache['banner_control']['cache_compatibility'], true, 'cache mode survives a save while IAB TCF is on (frontend forces the conservative gdpr_applies instead)' );
 
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";
