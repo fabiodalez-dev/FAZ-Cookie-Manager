@@ -66,7 +66,7 @@ namespace {
 		echo '      actual:   ' . var_export( $actual, true ) . "\n";
 	}
 
-	echo "\n== Settings compliance matrix (50 reusable checks) ==\n\n";
+	echo "\n== Settings compliance matrix (52 reusable checks) ==\n\n";
 
 	// 1-10: consent-affecting flags must become strict booleans.
 	$boolean_cases = array(
@@ -163,8 +163,21 @@ namespace {
 		'geolocation' => array( 'geo_targeting' => false ),
 		'iab'         => array( 'enabled' => false ),
 	);
-	$per_cookie = Settings::sanitize( array( 'banner_control' => array( 'per_cookie_consent' => true ) ), $defaults );
-	compliance_same( $per_cookie['banner_control']['per_service_consent'], true, 'per-cookie consent automatically enables per-service consent' );
+	// The dependency runs parent → child only. Enforcing it upwards (per-cookie
+	// implying per-service) would make per-service impossible to switch off while
+	// per-cookie is on, which is what the settings screen actually submits: it
+	// posts the whole banner_control subtree with one flag changed.
+	$svc_off = Settings::sanitize(
+		array( 'banner_control' => array( 'per_service_consent' => false, 'per_cookie_consent' => true ) ),
+		$defaults
+	);
+	compliance_same( $svc_off['banner_control']['per_service_consent'], false, 'per-service consent can be switched off even with per-cookie still set' );
+	compliance_same( $svc_off['banner_control']['per_cookie_consent'], false, 'per-cookie consent is dropped when its required per-service layer is off' );
+	$both_on = Settings::sanitize(
+		array( 'banner_control' => array( 'per_service_consent' => true, 'per_cookie_consent' => true ) ),
+		$defaults
+	);
+	compliance_same( $both_on['banner_control']['per_cookie_consent'], true, 'per-cookie consent survives when per-service is on' );
 
 	// Cache Compatibility Mode combined with geo-targeting or IAB TCF must be
 	// PRESERVED, not silently switched off. The frontend supports both: under
@@ -181,9 +194,9 @@ namespace {
 	$plain_cache = Settings::sanitize( array( 'banner_control' => array( 'cache_compatibility' => true ) ), $defaults );
 	compliance_same( $plain_cache['banner_control']['cache_compatibility'], true, 'cache mode is preserved on its own' );
 
-	if ( 50 !== $run ) {
+	if ( 52 !== $run ) {
 		$failed++;
-		echo "  \033[31m✗\033[0m suite contract expected exactly 50 checks, ran {$run}\n";
+		echo "  \033[31m✗\033[0m suite contract expected exactly 52 checks, ran {$run}\n";
 	}
 
 	echo "\n--\nChecks: {$run}\nFailed: {$failed}\n\n";
@@ -191,6 +204,6 @@ namespace {
 		echo "\033[31mFAIL\033[0m\n";
 		exit( 1 );
 	}
-	echo "\033[32mPASS — 50/50 compliance checks passed\033[0m\n";
+	echo "\033[32mPASS — 52/52 compliance checks passed\033[0m\n";
 	exit( 0 );
 }

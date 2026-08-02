@@ -405,10 +405,22 @@ class Settings extends Store {
 		// settings.js instead, matching how Cache Compatibility Mode pausing the A/B
 		// split is surfaced.
 		if ( isset( $result['banner_control'] ) && is_array( $result['banner_control'] ) ) {
-			// A per-cookie choice is nested below a service and cannot be enforced
-			// coherently when service-level consent is disabled.
-			if ( ! empty( $result['banner_control']['per_cookie_consent'] ) ) {
-				$result['banner_control']['per_service_consent'] = true;
+			// A per-cookie choice is nested below a service, so it is meaningless
+			// without service-level consent — the admin help text says as much
+			// ("Requires per-service consent"). The dependency is enforced in that
+			// direction only: the parent switches the child off.
+			//
+			// It must NOT be enforced the other way round. Deriving
+			// per_service_consent = true from per_cookie_consent looks equivalent
+			// and is not: it makes per-service impossible to turn off while
+			// per-cookie is on. The admin unticks it, saves, and finds it back on
+			// with no explanation. Caught by
+			// tests/e2e/specs/per-service-consent.spec.ts — "category-only mode
+			// hides and disables per-service consent" — which switches per-service
+			// off over a settings payload that still carries per_cookie_consent
+			// from an earlier state, exactly as the settings screen does.
+			if ( empty( $result['banner_control']['per_service_consent'] ) ) {
+				$result['banner_control']['per_cookie_consent'] = false;
 			}
 		}
 		return $result;

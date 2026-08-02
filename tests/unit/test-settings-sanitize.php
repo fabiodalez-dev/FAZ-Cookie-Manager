@@ -168,7 +168,8 @@ namespace {
 		),
 		$defaults
 	);
-	faz_assert_same( $cookie_dependency['banner_control']['per_service_consent'], true, 'per-cookie consent forces its required per-service layer on' );
+	faz_assert_same( $cookie_dependency['banner_control']['per_service_consent'], false, 'per-service consent stays off when the admin switches it off' );
+	faz_assert_same( $cookie_dependency['banner_control']['per_cookie_consent'], false, 'per-cookie consent is dropped with its required per-service layer' );
 
 	$geo_cache = Settings::sanitize(
 		array(
