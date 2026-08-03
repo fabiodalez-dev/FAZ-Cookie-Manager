@@ -802,29 +802,36 @@ class Frontend {
 	 * provider config) into real files the browser can cache: the filename
 	 * embeds a hash of the content, so it is immutable — no ?ver needed, no
 	 * invalidation problem, and stale full-page caches keep referencing their
-	 * own (still existing) hash. Files are only ever ADDED here; they are tiny,
-	 * new hashes only appear when the banner/config actually changes, and
-	 * removal happens on uninstall. Steady state costs one file_exists() per
-	 * asset per request; the WP_Filesystem machinery is only touched when the
-	 * file is missing (first request after a change).
+	 * own (still existing) hash. Steady state costs one file_exists() per asset
+	 * per request; the WP_Filesystem machinery is only touched when the file is
+	 * missing (first request after a change).
+	 *
+	 * Superseded hashes are reaped by cleanup_static_assets() on the daily
+	 * cron, using mtime as a last-used timestamp (refreshed at most once a day
+	 * by the hit path below), so the directory cannot grow without bound on a
+	 * long-lived install.
 	 *
 	 * @param string $filename Hash-carrying file name (no path).
 	 * @param string $contents File contents to write when missing.
 	 * @return string Public URL, or '' when the file cannot be provided.
 	 */
 	private function get_static_asset_url( $filename, $contents ) {
-		static $dir_info     = null;
 		static $write_failed = false;
 
-		if ( null === $dir_info ) {
-			$dir_info = Filesystem::get_instance()->get_uploads_dir( 'faz-cookie-manager/assets' );
-		}
+		$dir_info = self::get_static_assets_dir();
 		if ( empty( $dir_info['path'] ) || empty( $dir_info['url'] ) ) {
 			return '';
 		}
 
 		$path = $dir_info['path'] . $filename;
 		if ( file_exists( $path ) ) {
+			// Keep mtime meaning "last used" for the reaper, without paying a
+			// write on every request. filemtime() here hits PHP's per-request
+			// stat cache populated by the file_exists() above.
+			$mtime = @filemtime( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( $mtime && ( time() - $mtime ) > DAY_IN_SECONDS ) {
+				@touch( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.touch_touch -- last-used marker for the daily reaper; WP_Filesystem has no touch primitive.
+			}
 			return $dir_info['url'] . $filename;
 		}
 
@@ -840,12 +847,99 @@ class Frontend {
 		if ( ! file_exists( $dir_info['path'] . 'index.php' ) ) {
 			$fs->put_contents( $dir_info['path'] . 'index.php', "<?php // Silence is golden.\n" );
 		}
-		if ( ! $fs->put_contents( $path, $contents ) ) {
+
+		// Stage + rename instead of writing $path directly: put_contents() is
+		// not atomic, so a concurrent request could see the file exist (and
+		// hand its URL to a browser) while it is still half-written — and
+		// because the name is a content hash it would stay truncated forever.
+		// A same-directory rename() is atomic on POSIX and NTFS. Mirrors the
+		// staging pattern in Geolocation::extract_mmdb().
+		$staged = $dir_info['path'] . '.' . $filename . '.' . wp_generate_uuid4() . '.tmp';
+		if ( ! $fs->put_contents( $staged, $contents ) ) {
 			$write_failed = true;
 			return '';
 		}
+		if ( ! @rename( $staged, $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- intentional atomic same-dir swap; WP_Filesystem has no atomic move.
+			wp_delete_file( $staged );
+			// A parallel request may have landed the same file first. The name
+			// is a content hash, so that copy is byte-identical — use it.
+			if ( ! file_exists( $path ) ) {
+				$write_failed = true;
+				return '';
+			}
+		}
 
 		return $dir_info['url'] . $filename;
+	}
+
+	/**
+	 * Resolve (and memoize) the generated-assets directory.
+	 *
+	 * @return array { path: string, url: string }
+	 */
+	private static function get_static_assets_dir() {
+		static $dir_info = null;
+		if ( null === $dir_info ) {
+			$dir_info = Filesystem::get_instance()->get_uploads_dir( 'faz-cookie-manager/assets' );
+		}
+		return is_array( $dir_info ) ? $dir_info : array();
+	}
+
+	/**
+	 * Reap generated static assets that have not been served for a while.
+	 *
+	 * The config/banner assets are content-hashed, so every settings, cookie
+	 * or banner-template change mints a NEW filename and orphans the previous
+	 * one. Without this, an install that is edited regularly accumulates
+	 * orphans forever.
+	 *
+	 * mtime is used as a last-used timestamp: get_static_asset_url() refreshes
+	 * it (at most once a day) whenever it serves an existing file, so assets
+	 * still referenced by live pages keep moving forward and are never reaped.
+	 * The retention window is deliberately generous — full-page caches can
+	 * hold a rendered page (and its asset URL) for days without PHP running —
+	 * and the files are small, so erring long costs a few MB at worst.
+	 *
+	 * @return int Number of files deleted.
+	 */
+	public static function cleanup_static_assets() {
+		$dir_info = self::get_static_assets_dir();
+		if ( empty( $dir_info['path'] ) || ! is_dir( $dir_info['path'] ) ) {
+			return 0;
+		}
+
+		/**
+		 * Filter how long an unused generated asset is kept, in days.
+		 *
+		 * @since 1.26.1
+		 * @param int $days Default 90.
+		 */
+		$days = (int) apply_filters( 'faz_static_asset_retention_days', 90 );
+		if ( $days <= 0 ) {
+			return 0;
+		}
+
+		$cutoff  = time() - ( $days * DAY_IN_SECONDS );
+		$deleted = 0;
+		// Only ever touch files this class generates: the two content-hashed
+		// families, plus staging files orphaned by an interrupted write.
+		$patterns = array( 'config-*.js', 'banner-*.css', '.*.tmp' );
+		foreach ( $patterns as $pattern ) {
+			$files = glob( $dir_info['path'] . $pattern );
+			if ( ! is_array( $files ) ) {
+				continue;
+			}
+			foreach ( $files as $file ) {
+				$mtime = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				if ( $mtime && $mtime > $cutoff ) {
+					continue;
+				}
+				wp_delete_file( $file );
+				$deleted++;
+			}
+		}
+
+		return $deleted;
 	}
 
 	/**
