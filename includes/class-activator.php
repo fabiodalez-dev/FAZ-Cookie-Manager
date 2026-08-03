@@ -358,6 +358,14 @@ class Activator {
 		if ( $pv_retention > 0 ) {
 			Pageviews_Controller::get_instance()->cleanup_old_records( $pv_retention );
 		}
+
+		// Reap superseded content-hashed frontend assets (config-*.js /
+		// banner-*.css). Every settings/banner change mints a new hash and
+		// orphans the previous file, so without this the generated-assets
+		// directory grows for the lifetime of the install.
+		if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
+			\FazCookie\Frontend\Frontend::cleanup_static_assets();
+		}
 	}
 
 	/**

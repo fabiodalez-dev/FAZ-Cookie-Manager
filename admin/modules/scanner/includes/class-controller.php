@@ -1266,12 +1266,19 @@ class Controller {
 			}
 		} finally {
 			\FazCookie\Includes\Base_Controller::resume_cache_invalidation();
+			// Flush inside the finally: if a row threw mid-loop, the rows
+			// inserted before it are already committed, and skipping the flush
+			// would leave the cookie/category caches serving an incomplete
+			// inventory to the API and the banner until the next write.
+			Cookie_Controller::get_instance()->delete_cache();
+			Category_Controller::get_instance()->delete_cache();
 		}
 
-		// Flush cookie and category caches so the API returns fresh data, and
-		// fire the deferred per-cookie action ONCE for the whole batch.
-		Cookie_Controller::get_instance()->delete_cache();
-		Category_Controller::get_instance()->delete_cache();
+		// Fire the deferred per-cookie action ONCE for the whole batch. Kept
+		// outside the finally on purpose: its listeners (unmatched-vendor
+		// re-check, page-cache purge) are whole-dataset operations, and a
+		// listener throwing while an exception is already unwinding would
+		// replace the original error.
 		if ( $created > 0 ) {
 			do_action( 'faz_after_create_cookie' );
 		}

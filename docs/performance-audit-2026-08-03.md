@@ -140,8 +140,8 @@ HTML corpus, outputs identical) and a new dedicated unit suite
     dependency of the main bundle; a tiny inline snippet merges
     `window._fazStaticConfig` back into `_fazConfig` before `script.js` runs,
     so the frontend bundle needed no changes. Hash-named files are immutable
-    (browser-cacheable forever) and never garbage-collected except at
-    uninstall, so stale full-page caches keep resolving their own hash.
+    (browser-cacheable forever), so stale full-page caches keep resolving
+    their own hash; superseded hashes are reaped by the daily cron (item 26).
     Falls back to the historical full-inline behaviour when uploads is not
     writable, and stays inline in alternative-asset (ad-blocker-evasion) mode.
 21. **~30 KB of banner CSS inlined per page** — the compiled banner CSS is
@@ -168,6 +168,39 @@ HTML corpus, outputs identical) and a new dedicated unit suite
     the script/iframe filters treat regular tags (whitelist respected;
     per-service consent merged with svc:no taking precedence). Covered by
     `tests/unit/test-output-buffer-noscript-php.php`.
+
+## Review follow-ups (third pass)
+
+Raised in review of the changes above and fixed in the same branch. Covered
+by `tests/unit/test-static-assets-php.php` (22 checks).
+
+24. **Non-atomic asset write (race)** — `get_static_asset_url()` wrote
+    straight to the final path, but `file_exists()` turns true the moment the
+    file is created: a concurrent request could hand a browser the URL of a
+    still-half-written file, and because the name is a content hash it would
+    stay truncated *forever* (a `config-<hash>.js` missing
+    `_providersToBlock` disarms client-side blocking). *Fix:* write to a
+    same-directory staging file, then `rename()` — atomic on POSIX and NTFS,
+    mirroring `Geolocation::extract_mmdb()`. A losing racer falls back to the
+    file the winner landed (identical bytes, by construction of the hash).
+25. **Cache flush skipped when the scanner loop throws** — the bulk-mode
+    refactor (item 15) moved cache invalidation after the insert loop, so an
+    exception mid-loop resumed invalidation via `finally` but never flushed,
+    leaving the cookie/category caches serving an incomplete inventory for
+    rows already committed. *Fix:* flush inside the `finally`. The deferred
+    `faz_after_create_cookie` stays outside on purpose — a listener throwing
+    during unwinding would replace the original exception.
+26. **Unbounded growth of hashed assets** — every settings/banner change
+    mints a new hash and orphans the previous file, so the generated-assets
+    directory grew for the lifetime of the install. *Fix:*
+    `Frontend::cleanup_static_assets()` on the daily cron reaps
+    `config-*.js` / `banner-*.css` (and orphan staging files) unused for more
+    than 90 days, filterable via `faz_static_asset_retention_days` (0
+    disables). mtime is used as a last-used marker — the serve path refreshes
+    it at most once a day — so assets still referenced by live pages are
+    never reaped. The window is deliberately generous because full-page
+    caches can serve a rendered page, asset URL included, for days without
+    PHP running.
 
 ## Recommendations (not addressed)
 
@@ -205,8 +238,8 @@ Ordered by expected impact.
 
 ## Verification
 
-`bash scripts/run-unit-tests.sh` — 62/62 suites pass (including the new
-`test-output-buffer-noscript-php.php`). The two geolocation suites were
+`bash scripts/run-unit-tests.sh` — 63/63 suites pass (including the new
+`test-output-buffer-noscript-php.php` and `test-static-assets-php.php`). The two geolocation suites were
 updated to call `Geolocation::reset_runtime_cache()` where they mutate
 database files mid-process, reflecting the new per-request memoization (a
 database file cannot change mid-request in production). The output-buffer
