@@ -104,13 +104,19 @@ class Activator {
 		add_action( 'faz_after_create_cookie', array( __CLASS__, 'maybe_check_unmatched_vendors' ) );
 		add_action( 'faz_after_delete_cookie', array( __CLASS__, 'maybe_check_unmatched_vendors' ) );
 		add_filter( 'cron_schedules', array( __CLASS__, 'register_cron_schedules' ) );
-		self::schedule_cleanup();
+		// Ensure recurring events exist, but keep wp_next_scheduled() (which
+		// unserializes the whole cron option) off the frontend hot path: the
+		// events are created on activation, and admin + cron requests are more
+		// than frequent enough to self-heal a wiped cron option.
+		if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			self::schedule_cleanup();
+		}
 	}
 
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.06.17.1';
+	const MIGRATIONS_VERSION = '2026.08.03.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -138,11 +144,77 @@ class Activator {
 			self::ensure_share_personal_data_column();
 			self::clear_necessary_optout_flags();
 			self::reset_stale_per_cookie_consent();
+			self::demote_bulky_autoloaded_options();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+	}
+
+	/**
+	 * One-time migration: stop autoloading bulky / admin-only options.
+	 *
+	 * `faz_banner_template` (and its per-language variants) stores the full
+	 * rendered banner HTML+CSS per banner per language — tens to hundreds of
+	 * KB that alloptions was pulling into memory on every request, including
+	 * admin, AJAX, REST and cron where the banner never renders. The scanner
+	 * bookkeeping options and the admin-notice dismissal map are only ever
+	 * read in wp-admin. update_option() cannot flip the autoload flag of an
+	 * existing row unless the value changes, so existing installs need this
+	 * direct demotion (new writes already pass $autoload = false).
+	 *
+	 * @return void
+	 */
+	public static function demote_bulky_autoloaded_options() {
+		global $wpdb;
+
+		$exact = array(
+			'faz_scan_history',
+			'faz_scan_details',
+			'faz_scan_counter',
+			'faz_scan_max_pages',
+			'faz_admin_notices',
+			'faz_first_time_activated_plugin',
+			'faz_uncategorized_consent_fixed',
+			'faz_banner_gdpr_defaults_fixed',
+		);
+
+		$placeholders = implode( ',', array_fill( 0, count( $exact ), '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time migration; core offers no bulk autoload read API.
+		$names = $wpdb->get_col(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a static list of %s markers.
+				"SELECT option_name FROM {$wpdb->options}
+				 WHERE ( option_name LIKE %s OR option_name IN ( {$placeholders} ) )
+				   AND autoload NOT IN ( 'no', 'off' )",
+				array_merge( array( $wpdb->esc_like( 'faz_banner_template' ) . '%' ), $exact )
+			)
+		);
+
+		if ( empty( $names ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_set_option_autoload_values' ) ) {
+			// WP 6.4+: flips the flags and handles all option caches for us.
+			wp_set_option_autoload_values( array_fill_keys( $names, false ) );
+			return;
+		}
+
+		$name_placeholders = implode( ',', array_fill( 0, count( $names ), '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- pre-6.4 fallback; caches are invalidated below.
+		$wpdb->query(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $name_placeholders is a static list of %s markers.
+				"UPDATE {$wpdb->options} SET autoload = 'no' WHERE option_name IN ( {$name_placeholders} )",
+				$names
+			)
+		);
+		wp_cache_delete( 'alloptions', 'options' );
+		foreach ( $names as $name ) {
+			wp_cache_delete( $name, 'options' );
+		}
 	}
 
 	/**
@@ -277,6 +349,15 @@ class Activator {
 			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
 		}
 		self::cleanup_old_dsar_requests( $settings );
+
+		// Pageview analytics rows grow one-per-visit when tracking is enabled
+		// and previously had NO purge wired up at all, so the table (and every
+		// GROUP BY over it) grew without bound. 0 disables the purge.
+		$pv_retention = isset( $settings['pageviews']['retention'] ) ? (int) $settings['pageviews']['retention'] : 6;
+		$pv_retention = (int) apply_filters( 'faz_pageviews_retention_months', $pv_retention );
+		if ( $pv_retention > 0 ) {
+			Pageviews_Controller::get_instance()->cleanup_old_records( $pv_retention );
+		}
 	}
 
 	/**
@@ -404,7 +485,7 @@ class Activator {
 	public static function install() {
 		self::check_for_upgrade();
 		if ( true === faz_first_time_install() ) {
-			add_option( 'faz_first_time_activated_plugin', 'true' );
+			add_option( 'faz_first_time_activated_plugin', 'true', '', false );
 			// Arm the guided setup wizard for genuine fresh installs ONLY. The
 			// onboarding.completed flag defaults to true in Settings::get_defaults(),
 			// so every UPGRADING install (whose stored option lacks the key) is
@@ -1155,7 +1236,7 @@ class Activator {
 				array( '%s' )
 			);
 		}
-		update_option( 'faz_uncategorized_consent_fixed', 1 );
+		update_option( 'faz_uncategorized_consent_fixed', 1, false );
 	}
 
 	/**
@@ -1205,7 +1286,7 @@ class Activator {
 		}
 		// Clear banner template cache (base + language variants) to force regeneration.
 		faz_clear_banner_template_cache();
-		update_option( 'faz_banner_gdpr_defaults_fixed', 1 );
+		update_option( 'faz_banner_gdpr_defaults_fixed', 1, false );
 	}
 
 	/**
@@ -1547,6 +1628,7 @@ class Activator {
 			unset( $region );
 			if ( $changed ) {
 				update_option( 'faz_gcm_settings', $gcm );
+				\FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings::flush_runtime_cache();
 			}
 		}
 

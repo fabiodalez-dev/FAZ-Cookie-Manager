@@ -1430,7 +1430,8 @@ class Frontend {
 						}
 					}
 					if ( $repaired ) {
-						update_option( $cache_key, $stored );
+						// autoload=false — keep the multi-KB template blob out of alloptions.
+						update_option( $cache_key, $stored, false );
 					}
 				}
 			}
@@ -1531,7 +1532,8 @@ class Frontend {
 				}
 			}
 			if ( $repaired ) {
-				update_option( $cache_key, $stored );
+				// autoload=false — keep the multi-KB template blob out of alloptions.
+				update_option( $cache_key, $stored, false );
 			}
 		}
 
@@ -3434,7 +3436,13 @@ class Frontend {
 	 * @return string
 	 */
 	private function extract_tag_attr( $attrs, $name ) {
-		if ( preg_match( '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $attrs, $matches ) ) {
+		// Called for every attribute of every tag the output buffer inspects —
+		// build each attribute's pattern string once per request.
+		static $patterns = array();
+		if ( ! isset( $patterns[ $name ] ) ) {
+			$patterns[ $name ] = '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i';
+		}
+		if ( preg_match( $patterns[ $name ], $attrs, $matches ) ) {
 			for ( $i = 1; $i <= 3; $i++ ) {
 				if ( isset( $matches[ $i ] ) && '' !== $matches[ $i ] ) {
 					return $matches[ $i ];

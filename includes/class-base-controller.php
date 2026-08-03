@@ -76,11 +76,55 @@ abstract class Base_Controller {
 	}
 
 	/**
+	 * When true, per-item cache invalidation is skipped. Bulk writers (the
+	 * scanner's discovery loop inserts one row per found cookie) enable this
+	 * around their loop and perform ONE invalidation at the end — otherwise
+	 * every insert paid a transient-prefix rotation, a wp_options LIKE scan
+	 * and ~100 wp_cache_delete() round-trips.
+	 *
+	 * @var bool
+	 */
+	protected static $suspend_invalidation = false;
+
+	/**
+	 * Enter bulk-write mode: suspend per-item cache invalidation.
+	 *
+	 * Callers MUST pair this with resume_cache_invalidation() (use try/finally)
+	 * and run delete_cache() themselves afterwards.
+	 *
+	 * @return void
+	 */
+	public static function suspend_cache_invalidation() {
+		self::$suspend_invalidation = true;
+	}
+
+	/**
+	 * Leave bulk-write mode.
+	 *
+	 * @return void
+	 */
+	public static function resume_cache_invalidation() {
+		self::$suspend_invalidation = false;
+	}
+
+	/**
+	 * Whether bulk-write mode is active.
+	 *
+	 * @return bool
+	 */
+	public static function is_cache_invalidation_suspended() {
+		return self::$suspend_invalidation;
+	}
+
+	/**
 	 * Delete the cache.
 	 *
 	 * @return void
 	 */
 	public function delete_cache() {
+		if ( self::$suspend_invalidation ) {
+			return;
+		}
 		Cache::delete( $this->cache_group );
 
 		// Manually delete known legacy cache keys for the controller's group.
