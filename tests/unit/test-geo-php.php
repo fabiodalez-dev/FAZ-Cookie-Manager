@@ -104,6 +104,9 @@ function faz_geophp_clear( $dir ) {
 	foreach ( glob( $dir . '*.mmdb' ) ?: array() as $f ) {
 		@unlink( $f );
 	}
+	// get_database_path() memoizes its resolution per request; these tests
+	// mutate the candidate files between assertions, so drop the memo.
+	\FazCookie\Includes\Geolocation::reset_runtime_cache();
 }
 function faz_geophp_stub( $path ) {
 	// Padding + marker in the tail (a minimal "valid" MMDB).
@@ -297,7 +300,10 @@ faz_eq( Geolocation::get_database_path(), $own, 'G13 valid FAZ_MAXMIND_DB_PATH w
 faz_eq( Geolocation::has_database(), true, 'G14 valid constant -> has_database() true' );
 
 // Corrupt constant file -> skipped, resolver falls through to valid uploads.
+// The resolution is memoized per request, so simulate a fresh request after
+// mutating the file (a DB cannot change mid-request in production).
 file_put_contents( $own, 'corrupt-no-marker' );
+Geolocation::reset_runtime_cache();
 faz_eq( Geolocation::get_database_path(), $country, 'G15 corrupt constant skipped -> falls through to uploads' );
 
 // Missing constant target AND no uploads DB -> nothing valid.

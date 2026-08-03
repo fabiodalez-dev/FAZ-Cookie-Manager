@@ -282,7 +282,12 @@ class Cookie_Controller extends Base_Controller {
 		}
 		$object->set_id( $wpdb->insert_id );
 		$this->delete_cache();
-		do_action( 'faz_after_create_cookie' );
+		// In bulk mode (scanner import loop) the caller fires this once after
+		// the loop — the listeners (unmatched-vendor re-check, page-cache
+		// purge) are whole-dataset operations that must not run per row.
+		if ( ! self::is_cache_invalidation_suspended() ) {
+			do_action( 'faz_after_create_cookie' );
+		}
 	}
 
 	/**

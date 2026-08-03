@@ -886,11 +886,18 @@ class Controller extends Base_Controller {
 			return false;
 		}
 		foreach ( $items as $item ) {
-			$banner = new Banner( $item->banner_id );
-			if ( ! $banner->get_status() ) {
+			// Classify against the raw prepare_item() rows — same F010 pattern
+			// as get_active_banner_for_country(). prepare_item() already
+			// normalises status, decodes target_countries and settings; the
+			// previous `new Banner( $item->banner_id )` per row cost N extra
+			// controller round-trips + N full sanitize_settings cascades on
+			// EVERY frontend request whose object-cache read missed (i.e. every
+			// request on hosts without a persistent object cache).
+			if ( 1 !== (int) $item->status ) {
 				continue;
 			}
-			if ( ! empty( $banner->get_target_countries() ) ) {
+			$targets = is_array( $item->target_countries ) ? $item->target_countries : array();
+			if ( ! empty( $targets ) ) {
 				wp_cache_set( $cache_key, 1, 'faz_banners', 5 * MINUTE_IN_SECONDS );
 				return true;
 			}
@@ -901,7 +908,7 @@ class Controller extends Base_Controller {
 			// ruleSet, not just the first entry, otherwise a ruleSet like
 			// [{code:ALL}, {code:US}] is silently classified as country-
 			// independent and the cache headers never fire.
-			$settings = $banner->get_settings();
+			$settings = is_array( $item->settings ) ? $item->settings : array();
 			$inner    = isset( $settings['settings'] ) && is_array( $settings['settings'] ) ? $settings['settings'] : array();
 			$rules    = isset( $inner['ruleSet'] ) && is_array( $inner['ruleSet'] ) ? $inner['ruleSet'] : array();
 			foreach ( $rules as $rule ) {

@@ -186,8 +186,11 @@ class Cookie_Table_Shortcode {
 		}
 
 		// Fetch categories and build lookup, excluding hidden categories.
+		// get_items() (NOT get_item_from_db()) so the read goes through the
+		// object-cache/transient layer — this renders on public pages and was
+		// previously two uncached full-table scans per view.
 		$cat_controller = Category_Controller::get_instance();
-		$categories     = $cat_controller->get_item_from_db();
+		$categories     = $cat_controller->get_items();
 		$hidden_cat_ids = array();
 		$cat_map        = array(); // category_id => localized name
 		foreach ( $categories as $cat ) {
@@ -222,7 +225,7 @@ class Cookie_Table_Shortcode {
 			}
 			$cookies = $target_cat_id ? $cookie_controller->get_items_by_category( $target_cat_id ) : array();
 		} else {
-			$cookies = $cookie_controller->get_item_from_db();
+			$cookies = $cookie_controller->get_items();
 		}
 
 		// Exclude cookies belonging to hidden categories.

@@ -41,7 +41,7 @@ class Controller {
 	 *
 	 * @var string
 	 */
-	private $db_version = '1.0';
+	private $db_version = '1.1';
 
 	/**
 	 * Return the current instance of the class
@@ -96,7 +96,8 @@ class Controller {
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY idx_event_type (event_type),
-			KEY idx_created_at (created_at)
+			KEY idx_created_at (created_at),
+			KEY idx_event_created (event_type,created_at)
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -362,13 +363,20 @@ class Controller {
 		$months   = absint( $months );
 		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). DELETE write — caching irrelevant.
-		$deleted = $wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE created_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$cutoff
-			)
-		);
+		// Batched DELETE — same rationale as ConsentLogs::cleanup_old_logs():
+		// the first purge on a long-lived install can match a huge row count,
+		// and one unbounded DELETE means a long InnoDB lock.
+		$deleted = 0;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). DELETE write — caching irrelevant.
+			$batch = $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$table} WHERE created_at < %s LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff
+				)
+			);
+			$deleted += (int) $batch;
+		} while ( (int) $batch === 1000 && $deleted < 200000 );
 
 		return (int) $deleted;
 	}
