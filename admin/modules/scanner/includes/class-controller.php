@@ -1266,14 +1266,19 @@ class Controller {
 			}
 		} finally {
 			\FazCookie\Includes\Base_Controller::resume_cache_invalidation();
-		}
 
-		// Flush cookie and category caches so the API returns fresh data, and
-		// fire the deferred per-cookie action ONCE for the whole batch.
-		Cookie_Controller::get_instance()->delete_cache();
-		Category_Controller::get_instance()->delete_cache();
-		if ( $created > 0 ) {
-			do_action( 'faz_after_create_cookie' );
+			// The flush belongs in the finally too, not after it. Suspending
+			// invalidation trades one purge per inserted row for a single purge
+			// at the end; if create_item() throws mid-loop, the rows already
+			// written stay in the database while the caches keep serving the
+			// previous contents. Before bulk mode existed each insert invalidated
+			// immediately, so a partial failure still left the caches coherent —
+			// this restores that guarantee.
+			Cookie_Controller::get_instance()->delete_cache();
+			Category_Controller::get_instance()->delete_cache();
+			if ( $created > 0 ) {
+				do_action( 'faz_after_create_cookie' );
+			}
 		}
 
 		return $created;
