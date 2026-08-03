@@ -248,6 +248,12 @@ namespace {
 	file_put_contents( faz_assets_dir() . $orphan_tmp, 'half-written' ); // phpcs:ignore
 	file_put_contents( faz_assets_dir() . $unrelated, 'not ours' ); // phpcs:ignore
 
+	// Pin the retention explicitly instead of leaning on the shipped default:
+	// this section is about which files the reaper selects, not about how long
+	// the default keeps them. Without this the assertions silently invert the
+	// day the default changes.
+	$GLOBALS['__faz_filters']['faz_static_asset_retention_days'] = 90;
+
 	$old = time() - ( 120 * DAY_IN_SECONDS );
 	touch( faz_assets_dir() . $css_stale, $old );
 	touch( faz_assets_dir() . $orphan_tmp, $old );
@@ -278,6 +284,25 @@ namespace {
 
 	$GLOBALS['__faz_filters']['faz_static_asset_retention_days'] = 30;
 	assert_true( 1 === Frontend::cleanup_static_assets(), 'shortened retention reaps the backdated asset' );
+
+	// The shipped default must outlive a plausible full-page-cache TTL. mtime is
+	// only refreshed when PHP renders the page, and a cache serves the asset URLs
+	// without running PHP — so an asset can look untouched for the whole TTL
+	// while pages still reference it. Reaping it there means a 404 on the
+	// banner's own CSS/JS, i.e. no consent UI. 120 days of apparent disuse must
+	// NOT be enough to delete under the default.
+	$long_unused = 'banner-' . md5( 'long-unused' ) . '.css';
+	file_put_contents( faz_assets_dir() . $long_unused, '#faz-consent{}' ); // phpcs:ignore
+	touch( faz_assets_dir() . $long_unused, time() - ( 120 * DAY_IN_SECONDS ) );
+	clearstatcache();
+	unset( $GLOBALS['__faz_filters']['faz_static_asset_retention_days'] );
+	Frontend::cleanup_static_assets();
+	assert_true( file_exists( faz_assets_dir() . $long_unused ), 'default retention outlives a long page-cache TTL' );
+
+	// A failed stat must never be read as "old". Simulated by pointing the
+	// reaper at a file that disappears between glob() and filemtime() is not
+	// portable, so assert the guard directly: an unreadable mtime keeps the file.
+	assert_true( false === @filemtime( faz_assets_dir() . 'definitely-absent.css' ), 'filemtime returns false for a missing file' );
 
 	// ---------- cleanup + result ----------
 

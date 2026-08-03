@@ -878,11 +878,18 @@ class Frontend {
 	 * @return array { path: string, url: string }
 	 */
 	private static function get_static_assets_dir() {
-		static $dir_info = null;
-		if ( null === $dir_info ) {
-			$dir_info = Filesystem::get_instance()->get_uploads_dir( 'faz-cookie-manager/assets' );
+		// Keyed by blog id, not a plain static: get_uploads_dir() resolves through
+		// wp_upload_dir(), which is per-site. A single static would be filled from
+		// whichever site ran first, and after a switch_to_blog() — network admin,
+		// a multisite cron pass, any plugin that iterates blogs — both the serve
+		// path and the reaper would then be pointed at another site's directory.
+		// The reaper deletes files, so getting this wrong is destructive.
+		static $dir_info = array();
+		$blog_id = function_exists( 'get_current_blog_id' ) ? (int) get_current_blog_id() : 0;
+		if ( ! isset( $dir_info[ $blog_id ] ) ) {
+			$dir_info[ $blog_id ] = Filesystem::get_instance()->get_uploads_dir( 'faz-cookie-manager/assets' );
 		}
-		return is_array( $dir_info ) ? $dir_info : array();
+		return is_array( $dir_info[ $blog_id ] ) ? $dir_info[ $blog_id ] : array();
 	}
 
 	/**
@@ -911,10 +918,23 @@ class Frontend {
 		/**
 		 * Filter how long an unused generated asset is kept, in days.
 		 *
+		 * The default is deliberately long. mtime is refreshed only when PHP
+		 * renders the page, and a full-page cache serves the HTML — including the
+		 * config-*.js and banner-*.css URLs — without running PHP at all. An
+		 * asset can therefore look untouched for as long as the cache TTL while
+		 * still being referenced by pages in that cache. Deleting it gives those
+		 * visitors a 404 on the banner's own stylesheet and script, which on this
+		 * plugin means the consent UI may not appear.
+		 *
+		 * A year covers every plausible page-cache TTL with margin, and errs the
+		 * safe way: the cost of keeping an orphan is a few kilobytes on disk, the
+		 * cost of deleting a live one is a missing consent banner. Sites that
+		 * know their cache TTL can lower it through this filter.
+		 *
 		 * @since 1.26.1
-		 * @param int $days Default 90.
+		 * @param int $days Days an unused asset is kept. Default 365.
 		 */
-		$days = (int) apply_filters( 'faz_static_asset_retention_days', 90 );
+		$days = (int) apply_filters( 'faz_static_asset_retention_days', 365 );
 		if ( $days <= 0 ) {
 			return 0;
 		}
@@ -931,7 +951,11 @@ class Frontend {
 			}
 			foreach ( $files as $file ) {
 				$mtime = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-				if ( $mtime && $mtime > $cutoff ) {
+				// A failed stat must mean "leave it alone", never "delete it".
+				// filemtime() returns false on a permissions problem or a race
+				// with a concurrent write, and treating that as "old" would reap
+				// an asset that pages in a full-page cache still reference.
+				if ( false === $mtime || $mtime > $cutoff ) {
 					continue;
 				}
 				wp_delete_file( $file );
