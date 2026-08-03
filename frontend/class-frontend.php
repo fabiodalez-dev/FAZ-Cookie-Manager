@@ -830,7 +830,7 @@ class Frontend {
 			// stat cache populated by the file_exists() above.
 			$mtime = @filemtime( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 			if ( $mtime && ( time() - $mtime ) > DAY_IN_SECONDS ) {
-				@touch( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.touch_touch -- last-used marker for the daily reaper; WP_Filesystem has no touch primitive.
+				@touch( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_touch -- last-used marker for the daily reaper; raw touch() on purpose, so the hot serve path never initialises WP_Filesystem (credentials machinery) just to stamp an mtime.
 			}
 			return $dir_info['url'] . $filename;
 		}
