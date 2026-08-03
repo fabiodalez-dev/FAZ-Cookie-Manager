@@ -156,11 +156,18 @@ HTML corpus, outputs identical) and a new dedicated unit suite
     faster first render. The head-blocking default is deliberate: it arms the
     client-side interceptors before page scripts run.
 
-Observation recorded during equivalence testing (pre-existing, unchanged):
-`process_noscript_tag()` matches providers with empty tag attributes, so
-URL-fragment patterns never gate `<noscript>` pixel beacons — only
-code-signature patterns do. Worth a dedicated upstream fix with its own
-tests.
+23. **`<noscript>` beacons never gated by URL patterns (bug, FIXED)** —
+    discovered during the equivalence testing above: `process_noscript_tag()`
+    matched providers with empty tag attributes, so URL-fragment patterns
+    (`www.facebook.com/tr`, `youtube.com/embed`, …) never gated the
+    `<noscript>` pixel/iframe fallbacks the pass exists for — only
+    code-signature patterns (`fbq(` …) did, which real pixel beacons rarely
+    contain. Non-JS visitors (who can never consent via the JS banner)
+    therefore loaded those trackers unconditionally. *Fix:* each embedded
+    `<img>`/`<iframe>`'s own tag attributes are now matched exactly the way
+    the script/iframe filters treat regular tags (whitelist respected;
+    per-service consent merged with svc:no taking precedence). Covered by
+    `tests/unit/test-output-buffer-noscript-php.php`.
 
 ## Recommendations (not addressed)
 

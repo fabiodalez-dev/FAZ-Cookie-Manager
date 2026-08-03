@@ -3317,20 +3317,58 @@ class Frontend {
 			return $full;
 		}
 
+		// Pass 1 — code-signature patterns (fbq(, gtag …) against the raw text.
 		$matched_category = $this->match_script_to_provider( '', $content, $providers );
+
+		// Pass 2 — URL-fragment patterns against each embedded resource's OWN
+		// tag attributes. The content-only call above carries no src haystack
+		// (attrs are empty), so URL patterns like "www.facebook.com/tr" never
+		// gated <noscript> pixel beacons — the very tags this pass exists for.
+		// Match each <img>/<iframe> exactly the way the script/iframe filters
+		// match regular tags, skipping whitelisted resources.
+		$embedded_tags = array();
+		if ( preg_match_all( '#<(?:img|iframe)\b[^>]*#i', $content, $embedded_matches ) ) {
+			foreach ( $embedded_matches[0] as $embedded_tag ) {
+				if ( $this->is_whitelisted( $embedded_tag, '' ) ) {
+					continue;
+				}
+				$embedded_tags[] = $embedded_tag;
+			}
+		}
+		if ( ! $matched_category ) {
+			foreach ( $embedded_tags as $tag_attrs ) {
+				$matched_category = $this->match_script_to_provider( $tag_attrs, '', $providers );
+				if ( $matched_category ) {
+					break;
+				}
+			}
+		}
+
+		// Per-service consent, over both layers. Merging rule across multiple
+		// embedded resources mirrors the intra-call precedence: an explicit
+		// svc:no anywhere wins over an explicit svc:yes elsewhere.
+		$svc_blocked = $this->check_per_service_blocking( '', $content );
+		foreach ( $embedded_tags as $tag_attrs ) {
+			if ( true === $svc_blocked ) {
+				break;
+			}
+			$tag_svc = $this->check_per_service_blocking( $tag_attrs, '' );
+			if ( true === $tag_svc ) {
+				$svc_blocked = true;
+			} elseif ( false === $tag_svc && null === $svc_blocked ) {
+				$svc_blocked = false;
+			}
+		}
+
 		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
-			$svc_blocked = $this->check_per_service_blocking( '', $content );
 			if ( true !== $svc_blocked ) {
 				return $full;
 			}
 			if ( ! $matched_category ) {
 				$matched_category = 'functional';
 			}
-		} else {
-			$svc_blocked = $this->check_per_service_blocking( '', $content );
-			if ( false === $svc_blocked ) {
-				return $full;
-			}
+		} elseif ( false === $svc_blocked ) {
+			return $full;
 		}
 
 		// Block tracking fallback resources by replacing src → data-faz-src inside the noscript.

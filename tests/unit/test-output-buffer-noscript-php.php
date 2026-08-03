@@ -6,19 +6,23 @@
  * Subsystem: output-buffer-noscript-php
  *
  * Pins the merged single-pass <noscript> pipeline (perf refactor of the
- * former two-pass pixel-process + stash sequence). Behaviour was verified
- * byte-identical against the pre-refactor implementation over a 19-case
- * corpus; these tests encode that ACTUAL contract:
- *   1. <noscript> content is gated only when a code-signature pattern
- *      matches its text (match_script_to_provider is called with empty
- *      attrs, so URL-fragment patterns never apply — a pre-existing
- *      limitation of the pixel pass, preserved as-is by the merge).
- *   2. <noscript>-wrapped iframes are protected from process_iframe_tag —
- *      no phantom consent placeholders — and restored verbatim.
- *   3. Non-tracking <noscript> content passes through byte-identical.
- *   4. Blocked provider <script src> outside <noscript> is still neutralised
+ * former two-pass pixel-process + stash sequence) AND the URL-pattern fix:
+ * historically match_script_to_provider() was called with empty attrs for
+ * <noscript> content, so URL-fragment patterns (www.facebook.com/tr …)
+ * never gated the pixel beacons the pass exists for — only code-signature
+ * patterns did. The fix matches each embedded <img>/<iframe>'s own tag
+ * attributes, the same way the script/iframe filters treat regular tags.
+ *   1. URL-pattern pixels inside <noscript> ARE now consent-gated
+ *      (src → data-faz-src + data-faz-category), wrapper preserved.
+ *   2. Code-signature matches keep gating as before.
+ *   3. <noscript>-wrapped iframes are protected from process_iframe_tag —
+ *      no phantom consent placeholders — but blocked-provider iframes are
+ *      gated IN PLACE inside the wrapper.
+ *   4. Non-tracking and whitelisted <noscript> content passes through
+ *      byte-identical.
+ *   5. Blocked provider <script src> outside <noscript> is still neutralised
  *      to type="text/plain" (the merge must not affect script gating).
- *   5. The plugin's own asset tags (id="<handle>-js" / "<handle>-css") are
+ *   6. The plugin's own asset tags (id="<handle>-js" / "<handle>-css") are
  *      never gated by provider patterns — the content-hashed static config
  *      and banner CSS served from uploads must be immune by construction.
  *
@@ -78,6 +82,11 @@ namespace {
 			return $value;
 		}
 	}
+	if ( ! function_exists( 'wp_parse_url' ) ) {
+		function wp_parse_url( $url, $component = -1 ) {
+			return -1 === $component ? parse_url( (string) $url ) : parse_url( (string) $url, $component ); // phpcs:ignore
+		}
+	}
 	if ( ! function_exists( 'get_transient' ) ) {
 		function get_transient( $key ) {
 			return false;
@@ -113,14 +122,14 @@ namespace {
 
 	// ---------- reflection harness ----------
 
-	function faz_ob_frontend( array $providers, array $blocked ) {
+	function faz_ob_frontend( array $providers, array $blocked, array $whitelist = array() ) {
 		$rc = new ReflectionClass( Frontend::class );
 		$fe = $rc->newInstanceWithoutConstructor();
 		$preset = array(
 			'blocked_categories_cache'   => $blocked,
 			'provider_map_cache'         => $providers,
 			'service_consent_cache'      => array(), // per-service consent off
-			'whitelist_cache'            => array(),
+			'whitelist_cache'            => $whitelist,
 			'settings_option_cache'      => array(),
 			'pattern_service_cache'      => array(),
 			'provider_match_meta_cache'  => null,
@@ -151,17 +160,19 @@ namespace {
 
 	echo "\n-- merged <noscript> pass: gating + stash/restore --\n";
 
-	// 1. URL-fragment patterns do NOT gate noscript content (empty attrs →
-	//    no src haystack; pre-existing contract preserved by the merge).
+	// 1. URL-fragment patterns now gate noscript pixel beacons (the fix):
+	//    the embedded <img>'s own attributes are matched, wrapper preserved.
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body>'
 		. '<noscript><img height="1" width="1" src="https://www.facebook.com/tr?id=123&ev=PageView"/></noscript>'
 		. '</body></html>';
 	$out  = faz_ob_run( $fe, $html );
-	assert_true( $out === $html, 'URL-pattern-only noscript pixel passes through (pre-existing contract)' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://www.facebook.com/tr?id=123&ev=PageView"' ), 'URL-pattern noscript pixel src rewritten to data-faz-src' );
+	assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), 'URL-pattern noscript pixel carries data-faz-category' );
+	assert_true( false !== strpos( $out, '<noscript>' ), 'noscript wrapper preserved' );
 	assert_true( false === strpos( $out, '__FAZ_NOSCRIPT_STASH_' ), 'stash markers restored' );
 
-	// 2. A code-signature match DOES gate the noscript fallback resources.
+	// 2. A code-signature match keeps gating as before.
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body>'
 		. '<noscript><img src="https://tracker.example/t.gif" alt="fbq(pixel)"/></noscript>'
@@ -169,29 +180,45 @@ namespace {
 	$out  = faz_ob_run( $fe, $html );
 	assert_true( false !== strpos( $out, 'data-faz-src="https://tracker.example/t.gif"' ), 'signature-matched pixel src rewritten to data-faz-src' );
 	assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), 'signature-matched pixel carries data-faz-category' );
-	assert_true( false !== strpos( $out, '<noscript>' ), 'noscript wrapper preserved' );
 	assert_true( false === strpos( $out, '__FAZ_NOSCRIPT_STASH_' ), 'stash markers restored after gating' );
 
-	// 3. <noscript>-wrapped iframe is NOT rewritten into a consent placeholder
-	//    (stash protection), even when its URL matches a blocked provider.
+	// 3. <noscript>-wrapped blocked-provider iframe: no consent placeholder
+	//    (stash protection intact) but gated IN PLACE inside the wrapper.
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<html><body>'
 		. '<noscript><iframe src="https://youtube.com/embed/abc"></iframe></noscript>'
 		. '</body></html>';
 	$out  = faz_ob_run( $fe, $html );
-	assert_true( $out === $html, 'noscript-wrapped iframe protected from iframe placeholdering' );
+	assert_true( false !== strpos( $out, '<noscript><iframe data-faz-category="marketing" data-faz-src="https://youtube.com/embed/abc">' ), 'blocked noscript iframe gated in place, no placeholder' );
+	assert_true( false === strpos( $out, 'data-ph' ), 'no phantom placeholder injected' );
+
+	// 3b. Non-tracking <noscript> iframe passes through byte-identical.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body>'
+		. '<noscript><iframe src="https://example.com/plain-fallback"></iframe></noscript>'
+		. '</body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( $out === $html, 'non-tracking noscript iframe passes through byte-identical' );
+
+	// 3c. Whitelisted resource is not gated by the new URL pass.
+	$fe   = faz_ob_frontend( $providers, $blocked, array( 'www.facebook.com/tr' ) );
+	$html = '<html><body>'
+		. '<noscript><img src="https://www.facebook.com/tr?id=5"/></noscript>'
+		. '</body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( $out === $html, 'whitelisted noscript pixel passes through' );
 
 	// 4. Multiple <noscript> blocks: processed and restored in order.
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<p>a</p>'
-		. '<noscript><img src="https://t.example/1.gif" alt="fbq("/></noscript>'
+		. '<noscript><img src="https://www.facebook.com/tr?id=1"/></noscript>'
 		. '<p>b</p>'
 		. '<noscript><span>plain text fallback</span></noscript>'
 		. '<p>c</p>';
 	$out  = faz_ob_run( $fe, $html );
-	assert_true( false !== strpos( $out, 'data-faz-src="https://t.example/1.gif"' ), 'first noscript gated' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://www.facebook.com/tr?id=1"' ), 'first noscript gated' );
 	assert_true( false !== strpos( $out, '<noscript><span>plain text fallback</span></noscript>' ), 'second noscript untouched' );
-	assert_true( 1 === preg_match( '/a.+t\.example.+b.+plain text fallback.+c/s', $out ), 'document order preserved' );
+	assert_true( 1 === preg_match( '/a.+facebook.+b.+plain text fallback.+c/s', $out ), 'document order preserved' );
 
 	echo "\n-- script gating unaffected by the merge --\n";
 
