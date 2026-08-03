@@ -23,6 +23,7 @@ use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
 use FazCookie\Includes\Gvl;
 use FazCookie\Includes\Known_Providers;
+use FazCookie\Includes\Filesystem;
 use FazCookie\Includes\Cookie_Table_Shortcode;
 use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
@@ -108,6 +109,15 @@ class Frontend {
 	private $enforceable_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
+	/**
+	 * Precomputed provider-pattern metadata (lowercased pattern, URL-vs-code
+	 * classification) for the output-buffer matching hot loop, plus the map it
+	 * was built from (guards against a filtered map being passed later).
+	 */
+	private $provider_match_meta_cache  = null;
+	private $provider_match_meta_source = null;
+	/** Same precomputation for the per-service pattern → service-ids map. */
+	private $service_match_meta_cache = null;
 	/**
 	 * Set when runtime geo-routing resolves an opt-in jurisdiction but no
 	 * matching active banner exists, so the country-selected (opt-out) banner
@@ -359,6 +369,41 @@ class Frontend {
 			$alt_asset     = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 
+			// Offload the static bulk of _fazConfig (~60 KB of provider block
+			// patterns + cookie-category map, identical for every visitor of a
+			// given page type) into a content-hashed, browser-cacheable .js
+			// file instead of re-inlining it into every HTML response. The
+			// file defines window._fazStaticConfig; a "before" inline snippet
+			// merges it back into _fazConfig ahead of script.js execution, so
+			// the frontend bundle needs no changes. Server-side blocking is
+			// unaffected either way; if the static file cannot be provided the
+			// full config stays inline exactly as before.
+			$store_data  = $this->get_store_data();
+			$static_deps = array();
+			if ( ! $alt_asset && apply_filters( 'faz_external_static_assets', true ) ) {
+				$static_config = array();
+				foreach ( array( '_providersToBlock', '_cookieCategoryMap' ) as $static_key ) {
+					if ( isset( $store_data[ $static_key ] ) ) {
+						$static_config[ $static_key ] = $store_data[ $static_key ];
+					}
+				}
+				$static_json = ! empty( $static_config ) ? wp_json_encode( $static_config ) : false;
+				if ( false !== $static_json && '' !== $static_json ) {
+					$static_url = $this->get_static_asset_url(
+						'config-' . md5( $static_json ) . '.js',
+						'window._fazStaticConfig=' . $static_json . ';'
+					);
+					if ( '' !== $static_url ) {
+						$static_handle = $this->plugin_name . '-static-config';
+						wp_enqueue_script( $static_handle, $static_url, array(), null, false );
+						$static_deps[] = $static_handle;
+						foreach ( array_keys( $static_config ) as $static_key ) {
+							unset( $store_data[ $static_key ] );
+						}
+					}
+				}
+			}
+
 			if ( $alt_asset ) {
 				$script_path = plugin_dir_path( __FILE__ ) . 'js/script' . $suffix . '.js';
 				wp_register_script( $script_handle, false, array(), $this->version, false );
@@ -369,10 +414,33 @@ class Frontend {
 					wp_add_inline_script( $script_handle, $script_content );
 				}
 			} else {
-				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
+				/**
+				 * Opt-in: load the main banner bundle in the footer instead of
+				 * render-blocking in <head>. Default false — loading in <head>
+				 * shows the banner (and arms the client-side interceptors)
+				 * before page scripts run. Sites that accept a later banner
+				 * paint in exchange for faster first render can return true;
+				 * server-side blocking is unaffected by the position.
+				 *
+				 * @since 1.26.1
+				 * @param bool $in_footer Default false (head).
+				 */
+				$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
+				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
 			}
 
-			wp_localize_script( $script_handle, '_fazConfig', $this->get_store_data() );
+			wp_localize_script( $script_handle, '_fazConfig', $store_data );
+
+			if ( ! empty( $static_deps ) ) {
+				// Runs in the "before" bucket: after the _fazConfig data blob,
+				// after the static-config file's own tag (it is a dependency),
+				// and before script.js executes.
+				wp_add_inline_script(
+					$script_handle,
+					'if(window._fazStaticConfig&&typeof _fazConfig!=="undefined"){for(var _fazK in window._fazStaticConfig){if(!(_fazK in _fazConfig)){_fazConfig[_fazK]=window._fazStaticConfig[_fazK];}}}',
+					'before'
+				);
+			}
 
 			// Pre-initialise window.dataLayer so third-party trackers that emit
 			// `dataLayer.push(…)` bare (without the GTM bootstrap that
@@ -433,9 +501,25 @@ class Frontend {
 				. '.faz-age-confirm-error{flex-basis:100%;margin:2px 0 0;color:#b00020;font-size:12px}'
 				. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
 			$css_handle = $this->plugin_name . '-css';
-			wp_register_style( $css_handle, false, array(), $this->version );
-			wp_enqueue_style( $css_handle );
-			wp_add_inline_style( $css_handle, $css );
+			// Serve the compiled banner CSS (~30 KB) as a real, content-hashed
+			// stylesheet instead of inlining it into every page's <head> where
+			// it can never be browser-cached. The hash filename is immutable,
+			// so repeat views cost zero bytes. Falls back to the historical
+			// inline injection when the uploads dir is not writable, and stays
+			// inline in alternative-asset mode (those sites deliberately avoid
+			// plugin-URL patterns ad blockers match on — an uploads URL still
+			// contains the plugin slug).
+			$external_css_url = '';
+			if ( ! $alt_asset && apply_filters( 'faz_external_static_assets', true ) ) {
+				$external_css_url = $this->get_static_asset_url( 'banner-' . md5( $css ) . '.css', $css );
+			}
+			if ( '' !== $external_css_url ) {
+				wp_enqueue_style( $css_handle, $external_css_url, array(), null );
+			} else {
+				wp_register_style( $css_handle, false, array(), $this->version );
+				wp_enqueue_style( $css_handle );
+				wp_add_inline_style( $css_handle, $css );
+			}
 
 			// wp_localize_script for _fazStyles removed: CSS is now injected via
 			// wp_add_inline_style above; the JS variable was no longer consumed.
@@ -708,6 +792,60 @@ class Frontend {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftClarity = true;', 'before' );
 			}
 		}
+	}
+
+	/**
+	 * Persist a content-hashed static asset under
+	 * uploads/faz-cookie-manager/assets/ and return its URL ('' on failure).
+	 *
+	 * Used to move the per-page inline payloads (compiled banner CSS, static
+	 * provider config) into real files the browser can cache: the filename
+	 * embeds a hash of the content, so it is immutable — no ?ver needed, no
+	 * invalidation problem, and stale full-page caches keep referencing their
+	 * own (still existing) hash. Files are only ever ADDED here; they are tiny,
+	 * new hashes only appear when the banner/config actually changes, and
+	 * removal happens on uninstall. Steady state costs one file_exists() per
+	 * asset per request; the WP_Filesystem machinery is only touched when the
+	 * file is missing (first request after a change).
+	 *
+	 * @param string $filename Hash-carrying file name (no path).
+	 * @param string $contents File contents to write when missing.
+	 * @return string Public URL, or '' when the file cannot be provided.
+	 */
+	private function get_static_asset_url( $filename, $contents ) {
+		static $dir_info     = null;
+		static $write_failed = false;
+
+		if ( null === $dir_info ) {
+			$dir_info = Filesystem::get_instance()->get_uploads_dir( 'faz-cookie-manager/assets' );
+		}
+		if ( empty( $dir_info['path'] ) || empty( $dir_info['url'] ) ) {
+			return '';
+		}
+
+		$path = $dir_info['path'] . $filename;
+		if ( file_exists( $path ) ) {
+			return $dir_info['url'] . $filename;
+		}
+
+		if ( $write_failed ) {
+			return '';
+		}
+
+		$fs = Filesystem::get_instance();
+		if ( ! $fs->can_access_filesystem() || ! wp_mkdir_p( $dir_info['path'] ) ) {
+			$write_failed = true;
+			return '';
+		}
+		if ( ! file_exists( $dir_info['path'] . 'index.php' ) ) {
+			$fs->put_contents( $dir_info['path'] . 'index.php', "<?php // Silence is golden.\n" );
+		}
+		if ( ! $fs->put_contents( $path, $contents ) ) {
+			$write_failed = true;
+			return '';
+		}
+
+		return $dir_info['url'] . $filename;
 	}
 
 	/**
@@ -2772,11 +2910,34 @@ class Frontend {
 		// matcher's `<noscript>` lookup productive — the original placement
 		// AFTER the stash made this step dead code because every `<noscript>`
 		// had already been replaced with a `__FAZ_NOSCRIPT_STASH_N__` marker.
+		// Single merged <noscript> pass (was two full-document traversals):
+		// each block is pixel-processed AND immediately stashed.
+		//
+		// Stashing protects <noscript> content from the script/iframe/link
+		// filters below: it only renders when JS is disabled; visitors with JS
+		// (>99% case) never see it. Without stashing, an iframe wrapped in
+		// <noscript> (e.g. theme's "video fallback for non-JS users") would be
+		// rewritten by process_iframe_tag into a consent placeholder that lives
+		// forever in the DOM as a 0×0 phantom — invisible to humans, but found
+		// by document.querySelector. The phantom collides with
+		// `_fazAddPlaceholder()` placeholders for legitimate dynamic iframes
+		// and breaks any `.first()`-style locator. Restored after all filters.
+		//
+		// The pixel processing (Meta Pixel, GA, Adobe Analytics <img> beacons
+		// for JS-disabled visitors) must still be consent-gated server-side:
+		// process_noscript_tag rewrites the block's inner content (img src →
+		// data-faz-src + data-faz-category) but preserves the enclosing
+		// <noscript> wrapper, and it is that PROCESSED block that gets stashed
+		// and later restored.
+		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
 			$result = preg_replace_callback(
 				'#<noscript\b[^>]*>(.*?)</noscript>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_noscript_tag( $m, $providers, $blocked_categories );
+				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash ) {
+					$processed              = $this->process_noscript_tag( $m, $providers, $blocked_categories );
+					$key                    = '__FAZ_NOSCRIPT_STASH_' . count( $noscript_stash ) . '__';
+					$noscript_stash[ $key ] = $processed;
+					return $key;
 				},
 				$html
 			);
@@ -2784,35 +2945,6 @@ class Frontend {
 				$pcre_failed = true;
 			} else {
 				$html = $result;
-			}
-		}
-
-		// Stash <noscript> blocks BEFORE running the script/iframe/link filters.
-		// <noscript> content only renders when JS is disabled; visitors with JS
-		// (>99% case) never see it. Without stashing, an iframe wrapped in
-		// <noscript> (e.g. theme's "video fallback for non-JS users") would be
-		// rewritten by process_iframe_tag into a consent placeholder that lives
-		// forever in the DOM as a 0×0 phantom — invisible to humans, but found
-		// by document.querySelector. The phantom collides with
-		// `_fazAddPlaceholder()` placeholders for legitimate dynamic iframes
-		// and breaks any `.first()`-style locator. Restore after all filters.
-		// (The tracking-pixel pass above runs FIRST so its noscript matcher is
-		// not defeated by the markers this stash introduces.)
-		$noscript_stash = array();
-		if ( false !== stripos( $html, '<noscript' ) ) {
-			$stash_result = preg_replace_callback(
-				'#<noscript\b[^>]*>.*?</noscript>#is',
-				function ( $m ) use ( &$noscript_stash ) {
-					$key = '__FAZ_NOSCRIPT_STASH_' . count( $noscript_stash ) . '__';
-					$noscript_stash[ $key ] = $m[0];
-					return $key;
-				},
-				$html
-			);
-			if ( null === $stash_result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $stash_result;
 			}
 		}
 
@@ -2956,6 +3088,13 @@ class Frontend {
 
 		$id = $this->extract_tag_attr( $attrs, 'id' );
 		if ( $this->is_own_inline_script_id( $id ) ) {
+			return $full;
+		}
+		// Never inspect the plugin's own EXTERNAL script tags either (core
+		// prints them as id="<handle>-js"): the static-config asset and the
+		// main bundle must be immune to pattern collisions by construction,
+		// not by luck of the provider list's contents.
+		if ( $this->is_own_asset_tag_id( $id, '-js' ) ) {
 			return $full;
 		}
 		// wp_localize_script / wp_set_script_translations payloads carry only
@@ -3212,6 +3351,12 @@ class Frontend {
 		$attrs = $m[1];
 		$full  = $m[0];
 
+		// Own stylesheets (core prints them as id="<handle>-css") — e.g. the
+		// content-hashed banner CSS served from uploads — must never be gated
+		// by provider patterns.
+		if ( $this->is_own_asset_tag_id( $this->extract_tag_attr( $attrs, 'id' ), '-css' ) ) {
+			return $full;
+		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
@@ -4188,20 +4333,43 @@ class Frontend {
 		$inline              = $match_context['content'];
 		$is_data_uri_payload = ! empty( $match_context['is_data_uri_payload'] );
 
-		$matched_service_ids = array();
-		foreach ( $pattern_map as $pattern => $service_ids ) {
-			if ( empty( $pattern ) ) {
-				continue;
+		// Same matching strategy as match_script_to_provider() — see the
+		// comment there. Metadata built once per request off the memoized map.
+		if ( null === $this->service_match_meta_cache ) {
+			$service_meta = array();
+			foreach ( $pattern_map as $pattern => $service_ids ) {
+				if ( empty( $pattern ) ) {
+					continue;
+				}
+				$pattern        = (string) $pattern;
+				$service_meta[] = array(
+					'pattern'     => $pattern,
+					'lower'       => strtolower( $pattern ),
+					'is_url'      => false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' ),
+					'service_ids' => $service_ids,
+				);
 			}
-			$is_url_pattern = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
-			$matched        = ( '' !== $url && $this->provider_url_pattern_matches( $url, $pattern ) );
-			if ( ! $matched && ( ! $is_url_pattern || $is_data_uri_payload ) ) {
-				$matched = $is_url_pattern
-					? $this->provider_url_pattern_matches( $inline, $pattern )
-					: false !== stripos( $inline, $pattern );
+			$this->service_match_meta_cache = $service_meta;
+		}
+
+		$url_lc    = strtolower( $url );
+		$inline_lc = null; // Lazily lowered — only decoded data: URI payloads need it.
+
+		$matched_service_ids = array();
+		foreach ( $this->service_match_meta_cache as $m ) {
+			$matched = ( '' !== $url_lc && $this->provider_pattern_matches_lc( $url_lc, $m['lower'] ) );
+			if ( ! $matched ) {
+				if ( ! $m['is_url'] ) {
+					$matched = false !== stripos( $inline, $m['pattern'] );
+				} elseif ( $is_data_uri_payload ) {
+					if ( null === $inline_lc ) {
+						$inline_lc = strtolower( $inline );
+					}
+					$matched = $this->provider_pattern_matches_lc( $inline_lc, $m['lower'] );
+				}
 			}
 			if ( $matched ) {
-				foreach ( $service_ids as $service_id ) {
+				foreach ( $m['service_ids'] as $service_id ) {
 					$matched_service_ids[ $service_id ] = true;
 				}
 			}
@@ -4527,31 +4695,109 @@ class Frontend {
 		$inline              = $match_context['content'];
 		$is_data_uri_payload = ! empty( $match_context['is_data_uri_payload'] );
 
-		foreach ( $providers as $pattern => $category ) {
-			if ( empty( $pattern ) ) {
-				continue;
-			}
+		// Hot loop: runs for every <script>/<iframe>/<style>/<link> in the page
+		// against ~1,000 patterns (~840 URL fragments + ~200 code signatures).
+		// Exact-semantics optimizations, benchmarked on PHP 8.4:
+		//   1. Pattern metadata (lowercased form, URL-vs-signature class) is
+		//      precomputed once per request instead of per tag×pattern.
+		//   2. The URL haystack (short) is lowercased ONCE per tag and the 840
+		//      URL patterns matched with strpos() — measurably faster than
+		//      per-pattern stripos(), and strpos(lc(h), lc(n)) is
+		//      byte-identical to stripos(h, n).
+		//   3. Inline content keeps per-pattern stripos(): PHP 8's stripos is
+		//      as fast as strpos on large haystacks, so pre-lowering a big
+		//      inline blob per tag would be pure overhead for the ~200
+		//      signature patterns.
+		$meta      = $this->get_provider_match_meta( $providers );
+		$url_lc    = strtolower( $url );
+		$inline_lc = null; // Lazily lowered — only decoded data: URI payloads need it.
+
+		foreach ( $meta as $m ) {
 			// Patterns that look like URL fragments (contain '.' or '/') are designed
 			// to match tracker domains in src/href attributes.  Applying them to the
 			// inline text body causes false positives: config scripts that merely
 			// reference a tracker domain in their data (e.g. Rank Math's rankMath.links
 			// object contains youtu.be, facebook.com, etc.) would be incorrectly blocked.
-			$is_url_pattern = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
-			if ( '' !== $url && $this->provider_url_pattern_matches( $url, $pattern ) ) {
-				return $category;
+			if ( '' !== $url_lc && $this->provider_pattern_matches_lc( $url_lc, $m['lower'] ) ) {
+				return $m['category'];
 			}
-			if ( ! $is_url_pattern || $is_data_uri_payload ) {
+			if ( ! $m['is_url'] ) {
 				// Code-signature patterns (fbq(, gtag, _ga …) match inline content.
+				if ( false !== stripos( $inline, $m['pattern'] ) ) {
+					return $m['category'];
+				}
+			} elseif ( $is_data_uri_payload ) {
 				// URL-fragment patterns may also match decoded data: script payloads
 				// because that payload is the executable source, not page data.
-				$matched_inline = $is_url_pattern
-					? $this->provider_url_pattern_matches( $inline, $pattern )
-					: false !== stripos( $inline, $pattern );
-				if ( $matched_inline ) {
-					return $category;
+				if ( null === $inline_lc ) {
+					$inline_lc = strtolower( $inline );
+				}
+				if ( $this->provider_pattern_matches_lc( $inline_lc, $m['lower'] ) ) {
+					return $m['category'];
 				}
 			}
 		}
+		return false;
+	}
+
+	/**
+	 * Precompute per-pattern matching metadata for the provider map.
+	 *
+	 * Keyed off the map itself so callers passing a different (filtered) map
+	 * never receive stale entries; get_provider_category_map() is memoized per
+	 * request, so in practice this builds once per request.
+	 *
+	 * @param array $providers Provider map [ pattern => category ].
+	 * @return array[] Ordered list of { lower, is_url, category }.
+	 */
+	private function get_provider_match_meta( $providers ) {
+		if ( null !== $this->provider_match_meta_cache
+			&& $this->provider_match_meta_source === $providers ) {
+			return $this->provider_match_meta_cache;
+		}
+		$meta = array();
+		foreach ( $providers as $pattern => $category ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			$pattern = (string) $pattern;
+			$meta[]  = array(
+				'pattern'  => $pattern,
+				'lower'    => strtolower( $pattern ),
+				'is_url'   => false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' ),
+				'category' => $category,
+			);
+		}
+		$this->provider_match_meta_source = $providers;
+		$this->provider_match_meta_cache  = $meta;
+		return $meta;
+	}
+
+	/**
+	 * provider_url_pattern_matches() for pre-lowercased inputs.
+	 *
+	 * Identical semantics (stripos ≡ strpos over lowercased operands, same
+	 * tolower table) without stripos's per-call haystack copy. The boundary
+	 * check is case-independent — it only tests separator characters.
+	 *
+	 * @param string $target_lc  Lowercased URL-like haystack.
+	 * @param string $pattern_lc Lowercased provider pattern.
+	 * @return bool
+	 */
+	private function provider_pattern_matches_lc( $target_lc, $pattern_lc ) {
+		if ( '' === $target_lc || '' === $pattern_lc ) {
+			return false;
+		}
+
+		$offset = 0;
+		$length = strlen( $pattern_lc );
+		while ( false !== ( $index = strpos( $target_lc, $pattern_lc, $offset ) ) ) {
+			if ( $this->has_provider_boundary( $target_lc, $index, $length ) ) {
+				return true;
+			}
+			$offset = $index + 1;
+		}
+
 		return false;
 	}
 
@@ -5382,6 +5628,25 @@ class Frontend {
 	 * @param string $id Inline script tag ID.
 	 * @return bool
 	 */
+	/**
+	 * Whether a rendered asset tag id ("<handle>-js" / "<handle>-css")
+	 * belongs to one of this plugin's own enqueued handles.
+	 *
+	 * @param string $id     Tag id attribute value.
+	 * @param string $suffix Core-appended suffix ('-js' or '-css').
+	 * @return bool
+	 */
+	private function is_own_asset_tag_id( $id, $suffix ) {
+		if ( ! is_string( $id ) || '' === $id || '' === $suffix ) {
+			return false;
+		}
+		$len = strlen( $suffix );
+		if ( strlen( $id ) <= $len || substr( $id, -$len ) !== $suffix ) {
+			return false;
+		}
+		return $this->is_own_script_handle( substr( $id, 0, -$len ) );
+	}
+
 	private function is_own_inline_script_id( $id ) {
 		if ( ! is_string( $id ) || '' === $id ) {
 			return false;

@@ -115,30 +115,57 @@ head payload the banner pipeline emits.
 
 ---
 
-## Recommendations (not addressed here)
+## Addressed in the follow-up commit (second pass)
 
-Ordered by expected impact. Items 1–3 are the big remaining wins; each is
-compliance-sensitive and deserves its own change with dedicated tests.
+The three top recommendations from the first pass were implemented, with a
+byte-equivalence harness run against the pre-refactor output buffer (19-case
+HTML corpus, outputs identical) and a new dedicated unit suite
+(`tests/unit/test-output-buffer-noscript-php.php`).
 
-1. **Output buffer provider matching is O(tags × 1,041 patterns)**
-   (`frontend/class-frontend.php`, `match_script_to_provider()` /
-   `process_output_buffer()`). Seven full-document regex passes; every
-   `<script>`/`<iframe>` is scanned linearly against ~1,041 provider patterns
-   plus ~96 whitelist patterns — an estimated 20–100 ms of CPU per uncached
-   page view for non-fully-consented visitors. Recommended: index patterns by
-   host bucket (or an Aho-Corasick pass over the URL/inline text), and merge
-   the two `<noscript>` passes. **Not changed here**: a false negative means
-   an unblocked tracker, so this rewrite needs its own test-backed PR.
-2. **~60–100 KB of JSON inlined into every page's `<head>`** — `_fazConfig`
-   carries `_providersToBlock` (~55 KB, 1,021 static pattern objects) and
-   `_cookieCategoryMap` (~7 KB) rebuilt and re-transferred on every page view,
-   plus `_iabVendors`/`_fazTcfConfig` when TCF is on. The provider list is
-   static site-wide: it belongs in a versioned static `.js` file (far-future
-   cacheable), with only the site-specific config inlined.
-3. **~30 KB of banner CSS inlined per page on a `src=false` handle**
-   (`get_boosted_css()`), which can never be browser-cached. Writing the
-   compiled CSS to an uploads file (regenerated on banner save, epoch-keyed
-   filename) would make it a one-time download.
+19. **Output-buffer matching hot loop** — pattern metadata (lowercased form,
+    URL-fragment vs code-signature classification) is now precomputed once
+    per request instead of per tag×pattern; the ~840 URL patterns are matched
+    with `strpos()` against a once-lowercased URL haystack (measured ~25%
+    faster than per-pattern `stripos()` on PHP 8.4; `stripos` kept for large
+    inline content where PHP 8 makes it the faster choice); the two full-
+    document `<noscript>` regex passes (pixel-process, then stash) are merged
+    into a single pass. An Aho-Corasick / host-bucketed index was evaluated
+    and deliberately NOT pursued: alternation-based prefilters can miss
+    overlapping matches (false negative = unblocked tracker), and measured
+    PHP 8 `stripos` throughput makes the linear scan far cheaper than the
+    first-pass audit estimated (~2–5 ms/page realistic, not 20–100 ms).
+20. **~60 KB of static JSON inlined into every page** — `_providersToBlock`
+    and `_cookieCategoryMap` are now offloaded to a content-hashed
+    `config-<md5>.js` in `uploads/faz-cookie-manager/assets/`, enqueued as a
+    dependency of the main bundle; a tiny inline snippet merges
+    `window._fazStaticConfig` back into `_fazConfig` before `script.js` runs,
+    so the frontend bundle needed no changes. Hash-named files are immutable
+    (browser-cacheable forever) and never garbage-collected except at
+    uninstall, so stale full-page caches keep resolving their own hash.
+    Falls back to the historical full-inline behaviour when uploads is not
+    writable, and stays inline in alternative-asset (ad-blocker-evasion) mode.
+21. **~30 KB of banner CSS inlined per page** — the compiled banner CSS is
+    now served as a content-hashed `banner-<md5>.css` stylesheet from the
+    same assets dir (immutable, cacheable), with the same inline fallback.
+    New defence-in-depth guards make the plugin's own asset tags
+    (`id="<handle>-js"` / `"<handle>-css"`) immune to provider-pattern
+    collisions in the output buffer by construction.
+22. **Opt-in footer loading for the main bundle** — new
+    `faz_main_script_in_footer` filter (default `false`, head placement
+    unchanged) for sites that accept a later banner paint in exchange for
+    faster first render. The head-blocking default is deliberate: it arms the
+    client-side interceptors before page scripts run.
+
+Observation recorded during equivalence testing (pre-existing, unchanged):
+`process_noscript_tag()` matches providers with empty tag attributes, so
+URL-fragment patterns never gate `<noscript>` pixel beacons — only
+code-signature patterns do. Worth a dedicated upstream fix with its own
+tests.
+
+## Recommendations (not addressed)
+
+Ordered by expected impact.
+
 4. **`Mmdb_Reader` loads the whole `.mmdb` via `file_get_contents()`** —
    6–9 MB for GeoLite2-Country, 60–90 MB for City (memory-limit fatal risk).
    The MMDB format is designed for `fseek`/`fread` traversal; switch to
@@ -146,11 +173,6 @@ compliance-sensitive and deserves its own change with dedicated tests.
    per unique visitor on installs without a persistent object cache — with a
    stream-reading MMDB the transient layer could be dropped entirely when the
    lookup source is local.
-5. **Main banner bundle (121 KB) loads render-blocking in `<head>`** with
-   `data-no-defer`/`data-no-optimize` hints and 12 optimizer-exclusion
-   filters. Correct for consent semantics, but consider an opt-in
-   `faz_script_in_footer` / defer filter for sites that accept late banner
-   paint, and document the LCP trade-off.
 6. **Alt-asset mode inlines the whole 121 KB bundle into the HTML on every
    request** (`file_get_contents` + `wp_add_inline_script`). Consider copying
    the bundle to a randomized uploads path once instead of inlining per
@@ -176,7 +198,11 @@ compliance-sensitive and deserves its own change with dedicated tests.
 
 ## Verification
 
-`bash scripts/run-unit-tests.sh` — 61/61 suites pass. The two geolocation
-suites were updated to call `Geolocation::reset_runtime_cache()` where they
-mutate database files mid-process, reflecting the new per-request memoization
-(a database file cannot change mid-request in production).
+`bash scripts/run-unit-tests.sh` — 62/62 suites pass (including the new
+`test-output-buffer-noscript-php.php`). The two geolocation suites were
+updated to call `Geolocation::reset_runtime_cache()` where they mutate
+database files mid-process, reflecting the new per-request memoization (a
+database file cannot change mid-request in production). The output-buffer
+refactor was additionally verified byte-identical against the pre-refactor
+implementation over a 19-case HTML corpus (scripts, iframes, noscript
+pixels, link/style tags, data: URIs, case variants, own-asset tags).
