@@ -204,13 +204,22 @@ class Activator {
 
 		$name_placeholders = implode( ',', array_fill( 0, count( $names ), '%s' ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- pre-6.4 fallback; caches are invalidated below.
-		$wpdb->query(
+		$demoted = $wpdb->query(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $name_placeholders is a static list of %s markers.
 				"UPDATE {$wpdb->options} SET autoload = 'no' WHERE option_name IN ( {$name_placeholders} )",
 				$names
 			)
 		);
+		// Throw rather than return quietly: run_pending_migrations() catches
+		// Throwable and skips writing faz_migrations_version, so the demotion is
+		// retried on the next admin load. Swallowing the error would mark the
+		// migration done while the banner template stayed autoloaded on every
+		// request — the exact cost this migration exists to remove — and nothing
+		// would ever try again.
+		if ( false === $demoted ) {
+			throw new \RuntimeException( 'FAZ: failed to demote autoloaded options; migration will retry.' );
+		}
 		wp_cache_delete( 'alloptions', 'options' );
 		foreach ( $names as $name ) {
 			wp_cache_delete( $name, 'options' );

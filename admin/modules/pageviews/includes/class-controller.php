@@ -375,6 +375,13 @@ class Controller {
 					$cutoff
 				)
 			);
+			// See ConsentLogs::cleanup_old_logs(): (int) false is 0, so an error
+			// is otherwise indistinguishable from "nothing left to purge" and the
+			// table keeps growing silently.
+			if ( false === $batch ) {
+				error_log( 'FAZ: pageview retention DELETE failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- silent failure would let the table grow without bound.
+				break;
+			}
 			$deleted += (int) $batch;
 		} while ( (int) $batch === 1000 && $deleted < 200000 );
 

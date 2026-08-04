@@ -988,6 +988,14 @@ class Controller {
 					$cutoff
 				)
 			);
+			// A failed query returns false, and (int) false is 0 — which reads
+			// exactly like "no rows left to delete". Retention would then appear
+			// to have run while nothing was purged, and the caller has no way to
+			// tell the difference. Surface it and stop.
+			if ( false === $batch ) {
+				error_log( 'FAZ: consent-log retention DELETE failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a silent retention failure is a data-minimisation problem; it must leave a trace.
+				break;
+			}
 			$deleted += (int) $batch;
 		} while ( (int) $batch === 1000 && $deleted < 200000 );
 
