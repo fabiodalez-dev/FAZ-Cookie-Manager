@@ -122,16 +122,22 @@ namespace {
 
 	// ---------- reflection harness ----------
 
-	function faz_ob_frontend( array $providers, array $blocked, array $whitelist = array() ) {
+	/**
+	 * @param array $service_consent  service id => 'yes'|'no'. Empty = per-service
+	 *                                consent off, which is the default everywhere
+	 *                                below except the per-service cases.
+	 * @param array $pattern_services URL pattern => list of service ids.
+	 */
+	function faz_ob_frontend( array $providers, array $blocked, array $whitelist = array(), array $service_consent = array(), array $pattern_services = array() ) {
 		$rc = new ReflectionClass( Frontend::class );
 		$fe = $rc->newInstanceWithoutConstructor();
 		$preset = array(
 			'blocked_categories_cache'   => $blocked,
 			'provider_map_cache'         => $providers,
-			'service_consent_cache'      => array(), // per-service consent off
+			'service_consent_cache'      => $service_consent,
 			'whitelist_cache'            => $whitelist,
 			'settings_option_cache'      => array(),
-			'pattern_service_cache'      => array(),
+			'pattern_service_cache'      => $pattern_services,
 			'provider_match_meta_cache'  => null,
 			'provider_match_meta_source' => null,
 			'service_match_meta_cache'   => null,
@@ -333,6 +339,55 @@ namespace {
 	$out  = faz_ob_run( $fe, $html );
 	assert_true( false !== strpos( $out, '<iframe data-faz-category="functional"' ), 'iframe labelled with its own category' );
 	assert_true( false !== strpos( $out, '<img data-faz-category="marketing"' ), 'pixel labelled with its own category' );
+
+	// ---------- per-service decisions inside one <noscript> ----------
+	//
+	// Per-service consent is the second layer, and it used to be aggregated the
+	// same way the category was: one verdict for the whole block. An explicit
+	// svc:yes on any resource made the block "allowed" and returned it whole.
+
+	echo "\n-- per-service decisions inside one <noscript> --\n";
+
+	$svc_patterns = array(
+		'youtube.com/embed'   => array( 'youtube' ),
+		'www.facebook.com/tr' => array( 'meta-pixel' ),
+	);
+
+	// 14. svc:yes on ONE resource must not vouch for another that has no
+	//     decision of its own. Before the per-resource rewrite the aggregate went
+	//     to "allowed" and the whole block was returned untouched, so the denied
+	//     pixel kept its live src and fired with JavaScript disabled.
+	$fe   = faz_ob_frontend(
+		$mixed_providers,
+		$mixed_blocked,
+		array(),
+		array( 'youtube' => 'yes' ), // nothing said about meta-pixel
+		$svc_patterns
+	);
+	$html = '<html><body><noscript>'
+		. '<iframe src="https://youtube.com/embed/abc"></iframe>'
+		. '<img src="https://www.facebook.com/tr?id=77"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( false === strpos( $out, '<img src="https://www.facebook.com/tr?id=77"' ), 'svc:yes elsewhere does not release an undecided denied resource' );
+	assert_true( false !== strpos( $out, '<iframe src="https://youtube.com/embed/abc">' ), 'the svc:yes resource itself keeps loading' );
+
+	// 15. The mirror image: svc:no gates its own resource even when its category
+	//     is one the visitor consented to, and leaves the rest of the block alone.
+	$fe   = faz_ob_frontend(
+		$mixed_providers,
+		array(), // no category blocked at all
+		array(),
+		array( 'youtube' => 'no' ),
+		$svc_patterns
+	);
+	$html = '<html><body><noscript>'
+		. '<iframe src="https://youtube.com/embed/abc"></iframe>'
+		. '<img src="https://www.facebook.com/tr?id=77"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://youtube.com/embed/abc"' ), 'svc:no gates its own resource despite a consented category' );
+	assert_true( false !== strpos( $out, '<img src="https://www.facebook.com/tr?id=77"' ), 'the undecided, unblocked sibling is untouched' );
 
 	// ---------- result ----------
 

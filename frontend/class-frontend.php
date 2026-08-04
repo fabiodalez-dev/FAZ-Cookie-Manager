@@ -3437,8 +3437,7 @@ class Frontend {
 		// Kept in its own variable: a content-level hit means the block as a
 		// whole is a tracking fallback, which the rewrite below uses to decide
 		// whether unmatched sibling tags travel with it.
-		$content_matched  = $this->match_script_to_provider( '', $content, $providers );
-		$matched_category = $content_matched;
+		$content_matched = $this->match_script_to_provider( '', $content, $providers );
 
 		// Pass 2 — URL-fragment patterns against each embedded resource's OWN
 		// tag attributes. The content-only call above carries no src haystack
@@ -3450,8 +3449,9 @@ class Frontend {
 		// tag. Both the gating decision below and the category label written
 		// onto each rewritten tag need it, and matching twice invites the two to
 		// disagree.
-		$embedded_tags = array();
+		$embedded_tags  = array();
 		$tag_categories = array();
+		$tag_svcs       = array();
 		if ( preg_match_all( '#<(?:img|iframe)\b[^>]*#i', $content, $embedded_matches ) ) {
 			foreach ( $embedded_matches[0] as $embedded_tag ) {
 				if ( $this->is_whitelisted( $embedded_tag, '' ) ) {
@@ -3459,53 +3459,36 @@ class Frontend {
 				}
 				$embedded_tags[]  = $embedded_tag;
 				$tag_categories[] = $this->match_script_to_provider( $embedded_tag, '', $providers );
-			}
-		}
-		if ( ! $matched_category ) {
-			// Take the first category that is actually BLOCKED, not merely the
-			// first that matches something. Stopping at the first match let a
-			// tracker through: a granted YouTube <iframe> listed before a denied
-			// Meta pixel in the same block resolved to the YouTube category, the
-			// gate below found it un-blocked, and the whole block — pixel
-			// included — was returned untouched. That is under-blocking before
-			// consent, which is the direction that matters.
-			foreach ( $tag_categories as $tag_category ) {
-				if ( $tag_category && in_array( $tag_category, $blocked_categories, true ) ) {
-					$matched_category = $tag_category;
-					break;
-				}
-				if ( $tag_category && ! $matched_category ) {
-					// Remembered only so the per-service path below has a label
-					// when no category is blocked on its own.
-					$matched_category = $tag_category;
-				}
+				$tag_svcs[]       = $this->check_per_service_blocking( $embedded_tag, '' );
 			}
 		}
 
-		// Per-service consent, over both layers. Merging rule across multiple
-		// embedded resources mirrors the intra-call precedence: an explicit
-		// svc:no anywhere wins over an explicit svc:yes elsewhere.
-		$svc_blocked = $this->check_per_service_blocking( '', $content );
-		foreach ( $embedded_tags as $tag_attrs ) {
-			if ( true === $svc_blocked ) {
-				break;
+		// The block's own text can carry a per-service decision too (a service
+		// named in a comment or in the fallback markup). It stands in for any
+		// resource that has no decision of its own.
+		$content_svc = $this->check_per_service_blocking( '', $content );
+
+		// Decide EVERY resource on its own terms. Aggregating the block into one
+		// verdict — one category, one service decision — was an authorisation
+		// bypass in both layers: an explicit svc:yes on the first resource made
+		// the whole block "allowed", so a second resource in a denied category
+		// and with no decision of its own kept its live src and loaded as soon as
+		// the page rendered without JavaScript. Precedence per resource is
+		// svc:no → gate, svc:yes → leave alone, no decision → its category
+		// decides, falling back to the block-level signature that marks the whole
+		// <noscript> as a tracking fallback.
+		$gate = array();
+		foreach ( $embedded_tags as $index => $tag_attrs ) {
+			$svc = null !== $tag_svcs[ $index ] ? $tag_svcs[ $index ] : $content_svc;
+			if ( null !== $svc ) {
+				$gate[ $index ] = ( true === $svc );
+				continue;
 			}
-			$tag_svc = $this->check_per_service_blocking( $tag_attrs, '' );
-			if ( true === $tag_svc ) {
-				$svc_blocked = true;
-			} elseif ( false === $tag_svc && null === $svc_blocked ) {
-				$svc_blocked = false;
-			}
+			$cat            = $tag_categories[ $index ] ? $tag_categories[ $index ] : $content_matched;
+			$gate[ $index ] = ( $cat && in_array( $cat, $blocked_categories, true ) );
 		}
 
-		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
-			if ( true !== $svc_blocked ) {
-				return $full;
-			}
-			if ( ! $matched_category ) {
-				$matched_category = 'functional';
-			}
-		} elseif ( false === $svc_blocked ) {
+		if ( ! in_array( true, $gate, true ) ) {
 			return $full;
 		}
 
@@ -3525,29 +3508,21 @@ class Frontend {
 		// triggers often, which turns a latent over-block into a routine one.
 		$blocked_content = $content;
 		foreach ( $embedded_tags as $index => $tag_attrs ) {
-			$tag_category = isset( $tag_categories[ $index ] ) ? $tag_categories[ $index ] : '';
-			// Which tags travel with the block depends on WHY it was blocked.
-			// A content-signature hit (fbq(, gtag …) means the block itself is
-			// the tracking fallback, so its resources go with it. When only a
-			// per-tag URL matched, gate that tag alone: a site logo sitting in
-			// the same <noscript> as a Meta pixel is not a tracker, and marking
-			// it with the pixel's category would both break the image and
-			// mislabel it.
-			// Absent a block-level reason, a tag is gated only when ITS OWN
-			// category is one the visitor has not consented to. Gating on "some
-			// provider matched" over-blocks the other way: a consented YouTube
-			// embed sharing the block with a denied pixel would be gated too,
-			// breaking an embed the visitor explicitly allowed.
-			if ( ! $content_matched && true !== $svc_blocked
-				&& ( ! $tag_category || ! in_array( $tag_category, $blocked_categories, true ) ) ) {
+			if ( empty( $gate[ $index ] ) ) {
 				continue;
 			}
 			// Label each resource with ITS OWN category where one is known.
-			// Falling back to the block-level category for every tag mislabels a
-			// block that mixes providers — a Meta pixel and a YouTube embed
-			// would both be reported under whichever matched first, and the
+			// Falling back to a single block-level category for every tag
+			// mislabels a block that mixes providers — a Meta pixel and a YouTube
+			// embed would both be reported under whichever matched first, and the
 			// visitor's per-category choice would be applied to the wrong one.
-			$label_category = $tag_category ? $tag_category : $matched_category;
+			// A resource gated purely by a per-service decision may match no
+			// provider at all; 'functional' keeps it revealable rather than
+			// stranding it under a category nothing will ever grant.
+			$label_category = $tag_categories[ $index ];
+			if ( ! $label_category ) {
+				$label_category = $content_matched ? $content_matched : 'functional';
+			}
 			$rewritten = preg_replace( '/(\s)src\s*=/i', '$1data-faz-src=', $tag_attrs, 1 );
 			// preg_replace returns null on a PCRE failure and the subject
 			// unchanged when nothing matched; neither is a tag to rewrite.
