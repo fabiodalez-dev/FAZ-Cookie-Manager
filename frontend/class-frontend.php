@@ -3434,7 +3434,11 @@ class Frontend {
 		}
 
 		// Pass 1 — code-signature patterns (fbq(, gtag …) against the raw text.
-		$matched_category = $this->match_script_to_provider( '', $content, $providers );
+		// Kept in its own variable: a content-level hit means the block as a
+		// whole is a tracking fallback, which the rewrite below uses to decide
+		// whether unmatched sibling tags travel with it.
+		$content_matched  = $this->match_script_to_provider( '', $content, $providers );
+		$matched_category = $content_matched;
 
 		// Pass 2 — URL-fragment patterns against each embedded resource's OWN
 		// tag attributes. The content-only call above carries no src haystack
@@ -3487,9 +3491,53 @@ class Frontend {
 			return $full;
 		}
 
-		// Block tracking fallback resources by replacing src → data-faz-src inside the noscript.
-		$blocked_content = preg_replace( '/(<(?:img|iframe)\b[^>]*)(\s)src\s*=/i', '$1$2data-faz-src=', $content );
-		$blocked_content = preg_replace( '/(<(?:img|iframe)\b)/i', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_content );
+		// Rewrite ONLY the tags this pass actually resolved as blockable.
+		//
+		// A blanket preg_replace over $content would neutralise every <img> and
+		// <iframe> in the block, including the ones $embedded_tags deliberately
+		// excludes because the administrator whitelisted them, and any unrelated
+		// resource that matches no provider at all — a static logo sitting in the
+		// same <noscript> as a Meta pixel would stop loading and be labelled with
+		// the pixel's category. Every other filter in this class treats the
+		// whitelist as binding, and this one must too.
+		//
+		// The blast radius of getting this wrong grew with the gating fix above:
+		// matching used to see only the block's text, so blocking rarely
+		// triggered here. Now that each embedded tag is matched properly, it
+		// triggers often, which turns a latent over-block into a routine one.
+		$blocked_content = $content;
+		foreach ( $embedded_tags as $tag_attrs ) {
+			// Which tags travel with the block depends on WHY it was blocked.
+			// A content-signature hit (fbq(, gtag …) means the block itself is
+			// the tracking fallback, so its resources go with it. When only a
+			// per-tag URL matched, gate that tag alone: a site logo sitting in
+			// the same <noscript> as a Meta pixel is not a tracker, and marking
+			// it with the pixel's category would both break the image and
+			// mislabel it.
+			if ( ! $content_matched && true !== $svc_blocked
+				&& ! $this->match_script_to_provider( $tag_attrs, '', $providers ) ) {
+				continue;
+			}
+			$rewritten = preg_replace( '/(\s)src\s*=/i', '$1data-faz-src=', $tag_attrs, 1 );
+			// preg_replace returns null on a PCRE failure and the subject
+			// unchanged when nothing matched; neither is a tag to rewrite.
+			if ( null === $rewritten || $rewritten === $tag_attrs ) {
+				continue;
+			}
+			$rewritten = preg_replace(
+				'/^(<(?:img|iframe)\b)/i',
+				'$1 data-faz-category="' . esc_attr( $matched_category ) . '"',
+				$rewritten,
+				1
+			);
+			if ( null === $rewritten ) {
+				continue;
+			}
+			$blocked_content = str_replace( $tag_attrs, $rewritten, $blocked_content );
+		}
+		if ( $blocked_content === $content ) {
+			return $full;
+		}
 		return str_replace( $content, $blocked_content, $full );
 	}
 

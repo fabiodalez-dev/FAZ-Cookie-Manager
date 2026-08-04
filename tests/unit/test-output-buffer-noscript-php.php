@@ -208,6 +208,32 @@ namespace {
 	$out  = faz_ob_run( $fe, $html );
 	assert_true( $out === $html, 'whitelisted noscript pixel passes through' );
 
+	// 3d. A whitelisted resource sharing a block with a blocked one keeps its
+	// src. The rewrite must be per tag: neutralising the whole block would make
+	// the whitelist meaningless whenever anything else in the same <noscript>
+	// is blockable, and gating became frequent once URL patterns started
+	// matching, so this is the common case rather than a corner one.
+	$fe   = faz_ob_frontend( $providers, $blocked, array( 'cdn.example.com/logo' ) );
+	$html = '<html><body><noscript>'
+		. '<img src="https://www.facebook.com/tr?id=5"/>'
+		. '<img src="https://cdn.example.com/logo.png"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://www.facebook.com/tr?id=5"' ), 'blocked pixel still gated beside a whitelisted image' );
+	assert_true( false !== strpos( $out, 'src="https://cdn.example.com/logo.png"' ), 'whitelisted image in the same block keeps its src' );
+	assert_true( false === strpos( $out, 'data-faz-src="https://cdn.example.com/logo.png"' ), 'whitelisted image is not gated' );
+
+	// 3e. A resource matching no provider is left alone even when a sibling in
+	// the same block is blocked — it must not inherit the sibling's category.
+	$fe   = faz_ob_frontend( $providers, $blocked );
+	$html = '<html><body><noscript>'
+		. '<img src="https://www.facebook.com/tr?id=6"/>'
+		. '<img src="/wp-content/uploads/site-logo.png"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( false !== strpos( $out, 'src="/wp-content/uploads/site-logo.png"' ), 'unrelated image in a blocked block keeps its src' );
+	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'only the matched resource carries a category' );
+
 	// 4. Multiple <noscript> blocks: processed and restored in order.
 	$fe   = faz_ob_frontend( $providers, $blocked );
 	$html = '<p>a</p>'
