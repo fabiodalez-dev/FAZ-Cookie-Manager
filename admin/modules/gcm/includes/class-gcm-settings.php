@@ -11,6 +11,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Gcm_Settings extends Store {
 	protected $data = array();
 
+	/**
+	 * Per-request memo of the sanitized settings tree. get() is called several
+	 * times per page load (wp_head defaults + store data); without this each
+	 * call re-read the option and re-ran the recursive sanitize() walk.
+	 *
+	 * @var array|null
+	 */
+	private static $cached_settings = null;
+
 	private static $instance;
 
 	public static function get_instance() {
@@ -49,9 +58,22 @@ class Gcm_Settings extends Store {
 		);
 	}
 
+	/**
+	 * Drop the per-request settings memo (call after writing the option
+	 * outside of update(), e.g. from migrations).
+	 *
+	 * @return void
+	 */
+	public static function flush_runtime_cache() {
+		self::$cached_settings = null;
+	}
+
 	public function get( $group = '', $key = '' ) {
-		$settings = get_option( 'faz_gcm_settings', $this->data );
-		$settings = self::sanitize( $settings, $this->data );
+		if ( null === self::$cached_settings ) {
+			$settings              = get_option( 'faz_gcm_settings', $this->data );
+			self::$cached_settings = self::sanitize( $settings, $this->data );
+		}
+		$settings = self::$cached_settings;
 		if ( empty( $key ) && empty( $group ) ) {
 			return $settings;
 		} elseif ( ! empty( $key ) && ! empty( $group ) ) {
@@ -188,6 +210,7 @@ class Gcm_Settings extends Store {
 		$merged   = wp_parse_args( (array) $data, $base );
 		$settings = self::sanitize( $merged, $this->data );
 		update_option( 'faz_gcm_settings', $settings );
+		self::$cached_settings = null;
 		do_action( 'faz_after_update_settings', $settings );
 	}
 

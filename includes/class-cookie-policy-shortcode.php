@@ -44,10 +44,13 @@ class Cookie_Policy_Shortcode {
 		$contact    = sanitize_email( $atts['contact'] );
 		$show_table = 'yes' === $atts['show_table'];
 
-		// Enqueue inline styles for the policy page.
-		wp_register_style( 'faz-cookie-policy', false, array(), FAZ_VERSION );
-		wp_enqueue_style( 'faz-cookie-policy' );
-		wp_add_inline_style( 'faz-cookie-policy', '
+		// Enqueue inline styles for the policy page. Own handle: the Cookie
+		// Policy Generator registers 'faz-cookie-policy' with a real file src,
+		// and two registrations of the same handle with different src silently
+		// drop whichever comes second.
+		wp_register_style( 'faz-cookie-policy-inline', false, array(), FAZ_VERSION );
+		wp_enqueue_style( 'faz-cookie-policy-inline' );
+		wp_add_inline_style( 'faz-cookie-policy-inline', '
 .faz-cookie-policy { max-width: 800px; line-height: 1.7; }
 .faz-cookie-policy h2 { margin-top: 2em; }
 .faz-cookie-policy ul { padding-left: 1.5em; }

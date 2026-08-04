@@ -92,7 +92,7 @@ class Notice {
 		} else {
 			$dismissed[ $notice ] = false;
 		}
-		update_option( 'faz_admin_notices', $dismissed );
+		update_option( 'faz_admin_notices', $dismissed, false );
 	}
 
 
@@ -107,7 +107,7 @@ class Notice {
 	 */
 	public function undismiss( $notice ) {
 		unset( $this->notices[ $notice ] );
-		update_option( 'faz_admin_notices', $this->notices );
+		update_option( 'faz_admin_notices', $this->notices, false );
 	}
 
 	/**

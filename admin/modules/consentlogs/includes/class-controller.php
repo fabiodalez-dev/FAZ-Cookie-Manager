@@ -41,7 +41,7 @@ class Controller {
 	 *
 	 * @var string
 	 */
-	private $db_version = '1.1';
+	private $db_version = '1.2';
 
 	/**
 	 * Return the current instance of the class
@@ -110,7 +110,8 @@ class Controller {
 			PRIMARY KEY  (log_id),
 			KEY idx_consent_id (consent_id),
 			KEY idx_status (status),
-			KEY idx_created_at (created_at)
+			KEY idx_created_at (created_at),
+			KEY idx_banner_slug (banner_slug)
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -684,20 +685,6 @@ class Controller {
 
 		$where_clause = implode( ' AND ', $where );
 
-		if ( ! empty( $values ) ) {
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $where_clause is built from a closed allowlist of column names + %s/%d placeholders, all user values flow through $values which prepare() binds.
-			$query = $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_clause} ORDER BY created_at DESC", $values );
-		} else {
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix + literal; literal "WHERE 1=1" has no user input.
-			$query = "SELECT * FROM {$table} WHERE 1=1 ORDER BY created_at DESC";
-		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query produced by the prepare() block above (or a literal-only fallback). CSV export — must reflect live data.
-		$items = $wpdb->get_results( $query, ARRAY_A );
-
-		if ( ! is_array( $items ) ) {
-			$items = array();
-		}
-
 		$output = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
 		if ( false === $output ) {
 			return '';
@@ -706,26 +693,51 @@ class Controller {
 		// CSV header row.
 		fputcsv( $output, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ) );
 
-		foreach ( $items as $item ) {
-			fputcsv(
-				$output,
-				array_map(
-					array( $this, 'sanitize_csv_cell' ),
-					array(
-						$item['log_id'],
-						$item['consent_id'],
-						$item['status'],
-						$item['categories'], // Already JSON string from DB.
-						$item['ip_hash'],
-						$item['user_agent'],
-						$item['url'],
-						isset( $item['banner_slug'] ) ? $item['banner_slug'] : '',
-						isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
-						$item['created_at'],
-					)
-				)
+		// Stream in keyset-paginated batches instead of materialising the whole
+		// table in one get_results() call: the consent-log table is the plugin's
+		// highest-volume table and an unbounded SELECT * exhausts memory on
+		// long-lived installs. log_id is the auto-increment PK, so walking it
+		// descending preserves the newest-first export order and every batch is
+		// an index range scan.
+		$batch_size  = 1000;
+		$last_log_id = PHP_INT_MAX;
+
+		do {
+			$batch_values = array_merge( $values, array( $last_log_id, $batch_size ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $where_clause is built from a closed allowlist of column names + %s/%d placeholders, all user values flow through $batch_values which prepare() binds.
+			$query = $wpdb->prepare(
+				"SELECT * FROM {$table} WHERE {$where_clause} AND log_id < %d ORDER BY log_id DESC LIMIT %d",
+				$batch_values
 			);
-		}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query produced by the prepare() call above. CSV export — must reflect live data.
+			$items = $wpdb->get_results( $query, ARRAY_A );
+
+			if ( ! is_array( $items ) || empty( $items ) ) {
+				break;
+			}
+
+			foreach ( $items as $item ) {
+				$last_log_id = (int) $item['log_id'];
+				fputcsv(
+					$output,
+					array_map(
+						array( $this, 'sanitize_csv_cell' ),
+						array(
+							$item['log_id'],
+							$item['consent_id'],
+							$item['status'],
+							$item['categories'], // Already JSON string from DB.
+							$item['ip_hash'],
+							$item['user_agent'],
+							$item['url'],
+							isset( $item['banner_slug'] ) ? $item['banner_slug'] : '',
+							isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
+							$item['created_at'],
+						)
+					)
+				);
+			}
+		} while ( count( $items ) === $batch_size );
 
 		rewind( $output );
 		$csv = stream_get_contents( $output );
@@ -962,13 +974,30 @@ class Controller {
 		$months   = absint( $months );
 		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention cleanup writes — caching irrelevant for DELETE.
-		$deleted = $wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE created_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$cutoff
-			)
-		);
+		// Delete in bounded batches: the first cleanup on a long-lived install
+		// can match hundreds of thousands of rows, and a single unbounded
+		// DELETE holds a long InnoDB transaction (lock contention, huge undo
+		// log, replication lag). Each batch is an index range scan on
+		// idx_created_at; the cap keeps one cron run from monopolising the DB.
+		$deleted = 0;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention cleanup writes — caching irrelevant for DELETE.
+			$batch = $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$table} WHERE created_at < %s LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff
+				)
+			);
+			// A failed query returns false, and (int) false is 0 — which reads
+			// exactly like "no rows left to delete". Retention would then appear
+			// to have run while nothing was purged, and the caller has no way to
+			// tell the difference. Surface it and stop.
+			if ( false === $batch ) {
+				error_log( 'FAZ: consent-log retention DELETE failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a silent retention failure is a data-minimisation problem; it must leave a trace.
+				break;
+			}
+			$deleted += (int) $batch;
+		} while ( (int) $batch === 1000 && $deleted < 200000 );
 
 		return (int) $deleted;
 	}
