@@ -3446,20 +3446,38 @@ class Frontend {
 		// gated <noscript> pixel beacons — the very tags this pass exists for.
 		// Match each <img>/<iframe> exactly the way the script/iframe filters
 		// match regular tags, skipping whitelisted resources.
+		// Resolve each tag's own category once, here, and keep it alongside the
+		// tag. Both the gating decision below and the category label written
+		// onto each rewritten tag need it, and matching twice invites the two to
+		// disagree.
 		$embedded_tags = array();
+		$tag_categories = array();
 		if ( preg_match_all( '#<(?:img|iframe)\b[^>]*#i', $content, $embedded_matches ) ) {
 			foreach ( $embedded_matches[0] as $embedded_tag ) {
 				if ( $this->is_whitelisted( $embedded_tag, '' ) ) {
 					continue;
 				}
-				$embedded_tags[] = $embedded_tag;
+				$embedded_tags[]  = $embedded_tag;
+				$tag_categories[] = $this->match_script_to_provider( $embedded_tag, '', $providers );
 			}
 		}
 		if ( ! $matched_category ) {
-			foreach ( $embedded_tags as $tag_attrs ) {
-				$matched_category = $this->match_script_to_provider( $tag_attrs, '', $providers );
-				if ( $matched_category ) {
+			// Take the first category that is actually BLOCKED, not merely the
+			// first that matches something. Stopping at the first match let a
+			// tracker through: a granted YouTube <iframe> listed before a denied
+			// Meta pixel in the same block resolved to the YouTube category, the
+			// gate below found it un-blocked, and the whole block — pixel
+			// included — was returned untouched. That is under-blocking before
+			// consent, which is the direction that matters.
+			foreach ( $tag_categories as $tag_category ) {
+				if ( $tag_category && in_array( $tag_category, $blocked_categories, true ) ) {
+					$matched_category = $tag_category;
 					break;
+				}
+				if ( $tag_category && ! $matched_category ) {
+					// Remembered only so the per-service path below has a label
+					// when no category is blocked on its own.
+					$matched_category = $tag_category;
 				}
 			}
 		}
@@ -3506,7 +3524,8 @@ class Frontend {
 		// triggered here. Now that each embedded tag is matched properly, it
 		// triggers often, which turns a latent over-block into a routine one.
 		$blocked_content = $content;
-		foreach ( $embedded_tags as $tag_attrs ) {
+		foreach ( $embedded_tags as $index => $tag_attrs ) {
+			$tag_category = isset( $tag_categories[ $index ] ) ? $tag_categories[ $index ] : '';
 			// Which tags travel with the block depends on WHY it was blocked.
 			// A content-signature hit (fbq(, gtag …) means the block itself is
 			// the tracking fallback, so its resources go with it. When only a
@@ -3514,10 +3533,21 @@ class Frontend {
 			// the same <noscript> as a Meta pixel is not a tracker, and marking
 			// it with the pixel's category would both break the image and
 			// mislabel it.
+			// Absent a block-level reason, a tag is gated only when ITS OWN
+			// category is one the visitor has not consented to. Gating on "some
+			// provider matched" over-blocks the other way: a consented YouTube
+			// embed sharing the block with a denied pixel would be gated too,
+			// breaking an embed the visitor explicitly allowed.
 			if ( ! $content_matched && true !== $svc_blocked
-				&& ! $this->match_script_to_provider( $tag_attrs, '', $providers ) ) {
+				&& ( ! $tag_category || ! in_array( $tag_category, $blocked_categories, true ) ) ) {
 				continue;
 			}
+			// Label each resource with ITS OWN category where one is known.
+			// Falling back to the block-level category for every tag mislabels a
+			// block that mixes providers — a Meta pixel and a YouTube embed
+			// would both be reported under whichever matched first, and the
+			// visitor's per-category choice would be applied to the wrong one.
+			$label_category = $tag_category ? $tag_category : $matched_category;
 			$rewritten = preg_replace( '/(\s)src\s*=/i', '$1data-faz-src=', $tag_attrs, 1 );
 			// preg_replace returns null on a PCRE failure and the subject
 			// unchanged when nothing matched; neither is a tag to rewrite.
@@ -3526,7 +3556,7 @@ class Frontend {
 			}
 			$rewritten = preg_replace(
 				'/^(<(?:img|iframe)\b)/i',
-				'$1 data-faz-category="' . esc_attr( $matched_category ) . '"',
+				'$1 data-faz-category="' . esc_attr( $label_category ) . '"',
 				$rewritten,
 				1
 			);

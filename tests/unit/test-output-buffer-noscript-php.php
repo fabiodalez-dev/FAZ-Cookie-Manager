@@ -289,6 +289,51 @@ namespace {
 	$out  = faz_ob_run( $fe, $html );
 	assert_true( $out === $html, 'own banner stylesheet never gated' );
 
+	// ---------- mixed-category <noscript> blocks ----------
+	//
+	// A <noscript> block is a list, and its entries need not share a category.
+	// Both cases below failed before the per-tag resolution: the gate stopped at
+	// the FIRST provider match rather than the first BLOCKED one, and every
+	// rewritten tag was stamped with that single block-level category.
+
+	echo "\n-- mixed-category <noscript> blocks --\n";
+
+	$mixed_providers = array(
+		'youtube.com/embed'   => 'functional',   // consented
+		'www.facebook.com/tr' => 'marketing',    // denied
+	);
+	$mixed_blocked   = array( 'marketing' );
+
+	// 11. A consented resource listed FIRST must not shield a denied one that
+	//     follows it. This is the under-blocking case: before the fix the whole
+	//     block was returned untouched and the Meta pixel fired pre-consent.
+	$fe   = faz_ob_frontend( $mixed_providers, $mixed_blocked );
+	$html = '<html><body><noscript>'
+		. '<iframe src="https://youtube.com/embed/abc"></iframe>'
+		. '<img src="https://www.facebook.com/tr?id=99"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	// Match on the whole tag: a bare src="…" test would pass vacuously, since
+	// that string is also a substring of the rewritten data-faz-src="…".
+	assert_true( false === strpos( $out, '<img src="https://www.facebook.com/tr?id=99"' ), 'denied pixel after a consented iframe is still gated' );
+	assert_true( false !== strpos( $out, 'data-faz-src="https://www.facebook.com/tr?id=99"' ), 'denied pixel src moved to data-faz-src' );
+
+	// 12. …and the consented iframe in that same block keeps loading: gating it
+	//     would break a working embed the visitor already allowed.
+	assert_true( false !== strpos( $out, '<iframe src="https://youtube.com/embed/abc">' ), 'consented iframe in a mixed block is left alone' );
+
+	// 13. When BOTH are denied, each gated tag carries ITS OWN category, not
+	//     whichever one matched first — otherwise the visitor's per-category
+	//     choice is later applied to the wrong resource.
+	$fe   = faz_ob_frontend( $mixed_providers, array( 'marketing', 'functional' ) );
+	$html = '<html><body><noscript>'
+		. '<iframe src="https://youtube.com/embed/abc"></iframe>'
+		. '<img src="https://www.facebook.com/tr?id=99"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( false !== strpos( $out, '<iframe data-faz-category="functional"' ), 'iframe labelled with its own category' );
+	assert_true( false !== strpos( $out, '<img data-faz-category="marketing"' ), 'pixel labelled with its own category' );
+
 	// ---------- result ----------
 
 	echo "\n";
