@@ -6,6 +6,7 @@ import {
 	fazApiGet,
 	fazApiPost,
 	listCookies,
+	listCookiesUntil,
 	openCookiesPage,
 	openSettingsPage,
 } from '../utils/faz-api';
@@ -508,7 +509,11 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 			});
 			await expect(page.locator('.faz-toast').last()).toContainText('Scan complete', { timeout: 20_000 });
 
-			const cookies = await listCookies(page, nonce);
+			// The "Scan complete" toast above says the UI is done, not that the
+			// rows are readable through REST yet. Poll for the cookie instead of
+			// sampling the list once — this assertion held alone and failed in
+			// the full run purely on that gap.
+			const cookies = await listCookiesUntil(page, nonce, [`_faz_lab_js_basic_${token}`]);
 			expect(cookies.some((entry: any) => String(entry.name ?? '') === `_faz_lab_js_basic_${token}`)).toBe(true);
 		} finally {
 			disableLabFlags();
@@ -522,6 +527,12 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 		loginAsAdmin,
 		wpBaseURL,
 	}) => {
+		// Admin login, a settings read/write round trip, a second browser context
+		// for the visitor and a consent-log read — comfortably inside the 45s
+		// default when the box is idle, and over it when the full suite is
+		// loading the same PHP-FPM pool. It timed out in the full run and passed
+		// alone, so declare the budget rather than let it expire.
+		test.slow();
 		const nonce = await openSettingsPage(page, loginAsAdmin);
 		const originalSettings = await getSettings(page, nonce);
 		const originalConsentLogs = originalSettings.consent_logs ?? { status: false };
