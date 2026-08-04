@@ -4947,8 +4947,16 @@ class Frontend {
 	 * @return array[] Ordered list of { lower, is_url, category }.
 	 */
 	private function get_provider_match_meta( $providers ) {
+		// Compare a cheap signature, not the map itself. `===` on two arrays of
+		// ~1000 entries walks every key and value, and this runs once per
+		// inspected tag — which would put the per-tag cost back in proportion to
+		// the pattern count, the exact thing the memo exists to remove. Count
+		// plus a hash of the key order is enough: the values are categories
+		// derived from those keys, and the only producer is the provider
+		// catalogue, so a changed map always changes its keys.
+		$signature = count( $providers ) . ':' . md5( implode( "\n", array_keys( $providers ) ) );
 		if ( null !== $this->provider_match_meta_cache
-			&& $this->provider_match_meta_source === $providers ) {
+			&& $this->provider_match_meta_source === $signature ) {
 			return $this->provider_match_meta_cache;
 		}
 		$meta = array();
@@ -4964,7 +4972,7 @@ class Frontend {
 				'category' => $category,
 			);
 		}
-		$this->provider_match_meta_source = $providers;
+		$this->provider_match_meta_source = $signature;
 		$this->provider_match_meta_cache  = $meta;
 		return $meta;
 	}
@@ -6135,18 +6143,29 @@ class Frontend {
 	 * @return mixed
 	 */
 	public function litespeed_exclude_own_scripts( $excludes ) {
-		$pattern = 'plugins/faz-cookie-manager/';
+		// Two fragments, because the plugin's assets no longer all live under
+		// plugins/: the content-hashed banner CSS and config JS are served from
+		// the uploads directory. The path-based exclusion is the fallback for
+		// when the data-no-optimize / data-no-defer attributes are stripped, and
+		// it stopped covering those two files when they moved. Matched on
+		// `faz-cookie-manager/assets/` rather than a full uploads path so a site
+		// with a renamed uploads directory is still covered.
+		$patterns = array( 'plugins/faz-cookie-manager/', 'faz-cookie-manager/assets/' );
 		if ( is_string( $excludes ) ) {
-			if ( false !== strpos( $excludes, $pattern ) ) {
-				return $excludes;
+			foreach ( $patterns as $pattern ) {
+				if ( false === strpos( $excludes, $pattern ) ) {
+					$excludes = trim( $excludes . "\n" . $pattern );
+				}
 			}
-			return trim( $excludes . "\n" . $pattern );
+			return $excludes;
 		}
 		if ( ! is_array( $excludes ) ) {
 			$excludes = array();
 		}
-		if ( ! in_array( $pattern, $excludes, true ) ) {
-			$excludes[] = $pattern;
+		foreach ( $patterns as $pattern ) {
+			if ( ! in_array( $pattern, $excludes, true ) ) {
+				$excludes[] = $pattern;
+			}
 		}
 		return $excludes;
 	}
@@ -6214,9 +6233,17 @@ class Frontend {
 		if ( ! is_array( $excludes ) ) {
 			$excludes = array();
 		}
-		$pattern = '/wp-content/plugins/faz-cookie-manager/(.*)';
-		if ( ! in_array( $pattern, $excludes, true ) ) {
-			$excludes[] = $pattern;
+		// Second pattern for the content-hashed assets now served from uploads —
+		// see litespeed_exclude_own_scripts() for why the plugin-directory
+		// pattern alone no longer covers them.
+		$patterns = array(
+			'/wp-content/plugins/faz-cookie-manager/(.*)',
+			'faz-cookie-manager/assets/(.*)',
+		);
+		foreach ( $patterns as $pattern ) {
+			if ( ! in_array( $pattern, $excludes, true ) ) {
+				$excludes[] = $pattern;
+			}
 		}
 		return $excludes;
 	}
