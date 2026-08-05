@@ -257,6 +257,7 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
     const wantLangs = Array.from(new Set([...(beforeLang ?? ['en']), 'en', 'hr']));
     await putSettings(page, nonce, { general: { active_languages: wantLangs } });
 
+    try {
     // Hit the public REST endpoint for hr.
     const response = await page.request.get(`${WP_BASE}/wp-json/faz/v1/banner/hr`);
     // Either 200 (hr is selected and works) or 404 (hr not in selected — set
@@ -273,8 +274,12 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
       expect([400, 404]).toContain(response.status());
     }
 
-    // Restore.
-    await putSettings(page, nonce, { general: { active_languages: beforeLang ?? ['en'], default_language: beforeDefault ?? 'en' } });
+    } finally {
+      // In a finally, not trailing the assertions: a failure above used to skip
+      // the restore entirely and leave 'hr' in active_languages for every spec
+      // downstream.
+      await putSettings(page, nonce, { general: { active_languages: beforeLang ?? ['en'], default_language: beforeDefault ?? 'en' } });
+    }
   });
 
   test('M3: wca.js categoryMap covers performance + advertisement back-compat', async ({ page, loginAsAdmin }) => {
