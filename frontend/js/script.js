@@ -806,11 +806,20 @@ function _fazInitOperations() {
     if (!_fazStoredAction && !_fazPreviewEnabled() && _fazGpcActive()) {
         _fazApplyGpcOptOut();
         _fazRemoveBanner();
+        // This branch returns early, so without its own call the one page where
+        // GPC is applied would be the single page load emitting no ready event.
+        // (Every load after it takes the returning-visitor branch, since
+        // _fazApplyGpcOptOut records action:"yes".)
+        _fazFireConsentReadyEvent('gpc');
         return;
     }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
         _fazShowBanner();
         _fazSetInitialState();
+        // Fire on the first visit too, so a listener binds ONE event and is
+        // told the state on every page load — pre-consent defaults here, the
+        // stored choice in the branch below.
+        _fazFireConsentReadyEvent('init');
         // Do NOT call _fazSetConsentID() here — the consentid is a stable
         // 32-char random tracker written into fazcookie-consent. Generating it
         // before the user acts creates a persistent fingerprint before consent,
@@ -818,6 +827,7 @@ function _fazInitOperations() {
         // _fazAcceptCookies() on the first user action.
     } else {
         _fazRemoveBanner();
+        _fazFireConsentReadyEvent('restore');
         // Returning visitors with a stored "consent:yes" cookie still need the
         // bootstrap unblock pass for server-side blocked scripts/iframes.
         // Delay the restore pass so later synchronous DOM mutations cannot
@@ -829,6 +839,51 @@ function _fazInitOperations() {
             window.addEventListener('load', _fazUnblock, { once: true });
         }
     }
+}
+
+/**
+ * Announce the consent state in force on THIS page load.
+ *
+ * Why a separate event and not fazcookie_consent_update:
+ *
+ * fazcookie_consent_update means "the consent just changed". Its listeners act
+ * on that meaning — inside this plugin alone, the consent logger POSTs a row to
+ * wp_faz_consent_logs, the pageview tracker records a banner interaction, the
+ * TCF stub signals `useractioncomplete`, and GCM pushes a `consent update`.
+ * Firing it on every page load would make the logger write one accountability
+ * record per page view per returning visitor, the tracker invent a banner
+ * interaction that never happened, and GCM emit the duplicate update that
+ * issue #149 exists to prevent. Third-party listeners are written against the
+ * same meaning and cannot be audited. So the state-on-load signal gets its own
+ * name and breaks nothing.
+ *
+ * fazcookie_consent_ready fires once per page load, before the unblock pass,
+ * carrying the same {accepted, rejected, action} shape. `action` is 'init' on a
+ * first visit, 'gpc' when a Global Privacy Control signal was auto-applied, and
+ * 'restore' for a visitor whose choice was already stored — the
+ * case that previously emitted no signal at all, leaving an integration that
+ * starts a map or a chat widget on consent working on the page where the
+ * visitor clicked Accept and silently dead on every page after it.
+ *
+ * Reads the hydrated consent store — the same source getFazConsent() reads — so
+ * the payload and the query API can never disagree.
+ *
+ * @param {string} action 'init' on a first visit, 'gpc' on an auto-applied Global
+ *                        Privacy Control signal, 'restore' for a stored choice.
+ */
+function _fazFireConsentReadyEvent(action) {
+    const detail = { accepted: [], rejected: [], action: action };
+    const categories = (_fazStore && _fazStore._categories) || [];
+    for (const category of categories) {
+        if (ref._fazGetFromStore(category.slug) === 'yes') {
+            detail.accepted.push(category.slug);
+        } else {
+            detail.rejected.push(category.slug);
+        }
+    }
+    try {
+        document.dispatchEvent(new CustomEvent('fazcookie_consent_ready', { detail: detail }));
+    } catch (e) { /* CustomEvent unavailable — nothing to announce to. */ }
 }
 
 /**

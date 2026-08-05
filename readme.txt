@@ -318,6 +318,22 @@ Yes. Place `[faz_do_not_sell]` on any page (e.g. your Privacy Policy) to show a 
 
 Yes. Place `[faz_dsar_form]` on any page to show a GDPR-compliant request form covering six rights: Access (Art. 15), Erasure (Art. 17), Data Portability (Art. 20), Rectification (Art. 16), Restriction (Art. 18), and the Right to Object (Art. 21). On submission, the request is stored as a private post in the WordPress database (so it survives email failures), a notification is sent to the admin with a direct link to the record, and a confirmation is sent to the requester. The form includes a honeypot field and nonce verification to block spam bots. Optional attributes: `button` (submit label).
 
+= How do I run my own script when a category is consented? =
+
+Listen for `fazcookie_consent_ready` on `document`. It fires once on **every** page load and carries the consent in force right then, so the code runs both on the page where the visitor accepts and on every page afterwards:
+
+`document.addEventListener('fazcookie_consent_ready', function (e) {
+    if (e.detail.accepted.indexOf('functional') !== -1) {
+        showMap();
+    }
+});`
+
+`e.detail` is `{ accepted: [slug, ...], rejected: [slug, ...], action: 'init' | 'restore' | 'gpc' }` -- `init` on a first visit (before any choice), `restore` for a visitor whose choice was already stored, `gpc` when a Global Privacy Control signal was auto-applied. Register the listener before the plugin's script runs, for example from an inline `<script>` in the head.
+
+Use `fazcookie_consent_update` instead when you want to react to a **change**: it fires when the visitor accepts, rejects or saves preferences, and not on a plain page load by someone who already decided. A snippet that sends an analytics event belongs there, or it would fire on every page view.
+
+`window.getFazConsent()` returns the same state on demand -- `{ activeLaw, categories: { slug: true|false }, isUserActionCompleted, consentID, languageCode }` -- for code that runs after the plugin has initialised and cannot wait for an event.
+
 == Screenshots ==
 
 1. **Cookie consent banner on the frontend** -- GDPR-ready banner in the bottom-left corner with "Customize", "Reject All" and equal-weight "Accept All" buttons. Shown only on the first visit until the visitor makes a choice.

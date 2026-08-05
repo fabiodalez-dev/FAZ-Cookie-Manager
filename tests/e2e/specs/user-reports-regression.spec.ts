@@ -626,4 +626,81 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 			}
 		}
 	});
+	/**
+	 * wp.org forum: "Call script for already accepted cookies" (@migaweb).
+	 *
+	 * The reporter wants to start an OpenStreetMap embed once the functional
+	 * category is granted, and found that nothing fires on the pages after the
+	 * one where the visitor clicked Accept — so he polls getFazConsent() from
+	 * his own DOMContentLoaded handler instead.
+	 *
+	 * He was right that nothing fired. The fix is a SEPARATE event:
+	 * fazcookie_consent_update means "the consent just changed", and its
+	 * listeners — the consent logger, the pageview tracker, the TCF stub, GCM,
+	 * and third-party code we cannot audit — act on that meaning. Firing it on
+	 * every page load would write one accountability row per page view and
+	 * re-emit the GCM update that issue #149 exists to prevent. So
+	 * fazcookie_consent_ready carries the state-on-load signal instead, on both
+	 * a first visit ('init') and a stored choice ('restore').
+	 */
+	test('wp.org @migaweb: a returning visitor gets fazcookie_consent_ready on page load, not only when accepting', async ({ context }) => {
+		const visitor = await context.browser()?.newContext({ baseURL: WP_BASE });
+		if (!visitor) throw new Error('Could not create visitor context');
+		try {
+			const page = await visitor.newPage();
+
+			// Register the listener BEFORE any page script runs, on every
+			// navigation — the same position an integrator's inline snippet in
+			// the head occupies. A listener attached after load would miss the
+			// event and prove nothing.
+			await page.addInitScript(() => {
+				(window as unknown as { __fazEvents: unknown[] }).__fazEvents = [];
+				document.addEventListener('fazcookie_consent_ready', (event) => {
+					(window as unknown as { __fazEvents: unknown[] }).__fazEvents.push(
+						(event as CustomEvent).detail
+					);
+				});
+			});
+
+			// First visit → accept everything.
+			await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
+			await page.waitForFunction(
+				() => typeof (window as unknown as { _fazAcceptCookies?: unknown })._fazAcceptCookies === 'function',
+				undefined,
+				{ timeout: 15_000 }
+			);
+			await page.evaluate(() => (window as unknown as { _fazAcceptCookies: (c: string) => unknown })._fazAcceptCookies('all'));
+
+			// Second page: the consent cookie is already there, and the visitor
+			// takes no action at all. This is the case that fired nothing.
+			await page.goto(`${WP_BASE}/?faz_second_page=1`, { waitUntil: 'domcontentloaded' });
+			await page.waitForFunction(
+				() => ((window as unknown as { __fazEvents?: unknown[] }).__fazEvents ?? []).length > 0,
+				undefined,
+				{ timeout: 15_000 }
+			);
+
+			const events = (await page.evaluate(
+				() => (window as unknown as { __fazEvents: Array<{ action?: string; accepted?: string[]; rejected?: string[] }> }).__fazEvents
+			)) as Array<{ action?: string; accepted?: string[]; rejected?: string[] }>;
+
+			const restored = events.find((detail) => detail.action === 'restore');
+			expect(restored, `no action:'restore' ready event on the second page; got ${JSON.stringify(events)}`).toBeTruthy();
+
+			// The payload has to carry the granted categories, or a listener
+			// still cannot decide whether to start the map.
+			expect(restored?.accepted ?? []).toContain('functional');
+			expect(restored?.accepted ?? []).toContain('analytics');
+
+			// And it must agree with the query API on the same page — the two
+			// read the same store, and a listener may use either.
+			const queried = (await page.evaluate(
+				() => (window as unknown as { getFazConsent: () => { categories: Record<string, boolean>; isUserActionCompleted: boolean } }).getFazConsent()
+			)) as { categories: Record<string, boolean>; isUserActionCompleted: boolean };
+			expect(queried.isUserActionCompleted).toBe(true);
+			expect(queried.categories.functional).toBe(true);
+		} finally {
+			await visitor.close();
+		}
+	});
 });

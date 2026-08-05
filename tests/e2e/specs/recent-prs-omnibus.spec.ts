@@ -581,4 +581,74 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 			await visitor.close();
 		}
 	});
+	/**
+	 * Guard on the shape of the fazcookie_consent_ready fix (wp.org @migaweb).
+	 *
+	 * The reported gap was that nothing fires on the pages after the one where
+	 * the visitor accepted. The obvious fix — fire fazcookie_consent_update on
+	 * every page load — would have been far worse than the bug: the consent
+	 * logger listens to that event and POSTs to /faz/v1/consent, so every page
+	 * view by every returning visitor would have written an accountability row
+	 * claiming a consent action that never happened. On a busy site that is
+	 * unbounded table growth AND a falsified GDPR record.
+	 *
+	 * The state-on-load signal therefore got its own event name. This test pins
+	 * that decision where it hurts: the log must not grow when a visitor who
+	 * already consented simply loads another page.
+	 */
+	test('omnibus: a returning visitor loading another page writes NO new consent-log row', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
+		test.slow();
+		const nonce = await openSettingsPage(page, loginAsAdmin);
+		const originalSettings = await getSettings(page, nonce);
+		const originalConsentLogs = originalSettings.consent_logs ?? { status: false };
+
+		clearConsentLogState();
+
+		const countLogRows = (): number => {
+			const raw = wpEval(
+				'global $wpdb; ' +
+				'$table = $wpdb->prefix . "faz_consent_logs"; ' +
+				'echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );',
+			);
+			return Number.parseInt(raw.trim(), 10) || 0;
+		};
+
+		const visitor = await browser.newContext({ baseURL: wpBaseURL });
+		try {
+			await updateSettings(page, nonce, {
+				consent_logs: { ...originalConsentLogs, status: true },
+			});
+
+			const visitorPage = await visitor.newPage();
+			await visitorPage.goto('/', { waitUntil: 'domcontentloaded' });
+			await driveConsent(visitorPage, 'all', 'yes');
+
+			// One row for the one decision the visitor actually made.
+			await expect
+				.poll(countLogRows, { timeout: 10_000, message: 'the accept should be logged once' })
+				.toBeGreaterThan(0);
+			const afterConsent = countLogRows();
+
+			// Three more page loads, no interaction whatsoever.
+			for (const suffix of ['?faz_page=2', '?faz_page=3', '?faz_page=4']) {
+				await visitorPage.goto(`/${suffix}`, { waitUntil: 'domcontentloaded' });
+				await visitorPage.waitForFunction(
+					() => typeof (window as unknown as { getFazConsent?: unknown }).getFazConsent === 'function',
+					undefined,
+					{ timeout: 15_000 },
+				);
+			}
+			// Give any stray POST the time it would need to land.
+			await visitorPage.waitForTimeout(2000);
+
+			expect(
+				countLogRows(),
+				'a page load by a returning visitor must not be recorded as a consent action',
+			).toBe(afterConsent);
+		} finally {
+			await updateSettings(page, nonce, { consent_logs: originalConsentLogs });
+			clearConsentLogState();
+			await visitor.close();
+		}
+	});
 });
