@@ -7177,6 +7177,12 @@ window.getFazConsent = function () {
     const cookieConsent = {
         activeLaw: "",
         categories: {},
+        // Declared here, not only assigned inside the try below: the whole block
+        // shares one catch, so a single missing field elsewhere would otherwise
+        // hand the caller `services === undefined` instead of an empty map, and
+        // `getFazConsent().services[id]` would throw in their code rather than
+        // read false.
+        services: {},
         isUserActionCompleted: false,
         consentID: "",
         languageCode: ""
@@ -7192,9 +7198,96 @@ window.getFazConsent = function () {
         cookieConsent.isUserActionCompleted = ref._fazGetFromStore("action") === "yes";
         cookieConsent.consentID = ref._fazGetFromStore("consentid") || "";
         cookieConsent.languageCode = _fazStore._language || "";
+        cookieConsent.services = _fazPublicServiceConsentMap();
     } catch (_unused) { /* consent data unavailable */ }
 
     return cookieConsent;
+};
+
+/**
+ * Every service the visitor can be asked about on THIS site, with its effective
+ * consent resolved.
+ *
+ * Empty when per-service consent is off: the server ships no service list in
+ * that mode, so there is nothing finer than the category to report, and an empty
+ * map says exactly that instead of inventing entries.
+ *
+ * @return {Object} serviceId → true|false.
+ */
+function _fazPublicServiceConsentMap() {
+    var out = {};
+    _fazEachDeclaredService(function (service) {
+        if (!service || !service.id || Object.prototype.hasOwnProperty.call(out, service.id)) return;
+        out[service.id] = _fazServiceEffectiveConsent(service.id, service.category || "") === "yes";
+    });
+    return out;
+}
+
+/**
+ * Walk every service declared to the client, from both lists.
+ *
+ * _services is the scanner-detected set that the preference center renders;
+ * _serviceCatalogue is the broader enforceable set used for runtime-revealed
+ * toggles (#134/#146). A cookie can be declared by a service in the second and
+ * not the first, so a lookup that consulted only _services would answer "I do
+ * not know about this cookie" for something the plugin actively blocks.
+ *
+ * @param {Function} fn Receives each service object.
+ */
+function _fazEachDeclaredService(fn) {
+    var lists = [_fazStore._services, _fazStore._serviceCatalogue];
+    for (var li = 0; li < lists.length; li++) {
+        var list = lists[li];
+        if (!list) continue;
+        if (Array.isArray(list)) {
+            for (var i = 0; i < list.length; i++) fn(list[i]);
+        } else if (typeof list === "object") {
+            // _serviceCatalogue is keyed by service id, not an array.
+            for (var key in list) {
+                if (Object.prototype.hasOwnProperty.call(list, key)) fn(list[key]);
+            }
+        }
+    }
+}
+
+/**
+ * Effective consent for one declared cookie, by name.
+ *
+ * Resolution order is the same one the blocker and the shredder apply, so this
+ * cannot disagree with what actually happens to the cookie: a per-cookie
+ * override wins over the per-service decision, which wins over the category.
+ * Most restrictive wins when several services declare a matching pattern —
+ * a denied service anywhere means the cookie is denied.
+ *
+ * @param {string} cookieName Exact cookie name (patterns are matched for you).
+ * @return {boolean|null} true = allowed, false = denied, null = this site
+ *         declares no service for that cookie, so ask about the category
+ *         instead. null is the answer on every site with per-service consent
+ *         off, since the server ships no service list in that mode.
+ */
+window.getFazCookieConsent = function (cookieName) {
+    if (!cookieName || typeof cookieName !== "string") return null;
+    var decided = null;
+    try {
+        _fazEachDeclaredService(function (service) {
+            if (decided === false) return; // Already denied; most restrictive wins.
+            if (!service || !service.id || !Array.isArray(service.cookies)) return;
+            for (var ci = 0; ci < service.cookies.length; ci++) {
+                var pattern = service.cookies[ci];
+                if (!pattern || !_fazCookieNameMatches(cookieName, pattern)) continue;
+                var decision = "";
+                if (_fazStore._perCookieConsent) {
+                    decision = ref._fazGetFromStore(_fazCkKey(service.id, pattern));
+                }
+                if (decision !== "yes" && decision !== "no") {
+                    decision = _fazServiceEffectiveConsent(service.id, service.category || "");
+                }
+                if (decision === "no") { decided = false; return; }
+                if (decision === "yes" && decided === null) decided = true;
+            }
+        });
+    } catch (_unused) { return null; }
+    return decided;
 };
 
 // Cross-domain consent forwarding: listen for incoming consent from other domains.

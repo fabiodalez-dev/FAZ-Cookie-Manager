@@ -332,7 +332,23 @@ Listen for `fazcookie_consent_ready` on `document`. It fires once on **every** p
 
 Use `fazcookie_consent_update` instead when you want to react to a **change**: it fires when the visitor accepts, rejects or saves preferences, and not on a plain page load by someone who already decided. A snippet that sends an analytics event belongs there, or it would fire on every page view.
 
-`window.getFazConsent()` returns the same state on demand -- `{ activeLaw, categories: { slug: true|false }, isUserActionCompleted, consentID, languageCode }` -- for code that runs after the plugin has initialised and cannot wait for an event.
+`window.getFazConsent()` returns the same state on demand -- `{ activeLaw, categories: { slug: true|false }, services: { id: true|false }, isUserActionCompleted, consentID, languageCode }` -- for code that runs after the plugin has initialised and cannot wait for an event.
+
+= How do I check one service or one cookie instead of a whole category? =
+
+Categories are the right granularity on most sites, and while **Per-service consent** is off (the default) a granted category does mean every service in it is allowed. Once you enable it, a visitor can grant Functional and still deny one embed inside it, and a check on the category alone would run a script the visitor declined.
+
+`window.getFazCookieConsent('cookie_name')` answers for a single declared cookie. It returns `true` when allowed, `false` when denied, and `null` when this site declares no service for that cookie -- which is the answer on every site with per-service consent off. Treat `null` as "ask about the category instead":
+
+`document.addEventListener('fazcookie_consent_ready', function (e) {
+    var osm = getFazCookieConsent('_osm_session');
+    var allowed = osm === null
+        ? e.detail.accepted.indexOf('functional') !== -1
+        : osm;
+    if (allowed) { showMap(); }
+});`
+
+`getFazConsent().services` gives the same answer keyed by service id instead of cookie name, and is empty when per-service consent is off. Both apply the resolution the blocker and the cookie shredder use: a per-cookie override wins over the per-service choice, which wins over the category, and the most restrictive answer wins when several services declare the same cookie.
 
 == Screenshots ==
 
@@ -360,6 +376,10 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: a safe snapshot collector for privacy-policy text registered by installed plugins, preserving operator wording while tracking upstream changes.
 * Changed: the legal-document renderer now reads validated document coordinates from a registry while the existing Cookie Policy output remains byte-identical under the golden suite.
 * Fixed: material-change retries are idempotent after partial failure, identical third-party policy text cannot exchange plugin identities or overrides, oversized collected HTML stays balanced, and the REST route guard must exercise visible tabs.
+* Added: `fazcookie_consent_ready`, a JavaScript event fired on every page load carrying the consent in force. Scripts keyed on consent previously had nothing to react to on the pages after the visitor accepted, so an embed started on consent worked once and then stopped. Use `fazcookie_consent_update` to react to a change and this one to read the state.
+* Added: `getFazConsent().services` and `window.getFazCookieConsent( name )` for sites using per-service consent, answering for one service or one declared cookie instead of the whole category.
+* Fixed: the WP Consent API and Microsoft UET/Clarity bridges were never told a returning visitor's consent, so Consent-API aware plugins and Microsoft Advertising treated somebody who had accepted as denied for the rest of the session.
+* Fixed: tracking resources inside a `<noscript>` block are gated per resource. A block mixing providers was decided by whichever matched first, so a consented embed listed before a denied pixel let that pixel load before consent for visitors without JavaScript, and gated tags could be labelled with another provider's category.
 
 = 1.25.0 =
 * Added: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps the normal placeholder substitution pipeline, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.
