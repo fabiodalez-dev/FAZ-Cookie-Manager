@@ -13,6 +13,7 @@
  */
 
 import { expect, test } from '../fixtures/wp-fixture';
+import { wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
@@ -112,15 +113,34 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
     const before = await getSettings(page, nonce);
     const currentRev = Number(((before.general as Record<string, unknown> | undefined)?.consent_revision) ?? 1);
 
-    // Bump up — accepted.
-    await putSettings(page, nonce, { general: { consent_revision: currentRev + 5 } });
-    let mid = await getSettings(page, nonce);
-    expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
+    try {
+      // Bump up — accepted.
+      await putSettings(page, nonce, { general: { consent_revision: currentRev + 5 } });
+      let mid = await getSettings(page, nonce);
+      expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
 
-    // Try to lower — the sanitizer must keep the persisted (higher) value.
-    await putSettings(page, nonce, { general: { consent_revision: currentRev } });
-    mid = await getSettings(page, nonce);
-    expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
+      // Try to lower — the sanitizer must keep the persisted (higher) value.
+      await putSettings(page, nonce, { general: { consent_revision: currentRev } });
+      mid = await getSettings(page, nonce);
+      expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
+    } finally {
+      // Put it back, and do it BELOW the REST layer on purpose.
+      //
+      // consent_revision invalidates every stored consent cookie on the site —
+      // that is the point of the feature. This test raises it by 5 and, because
+      // the sanitiser refuses to lower it (which is exactly what the assertions
+      // above prove), the bump used to be permanent: every run of the suite
+      // ratcheted it up and invalidated the consent of every spec downstream of
+      // this one. It had reached 6 on this box. The monotonic guard is correct
+      // for the product and wrong for a test that has to leave no trace, so the
+      // restore goes straight to the option.
+      wpEval(
+        "$s = get_option( 'faz_settings', array() ); " +
+        "if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); } " +
+        `$s['general']['consent_revision'] = ${currentRev}; ` +
+        "update_option( 'faz_settings', $s ); echo 'ok';",
+      );
+    }
   });
 
   test('H8: consent_forwarding.target_domains rejects non-http(s) schemes', async ({ page, loginAsAdmin }) => {

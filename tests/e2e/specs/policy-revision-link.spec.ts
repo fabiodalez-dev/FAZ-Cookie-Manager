@@ -17,7 +17,7 @@ import { test, expect, completeAdminLogin } from '../fixtures/wp-fixture';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { getAdminNonce, fazApiGet, fazApiPost } from '../utils/faz-api';
 import { clickFirstVisible } from '../utils/ui';
-import { deleteOption } from '../utils/wp-env';
+import { deleteOption, wpEval } from '../utils/wp-env';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const NOTICE = '#faz-cp-version-notice';
@@ -120,7 +120,35 @@ async function withAdminPage(
 
 // beforeAll/afterAll can only see worker-scoped fixtures, hence `wpCreds`
 // rather than the per-test wpBaseURL/adminUser/adminPass trio.
+// Acknowledging a MATERIAL change bumps faz_settings.general.consent_revision,
+// and that counter invalidates every stored consent cookie on the site — it is
+// how the plugin re-prompts visitors after a policy change. This spec therefore
+// mutates global state that has nothing to do with cookie policy, and has to
+// put it back: leaving it bumped makes the NEXT spec's pre-seeded consent stale,
+// which surfaces far away as, say, per-service consent "failing" to keep _ga
+// after a reload. That only started biting once the bump was fixed to actually
+// change something — before, the notice never appeared, the material button was
+// never clicked, and the counter never moved.
+let consentRevisionSnapshot = 1;
+
+function readConsentRevision(): number {
+  const raw = wpEval(
+    "$s = get_option( 'faz_settings', array() ); echo (int) ( $s['general']['consent_revision'] ?? 1 );",
+  );
+  return Number.parseInt(raw.trim(), 10) || 1;
+}
+
+function writeConsentRevision(value: number): void {
+  wpEval(
+    "$s = get_option( 'faz_settings', array() ); " +
+    "if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); } " +
+    `$s['general']['consent_revision'] = ${value}; ` +
+    "update_option( 'faz_settings', $s ); echo 'ok';",
+  );
+}
+
 test.beforeAll(async ({ browser, wpCreds }) => {
+  consentRevisionSnapshot = readConsentRevision();
   await withAdminPage(browser, wpCreds, async (page) => {
     const nonce = await getAdminNonce(page);
     const current = await fazApiGet<PolicySettings>(page, nonce, 'cookie-policy/settings');
@@ -129,6 +157,7 @@ test.beforeAll(async ({ browser, wpCreds }) => {
 });
 
 test.afterAll(async ({ browser, wpCreds }) => {
+  writeConsentRevision(consentRevisionSnapshot);
   await withAdminPage(browser, wpCreds, async (page) => {
     const nonce = await getAdminNonce(page);
     if (settingsSnapshot) {
