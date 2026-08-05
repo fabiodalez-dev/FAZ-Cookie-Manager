@@ -348,6 +348,13 @@ test.describe('Guided setup wizard', () => {
       }
 
       // Enable TCF with no CMP ID → Next must stay on step 5 with the inline error.
+      //
+      // Clear the field first: setup.php pre-fills it from
+      // faz_settings['iab']['cmp_id'], and this site carries 123 from another
+      // spec. With a valid id already in the box the wizard advances — correctly
+      // — and the failure reads as "the TCF gate is broken" when the test simply
+      // never built the state it describes.
+      await page.fill('#faz-setup-tcf-cmpid', '');
       await page.locator('#faz-setup-tcf').check();
       await page.click('#faz-setup-next');
       await expect(page.locator('.faz-wizard-step[data-step="5"]')).toBeVisible();
