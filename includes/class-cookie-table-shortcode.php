@@ -11,6 +11,7 @@
 namespace FazCookie\Includes;
 
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
+use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -71,6 +72,35 @@ class Cookie_Table_Shortcode {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Localize a cookie field, consulting bundled fallbacks before falling
+	 * back to another stored language.
+	 *
+	 * @param Cookie $cookie  Cookie model.
+	 * @param mixed  $value   Multilingual field value.
+	 * @param string $key     description|duration.
+	 * @param string $lang    Requested language.
+	 * @param string $default Default plugin language.
+	 * @param string $wp_lang WordPress locale prefix.
+	 * @return string
+	 */
+	private function localize_cookie_field( Cookie $cookie, $value, $key, $lang, $default, $wp_lang = '' ) {
+		if ( is_array( $value ) ) {
+			if ( isset( $value[ $lang ] ) && is_string( $value[ $lang ] ) && '' !== $value[ $lang ] ) {
+				return $value[ $lang ];
+			}
+			if ( $wp_lang && isset( $value[ $wp_lang ] ) && is_string( $value[ $wp_lang ] ) && '' !== $value[ $wp_lang ] ) {
+				return $value[ $wp_lang ];
+			}
+		}
+
+		$translated = $lang ? $cookie->get_translations( $lang, $key ) : '';
+		if ( '' === $translated && $wp_lang ) {
+			$translated = $cookie->get_translations( $wp_lang, $key );
+		}
+		return '' !== $translated ? $translated : $this->localize( $value, $lang, $default, $wp_lang );
 	}
 
 	/**
@@ -317,6 +347,7 @@ class Cookie_Table_Shortcode {
 				</thead>
 				<tbody>
 					<?php foreach ( $cat_cookies as $cookie ) : ?>
+					<?php $cookie_obj = new Cookie( $cookie ); ?>
 					<tr>
 						<?php foreach ( $columns as $col ) : ?>
 							<td data-label="<?php echo esc_attr( $allowed_columns[ $col ] ); ?>">
@@ -329,16 +360,20 @@ class Cookie_Table_Shortcode {
 									echo esc_html( isset( $cookie->domain ) ? $cookie->domain : '' );
 									break;
 								case 'duration':
-									echo esc_html( $this->localize(
+									echo esc_html( $this->localize_cookie_field(
+										$cookie_obj,
 										isset( $cookie->duration ) ? $cookie->duration : '',
+										'duration',
 										$lang,
 										$default,
 										$wp_lang
 									) );
 									break;
 								case 'description':
-									echo esc_html( $this->localize(
+									echo esc_html( $this->localize_cookie_field(
+										$cookie_obj,
 										isset( $cookie->description ) ? $cookie->description : '',
+										'description',
 										$lang,
 										$default,
 										$wp_lang

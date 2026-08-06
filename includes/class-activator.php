@@ -110,7 +110,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.06.17.1';
+	const MIGRATIONS_VERSION = '2026.08.06.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -138,11 +138,35 @@ class Activator {
 			self::ensure_share_personal_data_column();
 			self::clear_necessary_optout_flags();
 			self::reset_stale_per_cookie_consent();
+			self::refresh_cookie_translation_caches();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+	}
+
+	/**
+	 * Upgrade migration for the cookie-content translation fallback.
+	 *
+	 * Cookie/category controller caches contain prepared cookie arrays, so an
+	 * existing persistent cache may still hold the pre-translation payload even
+	 * though no database rewrite or schema change is required. Rotate those
+	 * caches once on upgrade and remove the language-keyed policy fragments.
+	 *
+	 * @return void
+	 */
+	public static function refresh_cookie_translation_caches() {
+		Cookie_Controller::get_instance()->delete_cache();
+		Category_Controller::get_instance()->delete_cache();
+
+		$languages = function_exists( 'faz_selected_languages' ) ? faz_selected_languages() : array( 'en' );
+		foreach ( (array) $languages as $language ) {
+			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
+		}
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
 	}
 
 	/**

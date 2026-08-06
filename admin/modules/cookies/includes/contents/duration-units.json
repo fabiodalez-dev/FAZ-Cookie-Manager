@@ -1,0 +1,439 @@
+{
+  "cs": {
+    "session": "relace",
+    "persistent": "trvalé",
+    "second": {
+      "one": "sekunda",
+      "few": "sekundy",
+      "other": "sekund"
+    },
+    "minute": {
+      "one": "minuta",
+      "few": "minuty",
+      "other": "minut"
+    },
+    "hour": {
+      "one": "hodina",
+      "few": "hodiny",
+      "other": "hodin"
+    },
+    "day": {
+      "one": "den",
+      "few": "dny",
+      "other": "dní"
+    },
+    "week": {
+      "one": "týden",
+      "few": "týdny",
+      "other": "týdnů"
+    },
+    "month": {
+      "one": "měsíc",
+      "few": "měsíce",
+      "other": "měsíců"
+    },
+    "year": {
+      "one": "rok",
+      "few": "roky",
+      "other": "let"
+    }
+  },
+  "de": {
+    "session": "Sitzung",
+    "persistent": "dauerhaft",
+    "second": {
+      "one": "Sekunde",
+      "other": "Sekunden"
+    },
+    "minute": {
+      "one": "Minute",
+      "other": "Minuten"
+    },
+    "hour": {
+      "one": "Stunde",
+      "other": "Stunden"
+    },
+    "day": {
+      "one": "Tag",
+      "other": "Tage"
+    },
+    "week": {
+      "one": "Woche",
+      "other": "Wochen"
+    },
+    "month": {
+      "one": "Monat",
+      "other": "Monate"
+    },
+    "year": {
+      "one": "Jahr",
+      "other": "Jahre"
+    }
+  },
+  "en": {
+    "session": "session",
+    "persistent": "persistent",
+    "second": {
+      "one": "second",
+      "other": "seconds"
+    },
+    "minute": {
+      "one": "minute",
+      "other": "minutes"
+    },
+    "hour": {
+      "one": "hour",
+      "other": "hours"
+    },
+    "day": {
+      "one": "day",
+      "other": "days"
+    },
+    "week": {
+      "one": "week",
+      "other": "weeks"
+    },
+    "month": {
+      "one": "month",
+      "other": "months"
+    },
+    "year": {
+      "one": "year",
+      "other": "years"
+    }
+  },
+  "es": {
+    "session": "sesión",
+    "persistent": "persistente",
+    "second": {
+      "one": "segundo",
+      "other": "segundos"
+    },
+    "minute": {
+      "one": "minuto",
+      "other": "minutos"
+    },
+    "hour": {
+      "one": "hora",
+      "other": "horas"
+    },
+    "day": {
+      "one": "día",
+      "other": "días"
+    },
+    "week": {
+      "one": "semana",
+      "other": "semanas"
+    },
+    "month": {
+      "one": "mes",
+      "other": "meses"
+    },
+    "year": {
+      "one": "año",
+      "other": "años"
+    }
+  },
+  "fi": {
+    "session": "istunto",
+    "persistent": "pysyvä",
+    "second": {
+      "one": "sekunti",
+      "other": "sekuntia"
+    },
+    "minute": {
+      "one": "minuutti",
+      "other": "minuuttia"
+    },
+    "hour": {
+      "one": "tunti",
+      "other": "tuntia"
+    },
+    "day": {
+      "one": "päivä",
+      "other": "päivää"
+    },
+    "week": {
+      "one": "viikko",
+      "other": "viikkoa"
+    },
+    "month": {
+      "one": "kuukausi",
+      "other": "kuukautta"
+    },
+    "year": {
+      "one": "vuosi",
+      "other": "vuotta"
+    }
+  },
+  "fr": {
+    "session": "session",
+    "persistent": "persistant",
+    "second": {
+      "one": "seconde",
+      "other": "secondes"
+    },
+    "minute": {
+      "one": "minute",
+      "other": "minutes"
+    },
+    "hour": {
+      "one": "heure",
+      "other": "heures"
+    },
+    "day": {
+      "one": "jour",
+      "other": "jours"
+    },
+    "week": {
+      "one": "semaine",
+      "other": "semaines"
+    },
+    "month": {
+      "one": "mois",
+      "other": "mois"
+    },
+    "year": {
+      "one": "an",
+      "other": "ans"
+    }
+  },
+  "hr": {
+    "second": {
+      "one": "sekunda",
+      "few": "sekunde",
+      "other": "sekundi"
+    },
+    "minute": {
+      "one": "minuta",
+      "few": "minute",
+      "other": "minuta"
+    },
+    "hour": {
+      "one": "sat",
+      "few": "sata",
+      "other": "sati"
+    },
+    "day": {
+      "one": "dan",
+      "few": "dana",
+      "other": "dana"
+    },
+    "week": {
+      "one": "tjedan",
+      "few": "tjedna",
+      "other": "tjedana"
+    },
+    "month": {
+      "one": "mjesec",
+      "few": "mjeseca",
+      "other": "mjeseci"
+    },
+    "year": {
+      "one": "godina",
+      "few": "godine",
+      "other": "godina"
+    },
+    "session": "sesija",
+    "persistent": "trajno"
+  },
+  "hu": {
+    "session": "munkamenet",
+    "persistent": "állandó",
+    "second": {
+      "one": "másodperc",
+      "other": "másodperc"
+    },
+    "minute": {
+      "one": "perc",
+      "other": "perc"
+    },
+    "hour": {
+      "one": "óra",
+      "other": "óra"
+    },
+    "day": {
+      "one": "nap",
+      "other": "nap"
+    },
+    "week": {
+      "one": "hét",
+      "other": "hét"
+    },
+    "month": {
+      "one": "hónap",
+      "other": "hónap"
+    },
+    "year": {
+      "one": "év",
+      "other": "év"
+    }
+  },
+  "it": {
+    "session": "sessione",
+    "persistent": "persistente",
+    "second": {
+      "one": "secondo",
+      "other": "secondi"
+    },
+    "minute": {
+      "one": "minuto",
+      "other": "minuti"
+    },
+    "hour": {
+      "one": "ora",
+      "other": "ore"
+    },
+    "day": {
+      "one": "giorno",
+      "other": "giorni"
+    },
+    "week": {
+      "one": "settimana",
+      "other": "settimane"
+    },
+    "month": {
+      "one": "mese",
+      "other": "mesi"
+    },
+    "year": {
+      "one": "anno",
+      "other": "anni"
+    }
+  },
+  "nl": {
+    "session": "sessie",
+    "persistent": "permanent",
+    "second": {
+      "one": "seconde",
+      "other": "seconden"
+    },
+    "minute": {
+      "one": "minuut",
+      "other": "minuten"
+    },
+    "hour": {
+      "one": "uur",
+      "other": "uur"
+    },
+    "day": {
+      "one": "dag",
+      "other": "dagen"
+    },
+    "week": {
+      "one": "week",
+      "other": "weken"
+    },
+    "month": {
+      "one": "maand",
+      "other": "maanden"
+    },
+    "year": {
+      "one": "jaar",
+      "other": "jaar"
+    }
+  },
+  "pl": {
+    "session": "sesja",
+    "persistent": "trwałe",
+    "second": {
+      "one": "sekunda",
+      "few": "sekundy",
+      "other": "sekund"
+    },
+    "minute": {
+      "one": "minuta",
+      "few": "minuty",
+      "other": "minut"
+    },
+    "hour": {
+      "one": "godzina",
+      "few": "godziny",
+      "other": "godzin"
+    },
+    "day": {
+      "one": "dzień",
+      "few": "dni",
+      "other": "dni"
+    },
+    "week": {
+      "one": "tydzień",
+      "few": "tygodnie",
+      "other": "tygodni"
+    },
+    "month": {
+      "one": "miesiąc",
+      "few": "miesiące",
+      "other": "miesięcy"
+    },
+    "year": {
+      "one": "rok",
+      "few": "lata",
+      "other": "lat"
+    }
+  },
+  "pt": {
+    "session": "sessão",
+    "persistent": "persistente",
+    "second": {
+      "one": "segundo",
+      "other": "segundos"
+    },
+    "minute": {
+      "one": "minuto",
+      "other": "minutos"
+    },
+    "hour": {
+      "one": "hora",
+      "other": "horas"
+    },
+    "day": {
+      "one": "dia",
+      "other": "dias"
+    },
+    "week": {
+      "one": "semana",
+      "other": "semanas"
+    },
+    "month": {
+      "one": "mês",
+      "other": "meses"
+    },
+    "year": {
+      "one": "ano",
+      "other": "anos"
+    }
+  },
+  "pt-br": {
+    "session": "sessão",
+    "persistent": "persistente",
+    "second": {
+      "one": "segundo",
+      "other": "segundos"
+    },
+    "minute": {
+      "one": "minuto",
+      "other": "minutos"
+    },
+    "hour": {
+      "one": "hora",
+      "other": "horas"
+    },
+    "day": {
+      "one": "dia",
+      "other": "dias"
+    },
+    "week": {
+      "one": "semana",
+      "other": "semanas"
+    },
+    "month": {
+      "one": "mês",
+      "other": "meses"
+    },
+    "year": {
+      "one": "ano",
+      "other": "anos"
+    }
+  }
+}
