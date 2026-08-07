@@ -109,6 +109,51 @@ export async function listCookies(page: Page, nonce: string): Promise<any[]> {
   return normalizeCookieList(response.data);
 }
 
+/**
+ * List cookies, waiting until every expected name is present.
+ *
+ * A scan reports "complete" in the UI before its rows are necessarily readable
+ * through the REST list, so `await listCookies(); expect(names).toContain(x)`
+ * asserts against whatever happened to be persisted at that instant. It holds on
+ * an idle box and fails under full-suite load — the specs that used it passed
+ * alone and went red in the full run, which is that race and not a defect in the
+ * scanner.
+ *
+ * Retrying the REQUEST is not enough and was the existing mistake: the request
+ * succeeds, it just answers with an incomplete list. Poll the CONDITION instead.
+ * A genuinely missing cookie still fails, just after the deadline and with the
+ * names it did find, which is the message you actually want at 3am.
+ */
+export async function listCookiesUntil(
+  page: Page,
+  nonce: string,
+  expectedNames: string[],
+  timeoutMs = 30_000
+): Promise<any[]> {
+  const deadline = Date.now() + timeoutMs;
+  let cookies: any[] = [];
+  let missing: string[] = [];
+  for (;;) {
+    try {
+      cookies = await listCookies(page, nonce);
+      const names = new Set(cookies.map((entry: any) => String(entry?.name ?? '')));
+      missing = expectedNames.filter((name) => !names.has(name));
+      if (missing.length === 0) {
+        return cookies;
+      }
+    } catch {
+      // Transport hiccup mid-scan — keep polling until the deadline.
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Cookies still missing after ${Math.round(timeoutMs / 1000)}s: ${missing.join(', ') || expectedNames.join(', ')}. ` +
+          `Found ${cookies.length}: ${cookies.map((c: any) => c?.name).slice(0, 25).join(', ')}`
+      );
+    }
+    await page.waitForTimeout(1000);
+  }
+}
+
 export async function listCategories(page: Page, nonce: string): Promise<any[]> {
   const response = await fazApiGet<any>(page, nonce, 'cookies/categories');
   return Array.isArray(response.data) ? response.data : normalizeCookieList(response.data);

@@ -168,6 +168,44 @@ reviews:
         Key migration: advertisement→marketing slug rename with merge handling.
         Async OCD download via wp_schedule_single_event (don't block activation).
 
+    - path: "tests/unit/**"
+      instructions: |
+        Standalone test harnesses — NOT production code. There is no PHPUnit and
+        no WordPress bootstrap: each tests/unit/*.php is a program run directly
+        (`php tests/unit/<file>.php`), and tests/unit/js/*.test.mjs load the real
+        frontend JS in jsdom. `npm run test:unit` runs them all.
+        Do NOT flag as security or quality issues:
+        - Redefined WordPress functions (__(), esc_html(), wp_kses(), $wpdb, …).
+          They are deliberate shims so the test runs without WP; several are
+          identity functions on purpose, and a docblock in the file says so.
+        - Missing escaping, nonce checks or capability checks in harness code.
+        - Missing docblocks on the small assert helpers.
+        - Private members reached through Reflection, and statics reset the same
+          way. That is how these tests reach the units under test.
+        DO flag, and this is the point of reviewing them:
+        - Assertions that cannot fail. The recurring shape is a substring check
+          whose needle is also a substring of the rewritten form — asserting
+          `src="…"` is absent when the fix rewrites it to `data-faz-src="…"`
+          passes no matter what the code does. Anchor on the whole tag.
+        - Tests that pin the buggy behaviour instead of the intended one, and
+          fixtures whose shape does not match the production defaults they stand
+          in for (category slugs, settings keys, cookie format).
+        - Reflection-set property names that no longer exist on the real class:
+          setValue() on a stale name fails silently and the test then measures a
+          default, not the state it meant to build.
+        - A changed branch left uncovered, or coverage added only for the happy
+          path when the PR's risk is in the failure path.
+
+    - path: "tests/integration/**"
+      instructions: |
+        Integration harnesses, run directly like the unit ones and sharing their
+        shim idiom — apply the tests/unit/** instructions above. These exercise
+        code that talks to the outside world (GeoLite2 download and extraction),
+        so the failure path is the part that matters: a missing require_once for
+        an admin-only WP file, an unqualified call to a WP function from inside
+        the FazCookie\* namespace, or a download error swallowed instead of
+        surfaced. Those have shipped as fatals before (issues #85, #9).
+
     - path: "tests/e2e/**"
       instructions: |
         Playwright E2E tests. Conventions:
@@ -202,14 +240,12 @@ reviews:
     - "!admin/modules/banners/includes/presets/**/*.json"
     - "!admin/modules/cookies/includes/contents/**/*.json"
     - "!admin/dist/**"
-    # Standalone PHP unit/integration test harnesses. They redefine WordPress
-    # functions as no-op shims (__(), esc_html(), download_url(), …) so the
-    # tests run without a full WP bootstrap; those shims are not production code
-    # and should not count toward docstring coverage or review noise. The
-    # Playwright E2E suite (tests/e2e/**) stays reviewed — see the path
-    # instructions above.
-    - "!tests/unit/**"
-    - "!tests/integration/**"
+    # tests/unit/** and tests/integration/** used to be excluded here, because
+    # their WordPress shims read as unescaped production code. That also hid the
+    # tests proving a fix — the reviewer saw the changed behaviour with no way to
+    # see whether anything actually pinned it. They are reviewed now; the shim
+    # noise is handled by the path instructions above, which say what is a
+    # deliberate harness idiom and what is a test worth failing over.
 
   tools:
     phpstan:

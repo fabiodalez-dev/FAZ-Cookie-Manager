@@ -7,7 +7,7 @@
  */
 import { completeAdminLogin, expect, test } from '../fixtures/wp-fixture';
 import { getWpLoginPath } from '../utils/wp-auth';
-import { wpEval } from '../utils/wp-env';
+import { isPluginActive, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const WP_ADMIN_USER = process.env.WP_ADMIN_USER ?? 'admin';
@@ -1150,6 +1150,13 @@ test.describe('Koko Analytics cookie recognition', () => {
   });
 
   test('Koko Analytics script pattern is recognized by Known Providers', async ({ page, loginAsAdmin }) => {
+    // The assertion below says "when plugin is active" but nothing ever checked
+    // that it was. Koko Analytics is installed on this box and deactivated, so
+    // the test failed on the third party's absence rather than on anything FAZ
+    // does — a red that carries no information. The sibling test above needs no
+    // such guard: it reads FAZ's own built-in cookie database, which knows about
+    // Koko whether or not the plugin is installed.
+    test.skip(!isPluginActive('koko-analytics'), 'Koko Analytics is not active on this environment');
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 

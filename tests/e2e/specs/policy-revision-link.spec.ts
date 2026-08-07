@@ -17,6 +17,7 @@ import { test, expect, completeAdminLogin } from '../fixtures/wp-fixture';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { getAdminNonce, fazApiGet, fazApiPost } from '../utils/faz-api';
 import { clickFirstVisible } from '../utils/ui';
+import { deleteOption, wpEval } from '../utils/wp-env';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const NOTICE = '#faz-cp-version-notice';
@@ -43,16 +44,30 @@ async function openAdmin(page: Page): Promise<void> {
  * (Section_Overrides fails closed), so it would leave the hash untouched and
  * this suite would pass while asserting nothing.
  */
+// Unique per run, so a bump always lands on a value the ledger has never seen.
+const revisionRunId = Math.random().toString(36).slice(2, 8);
+let bumpCounter = 0;
+
 async function bumpPolicyVersion(page: Page, marker: string): Promise<void> {
   const nonce = await getAdminNonce(page);
   const current = await fazApiGet<PolicySettings>(page, nonce, 'cookie-policy/settings');
   expect(current.status).toBe(200);
 
   const company = current.data.company ?? {};
-  const baseName = String(company.name ?? 'Test Co').replace(/ \[rev [^\]]*\]$/, '');
+  // Strip EVERY trailing marker, not just the last one, and refuse an empty
+  // result. On this test site the name had degenerated to
+  // "[rev material] [rev material]": the single-marker regex left one behind,
+  // beforeAll snapshotted the already-contaminated value, and afterAll restored
+  // it — so each run ate a little more of the real name.
+  const baseName = String(company.name ?? '').replace(/(?: \[rev [^\]]*\])+$/, '').trim() || 'Test Co';
+  // The marker alone does not guarantee a CHANGE. Re-running with the same
+  // marker used to write back the identical string, so the policy hash never
+  // moved and "a material change re-prompts" waited for a notice that had no
+  // reason to appear — a test that could only pass once per marker value.
+  bumpCounter += 1;
   const next = {
     ...current.data,
-    company: { ...company, name: `${baseName} [rev ${marker}]` },
+    company: { ...company, name: `${baseName} [rev ${marker} ${bumpCounter}-${revisionRunId}]` },
   };
   const saved = await fazApiPost<{ saved: boolean }>(page, nonce, 'cookie-policy/settings', next);
   expect(saved.status).toBe(200);
@@ -105,7 +120,35 @@ async function withAdminPage(
 
 // beforeAll/afterAll can only see worker-scoped fixtures, hence `wpCreds`
 // rather than the per-test wpBaseURL/adminUser/adminPass trio.
+// Acknowledging a MATERIAL change bumps faz_settings.general.consent_revision,
+// and that counter invalidates every stored consent cookie on the site — it is
+// how the plugin re-prompts visitors after a policy change. This spec therefore
+// mutates global state that has nothing to do with cookie policy, and has to
+// put it back: leaving it bumped makes the NEXT spec's pre-seeded consent stale,
+// which surfaces far away as, say, per-service consent "failing" to keep _ga
+// after a reload. That only started biting once the bump was fixed to actually
+// change something — before, the notice never appeared, the material button was
+// never clicked, and the counter never moved.
+let consentRevisionSnapshot = 1;
+
+function readConsentRevision(): number {
+  const raw = wpEval(
+    "$s = get_option( 'faz_settings', array() ); echo (int) ( $s['general']['consent_revision'] ?? 1 );",
+  );
+  return Number.parseInt(raw.trim(), 10) || 1;
+}
+
+function writeConsentRevision(value: number): void {
+  wpEval(
+    "$s = get_option( 'faz_settings', array() ); " +
+    "if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); } " +
+    `$s['general']['consent_revision'] = ${value}; ` +
+    "update_option( 'faz_settings', $s ); echo 'ok';",
+  );
+}
+
 test.beforeAll(async ({ browser, wpCreds }) => {
+  consentRevisionSnapshot = readConsentRevision();
   await withAdminPage(browser, wpCreds, async (page) => {
     const nonce = await getAdminNonce(page);
     const current = await fazApiGet<PolicySettings>(page, nonce, 'cookie-policy/settings');
@@ -114,6 +157,7 @@ test.beforeAll(async ({ browser, wpCreds }) => {
 });
 
 test.afterAll(async ({ browser, wpCreds }) => {
+  writeConsentRevision(consentRevisionSnapshot);
   await withAdminPage(browser, wpCreds, async (page) => {
     const nonce = await getAdminNonce(page);
     if (settingsSnapshot) {
@@ -138,6 +182,15 @@ test.afterAll(async ({ browser, wpCreds }) => {
 });
 
 test('first load seeds the ledger silently — the feature itself never prompts', async ({ page, loginAsAdmin }) => {
+  // Establish the first load instead of hoping for one. The ledger is a
+  // persistent option: any earlier run of this spec — or a run interrupted
+  // before its afterAll could acknowledge — leaves an acknowledged hash behind,
+  // and once the policy content has moved on the notice is showing before this
+  // test opens the page. It then failed on a precondition it never set up,
+  // which made it fail in isolation while passing inside the full suite and
+  // vice versa depending on run order.
+  deleteOption('faz_legal_doc_acknowledged');
+
   await loginAsAdmin(page);
   await openAdmin(page);
   await expect(page.locator(NOTICE)).toHaveCount(0);
