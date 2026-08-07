@@ -389,6 +389,40 @@ namespace {
 	assert_true( false !== strpos( $out, 'data-faz-src="https://youtube.com/embed/abc"' ), 'svc:no gates its own resource despite a consented category' );
 	assert_true( false !== strpos( $out, '<img src="https://www.facebook.com/tr?id=77"' ), 'the undecided, unblocked sibling is untouched' );
 
+	// ---------- review findings: permission must not travel ----------
+
+	echo "\n-- block-level decisions and rewrite aliasing --\n";
+
+	// 16. A block-level per-service GRANT must not release a sibling that has no
+	//     decision of its own and whose category is denied. Denial may bind the
+	//     whole block; permission may not — that asymmetry is the whole point.
+	$fe   = faz_ob_frontend(
+		array( 'www.facebook.com/tr' => 'marketing' ),
+		array( 'marketing' ),
+		array(),
+		array( 'analytics-suite' => 'yes' ),
+		array( 'gtag(' => array( 'analytics-suite' ) ) // non-URL pattern: matches the BLOCK TEXT
+	);
+	$html = '<html><body><noscript>'
+		. '<!-- gtag( bootstrap -->'
+		. '<img src="https://www.facebook.com/tr?id=55"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( false === strpos( $out, '<img src="https://www.facebook.com/tr?id=55"' ), 'a granted service named in the block text does not release a denied sibling' );
+
+	// 17. The rewrite must target each match by POSITION. The pattern captures an
+	//     opening tag without its ">", so a gated tag is a literal prefix of a
+	//     longer sibling; a substring replace rewrote that sibling too, even when
+	//     the admin had whitelisted it.
+	$fe   = faz_ob_frontend( array( 'www.facebook.com/tr' => 'marketing' ), array( 'marketing' ) );
+	$html = '<html><body><noscript>'
+		. '<img src="https://www.facebook.com/tr?id=77"/>'
+		. '<img src="https://www.facebook.com/tr?id=77" class="faz-skip"/>'
+		. '</noscript></body></html>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( 1 === substr_count( $out, 'data-faz-category=' ), 'exactly one tag is gated — the faz-skip look-alike is untouched' );
+	assert_true( false !== strpos( $out, '<img src="https://www.facebook.com/tr?id=77" class="faz-skip"' ), 'the exempted sibling keeps its live src' );
+
 	// ---------- result ----------
 
 	echo "\n";

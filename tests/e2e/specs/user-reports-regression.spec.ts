@@ -671,6 +671,23 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 			);
 			await page.evaluate(() => (window as unknown as { _fazAcceptCookies: (c: string) => unknown })._fazAcceptCookies('all'));
 
+			// The acceptance page itself must already have announced the new
+			// state: the readme's example (start a map when `functional` is
+			// granted) has to run where the visitor clicked, not only after a
+			// navigation. Before the fix the last event on this page said
+			// everything was rejected.
+			await page.waitForFunction(
+				() => ((window as unknown as { __fazEvents?: Array<{ action?: string }> }).__fazEvents ?? [])
+					.some((d) => d.action === 'update'),
+				undefined,
+				{ timeout: 15_000 }
+			);
+			const onAccept = (await page.evaluate(
+				() => (window as unknown as { __fazEvents: Array<{ action?: string; accepted?: string[] }> }).__fazEvents
+			)) as Array<{ action?: string; accepted?: string[] }>;
+			const updated = onAccept.find((d) => d.action === 'update');
+			expect(updated?.accepted ?? [], 'the accept page must announce the granted categories').toContain('functional');
+
 			// Second page: the consent cookie is already there, and the visitor
 			// takes no action at all. This is the case that fired nothing.
 			await page.goto(`${WP_BASE}/?faz_second_page=1`, { waitUntil: 'domcontentloaded' });

@@ -3020,14 +3020,16 @@ class Frontend {
 		// `<noscript>` blocks for JS-disabled visitors; those still need to be
 		// consent-gated server-side. process_noscript_tag rewrites the
 		// `<noscript>` block's inner content (img src → data-faz-src + data-faz-
-		// category) but preserves the enclosing `<noscript>` wrapper, so the
-		// stash pass below still finds the (now-processed) block and protects
-		// it from the iframe filter. Running this BEFORE the stash keeps the
-		// matcher's `<noscript>` lookup productive — the original placement
-		// AFTER the stash made this step dead code because every `<noscript>`
-		// had already been replaced with a `__FAZ_NOSCRIPT_STASH_N__` marker.
-		// Single merged <noscript> pass (was two full-document traversals):
-		// each block is pixel-processed AND immediately stashed.
+		// category) while preserving the enclosing `<noscript>` wrapper, so the
+		// stash that follows still sees a well-formed block and protects it
+		// from the iframe filter.
+		//
+		// Single merged pass (was two full-document traversals): each block is
+		// pixel-processed AND stashed in the same callback. The ordering inside
+		// that callback is what matters — gate first, stash second. Stashing
+		// first is what the original two-pass version got wrong, and it made
+		// the gating dead code, because by then every `<noscript>` had already
+		// become a `__FAZ_NOSCRIPT_STASH_N__` marker with nothing left to match.
 		//
 		// Stashing protects <noscript> content from the script/iframe/link
 		// filters below: it only renders when JS is disabled; visitors with JS
@@ -3449,23 +3451,34 @@ class Frontend {
 		// tag. Both the gating decision below and the category label written
 		// onto each rewritten tag need it, and matching twice invites the two to
 		// disagree.
+		// EVERY match is kept, in document order, whitelisted ones included and
+		// flagged. The rewrite below re-walks the same pattern with a counter, so
+		// the two passes have to see the same list or the indices drift.
 		$embedded_tags  = array();
+		$tag_whitelisted = array();
 		$tag_categories = array();
 		$tag_svcs       = array();
 		if ( preg_match_all( '#<(?:img|iframe)\b[^>]*#i', $content, $embedded_matches ) ) {
 			foreach ( $embedded_matches[0] as $embedded_tag ) {
-				if ( $this->is_whitelisted( $embedded_tag, '' ) ) {
-					continue;
-				}
-				$embedded_tags[]  = $embedded_tag;
-				$tag_categories[] = $this->match_script_to_provider( $embedded_tag, '', $providers );
-				$tag_svcs[]       = $this->check_per_service_blocking( $embedded_tag, '' );
+				$whitelisted       = $this->is_whitelisted( $embedded_tag, '' );
+				$embedded_tags[]   = $embedded_tag;
+				$tag_whitelisted[] = $whitelisted;
+				$tag_categories[]  = $whitelisted ? '' : $this->match_script_to_provider( $embedded_tag, '', $providers );
+				$tag_svcs[]        = $whitelisted ? null : $this->check_per_service_blocking( $embedded_tag, '' );
 			}
 		}
 
 		// The block's own text can carry a per-service decision too (a service
-		// named in a comment or in the fallback markup). It stands in for any
-		// resource that has no decision of its own.
+		// named in the fallback markup). It is inherited by a resource that has
+		// no decision of its own ONLY when it is restrictive.
+		//
+		// Letting a block-level svc:yes stand in for an undecided resource is the
+		// same aggregation bypass this method was rewritten to remove, just one
+		// level up: a service named in the block text and granted would release a
+		// sibling pixel whose own category is denied, and that sibling would load
+		// before consent for a visitor without JavaScript. Permission does not
+		// travel between resources; denial may, because erring restrictive at
+		// worst blocks something the visitor allowed and never the reverse.
 		$content_svc = $this->check_per_service_blocking( '', $content );
 
 		// Decide EVERY resource on its own terms. Aggregating the block into one
@@ -3479,9 +3492,19 @@ class Frontend {
 		// <noscript> as a tracking fallback.
 		$gate = array();
 		foreach ( $embedded_tags as $index => $tag_attrs ) {
-			$svc = null !== $tag_svcs[ $index ] ? $tag_svcs[ $index ] : $content_svc;
-			if ( null !== $svc ) {
-				$gate[ $index ] = ( true === $svc );
+			if ( ! empty( $tag_whitelisted[ $index ] ) ) {
+				$gate[ $index ] = false;
+				continue;
+			}
+			// The resource's OWN decision, either way.
+			if ( null !== $tag_svcs[ $index ] ) {
+				$gate[ $index ] = ( true === $tag_svcs[ $index ] );
+				continue;
+			}
+			// No decision of its own: a restrictive block-level one still binds,
+			// a permissive one does not (see above).
+			if ( true === $content_svc ) {
+				$gate[ $index ] = true;
 				continue;
 			}
 			$cat            = $tag_categories[ $index ] ? $tag_categories[ $index ] : $content_matched;
@@ -3507,38 +3530,57 @@ class Frontend {
 		// triggered here. Now that each embedded tag is matched properly, it
 		// triggers often, which turns a latent over-block into a routine one.
 		$blocked_content = $content;
-		foreach ( $embedded_tags as $index => $tag_attrs ) {
-			if ( empty( $gate[ $index ] ) ) {
-				continue;
-			}
-			// Label each resource with ITS OWN category where one is known.
-			// Falling back to a single block-level category for every tag
-			// mislabels a block that mixes providers — a Meta pixel and a YouTube
-			// embed would both be reported under whichever matched first, and the
-			// visitor's per-category choice would be applied to the wrong one.
-			// A resource gated purely by a per-service decision may match no
-			// provider at all; 'functional' keeps it revealable rather than
-			// stranding it under a category nothing will ever grant.
-			$label_category = $tag_categories[ $index ];
-			if ( ! $label_category ) {
-				$label_category = $content_matched ? $content_matched : 'functional';
-			}
-			$rewritten = preg_replace( '/(\s)src\s*=/i', '$1data-faz-src=', $tag_attrs, 1 );
-			// preg_replace returns null on a PCRE failure and the subject
-			// unchanged when nothing matched; neither is a tag to rewrite.
-			if ( null === $rewritten || $rewritten === $tag_attrs ) {
-				continue;
-			}
-			$rewritten = preg_replace(
-				'/^(<(?:img|iframe)\b)/i',
-				'$1 data-faz-category="' . esc_attr( $label_category ) . '"',
-				$rewritten,
-				1
-			);
-			if ( null === $rewritten ) {
-				continue;
-			}
-			$blocked_content = str_replace( $tag_attrs, $rewritten, $blocked_content );
+		// Rewrite in place, by position, with a counter — never by substring.
+		//
+		// str_replace() on the matched fragment replaced EVERY occurrence, and
+		// the pattern captures an opening tag WITHOUT its closing ">", so a
+		// gated `<img src="a.gif"` is a literal prefix of an allowed
+		// `<img src="a.gif" alt="logo">`. The allowed tag was rewritten too,
+		// inheriting the gated one's category, and a whitelisted resource the
+		// admin had deliberately exempted could be neutralised by a sibling it
+		// merely resembles. Walking the same pattern again with an index makes
+		// each match its own target and the aliasing unrepresentable.
+		$rewrite_index   = -1;
+		$blocked_content = preg_replace_callback(
+			'#<(?:img|iframe)\b[^>]*#i',
+			function ( $m ) use ( &$rewrite_index, $gate, $tag_categories, $content_matched ) {
+				$rewrite_index++;
+				$tag = $m[0];
+				if ( empty( $gate[ $rewrite_index ] ) ) {
+					return $tag;
+				}
+				// Label each resource with ITS OWN category where one is known.
+				// Falling back to a single block-level category for every tag
+				// mislabels a block that mixes providers — a Meta pixel and a
+				// YouTube embed would both be reported under whichever matched
+				// first, and the visitor's per-category choice would be applied
+				// to the wrong one. A resource gated purely by a per-service
+				// decision may match no provider at all; 'functional' keeps it
+				// revealable rather than stranding it under a category nothing
+				// will ever grant.
+				$label_category = isset( $tag_categories[ $rewrite_index ] ) ? $tag_categories[ $rewrite_index ] : '';
+				if ( ! $label_category ) {
+					$label_category = $content_matched ? $content_matched : 'functional';
+				}
+				$rewritten = preg_replace( '/(\s)src\s*=/i', '$1data-faz-src=', $tag, 1 );
+				// preg_replace returns null on a PCRE failure and the subject
+				// unchanged when nothing matched; neither is a tag to rewrite.
+				if ( null === $rewritten || $rewritten === $tag ) {
+					return $tag;
+				}
+				$rewritten = preg_replace(
+					'/^(<(?:img|iframe)\b)/i',
+					'$1 data-faz-category="' . esc_attr( $label_category ) . '"',
+					$rewritten,
+					1
+				);
+				return null === $rewritten ? $tag : $rewritten;
+			},
+			$content
+		);
+		if ( null === $blocked_content ) {
+			// PCRE failure — serve the block untouched rather than a mangled one.
+			return $full;
 		}
 		if ( $blocked_content === $content ) {
 			return $full;
@@ -5827,17 +5869,6 @@ class Frontend {
 	}
 
 	/**
-	 * Detect WP-generated inline script IDs owned by this plugin.
-	 *
-	 * Core appends these suffixes when printing `wp_localize_script()`,
-	 * translations, and before/after inline payloads. The output-buffer
-	 * fallback only sees the rendered `id`, so recover the registered handle
-	 * before applying the own-handle guard.
-	 *
-	 * @param string $id Inline script tag ID.
-	 * @return bool
-	 */
-	/**
 	 * Whether a rendered asset tag id ("<handle>-js" / "<handle>-css")
 	 * belongs to one of this plugin's own enqueued handles.
 	 *
@@ -5856,6 +5887,17 @@ class Frontend {
 		return $this->is_own_script_handle( substr( $id, 0, -$len ) );
 	}
 
+	/**
+	 * Detect WP-generated inline script IDs owned by this plugin.
+	 *
+	 * Core appends these suffixes when printing `wp_localize_script()`,
+	 * translations, and before/after inline payloads. The output-buffer
+	 * fallback only sees the rendered `id`, so recover the registered handle
+	 * before applying the own-handle guard.
+	 *
+	 * @param string $id Inline script tag ID.
+	 * @return bool
+	 */
 	private function is_own_inline_script_id( $id ) {
 		if ( ! is_string( $id ) || '' === $id ) {
 			return false;

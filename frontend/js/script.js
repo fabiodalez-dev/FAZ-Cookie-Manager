@@ -2921,6 +2921,26 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
 
     _fazUnblock();
     _fazFireEvent(responseCategories);
+    // Announce the new state on the SAME page the visitor acted on, right where
+    // the state actually changes.
+    //
+    // Without this, fazcookie_consent_ready only ever fired during bootstrap, so
+    // on the page where somebody clicks Accept the last one they received said
+    // everything was rejected — the readme's own example (start a map when
+    // `functional` is granted) would not have run until the next navigation.
+    //
+    // It sits HERE and not in _fazAfterConsent() because this function is the
+    // single choke point every consent path goes through, including a direct
+    // window._fazAcceptCookies() call; _fazAfterConsent() is only reached via
+    // the banner's own handlers. It is also past the age-gate guard above, so a
+    // consent that was parked and never recorded announces nothing.
+    //
+    // Safe to add because of who listens: only wca.js and microsoft-consent.js
+    // subscribe, and both carry a last-applied guard, so the pair
+    // (consent_update + consent_ready) results in one push. The listeners that
+    // must not see a page-load-shaped event — the consent logger, the pageview
+    // tracker, GCM and the TCF stub — are on fazcookie_consent_update only.
+    _fazFireConsentReadyEvent('update');
     return true;
 }
 

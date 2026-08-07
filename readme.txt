@@ -328,7 +328,9 @@ Listen for `fazcookie_consent_ready` on `document`. It fires once on **every** p
     }
 });`
 
-`e.detail` is `{ accepted: [slug, ...], rejected: [slug, ...], action: 'init' | 'restore' | 'gpc' }` -- `init` on a first visit (before any choice), `restore` for a visitor whose choice was already stored, `gpc` when a Global Privacy Control signal was auto-applied. Register the listener before the plugin's script runs, for example from an inline `<script>` in the head.
+`e.detail` is `{ accepted: [slug, ...], rejected: [slug, ...], action: 'init' | 'restore' | 'gpc' | 'update' }` -- `init` on a first visit before any choice, `restore` for a visitor whose choice was already stored, `gpc` when a Global Privacy Control signal was auto-applied, and `update` right after the visitor accepts, rejects or saves preferences. Register the listener before the plugin's script runs, for example from an inline `<script>` in the head.
+
+One caveat on timing: the event tells you the consent state, which is not the same as the plugin having already re-activated the scripts it was blocking. That unblock pass runs shortly afterwards. Your own code can act immediately; if you depend on a resource the plugin itself gated (a `data-faz-tag` script or iframe), wait for it rather than assuming it is live in the same tick.
 
 Use `fazcookie_consent_update` instead when you want to react to a **change**: it fires when the visitor accepts, rejects or saves preferences, and not on a plain page load by someone who already decided. A snippet that sends an analytics event belongs there, or it would fire on every page view.
 
