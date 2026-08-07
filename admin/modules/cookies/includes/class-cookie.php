@@ -8,11 +8,16 @@
 namespace FazCookie\Admin\Modules\Cookies\Includes;
 
 use FazCookie\Includes\Store;
+use FazCookie\Includes\Cookie_Content_I18n;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
+
+// This model is also loaded directly by standalone tests and CLI utilities,
+// where the plugin autoloader is intentionally unavailable.
+require_once dirname( __DIR__, 4 ) . '/includes/class-cookie-content-i18n.php';
 
 /**
  * Handles Cookies Operation
@@ -626,6 +631,32 @@ class Cookie extends Store {
 	 * @return string
 	 */
 	public function get_translations( $lang = '', $key = '' ) {
-		return '';
+		if ( ! in_array( $key, array( 'description', 'duration' ), true ) || '' === $lang ) {
+			return '';
+		}
+
+		$source = '';
+		if ( 'duration' === $key ) {
+			$data    = $this->normalize_multilingual_data( $this->get_object_data( 'duration' ) );
+			$default = faz_default_language();
+			// The '' !== guards matter: a row can carry an EMPTY string for the
+			// default language while another language holds the real value. Without
+			// them the empty default won, $source stayed blank, and nothing was
+			// translated — the fallback loop below already got this right.
+			if ( isset( $data[ $default ] ) && is_string( $data[ $default ] ) && '' !== $data[ $default ] ) {
+				$source = $data[ $default ];
+			} elseif ( isset( $data['en'] ) && is_string( $data['en'] ) && '' !== $data['en'] ) {
+				$source = $data['en'];
+			} else {
+				foreach ( $data as $value ) {
+					if ( is_string( $value ) && '' !== $value ) {
+						$source = $value;
+						break;
+					}
+				}
+			}
+		}
+
+		return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang );
 	}
 }

@@ -21,6 +21,8 @@
 
 namespace FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes;
 
+use FazCookie\Includes\Cookie_Content_I18n;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -37,6 +39,7 @@ require_once __DIR__ . '/class-template-translations.php';
 require_once __DIR__ . '/class-section-overrides.php';
 require_once __DIR__ . '/class-document-config.php';
 require_once __DIR__ . '/class-document-registry.php';
+require_once dirname( __DIR__, 4 ) . '/includes/class-cookie-content-i18n.php';
 
 /**
  * Cookie policy renderer.
@@ -563,8 +566,8 @@ class Renderer {
 					// i18n JSON objects on the same schema as categories.
 					$name     = (string) ( $row['cookie_name'] ?? '' );
 					$domain   = (string) ( $row['cookie_domain'] ?? '' );
-					$duration = self::decode_i18n_text( $row['cookie_duration'] ?? '', $lang );
-					$desc     = self::decode_i18n_text( $row['cookie_description'] ?? '', $lang );
+					$duration = self::decode_cookie_i18n_text( $row['cookie_duration'] ?? '', $lang, $name, 'duration' );
+					$desc     = self::decode_cookie_i18n_text( $row['cookie_description'] ?? '', $lang, $name, 'description' );
 					$parts[]  = '<tr>';
 					$parts[]  = '<td data-label="' . $col_cookie . '"><code>' . esc_html( $name ) . '</code></td>';
 					$parts[]  = '<td data-label="' . $col_domain . '">' . ( '' !== $domain ? esc_html( $domain ) : '&mdash;' ) . '</td>';
@@ -635,6 +638,53 @@ class Renderer {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Decode a cookie i18n value and consult the bundled field fallback before
+	 * falling back to a different stored language.
+	 *
+	 * @param mixed  $value Cookie DB value.
+	 * @param string $lang  Requested policy language.
+	 * @param string $slug  Cookie name/slug.
+	 * @param string $key   description|duration.
+	 * @return string
+	 */
+	private static function decode_cookie_i18n_text( $value, $lang, $slug, $key ) {
+		$decoded = array();
+		if ( is_array( $value ) ) {
+			$decoded = $value;
+		} elseif ( is_string( $value ) && '' !== $value && '{' === $value[0] ) {
+			$candidate = json_decode( $value, true );
+			$decoded   = is_array( $candidate ) ? $candidate : array();
+		}
+
+		if ( isset( $decoded[ $lang ] ) && is_string( $decoded[ $lang ] ) && '' !== $decoded[ $lang ] ) {
+			return $decoded[ $lang ];
+		}
+
+		$source  = '';
+		$default = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+		foreach ( array( $default, 'en' ) as $source_lang ) {
+			if ( isset( $decoded[ $source_lang ] ) && is_string( $decoded[ $source_lang ] ) && '' !== $decoded[ $source_lang ] ) {
+				$source = $decoded[ $source_lang ];
+				break;
+			}
+		}
+		if ( '' === $source ) {
+			foreach ( $decoded as $entry ) {
+				if ( is_string( $entry ) && '' !== $entry ) {
+					$source = $entry;
+					break;
+				}
+			}
+		}
+		if ( empty( $decoded ) && is_string( $value ) && ( '' === $value || '{' !== $value[0] ) ) {
+			$source = $value;
+		}
+
+		$translated = Cookie_Content_I18n::translate( $slug, $key, $source, $lang );
+		return '' !== $translated ? $translated : self::decode_i18n_text( $value, $lang );
 	}
 
 	/**
