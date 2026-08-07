@@ -639,9 +639,13 @@ class Cookie extends Store {
 		if ( 'duration' === $key ) {
 			$data    = $this->normalize_multilingual_data( $this->get_object_data( 'duration' ) );
 			$default = faz_default_language();
-			if ( isset( $data[ $default ] ) && is_string( $data[ $default ] ) ) {
+			// The '' !== guards matter: a row can carry an EMPTY string for the
+			// default language while another language holds the real value. Without
+			// them the empty default won, $source stayed blank, and nothing was
+			// translated — the fallback loop below already got this right.
+			if ( isset( $data[ $default ] ) && is_string( $data[ $default ] ) && '' !== $data[ $default ] ) {
 				$source = $data[ $default ];
-			} elseif ( isset( $data['en'] ) && is_string( $data['en'] ) ) {
+			} elseif ( isset( $data['en'] ) && is_string( $data['en'] ) && '' !== $data['en'] ) {
 				$source = $data['en'];
 			} else {
 				foreach ( $data as $value ) {

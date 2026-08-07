@@ -42,7 +42,12 @@ if ( ! function_exists( 'faz_default_language' ) ) {
 }
 if ( ! function_exists( 'faz_selected_languages' ) ) {
 	function faz_selected_languages( $language = '' ) {
-		return '' !== $language ? array( $language ) : array( 'en', 'it' );
+		if ( '' !== $language ) {
+			return array( $language );
+		}
+		return isset( $GLOBALS['cookie_i18n_selected_languages'] )
+			? $GLOBALS['cookie_i18n_selected_languages']
+			: array( 'en', 'it' );
 	}
 }
 if ( ! function_exists( 'wp_cache_delete' ) ) {
@@ -151,12 +156,28 @@ $GLOBALS['cookie_i18n_cache_deletes']          = array();
 $GLOBALS['cookie_i18n_template_cache_clears']  = 0;
 Activator::refresh_cookie_translation_caches();
 cookie_i18n_eq( $GLOBALS['cookie_i18n_controller_clears'], array( 'cookies', 'categories' ), 'upgrade migration rotates prepared cookie/category caches' );
-cookie_i18n_eq(
-	$GLOBALS['cookie_i18n_cache_deletes'],
+$cookie_i18n_missing_frags = array_values( array_diff(
 	array( 'faz_cookie_policy:faz_cookie_policy_list_en', 'faz_cookie_policy:faz_cookie_policy_list_it' ),
-	'upgrade migration clears language-specific policy fragments'
-);
+	$GLOBALS['cookie_i18n_cache_deletes']
+) );
+cookie_i18n_eq( $cookie_i18n_missing_frags, array(), 'upgrade migration clears language-specific policy fragments' );
+
 cookie_i18n_eq( $GLOBALS['cookie_i18n_template_cache_clears'], 1, 'upgrade migration clears banner templates' );
+
+// The policy is not rendered only in the SELECTED languages: resolve_lang()
+// takes the shortcode `lang` attribute, the page default or the WordPress
+// locale, none of which is bound to faz_selected_languages(). Clearing only the
+// selected set left an English fragment serving pre-translation rows on a site
+// whose selected language is Italian alone.
+$GLOBALS['cookie_i18n_selected_languages'] = array( 'it' );
+$GLOBALS['cookie_i18n_cache_deletes']      = array();
+Activator::refresh_cookie_translation_caches();
+cookie_i18n_eq(
+	in_array( 'faz_cookie_policy:faz_cookie_policy_list_en', $GLOBALS['cookie_i18n_cache_deletes'], true ),
+	true,
+	'the English policy fragment is cleared even when English is not selected'
+);
+unset( $GLOBALS['cookie_i18n_selected_languages'] );
 
 // --- Croatian, and the guard that would have caught it being absent ---
 //
@@ -187,6 +208,13 @@ cookie_i18n_eq( Cookie_Content_I18n::duration( '1 year', 'hr' ), '1 godina', 'Cr
 cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'hr' ), '2 godine', 'Croatian few plural form is selected' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '5 years', 'hr' ), '5 godina', 'Croatian many plural form is selected' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '12 minutes', 'hr' ), '12 minuta', 'Croatian teens take the many form, not few' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '21 hours', 'hr' ), '21 sat', 'Croatian numbers ending in 1 take the ONE form (21 sat, not 21 sati)' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '11 hours', 'hr' ), '11 sati', 'except the 11 teen, which stays many' );
+// Polish does NOT share that rule: CLDR gives it `one` for exactly 1, so 21 is
+// "21 lat" and never "21 rok". Pinned because the obvious generalisation from
+// Croatian to "all Slavic locales" produces exactly that error.
+cookie_i18n_eq( Cookie_Content_I18n::duration( '21 years', 'pl' ), '21 lat', 'Polish 21 takes the many form, NOT one' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1 year', 'pl' ), '1 rok', 'Polish one applies to exactly 1' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( 'session', 'hr' ), 'sesija', 'Croatian session duration is translated' );
 
 echo "\n" . ( $tests_run - $failed ) . "/{$tests_run} passed\n";

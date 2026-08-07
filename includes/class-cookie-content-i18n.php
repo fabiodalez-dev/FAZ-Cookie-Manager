@@ -181,13 +181,25 @@ class Cookie_Content_I18n {
 		if ( 'cs' === $lang && $integer >= 2 && $integer <= 4 ) {
 			return 'few';
 		}
-		// Polish and Croatian share the same "few" rule: 2-4 in the last digit,
-		// except the 12-14 teens. Croatian ships as a plugin locale (hr_HR), so
-		// leaving it out meant a Croatian banner silently kept English durations.
-		if ( in_array( $lang, array( 'pl', 'hr' ), true )
-			&& in_array( $integer % 10, array( 2, 3, 4 ), true )
-			&& ! in_array( $integer % 100, array( 12, 13, 14 ), true ) ) {
-			return 'few';
+		// Polish and Croatian share the "few" rule — 2-4 in the last digit, minus
+		// the 12-14 teens — but NOT the "one" rule, and the difference is real:
+		//
+		//   Croatian  21 → one   "21 sat"   (hr.hour one=sat, other=sati)
+		//   Polish    21 → other "21 lat"   (pl.year one=rok, other=lat)
+		//
+		// CLDR gives Polish `one` for exactly 1 and nothing else, while Croatian
+		// gives it to every number ending in 1 except 11. Extending the "one"
+		// branch to Polish as well would render "21 rok".
+		if ( in_array( $lang, array( 'pl', 'hr' ), true ) ) {
+			$last_digit = $integer % 10;
+			$last_two   = $integer % 100;
+			if ( 'hr' === $lang && 1 === $last_digit && 11 !== $last_two ) {
+				return 'one';
+			}
+			if ( in_array( $last_digit, array( 2, 3, 4 ), true )
+				&& ! in_array( $last_two, array( 12, 13, 14 ), true ) ) {
+				return 'few';
+			}
 		}
 		return 'other';
 	}
