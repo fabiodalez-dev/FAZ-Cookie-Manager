@@ -422,10 +422,41 @@ class Frontend {
 				 * paint in exchange for faster first render can return true;
 				 * server-side blocking is unaffected by the position.
 				 *
+				 * Ignored when Google Consent Mode or the IAB TCF CMP is active.
+				 * Both of those declare this handle as a dependency and must
+				 * themselves load in <head> — GCM has to emit `consent default`
+				 * and the TCF stub has to define `__tcfapi` before any ad script
+				 * runs, and moving them later is a compliance regression, not a
+				 * tuning choice. WP_Scripts::set_group then pulls a dependency
+				 * back into the head group, so honouring the filter here while
+				 * either is enabled produced no footer move at all: the option
+				 * read as supported and silently did nothing on exactly the
+				 * installs most likely to want it. Now the constraint is
+				 * explicit, and `faz_main_script_effective_in_footer` reports
+				 * what was actually applied.
+				 *
 				 * @since 1.26.1
 				 * @param bool $in_footer Default false (head).
 				 */
 				$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
+				if ( $in_footer ) {
+					$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
+					$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
+						&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
+					if ( $gcm_active || $tcf_active ) {
+						$in_footer = false;
+					}
+				}
+				/**
+				 * The position actually used, after the GCM/TCF constraint above.
+				 *
+				 * Read-only signal for diagnostics and for anyone who needs to
+				 * know whether their `faz_main_script_in_footer` request survived.
+				 *
+				 * @since 1.26.1
+				 * @param bool $in_footer Effective position (true = footer).
+				 */
+				do_action( 'faz_main_script_effective_in_footer', $in_footer );
 				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
 			}
 
