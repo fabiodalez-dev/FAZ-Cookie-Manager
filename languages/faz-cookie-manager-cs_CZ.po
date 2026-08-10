@@ -4730,6 +4730,12 @@ msgid ""
 "match). Allow scripts for /wp-admin in this browser — or pause the shield "
 "for this page — then reload."
 msgstr ""
+"Editor zásad používání souborů cookie se nenahrál, takže funkce \"Uložit\" a "
+"\"Náhled\" na této stránce nebudou fungovat. Jeho skript pravděpodobně "
+"blokuje ochrana soukromí prohlížeče nebo blokovač reklam (název souboru "
+"obsahuje slovo \"cookie\", které odpovídá některým blokovacím seznamům). "
+"Povolte v tomto prohlížeči skripty pro adresář /wp-admin – nebo pro tuto "
+"stránku dočasně deaktivujte ochranu soukromí – a poté stránku znovu načtěte."
 
 #. translators: 1: previously confirmed version, 2: current version.
 #: admin/views/cookie-policy.php:81
@@ -5100,6 +5106,12 @@ msgid ""
 "scripts for /wp-admin in this browser — or pause the shield for this page — "
 "then reload."
 msgstr ""
+"Editor stránky \"Cookies\" se nenahrál, takže jeho tlačítka nebudou "
+"fungovat. Skript pravděpodobně blokuje ochrana soukromí prohlížeče nebo "
+"blokovač reklam (název souboru obsahuje slovo \"cookie\", které odpovídá "
+"některým blokovacím seznamům). Povolte v tomto prohlížeči skripty pro "
+"adresář /wp-admin – nebo dočasně deaktivujte ochranu pro tuto stránku – a "
+"poté stránku znovu načtěte."
 
 #: admin/views/cookies.php:36
 msgid "Cookie Categories"
@@ -7676,7 +7688,7 @@ msgstr "Nepodařilo se zaznamenat souhlas."
 
 #: frontend/modules/legal-links/class-legal-links.php:169
 msgid "Legal information"
-msgstr ""
+msgstr "Právní informace"
 
 #: frontend/modules/shortcodes/class-shortcodes.php:240
 msgid "Always Active"
