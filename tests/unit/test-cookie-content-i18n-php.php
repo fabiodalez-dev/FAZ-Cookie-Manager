@@ -71,12 +71,14 @@ require_once dirname( __DIR__, 2 ) . '/includes/class-store.php';
 require_once dirname( __DIR__, 2 ) . '/includes/class-cookie-content-i18n.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/class-cookie.php';
 require_once dirname( __DIR__, 2 ) . '/admin/modules/cookie-policy-generator/includes/class-renderer.php';
+require_once dirname( __DIR__, 2 ) . '/includes/class-cookie-table-shortcode.php';
 require_once dirname( __DIR__, 2 ) . '/includes/class-activator.php';
 
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer;
 use FazCookie\Includes\Activator;
 use FazCookie\Includes\Cookie_Content_I18n;
+use FazCookie\Includes\Cookie_Table_Shortcode;
 
 $tests_run = 0;
 $failed    = 0;
@@ -149,6 +151,31 @@ cookie_i18n_eq(
 	$method->invoke( null, wp_json_encode( array( 'en' => 'English source' ) ), 'it', '_ga', 'description' ),
 	'Cookie di Google Analytics utilizzato per distinguere gli utenti.',
 	'cookie-policy renderer uses shared description fallback'
+);
+
+// Legacy/plain strings belong to the default language. They are often custom
+// administrator wording, not stock catalogue text, so both parallel renderers
+// must preserve them in that language and only consult the catalogue when a
+// different requested language is missing.
+$plain_custom = 'Custom analytics wording written by the administrator.';
+cookie_i18n_eq(
+	$method->invoke( null, $plain_custom, 'en', '_ga', 'description' ),
+	$plain_custom,
+	'cookie-policy renderer preserves a plain custom description in the default language'
+);
+
+$shortcode        = ( new ReflectionClass( Cookie_Table_Shortcode::class ) )->newInstanceWithoutConstructor();
+$shortcode_method = new ReflectionMethod( Cookie_Table_Shortcode::class, 'localize_cookie_field' );
+$shortcode_method->setAccessible( true );
+cookie_i18n_eq(
+	$shortcode_method->invoke( $shortcode, $legacy, $plain_custom, 'description', 'en', 'en', 'en' ),
+	$plain_custom,
+	'cookie-table shortcode preserves a plain custom description in the default language'
+);
+cookie_i18n_eq(
+	$shortcode_method->invoke( $shortcode, $legacy, $plain_custom, 'description', 'it', 'en', 'it' ),
+	'Cookie di Google Analytics utilizzato per distinguere gli utenti.',
+	'cookie-table shortcode still translates a plain default-language description for another language'
 );
 
 $GLOBALS['cookie_i18n_controller_clears']      = array();

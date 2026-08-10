@@ -87,6 +87,15 @@ class Cookie_Table_Shortcode {
 	 * @return string
 	 */
 	private function localize_cookie_field( Cookie $cookie, $value, $key, $lang, $default, $wp_lang = '' ) {
+		// A plain legacy value belongs to the default language. Preserve it there:
+		// it may be deliberate administrator wording, and replacing it with the
+		// bundled stock description would violate the non-destructive fallback
+		// contract. Other languages may still use the catalogue below.
+		$requested_lang = strtolower( str_replace( '_', '-', (string) $lang ) );
+		$default_lang   = strtolower( str_replace( '_', '-', (string) $default ) );
+		if ( is_string( $value ) && '' !== $value && $requested_lang === $default_lang ) {
+			return $value;
+		}
 		if ( is_array( $value ) ) {
 			if ( isset( $value[ $lang ] ) && is_string( $value[ $lang ] ) && '' !== $value[ $lang ] ) {
 				return $value[ $lang ];

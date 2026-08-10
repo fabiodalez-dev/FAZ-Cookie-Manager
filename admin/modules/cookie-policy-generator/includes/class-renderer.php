@@ -683,6 +683,15 @@ class Renderer {
 			$source = $value;
 		}
 
+		// Plain legacy strings are values in the site's default language. Keep
+		// custom administrator wording intact when rendering that language, and
+		// consult the bundled catalogue only for a different missing language.
+		$normalized_lang    = strtolower( str_replace( '_', '-', (string) $lang ) );
+		$normalized_default = strtolower( str_replace( '_', '-', (string) $default ) );
+		if ( empty( $decoded ) && '' !== $source && $normalized_lang === $normalized_default ) {
+			return $source;
+		}
+
 		$translated = Cookie_Content_I18n::translate( $slug, $key, $source, $lang );
 		return '' !== $translated ? $translated : self::decode_i18n_text( $value, $lang );
 	}
