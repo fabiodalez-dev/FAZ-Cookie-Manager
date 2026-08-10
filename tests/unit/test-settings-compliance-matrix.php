@@ -153,7 +153,7 @@ namespace {
 	compliance_same( Settings::sanitize_option( 'custom_rules', 'bad' ), array(), 'scalar blocking rules input is rejected' );
 	compliance_same( Settings::sanitize_option( 'custom_rules', array( array( 'pattern' => 'x', 'category' => 'necessary' ) ) )[0]['category'], 'necessary', 'strictly necessary rule category is supported' );
 
-	// 47-50: cross-setting invariants are enforced for every write path.
+	// 47-52: cross-setting invariants are enforced for every write path.
 	$defaults = array(
 		'banner_control' => array(
 			'per_service_consent' => false,

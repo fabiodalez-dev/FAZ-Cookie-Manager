@@ -374,53 +374,7 @@
 			// (maybe_apply_ab_test() short-circuits entirely under cache-compat).
 			// Warn the admin instead of letting the generic success toast imply
 			// the A/B test is actually running.
-			var abTestWarning = null;
-			if (current.banner_control && current.banner_control.ab_test
-				&& current.banner_control.ab_test.status) {
-				// current.banner_control.ab_test.variants was just overwritten by the
-				// merge above with formData.banner_control.ab_test.variants (either the
-				// freshly serialized checkboxes, or the preserved server-side value when
-				// the checkbox list hadn't finished loading) — use it instead of a fresh
-				// serializeAbVariants() call, which would be wrong while !abVariantsReady.
-				var effectiveVariants = Array.isArray(current.banner_control.ab_test.variants)
-					? current.banner_control.ab_test.variants
-					: [];
-				if (effectiveVariants.length < 2) {
-					abTestWarning = __(
-						'settings.abTestWarnVariants',
-						'A/B testing needs at least 2 selected banner variants to run.'
-					);
-				} else if (current.banner_control.cache_compatibility) {
-					abTestWarning = __(
-						'settings.abTestWarnCache',
-						'A/B testing is disabled while Cache Compatibility Mode is on.'
-					);
-				}
-			}
-
-			var saveWarnings = [];
-			if (abTestWarning) { saveWarnings.push(abTestWarning); }
-
-			// Cache Compatibility Mode is compatible with geo-targeting and IAB TCF
-			// — the frontend deliberately resolves both conservatively so the
-			// rendered output stays identical for every visitor — but the result is
-			// not what the settings screen alone suggests. Say so rather than
-			// silently overriding the choice, or letting the success toast imply
-			// per-country routing is still happening.
-			if (current.banner_control && current.banner_control.cache_compatibility) {
-				if (current.geolocation && current.geolocation.geo_targeting) {
-					saveWarnings.push(__(
-						'settings.cacheCompatWarnGeo',
-						'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.'
-					));
-				}
-				if (current.iab && current.iab.enabled) {
-					saveWarnings.push(__(
-						'settings.cacheCompatWarnIab',
-						'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.'
-					));
-				}
-			}
+			var saveWarnings = collectSaveWarnings(current);
 
 			return FAZ.post('settings', current).then(function () {
 				return saveWarnings;
@@ -435,6 +389,70 @@
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');
 		});
+	}
+
+	/**
+	 * Return every warning implied by the effective settings payload.
+	 *
+	 * Kept separate from saveSettings() so the compatibility matrix can test the
+	 * exact decision logic without making a REST write. In particular, the IAB
+	 * warning must use the same activation gate as the frontend: an enabled
+	 * checkbox alone does not activate TCF without a registered CMP ID (>= 2).
+	 *
+	 * @param {Object} current Sanitized settings-shaped payload being saved.
+	 * @return {string[]} Localized warning messages.
+	 */
+	function collectSaveWarnings(current) {
+		var saveWarnings = [];
+		var abTestWarning = null;
+		if (current.banner_control && current.banner_control.ab_test
+			&& current.banner_control.ab_test.status) {
+			// current.banner_control.ab_test.variants was just overwritten by the
+			// merge above with formData.banner_control.ab_test.variants (either the
+			// freshly serialized checkboxes, or the preserved server-side value when
+			// the checkbox list hadn't finished loading) — use it instead of a fresh
+			// serializeAbVariants() call, which would be wrong while !abVariantsReady.
+			var effectiveVariants = Array.isArray(current.banner_control.ab_test.variants)
+				? current.banner_control.ab_test.variants
+				: [];
+			if (effectiveVariants.length < 2) {
+				abTestWarning = __(
+					'settings.abTestWarnVariants',
+					'A/B testing needs at least 2 selected banner variants to run.'
+				);
+			} else if (current.banner_control.cache_compatibility) {
+				abTestWarning = __(
+					'settings.abTestWarnCache',
+					'A/B testing is disabled while Cache Compatibility Mode is on.'
+				);
+			}
+		}
+
+		if (abTestWarning) { saveWarnings.push(abTestWarning); }
+
+		// Cache Compatibility Mode is compatible with geo-targeting and IAB TCF
+		// — the frontend deliberately resolves both conservatively so the
+		// rendered output stays identical for every visitor — but the result is
+		// not what the settings screen alone suggests. Say so rather than
+		// silently overriding the choice, or letting the success toast imply
+		// per-country routing is still happening.
+		if (current.banner_control && current.banner_control.cache_compatibility) {
+			if (current.geolocation && current.geolocation.geo_targeting) {
+				saveWarnings.push(__(
+					'settings.cacheCompatWarnGeo',
+					'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.'
+				));
+			}
+			var cmpId = current.iab ? parseInt(current.iab.cmp_id, 10) : 0;
+			if (current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {
+				saveWarnings.push(__(
+					'settings.cacheCompatWarnIab',
+					'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.'
+				));
+			}
+		}
+
+		return saveWarnings;
 	}
 
 	function loadGeoDbStatus() {
