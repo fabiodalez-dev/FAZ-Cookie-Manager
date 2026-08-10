@@ -6462,6 +6462,47 @@ class Frontend {
 	}
 
 	/**
+	 * Whether Smash Balloon's Instagram Feed already restricts itself.
+	 *
+	 * Instagram Feed has its own GDPR setting, `gdpr` in the
+	 * `sb_instagram_settings` option, with three values. Only `yes` makes it
+	 * self-restrict: SB_Instagram_GDPR_Integrations::blocking_cdn() then returns
+	 * true unconditionally, the feed serves local image copies, and no request
+	 * reaches Instagram's CDN at all. Gating that again adds nothing.
+	 *
+	 * Everything else keeps our blocking, and `auto` — the DEFAULT — is the case
+	 * that matters most. Instagram Feed's automatic mode does not detect an
+	 * arbitrary consent plugin: gdpr_plugins_active() checks a hardcoded list of
+	 * nine specific ones by class, constant or function, and this plugin is not
+	 * among them (as a de-branded fork it deliberately defines no CKY_* constant).
+	 * On `auto` it therefore concludes no consent plugin is present and restricts
+	 * nothing, which makes our block the only thing holding that feed back.
+	 *
+	 * Plugin inactive, option missing, key absent or unreadable: block. A signal
+	 * we cannot read is not permission to load a tracker.
+	 *
+	 * @since 1.26.1
+	 * @return bool True when Instagram Feed is handling it and we should not.
+	 */
+	private function smash_balloon_self_restricts() {
+		// Guarded so the method degrades to "block" in any context where these
+		// are unavailable — standalone unit harnesses stub only what the code
+		// they exercise needs, and an undefined function here would fatal a
+		// caller that has nothing to do with Instagram.
+		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
+			return false;
+		}
+		if ( ! function_exists( 'get_option' ) ) {
+			return false;
+		}
+		$settings = get_option( 'sb_instagram_settings', array() );
+		if ( ! is_array( $settings ) || ! isset( $settings['gdpr'] ) ) {
+			return false;
+		}
+		return 'yes' === strtolower( trim( (string) $settings['gdpr'] ) );
+	}
+
+	/**
 	 * Process social embed containers (Facebook, Instagram, Twitter/X).
 	 *
 	 * Social embeds use specific CSS class patterns that rely on external
@@ -6545,6 +6586,12 @@ class Frontend {
 		$social_ids = array(
 			'sb_instagram' => array( 'service_id' => 'smash-balloon-instagram', 'label' => 'Instagram', 'category' => 'marketing' ),
 		);
+		// Stand down when Instagram Feed already removed the third-party surface
+		// itself. Blocking a feed that makes no third-party request protects
+		// nobody and costs the visitor a placeholder they must click for nothing.
+		if ( $this->smash_balloon_self_restricts() ) {
+			unset( $social_ids['sb_instagram'] );
+		}
 
 		foreach ( $social_ids as $id_prefix => $info ) {
 			if ( false === stripos( $content, $id_prefix ) ) {
