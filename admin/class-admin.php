@@ -104,6 +104,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'payment_gateway_notice' ) );
 		add_action( 'admin_notices', array( $this, 'cookie_definitions_notice' ) );
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
+		add_action( 'admin_notices', array( $this, 'smash_balloon_notice' ) );
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
 		add_action( 'admin_notices', array( $this, 'redundant_geo_routing_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
@@ -1771,6 +1772,60 @@ class Admin {
 	 *
 	 * @return void
 	 */
+	/**
+	 * Tell the site owner when Instagram Feed is handling one embed itself.
+	 *
+	 * The wording matters more than the mechanics here. "Your setting is being
+	 * overridden" would be false: nothing overrides it. Instagram Feed's GDPR
+	 * setting on Yes removes the third-party surface entirely — it serves local
+	 * image copies and never contacts Instagram — so there is nothing left for a
+	 * consent decision to govern. Its restriction is also unconditional, so
+	 * accepting does not restore the CDN either. The honest claim is that the
+	 * setting no longer APPLIES to that feed, and the useful addition is a link
+	 * to the control that decides it.
+	 *
+	 * Shown once and dismissible: the permanent version of this belongs beside
+	 * the service toggle, where somebody wondering why it does nothing will
+	 * actually look. This notice exists so they learn it is there.
+	 *
+	 * @since 1.26.1
+	 * @return void
+	 */
+	public function smash_balloon_notice() {
+		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$user_id = get_current_user_id();
+		if ( get_user_meta( $user_id, 'faz_smash_balloon_notice_dismissed', true ) ) {
+			return;
+		}
+		if ( isset( $_GET['faz_dismiss_sb_notice'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_faz_nonce'] ?? '' ) ), 'faz_dismiss_sb_notice' ) ) {
+			update_user_meta( $user_id, 'faz_smash_balloon_notice_dismissed', 1 );
+			return;
+		}
+		$sb = get_option( 'sb_instagram_settings', array() );
+		if ( ! is_array( $sb ) || ! isset( $sb['gdpr'] ) || 'yes' !== strtolower( trim( (string) $sb['gdpr'] ) ) ) {
+			return;
+		}
+		$sb_url      = \FazCookie\Frontend\Frontend::smash_balloon_settings_url();
+		$dismiss_url = wp_nonce_url( add_query_arg( 'faz_dismiss_sb_notice', '1' ), 'faz_dismiss_sb_notice', '_faz_nonce' );
+		?>
+		<div class="notice notice-info">
+			<p>
+				<strong><?php esc_html_e( 'Instagram Feed is handling its own consent', 'faz-cookie-manager' ); ?></strong><br>
+				<?php esc_html_e( 'Its GDPR setting is set to Yes, so it serves local copies of images and never contacts Instagram. There is nothing left to block, so your cookie settings do not apply to that feed — and a visitor accepting will not restore the connection either, because Instagram Feed\'s restriction does not depend on consent.', 'faz-cookie-manager' ); ?>
+			</p>
+			<p>
+				<a href="<?php echo esc_url( $sb_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Open Instagram Feed settings', 'faz-cookie-manager' ); ?></a>
+				<a href="<?php echo esc_url( $dismiss_url ); ?>" class="button button-link"><?php esc_html_e( 'Dismiss', 'faz-cookie-manager' ); ?></a>
+			</p>
+			<p class="description">
+				<?php esc_html_e( 'Set it to Automatic or No there if you would rather the visitor\'s choice decided whether that feed loads.', 'faz-cookie-manager' ); ?>
+			</p>
+		</div>
+		<?php
+	}
+
 	public function payment_gateway_notice() {
 		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
 			return;

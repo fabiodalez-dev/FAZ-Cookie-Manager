@@ -42,6 +42,17 @@ use FazCookie\Frontend\Includes\Geo_Runtime;
 class Frontend {
 
 	/**
+	 * Instagram Feed's settings page slug, where its GDPR option lives.
+	 *
+	 * Pinned by tests/unit/test-smash-balloon-gdpr-php.php against the slug the
+	 * plugin actually registers, so this cannot rot into a dead link silently.
+	 *
+	 * @since 1.26.1
+	 * @var string
+	 */
+	const SMASH_BALLOON_SETTINGS_SLUG = 'sbi-settings';
+
+	/**
 	 * The ID of this plugin.
 	 *
 	 * @since    3.0.0
@@ -6484,6 +6495,23 @@ class Frontend {
 	 * @since 1.26.1
 	 * @return bool True when Instagram Feed is handling it and we should not.
 	 */
+	/**
+	 * Admin URL of Instagram Feed's own settings screen.
+	 *
+	 * Where its GDPR option lives, so a notice can send the site owner to the
+	 * control that actually decides the behaviour instead of describing it.
+	 * The slug is pinned by a test against the plugin's own registration, since
+	 * a link to a page that does not exist is worse than no link.
+	 *
+	 * @since 1.26.1
+	 * @return string
+	 */
+	public static function smash_balloon_settings_url() {
+		return function_exists( 'admin_url' )
+			? admin_url( 'admin.php?page=' . self::SMASH_BALLOON_SETTINGS_SLUG )
+			: '';
+	}
+
 	private function smash_balloon_self_restricts() {
 		// Guarded so the method degrades to "block" in any context where these
 		// are unavailable — standalone unit harnesses stub only what the code

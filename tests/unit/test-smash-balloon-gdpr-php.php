@@ -122,6 +122,38 @@ $GLOBALS['sb_filter_value'] = false;
 sb_eq( $probe->smash_balloon_self_restricts(), false, 'faz_respect_smash_balloon_gdpr=false forces the old always-block behaviour' );
 $GLOBALS['sb_filter_value'] = true;
 
+// --- the link must point somewhere that exists -----------------------------
+// A notice that sends the site owner to a 404 is worse than one that only names
+// the setting. Pin our slug against the page Instagram Feed actually registers,
+// read from the plugin itself when it is installed on this machine.
+$sb_slug = 'sbi-settings';
+$shipped_slug = '';
+$fe_src = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
+if ( preg_match( "/SMASH_BALLOON_SETTINGS_SLUG = '([^']+)'/", (string) $fe_src, $m ) ) {
+	$shipped_slug = $m[1];
+}
+sb_eq( $shipped_slug, $sb_slug, 'the settings slug we link to is the one this test pins' );
+
+$candidates = array(
+	'/Users/fabio/Sites/faz-test/wp-content/plugins/instagram-feed/inc/admin/actions.php',
+);
+$checked = false;
+foreach ( $candidates as $candidate ) {
+	if ( ! is_readable( $candidate ) ) {
+		continue;
+	}
+	$checked = true;
+	$actions = (string) file_get_contents( $candidate );
+	sb_eq(
+		false !== strpos( $actions, $shipped_slug ),
+		true,
+		'Instagram Feed registers the page slug we link to (verified against the installed plugin)'
+	);
+}
+if ( ! $checked ) {
+	echo "  \033[33mSKIP\033[0m Instagram Feed not installed here — slug not cross-checked against the plugin\n";
+}
+
 // --- drift guard -----------------------------------------------------------
 // The body above is a copy. If the shipped one changes, this suite would keep
 // passing while testing nothing that ships — so compare the two directly.
