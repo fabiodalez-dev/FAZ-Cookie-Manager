@@ -126,5 +126,17 @@ console.log('granular cookie shredder category fallback (jsdom)');
   check('explicit per-cookie denial overrides service and category allows', !hasCookie(window, '_ga'));
 }
 
+// Per-cookie allow is equally authoritative: it must be able to preserve one
+// cookie even when both its service and parent category are denied.
+{
+  const window = loadFrontend();
+  setCookie(window, '_ga');
+  window.fazcookie._fazConsentStore.set('analytics', 'no');
+  window.fazcookie._fazConsentStore.set('svc.google-analytics', 'no');
+  window.fazcookie._fazConsentStore.set('ck.google-analytics._ga', 'yes');
+  window.eval('_fazRemoveAllDeadCookies()');
+  check('explicit per-cookie allow overrides service and category denials', hasCookie(window, '_ga'));
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);
