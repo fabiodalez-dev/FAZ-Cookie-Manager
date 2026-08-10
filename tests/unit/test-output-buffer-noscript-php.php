@@ -138,9 +138,8 @@ namespace {
 			'whitelist_cache'            => $whitelist,
 			'settings_option_cache'      => array(),
 			'pattern_service_cache'      => $pattern_services,
-			'provider_match_meta_cache'  => null,
-			'provider_match_meta_source' => null,
-			'service_match_meta_cache'   => null,
+			'provider_match_meta_cache' => null,
+			'service_match_meta_cache'  => null,
 		);
 		foreach ( $preset as $prop => $value ) {
 			$p = $rc->getProperty( $prop );

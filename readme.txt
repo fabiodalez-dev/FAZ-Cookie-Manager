@@ -320,7 +320,7 @@ Yes. Place `[faz_dsar_form]` on any page to show a GDPR-compliant request form c
 
 = How do I run my own script when a category is consented? =
 
-Listen for `fazcookie_consent_ready` on `document`. It fires once on **every** page load and carries the consent in force right then, so the code runs both on the page where the visitor accepts and on every page afterwards:
+Listen for `fazcookie_consent_ready` on `document`. It announces the initial consent state once on **every** page load and fires again with `action: 'update'` if the visitor changes consent on that page, so the code runs both where the visitor accepts and on every page afterwards:
 
 `document.addEventListener('fazcookie_consent_ready', function (e) {
     if (e.detail.accepted.indexOf('functional') !== -1) {
@@ -378,7 +378,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: a safe snapshot collector for privacy-policy text registered by installed plugins, preserving operator wording while tracking upstream changes.
 * Changed: the legal-document renderer now reads validated document coordinates from a registry while the existing Cookie Policy output remains byte-identical under the golden suite.
 * Fixed: material-change retries are idempotent after partial failure, identical third-party policy text cannot exchange plugin identities or overrides, oversized collected HTML stays balanced, and the REST route guard must exercise visible tabs.
-* Added: `fazcookie_consent_ready`, a JavaScript event fired on every page load carrying the consent in force. Scripts keyed on consent previously had nothing to react to on the pages after the visitor accepted, so an embed started on consent worked once and then stopped. Use `fazcookie_consent_update` to react to a change and this one to read the state.
+* Added: `fazcookie_consent_ready`, a JavaScript event that announces the initial consent state on every page load and the new state after a same-page update. Scripts keyed on consent previously had nothing to react to on the pages after the visitor accepted, so an embed started on consent worked once and then stopped. Use `fazcookie_consent_update` for side effects that must run only when a choice changes; use this event to read and apply the current state.
 * Added: `getFazConsent().services` and `window.getFazCookieConsent( name )` for sites using per-service consent, answering for one service or one declared cookie instead of the whole category.
 * Fixed: the WP Consent API and Microsoft UET/Clarity bridges were never told a returning visitor's consent, so Consent-API aware plugins and Microsoft Advertising treated somebody who had accepted as denied for the rest of the session.
 * Fixed: tracking resources inside a `<noscript>` block are gated per resource. A block mixing providers was decided by whichever matched first, so a consented embed listed before a denied pixel let that pixel load before consent for visitors without JavaScript, and gated tags could be labelled with another provider's category.

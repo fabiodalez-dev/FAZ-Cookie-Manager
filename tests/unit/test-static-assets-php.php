@@ -238,15 +238,17 @@ namespace {
 
 	echo "\n-- cleanup_static_assets() --\n";
 
-	$css_stale  = 'banner-' . md5( 'stale' ) . '.css';
-	$css_fresh  = 'banner-' . md5( 'fresh' ) . '.css';
-	$orphan_tmp = '.config-orphan.js.abcd-1234.tmp';
-	$unrelated  = 'GeoLite2-Country.mmdb';
+	$css_stale   = 'banner-' . md5( 'stale' ) . '.css';
+	$css_fresh   = 'banner-' . md5( 'fresh' ) . '.css';
+	$orphan_tmp  = '.config-orphan.js.abcd-1234.tmp';
+	$unrelated   = 'GeoLite2-Country.mmdb';
+	$foreign_tmp = '.keep-me.tmp';
 
 	file_put_contents( faz_assets_dir() . $css_stale, '#faz-consent{}' ); // phpcs:ignore
 	file_put_contents( faz_assets_dir() . $css_fresh, '#faz-consent{}' ); // phpcs:ignore
 	file_put_contents( faz_assets_dir() . $orphan_tmp, 'half-written' ); // phpcs:ignore
 	file_put_contents( faz_assets_dir() . $unrelated, 'not ours' ); // phpcs:ignore
+	file_put_contents( faz_assets_dir() . $foreign_tmp, 'not our staging file' ); // phpcs:ignore
 
 	// Pin the retention explicitly instead of leaning on the shipped default:
 	// this section is about which files the reaper selects, not about how long
@@ -258,6 +260,7 @@ namespace {
 	touch( faz_assets_dir() . $css_stale, $old );
 	touch( faz_assets_dir() . $orphan_tmp, $old );
 	touch( faz_assets_dir() . $unrelated, $old );
+	touch( faz_assets_dir() . $foreign_tmp, $old );
 	touch( faz_assets_dir() . $name_b, $old );
 	clearstatcache();
 
@@ -271,6 +274,7 @@ namespace {
 	assert_true( file_exists( faz_assets_dir() . $name ), 'recently used config asset kept' );
 	assert_true( file_exists( faz_assets_dir() . 'index.php' ), 'index.php guard never reaped' );
 	assert_true( file_exists( faz_assets_dir() . $unrelated ), 'unrelated file in the directory never touched' );
+	assert_true( file_exists( faz_assets_dir() . $foreign_tmp ), 'unrelated hidden .tmp file never touched' );
 
 	// ---------- 5. retention filter ----------
 

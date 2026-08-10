@@ -111,11 +111,9 @@ class Frontend {
 	private $always_allowed_cache     = null;
 	/**
 	 * Precomputed provider-pattern metadata (lowercased pattern, URL-vs-code
-	 * classification) for the output-buffer matching hot loop, plus the map it
-	 * was built from (guards against a filtered map being passed later).
+	 * classification) for the output-buffer matching hot loop.
 	 */
-	private $provider_match_meta_cache  = null;
-	private $provider_match_meta_source = null;
+	private $provider_match_meta_cache = null;
 	/** Same precomputation for the per-service pattern → service-ids map. */
 	private $service_match_meta_cache = null;
 	/**
@@ -435,7 +433,7 @@ class Frontend {
 				 * explicit, and `faz_main_script_effective_in_footer` reports
 				 * what was actually applied.
 				 *
-				 * @since 1.26.1
+				 * @since 1.26.0
 				 * @param bool $in_footer Default false (head).
 				 */
 				$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
@@ -453,7 +451,7 @@ class Frontend {
 				 * Read-only signal for diagnostics and for anyone who needs to
 				 * know whether their `faz_main_script_in_footer` request survived.
 				 *
-				 * @since 1.26.1
+				 * @since 1.26.0
 				 * @param bool $in_footer Effective position (true = footer).
 				 */
 				do_action( 'faz_main_script_effective_in_footer', $in_footer );
@@ -962,7 +960,7 @@ class Frontend {
 		 * cost of deleting a live one is a missing consent banner. Sites that
 		 * know their cache TTL can lower it through this filter.
 		 *
-		 * @since 1.26.1
+		 * @since 1.26.0
 		 * @param int $days Days an unused asset is kept. Default 365.
 		 */
 		$days = (int) apply_filters( 'faz_static_asset_retention_days', 365 );
@@ -974,7 +972,7 @@ class Frontend {
 		$deleted = 0;
 		// Only ever touch files this class generates: the two content-hashed
 		// families, plus staging files orphaned by an interrupted write.
-		$patterns = array( 'config-*.js', 'banner-*.css', '.*.tmp' );
+		$patterns = array( 'config-*.js', 'banner-*.css', '.config-*.js.*.tmp', '.banner-*.css.*.tmp' );
 		foreach ( $patterns as $pattern ) {
 			$files = glob( $dir_info['path'] . $pattern );
 			if ( ! is_array( $files ) ) {
@@ -5017,24 +5015,16 @@ class Frontend {
 	/**
 	 * Precompute per-pattern matching metadata for the provider map.
 	 *
-	 * Keyed off the map itself so callers passing a different (filtered) map
-	 * never receive stale entries; get_provider_category_map() is memoized per
-	 * request, so in practice this builds once per request.
+	 * get_provider_category_map() is memoized per Frontend instance and every
+	 * internal caller passes that same filtered map. Return the built table
+	 * immediately: hashing all ~1,000 keys here on every inspected HTML tag would
+	 * recreate the O(tags × patterns) traversal this cache exists to remove.
 	 *
 	 * @param array $providers Provider map [ pattern => category ].
 	 * @return array[] Ordered list of { lower, is_url, category }.
 	 */
 	private function get_provider_match_meta( $providers ) {
-		// Compare a cheap signature, not the map itself. `===` on two arrays of
-		// ~1000 entries walks every key and value, and this runs once per
-		// inspected tag — which would put the per-tag cost back in proportion to
-		// the pattern count, the exact thing the memo exists to remove. Count
-		// plus a hash of the key order is enough: the values are categories
-		// derived from those keys, and the only producer is the provider
-		// catalogue, so a changed map always changes its keys.
-		$signature = count( $providers ) . ':' . md5( implode( "\n", array_keys( $providers ) ) );
-		if ( null !== $this->provider_match_meta_cache
-			&& $this->provider_match_meta_source === $signature ) {
+		if ( null !== $this->provider_match_meta_cache ) {
 			return $this->provider_match_meta_cache;
 		}
 		$meta = array();
@@ -5050,8 +5040,7 @@ class Frontend {
 				'category' => $category,
 			);
 		}
-		$this->provider_match_meta_source = $signature;
-		$this->provider_match_meta_cache  = $meta;
+		$this->provider_match_meta_cache = $meta;
 		return $meta;
 	}
 

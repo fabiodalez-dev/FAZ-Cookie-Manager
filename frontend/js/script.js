@@ -857,10 +857,12 @@ function _fazInitOperations() {
  * same meaning and cannot be audited. So the state-on-load signal gets its own
  * name and breaks nothing.
  *
- * fazcookie_consent_ready fires once per page load, before the unblock pass,
- * carrying the same {accepted, rejected, action} shape. `action` is 'init' on a
- * first visit, 'gpc' when a Global Privacy Control signal was auto-applied, and
- * 'restore' for a visitor whose choice was already stored — the
+ * fazcookie_consent_ready announces the initial state once per page load,
+ * before the unblock pass, and fires again with `action: 'update'` if the
+ * visitor changes consent on that page. It carries the same
+ * {accepted, rejected, action} shape. `action` is 'init' on a first visit,
+ * 'gpc' when a Global Privacy Control signal was auto-applied, and 'restore'
+ * for a visitor whose choice was already stored — the
  * case that previously emitted no signal at all, leaving an integration that
  * starts a map or a chat widget on consent working on the page where the
  * visitor clicked Accept and silently dead on every page after it.
