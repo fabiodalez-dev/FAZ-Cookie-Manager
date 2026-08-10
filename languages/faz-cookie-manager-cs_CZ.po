@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.7.0\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-217c\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
 "POT-Creation-Date: 2026-08-10T10:14:50+00:00\n"
 "PO-Revision-Date: 2026-08-01 13:45+0200\n"
 "Last-Translator: \n"
