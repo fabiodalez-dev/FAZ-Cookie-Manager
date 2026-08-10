@@ -6559,6 +6559,16 @@ class Frontend {
 					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
 						return $m[0];
 					}
+					// Honour the admin's exemptions here too. Social containers
+					// were the one blocking path that consulted neither the
+					// whitelist nor class="faz-skip", so a site owner who wanted
+					// one embed through had no way to say so — reported on wp.org
+					// by somebody who tried exactly that with the container id and
+					// class, and got nothing. Every other filter in this class
+					// treats those as binding; this one now does too.
+					if ( $this->is_whitelisted( $m[2], '' ) ) {
+						return $m[0];
+					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
 					// Placeholder before + hidden original element.
 					$blocked = $m[1] . $m[2] . ' data-faz-category="' . esc_attr( $category ) . '">';
@@ -6624,6 +6634,16 @@ class Frontend {
 				function ( $m ) use ( $category, $info ) {
 					// Skip if already processed.
 					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
+						return $m[0];
+					}
+					// Honour the admin's exemptions here too. Social containers
+					// were the one blocking path that consulted neither the
+					// whitelist nor class="faz-skip", so a site owner who wanted
+					// one embed through had no way to say so — reported on wp.org
+					// by somebody who tried exactly that with the container id and
+					// class, and got nothing. Every other filter in this class
+					// treats those as binding; this one now does too.
+					if ( $this->is_whitelisted( $m[2], '' ) ) {
 						return $m[0];
 					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
