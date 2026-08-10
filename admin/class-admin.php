@@ -1803,8 +1803,12 @@ class Admin {
 			update_user_meta( $user_id, 'faz_smash_balloon_notice_dismissed', 1 );
 			return;
 		}
-		$sb = get_option( 'sb_instagram_settings', array() );
-		if ( ! is_array( $sb ) || ! isset( $sb['gdpr'] ) || 'yes' !== strtolower( trim( (string) $sb['gdpr'] ) ) ) {
+		// Use the same fail-closed decision as the frontend. The option survives
+		// plugin deactivation, so checking `gdpr=yes` alone could show a notice
+		// that claims Instagram Feed is active and link to a page that no longer
+		// exists. This also keeps the notice aligned with the documented escape
+		// hatch instead of advertising behaviour the filter has disabled.
+		if ( ! \FazCookie\Frontend\Frontend::smash_balloon_self_restricts() ) {
 			return;
 		}
 		$sb_url      = \FazCookie\Frontend\Frontend::smash_balloon_settings_url();

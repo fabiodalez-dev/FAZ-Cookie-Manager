@@ -6512,7 +6512,7 @@ class Frontend {
 	 * @since 1.26.1
 	 * @return bool True when Instagram Feed is handling it and we should not.
 	 */
-	private function smash_balloon_self_restricts() {
+	public static function smash_balloon_self_restricts() {
 		// Guarded so the method degrades to "block" in any context where these
 		// are unavailable — standalone unit harnesses stub only what the code
 		// they exercise needs, and an undefined function here would fatal a
@@ -6647,7 +6647,7 @@ class Frontend {
 		// Stand down when Instagram Feed already removed the third-party surface
 		// itself. Blocking a feed that makes no third-party request protects
 		// nobody and costs the visitor a placeholder they must click for nothing.
-		$sb_self_restricts = $this->smash_balloon_self_restricts();
+		$sb_self_restricts = self::smash_balloon_self_restricts();
 
 		foreach ( $social_ids as $id_prefix => $info ) {
 			if ( false === stripos( $content, $id_prefix ) ) {

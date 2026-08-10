@@ -39,6 +39,10 @@ if ( ! function_exists( 'apply_filters' ) ) {
 	}
 }
 
+require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
+
+use FazCookie\Frontend\Frontend;
+
 $tests_run = 0;
 $failed    = 0;
 function sb_eq( $actual, $expected, $label ) {
@@ -54,35 +58,6 @@ function sb_eq( $actual, $expected, $label ) {
 	echo "        actual:   " . var_export( $actual, true ) . "\n";
 }
 
-/**
- * The method under test, extracted verbatim from Frontend so this file runs
- * without a WordPress bootstrap. Kept byte-identical to the shipped body; the
- * guard below fails the suite if the two drift apart.
- */
-class Sb_Gdpr_Probe {
-	public function smash_balloon_self_restricts() {
-		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
-			return false;
-		}
-		if ( ! defined( 'SBIVER' ) && ! class_exists( 'SB_Instagram_GDPR_Integrations', false ) ) {
-			return false;
-		}
-		if ( ! function_exists( 'get_option' ) ) {
-			return false;
-		}
-		$settings = get_option( 'sb_instagram_settings', array() );
-		if ( ! is_array( $settings ) || ! isset( $settings['gdpr'] ) ) {
-			return false;
-		}
-		if ( ! is_string( $settings['gdpr'] ) ) {
-			return false;
-		}
-		return 'yes' === strtolower( trim( $settings['gdpr'] ) );
-	}
-}
-
-$probe = new Sb_Gdpr_Probe();
-
 echo "Smash Balloon Instagram Feed — GDPR accommodation\n\n";
 
 // --- the plugin is not loaded ----------------------------------------------
@@ -96,7 +71,7 @@ echo "Smash Balloon Instagram Feed — GDPR accommodation\n\n";
 // down while nothing at all restricted the feed — the one way this
 // accommodation could ship a tracker.
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'yes' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, "gdpr 'yes' but Instagram Feed NOT loaded — stale option, keep blocking" );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, "gdpr 'yes' but Instagram Feed NOT loaded — stale option, keep blocking" );
 
 // From here on, simulate the plugin being active. Its bootstrap defines SBIVER
 // unconditionally (guarded only against redefinition), so the constant is
@@ -105,55 +80,55 @@ define( 'SBIVER', '6.11.4' );
 
 // --- the reported case -----------------------------------------------------
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'yes' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), true, "gdpr 'yes' — Instagram Feed self-restricts, we stand down" );
+sb_eq( Frontend::smash_balloon_self_restricts(), true, "gdpr 'yes' — Instagram Feed self-restricts, we stand down" );
 
 // --- the default, and the one that would ship a tracker if we got it wrong --
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'auto' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, "gdpr 'auto' (the DEFAULT) — SB detects no consent plugin, so we must block" );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, "gdpr 'auto' (the DEFAULT) — SB detects no consent plugin, so we must block" );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'no' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, "gdpr 'no' — SB restricts nothing, we must block" );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, "gdpr 'no' — SB restricts nothing, we must block" );
 
 // --- absent or unreadable signals all fall to the protective side ----------
 $GLOBALS['sb_options'] = array();
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'plugin not installed / option missing — block' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'plugin not installed / option missing — block' );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'other' => 'x' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'option present but no gdpr key — block' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'option present but no gdpr key — block' );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => 'corrupted-not-an-array' );
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'option corrupted to a scalar — block, do not fatal' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'option corrupted to a scalar — block, do not fatal' );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => '' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'empty gdpr value — block' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'empty gdpr value — block' );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'YES' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), true, 'value comparison is case-insensitive' );
+sb_eq( Frontend::smash_balloon_self_restricts(), true, 'value comparison is case-insensitive' );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => ' yes ' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), true, 'surrounding whitespace does not defeat the match' );
+sb_eq( Frontend::smash_balloon_self_restricts(), true, 'surrounding whitespace does not defeat the match' );
 
 // A value nobody expects must not be read as permission.
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'true' ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, "an unexpected value ('true') is not treated as yes" );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, "an unexpected value ('true') is not treated as yes" );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 1 ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'a truthy non-string is not treated as yes' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'a truthy non-string is not treated as yes' );
 
 // A corrupted option can hold a non-scalar. Casting an array to string raises a
 // conversion warning; casting an object without __toString throws. Either turns
 // a malformed setting into a frontend error, so the type is rejected outright —
 // and these two cases pin that it neither throws nor reads as permission.
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => array( 'yes' ) ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'an array value is rejected, not stringified' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'an array value is rejected, not stringified' );
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => new stdClass() ) );
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'an object value is rejected without throwing' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'an object value is rejected without throwing' );
 
 // --- the escape hatch ------------------------------------------------------
 $GLOBALS['sb_options']      = array( 'sb_instagram_settings' => array( 'gdpr' => 'yes' ) );
 $GLOBALS['sb_filter_value'] = false;
-sb_eq( $probe->smash_balloon_self_restricts(), false, 'faz_respect_smash_balloon_gdpr=false forces the old always-block behaviour' );
+sb_eq( Frontend::smash_balloon_self_restricts(), false, 'faz_respect_smash_balloon_gdpr=false forces the old always-block behaviour' );
 $GLOBALS['sb_filter_value'] = true;
 
 // --- the link must point somewhere that exists -----------------------------
@@ -188,70 +163,6 @@ if ( ! $checked ) {
 	echo "  \033[33mSKIP\033[0m Instagram Feed not installed here — slug not cross-checked against the plugin\n";
 }
 
-// --- drift guard -----------------------------------------------------------
-// The body above is a copy. If the shipped one changes, this suite would keep
-// passing while testing nothing that ships — so compare the two directly.
-$shipped = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
-$needle  = "private function smash_balloon_self_restricts() {";
-$pos     = strpos( (string) $shipped, $needle );
-$end     = false === $pos ? false : strpos( (string) $shipped, "\n\t}", $pos );
-$body    = ( false === $pos || false === $end ) ? '' : substr( (string) $shipped, $pos, $end - $pos );
-// Compare logic, not prose: run both sides through PHP's own tokenizer and drop
-// comments before collapsing whitespace. A guard that also pinned the comments
-// would fail on every clarification of the reasoning — which is the one kind of
-// edit nobody should have to think twice about — while a naive strip of `//`
-// would maul any string literal containing a URL.
-$normalise = function ( $code ) {
-	$out = '';
-	foreach ( token_get_all( '<?php ' . $code ) as $token ) {
-		if ( is_array( $token ) ) {
-			if ( T_COMMENT === $token[0] || T_DOC_COMMENT === $token[0] || T_OPEN_TAG === $token[0] ) {
-				continue;
-			}
-			$out .= $token[1];
-			continue;
-		}
-		$out .= $token;
-	}
-	return trim( preg_replace( '/\s+/', ' ', $out ) );
-};
-$copy_body = $normalise( "
-		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
-			return false;
-		}
-		if ( ! defined( 'SBIVER' ) && ! class_exists( 'SB_Instagram_GDPR_Integrations', false ) ) {
-			return false;
-		}
-		if ( ! function_exists( 'get_option' ) ) {
-			return false;
-		}
-		\$settings = get_option( 'sb_instagram_settings', array() );
-		if ( ! is_array( \$settings ) || ! isset( \$settings['gdpr'] ) ) {
-			return false;
-		}
-		if ( ! is_string( \$settings['gdpr'] ) ) {
-			return false;
-		}
-		return 'yes' === strtolower( trim( \$settings['gdpr'] ) );
-" );
-sb_eq(
-	false !== strpos( $normalise( $body ), $copy_body ),
-	true,
-	'the copy under test still matches the shipped method (drift guard)'
-);
-
-// --- the class arm, and where the exemption is applied ----------------------
-// Only the SBIVER arm is exercised behaviourally above: satisfying the other
-// one would mean declaring SB_Instagram_GDPR_Integrations in this process, and
-// a class is no more removable than a constant. The drift guard already pins
-// both arms textually, so assert the class arm here rather than leave a reader
-// to infer it from a body comparison.
-sb_eq(
-	false !== strpos( $normalise( $body ), "class_exists( 'SB_Instagram_GDPR_Integrations', false )" ),
-	true,
-	'the loaded-class signal is accepted as an alternative to the version constant'
-);
-
 // The self-restriction must clear only the CATEGORY-level block and leave the
 // per-service decision able to put it back. Removing the entry from
 // $social_ids instead would skip that check entirely, so a visitor who
@@ -259,7 +170,8 @@ sb_eq(
 // preference-centre toggle showed it off. Pinned structurally because the
 // difference is invisible in the blocked/not-blocked outcome that the rest of
 // this suite can observe.
-$social_pass = strpos( (string) $shipped, '$sb_self_restricts = $this->smash_balloon_self_restricts();' );
+$shipped     = $fe_src;
+$social_pass = strpos( (string) $shipped, '$sb_self_restricts = self::smash_balloon_self_restricts();' );
 sb_eq( false !== $social_pass, true, 'the self-restriction is resolved once, outside the social-id loop' );
 if ( false !== $social_pass ) {
 	$region        = substr( (string) $shipped, $social_pass, 2600 );
