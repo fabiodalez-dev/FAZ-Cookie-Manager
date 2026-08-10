@@ -749,9 +749,9 @@ class Geolocation {
 				return new \WP_Error( 'faz_geo_no_mmdb', __( 'No .mmdb file found in the archive.', 'faz-cookie-manager' ) );
 			}
 
-			// Reset cached reader and path so they pick up the new file.
-			self::$mmdb_reader   = null;
-			self::$db_path_cache = null;
+			// Every memo may contain an answer from the database we just replaced,
+			// including country/region results resolved earlier in this request.
+			self::reset_runtime_cache();
 
 			return true;
 		} catch ( \Exception $e ) {

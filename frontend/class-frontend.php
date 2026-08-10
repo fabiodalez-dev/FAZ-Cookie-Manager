@@ -684,10 +684,8 @@ class Frontend {
 			);
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';
-			// Compute the suffix per-file: wca.js and microsoft-consent.js
-			// are not in the build:min pipeline, so reusing the $suffix
-			// computed for script.js would produce URLs like wca.min.js
-			// that 404 on any install where script.min.js exists.
+			// Compute the suffix per-file so SCRIPT_DEBUG and a missing generated
+			// asset both fall back safely to the readable source.
 			$wca_suffix = $this->get_script_suffix( 'js/wca' );
 			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
 			if ( true === $this->is_gsk_enabled() ) {

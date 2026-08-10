@@ -691,7 +691,7 @@ class Controller {
 		}
 
 		// CSV header row.
-		fputcsv( $output, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ) );
+		fputcsv( $output, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ), ',', '"', '\\' );
 
 		// Stream in keyset-paginated batches instead of materialising the whole
 		// table in one get_results() call: the consent-log table is the plugin's
@@ -700,13 +700,22 @@ class Controller {
 		// descending preserves the newest-first export order and every batch is
 		// an index range scan.
 		$batch_size  = 1000;
-		$last_log_id = PHP_INT_MAX;
+		$last_log_id = null;
 
 		do {
-			$batch_values = array_merge( $values, array( $last_log_id, $batch_size ) );
+			// Do not seed the cursor with PHP_INT_MAX: on a 32-bit PHP build that
+			// would exclude valid BIGINT rows above 2,147,483,647. The first batch
+			// has no cursor predicate; subsequent batches use an id read from MySQL.
+			// Bind the BIGINT cursor as a decimal string. WordPress' %d formatter
+			// casts through the platform integer size and would still overflow on
+			// 32-bit PHP after the first batch.
+			$cursor_clause = null === $last_log_id ? '' : ' AND log_id < %s';
+			$batch_values  = null === $last_log_id
+				? array_merge( $values, array( $batch_size ) )
+				: array_merge( $values, array( $last_log_id, $batch_size ) );
 			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $where_clause is built from a closed allowlist of column names + %s/%d placeholders, all user values flow through $batch_values which prepare() binds.
 			$query = $wpdb->prepare(
-				"SELECT * FROM {$table} WHERE {$where_clause} AND log_id < %d ORDER BY log_id DESC LIMIT %d",
+				"SELECT * FROM {$table} WHERE {$where_clause}{$cursor_clause} ORDER BY log_id DESC LIMIT %d",
 				$batch_values
 			);
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query produced by the prepare() call above. CSV export — must reflect live data.
@@ -717,7 +726,7 @@ class Controller {
 			}
 
 			foreach ( $items as $item ) {
-				$last_log_id = (int) $item['log_id'];
+				$last_log_id = (string) $item['log_id'];
 				fputcsv(
 					$output,
 					array_map(
@@ -734,7 +743,10 @@ class Controller {
 							isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
 							$item['created_at'],
 						)
-					)
+					),
+					',',
+					'"',
+					'\\'
 				);
 			}
 		} while ( count( $items ) === $batch_size );

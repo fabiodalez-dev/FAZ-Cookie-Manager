@@ -198,7 +198,15 @@ class Activator {
 
 		if ( function_exists( 'wp_set_option_autoload_values' ) ) {
 			// WP 6.4+: flips the flags and handles all option caches for us.
-			wp_set_option_autoload_values( array_fill_keys( $names, false ) );
+			$results = wp_set_option_autoload_values( array_fill_keys( $names, false ) );
+			foreach ( $names as $name ) {
+				if ( empty( $results[ $name ] ) ) {
+					// Core reports each requested option independently. Treat even a
+					// partial write as a failed migration so the consolidated version
+					// flag is not advanced and the remaining rows are retried.
+					throw new \RuntimeException( 'FAZ: failed to demote every autoloaded option; migration will retry.' );
+				}
+			}
 			return;
 		}
 

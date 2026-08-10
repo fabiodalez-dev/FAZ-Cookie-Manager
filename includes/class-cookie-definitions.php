@@ -428,10 +428,10 @@ class Cookie_Definitions {
 
 		// The snapshot only changes on plugin updates, so cache its metadata
 		// keyed by mtime+size instead of re-decoding 2.8 MB per admin screen.
-		$mtime     = (int) filemtime( $file );
-		$size      = (int) filesize( $file );
+		$mtime       = (int) filemtime( $file );
+		$size        = (int) filesize( $file );
 		$fingerprint = $mtime . ':' . $size;
-		$cached    = get_option( self::BUNDLED_META_KEY, false );
+		$cached      = get_option( self::BUNDLED_META_KEY, false );
 		if (
 			is_array( $cached )
 			&& isset( $cached['fingerprint'], $cached['meta'] )

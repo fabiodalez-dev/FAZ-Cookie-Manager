@@ -114,6 +114,7 @@ namespace {
 		public $rows       = array(); // log_id => row
 		private $auto      = 0;
 		public $updates    = array(); // record of update() calls
+		public $queries    = array(); // record export queries for pagination assertions
 
 		public function get_charset_collate() { return ''; }
 		public function insert( $table, $data, $format = null ) {
@@ -151,6 +152,7 @@ namespace {
 			return $best; // ARRAY_A assumed by caller.
 		}
 		public function get_results( $q, $output = OBJECT ) {
+			$this->queries[] = $q;
 			// Used by the migration: return rows with log_id > cursor.
 			if ( false !== strpos( $q, 'SELECT log_id, user_agent' ) ) {
 				if ( preg_match( '/log_id > (\d+)/', $q, $m ) ) {
@@ -164,6 +166,19 @@ namespace {
 					usort( $out, function ( $a, $b ) { return $a['log_id'] - $b['log_id']; } );
 					return $out;
 				}
+			}
+			// Used by export_csv(): emulate descending keyset pagination.
+			if ( false !== strpos( $q, 'SELECT *' ) && false !== strpos( $q, 'ORDER BY log_id DESC' ) ) {
+				$cursor = null;
+				if ( preg_match( "/log_id < '?([0-9]+)'?/", $q, $m ) ) {
+					$cursor = (int) $m[1];
+				}
+				$limit = preg_match( '/LIMIT (\d+)/', $q, $m ) ? (int) $m[1] : 1000;
+				$out   = array_values( array_filter( $this->rows, function ( $row ) use ( $cursor ) {
+					return null === $cursor || (int) $row['log_id'] < $cursor;
+				} ) );
+				usort( $out, function ( $a, $b ) { return (int) $b['log_id'] <=> (int) $a['log_id']; } );
+				return array_slice( $out, 0, $limit );
 			}
 			return array();
 		}
@@ -342,6 +357,41 @@ namespace {
 		if ( (int) ( $u['where']['log_id'] ?? 0 ) === 1002 ) { $touched_1002 = true; }
 	}
 	ok( ! $touched_1002, 'already-hashed (64-hex) row is skipped — migration is idempotent' );
+
+	// ============================================================
+	// 8. Bounded CSV export uses a cursor from the database
+	// ============================================================
+	echo "\n-- keyset-paginated CSV export --\n";
+	$GLOBALS['wpdb']->rows    = array();
+	$GLOBALS['wpdb']->queries = array();
+	for ( $i = 0; $i < 1001; $i++ ) {
+		$id = 3000000000 + $i; // Deliberately above a signed 32-bit PHP_INT_MAX.
+		$GLOBALS['wpdb']->rows[ $id ] = array(
+			'log_id'         => $id,
+			'consent_id'     => 'export-' . $id,
+			'status'         => 'accepted',
+			'categories'     => '{}',
+			'ip_hash'        => 'ip-hash',
+			'user_agent'     => 'ua-hash',
+			'url'            => 'https://example.test/path',
+			'banner_slug'    => 'main',
+			'policy_revision' => 1,
+			'created_at'     => '2026-08-10 12:00:00',
+		);
+	}
+	$csv   = $ctrl->export_csv();
+	$lines = array_values( array_filter( preg_split( '/\r?\n/', trim( $csv ) ), 'strlen' ) );
+	eq( count( $lines ), 1002, 'export emits one header plus all 1001 rows across two batches' );
+	ok( false !== strpos( $lines[1], '3000001000' ), 'export remains newest-first for BIGINT ids above 32-bit range' );
+	ok( false !== strpos( end( $lines ), '3000000000' ), 'second keyset batch reaches the oldest row exactly once' );
+	$export_queries = array_values( array_filter( $GLOBALS['wpdb']->queries, function ( $query ) {
+		return false !== strpos( $query, 'SELECT *' );
+	} ) );
+	ok( false === strpos( $export_queries[0], 'log_id <' ), 'first batch has no architecture-sized synthetic cursor' );
+	ok(
+		false !== strpos( $export_queries[1], "log_id < '3000000001'" ),
+		'next batch binds the last database BIGINT as a platform-safe decimal string'
+	);
 
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";

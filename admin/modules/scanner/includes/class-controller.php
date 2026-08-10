@@ -1259,7 +1259,13 @@ class Controller {
 				$cookie->set_type( 1 );
 				$cookie->set_discovered( true );
 
-				Cookie_Controller::get_instance()->create_item( $cookie );
+				$result = Cookie_Controller::get_instance()->create_item( $cookie );
+				if ( false === $result ) {
+					// Do not report or count a row the database rejected. Throwing also
+					// drives the finally block, which restores invalidation and flushes
+					// any rows that were inserted earlier in this batch.
+					throw new \RuntimeException( 'FAZ: failed to persist scanned cookie "' . $name . '".' );
+				}
 				$logger->log( '  CREATED: "' . $name . '"' );
 				$existing_names[ $name ] = true;
 				++$created;
