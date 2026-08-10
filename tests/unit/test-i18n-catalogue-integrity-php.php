@@ -112,6 +112,56 @@ if ( 0 !== $has_msgfmt ) {
 
 $tmp = sys_get_temp_dir() . '/faz-catalogue-check-' . getmypid() . '.mo';
 
+// `wp i18n make-pot` derives the support-forum slug in Report-Msgid-Bugs-To
+// from the NAME OF THE DIRECTORY it runs in, not from the plugin header. Run it
+// from a scratch worktree — which is the normal way to work on two branches at
+// once — and every catalogue silently ships a 404 as the address translators are
+// invited to report bugs to. The command succeeds and the diff reads like a
+// routine header bump, so nothing but an assertion catches it.
+//
+// The expected slug is taken from the plugin's own Text Domain header: it is the
+// one source that does not move with the checkout, which is precisely the
+// variable that causes this.
+$plugin_php = dirname( __DIR__, 2 ) . '/faz-cookie-manager.php';
+$domain     = '';
+if ( preg_match( '/^\s*\*\s*Text Domain:\s*(\S+)/mi', (string) @file_get_contents( $plugin_php ), $m ) ) {
+	$domain = $m[1];
+}
+cat_eq( '' !== $domain, true, 'the plugin declares a Text Domain to check catalogue headers against' );
+
+// The header has to be reassembled before it can be read. PO wraps long values
+// across adjacent quoted lines, and Poedit does exactly that to this one — the
+// Czech catalogue carries it as "…/plugin/faz-cookie-" + "manager\n". Matching
+// line by line would skip precisely the catalogues a translation tool has
+// touched, which are the ones worth checking. And a skip here is never silent:
+// a guard that quietly declines to run reads as a pass.
+foreach ( array_merge( $pos, glob( $languages . '/*.pot' ) ) as $catalogue ) {
+	$name  = basename( $catalogue );
+	$lines = explode( "\n", (string) @file_get_contents( $catalogue ) );
+	$joined = '';
+	$in_header = false;
+	foreach ( $lines as $line ) {
+		$line = trim( $line );
+		if ( ! $in_header ) {
+			if ( 'msgstr ""' === $line ) {
+				$in_header = true;
+			}
+			continue;
+		}
+		if ( '' === $line || '"' !== substr( $line, 0, 1 ) ) {
+			break; // end of the header entry
+		}
+		$joined .= substr( $line, 1, -1 );
+	}
+
+	if ( ! preg_match( '#Report-Msgid-Bugs-To:\s*(\S+?)\\\\n#', $joined, $m ) ) {
+		cat_eq( false, true, "{$name} — a Report-Msgid-Bugs-To header could be read" );
+		continue;
+	}
+	$slug = basename( rtrim( $m[1], '/' ) );
+	cat_eq( $slug, $domain, "{$name} — the bug-report URL points at this plugin, not the build directory" );
+}
+
 foreach ( $pos as $po ) {
 	$name = basename( $po );
 	$mo   = substr( $po, 0, -3 ) . '.mo';
