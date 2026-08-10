@@ -6473,6 +6473,23 @@ class Frontend {
 	}
 
 	/**
+	 * Admin URL of Instagram Feed's own settings screen.
+	 *
+	 * Where its GDPR option lives, so a notice can send the site owner to the
+	 * control that actually decides the behaviour instead of describing it.
+	 * The slug is pinned by a test against the plugin's own registration, since
+	 * a link to a page that does not exist is worse than no link.
+	 *
+	 * @since 1.26.1
+	 * @return string
+	 */
+	public static function smash_balloon_settings_url() {
+		return function_exists( 'admin_url' )
+			? admin_url( 'admin.php?page=' . self::SMASH_BALLOON_SETTINGS_SLUG )
+			: '';
+	}
+
+	/**
 	 * Whether Smash Balloon's Instagram Feed already restricts itself.
 	 *
 	 * Instagram Feed has its own GDPR setting, `gdpr` in the
@@ -6495,29 +6512,25 @@ class Frontend {
 	 * @since 1.26.1
 	 * @return bool True when Instagram Feed is handling it and we should not.
 	 */
-	/**
-	 * Admin URL of Instagram Feed's own settings screen.
-	 *
-	 * Where its GDPR option lives, so a notice can send the site owner to the
-	 * control that actually decides the behaviour instead of describing it.
-	 * The slug is pinned by a test against the plugin's own registration, since
-	 * a link to a page that does not exist is worse than no link.
-	 *
-	 * @since 1.26.1
-	 * @return string
-	 */
-	public static function smash_balloon_settings_url() {
-		return function_exists( 'admin_url' )
-			? admin_url( 'admin.php?page=' . self::SMASH_BALLOON_SETTINGS_SLUG )
-			: '';
-	}
-
 	private function smash_balloon_self_restricts() {
 		// Guarded so the method degrades to "block" in any context where these
 		// are unavailable — standalone unit harnesses stub only what the code
 		// they exercise needs, and an undefined function here would fatal a
 		// caller that has nothing to do with Instagram.
 		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
+			return false;
+		}
+		// The option outlives the plugin. Deactivating or deleting Instagram
+		// Feed leaves `sb_instagram_settings` behind in wp_options, so a stale
+		// `gdpr=yes` from an install that is no longer running would read as
+		// "somebody else is handling this" when nobody is — and standing down
+		// on that would ship the very tracker this accommodation assumes is
+		// already contained. Require a signal that the code implementing the
+		// limitation is loaded: either the plugin's version constant or the
+		// class whose blocking_cdn() is the behaviour being deferred to.
+		// Both vanish with the plugin and neither can be left behind in the
+		// database, which is exactly the property the option lacks.
+		if ( ! defined( 'SBIVER' ) && ! class_exists( 'SB_Instagram_GDPR_Integrations', false ) ) {
 			return false;
 		}
 		if ( ! function_exists( 'get_option' ) ) {
@@ -6527,7 +6540,14 @@ class Frontend {
 		if ( ! is_array( $settings ) || ! isset( $settings['gdpr'] ) ) {
 			return false;
 		}
-		return 'yes' === strtolower( trim( (string) $settings['gdpr'] ) );
+		// Only a string can carry the documented value. A corrupted option
+		// holding an array or an object would raise a conversion warning or
+		// throw outright on the cast, turning a malformed setting into a
+		// frontend error — so reject the type instead of normalising it.
+		if ( ! is_string( $settings['gdpr'] ) ) {
+			return false;
+		}
+		return 'yes' === strtolower( trim( $settings['gdpr'] ) );
 	}
 
 	/**
@@ -6627,9 +6647,7 @@ class Frontend {
 		// Stand down when Instagram Feed already removed the third-party surface
 		// itself. Blocking a feed that makes no third-party request protects
 		// nobody and costs the visitor a placeholder they must click for nothing.
-		if ( $this->smash_balloon_self_restricts() ) {
-			unset( $social_ids['sb_instagram'] );
-		}
+		$sb_self_restricts = $this->smash_balloon_self_restricts();
 
 		foreach ( $social_ids as $id_prefix => $info ) {
 			if ( false === stripos( $content, $id_prefix ) ) {
@@ -6638,6 +6656,19 @@ class Frontend {
 
 			$category     = $info['category'];
 			$should_block = in_array( $category, $blocked_categories, true );
+
+			// Applied here, inside the loop, rather than by dropping the entry
+			// before it: dropping it would also skip the per-service check
+			// below, so a visitor who explicitly denied smash-balloon-instagram
+			// would get the feed anyway while the preference-centre toggle
+			// showed it off. An explicit denial is a stronger and more specific
+			// signal than an inferred redundancy, and the rule everywhere else
+			// in this plugin is that the most restrictive explicit answer wins.
+			// So this only clears the CATEGORY-level block, and leaves the
+			// per-service decision free to put it back.
+			if ( $sb_self_restricts && 'smash-balloon-instagram' === $info['service_id'] ) {
+				$should_block = false;
+			}
 
 			// Per-service consent check: override category-level decision.
 			$service_consent = $this->get_service_consent();

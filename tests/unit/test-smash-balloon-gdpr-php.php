@@ -64,6 +64,9 @@ class Sb_Gdpr_Probe {
 		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
 			return false;
 		}
+		if ( ! defined( 'SBIVER' ) && ! class_exists( 'SB_Instagram_GDPR_Integrations', false ) ) {
+			return false;
+		}
 		if ( ! function_exists( 'get_option' ) ) {
 			return false;
 		}
@@ -71,13 +74,34 @@ class Sb_Gdpr_Probe {
 		if ( ! is_array( $settings ) || ! isset( $settings['gdpr'] ) ) {
 			return false;
 		}
-		return 'yes' === strtolower( trim( (string) $settings['gdpr'] ) );
+		if ( ! is_string( $settings['gdpr'] ) ) {
+			return false;
+		}
+		return 'yes' === strtolower( trim( $settings['gdpr'] ) );
 	}
 }
 
 $probe = new Sb_Gdpr_Probe();
 
 echo "Smash Balloon Instagram Feed — GDPR accommodation\n\n";
+
+// --- the plugin is not loaded ----------------------------------------------
+// This block MUST run before anything defines SBIVER: a PHP constant cannot be
+// undefined, so "plugin absent" is only observable while it is still absent.
+// The ordering is load-bearing, not stylistic.
+//
+// Instagram Feed does not clean sb_instagram_settings out of wp_options when it
+// is deactivated or deleted, so gdpr='yes' can outlive the code that honoured
+// it. Reading that as "somebody else is handling this" would stand our block
+// down while nothing at all restricted the feed — the one way this
+// accommodation could ship a tracker.
+$GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'yes' ) );
+sb_eq( $probe->smash_balloon_self_restricts(), false, "gdpr 'yes' but Instagram Feed NOT loaded — stale option, keep blocking" );
+
+// From here on, simulate the plugin being active. Its bootstrap defines SBIVER
+// unconditionally (guarded only against redefinition), so the constant is
+// present for exactly as long as the plugin is.
+define( 'SBIVER', '6.11.4' );
 
 // --- the reported case -----------------------------------------------------
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'yes' ) );
@@ -115,6 +139,16 @@ sb_eq( $probe->smash_balloon_self_restricts(), false, "an unexpected value ('tru
 
 $GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 1 ) );
 sb_eq( $probe->smash_balloon_self_restricts(), false, 'a truthy non-string is not treated as yes' );
+
+// A corrupted option can hold a non-scalar. Casting an array to string raises a
+// conversion warning; casting an object without __toString throws. Either turns
+// a malformed setting into a frontend error, so the type is rejected outright —
+// and these two cases pin that it neither throws nor reads as permission.
+$GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => array( 'yes' ) ) );
+sb_eq( $probe->smash_balloon_self_restricts(), false, 'an array value is rejected, not stringified' );
+
+$GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => new stdClass() ) );
+sb_eq( $probe->smash_balloon_self_restricts(), false, 'an object value is rejected without throwing' );
 
 // --- the escape hatch ------------------------------------------------------
 $GLOBALS['sb_options']      = array( 'sb_instagram_settings' => array( 'gdpr' => 'yes' ) );
@@ -162,11 +196,30 @@ $needle  = "private function smash_balloon_self_restricts() {";
 $pos     = strpos( (string) $shipped, $needle );
 $end     = false === $pos ? false : strpos( (string) $shipped, "\n\t}", $pos );
 $body    = ( false === $pos || false === $end ) ? '' : substr( (string) $shipped, $pos, $end - $pos );
+// Compare logic, not prose: run both sides through PHP's own tokenizer and drop
+// comments before collapsing whitespace. A guard that also pinned the comments
+// would fail on every clarification of the reasoning — which is the one kind of
+// edit nobody should have to think twice about — while a naive strip of `//`
+// would maul any string literal containing a URL.
 $normalise = function ( $code ) {
-	return trim( preg_replace( '/\s+/', ' ', (string) $code ) );
+	$out = '';
+	foreach ( token_get_all( '<?php ' . $code ) as $token ) {
+		if ( is_array( $token ) ) {
+			if ( T_COMMENT === $token[0] || T_DOC_COMMENT === $token[0] || T_OPEN_TAG === $token[0] ) {
+				continue;
+			}
+			$out .= $token[1];
+			continue;
+		}
+		$out .= $token;
+	}
+	return trim( preg_replace( '/\s+/', ' ', $out ) );
 };
 $copy_body = $normalise( "
 		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
+			return false;
+		}
+		if ( ! defined( 'SBIVER' ) && ! class_exists( 'SB_Instagram_GDPR_Integrations', false ) ) {
 			return false;
 		}
 		if ( ! function_exists( 'get_option' ) ) {
@@ -176,13 +229,54 @@ $copy_body = $normalise( "
 		if ( ! is_array( \$settings ) || ! isset( \$settings['gdpr'] ) ) {
 			return false;
 		}
-		return 'yes' === strtolower( trim( (string) \$settings['gdpr'] ) );
+		if ( ! is_string( \$settings['gdpr'] ) ) {
+			return false;
+		}
+		return 'yes' === strtolower( trim( \$settings['gdpr'] ) );
 " );
 sb_eq(
 	false !== strpos( $normalise( $body ), $copy_body ),
 	true,
 	'the copy under test still matches the shipped method (drift guard)'
 );
+
+// --- the class arm, and where the exemption is applied ----------------------
+// Only the SBIVER arm is exercised behaviourally above: satisfying the other
+// one would mean declaring SB_Instagram_GDPR_Integrations in this process, and
+// a class is no more removable than a constant. The drift guard already pins
+// both arms textually, so assert the class arm here rather than leave a reader
+// to infer it from a body comparison.
+sb_eq(
+	false !== strpos( $normalise( $body ), "class_exists( 'SB_Instagram_GDPR_Integrations', false )" ),
+	true,
+	'the loaded-class signal is accepted as an alternative to the version constant'
+);
+
+// The self-restriction must clear only the CATEGORY-level block and leave the
+// per-service decision able to put it back. Removing the entry from
+// $social_ids instead would skip that check entirely, so a visitor who
+// explicitly denied smash-balloon-instagram would get the feed anyway while the
+// preference-centre toggle showed it off. Pinned structurally because the
+// difference is invisible in the blocked/not-blocked outcome that the rest of
+// this suite can observe.
+$social_pass = strpos( (string) $shipped, '$sb_self_restricts = $this->smash_balloon_self_restricts();' );
+sb_eq( false !== $social_pass, true, 'the self-restriction is resolved once, outside the social-id loop' );
+if ( false !== $social_pass ) {
+	$region        = substr( (string) $shipped, $social_pass, 2600 );
+	$exemption_at  = strpos( $region, "if ( \$sb_self_restricts && 'smash-balloon-instagram' === \$info['service_id'] )" );
+	$per_service_at = strpos( $region, '$service_consent = $this->get_service_consent();' );
+	sb_eq( false !== $exemption_at, true, 'the exemption is applied inside the loop, not by dropping the entry' );
+	sb_eq(
+		( false !== $exemption_at && false !== $per_service_at && $exemption_at < $per_service_at ),
+		true,
+		'it runs BEFORE the per-service check, so an explicit denial still binds'
+	);
+	sb_eq(
+		false === strpos( $region, "unset( \$social_ids['sb_instagram'] )" ),
+		true,
+		'the entry is never dropped from the loop'
+	);
+}
 
 echo "\n" . ( $tests_run - $failed ) . "/{$tests_run} passed\n";
 exit( 0 === $failed ? 0 : 1 );
