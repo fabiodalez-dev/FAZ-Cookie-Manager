@@ -39,6 +39,10 @@ if ( ! function_exists( 'apply_filters' ) ) {
 	}
 }
 
+// Loaded for real, not stubbed: the exempt-pattern set is derived FROM the
+// provider database, so a stub would let the two drift and the assertions below
+// would be checking this file against itself.
+require_once dirname( __DIR__, 2 ) . '/includes/class-known-providers.php';
 require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
 use FazCookie\Frontend\Frontend;
@@ -189,6 +193,55 @@ if ( false !== $social_pass ) {
 		'the entry is never dropped from the loop'
 	);
 }
+
+// --- the script side of the accommodation ----------------------------------
+// Exempting the container without the script was a half measure that produced
+// the worst of the three outcomes: the feed's <div> rendered while its own
+// first-party script stayed blocked, so the visitor got an empty box with no
+// placeholder to explain it. Measured on a real page before this was fixed.
+$GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => 'yes' ) );
+$exempt = Frontend::smash_balloon_exempt_patterns();
+
+sb_eq( isset( $exempt['sb-instagram'] ), true, "gdpr 'yes' — the dedicated provider's pattern is exempt" );
+sb_eq( isset( $exempt['sb_instagram_scripts'] ), true, "gdpr 'yes' — its handle pattern is exempt too" );
+
+// The trap that made the first fix inert: a SECOND provider entry covers the
+// same asset. The generic `instagram` service carries a path pattern for the
+// plugin's own directory, and leaving it in place kept blocking the very script
+// the dedicated exemption had just released.
+sb_eq( isset( $exempt['plugins/instagram-feed/js/'] ), true, "the generic provider's path pattern for the same plugin is exempt" );
+sb_eq( isset( $exempt['plugins/instagram-feed-pro/js/'] ), true, 'and the Pro build of the same plugin, which ships under its own slug' );
+
+// Nothing beyond Instagram Feed may ride along: this exemption removes blocking,
+// so breadth here is the dangerous direction.
+$strays = array();
+foreach ( array_keys( $exempt ) as $pattern ) {
+	if ( false === stripos( $pattern, 'instagram-feed' ) && false === stripos( $pattern, 'sb-instagram' ) && false === stripos( $pattern, 'sb_instagram' ) ) {
+		$strays[] = $pattern;
+	}
+}
+sb_eq( $strays, array(), 'no unrelated provider is exempted along with it' );
+sb_eq( isset( $exempt['instagram.com'] ), false, "instagram.com itself stays blocked — it is a genuine third party" );
+
+// And every value is off when the accommodation is.
+foreach ( array( 'auto', 'no', '' ) as $value ) {
+	$GLOBALS['sb_options'] = array( 'sb_instagram_settings' => array( 'gdpr' => $value ) );
+	sb_eq( Frontend::smash_balloon_exempt_patterns(), array(), "gdpr '{$value}' — nothing is exempted" );
+}
+
+// Both blocking paths must consult it. The client-side interceptor is built from
+// a SEPARATE list, so exempting only the server map would leave the browser
+// re-blocking the script the server had just allowed.
+$server_at = strpos( (string) $fe_src, '$sb_exempt_patterns = self::smash_balloon_exempt_patterns();' );
+sb_eq( false !== $server_at, true, 'the server provider map applies the exemption' );
+// Anchored on the client loop's own condition rather than on a count of call
+// sites: a count says "two of something" and would go green on two copies in the
+// same function, which is the failure it is meant to exclude.
+sb_eq(
+	false !== strpos( (string) $fe_src, '$this->is_always_allowed_gateway_pattern( $pattern ) || isset( $sb_exempt_patterns[ $pattern ] )' ),
+	true,
+	'and so does the client-side provider list (separate code path, same set)'
+);
 
 echo "\n" . ( $tests_run - $failed ) . "/{$tests_run} passed\n";
 exit( 0 === $failed ? 0 : 1 );

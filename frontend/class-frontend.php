@@ -2152,8 +2152,14 @@ class Frontend {
 		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
 
 		// Some payment SDKs are required outside checkout too (e.g. Stripe express buttons).
+		// The Instagram Feed exemption rides along here for the same reason it
+		// exists in get_provider_category_map(): the client-side interceptor is a
+		// SEPARATE list built from $this->providers, so exempting only the server
+		// map would leave the browser re-blocking the very script the server just
+		// allowed — the pattern reaching the page in _fazConfig is enough to do it.
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
 		foreach ( array_keys( $this->providers ) as $pattern ) {
-			if ( $this->is_always_allowed_gateway_pattern( $pattern ) ) {
+			if ( $this->is_always_allowed_gateway_pattern( $pattern ) || isset( $sb_exempt_patterns[ $pattern ] ) ) {
 				unset( $this->providers[ $pattern ] );
 			}
 		}
@@ -4405,12 +4411,28 @@ class Frontend {
 		// since the gateway match is substring-based and a generic pattern like
 		// "payment" must not be silently exempted because it is a substring of
 		// "stripe-payment".
+		// 5b. Same treatment for Instagram Feed's own patterns when it is limiting
+		// itself. Exempting the container (process_social_embeds) without this was
+		// a half measure that produced the worst of the three outcomes: the feed's
+		// <div> rendered while its first-party script stayed blocked, so the
+		// visitor got an empty box with no placeholder to explain it — worse than
+		// either blocking the feed or letting it work. With the GDPR setting on
+		// Yes the plugin serves local copies and contacts nothing, so its script
+		// is first-party and declares no cookies; there is nothing left to gate.
+		// Pattern list read from the provider database rather than repeated here,
+		// so the two cannot drift apart.
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
+
 		foreach ( array_keys( $map ) as $p ) {
 			$is_explicit_rule = isset( $custom_patterns[ $p ] ) || ! array_key_exists( $p, $pre_filter_map );
 			if ( $is_explicit_rule ) {
 				continue;
 			}
 			if ( $this->is_always_allowed_gateway_pattern( $p ) ) {
+				unset( $map[ $p ] );
+				continue;
+			}
+			if ( isset( $sb_exempt_patterns[ $p ] ) ) {
 				unset( $map[ $p ] );
 			}
 		}
@@ -6512,6 +6534,55 @@ class Frontend {
 	 * @since 1.26.1
 	 * @return bool True when Instagram Feed is handling it and we should not.
 	 */
+	/**
+	 * Blocking patterns to drop while Instagram Feed is limiting itself.
+	 *
+	 * Exempting the container alone was a half measure that produced the worst of
+	 * the three possible outcomes: the feed's `<div>` rendered while its script
+	 * stayed blocked, so the visitor got an empty box and not even a placeholder
+	 * to explain it — worse than blocking the feed outright, and worse than
+	 * letting it work. With the GDPR setting on Yes the plugin serves local
+	 * copies and contacts nothing, so its script is first-party and its provider
+	 * entry declares no cookies; there is nothing left to gate.
+	 *
+	 * Two provider entries cover the same asset and BOTH must go, which is why
+	 * this is derived rather than listed: `smash-balloon-instagram` owns
+	 * `sb-instagram`, while the generic `instagram` entry carries
+	 * `plugins/instagram-feed/js/` — a path pattern matching the very same
+	 * first-party script. Dropping only the first leaves the second blocking it,
+	 * which is exactly the empty-box state described above.
+	 *
+	 * @since 1.26.1
+	 * @return array Map of pattern => true; empty when the accommodation is off.
+	 */
+	public static function smash_balloon_exempt_patterns() {
+		if ( ! self::smash_balloon_self_restricts() ) {
+			return array();
+		}
+		$exempt = array();
+		foreach ( Known_Providers::get_all() as $service_id => $service ) {
+			$patterns = isset( $service['patterns'] ) && is_array( $service['patterns'] ) ? $service['patterns'] : array();
+			foreach ( $patterns as $pattern ) {
+				// Instagram Feed's own assets, wherever the provider database
+				// files them: its dedicated entry, plus any pattern addressing
+				// the plugin's own directory. That directory name is the wp.org
+				// slug, so it is as stable an anchor as the provider id itself.
+				//
+				// `-pro` is matched too, and deliberately. Instagram Feed Pro is
+				// the same product installed under its own slug: it defines the
+				// same SBIVER and reads the same sb_instagram_settings, so the
+				// accommodation applies identically — and the provider database
+				// carries a separate `plugins/instagram-feed-pro/js/` pattern
+				// that would otherwise go on blocking the same first-party
+				// script on exactly the sites that paid for it.
+				if ( 'smash-balloon-instagram' === $service_id || preg_match( '#instagram-feed(-pro)?/#i', (string) $pattern ) ) {
+					$exempt[ $pattern ] = true;
+				}
+			}
+		}
+		return $exempt;
+	}
+
 	public static function smash_balloon_self_restricts() {
 		// Guarded so the method degrades to "block" in any context where these
 		// are unavailable — standalone unit harnesses stub only what the code
