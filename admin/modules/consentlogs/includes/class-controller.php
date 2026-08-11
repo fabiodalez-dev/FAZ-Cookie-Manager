@@ -998,13 +998,31 @@ class Controller {
 		// retention returned 0 forever — silently, since 0 also means "nothing to
 		// delete". Retention that never runs is a data-minimisation failure, not
 		// a performance one. Same shape as the DSAR cleanup in class-activator.
+		//
+		// Both numbers are filterable because the right values are properties of
+		// the host, not of this plugin: 1000 rows per batch and 200000 per run
+		// suit shared hosting, and are wrong in both directions elsewhere — a
+		// constrained box wants smaller batches, while an install with millions
+		// of expired rows needs many cron runs to catch up at 200k and would
+		// rather raise the cap once. The bounds are not politeness: the batch
+		// size becomes that many %d placeholders in one prepared DELETE, and an
+		// unclamped filter would walk into max_prepared_stmt_count / packet
+		// limits; a cap of 0 or less would purge nothing at all while reporting
+		// success, which is the same silent-retention-failure class this code
+		// was rewritten to eliminate.
+		$batch_size = (int) apply_filters( 'faz_retention_batch_size', 1000 );
+		$batch_size = max( 100, min( 10000, $batch_size ) );
+		$max_rows   = (int) apply_filters( 'faz_retention_max_rows', 200000 );
+		$max_rows   = max( $batch_size, min( 10000000, $max_rows ) );
+
 		$deleted = 0;
 		do {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention read — caching irrelevant.
 			$ids = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT log_id FROM {$table} WHERE created_at < %s ORDER BY log_id ASC LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					$cutoff
+					"SELECT log_id FROM {$table} WHERE created_at < %s ORDER BY log_id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff,
+					$batch_size
 				)
 			);
 			// get_col() returns an empty array both when the query fails and when
@@ -1040,7 +1058,7 @@ class Controller {
 			// removed by a concurrent request makes the DELETE report fewer than
 			// it read, and treating that as "last page" would stop early and
 			// leave expired rows behind until the next cron run.
-		} while ( count( $ids ) === 1000 && $deleted < 200000 );
+		} while ( count( $ids ) === $batch_size && $deleted < $max_rows );
 
 		return (int) $deleted;
 	}

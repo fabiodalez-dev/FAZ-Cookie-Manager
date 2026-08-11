@@ -95,13 +95,40 @@ class Controller {
 	}
 
 	/**
+	 * Whether register_cron_hook() has already attached its callbacks in this
+	 * request.
+	 *
+	 * @var bool
+	 */
+	private static $cron_hooks_registered = false;
+
+	/**
 	 * Register the WP-Cron hook for async scanning.
 	 *
 	 * The closures keep registration cheap on the frontend: the controller is
 	 * only autoloaded and instantiated when a scan cron event actually fires,
-	 * not on every request that merely registers the callbacks.
+	 * not on every request that merely registers the callbacks. That laziness
+	 * is why they stay closures rather than becoming array callbacks — an
+	 * `array( self::get_instance(), … )` callback would have to build the
+	 * controller on every request just to name the handler.
+	 *
+	 * The price of a closure is that it cannot be de-duplicated: WordPress keys
+	 * its callback table by _wp_filter_build_unique_id(), which spl_object_hash
+	 * -es a Closure, and two syntactically identical closures are two distinct
+	 * objects with two distinct hashes. Both therefore stay attached and the
+	 * scan runs TWICE. This is not hypothetical: register_cron_hook() is called
+	 * once from the plugin bootstrap (so wp-cron.php, which never loads the
+	 * admin modules, still has a handler) and once from the scanner module's
+	 * init(), and both fire in the same admin/REST request. Hence the guard —
+	 * it belongs here rather than at the callsites, because the reason the two
+	 * callsites exist is precisely that neither can know about the other.
 	 */
 	public static function register_cron_hook() {
+		if ( self::$cron_hooks_registered ) {
+			return;
+		}
+		self::$cron_hooks_registered = true;
+
 		add_action(
 			self::CRON_HOOK,
 			static function () {

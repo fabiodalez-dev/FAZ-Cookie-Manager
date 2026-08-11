@@ -41,7 +41,7 @@ class Controller {
 	 *
 	 * @var string
 	 */
-	private $db_version = '1.1';
+	private $db_version = '1.2';
 
 	/**
 	 * Return the current instance of the class
@@ -87,6 +87,23 @@ class Controller {
 		$table_name      = $this->get_table_name();
 		$charset_collate = $wpdb->get_charset_collate();
 
+		// db_version 1.2 drops idx_event_type (event_type). It was fully
+		// redundant: idx_event_created (event_type,created_at) has event_type as
+		// its leftmost column, and a B-tree serves any leftmost prefix of its key,
+		// so every lookup the single-column index could answer the composite
+		// already answered. The cost was not free — this table takes one INSERT
+		// per tracked pageview, the hottest write in the plugin, and each write
+		// maintained a third index nothing ever read.
+		//
+		// dbDelta only ADDS columns and keys; it never drops them. So this change
+		// gives new installs the lean schema, while installs created before 1.2
+		// keep the redundant key until it is dropped by hand
+		// (ALTER TABLE wp_faz_pageviews DROP INDEX idx_event_type). That is the
+		// deliberate choice: an automatic DROP INDEX would need a portable way to
+		// ask whether the index exists, and the portable-SQL lesson on this table
+		// is recent — the retention purge was a permanent silent no-op on SQLite
+		// installs because it used a MySQL-only DELETE … LIMIT. A redundant index
+		// costs write throughput; a broken migration costs the table.
 		$sql = "CREATE TABLE {$table_name} (
 			id bigint(20) NOT NULL AUTO_INCREMENT,
 			page_url varchar(500) NOT NULL DEFAULT '',
@@ -95,7 +112,6 @@ class Controller {
 			session_id varchar(64) DEFAULT '',
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
-			KEY idx_event_type (event_type),
 			KEY idx_created_at (created_at),
 			KEY idx_event_created (event_type,created_at)
 		) $charset_collate;";
@@ -369,13 +385,26 @@ class Controller {
 		// Select-then-delete, for the same reason as ConsentLogs: `DELETE … LIMIT`
 		// is a MySQL extension that SQLite rejects, which turned every batch into
 		// a failure and retention into a permanent no-op on those installs.
+		//
+		// Batch size and per-run cap are filterable, and share the filter names
+		// with ConsentLogs::cleanup_old_logs() on purpose: they answer the same
+		// question about the same host ("how much DB work may one retention cron
+		// run do here?"), and splitting them would make an admin tune one purge
+		// and silently leave the other on the defaults. See that method for why
+		// the clamps are load-bearing rather than decorative.
+		$batch_size = (int) apply_filters( 'faz_retention_batch_size', 1000 );
+		$batch_size = max( 100, min( 10000, $batch_size ) );
+		$max_rows   = (int) apply_filters( 'faz_retention_max_rows', 200000 );
+		$max_rows   = max( $batch_size, min( 10000000, $max_rows ) );
+
 		$deleted = 0;
 		do {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention read — caching irrelevant.
 			$ids = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT id FROM {$table} WHERE created_at < %s ORDER BY id ASC LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					$cutoff
+					"SELECT id FROM {$table} WHERE created_at < %s ORDER BY id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff,
+					$batch_size
 				)
 			);
 			// An empty result means both "failed" and "nothing matched", so the
@@ -408,7 +437,7 @@ class Controller {
 			// Loop on what was READ, not on what the DELETE reported: a row
 			// removed concurrently makes those differ, and stopping on the
 			// smaller number leaves expired rows behind.
-		} while ( count( $ids ) === 1000 && $deleted < 200000 );
+		} while ( count( $ids ) === $batch_size && $deleted < $max_rows );
 
 		return (int) $deleted;
 	}

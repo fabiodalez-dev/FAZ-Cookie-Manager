@@ -76,15 +76,26 @@ abstract class Base_Controller {
 	}
 
 	/**
-	 * When true, per-item cache invalidation is skipped. Bulk writers (the
-	 * scanner's discovery loop inserts one row per found cookie) enable this
-	 * around their loop and perform ONE invalidation at the end — otherwise
-	 * every insert paid a transient-prefix rotation, a wp_options LIKE scan
-	 * and ~100 wp_cache_delete() round-trips.
+	 * How many bulk writers are currently active. While above zero, per-item
+	 * cache invalidation is skipped. Bulk writers (the scanner's discovery loop
+	 * inserts one row per found cookie) enable this around their loop and
+	 * perform ONE invalidation at the end — otherwise every insert paid a
+	 * transient-prefix rotation, a wp_options LIKE scan and ~100
+	 * wp_cache_delete() round-trips.
 	 *
-	 * @var bool
+	 * A depth counter rather than a flag, because suspension is global (the
+	 * state is static and shared by every controller) while the callers are
+	 * local and cannot see each other. With a flag, a bulk writer that called
+	 * anything which itself suspends — directly, or through a
+	 * faz_after_create_cookie listener — got its suspension cancelled by the
+	 * INNER resume, and every remaining write in the OUTER loop paid the full
+	 * per-item invalidation the suspension existed to avoid. Silent: the writes
+	 * still succeed, only the performance guarantee quietly evaporates, which
+	 * is the kind of regression no test notices.
+	 *
+	 * @var int
 	 */
-	protected static $suspend_invalidation = false;
+	protected static $suspend_invalidation = 0;
 
 	/**
 	 * Enter bulk-write mode: suspend per-item cache invalidation.
@@ -95,16 +106,22 @@ abstract class Base_Controller {
 	 * @return void
 	 */
 	public static function suspend_cache_invalidation() {
-		self::$suspend_invalidation = true;
+		++self::$suspend_invalidation;
 	}
 
 	/**
 	 * Leave bulk-write mode.
 	 *
+	 * Invalidation resumes only when the OUTERMOST writer leaves, so a nested
+	 * pair cannot re-enable it under a batch that is still running. Floored at
+	 * zero so an unpaired resume — a caller that forgot its try/finally, or one
+	 * that runs after an exception already unwound its partner — can never push
+	 * the counter negative and wedge suspension on for the rest of the request.
+	 *
 	 * @return void
 	 */
 	public static function resume_cache_invalidation() {
-		self::$suspend_invalidation = false;
+		self::$suspend_invalidation = max( 0, self::$suspend_invalidation - 1 );
 	}
 
 	/**
@@ -113,7 +130,7 @@ abstract class Base_Controller {
 	 * @return bool
 	 */
 	public static function is_cache_invalidation_suspended() {
-		return self::$suspend_invalidation;
+		return self::$suspend_invalidation > 0;
 	}
 
 	/**
@@ -122,7 +139,7 @@ abstract class Base_Controller {
 	 * @return void
 	 */
 	public function delete_cache() {
-		if ( self::$suspend_invalidation ) {
+		if ( self::$suspend_invalidation > 0 ) {
 			return;
 		}
 		Cache::delete( $this->cache_group );

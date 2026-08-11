@@ -71,8 +71,11 @@ foreach ( array(
 	'admin/modules/pageviews/includes/class-controller.php'   => 'id',
 ) as $rel => $pk ) {
 	$src = (string) file_get_contents( $root . '/' . $rel );
+	// The page size is now a bound %d (it comes from faz_retention_batch_size),
+	// so the assertion is that the SELECT is still BOUNDED — not that it is
+	// bounded by a particular constant.
 	ret_eq(
-		1 === preg_match( '#SELECT\s+' . preg_quote( $pk, '#' ) . '\s+FROM[^;]*?LIMIT 1000#is', $src ),
+		1 === preg_match( '#SELECT\s+' . preg_quote( $pk, '#' ) . '\s+FROM[^;]*?LIMIT %d#is', $src ),
 		true,
 		basename( $rel ) . " — reads a bounded page of {$pk} first"
 	);
@@ -91,7 +94,7 @@ foreach ( array(
 	// Looping on the DELETE's own count stops early when a row vanished
 	// concurrently, silently leaving expired rows behind.
 	ret_eq(
-		false !== strpos( $src, 'while ( count( $ids ) === 1000' ),
+		false !== strpos( $src, 'while ( count( $ids ) === $batch_size' ),
 		true,
 		basename( $rel ) . ' — pagination continues on rows READ, not rows deleted'
 	);
