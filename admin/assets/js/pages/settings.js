@@ -265,13 +265,36 @@
 		return regions;
 	}
 
-	/** Show/hide elements based on data-show-if="path.to.checkbox" */
-	function applyShowIf() {
-		form.querySelectorAll('[data-show-if]').forEach(function (el) {
+	/**
+	 * Show/hide elements based on data-show-if="path.to.checkbox".
+	 *
+	 * A group may additionally carry data-clear-when-hidden, which unticks the
+	 * checkboxes inside it whenever it is hidden. That is ONLY correct where the
+	 * server enforces the same dependency: Settings::sanitize() drops
+	 * per_cookie_consent when per_service_consent is off, so leaving the hidden
+	 * checkbox ticked would submit a value the server discards, and — worse —
+	 * re-ticking the parent later would resurrect a stale "on" the admin never
+	 * chose. It is deliberately opt-in rather than applied to every hidden
+	 * group: clearing e.g. geolocation.target_regions whenever geo-targeting is
+	 * toggled off would destroy a configuration the server happily keeps.
+	 *
+	 * @param {HTMLElement} [root] Scope to search; defaults to the settings form.
+	 */
+	function applyShowIf(root) {
+		var scope = root || form;
+		scope.querySelectorAll('[data-show-if]').forEach(function (el) {
 			var path = el.getAttribute('data-show-if');
-			var src = form.querySelector('input[type="checkbox"][data-path="' + path + '"]');
+			var src = scope.querySelector('input[type="checkbox"][data-path="' + path + '"]');
 			if (!src) return;
-			function toggle() { el.style.display = src.checked ? '' : 'none'; }
+			var clears = el.hasAttribute('data-clear-when-hidden');
+			function toggle() {
+				el.style.display = src.checked ? '' : 'none';
+				if (clears && !src.checked) {
+					el.querySelectorAll('input[type="checkbox"][data-path]').forEach(function (cb) {
+						cb.checked = false;
+					});
+				}
+			}
 			toggle();
 			src.addEventListener('change', toggle);
 		});

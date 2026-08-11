@@ -171,6 +171,38 @@ namespace {
 	faz_assert_same( $cookie_dependency['banner_control']['per_service_consent'], false, 'per-service consent stays off when the admin switches it off' );
 	faz_assert_same( $cookie_dependency['banner_control']['per_cookie_consent'], false, 'per-cookie consent is dropped with its required per-service layer' );
 
+	// The case the settings screen actually produced before the toggle was
+	// gated: per-cookie ticked ALONE, with per_service_consent absent from the
+	// payload rather than explicitly false. It has to fall back to the default
+	// (off) and take per-cookie down with it — otherwise the admin is told
+	// "Settings saved successfully." for a value the server never stored. The
+	// UI half of this is admin/views/settings.php's data-show-if wrapper,
+	// covered by tests/unit/js/settings-per-cookie-gate.test.mjs.
+	$cookie_alone = Settings::sanitize(
+		array(
+			'banner_control' => array(
+				'per_cookie_consent' => true,
+			),
+		),
+		$defaults
+	);
+	faz_assert_same( $cookie_alone['banner_control']['per_service_consent'], false, 'per-service consent stays at its default when the payload omits it' );
+	faz_assert_same( $cookie_alone['banner_control']['per_cookie_consent'], false, 'per-cookie consent ticked alone cannot enable itself' );
+
+	// The retained direction: with the parent on, the child is stored as asked.
+	// Guards against "fixing" the invariant into an unconditional clear, which
+	// would make per-cookie consent impossible to switch on at all.
+	$cookie_retained = Settings::sanitize(
+		array(
+			'banner_control' => array(
+				'per_service_consent' => true,
+				'per_cookie_consent'  => true,
+			),
+		),
+		$defaults
+	);
+	faz_assert_same( $cookie_retained['banner_control']['per_cookie_consent'], true, 'per-cookie consent is retained when per-service consent is on' );
+
 	$geo_cache = Settings::sanitize(
 		array(
 			'banner_control' => array( 'cache_compatibility' => true ),
