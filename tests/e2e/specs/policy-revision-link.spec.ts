@@ -43,6 +43,20 @@ function clearLedger(): void {
   wpEval(`delete_option( '${LEDGER_OPTION}' );`);
 }
 
+/**
+ * The review token the policy currently hashes to, computed without going
+ * through the code path under test.
+ *
+ * review_hash() is what the notice compares against, and it neither reads nor
+ * writes the ledger — so it can say which value a correct seeding must land on,
+ * where the ledger itself can only say which value it happened to store.
+ */
+function currentReviewHash(): string {
+  return wpEval(
+    "echo \\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Version_Ledger::review_hash();",
+  ).trim();
+}
+
 type PolicySettings = Record<string, unknown> & { company?: Record<string, unknown> };
 
 let settingsSnapshot: PolicySettings | null = null;
@@ -172,15 +186,22 @@ test('first load seeds the ledger silently — the feature itself never prompts'
   clearLedger();
   expect(acknowledgedHash()).toBe('');
 
+  // Captured before the page runs, so the expected value cannot be derived from
+  // whatever the page decided to store.
+  const expected = currentReviewHash();
+  expect(expected).toMatch(HASH_RE);
+
   await loginAsAdmin(page);
   await openAdmin(page);
   await expect(page.locator(NOTICE)).toHaveCount(0);
 
   // Silence on its own would also be the outcome if the feature had done
   // nothing at all, so assert the other half of "seeds silently": the ledger
-  // really did adopt the current hash on that first load.
+  // really did adopt the CURRENT hash on that first load. Checking only the
+  // <6hex>.<6hex> shape would pass on any well-formed value, including a stale
+  // one — the shape is not the claim, the value is.
   const seeded = acknowledgedHash();
-  expect(seeded).toMatch(HASH_RE);
+  expect(seeded).toBe(expected);
 
   // Second load, still nothing: seeding is a one-off, not a per-load reset —
   // and it must not quietly re-seed to some other value either.
