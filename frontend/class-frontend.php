@@ -3813,7 +3813,7 @@ class Frontend {
 			// gateway from consent blocking after upgrading. Sanitising here
 			// closes it for existing data without a migration, and a migration
 			// would also have to win a version race with two other open branches.
-			if ( $on_checkout || ( isset( $enabled[ $key ] ) && \faz_sanitize_bool( $enabled[ $key ] ) ) ) {
+			if ( $on_checkout || ( isset( $enabled[ $key ] ) && \faz_sanitize_bool_strict( $enabled[ $key ] ) ) ) {
 				$patterns = array_merge( $patterns, $gateway['patterns'] );
 			}
 		}

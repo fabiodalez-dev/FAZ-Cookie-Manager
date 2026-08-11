@@ -38,9 +38,22 @@ if ( ! function_exists( 'faz_sanitize_bool' ) ) {
 	 * gap, because this function decides consent-adjacent booleans — a payment
 	 * gateway marked `"no"` was read as exempt from blocking and loaded before
 	 * consent. Every canonical negative this plugin actually writes or receives
-	 * is recognised now, and the list errs toward false: for a flag whose true
-	 * value REMOVES a restriction, a value nobody anticipated must not be read as
-	 * permission.
+	 * is recognised now.
+	 *
+	 * What this function does NOT do, stated plainly because an earlier version
+	 * of this docblock claimed otherwise: it does not err toward false for
+	 * arbitrary input. The negatives are ENUMERATED, so an unrecognised string
+	 * ('maybe', 'banana', a value truncated by a bad migration) still returns
+	 * true. Narrowing that globally is not safe — this is the plugin's general
+	 * boolean coercion, and it has callers where TRUE is the restrictive side,
+	 * so flipping unknown input to false there would quietly switch protections
+	 * off rather than on.
+	 *
+	 * For the asymmetric case — a flag whose true value REMOVES a restriction,
+	 * such as exempting a payment gateway from consent blocking — use
+	 * faz_sanitize_bool_strict() below, which demands an explicit affirmative.
+	 * Which of the two applies is a question about which direction is dangerous,
+	 * and only the callsite knows that.
 	 *
 	 * `'null'` and `'undefined'` are here because they arrive from JavaScript:
 	 * a client that string-interpolates an absent value posts the literal word,
@@ -69,6 +82,40 @@ if ( ! function_exists( 'faz_sanitize_bool' ) ) {
 		}
 		// Everything else (bool, int, float, null) maps nicely to boolean.
 		return (bool) $string;
+	}
+}
+
+if ( ! function_exists( 'faz_sanitize_bool_strict' ) ) {
+
+	/**
+	 * Coerce to bool for flags whose TRUE value removes a restriction.
+	 *
+	 * faz_sanitize_bool() enumerates the negatives, so anything it does not
+	 * recognise comes back true. That is the right default for a general
+	 * coercion and the wrong one for permission: a payment-gateway exemption, an
+	 * always-allow, a "skip blocking here" flag. On those, a corrupted or
+	 * unexpected value must not be the same as the site owner having said yes.
+	 *
+	 * So this inverts the burden — only an explicit affirmative counts, and
+	 * everything else, including a string nobody anticipated, is false. There is
+	 * no third outcome and no logging: the caller wants a decision, and the safe
+	 * decision when the stored value is unintelligible is "not exempt".
+	 *
+	 * @since 1.26.1
+	 * @param mixed $value Stored value of a permission flag.
+	 * @return bool
+	 */
+	function faz_sanitize_bool_strict( $value ) {
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return 1 === (int) $value;
+		}
+		if ( ! is_string( $value ) ) {
+			return false;
+		}
+		return in_array( strtolower( trim( $value ) ), array( '1', 'yes', 'true', 'on' ), true );
 	}
 }
 

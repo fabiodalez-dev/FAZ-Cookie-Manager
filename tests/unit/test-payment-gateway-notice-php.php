@@ -100,6 +100,17 @@ namespace {
 		);
 	}
 
+	// A value nobody anticipated must not be permission either. faz_sanitize_bool()
+	// enumerates its negatives, so 'maybe' comes back TRUE there — correct for a
+	// general coercion, wrong for a flag that removes a restriction. These pin
+	// that the gateway read uses the strict form instead.
+	foreach ( array( 'maybe', 'banana', 'ye', 'enabled', '2', 'yes please' ) as $k => $value ) {
+		$GLOBALS['__faz_opt']['faz_settings'] = array(
+			'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $value ) ),
+		);
+		ok( false === $has->invoke( $a ), sprintf( '%02d an unanticipated value %s is NOT an exemption', 22 + $k, "'{$value}'" ) );
+	}
+
 	// A malformed value must not become an exemption either: for a flag whose
 	// true value REMOVES a restriction, "unrecognised" has to mean off.
 	$GLOBALS['__faz_opt']['faz_settings'] = array(
