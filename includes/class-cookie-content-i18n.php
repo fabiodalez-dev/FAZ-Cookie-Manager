@@ -38,12 +38,56 @@ class Cookie_Content_I18n {
 	 */
 	public static function translate( $slug, $key, $source, $lang ) {
 		if ( 'description' === $key ) {
+			// The catalogue may only speak for text the plugin itself wrote.
+			// Previously it keyed purely on the cookie name and ignored $source
+			// entirely, so a description an administrator had authored — often
+			// reviewed legal copy naming their own processor and retention —
+			// was replaced by a generic sentence, and the next save persisted
+			// that generic sentence into the database over the original.
+			//
+			// Same gate localize_category_name() already uses: translate when
+			// the stored value is absent or is still the bundled English text,
+			// stand down otherwise. Returning '' lets the caller fall back to
+			// the stored value, which is the correct answer in that case.
+			$stored = is_string( $source ) ? trim( $source ) : '';
+			if ( '' !== $stored && ! self::is_stock_description( $slug, $stored ) ) {
+				return '';
+			}
 			return self::description( $slug, $lang );
 		}
 		if ( 'duration' === $key ) {
 			return self::duration( $source, $lang );
 		}
 		return '';
+	}
+
+	/**
+	 * Whether a stored description is still the plugin's own English text.
+	 *
+	 * "Stock" means the bundled English catalogue entry for this cookie — the
+	 * text the scanner or a blocker template would have written. Anything else,
+	 * including a lightly edited version of it, counts as the site owner's and is
+	 * left alone: an edit is a decision, and half-respecting it would be worse
+	 * than not translating at all.
+	 *
+	 * Comparison is whitespace- and case-insensitive so a trailing space or a
+	 * capitalisation tweak from a WYSIWYG round-trip does not read as authorship,
+	 * but nothing looser than that — the failure this guards against is treating
+	 * somebody's own words as replaceable.
+	 *
+	 * @param string $slug   Cookie slug/name.
+	 * @param string $stored Trimmed stored value in the default language.
+	 * @return bool
+	 */
+	public static function is_stock_description( $slug, $stored ) {
+		$stock = self::description( $slug, 'en' );
+		if ( '' === $stock ) {
+			return false;
+		}
+		$normalise = static function ( $text ) {
+			return strtolower( trim( preg_replace( '/\s+/u', ' ', (string) $text ) ) );
+		};
+		return $normalise( $stock ) === $normalise( $stored );
 	}
 
 	/**

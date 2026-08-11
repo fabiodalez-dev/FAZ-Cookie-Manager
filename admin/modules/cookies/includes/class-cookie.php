@@ -635,9 +635,14 @@ class Cookie extends Store {
 			return '';
 		}
 
+		// Resolved for BOTH fields now. It used to be built only for duration, so
+		// description reached translate() with an empty source — which is how the
+		// catalogue came to outrank whatever the site owner had written. The
+		// resolver needs the stored value to tell "stock text worth localising"
+		// from "somebody's own copy that must be left alone".
 		$source = '';
-		if ( 'duration' === $key ) {
-			$data    = $this->normalize_multilingual_data( $this->get_object_data( 'duration' ) );
+		if ( in_array( $key, array( 'duration', 'description' ), true ) ) {
+			$data    = $this->normalize_multilingual_data( $this->get_object_data( $key ) );
 			$default = faz_default_language();
 			// The '' !== guards matter: a row can carry an EMPTY string for the
 			// default language while another language holds the real value. Without

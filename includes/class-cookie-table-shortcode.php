@@ -96,6 +96,16 @@ class Cookie_Table_Shortcode {
 		if ( is_string( $value ) && '' !== $value && $requested_lang === $default_lang ) {
 			return $value;
 		}
+		// The same protection for every OTHER requested language. This call site
+		// hands the value in separately from the Cookie object, so the resolver
+		// it eventually reaches inspects the row's stored description and never
+		// sees the string actually being localised — which is how administrator
+		// wording survived the resolver's own guard and got replaced here anyway.
+		// Stock text still translates; anything the site owner wrote does not.
+		if ( 'description' === $key && is_string( $value ) && '' !== $value
+			&& ! \FazCookie\Includes\Cookie_Content_I18n::is_stock_description( $cookie->get_slug(), $value ) ) {
+			return $value;
+		}
 		if ( is_array( $value ) ) {
 			if ( isset( $value[ $lang ] ) && is_string( $value[ $lang ] ) && '' !== $value[ $lang ] ) {
 				return $value[ $lang ];

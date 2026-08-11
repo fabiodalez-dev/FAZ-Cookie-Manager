@@ -147,10 +147,24 @@ cookie_i18n_eq(
 	'2 anni',
 	'cookie-policy renderer uses shared duration fallback'
 );
+// STOCK text still translates: this is the feature working, and asserting it
+// first keeps the guard below from being satisfied by simply never translating.
+cookie_i18n_eq(
+	$method->invoke( null, wp_json_encode( array( 'en' => 'Google Analytics cookie used to distinguish users.' ) ), 'it', '_ga', 'description' ),
+	'Cookie di Google Analytics utilizzato per distinguere gli utenti.',
+	'cookie-policy renderer translates the plugin\'s own English description'
+);
+// Administrator-authored text does NOT. This assertion previously demanded the
+// opposite -- that "English source" be replaced by the generic Italian sentence
+// -- which pinned the defect rather than the behaviour: the description column
+// carries reviewed legal copy naming a site's own processors and retention, and
+// the next save persisted the generic replacement over it. Showing the author's
+// English to an Italian visitor is the honest fallback; putting words in their
+// mouth in a language they never reviewed is not.
 cookie_i18n_eq(
 	$method->invoke( null, wp_json_encode( array( 'en' => 'English source' ) ), 'it', '_ga', 'description' ),
-	'Cookie di Google Analytics utilizzato per distinguere gli utenti.',
-	'cookie-policy renderer uses shared description fallback'
+	'English source',
+	'cookie-policy renderer keeps administrator wording in every language'
 );
 
 // Legacy/plain strings belong to the default language. They are often custom
@@ -172,10 +186,18 @@ cookie_i18n_eq(
 	$plain_custom,
 	'cookie-table shortcode preserves a plain custom description in the default language'
 );
+// This call site hands the value in separately from the Cookie object, so the
+// resolver never saw the string it was about to replace and substituted it
+// anyway. Both halves are asserted: stock text translates, custom text survives.
+cookie_i18n_eq(
+	$shortcode_method->invoke( $shortcode, $legacy, 'Google Analytics cookie used to distinguish users.', 'description', 'it', 'en', 'it' ),
+	'Cookie di Google Analytics utilizzato per distinguere gli utenti.',
+	'cookie-table shortcode translates a stock default-language description for another language'
+);
 cookie_i18n_eq(
 	$shortcode_method->invoke( $shortcode, $legacy, $plain_custom, 'description', 'it', 'en', 'it' ),
-	'Cookie di Google Analytics utilizzato per distinguere gli utenti.',
-	'cookie-table shortcode still translates a plain default-language description for another language'
+	$plain_custom,
+	'cookie-table shortcode keeps administrator wording for another language'
 );
 
 $GLOBALS['cookie_i18n_controller_clears']      = array();
