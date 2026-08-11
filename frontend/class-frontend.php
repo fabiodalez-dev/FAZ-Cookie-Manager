@@ -3805,7 +3805,15 @@ class Frontend {
 		foreach ( $catalog as $key => $gateway ) {
 			// Strictly necessary on WooCommerce checkout/cart; otherwise only when
 			// the admin opted this gateway in.
-			if ( $on_checkout || ! empty( $enabled[ $key ] ) ) {
+			//
+			// Read through the sanitiser rather than `! empty()`. The write path
+			// coerces properly now, but an install that stored the string "false"
+			// or "no" before that fix keeps it, and `! empty( "false" )` is true —
+			// so the very install this fix exists for would go on exempting the
+			// gateway from consent blocking after upgrading. Sanitising here
+			// closes it for existing data without a migration, and a migration
+			// would also have to win a version race with two other open branches.
+			if ( $on_checkout || ( isset( $enabled[ $key ] ) && \faz_sanitize_bool( $enabled[ $key ] ) ) ) {
 				$patterns = array_merge( $patterns, $gateway['patterns'] );
 			}
 		}

@@ -35,6 +35,10 @@ namespace {
 		}
 	}
 
+	// The real faz_sanitize_bool(), not a stub: this suite exercises how a stored
+	// gateway flag is READ, and a local copy of the coercion would let production
+	// and test drift apart on exactly the value that caused the bug.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-formatting.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/class-admin.php';
 
 	use FazCookie\Admin\Admin;
@@ -80,6 +84,37 @@ namespace {
 	ok( false === $has->invoke( $a ), '06 non-array faz_settings → false (no fatal)' );
 	$GLOBALS['__faz_opt']['faz_settings'] = array( 'script_blocking' => array( 'payment_gateways' => 'nope' ) );
 	ok( false === $has->invoke( $a ), '07 non-array payment_gateways → false (no fatal)' );
+
+	// Stored strings from before the write path coerced properly. `! empty()`
+	// read every one of these as an enabled gateway — which meant exempting it
+	// from consent blocking — so the read path is asserted here directly, on the
+	// values a real upgraded install can be carrying.
+	$stored_negatives = array( 'false', '0', 'no', 'off', 'null', 'undefined', ' false ', '' );
+	foreach ( $stored_negatives as $i => $value ) {
+		$GLOBALS['__faz_opt']['faz_settings'] = array(
+			'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $value ) ),
+		);
+		ok(
+			false === $has->invoke( $a ),
+			sprintf( '%02d stored %s reads as NOT enabled', 8 + $i, '' === $value ? "''" : "'{$value}'" )
+		);
+	}
+
+	// A malformed value must not become an exemption either: for a flag whose
+	// true value REMOVES a restriction, "unrecognised" has to mean off.
+	$GLOBALS['__faz_opt']['faz_settings'] = array(
+		'script_blocking' => array( 'payment_gateways' => array( 'stripe' => array( 'x' ) ) ),
+	);
+	ok( false === $has->invoke( $a ), '16 an array value reads as NOT enabled' );
+
+	// And the affirmative side still works, so the above is not passing by
+	// simply refusing everything.
+	foreach ( array( 'yes', 'true', '1', 1, true ) as $j => $value ) {
+		$GLOBALS['__faz_opt']['faz_settings'] = array(
+			'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $value ) ),
+		);
+		ok( true === $has->invoke( $a ), sprintf( '%02d stored %s still reads as enabled', 17 + $j, var_export( $value, true ) ) );
+	}
 
 	echo "\nPassed: $passed\nFailed: $failed\n";
 	if ( $failed > 0 ) {

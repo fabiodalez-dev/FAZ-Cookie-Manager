@@ -18,12 +18,11 @@ namespace {
 		define( 'ABSPATH', __DIR__ );
 	}
 
-	function faz_sanitize_bool( $value ) {
-		if ( is_string( $value ) && in_array( strtolower( $value ), array( 'false', '0' ), true ) ) {
-			return false;
-		}
-		return (bool) $value;
-	}
+	// The real coercion, not a copy of it. A local stub duplicating the accepted
+	// negatives means this matrix asserts against its own idea of the rule:
+	// simplify the shipped function to a bare cast and production regresses to
+	// the very bug this suite exists for while it still prints all-green.
+	require_once __DIR__ . '/../../includes/class-formatting.php';
 	function faz_sanitize_text( $value ) {
 		return is_array( $value ) ? array_map( 'faz_sanitize_text', $value ) : ( is_scalar( $value ) ? sanitize_text_field( $value ) : $value );
 	}
@@ -129,11 +128,21 @@ namespace {
 	compliance_same( $gateways['square'], false, 'integer zero does not exempt Square' );
 	compliance_same( $gateways['braintree'], false, 'missing gateway defaults to blocked' );
 	compliance_same( array_key_exists( 'evil', $gateways ), false, 'unknown gateway cannot enter the exemption map' );
-	// Read the canonical list rather than hardcoding its size: adding a gateway is
-	// a legitimate change and must not fail a test about injection safety.
-	$gw_keys_ref = new ReflectionMethod( Settings::class, 'payment_gateway_keys' );
-	$gw_keys_ref->setAccessible( true );
-	compliance_same( array_keys( $gateways ), $gw_keys_ref->invoke( null ), 'gateway map contains exactly the canonical catalogue' );
+	// Compared against a written-down list, not against the same method that
+	// produced the map. Reflecting into payment_gateway_keys() and asserting the
+	// output equals its own return is true by construction: it stays green if the
+	// catalogue is emptied, reordered, or has a gateway silently dropped — the
+	// three changes worth catching. The list is short and changes rarely; when a
+	// gateway is genuinely added, updating one line here is the intended cost.
+	// This harness does not load Frontend, so payment_gateway_keys() resolves to
+	// its own fallback list — which is exactly the list a site gets whenever the
+	// frontend class is unavailable, and therefore worth pinning in its own
+	// right rather than treating as a test artefact.
+	compliance_same(
+		array_keys( $gateways ),
+		array( 'paypal', 'stripe', 'square', 'braintree', 'klarna', 'mollie', 'amazon_pay' ),
+		'gateway map contains exactly the canonical catalogue (Frontend-absent fallback)'
+	);
 	compliance_same( Settings::sanitize_option( 'payment_gateways', 'paypal' )['paypal'], false, 'scalar gateway input enables nothing' );
 
 	// 42-46: custom blocking rules are structurally constrained.

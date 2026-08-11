@@ -1754,7 +1754,11 @@ class Admin {
 			? $settings['script_blocking']['payment_gateways']
 			: array();
 		foreach ( $gateways as $enabled ) {
-			if ( ! empty( $enabled ) ) {
+			// Sanitised rather than `! empty()`, for the same reason as the
+			// frontend read: a stored "false"/"no" from before the write-path fix
+			// is a non-empty string, and this notice would tell the admin a
+			// gateway is exempt when the frontend no longer treats it as one.
+			if ( \faz_sanitize_bool( $enabled ) ) {
 				return true;
 			}
 		}

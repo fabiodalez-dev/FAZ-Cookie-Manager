@@ -33,18 +33,41 @@ if ( ! function_exists( 'faz_sanitize_bool' ) ) {
 	/**
 	 * Converts a string (e.g. 'yes' or 'no') to a bool.
 	 *
+	 * The docblock has always named `'no'` as an example, and `'no'` used to come
+	 * back TRUE: only `'false'` and `'0'` were recognised. That is not a cosmetic
+	 * gap, because this function decides consent-adjacent booleans — a payment
+	 * gateway marked `"no"` was read as exempt from blocking and loaded before
+	 * consent. Every canonical negative this plugin actually writes or receives
+	 * is recognised now, and the list errs toward false: for a flag whose true
+	 * value REMOVES a restriction, a value nobody anticipated must not be read as
+	 * permission.
+	 *
+	 * `'null'` and `'undefined'` are here because they arrive from JavaScript:
+	 * a client that string-interpolates an absent value posts the literal word,
+	 * and both are unambiguously "no value", never an affirmation.
+	 *
+	 * Whitespace is trimmed first, so `' false'` from a hand-edited option or a
+	 * copy-pasted config no longer reads as true on a technicality.
+	 *
 	 * @since 3.0.0
 	 * @param string|bool $string String to convert. If a bool is passed it will be returned as-is.
 	 * @return bool
 	 */
 	function faz_sanitize_bool( $string ) {
 		if ( is_string( $string ) ) {
-			$string = strtolower( $string );
-			if ( in_array( $string, array( 'false', '0' ), true ) ) {
-				$string = false;
+			$string = strtolower( trim( $string ) );
+			if ( in_array( $string, array( 'false', '0', 'no', 'off', 'null', 'undefined', '' ), true ) ) {
+				return false;
 			}
+			return true;
 		}
-		// Everything else will map nicely to boolean.
+		// A non-scalar cannot express a boolean intent: an array or object here
+		// means the value is malformed, and `(bool) array( 'x' )` being true
+		// would turn corrupted data into an exemption.
+		if ( ! is_scalar( $string ) && null !== $string ) {
+			return false;
+		}
+		// Everything else (bool, int, float, null) maps nicely to boolean.
 		return (bool) $string;
 	}
 }

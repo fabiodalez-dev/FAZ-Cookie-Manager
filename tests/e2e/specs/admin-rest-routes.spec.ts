@@ -43,12 +43,18 @@ const ADMIN_PAGES = [
 // uses. Getting this wrong is not a harmless over-reach: a selector that
 // matches nothing makes the tab loop a no-op, and the guard then reports
 // success for coverage it never achieved. That is precisely what happened
-// here — geo-routing builds its tabs in JS with `.faz-geo-tab`, so the
-// original `.faz-tab` guess never clicked anything on the one page issue #198
-// was actually reported against. Verified against the source: `.faz-tab` +
-// `.faz-tabs` appear only in admin/views/banner.php, `.faz-geo-tab` only in
-// admin/assets/js/pages/geo-routing.js, and cookie-policy and settings have
-// no tabs at all.
+// here — geo-routing's tabs carry `.faz-geo-tab`, not `.faz-tab`, so the
+// original guess never clicked anything on the one page issue #198 was
+// actually reported against.
+//
+// Verified against the source: `.faz-tab` + `.faz-tabs` appear only in
+// admin/views/banner.php, and cookie-policy and settings have no tabs at all.
+// The six `.faz-geo-tab` buttons are SERVER-rendered in
+// admin/views/geo-routing.php (the JS only wires their click handlers) — an
+// earlier version of this comment said they were built in JS and that the
+// class lived only in the page script, and both halves were wrong. Left
+// corrected rather than deleted because a comment that misdescribes where a
+// selector comes from is how the wrong selector gets chosen next time.
 const TABBED_PAGES: Record<string, string> = {
   'faz-cookie-manager-banner': 'button.faz-tab',
   'faz-cookie-manager-geo-routing': '.faz-geo-tab',
