@@ -929,6 +929,17 @@ class Frontend {
 	 * one. Without this, an install that is edited regularly accumulates
 	 * orphans forever.
 	 *
+	 * Edits are not the only axis, and this is the part that is easy to get
+	 * wrong when reasoning about how much disk this costs. The hashed payload is
+	 * the CLIENT provider list plus the cookie-category map, and that list is
+	 * legitimately different on a WooCommerce checkout or cart page (payment
+	 * gateway patterns removed), on a page excluded from script blocking (empty),
+	 * under a geo ruleset that resolves to different blocking, and when a
+	 * self-restricting integration withdraws its own patterns. So the live set at
+	 * any moment is roughly (page contexts × geo rulesets), and the retained set
+	 * is that multiplied by the number of settings revisions inside the window —
+	 * not one file per edit.
+	 *
 	 * mtime is used as a last-used timestamp: get_static_asset_url() refreshes
 	 * it (at most once a day) whenever it serves an existing file, so assets
 	 * still referenced by live pages keep moving forward and are never reaped.
@@ -956,9 +967,18 @@ class Frontend {
 		 * plugin means the consent UI may not appear.
 		 *
 		 * A year covers every plausible page-cache TTL with margin, and errs the
-		 * safe way: the cost of keeping an orphan is a few kilobytes on disk, the
-		 * cost of deleting a live one is a missing consent banner. Sites that
-		 * know their cache TTL can lower it through this filter.
+		 * safe way: the cost of keeping an orphan is disk, the cost of deleting a
+		 * live one is a missing consent banner.
+		 *
+		 * Be honest about that disk cost rather than calling it negligible, since
+		 * this default is what a site owner is deciding whether to lower. Each
+		 * config asset is tens of kilobytes and the retained count is settings
+		 * revisions × page contexts × geo rulesets (see cleanup_static_assets()),
+		 * so a large, frequently edited, geo-targeted site can reach tens of
+		 * megabytes over a year — not the handful a single-variant reading of
+		 * this would suggest. Still the right trade against a broken banner, and
+		 * still worth lowering through this filter on a site that knows its cache
+		 * TTL.
 		 *
 		 * @since 1.26.0
 		 * @param int $days Days an unused asset is kept. Default 365.
