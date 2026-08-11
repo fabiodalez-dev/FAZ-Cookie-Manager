@@ -16,6 +16,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - **Material-change retries can no longer invalidate visitors twice.** The server persists a recovery intent before increasing `consent_revision`, verifies each write, resumes after a lost response or partial failure, and safely supersedes an abandoned pre-bump intent when a newer policy version is reviewed.
 - **Equal third-party privacy text no longer swaps plugin identities or overrides.** Reconciliation now prefers exact name+hash matches and permits hash-only/name-only carry-forward only when unique on both sides. Oversized collected HTML is clipped without cutting through a tag and is balanced within the storage limit.
 - **REST route regression coverage cannot pass without exercising its tabs.** Every tabbed admin page must expose and visit at least one visible tab before the guard accepts its FAZ REST calls.
+- **A payment gateway that was switched off could still load before consent.** A gateway stored as the string `"no"` (as well as `"false"` or `"0"`) was read as enabled, so its scripts were exempted from consent blocking on a site whose administrator had never allowed them. Saved values are now interpreted strictly everywhere they are read, a per-service or per-cookie toggle can be turned back off instead of sticking on, the per-cookie toggle no longer reports success for a save the server rejected, and the Script Blocking compatibility warnings describe the behaviour that actually runs.
 
 ## [1.25.0] — 2026-07-29
 
