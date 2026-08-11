@@ -344,6 +344,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: a safe snapshot collector for privacy-policy text registered by installed plugins, preserving operator wording while tracking upstream changes.
 * Changed: the legal-document renderer now reads validated document coordinates from a registry while the existing Cookie Policy output remains byte-identical under the golden suite.
 * Fixed: material-change retries are idempotent after partial failure, identical third-party policy text cannot exchange plugin identities or overrides, oversized collected HTML stays balanced, and the REST route guard must exercise visible tabs.
+* Fixed: with per-service or per-cookie consent enabled, cookies belonging to a category the visitor had accepted were deleted anyway, so analytics broke for the very visitors who agreed to it. Category consent is honoured again, while an explicit per-cookie or per-service refusal still wins over it.
 
 = 1.25.0 =
 * Added: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps the normal placeholder substitution pipeline, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.
