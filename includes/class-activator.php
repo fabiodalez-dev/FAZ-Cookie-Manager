@@ -243,6 +243,24 @@ class Activator {
 	 * @return void
 	 */
 	public static function seed_default_whitelist() {
+		// One-time marker, like every sibling seeder. Without it the only guard
+		// was "the list is currently empty", which is not the same question:
+		// an admin who deliberately cleared the whitelist to harden the site is
+		// indistinguishable from a fresh install, so every later bump of
+		// MIGRATIONS_VERSION re-ran this and wrote the eleven defaults back over
+		// their decision. The migration list re-runs on any version change, so
+		// that was not hypothetical — this branch bumps it, and two other open
+		// branches bump it again.
+		//
+		// Checked and set even when the early returns below fire, so a site that
+		// already has patterns is marked as seeded rather than being asked again
+		// on the next bump.
+		if ( get_option( 'faz_default_whitelist_seeded' ) ) {
+			return;
+		}
+		// Autoload NO: read once, during migrations, never on a front-end request.
+		add_option( 'faz_default_whitelist_seeded', '1', '', false );
+
 		$settings = get_option( 'faz_settings' );
 		if ( ! is_array( $settings ) ) {
 			return;
@@ -255,19 +273,30 @@ class Activator {
 			return;
 		}
 
-		$defaults = array(
-			'googleapis.com/youtube/v3/',
-			'googleapis.com/customsearch/',
-			'translation.googleapis.com/',
-			'www.google.com/recaptcha/api',
-			'challenges.cloudflare.com/',
-			'maps.googleapis.com/maps/api/',
-			'www.googleapis.com/oauth2/',
-			'fonts.googleapis.com/',
-			'cdn.jsdelivr.net/',
-			'unpkg.com/',
-			'hcaptcha.com/',
-		);
+		// Taken from Settings::get_defaults() rather than restated here, because
+		// the two lists had drifted apart in the direction that matters. This
+		// function used to seed eleven patterns including fonts.googleapis.com,
+		// cdn.jsdelivr.net, unpkg.com and maps.googleapis.com, while the shipped
+		// defaults deliberately whitelist only the four CAPTCHA endpoints and
+		// carry a comment explaining that CDN-hosted Google Fonts must stay
+		// blocked (German courts have held that loading them without consent is
+		// unlawful). A back-fill that quietly grants more than the product's own
+		// default is a compliance regression, not a convenience — and because it
+		// only fires when the whitelist is EMPTY, it fired precisely on the sites
+		// whose owner had just cleared it.
+		$defaults = array();
+		if ( class_exists( '\FazCookie\Admin\Modules\Settings\Includes\Settings' ) ) {
+			$shipped = ( new \FazCookie\Admin\Modules\Settings\Includes\Settings() )->get_defaults();
+			if ( isset( $shipped['script_blocking']['whitelist_patterns'] ) && is_array( $shipped['script_blocking']['whitelist_patterns'] ) ) {
+				$defaults = $shipped['script_blocking']['whitelist_patterns'];
+			}
+		}
+		if ( empty( $defaults ) ) {
+			// Settings unavailable in this context: write nothing rather than a
+			// guessed list. An empty whitelist blocks more, which is the safe
+			// direction, and the admin can add what their site needs.
+			return;
+		}
 
 		if ( ! isset( $settings['script_blocking'] ) ) {
 			$settings['script_blocking'] = array();

@@ -366,13 +366,35 @@ class Controller {
 		// Batched DELETE — same rationale as ConsentLogs::cleanup_old_logs():
 		// the first purge on a long-lived install can match a huge row count,
 		// and one unbounded DELETE means a long InnoDB lock.
+		// Select-then-delete, for the same reason as ConsentLogs: `DELETE … LIMIT`
+		// is a MySQL extension that SQLite rejects, which turned every batch into
+		// a failure and retention into a permanent no-op on those installs.
 		$deleted = 0;
 		do {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). DELETE write — caching irrelevant.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention read — caching irrelevant.
+			$ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT id FROM {$table} WHERE created_at < %s ORDER BY id ASC LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff
+				)
+			);
+			// An empty result means both "failed" and "nothing matched", so the
+			// two are separated explicitly — conflating them is the original bug.
+			if ( '' !== $wpdb->last_error ) {
+				error_log( 'FAZ: pageview retention SELECT failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- silent failure would let the table grow without bound.
+				break;
+			}
+			$ids = array_values( array_filter( array_map( 'absint', (array) $ids ) ) );
+			if ( empty( $ids ) ) {
+				break;
+			}
+
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%d). DELETE write — caching irrelevant.
 			$batch = $wpdb->query(
 				$wpdb->prepare(
-					"DELETE FROM {$table} WHERE created_at < %s LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					$cutoff
+					"DELETE FROM {$table} WHERE id IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$ids
 				)
 			);
 			// See ConsentLogs::cleanup_old_logs(): (int) false is 0, so an error
@@ -383,7 +405,10 @@ class Controller {
 				break;
 			}
 			$deleted += (int) $batch;
-		} while ( (int) $batch === 1000 && $deleted < 200000 );
+			// Loop on what was READ, not on what the DELETE reported: a row
+			// removed concurrently makes those differ, and stopping on the
+			// smaller number leaves expired rows behind.
+		} while ( count( $ids ) === 1000 && $deleted < 200000 );
 
 		return (int) $deleted;
 	}

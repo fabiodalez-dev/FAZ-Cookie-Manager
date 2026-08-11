@@ -991,13 +991,40 @@ class Controller {
 		// DELETE holds a long InnoDB transaction (lock contention, huge undo
 		// log, replication lag). Each batch is an index range scan on
 		// idx_created_at; the cap keeps one cron run from monopolising the DB.
+		// Select-then-delete rather than `DELETE … LIMIT`. That clause is a MySQL
+		// extension: SQLite refuses it unless compiled with an option WordPress's
+		// SQLite integration does not enable, so on a SQLite-backed install every
+		// batch returned false, the guard below logged once and broke, and
+		// retention returned 0 forever — silently, since 0 also means "nothing to
+		// delete". Retention that never runs is a data-minimisation failure, not
+		// a performance one. Same shape as the DSAR cleanup in class-activator.
 		$deleted = 0;
 		do {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention cleanup writes — caching irrelevant for DELETE.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention read — caching irrelevant.
+			$ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT log_id FROM {$table} WHERE created_at < %s ORDER BY log_id ASC LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff
+				)
+			);
+			// get_col() returns an empty array both when the query fails and when
+			// it matches nothing, so distinguish them explicitly: a failure that
+			// reads as "done" is the exact bug this replaces.
+			if ( '' !== $wpdb->last_error ) {
+				error_log( 'FAZ: consent-log retention SELECT failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a silent retention failure is a data-minimisation problem; it must leave a trace.
+				break;
+			}
+			$ids = array_values( array_filter( array_map( 'absint', (array) $ids ) ) );
+			if ( empty( $ids ) ) {
+				break;
+			}
+
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%d). Retention cleanup writes — caching irrelevant for DELETE.
 			$batch = $wpdb->query(
 				$wpdb->prepare(
-					"DELETE FROM {$table} WHERE created_at < %s LIMIT 1000", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-					$cutoff
+					"DELETE FROM {$table} WHERE log_id IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$ids
 				)
 			);
 			// A failed query returns false, and (int) false is 0 — which reads
@@ -1009,7 +1036,11 @@ class Controller {
 				break;
 			}
 			$deleted += (int) $batch;
-		} while ( (int) $batch === 1000 && $deleted < 200000 );
+			// Loop on the SELECT's own size, not the DELETE's return: a row
+			// removed by a concurrent request makes the DELETE report fewer than
+			// it read, and treating that as "last page" would stop early and
+			// leave expired rows behind until the next cron run.
+		} while ( count( $ids ) === 1000 && $deleted < 200000 );
 
 		return (int) $deleted;
 	}
