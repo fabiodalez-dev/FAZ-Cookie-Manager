@@ -176,6 +176,32 @@ namespace {
 	);
 	alq_eq( $defaults_all['pageviews']['retention'], 6, 'and its default is the 6 months that were hardcoded' );
 
+	// Same defect, same file, one group over: cleanup_old_dsar_requests() reads
+	// $settings['dsar']['retention'] and the group was equally undeclared, so the
+	// documented 24-month window was unreachable too and every install ran on the
+	// hardcoded fallback. Flagged during the first pass and left out of scope
+	// then; the group-threading added for pageviews is what made it a two-line
+	// fix rather than a second mechanism.
+	alq_eq(
+		isset( $defaults_all['dsar']['retention'] ),
+		true,
+		'get_defaults() declares the dsar group the DSAR cleanup already reads'
+	);
+	alq_eq( $defaults_all['dsar']['retention'], 24, 'and its default is the 24 months that were hardcoded' );
+	// DSAR records evidence that a request was answered — the kind of record a
+	// controller may have to produce — so unlike pageviews they keep the floor of
+	// 1 and "never purge" stays unreachable from the UI.
+	alq_eq(
+		$settings_cls::sanitize( array( 'dsar' => array( 'retention' => 0 ) ), array( 'dsar' => array( 'retention' => 24 ) ) )['dsar']['retention'],
+		1,
+		'a stored 0 for DSAR is floored to 1, never "keep forever"'
+	);
+	alq_eq(
+		$settings_cls::sanitize( array( 'dsar' => array( 'retention' => 6 ) ), array( 'dsar' => array( 'retention' => 24 ) ) )['dsar']['retention'],
+		6,
+		'but a site can shorten it'
+	);
+
 	// The key the Activator reads and the key the defaults declare have to be
 	// the same one; a rename on either side silently restores the bug.
 	$act_src = (string) file_get_contents( $alq_root . '/includes/class-activator.php' );
@@ -183,6 +209,11 @@ namespace {
 		false !== strpos( $act_src, "\$settings['pageviews']['retention']" ),
 		true,
 		'and it is the exact path run_retention_cleanup() reads'
+	);
+	alq_eq(
+		false !== strpos( $act_src, "\$settings['dsar']['retention']" ),
+		true,
+		'and the DSAR cleanup reads its group by the same path'
 	);
 	alq_eq(
 		false !== strpos( $act_src, "apply_filters( 'faz_pageviews_retention_months'" ),

@@ -79,6 +79,17 @@ class Settings extends Store {
 			'pageviews'    => array(
 				'retention' => 6,
 			),
+			// Same defect, same shape: cleanup_old_dsar_requests() has read
+			// $settings['dsar']['retention'] since it was written, while the
+			// group was never declared — so the documented 24-month window was
+			// unreachable and every install ran on the hardcoded fallback. DSAR
+			// records are the evidence that a data-subject request was answered,
+			// which is exactly the kind of record a controller may need to
+			// produce, so the floor below keeps it at accountability's side of
+			// the line rather than allowing "never purge".
+			'dsar'         => array(
+				'retention' => 24,
+			),
 			'languages'    => array(
 				'selected' => array( 'en' ),
 				'default'  => 'en',
