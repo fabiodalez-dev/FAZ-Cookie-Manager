@@ -1,40 +1,79 @@
 {
+  "bg": {
+    "session": "сесия",
+    "persistent": "постоянна",
+    "second": {
+      "one": "секунда",
+      "other": "секунди"
+    },
+    "minute": {
+      "one": "минута",
+      "other": "минути"
+    },
+    "hour": {
+      "one": "час",
+      "other": "часа"
+    },
+    "day": {
+      "one": "ден",
+      "other": "дни"
+    },
+    "week": {
+      "one": "седмица",
+      "other": "седмици"
+    },
+    "month": {
+      "one": "месец",
+      "other": "месеца"
+    },
+    "year": {
+      "one": "година",
+      "other": "години"
+    }
+  },
   "cs": {
     "session": "relace",
     "persistent": "trvalé",
     "second": {
       "one": "sekunda",
       "few": "sekundy",
+      "many": "sekundy",
       "other": "sekund"
     },
     "minute": {
       "one": "minuta",
       "few": "minuty",
+      "many": "minuty",
       "other": "minut"
     },
     "hour": {
       "one": "hodina",
       "few": "hodiny",
+      "many": "hodiny",
       "other": "hodin"
     },
     "day": {
       "one": "den",
       "few": "dny",
+      "many": "dne",
       "other": "dní"
     },
     "week": {
       "one": "týden",
       "few": "týdny",
+      "many": "týdne",
       "other": "týdnů"
     },
     "month": {
       "one": "měsíc",
       "few": "měsíce",
+      "many": "měsíce",
       "other": "měsíců"
     },
     "year": {
       "one": "rok",
       "few": "roky",
+      "many": "roku",
       "other": "let"
     }
   },
@@ -339,37 +378,44 @@
     "second": {
       "one": "sekunda",
       "few": "sekundy",
-      "other": "sekund"
+      "many": "sekund",
+      "other": "sekundy"
     },
     "minute": {
       "one": "minuta",
       "few": "minuty",
-      "other": "minut"
+      "many": "minut",
+      "other": "minuty"
     },
     "hour": {
       "one": "godzina",
       "few": "godziny",
-      "other": "godzin"
+      "many": "godzin",
+      "other": "godziny"
     },
     "day": {
       "one": "dzień",
       "few": "dni",
-      "other": "dni"
+      "many": "dni",
+      "other": "dnia"
     },
     "week": {
       "one": "tydzień",
       "few": "tygodnie",
-      "other": "tygodni"
+      "many": "tygodni",
+      "other": "tygodnia"
     },
     "month": {
       "one": "miesiąc",
       "few": "miesiące",
-      "other": "miesięcy"
+      "many": "miesięcy",
+      "other": "miesiąca"
     },
     "year": {
       "one": "rok",
       "few": "lata",
-      "other": "lat"
+      "many": "lat",
+      "other": "roku"
     }
   },
   "pt": {

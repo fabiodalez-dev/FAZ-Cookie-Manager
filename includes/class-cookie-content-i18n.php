@@ -17,6 +17,50 @@ if ( ! defined( 'ABSPATH' ) ) {
  * User-entered values remain authoritative. Callers invoke this class only
  * when the requested language is empty, so the bundled catalogue acts as a
  * non-destructive fallback for both new and legacy database rows.
+ *
+ * ---------------------------------------------------------------------------
+ * Adding a language
+ * ---------------------------------------------------------------------------
+ * Two data files under admin/modules/cookies/includes/contents/ feed this
+ * class, both keyed by the two-letter code normalize_language() produces
+ * (`pt-br` is the one exception, kept whole because Brazilian wording differs):
+ *
+ * 1. duration-units.json — one object per language:
+ *
+ *      "de": {
+ *        "session": "Sitzung",          // whole-value synonyms, matched alone
+ *        "persistent": "dauerhaft",
+ *        "year": { "one": "Jahr", "other": "Jahre" },
+ *        …second, minute, hour, day, week, month
+ *      }
+ *
+ *    The keys inside a unit are CLDR plural categories. Supply exactly the ones
+ *    the language uses — `one`/`other` for most, plus `few`/`many` for Czech and
+ *    Polish, `few` for Croatian — and teach plural_form() the rule if the
+ *    language needs a selection this class does not model yet. A missing
+ *    category falls back to `other`, which silently prints the wrong grammar
+ *    rather than failing, so add the rule and the words together.
+ *
+ * 2. cookies/<lang>.json — the description catalogue, currently `en` and `it`:
+ *
+ *      { "_ga": { "description": "…" }, "_ga_": { "description": "…" } }
+ *
+ *    A key is either an exact cookie name, or a prefix covering a family of
+ *    runtime-generated names. A prefix is spelled with its own trailing `_`/`-`
+ *    (`_ga_`, `wp-settings-`) or, when the family has no separator, with an
+ *    explicit `*` (`_hj*`) — see catalogue_prefix(). Exact matches win over
+ *    prefixes, and among prefixes the first match in file order wins, so keep
+ *    the more specific key above the more general one (`wordpress_logged_in_`
+ *    before `wordpress_`).
+ *
+ * Translating a file means copying en.json, keeping every key byte-for-byte and
+ * translating only the description values; keys are cookie names, not prose. A
+ * language with no file simply gets no fallback — nothing breaks, the stored
+ * value is shown as-is.
+ *
+ * Sites that need to override any of this without touching bundled files have
+ * the `faz_cookie_content_i18n_description` and `faz_cookie_content_i18n_duration`
+ * filters, documented at their call sites below.
  */
 class Cookie_Content_I18n {
 
@@ -98,13 +142,45 @@ class Cookie_Content_I18n {
 	 * @return string
 	 */
 	public static function description( $slug, $lang ) {
-		$lang     = self::normalize_language( $lang );
+		$lang = self::normalize_language( $lang );
+		$slug = function_exists( 'sanitize_title' ) ? sanitize_title( $slug ) : strtolower( trim( (string) $slug ) );
+
+		/**
+		 * Filter the bundled description resolved for one cookie.
+		 *
+		 * The escape hatch for sites the catalogue cannot serve: return a string
+		 * to substitute wording, or '' to switch the fallback off for this cookie
+		 * so the caller keeps whatever the row already stores.
+		 *
+		 * Note it also decides what counts as "stock": is_stock_description()
+		 * compares a stored value against description( $slug, 'en' ), so a site
+		 * that rewrites the English text moves that line with it — deliberately,
+		 * since a filtered catalogue is that site's idea of the plugin's own copy.
+		 *
+		 * @param string $description Resolved catalogue text, '' when unknown.
+		 * @param string $slug        Sanitised cookie slug being described.
+		 * @param string $lang        Normalised catalogue language code.
+		 */
+		return self::filter(
+			'faz_cookie_content_i18n_description',
+			self::lookup_description( $slug, $lang ),
+			array( $slug, $lang )
+		);
+	}
+
+	/**
+	 * Catalogue lookup behind description(), before filtering.
+	 *
+	 * @param string $slug Sanitised cookie slug.
+	 * @param string $lang Normalised language code.
+	 * @return string
+	 */
+	private static function lookup_description( $slug, $lang ) {
 		$contents = self::load_catalogue( 'cookies/' . $lang . '.json' );
 		if ( empty( $contents ) ) {
 			return '';
 		}
 
-		$slug = function_exists( 'sanitize_title' ) ? sanitize_title( $slug ) : strtolower( trim( (string) $slug ) );
 		if ( isset( $contents[ $slug ]['description'] ) && is_string( $contents[ $slug ]['description'] ) ) {
 			return $contents[ $slug ]['description'];
 		}
@@ -112,8 +188,8 @@ class Cookie_Content_I18n {
 		// Prefix definitions such as `_ga_` and `comment_author_` also cover
 		// the concrete cookie names generated at runtime.
 		foreach ( $contents as $catalogue_slug => $entry ) {
-			$last = substr( (string) $catalogue_slug, -1 );
-			if ( ! in_array( $last, array( '_', '-' ), true ) || 0 !== strpos( $slug, (string) $catalogue_slug ) ) {
+			$prefix = self::catalogue_prefix( (string) $catalogue_slug );
+			if ( '' === $prefix || 0 !== strpos( $slug, $prefix ) ) {
 				continue;
 			}
 			if ( isset( $entry['description'] ) && is_string( $entry['description'] ) ) {
@@ -121,6 +197,36 @@ class Cookie_Content_I18n {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * The prefix a catalogue key stands for, or '' when it is an exact name.
+	 *
+	 * Two spellings, and the split is deliberate. A key ending in `_` or `-` is
+	 * its own prefix — `_ga_` matches `_ga_G-ABC123` — which covers every family
+	 * whose members keep the separator. It cannot express Hotjar, whose cookies
+	 * run `_hjFirstSeen`/`_hjSessionUser_1` with no separator after `_hj`, so
+	 * that family carries the explicit trailing `*` already used for the same job
+	 * in includes/data/known-providers.json.
+	 *
+	 * The `*` form is additive on purpose: no existing key contains one, and the
+	 * `_`/`-` rule is untouched, so no key that matched before matches
+	 * differently now. Making every key a prefix instead would have been the
+	 * destructive option — `_ga` would then swallow `_gac_UA-…`, and `fr` would
+	 * swallow anything beginning "fr".
+	 *
+	 * @param string $catalogue_slug Key as written in the JSON catalogue.
+	 * @return string
+	 */
+	private static function catalogue_prefix( $catalogue_slug ) {
+		if ( '' === $catalogue_slug ) {
+			return '';
+		}
+		$last = substr( $catalogue_slug, -1 );
+		if ( '*' === $last ) {
+			return substr( $catalogue_slug, 0, -1 );
+		}
+		return in_array( $last, array( '_', '-' ), true ) ? $catalogue_slug : '';
 	}
 
 	/**
@@ -134,6 +240,33 @@ class Cookie_Content_I18n {
 	 * @return string
 	 */
 	public static function duration( $source, $lang ) {
+		/**
+		 * Filter the bundled retention period resolved for one cookie.
+		 *
+		 * Same contract as the description filter: a string substitutes the
+		 * rendered period, '' stands the fallback down so the stored value is
+		 * shown as typed. Useful for the free-form periods this parser
+		 * deliberately declines ("up to 13 months", "until consent is withdrawn").
+		 *
+		 * @param string $duration Translated period, '' when not translatable.
+		 * @param string $source   Stored duration exactly as it came in.
+		 * @param string $lang     Requested language, before normalisation.
+		 */
+		return self::filter(
+			'faz_cookie_content_i18n_duration',
+			self::lookup_duration( $source, $lang ),
+			array( (string) $source, (string) $lang )
+		);
+	}
+
+	/**
+	 * Catalogue lookup behind duration(), before filtering.
+	 *
+	 * @param string $source Stored duration.
+	 * @param string $lang   Requested language.
+	 * @return string
+	 */
+	private static function lookup_duration( $source, $lang ) {
 		$source = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( (string) $source ) : strip_tags( (string) $source );
 		$raw    = trim( $source );
 		$source = strtolower( $raw );
@@ -212,14 +345,28 @@ class Cookie_Content_I18n {
 	 *
 	 * @param float  $amount Numeric duration amount.
 	 * @param string $lang   Normalized language code.
-	 * @return string one|few|other
+	 * @return string one|few|many|other
 	 */
 	private static function plural_form( $amount, $lang ) {
+		// French and Portuguese are the odd ones out among the Romance locales:
+		// CLDR gives them `one` for an INTEGER PART of 0 or 1, not for the value
+		// 1 alone. So "0 jour" and "1,5 an" are singular where Italian, Spanish
+		// and German would pluralise. Handled before the generic 1.0 test because
+		// that test cannot express "0 is singular too".
+		if ( in_array( $lang, array( 'fr', 'pt', 'pt-br' ), true ) ) {
+			$integer_part = (int) $amount;
+			return ( 0 === $integer_part || 1 === $integer_part ) ? 'one' : 'other';
+		}
 		if ( 1.0 === $amount ) {
 			return 'one';
 		}
 		if ( floor( $amount ) !== $amount ) {
-			return 'other';
+			// Czech puts every fractional amount in its own class (CLDR `many`,
+			// the genitive singular): "1,5 roku", never "1,5 let". Elsewhere the
+			// fractional case falls through to `other`, which is also where CLDR
+			// puts Polish decimals — see the pl branch below, where `other` is
+			// therefore NOT the general integer plural.
+			return 'cs' === $lang ? 'many' : 'other';
 		}
 		$integer = (int) $amount;
 		if ( 'cs' === $lang && $integer >= 2 && $integer <= 4 ) {
@@ -244,8 +391,38 @@ class Cookie_Content_I18n {
 				&& ! in_array( $last_two, array( 12, 13, 14 ), true ) ) {
 				return 'few';
 			}
+			if ( 'pl' === $lang ) {
+				// Every remaining Polish INTEGER is `many` (5-9, 0, the teens, and
+				// 21/31/… which are not `one`). `other` is reserved for decimals,
+				// so falling through to it would now render "21 roku" instead of
+				// "21 lat" — the distinction the catalogue carries.
+				return 'many';
+			}
 		}
 		return 'other';
+	}
+
+	/**
+	 * Run one of this class's filters, if there is a WordPress to run it in.
+	 *
+	 * The guard mirrors the sanitize_title()/wp_strip_all_tags() ones above: this
+	 * resolver is loaded directly by the standalone unit runners and by CLI
+	 * utilities, where the plugin API is not bootstrapped. A non-string return is
+	 * read as '' — the documented "leave the stored value alone" answer — so a
+	 * filter that returns null or false disables the fallback instead of
+	 * propagating a type error into the cookie table.
+	 *
+	 * @param string $hook  Filter name.
+	 * @param string $value Resolved value.
+	 * @param array  $args  Extra context passed to subscribers.
+	 * @return string
+	 */
+	private static function filter( $hook, $value, array $args ) {
+		if ( ! function_exists( 'apply_filters' ) ) {
+			return $value;
+		}
+		$filtered = apply_filters( $hook, $value, ...$args );
+		return is_string( $filtered ) ? $filtered : '';
 	}
 
 	/**

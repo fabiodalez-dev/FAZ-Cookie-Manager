@@ -61,6 +61,25 @@ if ( ! function_exists( 'faz_clear_banner_template_cache' ) ) {
 		$GLOBALS['cookie_i18n_template_cache_clears'] = 1 + ( $GLOBALS['cookie_i18n_template_cache_clears'] ?? 0 );
 	}
 }
+// Minimal hook dispatcher: enough to prove the resolver's two escape hatches
+// actually reach a subscriber, in the order and with the arguments documented.
+$GLOBALS['cookie_i18n_filters'] = array();
+if ( ! function_exists( 'add_filter' ) ) {
+	function add_filter( $hook, $callback ) {
+		$GLOBALS['cookie_i18n_filters'][ $hook ][] = $callback;
+	}
+}
+if ( ! function_exists( 'apply_filters' ) ) {
+	function apply_filters( $hook, $value, ...$args ) {
+		foreach ( ( $GLOBALS['cookie_i18n_filters'][ $hook ] ?? array() ) as $callback ) {
+			$value = $callback( $value, ...$args );
+		}
+		return $value;
+	}
+}
+function cookie_i18n_reset_filters() {
+	$GLOBALS['cookie_i18n_filters'] = array();
+}
 
 // Lightweight controller doubles let the upgrade migration be exercised
 // without bootstrapping WordPress or touching a database.
@@ -75,6 +94,7 @@ require_once dirname( __DIR__, 2 ) . '/includes/class-cookie-table-shortcode.php
 require_once dirname( __DIR__, 2 ) . '/includes/class-activator.php';
 
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
+use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator;
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Renderer;
 use FazCookie\Includes\Activator;
 use FazCookie\Includes\Cookie_Content_I18n;
@@ -235,7 +255,17 @@ unset( $GLOBALS['cookie_i18n_selected_languages'] );
 // fallback is deliberately non-destructive, which is exactly what makes a
 // missing language invisible. The coverage assertion below is the real fix —
 // the four cases after it only pin the grammar.
+// The .po glob alone was the wrong yardstick, and measuring it is what let a
+// second language slip through unnoticed: Bulgarian has no .po but IS a
+// cookie-policy language (Generator::LANGUAGES), and it reached this branch with
+// no duration entry at all. The authoritative set is the union — a language the
+// policy renders in, or one whose interface is translated, must not fall back to
+// English retention periods in either case.
 $faz_i18n_shipped = array();
+foreach ( Generator::LANGUAGES as $faz_i18n_lang ) {
+	// pt-BR is the one catalogue key that keeps its region.
+	$faz_i18n_shipped[ strtolower( $faz_i18n_lang ) ] = true;
+}
 foreach ( glob( dirname( __DIR__, 2 ) . '/languages/faz-cookie-manager-*.po' ) as $faz_i18n_po ) {
 	if ( preg_match( '/faz-cookie-manager-([a-z]{2})_/', basename( $faz_i18n_po ), $faz_i18n_m ) ) {
 		$faz_i18n_shipped[ $faz_i18n_m[1] ] = true;
@@ -243,7 +273,14 @@ foreach ( glob( dirname( __DIR__, 2 ) . '/languages/faz-cookie-manager-*.po' ) a
 }
 $faz_i18n_units   = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/contents/duration-units.json' ), true );
 $faz_i18n_missing = array_values( array_diff( array_keys( $faz_i18n_shipped ), array_keys( (array) $faz_i18n_units ) ) );
-cookie_i18n_eq( $faz_i18n_missing, array(), 'every locale the plugin ships has a duration catalogue' );
+cookie_i18n_eq( $faz_i18n_missing, array(), 'every language the plugin renders in has a duration catalogue' );
+
+// Bulgarian has one/other only (CLDR: `one` is exactly 1), so these two cases
+// are the whole grammar — but they are also the proof that the entry added for
+// the guard above is wired to the resolver and not merely present in the file.
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1 year', 'bg' ), '1 година', 'Bulgarian singular is selected' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'bg' ), '2 години', 'Bulgarian plural is selected' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( 'session', 'bg' ), 'сесия', 'Bulgarian session duration is translated' );
 
 // Capitalisation follows the source: inventories store "Session" more often
 // than "session", and a lowercase translation next to a capitalised English
@@ -265,6 +302,125 @@ cookie_i18n_eq( Cookie_Content_I18n::duration( '11 hours', 'hr' ), '11 sati', 'e
 cookie_i18n_eq( Cookie_Content_I18n::duration( '21 years', 'pl' ), '21 lat', 'Polish 21 takes the many form, NOT one' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '1 year', 'pl' ), '1 rok', 'Polish one applies to exactly 1' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( 'session', 'hr' ), 'sesija', 'Croatian session duration is translated' );
+
+// --- The two CLDR classes the selector used to collapse into `other` ---
+//
+// A fractional retention period is not exotic here: "1.5 years" is what a
+// scanner writes for an 18-month cookie, and it is the exact case Czech and
+// Polish give their own word for. Both were rendering the big-integer plural.
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'cs' ), '1.5 roku', 'Czech decimals take the many form (roku), not the plural let' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1,5 days', 'cs' ), '1,5 dne', 'a comma decimal reaches the same Czech class' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'pl' ), '1.5 roku', 'Polish decimals take other (roku), which is NOT the integer plural' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '5 years', 'pl' ), '5 lat', 'Polish 5 stays in the many class' );
+// …and the neighbours the two rules must not disturb.
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'cs' ), '2 roky', 'Czech few is untouched by the decimal rule' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'it' ), '1.5 anni', 'Italian decimals stay plural' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'hr' ), '1.5 godina', 'Croatian decimals are left in other' );
+
+// French and Portuguese count 0 and every 1.x as singular (CLDR: i = 0,1). The
+// Romance locales do NOT agree on this — Italian and Spanish pluralise both —
+// so the rule is per-language, not "Romance".
+cookie_i18n_eq( Cookie_Content_I18n::duration( '0 days', 'fr' ), '0 jour', 'French 0 is singular' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'fr' ), '1.5 an', 'French 1.5 is singular' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '0 days', 'pt' ), '0 dia', 'Portuguese 0 is singular' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '1.5 years', 'pt-BR' ), '1.5 ano', 'Brazilian Portuguese follows the same rule' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'fr' ), '2 ans', 'French keeps the plural from 2 up' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '0 days', 'it' ), '0 giorni', 'Italian 0 stays plural — the rule is not applied across Romance' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '0 days', 'es' ), '0 días', 'Spanish 0 stays plural too' );
+
+// --- Every catalogue key must be able to match something ---
+//
+// `wp-settings` and `_hj` sat in both catalogues unreachable: the prefix branch
+// only fires for a key that says it is a prefix, and neither did, so the entries
+// could only have matched cookies literally named "wp-settings" or "_hj" — which
+// do not exist. The keys now carry a marker (`wp-settings-`, `_hj*`).
+foreach ( array( 'en', 'it' ) as $faz_i18n_catalogue ) {
+	$faz_i18n_entries     = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/contents/cookies/' . $faz_i18n_catalogue . '.json' ), true );
+	$faz_i18n_unreachable = array();
+	foreach ( (array) $faz_i18n_entries as $faz_i18n_key => $faz_i18n_entry ) {
+		$faz_i18n_last  = substr( $faz_i18n_key, -1 );
+		$faz_i18n_probe = $faz_i18n_key;
+		if ( '*' === $faz_i18n_last ) {
+			$faz_i18n_probe = substr( $faz_i18n_key, 0, -1 ) . 'x';
+		} elseif ( in_array( $faz_i18n_last, array( '_', '-' ), true ) ) {
+			$faz_i18n_probe = $faz_i18n_key . 'x';
+		}
+		if ( Cookie_Content_I18n::description( $faz_i18n_probe, $faz_i18n_catalogue ) !== $faz_i18n_entry['description'] ) {
+			$faz_i18n_unreachable[] = $faz_i18n_key;
+		}
+	}
+	cookie_i18n_eq( $faz_i18n_unreachable, array(), "every {$faz_i18n_catalogue} catalogue key resolves for a cookie name shaped like it" );
+}
+
+// The loop above can only see whether a key is reachable in principle; it cannot
+// know that no browser has ever set a cookie called "wp-settings". These are the
+// names the two entries exist to serve, taken from the WordPress source and from
+// includes/data/known-providers.json.
+$faz_i18n_real_names = array(
+	'wp-settings-1'         => 'Customizes the admin interface for each user.',
+	'wp-settings-time-1'    => 'Customizes the admin interface for each user.',
+	'_hjSessionUser_123456' => 'Hotjar analytics cookie.',
+	'_hjFirstSeen'          => 'Hotjar analytics cookie.',
+);
+foreach ( $faz_i18n_real_names as $faz_i18n_name => $faz_i18n_text ) {
+	cookie_i18n_eq( Cookie_Content_I18n::description( $faz_i18n_name, 'en' ), $faz_i18n_text, "the real cookie {$faz_i18n_name} finds its catalogue entry" );
+}
+// The wildcard is additive: it must not have turned exact keys into prefixes.
+cookie_i18n_eq( Cookie_Content_I18n::description( '_gac_UA-1234', 'en' ), 'Google Analytics cookie containing campaign information.', '_gac_ still wins over the shorter _ga key' );
+cookie_i18n_eq( Cookie_Content_I18n::description( '_gargantuan', 'en' ), '', 'an exact key like _ga does not swallow unrelated names' );
+cookie_i18n_eq( Cookie_Content_I18n::description( 'frobnicator', 'en' ), '', 'nor does the two-letter fr key' );
+
+// --- The escape hatch ---
+//
+// Bundled text cannot be right everywhere: a site may run its own translation
+// workflow, or need a processor named. Both resolvers are filterable, and ''
+// means "stand down", which is the same signal the stock-text guard uses.
+cookie_i18n_reset_filters();
+add_filter(
+	'faz_cookie_content_i18n_description',
+	function ( $description, $slug, $lang ) {
+		return '_ga' === $slug && 'it' === $lang ? 'Testo imposto dal filtro.' : $description;
+	}
+);
+cookie_i18n_eq( Cookie_Content_I18n::description( '_ga', 'it' ), 'Testo imposto dal filtro.', 'a filter can substitute a resolved description' );
+cookie_i18n_eq( Cookie_Content_I18n::description( '_ga', 'en' ), 'Google Analytics cookie used to distinguish users.', 'the filter receives the slug and language, so it can scope itself' );
+cookie_i18n_reset_filters();
+
+add_filter( 'faz_cookie_content_i18n_description', '__return_empty_catalogue_entry' );
+function __return_empty_catalogue_entry( $description ) {
+	return '';
+}
+cookie_i18n_eq( Cookie_Content_I18n::description( '_ga', 'it' ), '', 'returning an empty string switches the description fallback off' );
+// …and switching it off must leave the stored row visible rather than blank it:
+// this is the whole point of the empty-string contract.
+cookie_i18n_eq(
+	$method->invoke( null, wp_json_encode( array( 'en' => 'Google Analytics cookie used to distinguish users.' ) ), 'it', '_ga', 'description' ),
+	'Google Analytics cookie used to distinguish users.',
+	'with the fallback disabled the renderer shows the stored value untouched'
+);
+cookie_i18n_reset_filters();
+
+add_filter(
+	'faz_cookie_content_i18n_duration',
+	function ( $duration, $source, $lang ) {
+		// The parser declines free-form periods on purpose; a site that wants
+		// them rendered can say so here.
+		return '' === $duration && 'up to 13 months' === $source && 'it' === $lang ? 'fino a 13 mesi' : $duration;
+	}
+);
+cookie_i18n_eq( Cookie_Content_I18n::duration( 'up to 13 months', 'it' ), 'fino a 13 mesi', 'a filter can render a period the parser declines' );
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'it' ), '2 anni', 'a scoped duration filter leaves everything else alone' );
+cookie_i18n_reset_filters();
+
+add_filter(
+	'faz_cookie_content_i18n_duration',
+	function () {
+		return null; // A filter that forgets to return a string.
+	}
+);
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'it' ), '', 'a non-string filter return is read as "stand down", not propagated' );
+cookie_i18n_reset_filters();
+cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'it' ), '2 anni', 'and removing the filter restores the bundled answer' );
 
 echo "\n" . ( $tests_run - $failed ) . "/{$tests_run} passed\n";
 exit( 0 === $failed ? 0 : 1 );
