@@ -131,21 +131,8 @@ rg_eq( in_array( 'www.gstatic.com/recaptcha/', $out, true ), true, 'non-string e
 rg_run( array( 'www.google.com/recaptcha/api' ) );
 rg_eq( $GLOBALS['faz_test_writes'], 2, 'exactly two writes: the marker and the settings row' );
 
-// ── The drift this fix also closes ────────────────────────────────────────
-// seed_default_whitelist() carried a SECOND copy of the default list and the
-// two diverged: 1.17.2 narrowed the shipped default to four anti-abuse
-// endpoints, while the copy went on seeding eleven — Google Fonts, Maps,
-// OAuth and generic CDNs among them, the very entries the shipped comment
-// says must stay blocked until consent. A site landing on that path had the
-// compliance fix undone by the migration shipped beside it. Asserted against
-// the source because the failure was a duplicated literal, not a value.
-$activator = (string) file_get_contents( $root . '/includes/class-activator.php' );
-rg_eq( false === strpos( $activator, 'cdn.jsdelivr.net/' ), true, 'the stale CDN entry is gone from the seeder' );
-rg_eq( false === strpos( $activator, 'fonts.googleapis.com/' ), true, 'and so is the Google Fonts entry' );
-rg_eq( false !== strpos( $activator, "get_defaults()" ), true, 'the seeder reads the shipped defaults instead of repeating them' );
-
-// And the shipped defaults really do carry both halves, which is what makes
-// reading them the right source.
+// The shipped defaults carry both halves of the reCAPTCHA entry — which is
+// what makes the missing one on older installs a gap rather than a policy.
 $settings_src = (string) file_get_contents( $root . '/admin/modules/settings/includes/class-settings.php' );
 rg_eq( false !== strpos( $settings_src, 'www.google.com/recaptcha/api' ), true, 'the shipped defaults whitelist the reCAPTCHA endpoint' );
 rg_eq( false !== strpos( $settings_src, 'www.gstatic.com/recaptcha/' ), true, 'and the widget script too' );

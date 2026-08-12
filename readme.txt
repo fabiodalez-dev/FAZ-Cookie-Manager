@@ -344,7 +344,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: a safe snapshot collector for privacy-policy text registered by installed plugins, preserving operator wording while tracking upstream changes.
 * Changed: the legal-document renderer now reads validated document coordinates from a registry while the existing Cookie Policy output remains byte-identical under the golden suite.
 * Fixed: reCAPTCHA renders again on sites installed before 1.17.2, which allowed its API endpoint but blocked the widget script it loads. A one-time migration adds the missing pattern only where the endpoint is already whitelisted, and never removes anything.
-* Fixed: the whitelist seeder no longer seeds a stale, wider list than the shipped defaults, which had it allowing Google Fonts, Maps, OAuth and generic CDNs before consent on the sites that landed on it.
 * Fixed: material-change retries are idempotent after partial failure, identical third-party policy text cannot exchange plugin identities or overrides, oversized collected HTML stays balanced, and the REST route guard must exercise visible tabs.
 
 = 1.25.0 =

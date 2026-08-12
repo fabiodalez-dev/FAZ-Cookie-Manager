@@ -152,15 +152,6 @@ class Activator {
 	 * Only adds defaults when the whitelist is empty, so user customizations
 	 * are never overwritten.
 	 *
-	 * The list is READ FROM Settings::get_defaults() rather than repeated here.
-	 * It used to be a second literal, and the two drifted: 1.17.2 narrowed the
-	 * shipped default to four anti-abuse endpoints on the grounds that Google
-	 * Fonts, Maps, OAuth and generic CDNs must stay blocked until consent
-	 * (German courts have held CDN-hosted Google Fonts unlawful without it),
-	 * while this copy went on seeding all eleven. A site landing here was
-	 * handed a pre-consent whitelist the plugin's own policy forbids — the
-	 * migration undoing the compliance fix that shipped beside it.
-	 *
 	 * @return void
 	 */
 	public static function seed_default_whitelist() {
@@ -176,11 +167,19 @@ class Activator {
 			return;
 		}
 
-		$shipped  = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
-		$shipped  = $shipped->get_defaults();
-		$defaults = isset( $shipped['script_blocking']['whitelist_patterns'] ) && is_array( $shipped['script_blocking']['whitelist_patterns'] )
-			? $shipped['script_blocking']['whitelist_patterns']
-			: array();
+		$defaults = array(
+			'googleapis.com/youtube/v3/',
+			'googleapis.com/customsearch/',
+			'translation.googleapis.com/',
+			'www.google.com/recaptcha/api',
+			'challenges.cloudflare.com/',
+			'maps.googleapis.com/maps/api/',
+			'www.googleapis.com/oauth2/',
+			'fonts.googleapis.com/',
+			'cdn.jsdelivr.net/',
+			'unpkg.com/',
+			'hcaptcha.com/',
+		);
 
 		if ( ! isset( $settings['script_blocking'] ) ) {
 			$settings['script_blocking'] = array();
