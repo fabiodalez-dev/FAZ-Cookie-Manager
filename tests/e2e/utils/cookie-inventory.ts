@@ -45,7 +45,12 @@ function restore(backup: string): void {
       throw new RuntimeException('faz_cookies restore payload could not be decoded');
     }
     foreach ($rows as $row) {
-      $wpdb->insert($wpdb->prefix . 'faz_cookies', $row);
+      if (false === $wpdb->insert($wpdb->prefix . 'faz_cookies', $row)) {
+        $error = is_string($wpdb->last_error) && '' !== $wpdb->last_error
+          ? $wpdb->last_error
+          : 'unknown database error';
+        throw new RuntimeException('faz_cookies restore insert failed: ' . $error);
+      }
     }
   `);
 }
