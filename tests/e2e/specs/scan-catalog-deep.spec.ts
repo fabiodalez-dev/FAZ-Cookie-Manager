@@ -7,6 +7,7 @@ import {
   fazApiPost,
   findCategoryId,
   listCookies,
+  listCookiesUntil,
   openCookiesPage,
   openSettingsPage,
 } from '../utils/faz-api';
@@ -842,15 +843,21 @@ test.describe('Deep scan and catalog flows', () => {
 
     await runQuickScan(page, 100);
 
-    const cookies = await listCookiesWithRetry(page, nonce);
-    const names = cookies.map((cookie) => cookie.name);
-
-    expect(names).toEqual(expect.arrayContaining([
+    // listCookiesWithRetry only retries a FAILED request; a request that
+    // succeeds with a half-written list satisfies it. The scan persists rows
+    // after runQuickScan returns, so under load this sampled the list too early
+    // and reported the site's unrelated cookies as the mismatch. Wait for the
+    // rows themselves.
+    const expected = [
       `_faz_lab_wc_shop_${token}`,
       `_faz_lab_wc_product_${token}`,
       `_faz_lab_wc_cart_${token}`,
       `_faz_lab_wc_account_${token}`,
       '_GRECAPTCHA',
-    ]));
+    ];
+    const cookies = await listCookiesUntil(page, nonce, expected, 60_000);
+    const names = cookies.map((cookie) => cookie.name);
+
+    expect(names).toEqual(expect.arrayContaining(expected));
   });
 });

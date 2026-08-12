@@ -806,11 +806,20 @@ function _fazInitOperations() {
     if (!_fazStoredAction && !_fazPreviewEnabled() && _fazGpcActive()) {
         _fazApplyGpcOptOut();
         _fazRemoveBanner();
+        // This branch returns early, so without its own call the one page where
+        // GPC is applied would be the single page load emitting no ready event.
+        // (Every load after it takes the returning-visitor branch, since
+        // _fazApplyGpcOptOut records action:"yes".)
+        _fazFireConsentReadyEvent('gpc');
         return;
     }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
         _fazShowBanner();
         _fazSetInitialState();
+        // Fire on the first visit too, so a listener binds ONE event and is
+        // told the state on every page load — pre-consent defaults here, the
+        // stored choice in the branch below.
+        _fazFireConsentReadyEvent('init');
         // Do NOT call _fazSetConsentID() here — the consentid is a stable
         // 32-char random tracker written into fazcookie-consent. Generating it
         // before the user acts creates a persistent fingerprint before consent,
@@ -818,6 +827,7 @@ function _fazInitOperations() {
         // _fazAcceptCookies() on the first user action.
     } else {
         _fazRemoveBanner();
+        _fazFireConsentReadyEvent('restore');
         // Returning visitors with a stored "consent:yes" cookie still need the
         // bootstrap unblock pass for server-side blocked scripts/iframes.
         // Delay the restore pass so later synchronous DOM mutations cannot
@@ -829,6 +839,64 @@ function _fazInitOperations() {
             window.addEventListener('load', _fazUnblock, { once: true });
         }
     }
+}
+
+/**
+ * Announce the consent state in force on THIS page load.
+ *
+ * Why a separate event and not fazcookie_consent_update:
+ *
+ * fazcookie_consent_update means "the consent just changed". Its listeners act
+ * on that meaning — inside this plugin alone, the consent logger POSTs a row to
+ * wp_faz_consent_logs, the pageview tracker records a banner interaction, the
+ * TCF stub signals `useractioncomplete`, and GCM pushes a `consent update`.
+ * Firing it on every page load would make the logger write one accountability
+ * record per page view per returning visitor, the tracker invent a banner
+ * interaction that never happened, and GCM emit the duplicate update that
+ * issue #149 exists to prevent. Third-party listeners are written against the
+ * same meaning and cannot be audited. So the state-on-load signal gets its own
+ * name and breaks nothing.
+ *
+ * fazcookie_consent_ready announces the initial state once per page load,
+ * before the unblock pass, and fires again with `action: 'update'` if the
+ * visitor changes consent on that page. It carries the same
+ * {accepted, rejected, action} shape. `action` is 'init' on a first visit,
+ * 'gpc' when a Global Privacy Control signal was auto-applied, and 'restore'
+ * for a visitor whose choice was already stored — the
+ * case that previously emitted no signal at all, leaving an integration that
+ * starts a map or a chat widget on consent working on the page where the
+ * visitor clicked Accept and silently dead on every page after it.
+ *
+ * Reads the hydrated consent store — the same source getFazConsent() reads — so
+ * the payload and the query API can never disagree.
+ *
+ * @param {string} action 'init' on a first visit, 'gpc' on an auto-applied Global
+ *                        Privacy Control signal, 'restore' for a stored choice.
+ */
+function _fazFireConsentReadyEvent(action) {
+    const detail = { accepted: [], rejected: [], action: action };
+    const categories = (_fazStore && _fazStore._categories) || [];
+    for (const category of categories) {
+        if (ref._fazGetFromStore(category.slug) === 'yes') {
+            detail.accepted.push(category.slug);
+        } else {
+            detail.rejected.push(category.slug);
+        }
+    }
+    // Recorded BEFORE dispatch, so a listener that arrives late can still find
+    // out what it missed. wca.js and microsoft-consent.js are separate files
+    // outside the minification pipeline: a page optimiser that defers or
+    // reorders them, or simply a slower network for one file, lands them after
+    // this fires — and an event nobody was listening for is gone. That returns
+    // the visitor to exactly the state this event exists to fix: a returning
+    // visitor who accepted, reported to every downstream integration as denied.
+    // A one-line read at load is a much cheaper contract than event ordering.
+    try {
+        window._fazConsentReady = detail;
+    } catch (e) { /* no window (SSR-style harness) — the dispatch below still runs. */ }
+    try {
+        document.dispatchEvent(new CustomEvent('fazcookie_consent_ready', { detail: detail }));
+    } catch (e) { /* CustomEvent unavailable — nothing to announce to. */ }
 }
 
 /**
@@ -2872,6 +2940,26 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
 
     _fazUnblock();
     _fazFireEvent(responseCategories);
+    // Announce the new state on the SAME page the visitor acted on, right where
+    // the state actually changes.
+    //
+    // Without this, fazcookie_consent_ready only ever fired during bootstrap, so
+    // on the page where somebody clicks Accept the last one they received said
+    // everything was rejected — the readme's own example (start a map when
+    // `functional` is granted) would not have run until the next navigation.
+    //
+    // It sits HERE and not in _fazAfterConsent() because this function is the
+    // single choke point every consent path goes through, including a direct
+    // window._fazAcceptCookies() call; _fazAfterConsent() is only reached via
+    // the banner's own handlers. It is also past the age-gate guard above, so a
+    // consent that was parked and never recorded announces nothing.
+    //
+    // Safe to add because of who listens: only wca.js and microsoft-consent.js
+    // subscribe, and both carry a last-applied guard, so the pair
+    // (consent_update + consent_ready) results in one push. The listeners that
+    // must not see a page-load-shaped event — the consent logger, the pageview
+    // tracker, GCM and the TCF stub — are on fazcookie_consent_update only.
+    _fazFireConsentReadyEvent('update');
     return true;
 }
 
@@ -7127,6 +7215,12 @@ window.getFazConsent = function () {
     const cookieConsent = {
         activeLaw: "",
         categories: {},
+        // Declared here, not only assigned inside the try below: the whole block
+        // shares one catch, so a single missing field elsewhere would otherwise
+        // hand the caller `services === undefined` instead of an empty map, and
+        // `getFazConsent().services[id]` would throw in their code rather than
+        // read false.
+        services: {},
         isUserActionCompleted: false,
         consentID: "",
         languageCode: ""
@@ -7142,9 +7236,96 @@ window.getFazConsent = function () {
         cookieConsent.isUserActionCompleted = ref._fazGetFromStore("action") === "yes";
         cookieConsent.consentID = ref._fazGetFromStore("consentid") || "";
         cookieConsent.languageCode = _fazStore._language || "";
+        cookieConsent.services = _fazPublicServiceConsentMap();
     } catch (_unused) { /* consent data unavailable */ }
 
     return cookieConsent;
+};
+
+/**
+ * Every service the visitor can be asked about on THIS site, with its effective
+ * consent resolved.
+ *
+ * Empty when per-service consent is off: the server ships no service list in
+ * that mode, so there is nothing finer than the category to report, and an empty
+ * map says exactly that instead of inventing entries.
+ *
+ * @return {Object} serviceId → true|false.
+ */
+function _fazPublicServiceConsentMap() {
+    var out = {};
+    _fazEachDeclaredService(function (service) {
+        if (!service || !service.id || Object.prototype.hasOwnProperty.call(out, service.id)) return;
+        out[service.id] = _fazServiceEffectiveConsent(service.id, service.category || "") === "yes";
+    });
+    return out;
+}
+
+/**
+ * Walk every service declared to the client, from both lists.
+ *
+ * _services is the scanner-detected set that the preference center renders;
+ * _serviceCatalogue is the broader enforceable set used for runtime-revealed
+ * toggles (#134/#146). A cookie can be declared by a service in the second and
+ * not the first, so a lookup that consulted only _services would answer "I do
+ * not know about this cookie" for something the plugin actively blocks.
+ *
+ * @param {Function} fn Receives each service object.
+ */
+function _fazEachDeclaredService(fn) {
+    var lists = [_fazStore._services, _fazStore._serviceCatalogue];
+    for (var li = 0; li < lists.length; li++) {
+        var list = lists[li];
+        if (!list) continue;
+        if (Array.isArray(list)) {
+            for (var i = 0; i < list.length; i++) fn(list[i]);
+        } else if (typeof list === "object") {
+            // _serviceCatalogue is keyed by service id, not an array.
+            for (var key in list) {
+                if (Object.prototype.hasOwnProperty.call(list, key)) fn(list[key]);
+            }
+        }
+    }
+}
+
+/**
+ * Effective consent for one declared cookie, by name.
+ *
+ * Resolution order is the same one the blocker and the shredder apply, so this
+ * cannot disagree with what actually happens to the cookie: a per-cookie
+ * override wins over the per-service decision, which wins over the category.
+ * Most restrictive wins when several services declare a matching pattern —
+ * a denied service anywhere means the cookie is denied.
+ *
+ * @param {string} cookieName Exact cookie name (patterns are matched for you).
+ * @return {boolean|null} true = allowed, false = denied, null = this site
+ *         declares no service for that cookie, so ask about the category
+ *         instead. null is the answer on every site with per-service consent
+ *         off, since the server ships no service list in that mode.
+ */
+window.getFazCookieConsent = function (cookieName) {
+    if (!cookieName || typeof cookieName !== "string") return null;
+    var decided = null;
+    try {
+        _fazEachDeclaredService(function (service) {
+            if (decided === false) return; // Already denied; most restrictive wins.
+            if (!service || !service.id || !Array.isArray(service.cookies)) return;
+            for (var ci = 0; ci < service.cookies.length; ci++) {
+                var pattern = service.cookies[ci];
+                if (!pattern || !_fazCookieNameMatches(cookieName, pattern)) continue;
+                var decision = "";
+                if (_fazStore._perCookieConsent) {
+                    decision = ref._fazGetFromStore(_fazCkKey(service.id, pattern));
+                }
+                if (decision !== "yes" && decision !== "no") {
+                    decision = _fazServiceEffectiveConsent(service.id, service.category || "");
+                }
+                if (decision === "no") { decided = false; return; }
+                if (decision === "yes" && decided === null) decided = true;
+            }
+        });
+    } catch (_unused) { return null; }
+    return decided;
 };
 
 // Cross-domain consent forwarding: listen for incoming consent from other domains.
