@@ -85,6 +85,21 @@ function fail(title: string, detail: string, remedy: string): never {
 }
 
 /**
+ * One line of `rsync -i` output that names a file: eleven characters of
+ * itemised change flags (`>f+++++++++`, `cd+++++++++`, `.d..t......`) or
+ * `*deleting`, then the path.
+ *
+ * Needed because rsync mixes NOTICES into the same stream, and counting every
+ * non-empty line treated them as drift. `skipping non-regular file
+ * "node_modules"` — emitted whenever node_modules is a symlink, which is the
+ * normal case in a git worktree — made the preflight announce "1 file behind"
+ * and refuse to start the entire suite against a deployment that matched
+ * perfectly. A check that reports confidently on the wrong measurement is
+ * worse than no check.
+ */
+const ITEMIZED = /^(?:[<>ch.][a-zA-Z.][^\s]{9}|\*\w+)\s+\S/;
+
+/**
  * Files that differ between the working tree and the deployed plugin.
  * `-c` compares checksums rather than size+mtime, so an edit that happens to
  * preserve both is still caught; `-n` makes it a dry run.
@@ -98,7 +113,10 @@ function deploymentDrift(deployPath: string): string[] {
     deployPath.endsWith('/') ? deployPath : `${deployPath}/`,
   ];
   const out = execFileSync('rsync', args, { encoding: 'utf8', timeout: 60_000 });
-  return out.split('\n').map((l) => l.trim()).filter(Boolean);
+  return out
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => ITEMIZED.test(l));
 }
 
 /** Everything the suite needs, asserted before the first spec runs. */
