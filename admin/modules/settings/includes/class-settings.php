@@ -68,6 +68,28 @@ class Settings extends Store {
 				'status'    => true,
 				'retention' => 12,
 			),
+			// Pageview analytics retention, in months. Activator::run_retention_
+			// cleanup() has read $settings['pageviews']['retention'] since the
+			// purge was added, but the group was never declared here — and
+			// sanitize() builds the stored option by walking THESE defaults, so
+			// the key was unreachable through the settings API and every install
+			// ran on the hardcoded 6. A destructive default that a site cannot
+			// change except by writing PHP is not a setting; declaring the group
+			// is what makes the documented one real.
+			'pageviews'    => array(
+				'retention' => 6,
+			),
+			// Same defect, same shape: cleanup_old_dsar_requests() has read
+			// $settings['dsar']['retention'] since it was written, while the
+			// group was never declared — so the documented 24-month window was
+			// unreachable and every install ran on the hardcoded fallback. DSAR
+			// records are the evidence that a data-subject request was answered,
+			// which is exactly the kind of record a controller may need to
+			// produce, so the floor below keeps it at accountability's side of
+			// the line rather than allowing "never purge".
+			'dsar'         => array(
+				'retention' => 24,
+			),
 			'languages'    => array(
 				'selected' => array( 'en' ),
 				'default'  => 'en',
@@ -354,11 +376,18 @@ class Settings extends Store {
 	/**
 	 * Sanitize options
 	 *
-	 * @param array $settings Input settings array.
-	 * @param array $defaults Default settings array.
+	 * @param array  $settings Input settings array.
+	 * @param array  $defaults Default settings array.
+	 * @param string $group    Key of the group being walked, i.e. the immediate
+	 *                         parent of the leaves sanitised at this level (''
+	 *                         at the top). sanitize_option() matches on the bare
+	 *                         leaf name across the WHOLE tree — see the note in
+	 *                         get_excludes() — so a leaf whose correct rule
+	 *                         depends on which group it lives in has no other way
+	 *                         to find out. Only 'retention' needs it today.
 	 * @return array
 	 */
-	public static function sanitize( $settings, $defaults ) {
+	public static function sanitize( $settings, $defaults, $group = '' ) {
 		$result  = array();
 		$excludes = self::get_excludes();
 		foreach ( $defaults as $key => $data ) {
@@ -369,7 +398,7 @@ class Settings extends Store {
 			// "array default but non-array value" override below would wipe
 			// the string before sanitize_option() ever sees it.
 			if ( in_array( $key, $excludes, true ) ) {
-				$result[ $key ] = self::sanitize_option( $key, $value );
+				$result[ $key ] = self::sanitize_option( $key, $value, $group );
 				continue;
 			}
 			// If the default is an array but the stored value isn't, use the default.
@@ -377,10 +406,10 @@ class Settings extends Store {
 				$value = $data;
 			}
 			if ( is_array( $value ) ) {
-				$result[ $key ] = self::sanitize( $value, $data );
+				$result[ $key ] = self::sanitize( $value, $data, $key );
 			} else {
 				if ( is_string( $key ) ) {
-					$result[ $key ] = self::sanitize_option( $key, $value );
+					$result[ $key ] = self::sanitize_option( $key, $value, $group );
 				}
 			}
 		}
@@ -431,9 +460,12 @@ class Settings extends Store {
 	 *
 	 * @param string $option The name of the option.
 	 * @param string $value  The unsanitised value.
+	 * @param string $group  Settings group the option belongs to, when the rule
+	 *                       differs between groups that share a leaf name.
+	 *                       Empty when called directly.
 	 * @return string Sanitized value.
 	 */
-	public static function sanitize_option( $option, $value ) {
+	public static function sanitize_option( $option, $value, $group = '' ) {
 		switch ( $option ) {
 			case 'status':
 			case 'subdomain_sharing':
@@ -517,7 +549,25 @@ class Settings extends Store {
 				$value = max( $incoming, $persisted );
 				break;
 			case 'retention':
-				$value = max( 1, min( 120, absint( $value ) ) );
+				// Months to keep, capped at ten years. The floor differs by
+				// group, which is the whole reason sanitize_option() now knows
+				// one. Consent logs are the accountability record for consent
+				// (GDPR Art. 7(1)) and their retention window is a promise made
+				// to the visitor, so a stored 0 — read by the cleanup as "never
+				// purge" — must not be reachable from the UI. Pageview analytics
+				// carry no such duty, and their purge is documented as
+				// opt-out-able: Activator::run_retention_cleanup() already
+				// honours 0 via its `> 0` guard and the
+				// faz_pageviews_retention_months filter, so refusing to persist
+				// the 0 would leave that contract half-implemented.
+				$floor = ( 'pageviews' === $group ) ? 0 : 1;
+				// (int) rather than absint(): absint( -1 ) is 1, so a negative value
+				// landed ABOVE the pageviews floor of 0 and was stored as one month
+				// — the shortest possible retention — when the obvious reading of a
+				// negative is "off". Clamping the signed value sends it to the floor,
+				// which is 0 (never purge) for pageviews and 1 for the groups that owe
+				// an accountability record.
+				$value = max( $floor, min( 120, (int) $value ) );
 				break;
 			case 'min_age':
 				$value = max( 13, min( 18, absint( $value ) ) );

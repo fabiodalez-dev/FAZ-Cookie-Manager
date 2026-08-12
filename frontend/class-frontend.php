@@ -797,10 +797,8 @@ class Frontend {
 			);
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';
-			// Compute the suffix per-file: wca.js and microsoft-consent.js
-			// are not in the build:min pipeline, so reusing the $suffix
-			// computed for script.js would produce URLs like wca.min.js
-			// that 404 on any install where script.min.js exists.
+			// Compute the suffix per-file so SCRIPT_DEBUG and a missing generated
+			// asset both fall back safely to the readable source.
 			$wca_suffix = $this->get_script_suffix( 'js/wca' );
 			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
 			if ( true === $this->is_gsk_enabled() ) {
@@ -1735,7 +1733,8 @@ class Frontend {
 						}
 					}
 					if ( $repaired ) {
-						update_option( $cache_key, $stored );
+						// autoload=false — keep the multi-KB template blob out of alloptions.
+						update_option( $cache_key, $stored, false );
 					}
 				}
 			}
@@ -1836,7 +1835,8 @@ class Frontend {
 				}
 			}
 			if ( $repaired ) {
-				update_option( $cache_key, $stored );
+				// autoload=false — keep the multi-KB template blob out of alloptions.
+				update_option( $cache_key, $stored, false );
 			}
 		}
 
@@ -3879,7 +3879,13 @@ class Frontend {
 	 * @return string
 	 */
 	private function extract_tag_attr( $attrs, $name ) {
-		if ( preg_match( '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $attrs, $matches ) ) {
+		// Called for every attribute of every tag the output buffer inspects —
+		// build each attribute's pattern string once per request.
+		static $patterns = array();
+		if ( ! isset( $patterns[ $name ] ) ) {
+			$patterns[ $name ] = '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i';
+		}
+		if ( preg_match( $patterns[ $name ], $attrs, $matches ) ) {
 			for ( $i = 1; $i <= 3; $i++ ) {
 				if ( isset( $matches[ $i ] ) && '' !== $matches[ $i ] ) {
 					return $matches[ $i ];

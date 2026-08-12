@@ -384,6 +384,8 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: `getFazConsent().services` and `window.getFazCookieConsent( name )` for sites using per-service consent, answering for one service or one declared cookie instead of the whole category.
 * Fixed: the WP Consent API and Microsoft UET/Clarity bridges were never told a returning visitor's consent, so Consent-API aware plugins and Microsoft Advertising treated somebody who had accepted as denied for the rest of the session.
 * Fixed: tracking resources inside a `<noscript>` block are gated per resource. A block mixing providers was decided by whichever matched first, so a consented embed listed before a denied pixel let that pixel load before consent for visitors without JavaScript, and gated tags could be labelled with another provider's category.
+* Fixed: on SQLite-backed installs the retention cleanup silently deleted nothing, so consent logs and pageviews were kept past the retention window you set. The purge now runs on both database engines and reports honest counts.
+* Fixed: the script-blocking whitelist was re-seeded with default entries on every upgrade, undoing entries an administrator had removed and allowing more than the plugin's own defaults. It is now seeded once, and your list is left alone from then on.
 
 = 1.25.0 =
 * Added: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps the normal placeholder substitution pipeline, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.

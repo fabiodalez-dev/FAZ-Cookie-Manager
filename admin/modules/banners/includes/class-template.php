@@ -743,9 +743,13 @@ class Template {
 			),
 			'layout_signature' => $this->get_layout_signature(),
 		);
+		// autoload=false: each entry carries the full rendered banner HTML+CSS
+		// (~30-45 KB) per banner per language — loading it on every request via
+		// alloptions costs far more than the one indexed lookup on banner render.
 		update_option(
 			$cache_key,
-			$stored
+			$stored,
+			false
 		);
 	}
 

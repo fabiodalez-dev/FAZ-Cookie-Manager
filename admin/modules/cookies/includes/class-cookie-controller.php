@@ -78,6 +78,14 @@ class Cookie_Controller extends Base_Controller {
 	 * @return void
 	 */
 	public function delete_cache() {
+		// Honour the bulk-mode suspension the same way the parent does. Without
+		// this the parent returns early during a scanner import but the transient
+		// below is still deleted once per inserted row, which is most of the cost
+		// the suspension exists to avoid. The flush that runs after
+		// resume_cache_invalidation() clears it once for the whole batch.
+		if ( self::is_cache_invalidation_suspended() ) {
+			return;
+		}
 		parent::delete_cache();
 		delete_transient( 'faz_detected_cookie_names' );
 	}
@@ -282,7 +290,12 @@ class Cookie_Controller extends Base_Controller {
 		}
 		$object->set_id( $wpdb->insert_id );
 		$this->delete_cache();
-		do_action( 'faz_after_create_cookie' );
+		// In bulk mode (scanner import loop) the caller fires this once after
+		// the loop — the listeners (unmatched-vendor re-check, page-cache
+		// purge) are whole-dataset operations that must not run per row.
+		if ( ! self::is_cache_invalidation_suspended() ) {
+			do_action( 'faz_after_create_cookie' );
+		}
 	}
 
 	/**

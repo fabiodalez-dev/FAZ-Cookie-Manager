@@ -39,6 +39,14 @@ class Cookie_Definitions {
 	const META_KEY = 'faz_cookie_definitions_meta';
 
 	/**
+	 * Option caching the bundled snapshot's metadata (count / date), keyed by
+	 * the file's mtime+size. The bundled JSON is ~2.8 MB — decoding it just to
+	 * render the "definitions available" admin notice cost 100+ ms and tens of
+	 * MB of peak memory on every FAZ admin screen without a downloaded dataset.
+	 */
+	const BUNDLED_META_KEY = 'faz_cookie_definitions_bundled_meta';
+
+	/**
 	 * Map Open Cookie Database categories → FAZ category slugs.
 	 *
 	 * @var array
@@ -169,8 +177,10 @@ class Cookie_Definitions {
 			return true;
 		}
 
-		$bundled = $this->get_bundled_data();
-		return is_array( $bundled ) && ! empty( $bundled );
+		// Answer from the cached bundled metadata when possible so admin
+		// screens don't decode the 2.8 MB bundled JSON just for this check.
+		$meta = $this->get_bundled_meta();
+		return ! empty( $meta['count'] );
 	}
 
 	/**
@@ -411,17 +421,45 @@ class Cookie_Definitions {
 	 * @return array
 	 */
 	private function get_bundled_meta() {
+		$file = $this->get_bundled_file_path();
+		if ( ! is_readable( $file ) ) {
+			return array();
+		}
+
+		// The snapshot only changes on plugin updates, so cache its metadata
+		// keyed by mtime+size instead of re-decoding 2.8 MB per admin screen.
+		$mtime       = (int) filemtime( $file );
+		$size        = (int) filesize( $file );
+		$fingerprint = $mtime . ':' . $size;
+		$cached      = get_option( self::BUNDLED_META_KEY, false );
+		if (
+			is_array( $cached )
+			&& isset( $cached['fingerprint'], $cached['meta'] )
+			&& $fingerprint === $cached['fingerprint']
+			&& is_array( $cached['meta'] )
+		) {
+			return $cached['meta'];
+		}
+
 		$data = $this->get_bundled_data();
 		if ( empty( $data ) ) {
 			return array();
 		}
 
-		$file = $this->get_bundled_file_path();
-		return array(
+		$meta = array(
 			'count'      => $this->count_definitions( $data ),
-			'updated_at' => is_readable( $file ) ? gmdate( 'Y-m-d H:i:s', filemtime( $file ) ) : '',
+			'updated_at' => gmdate( 'Y-m-d H:i:s', $mtime ),
 			'source'     => 'bundled',
 		);
+		update_option(
+			self::BUNDLED_META_KEY,
+			array(
+				'fingerprint' => $fingerprint,
+				'meta'        => $meta,
+			),
+			false
+		);
+		return $meta;
 	}
 
 	/**

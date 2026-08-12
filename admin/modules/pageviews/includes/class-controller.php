@@ -41,7 +41,7 @@ class Controller {
 	 *
 	 * @var string
 	 */
-	private $db_version = '1.0';
+	private $db_version = '1.2';
 
 	/**
 	 * Return the current instance of the class
@@ -87,6 +87,23 @@ class Controller {
 		$table_name      = $this->get_table_name();
 		$charset_collate = $wpdb->get_charset_collate();
 
+		// db_version 1.2 drops idx_event_type (event_type). It was fully
+		// redundant: idx_event_created (event_type,created_at) has event_type as
+		// its leftmost column, and a B-tree serves any leftmost prefix of its key,
+		// so every lookup the single-column index could answer the composite
+		// already answered. The cost was not free — this table takes one INSERT
+		// per tracked pageview, the hottest write in the plugin, and each write
+		// maintained a third index nothing ever read.
+		//
+		// dbDelta only ADDS columns and keys; it never drops them. So this change
+		// gives new installs the lean schema, while installs created before 1.2
+		// keep the redundant key until it is dropped by hand
+		// (ALTER TABLE wp_faz_pageviews DROP INDEX idx_event_type). That is the
+		// deliberate choice: an automatic DROP INDEX would need a portable way to
+		// ask whether the index exists, and the portable-SQL lesson on this table
+		// is recent — the retention purge was a permanent silent no-op on SQLite
+		// installs because it used a MySQL-only DELETE … LIMIT. A redundant index
+		// costs write throughput; a broken migration costs the table.
 		$sql = "CREATE TABLE {$table_name} (
 			id bigint(20) NOT NULL AUTO_INCREMENT,
 			page_url varchar(500) NOT NULL DEFAULT '',
@@ -95,8 +112,8 @@ class Controller {
 			session_id varchar(64) DEFAULT '',
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
-			KEY idx_event_type (event_type),
-			KEY idx_created_at (created_at)
+			KEY idx_created_at (created_at),
+			KEY idx_event_created (event_type,created_at)
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -362,13 +379,83 @@ class Controller {
 		$months   = absint( $months );
 		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). DELETE write — caching irrelevant.
-		$deleted = $wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE created_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$cutoff
-			)
-		);
+		// Batched DELETE — same rationale as ConsentLogs::cleanup_old_logs():
+		// the first purge on a long-lived install can match a huge row count,
+		// and one unbounded DELETE means a long InnoDB lock.
+		// Select-then-delete, for the same reason as ConsentLogs: `DELETE … LIMIT`
+		// is a MySQL extension that SQLite rejects, which turned every batch into
+		// a failure and retention into a permanent no-op on those installs.
+		//
+		// Batch size and per-run cap are filterable, and share the filter names
+		// with ConsentLogs::cleanup_old_logs() on purpose: they answer the same
+		// question about the same host ("how much DB work may one retention cron
+		// run do here?"), and splitting them would make an admin tune one purge
+		// and silently leave the other on the defaults. See that method for why
+		// the clamps are load-bearing rather than decorative.
+		$batch_size = (int) apply_filters( 'faz_retention_batch_size', 1000 );
+		$batch_size = max( 100, min( 10000, $batch_size ) );
+		$max_rows   = (int) apply_filters( 'faz_retention_max_rows', 200000 );
+		$max_rows   = max( $batch_size, min( 10000000, $max_rows ) );
+
+		$deleted = 0;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention read — caching irrelevant.
+			// Unordered on purpose. The filter is on created_at and the only index
+			// that helps is idx_created_at, which does not cover an ORDER BY on the
+			// primary key — so asking for one made the database read and sort the
+			// whole expired set before applying LIMIT, on exactly the tables where
+			// that set is largest. Deletion needs the ids, not an order, and
+			// progress is guaranteed because every id read is then deleted.
+			$ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT id FROM {$table} WHERE created_at < %s LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff,
+					// The remaining budget, not the batch size. The cap used to be
+					// checked only in the loop condition, so the LAST batch always
+					// read a full batch and could overshoot by up to batch_size - 1
+					// rows — a cap that is exceeded on every run it applies to is
+					// not a cap.
+					min( $batch_size, max( 0, $max_rows - $deleted ) )
+				)
+			);
+			// An empty result means both "failed" and "nothing matched", so the
+			// two are separated explicitly — conflating them is the original bug.
+			if ( '' !== $wpdb->last_error ) {
+				error_log( 'FAZ: pageview retention SELECT failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- silent failure would let the table grow without bound.
+				break;
+			}
+			// Kept as decimal STRINGS, never absint()/%d. On 32-bit PHP both truncate
+			// at 2147483647, so a row with a larger id would be rewritten to that
+			// value — and if a row with THAT id exists, the DELETE removes somebody
+			// else's record. The column is BIGINT precisely because the id can
+			// exceed the platform integer, so the id must never travel through one.
+			$ids = array_values( array_filter( array_map( 'strval', (array) $ids ), static function ( $id ) {
+				return '' !== $id && ctype_digit( $id ) && '0' !== $id;
+			} ) );
+			if ( empty( $ids ) ) {
+				break;
+			}
+
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%s' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%s) as decimal strings. DELETE write — caching irrelevant.
+			$batch = $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$table} WHERE id IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$ids
+				)
+			);
+			// See ConsentLogs::cleanup_old_logs(): (int) false is 0, so an error
+			// is otherwise indistinguishable from "nothing left to purge" and the
+			// table keeps growing silently.
+			if ( false === $batch ) {
+				error_log( 'FAZ: pageview retention DELETE failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- silent failure would let the table grow without bound.
+				break;
+			}
+			$deleted += (int) $batch;
+			// Loop on what was READ, not on what the DELETE reported: a row
+			// removed concurrently makes those differ, and stopping on the
+			// smaller number leaves expired rows behind.
+		} while ( count( $ids ) === $batch_size && $deleted < $max_rows );
 
 		return (int) $deleted;
 	}
