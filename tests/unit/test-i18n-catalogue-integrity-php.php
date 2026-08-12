@@ -96,18 +96,37 @@ function faz_decode_mo( $path ) {
 echo "Translation catalogue integrity (.po <-> shipped .mo)\n\n";
 
 $languages = dirname( __DIR__, 2 ) . '/languages';
-$pos       = glob( $languages . '/*.po' );
+// glob() returns false on an unreadable directory, not an empty array, and
+// sort( false ) is a TypeError on PHP 8. Coercing here means a missing
+// languages/ directory fails the assertion below on its own terms instead of
+// crashing the runner with a type error that names neither the directory nor
+// the reason.
+$pos = glob( $languages . '/*.po' );
+$pos = is_array( $pos ) ? $pos : array();
 sort( $pos );
 
 cat_eq( count( $pos ) > 0, true, 'at least one .po catalogue is present' );
 
 // The whole point is comparing against a compile, so without msgfmt this suite
-// can only report that it did not run. Saying so beats a silent green.
+// can only report that it did not run.
+//
+// Locally that is a fair skip: not every machine has gettext, and refusing to
+// run the other assertions would help nobody. On a build machine it is the
+// opposite — a suite that exits 0 having verified nothing is indistinguishable
+// from one that verified everything, which is the failure this file exists to
+// prevent. So the skip is tolerated where a human reads the output and is a
+// hard failure where nobody does.
 exec( 'command -v msgfmt', $which, $has_msgfmt );
 if ( 0 !== $has_msgfmt ) {
-	echo "  \033[33mSKIP\033[0m msgfmt not installed — catalogues not verified against a compile\n";
+	$unattended = false !== getenv( 'CI' ) || false !== getenv( 'FAZ_REQUIRE_MSGFMT' );
+	if ( $unattended ) {
+		echo "  \033[31mFAIL\033[0m msgfmt not installed — install gettext; this suite cannot verify anything without it\n";
+	} else {
+		echo "  \033[33mSKIP\033[0m msgfmt not installed — catalogues not verified against a compile\n";
+		echo "         (set FAZ_REQUIRE_MSGFMT=1 to make this a failure)\n";
+	}
 	echo "\n" . ( $tests_run - $failed ) . "/{$tests_run} passed\n";
-	exit( 0 === $failed ? 0 : 1 );
+	exit( ( $unattended || $failed > 0 ) ? 1 : 0 );
 }
 
 $tmp = sys_get_temp_dir() . '/faz-catalogue-check-' . getmypid() . '.mo';
@@ -135,7 +154,8 @@ cat_eq( '' !== $domain, true, 'the plugin declares a Text Domain to check catalo
 // line by line would skip precisely the catalogues a translation tool has
 // touched, which are the ones worth checking. And a skip here is never silent:
 // a guard that quietly declines to run reads as a pass.
-foreach ( array_merge( $pos, glob( $languages . '/*.pot' ) ) as $catalogue ) {
+$pots = glob( $languages . '/*.pot' );
+foreach ( array_merge( $pos, is_array( $pots ) ? $pots : array() ) as $catalogue ) {
 	$name  = basename( $catalogue );
 	$lines = explode( "\n", (string) @file_get_contents( $catalogue ) );
 	$joined = '';
