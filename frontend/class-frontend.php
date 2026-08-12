@@ -48,7 +48,7 @@ class Frontend {
 	 * Pinned by tests/unit/test-smash-balloon-gdpr-php.php against the slug the
 	 * plugin actually registers, so this cannot rot into a dead link silently.
 	 *
-	 * @since 1.26.1
+	 * @since 1.26.0
 	 * @var string
 	 */
 	const SMASH_BALLOON_SETTINGS_SLUG = 'sbi-settings';
@@ -7099,7 +7099,7 @@ class Frontend {
 	 * The slug is pinned by a test against the plugin's own registration, since
 	 * a link to a page that does not exist is worse than no link.
 	 *
-	 * @since 1.26.1
+	 * @since 1.26.0
 	 * @return string
 	 */
 	public static function smash_balloon_settings_url() {
@@ -7128,7 +7128,7 @@ class Frontend {
 	 * Plugin inactive, option missing, key absent or unreadable: block. A signal
 	 * we cannot read is not permission to load a tracker.
 	 *
-	 * @since 1.26.1
+	 * @since 1.26.0
 	 * @return bool True when Instagram Feed is handling it and we should not.
 	 */
 	/**
@@ -7149,7 +7149,7 @@ class Frontend {
 	 * first-party script. Dropping only the first leaves the second blocking it,
 	 * which is exactly the empty-box state described above.
 	 *
-	 * @since 1.26.1
+	 * @since 1.26.0
 	 * @return array Map of pattern => true; empty when the accommodation is off.
 	 */
 	public static function smash_balloon_exempt_patterns() {

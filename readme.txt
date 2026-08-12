@@ -389,6 +389,11 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fixed: tracking resources inside a `<noscript>` block are gated per resource. A block mixing providers was decided by whichever matched first, so a consented embed listed before a denied pixel let that pixel load before consent for visitors without JavaScript, and gated tags could be labelled with another provider's category.
 * Fixed: on SQLite-backed installs the retention cleanup silently deleted nothing, so consent logs and pageviews were kept past the retention window you set. The purge now runs on both database engines and reports honest counts.
 * Fixed: the script-blocking whitelist was re-seeded with default entries on every upgrade, undoing entries an administrator had removed and allowing more than the plugin's own defaults. It is now seeded once, and your list is left alone from then on.
+* Fixed: Smash Balloon Instagram Feed in its own GDPR mode is no longer double-blocked; the template explains when and why the rule is inactive.
+* Fixed: Elementor's first-party lightbox helper is no longer blocked as a tracker; real third-party embeds remain governed by their own provider rules.
+* Changed: backend queries, scanner bulk writes, retention cleanup, CSV export and generated frontend assets now use bounded, cached or streamed paths to reduce per-request memory and database overhead.
+* Fixed: CSV export cannot loop forever on a locked output buffer, and multisite blog switches cannot reuse another site's Google Consent Mode settings.
+* Updated: the Czech catalogue is synchronized with the current source strings and compiled binary.
 
 = 1.25.0 =
 * Added: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps the normal placeholder substitution pipeline, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.

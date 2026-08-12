@@ -657,14 +657,15 @@ class Cookies_API extends API_Controller {
 			if ( $data && isset( $data['id'] ) ) {
 				if ( $sb_stood_down && 'smash-balloon-instagram' === $data['id'] ) {
 					$data['not_applicable'] = array(
-						'label' => __( 'Not applied', 'faz-cookie-manager' ),
+						'label'      => __( 'Not applied', 'faz-cookie-manager' ),
 						// Deliberately not "overridden". Nothing is overriding
 						// anything: with its GDPR setting on Yes, Instagram Feed
 						// serves local copies and contacts nobody, so the
 						// third-party surface this rule exists to gate is gone.
 						// There is nothing left for the setting to apply TO.
-						'note'  => __( 'Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect.', 'faz-cookie-manager' ),
-						'url'   => \FazCookie\Frontend\Frontend::smash_balloon_settings_url(),
+						'note'       => __( 'Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect.', 'faz-cookie-manager' ),
+						'url'        => \FazCookie\Frontend\Frontend::smash_balloon_settings_url(),
+						'link_label' => __( 'Open Instagram Feed settings', 'faz-cookie-manager' ),
 					);
 				}
 				$templates[] = $data;

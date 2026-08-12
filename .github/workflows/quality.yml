@@ -1,0 +1,61 @@
+name: "Quality"
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@2f4f146eb73a47ae11e1b27f6e5d4d77f74c3b61 # v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gettext shellcheck
+          npm ci
+          composer install --no-interaction --no-progress --prefer-dist
+
+      - name: PHP syntax
+        run: npm run lint:php
+
+      - name: Shell syntax and static analysis
+        run: |
+          bash -n scripts/*.sh
+          shellcheck scripts/*.sh
+
+      - name: Unit suites
+        run: npm run test:unit
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=2G
+
+      - name: Generated JavaScript is current
+        run: |
+          npm run build:min
+          git diff --exit-code -- frontend/js/*.min.js
+
+      - name: Repository diff hygiene
+        run: git diff --check HEAD^

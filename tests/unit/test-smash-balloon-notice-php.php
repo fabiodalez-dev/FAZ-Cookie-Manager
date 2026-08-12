@@ -138,5 +138,10 @@ sbn_eq( sbn_render_notice( $admin ), '', 'automatic mode remains blocked and doe
 $GLOBALS['sbn_options']['sb_instagram_settings']['gdpr'] = array( 'yes' );
 sbn_eq( sbn_render_notice( $admin ), '', 'malformed gdpr value fails closed without a notice or warning' );
 
+$cookies_js = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/assets/js/pages/cookies.js' );
+sbn_eq( false !== strpos( $cookies_js, "parsed.origin === window.location.origin" ), true, 'template settings links are restricted to the current admin origin' );
+sbn_eq( false !== strpos( $cookies_js, "document.createElement('a')" ), true, 'template settings use a native link outside the card button' );
+sbn_eq( false === strpos( $cookies_js, 'window.location.href = tpl.not_applicable.url' ), true, 'unvalidated server data is never assigned directly to window.location' );
+
 echo "\n" . ( $GLOBALS['sbn_tests_run'] - $GLOBALS['sbn_tests_failed'] ) . "/{$GLOBALS['sbn_tests_run']} passed\n";
 exit( 0 === $GLOBALS['sbn_tests_failed'] ? 0 : 1 );

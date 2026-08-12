@@ -81,7 +81,7 @@ green "  ✓ version consistent in 4 places; changelog entries present and under
 # reject what we are about to publish.
 if command -v gh >/dev/null 2>&1; then
     concl="$(gh api "repos/{owner}/{repo}/commits/${head_sha}/check-runs" \
-        --jq '[.check_runs[] | select(.name | test("Plugin Check|CodeQL")) | .conclusion] | unique | join(",")' 2>/dev/null || echo "")"
+		--jq '[.check_runs[] | select(.name | test("Plugin Check|CodeQL|Quality")) | .conclusion] | unique | join(",")' 2>/dev/null || echo "")"
     if [[ -z "${concl}" ]]; then
         red "  ! could not read CI status for ${head_sha:0:7} — continuing, verify manually"
     elif [[ "${concl}" != "success" ]]; then
@@ -93,8 +93,9 @@ fi
 
 # Nothing may already exist under this version. Discovering a half-published
 # version mid-flight is the state this script exists to prevent.
-git -C "${PLUGIN_SRC}" rev-parse "${TAG}" >/dev/null 2>&1 && ! done_step svn_committed \
-    && die "tag ${TAG} already exists but SVN was not committed by this run — resolve by hand"
+if git -C "${PLUGIN_SRC}" rev-parse "${TAG}" >/dev/null 2>&1 && ! done_step svn_committed; then
+    die "tag ${TAG} already exists but SVN was not committed by this run — resolve by hand"
+fi
 if svn ls "https://plugins.svn.wordpress.org/${SLUG}/tags/${VERSION}" >/dev/null 2>&1 && ! done_step svn_committed; then
     die "wp.org already has tags/${VERSION}"
 fi
@@ -180,7 +181,11 @@ for _ in $(seq 1 60); do
     [[ "${live}" == "${VERSION}" ]] && break
     sleep 30
 done
-[[ "${live:-}" == "${VERSION}" ]] && green "  ✓ wp.org serves ${VERSION}" || red "  ! wp.org still serves ${live:-unknown}"
+if [[ "${live:-}" == "${VERSION}" ]]; then
+    green "  ✓ wp.org serves ${VERSION}"
+else
+    red "  ! wp.org still serves ${live:-unknown}"
+fi
 
 rm -f "${PLUGIN_SRC}/.release-notes-${VERSION}.md"
 echo

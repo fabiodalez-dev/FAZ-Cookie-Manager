@@ -15,6 +15,10 @@ msgstr ""
 "X-Domain: faz-cookie-manager\n"
 "X-Generator: Poedit 3.9\n"
 
+#: admin/modules/consentlogs/api/class-api.php:308
+msgid "The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again."
+msgstr "De CSV-export kon niet worden gestart omdat een uitvoerbuffer is vergrendeld. Schakel uitvoercompressie of de conflicterende plugin uit en probeer het opnieuw."
+
 #. Plugin Name of the plugin
 #: faz-cookie-manager.php admin/views/base.php:71
 msgid "FAZ Cookie Manager"

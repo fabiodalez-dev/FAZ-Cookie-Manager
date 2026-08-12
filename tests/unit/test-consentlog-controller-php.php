@@ -34,6 +34,12 @@
  * @package FazCookie\Tests\Unit
  */
 
+namespace FazCookie\Includes {
+	// The REST endpoint is loaded only to exercise its private buffer-drain
+	// helper. Its WordPress parent is irrelevant to that isolated behaviour.
+	abstract class Rest_Controller {}
+}
+
 namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 	// Nothing to predeclare — the real Controller lives in this namespace and is
 	// loaded below; the braced block only fixes namespace context for clarity.
@@ -192,6 +198,7 @@ namespace {
 	$GLOBALS['wpdb'] = new FazTest_ConsentWPDB();
 
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/includes/class-controller.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/api/class-api.php';
 
 	use FazCookie\Admin\Modules\Consentlogs\Includes\Controller;
 
@@ -444,6 +451,26 @@ namespace {
 	// thing in both directions.
 	eq( false === strpos( $api_src, "header( 'Content-Length" ), true, 'and sends no Content-Length, which cannot be known before the last row' );
 	eq( false !== strpos( $api_src, 'ob_end_clean' ), true, 'output buffers are discarded, or streaming would accumulate in one anyway' );
+	eq( false !== strpos( $api_src, 'if ( ! ob_end_clean() )' ), true, 'a locked output buffer terminates the drain instead of looping forever' );
+	eq( false !== strpos( $api_src, 'return false;' ), true, 'a locked buffer makes streaming fail explicitly' );
+
+	// Exercise the actual termination condition as well as guarding the call
+	// site. A non-removable PHP buffer leaves ob_get_level() unchanged when
+	// ob_end_clean() is attempted; the old while loop therefore ran forever.
+	$drain = new ReflectionMethod( \FazCookie\Admin\Modules\Consentlogs\Api\Api::class, 'discard_output_buffers' );
+	$base_level = ob_get_level();
+	ob_start();
+	echo 'discard me';
+	eq( $drain->invoke( null ), true, 'the production drain removes a normal output buffer' );
+	eq( ob_get_level(), $base_level, 'the normal buffer is fully removed' );
+
+	$locked_flags = PHP_OUTPUT_HANDLER_STDFLAGS & ~PHP_OUTPUT_HANDLER_REMOVABLE;
+	ob_start( null, 0, $locked_flags );
+	set_error_handler( static function () { return true; } );
+	$locked_result = $drain->invoke( null );
+	restore_error_handler();
+	eq( $locked_result, false, 'the production drain returns on a non-removable buffer' );
+	eq( ob_get_level(), $base_level + 1, 'the locked buffer remains at the same level instead of causing an infinite loop' );
 
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";

@@ -3,6 +3,11 @@ includes:
 
 parameters:
     level: 2
+    # Keep peak memory deterministic on GitHub-hosted runners. Analysing the
+    # complete WordPress surface in several workers produces avoidable memory
+    # spikes; the Quality workflow also grants this serial run an explicit 2 GiB.
+    parallel:
+        maximumNumberOfProcesses: 1
     # Some integration-specific ignoreErrors patterns may not match on every
     # installation or dependency version; that must not fail the gate itself.
     reportUnmatchedIgnoredErrors: false

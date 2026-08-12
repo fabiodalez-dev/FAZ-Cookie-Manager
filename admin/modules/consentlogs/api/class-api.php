@@ -298,6 +298,16 @@ class Api extends Rest_Controller {
 			'status' => $request->get_param( 'status' ) ? sanitize_text_field( $request->get_param( 'status' ) ) : '',
 		);
 
+		// Every output buffer is discarded first. WordPress and other plugins
+		// routinely leave one open, and streaming INTO a buffer accumulates the
+		// same complete CSV in memory the buffer was meant to avoid: the code
+		// would look streamed and behave exactly as before.
+		if ( ! self::discard_output_buffers() ) {
+			status_header( 500 );
+			echo esc_html__( 'The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again.', 'faz-cookie-manager' );
+			exit;
+		}
+
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="consent-logs-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
@@ -308,14 +318,6 @@ class Api extends Rest_Controller {
 		// and computing it would mean building the whole file first — which is
 		// the thing being removed. A download without one is ordinary; the file
 		// name is what the browser shows.
-
-		// Every output buffer is discarded first. WordPress and other plugins
-		// routinely leave one open, and streaming INTO a buffer accumulates the
-		// same complete CSV in memory the buffer was meant to avoid: the code
-		// would look streamed and behave exactly as before.
-		while ( ob_get_level() > 0 ) {
-			ob_end_clean();
-		}
 
 		$handle = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
 		if ( false === $handle ) {
@@ -331,6 +333,23 @@ class Api extends Rest_Controller {
 		Controller::get_instance()->stream_csv( $handle, $args );
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		exit;
+	}
+
+	/**
+	 * Remove every removable output buffer before a streaming response.
+	 *
+	 * @return bool False when the current buffer is locked and streaming cannot
+	 *              be guaranteed without accumulating the full response.
+	 */
+	private static function discard_output_buffers() {
+		while ( ob_get_level() > 0 ) {
+			// A non-removable buffer leaves ob_get_level() unchanged when this
+			// fails. Returning immediately is the loop-termination guarantee.
+			if ( ! ob_end_clean() ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

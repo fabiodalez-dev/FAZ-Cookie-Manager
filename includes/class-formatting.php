@@ -101,7 +101,7 @@ if ( ! function_exists( 'faz_sanitize_bool_strict' ) ) {
 	 * no third outcome and no logging: the caller wants a decision, and the safe
 	 * decision when the stored value is unintelligible is "not exempt".
 	 *
-	 * @since 1.26.1
+	 * @since 1.26.0
 	 * @param mixed $value Stored value of a permission flag.
 	 * @return bool
 	 */

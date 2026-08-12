@@ -100,6 +100,19 @@ use FazCookie\Includes\Activator;
 use FazCookie\Includes\Cookie_Content_I18n;
 use FazCookie\Includes\Cookie_Table_Shortcode;
 
+class Cookie_I18n_Category_Double extends \FazCookie\Includes\Store {
+	protected $data = array(
+		'description' => array(
+			'en' => 'Stock category description',
+			'it' => 'Descrizione categoria personalizzata',
+		),
+	);
+
+	public function get_translations( $lang = '', $key = '' ) {
+		return 'Bundled category fallback';
+	}
+}
+
 $tests_run = 0;
 $failed    = 0;
 
@@ -159,6 +172,13 @@ $custom = new Cookie( cookie_i18n_row(
 ) );
 cookie_i18n_eq( $custom->get_description( 'it' ), 'Testo italiano personalizzato', 'manual Italian description wins over bundled fallback' );
 cookie_i18n_eq( $custom->get_duration()['it'], 'Durata personalizzata', 'manual Italian duration wins over bundled fallback' );
+
+$category = new Cookie_I18n_Category_Double();
+cookie_i18n_eq(
+	$category->get_description( 'it' ),
+	'Descrizione categoria personalizzata',
+	'cookie-only stock translation never overwrites an administrator category description'
+);
 
 $method = new ReflectionMethod( Renderer::class, 'decode_cookie_i18n_text' );
 $method->setAccessible( true );

@@ -14,6 +14,10 @@ msgstr ""
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
 
+#: admin/modules/consentlogs/api/class-api.php:308
+msgid "The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again."
+msgstr ""
+
 #. Plugin Name of the plugin
 #: faz-cookie-manager.php
 #: admin/views/base.php:71

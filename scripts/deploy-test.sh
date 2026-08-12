@@ -71,6 +71,31 @@ case "$TARGET" in
 	*) TARGET="${TARGET}/" ;;
 esac
 
+# rsync --delete is intentionally destructive inside the plugin directory, so
+# the destination must be proven to be exactly that directory. Canonicalising
+# the existing parent also defeats `..` components and a symlinked target that
+# only LOOKS like wp-content/plugins/faz-cookie-manager but resolves elsewhere.
+target_leaf="${TARGET%/}"
+target_parent="$(dirname "$target_leaf")"
+target_name="$(basename "$target_leaf")"
+if [ ! -d "$target_parent" ]; then
+	echo "deploy-test: target parent does not exist: ${target_parent}" >&2
+	exit 2
+fi
+if [ -L "$target_leaf" ]; then
+	echo "deploy-test: target must not be a symbolic link" >&2
+	exit 2
+fi
+target_parent="$(cd "$target_parent" && pwd -P)"
+TARGET="${target_parent}/${target_name}/"
+case "$TARGET" in
+	*/wp-content/plugins/faz-cookie-manager/) ;;
+	*)
+		echo "deploy-test: target must end with wp-content/plugins/faz-cookie-manager/" >&2
+		exit 2
+		;;
+esac
+
 # --delete is deliberate: a stale file left behind after a rename is how a test
 # passes against code that no longer ships. It also means the exclusions above
 # are the only thing standing between this and deleting them at the target, so

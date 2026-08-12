@@ -315,7 +315,7 @@ abstract class Store {
 				// (Cookie_Content_I18n::is_stock_description), so an
 				// administrator's own wording returns '' and is preserved. The
 				// protection lives in the resolver, not in this branch.
-				$translated = $this->get_translations( $lang, $prop, $content );
+				$translated = $this->translate_stored_value( $lang, $prop, $content );
 				$content    = '' !== $translated ? $translated : $content;
 			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
@@ -592,5 +592,25 @@ abstract class Store {
 	 */
 	public function get_translations( $lang = '', $key = '' ) {
 		return array();
+	}
+
+	/**
+	 * Translate one already-populated multilingual value when the model knows
+	 * how to distinguish bundled stock copy from administrator-authored copy.
+	 *
+	 * The base model deliberately stands down. Categories and banners also use
+	 * Store::get_description(), but their get_translations() methods return
+	 * shipped fallback wording without inspecting the supplied source. Calling
+	 * those methods for a non-empty value would overwrite administrator text.
+	 * Cookie overrides this hook because its catalogue resolver can prove that a
+	 * source string is stock wording before replacing it.
+	 *
+	 * @param string $lang   Language code.
+	 * @param string $key    Field name.
+	 * @param string $source Stored value.
+	 * @return string Empty means preserve the stored value.
+	 */
+	protected function translate_stored_value( $lang, $key, $source ) {
+		return '';
 	}
 }

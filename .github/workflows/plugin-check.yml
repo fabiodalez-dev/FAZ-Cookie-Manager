@@ -41,7 +41,7 @@ jobs:
         run: |
           cat > .wp-env.json <<'JSON'
           {
-            "core": null,
+            "core": "WordPress/WordPress#7.0.3",
             "port": 8880,
             "testsPort": 8881,
             "testsEnvironment": false,
@@ -50,8 +50,12 @@ jobs:
             }
           }
           JSON
-          # Pin @wordpress/env so the CI environment is reproducible — an
-          # unpinned @latest can introduce a wp-env boot regression (see #579)
+          # Pin both WordPress and @wordpress/env so the CI environment is
+          # reproducible. The WordPress/WordPress mirror currently has 7.0.3
+          # but not the 7.0.4 tag advertised by the update API; leaving core at
+          # null made wp-env fetch that missing ref and fail before Plugin Check.
+          # `Tested up to: 7.0` is patch-agnostic, so 7.0.3 is the stable gate.
+          # An unpinned @wordpress/env can introduce a boot regression (see #579)
           # without any change to the plugin under test.
           npm -g --no-fund i @wordpress/env@11.7.0
           wp-env start --update

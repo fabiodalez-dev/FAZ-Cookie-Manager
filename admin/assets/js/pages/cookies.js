@@ -1374,24 +1374,27 @@
 			}
 
 			templates.forEach(function (tpl) {
-				var card = document.createElement('button');
-				card.type = 'button';
+				var card = document.createElement('div');
 				card.className = 'faz-template-card';
+				var cardAction = document.createElement('button');
+				cardAction.type = 'button';
+				cardAction.className = 'faz-template-card-action';
+				card.appendChild(cardAction);
 
 				var name = document.createElement('div');
 				name.className = 'faz-template-card-name';
 				name.textContent = tpl.name;
-				card.appendChild(name);
+				cardAction.appendChild(name);
 
 				var desc = document.createElement('div');
 				desc.className = 'faz-template-card-desc';
 				desc.textContent = tpl.description;
-				card.appendChild(desc);
+				cardAction.appendChild(desc);
 
 				var badge = document.createElement('span');
 				badge.className = 'faz-template-card-badge';
 				badge.textContent = tpl.category;
-				card.appendChild(badge);
+				cardAction.appendChild(badge);
 
 				// A rule that cannot take effect must say so where it lives.
 				// Without this the admin adds it, sees the feed load anyway, and
@@ -1406,36 +1409,38 @@
 					var inert = document.createElement('span');
 					inert.className = 'faz-template-card-inert-badge';
 					inert.textContent = tpl.not_applicable.label;
-					card.appendChild(inert);
+					cardAction.appendChild(inert);
 
 					var note = document.createElement('div');
 					note.className = 'faz-template-card-inert-note';
 					note.textContent = tpl.not_applicable.note || '';
-					card.appendChild(note);
+					cardAction.appendChild(note);
 
 					if (tpl.not_applicable.url) {
-						// A link inside a <button> is invalid and unreachable by
-						// keyboard, so this is a span that stops the card's own
-						// click and navigates itself.
-						var link = document.createElement('span');
-						link.className = 'faz-template-card-inert-link';
-						link.setAttribute('role', 'link');
-						link.setAttribute('tabindex', '0');
-						link.textContent = __('cookies.sbOpenSettings', 'Open Instagram Feed settings');
-						var go = function (ev) {
-							ev.stopPropagation();
-							ev.preventDefault();
-							window.location.href = tpl.not_applicable.url;
-						};
-						link.addEventListener('click', go);
-						link.addEventListener('keydown', function (ev) {
-							if (ev.key === 'Enter' || ev.key === ' ') { go(ev); }
-						});
-						card.appendChild(link);
+						var inertUrl = '';
+						try {
+							var parsed = new URL(String(tpl.not_applicable.url), window.location.href);
+							if ((parsed.protocol === 'http:' || parsed.protocol === 'https:')
+								&& parsed.origin === window.location.origin) {
+								inertUrl = parsed.href;
+							}
+						} catch (e) {
+							inertUrl = '';
+						}
+						if (inertUrl) {
+							// A real link is a sibling of the card button: valid HTML,
+							// same-origin only, with native new-tab/copy-link behaviour.
+							var link = document.createElement('a');
+							link.className = 'faz-template-card-inert-link';
+							link.href = inertUrl;
+							link.textContent = tpl.not_applicable.link_label
+								|| __('cookies.sbOpenSettings', 'Open Instagram Feed settings');
+							card.appendChild(link);
+						}
 					}
 				}
 
-				card.addEventListener('click', function () {
+				cardAction.addEventListener('click', function () {
 					var patterns = Array.isArray(tpl.patterns) ? tpl.patterns : [];
 					if (!patterns.length && !(Array.isArray(tpl.cookies) && tpl.cookies.length)) {
 						FAZ.notify(__('cookies.templateEmpty', 'No patterns or cookies in template.'), 'error');

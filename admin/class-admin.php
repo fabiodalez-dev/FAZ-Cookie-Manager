@@ -1794,7 +1794,7 @@ class Admin {
 	 * the service toggle, where somebody wondering why it does nothing will
 	 * actually look. This notice exists so they learn it is there.
 	 *
-	 * @since 1.26.1
+	 * @since 1.26.0
 	 * @return void
 	 */
 	public function smash_balloon_notice() {

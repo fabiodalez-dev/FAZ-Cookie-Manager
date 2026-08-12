@@ -14,6 +14,10 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Domain: faz-cookie-manager\n"
 
+#: admin/modules/consentlogs/api/class-api.php:308
+msgid "The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again."
+msgstr "Der CSV-Export konnte nicht gestartet werden, weil ein Ausgabepuffer gesperrt ist. Deaktiviere die Ausgabekomprimierung oder das in Konflikt stehende Plugin und versuche es erneut."
+
 #. Plugin Name of the plugin
 #: faz-cookie-manager.php admin/views/base.php:71
 msgid "FAZ Cookie Manager"

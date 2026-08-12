@@ -661,7 +661,7 @@ class Cookie extends Store {
 		// resolver needs the stored value to tell "stock text worth localising"
 		// from "somebody's own copy that must be left alone".
 		if ( is_string( $source ) && '' !== $source ) {
-			return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang, $this->get_domain() );
+			return $this->translate_stored_value( $lang, $key, $source );
 		}
 
 		$source = '';
@@ -686,6 +686,21 @@ class Cookie extends Store {
 			}
 		}
 
+		return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang, $this->get_domain() );
+	}
+
+	/**
+	 * Translate stock cookie text without touching administrator-authored copy.
+	 *
+	 * @param string $lang   Language code.
+	 * @param string $key    description|duration.
+	 * @param string $source Stored value.
+	 * @return string
+	 */
+	protected function translate_stored_value( $lang, $key, $source ) {
+		if ( ! in_array( $key, array( 'description', 'duration' ), true ) || '' === $lang ) {
+			return '';
+		}
 		return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang, $this->get_domain() );
 	}
 }

@@ -10,15 +10,23 @@ namespace {
 		define( 'ABSPATH', __DIR__ . '/' );
 	}
 	$GLOBALS['faz_gcm_option_reads'] = 0;
-	$GLOBALS['faz_gcm_option']       = array( 'status' => false, 'wait_for_update' => 500 );
-	$GLOBALS['faz_gcm_hook_value']   = null;
+	$GLOBALS['faz_gcm_blog_id']      = 1;
+	$GLOBALS['faz_gcm_options']      = array(
+		1 => array( 'status' => false, 'wait_for_update' => 500 ),
+		2 => array( 'status' => true, 'wait_for_update' => 900 ),
+	);
+	$GLOBALS['faz_gcm_hook_value'] = null;
+
+	function get_current_blog_id() {
+		return $GLOBALS['faz_gcm_blog_id'];
+	}
 
 	function get_option( $name, $default = false ) {
 		++$GLOBALS['faz_gcm_option_reads'];
-		return $GLOBALS['faz_gcm_option'];
+		return $GLOBALS['faz_gcm_options'][ $GLOBALS['faz_gcm_blog_id'] ] ?? $default;
 	}
 	function update_option( $name, $value ) {
-		$GLOBALS['faz_gcm_option'] = $value;
+		$GLOBALS['faz_gcm_options'][ $GLOBALS['faz_gcm_blog_id'] ] = $value;
 		return true;
 	}
 	function do_action( $hook, $value = null ) {
@@ -56,8 +64,16 @@ namespace {
 	gcm_cache_ok( false === $settings->get( 'status' ), 'second read returns the memoized status' );
 	gcm_cache_ok( 1 === $GLOBALS['faz_gcm_option_reads'], 'repeated get() calls read wp_options once per request' );
 
-	$GLOBALS['faz_gcm_option']['status'] = true;
+	$GLOBALS['faz_gcm_options'][1]['status'] = true;
 	gcm_cache_ok( false === $settings->get( 'status' ), 'external mutation cannot bypass an existing request memo' );
+
+	$GLOBALS['faz_gcm_blog_id'] = 2;
+	gcm_cache_ok( true === $settings->get( 'status' ), 'switch_to_blog reads the destination blog status' );
+	gcm_cache_ok( 900 === $settings->get( 'wait_for_update' ), 'switch_to_blog never reuses the source blog memo' );
+	gcm_cache_ok( 2 === $GLOBALS['faz_gcm_option_reads'], 'each blog is read once and memoized independently' );
+	$GLOBALS['faz_gcm_blog_id'] = 1;
+	gcm_cache_ok( false === $settings->get( 'status' ), 'restoring the blog reuses only that blog memo' );
+
 	Gcm_Settings::flush_runtime_cache();
 	gcm_cache_ok( true === $settings->get( 'status' ), 'explicit flush makes an external migration write visible' );
 

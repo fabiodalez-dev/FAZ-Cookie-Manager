@@ -84,6 +84,9 @@ function faz_decode_mo( $path ) {
 	for ( $i = 0; $i < $count; $i++ ) {
 		$o = unpack( $fmt . '2', substr( $blob, $o_orig + ( $i * 8 ), 8 ) );
 		$t = unpack( $fmt . '2', substr( $blob, $o_tran + ( $i * 8 ), 8 ) );
+		if ( $o[2] + $o[1] > strlen( $blob ) || $t[2] + $t[1] > strlen( $blob ) ) {
+			return 'string entry runs past end of file';
+		}
 		$key = substr( $blob, $o[2], $o[1] );
 		$val = substr( $blob, $t[2], $t[1] );
 		$map[ $key ] = $val;
