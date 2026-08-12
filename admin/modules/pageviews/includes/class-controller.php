@@ -410,7 +410,12 @@ class Controller {
 				$wpdb->prepare(
 					"SELECT id FROM {$table} WHERE created_at < %s LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					$cutoff,
-					$batch_size
+					// The remaining budget, not the batch size. The cap used to be
+					// checked only in the loop condition, so the LAST batch always
+					// read a full batch and could overshoot by up to batch_size - 1
+					// rows — a cap that is exceeded on every run it applies to is
+					// not a cap.
+					min( $batch_size, max( 0, $max_rows - $deleted ) )
 				)
 			);
 			// An empty result means both "failed" and "nothing matched", so the
@@ -419,13 +424,20 @@ class Controller {
 				error_log( 'FAZ: pageview retention SELECT failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- silent failure would let the table grow without bound.
 				break;
 			}
-			$ids = array_values( array_filter( array_map( 'absint', (array) $ids ) ) );
+			// Kept as decimal STRINGS, never absint()/%d. On 32-bit PHP both truncate
+			// at 2147483647, so a row with a larger id would be rewritten to that
+			// value — and if a row with THAT id exists, the DELETE removes somebody
+			// else's record. The column is BIGINT precisely because the id can
+			// exceed the platform integer, so the id must never travel through one.
+			$ids = array_values( array_filter( array_map( 'strval', (array) $ids ), static function ( $id ) {
+				return '' !== $id && ctype_digit( $id ) && '0' !== $id;
+			} ) );
 			if ( empty( $ids ) ) {
 				break;
 			}
 
-			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%d). DELETE write — caching irrelevant.
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%s' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%s) as decimal strings. DELETE write — caching irrelevant.
 			$batch = $wpdb->query(
 				$wpdb->prepare(
 					"DELETE FROM {$table} WHERE id IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared

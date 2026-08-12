@@ -412,6 +412,26 @@ namespace {
 	eq( $ctrl->stream_csv( null ), false, 'a non-resource is refused' );
 	eq( $ctrl->stream_csv( 'not a stream' ), false, 'and so is a string' );
 
+	// BIGINT ids must never travel through a platform integer. On 32-bit PHP
+	// absint() and %d both truncate at 2147483647, so a larger id is rewritten
+	// to that value — and if a row with THAT id exists, the DELETE removes
+	// somebody else's consent record. The column is BIGINT for exactly this
+	// reason, so the fix is to keep the ids as decimal strings end to end.
+	$ctrl_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/includes/class-controller.php' );
+	eq( false === strpos( $ctrl_src, "array_map( 'absint', (array) \$ids )" ), true, 'retention ids are not passed through absint()' );
+	eq( false !== strpos( $ctrl_src, "ctype_digit" ), true, 'they are validated as decimal digit strings instead' );
+	eq( false === strpos( $ctrl_src, "array_fill( 0, count( \$ids ), '%d' )" ), true, 'and bound with %s, not %d' );
+
+	// A failed export query returns an empty array exactly like a finished one.
+	// Conflating them handed back a CSV that LOOKS complete — the worst outcome
+	// for a file exported to answer a data-subject request.
+	eq( false !== strpos( $ctrl_src, 'consent-log export query failed' ), true, 'a failed export query is detected' );
+	eq( false !== strpos( $ctrl_src, "\$complete = \$this->write_csv" ), true, 'and its failure is propagated to export_csv()' );
+
+	// A cap checked only in the loop condition is exceeded on every run where it
+	// applies, because the last SELECT still reads a whole batch.
+	eq( false !== strpos( $ctrl_src, 'min( $batch_size, max( 0, $max_rows - $deleted ) )' ), true, 'the per-run cap bounds the SELECT, not just the loop' );
+
 	// The REST download must use the streaming entry point, not the string one.
 	// Behaviourally indistinguishable from a unit test — both produce the same
 	// bytes — so the call site is asserted directly; using export_csv() there

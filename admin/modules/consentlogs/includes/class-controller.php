@@ -668,7 +668,14 @@ class Controller {
 		if ( false === $output ) {
 			return '';
 		}
-		$this->write_csv( $output, $args );
+		$complete = $this->write_csv( $output, $args );
+		if ( false === $complete ) {
+			fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			// false, not a partial string: the caller decides what to do with a
+			// failure, and a truncated CSV that reads as complete is the failure
+			// mode worth refusing outright.
+			return false;
+		}
 		rewind( $output );
 		$csv = stream_get_contents( $output );
 		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
@@ -692,7 +699,7 @@ class Controller {
 	 *
 	 * @param resource $handle Open, writable stream.
 	 * @param array    $args   Same filters as export_csv().
-	 * @return void
+	 * @return bool True when every batch was written; false on a database error.
 	 */
 	private function write_csv( $handle, $args = array() ) {
 		global $wpdb;
@@ -748,6 +755,17 @@ class Controller {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query produced by the prepare() call above. CSV export — must reflect live data.
 			$items = $wpdb->get_results( $query, ARRAY_A );
 
+			// A failed query also returns an empty array, so without this the
+			// export stopped at the error and handed back a CSV that LOOKS
+			// complete — the worst possible outcome for a file somebody exports
+			// to answer a data-subject request or an audit. Same conflation the
+			// retention purge above had, in the one place where the missing rows
+			// are the whole point of the file.
+			if ( '' !== $wpdb->last_error ) {
+				error_log( 'FAZ: consent-log export query failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a truncated export must never pass for a complete one.
+				return false;
+			}
+
 			if ( ! is_array( $items ) || empty( $items ) ) {
 				break;
 			}
@@ -778,6 +796,8 @@ class Controller {
 			}
 		} while ( count( $items ) === $batch_size );
 
+
+		return true;
 	}
 
 	/**
@@ -791,8 +811,11 @@ class Controller {
 		if ( ! is_resource( $handle ) ) {
 			return false;
 		}
-		$this->write_csv( $handle, $args );
-		return true;
+		// Propagated, though a streamed failure cannot be retracted: the headers
+		// and the first batches have already reached the client. What the caller
+		// gets back is the truth about completeness, which is the most this
+		// direction can offer — and more than silently claiming success.
+		return false !== $this->write_csv( $handle, $args );
 	}
 
 	/**
@@ -1065,7 +1088,12 @@ class Controller {
 				$wpdb->prepare(
 					"SELECT log_id FROM {$table} WHERE created_at < %s LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					$cutoff,
-					$batch_size
+					// The remaining budget, not the batch size. The cap used to be
+					// checked only in the loop condition, so the LAST batch always
+					// read a full batch and could overshoot by up to batch_size - 1
+					// rows — a cap that is exceeded on every run it applies to is
+					// not a cap.
+					min( $batch_size, max( 0, $max_rows - $deleted ) )
 				)
 			);
 			// get_col() returns an empty array both when the query fails and when
@@ -1075,13 +1103,20 @@ class Controller {
 				error_log( 'FAZ: consent-log retention SELECT failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a silent retention failure is a data-minimisation problem; it must leave a trace.
 				break;
 			}
-			$ids = array_values( array_filter( array_map( 'absint', (array) $ids ) ) );
+			// Kept as decimal STRINGS, never absint()/%d. On 32-bit PHP both truncate
+			// at 2147483647, so a row with a larger id would be rewritten to that
+			// value — and if a row with THAT id exists, the DELETE removes somebody
+			// else's record. The column is BIGINT precisely because the id can
+			// exceed the platform integer, so the id must never travel through one.
+			$ids = array_values( array_filter( array_map( 'strval', (array) $ids ), static function ( $id ) {
+				return '' !== $id && ctype_digit( $id ) && '0' !== $id;
+			} ) );
 			if ( empty( $ids ) ) {
 				break;
 			}
 
-			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%d). Retention cleanup writes — caching irrelevant for DELETE.
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%s' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%s) as decimal strings. Retention cleanup writes — caching irrelevant for DELETE.
 			$batch = $wpdb->query(
 				$wpdb->prepare(
 					"DELETE FROM {$table} WHERE log_id IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
