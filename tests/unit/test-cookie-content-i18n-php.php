@@ -387,6 +387,64 @@ cookie_i18n_eq( Cookie_Content_I18n::description( 'ct0', 'en', '.x.com' ), 'Twit
 cookie_i18n_eq( Cookie_Content_I18n::description( '_ga', 'en', 'example.test' ), 'Google Analytics cookie used to distinguish users.', '_ga is first-party and stays unconstrained' );
 cookie_i18n_eq( Cookie_Content_I18n::description( '_fbp', 'en', 'example.test' ), 'Facebook Pixel cookie used for advertising and analytics.', 'and so is _fbp' );
 
+// --- Prefix collisions resolve to the LONGEST match, not the first one ---
+//
+// `wordpress_` and `wordpress_logged_in_` are both prefix keys, and one is a
+// prefix of the other. Returning the first hit made the answer depend on the
+// order of keys in a JSON file: right today only because the specific keys sit
+// above the general ones. Reorder the file and a session cookie acquires the
+// wrong description in a document a visitor consents to — silently.
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'wordpress_logged_in_a1b2c3', 'en' ),
+	'Indicates logged-in status and user identity.',
+	'wordpress_logged_in_* takes the specific entry, not the generic wordpress_ one'
+);
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'wordpress_ab12cd34', 'en' ),
+	'WordPress authentication cookie for the admin area.',
+	'and a plain wordpress_* cookie still gets the generic one'
+);
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'comment_author_email_9f', 'en' ),
+	'Stores the commenter email for convenience.',
+	'comment_author_email_ beats the shorter comment_author_'
+);
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'comment_author_url_9f', 'en' ),
+	'Stores the commenter website URL for convenience.',
+	'and so does comment_author_url_'
+);
+
+// Reversing the catalogue order must change nothing. This is the assertion that
+// makes the rule an invariant rather than a property of the current file.
+$faz_i18n_rev = new ReflectionMethod( Cookie_Content_I18n::class, 'catalogue_prefix' );
+$faz_i18n_rev->setAccessible( true );
+cookie_i18n_eq(
+	$faz_i18n_rev->invoke( null, 'wordpress_logged_in_' ),
+	'wordpress_logged_in_',
+	'a trailing-underscore key is its own prefix'
+);
+
+// Lookup is case-insensitive: catalogue keys are lowercase by convention and a
+// cookie called IDE must still resolve.
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'IDE', 'en', '.doubleclick.net' ),
+	'DoubleClick/Google cookie used for targeted advertising.',
+	'an uppercase cookie name resolves against the lowercase key'
+);
+
+// Every locale must carry the SAME key set. Twelve catalogues were added at
+// once; without this, one of them silently falls behind as entries are added
+// and that language quietly loses descriptions.
+$faz_i18n_en_keys = array_keys( (array) json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/contents/cookies/en.json' ), true ) );
+sort( $faz_i18n_en_keys );
+foreach ( (array) glob( dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/contents/cookies/*.json' ) as $faz_i18n_f ) {
+	$faz_i18n_lang = basename( $faz_i18n_f, '.json' );
+	$faz_i18n_k    = array_keys( (array) json_decode( (string) file_get_contents( $faz_i18n_f ), true ) );
+	sort( $faz_i18n_k );
+	cookie_i18n_eq( $faz_i18n_k, $faz_i18n_en_keys, "{$faz_i18n_lang}.json carries exactly the English key set" );
+}
+
 // --- Both content surfaces must cover the same languages ---
 //
 // The descriptions shipped in en + it while durations shipped in fourteen, so a

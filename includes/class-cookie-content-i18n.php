@@ -188,17 +188,33 @@ class Cookie_Content_I18n {
 
 		// Prefix definitions such as `_ga_` and `comment_author_` also cover
 		// the concrete cookie names generated at runtime.
+		//
+		// LONGEST match wins, not the first one found. Several prefixes are
+		// prefixes of each other — `wordpress_` and `wordpress_logged_in_`,
+		// `comment_author_` and `comment_author_email_` — and returning the first
+		// hit made the answer depend on the order of keys in a JSON file. It
+		// happens to be right today because the specific keys sit above the
+		// general ones; reorder the file, or add a key, and a WordPress session
+		// cookie silently acquires the wrong description in a document a visitor
+		// consents to. Correct by accident is worth converting into correct by
+		// construction, especially when the failure is silent and legal.
+		$best        = '';
+		$best_length = -1;
 		foreach ( $contents as $catalogue_slug => $entry ) {
 			$prefix = self::catalogue_prefix( (string) $catalogue_slug );
 			if ( '' === $prefix || 0 !== strpos( $slug, $prefix ) ) {
 				continue;
 			}
+			if ( strlen( $prefix ) <= $best_length ) {
+				continue;
+			}
 			if ( isset( $entry['description'] ) && is_string( $entry['description'] )
 				&& self::domain_allows( (string) $catalogue_slug, $domain ) ) {
-				return $entry['description'];
+				$best        = $entry['description'];
+				$best_length = strlen( $prefix );
 			}
 		}
-		return '';
+		return $best;
 	}
 
 	/**
