@@ -25,7 +25,7 @@ jobs:
           cache: npm
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@2f4f146eb73a47ae11e1b27f6e5d4d77f74c3b61 # v2
+        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # v2.35.5
         with:
           php-version: '8.3'
           tools: composer:v2
