@@ -2073,9 +2073,10 @@ function _fazSetFooterShadow($doc) {
 /**
  * Remove all the rejected cookies.
  *
- * @param {object} cookies Cookies list.
+ * @param {object} category Category with slug and cookies list.
  */
-function _fazRemoveDeadCookies({ cookies }) {
+function _fazRemoveDeadCookies(category) {
+    const cookies = category.cookies || [];
     const currentCookieMap = ref._fazGetCookieMap();
     for (const { cookieID, domain } of cookies) {
         // Never delete the plugin's own consent-mechanism cookies.
@@ -2086,6 +2087,11 @@ function _fazRemoveDeadCookies({ cookies }) {
         // whitelist only overrides the category fallback when no explicit
         // decision exists.
         if (serviceDecision === "yes") continue;
+        // No granular override means the category remains authoritative. In
+        // granular mode callers intentionally sweep every category so an
+        // explicit svc/ck denial inside an accepted category is enforced; that
+        // must not turn a missing override into an implicit denial.
+        if (serviceDecision !== "no" && !_fazIsCategoryToBeBlocked(category.slug)) continue;
         if (serviceDecision !== "no" && _fazIsCookieWhitelisted(cookieID)) continue;
         if (serviceDecision === "no" || currentCookieMap[cookieID])
             [domain, ""].forEach((cookieDomain) =>
@@ -2840,8 +2846,8 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     // denied INSIDE a category the visitor accepted — those accepted categories
     // are absent from rejectedCategoryObjects, so sweeping only the rejected set
     // would leave the just-denied cookie in place until the next request's
-    // server shred. Sweep EVERY category instead: _fazRemoveDeadCookies keeps
-    // only cookies whose effective decision is "yes" (ck.* > svc.* > category),
+    // server shred. Sweep EVERY category instead: _fazRemoveDeadCookies applies
+    // explicit ck.* > svc.* decisions first and then falls back to the category,
     // so accepted cookies survive and explicit denies are shredded immediately
     // on save. #135 / #134/#146.
     if (_fazStore._perCookieConsent || _fazStore._perServiceConsent) {
@@ -6036,9 +6042,8 @@ function _fazRemoveAllDeadCookies() {
     // category-only gate below would skip those accepted categories and leave
     // the individually-revoked cookie in place (it survived "save" client-side
     // even though the server shredder removes it on the next request). Run the
-    // sweep over EVERY category in granular mode: _fazRemoveDeadCookies already
-    // keeps only cookies whose effective decision is "yes"
-    // (_fazGetServiceCookieDecision honours ck.* > svc.* > category), so an
+    // sweep over EVERY category in granular mode: _fazRemoveDeadCookies applies
+    // explicit ck.* > svc.* decisions and falls back to category consent, so an
     // accepted category with no override is a no-op while an explicit
     // svc.<id>:no / ck.<svc>.<cookie>:no inside it gets shredded. #135 / #134/#146.
     var _fazGranularConsent = _fazStore._perCookieConsent || _fazStore._perServiceConsent;
