@@ -522,7 +522,13 @@ class Settings extends Store {
 				// faz_pageviews_retention_months filter, so refusing to persist
 				// the 0 would leave that contract half-implemented.
 				$floor = ( 'pageviews' === $group ) ? 0 : 1;
-				$value = max( $floor, min( 120, absint( $value ) ) );
+				// (int) rather than absint(): absint( -1 ) is 1, so a negative value
+				// landed ABOVE the pageviews floor of 0 and was stored as one month
+				// — the shortest possible retention — when the obvious reading of a
+				// negative is "off". Clamping the signed value sends it to the floor,
+				// which is 0 (never purge) for pageviews and 1 for the groups that owe
+				// an accountability record.
+				$value = max( $floor, min( 120, (int) $value ) );
 				break;
 			case 'min_age':
 				$value = max( 13, min( 18, absint( $value ) ) );

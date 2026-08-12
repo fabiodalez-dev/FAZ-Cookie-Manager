@@ -1018,9 +1018,15 @@ class Controller {
 		$deleted = 0;
 		do {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention read — caching irrelevant.
+			// Unordered on purpose. The filter is on created_at and the only index
+			// that helps is idx_created_at, which does not cover an ORDER BY on the
+			// primary key — so asking for one made the database read and sort the
+			// whole expired set before applying LIMIT, on exactly the tables where
+			// that set is largest. Deletion needs the ids, not an order, and
+			// progress is guaranteed because every id read is then deleted.
 			$ids = $wpdb->get_col(
 				$wpdb->prepare(
-					"SELECT log_id FROM {$table} WHERE created_at < %s ORDER BY log_id ASC LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"SELECT log_id FROM {$table} WHERE created_at < %s LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 					$cutoff,
 					$batch_size
 				)

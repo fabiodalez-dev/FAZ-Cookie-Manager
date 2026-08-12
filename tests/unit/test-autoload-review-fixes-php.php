@@ -202,6 +202,52 @@ namespace {
 		'but a site can shorten it'
 	);
 
+	// absint( -1 ) is 1, so a negative retention used to land ABOVE the pageviews
+	// floor and store as one month — the SHORTEST window — when the obvious
+	// reading of a negative is "off". Clamping the signed value sends it to the
+	// floor of each group instead.
+	alq_eq(
+		$settings_cls::sanitize( array( 'pageviews' => array( 'retention' => -1 ) ), array( 'pageviews' => array( 'retention' => 6 ) ) )['pageviews']['retention'],
+		0,
+		'a negative pageview retention floors to 0 (never purge), not to 1 month'
+	);
+	alq_eq(
+		$settings_cls::sanitize( array( 'consent_logs' => array( 'retention' => -1 ) ), array( 'consent_logs' => array( 'retention' => 12 ) ) )['consent_logs']['retention'],
+		1,
+		'and a negative consent-log retention still floors to 1, never to "keep forever"'
+	);
+
+	// The seeding marker records that the work happened; writing it first made it
+	// a claim, and a failed write then locked the seed out permanently.
+	$act_seed = (string) file_get_contents( $alq_root . '/includes/class-activator.php' );
+	$seed_at  = strpos( $act_seed, 'function seed_default_whitelist' );
+	$seed_end = false === $seed_at ? false : strpos( $act_seed, "\n\t}", $seed_at );
+	$region   = ( false === $seed_at || false === $seed_end ) ? '' : substr( $act_seed, $seed_at, $seed_end - $seed_at );
+	$write_at = strpos( $region, "update_option( 'faz_settings', \$settings );" );
+	$mark_at  = strpos( $region, "add_option( 'faz_default_whitelist_seeded'" );
+	// Both must be FOUND, not merely ordered: strpos() returns false, which
+	// compares as 0, so a missing needle would otherwise satisfy a bare `<`.
+	alq_eq(
+		false !== $write_at && false !== $mark_at && $write_at < $mark_at,
+		true,
+		'the seeded marker is written AFTER the whitelist, not before'
+	);
+	alq_eq(
+		false !== strpos( $region, 'RuntimeException' ),
+		true,
+		'and a failed persist throws so run_pending_migrations() retries'
+	);
+
+	// The retention SELECT must not ask for an order no index covers.
+	foreach ( array( 'consentlogs', 'pageviews' ) as $mod ) {
+		$src = (string) file_get_contents( $alq_root . '/admin/modules/' . $mod . '/includes/class-controller.php' );
+		alq_eq(
+			false === strpos( $src, 'ORDER BY log_id ASC LIMIT' ) && false === strpos( $src, 'ORDER BY id ASC LIMIT' ),
+			true,
+			$mod . ' — the retention SELECT does not sort by a key idx_created_at cannot cover'
+		);
+	}
+
 	// The key the Activator reads and the key the defaults declare have to be
 	// the same one; a rename on either side silently restores the bug.
 	$act_src = (string) file_get_contents( $alq_root . '/includes/class-activator.php' );

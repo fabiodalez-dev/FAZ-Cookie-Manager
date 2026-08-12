@@ -252,18 +252,20 @@ class Activator {
 		// that was not hypothetical — this branch bumps it, and two other open
 		// branches bump it again.
 		//
-		// Checked and set even when the early returns below fire, so a site that
-		// already has patterns is marked as seeded rather than being asked again
-		// on the next bump.
+		// The marker is written at the END, and only after the write is verified
+		// (see below). A site that already has patterns therefore returns early
+		// WITHOUT being marked: the next bump re-reads one option and returns
+		// again, which costs nothing, while never leaving a marker that claims
+		// work which did not happen.
 		if ( get_option( 'faz_default_whitelist_seeded' ) ) {
 			return;
 		}
-		// Autoload NO: read once, during migrations, never on a front-end request.
-		add_option( 'faz_default_whitelist_seeded', '1', '', false );
-
 		$settings = get_option( 'faz_settings' );
 		if ( ! is_array( $settings ) ) {
-			return;
+			// Unreadable settings is a transient condition, not a decision. Throw
+			// so run_pending_migrations() leaves faz_migrations_version alone and
+			// the whole list retries on the next admin load.
+			throw new \RuntimeException( 'FAZ: unable to read settings while seeding the whitelist; migration will retry.' );
 		}
 		$current = isset( $settings['script_blocking']['whitelist_patterns'] )
 			? $settings['script_blocking']['whitelist_patterns']
@@ -303,6 +305,23 @@ class Activator {
 		}
 		$settings['script_blocking']['whitelist_patterns'] = $defaults;
 		update_option( 'faz_settings', $settings );
+
+		// Verify by reading back rather than trusting update_option()'s return:
+		// it reports false BOTH when the write failed and when the value was
+		// already identical, so the return value cannot distinguish the two.
+		$saved = get_option( 'faz_settings' );
+		if ( ! is_array( $saved ) || empty( $saved['script_blocking']['whitelist_patterns'] ) ) {
+			throw new \RuntimeException( 'FAZ: failed to persist the default whitelist; migration will retry.' );
+		}
+
+		// Marker LAST, and only on success. Written first, a failed write left the
+		// marker in place while run_pending_migrations() went on to record the new
+		// version — so the seed was permanently skipped and a site could sit with
+		// reCAPTCHA blocked until somebody noticed and fixed it by hand. A marker
+		// is a record that the work happened; recording it before the work is a
+		// claim, not a record.
+		// Autoload NO: read once, during migrations, never on a front-end request.
+		add_option( 'faz_default_whitelist_seeded', '1', '', false );
 	}
 
 	/**

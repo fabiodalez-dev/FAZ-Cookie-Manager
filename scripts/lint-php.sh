@@ -44,14 +44,13 @@ while IFS= read -r f; do
 	fi
 done <<EOF
 $(
-	find . -name '*.php' \
-		-not -path './vendor/*' \
-		-not -path './node_modules/*' \
-		-not -path './.phpcs-tools/*' \
-		-not -path './graphify-out/*' \
-		-not -path './.code-review-graph/*' \
-		-not -path './.git/*' \
-		2>/dev/null | sort -u
+	# git ls-files, not find: find also picks up untracked PHP left in the tree
+	# — a scratch file, a downloaded plugin, a half-finished experiment — and a
+	# lint that fails on something the repository does not ship trains people to
+	# ignore it. Tracked files are exactly the ones that reach a user.
+	git ls-files -- '*.php' \
+		| grep -v -e '^vendor/' -e '^node_modules/' -e '^\.phpcs-tools/' \
+		| sort -u
 )
 EOF
 
