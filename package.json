@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:min": "terser frontend/js/script.js -c -m -o frontend/js/script.min.js && terser frontend/js/tcf-cmp.js -c -m -o frontend/js/tcf-cmp.min.js && terser frontend/js/gcm.js -c -m -o frontend/js/gcm.min.js && terser frontend/js/a11y.js -c -m -o frontend/js/a11y.min.js",
+    "build:min": "terser frontend/js/script.js -c -m -o frontend/js/script.min.js && terser frontend/js/tcf-cmp.js -c -m -o frontend/js/tcf-cmp.min.js && terser frontend/js/gcm.js -c -m -o frontend/js/gcm.min.js && terser frontend/js/a11y.js -c -m -o frontend/js/a11y.min.js && terser frontend/js/faz-dsar.js -c -m -o frontend/js/faz-dsar.min.js && terser frontend/js/faz-dnsmpi.js -c -m -o frontend/js/faz-dnsmpi.min.js && terser frontend/js/wca.js -c -m -o frontend/js/wca.min.js && terser frontend/js/microsoft-consent.js -c -m -o frontend/js/microsoft-consent.min.js",
+    "lint:php": "bash scripts/lint-php.sh",
     "full-test-codex": "playwright test -c tests/e2e/playwright.config.ts tests/e2e/specs/full-test-codex.spec.ts",
     "test:compliance": "node tests/compliance/compliance-tests.mjs",
     "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",

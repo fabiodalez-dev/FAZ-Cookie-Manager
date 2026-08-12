@@ -36,6 +36,7 @@ import { type Page } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 import { acquireCookiesTableLock, releaseCookiesTableLock } from '../utils/db-lock';
+import { withNoDiscoveredCookies, withOwnCookiesOnly } from '../utils/cookie-inventory';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const REST_BASE = '/wp-json/faz/v1/cookie-policy';
@@ -163,8 +164,10 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     plantCookies([
       { name: 'cp_evil', slug: 'cp-auto-evil', domain: '.notlinkedin.com' },
     ]);
-    const r = await suggest();
-    expect(r.service_ids).toEqual([]);
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      const r = await suggest();
+      expect(r.service_ids).toEqual([]);
+    });
   });
 
   test('4. Subdomain match: ".m.linkedin.com" still matches the linkedin.com entry', async () => {
@@ -183,10 +186,14 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     wpEval(
       `$d = (array) get_option('faz_cookie_policy_data', array()); $d['third_party_services'] = array('gtm'); update_option('faz_cookie_policy_data', $d, false);`,
     );
-    const r = await suggest();
-    expect(r.service_ids).toEqual(expect.arrayContaining(['gtm', 'linkedin']));
-    expect(r.already_selected).toEqual(['gtm']);
-    expect(r.newly_suggested).toEqual(['linkedin']);
+    // Exact-set assertions: a foreign scanned cookie mapping to any other
+    // service would land in newly_suggested and break the split.
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      const r = await suggest();
+      expect(r.service_ids).toEqual(expect.arrayContaining(['gtm', 'linkedin']));
+      expect(r.already_selected).toEqual(['gtm']);
+      expect(r.newly_suggested).toEqual(['linkedin']);
+    });
   });
 
   test('6. Read-only: calling /suggest-services does NOT mutate faz_cookie_policy_data', async () => {
@@ -216,19 +223,23 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
       ),
       array('%s','%s','%s','%d','%s','%d')
     );`);
-    const r = await suggest();
-    expect(r.service_ids, 'manually-added cookies leaked into the suggestion').toEqual([]);
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      const r = await suggest();
+      expect(r.service_ids, 'manually-added cookies leaked into the suggestion').toEqual([]);
+    });
   });
 
   test('8. With zero matching cookies, response is empty arrays — not an error', async () => {
     plantCookies([
       { name: 'cp_noise', slug: 'cp-auto-noise', domain: '.example.org' },
     ]);
-    const r = await suggest();
-    expect(r.scan_available).toBe(true);
-    expect(r.service_ids).toEqual([]);
-    expect(r.already_selected).toEqual([]);
-    expect(r.newly_suggested).toEqual([]);
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      const r = await suggest();
+      expect(r.scan_available).toBe(true);
+      expect(r.service_ids).toEqual([]);
+      expect(r.already_selected).toEqual([]);
+      expect(r.newly_suggested).toEqual([]);
+    });
   });
 
   test('9. /detected-services returns the same scan set without the partition', async () => {
@@ -245,43 +256,48 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   });
 
   test('10. Admin UI: clicking Auto-detect button pre-ticks matching checkboxes', async () => {
-    plantCookies([
-      { name: 'cp_gads', slug: 'cp-auto-gads', domain: '.googleadservices.com' },
-      { name: 'cp_yt',   slug: 'cp-auto-yt',   domain: '.youtube.com' },
-    ]);
-    await adminPage.reload({ waitUntil: 'domcontentloaded' });
-    const summary = adminPage.locator('summary', { hasText: 'Third-party services' });
-    await summary.click();
-    await adminPage.waitForSelector(
-      '#cp-services-list input[type=checkbox][data-service-id="gads"]',
-      { timeout: 5_000 },
-    );
-    const beforeChecked = await adminPage.$$eval(
-      '#cp-services-list input[type=checkbox]:checked',
-      (els) => els.length,
-    );
-    expect(beforeChecked).toBe(0);
+    // Foreign scanned rows are auto-detected too, so they tick extra
+    // checkboxes and change the status count this test reads. Restrict the
+    // inventory to what this test planted — see utils/cookie-inventory.
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      plantCookies([
+        { name: 'cp_gads', slug: 'cp-auto-gads', domain: '.googleadservices.com' },
+        { name: 'cp_yt',   slug: 'cp-auto-yt',   domain: '.youtube.com' },
+      ]);
+      await adminPage.reload({ waitUntil: 'domcontentloaded' });
+      const summary = adminPage.locator('summary', { hasText: 'Third-party services' });
+      await summary.click();
+      await adminPage.waitForSelector(
+        '#cp-services-list input[type=checkbox][data-service-id="gads"]',
+        { timeout: 5_000 },
+      );
+      const beforeChecked = await adminPage.$$eval(
+        '#cp-services-list input[type=checkbox]:checked',
+        (els) => els.length,
+      );
+      expect(beforeChecked).toBe(0);
 
-    await adminPage.click('#cp-services-auto-detect');
-    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /Pre-ticked \d+ new service\(s\), \d+ were already selected\. Click Save to commit\./i,
-      { timeout: 10_000 },
-    );
+      await adminPage.click('#cp-services-auto-detect');
+      await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+        /Pre-ticked \d+ new service\(s\), \d+ were already selected\. Click Save to commit\./i,
+        { timeout: 10_000 },
+      );
 
-    expect(
-      await adminPage.locator('#cp-services-list input[data-service-id="gads"]').isChecked(),
-    ).toBe(true);
-    expect(
-      await adminPage.locator('#cp-services-list input[data-service-id="youtube"]').isChecked(),
-    ).toBe(true);
-    expect(
-      await adminPage.locator('#cp-services-list input[data-service-id="paypal"]').isChecked(),
-    ).toBe(false);
+      expect(
+        await adminPage.locator('#cp-services-list input[data-service-id="gads"]').isChecked(),
+      ).toBe(true);
+      expect(
+        await adminPage.locator('#cp-services-list input[data-service-id="youtube"]').isChecked(),
+      ).toBe(true);
+      expect(
+        await adminPage.locator('#cp-services-list input[data-service-id="paypal"]').isChecked(),
+      ).toBe(false);
 
-    const persistedBefore = wpEval(
-      `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
-    ).trim();
-    expect(persistedBefore).toBe('[]');
+      const persistedBefore = wpEval(
+        `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
+      ).trim();
+      expect(persistedBefore).toBe('[]');
+    });
   });
 
   // ============================================================
@@ -365,32 +381,13 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   });
 
   test('16. /detected-services with zero discovered cookies returns scan_available=false', async () => {
-    // beforeEach already resetCookies()'d the test slugs, but real rows
-    // from prior unrelated specs may still exist. Wipe everything to
-    // assert the zero-rows path deterministically, then restore.
-    const backup = wpEval(
-      `global $wpdb; echo wp_json_encode($wpdb->get_results("SELECT * FROM {$wpdb->prefix}faz_cookies WHERE discovered = 1", ARRAY_A));`,
-    ).trim();
-    wpEval(`global $wpdb; $wpdb->query("DELETE FROM {$wpdb->prefix}faz_cookies WHERE discovered = 1");`);
-    try {
+    // Rows from prior unrelated specs still exist here; the zero-rows path
+    // needs them gone. See utils/cookie-inventory for why this is shared.
+    await withNoDiscoveredCookies(async () => {
       const r = await detected();
       expect(r.scan_available).toBe(false);
       expect(r.service_ids).toEqual([]);
-    } finally {
-      // Restore so subsequent tests in this or other specs aren't affected.
-      if (backup && backup !== '[]' && backup !== 'null') {
-        wpEval(`
-          global $wpdb;
-          $rows = json_decode(${JSON.stringify(backup)}, true);
-          if (is_array($rows)) {
-            foreach ($rows as $row) {
-              unset($row['id']);
-              $wpdb->insert($wpdb->prefix . 'faz_cookies', $row);
-            }
-          }
-        `);
-      }
-    }
+    });
   });
 
   test('17. Unauthenticated request to /suggest-services returns 401 — admin gate enforced', async ({ browser }) => {
@@ -423,29 +420,29 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     plantCookies([
       { name: 'cp_x', slug: 'cp-auto-nomatch', domain: '.example.org' },
     ]);
-    await adminPage.reload({ waitUntil: 'domcontentloaded' });
-    await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
-    await adminPage.waitForSelector('#cp-services-auto-detect', { timeout: 5_000 });
-    await adminPage.click('#cp-services-auto-detect');
-    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /No matching services found/i,
-      { timeout: 10_000 },
-    );
-    // No checkboxes ticked.
-    const checkedCount = await adminPage.$$eval(
-      '#cp-services-list input[type=checkbox]:checked',
-      (els) => els.length,
-    );
-    expect(checkedCount).toBe(0);
+    // "No matching services" is a claim about the WHOLE inventory, so any
+    // foreign scanned cookie mapping to a known service would contradict it.
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      await adminPage.reload({ waitUntil: 'domcontentloaded' });
+      await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
+      await adminPage.waitForSelector('#cp-services-auto-detect', { timeout: 5_000 });
+      await adminPage.click('#cp-services-auto-detect');
+      await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+        /No matching services found/i,
+        { timeout: 10_000 },
+      );
+      // No checkboxes ticked.
+      const checkedCount = await adminPage.$$eval(
+        '#cp-services-list input[type=checkbox]:checked',
+        (els) => els.length,
+      );
+      expect(checkedCount).toBe(0);
+    });
   });
 
   test('20. Auto-detect when scanner has zero rows shows the "Run the cookie scanner first" hint', async () => {
-    // Wipe ALL discovered rows so scan_available is false. Restore in finally.
-    const backup = wpEval(
-      `global $wpdb; echo wp_json_encode($wpdb->get_results("SELECT * FROM {$wpdb->prefix}faz_cookies WHERE discovered = 1", ARRAY_A));`,
-    ).trim();
-    wpEval(`global $wpdb; $wpdb->query("DELETE FROM {$wpdb->prefix}faz_cookies WHERE discovered = 1");`);
-    try {
+    // Every discovered row gone, so scan_available is false.
+    await withNoDiscoveredCookies(async () => {
       await adminPage.reload({ waitUntil: 'domcontentloaded' });
       await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
       await adminPage.waitForSelector('#cp-services-auto-detect', { timeout: 5_000 });
@@ -454,20 +451,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
         /Run the cookie scanner first/i,
         { timeout: 10_000 },
       );
-    } finally {
-      if (backup && backup !== '[]' && backup !== 'null') {
-        wpEval(`
-          global $wpdb;
-          $rows = json_decode(${JSON.stringify(backup)}, true);
-          if (is_array($rows)) {
-            foreach ($rows as $row) {
-              unset($row['id']);
-              $wpdb->insert($wpdb->prefix . 'faz_cookies', $row);
-            }
-          }
-        `);
-      }
-    }
+    });
   });
 
   test('21. End-to-end save flow: auto-detect → submit form → option persisted with the suggested IDs', async () => {
@@ -547,36 +531,41 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   });
 
   test('24. Race-guard: rapid double click does not paint stale state — final status reflects the latest run', async () => {
-    plantCookies([
-      { name: 'cp_gtm', slug: 'cp-auto-race-gtm', domain: '.googletagmanager.com' },
-    ]);
-    await adminPage.reload({ waitUntil: 'domcontentloaded' });
-    await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
-    await adminPage.waitForSelector('#cp-services-auto-detect', { timeout: 5_000 });
-    // Two clicks back-to-back — the second invocation must win.
-    // autoDetectRequestId increments per click; the stale .then() bails
-    // before painting. We assert that, after both resolve, exactly ONE
-    // success status is visible (not "Scanning…" hung from the first).
-    await Promise.all([
-      adminPage.click('#cp-services-auto-detect'),
-      adminPage.click('#cp-services-auto-detect', { force: true }),
-    ]);
-    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /Pre-ticked \d+ new service\(s\), \d+ were already selected|No matching services found|Scanning cookie inventory/i,
-      { timeout: 15_000 },
-    );
-    // Allow the second response to settle, then re-check that the final
-    // state is one of the terminal messages (not the in-flight "Scanning…").
-    await adminPage.waitForFunction(
-      () => {
-        const el = document.getElementById('cp-services-auto-detect-status');
-        return el !== null && !/Scanning/i.test(el.textContent || '');
-      },
-      undefined,
-      { timeout: 10_000 },
-    );
-    // Button is re-enabled when both invocations have resolved.
-    await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 5_000 });
+    // Foreign scanned rows are auto-detected too, so they tick extra
+    // checkboxes and change the status count this test reads. Restrict the
+    // inventory to what this test planted — see utils/cookie-inventory.
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      plantCookies([
+        { name: 'cp_gtm', slug: 'cp-auto-race-gtm', domain: '.googletagmanager.com' },
+      ]);
+      await adminPage.reload({ waitUntil: 'domcontentloaded' });
+      await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
+      await adminPage.waitForSelector('#cp-services-auto-detect', { timeout: 5_000 });
+      // Two clicks back-to-back — the second invocation must win.
+      // autoDetectRequestId increments per click; the stale .then() bails
+      // before painting. We assert that, after both resolve, exactly ONE
+      // success status is visible (not "Scanning…" hung from the first).
+      await Promise.all([
+        adminPage.click('#cp-services-auto-detect'),
+        adminPage.click('#cp-services-auto-detect', { force: true }),
+      ]);
+      await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+        /Pre-ticked \d+ new service\(s\), \d+ were already selected|No matching services found|Scanning cookie inventory/i,
+        { timeout: 15_000 },
+      );
+      // Allow the second response to settle, then re-check that the final
+      // state is one of the terminal messages (not the in-flight "Scanning…").
+      await adminPage.waitForFunction(
+        () => {
+          const el = document.getElementById('cp-services-auto-detect-status');
+          return el !== null && !/Scanning/i.test(el.textContent || '');
+        },
+        undefined,
+        { timeout: 10_000 },
+      );
+      // Button is re-enabled when both invocations have resolved.
+      await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 5_000 });
+    });
   });
 
   test('25. Pre-existing admin selection is preserved: 5 non-scannered services stay ticked when Auto-detect adds a new one and Save is clicked', async () => {
@@ -590,87 +579,93 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     // This is the composition test #5 + #10 + #22 implies but doesn't
     // assert end-to-end. Migration story for 1.16.4 hinges on it.
     const preExisting = ['auth0', 'square', 'akismet', 'pardot', 'fcm'];
-    // JSON-bridge the array into PHP via json_decode — keeps the fixture
-    // legible even as the seed list grows.
-    wpEval(
-      `$d = (array) get_option('faz_cookie_policy_data', array()); $d['third_party_services'] = json_decode(${JSON.stringify(JSON.stringify(preExisting))}, true); update_option('faz_cookie_policy_data', $d, false);`,
-    );
-    // Sanity: option was seeded with exactly the five entries.
-    const seeded = JSON.parse(
+    // The count and the phantom filter are exact-set claims: a foreign scanned
+    // cookie mapping to any other service would be auto-detected, ticked and
+    // saved as a seventh entry, and the failure would read as "pre-existing
+    // selection not preserved" rather than as leftover inventory.
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      // JSON-bridge the array into PHP via json_decode — keeps the fixture
+      // legible even as the seed list grows.
       wpEval(
-        `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
-      ).trim(),
-    );
-    expect(seeded.sort()).toEqual([...preExisting].sort());
+        `$d = (array) get_option('faz_cookie_policy_data', array()); $d['third_party_services'] = json_decode(${JSON.stringify(JSON.stringify(preExisting))}, true); update_option('faz_cookie_policy_data', $d, false);`,
+      );
+      // Sanity: option was seeded with exactly the five entries.
+      const seeded = JSON.parse(
+        wpEval(
+          `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
+        ).trim(),
+      );
+      expect(seeded.sort()).toEqual([...preExisting].sort());
 
-    // Plant a single discoverable cookie the curated map will resolve.
-    plantCookies([
-      { name: 'cp_gtm', slug: 'cp-auto-mig-gtm', domain: '.googletagmanager.com' },
-    ]);
+      // Plant a single discoverable cookie the curated map will resolve.
+      plantCookies([
+        { name: 'cp_gtm', slug: 'cp-auto-mig-gtm', domain: '.googletagmanager.com' },
+      ]);
 
-    // Reload so the admin page reads the freshly-seeded option AND the
-    // freshly-planted scanner row.
-    await adminPage.reload({ waitUntil: 'domcontentloaded' });
-    await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
-    await adminPage.waitForSelector('#cp-services-list input[data-service-id="auth0"]', { timeout: 5_000 });
+      // Reload so the admin page reads the freshly-seeded option AND the
+      // freshly-planted scanner row.
+      await adminPage.reload({ waitUntil: 'domcontentloaded' });
+      await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
+      await adminPage.waitForSelector('#cp-services-list input[data-service-id="auth0"]', { timeout: 5_000 });
 
-    // All five pre-existing checkboxes must be ticked at load time
-    // (writeForm() runs after the parallel /settings+/detected-services
-    // fetches resolve — the second renderServicesList() pass repaints
-    // the labels with badges, then writeForm restores the checked state).
-    for (const sid of preExisting) {
-      await expect(
-        adminPage.locator(`#cp-services-list input[data-service-id="${sid}"]`),
-      ).toBeChecked({ timeout: 10_000 });
-    }
-    // GTM must NOT be ticked yet — the scanner saw the cookie but the
-    // admin never accepted the suggestion.
-    await expect(adminPage.locator('#cp-services-list input[data-service-id="gtm"]')).not.toBeChecked();
+      // All five pre-existing checkboxes must be ticked at load time
+      // (writeForm() runs after the parallel /settings+/detected-services
+      // fetches resolve — the second renderServicesList() pass repaints
+      // the labels with badges, then writeForm restores the checked state).
+      for (const sid of preExisting) {
+        await expect(
+          adminPage.locator(`#cp-services-list input[data-service-id="${sid}"]`),
+        ).toBeChecked({ timeout: 10_000 });
+      }
+      // GTM must NOT be ticked yet — the scanner saw the cookie but the
+      // admin never accepted the suggestion.
+      await expect(adminPage.locator('#cp-services-list input[data-service-id="gtm"]')).not.toBeChecked();
 
-    // Click Auto-detect. Status should say "Pre-ticked 1 new service(s), 0
-    // were already selected" — GTM is genuinely new, none of the five
-    // pre-existing services have a cookie domain mapped to them in
-    // domain-to-service.json.
-    await adminPage.click('#cp-services-auto-detect');
-    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /Pre-ticked 1 new service\(s\), 0 were already selected\. Click Save to commit\./i,
-      { timeout: 10_000 },
-    );
+      // Click Auto-detect. Status should say "Pre-ticked 1 new service(s), 0
+      // were already selected" — GTM is genuinely new, none of the five
+      // pre-existing services have a cookie domain mapped to them in
+      // domain-to-service.json.
+      await adminPage.click('#cp-services-auto-detect');
+      await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+        /Pre-ticked 1 new service\(s\), 0 were already selected\. Click Save to commit\./i,
+        { timeout: 10_000 },
+      );
 
-    // All five pre-existing checkboxes STILL ticked — auto-detect must
-    // not destick anything. GTM now ticked.
-    for (const sid of preExisting) {
-      await expect(
-        adminPage.locator(`#cp-services-list input[data-service-id="${sid}"]`),
-      ).toBeChecked();
-    }
-    await expect(adminPage.locator('#cp-services-list input[data-service-id="gtm"]')).toBeChecked();
+      // All five pre-existing checkboxes STILL ticked — auto-detect must
+      // not destick anything. GTM now ticked.
+      for (const sid of preExisting) {
+        await expect(
+          adminPage.locator(`#cp-services-list input[data-service-id="${sid}"]`),
+        ).toBeChecked();
+      }
+      await expect(adminPage.locator('#cp-services-list input[data-service-id="gtm"]')).toBeChecked();
 
-    // Pre-save invariant: the option still holds ONLY the five originals
-    // — deferred-save means the DOM tick is ephemeral until submit.
-    const preSave = JSON.parse(
-      wpEval(
-        `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
-      ).trim(),
-    );
-    expect(preSave.sort()).toEqual([...preExisting].sort());
+      // Pre-save invariant: the option still holds ONLY the five originals
+      // — deferred-save means the DOM tick is ephemeral until submit.
+      const preSave = JSON.parse(
+        wpEval(
+          `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
+        ).trim(),
+      );
+      expect(preSave.sort()).toEqual([...preExisting].sort());
 
-    // Submit the form.
-    await adminPage.click('button[type=submit]', { timeout: 5_000 });
-    await expect(adminPage.locator('#cp-save-status')).toContainText(/Saved/i, { timeout: 10_000 });
+      // Submit the form.
+      await adminPage.click('button[type=submit]', { timeout: 5_000 });
+      await expect(adminPage.locator('#cp-save-status')).toContainText(/Saved/i, { timeout: 10_000 });
 
-    // Post-save: option contains exactly the six expected service IDs
-    // — the five originals (preserved) plus GTM (newly accepted).
-    const persisted = JSON.parse(
-      wpEval(
-        `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
-      ).trim(),
-    );
-    expect(persisted, `expected pre-existing selection preserved + gtm added; got: ${persisted.join(', ')}`).toHaveLength(6);
-    expect(persisted).toEqual(expect.arrayContaining([...preExisting, 'gtm']));
-    // No phantom entries — array length matches the expected set exactly.
-    const phantom = persisted.filter((s: string) => ![...preExisting, 'gtm'].includes(s));
-    expect(phantom).toEqual([]);
+      // Post-save: option contains exactly the six expected service IDs
+      // — the five originals (preserved) plus GTM (newly accepted).
+      const persisted = JSON.parse(
+        wpEval(
+          `$d = (array) get_option('faz_cookie_policy_data', array()); echo wp_json_encode($d['third_party_services'] ?? array());`,
+        ).trim(),
+      );
+      expect(persisted, `expected pre-existing selection preserved + gtm added; got: ${persisted.join(', ')}`).toHaveLength(6);
+      expect(persisted).toEqual(expect.arrayContaining([...preExisting, 'gtm']));
+      // No phantom entries — array length matches the expected set exactly.
+      const phantom = persisted.filter((s: string) => ![...preExisting, 'gtm'].includes(s));
+      expect(phantom).toEqual([]);
+    });
   });
 
   test('26. Map loader caches the file read — repeated suggest calls produce identical responses without per-call I/O', async () => {
@@ -693,84 +688,93 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   });
 
   test('27. F009: Auto-detect does NOT re-tick a detected service the admin unticked in-session (and still ticks the others)', async () => {
-    // Two detected-but-unsaved services. The admin manually adds then
-    // removes one (gtm) before saving; the other (stripe) is left alone.
-    plantCookies([
-      { name: 'cp_gtm', slug: 'cp-auto-f009-gtm', domain: '.googletagmanager.com' },
-      { name: 'cp_st',  slug: 'cp-auto-f009-st',  domain: '.js.stripe.com' },
-    ]);
-    await adminPage.reload({ waitUntil: 'domcontentloaded' });
-    await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
-    // Hydration must finish (writeForm clears the in-session untick map and
-    // enables the button) before we interact, or the manual untick we record
-    // would be wiped.
-    await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 10_000 });
+    // Foreign scanned rows are auto-detected too, so they tick extra
+    // checkboxes and change the status count this test reads. Restrict the
+    // inventory to what this test planted — see utils/cookie-inventory.
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      // Two detected-but-unsaved services. The admin manually adds then
+      // removes one (gtm) before saving; the other (stripe) is left alone.
+      plantCookies([
+        { name: 'cp_gtm', slug: 'cp-auto-f009-gtm', domain: '.googletagmanager.com' },
+        { name: 'cp_st',  slug: 'cp-auto-f009-st',  domain: '.js.stripe.com' },
+      ]);
+      await adminPage.reload({ waitUntil: 'domcontentloaded' });
+      await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
+      // Hydration must finish (writeForm clears the in-session untick map and
+      // enables the button) before we interact, or the manual untick we record
+      // would be wiped.
+      await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 10_000 });
 
-    const gtm = adminPage.locator('#cp-services-list input[data-service-id="gtm"]');
-    const stripe = adminPage.locator('#cp-services-list input[data-service-id="stripe"]');
-    // Both start unchecked — they are detected (newly) but not saved.
-    await expect(gtm).not.toBeChecked();
-    await expect(stripe).not.toBeChecked();
+      const gtm = adminPage.locator('#cp-services-list input[data-service-id="gtm"]');
+      const stripe = adminPage.locator('#cp-services-list input[data-service-id="stripe"]');
+      // Both start unchecked — they are detected (newly) but not saved.
+      await expect(gtm).not.toBeChecked();
+      await expect(stripe).not.toBeChecked();
 
-    // Admin manually ticks gtm, then unticks it — a deliberate in-session
-    // removal. Each click fires 'change', which the delegated listener records.
-    await gtm.click();
-    await expect(gtm).toBeChecked();
-    await gtm.click();
-    await expect(gtm).not.toBeChecked();
+      // Admin manually ticks gtm, then unticks it — a deliberate in-session
+      // removal. Each click fires 'change', which the delegated listener records.
+      await gtm.click();
+      await expect(gtm).toBeChecked();
+      await gtm.click();
+      await expect(gtm).not.toBeChecked();
 
-    // Run Auto-detect.
-    await adminPage.click('#cp-services-auto-detect');
-    // gtm stays UNCHECKED (skipped — the admin removed it); stripe IS ticked
-    // (auto-detect still works for services the admin didn't touch).
-    await expect(stripe).toBeChecked({ timeout: 10_000 });
-    await expect(gtm).not.toBeChecked();
-    // Status reflects only the one actually pre-ticked, not the raw count.
-    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /Pre-ticked 1 new service\(s\)/i,
-      { timeout: 10_000 },
-    );
+      // Run Auto-detect.
+      await adminPage.click('#cp-services-auto-detect');
+      // gtm stays UNCHECKED (skipped — the admin removed it); stripe IS ticked
+      // (auto-detect still works for services the admin didn't touch).
+      await expect(stripe).toBeChecked({ timeout: 10_000 });
+      await expect(gtm).not.toBeChecked();
+      // Status reflects only the one actually pre-ticked, not the raw count.
+      await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+        /Pre-ticked 1 new service\(s\)/i,
+        { timeout: 10_000 },
+      );
+    });
   });
 
   test('28. F009: a successful save resets the baseline — a later Auto-detect re-suggests the removed service', async () => {
-    plantCookies([
-      { name: 'cp_gtm', slug: 'cp-auto-f009b-gtm', domain: '.googletagmanager.com' },
-    ]);
-    await adminPage.reload({ waitUntil: 'domcontentloaded' });
-    await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
-    await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 10_000 });
+    // Same reason as the tests above: a foreign scanned row is detected too,
+    // so the re-suggestion set this asserts is not the one it planted.
+    await withOwnCookiesOnly('cp-auto-', async () => {
+      plantCookies([
+        { name: 'cp_gtm', slug: 'cp-auto-f009b-gtm', domain: '.googletagmanager.com' },
+      ]);
+      await adminPage.reload({ waitUntil: 'domcontentloaded' });
+      await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
+      await expect(adminPage.locator('#cp-services-auto-detect')).toBeEnabled({ timeout: 10_000 });
 
-    const gtm = adminPage.locator('#cp-services-list input[data-service-id="gtm"]');
-    await expect(gtm).not.toBeChecked();
+      const gtm = adminPage.locator('#cp-services-list input[data-service-id="gtm"]');
+      await expect(gtm).not.toBeChecked();
 
-    // Tick then untick gtm → in-session removal recorded. Await the checked
-    // state BETWEEN the two clicks so each toggle's 'change' event is
-    // processed before the next (a rapid double-click can drop the second
-    // 'change', leaving the untick unrecorded).
-    await gtm.click();
-    await expect(gtm).toBeChecked();
-    await gtm.click();
-    await expect(gtm).not.toBeChecked();
+      // Tick then untick gtm → in-session removal recorded. Await the checked
+      // state BETWEEN the two clicks so each toggle's 'change' event is
+      // processed before the next (a rapid double-click can drop the second
+      // 'change', leaving the untick unrecorded).
+      await gtm.click();
+      await expect(gtm).toBeChecked();
+      await gtm.click();
+      await expect(gtm).not.toBeChecked();
 
-    // First Auto-detect: gtm is skipped, nothing pre-ticked.
-    await adminPage.click('#cp-services-auto-detect');
-    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /left unticked/i,
-      { timeout: 10_000 },
-    );
-    await expect(gtm).not.toBeChecked();
+      // First Auto-detect: gtm is skipped, nothing pre-ticked.
+      await adminPage.click('#cp-services-auto-detect');
+      await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+        /left unticked/i,
+        { timeout: 10_000 },
+      );
+      await expect(gtm).not.toBeChecked();
 
-    // Save (persists third_party_services = [] — gtm stays unselected).
-    await adminPage.click('button[type=submit]');
-    await expect(adminPage.locator('#cp-save-status')).toContainText(/Saved/i, { timeout: 10_000 });
+      // Save (persists third_party_services = [] — gtm stays unselected).
+      await adminPage.click('button[type=submit]');
+      await expect(adminPage.locator('#cp-save-status')).toContainText(/Saved/i, { timeout: 10_000 });
 
-    // Saved state is the new baseline: the in-session untick is cleared, so a
-    // second Auto-detect re-suggests gtm and ticks it.
-    await adminPage.click('#cp-services-auto-detect');
-    await expect(gtm).toBeChecked({ timeout: 10_000 });
-    await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
-      /Pre-ticked 1 new service\(s\)/i,
-      { timeout: 10_000 },
-    );
+      // Saved state is the new baseline: the in-session untick is cleared, so a
+      // second Auto-detect re-suggests gtm and ticks it.
+      await adminPage.click('#cp-services-auto-detect');
+      await expect(gtm).toBeChecked({ timeout: 10_000 });
+      await expect(adminPage.locator('#cp-services-auto-detect-status')).toContainText(
+        /Pre-ticked 1 new service\(s\)/i,
+        { timeout: 10_000 },
+      );
+    });
   });
 });

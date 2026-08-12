@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress ustawia ten plik cookie, gdy użytkownik korzysta z emoji w witrynie WordPress."
+    },
+    "wordpress_test_cookie": {
+        "description": "Testowy plik cookie WordPressa sprawdzający, czy pliki cookie są włączone."
+    },
+    "wordpress_logged_in_": {
+        "description": "Wskazuje stan zalogowania i tożsamość użytkownika."
+    },
+    "wp-settings-": {
+        "description": "Dostosowuje interfejs administracyjny dla każdego użytkownika."
+    },
+    "wordpress_": {
+        "description": "Uwierzytelniający plik cookie WordPressa dla panelu administracyjnego."
+    },
+    "wp_lang": {
+        "description": "Przechowuje język wybrany podczas logowania."
+    },
+    "comment_author_email_": {
+        "description": "Dla wygody zapamiętuje adres e-mail osoby komentującej."
+    },
+    "comment_author_url_": {
+        "description": "Dla wygody zapamiętuje adres witryny osoby komentującej."
+    },
+    "comment_author_": {
+        "description": "Dla wygody zapamiętuje imię osoby komentującej."
+    },
+    "_ga": {
+        "description": "Plik cookie Google Analytics służący do rozróżniania użytkowników."
+    },
+    "_ga_": {
+        "description": "Plik cookie Google Analytics 4 przechowujący stan sesji."
+    },
+    "_gid": {
+        "description": "Plik cookie Google Analytics służący do rozróżniania użytkowników."
+    },
+    "_gat": {
+        "description": "Plik cookie Google Analytics ograniczający liczbę żądań."
+    },
+    "wp_statistics_": {
+        "description": "Plik cookie WP Statistics rejestrujący sesje odwiedzających i odsłony stron."
+    },
+    "burst_uid": {
+        "description": "Plik cookie Burst Statistics identyfikujący unikalnych odwiedzających."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Plik cookie Koko Analytics wykrywający unikalnych odwiedzających i liczący odsłony na sesję."
+    },
+    "_gac_": {
+        "description": "Plik cookie Google Analytics zawierający informacje o kampanii."
+    },
+    "__utma": {
+        "description": "Plik cookie Google Analytics (Classic) rozróżniający użytkowników i sesje."
+    },
+    "__utmb": {
+        "description": "Plik cookie Google Analytics (Classic) określający nowe sesje."
+    },
+    "__utmc": {
+        "description": "Plik cookie Google Analytics (Classic) używany wraz z __utmb do określania nowych sesji."
+    },
+    "__utmz": {
+        "description": "Plik cookie Google Analytics (Classic) przechowujący źródło ruchu lub kampanię."
+    },
+    "__utmt": {
+        "description": "Plik cookie Google Analytics (Classic) ograniczający liczbę żądań."
+    },
+    "_gcl_au": {
+        "description": "Plik cookie łącznika konwersji Google Ads."
+    },
+    "ide": {
+        "description": "Plik cookie DoubleClick/Google używany do reklamy ukierunkowanej."
+    },
+    "dsid": {
+        "description": "Reklamowy plik cookie Google służący do personalizacji reklam."
+    },
+    "_fbp": {
+        "description": "Plik cookie piksela Facebooka używany do reklamy i analityki."
+    },
+    "_fbc": {
+        "description": "Plik cookie Facebooka z identyfikatorem kliknięcia."
+    },
+    "fr": {
+        "description": "Reklamowy plik cookie Facebooka."
+    },
+    "__cf_bm": {
+        "description": "Plik cookie Cloudflare do zarządzania botami."
+    },
+    "__cfduid": {
+        "description": "Plik cookie Cloudflare rozpoznający zaufany ruch sieciowy."
+    },
+    "_grecaptcha": {
+        "description": "Używany przez Google reCAPTCHA do odróżniania ludzi od botów."
+    },
+    "fazcookie-consent": {
+        "description": "Preferencje zgody na pliki cookie ustawione przez odwiedzającego."
+    },
+    "_clck": {
+        "description": "Plik cookie Microsoft Clarity do analityki."
+    },
+    "_clsk": {
+        "description": "Sesyjny plik cookie Microsoft Clarity."
+    },
+    "muid": {
+        "description": "Plik cookie Microsoft Bing Ads dla Universal Event Tracking."
+    },
+    "_uetsid": {
+        "description": "Plik cookie UET Microsoft Bing Ads śledzący sesję."
+    },
+    "_uetvid": {
+        "description": "Plik cookie UET Microsoft Bing Ads śledzący użytkownika między sesjami."
+    },
+    "bcookie": {
+        "description": "Plik cookie LinkedIn identyfikujący przeglądarkę."
+    },
+    "li_sugr": {
+        "description": "Plik cookie narzędzia LinkedIn Insight Tag."
+    },
+    "lidc": {
+        "description": "Plik cookie LinkedIn optymalizujący kierowanie ruchu między centrami danych."
+    },
+    "__hssc": {
+        "description": "Plik cookie HubSpot śledzący sesję."
+    },
+    "__hssrc": {
+        "description": "Plik cookie HubSpot wykrywający ponowne uruchomienie sesji."
+    },
+    "__hstc": {
+        "description": "Główny analityczny plik cookie HubSpot."
+    },
+    "hubspotutk": {
+        "description": "Plik cookie HubSpot śledzący odwiedzających."
+    },
+    "__hs_opt_out": {
+        "description": "Plik cookie HubSpot zapamiętujący sprzeciw."
+    },
+    "ysc": {
+        "description": "Plik cookie YouTube rejestrujący odtworzenia osadzonych filmów."
+    },
+    "visitor_info1_live": {
+        "description": "Plik cookie YouTube szacujący przepustowość i ustawienia odtwarzania."
+    },
+    "vuid": {
+        "description": "Analityczny plik cookie Vimeo rejestrujący odtworzenia filmów."
+    },
+    "__stripe_mid": {
+        "description": "Plik cookie Stripe zapobiegający oszustwom przy przetwarzaniu płatności."
+    },
+    "__stripe_sid": {
+        "description": "Sesyjny plik cookie Stripe zapobiegający oszustwom przy przetwarzaniu płatności."
+    },
+    "mp_": {
+        "description": "Analityczny plik cookie Mixpanel rejestrujący interakcje użytkownika."
+    },
+    "distinct_id": {
+        "description": "Plik cookie Mixpanel identyfikujący unikalnych użytkowników."
+    },
+    "_hj*": {
+        "description": "Analityczny plik cookie Hotjar."
+    },
+    "woocommerce_cart_hash": {
+        "description": "Plik cookie WooCommerce wykrywający zmiany w koszyku."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "Plik cookie WooCommerce śledzący produkty w koszyku."
+    },
+    "wp_woocommerce_session_": {
+        "description": "Sesyjny plik cookie WooCommerce."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Token pamięci podręcznej używany przez analityczny pakiet SDK TikToka."
+    },
+    "_ttp": {
+        "description": "Plik cookie piksela TikToka śledzący odwiedzających w wielu witrynach w celach reklamowych."
+    },
+    "tt_webid": {
+        "description": "Plik cookie TikToka identyfikujący i śledzący użytkowników w celach reklamowych."
+    },
+    "guest_id": {
+        "description": "Plik cookie Twittera identyfikujący niezalogowanych użytkowników."
+    },
+    "personalization_id": {
+        "description": "Plik cookie Twittera służący do personalizacji i reklamy."
+    },
+    "ct0": {
+        "description": "Plik cookie Twittera odpowiadający za bezpieczeństwo i ochronę osadzonych treści przed spamem."
+    },
+    "_scid": {
+        "description": "Plik cookie piksela Snapchata identyfikujący odwiedzających w wielu witrynach."
+    },
+    "sc_at": {
+        "description": "Plik cookie piksela Snapchata używany do atrybucji reklam."
+    },
+    "_pin_unauth": {
+        "description": "Plik cookie Pinteresta śledzący niezalogowanych użytkowników."
+    },
+    "_pinterest_sess": {
+        "description": "Sesyjny plik cookie Pinteresta używany do reklamy i śledzenia."
+    },
+    "phpsessid": {
+        "description": "Sesyjny plik cookie PHP zarządzający sesjami użytkowników."
+    }
+}

@@ -2146,14 +2146,40 @@ async function testVisualIntegrity(browser) {
 	}
 
 	// VIS06 — No JS errors on page
+	//
+	// Blocking a third-party loader before consent is the whole point of this
+	// plugin, and it has a visible consequence: the inline snippets those
+	// plugins leave in the page still run, and throw ReferenceError for globals
+	// that never arrived. On this test site pixel-manager-for-woocommerce does
+	// exactly that (PMW_PixelManagerJS is not defined). Failing on it means the
+	// test goes red precisely when the plugin is doing its job, and stays red
+	// until someone deactivates a tracker — so it stops being read.
+	//
+	// Ignore only the one global this fixture deliberately blocks. An undefined
+	// FAZ global — or an unrelated third-party global — is a real defect. Everything else
+	// — TypeError, SyntaxError, anything thrown by our own code — still counts.
+	const EXPECTED_BLOCKED_GLOBALS = new Set(['PMW_PixelManagerJS']);
+	const isBlockedThirdPartyGlobal = (entry) => {
+		// The error TYPE has to be part of the record. Playwright's pageerror
+		// gives the bare message ("PMW_PixelManagerJS is not defined") with the
+		// class in err.name, so matching "ReferenceError: …" against the message
+		// alone silently matches nothing — which is exactly how the first version
+		// of this filter passed review and changed no behaviour at all.
+		const m = /^ReferenceError: (?:Can't find variable: )?([A-Za-z_$][\w$]*) is not defined/.exec(entry);
+		return !!m && EXPECTED_BLOCKED_GLOBALS.has(m[1]);
+	};
 	const errors = [];
 	const page2 = await ctx.newPage();
-	page2.on('pageerror', err => errors.push(err.message));
+	page2.on('pageerror', err => errors.push(err.name ? `${err.name}: ${err.message}` : String(err.message)));
 	await gotoFront(page2);
 	await page2.waitForTimeout(3000);
+	const ignored = errors.filter(isBlockedThirdPartyGlobal);
+	const real    = errors.filter(e => !isBlockedThirdPartyGlobal(e));
 	test('VIS06 No JavaScript errors on frontend',
-		errors.length === 0,
-		errors.length > 0 ? errors[0].substring(0, 100) : 'clean');
+		real.length === 0,
+		real.length > 0
+			? real[0].substring(0, 100)
+			: 'clean' + (ignored.length ? ` (${ignored.length} blocked-third-party ReferenceError ignored: ${ignored[0].substring(0, 60)})` : ''));
 
 	await ctx.close();
 }

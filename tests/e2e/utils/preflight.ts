@@ -43,20 +43,37 @@ const BASELINE_FIXTURES = [
 ];
 
 /**
- * Paths that legitimately differ between the working tree and the deployed
- * copy — development artefacts and the test suite itself, which the site has
- * no use for. Mirrors the deploy command documented in CLAUDE.md.
+ * The deploy exclusions, read from the deploy script rather than restated.
+ *
+ * This list used to live here as a second copy, and the copies disagreed:
+ * `scripts/deploy-test.sh` excludes `.git*` (which also covers `.gitignore`
+ * and `.githooks/`), this one excluded only `.git/`. A perfectly correct
+ * deploy therefore showed up here as five files of drift, and the preflight
+ * refused to start the whole suite over a disagreement between two lists that
+ * were meant to be the same list.
+ *
+ * Asking the script keeps the drift check honest by construction: whatever the
+ * deploy actually skips is exactly what this declines to compare. A failure to
+ * read it is fatal on purpose — falling back to a hardcoded list would restore
+ * the very divergence this removes, and it would do so silently.
  */
-const DEPLOY_EXCLUDES = [
-  '.git/',
-  '.github/',
-  'node_modules/',
-  'graphify-out/',
-  '.code-review-graph/',
-  '.serena/',
-  'tests/',
-  '.DS_Store',
-];
+let excludesCache: string[] | null = null;
+function deployExcludes(): string[] {
+  if (excludesCache) {
+    return excludesCache;
+  }
+  const script = join(REPO_ROOT, 'scripts', 'deploy-test.sh');
+  const out = execFileSync('bash', [script, '--print-excludes'], {
+    encoding: 'utf8',
+    timeout: 15_000,
+  });
+  const list = out.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (!list.length) {
+    throw new Error(`${script} --print-excludes returned nothing`);
+  }
+  excludesCache = list;
+  return list;
+}
 
 const OK = '\x1b[32m✓\x1b[0m';
 const FIX = '\x1b[33m⟳\x1b[0m';
@@ -68,6 +85,21 @@ function fail(title: string, detail: string, remedy: string): never {
 }
 
 /**
+ * One line of `rsync -i` output that names a file: eleven characters of
+ * itemised change flags (`>f+++++++++`, `cd+++++++++`, `.d..t......`) or
+ * `*deleting`, then the path.
+ *
+ * Needed because rsync mixes NOTICES into the same stream, and counting every
+ * non-empty line treated them as drift. `skipping non-regular file
+ * "node_modules"` — emitted whenever node_modules is a symlink, which is the
+ * normal case in a git worktree — made the preflight announce "1 file behind"
+ * and refuse to start the entire suite against a deployment that matched
+ * perfectly. A check that reports confidently on the wrong measurement is
+ * worse than no check.
+ */
+const ITEMIZED = /^(?:[<>ch.][a-zA-Z.][^\s]{9}|\*\w+)\s+\S/;
+
+/**
  * Files that differ between the working tree and the deployed plugin.
  * `-c` compares checksums rather than size+mtime, so an edit that happens to
  * preserve both is still caught; `-n` makes it a dry run.
@@ -76,12 +108,15 @@ function deploymentDrift(deployPath: string): string[] {
   const args = [
     '-rcni',
     '--delete',
-    ...DEPLOY_EXCLUDES.map((p) => `--exclude=${p}`),
+    ...deployExcludes().map((p) => `--exclude=${p}`),
     `${REPO_ROOT}/`,
     deployPath.endsWith('/') ? deployPath : `${deployPath}/`,
   ];
   const out = execFileSync('rsync', args, { encoding: 'utf8', timeout: 60_000 });
-  return out.split('\n').map((l) => l.trim()).filter(Boolean);
+  return out
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => ITEMIZED.test(l));
 }
 
 /** Everything the suite needs, asserted before the first spec runs. */
@@ -169,7 +204,7 @@ export async function assertPrerequisites(baseURL: string): Promise<void> {
       fail(
         `the deployed plugin is ${drift.length} file(s) behind the working tree`,
         `The suite would test code you are not editing.\n\n${shown}${more}`,
-        `rsync -a --delete ${DEPLOY_EXCLUDES.map((p) => `--exclude='${p}'`).join(' ')} \\\n      "${REPO_ROOT}/" "${deployPath}"`,
+        `FAZ_DEPLOY_TARGET="${deployPath}" bash scripts/deploy-test.sh`,
       );
     }
     ok.push(`${OK} deployed plugin matches the working tree`);

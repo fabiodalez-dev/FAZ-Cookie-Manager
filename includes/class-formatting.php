@@ -33,19 +33,94 @@ if ( ! function_exists( 'faz_sanitize_bool' ) ) {
 	/**
 	 * Converts a string (e.g. 'yes' or 'no') to a bool.
 	 *
+	 * The docblock has always named `'no'` as an example, and `'no'` used to come
+	 * back TRUE: only `'false'` and `'0'` were recognised. That is not a cosmetic
+	 * gap, because this function decides consent-adjacent booleans — a payment
+	 * gateway marked `"no"` was read as exempt from blocking and loaded before
+	 * consent. Every canonical negative this plugin actually writes or receives
+	 * is recognised now.
+	 *
+	 * What this function does NOT do, stated plainly because an earlier version
+	 * of this docblock claimed otherwise: it does not err toward false for
+	 * arbitrary input. The negatives are ENUMERATED, so an unrecognised string
+	 * ('maybe', 'banana', a value truncated by a bad migration) still returns
+	 * true. Narrowing that globally is not safe — this is the plugin's general
+	 * boolean coercion, and it has callers where TRUE is the restrictive side,
+	 * so flipping unknown input to false there would quietly switch protections
+	 * off rather than on.
+	 *
+	 * For the asymmetric case — a flag whose true value REMOVES a restriction,
+	 * such as exempting a payment gateway from consent blocking — use
+	 * faz_sanitize_bool_strict() below, which demands an explicit affirmative.
+	 * Which of the two applies is a question about which direction is dangerous,
+	 * and only the callsite knows that.
+	 *
+	 * `'null'` and `'undefined'` are here because they arrive from JavaScript:
+	 * a client that string-interpolates an absent value posts the literal word,
+	 * and both are unambiguously "no value", never an affirmation.
+	 *
+	 * Whitespace is trimmed first, so `' false'` from a hand-edited option or a
+	 * copy-pasted config no longer reads as true on a technicality.
+	 *
 	 * @since 3.0.0
 	 * @param string|bool $string String to convert. If a bool is passed it will be returned as-is.
 	 * @return bool
 	 */
 	function faz_sanitize_bool( $string ) {
 		if ( is_string( $string ) ) {
-			$string = strtolower( $string );
-			if ( in_array( $string, array( 'false', '0' ), true ) ) {
-				$string = false;
+			$string = strtolower( trim( $string ) );
+			if ( in_array( $string, array( 'false', '0', 'no', 'off', 'null', 'undefined', '' ), true ) ) {
+				return false;
 			}
+			return true;
 		}
-		// Everything else will map nicely to boolean.
+		// A non-scalar cannot express a boolean intent: an array or object here
+		// means the value is malformed, and `(bool) array( 'x' )` being true
+		// would turn corrupted data into an exemption.
+		if ( ! is_scalar( $string ) && null !== $string ) {
+			return false;
+		}
+		// Everything else (bool, int, float, null) maps nicely to boolean.
 		return (bool) $string;
+	}
+}
+
+if ( ! function_exists( 'faz_sanitize_bool_strict' ) ) {
+
+	/**
+	 * Coerce to bool for flags whose TRUE value removes a restriction.
+	 *
+	 * faz_sanitize_bool() enumerates the negatives, so anything it does not
+	 * recognise comes back true. That is the right default for a general
+	 * coercion and the wrong one for permission: a payment-gateway exemption, an
+	 * always-allow, a "skip blocking here" flag. On those, a corrupted or
+	 * unexpected value must not be the same as the site owner having said yes.
+	 *
+	 * So this inverts the burden — only an explicit affirmative counts, and
+	 * everything else, including a string nobody anticipated, is false. There is
+	 * no third outcome and no logging: the caller wants a decision, and the safe
+	 * decision when the stored value is unintelligible is "not exempt".
+	 *
+	 * @since 1.26.0
+	 * @param mixed $value Stored value of a permission flag.
+	 * @return bool
+	 */
+	function faz_sanitize_bool_strict( $value ) {
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+		if ( is_int( $value ) || is_float( $value ) ) {
+			// Compared without a cast: (int) 1.5 and (int) 1.9 are both 1, so a
+			// fractional value truncated its way into "yes" and exempted a gateway
+			// from pre-consent blocking. Nothing legitimately stores 1.9 here, and
+			// that is the point — an unintended value must not round toward
+			// permission.
+			return 1 === $value || 1.0 === $value;
+		}
+		if ( ! is_string( $value ) ) {
+			return false;
+		}
+		return in_array( strtolower( trim( $value ) ), array( '1', 'yes', 'true', 'on' ), true );
 	}
 }
 
@@ -173,5 +248,22 @@ if ( ! function_exists( 'faz_sanitize_color' ) ) {
 		$alpha = '';
 		sscanf( $value, 'rgba(%d,%d,%d,%f)', $red, $green, $blue, $alpha );
 		return 'rgba(' . $red . ',' . $green . ',' . $blue . ',' . $alpha . ')';
+	}
+}
+
+if ( ! function_exists( 'faz_asset_suffix' ) ) {
+	/**
+	 * Return `.min` when a production JavaScript build exists and debug is off.
+	 *
+	 * @param string $relative_path Plugin-relative asset path without extension.
+	 * @return string
+	 */
+	function faz_asset_suffix( $relative_path ) {
+		if ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
+			return '';
+		}
+		$base = defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : dirname( __DIR__ ) . '/';
+		$path = $base . ltrim( (string) $relative_path, '/' ) . '.min.js';
+		return file_exists( $path ) ? '.min' : '';
 	}
 }

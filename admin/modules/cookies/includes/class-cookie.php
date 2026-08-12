@@ -8,11 +8,16 @@
 namespace FazCookie\Admin\Modules\Cookies\Includes;
 
 use FazCookie\Includes\Store;
+use FazCookie\Includes\Cookie_Content_I18n;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
+
+// This model is also loaded directly by standalone tests and CLI utilities,
+// where the plugin autoloader is intentionally unavailable.
+require_once dirname( __DIR__, 4 ) . '/includes/class-cookie-content-i18n.php';
 
 /**
  * Handles Cookies Operation
@@ -217,7 +222,23 @@ class Cookie extends Store {
 		$default_content = isset( $data[ $default ] ) ? $data[ $default ] : '';
 		foreach ( $languages as $lang ) {
 			$content           = isset( $data[ $lang ] ) ? $data[ $lang ] : '';
-			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
+			if ( empty( $content ) ) {
+				$content = $this->get_translations( $lang, $prop );
+			} else {
+				// A non-empty value is not automatically a localised one. Scanners and
+				// imports write the same English string into every language slot, so
+				// the Italian column held "2 years" and was skipped here for being
+				// non-empty — the mixed-language declaration issue #214 is about,
+				// surviving inside the fix for it.
+				//
+				// Safe to attempt because the resolver refuses anything it does not
+				// recognise: duration() parses a strict "<number> <english unit>" or a
+				// named special and returns '' otherwise, so an already-Italian "2 anni"
+				// and a free-form "1 year or longer" both fall through untouched. It is
+				// the resolver's refusal, not this branch, that protects authored text.
+				$translated = $this->translate_stored_value( $lang, $prop, $content );
+				$content    = '' !== $translated ? $translated : $content;
+			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
 			$contents[ $lang ] = is_string( $content ) ? stripslashes( wp_kses_post( $content ) ) : '';
 		}
@@ -621,11 +642,63 @@ class Cookie extends Store {
 	/**
 	 * Get contents by language.
 	 *
-	 * @param string $lang Language code.
-	 * @param string $key Specific key if any.
+	 * @param string      $lang   Language code.
+	 * @param string      $key    Specific key if any.
+	 * @param string|null $source Stored value to resolve against. Null resolves it
+	 *                            from the row; callers localising one specific
+	 *                            string pass it, so the resolver judges that text
+	 *                            instead of the row's default-language value.
 	 * @return string
 	 */
-	public function get_translations( $lang = '', $key = '' ) {
-		return '';
+	public function get_translations( $lang = '', $key = '', $source = null ) {
+		if ( ! in_array( $key, array( 'description', 'duration' ), true ) || '' === $lang ) {
+			return '';
+		}
+
+		// Resolved for BOTH fields now. It used to be built only for duration, so
+		// description reached translate() with an empty source — which is how the
+		// catalogue came to outrank whatever the site owner had written. The
+		// resolver needs the stored value to tell "stock text worth localising"
+		// from "somebody's own copy that must be left alone".
+		if ( is_string( $source ) && '' !== $source ) {
+			return $this->translate_stored_value( $lang, $key, $source );
+		}
+
+		$source = '';
+		$data    = $this->normalize_multilingual_data( $this->get_object_data( $key ) );
+		$default = faz_default_language();
+		// The '' !== guards matter: a row can carry an EMPTY string for the
+		// default language while another language holds the real value. Without
+		// them the empty default won, $source stayed blank, and nothing was
+		// translated — the fallback loop below already got this right.
+		if ( isset( $data[ $default ] ) && is_string( $data[ $default ] ) && '' !== $data[ $default ] ) {
+			$source = $data[ $default ];
+		} elseif ( isset( $data['en'] ) && is_string( $data['en'] ) && '' !== $data['en'] ) {
+			$source = $data['en'];
+		} else {
+			foreach ( $data as $value ) {
+				if ( is_string( $value ) && '' !== $value ) {
+					$source = $value;
+					break;
+				}
+			}
+		}
+
+		return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang, $this->get_domain() );
+	}
+
+	/**
+	 * Translate stock cookie text without touching administrator-authored copy.
+	 *
+	 * @param string $lang   Language code.
+	 * @param string $key    description|duration.
+	 * @param string $source Stored value.
+	 * @return string
+	 */
+	protected function translate_stored_value( $lang, $key, $source ) {
+		if ( ! in_array( $key, array( 'description', 'duration' ), true ) || '' === $lang ) {
+			return '';
+		}
+		return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang, $this->get_domain() );
 	}
 }

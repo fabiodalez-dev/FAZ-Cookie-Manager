@@ -106,9 +106,12 @@ class DSAR_Shortcode {
 	 */
 	private function enqueue_dsar_assets() {
 		if ( ! wp_script_is( 'faz-dsar-form', 'registered' ) ) {
+			// Prefer the minified build (~3.6 KB vs ~8.6 KB) — this script is
+			// deliberately loaded on every frontend page (see load_assets()).
+			$suffix = faz_asset_suffix( 'frontend/js/faz-dsar' );
 			wp_register_script(
 				'faz-dsar-form',
-				FAZ_PLUGIN_URL . 'frontend/js/faz-dsar.js',
+				FAZ_PLUGIN_URL . 'frontend/js/faz-dsar' . $suffix . '.js',
 				array(),
 				FAZ_VERSION,
 				true

@@ -95,11 +95,58 @@ class Controller {
 	}
 
 	/**
+	 * Whether register_cron_hook() has already attached its callbacks in this
+	 * request.
+	 *
+	 * @var bool
+	 */
+	private static $cron_hooks_registered = false;
+
+	/**
 	 * Register the WP-Cron hook for async scanning.
+	 *
+	 * The closures keep registration cheap on the frontend: the controller is
+	 * only autoloaded and instantiated when a scan cron event actually fires,
+	 * not on every request that merely registers the callbacks. That laziness
+	 * is why they stay closures rather than becoming array callbacks — an
+	 * `array( self::get_instance(), … )` callback would have to build the
+	 * controller on every request just to name the handler.
+	 *
+	 * The price of a closure is that it cannot be de-duplicated: WordPress keys
+	 * its callback table by _wp_filter_build_unique_id(), which spl_object_hash
+	 * -es a Closure, and two syntactically identical closures are two distinct
+	 * objects with two distinct hashes. Both therefore stay attached and the
+	 * scan runs TWICE. This is not hypothetical: register_cron_hook() is called
+	 * once from the plugin bootstrap (so wp-cron.php, which never loads the
+	 * admin modules, still has a handler) and once from the scanner module's
+	 * init(), and both fire in the same admin/REST request. Hence the guard —
+	 * it belongs here rather than at the callsites, because the reason the two
+	 * callsites exist is precisely that neither can know about the other.
 	 */
 	public static function register_cron_hook() {
-		add_action( self::CRON_HOOK, array( self::get_instance(), 'run_scan_async' ) );
-		add_action( self::HTTPONLY_CRON_HOOK, array( self::get_instance(), 'run_httponly_check' ) );
+		if ( self::$cron_hooks_registered ) {
+			return;
+		}
+		self::$cron_hooks_registered = true;
+
+		add_action(
+			self::CRON_HOOK,
+			static function () {
+				self::get_instance()->run_scan_async();
+			}
+		);
+		add_action(
+			self::HTTPONLY_CRON_HOOK,
+			static function () {
+				$controller = self::get_instance();
+				try {
+					$controller->run_httponly_check();
+				} catch ( \Throwable $e ) {
+					$controller->record_scan_failure( 'httponly', $e->getMessage(), 1 );
+					error_log( 'FAZ: httpOnly scan failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- cron has no response channel.
+				}
+			}
+		);
 	}
 
 	/**
@@ -135,7 +182,7 @@ class Controller {
 		}
 
 		// Web request path: hand the scan to WP-Cron.
-		update_option( 'faz_scan_max_pages', $max_pages );
+		update_option( 'faz_scan_max_pages', $max_pages, false );
 
 		// WP-Cron disabled — it will never self-trigger. Try a detached CLI
 		// spawn (best effort; may still be reaped under FPM), else run inline as
@@ -418,7 +465,12 @@ class Controller {
 	 */
 	public function run_scan_async() {
 		$max_pages = absint( get_option( 'faz_scan_max_pages', 20 ) );
-		$this->run_scan( $max_pages );
+		try {
+			$this->run_scan( $max_pages );
+		} catch ( \Throwable $e ) {
+			$this->record_scan_failure( 'local', $e->getMessage() );
+			error_log( 'FAZ: scheduled scan failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- cron has no response channel.
+		}
 	}
 
 	/**
@@ -482,7 +534,7 @@ class Controller {
 			$new_cookies = $this->save_cookies( $cookies );
 
 			$scan_id = absint( get_option( 'faz_scan_counter', 0 ) ) + 1;
-			update_option( 'faz_scan_counter', $scan_id );
+			update_option( 'faz_scan_counter', $scan_id, false );
 
 			$this->update_info(
 				array(
@@ -510,7 +562,7 @@ class Controller {
 			if ( count( $history ) > 50 ) {
 				$history = array_slice( $history, -50 );
 			}
-			update_option( 'faz_scan_history', $history );
+			update_option( 'faz_scan_history', $history, false );
 
 			$logger->log( 'Server-side scan result: scan_id=' . $scan_id . ', total_cookies=' . $total_cookies . ', pages=' . count( $pages ) );
 
@@ -1063,7 +1115,7 @@ class Controller {
 			}
 
 			$scan_id = absint( get_option( 'faz_scan_counter', 0 ) ) + 1;
-			update_option( 'faz_scan_counter', $scan_id );
+			update_option( 'faz_scan_counter', $scan_id, false );
 
 			$this->update_info(
 				array(
@@ -1095,7 +1147,7 @@ class Controller {
 			if ( count( $history ) > 50 ) {
 				$history = array_slice( $history, -50 );
 			}
-			update_option( 'faz_scan_history', $history );
+			update_option( 'faz_scan_history', $history, false );
 
 			$logger->log( 'Scan result: scan_id=' . $scan_id . ', total_cookies=' . $total_cookies . ', pages_scanned=' . $pages_scanned );
 
@@ -1105,9 +1157,45 @@ class Controller {
 				'pages_scanned' => $pages_scanned,
 				'cookie_names'  => array_values( array_unique( $cookie_names ) ),
 			);
+		} catch ( \Throwable $e ) {
+			$this->record_scan_failure( 'browser', $e->getMessage(), $pages_scanned );
+			throw $e;
 		} finally {
 			$logger->finish();
 		}
+	}
+
+	/**
+	 * Persist a failed scan result at an execution boundary.
+	 *
+	 * @param string $type          Scan type (local, browser, or httponly).
+	 * @param string $message       Diagnostic failure message.
+	 * @param int    $pages_scanned Number of pages completed before failure.
+	 * @return array Failure record.
+	 */
+	public function record_scan_failure( $type, $message, $pages_scanned = 0 ) {
+		$scan_id = absint( get_option( 'faz_scan_counter', 0 ) ) + 1;
+		update_option( 'faz_scan_counter', $scan_id, false );
+
+		$failure = array(
+			'id'            => $scan_id,
+			'status'        => 'failed',
+			'type'          => sanitize_key( $type ),
+			'date'          => current_time( 'mysql' ),
+			'total_cookies' => 0,
+			'pages_scanned' => absint( $pages_scanned ),
+			'error'         => substr( sanitize_text_field( $message ), 0, 500 ),
+		);
+		$this->update_info( $failure );
+
+		$history   = get_option( 'faz_scan_history', array() );
+		$history   = is_array( $history ) ? $history : array();
+		$history[] = $failure;
+		if ( count( $history ) > 50 ) {
+			$history = array_slice( $history, -50 );
+		}
+		update_option( 'faz_scan_history', $history, false );
+		return $failure;
 	}
 
 	/**
@@ -1149,106 +1237,129 @@ class Controller {
 			? $category_map['uncategorized']
 			: ( isset( $category_map['necessary'] ) ? $category_map['necessary'] : 1 );
 
-		foreach ( $cookies as $cookie_data ) {
-			if ( ! is_array( $cookie_data ) || empty( $cookie_data['name'] ) ) {
-				continue;
-			}
-			$cookie_data = wp_parse_args(
-				$cookie_data,
-				array(
-					'description' => '',
-					'duration'    => 'session',
-					'domain'      => '',
-					'category'    => '',
-				)
-			);
-			$name        = sanitize_text_field( $cookie_data['name'] );
-
-			$logger->log( 'Processing: "' . $name . '"' );
-
-			if ( isset( $existing_names[ $name ] ) ) {
-				$logger->log( '  SKIPPED: already exists in DB' );
-				continue; // Don't overwrite existing cookies.
-			}
-
-			// Try known cookies database first (handles WP admin cookies, etc.).
-			$known = Cookie_Database::lookup( $name );
-			if ( $known ) {
-				$cat_slug = $known['category'];
-				$logger->log( '  Cookie_Database lookup: FOUND → category=' . $known['category'] . ', description="' . substr( $known['description'], 0, 60 ) . '..."' );
-				if ( ! empty( $known['description'] ) && empty( $cookie_data['description'] ) ) {
-					$cookie_data['description'] = $known['description'];
+		// Bulk mode: one cache invalidation + one faz_after_create_cookie at
+		// the end of the loop instead of per inserted cookie (each per-item
+		// flush cost a wp_options LIKE scan and a full-table vendor re-check).
+		\FazCookie\Includes\Base_Controller::suspend_cache_invalidation();
+		try {
+			foreach ( $cookies as $cookie_data ) {
+				if ( ! is_array( $cookie_data ) || empty( $cookie_data['name'] ) ) {
+					continue;
 				}
-				if ( ! empty( $known['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
-					$cookie_data['duration'] = $known['duration'];
+				$cookie_data = wp_parse_args(
+					$cookie_data,
+					array(
+						'description' => '',
+						'duration'    => 'session',
+						'domain'      => '',
+						'category'    => '',
+					)
+				);
+				$name        = sanitize_text_field( $cookie_data['name'] );
+
+				$logger->log( 'Processing: "' . $name . '"' );
+
+				if ( isset( $existing_names[ $name ] ) ) {
+					$logger->log( '  SKIPPED: already exists in DB' );
+					continue; // Don't overwrite existing cookies.
 				}
-			} else {
-				$logger->log( '  Cookie_Database lookup: not found' );
-				// Fallback 2: Known Providers cookie map.
-				$provider_cat = $this->match_cookie_to_provider( $name );
-				if ( $provider_cat ) {
-					$cat_slug = $provider_cat;
-					$logger->log( '  Known_Providers match: FOUND → category=' . $provider_cat );
-					// Known Providers only gives category — try OCD for description/duration.
-					if ( empty( $cookie_data['description'] ) || empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) {
-						$ocd_extra = Cookie_Definitions::get_instance()->lookup( $name );
-						if ( $ocd_extra ) {
-							$logger->log( '  OCD lookup (for description/duration): FOUND' );
-							if ( ! empty( $ocd_extra['description'] ) && empty( $cookie_data['description'] ) ) {
-								$cookie_data['description'] = $ocd_extra['description'];
-							}
-							if ( ! empty( $ocd_extra['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
-								$cookie_data['duration'] = $ocd_extra['duration'];
-							}
-						} else {
-							$logger->log( '  OCD lookup (for description/duration): not found' );
-						}
+
+				// Try known cookies database first (handles WP admin cookies, etc.).
+				$known = Cookie_Database::lookup( $name );
+				if ( $known ) {
+					$cat_slug = $known['category'];
+					$logger->log( '  Cookie_Database lookup: FOUND → category=' . $known['category'] . ', description="' . substr( $known['description'], 0, 60 ) . '..."' );
+					if ( ! empty( $known['description'] ) && empty( $cookie_data['description'] ) ) {
+						$cookie_data['description'] = $known['description'];
+					}
+					if ( ! empty( $known['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
+						$cookie_data['duration'] = $known['duration'];
 					}
 				} else {
-					$logger->log( '  Known_Providers match: not found' );
-					// Fallback 3: Open Cookie Database (1400+ definitions).
-					$ocd = Cookie_Definitions::get_instance()->lookup( $name );
-					if ( $ocd ) {
-						$cat_slug = ! empty( $ocd['category'] ) ? $ocd['category'] : 'uncategorized';
-						$logger->log( '  OCD lookup: FOUND → category=' . $cat_slug . ', description="' . substr( isset( $ocd['description'] ) ? $ocd['description'] : '', 0, 60 ) . '..."' );
-						if ( ! empty( $ocd['description'] ) && empty( $cookie_data['description'] ) ) {
-							$cookie_data['description'] = $ocd['description'];
-						}
-						if ( ! empty( $ocd['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
-							$cookie_data['duration'] = $ocd['duration'];
+					$logger->log( '  Cookie_Database lookup: not found' );
+					// Fallback 2: Known Providers cookie map.
+					$provider_cat = $this->match_cookie_to_provider( $name );
+					if ( $provider_cat ) {
+						$cat_slug = $provider_cat;
+						$logger->log( '  Known_Providers match: FOUND → category=' . $provider_cat );
+						// Known Providers only gives category — try OCD for description/duration.
+						if ( empty( $cookie_data['description'] ) || empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) {
+							$ocd_extra = Cookie_Definitions::get_instance()->lookup( $name );
+							if ( $ocd_extra ) {
+								$logger->log( '  OCD lookup (for description/duration): FOUND' );
+								if ( ! empty( $ocd_extra['description'] ) && empty( $cookie_data['description'] ) ) {
+									$cookie_data['description'] = $ocd_extra['description'];
+								}
+								if ( ! empty( $ocd_extra['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
+									$cookie_data['duration'] = $ocd_extra['duration'];
+								}
+							} else {
+								$logger->log( '  OCD lookup (for description/duration): not found' );
+							}
 						}
 					} else {
-						$cat_slug = isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'uncategorized';
-						$logger->log( '  OCD lookup: not found' );
-						$logger->log( '  Using client-provided category: ' . $cat_slug );
+						$logger->log( '  Known_Providers match: not found' );
+						// Fallback 3: Open Cookie Database (1400+ definitions).
+						$ocd = Cookie_Definitions::get_instance()->lookup( $name );
+						if ( $ocd ) {
+							$cat_slug = ! empty( $ocd['category'] ) ? $ocd['category'] : 'uncategorized';
+							$logger->log( '  OCD lookup: FOUND → category=' . $cat_slug . ', description="' . substr( isset( $ocd['description'] ) ? $ocd['description'] : '', 0, 60 ) . '..."' );
+							if ( ! empty( $ocd['description'] ) && empty( $cookie_data['description'] ) ) {
+								$cookie_data['description'] = $ocd['description'];
+							}
+							if ( ! empty( $ocd['duration'] ) && ( empty( $cookie_data['duration'] ) || 'session' === $cookie_data['duration'] ) ) {
+								$cookie_data['duration'] = $ocd['duration'];
+							}
+						} else {
+							$cat_slug = isset( $cookie_data['category'] ) ? $cookie_data['category'] : 'uncategorized';
+							$logger->log( '  OCD lookup: not found' );
+							$logger->log( '  Using client-provided category: ' . $cat_slug );
+						}
 					}
 				}
+				$category_id = isset( $category_map[ $cat_slug ] ) ? $category_map[ $cat_slug ] : $default_cat_id;
+
+				$logger->log( '  Final category: ' . $cat_slug . ' (id=' . $category_id . ')' );
+				$logger->log( '  Description: "' . substr( $cookie_data['description'], 0, 80 ) . '"' );
+				$logger->log( '  Duration: ' . $cookie_data['duration'] );
+
+				$cookie = new Cookie();
+				$cookie->set_name( $name );
+				$cookie->set_slug( sanitize_title( $name ) );
+				$cookie->set_description( array( $default_lang => sanitize_text_field( $cookie_data['description'] ) ) );
+				$cookie->set_duration( array( $default_lang => sanitize_text_field( $cookie_data['duration'] ) ) );
+				$cookie->set_domain( sanitize_text_field( $cookie_data['domain'] ) );
+				$cookie->set_category( $category_id );
+				$cookie->set_type( 1 );
+				$cookie->set_discovered( true );
+
+				$result = Cookie_Controller::get_instance()->create_item( $cookie );
+				if ( false === $result ) {
+					// Do not report or count a row the database rejected. Throwing also
+					// drives the finally block, which restores invalidation and flushes
+					// any rows that were inserted earlier in this batch.
+					throw new \RuntimeException( 'FAZ: failed to persist scanned cookie "' . $name . '".' );
+				}
+				$logger->log( '  CREATED: "' . $name . '"' );
+				$existing_names[ $name ] = true;
+				++$created;
 			}
-			$category_id = isset( $category_map[ $cat_slug ] ) ? $category_map[ $cat_slug ] : $default_cat_id;
+		} finally {
+			\FazCookie\Includes\Base_Controller::resume_cache_invalidation();
 
-			$logger->log( '  Final category: ' . $cat_slug . ' (id=' . $category_id . ')' );
-			$logger->log( '  Description: "' . substr( $cookie_data['description'], 0, 80 ) . '"' );
-			$logger->log( '  Duration: ' . $cookie_data['duration'] );
-
-			$cookie = new Cookie();
-			$cookie->set_name( $name );
-			$cookie->set_slug( sanitize_title( $name ) );
-			$cookie->set_description( array( $default_lang => sanitize_text_field( $cookie_data['description'] ) ) );
-			$cookie->set_duration( array( $default_lang => sanitize_text_field( $cookie_data['duration'] ) ) );
-			$cookie->set_domain( sanitize_text_field( $cookie_data['domain'] ) );
-			$cookie->set_category( $category_id );
-			$cookie->set_type( 1 );
-			$cookie->set_discovered( true );
-
-			Cookie_Controller::get_instance()->create_item( $cookie );
-			$logger->log( '  CREATED: "' . $name . '"' );
-			$existing_names[ $name ] = true;
-			++$created;
+			// The flush belongs in the finally too, not after it. Suspending
+			// invalidation trades one purge per inserted row for a single purge
+			// at the end; if create_item() throws mid-loop, the rows already
+			// written stay in the database while the caches keep serving the
+			// previous contents. Before bulk mode existed each insert invalidated
+			// immediately, so a partial failure still left the caches coherent —
+			// this restores that guarantee.
+			Cookie_Controller::get_instance()->delete_cache();
+			Category_Controller::get_instance()->delete_cache();
+			if ( $created > 0 ) {
+				do_action( 'faz_after_create_cookie' );
+			}
 		}
-
-		// Flush cookie and category caches so the API returns fresh data.
-		Cookie_Controller::get_instance()->delete_cache();
-		Category_Controller::get_instance()->delete_cache();
 
 		return $created;
 	}
@@ -1433,7 +1544,7 @@ class Controller {
 			'pages_scanned' => absint( $data['pages_scanned'] ),
 		);
 
-		update_option( 'faz_scan_details', $sanitized );
+		update_option( 'faz_scan_details', $sanitized, false );
 		$this->last_scan_info = null; // Reset cached info.
 	}
 

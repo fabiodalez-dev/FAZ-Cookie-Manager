@@ -226,7 +226,7 @@ async function gotoResilient(page: Page, url: string): Promise<void> {
   throw lastError;
 }
 
-async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
+async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<boolean> {
   await gotoResilient(page, `${wpBaseURL}${WP_LOGIN_PATH}`);
   await page.locator('#user_login').fill(adminUser);
   await page.locator('#user_pass').fill(adminPass);
@@ -236,29 +236,70 @@ async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: str
   });
 
   if (page.url().includes('/wp-admin/')) {
-    await expect(page.locator('#wpadminbar')).toBeVisible();
-    return;
+    return page.locator('#wpadminbar').isVisible().catch(() => false);
   }
 
   const cookies = await page.context().cookies(wpBaseURL);
-  const hasLoggedCookie = cookies.some((cookie) => cookie.name.startsWith('wordpress_logged_in_'));
-  if (hasLoggedCookie) {
-    await gotoResilient(page, `${wpBaseURL}/wp-admin/`);
-    await expect(page).toHaveURL(/\/wp-admin\//);
-    await expect(page.locator('#wpadminbar')).toBeVisible();
-    return;
+  if (cookies.some((cookie) => cookie.name.startsWith('wordpress_logged_in_'))) {
+    try {
+      await gotoResilient(page, `${wpBaseURL}/wp-admin/`);
+    } catch {
+      return false;
+    }
+    if (!page.url().includes('/wp-admin/')) return false;
+    return page.locator('#wpadminbar').isVisible().catch(() => false);
   }
 
-  const loginError = await page.locator('#login_error').textContent().catch(() => '');
-  throw new Error(`Admin login failed after plugin activation. URL=${page.url()} error=${loginError ?? 'n/a'}`);
+  return false;
+}
+
+/**
+ * Log in, retrying the whole submission.
+ *
+ * Only the navigation was retried before; the form submission itself ran once.
+ * This function is called right after activating ~30 third-party plugins, and
+ * on that first POST WordPress is still running activation hooks and warming
+ * opcache — the request can come back with the login form re-rendered, no
+ * cookie set and `#login_error` EMPTY, which is neither a wrong password nor
+ * anything the caller can act on. Retrying is what a human does here, and it
+ * costs one page load.
+ *
+ * If every attempt fails, say what was actually observed. "Admin login failed"
+ * with an empty error field describes the failure of the test to find out.
+ */
+async function loginAdminResilient(page: Page, wpBaseURL: string, adminUser: string, adminPass: string): Promise<void> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    if (await attemptAdminLogin(page, wpBaseURL, adminUser, adminPass)) {
+      return;
+    }
+    if (attempt < 3) {
+      await page.waitForTimeout(2000 * attempt);
+    }
+  }
+
+  const loginError = (await page.locator('#login_error').textContent().catch(() => '')) ?? '';
+  const cookieNames = (await page.context().cookies(wpBaseURL)).map((c) => c.name).join(', ');
+  throw new Error(
+    `Admin login failed after plugin activation, 3 attempts. URL=${page.url()} ` +
+      `login_error="${loginError.trim() || '(none rendered)'}" cookies=[${cookieNames || 'none'}]`
+  );
 }
 
 test.describe('full-test-codex', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('installa plugin target, configura header/footer e valida blocco completo', async ({ page, browser, adminUser, adminPass, wpBaseURL }) => {
-    test.setTimeout(45 * 60_000);
+  // Declare the long budget HERE, not as the first statement of the test body.
+  // The clock starts before the body does — fixture setup and the serial-mode
+  // re-entry on retry both run under whatever timeout is current, which is the
+  // config's 45s. That is how a test carrying `test.setTimeout(45 * 60_000)`
+  // died reporting "Test timeout of 45000ms exceeded" on retry while the same
+  // test passed on the next attempt. A beforeEach hook applies to the test from
+  // the outset.
+  test.beforeEach(({}, testInfo) => {
+    testInfo.setTimeout(45 * 60_000);
+  });
 
+  test('installa plugin target, configura header/footer e valida blocco completo', async ({ page, browser, adminUser, adminPass, wpBaseURL }) => {
     const slugActivationCache = new Map<string, boolean>();
     const installResults: InstallResult[] = [];
     for (const target of TARGETS) {

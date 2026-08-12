@@ -41,7 +41,7 @@ class Controller {
 	 *
 	 * @var string
 	 */
-	private $db_version = '1.1';
+	private $db_version = '1.2';
 
 	/**
 	 * Return the current instance of the class
@@ -110,7 +110,8 @@ class Controller {
 			PRIMARY KEY  (log_id),
 			KEY idx_consent_id (consent_id),
 			KEY idx_status (status),
-			KEY idx_created_at (created_at)
+			KEY idx_created_at (created_at),
+			KEY idx_banner_slug (banner_slug)
 		) $charset_collate;";
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -660,9 +661,47 @@ class Controller {
 	 * Export consent logs as CSV.
 	 *
 	 * @param array $args Query arguments (same as get_logs, but per_page can be -1 for all).
-	 * @return string CSV content.
+	 * @return string|false CSV content, or false when generation fails.
 	 */
 	public function export_csv( $args = array() ) {
+		$output = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		if ( false === $output ) {
+			return '';
+		}
+		$complete = $this->write_csv( $output, $args );
+		if ( false === $complete ) {
+			fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+			// false, not a partial string: the caller decides what to do with a
+			// failure, and a truncated CSV that reads as complete is the failure
+			// mode worth refusing outright.
+			return false;
+		}
+		rewind( $output );
+		$csv = stream_get_contents( $output );
+		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		return $csv;
+	}
+
+	/**
+	 * Write the export straight to a stream, one batch at a time.
+	 *
+	 * export_csv() above still returns a string, because callers that want the
+	 * whole thing in memory legitimately exist. The HTTP download does not: it
+	 * used to build the entire file in a php://temp buffer and only then echo it,
+	 * so peak memory held the complete CSV — on the plugin's highest-volume table,
+	 * for the site with the most rows, which is exactly the site whose
+	 * administrator needs the export and the one where it ran out of memory.
+	 *
+	 * Batching the QUERY without batching the OUTPUT solved half the problem and
+	 * hid the other half: the SELECT no longer spiked, so the failure moved from
+	 * an obvious "SQL returned too much" to an opaque allowed-memory-exhausted
+	 * partway through a download.
+	 *
+	 * @param resource $handle Open, writable stream.
+	 * @param array    $args   Same filters as export_csv().
+	 * @return bool True when every batch was written; false on a database error.
+	 */
+	private function write_csv( $handle, $args = array() ) {
 		global $wpdb;
 
 		$table = $this->get_table_name();
@@ -684,54 +723,99 @@ class Controller {
 
 		$where_clause = implode( ' AND ', $where );
 
-		if ( ! empty( $values ) ) {
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $where_clause is built from a closed allowlist of column names + %s/%d placeholders, all user values flow through $values which prepare() binds.
-			$query = $wpdb->prepare( "SELECT * FROM {$table} WHERE {$where_clause} ORDER BY created_at DESC", $values );
-		} else {
-			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix + literal; literal "WHERE 1=1" has no user input.
-			$query = "SELECT * FROM {$table} WHERE 1=1 ORDER BY created_at DESC";
-		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query produced by the prepare() block above (or a literal-only fallback). CSV export — must reflect live data.
-		$items = $wpdb->get_results( $query, ARRAY_A );
-
-		if ( ! is_array( $items ) ) {
-			$items = array();
-		}
-
-		$output = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
-		if ( false === $output ) {
-			return '';
-		}
 
 		// CSV header row.
-		fputcsv( $output, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ) );
+		fputcsv( $handle, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ), ',', '"', '\\' );
 
-		foreach ( $items as $item ) {
-			fputcsv(
-				$output,
-				array_map(
-					array( $this, 'sanitize_csv_cell' ),
-					array(
-						$item['log_id'],
-						$item['consent_id'],
-						$item['status'],
-						$item['categories'], // Already JSON string from DB.
-						$item['ip_hash'],
-						$item['user_agent'],
-						$item['url'],
-						isset( $item['banner_slug'] ) ? $item['banner_slug'] : '',
-						isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
-						$item['created_at'],
-					)
-				)
+		// Stream in keyset-paginated batches instead of materialising the whole
+		// table in one get_results() call: the consent-log table is the plugin's
+		// highest-volume table and an unbounded SELECT * exhausts memory on
+		// long-lived installs. log_id is the auto-increment PK, so walking it
+		// descending preserves the newest-first export order and every batch is
+		// an index range scan.
+		$batch_size  = 1000;
+		$last_log_id = null;
+
+		do {
+			// Do not seed the cursor with PHP_INT_MAX: on a 32-bit PHP build that
+			// would exclude valid BIGINT rows above 2,147,483,647. The first batch
+			// has no cursor predicate; subsequent batches use an id read from MySQL.
+			// Bind the BIGINT cursor as a decimal string. WordPress' %d formatter
+			// casts through the platform integer size and would still overflow on
+			// 32-bit PHP after the first batch.
+			$cursor_clause = null === $last_log_id ? '' : ' AND log_id < %s';
+			$batch_values  = null === $last_log_id
+				? array_merge( $values, array( $batch_size ) )
+				: array_merge( $values, array( $last_log_id, $batch_size ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $where_clause is built from a closed allowlist of column names + %s/%d placeholders, all user values flow through $batch_values which prepare() binds.
+			$query = $wpdb->prepare(
+				"SELECT * FROM {$table} WHERE {$where_clause}{$cursor_clause} ORDER BY log_id DESC LIMIT %d",
+				$batch_values
 			);
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $query produced by the prepare() call above. CSV export — must reflect live data.
+			$items = $wpdb->get_results( $query, ARRAY_A );
+
+			// A failed query also returns an empty array, so without this the
+			// export stopped at the error and handed back a CSV that LOOKS
+			// complete — the worst possible outcome for a file somebody exports
+			// to answer a data-subject request or an audit. Same conflation the
+			// retention purge above had, in the one place where the missing rows
+			// are the whole point of the file.
+			if ( '' !== $wpdb->last_error ) {
+				error_log( 'FAZ: consent-log export query failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a truncated export must never pass for a complete one.
+				return false;
+			}
+
+			if ( ! is_array( $items ) || empty( $items ) ) {
+				break;
+			}
+
+			foreach ( $items as $item ) {
+				$last_log_id = (string) $item['log_id'];
+				fputcsv(
+					$handle,
+					array_map(
+						array( $this, 'sanitize_csv_cell' ),
+						array(
+							$item['log_id'],
+							$item['consent_id'],
+							$item['status'],
+							$item['categories'], // Already JSON string from DB.
+							$item['ip_hash'],
+							$item['user_agent'],
+							$item['url'],
+							isset( $item['banner_slug'] ) ? $item['banner_slug'] : '',
+							isset( $item['policy_revision'] ) ? $item['policy_revision'] : 1,
+							$item['created_at'],
+						)
+					),
+					',',
+					'"',
+					'\\'
+				);
+			}
+		} while ( count( $items ) === $batch_size );
+
+
+		return true;
+	}
+
+	/**
+	 * Public entry point for streaming the export to an already-open stream.
+	 *
+	 * @param resource $handle Open, writable stream (e.g. fopen('php://output','w')).
+	 * @param array    $args   Same filters as export_csv().
+	 * @return bool True when the stream was usable.
+	 */
+	public function stream_csv( $handle, $args = array() ) {
+		if ( ! is_resource( $handle ) ) {
+			return false;
 		}
-
-		rewind( $output );
-		$csv = stream_get_contents( $output );
-		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
-
-		return $csv;
+		// Propagated, though a streamed failure cannot be retracted: the headers
+		// and the first batches have already reached the client. What the caller
+		// gets back is the truth about completeness, which is the most this
+		// direction can offer — and more than silently claiming success.
+		return false !== $this->write_csv( $handle, $args );
 	}
 
 	/**
@@ -962,13 +1046,97 @@ class Controller {
 		$months   = absint( $months );
 		$cutoff   = gmdate( 'Y-m-d H:i:s', strtotime( "-{$months} months" ) );
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention cleanup writes — caching irrelevant for DELETE.
-		$deleted = $wpdb->query(
-			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE created_at < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$cutoff
-			)
-		);
+		// Delete in bounded batches: the first cleanup on a long-lived install
+		// can match hundreds of thousands of rows, and a single unbounded
+		// DELETE holds a long InnoDB transaction (lock contention, huge undo
+		// log, replication lag). Each batch is an index range scan on
+		// idx_created_at; the cap keeps one cron run from monopolising the DB.
+		// Select-then-delete rather than `DELETE … LIMIT`. That clause is a MySQL
+		// extension: SQLite refuses it unless compiled with an option WordPress's
+		// SQLite integration does not enable, so on a SQLite-backed install every
+		// batch returned false, the guard below logged once and broke, and
+		// retention returned 0 forever — silently, since 0 also means "nothing to
+		// delete". Retention that never runs is a data-minimisation failure, not
+		// a performance one. Same shape as the DSAR cleanup in class-activator.
+		//
+		// Both numbers are filterable because the right values are properties of
+		// the host, not of this plugin: 1000 rows per batch and 200000 per run
+		// suit shared hosting, and are wrong in both directions elsewhere — a
+		// constrained box wants smaller batches, while an install with millions
+		// of expired rows needs many cron runs to catch up at 200k and would
+		// rather raise the cap once. The bounds are not politeness: the batch
+		// size becomes that many %d placeholders in one prepared DELETE, and an
+		// unclamped filter would walk into max_prepared_stmt_count / packet
+		// limits; a cap of 0 or less would purge nothing at all while reporting
+		// success, which is the same silent-retention-failure class this code
+		// was rewritten to eliminate.
+		$batch_size = (int) apply_filters( 'faz_retention_batch_size', 1000 );
+		$batch_size = max( 100, min( 10000, $batch_size ) );
+		$max_rows   = (int) apply_filters( 'faz_retention_max_rows', 200000 );
+		$max_rows   = max( $batch_size, min( 10000000, $max_rows ) );
+
+		$deleted = 0;
+		do {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; $cutoff is bound via prepare(%s). Retention read — caching irrelevant.
+			// Unordered on purpose. The filter is on created_at and the only index
+			// that helps is idx_created_at, which does not cover an ORDER BY on the
+			// primary key — so asking for one made the database read and sort the
+			// whole expired set before applying LIMIT, on exactly the tables where
+			// that set is largest. Deletion needs the ids, not an order, and
+			// progress is guaranteed because every id read is then deleted.
+			$ids = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT log_id FROM {$table} WHERE created_at < %s LIMIT %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$cutoff,
+					// The remaining budget, not the batch size. The cap used to be
+					// checked only in the loop condition, so the LAST batch always
+					// read a full batch and could overshoot by up to batch_size - 1
+					// rows — a cap that is exceeded on every run it applies to is
+					// not a cap.
+					min( $batch_size, max( 0, $max_rows - $deleted ) )
+				)
+			);
+			// get_col() returns an empty array both when the query fails and when
+			// it matches nothing, so distinguish them explicitly: a failure that
+			// reads as "done" is the exact bug this replaces.
+			if ( '' !== $wpdb->last_error ) {
+				error_log( 'FAZ: consent-log retention SELECT failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a silent retention failure is a data-minimisation problem; it must leave a trace.
+				break;
+			}
+			// Kept as decimal STRINGS, never absint()/%d. On 32-bit PHP both truncate
+			// at 2147483647, so a row with a larger id would be rewritten to that
+			// value — and if a row with THAT id exists, the DELETE removes somebody
+			// else's record. The column is BIGINT precisely because the id can
+			// exceed the platform integer, so the id must never travel through one.
+			$ids = array_values( array_filter( array_map( 'strval', (array) $ids ), static function ( $id ) {
+				return '' !== $id && ctype_digit( $id ) && '0' !== $id;
+			} ) );
+			if ( empty( $ids ) ) {
+				break;
+			}
+
+			$placeholders = implode( ',', array_fill( 0, count( $ids ), '%s' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- $table is plugin-prefix; ids are bound via prepare(%s) as decimal strings. Retention cleanup writes — caching irrelevant for DELETE.
+			$batch = $wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM {$table} WHERE log_id IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					$ids
+				)
+			);
+			// A failed query returns false, and (int) false is 0 — which reads
+			// exactly like "no rows left to delete". Retention would then appear
+			// to have run while nothing was purged, and the caller has no way to
+			// tell the difference. Surface it and stop.
+			if ( false === $batch ) {
+				error_log( 'FAZ: consent-log retention DELETE failed: ' . $wpdb->last_error ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a silent retention failure is a data-minimisation problem; it must leave a trace.
+				break;
+			}
+			$deleted += (int) $batch;
+			// Loop on the SELECT's own size, not the DELETE's return: a row
+			// removed by a concurrent request makes the DELETE report fewer than
+			// it read, and treating that as "last page" would stop early and
+			// leave expired rows behind until the next cron run.
+		} while ( count( $ids ) === $batch_size && $deleted < $max_rows );
 
 		return (int) $deleted;
 	}

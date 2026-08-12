@@ -36,6 +36,7 @@ import { type Page } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 import { acquireCookiesTableLock, releaseCookiesTableLock } from '../utils/db-lock';
+import { withNoDiscoveredCookies, withOwnCookiesOnly } from '../utils/cookie-inventory';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager';
 const REST_BASE = '/wp-json/faz/v1/gvl';
@@ -177,20 +178,25 @@ test.describe('GVL vendor auto-detect from cookies', () => {
   });
 
   test('3. Suffix match guard: ".notlinkedin.com" does NOT trigger a LinkedIn match', async () => {
-    // Plant a domain that contains "linkedin.com" as a non-suffix substring.
-    // The Gvl::suggest_vendor_ids_from_scanned_cookies() helper guards
-    // against this with a "." prefix check on the suffix candidate.
-    // linkedin.com IS in domain-to-vendor.json (mapped to vendor 804), so
-    // this is a true adversarial input: without the dot-prefix guard, a
-    // naive substring/endsWith check on `notlinkedin.com` would match
-    // `linkedin.com` and falsely surface vendor 804. The assertion that
-    // vendor_ids === [] is therefore exercising the guard, not passing
-    // trivially because the suffix is absent from the map.
-    plantCookies([
-      { name: 'auto_evil', slug: 'auto-detect-evil', domain: '.notlinkedin.com' },
-    ]);
-    const r = await suggest();
-    expect(r.vendor_ids).toEqual([]);
+    // Assertions about the WHOLE inventory: restrict it to this spec's own
+    // fixtures, or a scanned row left by an earlier spec answers for us.
+    // See utils/cookie-inventory.
+    await withOwnCookiesOnly('auto-detect-', async () => {
+      // Plant a domain that contains "linkedin.com" as a non-suffix substring.
+      // The Gvl::suggest_vendor_ids_from_scanned_cookies() helper guards
+      // against this with a "." prefix check on the suffix candidate.
+      // linkedin.com IS in domain-to-vendor.json (mapped to vendor 804), so
+      // this is a true adversarial input: without the dot-prefix guard, a
+      // naive substring/endsWith check on `notlinkedin.com` would match
+      // `linkedin.com` and falsely surface vendor 804. The assertion that
+      // vendor_ids === [] is therefore exercising the guard, not passing
+      // trivially because the suffix is absent from the map.
+      plantCookies([
+        { name: 'auto_evil', slug: 'auto-detect-evil', domain: '.notlinkedin.com' },
+      ]);
+      const r = await suggest();
+      expect(r.vendor_ids).toEqual([]);
+    });
   });
 
   test('4. Subdomain match: ".m.linkedin.com" still matches the linkedin.com map entry', async () => {
@@ -202,21 +208,26 @@ test.describe('GVL vendor auto-detect from cookies', () => {
   });
 
   test('5. already_selected vs newly_suggested split is correct', async () => {
-    plantCookies([
-      { name: 'auto_ga', slug: 'auto-detect-ga', domain: '.googletagmanager.com' },
-      { name: 'auto_li', slug: 'auto-detect-li', domain: '.linkedin.com' },
-    ]);
-    // Pre-select Google (755) only.
-    wpEval(`update_option('faz_gvl_selected_vendors', array(755), false);`);
-    try {
-      const r = await suggest();
-      expect(r.vendor_ids).toEqual(expect.arrayContaining([755, 804]));
-      expect(r.already_selected).toEqual([755]);
-      expect(r.newly_suggested).toEqual([804]);
-    } finally {
-      // Clean up the option so other tests see a fresh state.
-      wpEval(`delete_option('faz_gvl_selected_vendors');`);
-    }
+    // Assertions about the WHOLE inventory: restrict it to this spec's own
+    // fixtures, or a scanned row left by an earlier spec answers for us.
+    // See utils/cookie-inventory.
+    await withOwnCookiesOnly('auto-detect-', async () => {
+      plantCookies([
+        { name: 'auto_ga', slug: 'auto-detect-ga', domain: '.googletagmanager.com' },
+        { name: 'auto_li', slug: 'auto-detect-li', domain: '.linkedin.com' },
+      ]);
+      // Pre-select Google (755) only.
+      wpEval(`update_option('faz_gvl_selected_vendors', array(755), false);`);
+      try {
+        const r = await suggest();
+        expect(r.vendor_ids).toEqual(expect.arrayContaining([755, 804]));
+        expect(r.already_selected).toEqual([755]);
+        expect(r.newly_suggested).toEqual([804]);
+      } finally {
+        // Clean up the option so other tests see a fresh state.
+        wpEval(`delete_option('faz_gvl_selected_vendors');`);
+      }
+    });
   });
 
   test('6. Read-only: calling /suggest does NOT mutate faz_gvl_selected_vendors', async () => {
@@ -232,33 +243,42 @@ test.describe('GVL vendor auto-detect from cookies', () => {
   });
 
   test('7. With zero matching cookies, response is empty arrays — not an error', async () => {
-    plantCookies([
-      { name: 'auto_noise', slug: 'auto-detect-noise', domain: '.example.org' },
-    ]);
-    const r = await suggest();
-    expect(r.gvl_available).toBe(true);
-    expect(r.vendor_ids).toEqual([]);
-    expect(r.already_selected).toEqual([]);
-    expect(r.newly_suggested).toEqual([]);
-    // F006: a discovered-but-unmatched domain means the scanner DID run, so
-    // scan_available must be true — the UI shows "no match" here, NOT the
-    // "run the cookie scanner first" hint (which is for scan_available=false).
-    expect(r.scan_available).toBe(true);
+    // Assertions about the WHOLE inventory: restrict it to this spec's own
+    // fixtures, or a scanned row left by an earlier spec answers for us.
+    // See utils/cookie-inventory.
+    await withOwnCookiesOnly('auto-detect-', async () => {
+      plantCookies([
+        { name: 'auto_noise', slug: 'auto-detect-noise', domain: '.example.org' },
+      ]);
+      const r = await suggest();
+      expect(r.gvl_available).toBe(true);
+      expect(r.vendor_ids).toEqual([]);
+      expect(r.already_selected).toEqual([]);
+      expect(r.newly_suggested).toEqual([]);
+      // F006: a discovered-but-unmatched domain means the scanner DID run, so
+      // scan_available must be true — the UI shows "no match" here, NOT the
+      // "run the cookie scanner first" hint (which is for scan_available=false).
+      expect(r.scan_available).toBe(true);
+    });
   });
 
   test('8. discovered=0 rows are ignored — only scanner-discovered cookies feed suggestions', async () => {
-    // Manually-added cookies (discovered=0, the default when the
-    // admin adds a row from the Cookies admin page) MUST NOT
-    // surface a vendor suggestion: the auto-detect feature is
-    // explicitly about what the SCANNER observed on the live site.
-    // CodeRabbit PR #127 review flagged this as the cookie schema's
-    // discovered column is the contract boundary between
-    // scanner-observed and admin-curated rows.
-    plantCookies(
-      [{ name: 'manual_ga', slug: 'auto-detect-manual', domain: '.googletagmanager.com' }],
-      0,
-    );
-    const r = await suggest();
-    expect(r.vendor_ids, 'manually-added discovered=0 cookies leaked into the suggestion').toEqual([]);
+    // Same global claim as the tests above — the expect() here carries a
+    // message argument, which is the only reason it was missed at first.
+    await withOwnCookiesOnly('auto-detect-', async () => {
+      // Manually-added cookies (discovered=0, the default when the
+      // admin adds a row from the Cookies admin page) MUST NOT
+      // surface a vendor suggestion: the auto-detect feature is
+      // explicitly about what the SCANNER observed on the live site.
+      // CodeRabbit PR #127 review flagged this as the cookie schema's
+      // discovered column is the contract boundary between
+      // scanner-observed and admin-curated rows.
+      plantCookies(
+        [{ name: 'manual_ga', slug: 'auto-detect-manual', domain: '.googletagmanager.com' }],
+        0,
+      );
+      const r = await suggest();
+      expect(r.vendor_ids, 'manually-added discovered=0 cookies leaked into the suggestion').toEqual([]);
+    });
   });
 });

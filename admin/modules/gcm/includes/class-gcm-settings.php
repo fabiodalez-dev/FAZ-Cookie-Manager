@@ -11,6 +11,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Gcm_Settings extends Store {
 	protected $data = array();
 
+	/**
+	 * Per-request memo of the sanitized settings tree. get() is called several
+	 * times per page load (wp_head defaults + store data); without this each
+	 * call re-read the option and re-ran the recursive sanitize() walk.
+	 *
+	 * Keyed by blog id so switch_to_blog() cannot serve another site's consent
+	 * defaults during a multisite request.
+	 *
+	 * @var array<int,array>
+	 */
+	private static $cached_settings = array();
+
 	private static $instance;
 
 	public static function get_instance() {
@@ -49,9 +61,23 @@ class Gcm_Settings extends Store {
 		);
 	}
 
+	/**
+	 * Drop the per-request settings memo (call after writing the option
+	 * outside of update(), e.g. from migrations).
+	 *
+	 * @return void
+	 */
+	public static function flush_runtime_cache() {
+		self::$cached_settings = array();
+	}
+
 	public function get( $group = '', $key = '' ) {
-		$settings = get_option( 'faz_gcm_settings', $this->data );
-		$settings = self::sanitize( $settings, $this->data );
+		$blog_id = function_exists( 'get_current_blog_id' ) ? (int) get_current_blog_id() : 0;
+		if ( ! isset( self::$cached_settings[ $blog_id ] ) ) {
+			$settings                         = get_option( 'faz_gcm_settings', $this->data );
+			self::$cached_settings[ $blog_id ] = self::sanitize( $settings, $this->data );
+		}
+		$settings = self::$cached_settings[ $blog_id ];
 		if ( empty( $key ) && empty( $group ) ) {
 			return $settings;
 		} elseif ( ! empty( $key ) && ! empty( $group ) ) {
@@ -188,6 +214,8 @@ class Gcm_Settings extends Store {
 		$merged   = wp_parse_args( (array) $data, $base );
 		$settings = self::sanitize( $merged, $this->data );
 		update_option( 'faz_gcm_settings', $settings );
+		$blog_id = function_exists( 'get_current_blog_id' ) ? (int) get_current_blog_id() : 0;
+		unset( self::$cached_settings[ $blog_id ] );
 		do_action( 'faz_after_update_settings', $settings );
 	}
 

@@ -136,15 +136,34 @@ async function cacheState(request: APIRequestContext, url: string): Promise<stri
   return (resp.headers()['x-flying-press-cache'] ?? '').toUpperCase();
 }
 
-/** Hit a URL until FlyingPress reports a cache HIT (first hit generates, second serves). */
+/**
+ * Hit a URL until FlyingPress reports a cache HIT (first hit generates, second
+ * serves).
+ *
+ * FlyingPress writes the cache file on shutdown, after the response is already
+ * on the wire, so the HIT is never immediate. The old budget here was 8 tries
+ * 300ms apart — about 2.1s, which held when this spec ran alone and did not
+ * when the whole suite was loading the same PHP-FPM pool: test 06 alone takes
+ * ~4.6s idle. It failed the full run and passed in isolation, which is the
+ * signature of a budget tuned on an idle box.
+ *
+ * The error also has to say what it saw. "never reported a HIT" is the same
+ * message whether the header read MISS (caching works, we were impatient),
+ * BYPASS (something vetoed the cache) or nothing at all (FlyingPress is not
+ * serving this request) — three different bugs behind one sentence.
+ */
 async function primeCache(request: APIRequestContext, url: string): Promise<void> {
-  for (let i = 0; i < 8; i += 1) {
-    if ((await cacheState(request, url)) === 'HIT') {
+  let seen = '';
+  for (let i = 0; i < 24; i += 1) {
+    seen = await cacheState(request, url);
+    if (seen === 'HIT') {
       return;
     }
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 500));
   }
-  throw new Error(`FlyingPress never reported a cache HIT for ${url}`);
+  throw new Error(
+    `FlyingPress never reported a cache HIT for ${url} within 12s; last x-flying-press-cache was "${seen || '(header absent)'}"`
+  );
 }
 
 test.beforeAll(async ({}, testInfo) => {

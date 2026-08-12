@@ -40,6 +40,47 @@ class Geolocation {
 	private static $mmdb_reader = null;
 
 	/**
+	 * Per-request memo of resolved countries, keyed by IP. The banner pipeline
+	 * asks for the visitor country several times per request (cache headers,
+	 * banner selection, runtime ruleset); without this each call re-hit the
+	 * transient/filter stack.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $country_cache = array();
+
+	/**
+	 * Per-request memo of resolved regions, keyed by IP.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $region_cache = array();
+
+	/**
+	 * Per-request memo of the resolved MMDB path (null = not resolved yet).
+	 * get_database_path() probes up to 4 candidates with a 128 KB tail read
+	 * each, and is reached 2-3 times per request — resolve once.
+	 *
+	 * @var string|null
+	 */
+	private static $db_path_cache = null;
+
+	/**
+	 * Reset all per-request memoization (resolved DB path, per-IP country /
+	 * region results, MMDB reader). Production code never needs this — the
+	 * memos die with the request — but tests that mutate the database files
+	 * on disk between assertions do.
+	 *
+	 * @return void
+	 */
+	public static function reset_runtime_cache() {
+		self::$db_path_cache = null;
+		self::$country_cache = array();
+		self::$region_cache  = array();
+		self::$mmdb_reader   = null;
+	}
+
+	/**
 	 * Get the visitor's ISO 3166-1 alpha-2 country code.
 	 *
 	 * @param string|null $ip_override Optional explicit IP to look up instead of
@@ -58,10 +99,15 @@ class Geolocation {
 			return '';
 		}
 
+		if ( isset( self::$country_cache[ $ip ] ) ) {
+			return self::$country_cache[ $ip ];
+		}
+
 		// Check transient cache.
 		$cache_key = 'faz_geo_' . md5( $ip );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
+			self::$country_cache[ $ip ] = $cached;
 			return $cached;
 		}
 
@@ -72,6 +118,7 @@ class Geolocation {
 			set_transient( $cache_key, $country, HOUR_IN_SECONDS );
 		}
 
+		self::$country_cache[ $ip ] = $country;
 		return $country;
 	}
 
@@ -200,9 +247,14 @@ class Geolocation {
 			return '';
 		}
 
+		if ( isset( self::$region_cache[ $ip ] ) ) {
+			return self::$region_cache[ $ip ];
+		}
+
 		$cache_key = 'faz_georeg_' . md5( $ip );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
+			self::$region_cache[ $ip ] = (string) $cached;
 			return (string) $cached;
 		}
 
@@ -226,6 +278,7 @@ class Geolocation {
 		// Cache even an empty result (briefly) to avoid re-reading the DB on
 		// every request for IPs with no subdivision data.
 		set_transient( $cache_key, $region, '' !== $region ? HOUR_IN_SECONDS : 10 * MINUTE_IN_SECONDS );
+		self::$region_cache[ $ip ] = $region;
 		return $region;
 	}
 
@@ -407,6 +460,9 @@ class Geolocation {
 	 * @return string Full path to the database file, or empty string.
 	 */
 	public static function get_database_path() {
+		if ( null !== self::$db_path_cache ) {
+			return self::$db_path_cache;
+		}
 		$upload_dir = self::get_data_dir();
 		$preferred  = self::geolite2_edition();
 		$alternate  = ( 'GeoLite2-City' === $preferred ) ? 'GeoLite2-Country' : 'GeoLite2-City';
@@ -420,10 +476,12 @@ class Geolocation {
 
 		foreach ( $candidates as $path ) {
 			if ( file_exists( $path ) && is_readable( $path ) && self::is_valid_mmdb( $path ) ) {
+				self::$db_path_cache = $path;
 				return $path;
 			}
 		}
 
+		self::$db_path_cache = '';
 		return '';
 	}
 
@@ -691,8 +749,9 @@ class Geolocation {
 				return new \WP_Error( 'faz_geo_no_mmdb', __( 'No .mmdb file found in the archive.', 'faz-cookie-manager' ) );
 			}
 
-			// Reset cached reader so it picks up the new file.
-			self::$mmdb_reader = null;
+			// Every memo may contain an answer from the database we just replaced,
+			// including country/region results resolved earlier in this request.
+			self::reset_runtime_cache();
 
 			return true;
 		} catch ( \Exception $e ) {

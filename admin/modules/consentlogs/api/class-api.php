@@ -290,7 +290,7 @@ class Api extends Rest_Controller {
 	 * Outputs raw CSV and exits to bypass WP REST JSON encoding.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
-	 * @return void
+	 * @return void|WP_Error
 	 */
 	public function export_csv( $request ) {
 		$args = array(
@@ -298,11 +298,16 @@ class Api extends Rest_Controller {
 			'status' => $request->get_param( 'status' ) ? sanitize_text_field( $request->get_param( 'status' ) ) : '',
 		);
 
-		$csv = Controller::get_instance()->export_csv( $args );
-
-		if ( ! is_string( $csv ) ) {
-			status_header( 500 );
-			exit;
+		// Every output buffer is discarded first. WordPress and other plugins
+		// routinely leave one open, and streaming INTO a buffer accumulates the
+		// same complete CSV in memory the buffer was meant to avoid: the code
+		// would look streamed and behave exactly as before.
+		if ( ! self::discard_output_buffers() ) {
+			return new WP_Error(
+				'faz_export_buffer_locked',
+				__( 'The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
 		}
 
 		header( 'Content-Type: text/csv; charset=utf-8' );
@@ -310,9 +315,47 @@ class Api extends Rest_Controller {
 		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 		header( 'Pragma: no-cache' );
 		header( 'Expires: 0' );
-		header( 'Content-Length: ' . strlen( $csv ) );
-		echo $csv; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Raw CSV file download.
+
+		// No Content-Length. It cannot be known before the last row is written,
+		// and computing it would mean building the whole file first — which is
+		// the thing being removed. A download without one is ordinary; the file
+		// name is what the browser shows.
+
+		$handle = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		if ( false === $handle ) {
+			status_header( 500 );
+			exit;
+		}
+
+		// Written batch by batch straight to the response. The previous version
+		// built the entire export in a php://temp buffer and echoed it, so peak
+		// memory held the whole file — on the plugin's highest-volume table, for
+		// the site with the most rows, which is the site whose administrator
+		// needs the export and the one where it ran out of memory.
+		$complete = Controller::get_instance()->stream_csv( $handle, $args );
+		if ( false === $complete ) {
+			error_log( 'FAZ: consent-log CSV export was interrupted by a database error.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- headers are already sent; logging is the server-side failure signal.
+			fwrite( $handle, "\n# " . __( 'INCOMPLETE EXPORT: a database error interrupted the download.', 'faz-cookie-manager' ) . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+		}
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		exit;
+	}
+
+	/**
+	 * Remove every removable output buffer before a streaming response.
+	 *
+	 * @return bool False when the current buffer is locked and streaming cannot
+	 *              be guaranteed without accumulating the full response.
+	 */
+	private static function discard_output_buffers() {
+		while ( ob_get_level() > 0 ) {
+			// A non-removable buffer leaves ob_get_level() unchanged when this
+			// fails. Returning immediately is the loop-termination guarantee.
+			if ( ! ob_end_clean() ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

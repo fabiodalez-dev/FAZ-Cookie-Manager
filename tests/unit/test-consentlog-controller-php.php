@@ -34,6 +34,12 @@
  * @package FazCookie\Tests\Unit
  */
 
+namespace FazCookie\Includes {
+	// The REST endpoint is loaded only to exercise its private buffer-drain
+	// helper. Its WordPress parent is irrelevant to that isolated behaviour.
+	abstract class Rest_Controller {}
+}
+
 namespace FazCookie\Admin\Modules\Consentlogs\Includes {
 	// Nothing to predeclare — the real Controller lives in this namespace and is
 	// loaded below; the braced block only fixes namespace context for clarity.
@@ -114,6 +120,7 @@ namespace {
 		public $rows       = array(); // log_id => row
 		private $auto      = 0;
 		public $updates    = array(); // record of update() calls
+		public $queries    = array(); // record export queries for pagination assertions
 
 		public function get_charset_collate() { return ''; }
 		public function insert( $table, $data, $format = null ) {
@@ -151,6 +158,7 @@ namespace {
 			return $best; // ARRAY_A assumed by caller.
 		}
 		public function get_results( $q, $output = OBJECT ) {
+			$this->queries[] = $q;
 			// Used by the migration: return rows with log_id > cursor.
 			if ( false !== strpos( $q, 'SELECT log_id, user_agent' ) ) {
 				if ( preg_match( '/log_id > (\d+)/', $q, $m ) ) {
@@ -165,6 +173,19 @@ namespace {
 					return $out;
 				}
 			}
+			// Used by export_csv(): emulate descending keyset pagination.
+			if ( false !== strpos( $q, 'SELECT *' ) && false !== strpos( $q, 'ORDER BY log_id DESC' ) ) {
+				$cursor = null;
+				if ( preg_match( "/log_id < '?([0-9]+)'?/", $q, $m ) ) {
+					$cursor = (int) $m[1];
+				}
+				$limit = preg_match( '/LIMIT (\d+)/', $q, $m ) ? (int) $m[1] : 1000;
+				$out   = array_values( array_filter( $this->rows, function ( $row ) use ( $cursor ) {
+					return null === $cursor || (int) $row['log_id'] < $cursor;
+				} ) );
+				usort( $out, function ( $a, $b ) { return (int) $b['log_id'] <=> (int) $a['log_id']; } );
+				return array_slice( $out, 0, $limit );
+			}
 			return array();
 		}
 		public function get_var( $q ) { return 0; }
@@ -177,6 +198,7 @@ namespace {
 	$GLOBALS['wpdb'] = new FazTest_ConsentWPDB();
 
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/includes/class-controller.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/api/class-api.php';
 
 	use FazCookie\Admin\Modules\Consentlogs\Includes\Controller;
 
@@ -342,6 +364,113 @@ namespace {
 		if ( (int) ( $u['where']['log_id'] ?? 0 ) === 1002 ) { $touched_1002 = true; }
 	}
 	ok( ! $touched_1002, 'already-hashed (64-hex) row is skipped — migration is idempotent' );
+
+	// ============================================================
+	// 8. Bounded CSV export uses a cursor from the database
+	// ============================================================
+	echo "\n-- keyset-paginated CSV export --\n";
+	$GLOBALS['wpdb']->rows    = array();
+	$GLOBALS['wpdb']->queries = array();
+	for ( $i = 0; $i < 1001; $i++ ) {
+		$id = 3000000000 + $i; // Deliberately above a signed 32-bit PHP_INT_MAX.
+		$GLOBALS['wpdb']->rows[ $id ] = array(
+			'log_id'         => $id,
+			'consent_id'     => 'export-' . $id,
+			'status'         => 'accepted',
+			'categories'     => '{}',
+			'ip_hash'        => 'ip-hash',
+			'user_agent'     => 'ua-hash',
+			'url'            => 'https://example.test/path',
+			'banner_slug'    => 'main',
+			'policy_revision' => 1,
+			'created_at'     => '2026-08-10 12:00:00',
+		);
+	}
+	$csv   = $ctrl->export_csv();
+	$lines = array_values( array_filter( preg_split( '/\r?\n/', trim( $csv ) ), 'strlen' ) );
+	eq( count( $lines ), 1002, 'export emits one header plus all 1001 rows across two batches' );
+	ok( false !== strpos( $lines[1], '3000001000' ), 'export remains newest-first for BIGINT ids above 32-bit range' );
+	ok( false !== strpos( end( $lines ), '3000000000' ), 'second keyset batch reaches the oldest row exactly once' );
+	$export_queries = array_values( array_filter( $GLOBALS['wpdb']->queries, function ( $query ) {
+		return false !== strpos( $query, 'SELECT *' );
+	} ) );
+	ok( false === strpos( $export_queries[0], 'log_id <' ), 'first batch has no architecture-sized synthetic cursor' );
+	ok(
+		false !== strpos( $export_queries[1], "log_id < '3000000001'" ),
+		'next batch binds the last database BIGINT as a platform-safe decimal string'
+	);
+
+	// The streamed path must produce byte-identical output to the buffered one.
+	// It exists because the HTTP download used to build the whole export in
+	// memory and only then echo it — so peak memory held the complete file, on
+	// the plugin's highest-volume table, for the site with the most rows. That is
+	// the administrator who needs the export and the one it failed for.
+	$stream = fopen( 'php://temp', 'r+' );
+	$ok     = $ctrl->stream_csv( $stream );
+	rewind( $stream );
+	$streamed = stream_get_contents( $stream );
+	fclose( $stream );
+	eq( $ok, true, 'stream_csv reports success on a usable stream' );
+	eq( $streamed, $csv, 'the streamed export is byte-identical to the buffered one' );
+	eq( false === strpos( $streamed, 'Log ID' ) ? 0 : 1, 1, 'and still carries the header row' );
+
+	// A caller that hands over something unusable gets false rather than a
+	// warning and a half-written response.
+	eq( $ctrl->stream_csv( null ), false, 'a non-resource is refused' );
+	eq( $ctrl->stream_csv( 'not a stream' ), false, 'and so is a string' );
+
+	// BIGINT ids must never travel through a platform integer. On 32-bit PHP
+	// absint() and %d both truncate at 2147483647, so a larger id is rewritten
+	// to that value — and if a row with THAT id exists, the DELETE removes
+	// somebody else's consent record. The column is BIGINT for exactly this
+	// reason, so the fix is to keep the ids as decimal strings end to end.
+	$ctrl_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/includes/class-controller.php' );
+	eq( false === strpos( $ctrl_src, "array_map( 'absint', (array) \$ids )" ), true, 'retention ids are not passed through absint()' );
+	eq( false !== strpos( $ctrl_src, "ctype_digit" ), true, 'they are validated as decimal digit strings instead' );
+	eq( false === strpos( $ctrl_src, "array_fill( 0, count( \$ids ), '%d' )" ), true, 'and bound with %s, not %d' );
+
+	// A failed export query returns an empty array exactly like a finished one.
+	// Conflating them handed back a CSV that LOOKS complete — the worst outcome
+	// for a file exported to answer a data-subject request.
+	eq( false !== strpos( $ctrl_src, 'consent-log export query failed' ), true, 'a failed export query is detected' );
+	eq( false !== strpos( $ctrl_src, "\$complete = \$this->write_csv" ), true, 'and its failure is propagated to export_csv()' );
+
+	// A cap checked only in the loop condition is exceeded on every run where it
+	// applies, because the last SELECT still reads a whole batch.
+	eq( false !== strpos( $ctrl_src, 'min( $batch_size, max( 0, $max_rows - $deleted ) )' ), true, 'the per-run cap bounds the SELECT, not just the loop' );
+
+	// The REST download must use the streaming entry point, not the string one.
+	// Behaviourally indistinguishable from a unit test — both produce the same
+	// bytes — so the call site is asserted directly; using export_csv() there
+	// would restore the original memory profile while every test above passed.
+	$api_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/api/class-api.php' );
+	eq( false !== strpos( $api_src, 'stream_csv( $handle, $args )' ), true, 'the REST export streams to php://output' );
+	// Anchored on the header CALL, not the words: the first version of this
+	// matched the comment that explains why the header is absent, so it failed
+	// because of prose. An assertion a comment can satisfy is checking the wrong
+	// thing in both directions.
+	eq( false === strpos( $api_src, "header( 'Content-Length" ), true, 'and sends no Content-Length, which cannot be known before the last row' );
+	eq( false !== strpos( $api_src, 'ob_end_clean' ), true, 'output buffers are discarded, or streaming would accumulate in one anyway' );
+	eq( false !== strpos( $api_src, 'if ( ! ob_end_clean() )' ), true, 'a locked output buffer terminates the drain instead of looping forever' );
+	eq( false !== strpos( $api_src, 'return false;' ), true, 'a locked buffer makes streaming fail explicitly' );
+
+	// Exercise the actual termination condition as well as guarding the call
+	// site. A non-removable PHP buffer leaves ob_get_level() unchanged when
+	// ob_end_clean() is attempted; the old while loop therefore ran forever.
+	$drain = new ReflectionMethod( \FazCookie\Admin\Modules\Consentlogs\Api\Api::class, 'discard_output_buffers' );
+	$base_level = ob_get_level();
+	ob_start();
+	echo 'discard me';
+	eq( $drain->invoke( null ), true, 'the production drain removes a normal output buffer' );
+	eq( ob_get_level(), $base_level, 'the normal buffer is fully removed' );
+
+	$locked_flags = PHP_OUTPUT_HANDLER_STDFLAGS & ~PHP_OUTPUT_HANDLER_REMOVABLE;
+	ob_start( null, 0, $locked_flags );
+	set_error_handler( static function () { return true; } );
+	$locked_result = $drain->invoke( null );
+	restore_error_handler();
+	eq( $locked_result, false, 'the production drain returns on a non-removable buffer' );
+	eq( ob_get_level(), $base_level + 1, 'the locked buffer remains at the same level instead of causing an infinite loop' );
 
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";

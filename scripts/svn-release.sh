@@ -215,7 +215,9 @@ fi
 
 cyan "═══ Apply: svn add new files + svn rm deleted ═══"
 svn add --force trunk assets >/dev/null 2>&1 || true
-[[ "${NO_TAG}" == "0" ]] && svn add --force "tags/${VERSION}" >/dev/null 2>&1 || true
+if [[ "${NO_TAG}" == "0" ]]; then
+    svn add --force "tags/${VERSION}" >/dev/null 2>&1 || true
+fi
 # Mark deleted files for SVN.
 DELETED="$(svn status | awk '/^!/ {print $2}')"
 if [[ -n "${DELETED}" ]]; then

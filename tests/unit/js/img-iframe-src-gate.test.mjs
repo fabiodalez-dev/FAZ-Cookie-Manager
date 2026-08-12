@@ -146,6 +146,18 @@ eq('element carrying faz-skip class → not blocked',
 cfg._userWhitelist = ['tile.openstreetmap.org'];
 eq('user-whitelisted provider URL → not blocked', sb(OSM), false);
 cfg._userWhitelist = [];
+// The settings UI also promises script/element IDs and CSS class tokens. These
+// must work for runtime-created resources, not only server-rendered tags.
+const idWhitelisted = w.document.createElement('img');
+idWhitelisted.id = 'map-tile-runtime';
+cfg._userWhitelist = ['map-tile'];
+eq('configured element ID → runtime resource not blocked', w.eval('_fazImgShouldBlock').call(null, idWhitelisted, OSM), false);
+idWhitelisted.id = 'unrelated-map-tile';
+eq('ID token look-alike → still blocked', w.eval('_fazImgShouldBlock').call(null, idWhitelisted, OSM), true);
+const classWhitelisted = w.document.createElement('img');
+classWhitelisted.className = 'map-tile another-class';
+eq('configured CSS class → runtime resource not blocked', w.eval('_fazImgShouldBlock').call(null, classWhitelisted, OSM), false);
+cfg._userWhitelist = [];
 // _block off → never blocks, even for a known provider.
 cfg._block = '';
 eq('blocking globally off → not blocked', sb(OSM), false);

@@ -88,6 +88,9 @@ function faz_clear_mmdb( $dir ) {
 	foreach ( glob( $dir . '*.mmdb' ) ?: array() as $f ) {
 		@unlink( $f );
 	}
+	// get_database_path() memoizes its resolution per request; these tests
+	// mutate the candidate files between assertions, so drop the memo.
+	\FazCookie\Includes\Geolocation::reset_runtime_cache();
 }
 
 /** Minimal valid MMDB stub: padding + the MaxMind metadata marker near EOF. */
@@ -220,12 +223,16 @@ faz_ok( $own === Geolocation::get_database_path(), '20 valid FAZ_MAXMIND_DB_PATH
 faz_ok( true === Geolocation::has_database(), '21 valid constant -> has_database() true' );
 
 // 22: corrupt constant is skipped; resolver falls through to valid uploads (F-C).
+// get_database_path() memoizes per request; mutating the constant's target
+// mid-process simulates a new request, so drop the memo first.
 faz_write_corrupt( $own );
+Geolocation::reset_runtime_cache();
 faz_ok( $country === Geolocation::get_database_path(), '22 corrupt constant -> falls through to uploads' );
 faz_ok( true === Geolocation::has_database(), '23 corrupt constant + valid uploads -> has_database() true' );
 
 // 24: empty constant file is skipped; uploads used.
 file_put_contents( $own, '' );
+Geolocation::reset_runtime_cache();
 faz_ok( $country === Geolocation::get_database_path(), '24 empty constant file -> falls through to uploads' );
 
 // 25: missing constant file AND no uploads DB -> nothing valid.

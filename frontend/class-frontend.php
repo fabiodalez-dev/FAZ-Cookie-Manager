@@ -23,6 +23,7 @@ use FazCookie\Includes\Geolocation;
 use FazCookie\Includes\Ab_Test;
 use FazCookie\Includes\Gvl;
 use FazCookie\Includes\Known_Providers;
+use FazCookie\Includes\Filesystem;
 use FazCookie\Includes\Cookie_Table_Shortcode;
 use FazCookie\Includes\Cookie_Policy_Shortcode;
 use FazCookie\Includes\Do_Not_Sell_Shortcode;
@@ -40,6 +41,17 @@ use FazCookie\Frontend\Includes\Geo_Runtime;
  * @author     Fabio D'Alessandro
  */
 class Frontend {
+
+	/**
+	 * Instagram Feed's settings page slug, where its GDPR option lives.
+	 *
+	 * Pinned by tests/unit/test-smash-balloon-gdpr-php.php against the slug the
+	 * plugin actually registers, so this cannot rot into a dead link silently.
+	 *
+	 * @since 1.26.0
+	 * @var string
+	 */
+	const SMASH_BALLOON_SETTINGS_SLUG = 'sbi-settings';
 
 	/**
 	 * The ID of this plugin.
@@ -108,6 +120,13 @@ class Frontend {
 	private $enforceable_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
+	/**
+	 * Precomputed provider-pattern metadata (lowercased pattern, URL-vs-code
+	 * classification) for the output-buffer matching hot loop.
+	 */
+	private $provider_match_meta_cache = null;
+	/** Same precomputation for the per-service pattern → service-ids map. */
+	private $service_match_meta_cache = null;
 	/**
 	 * Set when runtime geo-routing resolves an opt-in jurisdiction but no
 	 * matching active banner exists, so the country-selected (opt-out) banner
@@ -359,6 +378,41 @@ class Frontend {
 			$alt_asset     = ! empty( $faz_settings['banner_control']['alternative_asset_path'] );
 			$script_handle = $alt_asset ? 'faz-fw' : $this->plugin_name;
 
+			// Offload the static bulk of _fazConfig (~60 KB of provider block
+			// patterns + cookie-category map, identical for every visitor of a
+			// given page type) into a content-hashed, browser-cacheable .js
+			// file instead of re-inlining it into every HTML response. The
+			// file defines window._fazStaticConfig; a "before" inline snippet
+			// merges it back into _fazConfig ahead of script.js execution, so
+			// the frontend bundle needs no changes. Server-side blocking is
+			// unaffected either way; if the static file cannot be provided the
+			// full config stays inline exactly as before.
+			$store_data  = $this->get_store_data();
+			$static_deps = array();
+			if ( ! $alt_asset && apply_filters( 'faz_external_static_assets', true ) ) {
+				$static_config = array();
+				foreach ( array( '_providersToBlock', '_cookieCategoryMap' ) as $static_key ) {
+					if ( isset( $store_data[ $static_key ] ) ) {
+						$static_config[ $static_key ] = $store_data[ $static_key ];
+					}
+				}
+				$static_json = ! empty( $static_config ) ? wp_json_encode( $static_config ) : false;
+				if ( false !== $static_json && '' !== $static_json ) {
+					$static_url = $this->get_static_asset_url(
+						'config-' . md5( $static_json ) . '.js',
+						'window._fazStaticConfig=' . $static_json . ';'
+					);
+					if ( '' !== $static_url ) {
+						$static_handle = $this->plugin_name . '-static-config';
+						wp_enqueue_script( $static_handle, $static_url, array(), null, false );
+						$static_deps[] = $static_handle;
+						foreach ( array_keys( $static_config ) as $static_key ) {
+							unset( $store_data[ $static_key ] );
+						}
+					}
+				}
+			}
+
 			if ( $alt_asset ) {
 				$script_path = plugin_dir_path( __FILE__ ) . 'js/script' . $suffix . '.js';
 				wp_register_script( $script_handle, false, array(), $this->version, false );
@@ -369,10 +423,64 @@ class Frontend {
 					wp_add_inline_script( $script_handle, $script_content );
 				}
 			} else {
-				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', array(), $this->version, false );
+				/**
+				 * Opt-in: load the main banner bundle in the footer instead of
+				 * render-blocking in <head>. Default false — loading in <head>
+				 * shows the banner (and arms the client-side interceptors)
+				 * before page scripts run. Sites that accept a later banner
+				 * paint in exchange for faster first render can return true;
+				 * server-side blocking is unaffected by the position.
+				 *
+				 * Ignored when Google Consent Mode or the IAB TCF CMP is active.
+				 * Both of those declare this handle as a dependency and must
+				 * themselves load in <head> — GCM has to emit `consent default`
+				 * and the TCF stub has to define `__tcfapi` before any ad script
+				 * runs, and moving them later is a compliance regression, not a
+				 * tuning choice. WP_Scripts::set_group then pulls a dependency
+				 * back into the head group, so honouring the filter here while
+				 * either is enabled produced no footer move at all: the option
+				 * read as supported and silently did nothing on exactly the
+				 * installs most likely to want it. Now the constraint is
+				 * explicit, and `faz_main_script_effective_in_footer` reports
+				 * what was actually applied.
+				 *
+				 * @since 1.26.0
+				 * @param bool $in_footer Default false (head).
+				 */
+				$in_footer = (bool) apply_filters( 'faz_main_script_in_footer', false );
+				if ( $in_footer ) {
+					$gcm_active = is_object( $this->gcm_settings ) && true === $this->gcm_settings->is_gcm_enabled();
+					$tcf_active = (bool) $this->settings->get( 'iab', 'enabled' )
+						&& absint( $this->settings->get( 'iab', 'cmp_id' ) ) >= 2;
+					if ( $gcm_active || $tcf_active ) {
+						$in_footer = false;
+					}
+				}
+				/**
+				 * The position actually used, after the GCM/TCF constraint above.
+				 *
+				 * Read-only signal for diagnostics and for anyone who needs to
+				 * know whether their `faz_main_script_in_footer` request survived.
+				 *
+				 * @since 1.26.0
+				 * @param bool $in_footer Effective position (true = footer).
+				 */
+				do_action( 'faz_main_script_effective_in_footer', $in_footer );
+				wp_enqueue_script( $script_handle, plugin_dir_url( __FILE__ ) . 'js/script' . $suffix . '.js', $static_deps, $this->version, $in_footer );
 			}
 
-			wp_localize_script( $script_handle, '_fazConfig', $this->get_store_data() );
+			wp_localize_script( $script_handle, '_fazConfig', $store_data );
+
+			if ( ! empty( $static_deps ) ) {
+				// Runs in the "before" bucket: after the _fazConfig data blob,
+				// after the static-config file's own tag (it is a dependency),
+				// and before script.js executes.
+				wp_add_inline_script(
+					$script_handle,
+					'if(window._fazStaticConfig&&typeof _fazConfig!=="undefined"){for(var _fazK in window._fazStaticConfig){if(!(_fazK in _fazConfig)){_fazConfig[_fazK]=window._fazStaticConfig[_fazK];}}}',
+					'before'
+				);
+			}
 
 			// Pre-initialise window.dataLayer so third-party trackers that emit
 			// `dataLayer.push(…)` bare (without the GTM bootstrap that
@@ -433,9 +541,25 @@ class Frontend {
 				. '.faz-age-confirm-error{flex-basis:100%;margin:2px 0 0;color:#b00020;font-size:12px}'
 				. '.video-placeholder-normal,.video-placeholder-youtube{min-height:200px;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;box-sizing:border-box}';
 			$css_handle = $this->plugin_name . '-css';
-			wp_register_style( $css_handle, false, array(), $this->version );
-			wp_enqueue_style( $css_handle );
-			wp_add_inline_style( $css_handle, $css );
+			// Serve the compiled banner CSS (~30 KB) as a real, content-hashed
+			// stylesheet instead of inlining it into every page's <head> where
+			// it can never be browser-cached. The hash filename is immutable,
+			// so repeat views cost zero bytes. Falls back to the historical
+			// inline injection when the uploads dir is not writable, and stays
+			// inline in alternative-asset mode (those sites deliberately avoid
+			// plugin-URL patterns ad blockers match on — an uploads URL still
+			// contains the plugin slug).
+			$external_css_url = '';
+			if ( ! $alt_asset && apply_filters( 'faz_external_static_assets', true ) ) {
+				$external_css_url = $this->get_static_asset_url( 'banner-' . md5( $css ) . '.css', $css );
+			}
+			if ( '' !== $external_css_url ) {
+				wp_enqueue_style( $css_handle, $external_css_url, array(), null );
+			} else {
+				wp_register_style( $css_handle, false, array(), $this->version );
+				wp_enqueue_style( $css_handle );
+				wp_add_inline_style( $css_handle, $css );
+			}
 
 			// wp_localize_script for _fazStyles removed: CSS is now injected via
 			// wp_add_inline_style above; the JS variable was no longer consumed.
@@ -684,10 +808,8 @@ class Frontend {
 			);
 		if ( true === $this->is_wpconsentapi_enabled() ) {
 			$handle = $this->plugin_name . '-wca';
-			// Compute the suffix per-file: wca.js and microsoft-consent.js
-			// are not in the build:min pipeline, so reusing the $suffix
-			// computed for script.js would produce URLs like wca.min.js
-			// that 404 on any install where script.min.js exists.
+			// Compute the suffix per-file so SCRIPT_DEBUG and a missing generated
+			// asset both fall back safely to the readable source.
 			$wca_suffix = $this->get_script_suffix( 'js/wca' );
 			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
 			if ( true === $this->is_gsk_enabled() ) {
@@ -711,6 +833,198 @@ class Frontend {
 	}
 
 	/**
+	 * Persist a content-hashed static asset under
+	 * uploads/faz-cookie-manager/assets/ and return its URL ('' on failure).
+	 *
+	 * Used to move the per-page inline payloads (compiled banner CSS, static
+	 * provider config) into real files the browser can cache: the filename
+	 * embeds a hash of the content, so it is immutable — no ?ver needed, no
+	 * invalidation problem, and stale full-page caches keep referencing their
+	 * own (still existing) hash. Steady state costs one file_exists() per asset
+	 * per request; the WP_Filesystem machinery is only touched when the file is
+	 * missing (first request after a change).
+	 *
+	 * Superseded hashes are reaped by cleanup_static_assets() on the daily
+	 * cron, using mtime as a last-used timestamp (refreshed at most once a day
+	 * by the hit path below), so the directory cannot grow without bound on a
+	 * long-lived install.
+	 *
+	 * @param string $filename Hash-carrying file name (no path).
+	 * @param string $contents File contents to write when missing.
+	 * @return string Public URL, or '' when the file cannot be provided.
+	 */
+	private function get_static_asset_url( $filename, $contents ) {
+		static $write_failed = false;
+
+		$dir_info = self::get_static_assets_dir();
+		if ( empty( $dir_info['path'] ) || empty( $dir_info['url'] ) ) {
+			return '';
+		}
+
+		$path = $dir_info['path'] . $filename;
+		if ( file_exists( $path ) ) {
+			// Keep mtime meaning "last used" for the reaper, without paying a
+			// write on every request. filemtime() here hits PHP's per-request
+			// stat cache populated by the file_exists() above.
+			$mtime = @filemtime( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( $mtime && ( time() - $mtime ) > DAY_IN_SECONDS ) {
+				@touch( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.touch_touch -- last-used marker for the daily reaper; WP_Filesystem has no touch primitive.
+			}
+			return $dir_info['url'] . $filename;
+		}
+
+		if ( $write_failed ) {
+			return '';
+		}
+
+		$fs = Filesystem::get_instance();
+		if ( ! $fs->can_access_filesystem() || ! wp_mkdir_p( $dir_info['path'] ) ) {
+			$write_failed = true;
+			return '';
+		}
+		if ( ! file_exists( $dir_info['path'] . 'index.php' ) ) {
+			$fs->put_contents( $dir_info['path'] . 'index.php', "<?php // Silence is golden.\n" );
+		}
+
+		// Stage + rename instead of writing $path directly: put_contents() is
+		// not atomic, so a concurrent request could see the file exist (and
+		// hand its URL to a browser) while it is still half-written — and
+		// because the name is a content hash it would stay truncated forever.
+		// A same-directory rename() is atomic on POSIX and NTFS. Mirrors the
+		// staging pattern in Geolocation::extract_mmdb().
+		$staged = $dir_info['path'] . '.' . $filename . '.' . wp_generate_uuid4() . '.tmp';
+		if ( ! $fs->put_contents( $staged, $contents ) ) {
+			$write_failed = true;
+			return '';
+		}
+		if ( ! @rename( $staged, $path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.rename_rename -- intentional atomic same-dir swap; WP_Filesystem has no atomic move.
+			wp_delete_file( $staged );
+			// A parallel request may have landed the same file first. The name
+			// is a content hash, so that copy is byte-identical — use it.
+			if ( ! file_exists( $path ) ) {
+				$write_failed = true;
+				return '';
+			}
+		}
+
+		return $dir_info['url'] . $filename;
+	}
+
+	/**
+	 * Resolve (and memoize) the generated-assets directory.
+	 *
+	 * @return array { path: string, url: string }
+	 */
+	private static function get_static_assets_dir() {
+		// Keyed by blog id, not a plain static: get_uploads_dir() resolves through
+		// wp_upload_dir(), which is per-site. A single static would be filled from
+		// whichever site ran first, and after a switch_to_blog() — network admin,
+		// a multisite cron pass, any plugin that iterates blogs — both the serve
+		// path and the reaper would then be pointed at another site's directory.
+		// The reaper deletes files, so getting this wrong is destructive.
+		static $dir_info = array();
+		$blog_id = function_exists( 'get_current_blog_id' ) ? (int) get_current_blog_id() : 0;
+		if ( ! isset( $dir_info[ $blog_id ] ) ) {
+			$dir_info[ $blog_id ] = Filesystem::get_instance()->get_uploads_dir( 'faz-cookie-manager/assets' );
+		}
+		return is_array( $dir_info[ $blog_id ] ) ? $dir_info[ $blog_id ] : array();
+	}
+
+	/**
+	 * Reap generated static assets that have not been served for a while.
+	 *
+	 * The config/banner assets are content-hashed, so every settings, cookie
+	 * or banner-template change mints a NEW filename and orphans the previous
+	 * one. Without this, an install that is edited regularly accumulates
+	 * orphans forever.
+	 *
+	 * Edits are not the only axis, and this is the part that is easy to get
+	 * wrong when reasoning about how much disk this costs. The hashed payload is
+	 * the CLIENT provider list plus the cookie-category map, and that list is
+	 * legitimately different on a WooCommerce checkout or cart page (payment
+	 * gateway patterns removed), on a page excluded from script blocking (empty),
+	 * under a geo ruleset that resolves to different blocking, and when a
+	 * self-restricting integration withdraws its own patterns. So the live set at
+	 * any moment is roughly (page contexts × geo rulesets), and the retained set
+	 * is that multiplied by the number of settings revisions inside the window —
+	 * not one file per edit.
+	 *
+	 * mtime is used as a last-used timestamp: get_static_asset_url() refreshes
+	 * it (at most once a day) whenever it serves an existing file, so assets
+	 * still referenced by live pages keep moving forward and are never reaped.
+	 * The retention window is deliberately generous — full-page caches can
+	 * hold a rendered page (and its asset URL) for days without PHP running —
+	 * and the files are small, so erring long costs a few MB at worst.
+	 *
+	 * @return int Number of files deleted.
+	 */
+	public static function cleanup_static_assets() {
+		$dir_info = self::get_static_assets_dir();
+		if ( empty( $dir_info['path'] ) || ! is_dir( $dir_info['path'] ) ) {
+			return 0;
+		}
+
+		/**
+		 * Filter how long an unused generated asset is kept, in days.
+		 *
+		 * The default is deliberately long. mtime is refreshed only when PHP
+		 * renders the page, and a full-page cache serves the HTML — including the
+		 * config-*.js and banner-*.css URLs — without running PHP at all. An
+		 * asset can therefore look untouched for as long as the cache TTL while
+		 * still being referenced by pages in that cache. Deleting it gives those
+		 * visitors a 404 on the banner's own stylesheet and script, which on this
+		 * plugin means the consent UI may not appear.
+		 *
+		 * A year covers every plausible page-cache TTL with margin, and errs the
+		 * safe way: the cost of keeping an orphan is disk, the cost of deleting a
+		 * live one is a missing consent banner.
+		 *
+		 * Be honest about that disk cost rather than calling it negligible, since
+		 * this default is what a site owner is deciding whether to lower. Each
+		 * config asset is tens of kilobytes and the retained count is settings
+		 * revisions × page contexts × geo rulesets (see cleanup_static_assets()),
+		 * so a large, frequently edited, geo-targeted site can reach tens of
+		 * megabytes over a year — not the handful a single-variant reading of
+		 * this would suggest. Still the right trade against a broken banner, and
+		 * still worth lowering through this filter on a site that knows its cache
+		 * TTL.
+		 *
+		 * @since 1.26.0
+		 * @param int $days Days an unused asset is kept. Default 365.
+		 */
+		$days = (int) apply_filters( 'faz_static_asset_retention_days', 365 );
+		if ( $days <= 0 ) {
+			return 0;
+		}
+
+		$cutoff  = time() - ( $days * DAY_IN_SECONDS );
+		$deleted = 0;
+		// Only ever touch files this class generates: the two content-hashed
+		// families, plus staging files orphaned by an interrupted write.
+		$patterns = array( 'config-*.js', 'banner-*.css', '.config-*.js.*.tmp', '.banner-*.css.*.tmp' );
+		foreach ( $patterns as $pattern ) {
+			$files = glob( $dir_info['path'] . $pattern );
+			if ( ! is_array( $files ) ) {
+				continue;
+			}
+			foreach ( $files as $file ) {
+				$mtime = @filemtime( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				// A failed stat must mean "leave it alone", never "delete it".
+				// filemtime() returns false on a permissions problem or a race
+				// with a concurrent write, and treating that as "old" would reap
+				// an asset that pages in a full-page cache still reference.
+				if ( false === $mtime || $mtime > $cutoff ) {
+					continue;
+				}
+				wp_delete_file( $file );
+				$deleted++;
+			}
+		}
+
+		return $deleted;
+	}
+
+	/**
 	 * Return the script suffix to use for frontend assets.
 	 *
 	 * Production loads `.min.js` when available. Development keeps the
@@ -721,12 +1035,7 @@ class Frontend {
 	 * @return string
 	 */
 	private function get_script_suffix( $asset_base ) {
-		if ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
-			return '';
-		}
-
-		$minified_path = plugin_dir_path( __FILE__ ) . $asset_base . '.min.js';
-		return file_exists( $minified_path ) ? '.min' : '';
+		return faz_asset_suffix( 'frontend/' . ltrim( $asset_base, '/' ) );
 	}
 
 	/**
@@ -1430,7 +1739,8 @@ class Frontend {
 						}
 					}
 					if ( $repaired ) {
-						update_option( $cache_key, $stored );
+						// autoload=false — keep the multi-KB template blob out of alloptions.
+						update_option( $cache_key, $stored, false );
 					}
 				}
 			}
@@ -1531,7 +1841,8 @@ class Frontend {
 				}
 			}
 			if ( $repaired ) {
-				update_option( $cache_key, $stored );
+				// autoload=false — keep the multi-KB template blob out of alloptions.
+				update_option( $cache_key, $stored, false );
 			}
 		}
 
@@ -2141,8 +2452,14 @@ class Frontend {
 		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
 
 		// Some payment SDKs are required outside checkout too (e.g. Stripe express buttons).
+		// The Instagram Feed exemption rides along here for the same reason it
+		// exists in get_provider_category_map(): the client-side interceptor is a
+		// SEPARATE list built from $this->providers, so exempting only the server
+		// map would leave the browser re-blocking the very script the server just
+		// allowed — the pattern reaching the page in _fazConfig is enough to do it.
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
 		foreach ( array_keys( $this->providers ) as $pattern ) {
-			if ( $this->is_always_allowed_gateway_pattern( $pattern ) ) {
+			if ( $this->is_always_allowed_gateway_pattern( $pattern ) || isset( $sb_exempt_patterns[ $pattern ] ) ) {
 				unset( $this->providers[ $pattern ] );
 			}
 		}
@@ -2764,17 +3081,42 @@ class Frontend {
 		// `<noscript>` blocks for JS-disabled visitors; those still need to be
 		// consent-gated server-side. process_noscript_tag rewrites the
 		// `<noscript>` block's inner content (img src → data-faz-src + data-faz-
-		// category) but preserves the enclosing `<noscript>` wrapper, so the
-		// stash pass below still finds the (now-processed) block and protects
-		// it from the iframe filter. Running this BEFORE the stash keeps the
-		// matcher's `<noscript>` lookup productive — the original placement
-		// AFTER the stash made this step dead code because every `<noscript>`
-		// had already been replaced with a `__FAZ_NOSCRIPT_STASH_N__` marker.
+		// category) while preserving the enclosing `<noscript>` wrapper, so the
+		// stash that follows still sees a well-formed block and protects it
+		// from the iframe filter.
+		//
+		// Single merged pass (was two full-document traversals): each block is
+		// pixel-processed AND stashed in the same callback. The ordering inside
+		// that callback is what matters — gate first, stash second. Stashing
+		// first is what the original two-pass version got wrong, and it made
+		// the gating dead code, because by then every `<noscript>` had already
+		// become a `__FAZ_NOSCRIPT_STASH_N__` marker with nothing left to match.
+		//
+		// Stashing protects <noscript> content from the script/iframe/link
+		// filters below: it only renders when JS is disabled; visitors with JS
+		// (>99% case) never see it. Without stashing, an iframe wrapped in
+		// <noscript> (e.g. theme's "video fallback for non-JS users") would be
+		// rewritten by process_iframe_tag into a consent placeholder that lives
+		// forever in the DOM as a 0×0 phantom — invisible to humans, but found
+		// by document.querySelector. The phantom collides with
+		// `_fazAddPlaceholder()` placeholders for legitimate dynamic iframes
+		// and breaks any `.first()`-style locator. Restored after all filters.
+		//
+		// The pixel processing (Meta Pixel, GA, Adobe Analytics <img> beacons
+		// for JS-disabled visitors) must still be consent-gated server-side:
+		// process_noscript_tag rewrites the block's inner content (img src →
+		// data-faz-src + data-faz-category) but preserves the enclosing
+		// <noscript> wrapper, and it is that PROCESSED block that gets stashed
+		// and later restored.
+		$noscript_stash = array();
 		if ( false !== stripos( $html, '<noscript' ) ) {
 			$result = preg_replace_callback(
 				'#<noscript\b[^>]*>(.*?)</noscript>#is',
-				function ( $m ) use ( $providers, $blocked_categories ) {
-					return $this->process_noscript_tag( $m, $providers, $blocked_categories );
+				function ( $m ) use ( $providers, $blocked_categories, &$noscript_stash ) {
+					$processed              = $this->process_noscript_tag( $m, $providers, $blocked_categories );
+					$key                    = '__FAZ_NOSCRIPT_STASH_' . count( $noscript_stash ) . '__';
+					$noscript_stash[ $key ] = $processed;
+					return $key;
 				},
 				$html
 			);
@@ -2782,35 +3124,6 @@ class Frontend {
 				$pcre_failed = true;
 			} else {
 				$html = $result;
-			}
-		}
-
-		// Stash <noscript> blocks BEFORE running the script/iframe/link filters.
-		// <noscript> content only renders when JS is disabled; visitors with JS
-		// (>99% case) never see it. Without stashing, an iframe wrapped in
-		// <noscript> (e.g. theme's "video fallback for non-JS users") would be
-		// rewritten by process_iframe_tag into a consent placeholder that lives
-		// forever in the DOM as a 0×0 phantom — invisible to humans, but found
-		// by document.querySelector. The phantom collides with
-		// `_fazAddPlaceholder()` placeholders for legitimate dynamic iframes
-		// and breaks any `.first()`-style locator. Restore after all filters.
-		// (The tracking-pixel pass above runs FIRST so its noscript matcher is
-		// not defeated by the markers this stash introduces.)
-		$noscript_stash = array();
-		if ( false !== stripos( $html, '<noscript' ) ) {
-			$stash_result = preg_replace_callback(
-				'#<noscript\b[^>]*>.*?</noscript>#is',
-				function ( $m ) use ( &$noscript_stash ) {
-					$key = '__FAZ_NOSCRIPT_STASH_' . count( $noscript_stash ) . '__';
-					$noscript_stash[ $key ] = $m[0];
-					return $key;
-				},
-				$html
-			);
-			if ( null === $stash_result ) {
-				$pcre_failed = true;
-			} else {
-				$html = $stash_result;
 			}
 		}
 
@@ -2954,6 +3267,13 @@ class Frontend {
 
 		$id = $this->extract_tag_attr( $attrs, 'id' );
 		if ( $this->is_own_inline_script_id( $id ) ) {
+			return $full;
+		}
+		// Never inspect the plugin's own EXTERNAL script tags either (core
+		// prints them as id="<handle>-js"): the static-config asset and the
+		// main bundle must be immune to pattern collisions by construction,
+		// not by luck of the provider list's contents.
+		if ( $this->is_own_asset_tag_id( $id, '-js' ) ) {
 			return $full;
 		}
 		// wp_localize_script / wp_set_script_translations payloads carry only
@@ -3176,25 +3496,156 @@ class Frontend {
 			return $full;
 		}
 
-		$matched_category = $this->match_script_to_provider( '', $content, $providers );
-		if ( ! $matched_category || ! in_array( $matched_category, $blocked_categories, true ) ) {
-			$svc_blocked = $this->check_per_service_blocking( '', $content );
-			if ( true !== $svc_blocked ) {
-				return $full;
-			}
-			if ( ! $matched_category ) {
-				$matched_category = 'functional';
-			}
-		} else {
-			$svc_blocked = $this->check_per_service_blocking( '', $content );
-			if ( false === $svc_blocked ) {
-				return $full;
+		// Pass 1 — code-signature patterns (fbq(, gtag …) against the raw text.
+		// Kept in its own variable: a content-level hit means the block as a
+		// whole is a tracking fallback, which the rewrite below uses to decide
+		// whether unmatched sibling tags travel with it.
+		$content_matched = $this->match_script_to_provider( '', $content, $providers );
+
+		// Pass 2 — URL-fragment patterns against each embedded resource's OWN
+		// tag attributes. The content-only call above carries no src haystack
+		// (attrs are empty), so URL patterns like "www.facebook.com/tr" never
+		// gated <noscript> pixel beacons — the very tags this pass exists for.
+		// Match each <img>/<iframe> exactly the way the script/iframe filters
+		// match regular tags, skipping whitelisted resources.
+		// Resolve each tag's own category once, here, and keep it alongside the
+		// tag. Both the gating decision below and the category label written
+		// onto each rewritten tag need it, and matching twice invites the two to
+		// disagree.
+		// EVERY match is kept, in document order, whitelisted ones included and
+		// flagged. The rewrite below re-walks the same pattern with a counter, so
+		// the two passes have to see the same list or the indices drift.
+		$embedded_tags  = array();
+		$tag_whitelisted = array();
+		$tag_categories = array();
+		$tag_svcs       = array();
+		if ( preg_match_all( '#<(?:img|iframe)\b[^>]*#i', $content, $embedded_matches ) ) {
+			foreach ( $embedded_matches[0] as $embedded_tag ) {
+				$whitelisted       = $this->is_whitelisted( $embedded_tag, '' );
+				$embedded_tags[]   = $embedded_tag;
+				$tag_whitelisted[] = $whitelisted;
+				$tag_categories[]  = $whitelisted ? '' : $this->match_script_to_provider( $embedded_tag, '', $providers );
+				$tag_svcs[]        = $whitelisted ? null : $this->check_per_service_blocking( $embedded_tag, '' );
 			}
 		}
 
-		// Block tracking fallback resources by replacing src → data-faz-src inside the noscript.
-		$blocked_content = preg_replace( '/(<(?:img|iframe)\b[^>]*)(\s)src\s*=/i', '$1$2data-faz-src=', $content );
-		$blocked_content = preg_replace( '/(<(?:img|iframe)\b)/i', '$1 data-faz-category="' . esc_attr( $matched_category ) . '"', $blocked_content );
+		// The block's own text can carry a per-service decision too (a service
+		// named in the fallback markup). It is inherited by a resource that has
+		// no decision of its own ONLY when it is restrictive.
+		//
+		// Letting a block-level svc:yes stand in for an undecided resource is the
+		// same aggregation bypass this method was rewritten to remove, just one
+		// level up: a service named in the block text and granted would release a
+		// sibling pixel whose own category is denied, and that sibling would load
+		// before consent for a visitor without JavaScript. Permission does not
+		// travel between resources; denial may, because erring restrictive at
+		// worst blocks something the visitor allowed and never the reverse.
+		$content_svc = $this->check_per_service_blocking( '', $content );
+
+		// Decide EVERY resource on its own terms. Aggregating the block into one
+		// verdict — one category, one service decision — was an authorisation
+		// bypass in both layers: an explicit svc:yes on the first resource made
+		// the whole block "allowed", so a second resource in a denied category
+		// and with no decision of its own kept its live src and loaded as soon as
+		// the page rendered without JavaScript. Precedence per resource is
+		// svc:no → gate, svc:yes → leave alone, no decision → its category
+		// decides, falling back to the block-level signature that marks the whole
+		// <noscript> as a tracking fallback.
+		$gate = array();
+		foreach ( array_keys( $embedded_tags ) as $index ) {
+			if ( ! empty( $tag_whitelisted[ $index ] ) ) {
+				$gate[ $index ] = false;
+				continue;
+			}
+			// The resource's OWN decision, either way.
+			if ( null !== $tag_svcs[ $index ] ) {
+				$gate[ $index ] = ( true === $tag_svcs[ $index ] );
+				continue;
+			}
+			// No decision of its own: a restrictive block-level one still binds,
+			// a permissive one does not (see above).
+			if ( true === $content_svc ) {
+				$gate[ $index ] = true;
+				continue;
+			}
+			$cat            = $tag_categories[ $index ] ? $tag_categories[ $index ] : $content_matched;
+			$gate[ $index ] = ( $cat && in_array( $cat, $blocked_categories, true ) );
+		}
+
+		if ( ! in_array( true, $gate, true ) ) {
+			return $full;
+		}
+
+		// Rewrite ONLY the tags this pass actually resolved as blockable.
+		//
+		// A blanket preg_replace over $content would neutralise every <img> and
+		// <iframe> in the block, including the ones $embedded_tags deliberately
+		// excludes because the administrator whitelisted them, and any unrelated
+		// resource that matches no provider at all — a static logo sitting in the
+		// same <noscript> as a Meta pixel would stop loading and be labelled with
+		// the pixel's category. Every other filter in this class treats the
+		// whitelist as binding, and this one must too.
+		//
+		// The blast radius of getting this wrong grew with the gating fix above:
+		// matching used to see only the block's text, so blocking rarely
+		// triggered here. Now that each embedded tag is matched properly, it
+		// triggers often, which turns a latent over-block into a routine one.
+		$blocked_content = $content;
+		// Rewrite in place, by position, with a counter — never by substring.
+		//
+		// str_replace() on the matched fragment replaced EVERY occurrence, and
+		// the pattern captures an opening tag WITHOUT its closing ">", so a
+		// gated `<img src="a.gif"` is a literal prefix of an allowed
+		// `<img src="a.gif" alt="logo">`. The allowed tag was rewritten too,
+		// inheriting the gated one's category, and a whitelisted resource the
+		// admin had deliberately exempted could be neutralised by a sibling it
+		// merely resembles. Walking the same pattern again with an index makes
+		// each match its own target and the aliasing unrepresentable.
+		$rewrite_index   = -1;
+		$blocked_content = preg_replace_callback(
+			'#<(?:img|iframe)\b[^>]*#i',
+			function ( $m ) use ( &$rewrite_index, $gate, $tag_categories, $content_matched ) {
+				$rewrite_index++;
+				$tag = $m[0];
+				if ( empty( $gate[ $rewrite_index ] ) ) {
+					return $tag;
+				}
+				// Label each resource with ITS OWN category where one is known.
+				// Falling back to a single block-level category for every tag
+				// mislabels a block that mixes providers — a Meta pixel and a
+				// YouTube embed would both be reported under whichever matched
+				// first, and the visitor's per-category choice would be applied
+				// to the wrong one. A resource gated purely by a per-service
+				// decision may match no provider at all; 'functional' keeps it
+				// revealable rather than stranding it under a category nothing
+				// will ever grant.
+				$label_category = isset( $tag_categories[ $rewrite_index ] ) ? $tag_categories[ $rewrite_index ] : '';
+				if ( ! $label_category ) {
+					$label_category = $content_matched ? $content_matched : 'functional';
+				}
+				$rewritten = preg_replace( '/(\s)src\s*=/i', '$1data-faz-src=', $tag, 1 );
+				// preg_replace returns null on a PCRE failure and the subject
+				// unchanged when nothing matched; neither is a tag to rewrite.
+				if ( null === $rewritten || $rewritten === $tag ) {
+					return $tag;
+				}
+				$rewritten = preg_replace(
+					'/^(<(?:img|iframe)\b)/i',
+					'$1 data-faz-category="' . esc_attr( $label_category ) . '"',
+					$rewritten,
+					1
+				);
+				return null === $rewritten ? $tag : $rewritten;
+			},
+			$content
+		);
+		if ( null === $blocked_content ) {
+			// PCRE failure — serve the block untouched rather than a mangled one.
+			return $full;
+		}
+		if ( $blocked_content === $content ) {
+			return $full;
+		}
 		return str_replace( $content, $blocked_content, $full );
 	}
 
@@ -3210,6 +3661,12 @@ class Frontend {
 		$attrs = $m[1];
 		$full  = $m[0];
 
+		// Own stylesheets (core prints them as id="<handle>-css") — e.g. the
+		// content-hashed banner CSS served from uploads — must never be gated
+		// by provider patterns.
+		if ( $this->is_own_asset_tag_id( $this->extract_tag_attr( $attrs, 'id' ), '-css' ) ) {
+			return $full;
+		}
 		if ( $this->is_whitelisted( $attrs, '' ) ) {
 			return $full;
 		}
@@ -3434,7 +3891,13 @@ class Frontend {
 	 * @return string
 	 */
 	private function extract_tag_attr( $attrs, $name ) {
-		if ( preg_match( '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i', $attrs, $matches ) ) {
+		// Called for every attribute of every tag the output buffer inspects —
+		// build each attribute's pattern string once per request.
+		static $patterns = array();
+		if ( ! isset( $patterns[ $name ] ) ) {
+			$patterns[ $name ] = '/(?<![a-z0-9\-])' . preg_quote( $name, '/' ) . '\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i';
+		}
+		if ( preg_match( $patterns[ $name ], $attrs, $matches ) ) {
 			for ( $i = 1; $i <= 3; $i++ ) {
 				if ( isset( $matches[ $i ] ) && '' !== $matches[ $i ] ) {
 					return $matches[ $i ];
@@ -3805,7 +4268,15 @@ class Frontend {
 		foreach ( $catalog as $key => $gateway ) {
 			// Strictly necessary on WooCommerce checkout/cart; otherwise only when
 			// the admin opted this gateway in.
-			if ( $on_checkout || ! empty( $enabled[ $key ] ) ) {
+			//
+			// Read through the sanitiser rather than `! empty()`. The write path
+			// coerces properly now, but an install that stored the string "false"
+			// or "no" before that fix keeps it, and `! empty( "false" )` is true —
+			// so the very install this fix exists for would go on exempting the
+			// gateway from consent blocking after upgrading. Sanitising here
+			// closes it for existing data without a migration, and a migration
+			// would also have to win a version race with two other open branches.
+			if ( $on_checkout || ( isset( $enabled[ $key ] ) && \faz_sanitize_bool_strict( $enabled[ $key ] ) ) ) {
 				$patterns = array_merge( $patterns, $gateway['patterns'] );
 			}
 		}
@@ -4180,20 +4651,43 @@ class Frontend {
 		$inline              = $match_context['content'];
 		$is_data_uri_payload = ! empty( $match_context['is_data_uri_payload'] );
 
-		$matched_service_ids = array();
-		foreach ( $pattern_map as $pattern => $service_ids ) {
-			if ( empty( $pattern ) ) {
-				continue;
+		// Same matching strategy as match_script_to_provider() — see the
+		// comment there. Metadata built once per request off the memoized map.
+		if ( null === $this->service_match_meta_cache ) {
+			$service_meta = array();
+			foreach ( $pattern_map as $pattern => $service_ids ) {
+				if ( empty( $pattern ) ) {
+					continue;
+				}
+				$pattern        = (string) $pattern;
+				$service_meta[] = array(
+					'pattern'     => $pattern,
+					'lower'       => strtolower( $pattern ),
+					'is_url'      => false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' ),
+					'service_ids' => $service_ids,
+				);
 			}
-			$is_url_pattern = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
-			$matched        = ( '' !== $url && $this->provider_url_pattern_matches( $url, $pattern ) );
-			if ( ! $matched && ( ! $is_url_pattern || $is_data_uri_payload ) ) {
-				$matched = $is_url_pattern
-					? $this->provider_url_pattern_matches( $inline, $pattern )
-					: false !== stripos( $inline, $pattern );
+			$this->service_match_meta_cache = $service_meta;
+		}
+
+		$url_lc    = strtolower( $url );
+		$inline_lc = null; // Lazily lowered — only decoded data: URI payloads need it.
+
+		$matched_service_ids = array();
+		foreach ( $this->service_match_meta_cache as $m ) {
+			$matched = ( '' !== $url_lc && $this->provider_pattern_matches_lc( $url_lc, $m['lower'] ) );
+			if ( ! $matched ) {
+				if ( ! $m['is_url'] ) {
+					$matched = false !== stripos( $inline, $m['pattern'] );
+				} elseif ( $is_data_uri_payload ) {
+					if ( null === $inline_lc ) {
+						$inline_lc = strtolower( $inline );
+					}
+					$matched = $this->provider_pattern_matches_lc( $inline_lc, $m['lower'] );
+				}
 			}
 			if ( $matched ) {
-				foreach ( $service_ids as $service_id ) {
+				foreach ( $m['service_ids'] as $service_id ) {
 					$matched_service_ids[ $service_id ] = true;
 				}
 			}
@@ -4394,12 +4888,28 @@ class Frontend {
 		// since the gateway match is substring-based and a generic pattern like
 		// "payment" must not be silently exempted because it is a substring of
 		// "stripe-payment".
+		// 5b. Same treatment for Instagram Feed's own patterns when it is limiting
+		// itself. Exempting the container (process_social_embeds) without this was
+		// a half measure that produced the worst of the three outcomes: the feed's
+		// <div> rendered while its first-party script stayed blocked, so the
+		// visitor got an empty box with no placeholder to explain it — worse than
+		// either blocking the feed or letting it work. With the GDPR setting on
+		// Yes the plugin serves local copies and contacts nothing, so its script
+		// is first-party and declares no cookies; there is nothing left to gate.
+		// Pattern list read from the provider database rather than repeated here,
+		// so the two cannot drift apart.
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
+
 		foreach ( array_keys( $map ) as $p ) {
 			$is_explicit_rule = isset( $custom_patterns[ $p ] ) || ! array_key_exists( $p, $pre_filter_map );
 			if ( $is_explicit_rule ) {
 				continue;
 			}
 			if ( $this->is_always_allowed_gateway_pattern( $p ) ) {
+				unset( $map[ $p ] );
+				continue;
+			}
+			if ( isset( $sb_exempt_patterns[ $p ] ) ) {
 				unset( $map[ $p ] );
 			}
 		}
@@ -4519,31 +5029,108 @@ class Frontend {
 		$inline              = $match_context['content'];
 		$is_data_uri_payload = ! empty( $match_context['is_data_uri_payload'] );
 
-		foreach ( $providers as $pattern => $category ) {
-			if ( empty( $pattern ) ) {
-				continue;
-			}
+		// Hot loop: runs for every <script>/<iframe>/<style>/<link> in the page
+		// against ~1,000 patterns (~840 URL fragments + ~200 code signatures).
+		// Exact-semantics optimizations, benchmarked on PHP 8.4:
+		//   1. Pattern metadata (lowercased form, URL-vs-signature class) is
+		//      precomputed once per request instead of per tag×pattern.
+		//   2. The URL haystack (short) is lowercased ONCE per tag and the 840
+		//      URL patterns matched with strpos() — measurably faster than
+		//      per-pattern stripos(), and strpos(lc(h), lc(n)) is
+		//      byte-identical to stripos(h, n).
+		//   3. Inline content keeps per-pattern stripos(): PHP 8's stripos is
+		//      as fast as strpos on large haystacks, so pre-lowering a big
+		//      inline blob per tag would be pure overhead for the ~200
+		//      signature patterns.
+		$meta      = $this->get_provider_match_meta( $providers );
+		$url_lc    = strtolower( $url );
+		$inline_lc = null; // Lazily lowered — only decoded data: URI payloads need it.
+
+		foreach ( $meta as $m ) {
 			// Patterns that look like URL fragments (contain '.' or '/') are designed
 			// to match tracker domains in src/href attributes.  Applying them to the
 			// inline text body causes false positives: config scripts that merely
 			// reference a tracker domain in their data (e.g. Rank Math's rankMath.links
 			// object contains youtu.be, facebook.com, etc.) would be incorrectly blocked.
-			$is_url_pattern = false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' );
-			if ( '' !== $url && $this->provider_url_pattern_matches( $url, $pattern ) ) {
-				return $category;
+			if ( '' !== $url_lc && $this->provider_pattern_matches_lc( $url_lc, $m['lower'] ) ) {
+				return $m['category'];
 			}
-			if ( ! $is_url_pattern || $is_data_uri_payload ) {
+			if ( ! $m['is_url'] ) {
 				// Code-signature patterns (fbq(, gtag, _ga …) match inline content.
+				if ( false !== stripos( $inline, $m['pattern'] ) ) {
+					return $m['category'];
+				}
+			} elseif ( $is_data_uri_payload ) {
 				// URL-fragment patterns may also match decoded data: script payloads
 				// because that payload is the executable source, not page data.
-				$matched_inline = $is_url_pattern
-					? $this->provider_url_pattern_matches( $inline, $pattern )
-					: false !== stripos( $inline, $pattern );
-				if ( $matched_inline ) {
-					return $category;
+				if ( null === $inline_lc ) {
+					$inline_lc = strtolower( $inline );
+				}
+				if ( $this->provider_pattern_matches_lc( $inline_lc, $m['lower'] ) ) {
+					return $m['category'];
 				}
 			}
 		}
+		return false;
+	}
+
+	/**
+	 * Precompute per-pattern matching metadata for the provider map.
+	 *
+	 * get_provider_category_map() is memoized per Frontend instance and every
+	 * internal caller passes that same filtered map. Return the built table
+	 * immediately: hashing all ~1,000 keys here on every inspected HTML tag would
+	 * recreate the O(tags × patterns) traversal this cache exists to remove.
+	 *
+	 * @param array $providers Provider map [ pattern => category ].
+	 * @return array[] Ordered list of { lower, is_url, category }.
+	 */
+	private function get_provider_match_meta( $providers ) {
+		if ( null !== $this->provider_match_meta_cache ) {
+			return $this->provider_match_meta_cache;
+		}
+		$meta = array();
+		foreach ( $providers as $pattern => $category ) {
+			if ( empty( $pattern ) ) {
+				continue;
+			}
+			$pattern = (string) $pattern;
+			$meta[]  = array(
+				'pattern'  => $pattern,
+				'lower'    => strtolower( $pattern ),
+				'is_url'   => false !== strpos( $pattern, '.' ) || false !== strpos( $pattern, '/' ),
+				'category' => $category,
+			);
+		}
+		$this->provider_match_meta_cache = $meta;
+		return $meta;
+	}
+
+	/**
+	 * provider_url_pattern_matches() for pre-lowercased inputs.
+	 *
+	 * Identical semantics (stripos ≡ strpos over lowercased operands, same
+	 * tolower table) without stripos's per-call haystack copy. The boundary
+	 * check is case-independent — it only tests separator characters.
+	 *
+	 * @param string $target_lc  Lowercased URL-like haystack.
+	 * @param string $pattern_lc Lowercased provider pattern.
+	 * @return bool
+	 */
+	private function provider_pattern_matches_lc( $target_lc, $pattern_lc ) {
+		if ( '' === $target_lc || '' === $pattern_lc ) {
+			return false;
+		}
+
+		$offset = 0;
+		$length = strlen( $pattern_lc );
+		while ( false !== ( $index = strpos( $target_lc, $pattern_lc, $offset ) ) ) {
+			if ( $this->has_provider_boundary( $target_lc, $index, $length ) ) {
+				return true;
+			}
+			$offset = $index + 1;
+		}
+
 		return false;
 	}
 
@@ -5364,6 +5951,25 @@ class Frontend {
 	}
 
 	/**
+	 * Whether a rendered asset tag id ("<handle>-js" / "<handle>-css")
+	 * belongs to one of this plugin's own enqueued handles.
+	 *
+	 * @param string $id     Tag id attribute value.
+	 * @param string $suffix Core-appended suffix ('-js' or '-css').
+	 * @return bool
+	 */
+	private function is_own_asset_tag_id( $id, $suffix ) {
+		if ( ! is_string( $id ) || '' === $id || '' === $suffix ) {
+			return false;
+		}
+		$len = strlen( $suffix );
+		if ( strlen( $id ) <= $len || substr( $id, -$len ) !== $suffix ) {
+			return false;
+		}
+		return $this->is_own_script_handle( substr( $id, 0, -$len ) );
+	}
+
+	/**
 	 * Detect WP-generated inline script IDs owned by this plugin.
 	 *
 	 * Core appends these suffixes when printing `wp_localize_script()`,
@@ -5666,18 +6272,29 @@ class Frontend {
 	 * @return mixed
 	 */
 	public function litespeed_exclude_own_scripts( $excludes ) {
-		$pattern = 'plugins/faz-cookie-manager/';
+		// Two fragments, because the plugin's assets no longer all live under
+		// plugins/: the content-hashed banner CSS and config JS are served from
+		// the uploads directory. The path-based exclusion is the fallback for
+		// when the data-no-optimize / data-no-defer attributes are stripped, and
+		// it stopped covering those two files when they moved. Matched on
+		// `faz-cookie-manager/assets/` rather than a full uploads path so a site
+		// with a renamed uploads directory is still covered.
+		$patterns = array( 'plugins/faz-cookie-manager/', 'faz-cookie-manager/assets/' );
 		if ( is_string( $excludes ) ) {
-			if ( false !== strpos( $excludes, $pattern ) ) {
-				return $excludes;
+			foreach ( $patterns as $pattern ) {
+				if ( false === strpos( $excludes, $pattern ) ) {
+					$excludes = trim( $excludes . "\n" . $pattern );
+				}
 			}
-			return trim( $excludes . "\n" . $pattern );
+			return $excludes;
 		}
 		if ( ! is_array( $excludes ) ) {
 			$excludes = array();
 		}
-		if ( ! in_array( $pattern, $excludes, true ) ) {
-			$excludes[] = $pattern;
+		foreach ( $patterns as $pattern ) {
+			if ( ! in_array( $pattern, $excludes, true ) ) {
+				$excludes[] = $pattern;
+			}
 		}
 		return $excludes;
 	}
@@ -5745,9 +6362,17 @@ class Frontend {
 		if ( ! is_array( $excludes ) ) {
 			$excludes = array();
 		}
-		$pattern = '/wp-content/plugins/faz-cookie-manager/(.*)';
-		if ( ! in_array( $pattern, $excludes, true ) ) {
-			$excludes[] = $pattern;
+		// Second pattern for the content-hashed assets now served from uploads —
+		// see litespeed_exclude_own_scripts() for why the plugin-directory
+		// pattern alone no longer covers them.
+		$patterns = array(
+			'/wp-content/plugins/faz-cookie-manager/(.*)',
+			'faz-cookie-manager/assets/(.*)',
+		);
+		foreach ( $patterns as $pattern ) {
+			if ( ! in_array( $pattern, $excludes, true ) ) {
+				$excludes[] = $pattern;
+			}
 		}
 		return $excludes;
 	}
@@ -6462,6 +7087,133 @@ class Frontend {
 	}
 
 	/**
+	 * Admin URL of Instagram Feed's own settings screen.
+	 *
+	 * Where its GDPR option lives, so a notice can send the site owner to the
+	 * control that actually decides the behaviour instead of describing it.
+	 * The slug is pinned by a test against the plugin's own registration, since
+	 * a link to a page that does not exist is worse than no link.
+	 *
+	 * @since 1.26.0
+	 * @return string
+	 */
+	public static function smash_balloon_settings_url() {
+		return function_exists( 'admin_url' )
+			? admin_url( 'admin.php?page=' . self::SMASH_BALLOON_SETTINGS_SLUG )
+			: '';
+	}
+
+	/**
+	 * Blocking patterns to drop while Instagram Feed is limiting itself.
+	 *
+	 * Exempting the container alone was a half measure that produced the worst of
+	 * the three possible outcomes: the feed's `<div>` rendered while its script
+	 * stayed blocked, so the visitor got an empty box and not even a placeholder
+	 * to explain it — worse than blocking the feed outright, and worse than
+	 * letting it work. With the GDPR setting on Yes the plugin serves local
+	 * copies and contacts nothing, so its script is first-party and its provider
+	 * entry declares no cookies; there is nothing left to gate.
+	 *
+	 * Two provider entries cover the same asset and BOTH must go, which is why
+	 * this is derived rather than listed: `smash-balloon-instagram` owns
+	 * `sb-instagram`, while the generic `instagram` entry carries
+	 * `plugins/instagram-feed/js/` — a path pattern matching the very same
+	 * first-party script. Dropping only the first leaves the second blocking it,
+	 * which is exactly the empty-box state described above.
+	 *
+	 * @since 1.26.0
+	 * @return array Map of pattern => true; empty when the accommodation is off.
+	 */
+	public static function smash_balloon_exempt_patterns() {
+		if ( ! self::smash_balloon_self_restricts() ) {
+			return array();
+		}
+		$exempt = array();
+		foreach ( Known_Providers::get_all() as $service_id => $service ) {
+			$patterns = isset( $service['patterns'] ) && is_array( $service['patterns'] ) ? $service['patterns'] : array();
+			foreach ( $patterns as $pattern ) {
+				// Instagram Feed's own assets, wherever the provider database
+				// files them: its dedicated entry, plus any pattern addressing
+				// the plugin's own directory. That directory name is the wp.org
+				// slug, so it is as stable an anchor as the provider id itself.
+				//
+				// `-pro` is matched too, and deliberately. Instagram Feed Pro is
+				// the same product installed under its own slug: it defines the
+				// same SBIVER and reads the same sb_instagram_settings, so the
+				// accommodation applies identically — and the provider database
+				// carries a separate `plugins/instagram-feed-pro/js/` pattern
+				// that would otherwise go on blocking the same first-party
+				// script on exactly the sites that paid for it.
+				if ( 'smash-balloon-instagram' === $service_id || preg_match( '#instagram-feed(-pro)?/#i', (string) $pattern ) ) {
+					$exempt[ $pattern ] = true;
+				}
+			}
+		}
+		return $exempt;
+	}
+
+	/**
+	 * Whether Smash Balloon's Instagram Feed already restricts itself.
+	 *
+	 * Instagram Feed has its own GDPR setting, `gdpr` in the
+	 * `sb_instagram_settings` option, with three values. Only `yes` makes it
+	 * self-restrict: SB_Instagram_GDPR_Integrations::blocking_cdn() then returns
+	 * true unconditionally, the feed serves local image copies, and no request
+	 * reaches Instagram's CDN at all. Gating that again adds nothing.
+	 *
+	 * Everything else keeps our blocking, and `auto` — the DEFAULT — is the case
+	 * that matters most. Instagram Feed's automatic mode does not detect an
+	 * arbitrary consent plugin: gdpr_plugins_active() checks a hardcoded list of
+	 * nine specific ones by class, constant or function, and this plugin is not
+	 * among them (as a de-branded fork it deliberately defines no CKY_* constant).
+	 * On `auto` it therefore concludes no consent plugin is present and restricts
+	 * nothing, which makes our block the only thing holding that feed back.
+	 *
+	 * Plugin inactive, option missing, key absent or unreadable: block. A signal
+	 * we cannot read is not permission to load a tracker.
+	 *
+	 * @since 1.26.0
+	 * @return bool True when Instagram Feed is handling it and we should not.
+	 */
+	public static function smash_balloon_self_restricts() {
+		// Guarded so the method degrades to "block" in any context where these
+		// are unavailable — standalone unit harnesses stub only what the code
+		// they exercise needs, and an undefined function here would fatal a
+		// caller that has nothing to do with Instagram.
+		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
+			return false;
+		}
+		// The option outlives the plugin. Deactivating or deleting Instagram
+		// Feed leaves `sb_instagram_settings` behind in wp_options, so a stale
+		// `gdpr=yes` from an install that is no longer running would read as
+		// "somebody else is handling this" when nobody is — and standing down
+		// on that would ship the very tracker this accommodation assumes is
+		// already contained. Require a signal that the code implementing the
+		// limitation is loaded: either the plugin's version constant or the
+		// class whose blocking_cdn() is the behaviour being deferred to.
+		// Both vanish with the plugin and neither can be left behind in the
+		// database, which is exactly the property the option lacks.
+		if ( ! defined( 'SBIVER' ) && ! class_exists( 'SB_Instagram_GDPR_Integrations', false ) ) {
+			return false;
+		}
+		if ( ! function_exists( 'get_option' ) ) {
+			return false;
+		}
+		$settings = get_option( 'sb_instagram_settings', array() );
+		if ( ! is_array( $settings ) || ! isset( $settings['gdpr'] ) ) {
+			return false;
+		}
+		// Only a string can carry the documented value. A corrupted option
+		// holding an array or an object would raise a conversion warning or
+		// throw outright on the cast, turning a malformed setting into a
+		// frontend error — so reject the type instead of normalising it.
+		if ( ! is_string( $settings['gdpr'] ) ) {
+			return false;
+		}
+		return 'yes' === strtolower( trim( $settings['gdpr'] ) );
+	}
+
+	/**
 	 * Process social embed containers (Facebook, Instagram, Twitter/X).
 	 *
 	 * Social embeds use specific CSS class patterns that rely on external
@@ -6518,6 +7270,16 @@ class Frontend {
 					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
 						return $m[0];
 					}
+					// Honour the admin's exemptions here too. Social containers
+					// were the one blocking path that consulted neither the
+					// whitelist nor class="faz-skip", so a site owner who wanted
+					// one embed through had no way to say so — reported on wp.org
+					// by somebody who tried exactly that with the container id and
+					// class, and got nothing. Every other filter in this class
+					// treats those as binding; this one now does too.
+					if ( $this->is_whitelisted( $m[2], '' ) ) {
+						return $m[0];
+					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
 					// Placeholder before + hidden original element.
 					$blocked = $m[1] . $m[2] . ' data-faz-category="' . esc_attr( $category ) . '">';
@@ -6545,6 +7307,10 @@ class Frontend {
 		$social_ids = array(
 			'sb_instagram' => array( 'service_id' => 'smash-balloon-instagram', 'label' => 'Instagram', 'category' => 'marketing' ),
 		);
+		// Stand down when Instagram Feed already removed the third-party surface
+		// itself. Blocking a feed that makes no third-party request protects
+		// nobody and costs the visitor a placeholder they must click for nothing.
+		$sb_self_restricts = self::smash_balloon_self_restricts();
 
 		foreach ( $social_ids as $id_prefix => $info ) {
 			if ( false === stripos( $content, $id_prefix ) ) {
@@ -6553,6 +7319,19 @@ class Frontend {
 
 			$category     = $info['category'];
 			$should_block = in_array( $category, $blocked_categories, true );
+
+			// Applied here, inside the loop, rather than by dropping the entry
+			// before it: dropping it would also skip the per-service check
+			// below, so a visitor who explicitly denied smash-balloon-instagram
+			// would get the feed anyway while the preference-centre toggle
+			// showed it off. An explicit denial is a stronger and more specific
+			// signal than an inferred redundancy, and the rule everywhere else
+			// in this plugin is that the most restrictive explicit answer wins.
+			// So this only clears the CATEGORY-level block, and leaves the
+			// per-service decision free to put it back.
+			if ( $sb_self_restricts && 'smash-balloon-instagram' === $info['service_id'] ) {
+				$should_block = false;
+			}
 
 			// Per-service consent check: override category-level decision.
 			$service_consent = $this->get_service_consent();
@@ -6577,6 +7356,16 @@ class Frontend {
 				function ( $m ) use ( $category, $info ) {
 					// Skip if already processed.
 					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
+						return $m[0];
+					}
+					// Honour the admin's exemptions here too. Social containers
+					// were the one blocking path that consulted neither the
+					// whitelist nor class="faz-skip", so a site owner who wanted
+					// one embed through had no way to say so — reported on wp.org
+					// by somebody who tried exactly that with the container id and
+					// class, and got nothing. Every other filter in this class
+					// treats those as binding; this one now does too.
+					if ( $this->is_whitelisted( $m[2], '' ) ) {
 						return $m[0];
 					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );

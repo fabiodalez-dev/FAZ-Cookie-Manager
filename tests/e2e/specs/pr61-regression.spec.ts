@@ -492,7 +492,11 @@ test.describe.serial('PR #61 regressions', () => {
 			const html = await page.content();
 			expect(html).toContain('var _fazGsk = true;');
 
-			await page.waitForFunction(() => Array.from(document.scripts).some((script) => script.src.includes('/frontend/js/wca.js')), undefined, { timeout: 10_000 });
+			// Match the bridge whether or not it is minified. This branch now
+			// enqueues js/wca<suffix>.js, so pinning the unminified name asserted
+			// the build pipeline rather than the thing under test — which is that
+			// the WP Consent API bridge loads and reports consent.
+			await page.waitForFunction(() => Array.from(document.scripts).some((script) => /\/frontend\/js\/wca(\.min)?\.js/.test(script.src)), undefined, { timeout: 10_000 });
 			await driveConsent(page, 'all');
 			await page.waitForFunction(() => Array.isArray((window as any)._fazWpConsentCalls) && (window as any)._fazWpConsentCalls.length > 0, undefined, { timeout: 10_000 });
 
@@ -515,6 +519,52 @@ test.describe.serial('PR #61 regressions', () => {
 
 			const allErrors = [...consoleErrors, ...pageErrors].join('\n');
 			expect(allErrors).not.toContain('SyntaxError');
+		} finally {
+			restorePlugins(originalActive);
+		}
+	});
+	test('WP Consent API is told the consent of a RETURNING visitor, not only of one who just clicked', async ({ page }) => {
+		test.setTimeout(120_000);
+		const originalActive = listActivePluginFiles();
+		ensureFixturePlugin('faz-e2e-wp-consent-api-mock');
+
+		try {
+			// wca.js is 48 lines and its only entry point is the
+			// fazcookie_consent_update listener — it has no init path. The
+			// returning-visitor branch of _fazInitOperations used to fire no
+			// event at all, so on every page after the one where the visitor
+			// accepted, wp_set_consent() was never called and wp_consent_type
+			// was never defined. Consent-API-aware plugins therefore kept
+			// applying their own default (deny) to a visitor who had accepted.
+			// Reported on wp.org as "Call script for already accepted cookies".
+			await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
+			await page.waitForFunction(
+				() => Array.from(document.scripts).some((script) => script.src.includes('/frontend/js/wca')),
+				undefined,
+				{ timeout: 10_000 },
+			);
+			await driveConsent(page, 'all');
+
+			// Second page. No interaction — only the stored consent cookie.
+			await page.goto(`${WP_BASE}/?faz_returning=1`, { waitUntil: 'domcontentloaded' });
+			await page.waitForFunction(
+				() => Array.isArray((window as any)._fazWpConsentCalls) && (window as any)._fazWpConsentCalls.length > 0,
+				undefined,
+				{ timeout: 15_000 },
+			);
+
+			const bridge = await page.evaluate(() => ({
+				consentType: (window as any).wp_consent_type || '',
+				calls: (window as any)._fazWpConsentCalls || [],
+			}));
+
+			expect(bridge.consentType).toBe('optin');
+			expect(bridge.calls).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ key: 'marketing', status: 'allow' }),
+					expect.objectContaining({ key: 'statistics', status: 'allow' }),
+				]),
+			);
 		} finally {
 			restorePlugins(originalActive);
 		}

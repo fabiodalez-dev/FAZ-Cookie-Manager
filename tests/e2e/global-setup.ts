@@ -175,6 +175,18 @@ async function globalSetup(): Promise<void> {
           $faz_settings['geolocation'] = array();
         }
         $faz_settings['geolocation']['geo_targeting'] = false;
+        // Reset the age gate for the same reason, and it is the more damaging
+        // of the two. When enabled, an accept click is PARKED until the visitor
+        // ticks the affirmation box, so no consent cookie is written — every
+        // test that clicks Accept and waits for that cookie times out. It is
+        // set by settings-options-behavior and v170-features F15, both of which
+        // restore it correctly when they run to completion; an interrupted run
+        // (a killed suite, a crashed worker) leaves { enabled: true } behind and
+        // silently breaks accept-based specs across the whole instance from then
+        // on. Found exactly that way: nine specs failing on main and on a
+        // feature branch alike, all of them waiting for a cookie that a stale
+        // age gate was suppressing.
+        $faz_settings['age_gate'] = array( 'enabled' => false, 'min_age' => 16 );
         update_option( 'faz_settings', $faz_settings );
         delete_transient( 'faz_dismiss_redundant_geo_routing' );
 

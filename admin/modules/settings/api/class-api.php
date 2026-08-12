@@ -257,8 +257,17 @@ class Api extends Rest_Controller {
 						'payment_gateways' => array(
 							// Map { gateway => bool } (canonical: explicit state of
 							// every gateway the wizard showed) or legacy string list.
+							//
+							// The union type cannot express "known keys, boolean
+							// values" on its own: `properties`/`additionalProperties`
+							// only apply on the object branch, and rest_validate_request_arg
+							// would wave through {"stripe":"banana"} or an unknown key,
+							// each of which exempts a third-party SDK from pre-consent
+							// blocking. The pair below enforces both shapes explicitly
+							// and rejects anything else with a 400.
 							'type'              => array( 'object', 'array' ),
-							'validate_callback' => 'rest_validate_request_arg',
+							'validate_callback' => array( Onboarding::class, 'validate_payment_gateways' ),
+							'sanitize_callback' => array( Onboarding::class, 'sanitize_payment_gateways' ),
 						),
 					),
 				),

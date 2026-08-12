@@ -104,13 +104,19 @@ class Activator {
 		add_action( 'faz_after_create_cookie', array( __CLASS__, 'maybe_check_unmatched_vendors' ) );
 		add_action( 'faz_after_delete_cookie', array( __CLASS__, 'maybe_check_unmatched_vendors' ) );
 		add_filter( 'cron_schedules', array( __CLASS__, 'register_cron_schedules' ) );
-		self::schedule_cleanup();
+		// Ensure recurring events exist, but keep wp_next_scheduled() (which
+		// unserializes the whole cron option) off the frontend hot path: the
+		// events are created on activation, and admin + cron requests are more
+		// than frequent enough to self-heal a wiped cron option.
+		if ( is_admin() || wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			self::schedule_cleanup();
+		}
 	}
 
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.06.17.1';
+	const MIGRATIONS_VERSION = '2026.08.12.2';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -134,15 +140,136 @@ class Activator {
 			self::fix_banner_gdpr_defaults();
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
+			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
 			self::clear_necessary_optout_flags();
 			self::reset_stale_per_cookie_consent();
+			self::demote_bulky_autoloaded_options();
+			self::refresh_cookie_translation_caches();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+	}
+
+	/**
+	 * Upgrade migration for the cookie-content translation fallback.
+	 *
+	 * Cookie/category controller caches contain prepared cookie arrays, so an
+	 * existing persistent cache may still hold the pre-translation payload even
+	 * though no database rewrite or schema change is required. Rotate those
+	 * caches once on upgrade and remove the language-keyed policy fragments.
+	 *
+	 * @return void
+	 */
+	public static function refresh_cookie_translation_caches() {
+		Cookie_Controller::get_instance()->delete_cache();
+		Category_Controller::get_instance()->delete_cache();
+
+		// Every language the POLICY can render, not just the selected ones.
+		// Renderer::resolve_lang() picks from the shortcode `lang` attribute, the
+		// page's default, or the WordPress locale — none of which is bound to
+		// faz_selected_languages(). A key can therefore exist for a language that
+		// is not selected (English being the common one), and clearing only the
+		// selected set leaves it serving pre-translation rows.
+		$languages = array( 'en' );
+		if ( function_exists( 'faz_selected_languages' ) ) {
+			$languages = array_merge( $languages, (array) faz_selected_languages() );
+		}
+		$generator = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Generator';
+		if ( class_exists( $generator ) && method_exists( $generator, 'policy_languages' ) ) {
+			$languages = array_merge( $languages, (array) $generator::policy_languages() );
+		}
+		foreach ( array_unique( array_filter( $languages, 'is_string' ) ) as $language ) {
+			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
+		}
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
+	}
+
+	/**
+	 * One-time migration: stop autoloading bulky / admin-only options.
+	 *
+	 * `faz_banner_template` (and its per-language variants) stores the full
+	 * rendered banner HTML+CSS per banner per language — tens to hundreds of
+	 * KB that alloptions was pulling into memory on every request, including
+	 * admin, AJAX, REST and cron where the banner never renders. The scanner
+	 * bookkeeping options and the admin-notice dismissal map are only ever
+	 * read in wp-admin. update_option() cannot flip the autoload flag of an
+	 * existing row unless the value changes, so existing installs need this
+	 * direct demotion (new writes already pass $autoload = false).
+	 *
+	 * @return void
+	 */
+	public static function demote_bulky_autoloaded_options() {
+		global $wpdb;
+
+		$exact = array(
+			'faz_scan_history',
+			'faz_scan_details',
+			'faz_scan_counter',
+			'faz_scan_max_pages',
+			'faz_admin_notices',
+			'faz_first_time_activated_plugin',
+			'faz_uncategorized_consent_fixed',
+			'faz_banner_gdpr_defaults_fixed',
+		);
+
+		$placeholders = implode( ',', array_fill( 0, count( $exact ), '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-time migration; core offers no bulk autoload read API.
+		$names = $wpdb->get_col(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a static list of %s markers.
+				"SELECT option_name FROM {$wpdb->options}
+				 WHERE ( option_name LIKE %s OR option_name IN ( {$placeholders} ) )
+				   AND autoload NOT IN ( 'no', 'off', 'auto-off' )",
+				array_merge( array( $wpdb->esc_like( 'faz_banner_template' ) . '%' ), $exact )
+			)
+		);
+
+		if ( empty( $names ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_set_option_autoload_values' ) ) {
+			// WP 6.4+: flips the flags and handles all option caches for us.
+			$results = wp_set_option_autoload_values( array_fill_keys( $names, false ) );
+			foreach ( $names as $name ) {
+				if ( empty( $results[ $name ] ) ) {
+					// Core reports each requested option independently. Treat even a
+					// partial write as a failed migration so the consolidated version
+					// flag is not advanced and the remaining rows are retried.
+					throw new \RuntimeException( 'FAZ: failed to demote every autoloaded option; migration will retry.' );
+				}
+			}
+			return;
+		}
+
+		$name_placeholders = implode( ',', array_fill( 0, count( $names ), '%s' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- pre-6.4 fallback; caches are invalidated below.
+		$demoted = $wpdb->query(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $name_placeholders is a static list of %s markers.
+				"UPDATE {$wpdb->options} SET autoload = 'no' WHERE option_name IN ( {$name_placeholders} )",
+				$names
+			)
+		);
+		// Throw rather than return quietly: run_pending_migrations() catches
+		// Throwable and skips writing faz_migrations_version, so the demotion is
+		// retried on the next admin load. Swallowing the error would mark the
+		// migration done while the banner template stayed autoloaded on every
+		// request — the exact cost this migration exists to remove — and nothing
+		// would ever try again.
+		if ( false === $demoted ) {
+			throw new \RuntimeException( 'FAZ: failed to demote autoloaded options; migration will retry.' );
+		}
+		wp_cache_delete( 'alloptions', 'options' );
+		foreach ( $names as $name ) {
+			wp_cache_delete( $name, 'options' );
+		}
 	}
 
 	/**
@@ -154,9 +281,34 @@ class Activator {
 	 * @return void
 	 */
 	public static function seed_default_whitelist() {
-		$settings = get_option( 'faz_settings' );
-		if ( ! is_array( $settings ) ) {
+		// One-time marker, like every sibling seeder. Without it the only guard
+		// was "the list is currently empty", which is not the same question:
+		// an admin who deliberately cleared the whitelist to harden the site is
+		// indistinguishable from a fresh install, so every later bump of
+		// MIGRATIONS_VERSION re-ran this and wrote the eleven defaults back over
+		// their decision. The migration list re-runs on any version change, so
+		// that was not hypothetical — this branch bumps it, and two other open
+		// branches bump it again.
+		//
+		// The marker is written at the END, and only after the write is verified
+		// (see below). A site that already has patterns therefore returns early
+		// WITHOUT being marked: the next bump re-reads one option and returns
+		// again, which costs nothing, while never leaving a marker that claims
+		// work which did not happen.
+		if ( get_option( 'faz_default_whitelist_seeded' ) ) {
 			return;
+		}
+		$settings = get_option( 'faz_settings', false );
+		if ( false === $settings ) {
+			// Settings have not been created yet. The activation/settings lifecycle
+			// owns that work; there is no existing whitelist to back-fill here.
+			return;
+		}
+		if ( ! is_array( $settings ) ) {
+			// Unreadable settings is a transient condition, not a decision. Throw
+			// so run_pending_migrations() leaves faz_migrations_version alone and
+			// the whole list retries on the next admin load.
+			throw new \RuntimeException( 'FAZ: unable to read settings while seeding the whitelist; migration will retry.' );
 		}
 		$current = isset( $settings['script_blocking']['whitelist_patterns'] )
 			? $settings['script_blocking']['whitelist_patterns']
@@ -166,24 +318,119 @@ class Activator {
 			return;
 		}
 
-		$defaults = array(
-			'googleapis.com/youtube/v3/',
-			'googleapis.com/customsearch/',
-			'translation.googleapis.com/',
-			'www.google.com/recaptcha/api',
-			'challenges.cloudflare.com/',
-			'maps.googleapis.com/maps/api/',
-			'www.googleapis.com/oauth2/',
-			'fonts.googleapis.com/',
-			'cdn.jsdelivr.net/',
-			'unpkg.com/',
-			'hcaptcha.com/',
-		);
+		// Taken from Settings::get_defaults() rather than restated here, because
+		// the two lists had drifted apart in the direction that matters. This
+		// function used to seed eleven patterns including fonts.googleapis.com,
+		// cdn.jsdelivr.net, unpkg.com and maps.googleapis.com, while the shipped
+		// defaults deliberately whitelist only the four CAPTCHA endpoints and
+		// carry a comment explaining that CDN-hosted Google Fonts must stay
+		// blocked (German courts have held that loading them without consent is
+		// unlawful). A back-fill that quietly grants more than the product's own
+		// default is a compliance regression, not a convenience — and because it
+		// only fires when the whitelist is EMPTY, it fired precisely on the sites
+		// whose owner had just cleared it.
+		$defaults = array();
+		if ( class_exists( '\FazCookie\Admin\Modules\Settings\Includes\Settings' ) ) {
+			$shipped = ( new \FazCookie\Admin\Modules\Settings\Includes\Settings() )->get_defaults();
+			if ( isset( $shipped['script_blocking']['whitelist_patterns'] ) && is_array( $shipped['script_blocking']['whitelist_patterns'] ) ) {
+				$defaults = $shipped['script_blocking']['whitelist_patterns'];
+			}
+		}
+		if ( empty( $defaults ) ) {
+			// Settings unavailable in this context: write nothing rather than a
+			// guessed list. An empty whitelist blocks more, which is the safe
+			// direction, and the admin can add what their site needs.
+			return;
+		}
 
 		if ( ! isset( $settings['script_blocking'] ) ) {
 			$settings['script_blocking'] = array();
 		}
 		$settings['script_blocking']['whitelist_patterns'] = $defaults;
+		update_option( 'faz_settings', $settings );
+
+		// Verify by reading back rather than trusting update_option()'s return:
+		// it reports false BOTH when the write failed and when the value was
+		// already identical, so the return value cannot distinguish the two.
+		$saved = get_option( 'faz_settings' );
+		if ( ! is_array( $saved ) || empty( $saved['script_blocking']['whitelist_patterns'] ) ) {
+			throw new \RuntimeException( 'FAZ: failed to persist the default whitelist; migration will retry.' );
+		}
+
+		// Marker LAST, and only on success. Written first, a failed write left the
+		// marker in place while run_pending_migrations() went on to record the new
+		// version — so the seed was permanently skipped and a site could sit with
+		// reCAPTCHA blocked until somebody noticed and fixed it by hand. A marker
+		// is a record that the work happened; recording it before the work is a
+		// claim, not a record.
+		// Autoload NO: read once, during migrations, never on a front-end request.
+		add_option( 'faz_default_whitelist_seeded', '1', '', false );
+	}
+
+	/**
+	 * Give existing installs the second half of the reCAPTCHA whitelist entry.
+	 *
+	 * A working reCAPTCHA needs two hosts: the API endpoint on www.google.com
+	 * and the widget's own script on www.gstatic.com. Only the first was
+	 * seeded before 1.17.2, so every install predating it allows the endpoint
+	 * and blocks the script it loads — the CAPTCHA never renders, and the form
+	 * behind it cannot be submitted. New installs get both from the shipped
+	 * defaults; a stored whitelist is never revisited, so upgrading alone
+	 * never fixed it.
+	 *
+	 * Add-only, and deliberately conditional on the site already whitelisting
+	 * the reCAPTCHA endpoint: that is the evidence the site owner wants
+	 * reCAPTCHA to work before consent. A site that removed the entry, or
+	 * never had it, has expressed the opposite and is left alone.
+	 *
+	 * Guarded by its own option rather than by MIGRATIONS_VERSION, which is a
+	 * consolidated flag: riding it would re-add the pattern at the next bump,
+	 * overruling an admin who had since removed it on purpose. This runs once
+	 * per site, ever.
+	 *
+	 * @return void
+	 */
+	public static function add_recaptcha_gstatic_pattern() {
+		if ( 'done' === get_option( 'faz_recaptcha_gstatic_migrated' ) ) {
+			return;
+		}
+		// Marked before the work, not after: a site whose settings row is
+		// missing or malformed should not have this reconsidered on every
+		// admin load for the rest of its life.
+		update_option( 'faz_recaptcha_gstatic_migrated', 'done', false );
+
+		$settings = get_option( 'faz_settings' );
+		if ( ! is_array( $settings ) || ! isset( $settings['script_blocking']['whitelist_patterns'] ) ) {
+			return;
+		}
+		$patterns = $settings['script_blocking']['whitelist_patterns'];
+		if ( ! is_array( $patterns ) ) {
+			return;
+		}
+
+		$wants_recaptcha = false;
+		$has_gstatic     = false;
+		foreach ( $patterns as $pattern ) {
+			if ( ! is_string( $pattern ) ) {
+				continue;
+			}
+			if ( false !== stripos( $pattern, 'google.com/recaptcha' ) ) {
+				$wants_recaptcha = true;
+			}
+			// Matched loosely on purpose: an admin may have typed the host
+			// without the trailing path, or with a scheme. Any existing
+			// mention means the decision has already been made here.
+			if ( false !== stripos( $pattern, 'gstatic.com/recaptcha' ) ) {
+				$has_gstatic = true;
+			}
+		}
+
+		if ( ! $wants_recaptcha || $has_gstatic ) {
+			return;
+		}
+
+		$patterns[] = 'www.gstatic.com/recaptcha/';
+		$settings['script_blocking']['whitelist_patterns'] = array_values( $patterns );
 		update_option( 'faz_settings', $settings );
 	}
 
@@ -277,6 +524,23 @@ class Activator {
 			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
 		}
 		self::cleanup_old_dsar_requests( $settings );
+
+		// Reap superseded content-hashed frontend assets (config-*.js /
+		// banner-*.css). Every settings/banner change mints a new hash and
+		// orphans the previous file, so without this the generated-assets
+		// directory grows for the lifetime of the install.
+		if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
+			\FazCookie\Frontend\Frontend::cleanup_static_assets();
+		}
+
+		// Pageview analytics rows grow one-per-visit when tracking is enabled
+		// and previously had NO purge wired up at all, so the table (and every
+		// GROUP BY over it) grew without bound. 0 disables the purge.
+		$pv_retention = isset( $settings['pageviews']['retention'] ) ? (int) $settings['pageviews']['retention'] : 6;
+		$pv_retention = (int) apply_filters( 'faz_pageviews_retention_months', $pv_retention );
+		if ( $pv_retention > 0 ) {
+			Pageviews_Controller::get_instance()->cleanup_old_records( $pv_retention );
+		}
 	}
 
 	/**
@@ -403,8 +667,26 @@ class Activator {
 	 */
 	public static function install() {
 		self::check_for_upgrade();
+		// Rotate the cookie/policy caches on the FRONTEND upgrade path too.
+		//
+		// run_pending_migrations() carries the same call, but it is hooked on
+		// admin_init: a site whose admin nobody visits would keep serving the
+		// pre-translation payloads until somebody logged in. That is not a
+		// self-healing wait either — Base_Controller::set_object_cache() writes
+		// with no expiry, so with a persistent object cache the stale list can
+		// outlive the upgrade indefinitely. install() runs from check_version()
+		// on `init`, so this fires on the first request after an upgrade
+		// whatever kind of request it is. Clearing caches twice is harmless;
+		// never clearing them is not.
+		try {
+			self::refresh_cookie_translation_caches();
+		} catch ( \Throwable $e ) {
+			// A cache rotation must never be able to block activation or a
+			// front-end request. The admin_init migration retries it anyway.
+			unset( $e );
+		}
 		if ( true === faz_first_time_install() ) {
-			add_option( 'faz_first_time_activated_plugin', 'true' );
+			add_option( 'faz_first_time_activated_plugin', 'true', '', false );
 			// Arm the guided setup wizard for genuine fresh installs ONLY. The
 			// onboarding.completed flag defaults to true in Settings::get_defaults(),
 			// so every UPGRADING install (whose stored option lacks the key) is
@@ -434,6 +716,10 @@ class Activator {
 			$faz_settings->update( $faz_onboarding, false );
 		}
 		self::ensure_default_settings();
+		// This method runs while activation has switched into each site's context.
+		// Schedule here so network activation and wp_initialize_site both create
+		// site-local cron rows, instead of only healing the currently loaded site.
+		self::schedule_cleanup();
 		self::install_all_tables();
 		self::maybe_update_db();
 		// Ensure required default categories always exist, even on re-activation
@@ -1155,7 +1441,7 @@ class Activator {
 				array( '%s' )
 			);
 		}
-		update_option( 'faz_uncategorized_consent_fixed', 1 );
+		update_option( 'faz_uncategorized_consent_fixed', 1, false );
 	}
 
 	/**
@@ -1205,7 +1491,7 @@ class Activator {
 		}
 		// Clear banner template cache (base + language variants) to force regeneration.
 		faz_clear_banner_template_cache();
-		update_option( 'faz_banner_gdpr_defaults_fixed', 1 );
+		update_option( 'faz_banner_gdpr_defaults_fixed', 1, false );
 	}
 
 	/**
@@ -1547,6 +1833,7 @@ class Activator {
 			unset( $region );
 			if ( $changed ) {
 				update_option( 'faz_gcm_settings', $gcm );
+				\FazCookie\Admin\Modules\Gcm\Includes\Gcm_Settings::flush_runtime_cache();
 			}
 		}
 

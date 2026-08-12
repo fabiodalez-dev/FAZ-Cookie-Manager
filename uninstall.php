@@ -179,6 +179,7 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_migrations_version',
 				'faz_cookie_definitions',
 				'faz_cookie_definitions_meta',
+				'faz_cookie_definitions_bundled_meta',
 				'faz_file_write_access',
 				'faz_legal_doc_acknowledged',
 				'faz_legal_doc_material_pending',

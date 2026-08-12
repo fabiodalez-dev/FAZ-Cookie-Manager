@@ -27,22 +27,51 @@
 			ad_storage: 'denied',
 			analytics_storage: 'denied'
 		});
-		document.addEventListener('fazcookie_consent_update', function (e) {
+		// Both events, because the `default: denied` pushed just above is all
+		// Microsoft ever saw on the pages AFTER the visitor accepted: this file
+		// had no bootstrap path, and fazcookie_consent_update does not fire for
+		// a visitor whose choice was already stored. A returning visitor who had
+		// granted marketing was still reported to UET as denied.
+		var lastUetPush = null;
+		function pushUetConsent(e) {
 			var cats = (e.detail && e.detail.accepted) ? e.detail.accepted : [];
-			window.uetq.push('consent', 'update', {
+			var state = {
 				ad_storage: hasAny(cats, AD_SLUGS) ? 'granted' : 'denied',
 				analytics_storage: hasAny(cats, ANALYTICS_SLUGS) ? 'granted' : 'denied'
-			});
-		});
+			};
+			// On a first visit both events arrive with the same values; one push
+			// is the honest report of one state.
+			var signature = state.ad_storage + '|' + state.analytics_storage;
+			if (signature === lastUetPush) {
+				return;
+			}
+			lastUetPush = signature;
+			window.uetq.push('consent', 'update', state);
+		}
+		document.addEventListener('fazcookie_consent_update', pushUetConsent);
+		document.addEventListener('fazcookie_consent_ready', pushUetConsent);
+		// Catch up if the announcement already happened — see wca.js for why a
+		// separately-loaded file cannot rely on being present for it.
+		if (window._fazConsentReady) {
+			pushUetConsent({ detail: window._fazConsentReady });
+		}
 	}
 
 	// Microsoft Clarity Consent API
 	if (window._fazMicrosoftClarity) {
-		document.addEventListener('fazcookie_consent_update', function (e) {
+		// Same gap as UET above: without the ready event, clarity('consent') was
+		// never called for a returning visitor. clarity('consent') is itself
+		// idempotent, so no dedupe guard is needed here.
+		function grantClarityConsent(e) {
 			var cats = (e.detail && e.detail.accepted) ? e.detail.accepted : [];
 			if (typeof window.clarity === 'function' && hasAny(cats, ANALYTICS_SLUGS)) {
 				window.clarity('consent');
 			}
-		});
+		}
+		document.addEventListener('fazcookie_consent_update', grantClarityConsent);
+		document.addEventListener('fazcookie_consent_ready', grantClarityConsent);
+		if (window._fazConsentReady) {
+			grantClarityConsent({ detail: window._fazConsentReady });
+		}
 	}
 })();

@@ -497,12 +497,29 @@ test.describe('PR104-FU — country→language fallback respects the opt-in filt
         'off'              => $off,
         'on_with_lang'     => $on_with_lang,
         'on_without_lang'  => $on_without_lang,
+        // Report the premises instead of assuming them. This test hard-coded
+        // 'en' as "the site default" and asserted in a comment that no
+        // multilingual plugin was active, without checking either. When another
+        // spec left a different default behind, or a multilingual plugin
+        // active, it failed with "expected en, received it" — which reads as a
+        // product bug and is a stale precondition.
+        'site_default'     => function_exists( 'faz_default_language' ) ? faz_default_language() : 'en',
+        'multilingual'     => (
+          defined( 'ICL_SITEPRESS_VERSION' )
+          || function_exists( 'pll_default_language' )
+          || class_exists( 'TRP_Translate_Press' )
+        ),
       ) );
     `).trim();
     const data = JSON.parse(result);
-    expect(data.off, 'fallback off → site default language, regardless of visitor country').toBe('en');
+    // A multilingual plugin resolves the current language itself, so the three
+    // cases below stop being about the country fallback at all.
+    test.skip(Boolean(data.multilingual), 'a multilingual plugin is active; the country fallback is not what decides the language');
+
+    const siteDefault = String(data.site_default || 'en');
+    expect(data.off, 'fallback off → site default language, regardless of visitor country').toBe(siteDefault);
     expect(data.on_with_lang, 'fallback on AND it in selected → it (country mapping wins)').toBe('it');
-    expect(data.on_without_lang, 'fallback on but it NOT in selected → site default (selected_languages gate)').toBe('en');
+    expect(data.on_without_lang, 'fallback on but it NOT in selected → site default (selected_languages gate)').toBe(siteDefault);
   });
 });
 

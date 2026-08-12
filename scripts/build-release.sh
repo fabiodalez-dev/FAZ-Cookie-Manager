@@ -194,7 +194,7 @@ copy_plugin() {
     mkdir -p "${dest}"
     for pattern in "${excludes[@]}"; do
         if [[ "${pattern}" == "${PLUGIN_SLUG}/"* ]]; then
-            pattern="/${pattern#${PLUGIN_SLUG}/}"
+            pattern="/${pattern#"${PLUGIN_SLUG}/"}"
         fi
         rsync_args+=(--exclude="${pattern}")
     done
@@ -330,13 +330,17 @@ while IFS= read -r f; do
 done <<< "${missing_from_zip}"
 if [[ -n "${unexpectedly_missing//[[:space:]]/}" ]]; then
     red "FAIL: files staged for release are missing from the wp.org ZIP:"
-    printf '  %s\n' ${unexpectedly_missing} >&2
+    while IFS= read -r path; do
+        [[ -n "${path}" ]] && printf '  %s\n' "${path}" >&2
+    done <<< "${unexpectedly_missing}"
     exit 1
 fi
 
 if [[ -n "${untracked_in_zip}" ]]; then
     red "FAIL: the wp.org ZIP ships files git does not track:"
-    printf '  %s\n' ${untracked_in_zip} >&2
+    while IFS= read -r path; do
+        [[ -n "${path}" ]] && printf '  %s\n' "${path}" >&2
+    done <<< "${untracked_in_zip}"
     red "Move them out of ${PLUGIN_SLUG}/ or add them to COMMON_EXCLUDES."
     exit 1
 fi

@@ -45,9 +45,34 @@ namespace {
 		define( 'ABSPATH', __DIR__ );
 	}
 
-	if ( ! function_exists( 'faz_sanitize_bool' ) ) {
-		function faz_sanitize_bool( $value ) {
-			return filter_var( $value, FILTER_VALIDATE_BOOLEAN );
+	// The REAL helper, not a filter_var() stand-in. apply_options() hands it raw
+	// wizard values to decide which payment SDKs are exempt from pre-consent
+	// blocking, and the two differ exactly where that matters: filter_var()
+	// reports FALSE for any string it does not recognise, faz_sanitize_bool()
+	// reports TRUE. A stub would have made the gateway assertions below pass
+	// while proving nothing about what production does.
+	require_once __DIR__ . '/../../includes/class-formatting.php';
+
+	// Minimal WP_Error so the REST-boundary validators can be exercised without
+	// bootstrapping WordPress.
+	if ( ! class_exists( 'WP_Error' ) ) {
+		class WP_Error {
+			public $code;
+			public $message;
+			public $data;
+			public function __construct( $code = '', $message = '', $data = '' ) {
+				$this->code    = $code;
+				$this->message = $message;
+				$this->data    = $data;
+			}
+			public function get_error_code() {
+				return $this->code;
+			}
+		}
+	}
+	if ( ! function_exists( 'is_wp_error' ) ) {
+		function is_wp_error( $thing ) {
+			return $thing instanceof WP_Error;
 		}
 	}
 
@@ -272,6 +297,52 @@ namespace {
 	faz_assert_same( array_key_exists( 'evil_gateway', $all['script_blocking']['payment_gateways'] ), false, 'payments: unknown gateway keys are ignored' );
 	list( $all, ) = $run_options( array( 'payment_gateways' => array( 'stripe' => 'false' ) ) );
 	faz_assert_same( $all['script_blocking']['payment_gateways']['stripe'], false, "payments: string 'false' disables the gateway" );
+
+	echo "\n-- payment_gateways REST boundary --\n";
+
+	// apply_options() calls faz_sanitize_bool() on the raw value, which is the
+	// right helper but a permissive one: an unrecognised string comes back TRUE.
+	// Pinned here so the reason the boundary has to be strict stays visible.
+	faz_assert_same( faz_sanitize_bool( 'banana' ), true, 'faz_sanitize_bool reports an unanticipated string as TRUE (why the schema must reject it)' );
+	list( $all, ) = $run_options( array( 'payment_gateways' => array( 'stripe' => 'banana' ) ) );
+	faz_assert_same( $all['script_blocking']['payment_gateways']['stripe'], true, 'unchecked, junk would EXEMPT a gateway from pre-consent blocking' );
+
+	$gw_valid = function ( $value ) {
+		return Onboarding::validate_payment_gateways( $value );
+	};
+	// Map form: known keys with boolean-ish values pass; everything else 400s
+	// rather than being silently dropped, so a broken client learns of it.
+	faz_assert_same( $gw_valid( array( 'stripe' => true, 'paypal' => false ) ), true, 'REST: map of known gateways with real booleans validates' );
+	faz_assert_same( $gw_valid( array( 'stripe' => 'true', 'paypal' => 'off' ) ), true, 'REST: canonical boolean strings validate' );
+	faz_assert_same( $gw_valid( array( 'stripe' => 1, 'paypal' => 0 ) ), true, 'REST: 0/1 integers validate' );
+	faz_assert_same( is_wp_error( $gw_valid( array( 'stripe' => 'banana' ) ) ), true, 'REST: junk gateway value is rejected (the exemption path above is closed)' );
+	faz_assert_same( is_wp_error( $gw_valid( array( 'evil_gateway' => true ) ) ), true, 'REST: unknown gateway key is rejected' );
+	faz_assert_same( is_wp_error( $gw_valid( array( 'stripe' => array( 'nested' => true ) ) ) ), true, 'REST: nested array value is rejected' );
+	faz_assert_same( is_wp_error( $gw_valid( array( 'stripe' => 2 ) ) ), true, 'REST: an integer that is not 0/1 is rejected' );
+	faz_assert_same( is_wp_error( $gw_valid( 'stripe' ) ), true, 'REST: a scalar instead of a map/list is rejected' );
+	// Legacy list form stays accepted — the wizard shipped it and installs still send it.
+	faz_assert_same( $gw_valid( array( 'stripe', 'paypal' ) ), true, 'REST: legacy opt-in list of known gateways validates' );
+	faz_assert_same( is_wp_error( $gw_valid( array( 'evil_gateway' ) ) ), true, 'REST: legacy list naming an unknown gateway is rejected' );
+	$mixed_gateways = array( 0 => 'paypal', 'stripe' => false );
+	faz_assert_same( is_wp_error( $gw_valid( $mixed_gateways ) ), true, 'REST: a mixed list/map payload is rejected' );
+	faz_assert_same( $gw_valid( array() ), true, 'REST: an empty payload is legitimate (no gateway opted in)' );
+
+	// Sanitizer normalises values but must PRESERVE the shape: expanding a
+	// legacy list into a full map would switch off every gateway the wizard
+	// never mentioned, which is the opposite of the list form's contract.
+	faz_assert_same( Onboarding::sanitize_payment_gateways( array( 'stripe' => 'yes', 'paypal' => '0' ) ), array( 'stripe' => true, 'paypal' => false ), 'REST: map values normalise to real booleans' );
+	faz_assert_same( Onboarding::sanitize_payment_gateways( array( 'stripe', 'paypal' ) ), array( 'stripe', 'paypal' ), 'REST: legacy list is preserved as a list, not expanded into a map' );
+	faz_assert_same( Onboarding::sanitize_payment_gateways( $mixed_gateways ), array(), 'REST: sanitizer also fails closed on a mixed list/map payload' );
+	faz_assert_same( Onboarding::sanitize_payment_gateways( array( 'evil_gateway' => true, 'stripe' => true ) ), array( 'stripe' => true ), 'REST: sanitizer drops unknown keys as a second line of defence' );
+	faz_assert_same( Onboarding::sanitize_payment_gateways( 'nonsense' ), array(), 'REST: a non-array sanitises to an empty payload' );
+
+	// A validator nothing routes to is decoration: pin that the wizard's
+	// onboarding route actually installs both callbacks on the argument.
+	$api_source = file_get_contents( __DIR__ . '/../../admin/modules/settings/api/class-api.php' );
+	faz_assert_same( (bool) preg_match( "/'validate_callback'\s*=>\s*array\(\s*Onboarding::class,\s*'validate_payment_gateways'\s*\)/", $api_source ), true, 'REST: the onboarding route wires the payment-gateway validator' );
+	faz_assert_same( (bool) preg_match( "/'sanitize_callback'\s*=>\s*array\(\s*Onboarding::class,\s*'sanitize_payment_gateways'\s*\)/", $api_source ), true, 'REST: the onboarding route wires the payment-gateway sanitizer' );
+	faz_assert_same( is_callable( array( Onboarding::class, 'validate_payment_gateways' ) ), true, 'REST: the wired validator is callable as declared' );
+	faz_assert_same( is_callable( array( Onboarding::class, 'sanitize_payment_gateways' ) ), true, 'REST: the wired sanitizer is callable as declared' );
 
 	// Site-locale mapping is independent of the logged-in administrator locale.
 	faz_assert_same( Onboarding::language_from_locale( 'it_IT' ), 'it', 'site locale: it_IT maps to Italian' );

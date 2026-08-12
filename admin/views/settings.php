@@ -67,7 +67,29 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'When enabled, visitors can accept or reject individual services (e.g., Google Analytics, YouTube) instead of entire categories. Services detected by the scanner are shown immediately, and embedded providers blocked at runtime are revealed when the browser sees them on the page. This keeps the preference center present-aware but makes it more complex.', 'faz-cookie-manager' ); ?></div>
 			</div>
-			<div class="faz-form-group">
+			<?php
+			/*
+			 * Gated on its parent because Settings::sanitize() forces
+			 * per_cookie_consent off whenever per_service_consent is off. Left
+			 * ungated, the admin could tick a nested-cookie mode that the server
+			 * silently discarded, get the generic "Settings saved successfully."
+			 * toast, and keep looking at an enabled toggle for the rest of the
+			 * session — the one thing a settings screen must never do.
+			 *
+			 * Hiding alone DOES keep it out of the payload: FAZ.serializeForm()
+			 * skips any [data-path] whose [data-show-if] wrapper computes to
+			 * display:none (faz-admin.js). An earlier version of this comment
+			 * claimed the opposite. Corrected rather than deleted, because a
+			 * comment that misdescribes the serializer is how somebody later adds
+			 * a redundant guard, or removes a load-bearing one.
+			 *
+			 * data-clear-when-hidden is still needed, for a different reason: the
+			 * box keeps its ticked state while hidden, so re-enabling the parent
+			 * would restore a choice the server had already discarded. See
+			 * settings.js applyShowIf().
+			 */
+			?>
+			<div class="faz-form-group" data-show-if="banner_control.per_service_consent" data-clear-when-hidden>
 				<label class="faz-toggle">
 					<input type="checkbox" data-path="banner_control.per_cookie_consent">
 					<span class="faz-toggle-track"></span>

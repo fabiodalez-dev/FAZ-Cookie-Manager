@@ -228,15 +228,26 @@ try {
 	faz_test_assert( 'ENG' === $city_reader->subdivision( '81.2.69.160' ), 'City database resolves the subdivision.' );
 	faz_test_assert( ! file_exists( Geolocation::get_data_dir() . 'GeoLite2-Country.mmdb' ), 'Switching to City removes Country.' );
 
+	// get_database_path() memoises its answer for the life of the request —
+	// resolving it costs up to four candidate probes with a 128 KB tail read
+	// each. Production never notices, because the files cannot change under a
+	// running request. This block does exactly that: it adds a second edition,
+	// re-points the configured one, then removes it again. Every one of those
+	// is a fact the memo already answered, so the memo has to be dropped after
+	// each mutation or the assertions below grade a cached reply to a question
+	// asked before the file moved.
 	copy( $country_mmdb, Geolocation::get_data_dir() . 'GeoLite2-Country.mmdb' );
+	Geolocation::reset_runtime_cache();
 	faz_test_assert( $city_path === Geolocation::get_database_path(), 'Configured City wins when both editions exist.' );
 	$faz_test_edition = 'GeoLite2-Country';
+	Geolocation::reset_runtime_cache();
 	faz_test_assert(
 		'GeoLite2-Country.mmdb' === basename( Geolocation::get_database_path() ),
 		'Configured Country wins when both editions exist.'
 	);
 	$faz_test_edition = 'GeoLite2-City';
 	unlink( Geolocation::get_data_dir() . 'GeoLite2-Country.mmdb' );
+	Geolocation::reset_runtime_cache();
 
 	$city_hash                           = hash_file( 'sha256', $city_path );
 	$faz_test_archives['GeoLite2-City'] = $country_archive;

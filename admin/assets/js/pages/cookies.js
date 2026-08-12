@@ -1374,26 +1374,73 @@
 			}
 
 			templates.forEach(function (tpl) {
-				var card = document.createElement('button');
-				card.type = 'button';
+				var card = document.createElement('div');
 				card.className = 'faz-template-card';
+				var cardAction = document.createElement('button');
+				cardAction.type = 'button';
+				cardAction.className = 'faz-template-card-action';
+				card.appendChild(cardAction);
 
 				var name = document.createElement('div');
 				name.className = 'faz-template-card-name';
 				name.textContent = tpl.name;
-				card.appendChild(name);
+				cardAction.appendChild(name);
 
 				var desc = document.createElement('div');
 				desc.className = 'faz-template-card-desc';
 				desc.textContent = tpl.description;
-				card.appendChild(desc);
+				cardAction.appendChild(desc);
 
 				var badge = document.createElement('span');
 				badge.className = 'faz-template-card-badge';
 				badge.textContent = tpl.category;
-				card.appendChild(badge);
+				cardAction.appendChild(badge);
 
-				card.addEventListener('click', function () {
+				// A rule that cannot take effect must say so where it lives.
+				// Without this the admin adds it, sees the feed load anyway, and
+				// has no way to learn that the third-party surface it gates no
+				// longer exists — the plugin looks broken while behaving
+				// correctly. The card stays clickable: the condition belongs to
+				// the other plugin's setting and can change at any moment.
+				if (tpl.not_applicable && tpl.not_applicable.label) {
+					card.classList.add('faz-template-card-inert');
+					card.title = tpl.not_applicable.note || '';
+
+					var inert = document.createElement('span');
+					inert.className = 'faz-template-card-inert-badge';
+					inert.textContent = tpl.not_applicable.label;
+					cardAction.appendChild(inert);
+
+					var note = document.createElement('div');
+					note.className = 'faz-template-card-inert-note';
+					note.textContent = tpl.not_applicable.note || '';
+					cardAction.appendChild(note);
+
+					if (tpl.not_applicable.url) {
+						var inertUrl = '';
+						try {
+							var parsed = new URL(String(tpl.not_applicable.url), window.location.href);
+							if ((parsed.protocol === 'http:' || parsed.protocol === 'https:')
+								&& parsed.origin === window.location.origin) {
+								inertUrl = parsed.href;
+							}
+						} catch (e) {
+							inertUrl = '';
+						}
+						if (inertUrl) {
+							// A real link is a sibling of the card button: valid HTML,
+							// same-origin only, with native new-tab/copy-link behaviour.
+							var link = document.createElement('a');
+							link.className = 'faz-template-card-inert-link';
+							link.href = inertUrl;
+							link.textContent = tpl.not_applicable.link_label
+								|| __('cookies.sbOpenSettings', 'Open Instagram Feed settings');
+							card.appendChild(link);
+						}
+					}
+				}
+
+				cardAction.addEventListener('click', function () {
 					var patterns = Array.isArray(tpl.patterns) ? tpl.patterns : [];
 					if (!patterns.length && !(Array.isArray(tpl.cookies) && tpl.cookies.length)) {
 						FAZ.notify(__('cookies.templateEmpty', 'No patterns or cookies in template.'), 'error');

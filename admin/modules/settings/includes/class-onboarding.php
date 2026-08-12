@@ -659,6 +659,135 @@ class Onboarding {
 	}
 
 	/**
+	 * The literal values accepted as a boolean at the payment-gateway REST
+	 * boundary, lower-cased.
+	 *
+	 * Deliberately an allow-list rather than a call to faz_sanitize_bool(). That
+	 * helper answers "is this truthy" for values the plugin itself wrote, so an
+	 * unrecognised string comes back TRUE — harmless for an ordinary flag, but
+	 * these booleans EXEMPT a gateway from pre-consent script blocking, so
+	 * `{"stripe":"banana"}` would load the SDK before consent. The boundary is
+	 * the right place to refuse that: the helper stays untouched for its other
+	 * callers, and by the time apply_options() reaches faz_sanitize_bool() the
+	 * value is guaranteed to be one of these.
+	 *
+	 * @var string[]
+	 */
+	const GATEWAY_BOOLEANS = array( 'true', 'false', '1', '0', 'yes', 'no', 'on', 'off' );
+
+	/**
+	 * Validate the wizard's `payment_gateways` argument.
+	 *
+	 * Two shapes are legitimate, and both are checked strictly because every
+	 * accepted key ends up whitelisting a third-party SDK against the blocker:
+	 *   - map  { gateway => bool }: the canonical form, carrying the explicit
+	 *     state of every gateway the wizard showed;
+	 *   - list [ gateway, ... ]: the legacy opt-in-only form.
+	 * Anything else (unknown key, nested array, arbitrary string) is refused
+	 * with a 400 rather than silently dropped, so a broken client is told.
+	 *
+	 * @param mixed $value Raw argument value.
+	 * @return true|WP_Error
+	 */
+	public static function validate_payment_gateways( $value ) {
+		if ( ! is_array( $value ) ) {
+			return new WP_Error(
+				'faz_invalid_payment_gateways',
+				__( 'Payment gateways must be sent as an object or an array.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+		$is_list = array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+		if ( ! $is_list ) {
+			foreach ( array_keys( $value ) as $key ) {
+				if ( is_int( $key ) ) {
+					return new WP_Error(
+						'faz_invalid_payment_gateways',
+						__( 'Payment gateways must be submitted as either a list or a keyed map, not both.', 'faz-cookie-manager' ),
+						array( 'status' => 400 )
+					);
+				}
+			}
+		}
+		$valid = self::payment_gateway_keys();
+		foreach ( $value as $key => $entry ) {
+			if ( is_int( $key ) ) {
+				// Legacy list form: the entry itself names the gateway.
+				if ( ! is_string( $entry ) || ! in_array( $entry, $valid, true ) ) {
+					return new WP_Error(
+						'faz_invalid_payment_gateways',
+						__( 'Unknown payment gateway in the submitted list.', 'faz-cookie-manager' ),
+						array( 'status' => 400 )
+					);
+				}
+				continue;
+			}
+			if ( ! in_array( $key, $valid, true ) ) {
+				return new WP_Error(
+					'faz_invalid_payment_gateways',
+					__( 'Unknown payment gateway key.', 'faz-cookie-manager' ),
+					array( 'status' => 400 )
+				);
+			}
+			if ( is_bool( $entry ) || is_int( $entry ) ) {
+				// Accept only the two integers that mean a boolean; 2 is a bug.
+				if ( is_int( $entry ) && 0 !== $entry && 1 !== $entry ) {
+					return new WP_Error(
+						'faz_invalid_payment_gateways',
+						__( 'Payment gateway values must be true or false.', 'faz-cookie-manager' ),
+						array( 'status' => 400 )
+					);
+				}
+				continue;
+			}
+			if ( is_string( $entry ) && in_array( strtolower( trim( $entry ) ), self::GATEWAY_BOOLEANS, true ) ) {
+				continue;
+			}
+			return new WP_Error(
+				'faz_invalid_payment_gateways',
+				__( 'Payment gateway values must be true or false.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
+		}
+		return true;
+	}
+
+	/**
+	 * Normalise the `payment_gateways` argument once it has validated.
+	 *
+	 * The two shapes are preserved rather than merged into one: apply_options()
+	 * reads the map as "the explicit state of every gateway shown" and the list
+	 * as "enable these, leave the rest alone". Expanding a legacy list into a
+	 * full map here would turn every gateway the wizard never mentioned off.
+	 *
+	 * @param mixed $value Validated argument value.
+	 * @return array
+	 */
+	public static function sanitize_payment_gateways( $value ) {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+		$is_list = array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+		if ( ! $is_list && count( array_filter( array_keys( $value ), 'is_int' ) ) > 0 ) {
+			return array();
+		}
+		$valid  = self::payment_gateway_keys();
+		$result = array();
+		foreach ( $value as $key => $entry ) {
+			if ( is_int( $key ) ) {
+				if ( is_string( $entry ) && in_array( $entry, $valid, true ) ) {
+					$result[] = $entry;
+				}
+				continue;
+			}
+			if ( in_array( $key, $valid, true ) ) {
+				$result[ $key ] = faz_sanitize_bool( $entry );
+			}
+		}
+		return $result;
+	}
+
+	/**
 	 * Environment-aware suggestions for the wizard: detected page-cache plugin,
 	 * Google tag presence, WooCommerce, payment gateways (from active plugins
 	 * and from cookies found by the scanner), and the site's language.

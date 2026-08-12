@@ -78,6 +78,14 @@ class Cookie_Controller extends Base_Controller {
 	 * @return void
 	 */
 	public function delete_cache() {
+		// Honour the bulk-mode suspension the same way the parent does. Without
+		// this the parent returns early during a scanner import but the transient
+		// below is still deleted once per inserted row, which is most of the cost
+		// the suspension exists to avoid. The flush that runs after
+		// resume_cache_invalidation() clears it once for the whole batch.
+		if ( self::is_cache_invalidation_suspended() ) {
+			return;
+		}
 		parent::delete_cache();
 		delete_transient( 'faz_detected_cookie_names' );
 	}
@@ -245,14 +253,15 @@ class Cookie_Controller extends Base_Controller {
 		$date_created = current_time( 'mysql' );
 		$object->set_date_created( $date_created );
 		$object->set_date_modified( $date_created );
+		$stored = $object->get_data();
 
 		$result = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookies',
 			array(
 				'name'          => $object->get_name(),
 				'slug'          => $object->get_slug(),
-				'description'   => wp_json_encode( $object->get_description() ),
-				'duration'      => wp_json_encode( $object->get_duration() ),
+				'description'   => wp_json_encode( isset( $stored['description'] ) && is_array( $stored['description'] ) ? $stored['description'] : array() ),
+				'duration'      => wp_json_encode( isset( $stored['duration'] ) && is_array( $stored['duration'] ) ? $stored['duration'] : array() ),
 				'domain'        => $object->get_domain(),
 				'category'      => $object->get_category(),
 				'type'          => $object->get_type(),
@@ -282,7 +291,12 @@ class Cookie_Controller extends Base_Controller {
 		}
 		$object->set_id( $wpdb->insert_id );
 		$this->delete_cache();
-		do_action( 'faz_after_create_cookie' );
+		// In bulk mode (scanner import loop) the caller fires this once after
+		// the loop — the listeners (unmatched-vendor re-check, page-cache
+		// purge) are whole-dataset operations that must not run per row.
+		if ( ! self::is_cache_invalidation_suspended() ) {
+			do_action( 'faz_after_create_cookie' );
+		}
 	}
 
 	/**
@@ -295,13 +309,14 @@ class Cookie_Controller extends Base_Controller {
 		global $wpdb;
 		$date_modified = current_time( 'mysql' );
 		$object->set_date_modified( $date_modified );
+		$stored = $object->get_data();
 		$result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookies',
 			array(
 				'name'          => $object->get_name(),
 				'slug'          => $object->get_slug(),
-				'description'   => wp_json_encode( $object->get_description() ),
-				'duration'      => wp_json_encode( $object->get_duration() ),
+				'description'   => wp_json_encode( isset( $stored['description'] ) && is_array( $stored['description'] ) ? $stored['description'] : array() ),
+				'duration'      => wp_json_encode( isset( $stored['duration'] ) && is_array( $stored['duration'] ) ? $stored['duration'] : array() ),
 				'domain'        => $object->get_domain(),
 				'category'      => $object->get_category(),
 				'type'          => $object->get_type(),

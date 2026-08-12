@@ -13,6 +13,7 @@
  */
 
 import { expect, test } from '../fixtures/wp-fixture';
+import { WP_PATH, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
@@ -101,6 +102,7 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
   });
 
   test('H7: consent_revision input is disabled and cannot be lowered via REST', async ({ page, loginAsAdmin }) => {
+    test.skip(!WP_PATH, 'requires WP_PATH to restore consent_revision through wp-cli');
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     // UI: input has both readonly and disabled attributes.
@@ -112,15 +114,38 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
     const before = await getSettings(page, nonce);
     const currentRev = Number(((before.general as Record<string, unknown> | undefined)?.consent_revision) ?? 1);
 
-    // Bump up — accepted.
-    await putSettings(page, nonce, { general: { consent_revision: currentRev + 5 } });
-    let mid = await getSettings(page, nonce);
-    expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
+    try {
+      // Bump up — accepted.
+      await putSettings(page, nonce, { general: { consent_revision: currentRev + 5 } });
+      let mid = await getSettings(page, nonce);
+      expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
 
-    // Try to lower — the sanitizer must keep the persisted (higher) value.
-    await putSettings(page, nonce, { general: { consent_revision: currentRev } });
-    mid = await getSettings(page, nonce);
-    expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
+      // Try to lower — the sanitizer must keep the persisted (higher) value.
+      await putSettings(page, nonce, { general: { consent_revision: currentRev } });
+      mid = await getSettings(page, nonce);
+      expect(Number((mid.general as Record<string, unknown>).consent_revision)).toBe(currentRev + 5);
+    } finally {
+      // Put it back, and do it BELOW the REST layer on purpose.
+      //
+      // consent_revision invalidates every stored consent cookie on the site —
+      // that is the point of the feature. This test raises it by 5 and, because
+      // the sanitiser refuses to lower it (which is exactly what the assertions
+      // above prove), the bump used to be permanent: every run of the suite
+      // ratcheted it up and invalidated the consent of every spec downstream of
+      // this one. It had reached 6 on this box. The monotonic guard is correct
+      // for the product and wrong for a test that has to leave no trace, so the
+      // restore goes straight to the option.
+      try {
+        wpEval(
+          "$s = get_option( 'faz_settings', array() ); " +
+          "if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); } " +
+          `$s['general']['consent_revision'] = ${currentRev}; ` +
+          "update_option( 'faz_settings', $s ); echo 'ok';",
+        );
+      } catch (error) {
+        console.warn('Could not restore consent_revision after H7:', error);
+      }
+    }
   });
 
   test('H8: consent_forwarding.target_domains rejects non-http(s) schemes', async ({ page, loginAsAdmin }) => {
@@ -237,6 +262,7 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
     const wantLangs = Array.from(new Set([...(beforeLang ?? ['en']), 'en', 'hr']));
     await putSettings(page, nonce, { general: { active_languages: wantLangs } });
 
+    try {
     // Hit the public REST endpoint for hr.
     const response = await page.request.get(`${WP_BASE}/wp-json/faz/v1/banner/hr`);
     // Either 200 (hr is selected and works) or 404 (hr not in selected — set
@@ -253,8 +279,12 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
       expect([400, 404]).toContain(response.status());
     }
 
-    // Restore.
-    await putSettings(page, nonce, { general: { active_languages: beforeLang ?? ['en'], default_language: beforeDefault ?? 'en' } });
+    } finally {
+      // In a finally, not trailing the assertions: a failure above used to skip
+      // the restore entirely and leave 'hr' in active_languages for every spec
+      // downstream.
+      await putSettings(page, nonce, { general: { active_languages: beforeLang ?? ['en'], default_language: beforeDefault ?? 'en' } });
+    }
   });
 
   test('M3: wca.js categoryMap covers performance + advertisement back-compat', async ({ page, loginAsAdmin }) => {

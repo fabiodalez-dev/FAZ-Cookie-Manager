@@ -78,7 +78,14 @@ namespace {
 	$GLOBALS['__faz_consent_cookie'] = '';
 	$GLOBALS['__faz_providers']      = array();
 
-	if ( ! function_exists( 'get_transient' ) ) {
+	if ( ! function_exists( 'wp_parse_url' ) ) {
+	// Reached only once the social-container path consults the whitelist, which
+	// it did not before this change — the harness had no reason to stub it.
+	function wp_parse_url( $url, $component = -1 ) {
+		return parse_url( $url, $component );
+	}
+}
+if ( ! function_exists( 'get_transient' ) ) {
 		function get_transient( $key ) {
 			return array_key_exists( $key, $GLOBALS['__faz_transients'] )
 				? $GLOBALS['__faz_transients'][ $key ]
@@ -214,12 +221,13 @@ namespace {
 	 * enforceable set computed from the provider catalogue (so get_service_consent
 	 * resolves against the BROAD set, mirroring runtime).
 	 */
-	function faz_arrange( $cookie, $option_on = true ) {
+	function faz_arrange( $cookie, $option_on = true, $whitelist = array() ) {
 		$GLOBALS['__faz_consent_cookie'] = $cookie;
 		$GLOBALS['__faz_providers']      = faz_providers();
 		$fe = faz_new_frontend();
 		faz_set_prop( $fe, 'settings_option_cache', array(
 			'banner_control' => array( 'per_service_consent' => $option_on ),
+			'script_blocking' => array( 'whitelist_patterns' => $whitelist ),
 		) );
 		// Detected (visible) list stays narrow & empty — the whole point of the
 		// block-first scenario is that no provider cookie was observed.
@@ -350,6 +358,40 @@ namespace {
 	$cat_ids = array_keys( $cat );
 	sort( $cat_ids );
 	assert_eq( $cat_ids, $enf_ids, 'D11 catalogue membership equals the enforceable set (UI ⇄ enforcement consistency)' );
+
+	// ===== Group E0 — social containers honour the admin's exemptions =====
+	// Reported on wp.org (Smash Balloon Instagram Feed): a site owner tried to
+	// let one feed through by adding its container id and class to the blocking
+	// exceptions, and nothing happened. process_social_embeds() was the one
+	// blocking path that consulted neither the whitelist nor class="faz-skip",
+	// so there was no way to say "not this embed" at all.
+	$fe_wl = faz_arrange( '', false );
+
+	$skip_class = '<div class="instagram-media faz-skip">feed</div>';
+	$out_skip   = faz_call( $fe_wl, 'process_social_embeds', array( $skip_class, array( 'marketing' ) ) );
+	assert_eq( $out_skip, $skip_class, 'E0a class="faz-skip" exempts a class-matched social container' );
+
+	$skip_id  = '<div id="sb_instagram" class="faz-skip">feed</div>';
+	$out_id   = faz_call( $fe_wl, 'process_social_embeds', array( $skip_id, array( 'marketing' ) ) );
+	assert_eq( $out_id, $skip_id, 'E0b class="faz-skip" exempts an id-matched social container (Smash Balloon)' );
+
+	// The settings screen explicitly promises IDs and CSS class tokens too. The
+	// forum follow-up confirmed that this promise is what the reporter relied on,
+	// so pin the configured paths independently of the faz-skip escape hatch.
+	$configured_id = faz_arrange( '', false, array( 'sb_instagram' ) );
+	$id_markup     = '<div id="sb_instagram_2" class="sbi">feed</div>';
+	$id_output     = faz_call( $configured_id, 'process_social_embeds', array( $id_markup, array( 'marketing' ) ) );
+	assert_eq( $id_output, $id_markup, 'E0c a configured script/container ID exempts the Smash Balloon feed' );
+
+	$configured_class = faz_arrange( '', false, array( 'instagram-media' ) );
+	$class_markup     = '<blockquote class="instagram-media another-class">feed</blockquote>';
+	$class_output     = faz_call( $configured_class, 'process_social_embeds', array( $class_markup, array( 'marketing' ) ) );
+	assert_eq( $class_output, $class_markup, 'E0d a configured CSS class exempts a social feed container' );
+
+	// Non-vacuity: without the exemption the very same markup IS blocked.
+	$plain     = '<div class="instagram-media">feed</div>';
+	$out_plain = faz_call( $fe_wl, 'process_social_embeds', array( $plain, array( 'marketing' ) ) );
+	assert_eq( false !== strpos( $out_plain, 'data-faz-category' ), true, 'E0e the same container without the exemption is still blocked' );
 
 	// ===== Group E — social-embed PCRE failure preserves page content =====
 	$fe       = faz_arrange( '', false );

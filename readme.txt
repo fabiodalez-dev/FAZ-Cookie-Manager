@@ -318,6 +318,40 @@ Yes. Place `[faz_do_not_sell]` on any page (e.g. your Privacy Policy) to show a 
 
 Yes. Place `[faz_dsar_form]` on any page to show a GDPR-compliant request form covering six rights: Access (Art. 15), Erasure (Art. 17), Data Portability (Art. 20), Rectification (Art. 16), Restriction (Art. 18), and the Right to Object (Art. 21). On submission, the request is stored as a private post in the WordPress database (so it survives email failures), a notification is sent to the admin with a direct link to the record, and a confirmation is sent to the requester. The form includes a honeypot field and nonce verification to block spam bots. Optional attributes: `button` (submit label).
 
+= How do I run my own script when a category is consented? =
+
+Listen for `fazcookie_consent_ready` on `document`. It announces the initial consent state once on **every** page load and fires again with `action: 'update'` if the visitor changes consent on that page, so the code runs both where the visitor accepts and on every page afterwards:
+
+`document.addEventListener('fazcookie_consent_ready', function (e) {
+    if (e.detail.accepted.indexOf('functional') !== -1) {
+        showMap();
+    }
+});`
+
+`e.detail` is `{ accepted: [slug, ...], rejected: [slug, ...], action: 'init' | 'restore' | 'gpc' | 'update' }` -- `init` on a first visit before any choice, `restore` for a visitor whose choice was already stored, `gpc` when a Global Privacy Control signal was auto-applied, and `update` right after the visitor accepts, rejects or saves preferences. Register the listener before the plugin's script runs, for example from an inline `<script>` in the head.
+
+One caveat on timing: the event tells you the consent state, which is not the same as the plugin having already re-activated the scripts it was blocking. That unblock pass runs shortly afterwards. Your own code can act immediately; if you depend on a resource the plugin itself gated (a `data-faz-tag` script or iframe), wait for it rather than assuming it is live in the same tick.
+
+Use `fazcookie_consent_update` instead when you want to react to a **change**: it fires when the visitor accepts, rejects or saves preferences, and not on a plain page load by someone who already decided. A snippet that sends an analytics event belongs there, or it would fire on every page view.
+
+`window.getFazConsent()` returns the same state on demand -- `{ activeLaw, categories: { slug: true|false }, services: { id: true|false }, isUserActionCompleted, consentID, languageCode }` -- for code that runs after the plugin has initialised and cannot wait for an event.
+
+= How do I check one service or one cookie instead of a whole category? =
+
+Categories are the right granularity on most sites, and while **Per-service consent** is off (the default) a granted category does mean every service in it is allowed. Once you enable it, a visitor can grant Functional and still deny one embed inside it, and a check on the category alone would run a script the visitor declined.
+
+`window.getFazCookieConsent('cookie_name')` answers for a single declared cookie. It returns `true` when allowed, `false` when denied, and `null` when this site declares no service for that cookie -- which is the answer on every site with per-service consent off. Treat `null` as "ask about the category instead":
+
+`document.addEventListener('fazcookie_consent_ready', function (e) {
+    var osm = getFazCookieConsent('_osm_session');
+    var allowed = osm === null
+        ? e.detail.accepted.indexOf('functional') !== -1
+        : osm;
+    if (allowed) { showMap(); }
+});`
+
+`getFazConsent().services` gives the same answer keyed by service id instead of cookie name, and is empty when per-service consent is off. Both apply the resolution the blocker and the cookie shredder use: a per-cookie override wins over the per-service choice, which wins over the category, and the most restrictive answer wins when several services declare the same cookie.
+
 == Screenshots ==
 
 1. **Cookie consent banner on the frontend** -- GDPR-ready banner in the bottom-left corner with "Customize", "Reject All" and equal-weight "Accept All" buttons. Shown only on the first visit until the visitor makes a choice.
@@ -342,8 +376,24 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Added: Cookie Policy change review linked to consent revision. Mark a change minor to keep existing consents, or material to re-show the banner. The review token includes the default policy and every saved jurisdiction/language override variant.
 * Added: opt-in footer legal links with ordered page selections and optional custom labels. Output is visitor-invariant and cache-safe; unpublished or unavailable selections remain visible in Settings so they can be removed, but never render publicly.
 * Added: a safe snapshot collector for privacy-policy text registered by installed plugins, preserving operator wording while tracking upstream changes.
+* Added: cookie duration and description are now shown in the visitor's language, not only the category labels (#214). A bundled catalogue supplies wording for known cookies and translates simple retention periods such as "2 years". It replaces a value only when that value is empty or is the plugin's own English text, so a description you wrote yourself is never replaced, while the English wording the scanner left in an Italian or German row does get translated. An unrecognised or free-form duration keeps exactly the value you entered. Applies to the banner, the [faz_cookie_table] shortcode and the generated Cookie Policy; no database change is involved.
+* Added: two filters, `faz_cookie_content_i18n_description` and `faz_cookie_content_i18n_duration`, let a site override or switch off the bundled cookie wording per cookie and per language, without editing plugin files.
 * Changed: the legal-document renderer now reads validated document coordinates from a registry while the existing Cookie Policy output remains byte-identical under the golden suite.
+* Fixed: reCAPTCHA renders again on sites installed before 1.17.2, which allowed its API endpoint but blocked the widget script it loads. A one-time migration adds the missing pattern only where the endpoint is already whitelisted, and never removes anything.
 * Fixed: material-change retries are idempotent after partial failure, identical third-party policy text cannot exchange plugin identities or overrides, oversized collected HTML stays balanced, and the REST route guard must exercise visible tabs.
+* Fixed: a payment gateway left switched off in Settings > Script Blocking could still be treated as allowed, so its scripts loaded before consent. A saved "no" is now read as off, per-service and per-cookie toggles can be switched back off and report the state the server actually stored, and the compatibility warnings on that screen describe what really runs.
+* Fixed: with per-service or per-cookie consent enabled, cookies belonging to a category the visitor had accepted were deleted anyway, so analytics broke for the very visitors who agreed to it. Category consent is honoured again, while an explicit per-cookie or per-service refusal still wins over it.
+* Added: `fazcookie_consent_ready`, a JavaScript event that announces the initial consent state on every page load and the new state after a same-page update. Scripts keyed on consent previously had nothing to react to on the pages after the visitor accepted, so an embed started on consent worked once and then stopped. Use `fazcookie_consent_update` for side effects that must run only when a choice changes; use this event to read and apply the current state.
+* Added: `getFazConsent().services` and `window.getFazCookieConsent( name )` for sites using per-service consent, answering for one service or one declared cookie instead of the whole category.
+* Fixed: the WP Consent API and Microsoft UET/Clarity bridges were never told a returning visitor's consent, so Consent-API aware plugins and Microsoft Advertising treated somebody who had accepted as denied for the rest of the session.
+* Fixed: tracking resources inside a `<noscript>` block are gated per resource. A block mixing providers was decided by whichever matched first, so a consented embed listed before a denied pixel let that pixel load before consent for visitors without JavaScript, and gated tags could be labelled with another provider's category.
+* Fixed: on SQLite-backed installs the retention cleanup silently deleted nothing, so consent logs and pageviews were kept past the retention window you set. The purge now runs on both database engines and reports honest counts.
+* Fixed: the script-blocking whitelist was re-seeded with default entries on every upgrade, undoing entries an administrator had removed and allowing more than the plugin's own defaults. It is now seeded once, and your list is left alone from then on.
+* Fixed: Smash Balloon Instagram Feed in its own GDPR mode is no longer double-blocked; the template explains when and why the rule is inactive. Script Blocking Exceptions using a feed container ID or CSS class now work as documented.
+* Fixed: Elementor's first-party lightbox helper is no longer blocked as a tracker; real third-party embeds remain governed by their own provider rules.
+* Changed: backend queries, scanner bulk writes, retention cleanup, CSV export and generated frontend assets now use bounded, cached or streamed paths to reduce per-request memory and database overhead.
+* Fixed: CSV export cannot loop forever on a locked output buffer, and multisite blog switches cannot reuse another site's Google Consent Mode settings.
+* Updated: the Czech catalogue is synchronized with the current source strings and compiled binary.
 
 = 1.25.0 =
 * Added: administrator-editable Cookie Policy sections, isolated by jurisdiction and language. Shipped text remains the empty textarea placeholder, authored Markdown keeps the normal placeholder substitution pipeline, and unbundled languages such as Slovak can be written against the reviewed jurisdiction fallback. A stored section-heading anchor disables stale overrides after scaffold drift instead of placing legal text under the wrong heading.

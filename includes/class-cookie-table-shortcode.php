@@ -11,6 +11,7 @@
 namespace FazCookie\Includes;
 
 use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
+use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -71,6 +72,56 @@ class Cookie_Table_Shortcode {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Localize a cookie field, consulting bundled fallbacks before falling
+	 * back to another stored language.
+	 *
+	 * @param Cookie $cookie  Cookie model.
+	 * @param mixed  $value   Multilingual field value.
+	 * @param string $key     description|duration.
+	 * @param string $lang    Requested language.
+	 * @param string $default Default plugin language.
+	 * @param string $wp_lang WordPress locale prefix.
+	 * @return string
+	 */
+	private function localize_cookie_field( Cookie $cookie, $value, $key, $lang, $default, $wp_lang = '' ) {
+		// A plain legacy value belongs to the default language. Preserve it there:
+		// it may be deliberate administrator wording, and replacing it with the
+		// bundled stock description would violate the non-destructive fallback
+		// contract. Other languages may still use the catalogue below.
+		$requested_lang = strtolower( str_replace( '_', '-', (string) $lang ) );
+		$default_lang   = strtolower( str_replace( '_', '-', (string) $default ) );
+		if ( is_string( $value ) && '' !== $value && $requested_lang === $default_lang ) {
+			return $value;
+		}
+		// The same protection for every OTHER requested language. This call site
+		// hands the value in separately from the Cookie object, so the resolver
+		// it eventually reaches inspects the row's stored description and never
+		// sees the string actually being localised — which is how administrator
+		// wording survived the resolver's own guard and got replaced here anyway.
+		// Stock text still translates; anything the site owner wrote does not.
+		if ( 'description' === $key && is_string( $value ) && '' !== $value
+			&& ! \FazCookie\Includes\Cookie_Content_I18n::is_stock_description( $cookie->get_slug(), $value, $cookie->get_domain() ) ) {
+			return $value;
+		}
+		if ( is_array( $value ) ) {
+			if ( isset( $value[ $lang ] ) && is_string( $value[ $lang ] ) && '' !== $value[ $lang ] ) {
+				$translated = $cookie->get_translations( $lang, $key, $value[ $lang ] );
+				return '' !== $translated ? $translated : $value[ $lang ];
+			}
+			if ( $wp_lang && isset( $value[ $wp_lang ] ) && is_string( $value[ $wp_lang ] ) && '' !== $value[ $wp_lang ] ) {
+				$translated = $cookie->get_translations( $wp_lang, $key, $value[ $wp_lang ] );
+				return '' !== $translated ? $translated : $value[ $wp_lang ];
+			}
+		}
+
+		$translated = $lang ? $cookie->get_translations( $lang, $key ) : '';
+		if ( '' === $translated && $wp_lang ) {
+			$translated = $cookie->get_translations( $wp_lang, $key );
+		}
+		return '' !== $translated ? $translated : $this->localize( $value, $lang, $default, $wp_lang );
 	}
 
 	/**
@@ -186,8 +237,11 @@ class Cookie_Table_Shortcode {
 		}
 
 		// Fetch categories and build lookup, excluding hidden categories.
+		// get_items() (NOT get_item_from_db()) so the read goes through the
+		// object-cache/transient layer — this renders on public pages and was
+		// previously two uncached full-table scans per view.
 		$cat_controller = Category_Controller::get_instance();
-		$categories     = $cat_controller->get_item_from_db();
+		$categories     = $cat_controller->get_items();
 		$hidden_cat_ids = array();
 		$cat_map        = array(); // category_id => localized name
 		foreach ( $categories as $cat ) {
@@ -222,7 +276,7 @@ class Cookie_Table_Shortcode {
 			}
 			$cookies = $target_cat_id ? $cookie_controller->get_items_by_category( $target_cat_id ) : array();
 		} else {
-			$cookies = $cookie_controller->get_item_from_db();
+			$cookies = $cookie_controller->get_items();
 		}
 
 		// Exclude cookies belonging to hidden categories.
@@ -317,6 +371,7 @@ class Cookie_Table_Shortcode {
 				</thead>
 				<tbody>
 					<?php foreach ( $cat_cookies as $cookie ) : ?>
+					<?php $cookie_obj = new Cookie( $cookie ); ?>
 					<tr>
 						<?php foreach ( $columns as $col ) : ?>
 							<td data-label="<?php echo esc_attr( $allowed_columns[ $col ] ); ?>">
@@ -329,16 +384,20 @@ class Cookie_Table_Shortcode {
 									echo esc_html( isset( $cookie->domain ) ? $cookie->domain : '' );
 									break;
 								case 'duration':
-									echo esc_html( $this->localize(
+									echo esc_html( $this->localize_cookie_field(
+										$cookie_obj,
 										isset( $cookie->duration ) ? $cookie->duration : '',
+										'duration',
 										$lang,
 										$default,
 										$wp_lang
 									) );
 									break;
 								case 'description':
-									echo esc_html( $this->localize(
+									echo esc_html( $this->localize_cookie_field(
+										$cookie_obj,
 										isset( $cookie->description ) ? $cookie->description : '',
+										'description',
 										$lang,
 										$default,
 										$wp_lang

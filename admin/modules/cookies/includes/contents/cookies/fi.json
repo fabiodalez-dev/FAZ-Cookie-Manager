@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress asettaa tämän evästeen, kun käyttäjä käyttää emojeja WordPress-sivustolla."
+    },
+    "wordpress_test_cookie": {
+        "description": "WordPressin testieväste, jolla tarkistetaan, ovatko evästeet käytössä."
+    },
+    "wordpress_logged_in_": {
+        "description": "Ilmaisee kirjautumistilan ja käyttäjän henkilöllisyyden."
+    },
+    "wp-settings-": {
+        "description": "Mukauttaa hallintanäkymän kullekin käyttäjälle."
+    },
+    "wordpress_": {
+        "description": "WordPressin todennuseväste hallinta-alueelle."
+    },
+    "wp_lang": {
+        "description": "Tallentaa kirjautumisen yhteydessä valitun kielen."
+    },
+    "comment_author_email_": {
+        "description": "Tallentaa kommentoijan sähköpostiosoitteen käytön helpottamiseksi."
+    },
+    "comment_author_url_": {
+        "description": "Tallentaa kommentoijan sivuston osoitteen käytön helpottamiseksi."
+    },
+    "comment_author_": {
+        "description": "Tallentaa kommentoijan nimen käytön helpottamiseksi."
+    },
+    "_ga": {
+        "description": "Google Analyticsin eväste käyttäjien erottamiseen."
+    },
+    "_ga_": {
+        "description": "Google Analytics 4:n eväste istunnon tilan säilyttämiseen."
+    },
+    "_gid": {
+        "description": "Google Analyticsin eväste käyttäjien erottamiseen."
+    },
+    "_gat": {
+        "description": "Google Analyticsin eväste pyyntötahdin rajoittamiseen."
+    },
+    "wp_statistics_": {
+        "description": "WP Statisticsin eväste kävijäistuntojen ja sivunäyttöjen seurantaan."
+    },
+    "burst_uid": {
+        "description": "Burst Statisticsin eväste yksilöllisten kävijöiden tunnistamiseen."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Koko Analyticsin eväste yksilöllisten kävijöiden tunnistamiseen ja istuntokohtaisten sivunäyttöjen laskemiseen."
+    },
+    "_gac_": {
+        "description": "Google Analyticsin eväste, joka sisältää kampanjatiedot."
+    },
+    "__utma": {
+        "description": "Google Analyticsin (Classic) eväste käyttäjien ja istuntojen erottamiseen."
+    },
+    "__utmb": {
+        "description": "Google Analyticsin (Classic) eväste uusien istuntojen tunnistamiseen."
+    },
+    "__utmc": {
+        "description": "Google Analyticsin (Classic) eväste, jota käytetään __utmb-evästeen kanssa uusien istuntojen tunnistamiseen."
+    },
+    "__utmz": {
+        "description": "Google Analyticsin (Classic) eväste, joka tallentaa liikenteen lähteen tai kampanjan."
+    },
+    "__utmt": {
+        "description": "Google Analyticsin (Classic) eväste pyyntötahdin rajoittamiseen."
+    },
+    "_gcl_au": {
+        "description": "Google Adsin konversiolinkittäjän eväste."
+    },
+    "ide": {
+        "description": "DoubleClickin/Googlen eväste kohdennettuun mainontaan."
+    },
+    "dsid": {
+        "description": "Googlen mainoseväste mainosten personointiin."
+    },
+    "_fbp": {
+        "description": "Facebook Pixelin eväste mainontaan ja analytiikkaan."
+    },
+    "_fbc": {
+        "description": "Facebookin eväste, joka sisältää napsautustunnisteen."
+    },
+    "fr": {
+        "description": "Facebookin mainoseväste."
+    },
+    "__cf_bm": {
+        "description": "Cloudflaren eväste bottien hallintaan."
+    },
+    "__cfduid": {
+        "description": "Cloudflaren eväste luotettavan verkkoliikenteen tunnistamiseen."
+    },
+    "_grecaptcha": {
+        "description": "Google reCAPTCHA käyttää tätä ihmisten ja bottien erottamiseen."
+    },
+    "fazcookie-consent": {
+        "description": "Kävijän asettamat evästesuostumuksen asetukset."
+    },
+    "_clck": {
+        "description": "Microsoft Clarityn eväste analytiikkaan."
+    },
+    "_clsk": {
+        "description": "Microsoft Clarityn istuntoeväste."
+    },
+    "muid": {
+        "description": "Microsoft Bing Adsin eväste Universal Event Trackingia varten."
+    },
+    "_uetsid": {
+        "description": "Microsoft Bing Adsin UET-eväste istunnon seurantaan."
+    },
+    "_uetvid": {
+        "description": "Microsoft Bing Adsin UET-eväste istuntojen väliseen seurantaan."
+    },
+    "bcookie": {
+        "description": "LinkedInin eväste selaimen tunnistamiseen."
+    },
+    "li_sugr": {
+        "description": "LinkedIn Insight Tag -työkalun eväste."
+    },
+    "lidc": {
+        "description": "LinkedInin eväste konesalien välisen reitityksen optimointiin."
+    },
+    "__hssc": {
+        "description": "HubSpotin eväste istunnon seurantaan."
+    },
+    "__hssrc": {
+        "description": "HubSpotin eväste istunnon uudelleenkäynnistyksen tunnistamiseen."
+    },
+    "__hstc": {
+        "description": "HubSpotin tärkein analytiikkaeväste."
+    },
+    "hubspotutk": {
+        "description": "HubSpotin eväste kävijöiden seurantaan."
+    },
+    "__hs_opt_out": {
+        "description": "HubSpotin eväste, joka muistaa kieltäytymisen."
+    },
+    "ysc": {
+        "description": "YouTuben eväste upotettujen videoiden katselukertojen seurantaan."
+    },
+    "visitor_info1_live": {
+        "description": "YouTuben eväste kaistanleveyden ja näyttöasetusten arviointiin."
+    },
+    "vuid": {
+        "description": "Vimeon analytiikkaeväste videoiden katselukertojen seurantaan."
+    },
+    "__stripe_mid": {
+        "description": "Stripen eväste petosten torjuntaan maksujen käsittelyssä."
+    },
+    "__stripe_sid": {
+        "description": "Stripen istuntoeväste petosten torjuntaan maksujen käsittelyssä."
+    },
+    "mp_": {
+        "description": "Mixpanelin analytiikkaeväste käyttäjän toimien seurantaan."
+    },
+    "distinct_id": {
+        "description": "Mixpanelin eväste yksilöllisten käyttäjien tunnistamiseen."
+    },
+    "_hj*": {
+        "description": "Hotjarin analytiikkaeväste."
+    },
+    "woocommerce_cart_hash": {
+        "description": "WooCommercen eväste ostoskorin muutosten tunnistamiseen."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "WooCommercen eväste ostoskorin tuotteiden seurantaan."
+    },
+    "wp_woocommerce_session_": {
+        "description": "WooCommercen istuntoeväste."
+    },
+    "__tea_cache_tokens_": {
+        "description": "TikTokin analytiikka-SDK:n käyttämä välimuistitunniste."
+    },
+    "_ttp": {
+        "description": "TikTok Pixelin eväste kävijöiden seurantaan eri sivustoilla mainostarkoituksessa."
+    },
+    "tt_webid": {
+        "description": "TikTokin eväste käyttäjien tunnistamiseen ja seurantaan mainostarkoituksessa."
+    },
+    "guest_id": {
+        "description": "Twitterin eväste kirjautumattomien käyttäjien tunnistamiseen."
+    },
+    "personalization_id": {
+        "description": "Twitterin eväste personointiin ja mainontaan."
+    },
+    "ct0": {
+        "description": "Twitterin eväste upotetun sisällön tietoturvaan ja roskapostin torjuntaan."
+    },
+    "_scid": {
+        "description": "Snapchat Pixelin eväste kävijöiden tunnistamiseen eri sivustoilla."
+    },
+    "sc_at": {
+        "description": "Snapchat Pixelin eväste mainonnan attribuutioon."
+    },
+    "_pin_unauth": {
+        "description": "Pinterestin eväste tunnistautumattomien käyttäjien seurantaan."
+    },
+    "_pinterest_sess": {
+        "description": "Pinterestin istuntoeväste mainontaan ja seurantaan."
+    },
+    "phpsessid": {
+        "description": "PHP:n istuntoeväste käyttäjäistuntojen hallintaan."
+    }
+}

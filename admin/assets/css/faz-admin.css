@@ -1792,15 +1792,31 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	border-radius: 18px;
 	background: var(--faz-card);
 	text-align: left;
-	cursor: pointer;
 	transition: border-color var(--faz-transition), box-shadow var(--faz-transition), transform var(--faz-transition);
 }
 
 .faz-template-card:hover,
-.faz-template-card:focus {
+.faz-template-card:focus-within {
 	border-color: rgba(var(--faz-primary-rgb), 0.24);
 	box-shadow: var(--faz-shadow);
 	transform: translateY(-1px);
+	outline: none;
+}
+
+.faz-template-card-action {
+	display: block;
+	width: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.faz-template-card-action:focus {
 	outline: none;
 }
 
@@ -1814,7 +1830,7 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 .faz-template-card-desc {
 	font-size: 12px;
 	line-height: 1.55;
-	color: var(--faz-text-secondary);
+	color: var(--faz-text-secondary, #50575e);
 	margin-bottom: 10px;
 }
 
@@ -1824,11 +1840,55 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	padding: 4px 9px;
 	border-radius: 999px;
 	background: var(--faz-primary-soft);
-	color: var(--faz-primary-strong);
+	color: var(--faz-primary-strong, #3858e9);
 	font-size: 10px;
 	font-weight: 800;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
+}
+
+/* A blocker template that currently has nothing to act on. Muted rather than
+   disabled: the condition belongs to another plugin's setting and can change at
+   any moment, so the card stays usable and only says that it is not in effect. */
+.faz-template-card-inert {
+	border-style: dashed;
+}
+
+.faz-template-card-inert-badge {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 6px;
+	padding: 4px 9px;
+	border-radius: 999px;
+	background: var(--faz-warning-soft, rgba(180, 120, 0, 0.12));
+	color: var(--faz-warning-strong, #8a5a00);
+	font-size: 10px;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.faz-template-card-inert-note {
+	margin-top: 8px;
+	font-size: 11px;
+	line-height: 1.5;
+	color: var(--faz-text-secondary, #50575e);
+	text-align: left;
+}
+
+.faz-template-card-inert-link {
+	display: inline-block;
+	margin-top: 6px;
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--faz-primary-strong, #3858e9);
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.faz-template-card-inert-link:focus {
+	outline: 2px solid var(--faz-primary-strong, #3858e9);
+	outline-offset: 2px;
 }
 
 #faz-shortcode-text,

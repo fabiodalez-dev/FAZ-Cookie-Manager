@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "O WordPress define este cookie quando um usuário interage com emojis em um site WordPress."
+    },
+    "wordpress_test_cookie": {
+        "description": "Cookie de teste do WordPress para verificar se os cookies estão habilitados."
+    },
+    "wordpress_logged_in_": {
+        "description": "Indica o status de login e a identidade do usuário."
+    },
+    "wp-settings-": {
+        "description": "Personaliza a interface de administração para cada usuário."
+    },
+    "wordpress_": {
+        "description": "Cookie de autenticação do WordPress para a área administrativa."
+    },
+    "wp_lang": {
+        "description": "Armazena o idioma selecionado durante o login."
+    },
+    "comment_author_email_": {
+        "description": "Armazena o e-mail de quem comenta, por conveniência."
+    },
+    "comment_author_url_": {
+        "description": "Armazena o endereço do site de quem comenta, por conveniência."
+    },
+    "comment_author_": {
+        "description": "Armazena o nome de quem comenta, por conveniência."
+    },
+    "_ga": {
+        "description": "Cookie do Google Analytics usado para distinguir usuários."
+    },
+    "_ga_": {
+        "description": "Cookie do Google Analytics 4 usado para manter o estado da sessão."
+    },
+    "_gid": {
+        "description": "Cookie do Google Analytics usado para distinguir usuários."
+    },
+    "_gat": {
+        "description": "Cookie do Google Analytics usado para limitar a taxa de requisições."
+    },
+    "wp_statistics_": {
+        "description": "Cookie do WP Statistics usado para acompanhar sessões de visitantes e páginas visualizadas."
+    },
+    "burst_uid": {
+        "description": "Cookie do Burst Statistics usado para identificar visitantes únicos."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Cookie do Koko Analytics usado para detectar visitantes únicos e contar as páginas visualizadas por sessão."
+    },
+    "_gac_": {
+        "description": "Cookie do Google Analytics que contém informações de campanha."
+    },
+    "__utma": {
+        "description": "Cookie do Google Analytics (Classic) usado para distinguir usuários e sessões."
+    },
+    "__utmb": {
+        "description": "Cookie do Google Analytics (Classic) usado para determinar novas sessões."
+    },
+    "__utmc": {
+        "description": "Cookie do Google Analytics (Classic) usado junto com o __utmb para determinar novas sessões."
+    },
+    "__utmz": {
+        "description": "Cookie do Google Analytics (Classic) que armazena a origem do tráfego ou a campanha."
+    },
+    "__utmt": {
+        "description": "Cookie do Google Analytics (Classic) usado para limitar a taxa de requisições."
+    },
+    "_gcl_au": {
+        "description": "Cookie do vinculador de conversões do Google Ads."
+    },
+    "ide": {
+        "description": "Cookie da DoubleClick/Google usado para publicidade direcionada."
+    },
+    "dsid": {
+        "description": "Cookie de publicidade do Google para personalização de anúncios."
+    },
+    "_fbp": {
+        "description": "Cookie do pixel do Facebook usado para publicidade e análise."
+    },
+    "_fbc": {
+        "description": "Cookie do Facebook com o identificador de clique."
+    },
+    "fr": {
+        "description": "Cookie de publicidade do Facebook."
+    },
+    "__cf_bm": {
+        "description": "Cookie da Cloudflare para gerenciamento de bots."
+    },
+    "__cfduid": {
+        "description": "Cookie da Cloudflare usado para identificar tráfego confiável."
+    },
+    "_grecaptcha": {
+        "description": "Usado pelo Google reCAPTCHA para distinguir humanos de bots."
+    },
+    "fazcookie-consent": {
+        "description": "Preferências de consentimento de cookies definidas pelo visitante."
+    },
+    "_clck": {
+        "description": "Cookie do Microsoft Clarity para análise."
+    },
+    "_clsk": {
+        "description": "Cookie de sessão do Microsoft Clarity."
+    },
+    "muid": {
+        "description": "Cookie do Microsoft Bing Ads para o Universal Event Tracking."
+    },
+    "_uetsid": {
+        "description": "Cookie UET do Microsoft Bing Ads para rastreamento de sessão."
+    },
+    "_uetvid": {
+        "description": "Cookie UET do Microsoft Bing Ads para rastreamento entre sessões."
+    },
+    "bcookie": {
+        "description": "Cookie do LinkedIn para identificação do navegador."
+    },
+    "li_sugr": {
+        "description": "Cookie do LinkedIn Insight Tag."
+    },
+    "lidc": {
+        "description": "Cookie do LinkedIn para otimizar o roteamento entre data centers."
+    },
+    "__hssc": {
+        "description": "Cookie do HubSpot para rastreamento de sessão."
+    },
+    "__hssrc": {
+        "description": "Cookie do HubSpot para detectar a reinicialização da sessão."
+    },
+    "__hstc": {
+        "description": "Principal cookie de análise do HubSpot."
+    },
+    "hubspotutk": {
+        "description": "Cookie do HubSpot para rastreamento de visitantes."
+    },
+    "__hs_opt_out": {
+        "description": "Cookie do HubSpot que memoriza a recusa."
+    },
+    "ysc": {
+        "description": "Cookie do YouTube usado para registrar visualizações de vídeos incorporados."
+    },
+    "visitor_info1_live": {
+        "description": "Cookie do YouTube usado para estimar a largura de banda e as configurações de exibição."
+    },
+    "vuid": {
+        "description": "Cookie de análise do Vimeo para registrar visualizações de vídeo."
+    },
+    "__stripe_mid": {
+        "description": "Cookie da Stripe para prevenção de fraude no processamento de pagamentos."
+    },
+    "__stripe_sid": {
+        "description": "Cookie de sessão da Stripe para prevenção de fraude no processamento de pagamentos."
+    },
+    "mp_": {
+        "description": "Cookie de análise do Mixpanel para registrar interações do usuário."
+    },
+    "distinct_id": {
+        "description": "Cookie do Mixpanel usado para identificar usuários únicos."
+    },
+    "_hj*": {
+        "description": "Cookie de análise do Hotjar."
+    },
+    "woocommerce_cart_hash": {
+        "description": "Cookie do WooCommerce para detectar alterações no carrinho."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "Cookie do WooCommerce para acompanhar os itens do carrinho."
+    },
+    "wp_woocommerce_session_": {
+        "description": "Cookie de sessão do WooCommerce."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Token de cache usado pelo SDK de análise do TikTok."
+    },
+    "_ttp": {
+        "description": "Cookie do pixel do TikTok usado para rastrear visitantes entre sites para fins publicitários."
+    },
+    "tt_webid": {
+        "description": "Cookie do TikTok usado para identificar e rastrear usuários para fins publicitários."
+    },
+    "guest_id": {
+        "description": "Cookie do Twitter usado para identificar usuários não conectados."
+    },
+    "personalization_id": {
+        "description": "Cookie do Twitter usado para personalização e publicidade."
+    },
+    "ct0": {
+        "description": "Cookie do Twitter usado para segurança e prevenção de spam em conteúdo incorporado."
+    },
+    "_scid": {
+        "description": "Cookie do pixel do Snapchat para identificação de visitantes entre sites."
+    },
+    "sc_at": {
+        "description": "Cookie do pixel do Snapchat usado para atribuição publicitária."
+    },
+    "_pin_unauth": {
+        "description": "Cookie do Pinterest usado para rastrear usuários não autenticados."
+    },
+    "_pinterest_sess": {
+        "description": "Cookie de sessão do Pinterest usado para publicidade e rastreamento."
+    },
+    "phpsessid": {
+        "description": "Cookie de sessão do PHP para gerenciar as sessões dos usuários."
+    }
+}
