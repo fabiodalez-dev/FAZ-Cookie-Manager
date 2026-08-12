@@ -298,20 +298,38 @@ class Api extends Rest_Controller {
 			'status' => $request->get_param( 'status' ) ? sanitize_text_field( $request->get_param( 'status' ) ) : '',
 		);
 
-		$csv = Controller::get_instance()->export_csv( $args );
-
-		if ( ! is_string( $csv ) ) {
-			status_header( 500 );
-			exit;
-		}
-
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="consent-logs-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 		header( 'Pragma: no-cache' );
 		header( 'Expires: 0' );
-		header( 'Content-Length: ' . strlen( $csv ) );
-		echo $csv; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Raw CSV file download.
+
+		// No Content-Length. It cannot be known before the last row is written,
+		// and computing it would mean building the whole file first — which is
+		// the thing being removed. A download without one is ordinary; the file
+		// name is what the browser shows.
+
+		// Every output buffer is discarded first. WordPress and other plugins
+		// routinely leave one open, and streaming INTO a buffer accumulates the
+		// same complete CSV in memory the buffer was meant to avoid: the code
+		// would look streamed and behave exactly as before.
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+
+		$handle = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		if ( false === $handle ) {
+			status_header( 500 );
+			exit;
+		}
+
+		// Written batch by batch straight to the response. The previous version
+		// built the entire export in a php://temp buffer and echoed it, so peak
+		// memory held the whole file — on the plugin's highest-volume table, for
+		// the site with the most rows, which is the site whose administrator
+		// needs the export and the one where it ran out of memory.
+		Controller::get_instance()->stream_csv( $handle, $args );
+		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		exit;
 	}
 

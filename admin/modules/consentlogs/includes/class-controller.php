@@ -664,6 +664,37 @@ class Controller {
 	 * @return string CSV content.
 	 */
 	public function export_csv( $args = array() ) {
+		$output = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+		if ( false === $output ) {
+			return '';
+		}
+		$this->write_csv( $output, $args );
+		rewind( $output );
+		$csv = stream_get_contents( $output );
+		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+		return $csv;
+	}
+
+	/**
+	 * Write the export straight to a stream, one batch at a time.
+	 *
+	 * export_csv() above still returns a string, because callers that want the
+	 * whole thing in memory legitimately exist. The HTTP download does not: it
+	 * used to build the entire file in a php://temp buffer and only then echo it,
+	 * so peak memory held the complete CSV — on the plugin's highest-volume table,
+	 * for the site with the most rows, which is exactly the site whose
+	 * administrator needs the export and the one where it ran out of memory.
+	 *
+	 * Batching the QUERY without batching the OUTPUT solved half the problem and
+	 * hid the other half: the SELECT no longer spiked, so the failure moved from
+	 * an obvious "SQL returned too much" to an opaque allowed-memory-exhausted
+	 * partway through a download.
+	 *
+	 * @param resource $handle Open, writable stream.
+	 * @param array    $args   Same filters as export_csv().
+	 * @return void
+	 */
+	private function write_csv( $handle, $args = array() ) {
 		global $wpdb;
 
 		$table = $this->get_table_name();
@@ -685,13 +716,9 @@ class Controller {
 
 		$where_clause = implode( ' AND ', $where );
 
-		$output = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
-		if ( false === $output ) {
-			return '';
-		}
 
 		// CSV header row.
-		fputcsv( $output, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ), ',', '"', '\\' );
+		fputcsv( $handle, array( 'Log ID', 'Consent ID', 'Status', 'Categories', 'IP Hash', 'User Agent Hash', 'URL', 'Banner Slug', 'Policy Revision', 'Created At' ), ',', '"', '\\' );
 
 		// Stream in keyset-paginated batches instead of materialising the whole
 		// table in one get_results() call: the consent-log table is the plugin's
@@ -728,7 +755,7 @@ class Controller {
 			foreach ( $items as $item ) {
 				$last_log_id = (string) $item['log_id'];
 				fputcsv(
-					$output,
+					$handle,
 					array_map(
 						array( $this, 'sanitize_csv_cell' ),
 						array(
@@ -751,11 +778,21 @@ class Controller {
 			}
 		} while ( count( $items ) === $batch_size );
 
-		rewind( $output );
-		$csv = stream_get_contents( $output );
-		fclose( $output ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+	}
 
-		return $csv;
+	/**
+	 * Public entry point for streaming the export to an already-open stream.
+	 *
+	 * @param resource $handle Open, writable stream (e.g. fopen('php://output','w')).
+	 * @param array    $args   Same filters as export_csv().
+	 * @return bool True when the stream was usable.
+	 */
+	public function stream_csv( $handle, $args = array() ) {
+		if ( ! is_resource( $handle ) ) {
+			return false;
+		}
+		$this->write_csv( $handle, $args );
+		return true;
 	}
 
 	/**

@@ -393,6 +393,38 @@ namespace {
 		'next batch binds the last database BIGINT as a platform-safe decimal string'
 	);
 
+	// The streamed path must produce byte-identical output to the buffered one.
+	// It exists because the HTTP download used to build the whole export in
+	// memory and only then echo it — so peak memory held the complete file, on
+	// the plugin's highest-volume table, for the site with the most rows. That is
+	// the administrator who needs the export and the one it failed for.
+	$stream = fopen( 'php://temp', 'r+' );
+	$ok     = $ctrl->stream_csv( $stream );
+	rewind( $stream );
+	$streamed = stream_get_contents( $stream );
+	fclose( $stream );
+	eq( $ok, true, 'stream_csv reports success on a usable stream' );
+	eq( $streamed, $csv, 'the streamed export is byte-identical to the buffered one' );
+	eq( false === strpos( $streamed, 'Log ID' ) ? 0 : 1, 1, 'and still carries the header row' );
+
+	// A caller that hands over something unusable gets false rather than a
+	// warning and a half-written response.
+	eq( $ctrl->stream_csv( null ), false, 'a non-resource is refused' );
+	eq( $ctrl->stream_csv( 'not a stream' ), false, 'and so is a string' );
+
+	// The REST download must use the streaming entry point, not the string one.
+	// Behaviourally indistinguishable from a unit test — both produce the same
+	// bytes — so the call site is asserted directly; using export_csv() there
+	// would restore the original memory profile while every test above passed.
+	$api_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/consentlogs/api/class-api.php' );
+	eq( false !== strpos( $api_src, 'stream_csv( $handle, $args )' ), true, 'the REST export streams to php://output' );
+	// Anchored on the header CALL, not the words: the first version of this
+	// matched the comment that explains why the header is absent, so it failed
+	// because of prose. An assertion a comment can satisfy is checking the wrong
+	// thing in both directions.
+	eq( false === strpos( $api_src, "header( 'Content-Length" ), true, 'and sends no Content-Length, which cannot be known before the last row' );
+	eq( false !== strpos( $api_src, 'ob_end_clean' ), true, 'output buffers are discarded, or streaming would accumulate in one anyway' );
+
 	// ---------- summary ----------
 	echo "\n--\nTests:  $run\nPassed: $pass\nFailed: $fail\n\n";
 	if ( $fail > 0 ) { echo "\033[31mFAIL\033[0m\n"; exit( 1 ); }
