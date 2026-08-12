@@ -52,7 +52,12 @@ function el_eq( $actual, $expected, $label ) {
 $root      = dirname( __DIR__, 2 );
 $providers = json_decode( (string) file_get_contents( $root . '/includes/data/known-providers.json' ), true );
 
-el_eq( is_array( $providers ) && count( $providers ) > 100, true, 'the provider database loads' );
+// The floor matches the one at the foot of this file rather than a token
+// "it parsed" number: the catalogue ships 337 entries, so a threshold of 100
+// would still pass with two thirds of the providers accidentally dropped —
+// and this assertion is what the rest of the file leans on to mean "the
+// deletion below removed one entry, not a section".
+el_eq( is_array( $providers ) && count( $providers ) > 300, true, 'the provider database loads' );
 
 // 1. No entry may name an Elementor asset path.
 $offenders = array();
