@@ -167,6 +167,22 @@ cookie_i18n_eq(
 	'2 anni',
 	'cookie-policy renderer uses shared duration fallback'
 );
+// A value that is non-empty but NOT localised. Scanners and imports write the
+// same English string into every language slot, so the Italian column can hold
+// "2 years" — and the old "only translate when empty" rule skipped it for being
+// non-empty, leaving the mixed-language declaration issue #214 is about intact
+// inside the fix for it.
+$stock_dur = new Cookie( cookie_i18n_row( array( 'en' => 'x' ), array( 'en' => '2 years', 'it' => '2 years' ) ) );
+cookie_i18n_eq( $stock_dur->get_duration()['it'], '2 anni', 'an English duration sitting in the Italian slot is translated' );
+
+// And the resolver's strictness is what protects everything else: it parses a
+// strict "<number> <english unit>" or a named special and returns '' otherwise.
+$free_dur = new Cookie( cookie_i18n_row( array( 'en' => 'x' ), array( 'en' => '1 year or longer', 'it' => '1 year or longer' ) ) );
+cookie_i18n_eq( $free_dur->get_duration()['it'], '1 year or longer', 'a free-form duration is left exactly as entered' );
+
+$already_it = new Cookie( cookie_i18n_row( array( 'en' => 'x' ), array( 'en' => '2 years', 'it' => '2 anni' ) ) );
+cookie_i18n_eq( $already_it->get_duration()['it'], '2 anni', 'an already-Italian duration is not re-translated into nonsense' );
+
 // STOCK text still translates: this is the feature working, and asserting it
 // first keeps the guard below from being satisfied by simply never translating.
 cookie_i18n_eq(
