@@ -289,8 +289,30 @@
 		var scope = root || form;
 		scope.querySelectorAll('[data-show-if]').forEach(function (el) {
 			var path = el.getAttribute('data-show-if');
-			var src = scope.querySelector('input[type="checkbox"][data-path="' + path + '"]');
-			if (!src) return;
+			// The controller is looked up on the whole FORM, never on `scope`.
+			// `root` exists to narrow which groups get processed after a partial
+			// re-render; it says nothing about where the checkbox that governs
+			// them lives, and that checkbox is routinely outside the re-rendered
+			// fragment. Scoping the lookup made `src` null, the guard below
+			// returned, and the group kept whatever visibility the markup shipped
+			// with — silently, in a mechanism whose only job is staying in step
+			// with the server-side sanitiser.
+			var selector = 'input[type="checkbox"][data-path="' + path + '"]';
+			// Scope first, widen only if it is not there. Searching the whole
+			// form unconditionally would take the FIRST match in the document,
+			// which is the wrong element as soon as two fragments carry the same
+			// data-path — and searching only the scope is the defect being fixed.
+			// Narrow-then-widen is correct in both directions.
+			var src = scope.querySelector(selector) || (form || document).querySelector(selector);
+			if (!src) {
+				// A data-show-if naming a path with no checkbox is a markup bug.
+				// It used to fail silently, which is how the previous defect went
+				// unnoticed; say so instead.
+				if (window.console && console.warn) {
+					console.warn('FAZ: data-show-if="' + path + '" has no matching checkbox; group left as rendered.');
+				}
+				return;
+			}
 			var clears = el.hasAttribute('data-clear-when-hidden');
 			function toggle() {
 				el.style.display = src.checked ? '' : 'none';
@@ -301,7 +323,16 @@
 				}
 			}
 			toggle();
-			src.addEventListener('change', toggle);
+			// Bind once per group element. applyShowIf runs again on every
+			// re-scope, and the listener was re-registered each time: harmless
+			// for the visibility toggle, but on a data-clear-when-hidden group it
+			// meant N redundant DOM sweeps per change event, growing with the
+			// number of times the panel had been re-rendered. A re-rendered group
+			// is a NEW element, so it carries no flag and binds correctly.
+			if (!el.__fazShowIfBound) {
+				el.__fazShowIfBound = true;
+				src.addEventListener('change', toggle);
+			}
 		});
 	}
 

@@ -145,4 +145,63 @@ check('settings.php gates per-cookie consent on per-service consent', () => {
   );
 });
 
+// ── the controller OUTSIDE the re-rendered root ─────────────────────────────
+// applyShowIf takes a root so a partial re-render can re-gate just that
+// fragment. The controlling checkbox routinely lives OUTSIDE it — it is the
+// parent toggle, in a different form group. Looking the controller up inside
+// the root made `src` null, the guard returned, and the group kept whatever
+// visibility the markup shipped with: no error, no warning, and a
+// data-clear-when-hidden group left ticked while the server was about to
+// discard the value. A silent failure in the one mechanism whose only job is
+// agreeing with the sanitiser.
+function buildSplitForm({ serviceOn, cookieOn }) {
+  const form = dom.window.document.createElement('form');
+  form.innerHTML = `
+    <div class="faz-form-group">
+      <label class="faz-toggle">
+        <input type="checkbox" data-path="banner_control.per_service_consent">
+      </label>
+    </div>
+    <div class="faz-rerender-panel">
+      <div class="faz-form-group" data-show-if="banner_control.per_service_consent" data-clear-when-hidden>
+        <label class="faz-toggle">
+          <input type="checkbox" data-path="banner_control.per_cookie_consent">
+        </label>
+      </div>
+    </div>`;
+  const service = form.querySelector('[data-path="banner_control.per_service_consent"]');
+  const cookie = form.querySelector('[data-path="banner_control.per_cookie_consent"]');
+  service.checked = serviceOn;
+  cookie.checked = cookieOn;
+  dom.window.document.body.appendChild(form);
+  return { form, service, cookie, panel: form.querySelector(".faz-rerender-panel"), group: form.querySelector('[data-show-if]') };
+}
+
+check('a controller outside the re-scoped root is still found', () => {
+  const { panel, group } = buildSplitForm({ serviceOn: false, cookieOn: true });
+  applyShowIf(panel); // the controller lives outside `panel`
+  assert.equal(group.style.display, 'none', 'the group must be hidden even when the controller is outside the root');
+});
+
+check('and the child is still cleared when the controller is outside the root', () => {
+  const { panel, cookie } = buildSplitForm({ serviceOn: false, cookieOn: true });
+  applyShowIf(panel);
+  assert.equal(cookie.checked, false, 'a hidden checkbox still serializes — re-scoping must not skip the clear');
+});
+
+// The listener must not stack: applyShowIf runs again on every re-scope, and a
+// data-clear-when-hidden group sweeps the DOM on each change event.
+check('re-scoping does not stack change listeners', () => {
+  const { form, service, group } = buildForm({ serviceOn: true, cookieOn: true });
+  applyShowIf(form);
+  applyShowIf(form);
+  applyShowIf(form);
+  let sweeps = 0;
+  const realQSA = group.querySelectorAll.bind(group);
+  group.querySelectorAll = (sel) => { sweeps++; return realQSA(sel); };
+  service.checked = false;
+  service.dispatchEvent(new dom.window.Event('change'));
+  assert.equal(sweeps, 1, `one change event must sweep once, not once per applyShowIf call (got ${sweeps})`);
+});
+
 console.log(`settings per-cookie gate: ${passed} passed, 0 failed`);
