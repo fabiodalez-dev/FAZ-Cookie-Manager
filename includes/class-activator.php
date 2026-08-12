@@ -116,7 +116,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.08.06.1';
+	const MIGRATIONS_VERSION = '2026.08.12.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -140,6 +140,7 @@ class Activator {
 			self::fix_banner_gdpr_defaults();
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
+			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
 			self::clear_necessary_optout_flags();
@@ -359,6 +360,73 @@ class Activator {
 		// claim, not a record.
 		// Autoload NO: read once, during migrations, never on a front-end request.
 		add_option( 'faz_default_whitelist_seeded', '1', '', false );
+	}
+
+	/**
+	 * Give existing installs the second half of the reCAPTCHA whitelist entry.
+	 *
+	 * A working reCAPTCHA needs two hosts: the API endpoint on www.google.com
+	 * and the widget's own script on www.gstatic.com. Only the first was
+	 * seeded before 1.17.2, so every install predating it allows the endpoint
+	 * and blocks the script it loads — the CAPTCHA never renders, and the form
+	 * behind it cannot be submitted. New installs get both from the shipped
+	 * defaults; a stored whitelist is never revisited, so upgrading alone
+	 * never fixed it.
+	 *
+	 * Add-only, and deliberately conditional on the site already whitelisting
+	 * the reCAPTCHA endpoint: that is the evidence the site owner wants
+	 * reCAPTCHA to work before consent. A site that removed the entry, or
+	 * never had it, has expressed the opposite and is left alone.
+	 *
+	 * Guarded by its own option rather than by MIGRATIONS_VERSION, which is a
+	 * consolidated flag: riding it would re-add the pattern at the next bump,
+	 * overruling an admin who had since removed it on purpose. This runs once
+	 * per site, ever.
+	 *
+	 * @return void
+	 */
+	public static function add_recaptcha_gstatic_pattern() {
+		if ( 'done' === get_option( 'faz_recaptcha_gstatic_migrated' ) ) {
+			return;
+		}
+		// Marked before the work, not after: a site whose settings row is
+		// missing or malformed should not have this reconsidered on every
+		// admin load for the rest of its life.
+		update_option( 'faz_recaptcha_gstatic_migrated', 'done', false );
+
+		$settings = get_option( 'faz_settings' );
+		if ( ! is_array( $settings ) || ! isset( $settings['script_blocking']['whitelist_patterns'] ) ) {
+			return;
+		}
+		$patterns = $settings['script_blocking']['whitelist_patterns'];
+		if ( ! is_array( $patterns ) ) {
+			return;
+		}
+
+		$wants_recaptcha = false;
+		$has_gstatic     = false;
+		foreach ( $patterns as $pattern ) {
+			if ( ! is_string( $pattern ) ) {
+				continue;
+			}
+			if ( false !== stripos( $pattern, 'google.com/recaptcha' ) ) {
+				$wants_recaptcha = true;
+			}
+			// Matched loosely on purpose: an admin may have typed the host
+			// without the trailing path, or with a scheme. Any existing
+			// mention means the decision has already been made here.
+			if ( false !== stripos( $pattern, 'gstatic.com/recaptcha' ) ) {
+				$has_gstatic = true;
+			}
+		}
+
+		if ( ! $wants_recaptcha || $has_gstatic ) {
+			return;
+		}
+
+		$patterns[] = 'www.gstatic.com/recaptcha/';
+		$settings['script_blocking']['whitelist_patterns'] = array_values( $patterns );
+		update_option( 'faz_settings', $settings );
 	}
 
 	/**
