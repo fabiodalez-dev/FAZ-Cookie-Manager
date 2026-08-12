@@ -1,0 +1,231 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress sets this cookie when a user interacts with emojis on a WordPress site."
+    },
+    "wordpress_test_cookie": {
+        "description": "WordPress test cookie to check if cookies are enabled."
+    },
+    "wordpress_logged_in_": {
+        "description": "Indicates logged-in status and user identity."
+    },
+    "wp-settings-": {
+        "description": "Customizes the admin interface for each user."
+    },
+    "wordpress_": {
+        "description": "WordPress authentication cookie for the admin area."
+    },
+    "wp_lang": {
+        "description": "Stores the selected language during login."
+    },
+    "comment_author_email_": {
+        "description": "Stores the commenter email for convenience."
+    },
+    "comment_author_url_": {
+        "description": "Stores the commenter website URL for convenience."
+    },
+    "comment_author_": {
+        "description": "Stores the commenter name for convenience."
+    },
+    "_ga": {
+        "description": "Google Analytics cookie used to distinguish users."
+    },
+    "_ga_": {
+        "description": "Google Analytics 4 cookie used to persist session state."
+    },
+    "_gid": {
+        "description": "Google Analytics cookie used to distinguish users."
+    },
+    "_gat": {
+        "description": "Google Analytics cookie used to throttle request rate."
+    },
+    "wp_statistics_": {
+        "description": "WP Statistics cookie used to track visitor sessions and page views."
+    },
+    "burst_uid": {
+        "description": "Burst Statistics cookie used to identify unique visitors."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Koko Analytics cookie used to detect unique visitors and count pages viewed per session."
+    },
+    "_gac_": {
+        "description": "Google Analytics cookie containing campaign information."
+    },
+    "__utma": {
+        "description": "Google Analytics (Classic) cookie used to distinguish users and sessions."
+    },
+    "__utmb": {
+        "description": "Google Analytics (Classic) cookie used to determine new sessions."
+    },
+    "__utmc": {
+        "description": "Google Analytics (Classic) cookie used with __utmb to determine new sessions."
+    },
+    "__utmz": {
+        "description": "Google Analytics (Classic) cookie that stores the traffic source or campaign."
+    },
+    "__utmt": {
+        "description": "Google Analytics (Classic) cookie used to throttle request rate."
+    },
+    "_gcl_au": {
+        "description": "Google Ads conversion linker cookie."
+    },
+    "ide": {
+        "description": "DoubleClick/Google cookie used for targeted advertising.",
+        "domains": [
+            "doubleclick.net"
+        ]
+    },
+    "dsid": {
+        "description": "Google advertising cookie for ad personalization.",
+        "domains": [
+            "doubleclick.net"
+        ]
+    },
+    "_fbp": {
+        "description": "Facebook Pixel cookie used for advertising and analytics."
+    },
+    "_fbc": {
+        "description": "Facebook click identifier cookie."
+    },
+    "fr": {
+        "description": "Facebook advertising cookie.",
+        "domains": [
+            "facebook.com"
+        ]
+    },
+    "__cf_bm": {
+        "description": "Cloudflare bot management cookie."
+    },
+    "__cfduid": {
+        "description": "Cloudflare cookie used for identifying trusted web traffic."
+    },
+    "_grecaptcha": {
+        "description": "Used by Google reCAPTCHA to distinguish between humans and bots."
+    },
+    "fazcookie-consent": {
+        "description": "Cookie consent preferences set by the visitor."
+    },
+    "_clck": {
+        "description": "Microsoft Clarity cookie for analytics."
+    },
+    "_clsk": {
+        "description": "Microsoft Clarity session cookie."
+    },
+    "muid": {
+        "description": "Microsoft Bing Ads Universal Event Tracking cookie.",
+        "domains": [
+            "bing.com",
+            "microsoft.com",
+            "clarity.ms"
+        ]
+    },
+    "_uetsid": {
+        "description": "Microsoft Bing Ads UET session tracking cookie."
+    },
+    "_uetvid": {
+        "description": "Microsoft Bing Ads UET cross-session tracking cookie."
+    },
+    "bcookie": {
+        "description": "LinkedIn browser identification cookie."
+    },
+    "li_sugr": {
+        "description": "LinkedIn Insight Tag cookie."
+    },
+    "lidc": {
+        "description": "LinkedIn cookie for data center routing optimization.",
+        "domains": [
+            "linkedin.com"
+        ]
+    },
+    "__hssc": {
+        "description": "HubSpot session tracking cookie."
+    },
+    "__hssrc": {
+        "description": "HubSpot session reset detection cookie."
+    },
+    "__hstc": {
+        "description": "HubSpot main analytics cookie."
+    },
+    "hubspotutk": {
+        "description": "HubSpot visitor tracking cookie."
+    },
+    "__hs_opt_out": {
+        "description": "HubSpot cookie to remember opt-out preference."
+    },
+    "ysc": {
+        "description": "YouTube cookie used to track views of embedded videos.",
+        "domains": [
+            "youtube.com",
+            "youtube-nocookie.com"
+        ]
+    },
+    "visitor_info1_live": {
+        "description": "YouTube cookie used to estimate bandwidth and display settings."
+    },
+    "vuid": {
+        "description": "Vimeo analytics cookie to track video views.",
+        "domains": [
+            "vimeo.com"
+        ]
+    },
+    "__stripe_mid": {
+        "description": "Stripe fraud prevention cookie for payment processing."
+    },
+    "__stripe_sid": {
+        "description": "Stripe fraud prevention session cookie for payment processing."
+    },
+    "mp_": {
+        "description": "Mixpanel analytics cookie for tracking user interactions."
+    },
+    "distinct_id": {
+        "description": "Mixpanel cookie used to identify unique users."
+    },
+    "_hj*": {
+        "description": "Hotjar analytics cookie."
+    },
+    "woocommerce_cart_hash": {
+        "description": "WooCommerce cookie to determine cart contents changes."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "WooCommerce cookie to track items in cart."
+    },
+    "wp_woocommerce_session_": {
+        "description": "WooCommerce session cookie."
+    },
+    "__tea_cache_tokens_": {
+        "description": "TikTok cache token used by the analytics SDK."
+    },
+    "_ttp": {
+        "description": "TikTok Pixel cookie used to track visitors across websites for advertising."
+    },
+    "tt_webid": {
+        "description": "TikTok cookie used to identify and track users for advertising purposes."
+    },
+    "guest_id": {
+        "description": "Twitter cookie used to identify non-logged-in users."
+    },
+    "personalization_id": {
+        "description": "Twitter cookie used for personalization and advertising."
+    },
+    "ct0": {
+        "description": "Twitter cookie used for security and spam prevention on embedded content.",
+        "domains": [
+            "twitter.com",
+            "x.com"
+        ]
+    },
+    "_scid": {
+        "description": "Snapchat Pixel cookie for cross-site visitor identification."
+    },
+    "sc_at": {
+        "description": "Snapchat Pixel cookie used for advertising attribution."
+    },
+    "_pin_unauth": {
+        "description": "Pinterest cookie used to track unauthenticated users."
+    },
+    "_pinterest_sess": {
+        "description": "Pinterest session cookie used for advertising and tracking."
+    },
+    "phpsessid": {
+        "description": "PHP session cookie for managing user sessions."
+    }
+}

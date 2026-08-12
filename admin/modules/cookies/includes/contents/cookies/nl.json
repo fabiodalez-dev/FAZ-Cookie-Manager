@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress plaatst deze cookie wanneer een gebruiker op een WordPress-site met emoji's werkt."
+    },
+    "wordpress_test_cookie": {
+        "description": "WordPress-testcookie om te controleren of cookies zijn ingeschakeld."
+    },
+    "wordpress_logged_in_": {
+        "description": "Geeft de aanmeldstatus en de identiteit van de gebruiker aan."
+    },
+    "wp-settings-": {
+        "description": "Past de beheeromgeving aan per gebruiker."
+    },
+    "wordpress_": {
+        "description": "WordPress-authenticatiecookie voor het beheergedeelte."
+    },
+    "wp_lang": {
+        "description": "Slaat de bij het aanmelden gekozen taal op."
+    },
+    "comment_author_email_": {
+        "description": "Slaat het e-mailadres van de reageerder op voor het gemak."
+    },
+    "comment_author_url_": {
+        "description": "Slaat het website-adres van de reageerder op voor het gemak."
+    },
+    "comment_author_": {
+        "description": "Slaat de naam van de reageerder op voor het gemak."
+    },
+    "_ga": {
+        "description": "Google Analytics-cookie om gebruikers te onderscheiden."
+    },
+    "_ga_": {
+        "description": "Google Analytics 4-cookie om de sessiestatus te bewaren."
+    },
+    "_gid": {
+        "description": "Google Analytics-cookie om gebruikers te onderscheiden."
+    },
+    "_gat": {
+        "description": "Google Analytics-cookie om het aantal verzoeken te beperken."
+    },
+    "wp_statistics_": {
+        "description": "WP Statistics-cookie om bezoekerssessies en paginaweergaven bij te houden."
+    },
+    "burst_uid": {
+        "description": "Burst Statistics-cookie om unieke bezoekers te herkennen."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Koko Analytics-cookie om unieke bezoekers te herkennen en het aantal paginaweergaven per sessie te tellen."
+    },
+    "_gac_": {
+        "description": "Google Analytics-cookie met campagne-informatie."
+    },
+    "__utma": {
+        "description": "Google Analytics-cookie (Classic) om gebruikers en sessies te onderscheiden."
+    },
+    "__utmb": {
+        "description": "Google Analytics-cookie (Classic) om nieuwe sessies vast te stellen."
+    },
+    "__utmc": {
+        "description": "Google Analytics-cookie (Classic) die samen met __utmb nieuwe sessies vaststelt."
+    },
+    "__utmz": {
+        "description": "Google Analytics-cookie (Classic) die de verkeersbron of campagne opslaat."
+    },
+    "__utmt": {
+        "description": "Google Analytics-cookie (Classic) om het aantal verzoeken te beperken."
+    },
+    "_gcl_au": {
+        "description": "Cookie van de Google Ads-conversielinker."
+    },
+    "ide": {
+        "description": "DoubleClick/Google-cookie voor gerichte advertenties."
+    },
+    "dsid": {
+        "description": "Google-advertentiecookie voor het personaliseren van advertenties."
+    },
+    "_fbp": {
+        "description": "Facebook Pixel-cookie voor advertenties en analyse."
+    },
+    "_fbc": {
+        "description": "Facebook-cookie met de klik-identificatie."
+    },
+    "fr": {
+        "description": "Facebook-advertentiecookie."
+    },
+    "__cf_bm": {
+        "description": "Cloudflare-cookie voor botbeheer."
+    },
+    "__cfduid": {
+        "description": "Cloudflare-cookie om vertrouwd webverkeer te herkennen."
+    },
+    "_grecaptcha": {
+        "description": "Wordt door Google reCAPTCHA gebruikt om mensen van bots te onderscheiden."
+    },
+    "fazcookie-consent": {
+        "description": "Cookievoorkeuren zoals ingesteld door de bezoeker."
+    },
+    "_clck": {
+        "description": "Microsoft Clarity-cookie voor analyse."
+    },
+    "_clsk": {
+        "description": "Microsoft Clarity-sessiecookie."
+    },
+    "muid": {
+        "description": "Microsoft Bing Ads-cookie voor Universal Event Tracking."
+    },
+    "_uetsid": {
+        "description": "Microsoft Bing Ads UET-cookie voor sessieregistratie."
+    },
+    "_uetvid": {
+        "description": "Microsoft Bing Ads UET-cookie voor registratie over sessies heen."
+    },
+    "bcookie": {
+        "description": "LinkedIn-cookie voor browseridentificatie."
+    },
+    "li_sugr": {
+        "description": "Cookie van de LinkedIn Insight Tag."
+    },
+    "lidc": {
+        "description": "LinkedIn-cookie voor het optimaliseren van datacenterroutering."
+    },
+    "__hssc": {
+        "description": "HubSpot-cookie voor sessieregistratie."
+    },
+    "__hssrc": {
+        "description": "HubSpot-cookie om het herstarten van een sessie te herkennen."
+    },
+    "__hstc": {
+        "description": "Belangrijkste analysecookie van HubSpot."
+    },
+    "hubspotutk": {
+        "description": "HubSpot-cookie om bezoekers te volgen."
+    },
+    "__hs_opt_out": {
+        "description": "HubSpot-cookie die de afmelding onthoudt."
+    },
+    "ysc": {
+        "description": "YouTube-cookie om weergaven van ingesloten video's bij te houden."
+    },
+    "visitor_info1_live": {
+        "description": "YouTube-cookie om de bandbreedte en weergave-instellingen te schatten."
+    },
+    "vuid": {
+        "description": "Vimeo-analysecookie om videoweergaven bij te houden."
+    },
+    "__stripe_mid": {
+        "description": "Stripe-cookie voor fraudepreventie bij betalingsverwerking."
+    },
+    "__stripe_sid": {
+        "description": "Stripe-sessiecookie voor fraudepreventie bij betalingsverwerking."
+    },
+    "mp_": {
+        "description": "Mixpanel-analysecookie om gebruikersinteracties bij te houden."
+    },
+    "distinct_id": {
+        "description": "Mixpanel-cookie om unieke gebruikers te herkennen."
+    },
+    "_hj*": {
+        "description": "Hotjar-analysecookie."
+    },
+    "woocommerce_cart_hash": {
+        "description": "WooCommerce-cookie om wijzigingen in de winkelwagen vast te stellen."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "WooCommerce-cookie om de artikelen in de winkelwagen bij te houden."
+    },
+    "wp_woocommerce_session_": {
+        "description": "WooCommerce-sessiecookie."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Cache-token dat door de analyse-SDK van TikTok wordt gebruikt."
+    },
+    "_ttp": {
+        "description": "TikTok Pixel-cookie om bezoekers over websites heen te volgen voor advertenties."
+    },
+    "tt_webid": {
+        "description": "TikTok-cookie om gebruikers te herkennen en te volgen voor advertentiedoeleinden."
+    },
+    "guest_id": {
+        "description": "Twitter-cookie om niet-aangemelde gebruikers te herkennen."
+    },
+    "personalization_id": {
+        "description": "Twitter-cookie voor personalisatie en advertenties."
+    },
+    "ct0": {
+        "description": "Twitter-cookie voor beveiliging en spampreventie bij ingesloten inhoud."
+    },
+    "_scid": {
+        "description": "Snapchat Pixel-cookie voor bezoekersidentificatie over sites heen."
+    },
+    "sc_at": {
+        "description": "Snapchat Pixel-cookie voor advertentie-attributie."
+    },
+    "_pin_unauth": {
+        "description": "Pinterest-cookie om niet-geverifieerde gebruikers te volgen."
+    },
+    "_pinterest_sess": {
+        "description": "Pinterest-sessiecookie voor advertenties en tracking."
+    },
+    "phpsessid": {
+        "description": "PHP-sessiecookie voor het beheren van gebruikerssessies."
+    }
+}

@@ -300,8 +300,24 @@ abstract class Store {
 		$default_content = isset( $data[ $default ] ) ? $data[ $default ] : $this->get_translations( $default, $prop );
 
 		foreach ( $languages as $lang ) {
-			$content           = isset( $data[ $lang ] ) ? $data[ $lang ] : '';
-			$content           = empty( $content ) ? $this->get_translations( $lang, $prop ) : $content;
+			$content = isset( $data[ $lang ] ) ? $data[ $lang ] : '';
+			if ( empty( $content ) ) {
+				$content = $this->get_translations( $lang, $prop );
+			} else {
+				// Non-empty does not mean localised. Scanners and imports write
+				// the same English sentence into every language slot, so an
+				// Italian row could hold the plugin's own English description and
+				// be skipped here for being non-empty — the mixed-language
+				// declaration the catalogue exists to fix, surviving inside it.
+				//
+				// Attempting it is safe because the resolver stands down on
+				// anything that is not the bundled English text for this cookie
+				// (Cookie_Content_I18n::is_stock_description), so an
+				// administrator's own wording returns '' and is preserved. The
+				// protection lives in the resolver, not in this branch.
+				$translated = $this->get_translations( $lang, $prop, $content );
+				$content    = '' !== $translated ? $translated : $content;
+			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
 			$contents[ $lang ] = is_string( $content ) ? stripslashes( wp_kses_post( $content ) ) : '';
 		}
@@ -564,6 +580,11 @@ abstract class Store {
 
 	/**
 	 * Get translations
+	 *
+	 * Subclasses may accept a third optional $source argument (Cookie does), which
+	 * PHP permits: a child adding OPTIONAL parameters stays compatible, and the
+	 * extra argument is harmlessly ignored by the ones that do not. Declaring it
+	 * here instead would break every existing two-parameter override.
 	 *
 	 * @param string $lang Language code.
 	 * @param string $key Specific key if any.

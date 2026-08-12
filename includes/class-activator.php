@@ -116,7 +116,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.08.03.1';
+	const MIGRATIONS_VERSION = '2026.08.06.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -145,11 +145,48 @@ class Activator {
 			self::clear_necessary_optout_flags();
 			self::reset_stale_per_cookie_consent();
 			self::demote_bulky_autoloaded_options();
+			self::refresh_cookie_translation_caches();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+	}
+
+	/**
+	 * Upgrade migration for the cookie-content translation fallback.
+	 *
+	 * Cookie/category controller caches contain prepared cookie arrays, so an
+	 * existing persistent cache may still hold the pre-translation payload even
+	 * though no database rewrite or schema change is required. Rotate those
+	 * caches once on upgrade and remove the language-keyed policy fragments.
+	 *
+	 * @return void
+	 */
+	public static function refresh_cookie_translation_caches() {
+		Cookie_Controller::get_instance()->delete_cache();
+		Category_Controller::get_instance()->delete_cache();
+
+		// Every language the POLICY can render, not just the selected ones.
+		// Renderer::resolve_lang() picks from the shortcode `lang` attribute, the
+		// page's default, or the WordPress locale — none of which is bound to
+		// faz_selected_languages(). A key can therefore exist for a language that
+		// is not selected (English being the common one), and clearing only the
+		// selected set leaves it serving pre-translation rows.
+		$languages = array( 'en' );
+		if ( function_exists( 'faz_selected_languages' ) ) {
+			$languages = array_merge( $languages, (array) faz_selected_languages() );
+		}
+		$generator = '\\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Generator';
+		if ( class_exists( $generator ) && method_exists( $generator, 'policy_languages' ) ) {
+			$languages = array_merge( $languages, (array) $generator::policy_languages() );
+		}
+		foreach ( array_unique( array_filter( $languages, 'is_string' ) ) as $language ) {
+			wp_cache_delete( 'faz_cookie_policy_list_' . $language, 'faz_cookie_policy' );
+		}
+		if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+			faz_clear_banner_template_cache();
+		}
 	}
 
 	/**
@@ -557,6 +594,24 @@ class Activator {
 	 */
 	public static function install() {
 		self::check_for_upgrade();
+		// Rotate the cookie/policy caches on the FRONTEND upgrade path too.
+		//
+		// run_pending_migrations() carries the same call, but it is hooked on
+		// admin_init: a site whose admin nobody visits would keep serving the
+		// pre-translation payloads until somebody logged in. That is not a
+		// self-healing wait either — Base_Controller::set_object_cache() writes
+		// with no expiry, so with a persistent object cache the stale list can
+		// outlive the upgrade indefinitely. install() runs from check_version()
+		// on `init`, so this fires on the first request after an upgrade
+		// whatever kind of request it is. Clearing caches twice is harmless;
+		// never clearing them is not.
+		try {
+			self::refresh_cookie_translation_caches();
+		} catch ( \Throwable $e ) {
+			// A cache rotation must never be able to block activation or a
+			// front-end request. The admin_init migration retries it anyway.
+			unset( $e );
+		}
 		if ( true === faz_first_time_install() ) {
 			add_option( 'faz_first_time_activated_plugin', 'true', '', false );
 			// Arm the guided setup wizard for genuine fresh installs ONLY. The

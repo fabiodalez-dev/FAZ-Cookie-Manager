@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "A WordPress akkor állítja be ezt a sütit, amikor a felhasználó egy WordPress-webhelyen emodzsikkal dolgozik."
+    },
+    "wordpress_test_cookie": {
+        "description": "A WordPress tesztsütije annak ellenőrzésére, hogy engedélyezettek-e a sütik."
+    },
+    "wordpress_logged_in_": {
+        "description": "A bejelentkezési állapotot és a felhasználó azonosságát jelzi."
+    },
+    "wp-settings-": {
+        "description": "Felhasználónként szabja testre az adminisztrációs felületet."
+    },
+    "wordpress_": {
+        "description": "A WordPress hitelesítési sütije az adminisztrációs felülethez."
+    },
+    "wp_lang": {
+        "description": "A bejelentkezéskor kiválasztott nyelvet tárolja."
+    },
+    "comment_author_email_": {
+        "description": "Kényelmi okból tárolja a hozzászóló e-mail-címét."
+    },
+    "comment_author_url_": {
+        "description": "Kényelmi okból tárolja a hozzászóló webhelyének címét."
+    },
+    "comment_author_": {
+        "description": "Kényelmi okból tárolja a hozzászóló nevét."
+    },
+    "_ga": {
+        "description": "A Google Analytics sütije a felhasználók megkülönböztetésére."
+    },
+    "_ga_": {
+        "description": "A Google Analytics 4 sütije a munkamenet állapotának megőrzésére."
+    },
+    "_gid": {
+        "description": "A Google Analytics sütije a felhasználók megkülönböztetésére."
+    },
+    "_gat": {
+        "description": "A Google Analytics sütije a kérések gyakoriságának korlátozására."
+    },
+    "wp_statistics_": {
+        "description": "A WP Statistics sütije a látogatói munkamenetek és oldalmegtekintések követésére."
+    },
+    "burst_uid": {
+        "description": "A Burst Statistics sütije az egyedi látogatók azonosítására."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "A Koko Analytics sütije az egyedi látogatók felismerésére és a munkamenetenként megtekintett oldalak számlálására."
+    },
+    "_gac_": {
+        "description": "A Google Analytics sütije, amely kampányadatokat tartalmaz."
+    },
+    "__utma": {
+        "description": "A Google Analytics (Classic) sütije a felhasználók és munkamenetek megkülönböztetésére."
+    },
+    "__utmb": {
+        "description": "A Google Analytics (Classic) sütije az új munkamenetek meghatározására."
+    },
+    "__utmc": {
+        "description": "A Google Analytics (Classic) sütije, amely az __utmb sütivel együtt határozza meg az új munkameneteket."
+    },
+    "__utmz": {
+        "description": "A Google Analytics (Classic) sütije, amely a forgalmi forrást vagy a kampányt tárolja."
+    },
+    "__utmt": {
+        "description": "A Google Analytics (Classic) sütije a kérések gyakoriságának korlátozására."
+    },
+    "_gcl_au": {
+        "description": "A Google Ads konverziócsatolójának sütije."
+    },
+    "ide": {
+        "description": "A DoubleClick/Google sütije célzott hirdetésekhez."
+    },
+    "dsid": {
+        "description": "A Google hirdetési sütije a hirdetések személyre szabásához."
+    },
+    "_fbp": {
+        "description": "A Facebook Pixel sütije hirdetési és elemzési célra."
+    },
+    "_fbc": {
+        "description": "A Facebook sütije a kattintásazonosítóval."
+    },
+    "fr": {
+        "description": "A Facebook hirdetési sütije."
+    },
+    "__cf_bm": {
+        "description": "A Cloudflare sütije a botok kezeléséhez."
+    },
+    "__cfduid": {
+        "description": "A Cloudflare sütije a megbízható forgalom felismeréséhez."
+    },
+    "_grecaptcha": {
+        "description": "A Google reCAPTCHA használja az emberek és a botok megkülönböztetésére."
+    },
+    "fazcookie-consent": {
+        "description": "A látogató által megadott sütihozzájárulási beállítások."
+    },
+    "_clck": {
+        "description": "A Microsoft Clarity elemzési sütije."
+    },
+    "_clsk": {
+        "description": "A Microsoft Clarity munkamenet-sütije."
+    },
+    "muid": {
+        "description": "A Microsoft Bing Ads sütije a Universal Event Trackinghez."
+    },
+    "_uetsid": {
+        "description": "A Microsoft Bing Ads UET sütije a munkamenet követéséhez."
+    },
+    "_uetvid": {
+        "description": "A Microsoft Bing Ads UET sütije a munkameneteken átívelő követéshez."
+    },
+    "bcookie": {
+        "description": "A LinkedIn sütije a böngésző azonosítására."
+    },
+    "li_sugr": {
+        "description": "A LinkedIn Insight Tag sütije."
+    },
+    "lidc": {
+        "description": "A LinkedIn sütije az adatközpontok közötti útválasztás optimalizálására."
+    },
+    "__hssc": {
+        "description": "A HubSpot sütije a munkamenet követésére."
+    },
+    "__hssrc": {
+        "description": "A HubSpot sütije a munkamenet újraindulásának felismerésére."
+    },
+    "__hstc": {
+        "description": "A HubSpot fő elemzési sütije."
+    },
+    "hubspotutk": {
+        "description": "A HubSpot sütije a látogatók követésére."
+    },
+    "__hs_opt_out": {
+        "description": "A HubSpot sütije, amely megjegyzi az elutasítást."
+    },
+    "ysc": {
+        "description": "A YouTube sütije a beágyazott videók megtekintéseinek követésére."
+    },
+    "visitor_info1_live": {
+        "description": "A YouTube sütije a sávszélesség és a megjelenítési beállítások becslésére."
+    },
+    "vuid": {
+        "description": "A Vimeo elemzési sütije a videómegtekintések követésére."
+    },
+    "__stripe_mid": {
+        "description": "A Stripe sütije a fizetésfeldolgozás csalásmegelőzéséhez."
+    },
+    "__stripe_sid": {
+        "description": "A Stripe munkamenet-sütije a fizetésfeldolgozás csalásmegelőzéséhez."
+    },
+    "mp_": {
+        "description": "A Mixpanel elemzési sütije a felhasználói interakciók követésére."
+    },
+    "distinct_id": {
+        "description": "A Mixpanel sütije az egyedi felhasználók azonosítására."
+    },
+    "_hj*": {
+        "description": "A Hotjar elemzési sütije."
+    },
+    "woocommerce_cart_hash": {
+        "description": "A WooCommerce sütije a kosár tartalmában bekövetkező változások felismerésére."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "A WooCommerce sütije a kosárban lévő tételek követésére."
+    },
+    "wp_woocommerce_session_": {
+        "description": "A WooCommerce munkamenet-sütije."
+    },
+    "__tea_cache_tokens_": {
+        "description": "A TikTok elemzési SDK-ja által használt gyorsítótár-token."
+    },
+    "_ttp": {
+        "description": "A TikTok Pixel sütije, amely hirdetési célból webhelyeken átívelően követi a látogatókat."
+    },
+    "tt_webid": {
+        "description": "A TikTok sütije a felhasználók hirdetési célú azonosítására és követésére."
+    },
+    "guest_id": {
+        "description": "A Twitter sütije a be nem jelentkezett felhasználók azonosítására."
+    },
+    "personalization_id": {
+        "description": "A Twitter sütije személyre szabáshoz és hirdetésekhez."
+    },
+    "ct0": {
+        "description": "A Twitter sütije a beágyazott tartalom biztonságához és a levélszemét elleni védelemhez."
+    },
+    "_scid": {
+        "description": "A Snapchat Pixel sütije a látogatók webhelyeken átívelő azonosítására."
+    },
+    "sc_at": {
+        "description": "A Snapchat Pixel sütije a hirdetési attribúcióhoz."
+    },
+    "_pin_unauth": {
+        "description": "A Pinterest sütije a nem hitelesített felhasználók követésére."
+    },
+    "_pinterest_sess": {
+        "description": "A Pinterest munkamenet-sütije hirdetési és követési célra."
+    },
+    "phpsessid": {
+        "description": "PHP munkamenet-süti a felhasználói munkamenetek kezeléséhez."
+    }
+}
