@@ -74,10 +74,19 @@ defined( 'ABSPATH' ) || exit;
 			 * ungated, the admin could tick a nested-cookie mode that the server
 			 * silently discarded, get the generic "Settings saved successfully."
 			 * toast, and keep looking at an enabled toggle for the rest of the
-			 * session — the one thing a settings screen must never do. Hiding
-			 * alone is not enough (a hidden checkbox still serializes), so the
-			 * group also carries data-clear-when-hidden, which unticks it in
-			 * lockstep with the server rule. See settings.js applyShowIf().
+			 * session — the one thing a settings screen must never do.
+			 *
+			 * Hiding alone DOES keep it out of the payload: FAZ.serializeForm()
+			 * skips any [data-path] whose [data-show-if] wrapper computes to
+			 * display:none (faz-admin.js). An earlier version of this comment
+			 * claimed the opposite. Corrected rather than deleted, because a
+			 * comment that misdescribes the serializer is how somebody later adds
+			 * a redundant guard, or removes a load-bearing one.
+			 *
+			 * data-clear-when-hidden is still needed, for a different reason: the
+			 * box keeps its ticked state while hidden, so re-enabling the parent
+			 * would restore a choice the server had already discarded. See
+			 * settings.js applyShowIf().
 			 */
 			?>
 			<div class="faz-form-group" data-show-if="banner_control.per_service_consent" data-clear-when-hidden>

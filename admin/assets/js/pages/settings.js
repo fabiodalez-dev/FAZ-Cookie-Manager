@@ -27,6 +27,10 @@
 	// flight or after it failed. saveSettings() must not trust the DOM-derived
 	// serializeAbVariants() result while this is false — see saveSettings().
 	var abVariantsReady = false;
+	// How many ACTIVE banners the server last reported. null means "not asked yet",
+	// which must not be treated as zero: the warning below would then fire on every
+	// page load before the request resolves.
+	var abActiveBannerCount = null;
 
 	FAZ.ready(function () {
 		form = document.getElementById('faz-settings');
@@ -132,6 +136,7 @@
 
 		FAZ.get('banners').then(function (banners) {
 			var list = Array.isArray(banners) ? banners.filter(function (b) { return b && b.status; }) : [];
+			abActiveBannerCount = list.length;
 
 			while (container.firstChild) { container.removeChild(container.firstChild); }
 
@@ -427,7 +432,7 @@
 	 */
 	function collectSaveWarnings(current) {
 		var saveWarnings = [];
-		var abTestWarning = null;
+		var abTestWarnings = [];
 		if (current.banner_control && current.banner_control.ab_test
 			&& current.banner_control.ab_test.status) {
 			// current.banner_control.ab_test.variants was just overwritten by the
@@ -438,20 +443,32 @@
 			var effectiveVariants = Array.isArray(current.banner_control.ab_test.variants)
 				? current.banner_control.ab_test.variants
 				: [];
-			if (effectiveVariants.length < 2) {
-				abTestWarning = __(
+			// Two independent reasons the test cannot run, so two independent
+			// conditions. Chained with else-if, a site that had BOTH problems was
+			// told about one, fixed it, saved, and was told about the other — a
+			// warning that hides its sibling turns one round trip into two.
+			// Two ways to have fewer than two runnable variants, and the stored
+			// slugs only reveal one of them. When fewer than two banners are
+			// active the picker renders nothing, abVariantsReady stays false and
+			// saveSettings() deliberately preserves the previously stored slugs —
+			// so the count can still read 2 while both slugs name banners that are
+			// no longer active and Ab_Test::pick_variant() has nothing to choose
+			// between. Ask the catalogue, not the leftovers.
+			if (effectiveVariants.length < 2 || (abActiveBannerCount !== null && abActiveBannerCount < 2)) {
+				abTestWarnings.push(__(
 					'settings.abTestWarnVariants',
 					'A/B testing needs at least 2 selected banner variants to run.'
-				);
-			} else if (current.banner_control.cache_compatibility) {
-				abTestWarning = __(
+				));
+			}
+			if (current.banner_control.cache_compatibility) {
+				abTestWarnings.push(__(
 					'settings.abTestWarnCache',
 					'A/B testing is disabled while Cache Compatibility Mode is on.'
-				);
+				));
 			}
 		}
 
-		if (abTestWarning) { saveWarnings.push(abTestWarning); }
+		abTestWarnings.forEach(function (w) { saveWarnings.push(w); });
 
 		// Cache Compatibility Mode is compatible with geo-targeting and IAB TCF
 		// — the frontend deliberately resolves both conservatively so the

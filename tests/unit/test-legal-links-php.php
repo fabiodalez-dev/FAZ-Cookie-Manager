@@ -84,11 +84,12 @@ namespace {
 			return abs( (int) $value );
 		}
 	}
-	if ( ! function_exists( 'faz_sanitize_bool' ) ) {
-		function faz_sanitize_bool( $value ) {
-			return filter_var( $value, FILTER_VALIDATE_BOOLEAN );
-		}
-	}
+	// Real coercions rather than a filter_var() stand-in: the shipped
+	// faz_sanitize_bool() enumerates its negatives and faz_sanitize_bool_strict()
+	// requires an explicit affirmative, and neither is what filter_var does. The
+	// file guards every definition with function_exists(), so the remaining
+	// stubs below still fill whatever it does not provide.
+	require_once __DIR__ . '/../../includes/class-formatting.php';
 	if ( ! function_exists( 'faz_sanitize_text' ) ) {
 		function faz_sanitize_text( $value ) {
 			if ( is_array( $value ) ) {

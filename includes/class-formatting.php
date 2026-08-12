@@ -110,7 +110,12 @@ if ( ! function_exists( 'faz_sanitize_bool_strict' ) ) {
 			return $value;
 		}
 		if ( is_int( $value ) || is_float( $value ) ) {
-			return 1 === (int) $value;
+			// Compared without a cast: (int) 1.5 and (int) 1.9 are both 1, so a
+			// fractional value truncated its way into "yes" and exempted a gateway
+			// from pre-consent blocking. Nothing legitimately stores 1.9 here, and
+			// that is the point — an unintended value must not round toward
+			// permission.
+			return 1 === $value || 1.0 === $value;
 		}
 		if ( ! is_string( $value ) ) {
 			return false;

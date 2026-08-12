@@ -14,9 +14,11 @@ namespace {
 		define( 'ABSPATH', __DIR__ );
 	}
 
-	function faz_sanitize_bool( $value ) {
-		return filter_var( $value, FILTER_VALIDATE_BOOLEAN );
-	}
+	// The real coercions, not stubs. This suite exercises the settings write
+	// path, and a local filter_var() copy is not what ships: it accepts 'on' and
+	// rejects 'yes', so the harness would be asserting against its own idea of
+	// the rule while production used another.
+	require_once __DIR__ . '/../../includes/class-formatting.php';
 
 	require_once __DIR__ . '/../../admin/modules/settings/includes/class-settings.php';
 
@@ -220,6 +222,21 @@ namespace {
 		$defaults
 	);
 	faz_assert_same( $iab_cache['banner_control']['cache_compatibility'], true, 'cache mode survives a save while IAB TCF is on (frontend forces the conservative gdpr_applies instead)' );
+
+	// The WRITE path must agree with the read path. It used the general coercion,
+	// whose negatives are enumerated, so 'garbage' persisted as an ENABLED
+	// gateway — a stored value that meant one thing on save and another on
+	// render is worse than either answer alone.
+	$gw_defaults = array( 'script_blocking' => array( 'payment_gateways' => array( 'stripe' => false, 'paypal' => false ) ) );
+	foreach ( array( 'garbage', 'maybe', '', 'no', 'off', 1.5, array( 'x' ) ) as $bad ) {
+		$out = Settings::sanitize( array( 'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $bad ) ) ), $gw_defaults );
+		faz_assert_same( $out['script_blocking']['payment_gateways']['stripe'], false, 'write path refuses ' . var_export( $bad, true ) );
+	}
+	foreach ( array( true, 1, '1', 'yes', 'true', 'on' ) as $good ) {
+		$out = Settings::sanitize( array( 'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $good ) ) ), $gw_defaults );
+		faz_assert_same( $out['script_blocking']['payment_gateways']['stripe'], true, 'write path accepts ' . var_export( $good, true ) );
+	}
+
 
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";

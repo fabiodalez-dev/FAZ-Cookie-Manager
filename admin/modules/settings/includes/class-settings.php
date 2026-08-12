@@ -629,11 +629,20 @@ class Settings extends Store {
 				// Map of gateway-key => bool. Only known catalogue keys survive,
 				// each coerced to a strict boolean, so a settings PUT cannot smuggle
 				// an unknown gateway or a non-bool into the whitelist decision.
+				//
+				// faz_sanitize_bool_strict(), not faz_sanitize_bool(): the general
+				// coercion enumerates its NEGATIVES, so any string it does not
+				// recognise — 'garbage', a truncated value, something a migration
+				// mangled — came back true and was persisted as an enabled gateway.
+				// True here removes a restriction, so only an explicit yes counts.
+				// The two read sites use the same function; write and read agreeing
+				// is what keeps a stored value from meaning one thing on save and
+				// another on render.
 				$gateway_keys = self::payment_gateway_keys();
 				$clean = array();
 				foreach ( $gateway_keys as $gw_key ) {
 					$clean[ $gw_key ] = is_array( $value ) && array_key_exists( $gw_key, $value )
-						? faz_sanitize_bool( $value[ $gw_key ] )
+						? \faz_sanitize_bool_strict( $value[ $gw_key ] )
 						: false;
 				}
 				$value = $clean;

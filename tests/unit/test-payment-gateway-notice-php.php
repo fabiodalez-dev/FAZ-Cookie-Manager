@@ -118,6 +118,22 @@ namespace {
 	);
 	ok( false === $has->invoke( $a ), '16 an array value reads as NOT enabled' );
 
+	// (int) 1.5 and (int) 1.9 are both 1, so a fractional value truncated its way
+	// into "yes" and exempted the gateway. Nothing legitimately stores 1.9 here —
+	// which is the point: an unintended value must not round toward permission.
+	foreach ( array( 1.5, 1.9, 0.9, 2, -1 ) as $k => $value ) {
+		$GLOBALS['__faz_opt']['faz_settings'] = array(
+			'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $value ) ),
+		);
+		ok( false === $has->invoke( $a ), sprintf( '%02d numeric %s is NOT an exemption', 28 + $k, var_export( $value, true ) ) );
+	}
+	foreach ( array( 1, 1.0 ) as $k => $value ) {
+		$GLOBALS['__faz_opt']['faz_settings'] = array(
+			'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $value ) ),
+		);
+		ok( true === $has->invoke( $a ), sprintf( '%02d numeric %s still is', 33 + $k, var_export( $value, true ) ) );
+	}
+
 	// And the affirmative side still works, so the above is not passing by
 	// simply refusing everything.
 	foreach ( array( 'yes', 'true', '1', 1, true ) as $j => $value ) {
