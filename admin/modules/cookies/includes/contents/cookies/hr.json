@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress postavlja ovaj kolačić kada korisnik na WordPress stranici koristi emotikone."
+    },
+    "wordpress_test_cookie": {
+        "description": "Testni kolačić WordPressa za provjeru jesu li kolačići omogućeni."
+    },
+    "wordpress_logged_in_": {
+        "description": "Označava status prijave i identitet korisnika."
+    },
+    "wp-settings-": {
+        "description": "Prilagođava administracijsko sučelje svakom korisniku."
+    },
+    "wordpress_": {
+        "description": "Autentifikacijski kolačić WordPressa za administracijski dio."
+    },
+    "wp_lang": {
+        "description": "Pohranjuje jezik odabran pri prijavi."
+    },
+    "comment_author_email_": {
+        "description": "Radi praktičnosti pohranjuje e-adresu komentatora."
+    },
+    "comment_author_url_": {
+        "description": "Radi praktičnosti pohranjuje adresu web-mjesta komentatora."
+    },
+    "comment_author_": {
+        "description": "Radi praktičnosti pohranjuje ime komentatora."
+    },
+    "_ga": {
+        "description": "Kolačić usluge Google Analytics za razlikovanje korisnika."
+    },
+    "_ga_": {
+        "description": "Kolačić usluge Google Analytics 4 za čuvanje stanja sesije."
+    },
+    "_gid": {
+        "description": "Kolačić usluge Google Analytics za razlikovanje korisnika."
+    },
+    "_gat": {
+        "description": "Kolačić usluge Google Analytics za ograničavanje broja zahtjeva."
+    },
+    "wp_statistics_": {
+        "description": "Kolačić WP Statistics za praćenje sesija posjetitelja i pregleda stranica."
+    },
+    "burst_uid": {
+        "description": "Kolačić Burst Statistics za prepoznavanje jedinstvenih posjetitelja."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Kolačić Koko Analytics za prepoznavanje jedinstvenih posjetitelja i brojanje pregledanih stranica po sesiji."
+    },
+    "_gac_": {
+        "description": "Kolačić usluge Google Analytics s podacima o kampanji."
+    },
+    "__utma": {
+        "description": "Kolačić usluge Google Analytics (Classic) za razlikovanje korisnika i sesija."
+    },
+    "__utmb": {
+        "description": "Kolačić usluge Google Analytics (Classic) za utvrđivanje novih sesija."
+    },
+    "__utmc": {
+        "description": "Kolačić usluge Google Analytics (Classic) koji se s __utmb koristi za utvrđivanje novih sesija."
+    },
+    "__utmz": {
+        "description": "Kolačić usluge Google Analytics (Classic) koji pohranjuje izvor prometa ili kampanju."
+    },
+    "__utmt": {
+        "description": "Kolačić usluge Google Analytics (Classic) za ograničavanje broja zahtjeva."
+    },
+    "_gcl_au": {
+        "description": "Kolačić poveznika konverzija Google Adsa."
+    },
+    "ide": {
+        "description": "Kolačić DoubleClick/Google za ciljano oglašavanje."
+    },
+    "dsid": {
+        "description": "Googleov oglasni kolačić za personalizaciju oglasa."
+    },
+    "_fbp": {
+        "description": "Kolačić Facebook Pixela za oglašavanje i analitiku."
+    },
+    "_fbc": {
+        "description": "Facebookov kolačić s identifikatorom klika."
+    },
+    "fr": {
+        "description": "Facebookov oglasni kolačić."
+    },
+    "__cf_bm": {
+        "description": "Kolačić Cloudflarea za upravljanje botovima."
+    },
+    "__cfduid": {
+        "description": "Kolačić Cloudflarea za prepoznavanje pouzdanog prometa."
+    },
+    "_grecaptcha": {
+        "description": "Koristi ga Google reCAPTCHA za razlikovanje ljudi od botova."
+    },
+    "fazcookie-consent": {
+        "description": "Postavke privole za kolačiće koje je odredio posjetitelj."
+    },
+    "_clck": {
+        "description": "Kolačić Microsoft Clarityja za analitiku."
+    },
+    "_clsk": {
+        "description": "Kolačić sesije Microsoft Clarityja."
+    },
+    "muid": {
+        "description": "Kolačić Microsoft Bing Adsa za Universal Event Tracking."
+    },
+    "_uetsid": {
+        "description": "UET kolačić Microsoft Bing Adsa za praćenje sesije."
+    },
+    "_uetvid": {
+        "description": "UET kolačić Microsoft Bing Adsa za praćenje kroz više sesija."
+    },
+    "bcookie": {
+        "description": "LinkedInov kolačić za prepoznavanje preglednika."
+    },
+    "li_sugr": {
+        "description": "Kolačić alata LinkedIn Insight Tag."
+    },
+    "lidc": {
+        "description": "LinkedInov kolačić za optimizaciju usmjeravanja među podatkovnim centrima."
+    },
+    "__hssc": {
+        "description": "HubSpotov kolačić za praćenje sesije."
+    },
+    "__hssrc": {
+        "description": "HubSpotov kolačić za prepoznavanje ponovnog pokretanja sesije."
+    },
+    "__hstc": {
+        "description": "Glavni analitički kolačić HubSpota."
+    },
+    "hubspotutk": {
+        "description": "HubSpotov kolačić za praćenje posjetitelja."
+    },
+    "__hs_opt_out": {
+        "description": "HubSpotov kolačić koji pamti odbijanje."
+    },
+    "ysc": {
+        "description": "YouTubeov kolačić za praćenje pregleda ugrađenih videozapisa."
+    },
+    "visitor_info1_live": {
+        "description": "YouTubeov kolačić za procjenu propusnosti i postavki prikaza."
+    },
+    "vuid": {
+        "description": "Analitički kolačić Vimea za praćenje pregleda videozapisa."
+    },
+    "__stripe_mid": {
+        "description": "Stripeov kolačić za sprječavanje prijevara pri obradi plaćanja."
+    },
+    "__stripe_sid": {
+        "description": "Stripeov kolačić sesije za sprječavanje prijevara pri obradi plaćanja."
+    },
+    "mp_": {
+        "description": "Analitički kolačić Mixpanela za praćenje interakcija korisnika."
+    },
+    "distinct_id": {
+        "description": "Kolačić Mixpanela za prepoznavanje jedinstvenih korisnika."
+    },
+    "_hj*": {
+        "description": "Analitički kolačić Hotjara."
+    },
+    "woocommerce_cart_hash": {
+        "description": "Kolačić WooCommercea za prepoznavanje promjena u košarici."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "Kolačić WooCommercea za praćenje artikala u košarici."
+    },
+    "wp_woocommerce_session_": {
+        "description": "Kolačić sesije WooCommercea."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Token predmemorije koji koristi TikTokov analitički SDK."
+    },
+    "_ttp": {
+        "description": "Kolačić TikTok Pixela za praćenje posjetitelja na različitim web-mjestima u svrhu oglašavanja."
+    },
+    "tt_webid": {
+        "description": "TikTokov kolačić za prepoznavanje i praćenje korisnika u svrhu oglašavanja."
+    },
+    "guest_id": {
+        "description": "Twitterov kolačić za prepoznavanje neprijavljenih korisnika."
+    },
+    "personalization_id": {
+        "description": "Twitterov kolačić za personalizaciju i oglašavanje."
+    },
+    "ct0": {
+        "description": "Twitterov kolačić za sigurnost i zaštitu ugrađenog sadržaja od neželjene pošte."
+    },
+    "_scid": {
+        "description": "Kolačić Snapchat Pixela za prepoznavanje posjetitelja na različitim web-mjestima."
+    },
+    "sc_at": {
+        "description": "Kolačić Snapchat Pixela za atribuciju oglasa."
+    },
+    "_pin_unauth": {
+        "description": "Pinterestov kolačić za praćenje neprijavljenih korisnika."
+    },
+    "_pinterest_sess": {
+        "description": "Pinterestov kolačić sesije za oglašavanje i praćenje."
+    },
+    "phpsessid": {
+        "description": "PHP kolačić sesije za upravljanje korisničkim sesijama."
+    }
+}

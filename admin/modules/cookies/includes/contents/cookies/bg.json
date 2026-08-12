@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress задава тази бисквитка, когато потребител използва емоджита в сайт с WordPress."
+    },
+    "wordpress_test_cookie": {
+        "description": "Тестова бисквитка на WordPress за проверка дали бисквитките са разрешени."
+    },
+    "wordpress_logged_in_": {
+        "description": "Указва състоянието на вход и самоличността на потребителя."
+    },
+    "wp-settings-": {
+        "description": "Персонализира административния интерфейс за всеки потребител."
+    },
+    "wordpress_": {
+        "description": "Бисквитка за удостоверяване на WordPress за административната част."
+    },
+    "wp_lang": {
+        "description": "Запазва избрания при влизане език."
+    },
+    "comment_author_email_": {
+        "description": "За удобство запазва имейла на автора на коментара."
+    },
+    "comment_author_url_": {
+        "description": "За удобство запазва адреса на сайта на автора на коментара."
+    },
+    "comment_author_": {
+        "description": "За удобство запазва името на автора на коментара."
+    },
+    "_ga": {
+        "description": "Бисквитка на Google Analytics за разграничаване на потребителите."
+    },
+    "_ga_": {
+        "description": "Бисквитка на Google Analytics 4 за запазване на състоянието на сесията."
+    },
+    "_gid": {
+        "description": "Бисквитка на Google Analytics за разграничаване на потребителите."
+    },
+    "_gat": {
+        "description": "Бисквитка на Google Analytics за ограничаване на честотата на заявките."
+    },
+    "wp_statistics_": {
+        "description": "Бисквитка на WP Statistics за проследяване на сесиите на посетителите и прегледаните страници."
+    },
+    "burst_uid": {
+        "description": "Бисквитка на Burst Statistics за разпознаване на уникални посетители."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Бисквитка на Koko Analytics за разпознаване на уникални посетители и броене на прегледаните страници за сесия."
+    },
+    "_gac_": {
+        "description": "Бисквитка на Google Analytics, съдържаща информация за кампанията."
+    },
+    "__utma": {
+        "description": "Бисквитка на Google Analytics (Classic) за разграничаване на потребители и сесии."
+    },
+    "__utmb": {
+        "description": "Бисквитка на Google Analytics (Classic) за определяне на нови сесии."
+    },
+    "__utmc": {
+        "description": "Бисквитка на Google Analytics (Classic), използвана заедно с __utmb за определяне на нови сесии."
+    },
+    "__utmz": {
+        "description": "Бисквитка на Google Analytics (Classic), която запазва източника на трафик или кампанията."
+    },
+    "__utmt": {
+        "description": "Бисквитка на Google Analytics (Classic) за ограничаване на честотата на заявките."
+    },
+    "_gcl_au": {
+        "description": "Бисквитка на свързването на реализации в Google Ads."
+    },
+    "ide": {
+        "description": "Бисквитка на DoubleClick/Google за таргетирана реклама."
+    },
+    "dsid": {
+        "description": "Рекламна бисквитка на Google за персонализиране на рекламите."
+    },
+    "_fbp": {
+        "description": "Бисквитка на Facebook Pixel за реклама и анализ."
+    },
+    "_fbc": {
+        "description": "Бисквитка на Facebook с идентификатора на кликването."
+    },
+    "fr": {
+        "description": "Рекламна бисквитка на Facebook."
+    },
+    "__cf_bm": {
+        "description": "Бисквитка на Cloudflare за управление на ботове."
+    },
+    "__cfduid": {
+        "description": "Бисквитка на Cloudflare за разпознаване на надежден трафик."
+    },
+    "_grecaptcha": {
+        "description": "Използва се от Google reCAPTCHA за разграничаване на хора от ботове."
+    },
+    "fazcookie-consent": {
+        "description": "Предпочитания за съгласие за бисквитки, зададени от посетителя."
+    },
+    "_clck": {
+        "description": "Бисквитка на Microsoft Clarity за анализ."
+    },
+    "_clsk": {
+        "description": "Сесийна бисквитка на Microsoft Clarity."
+    },
+    "muid": {
+        "description": "Бисквитка на Microsoft Bing Ads за Universal Event Tracking."
+    },
+    "_uetsid": {
+        "description": "UET бисквитка на Microsoft Bing Ads за проследяване на сесията."
+    },
+    "_uetvid": {
+        "description": "UET бисквитка на Microsoft Bing Ads за проследяване между сесии."
+    },
+    "bcookie": {
+        "description": "Бисквитка на LinkedIn за разпознаване на браузъра."
+    },
+    "li_sugr": {
+        "description": "Бисквитка на LinkedIn Insight Tag."
+    },
+    "lidc": {
+        "description": "Бисквитка на LinkedIn за оптимизиране на маршрутизирането между центровете за данни."
+    },
+    "__hssc": {
+        "description": "Бисквитка на HubSpot за проследяване на сесията."
+    },
+    "__hssrc": {
+        "description": "Бисквитка на HubSpot за разпознаване на рестарт на сесията."
+    },
+    "__hstc": {
+        "description": "Основна аналитична бисквитка на HubSpot."
+    },
+    "hubspotutk": {
+        "description": "Бисквитка на HubSpot за проследяване на посетителите."
+    },
+    "__hs_opt_out": {
+        "description": "Бисквитка на HubSpot, която запомня отказа."
+    },
+    "ysc": {
+        "description": "Бисквитка на YouTube за проследяване на гледанията на вградени видеоклипове."
+    },
+    "visitor_info1_live": {
+        "description": "Бисквитка на YouTube за преценка на честотната лента и настройките на възпроизвеждане."
+    },
+    "vuid": {
+        "description": "Аналитична бисквитка на Vimeo за проследяване на гледанията на видеоклипове."
+    },
+    "__stripe_mid": {
+        "description": "Бисквитка на Stripe за предотвратяване на измами при обработката на плащания."
+    },
+    "__stripe_sid": {
+        "description": "Сесийна бисквитка на Stripe за предотвратяване на измами при обработката на плащания."
+    },
+    "mp_": {
+        "description": "Аналитична бисквитка на Mixpanel за проследяване на взаимодействията на потребителя."
+    },
+    "distinct_id": {
+        "description": "Бисквитка на Mixpanel за разпознаване на уникални потребители."
+    },
+    "_hj*": {
+        "description": "Аналитична бисквитка на Hotjar."
+    },
+    "woocommerce_cart_hash": {
+        "description": "Бисквитка на WooCommerce за разпознаване на промени в количката."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "Бисквитка на WooCommerce за проследяване на артикулите в количката."
+    },
+    "wp_woocommerce_session_": {
+        "description": "Сесийна бисквитка на WooCommerce."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Токен за кеш, използван от аналитичния SDK на TikTok."
+    },
+    "_ttp": {
+        "description": "Бисквитка на TikTok Pixel за проследяване на посетителите в различни сайтове с рекламна цел."
+    },
+    "tt_webid": {
+        "description": "Бисквитка на TikTok за разпознаване и проследяване на потребители с рекламна цел."
+    },
+    "guest_id": {
+        "description": "Бисквитка на Twitter за разпознаване на невлезли потребители."
+    },
+    "personalization_id": {
+        "description": "Бисквитка на Twitter за персонализация и реклама."
+    },
+    "ct0": {
+        "description": "Бисквитка на Twitter за сигурност и защита от спам на вграденото съдържание."
+    },
+    "_scid": {
+        "description": "Бисквитка на Snapchat Pixel за разпознаване на посетители в различни сайтове."
+    },
+    "sc_at": {
+        "description": "Бисквитка на Snapchat Pixel за рекламна атрибуция."
+    },
+    "_pin_unauth": {
+        "description": "Бисквитка на Pinterest за проследяване на неудостоверени потребители."
+    },
+    "_pinterest_sess": {
+        "description": "Сесийна бисквитка на Pinterest за реклама и проследяване."
+    },
+    "phpsessid": {
+        "description": "Сесийна бисквитка на PHP за управление на потребителските сесии."
+    }
+}

@@ -1,0 +1,203 @@
+{
+    "wpemojisettingssupports": {
+        "description": "WordPress nastaví tento soubor cookie, když uživatel na webu WordPress pracuje s emodži."
+    },
+    "wordpress_test_cookie": {
+        "description": "Testovací soubor cookie WordPressu pro ověření, zda jsou cookies povoleny."
+    },
+    "wordpress_logged_in_": {
+        "description": "Označuje stav přihlášení a totožnost uživatele."
+    },
+    "wp-settings-": {
+        "description": "Přizpůsobuje administrační rozhraní každému uživateli."
+    },
+    "wordpress_": {
+        "description": "Ověřovací soubor cookie WordPressu pro administrační část."
+    },
+    "wp_lang": {
+        "description": "Ukládá jazyk zvolený při přihlášení."
+    },
+    "comment_author_email_": {
+        "description": "Pro pohodlí ukládá e-mail autora komentáře."
+    },
+    "comment_author_url_": {
+        "description": "Pro pohodlí ukládá adresu webu autora komentáře."
+    },
+    "comment_author_": {
+        "description": "Pro pohodlí ukládá jméno autora komentáře."
+    },
+    "_ga": {
+        "description": "Soubor cookie služby Google Analytics k rozlišení uživatelů."
+    },
+    "_ga_": {
+        "description": "Soubor cookie služby Google Analytics 4 k uchování stavu relace."
+    },
+    "_gid": {
+        "description": "Soubor cookie služby Google Analytics k rozlišení uživatelů."
+    },
+    "_gat": {
+        "description": "Soubor cookie služby Google Analytics k omezení počtu požadavků."
+    },
+    "wp_statistics_": {
+        "description": "Soubor cookie WP Statistics ke sledování relací návštěvníků a zobrazení stránek."
+    },
+    "burst_uid": {
+        "description": "Soubor cookie Burst Statistics k identifikaci jedinečných návštěvníků."
+    },
+    "_koko_analytics_pages_viewed": {
+        "description": "Soubor cookie Koko Analytics k rozpoznání jedinečných návštěvníků a počítání zobrazených stránek za relaci."
+    },
+    "_gac_": {
+        "description": "Soubor cookie služby Google Analytics obsahující informace o kampani."
+    },
+    "__utma": {
+        "description": "Soubor cookie služby Google Analytics (Classic) k rozlišení uživatelů a relací."
+    },
+    "__utmb": {
+        "description": "Soubor cookie služby Google Analytics (Classic) k určení nových relací."
+    },
+    "__utmc": {
+        "description": "Soubor cookie služby Google Analytics (Classic) používaný spolu s __utmb k určení nových relací."
+    },
+    "__utmz": {
+        "description": "Soubor cookie služby Google Analytics (Classic), který ukládá zdroj návštěvnosti nebo kampaň."
+    },
+    "__utmt": {
+        "description": "Soubor cookie služby Google Analytics (Classic) k omezení počtu požadavků."
+    },
+    "_gcl_au": {
+        "description": "Soubor cookie propojovače konverzí Google Ads."
+    },
+    "ide": {
+        "description": "Soubor cookie DoubleClick/Google pro cílenou reklamu."
+    },
+    "dsid": {
+        "description": "Reklamní soubor cookie Google pro personalizaci reklam."
+    },
+    "_fbp": {
+        "description": "Soubor cookie Facebook Pixelu pro reklamu a analytiku."
+    },
+    "_fbc": {
+        "description": "Soubor cookie Facebooku s identifikátorem kliknutí."
+    },
+    "fr": {
+        "description": "Reklamní soubor cookie Facebooku."
+    },
+    "__cf_bm": {
+        "description": "Soubor cookie Cloudflare pro správu botů."
+    },
+    "__cfduid": {
+        "description": "Soubor cookie Cloudflare k rozpoznání důvěryhodného provozu."
+    },
+    "_grecaptcha": {
+        "description": "Používá jej Google reCAPTCHA k rozlišení lidí a robotů."
+    },
+    "fazcookie-consent": {
+        "description": "Předvolby souhlasu s cookies nastavené návštěvníkem."
+    },
+    "_clck": {
+        "description": "Soubor cookie Microsoft Clarity pro analytiku."
+    },
+    "_clsk": {
+        "description": "Relační soubor cookie Microsoft Clarity."
+    },
+    "muid": {
+        "description": "Soubor cookie Microsoft Bing Ads pro Universal Event Tracking."
+    },
+    "_uetsid": {
+        "description": "Soubor cookie UET služby Microsoft Bing Ads ke sledování relace."
+    },
+    "_uetvid": {
+        "description": "Soubor cookie UET služby Microsoft Bing Ads ke sledování napříč relacemi."
+    },
+    "bcookie": {
+        "description": "Soubor cookie LinkedIn k identifikaci prohlížeče."
+    },
+    "li_sugr": {
+        "description": "Soubor cookie nástroje LinkedIn Insight Tag."
+    },
+    "lidc": {
+        "description": "Soubor cookie LinkedIn pro optimalizaci směrování mezi datovými centry."
+    },
+    "__hssc": {
+        "description": "Soubor cookie HubSpot ke sledování relace."
+    },
+    "__hssrc": {
+        "description": "Soubor cookie HubSpot k rozpoznání restartu relace."
+    },
+    "__hstc": {
+        "description": "Hlavní analytický soubor cookie služby HubSpot."
+    },
+    "hubspotutk": {
+        "description": "Soubor cookie HubSpot ke sledování návštěvníků."
+    },
+    "__hs_opt_out": {
+        "description": "Soubor cookie HubSpot, který si pamatuje odmítnutí."
+    },
+    "ysc": {
+        "description": "Soubor cookie YouTube ke sledování přehrání vložených videí."
+    },
+    "visitor_info1_live": {
+        "description": "Soubor cookie YouTube k odhadu šířky pásma a nastavení přehrávání."
+    },
+    "vuid": {
+        "description": "Analytický soubor cookie Vimeo ke sledování přehrání videí."
+    },
+    "__stripe_mid": {
+        "description": "Soubor cookie Stripe pro prevenci podvodů při zpracování plateb."
+    },
+    "__stripe_sid": {
+        "description": "Relační soubor cookie Stripe pro prevenci podvodů při zpracování plateb."
+    },
+    "mp_": {
+        "description": "Analytický soubor cookie Mixpanel ke sledování interakcí uživatele."
+    },
+    "distinct_id": {
+        "description": "Soubor cookie Mixpanel k identifikaci jedinečných uživatelů."
+    },
+    "_hj*": {
+        "description": "Analytický soubor cookie Hotjar."
+    },
+    "woocommerce_cart_hash": {
+        "description": "Soubor cookie WooCommerce k rozpoznání změn v košíku."
+    },
+    "woocommerce_items_in_cart": {
+        "description": "Soubor cookie WooCommerce ke sledování položek v košíku."
+    },
+    "wp_woocommerce_session_": {
+        "description": "Relační soubor cookie WooCommerce."
+    },
+    "__tea_cache_tokens_": {
+        "description": "Token mezipaměti používaný analytickým SDK TikToku."
+    },
+    "_ttp": {
+        "description": "Soubor cookie TikTok Pixelu ke sledování návštěvníků napříč weby pro reklamní účely."
+    },
+    "tt_webid": {
+        "description": "Soubor cookie TikToku k identifikaci a sledování uživatelů pro reklamní účely."
+    },
+    "guest_id": {
+        "description": "Soubor cookie Twitteru k identifikaci nepřihlášených uživatelů."
+    },
+    "personalization_id": {
+        "description": "Soubor cookie Twitteru pro personalizaci a reklamu."
+    },
+    "ct0": {
+        "description": "Soubor cookie Twitteru pro zabezpečení a ochranu vloženého obsahu před spamem."
+    },
+    "_scid": {
+        "description": "Soubor cookie Snapchat Pixelu pro identifikaci návštěvníků napříč weby."
+    },
+    "sc_at": {
+        "description": "Soubor cookie Snapchat Pixelu pro atribuci reklamy."
+    },
+    "_pin_unauth": {
+        "description": "Soubor cookie Pinterestu ke sledování nepřihlášených uživatelů."
+    },
+    "_pinterest_sess": {
+        "description": "Relační soubor cookie Pinterestu pro reklamu a sledování."
+    },
+    "phpsessid": {
+        "description": "Relační soubor cookie PHP pro správu uživatelských relací."
+    }
+}

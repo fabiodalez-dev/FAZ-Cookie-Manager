@@ -387,6 +387,43 @@ cookie_i18n_eq( Cookie_Content_I18n::description( 'ct0', 'en', '.x.com' ), 'Twit
 cookie_i18n_eq( Cookie_Content_I18n::description( '_ga', 'en', 'example.test' ), 'Google Analytics cookie used to distinguish users.', '_ga is first-party and stays unconstrained' );
 cookie_i18n_eq( Cookie_Content_I18n::description( '_fbp', 'en', 'example.test' ), 'Facebook Pixel cookie used for advertising and analytics.', 'and so is _fbp' );
 
+// --- Both content surfaces must cover the same languages ---
+//
+// The descriptions shipped in en + it while durations shipped in fourteen, so a
+// German site got "2 Jahre" next to an English sentence — the mixed-language
+// declaration this feature exists to remove, produced by the feature itself.
+// The two are asserted against each other rather than against a hardcoded list,
+// because a list is a third thing to keep in step.
+$faz_i18n_dir      = dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/contents';
+$faz_i18n_dur      = array_keys( (array) json_decode( (string) file_get_contents( $faz_i18n_dir . '/duration-units.json' ), true ) );
+$faz_i18n_desc     = array();
+foreach ( (array) glob( $faz_i18n_dir . '/cookies/*.json' ) as $faz_i18n_file ) {
+	$faz_i18n_desc[] = basename( $faz_i18n_file, '.json' );
+}
+sort( $faz_i18n_dur );
+sort( $faz_i18n_desc );
+cookie_i18n_eq( array_values( array_diff( $faz_i18n_dur, $faz_i18n_desc ) ), array(), 'every language with durations also has descriptions' );
+cookie_i18n_eq( array_values( array_diff( $faz_i18n_desc, $faz_i18n_dur ) ), array(), 'and the reverse, so neither surface can drift ahead' );
+
+// Every jurisdiction the policy generator can render must be covered by both,
+// since that is the set a site can actually select.
+$faz_i18n_gen = array();
+if ( preg_match( "#const LANGUAGES\s*=\s*array\(([^)]*)\)#", (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookie-policy-generator/includes/class-generator.php' ), $faz_i18n_m ) ) {
+	preg_match_all( "#'([^']+)'#", $faz_i18n_m[1], $faz_i18n_g );
+	$faz_i18n_gen = array_map( 'strtolower', $faz_i18n_g[1] );
+}
+cookie_i18n_eq( count( $faz_i18n_gen ) > 0, true, 'the policy generator language list could be read' );
+cookie_i18n_eq( array_values( array_diff( $faz_i18n_gen, $faz_i18n_desc ) ), array(), 'every policy-generator language has a description catalogue' );
+
+// And each one actually resolves, rather than merely having a file.
+foreach ( $faz_i18n_desc as $faz_i18n_lang ) {
+	cookie_i18n_eq(
+		'' !== Cookie_Content_I18n::description( '_ga', $faz_i18n_lang ) && '' !== Cookie_Content_I18n::duration( '2 years', $faz_i18n_lang ),
+		true,
+		"{$faz_i18n_lang}: both a description and a duration resolve"
+	);
+}
+
 // --- Every catalogue key must be able to match something ---
 //
 // `wp-settings` and `_hj` sat in both catalogues unreachable: the prefix branch
