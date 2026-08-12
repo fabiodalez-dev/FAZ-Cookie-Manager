@@ -78,7 +78,14 @@ namespace {
 	$GLOBALS['__faz_consent_cookie'] = '';
 	$GLOBALS['__faz_providers']      = array();
 
-	if ( ! function_exists( 'get_transient' ) ) {
+	if ( ! function_exists( 'wp_parse_url' ) ) {
+	// Reached only once the social-container path consults the whitelist, which
+	// it did not before this change — the harness had no reason to stub it.
+	function wp_parse_url( $url, $component = -1 ) {
+		return parse_url( $url, $component );
+	}
+}
+if ( ! function_exists( 'get_transient' ) ) {
 		function get_transient( $key ) {
 			return array_key_exists( $key, $GLOBALS['__faz_transients'] )
 				? $GLOBALS['__faz_transients'][ $key ]
@@ -350,6 +357,27 @@ namespace {
 	$cat_ids = array_keys( $cat );
 	sort( $cat_ids );
 	assert_eq( $cat_ids, $enf_ids, 'D11 catalogue membership equals the enforceable set (UI ⇄ enforcement consistency)' );
+
+	// ===== Group E0 — social containers honour the admin's exemptions =====
+	// Reported on wp.org (Smash Balloon Instagram Feed): a site owner tried to
+	// let one feed through by adding its container id and class to the blocking
+	// exceptions, and nothing happened. process_social_embeds() was the one
+	// blocking path that consulted neither the whitelist nor class="faz-skip",
+	// so there was no way to say "not this embed" at all.
+	$fe_wl = faz_arrange( '', false );
+
+	$skip_class = '<div class="instagram-media faz-skip">feed</div>';
+	$out_skip   = faz_call( $fe_wl, 'process_social_embeds', array( $skip_class, array( 'marketing' ) ) );
+	assert_eq( $out_skip, $skip_class, 'E0a class="faz-skip" exempts a class-matched social container' );
+
+	$skip_id  = '<div id="sb_instagram" class="faz-skip">feed</div>';
+	$out_id   = faz_call( $fe_wl, 'process_social_embeds', array( $skip_id, array( 'marketing' ) ) );
+	assert_eq( $out_id, $skip_id, 'E0b class="faz-skip" exempts an id-matched social container (Smash Balloon)' );
+
+	// Non-vacuity: without the exemption the very same markup IS blocked.
+	$plain     = '<div class="instagram-media">feed</div>';
+	$out_plain = faz_call( $fe_wl, 'process_social_embeds', array( $plain, array( 'marketing' ) ) );
+	assert_eq( false !== strpos( $out_plain, 'data-faz-category' ), true, 'E0c the same container without the exemption is still blocked' );
 
 	// ===== Group E — social-embed PCRE failure preserves page content =====
 	$fe       = faz_arrange( '', false );

@@ -43,6 +43,17 @@ use FazCookie\Frontend\Includes\Geo_Runtime;
 class Frontend {
 
 	/**
+	 * Instagram Feed's settings page slug, where its GDPR option lives.
+	 *
+	 * Pinned by tests/unit/test-smash-balloon-gdpr-php.php against the slug the
+	 * plugin actually registers, so this cannot rot into a dead link silently.
+	 *
+	 * @since 1.26.1
+	 * @var string
+	 */
+	const SMASH_BALLOON_SETTINGS_SLUG = 'sbi-settings';
+
+	/**
 	 * The ID of this plugin.
 	 *
 	 * @since    3.0.0
@@ -2446,8 +2457,14 @@ class Frontend {
 		$this->providers = apply_filters( 'faz_blocking_rules_client', $this->providers );
 
 		// Some payment SDKs are required outside checkout too (e.g. Stripe express buttons).
+		// The Instagram Feed exemption rides along here for the same reason it
+		// exists in get_provider_category_map(): the client-side interceptor is a
+		// SEPARATE list built from $this->providers, so exempting only the server
+		// map would leave the browser re-blocking the very script the server just
+		// allowed — the pattern reaching the page in _fazConfig is enough to do it.
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
 		foreach ( array_keys( $this->providers ) as $pattern ) {
-			if ( $this->is_always_allowed_gateway_pattern( $pattern ) ) {
+			if ( $this->is_always_allowed_gateway_pattern( $pattern ) || isset( $sb_exempt_patterns[ $pattern ] ) ) {
 				unset( $this->providers[ $pattern ] );
 			}
 		}
@@ -4876,12 +4893,28 @@ class Frontend {
 		// since the gateway match is substring-based and a generic pattern like
 		// "payment" must not be silently exempted because it is a substring of
 		// "stripe-payment".
+		// 5b. Same treatment for Instagram Feed's own patterns when it is limiting
+		// itself. Exempting the container (process_social_embeds) without this was
+		// a half measure that produced the worst of the three outcomes: the feed's
+		// <div> rendered while its first-party script stayed blocked, so the
+		// visitor got an empty box with no placeholder to explain it — worse than
+		// either blocking the feed or letting it work. With the GDPR setting on
+		// Yes the plugin serves local copies and contacts nothing, so its script
+		// is first-party and declares no cookies; there is nothing left to gate.
+		// Pattern list read from the provider database rather than repeated here,
+		// so the two cannot drift apart.
+		$sb_exempt_patterns = self::smash_balloon_exempt_patterns();
+
 		foreach ( array_keys( $map ) as $p ) {
 			$is_explicit_rule = isset( $custom_patterns[ $p ] ) || ! array_key_exists( $p, $pre_filter_map );
 			if ( $is_explicit_rule ) {
 				continue;
 			}
 			if ( $this->is_always_allowed_gateway_pattern( $p ) ) {
+				unset( $map[ $p ] );
+				continue;
+			}
+			if ( isset( $sb_exempt_patterns[ $p ] ) ) {
 				unset( $map[ $p ] );
 			}
 		}
@@ -7059,6 +7092,133 @@ class Frontend {
 	}
 
 	/**
+	 * Admin URL of Instagram Feed's own settings screen.
+	 *
+	 * Where its GDPR option lives, so a notice can send the site owner to the
+	 * control that actually decides the behaviour instead of describing it.
+	 * The slug is pinned by a test against the plugin's own registration, since
+	 * a link to a page that does not exist is worse than no link.
+	 *
+	 * @since 1.26.1
+	 * @return string
+	 */
+	public static function smash_balloon_settings_url() {
+		return function_exists( 'admin_url' )
+			? admin_url( 'admin.php?page=' . self::SMASH_BALLOON_SETTINGS_SLUG )
+			: '';
+	}
+
+	/**
+	 * Whether Smash Balloon's Instagram Feed already restricts itself.
+	 *
+	 * Instagram Feed has its own GDPR setting, `gdpr` in the
+	 * `sb_instagram_settings` option, with three values. Only `yes` makes it
+	 * self-restrict: SB_Instagram_GDPR_Integrations::blocking_cdn() then returns
+	 * true unconditionally, the feed serves local image copies, and no request
+	 * reaches Instagram's CDN at all. Gating that again adds nothing.
+	 *
+	 * Everything else keeps our blocking, and `auto` — the DEFAULT — is the case
+	 * that matters most. Instagram Feed's automatic mode does not detect an
+	 * arbitrary consent plugin: gdpr_plugins_active() checks a hardcoded list of
+	 * nine specific ones by class, constant or function, and this plugin is not
+	 * among them (as a de-branded fork it deliberately defines no CKY_* constant).
+	 * On `auto` it therefore concludes no consent plugin is present and restricts
+	 * nothing, which makes our block the only thing holding that feed back.
+	 *
+	 * Plugin inactive, option missing, key absent or unreadable: block. A signal
+	 * we cannot read is not permission to load a tracker.
+	 *
+	 * @since 1.26.1
+	 * @return bool True when Instagram Feed is handling it and we should not.
+	 */
+	/**
+	 * Blocking patterns to drop while Instagram Feed is limiting itself.
+	 *
+	 * Exempting the container alone was a half measure that produced the worst of
+	 * the three possible outcomes: the feed's `<div>` rendered while its script
+	 * stayed blocked, so the visitor got an empty box and not even a placeholder
+	 * to explain it — worse than blocking the feed outright, and worse than
+	 * letting it work. With the GDPR setting on Yes the plugin serves local
+	 * copies and contacts nothing, so its script is first-party and its provider
+	 * entry declares no cookies; there is nothing left to gate.
+	 *
+	 * Two provider entries cover the same asset and BOTH must go, which is why
+	 * this is derived rather than listed: `smash-balloon-instagram` owns
+	 * `sb-instagram`, while the generic `instagram` entry carries
+	 * `plugins/instagram-feed/js/` — a path pattern matching the very same
+	 * first-party script. Dropping only the first leaves the second blocking it,
+	 * which is exactly the empty-box state described above.
+	 *
+	 * @since 1.26.1
+	 * @return array Map of pattern => true; empty when the accommodation is off.
+	 */
+	public static function smash_balloon_exempt_patterns() {
+		if ( ! self::smash_balloon_self_restricts() ) {
+			return array();
+		}
+		$exempt = array();
+		foreach ( Known_Providers::get_all() as $service_id => $service ) {
+			$patterns = isset( $service['patterns'] ) && is_array( $service['patterns'] ) ? $service['patterns'] : array();
+			foreach ( $patterns as $pattern ) {
+				// Instagram Feed's own assets, wherever the provider database
+				// files them: its dedicated entry, plus any pattern addressing
+				// the plugin's own directory. That directory name is the wp.org
+				// slug, so it is as stable an anchor as the provider id itself.
+				//
+				// `-pro` is matched too, and deliberately. Instagram Feed Pro is
+				// the same product installed under its own slug: it defines the
+				// same SBIVER and reads the same sb_instagram_settings, so the
+				// accommodation applies identically — and the provider database
+				// carries a separate `plugins/instagram-feed-pro/js/` pattern
+				// that would otherwise go on blocking the same first-party
+				// script on exactly the sites that paid for it.
+				if ( 'smash-balloon-instagram' === $service_id || preg_match( '#instagram-feed(-pro)?/#i', (string) $pattern ) ) {
+					$exempt[ $pattern ] = true;
+				}
+			}
+		}
+		return $exempt;
+	}
+
+	public static function smash_balloon_self_restricts() {
+		// Guarded so the method degrades to "block" in any context where these
+		// are unavailable — standalone unit harnesses stub only what the code
+		// they exercise needs, and an undefined function here would fatal a
+		// caller that has nothing to do with Instagram.
+		if ( function_exists( 'apply_filters' ) && ! apply_filters( 'faz_respect_smash_balloon_gdpr', true ) ) {
+			return false;
+		}
+		// The option outlives the plugin. Deactivating or deleting Instagram
+		// Feed leaves `sb_instagram_settings` behind in wp_options, so a stale
+		// `gdpr=yes` from an install that is no longer running would read as
+		// "somebody else is handling this" when nobody is — and standing down
+		// on that would ship the very tracker this accommodation assumes is
+		// already contained. Require a signal that the code implementing the
+		// limitation is loaded: either the plugin's version constant or the
+		// class whose blocking_cdn() is the behaviour being deferred to.
+		// Both vanish with the plugin and neither can be left behind in the
+		// database, which is exactly the property the option lacks.
+		if ( ! defined( 'SBIVER' ) && ! class_exists( 'SB_Instagram_GDPR_Integrations', false ) ) {
+			return false;
+		}
+		if ( ! function_exists( 'get_option' ) ) {
+			return false;
+		}
+		$settings = get_option( 'sb_instagram_settings', array() );
+		if ( ! is_array( $settings ) || ! isset( $settings['gdpr'] ) ) {
+			return false;
+		}
+		// Only a string can carry the documented value. A corrupted option
+		// holding an array or an object would raise a conversion warning or
+		// throw outright on the cast, turning a malformed setting into a
+		// frontend error — so reject the type instead of normalising it.
+		if ( ! is_string( $settings['gdpr'] ) ) {
+			return false;
+		}
+		return 'yes' === strtolower( trim( $settings['gdpr'] ) );
+	}
+
+	/**
 	 * Process social embed containers (Facebook, Instagram, Twitter/X).
 	 *
 	 * Social embeds use specific CSS class patterns that rely on external
@@ -7115,6 +7275,16 @@ class Frontend {
 					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
 						return $m[0];
 					}
+					// Honour the admin's exemptions here too. Social containers
+					// were the one blocking path that consulted neither the
+					// whitelist nor class="faz-skip", so a site owner who wanted
+					// one embed through had no way to say so — reported on wp.org
+					// by somebody who tried exactly that with the container id and
+					// class, and got nothing. Every other filter in this class
+					// treats those as binding; this one now does too.
+					if ( $this->is_whitelisted( $m[2], '' ) ) {
+						return $m[0];
+					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );
 					// Placeholder before + hidden original element.
 					$blocked = $m[1] . $m[2] . ' data-faz-category="' . esc_attr( $category ) . '">';
@@ -7142,6 +7312,10 @@ class Frontend {
 		$social_ids = array(
 			'sb_instagram' => array( 'service_id' => 'smash-balloon-instagram', 'label' => 'Instagram', 'category' => 'marketing' ),
 		);
+		// Stand down when Instagram Feed already removed the third-party surface
+		// itself. Blocking a feed that makes no third-party request protects
+		// nobody and costs the visitor a placeholder they must click for nothing.
+		$sb_self_restricts = self::smash_balloon_self_restricts();
 
 		foreach ( $social_ids as $id_prefix => $info ) {
 			if ( false === stripos( $content, $id_prefix ) ) {
@@ -7150,6 +7324,19 @@ class Frontend {
 
 			$category     = $info['category'];
 			$should_block = in_array( $category, $blocked_categories, true );
+
+			// Applied here, inside the loop, rather than by dropping the entry
+			// before it: dropping it would also skip the per-service check
+			// below, so a visitor who explicitly denied smash-balloon-instagram
+			// would get the feed anyway while the preference-centre toggle
+			// showed it off. An explicit denial is a stronger and more specific
+			// signal than an inferred redundancy, and the rule everywhere else
+			// in this plugin is that the most restrictive explicit answer wins.
+			// So this only clears the CATEGORY-level block, and leaves the
+			// per-service decision free to put it back.
+			if ( $sb_self_restricts && 'smash-balloon-instagram' === $info['service_id'] ) {
+				$should_block = false;
+			}
 
 			// Per-service consent check: override category-level decision.
 			$service_consent = $this->get_service_consent();
@@ -7174,6 +7361,16 @@ class Frontend {
 				function ( $m ) use ( $category, $info ) {
 					// Skip if already processed.
 					if ( false !== strpos( $m[2], 'data-faz-category' ) ) {
+						return $m[0];
+					}
+					// Honour the admin's exemptions here too. Social containers
+					// were the one blocking path that consulted neither the
+					// whitelist nor class="faz-skip", so a site owner who wanted
+					// one embed through had no way to say so — reported on wp.org
+					// by somebody who tried exactly that with the container id and
+					// class, and got nothing. Every other filter in this class
+					// treats those as binding; this one now does too.
+					if ( $this->is_whitelisted( $m[2], '' ) ) {
 						return $m[0];
 					}
 					$placeholder = Placeholder_Builder::build_social( $info['service_id'], $info['label'], $category );

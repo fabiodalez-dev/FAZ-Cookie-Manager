@@ -641,9 +641,32 @@ class Cookies_API extends API_Controller {
 		$templates_dir = FAZ_PLUGIN_BASEPATH . 'admin/modules/cookies/includes/blocker-templates/';
 		$templates     = array();
 
+		// When Instagram Feed limits itself, this plugin stands down for that feed
+		// — container and script alike. The template stays listed and stays
+		// addable, because the setting it belongs to is Instagram Feed's own and
+		// can be changed there at any moment; what changes is that adding it here
+		// no longer affects that feed. Saying so beside the control is the whole
+		// point: an admin who finds a rule that does nothing, with nothing
+		// explaining why, reasonably concludes the plugin is broken.
+		$sb_stood_down = class_exists( '\FazCookie\Frontend\Frontend' )
+			&& method_exists( '\FazCookie\Frontend\Frontend', 'smash_balloon_self_restricts' )
+			&& \FazCookie\Frontend\Frontend::smash_balloon_self_restricts();
+
 		foreach ( glob( $templates_dir . '*.json' ) as $file ) {
 			$data = json_decode( file_get_contents( $file ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			if ( $data && isset( $data['id'] ) ) {
+				if ( $sb_stood_down && 'smash-balloon-instagram' === $data['id'] ) {
+					$data['not_applicable'] = array(
+						'label' => __( 'Not applied', 'faz-cookie-manager' ),
+						// Deliberately not "overridden". Nothing is overriding
+						// anything: with its GDPR setting on Yes, Instagram Feed
+						// serves local copies and contacts nobody, so the
+						// third-party surface this rule exists to gate is gone.
+						// There is nothing left for the setting to apply TO.
+						'note'  => __( 'Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect.', 'faz-cookie-manager' ),
+						'url'   => \FazCookie\Frontend\Frontend::smash_balloon_settings_url(),
+					);
+				}
 				$templates[] = $data;
 			}
 		}
