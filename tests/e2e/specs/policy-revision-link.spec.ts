@@ -17,11 +17,46 @@ import { test, expect, completeAdminLogin } from '../fixtures/wp-fixture';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { getAdminNonce, fazApiGet, fazApiPost } from '../utils/faz-api';
 import { clickFirstVisible } from '../utils/ui';
-import { deleteOption, wpEval } from '../utils/wp-env';
+import { WP_PATH, wpEval } from '../utils/wp-env';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const NOTICE = '#faz-cp-version-notice';
 const HASH_PAIR_RE = /[0-9a-f]{6}\.[0-9a-f]{6}\s*→\s*[0-9a-f]{6}\.[0-9a-f]{6}/;
+
+const HASH_RE = /^[0-9a-f]{6}\.[0-9a-f]{6}$/;
+
+// Version_Ledger::OPTION / ::DOCUMENT. Read through wp-cli rather than through
+// the admin page, because the page is the thing under test: asking it whether
+// seeding happened would only ever return its own opinion.
+const LEDGER_OPTION = 'faz_legal_doc_acknowledged';
+const LEDGER_DOCUMENT = 'cookie-policy';
+
+/** The hash currently recorded as acknowledged, or '' when none is. */
+function acknowledgedHash(): string {
+  return wpEval(
+    `$l = get_option( '${LEDGER_OPTION}', array() );` +
+    `echo ( is_array( $l ) && isset( $l['${LEDGER_DOCUMENT}']['hash'] ) ) ? $l['${LEDGER_DOCUMENT}']['hash'] : '';`,
+  ).trim();
+}
+
+/** Return the ledger to the never-acknowledged state a fresh install is in. */
+function clearLedger(): void {
+  wpEval(`delete_option( '${LEDGER_OPTION}' );`);
+}
+
+/**
+ * The review token the policy currently hashes to, computed without going
+ * through the code path under test.
+ *
+ * review_hash() is what the notice compares against, and it neither reads nor
+ * writes the ledger — so it can say which value a correct seeding must land on,
+ * where the ledger itself can only say which value it happened to store.
+ */
+function currentReviewHash(): string {
+  return wpEval(
+    "echo \\FazCookie\\Admin\\Modules\\Cookie_Policy_Generator\\Includes\\Version_Ledger::review_hash();",
+  ).trim();
+}
 
 type PolicySettings = Record<string, unknown> & { company?: Record<string, unknown> };
 
@@ -182,22 +217,41 @@ test.afterAll(async ({ browser, wpCreds }) => {
 });
 
 test('first load seeds the ledger silently — the feature itself never prompts', async ({ page, loginAsAdmin }) => {
-  // Establish the first load instead of hoping for one. The ledger is a
-  // persistent option: any earlier run of this spec — or a run interrupted
-  // before its afterAll could acknowledge — leaves an acknowledged hash behind,
-  // and once the policy content has moved on the notice is showing before this
-  // test opens the page. It then failed on a precondition it never set up,
-  // which made it fail in isolation while passing inside the full suite and
-  // vice versa depending on run order.
-  deleteOption('faz_legal_doc_acknowledged');
+  test.skip(!WP_PATH, 'requires WP_PATH to put the ledger back to its unacknowledged state');
+
+  // The precondition IS the subject here. Seeding only happens when nothing has
+  // been acknowledged yet (Version_Ledger::evaluate returns 'seeded' on an empty
+  // ledger and adopts the current hash), so a test that inherits whatever ledger
+  // state the site happens to carry is not exercising seeding at all — it is
+  // asserting "no notice pending", which is a different claim from the one in
+  // its own name. It passed for that weaker reason, and failed outright on any
+  // site holding a genuine unacknowledged change, including a run left half
+  // finished. Establish the state rather than hope for it.
+  clearLedger();
+  expect(acknowledgedHash()).toBe('');
+
+  // Captured before the page runs, so the expected value cannot be derived from
+  // whatever the page decided to store.
+  const expected = currentReviewHash();
+  expect(expected).toMatch(HASH_RE);
 
   await loginAsAdmin(page);
   await openAdmin(page);
   await expect(page.locator(NOTICE)).toHaveCount(0);
 
-  // Second load, still nothing: seeding is a one-off, not a per-load reset.
+  // Silence on its own would also be the outcome if the feature had done
+  // nothing at all, so assert the other half of "seeds silently": the ledger
+  // really did adopt the CURRENT hash on that first load. Checking only the
+  // <6hex>.<6hex> shape would pass on any well-formed value, including a stale
+  // one — the shape is not the claim, the value is.
+  const seeded = acknowledgedHash();
+  expect(seeded).toBe(expected);
+
+  // Second load, still nothing: seeding is a one-off, not a per-load reset —
+  // and it must not quietly re-seed to some other value either.
   await openAdmin(page);
   await expect(page.locator(NOTICE)).toHaveCount(0);
+  expect(acknowledgedHash()).toBe(seeded);
 });
 
 test('a material change re-prompts a visitor who had already consented', async ({ page, loginAsAdmin, wpBaseURL }) => {
