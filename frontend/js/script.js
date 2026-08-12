@@ -883,6 +883,17 @@ function _fazFireConsentReadyEvent(action) {
             detail.rejected.push(category.slug);
         }
     }
+    // Recorded BEFORE dispatch, so a listener that arrives late can still find
+    // out what it missed. wca.js and microsoft-consent.js are separate files
+    // outside the minification pipeline: a page optimiser that defers or
+    // reorders them, or simply a slower network for one file, lands them after
+    // this fires — and an event nobody was listening for is gone. That returns
+    // the visitor to exactly the state this event exists to fix: a returning
+    // visitor who accepted, reported to every downstream integration as denied.
+    // A one-line read at load is a much cheaper contract than event ordering.
+    try {
+        window._fazConsentReady = detail;
+    } catch (e) { /* no window (SSR-style harness) — the dispatch below still runs. */ }
     try {
         document.dispatchEvent(new CustomEvent('fazcookie_consent_ready', { detail: detail }));
     } catch (e) { /* CustomEvent unavailable — nothing to announce to. */ }

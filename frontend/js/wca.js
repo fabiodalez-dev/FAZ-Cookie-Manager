@@ -66,3 +66,13 @@ function applyConsentToWpApi() {
 // default (deny) for the rest of the session.
 document.addEventListener("fazcookie_consent_update", applyConsentToWpApi);
 document.addEventListener("fazcookie_consent_ready", applyConsentToWpApi);
+
+// This file is not in the minification pipeline and loads as its own request,
+// so a page optimiser or a slow network can land it AFTER script.js has already
+// announced the consent state. Listening alone would then miss the only
+// announcement there is. The state is recorded on window before dispatch, so
+// catching up is a read; the duplicate guard inside applyConsentToWpApi keeps
+// this from double-reporting when the listener did fire.
+if (typeof window !== 'undefined' && window._fazConsentReady) {
+    applyConsentToWpApi();
+}

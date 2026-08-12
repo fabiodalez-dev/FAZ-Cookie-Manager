@@ -239,5 +239,61 @@ console.log('consent bridges — returning visitors are reported too (jsdom)');
   check('and both still subscribe to the update event', wcaSrc.includes('fazcookie_consent_update') && msSrc.includes('fazcookie_consent_update'));
 }
 
+// ── a bridge that loads AFTER the announcement ─────────────────────────────
+// Both files load as their own request and are outside the minification
+// pipeline, so a page optimiser that defers or reorders them — or simply a
+// slower network for one file — lands them after script.js has already
+// announced. Listening alone then misses the only announcement there is, and
+// the visitor is back to being reported as denied. The state is recorded on
+// window before dispatch so catching up is a read.
+{
+  const w = loadWca({
+    activeLaw: 'gdpr',
+    isUserActionCompleted: true,
+    categories: { analytics: true, marketing: false },
+  });
+  // Simulate: the event already fired before this file was evaluated.
+  w.calls.length = 0;
+  w._fazConsentReady = { accepted: ['analytics'], rejected: ['marketing'], action: 'init' };
+  w.eval(`(function(){${readFileSync(WCA, 'utf8')}})()`);
+  check('wca: a late-loading bridge recovers the announcement it missed', w.calls.length > 0);
+  check('wca: and reports the same categories', w.calls.includes('statistics:allow') && w.calls.includes('marketing:deny'));
+}
+{
+  const w = loadMicrosoft();
+  const before = w.uetq.length;
+  w._fazConsentReady = { accepted: ['marketing', 'analytics'], action: 'init' };
+  w.eval(readFileSync(MS, 'utf8'));
+  const pushes = w.uetq.slice(before);
+  check('uet: a late-loading bridge recovers it too', pushes.length >= 3 && pushes.includes('update'));
+}
+{
+  const w = loadMicrosoft({ clarity: true });
+  w.clarityCalls.length = 0;
+  w._fazConsentReady = { accepted: ['analytics'], action: 'init' };
+  w.eval(readFileSync(MS, 'utf8'));
+  check('clarity: recovers it as well', w.clarityCalls.includes('consent'));
+}
+// And catching up must not double-report when the listener DID fire.
+{
+  const w = loadWca({ activeLaw: 'gdpr', isUserActionCompleted: true, categories: { analytics: true } });
+  fire(w, 'fazcookie_consent_ready', ['analytics']);
+  const afterEvent = w.calls.length;
+  w._fazConsentReady = { accepted: ['analytics'], action: 'init' };
+  fire(w, 'fazcookie_consent_update', ['analytics']);
+  check('wca: catching up does not double-report an identical state', w.calls.length === afterEvent);
+}
+
+// script.js must record the state before dispatching, or none of the above can
+// work. Asserted on the source: the ordering is the contract.
+{
+  const src = readFileSync(resolve(HERE, '../../../frontend/js/script.js'), 'utf8');
+  const fn = src.slice(src.indexOf('function _fazFireConsentReadyEvent'));
+  const body = fn.slice(0, fn.indexOf('\n}') + 2);
+  const recordAt = body.indexOf('window._fazConsentReady = detail');
+  const fireAt = body.indexOf('dispatchEvent');
+  check('script.js records the state BEFORE dispatching it', recordAt !== -1 && fireAt !== -1 && recordAt < fireAt);
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

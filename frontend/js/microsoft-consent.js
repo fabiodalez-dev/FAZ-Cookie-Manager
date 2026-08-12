@@ -50,6 +50,11 @@
 		}
 		document.addEventListener('fazcookie_consent_update', pushUetConsent);
 		document.addEventListener('fazcookie_consent_ready', pushUetConsent);
+		// Catch up if the announcement already happened — see wca.js for why a
+		// separately-loaded file cannot rely on being present for it.
+		if (window._fazConsentReady) {
+			pushUetConsent({ detail: window._fazConsentReady });
+		}
 	}
 
 	// Microsoft Clarity Consent API
@@ -65,5 +70,8 @@
 		}
 		document.addEventListener('fazcookie_consent_update', grantClarityConsent);
 		document.addEventListener('fazcookie_consent_ready', grantClarityConsent);
+		if (window._fazConsentReady) {
+			grantClarityConsent({ detail: window._fazConsentReady });
+		}
 	}
 })();
