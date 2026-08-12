@@ -492,7 +492,11 @@ test.describe.serial('PR #61 regressions', () => {
 			const html = await page.content();
 			expect(html).toContain('var _fazGsk = true;');
 
-			await page.waitForFunction(() => Array.from(document.scripts).some((script) => script.src.includes('/frontend/js/wca.js')), undefined, { timeout: 10_000 });
+			// Match the bridge whether or not it is minified. This branch now
+			// enqueues js/wca<suffix>.js, so pinning the unminified name asserted
+			// the build pipeline rather than the thing under test — which is that
+			// the WP Consent API bridge loads and reports consent.
+			await page.waitForFunction(() => Array.from(document.scripts).some((script) => /\/frontend\/js\/wca(\.min)?\.js/.test(script.src)), undefined, { timeout: 10_000 });
 			await driveConsent(page, 'all');
 			await page.waitForFunction(() => Array.isArray((window as any)._fazWpConsentCalls) && (window as any)._fazWpConsentCalls.length > 0, undefined, { timeout: 10_000 });
 

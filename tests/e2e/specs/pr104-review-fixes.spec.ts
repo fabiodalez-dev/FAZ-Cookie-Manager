@@ -316,6 +316,11 @@ test.describe('PR104 — F-SEC-02 GEOIP_COUNTRY_CODE opt-in filter', () => {
 
       // Filter ON: header IS consumed and steers the result.
       delete_transient( 'faz_geo_' . md5( '8.8.8.8' ) );
+      // Clearing the transient is no longer enough: this branch added a
+      // per-request memo (Geolocation::\$country_cache) that is consulted
+      // BEFORE the transient, so the second resolution would return the ''
+      // the first one memoised and the trust filter would look inert.
+      \\FazCookie\\Includes\\Geolocation::reset_runtime_cache();
       $closure = function() { return true; };
       add_filter( 'faz_trust_geoip_country_code', $closure, 10 );
       $on = \\FazCookie\\Includes\\Geolocation::get_visitor_country();
