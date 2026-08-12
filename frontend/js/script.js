@@ -3358,7 +3358,7 @@ function _fazImgShouldBlock(el, url) {
     if (url.indexOf("//") === -1) return false; // relative path → same-origin
     try { if (new URL(url, location.href).host === location.host) return false; } catch (e) { return false; }
     if (el && el.classList && el.classList.contains("faz-skip")) return false;
-    if (_fazIsUserWhitelisted(url)) return false;
+    if (_fazIsUserWhitelisted(url, el)) return false;
     return _fazShouldBlockProvider(url);
 }
 function _fazImgCategory(url) {
@@ -4444,7 +4444,7 @@ function _fazMutationObserver(mutations) {
                         blockingTarget = nodeSrc;
                     }
                 }
-                if (_fazIsUserWhitelisted(nodeSrc)) continue;
+                if (_fazIsUserWhitelisted(nodeSrc, node)) continue;
                 if (node.classList && node.classList.contains('faz-skip')) continue;
                 // Optimiser-deferred placeholders (LiteSpeed/WP Rocket "Delay JS")
                 // are non-executing — leave them to the optimiser. The real script
@@ -5122,11 +5122,31 @@ function _fazShouldBlockProvider(formattedRE) {
     });
 }
 /**
- * Check if the URL matches a user-defined whitelist pattern.
+ * Check whether a URL or its element matches a user-defined whitelist pattern.
  * Defined at module scope so both _fazShouldChangeType, _fazMutationObserver,
  * and _fazNetworkInterceptors can all access it.
  */
-function _fazIsUserWhitelisted(url) {
+function _fazWhitelistElementMatches(element, pattern) {
+    if (!element || !pattern || pattern.indexOf('.') !== -1 || pattern.indexOf('/') !== -1) return false;
+    if (typeof element.getAttribute !== "function") return false;
+
+    var values = [element.getAttribute('id') || '', element.getAttribute('class') || ''];
+    var needle = pattern.toLowerCase();
+    var explicitPrefix = /[-_]$/.test(needle);
+    for (var i = 0; i < values.length; i++) {
+        var tokens = String(values[i]).toLowerCase().split(/\s+/);
+        for (var j = 0; j < tokens.length; j++) {
+            var token = tokens[j];
+            if (!token) continue;
+            if (token === needle) return true;
+            if (explicitPrefix && token.indexOf(needle) === 0) return true;
+            if (!explicitPrefix && (token.indexOf(needle + '-') === 0 || token.indexOf(needle + '_') === 0)) return true;
+        }
+    }
+    return false;
+}
+
+function _fazIsUserWhitelisted(url, element) {
     if (typeof url !== "string") return false;
     var wl = _fazStore._userWhitelist;
     if (!Array.isArray(wl) || !wl.length) return false;
@@ -5135,6 +5155,7 @@ function _fazIsUserWhitelisted(url) {
     for (var i = 0; i < wl.length; i++) {
         if (typeof wl[i] !== "string" || !wl[i]) continue;
         var needle = wl[i].toLowerCase();
+        if (_fazWhitelistElementMatches(element, needle)) return true;
         if (rawTarget.indexOf(needle) !== -1 || decodedTarget.indexOf(needle) !== -1) return true;
     }
     return false;
@@ -5185,7 +5206,7 @@ function _fazIsGcmManaged(u) {
 function _fazShouldChangeType(element, src, typeOverride) {
     if (element.classList && element.classList.contains('faz-skip')) return false;
     var url = src ? src : element.src;
-    if (_fazIsUserWhitelisted(url)) return false;
+    if (_fazIsUserWhitelisted(url, element)) return false;
     // Resolve the effective type: the value being ASSIGNED (typeOverride, passed
     // by the createElement type setter) wins over the currently-committed
     // attribute, so a module→runnable or placeholder→runnable reassignment is
@@ -7519,7 +7540,7 @@ document.addEventListener('click', function (event) {
         blockingTarget = _fazCleanHostName(u.hostname + u.pathname);
     } catch (_e) { /* keep raw URL */ }
 
-    if (_fazIsUserWhitelisted(match.url)) return;
+    if (_fazIsUserWhitelisted(match.url, match.el)) return;
 
     // Known_Providers patterns target the EMBED URL (e.g. youtube.com/embed),
     // but lightbox links carry the WATCH URL (youtube.com/watch?v=…). We

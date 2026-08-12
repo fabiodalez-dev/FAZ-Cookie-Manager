@@ -104,6 +104,13 @@ eq('importmap, no category → exempt (false)', ev(`_fazShouldChangeType(${elem(
 eq('module + marketing category → block (true)', ev(`_fazShouldChangeType(${elem({ type: 'module', 'data-faz-category': 'marketing' })})`), true);
 // classic tracker still blocked
 eq('classic text/javascript + marketing → block (true)', ev(`_fazShouldChangeType(${elem({ type: 'text/javascript', 'data-faz-category': 'marketing' })})`), true);
+// A configured bare token is documented as a script ID or CSS class. It must
+// exempt runtime-created scripts too, not only tags processed by PHP.
+w._fazConfig._userWhitelist = ['runtime-tracker'];
+eq('configured script ID exempts a runtime-created tracker', ev(`_fazShouldChangeType(${elem({ id: 'runtime-tracker', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), false);
+eq('configured script class exempts a runtime-created tracker', ev(`_fazShouldChangeType(${elem({ class: 'runtime-tracker another-class', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), false);
+eq('script ID look-alike remains blocked', ev(`_fazShouldChangeType(${elem({ id: 'not-runtime-tracker', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), true);
+w._fazConfig._userWhitelist = [];
 // optimiser placeholder is left to the caching layer even when it is a tracker
 eq('litespeed placeholder + marketing → left to optimiser (false)', ev(`_fazShouldChangeType(${elem({ type: 'litespeed/javascript', 'data-faz-category': 'marketing' })})`), false);
 // typeOverride wins over the committed attribute (F003): stale 'module' attr,

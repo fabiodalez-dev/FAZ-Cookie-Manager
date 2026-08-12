@@ -619,7 +619,7 @@ Only the most recent release is listed here. The complete history is in [CHANGEL
 - **Changed**: cookie-definition and policy rendering hot paths now reuse indexed data and cached immutable output; the Czech catalogue was re-synchronised with the canonical definitions.
 - **Fixed**: material-decision retries are idempotent across partial failures, identical third-party policy text cannot swap overrides between plugins, oversized collected HTML remains balanced, and the REST route guard must actually visit visible tabs.
 - **Fixed**: consent-log CSV export cannot hang on a non-removable output buffer, Google Consent Mode settings stay isolated between multisite blogs, and custom category descriptions are never replaced by stock translations.
-- **Fixed**: `<noscript>` tracking fallbacks are blocked until consent, Smash Balloon setup links are same-origin only, and stale Elementor provider definitions are removed on upgrade.
+- **Fixed**: `<noscript>` tracking fallbacks are blocked until consent, Smash Balloon respects its own GDPR mode and configured container ID/class exceptions, setup links are same-origin only, and stale Elementor provider definitions are removed on upgrade.
 
 ### 1.24.0 — 2026-07-21
 - **Added**: editable opt-out (Do Not Sell) modal text (#187) — a new "Opt-out (Do Not Sell) Text" card on the Cookie Banner → Preference Center tab edits the "Opt-out Preferences" popup's title, description and toggle label, per language, on CCPA / US State Laws (and Both) banners. Previously that copy was fixed to the bundled default. Translated into every bundled locale.

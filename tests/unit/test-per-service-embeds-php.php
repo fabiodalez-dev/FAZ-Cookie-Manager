@@ -221,12 +221,13 @@ if ( ! function_exists( 'get_transient' ) ) {
 	 * enforceable set computed from the provider catalogue (so get_service_consent
 	 * resolves against the BROAD set, mirroring runtime).
 	 */
-	function faz_arrange( $cookie, $option_on = true ) {
+	function faz_arrange( $cookie, $option_on = true, $whitelist = array() ) {
 		$GLOBALS['__faz_consent_cookie'] = $cookie;
 		$GLOBALS['__faz_providers']      = faz_providers();
 		$fe = faz_new_frontend();
 		faz_set_prop( $fe, 'settings_option_cache', array(
 			'banner_control' => array( 'per_service_consent' => $option_on ),
+			'script_blocking' => array( 'whitelist_patterns' => $whitelist ),
 		) );
 		// Detected (visible) list stays narrow & empty — the whole point of the
 		// block-first scenario is that no provider cookie was observed.
@@ -374,10 +375,23 @@ if ( ! function_exists( 'get_transient' ) ) {
 	$out_id   = faz_call( $fe_wl, 'process_social_embeds', array( $skip_id, array( 'marketing' ) ) );
 	assert_eq( $out_id, $skip_id, 'E0b class="faz-skip" exempts an id-matched social container (Smash Balloon)' );
 
+	// The settings screen explicitly promises IDs and CSS class tokens too. The
+	// forum follow-up confirmed that this promise is what the reporter relied on,
+	// so pin the configured paths independently of the faz-skip escape hatch.
+	$configured_id = faz_arrange( '', false, array( 'sb_instagram' ) );
+	$id_markup     = '<div id="sb_instagram_2" class="sbi">feed</div>';
+	$id_output     = faz_call( $configured_id, 'process_social_embeds', array( $id_markup, array( 'marketing' ) ) );
+	assert_eq( $id_output, $id_markup, 'E0c a configured script/container ID exempts the Smash Balloon feed' );
+
+	$configured_class = faz_arrange( '', false, array( 'instagram-media' ) );
+	$class_markup     = '<blockquote class="instagram-media another-class">feed</blockquote>';
+	$class_output     = faz_call( $configured_class, 'process_social_embeds', array( $class_markup, array( 'marketing' ) ) );
+	assert_eq( $class_output, $class_markup, 'E0d a configured CSS class exempts a social feed container' );
+
 	// Non-vacuity: without the exemption the very same markup IS blocked.
 	$plain     = '<div class="instagram-media">feed</div>';
 	$out_plain = faz_call( $fe_wl, 'process_social_embeds', array( $plain, array( 'marketing' ) ) );
-	assert_eq( false !== strpos( $out_plain, 'data-faz-category' ), true, 'E0c the same container without the exemption is still blocked' );
+	assert_eq( false !== strpos( $out_plain, 'data-faz-category' ), true, 'E0e the same container without the exemption is still blocked' );
 
 	// ===== Group E — social-embed PCRE failure preserves page content =====
 	$fe       = faz_arrange( '', false );
