@@ -384,6 +384,45 @@ class Settings extends Store {
 				}
 			}
 		}
+
+		// Structural dependency between two banner_control flags. Enforced in the
+		// server-side sanitiser rather than the admin JS so it also holds for REST
+		// updates, imports and programmatic writes.
+		//
+		// NOTE: this method recurses into every nested array, so this block runs at
+		// each level, not only at the top. The isset() guard is what keeps it a
+		// no-op below the root — do not add an invariant here that could match a
+		// nested key of the same name.
+		//
+		// Deliberately NOT enforced here: turning Cache Compatibility Mode off when
+		// geo-targeting or IAB TCF is on. That combination is supported by design —
+		// the frontend neutralises per-visitor resolution under cache mode instead
+		// of failing (banner-rest and amp-consent skip country/ruleset lookup,
+		// class-frontend forces the conservative gdpr_applies=true for TCF). Forcing
+		// the flag off would silently revert an administrator's choice on every
+		// save, including saves that never touched it, and would strip the setting
+		// from installs already running the combination. The admin is warned in
+		// settings.js instead, matching how Cache Compatibility Mode pausing the A/B
+		// split is surfaced.
+		if ( isset( $result['banner_control'] ) && is_array( $result['banner_control'] ) ) {
+			// A per-cookie choice is nested below a service, so it is meaningless
+			// without service-level consent — the admin help text says as much
+			// ("Requires per-service consent"). The dependency is enforced in that
+			// direction only: the parent switches the child off.
+			//
+			// It must NOT be enforced the other way round. Deriving
+			// per_service_consent = true from per_cookie_consent looks equivalent
+			// and is not: it makes per-service impossible to turn off while
+			// per-cookie is on. The admin unticks it, saves, and finds it back on
+			// with no explanation. Caught by
+			// tests/e2e/specs/per-service-consent.spec.ts — "category-only mode
+			// hides and disables per-service consent" — which switches per-service
+			// off over a settings payload that still carries per_cookie_consent
+			// from an earlier state, exactly as the settings screen does.
+			if ( empty( $result['banner_control']['per_service_consent'] ) ) {
+				$result['banner_control']['per_cookie_consent'] = false;
+			}
+		}
 		return $result;
 	}
 
@@ -590,10 +629,21 @@ class Settings extends Store {
 				// Map of gateway-key => bool. Only known catalogue keys survive,
 				// each coerced to a strict boolean, so a settings PUT cannot smuggle
 				// an unknown gateway or a non-bool into the whitelist decision.
+				//
+				// faz_sanitize_bool_strict(), not faz_sanitize_bool(): the general
+				// coercion enumerates its NEGATIVES, so any string it does not
+				// recognise — 'garbage', a truncated value, something a migration
+				// mangled — came back true and was persisted as an enabled gateway.
+				// True here removes a restriction, so only an explicit yes counts.
+				// The two read sites use the same function; write and read agreeing
+				// is what keeps a stored value from meaning one thing on save and
+				// another on render.
 				$gateway_keys = self::payment_gateway_keys();
 				$clean = array();
 				foreach ( $gateway_keys as $gw_key ) {
-					$clean[ $gw_key ] = ( is_array( $value ) && ! empty( $value[ $gw_key ] ) );
+					$clean[ $gw_key ] = is_array( $value ) && array_key_exists( $gw_key, $value )
+						? \faz_sanitize_bool_strict( $value[ $gw_key ] )
+						: false;
 				}
 				$value = $clean;
 				break;

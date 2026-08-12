@@ -656,6 +656,8 @@ class Admin {
 						'noGeoipDb'                => __( 'No GeoIP database installed. Enter your license key and click "Update Database".', 'faz-cookie-manager' ),
 						'abTestWarnVariants'       => __( 'A/B testing needs at least 2 selected banner variants to run.', 'faz-cookie-manager' ),
 						'abTestWarnCache'          => __( 'A/B testing is disabled while Cache Compatibility Mode is on.', 'faz-cookie-manager' ),
+						'cacheCompatWarnGeo'       => __( 'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.', 'faz-cookie-manager' ),
+						'cacheCompatWarnIab'       => __( 'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.', 'faz-cookie-manager' ),
 					),
 					// GCM page.
 					'gcm'                      => array(
@@ -1752,7 +1754,11 @@ class Admin {
 			? $settings['script_blocking']['payment_gateways']
 			: array();
 		foreach ( $gateways as $enabled ) {
-			if ( ! empty( $enabled ) ) {
+			// Sanitised rather than `! empty()`, for the same reason as the
+			// frontend read: a stored "false"/"no" from before the write-path fix
+			// is a non-empty string, and this notice would tell the admin a
+			// gateway is exempt when the frontend no longer treats it as one.
+			if ( \faz_sanitize_bool_strict( $enabled ) ) {
 				return true;
 			}
 		}

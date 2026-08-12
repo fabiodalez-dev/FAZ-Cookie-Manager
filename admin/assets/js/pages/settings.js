@@ -27,6 +27,10 @@
 	// flight or after it failed. saveSettings() must not trust the DOM-derived
 	// serializeAbVariants() result while this is false — see saveSettings().
 	var abVariantsReady = false;
+	// How many ACTIVE banners the server last reported. null means "not asked yet",
+	// which must not be treated as zero: the warning below would then fire on every
+	// page load before the request resolves.
+	var abActiveBannerCount = null;
 
 	FAZ.ready(function () {
 		form = document.getElementById('faz-settings');
@@ -132,6 +136,7 @@
 
 		FAZ.get('banners').then(function (banners) {
 			var list = Array.isArray(banners) ? banners.filter(function (b) { return b && b.status; }) : [];
+			abActiveBannerCount = list.length;
 
 			while (container.firstChild) { container.removeChild(container.firstChild); }
 
@@ -265,15 +270,69 @@
 		return regions;
 	}
 
-	/** Show/hide elements based on data-show-if="path.to.checkbox" */
-	function applyShowIf() {
-		form.querySelectorAll('[data-show-if]').forEach(function (el) {
+	/**
+	 * Show/hide elements based on data-show-if="path.to.checkbox".
+	 *
+	 * A group may additionally carry data-clear-when-hidden, which unticks the
+	 * checkboxes inside it whenever it is hidden. That is ONLY correct where the
+	 * server enforces the same dependency: Settings::sanitize() drops
+	 * per_cookie_consent when per_service_consent is off, so leaving the hidden
+	 * checkbox ticked would submit a value the server discards, and — worse —
+	 * re-ticking the parent later would resurrect a stale "on" the admin never
+	 * chose. It is deliberately opt-in rather than applied to every hidden
+	 * group: clearing e.g. geolocation.target_regions whenever geo-targeting is
+	 * toggled off would destroy a configuration the server happily keeps.
+	 *
+	 * @param {HTMLElement} [root] Scope to search; defaults to the settings form.
+	 */
+	function applyShowIf(root) {
+		var scope = root || form;
+		scope.querySelectorAll('[data-show-if]').forEach(function (el) {
 			var path = el.getAttribute('data-show-if');
-			var src = form.querySelector('input[type="checkbox"][data-path="' + path + '"]');
-			if (!src) return;
-			function toggle() { el.style.display = src.checked ? '' : 'none'; }
+			// The controller is looked up on the whole FORM, never on `scope`.
+			// `root` exists to narrow which groups get processed after a partial
+			// re-render; it says nothing about where the checkbox that governs
+			// them lives, and that checkbox is routinely outside the re-rendered
+			// fragment. Scoping the lookup made `src` null, the guard below
+			// returned, and the group kept whatever visibility the markup shipped
+			// with — silently, in a mechanism whose only job is staying in step
+			// with the server-side sanitiser.
+			var selector = 'input[type="checkbox"][data-path="' + path + '"]';
+			// Scope first, widen only if it is not there. Searching the whole
+			// form unconditionally would take the FIRST match in the document,
+			// which is the wrong element as soon as two fragments carry the same
+			// data-path — and searching only the scope is the defect being fixed.
+			// Narrow-then-widen is correct in both directions.
+			var src = scope.querySelector(selector) || (form || document).querySelector(selector);
+			if (!src) {
+				// A data-show-if naming a path with no checkbox is a markup bug.
+				// It used to fail silently, which is how the previous defect went
+				// unnoticed; say so instead.
+				if (window.console && console.warn) {
+					console.warn('FAZ: data-show-if="' + path + '" has no matching checkbox; group left as rendered.');
+				}
+				return;
+			}
+			var clears = el.hasAttribute('data-clear-when-hidden');
+			function toggle() {
+				el.style.display = src.checked ? '' : 'none';
+				if (clears && !src.checked) {
+					el.querySelectorAll('input[type="checkbox"][data-path]').forEach(function (cb) {
+						cb.checked = false;
+					});
+				}
+			}
 			toggle();
-			src.addEventListener('change', toggle);
+			// Bind once per group element. applyShowIf runs again on every
+			// re-scope, and the listener was re-registered each time: harmless
+			// for the visibility toggle, but on a data-clear-when-hidden group it
+			// meant N redundant DOM sweeps per change event, growing with the
+			// number of times the panel had been re-rendered. A re-rendered group
+			// is a NEW element, so it carries no flag and binds correctly.
+			if (!el.__fazShowIfBound) {
+				el.__fazShowIfBound = true;
+				src.addEventListener('change', toggle);
+			}
 		});
 	}
 
@@ -374,43 +433,97 @@
 			// (maybe_apply_ab_test() short-circuits entirely under cache-compat).
 			// Warn the admin instead of letting the generic success toast imply
 			// the A/B test is actually running.
-			var abTestWarning = null;
-			if (current.banner_control && current.banner_control.ab_test
-				&& current.banner_control.ab_test.status) {
-				// current.banner_control.ab_test.variants was just overwritten by the
-				// merge above with formData.banner_control.ab_test.variants (either the
-				// freshly serialized checkboxes, or the preserved server-side value when
-				// the checkbox list hadn't finished loading) — use it instead of a fresh
-				// serializeAbVariants() call, which would be wrong while !abVariantsReady.
-				var effectiveVariants = Array.isArray(current.banner_control.ab_test.variants)
-					? current.banner_control.ab_test.variants
-					: [];
-				if (effectiveVariants.length < 2) {
-					abTestWarning = __(
-						'settings.abTestWarnVariants',
-						'A/B testing needs at least 2 selected banner variants to run.'
-					);
-				} else if (current.banner_control.cache_compatibility) {
-					abTestWarning = __(
-						'settings.abTestWarnCache',
-						'A/B testing is disabled while Cache Compatibility Mode is on.'
-					);
-				}
-			}
+			var saveWarnings = collectSaveWarnings(current);
 
 			return FAZ.post('settings', current).then(function () {
-				return abTestWarning;
+				return saveWarnings;
 			});
-		}).then(function (abTestWarning) {
+		}).then(function (saveWarnings) {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saved', 'Settings saved successfully.'));
-			if (abTestWarning) {
-				FAZ.notify(abTestWarning, 'warning');
-			}
+			(saveWarnings || []).forEach(function (message) {
+				FAZ.notify(message, 'warning');
+			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');
 		});
+	}
+
+	/**
+	 * Return every warning implied by the effective settings payload.
+	 *
+	 * Kept separate from saveSettings() so the compatibility matrix can test the
+	 * exact decision logic without making a REST write. In particular, the IAB
+	 * warning must use the same activation gate as the frontend: an enabled
+	 * checkbox alone does not activate TCF without a registered CMP ID (>= 2).
+	 *
+	 * @param {Object} current Sanitized settings-shaped payload being saved.
+	 * @return {string[]} Localized warning messages.
+	 */
+	function collectSaveWarnings(current) {
+		var saveWarnings = [];
+		var abTestWarnings = [];
+		if (current.banner_control && current.banner_control.ab_test
+			&& current.banner_control.ab_test.status) {
+			// current.banner_control.ab_test.variants was just overwritten by the
+			// merge above with formData.banner_control.ab_test.variants (either the
+			// freshly serialized checkboxes, or the preserved server-side value when
+			// the checkbox list hadn't finished loading) — use it instead of a fresh
+			// serializeAbVariants() call, which would be wrong while !abVariantsReady.
+			var effectiveVariants = Array.isArray(current.banner_control.ab_test.variants)
+				? current.banner_control.ab_test.variants
+				: [];
+			// Two independent reasons the test cannot run, so two independent
+			// conditions. Chained with else-if, a site that had BOTH problems was
+			// told about one, fixed it, saved, and was told about the other — a
+			// warning that hides its sibling turns one round trip into two.
+			// Two ways to have fewer than two runnable variants, and the stored
+			// slugs only reveal one of them. When fewer than two banners are
+			// active the picker renders nothing, abVariantsReady stays false and
+			// saveSettings() deliberately preserves the previously stored slugs —
+			// so the count can still read 2 while both slugs name banners that are
+			// no longer active and Ab_Test::pick_variant() has nothing to choose
+			// between. Ask the catalogue, not the leftovers.
+			if (effectiveVariants.length < 2 || (abActiveBannerCount !== null && abActiveBannerCount < 2)) {
+				abTestWarnings.push(__(
+					'settings.abTestWarnVariants',
+					'A/B testing needs at least 2 selected banner variants to run.'
+				));
+			}
+			if (current.banner_control.cache_compatibility) {
+				abTestWarnings.push(__(
+					'settings.abTestWarnCache',
+					'A/B testing is disabled while Cache Compatibility Mode is on.'
+				));
+			}
+		}
+
+		abTestWarnings.forEach(function (w) { saveWarnings.push(w); });
+
+		// Cache Compatibility Mode is compatible with geo-targeting and IAB TCF
+		// — the frontend deliberately resolves both conservatively so the
+		// rendered output stays identical for every visitor — but the result is
+		// not what the settings screen alone suggests. Say so rather than
+		// silently overriding the choice, or letting the success toast imply
+		// per-country routing is still happening.
+		if (current.banner_control && current.banner_control.cache_compatibility) {
+			if (current.geolocation && current.geolocation.geo_targeting) {
+				saveWarnings.push(__(
+					'settings.cacheCompatWarnGeo',
+					'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.'
+				));
+			}
+			var cmpId = current.iab ? parseInt(current.iab.cmp_id, 10) : 0;
+			if (current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {
+				saveWarnings.push(__(
+					'settings.cacheCompatWarnIab',
+					'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.'
+				));
+			}
+		}
+
+		return saveWarnings;
 	}
 
 	function loadGeoDbStatus() {

@@ -14,9 +14,11 @@ namespace {
 		define( 'ABSPATH', __DIR__ );
 	}
 
-	function faz_sanitize_bool( $value ) {
-		return filter_var( $value, FILTER_VALIDATE_BOOLEAN );
-	}
+	// The real coercions, not stubs. This suite exercises the settings write
+	// path, and a local filter_var() copy is not what ships: it accepts 'on' and
+	// rejects 'yes', so the harness would be asserting against its own idea of
+	// the rule while production used another.
+	require_once __DIR__ . '/../../includes/class-formatting.php';
 
 	require_once __DIR__ . '/../../admin/modules/settings/includes/class-settings.php';
 
@@ -44,6 +46,13 @@ namespace {
 			'per_service_consent' => false,
 			'per_cookie_consent'  => false,
 			'adblock_resilience'  => false,
+			'cache_compatibility' => false,
+		),
+		'geolocation' => array(
+			'geo_targeting' => false,
+		),
+		'iab' => array(
+			'enabled' => false,
 		),
 		'script_blocking' => array(
 			'aggressive_css_url_blocking' => false,
@@ -136,6 +145,7 @@ namespace {
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['paypal'], true, "payment gateway 'paypal' string '1' coerces to bool true" );
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['stripe'], false, "payment gateway 'stripe' int 0 coerces to bool false" );
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['amazon_pay'], true, "payment gateway 'amazon_pay' string 'yes' coerces to bool true" );
+	faz_assert_same( Settings::sanitize_option( 'payment_gateways', array( 'paypal' => 'false' ) )['paypal'], false, "payment gateway string 'false' coerces to bool false" );
 	faz_assert_same( $gw_sanitized['script_blocking']['payment_gateways']['braintree'], false, 'unset payment gateway defaults to false' );
 	faz_assert_same( array_key_exists( 'evilkey', $gw_sanitized['script_blocking']['payment_gateways'] ), false, 'unknown payment-gateway key is dropped (injection-safe)' );
 
@@ -150,6 +160,83 @@ namespace {
 		false,
 		'aggressive_css_url_blocking defaults off'
 	);
+
+	$cookie_dependency = Settings::sanitize(
+		array(
+			'banner_control' => array(
+				'per_service_consent' => false,
+				'per_cookie_consent'  => true,
+			),
+		),
+		$defaults
+	);
+	faz_assert_same( $cookie_dependency['banner_control']['per_service_consent'], false, 'per-service consent stays off when the admin switches it off' );
+	faz_assert_same( $cookie_dependency['banner_control']['per_cookie_consent'], false, 'per-cookie consent is dropped with its required per-service layer' );
+
+	// The case the settings screen actually produced before the toggle was
+	// gated: per-cookie ticked ALONE, with per_service_consent absent from the
+	// payload rather than explicitly false. It has to fall back to the default
+	// (off) and take per-cookie down with it — otherwise the admin is told
+	// "Settings saved successfully." for a value the server never stored. The
+	// UI half of this is admin/views/settings.php's data-show-if wrapper,
+	// covered by tests/unit/js/settings-per-cookie-gate.test.mjs.
+	$cookie_alone = Settings::sanitize(
+		array(
+			'banner_control' => array(
+				'per_cookie_consent' => true,
+			),
+		),
+		$defaults
+	);
+	faz_assert_same( $cookie_alone['banner_control']['per_service_consent'], false, 'per-service consent stays at its default when the payload omits it' );
+	faz_assert_same( $cookie_alone['banner_control']['per_cookie_consent'], false, 'per-cookie consent ticked alone cannot enable itself' );
+
+	// The retained direction: with the parent on, the child is stored as asked.
+	// Guards against "fixing" the invariant into an unconditional clear, which
+	// would make per-cookie consent impossible to switch on at all.
+	$cookie_retained = Settings::sanitize(
+		array(
+			'banner_control' => array(
+				'per_service_consent' => true,
+				'per_cookie_consent'  => true,
+			),
+		),
+		$defaults
+	);
+	faz_assert_same( $cookie_retained['banner_control']['per_cookie_consent'], true, 'per-cookie consent is retained when per-service consent is on' );
+
+	$geo_cache = Settings::sanitize(
+		array(
+			'banner_control' => array( 'cache_compatibility' => true ),
+			'geolocation'    => array( 'geo_targeting' => true ),
+		),
+		$defaults
+	);
+	faz_assert_same( $geo_cache['banner_control']['cache_compatibility'], true, 'cache mode survives a save while geo-targeting is on (frontend neutralises geo instead)' );
+
+	$iab_cache = Settings::sanitize(
+		array(
+			'banner_control' => array( 'cache_compatibility' => true ),
+			'iab'            => array( 'enabled' => true ),
+		),
+		$defaults
+	);
+	faz_assert_same( $iab_cache['banner_control']['cache_compatibility'], true, 'cache mode survives a save while IAB TCF is on (frontend forces the conservative gdpr_applies instead)' );
+
+	// The WRITE path must agree with the read path. It used the general coercion,
+	// whose negatives are enumerated, so 'garbage' persisted as an ENABLED
+	// gateway — a stored value that meant one thing on save and another on
+	// render is worse than either answer alone.
+	$gw_defaults = array( 'script_blocking' => array( 'payment_gateways' => array( 'stripe' => false, 'paypal' => false ) ) );
+	foreach ( array( 'garbage', 'maybe', '', 'no', 'off', 1.5, array( 'x' ) ) as $bad ) {
+		$out = Settings::sanitize( array( 'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $bad ) ) ), $gw_defaults );
+		faz_assert_same( $out['script_blocking']['payment_gateways']['stripe'], false, 'write path refuses ' . var_export( $bad, true ) );
+	}
+	foreach ( array( true, 1, '1', 'yes', 'true', 'on' ) as $good ) {
+		$out = Settings::sanitize( array( 'script_blocking' => array( 'payment_gateways' => array( 'stripe' => $good ) ) ), $gw_defaults );
+		faz_assert_same( $out['script_blocking']['payment_gateways']['stripe'], true, 'write path accepts ' . var_export( $good, true ) );
+	}
+
 
 	echo "\n--\n";
 	echo "Tests:  $tests_run\n";
