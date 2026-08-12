@@ -236,7 +236,7 @@ class Cookie extends Store {
 				// named special and returns '' otherwise, so an already-Italian "2 anni"
 				// and a free-form "1 year or longer" both fall through untouched. It is
 				// the resolver's refusal, not this branch, that protects authored text.
-				$translated = Cookie_Content_I18n::translate( $this->get_slug(), $prop, $content, $lang );
+				$translated = Cookie_Content_I18n::translate( $this->get_slug(), $prop, $content, $lang, $this->get_domain() );
 				$content    = '' !== $translated ? $translated : $content;
 			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
@@ -661,7 +661,7 @@ class Cookie extends Store {
 		// resolver needs the stored value to tell "stock text worth localising"
 		// from "somebody's own copy that must be left alone".
 		if ( is_string( $source ) && '' !== $source ) {
-			return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang );
+			return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang, $this->get_domain() );
 		}
 
 		$source = '';
@@ -686,6 +686,6 @@ class Cookie extends Store {
 			}
 		}
 
-		return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang );
+		return Cookie_Content_I18n::translate( $this->get_slug(), $key, $source, $lang, $this->get_domain() );
 	}
 }

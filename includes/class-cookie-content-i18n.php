@@ -80,7 +80,7 @@ class Cookie_Content_I18n {
 	 * @param string $lang   Requested plugin language code.
 	 * @return string
 	 */
-	public static function translate( $slug, $key, $source, $lang ) {
+	public static function translate( $slug, $key, $source, $lang, $domain = '' ) {
 		if ( 'description' === $key ) {
 			// The catalogue may only speak for text the plugin itself wrote.
 			// Previously it keyed purely on the cookie name and ignored $source
@@ -94,10 +94,10 @@ class Cookie_Content_I18n {
 			// stand down otherwise. Returning '' lets the caller fall back to
 			// the stored value, which is the correct answer in that case.
 			$stored = is_string( $source ) ? trim( $source ) : '';
-			if ( '' !== $stored && ! self::is_stock_description( $slug, $stored ) ) {
+			if ( '' !== $stored && ! self::is_stock_description( $slug, $stored, $domain ) ) {
 				return '';
 			}
-			return self::description( $slug, $lang );
+			return self::description( $slug, $lang, $domain );
 		}
 		if ( 'duration' === $key ) {
 			return self::duration( $source, $lang );
@@ -123,8 +123,8 @@ class Cookie_Content_I18n {
 	 * @param string $stored Trimmed stored value in the default language.
 	 * @return bool
 	 */
-	public static function is_stock_description( $slug, $stored ) {
-		$stock = self::description( $slug, 'en' );
+	public static function is_stock_description( $slug, $stored, $domain = '' ) {
+		$stock = self::description( $slug, 'en', $domain );
 		if ( '' === $stock ) {
 			return false;
 		}
@@ -141,7 +141,7 @@ class Cookie_Content_I18n {
 	 * @param string $lang Requested language.
 	 * @return string
 	 */
-	public static function description( $slug, $lang ) {
+	public static function description( $slug, $lang, $domain = '' ) {
 		$lang = self::normalize_language( $lang );
 		$slug = function_exists( 'sanitize_title' ) ? sanitize_title( $slug ) : strtolower( trim( (string) $slug ) );
 
@@ -163,7 +163,7 @@ class Cookie_Content_I18n {
 		 */
 		return self::filter(
 			'faz_cookie_content_i18n_description',
-			self::lookup_description( $slug, $lang ),
+			self::lookup_description( $slug, $lang, $domain ),
 			array( $slug, $lang )
 		);
 	}
@@ -175,13 +175,14 @@ class Cookie_Content_I18n {
 	 * @param string $lang Normalised language code.
 	 * @return string
 	 */
-	private static function lookup_description( $slug, $lang ) {
+	private static function lookup_description( $slug, $lang, $domain = '' ) {
 		$contents = self::load_catalogue( 'cookies/' . $lang . '.json' );
 		if ( empty( $contents ) ) {
 			return '';
 		}
 
-		if ( isset( $contents[ $slug ]['description'] ) && is_string( $contents[ $slug ]['description'] ) ) {
+		if ( isset( $contents[ $slug ]['description'] ) && is_string( $contents[ $slug ]['description'] )
+			&& self::domain_allows( $slug, $domain ) ) {
 			return $contents[ $slug ]['description'];
 		}
 
@@ -192,11 +193,64 @@ class Cookie_Content_I18n {
 			if ( '' === $prefix || 0 !== strpos( $slug, $prefix ) ) {
 				continue;
 			}
-			if ( isset( $entry['description'] ) && is_string( $entry['description'] ) ) {
+			if ( isset( $entry['description'] ) && is_string( $entry['description'] )
+				&& self::domain_allows( (string) $catalogue_slug, $domain ) ) {
 				return $entry['description'];
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * Whether a catalogue entry may speak about a cookie found on this domain.
+	 *
+	 * Matching on the cookie NAME alone is wrong for the short, generic ones. A
+	 * cookie called `fr` gets "Facebook advertising cookie" whatever set it — and
+	 * `fr` is a perfectly ordinary name for a site's own language preference, so
+	 * the declaration ends up asserting a transfer to Meta that never happened.
+	 * That is not a cosmetic error: the cookie declaration is the document a
+	 * visitor is asked to consent to, and a regulator to read.
+	 *
+	 * Only entries that are genuinely set BY a third party carry a `domains`
+	 * constraint — `fr`, `ide`, `dsid`, `muid`, `lidc`, `ysc`, `vuid`, `ct0`.
+	 * Names like `_ga` or `_fbp` are written first-party by a script on the
+	 * site's own host, so constraining them by domain would reject every real
+	 * one. Entries without the key are unaffected.
+	 *
+	 * An unknown domain is refused rather than assumed. For a legal statement,
+	 * "we could not attribute this" must not resolve to "it belongs to Facebook";
+	 * a site that wants the wording anyway has the
+	 * faz_cookie_content_i18n_description filter.
+	 *
+	 * Constraints are read from the ENGLISH catalogue in every language: they are
+	 * metadata about who sets the cookie, not translated prose, and duplicating
+	 * them per locale would only create somewhere for them to drift.
+	 *
+	 * @param string $catalogue_slug Catalogue key being considered.
+	 * @param string $domain         Domain the cookie was observed on, '' if unknown.
+	 * @return bool
+	 */
+	private static function domain_allows( $catalogue_slug, $domain ) {
+		$meta = self::load_catalogue( 'cookies/en.json' );
+		if ( ! isset( $meta[ $catalogue_slug ]['domains'] ) || ! is_array( $meta[ $catalogue_slug ]['domains'] ) ) {
+			return true;
+		}
+		$domain = strtolower( ltrim( trim( (string) $domain ), '.' ) );
+		if ( '' === $domain ) {
+			return false;
+		}
+		foreach ( $meta[ $catalogue_slug ]['domains'] as $allowed ) {
+			$allowed = strtolower( ltrim( trim( (string) $allowed ), '.' ) );
+			if ( '' === $allowed ) {
+				continue;
+			}
+			// Suffix match on a label boundary, so `notfacebook.com` cannot pass
+			// as `facebook.com` while `connect.facebook.com` still does.
+			if ( $domain === $allowed || substr( $domain, -( strlen( $allowed ) + 1 ) ) === '.' . $allowed ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

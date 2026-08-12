@@ -344,12 +344,56 @@ cookie_i18n_eq( Cookie_Content_I18n::duration( '2 years', 'fr' ), '2 ans', 'Fren
 cookie_i18n_eq( Cookie_Content_I18n::duration( '0 days', 'it' ), '0 giorni', 'Italian 0 stays plural — the rule is not applied across Romance' );
 cookie_i18n_eq( Cookie_Content_I18n::duration( '0 days', 'es' ), '0 días', 'Spanish 0 stays plural too' );
 
+// --- A short generic name must not collect a third party's description ---
+//
+// Matching on the cookie NAME alone made `fr` "Facebook advertising cookie"
+// whatever set it — and `fr` is an ordinary name for a site's own language
+// preference, so the declaration asserted a transfer to Meta that never
+// happened. The cookie declaration is the document a visitor consents to and a
+// regulator reads; a wrong attribution there is not a cosmetic defect.
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'fr', 'en', '.facebook.com' ),
+	'Facebook advertising cookie.',
+	'fr on facebook.com is still described'
+);
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'fr', 'en', 'connect.facebook.com' ),
+	'Facebook advertising cookie.',
+	'and on a subdomain of it'
+);
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'fr', 'en', 'example.test' ),
+	'',
+	'a first-party fr — a language preference, say — gets NO third-party description'
+);
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'fr', 'en', 'notfacebook.com' ),
+	'',
+	'and a look-alike domain cannot borrow the entry'
+);
+// An unattributable cookie must not be assigned to somebody. For a legal
+// statement "we could not tell" has to stay "we could not tell".
+cookie_i18n_eq(
+	Cookie_Content_I18n::description( 'fr', 'en', '' ),
+	'',
+	'an unknown domain is refused, not assumed'
+);
+// The same rule for the other genuinely third-party-set names.
+cookie_i18n_eq( Cookie_Content_I18n::description( 'ide', 'en', '.doubleclick.net' ), 'DoubleClick/Google cookie used for targeted advertising.', 'ide on doubleclick.net resolves' );
+cookie_i18n_eq( Cookie_Content_I18n::description( 'ide', 'en', 'shop.example.test' ), '', 'ide set first-party does not' );
+cookie_i18n_eq( Cookie_Content_I18n::description( 'ct0', 'en', '.x.com' ), 'Twitter cookie used for security and spam prevention on embedded content.', 'ct0 resolves on x.com as well as twitter.com' );
+// And names written FIRST-PARTY by a third party's script keep working without
+// a domain, because constraining them would reject every real one.
+cookie_i18n_eq( Cookie_Content_I18n::description( '_ga', 'en', 'example.test' ), 'Google Analytics cookie used to distinguish users.', '_ga is first-party and stays unconstrained' );
+cookie_i18n_eq( Cookie_Content_I18n::description( '_fbp', 'en', 'example.test' ), 'Facebook Pixel cookie used for advertising and analytics.', 'and so is _fbp' );
+
 // --- Every catalogue key must be able to match something ---
 //
 // `wp-settings` and `_hj` sat in both catalogues unreachable: the prefix branch
 // only fires for a key that says it is a prefix, and neither did, so the entries
 // could only have matched cookies literally named "wp-settings" or "_hj" — which
 // do not exist. The keys now carry a marker (`wp-settings-`, `_hj*`).
+$faz_i18n_meta = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/contents/cookies/en.json' ), true );
 foreach ( array( 'en', 'it' ) as $faz_i18n_catalogue ) {
 	$faz_i18n_entries     = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/includes/contents/cookies/' . $faz_i18n_catalogue . '.json' ), true );
 	$faz_i18n_unreachable = array();
@@ -361,7 +405,15 @@ foreach ( array( 'en', 'it' ) as $faz_i18n_catalogue ) {
 		} elseif ( in_array( $faz_i18n_last, array( '_', '-' ), true ) ) {
 			$faz_i18n_probe = $faz_i18n_key . 'x';
 		}
-		if ( Cookie_Content_I18n::description( $faz_i18n_probe, $faz_i18n_catalogue ) !== $faz_i18n_entry['description'] ) {
+		// An entry that declares the third party which SETS the cookie is only
+		// reachable from that domain — that is the point of the constraint — so
+		// the probe supplies it. Entries without one are unconstrained.
+		// Read from the ENGLISH catalogue whichever language is being probed: the
+		// constraint is metadata about who sets the cookie, not translated prose,
+		// so it is declared once and would only have somewhere to drift if it
+		// were repeated per locale.
+		$faz_i18n_domain = isset( $faz_i18n_meta[ $faz_i18n_key ]['domains'][0] ) ? $faz_i18n_meta[ $faz_i18n_key ]['domains'][0] : '';
+		if ( Cookie_Content_I18n::description( $faz_i18n_probe, $faz_i18n_catalogue, $faz_i18n_domain ) !== $faz_i18n_entry['description'] ) {
 			$faz_i18n_unreachable[] = $faz_i18n_key;
 		}
 	}
