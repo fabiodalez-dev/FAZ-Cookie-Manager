@@ -117,6 +117,15 @@ namespace {
 	scanner_ok( 2 === Cookie_Controller::$flushes && 2 === Category_Controller::$flushes, 'failure path flushes rows written before the error' );
 	scanner_ok( array( 'faz_after_create_cookie' ) === $GLOBALS['faz_scanner_actions'], 'partial batch still fires one dataset invalidation action' );
 
+	$controller_source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php' );
+	$api_source        = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/api/class-api.php' );
+	$cookies_api_source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/api/class-cookies-api.php' );
+	scanner_ok( false !== strpos( $controller_source, "record_scan_failure( 'browser'" ), 'browser import failures are recorded before they leave the controller' );
+	scanner_ok( false !== strpos( $controller_source, "record_scan_failure( 'local'" ), 'scheduled local scan failures are recorded at the cron boundary' );
+	scanner_ok( false !== strpos( $controller_source, "record_scan_failure( 'httponly'" ), 'httpOnly scan failures are recorded at the cron boundary' );
+	scanner_ok( false !== strpos( $api_source, "'faz_scan_import_failed'" ), 'REST import converts scanner exceptions to WP_Error' );
+	scanner_ok( false !== strpos( $cookies_api_source, "'faz_service_registration_failed'" ), 'service registration converts scanner exceptions to WP_Error' );
+
 	echo "Tests: {$run}, failed: {$fail}\n";
 	if ( $fail ) {
 		exit( 1 );

@@ -348,7 +348,16 @@ class Cookies_API extends API_Controller {
 		if ( ! class_exists( $scanner ) ) {
 			return new WP_Error( 'faz_scanner_unavailable', __( 'The registration engine is unavailable.', 'faz-cookie-manager' ), array( 'status' => 500 ) );
 		}
-		\call_user_func( array( $scanner, 'get_instance' ) )->save_cookies( $payload );
+		try {
+			\call_user_func( array( $scanner, 'get_instance' ) )->save_cookies( $payload );
+		} catch ( \Throwable $e ) {
+			error_log( 'FAZ: service registration failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- preserve diagnostics while returning a safe REST error.
+			return new WP_Error(
+				'faz_service_registration_failed',
+				__( 'The service cookies could not be registered. Review the scanner log and try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
 
 		// Invalidate the runtime cookie-scripts map so the new rows surface on
 		// the next render, and fire the standard write action (cache purge etc.).

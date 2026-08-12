@@ -236,7 +236,7 @@ class Cookie extends Store {
 				// named special and returns '' otherwise, so an already-Italian "2 anni"
 				// and a free-form "1 year or longer" both fall through untouched. It is
 				// the resolver's refusal, not this branch, that protects authored text.
-				$translated = Cookie_Content_I18n::translate( $this->get_slug(), $prop, $content, $lang, $this->get_domain() );
+				$translated = $this->translate_stored_value( $lang, $prop, $content );
 				$content    = '' !== $translated ? $translated : $content;
 			}
 			$content           = empty( $content ) && 'view' === $this->get_context() ? $default_content : $content;
@@ -665,23 +665,21 @@ class Cookie extends Store {
 		}
 
 		$source = '';
-		if ( in_array( $key, array( 'duration', 'description' ), true ) ) {
-			$data    = $this->normalize_multilingual_data( $this->get_object_data( $key ) );
-			$default = faz_default_language();
-			// The '' !== guards matter: a row can carry an EMPTY string for the
-			// default language while another language holds the real value. Without
-			// them the empty default won, $source stayed blank, and nothing was
-			// translated — the fallback loop below already got this right.
-			if ( isset( $data[ $default ] ) && is_string( $data[ $default ] ) && '' !== $data[ $default ] ) {
-				$source = $data[ $default ];
-			} elseif ( isset( $data['en'] ) && is_string( $data['en'] ) && '' !== $data['en'] ) {
-				$source = $data['en'];
-			} else {
-				foreach ( $data as $value ) {
-					if ( is_string( $value ) && '' !== $value ) {
-						$source = $value;
-						break;
-					}
+		$data    = $this->normalize_multilingual_data( $this->get_object_data( $key ) );
+		$default = faz_default_language();
+		// The '' !== guards matter: a row can carry an EMPTY string for the
+		// default language while another language holds the real value. Without
+		// them the empty default won, $source stayed blank, and nothing was
+		// translated — the fallback loop below already got this right.
+		if ( isset( $data[ $default ] ) && is_string( $data[ $default ] ) && '' !== $data[ $default ] ) {
+			$source = $data[ $default ];
+		} elseif ( isset( $data['en'] ) && is_string( $data['en'] ) && '' !== $data['en'] ) {
+			$source = $data['en'];
+		} else {
+			foreach ( $data as $value ) {
+				if ( is_string( $value ) && '' !== $value ) {
+					$source = $value;
+					break;
 				}
 			}
 		}

@@ -661,7 +661,7 @@ class Controller {
 	 * Export consent logs as CSV.
 	 *
 	 * @param array $args Query arguments (same as get_logs, but per_page can be -1 for all).
-	 * @return string CSV content.
+	 * @return string|false CSV content, or false when generation fails.
 	 */
 	public function export_csv( $args = array() ) {
 		$output = fopen( 'php://temp', 'r+' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen

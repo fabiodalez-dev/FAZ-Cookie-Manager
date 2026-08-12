@@ -697,6 +697,18 @@ class Onboarding {
 				array( 'status' => 400 )
 			);
 		}
+		$is_list = array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+		if ( ! $is_list ) {
+			foreach ( array_keys( $value ) as $key ) {
+				if ( is_int( $key ) ) {
+					return new WP_Error(
+						'faz_invalid_payment_gateways',
+						__( 'Payment gateways must be submitted as either a list or a keyed map, not both.', 'faz-cookie-manager' ),
+						array( 'status' => 400 )
+					);
+				}
+			}
+		}
 		$valid = self::payment_gateway_keys();
 		foreach ( $value as $key => $entry ) {
 			if ( is_int( $key ) ) {
@@ -753,6 +765,10 @@ class Onboarding {
 	 */
 	public static function sanitize_payment_gateways( $value ) {
 		if ( ! is_array( $value ) ) {
+			return array();
+		}
+		$is_list = array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+		if ( ! $is_list && count( array_filter( array_keys( $value ), 'is_int' ) ) > 0 ) {
 			return array();
 		}
 		$valid  = self::payment_gateway_keys();

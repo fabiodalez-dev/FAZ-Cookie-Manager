@@ -35,13 +35,17 @@ function restore(backup: string): void {
   }
   // The rows are re-inserted with their original cookie_id — the delete above
   // freed it, so nothing collides and any id another spec is holding survives.
+  // Base64 keeps PHP from interpreting dollar signs or JSON escape sequences
+  // before json_decode sees the exact payload that snapshotAndDelete returned.
+  const encoded = Buffer.from(backup, 'utf8').toString('base64');
   wpEval(`
     global $wpdb;
-    $rows = json_decode(${JSON.stringify(backup)}, true);
-    if (is_array($rows)) {
-      foreach ($rows as $row) {
-        $wpdb->insert($wpdb->prefix . 'faz_cookies', $row);
-      }
+    $rows = json_decode(base64_decode('${encoded}'), true);
+    if (!is_array($rows)) {
+      throw new RuntimeException('faz_cookies restore payload could not be decoded');
+    }
+    foreach ($rows as $row) {
+      $wpdb->insert($wpdb->prefix . 'faz_cookies', $row);
     }
   `);
 }

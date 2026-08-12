@@ -13,7 +13,7 @@
  */
 
 import { expect, test } from '../fixtures/wp-fixture';
-import { wpEval } from '../utils/wp-env';
+import { WP_PATH, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
@@ -102,6 +102,7 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
   });
 
   test('H7: consent_revision input is disabled and cannot be lowered via REST', async ({ page, loginAsAdmin }) => {
+    test.skip(!WP_PATH, 'requires WP_PATH to restore consent_revision through wp-cli');
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded' });
     // UI: input has both readonly and disabled attributes.
@@ -134,12 +135,16 @@ test.describe('Audit-fix regression suite (1.13.12)', () => {
       // this one. It had reached 6 on this box. The monotonic guard is correct
       // for the product and wrong for a test that has to leave no trace, so the
       // restore goes straight to the option.
-      wpEval(
-        "$s = get_option( 'faz_settings', array() ); " +
-        "if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); } " +
-        `$s['general']['consent_revision'] = ${currentRev}; ` +
-        "update_option( 'faz_settings', $s ); echo 'ok';",
-      );
+      try {
+        wpEval(
+          "$s = get_option( 'faz_settings', array() ); " +
+          "if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); } " +
+          `$s['general']['consent_revision'] = ${currentRev}; ` +
+          "update_option( 'faz_settings', $s ); echo 'ok';",
+        );
+      } catch (error) {
+        console.warn('Could not restore consent_revision after H7:', error);
+      }
     }
   });
 

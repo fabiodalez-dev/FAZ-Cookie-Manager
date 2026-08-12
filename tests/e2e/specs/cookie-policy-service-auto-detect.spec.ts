@@ -36,7 +36,7 @@ import { type Page } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 import { acquireCookiesTableLock, releaseCookiesTableLock } from '../utils/db-lock';
-import { withNoDiscoveredCookies, withOwnCookiesOnly as withOwnCookiesOnlyPrefixed } from '../utils/cookie-inventory';
+import { withNoDiscoveredCookies, withOwnCookiesOnly } from '../utils/cookie-inventory';
 
 const ADMIN_PAGE = '/wp-admin/admin.php?page=faz-cookie-manager-cookie-policy';
 const REST_BASE = '/wp-json/faz/v1/cookie-policy';
@@ -164,7 +164,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     plantCookies([
       { name: 'cp_evil', slug: 'cp-auto-evil', domain: '.notlinkedin.com' },
     ]);
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       const r = await suggest();
       expect(r.service_ids).toEqual([]);
     });
@@ -188,7 +188,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     );
     // Exact-set assertions: a foreign scanned cookie mapping to any other
     // service would land in newly_suggested and break the split.
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       const r = await suggest();
       expect(r.service_ids).toEqual(expect.arrayContaining(['gtm', 'linkedin']));
       expect(r.already_selected).toEqual(['gtm']);
@@ -223,7 +223,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
       ),
       array('%s','%s','%s','%d','%s','%d')
     );`);
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       const r = await suggest();
       expect(r.service_ids, 'manually-added cookies leaked into the suggestion').toEqual([]);
     });
@@ -233,7 +233,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     plantCookies([
       { name: 'cp_noise', slug: 'cp-auto-noise', domain: '.example.org' },
     ]);
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       const r = await suggest();
       expect(r.scan_available).toBe(true);
       expect(r.service_ids).toEqual([]);
@@ -259,7 +259,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     // Foreign scanned rows are auto-detected too, so they tick extra
     // checkboxes and change the status count this test reads. Restrict the
     // inventory to what this test planted — see utils/cookie-inventory.
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       plantCookies([
         { name: 'cp_gads', slug: 'cp-auto-gads', domain: '.googleadservices.com' },
         { name: 'cp_yt',   slug: 'cp-auto-yt',   domain: '.youtube.com' },
@@ -422,7 +422,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     ]);
     // "No matching services" is a claim about the WHOLE inventory, so any
     // foreign scanned cookie mapping to a known service would contradict it.
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       await adminPage.reload({ waitUntil: 'domcontentloaded' });
       await adminPage.locator('summary', { hasText: 'Third-party services' }).click();
       await adminPage.waitForSelector('#cp-services-auto-detect', { timeout: 5_000 });
@@ -534,7 +534,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     // Foreign scanned rows are auto-detected too, so they tick extra
     // checkboxes and change the status count this test reads. Restrict the
     // inventory to what this test planted — see utils/cookie-inventory.
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       plantCookies([
         { name: 'cp_gtm', slug: 'cp-auto-race-gtm', domain: '.googletagmanager.com' },
       ]);
@@ -583,7 +583,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     // cookie mapping to any other service would be auto-detected, ticked and
     // saved as a seventh entry, and the failure would read as "pre-existing
     // selection not preserved" rather than as leftover inventory.
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       // JSON-bridge the array into PHP via json_decode — keeps the fixture
       // legible even as the seed list grows.
       wpEval(
@@ -691,7 +691,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     // Foreign scanned rows are auto-detected too, so they tick extra
     // checkboxes and change the status count this test reads. Restrict the
     // inventory to what this test planted — see utils/cookie-inventory.
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       // Two detected-but-unsaved services. The admin manually adds then
       // removes one (gtm) before saving; the other (stripe) is left alone.
       plantCookies([
@@ -735,7 +735,7 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   test('28. F009: a successful save resets the baseline — a later Auto-detect re-suggests the removed service', async () => {
     // Same reason as the tests above: a foreign scanned row is detected too,
     // so the re-suggestion set this asserts is not the one it planted.
-    await withOwnCookiesOnlyPrefixed('cp-auto-', async () => {
+    await withOwnCookiesOnly('cp-auto-', async () => {
       plantCookies([
         { name: 'cp_gtm', slug: 'cp-auto-f009b-gtm', domain: '.googletagmanager.com' },
       ]);

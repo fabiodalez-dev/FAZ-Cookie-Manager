@@ -1035,12 +1035,7 @@ class Frontend {
 	 * @return string
 	 */
 	private function get_script_suffix( $asset_base ) {
-		if ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
-			return '';
-		}
-
-		$minified_path = plugin_dir_path( __FILE__ ) . $asset_base . '.min.js';
-		return file_exists( $minified_path ) ? '.min' : '';
+		return faz_asset_suffix( 'frontend/' . ltrim( $asset_base, '/' ) );
 	}
 
 	/**
@@ -3557,7 +3552,7 @@ class Frontend {
 		// decides, falling back to the block-level signature that marks the whole
 		// <noscript> as a tracking fallback.
 		$gate = array();
-		foreach ( $embedded_tags as $index => $tag_attrs ) {
+		foreach ( array_keys( $embedded_tags ) as $index ) {
 			if ( ! empty( $tag_whitelisted[ $index ] ) ) {
 				$gate[ $index ] = false;
 				continue;
@@ -7109,29 +7104,6 @@ class Frontend {
 	}
 
 	/**
-	 * Whether Smash Balloon's Instagram Feed already restricts itself.
-	 *
-	 * Instagram Feed has its own GDPR setting, `gdpr` in the
-	 * `sb_instagram_settings` option, with three values. Only `yes` makes it
-	 * self-restrict: SB_Instagram_GDPR_Integrations::blocking_cdn() then returns
-	 * true unconditionally, the feed serves local image copies, and no request
-	 * reaches Instagram's CDN at all. Gating that again adds nothing.
-	 *
-	 * Everything else keeps our blocking, and `auto` — the DEFAULT — is the case
-	 * that matters most. Instagram Feed's automatic mode does not detect an
-	 * arbitrary consent plugin: gdpr_plugins_active() checks a hardcoded list of
-	 * nine specific ones by class, constant or function, and this plugin is not
-	 * among them (as a de-branded fork it deliberately defines no CKY_* constant).
-	 * On `auto` it therefore concludes no consent plugin is present and restricts
-	 * nothing, which makes our block the only thing holding that feed back.
-	 *
-	 * Plugin inactive, option missing, key absent or unreadable: block. A signal
-	 * we cannot read is not permission to load a tracker.
-	 *
-	 * @since 1.26.0
-	 * @return bool True when Instagram Feed is handling it and we should not.
-	 */
-	/**
 	 * Blocking patterns to drop while Instagram Feed is limiting itself.
 	 *
 	 * Exempting the container alone was a half measure that produced the worst of
@@ -7180,6 +7152,29 @@ class Frontend {
 		return $exempt;
 	}
 
+	/**
+	 * Whether Smash Balloon's Instagram Feed already restricts itself.
+	 *
+	 * Instagram Feed has its own GDPR setting, `gdpr` in the
+	 * `sb_instagram_settings` option, with three values. Only `yes` makes it
+	 * self-restrict: SB_Instagram_GDPR_Integrations::blocking_cdn() then returns
+	 * true unconditionally, the feed serves local image copies, and no request
+	 * reaches Instagram's CDN at all. Gating that again adds nothing.
+	 *
+	 * Everything else keeps our blocking, and `auto` — the DEFAULT — is the case
+	 * that matters most. Instagram Feed's automatic mode does not detect an
+	 * arbitrary consent plugin: gdpr_plugins_active() checks a hardcoded list of
+	 * nine specific ones by class, constant or function, and this plugin is not
+	 * among them (as a de-branded fork it deliberately defines no CKY_* constant).
+	 * On `auto` it therefore concludes no consent plugin is present and restricts
+	 * nothing, which makes our block the only thing holding that feed back.
+	 *
+	 * Plugin inactive, option missing, key absent or unreadable: block. A signal
+	 * we cannot read is not permission to load a tracker.
+	 *
+	 * @since 1.26.0
+	 * @return bool True when Instagram Feed is handling it and we should not.
+	 */
 	public static function smash_balloon_self_restricts() {
 		// Guarded so the method degrades to "block" in any context where these
 		// are unavailable — standalone unit harnesses stub only what the code

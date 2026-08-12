@@ -63,6 +63,7 @@ type PolicySettings = Record<string, unknown> & { company?: Record<string, unkno
 let settingsSnapshot: PolicySettings | null = null;
 
 test.describe.configure({ mode: 'serial' });
+test.skip(!WP_PATH, 'requires WP_PATH for consent-revision setup and teardown');
 
 /** Open the admin page and wait for the generator script to have run. */
 async function openAdmin(page: Page): Promise<void> {
@@ -167,6 +168,7 @@ async function withAdminPage(
 let consentRevisionSnapshot = 1;
 
 function readConsentRevision(): number {
+	if (!WP_PATH) return 1;
   const raw = wpEval(
     "$s = get_option( 'faz_settings', array() ); echo (int) ( $s['general']['consent_revision'] ?? 1 );",
   );
@@ -174,6 +176,7 @@ function readConsentRevision(): number {
 }
 
 function writeConsentRevision(value: number): void {
+	if (!WP_PATH) return;
   wpEval(
     "$s = get_option( 'faz_settings', array() ); " +
     "if ( ! isset( $s['general'] ) || ! is_array( $s['general'] ) ) { $s['general'] = array(); } " +

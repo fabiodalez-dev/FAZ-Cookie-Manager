@@ -9,14 +9,10 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-12T13:48:03+00:00\n"
+"POT-Creation-Date: 2026-08-12T19:47:59+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
-
-#: admin/modules/consentlogs/api/class-api.php:308
-msgid "The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again."
-msgstr ""
 
 #. Plugin Name of the plugin
 #: faz-cookie-manager.php
@@ -57,7 +53,7 @@ msgstr ""
 
 #: admin/class-admin.php:229
 #: admin/views/base.php:21
-#: frontend/class-frontend.php:2371
+#: frontend/class-frontend.php:2366
 msgid "Cookies"
 msgstr ""
 
@@ -171,7 +167,7 @@ msgstr ""
 #: admin/class-admin.php:533
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:494
 #: admin/views/cookies.php:130
-#: includes/class-cookie-table-shortcode.php:224
+#: includes/class-cookie-table-shortcode.php:226
 msgid "Domain"
 msgstr ""
 
@@ -179,7 +175,7 @@ msgstr ""
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:495
 #: admin/views/cookies.php:131
 #: frontend/modules/shortcodes/class-shortcodes.php:248
-#: includes/class-cookie-table-shortcode.php:225
+#: includes/class-cookie-table-shortcode.php:227
 msgid "Duration"
 msgstr ""
 
@@ -195,7 +191,7 @@ msgstr ""
 #: admin/views/cookies.php:132
 #: admin/views/cookies.php:224
 #: frontend/modules/shortcodes/class-shortcodes.php:250
-#: includes/class-cookie-table-shortcode.php:226
+#: includes/class-cookie-table-shortcode.php:228
 msgid "Description"
 msgstr ""
 
@@ -258,7 +254,7 @@ msgid "All cookies from %s already exist"
 msgstr ""
 
 #: admin/class-admin.php:553
-#: includes/class-cookie-table-shortcode.php:295
+#: includes/class-cookie-table-shortcode.php:297
 msgid "No cookies found."
 msgstr ""
 
@@ -277,7 +273,7 @@ msgstr ""
 
 #: admin/class-admin.php:557
 #: admin/views/cookies.php:189
-#: includes/class-cookie-table-shortcode.php:227
+#: includes/class-cookie-table-shortcode.php:229
 msgid "Category"
 msgstr ""
 
@@ -1695,25 +1691,26 @@ msgstr ""
 msgid "Dismiss this notice"
 msgstr ""
 
-#: admin/class-admin.php:1825
+#: admin/class-admin.php:1813
 msgid "Instagram Feed is handling its own consent"
 msgstr ""
 
-#: admin/class-admin.php:1826
+#: admin/class-admin.php:1814
 msgid "Its GDPR setting is set to Yes, so it serves local copies of images and never contacts Instagram. There is nothing left to block, so your cookie settings do not apply to that feed — and a visitor accepting will not restore the connection either, because Instagram Feed's restriction does not depend on consent."
 msgstr ""
 
-#: admin/class-admin.php:1829
+#: admin/class-admin.php:1817
+#: admin/modules/cookies/api/class-cookies-api.php:677
 msgid "Open Instagram Feed settings"
 msgstr ""
 
-#: admin/class-admin.php:1830
+#: admin/class-admin.php:1818
 #: admin/class-admin.php:1970
 #: admin/views/dashboard.php:30
 msgid "Dismiss"
 msgstr ""
 
-#: admin/class-admin.php:1833
+#: admin/class-admin.php:1821
 msgid "Set it to Automatic or No there if you would rather the visitor's choice decided whether that feed loads."
 msgstr ""
 
@@ -1811,9 +1808,9 @@ msgstr ""
 #: admin/modules/cookies/api/class-categories-api.php:95
 #: admin/modules/cookies/api/class-categories-api.php:244
 #: admin/modules/cookies/api/class-cookies-api.php:144
-#: admin/modules/cookies/api/class-cookies-api.php:423
+#: admin/modules/cookies/api/class-cookies-api.php:432
 #: admin/modules/scanner/api/class-api.php:160
-#: admin/modules/scanner/api/class-api.php:667
+#: admin/modules/scanner/api/class-api.php:676
 #: admin/modules/settings/api/class-api.php:566
 #: admin/modules/settings/api/class-api.php:572
 msgid "Unique identifier for the resource."
@@ -1872,7 +1869,7 @@ msgid "Too many requests. Please slow down."
 msgstr ""
 
 #: admin/modules/banners/api/class-api.php:760
-#: admin/modules/consentlogs/api/class-api.php:362
+#: admin/modules/consentlogs/api/class-api.php:387
 #: admin/modules/cookies/api/class-api-controller.php:291
 #: admin/modules/settings/api/class-api.php:542
 msgid "Limit results to those matching a string."
@@ -1935,51 +1932,59 @@ msgstr ""
 msgid "Consent log not found."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:345
+#: admin/modules/consentlogs/api/class-api.php:308
+msgid "The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:338
+msgid "INCOMPLETE EXPORT: a database error interrupted the download."
+msgstr ""
+
+#: admin/modules/consentlogs/api/class-api.php:370
 #: admin/modules/cookies/api/class-api-controller.php:274
 #: admin/modules/settings/api/class-api.php:525
 msgid "Current page of the collection."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:353
+#: admin/modules/consentlogs/api/class-api.php:378
 #: admin/modules/cookies/api/class-api-controller.php:282
 #: admin/modules/settings/api/class-api.php:533
 msgid "Maximum number of items to be returned in result set."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:368
+#: admin/modules/consentlogs/api/class-api.php:393
 msgid "Filter by consent status."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:388
+#: admin/modules/consentlogs/api/class-api.php:413
 msgid "Log ID."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:394
+#: admin/modules/consentlogs/api/class-api.php:419
 msgid "Unique consent ID."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:399
+#: admin/modules/consentlogs/api/class-api.php:424
 msgid "Consent status."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:404
+#: admin/modules/consentlogs/api/class-api.php:429
 msgid "Consent categories."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:409
+#: admin/modules/consentlogs/api/class-api.php:434
 msgid "Hashed visitor IP."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:415
+#: admin/modules/consentlogs/api/class-api.php:440
 msgid "Visitor user agent."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:421
+#: admin/modules/consentlogs/api/class-api.php:446
 msgid "Page URL where consent was given."
 msgstr ""
 
-#: admin/modules/consentlogs/api/class-api.php:426
+#: admin/modules/consentlogs/api/class-api.php:451
 msgid "Date the consent was logged."
 msgstr ""
 
@@ -1997,7 +2002,7 @@ msgstr ""
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:493
 #: frontend/modules/shortcodes/class-shortcodes.php:246
-#: includes/class-cookie-table-shortcode.php:223
+#: includes/class-cookie-table-shortcode.php:225
 msgid "Cookie"
 msgstr ""
 
@@ -2015,39 +2020,39 @@ msgstr ""
 msgid "Transfers personal data outside the EU/EEA"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:893
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:895
 msgid "International data transfers"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:894
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:896
 msgid "Some cookies listed above may transfer your personal data to a country outside the EU/EEA that does not have an EU adequacy decision. Under Articles 44 to 49 of the GDPR, such transfers require a valid transfer mechanism (for example an adequacy decision, Standard Contractual Clauses, or your explicit and informed consent). The recipient country and the safeguard described by the operator of this site are listed below so that you can make an informed choice."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:895
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:897
 msgid "Recipient country:"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:896
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:898
 msgid "transfers personal data outside the EU/EEA"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:897
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:899
 #: frontend/modules/shortcodes/class-shortcodes.php:1087
 msgid "Safeguard:"
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1098
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1214
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1100
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1216
 msgid "None declared."
 msgstr ""
 
 #. translators: 1: jurisdiction, 2: lang
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1279
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1281
 #, php-format
 msgid "FAZ Cookie Policy: no template scaffold found for jurisdiction \"%1$s\" and language \"%2$s\". Configure the generator under FAZ Cookie Manager → Cookie Policy."
 msgstr ""
 
-#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1297
+#: admin/modules/cookie-policy-generator/includes/class-renderer.php:1299
 msgid "FAZ Cookie Policy: complete the fields required for the selected jurisdiction before publishing this policy."
 msgstr ""
 
@@ -2566,7 +2571,7 @@ msgid "The date the category was last modified, as GMT."
 msgstr ""
 
 #: admin/modules/cookies/api/class-categories-api.php:262
-#: admin/modules/cookies/api/class-cookies-api.php:445
+#: admin/modules/cookies/api/class-cookies-api.php:454
 msgid "Cookie category name."
 msgstr ""
 
@@ -2634,79 +2639,83 @@ msgstr ""
 msgid "The registration engine is unavailable."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:429
+#: admin/modules/cookies/api/class-cookies-api.php:357
+msgid "The service cookies could not be registered. Review the scanner log and try again."
+msgstr ""
+
+#: admin/modules/cookies/api/class-cookies-api.php:438
 msgid "The date the cookie was created, as GMT."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:435
+#: admin/modules/cookies/api/class-cookies-api.php:444
 msgid "The date the cookie was last modified, as GMT."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:440
+#: admin/modules/cookies/api/class-cookies-api.php:449
 msgid "Cookie name."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:450
+#: admin/modules/cookies/api/class-cookies-api.php:459
 msgid "Cookie unique name"
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:455
+#: admin/modules/cookies/api/class-cookies-api.php:464
 msgid "Cookie description."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:460
+#: admin/modules/cookies/api/class-cookies-api.php:469
 msgid "Cookie duration"
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:465
+#: admin/modules/cookies/api/class-cookies-api.php:474
 msgid "Cookie language."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:470
+#: admin/modules/cookies/api/class-cookies-api.php:479
 msgid "Cookie type."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:475
+#: admin/modules/cookies/api/class-cookies-api.php:484
 msgid "Cookie domain."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:480
+#: admin/modules/cookies/api/class-cookies-api.php:489
 msgid "If cookies added from the scanner or not."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:485
+#: admin/modules/cookies/api/class-cookies-api.php:494
 msgid "URL patterns for blocking purposes"
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:490
+#: admin/modules/cookies/api/class-cookies-api.php:499
 msgid "Third-country (Schrems II) personal-data transfer disclosure for this cookie."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:506
+#: admin/modules/cookies/api/class-cookies-api.php:515
 msgid "JavaScript executed when this cookie's category is accepted."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:518
+#: admin/modules/cookies/api/class-cookies-api.php:527
 msgid "JavaScript executed when this cookie's category is rejected or revoked."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:544
+#: admin/modules/cookies/api/class-cookies-api.php:553
 msgid "No cookies provided."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:616
+#: admin/modules/cookies/api/class-cookies-api.php:625
 msgid "No cookie IDs provided."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:660
+#: admin/modules/cookies/api/class-cookies-api.php:669
 msgid "Not applied"
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:666
+#: admin/modules/cookies/api/class-cookies-api.php:675
 msgid "Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:706
+#: admin/modules/cookies/api/class-cookies-api.php:716
 msgid "You do not have permission to modify script fields."
 msgstr ""
 
@@ -2782,27 +2791,31 @@ msgstr ""
 msgid "Empty or invalid request body."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:673
+#: admin/modules/scanner/api/class-api.php:609
+msgid "The cookie import could not be completed. No completion status was recorded; review the scanner log and try again."
+msgstr ""
+
+#: admin/modules/scanner/api/class-api.php:682
 msgid "Scan status."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:679
+#: admin/modules/scanner/api/class-api.php:688
 msgid "Scan type."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:685
+#: admin/modules/scanner/api/class-api.php:694
 msgid "Scan date."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:691
+#: admin/modules/scanner/api/class-api.php:700
 msgid "Total cookies found."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:697
+#: admin/modules/scanner/api/class-api.php:706
 msgid "Total pages scanned."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:703
+#: admin/modules/scanner/api/class-api.php:712
 msgid "Maximum pages to scan."
 msgstr ""
 
@@ -2924,16 +2937,20 @@ msgstr ""
 msgid "Payment gateways must be sent as an object or an array."
 msgstr ""
 
-#: admin/modules/settings/includes/class-onboarding.php:707
+#: admin/modules/settings/includes/class-onboarding.php:706
+msgid "Payment gateways must be submitted as either a list or a keyed map, not both."
+msgstr ""
+
+#: admin/modules/settings/includes/class-onboarding.php:719
 msgid "Unknown payment gateway in the submitted list."
 msgstr ""
 
-#: admin/modules/settings/includes/class-onboarding.php:716
+#: admin/modules/settings/includes/class-onboarding.php:728
 msgid "Unknown payment gateway key."
 msgstr ""
 
-#: admin/modules/settings/includes/class-onboarding.php:725
-#: admin/modules/settings/includes/class-onboarding.php:736
+#: admin/modules/settings/includes/class-onboarding.php:737
+#: admin/modules/settings/includes/class-onboarding.php:748
 msgid "Payment gateway values must be true or false."
 msgstr ""
 
@@ -3209,7 +3226,7 @@ msgid "Notice Title"
 msgstr ""
 
 #: admin/views/banner.php:277
-#: frontend/class-frontend.php:2366
+#: frontend/class-frontend.php:2361
 #: frontend/modules/banner-rest/class-banner-rest.php:556
 msgid "We value your privacy"
 msgstr ""
@@ -3516,7 +3533,7 @@ msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking 
 msgstr ""
 
 #: admin/views/banner.php:699
-#: frontend/class-frontend.php:2368
+#: frontend/class-frontend.php:2363
 #: frontend/modules/banner-rest/class-banner-rest.php:558
 msgid "Opt-out Preferences"
 msgstr ""
@@ -5031,7 +5048,7 @@ msgid "Daily"
 msgstr ""
 
 #: admin/views/settings.php:272
-#: includes/class-activator.php:442
+#: includes/class-activator.php:447
 msgid "Weekly"
 msgstr ""
 
@@ -5877,42 +5894,42 @@ msgstr ""
 msgid "{name} disabled, enable {name}"
 msgstr ""
 
-#: frontend/class-frontend.php:2367
+#: frontend/class-frontend.php:2362
 #: frontend/modules/banner-rest/class-banner-rest.php:557
 msgid "Your cookie preferences have been saved."
 msgstr ""
 
-#: frontend/class-frontend.php:2369
+#: frontend/class-frontend.php:2364
 #: frontend/modules/banner-rest/class-banner-rest.php:559
 msgid "Customise Consent Preferences"
 msgstr ""
 
-#: frontend/class-frontend.php:2370
+#: frontend/class-frontend.php:2365
 #: frontend/modules/banner-rest/class-banner-rest.php:560
 msgid "Service consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2372
+#: frontend/class-frontend.php:2367
 msgid "Cookie consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2373
+#: frontend/class-frontend.php:2368
 #: frontend/modules/banner-rest/class-banner-rest.php:561
 msgid "Vendor consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2374
+#: frontend/class-frontend.php:2369
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr ""
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2378
+#: frontend/class-frontend.php:2373
 #: frontend/modules/banner-rest/class-banner-rest.php:566
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr ""
 
-#: frontend/class-frontend.php:2379
+#: frontend/class-frontend.php:2374
 #: frontend/modules/banner-rest/class-banner-rest.php:567
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr ""
@@ -6010,15 +6027,15 @@ msgstr ""
 msgid "Manage Cookie Preferences"
 msgstr ""
 
-#: includes/class-activator.php:448
+#: includes/class-activator.php:453
 msgid "Once Daily (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:454
+#: includes/class-activator.php:459
 msgid "Once Weekly (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:460
+#: includes/class-activator.php:465
 msgid "Once Monthly (FAZ)"
 msgstr ""
 
@@ -6155,7 +6172,7 @@ msgstr ""
 msgid "Manage consent preferences"
 msgstr ""
 
-#: includes/class-cookie-table-shortcode.php:359
+#: includes/class-cookie-table-shortcode.php:361
 msgid "Other"
 msgstr ""
 

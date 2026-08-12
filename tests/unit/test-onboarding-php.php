@@ -323,6 +323,8 @@ namespace {
 	// Legacy list form stays accepted — the wizard shipped it and installs still send it.
 	faz_assert_same( $gw_valid( array( 'stripe', 'paypal' ) ), true, 'REST: legacy opt-in list of known gateways validates' );
 	faz_assert_same( is_wp_error( $gw_valid( array( 'evil_gateway' ) ) ), true, 'REST: legacy list naming an unknown gateway is rejected' );
+	$mixed_gateways = array( 0 => 'paypal', 'stripe' => false );
+	faz_assert_same( is_wp_error( $gw_valid( $mixed_gateways ) ), true, 'REST: a mixed list/map payload is rejected' );
 	faz_assert_same( $gw_valid( array() ), true, 'REST: an empty payload is legitimate (no gateway opted in)' );
 
 	// Sanitizer normalises values but must PRESERVE the shape: expanding a
@@ -330,6 +332,7 @@ namespace {
 	// never mentioned, which is the opposite of the list form's contract.
 	faz_assert_same( Onboarding::sanitize_payment_gateways( array( 'stripe' => 'yes', 'paypal' => '0' ) ), array( 'stripe' => true, 'paypal' => false ), 'REST: map values normalise to real booleans' );
 	faz_assert_same( Onboarding::sanitize_payment_gateways( array( 'stripe', 'paypal' ) ), array( 'stripe', 'paypal' ), 'REST: legacy list is preserved as a list, not expanded into a map' );
+	faz_assert_same( Onboarding::sanitize_payment_gateways( $mixed_gateways ), array(), 'REST: sanitizer also fails closed on a mixed list/map payload' );
 	faz_assert_same( Onboarding::sanitize_payment_gateways( array( 'evil_gateway' => true, 'stripe' => true ) ), array( 'stripe' => true ), 'REST: sanitizer drops unknown keys as a second line of defence' );
 	faz_assert_same( Onboarding::sanitize_payment_gateways( 'nonsense' ), array(), 'REST: a non-array sanitises to an empty payload' );
 

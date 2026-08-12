@@ -608,6 +608,7 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 			const raw = wpEval(
 				'global $wpdb; ' +
 				'$table = $wpdb->prefix . "faz_consent_logs"; ' +
+				'if ( ! preg_match( "/^[a-zA-Z0-9_]+$/", $table ) || $table !== $wpdb->prefix . "faz_consent_logs" ) { throw new RuntimeException( "unexpected consent-log table name" ); } ' +
 				'echo (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );',
 			);
 			return Number.parseInt(raw.trim(), 10) || 0;
@@ -631,7 +632,7 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 
 			// Three more page loads, no interaction whatsoever.
 			for (const suffix of ['?faz_page=2', '?faz_page=3', '?faz_page=4']) {
-				await visitorPage.goto(`/${suffix}`, { waitUntil: 'domcontentloaded' });
+				await visitorPage.goto(suffix, { waitUntil: 'domcontentloaded' });
 				await visitorPage.waitForFunction(
 					() => typeof (window as unknown as { getFazConsent?: unknown }).getFazConsent === 'function',
 					undefined,

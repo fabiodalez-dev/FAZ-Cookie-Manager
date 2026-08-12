@@ -103,15 +103,17 @@ class Cookie_Table_Shortcode {
 		// wording survived the resolver's own guard and got replaced here anyway.
 		// Stock text still translates; anything the site owner wrote does not.
 		if ( 'description' === $key && is_string( $value ) && '' !== $value
-			&& ! \FazCookie\Includes\Cookie_Content_I18n::is_stock_description( $cookie->get_slug(), $value ) ) {
+			&& ! \FazCookie\Includes\Cookie_Content_I18n::is_stock_description( $cookie->get_slug(), $value, $cookie->get_domain() ) ) {
 			return $value;
 		}
 		if ( is_array( $value ) ) {
 			if ( isset( $value[ $lang ] ) && is_string( $value[ $lang ] ) && '' !== $value[ $lang ] ) {
-				return $value[ $lang ];
+				$translated = $cookie->get_translations( $lang, $key, $value[ $lang ] );
+				return '' !== $translated ? $translated : $value[ $lang ];
 			}
 			if ( $wp_lang && isset( $value[ $wp_lang ] ) && is_string( $value[ $wp_lang ] ) && '' !== $value[ $wp_lang ] ) {
-				return $value[ $wp_lang ];
+				$translated = $cookie->get_translations( $wp_lang, $key, $value[ $wp_lang ] );
+				return '' !== $translated ? $translated : $value[ $wp_lang ];
 			}
 		}
 

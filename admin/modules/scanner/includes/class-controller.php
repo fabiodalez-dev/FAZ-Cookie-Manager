@@ -138,7 +138,13 @@ class Controller {
 		add_action(
 			self::HTTPONLY_CRON_HOOK,
 			static function () {
-				self::get_instance()->run_httponly_check();
+				$controller = self::get_instance();
+				try {
+					$controller->run_httponly_check();
+				} catch ( \Throwable $e ) {
+					$controller->record_scan_failure( 'httponly', $e->getMessage(), 1 );
+					error_log( 'FAZ: httpOnly scan failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- cron has no response channel.
+				}
 			}
 		);
 	}
@@ -459,7 +465,12 @@ class Controller {
 	 */
 	public function run_scan_async() {
 		$max_pages = absint( get_option( 'faz_scan_max_pages', 20 ) );
-		$this->run_scan( $max_pages );
+		try {
+			$this->run_scan( $max_pages );
+		} catch ( \Throwable $e ) {
+			$this->record_scan_failure( 'local', $e->getMessage() );
+			error_log( 'FAZ: scheduled scan failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- cron has no response channel.
+		}
 	}
 
 	/**
@@ -1146,9 +1157,45 @@ class Controller {
 				'pages_scanned' => $pages_scanned,
 				'cookie_names'  => array_values( array_unique( $cookie_names ) ),
 			);
+		} catch ( \Throwable $e ) {
+			$this->record_scan_failure( 'browser', $e->getMessage(), $pages_scanned );
+			throw $e;
 		} finally {
 			$logger->finish();
 		}
+	}
+
+	/**
+	 * Persist a failed scan result at an execution boundary.
+	 *
+	 * @param string $type          Scan type (local, browser, or httponly).
+	 * @param string $message       Diagnostic failure message.
+	 * @param int    $pages_scanned Number of pages completed before failure.
+	 * @return array Failure record.
+	 */
+	public function record_scan_failure( $type, $message, $pages_scanned = 0 ) {
+		$scan_id = absint( get_option( 'faz_scan_counter', 0 ) ) + 1;
+		update_option( 'faz_scan_counter', $scan_id, false );
+
+		$failure = array(
+			'id'            => $scan_id,
+			'status'        => 'failed',
+			'type'          => sanitize_key( $type ),
+			'date'          => current_time( 'mysql' ),
+			'total_cookies' => 0,
+			'pages_scanned' => absint( $pages_scanned ),
+			'error'         => substr( sanitize_text_field( $message ), 0, 500 ),
+		);
+		$this->update_info( $failure );
+
+		$history   = get_option( 'faz_scan_history', array() );
+		$history   = is_array( $history ) ? $history : array();
+		$history[] = $failure;
+		if ( count( $history ) > 50 ) {
+			$history = array_slice( $history, -50 );
+		}
+		update_option( 'faz_scan_history', $history, false );
+		return $failure;
 	}
 
 	/**

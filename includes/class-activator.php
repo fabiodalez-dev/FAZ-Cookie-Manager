@@ -116,7 +116,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.08.12.1';
+	const MIGRATIONS_VERSION = '2026.08.12.2';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -225,7 +225,7 @@ class Activator {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is a static list of %s markers.
 				"SELECT option_name FROM {$wpdb->options}
 				 WHERE ( option_name LIKE %s OR option_name IN ( {$placeholders} ) )
-				   AND autoload NOT IN ( 'no', 'off' )",
+				   AND autoload NOT IN ( 'no', 'off', 'auto-off' )",
 				array_merge( array( $wpdb->esc_like( 'faz_banner_template' ) . '%' ), $exact )
 			)
 		);
@@ -298,7 +298,12 @@ class Activator {
 		if ( get_option( 'faz_default_whitelist_seeded' ) ) {
 			return;
 		}
-		$settings = get_option( 'faz_settings' );
+		$settings = get_option( 'faz_settings', false );
+		if ( false === $settings ) {
+			// Settings have not been created yet. The activation/settings lifecycle
+			// owns that work; there is no existing whitelist to back-fill here.
+			return;
+		}
 		if ( ! is_array( $settings ) ) {
 			// Unreadable settings is a transient condition, not a decision. Throw
 			// so run_pending_migrations() leaves faz_migrations_version alone and
@@ -711,6 +716,10 @@ class Activator {
 			$faz_settings->update( $faz_onboarding, false );
 		}
 		self::ensure_default_settings();
+		// This method runs while activation has switched into each site's context.
+		// Schedule here so network activation and wp_initialize_site both create
+		// site-local cron rows, instead of only healing the currently loaded site.
+		self::schedule_cleanup();
 		self::install_all_tables();
 		self::maybe_update_db();
 		// Ensure required default categories always exist, even on re-activation

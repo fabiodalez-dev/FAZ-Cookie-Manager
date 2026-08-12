@@ -30,6 +30,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - **Smash Balloon's own GDPR mode is respected without double-blocking.** When Instagram Feed is actively serving local copies and contacting no third party, its shipped rule stands down and the admin explains why; Automatic/No, inactive or unreadable states remain blocked. Script Blocking Exceptions configured with the feed container's ID or CSS class now also work as the settings screen promises; that social-container path previously ignored the whitelist entirely.
 - **Elementor's first-party lightbox helper is no longer mistaken for a tracker.** The obsolete shipped provider/template rule was removed while actual YouTube, Vimeo, Maps and reCAPTCHA embeds remain covered by their provider rules.
 - **CSV export and GCM memoization are safe under unusual hosts.** A locked PHP output buffer now fails the export instead of spinning forever, and multisite blog switches cannot reuse another site's Google Consent Mode settings.
+- **Release hardening closes partial-write and upgrade edge cases.** Consent-log exports now mark and log database-truncated downloads; scanner/import failures become explicit REST or cron failures with history instead of fataling after partial work; translated cookie fallbacks remain read-only rather than being written back as authored data; mixed payment-gateway payloads are rejected; and multisite activation schedules retention jobs for every existing and newly-created site.
 
 ## [1.25.0] — 2026-07-29
 

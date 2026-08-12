@@ -600,7 +600,16 @@ class Api extends Rest_Controller {
 		// httpOnly cookies that JavaScript cannot read from document.cookie.
 		$this->controller->schedule_httponly_check();
 
-		$result = $this->controller->save_scan_result( $cookies, $pages_scanned, $clean_scripts, $metrics );
+		try {
+			$result = $this->controller->save_scan_result( $cookies, $pages_scanned, $clean_scripts, $metrics );
+		} catch ( \Throwable $e ) {
+			error_log( 'FAZ: browser scan import failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- preserve diagnostics while returning a safe REST error.
+			return new \WP_Error(
+				'faz_scan_import_failed',
+				__( 'The cookie import could not be completed. No completion status was recorded; review the scanner log and try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
+		}
 
 		return rest_ensure_response( $result );
 	}

@@ -250,3 +250,20 @@ if ( ! function_exists( 'faz_sanitize_color' ) ) {
 		return 'rgba(' . $red . ',' . $green . ',' . $blue . ',' . $alpha . ')';
 	}
 }
+
+if ( ! function_exists( 'faz_asset_suffix' ) ) {
+	/**
+	 * Return `.min` when a production JavaScript build exists and debug is off.
+	 *
+	 * @param string $relative_path Plugin-relative asset path without extension.
+	 * @return string
+	 */
+	function faz_asset_suffix( $relative_path ) {
+		if ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) {
+			return '';
+		}
+		$base = defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : dirname( __DIR__ ) . '/';
+		$path = $base . ltrim( (string) $relative_path, '/' ) . '.min.js';
+		return file_exists( $path ) ? '.min' : '';
+	}
+}

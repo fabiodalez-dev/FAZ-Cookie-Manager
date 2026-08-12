@@ -566,8 +566,8 @@ class Renderer {
 					// i18n JSON objects on the same schema as categories.
 					$name     = (string) ( $row['cookie_name'] ?? '' );
 					$domain   = (string) ( $row['cookie_domain'] ?? '' );
-					$duration = self::decode_cookie_i18n_text( $row['cookie_duration'] ?? '', $lang, $name, 'duration' );
-					$desc     = self::decode_cookie_i18n_text( $row['cookie_description'] ?? '', $lang, $name, 'description' );
+					$duration = self::decode_cookie_i18n_text( $row['cookie_duration'] ?? '', $lang, $name, 'duration', $domain );
+					$desc     = self::decode_cookie_i18n_text( $row['cookie_description'] ?? '', $lang, $name, 'description', $domain );
 					$parts[]  = '<tr>';
 					$parts[]  = '<td data-label="' . $col_cookie . '"><code>' . esc_html( $name ) . '</code></td>';
 					$parts[]  = '<td data-label="' . $col_domain . '">' . ( '' !== $domain ? esc_html( $domain ) : '&mdash;' ) . '</td>';
@@ -648,9 +648,10 @@ class Renderer {
 	 * @param string $lang  Requested policy language.
 	 * @param string $slug  Cookie name/slug.
 	 * @param string $key   description|duration.
+	 * @param string $domain Cookie domain used by domain-constrained catalogue entries.
 	 * @return string
 	 */
-	private static function decode_cookie_i18n_text( $value, $lang, $slug, $key ) {
+	private static function decode_cookie_i18n_text( $value, $lang, $slug, $key, $domain = '' ) {
 		$decoded = array();
 		if ( is_array( $value ) ) {
 			$decoded = $value;
@@ -660,7 +661,8 @@ class Renderer {
 		}
 
 		if ( isset( $decoded[ $lang ] ) && is_string( $decoded[ $lang ] ) && '' !== $decoded[ $lang ] ) {
-			return $decoded[ $lang ];
+			$translated = Cookie_Content_I18n::translate( $slug, $key, $decoded[ $lang ], $lang, $domain );
+			return '' !== $translated ? $translated : $decoded[ $lang ];
 		}
 
 		$source  = '';
@@ -692,7 +694,7 @@ class Renderer {
 			return $source;
 		}
 
-		$translated = Cookie_Content_I18n::translate( $slug, $key, $source, $lang );
+		$translated = Cookie_Content_I18n::translate( $slug, $key, $source, $lang, $domain );
 		return '' !== $translated ? $translated : self::decode_i18n_text( $value, $lang );
 	}
 

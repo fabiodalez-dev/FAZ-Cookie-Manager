@@ -78,6 +78,7 @@ class Cookie_Content_I18n {
 	 * @param string $key    Field name (description or duration).
 	 * @param string $source Stored fallback value, used by duration parsing.
 	 * @param string $lang   Requested plugin language code.
+	 * @param string $domain Cookie domain for domain-constrained catalogue entries.
 	 * @return string
 	 */
 	public static function translate( $slug, $key, $source, $lang, $domain = '' ) {
@@ -121,6 +122,7 @@ class Cookie_Content_I18n {
 	 *
 	 * @param string $slug   Cookie slug/name.
 	 * @param string $stored Trimmed stored value in the default language.
+	 * @param string $domain Cookie domain for domain-constrained catalogue entries.
 	 * @return bool
 	 */
 	public static function is_stock_description( $slug, $stored, $domain = '' ) {
@@ -139,6 +141,7 @@ class Cookie_Content_I18n {
 	 *
 	 * @param string $slug Cookie slug/name.
 	 * @param string $lang Requested language.
+	 * @param string $domain Cookie domain for domain-constrained catalogue entries.
 	 * @return string
 	 */
 	public static function description( $slug, $lang, $domain = '' ) {
@@ -164,7 +167,7 @@ class Cookie_Content_I18n {
 		return self::filter(
 			'faz_cookie_content_i18n_description',
 			self::lookup_description( $slug, $lang, $domain ),
-			array( $slug, $lang )
+			array( $slug, $lang, $domain )
 		);
 	}
 
@@ -173,6 +176,7 @@ class Cookie_Content_I18n {
 	 *
 	 * @param string $slug Sanitised cookie slug.
 	 * @param string $lang Normalised language code.
+	 * @param string $domain Cookie domain for domain-constrained catalogue entries.
 	 * @return string
 	 */
 	private static function lookup_description( $slug, $lang, $domain = '' ) {
@@ -355,8 +359,9 @@ class Cookie_Content_I18n {
 			'permanent'  => 'persistent',
 			'forever'    => 'persistent',
 		);
-		if ( isset( $specials[ $source ], $units[ $lang ][ $specials[ $source ] ] ) ) {
-			return self::match_leading_case( $raw, (string) $units[ $lang ][ $specials[ $source ] ] );
+		if ( isset( $specials[ $source ], $units[ $lang ][ $specials[ $source ] ] )
+			&& is_string( $units[ $lang ][ $specials[ $source ] ] ) ) {
+			return self::match_leading_case( $raw, $units[ $lang ][ $specials[ $source ] ] );
 		}
 
 		if ( ! preg_match( '/^(\d+(?:[.,]\d+)?)\s*(seconds?|secs?|sec|minutes?|mins?|min|hours?|hrs?|hr|days?|weeks?|months?|years?)$/', $source, $matches ) ) {

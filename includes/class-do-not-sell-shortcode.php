@@ -57,7 +57,7 @@ class Do_Not_Sell_Shortcode {
 		if ( ! wp_script_is( 'faz-dnsmpi-form', 'registered' ) ) {
 			// Prefer the minified build (~2.3 KB vs ~5.7 KB) — this script is
 			// deliberately loaded on every frontend page (see load_assets()).
-			$suffix = ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) || ! file_exists( FAZ_PLUGIN_BASEPATH . 'frontend/js/faz-dnsmpi.min.js' ) ? '' : '.min';
+			$suffix = faz_asset_suffix( 'frontend/js/faz-dnsmpi' );
 			wp_register_script(
 				'faz-dnsmpi-form',
 				FAZ_PLUGIN_URL . 'frontend/js/faz-dnsmpi' . $suffix . '.js',

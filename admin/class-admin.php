@@ -1767,18 +1767,6 @@ class Admin {
 	}
 
 	/**
-	 * Dismissible notice on FAZ admin pages when a non-WooCommerce payment plugin
-	 * is active but no payment gateway has been authorised yet.
-	 *
-	 * A payment SDK (PayPal, Stripe, …) is blocked until consent by default, so a
-	 * payment form built with Forminator / Paid Memberships Pro / Easy Digital
-	 * Downloads / Give can log "paypal is not defined" until the site owner
-	 * consciously authorises that gateway. This nudges them to the toggle without
-	 * the plugin ever auto-loading a tracker. (#125 thread.)
-	 *
-	 * @return void
-	 */
-	/**
 	 * Tell the site owner when Instagram Feed is handling one embed itself.
 	 *
 	 * The wording matters more than the mechanics here. "Your setting is being
@@ -1836,6 +1824,18 @@ class Admin {
 		<?php
 	}
 
+	/**
+	 * Dismissible notice on FAZ admin pages when a non-WooCommerce payment plugin
+	 * is active but no payment gateway has been authorised yet.
+	 *
+	 * A payment SDK (PayPal, Stripe, …) is blocked until consent by default, so a
+	 * payment form built with Forminator / Paid Memberships Pro / Easy Digital
+	 * Downloads / Give can log "paypal is not defined" until the site owner
+	 * consciously authorises that gateway. This nudges them to the toggle without
+	 * the plugin ever auto-loading a tracker. (#125 thread.)
+	 *
+	 * @return void
+	 */
 	public function payment_gateway_notice() {
 		if ( ! faz_is_admin_page() || ! current_user_can( 'manage_options' ) ) {
 			return;

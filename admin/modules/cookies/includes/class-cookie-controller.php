@@ -253,14 +253,15 @@ class Cookie_Controller extends Base_Controller {
 		$date_created = current_time( 'mysql' );
 		$object->set_date_created( $date_created );
 		$object->set_date_modified( $date_created );
+		$stored = $object->get_data();
 
 		$result = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookies',
 			array(
 				'name'          => $object->get_name(),
 				'slug'          => $object->get_slug(),
-				'description'   => wp_json_encode( $object->get_description() ),
-				'duration'      => wp_json_encode( $object->get_duration() ),
+				'description'   => wp_json_encode( isset( $stored['description'] ) && is_array( $stored['description'] ) ? $stored['description'] : array() ),
+				'duration'      => wp_json_encode( isset( $stored['duration'] ) && is_array( $stored['duration'] ) ? $stored['duration'] : array() ),
 				'domain'        => $object->get_domain(),
 				'category'      => $object->get_category(),
 				'type'          => $object->get_type(),
@@ -308,13 +309,14 @@ class Cookie_Controller extends Base_Controller {
 		global $wpdb;
 		$date_modified = current_time( 'mysql' );
 		$object->set_date_modified( $date_modified );
+		$stored = $object->get_data();
 		$result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookies',
 			array(
 				'name'          => $object->get_name(),
 				'slug'          => $object->get_slug(),
-				'description'   => wp_json_encode( $object->get_description() ),
-				'duration'      => wp_json_encode( $object->get_duration() ),
+				'description'   => wp_json_encode( isset( $stored['description'] ) && is_array( $stored['description'] ) ? $stored['description'] : array() ),
+				'duration'      => wp_json_encode( isset( $stored['duration'] ) && is_array( $stored['duration'] ) ? $stored['duration'] : array() ),
 				'domain'        => $object->get_domain(),
 				'category'      => $object->get_category(),
 				'type'          => $object->get_type(),

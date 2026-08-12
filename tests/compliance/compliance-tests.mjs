@@ -2155,10 +2155,10 @@ async function testVisualIntegrity(browser) {
 	// test goes red precisely when the plugin is doing its job, and stays red
 	// until someone deactivates a tracker — so it stops being read.
 	//
-	// Ignore only that one shape, and only for globals that are not ours: an
-	// undefined FAZ global is a real defect and must still fail. Everything else
+	// Ignore only the one global this fixture deliberately blocks. An undefined
+	// FAZ global — or an unrelated third-party global — is a real defect. Everything else
 	// — TypeError, SyntaxError, anything thrown by our own code — still counts.
-	const FAZ_OWNED_GLOBAL = /^(?:_faz|faz|FAZ)/;
+	const EXPECTED_BLOCKED_GLOBALS = new Set(['PMW_PixelManagerJS']);
 	const isBlockedThirdPartyGlobal = (entry) => {
 		// The error TYPE has to be part of the record. Playwright's pageerror
 		// gives the bare message ("PMW_PixelManagerJS is not defined") with the
@@ -2166,7 +2166,7 @@ async function testVisualIntegrity(browser) {
 		// alone silently matches nothing — which is exactly how the first version
 		// of this filter passed review and changed no behaviour at all.
 		const m = /^ReferenceError: (?:Can't find variable: )?([A-Za-z_$][\w$]*) is not defined/.exec(entry);
-		return !!m && !FAZ_OWNED_GLOBAL.test(m[1]);
+		return !!m && EXPECTED_BLOCKED_GLOBALS.has(m[1]);
 	};
 	const errors = [];
 	const page2 = await ctx.newPage();

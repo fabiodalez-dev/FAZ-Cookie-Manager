@@ -290,7 +290,7 @@ class Api extends Rest_Controller {
 	 * Outputs raw CSV and exits to bypass WP REST JSON encoding.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
-	 * @return void
+	 * @return void|WP_Error
 	 */
 	public function export_csv( $request ) {
 		$args = array(
@@ -303,9 +303,11 @@ class Api extends Rest_Controller {
 		// same complete CSV in memory the buffer was meant to avoid: the code
 		// would look streamed and behave exactly as before.
 		if ( ! self::discard_output_buffers() ) {
-			status_header( 500 );
-			echo esc_html__( 'The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again.', 'faz-cookie-manager' );
-			exit;
+			return new WP_Error(
+				'faz_export_buffer_locked',
+				__( 'The CSV export could not start because an output buffer is locked. Disable output compression or the conflicting plugin and try again.', 'faz-cookie-manager' ),
+				array( 'status' => 500 )
+			);
 		}
 
 		header( 'Content-Type: text/csv; charset=utf-8' );
@@ -330,7 +332,11 @@ class Api extends Rest_Controller {
 		// memory held the whole file — on the plugin's highest-volume table, for
 		// the site with the most rows, which is the site whose administrator
 		// needs the export and the one where it ran out of memory.
-		Controller::get_instance()->stream_csv( $handle, $args );
+		$complete = Controller::get_instance()->stream_csv( $handle, $args );
+		if ( false === $complete ) {
+			error_log( 'FAZ: consent-log CSV export was interrupted by a database error.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- headers are already sent; logging is the server-side failure signal.
+			fwrite( $handle, "\n# " . __( 'INCOMPLETE EXPORT: a database error interrupted the download.', 'faz-cookie-manager' ) . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+		}
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 		exit;
 	}

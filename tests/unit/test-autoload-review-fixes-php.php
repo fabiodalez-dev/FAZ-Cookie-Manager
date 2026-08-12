@@ -390,6 +390,18 @@ namespace {
 		);
 	}
 
+	$act_src = (string) file_get_contents( $alq_root . '/includes/class-activator.php' );
+	alq_eq(
+		false !== strpos( $act_src, "autoload NOT IN ( 'no', 'off', 'auto-off' )" ),
+		true,
+		'already non-autoloaded auto-off rows are excluded from the demotion migration'
+	);
+	alq_eq(
+		false !== strpos( $act_src, 'self::schedule_cleanup();', strpos( $act_src, 'self::ensure_default_settings();' ) ),
+		true,
+		'install schedules cleanup in each site context used by network activation and wp_initialize_site'
+	);
+
 	echo "\n" . ( $tests_run - $failed ) . "/{$tests_run} passed\n";
 	exit( 0 === $failed ? 0 : 1 );
 }

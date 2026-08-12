@@ -153,12 +153,12 @@ if ( ! function_exists( 'current_time' ) ) {
 }
 if ( ! function_exists( 'faz_default_language' ) ) {
 	function faz_default_language() {
-		return 'en';
+		return $GLOBALS['faz_roundtrip_default_language'];
 	}
 }
 if ( ! function_exists( 'faz_selected_languages' ) ) {
 	function faz_selected_languages( $language = '' ) {
-		return '' !== $language ? array( $language ) : array( 'en', 'it' );
+		return '' !== $language ? array( $language ) : $GLOBALS['faz_roundtrip_selected_languages'];
 	}
 }
 if ( ! function_exists( 'faz_is_admin_request' ) ) {
@@ -291,7 +291,9 @@ function roundtrip_save( stdClass $row ) {
 }
 
 global $wpdb;
-$wpdb = new Faz_Roundtrip_WPDB();
+$wpdb                                      = new Faz_Roundtrip_WPDB();
+$GLOBALS['faz_roundtrip_default_language'] = 'en';
+$GLOBALS['faz_roundtrip_selected_languages'] = array( 'en', 'it' );
 
 echo "\n== Cookie description round trip (read → save → re-read) ==\n\n";
 
@@ -309,7 +311,7 @@ $persisted = json_decode( $saved->description, true );
 
 roundtrip_eq( $persisted['en'], $authored, 'the administrator English description is written back verbatim' );
 roundtrip_eq( isset( $persisted['it'] ) && false !== strpos( $persisted['it'], 'Google Analytics' ) && $persisted['it'] === $stock_it, false, 'the bundled Italian sentence is NOT persisted over authored wording' );
-roundtrip_eq( $persisted['it'], $authored, 'the Italian slot falls back to the words the author actually wrote' );
+roundtrip_eq( $persisted['it'], '', 'the Italian read fallback is not persisted as authored data' );
 
 // Re-read: the row the database now holds still shows the author's text.
 $reread = new Cookie( $saved );
@@ -324,13 +326,27 @@ roundtrip_eq( $reread->get_description( 'it' ), $authored, 'and the re-read Ital
 $stock_saved     = roundtrip_save( roundtrip_row( array( 'en' => $stock_en ), array( 'en' => '2 years' ) ) );
 $stock_persisted = json_decode( $stock_saved->description, true );
 roundtrip_eq( $stock_persisted['en'], $stock_en, 'stock English is preserved' );
-roundtrip_eq( $stock_persisted['it'], $stock_it, 'stock English DOES gain its Italian translation' );
-roundtrip_eq( json_decode( $stock_saved->duration, true )['it'], '2 anni', 'the duration is translated on the same trip' );
+roundtrip_eq( $stock_persisted['it'], '', 'stock Italian remains a read-time fallback, not stored data' );
+roundtrip_eq( ( new Cookie( $stock_saved ) )->get_description( 'it' ), $stock_it, 'stock English DOES translate to Italian on read' );
+roundtrip_eq( ( new Cookie( $stock_saved ) )->get_duration()['it'], '2 anni', 'the duration translates on read without being persisted' );
+
+// Changing the default and adding a language must not make that new language
+// inherit a fallback that an earlier save materialised in the old locale.
+$GLOBALS['faz_roundtrip_default_language']  = 'it';
+$GLOBALS['faz_roundtrip_selected_languages'] = array( 'en', 'it', 'fr' );
+$after_language_change = roundtrip_save( $stock_saved );
+$changed_persisted     = json_decode( $after_language_change->description, true );
+roundtrip_eq( $changed_persisted['it'], '', 'changing the default language does not materialise the old Italian fallback' );
+roundtrip_eq( $changed_persisted['fr'], '', 'a newly selected language is stored empty until explicitly authored' );
+$fr_read = ( new Cookie( $after_language_change ) )->get_description( 'fr' );
+roundtrip_eq( '' !== $fr_read && $stock_it !== $fr_read, true, 'the new language resolves independently instead of inheriting Italian' );
 
 // -------------------------------------------------------------------------
 // 3. Idempotence. Two consecutive saves must be a fixed point: a drift that
 //    only shows up on the second cycle is the same bug, arriving later.
 // -------------------------------------------------------------------------
+$GLOBALS['faz_roundtrip_default_language']   = 'en';
+$GLOBALS['faz_roundtrip_selected_languages'] = array( 'en', 'it' );
 $again = roundtrip_save( $saved );
 roundtrip_eq( json_decode( $again->description, true ), $persisted, 'a second save of the authored row changes nothing' );
 $stock_again = roundtrip_save( $stock_saved );

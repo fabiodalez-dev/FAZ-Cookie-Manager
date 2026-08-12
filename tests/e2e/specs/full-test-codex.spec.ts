@@ -236,16 +236,18 @@ async function attemptAdminLogin(page: Page, wpBaseURL: string, adminUser: strin
   });
 
   if (page.url().includes('/wp-admin/')) {
-    await expect(page.locator('#wpadminbar')).toBeVisible();
-    return true;
+    return page.locator('#wpadminbar').isVisible().catch(() => false);
   }
 
   const cookies = await page.context().cookies(wpBaseURL);
   if (cookies.some((cookie) => cookie.name.startsWith('wordpress_logged_in_'))) {
-    await gotoResilient(page, `${wpBaseURL}/wp-admin/`);
-    await expect(page).toHaveURL(/\/wp-admin\//);
-    await expect(page.locator('#wpadminbar')).toBeVisible();
-    return true;
+    try {
+      await gotoResilient(page, `${wpBaseURL}/wp-admin/`);
+    } catch {
+      return false;
+    }
+    if (!page.url().includes('/wp-admin/')) return false;
+    return page.locator('#wpadminbar').isVisible().catch(() => false);
   }
 
   return false;

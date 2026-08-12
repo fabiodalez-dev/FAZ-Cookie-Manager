@@ -31,13 +31,19 @@ require_once $abspath . 'wp-load.php';
 
 $controller = \FazCookie\Admin\Modules\Scanner\Includes\Controller::get_instance();
 
-if ( 'httponly' === $mode ) {
-	// Quick httpOnly cookie check on homepage only.
-	$controller->run_httponly_check();
-	echo "httpOnly check complete.\n";
-} else {
-	// Full scan.
-	$max_pages = absint( $mode );
-	$result    = $controller->run_scan( $max_pages );
-	echo 'Scan complete: ' . wp_json_encode( $result ) . "\n";
+try {
+	if ( 'httponly' === $mode ) {
+		// Quick httpOnly cookie check on homepage only.
+		$controller->run_httponly_check();
+		echo "httpOnly check complete.\n";
+	} else {
+		// Full scan.
+		$max_pages = absint( $mode );
+		$result    = $controller->run_scan( $max_pages );
+		echo 'Scan complete: ' . wp_json_encode( $result ) . "\n";
+	}
+} catch ( \Throwable $e ) {
+	$controller->record_scan_failure( 'httponly' === $mode ? 'httponly' : 'local', $e->getMessage() );
+	fwrite( STDERR, 'Scan failed: ' . $e->getMessage() . "\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+	exit( 1 );
 }
