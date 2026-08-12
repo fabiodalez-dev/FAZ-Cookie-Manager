@@ -16,9 +16,47 @@
 # Usage:
 #   bash scripts/deploy-test.sh                 # default target
 #   FAZ_DEPLOY_TARGET=/path/to/plugins/faz-cookie-manager/ bash scripts/deploy-test.sh
+#   bash scripts/deploy-test.sh --print-excludes   # the list, one per line
+#
+# --print-excludes exists so that nothing else has to restate the list. The E2E
+# preflight compares the working tree against the deployed plugin and refuses to
+# run the suite when they differ; it held a THIRD copy of these exclusions, and
+# the copies disagreed about `.gitignore` and `.githooks/`, so a correct deploy
+# was reported as five files of drift and the whole suite declined to start.
+# It now asks this script instead.
 
 set -euo pipefail
 cd "$(dirname "$0")/.." || exit 2
+
+# The single list. Note that no pattern carries a trailing slash, and that is
+# load-bearing: in rsync a trailing slash restricts the pattern to DIRECTORIES.
+# Run from a git worktree — the normal way to work on two branches at once —
+# `.git` is a file rather than a directory and `node_modules` is usually a
+# symlink into the main checkout, so slash-suffixed patterns match neither and
+# rsync copies both. That was not hypothetical: it shipped a 17 MB target with
+# node_modules in it.
+#
+# `tests` is excluded because the plugin does not ship its own test suite, and
+# because the preflight already compared without it — deploying it would have
+# meant the two disagreed in the other direction.
+EXCLUDES=(
+	'.git'
+	'.git*'
+	'.github'
+	'node_modules'
+	'.phpcs-tools'
+	'graphify-out'
+	'.code-review-graph'
+	'.serena'
+	'tests'
+	'*.zip'
+	'.DS_Store'
+)
+
+if [ "${1:-}" = '--print-excludes' ]; then
+	printf '%s\n' "${EXCLUDES[@]}"
+	exit 0
+fi
 
 TARGET="${FAZ_DEPLOY_TARGET:-/Users/fabio/Sites/faz-test/wp-content/plugins/faz-cookie-manager/}"
 
@@ -34,27 +72,15 @@ case "$TARGET" in
 esac
 
 # --delete is deliberate: a stale file left behind after a rename is how a test
-# passes against code that no longer ships. It also means the exclusions below
+# passes against code that no longer ships. It also means the exclusions above
 # are the only thing standing between this and deleting them at the target, so
 # every entry is repository-side clutter, never plugin content.
-#
-# None of these patterns carries a trailing slash, and that is load-bearing: in
-# rsync a trailing slash restricts the pattern to DIRECTORIES. Run from a git
-# worktree — the normal way to work on two branches at once — `.git` is a file
-# rather than a directory and `node_modules` is usually a symlink into the main
-# checkout, so slash-suffixed patterns match neither and rsync copies both. That
-# was not hypothetical: it shipped a 17 MB target with node_modules in it.
-rsync -a --delete \
-	--exclude='.git' \
-	--exclude='.git*' \
-	--exclude='node_modules' \
-	--exclude='.phpcs-tools' \
-	--exclude='graphify-out' \
-	--exclude='.code-review-graph' \
-	--exclude='.serena' \
-	--exclude='tests/e2e/reports' \
-	--exclude='*.zip' \
-	./ "$TARGET"
+RSYNC_EXCLUDES=()
+for pattern in "${EXCLUDES[@]}"; do
+	RSYNC_EXCLUDES+=( "--exclude=${pattern}" )
+done
+
+rsync -a --delete "${RSYNC_EXCLUDES[@]}" ./ "$TARGET"
 
 echo "deployed → ${TARGET}"
 du -sh "$TARGET" 2>/dev/null | awk '{print "size: " $1}'
