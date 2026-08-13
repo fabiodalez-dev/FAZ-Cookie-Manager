@@ -21,11 +21,21 @@
 ( function () {
     'use strict';
 
+    // The banner can be rebuilt in place after a browser-language swap. Keep
+    // the identity of the DOM instance already enhanced so a replacement gets
+    // the same semantics without applying the transforms twice to one banner.
+    var currentBanner = null;
+
 	/**
-     * Run all accessibility enhancements.
-     * Called once after fazcookie_banner_loaded fires.
+     * Run all accessibility enhancements on the current banner DOM instance.
+     * Called after the initial banner is shown and again when that instance is
+     * replaced by the client-side language renderer.
      */
     function init() {
+        var banner = document.querySelector( '.faz-consent-container' );
+        if ( ! banner || banner === currentBanner ) return;
+        currentBanner = banner;
+
         // Structural fixes
         transformBannerTitle();
         transformModalTitle();
@@ -233,14 +243,50 @@
 
         applyAriaControls();
 
-        // The observer is intentionally not disconnected — the banner is not re-injected
-        // in the current plugin design, so the lifecycle ends with the page.
+        // This observer belongs to the current description wrapper. If a
+        // language swap replaces the banner, observeBannerReplacements() runs
+        // init() for the new wrapper and its old detached observer becomes inert.
         new MutationObserver( applyAriaControls ).observe( wrapper, { childList: true, subtree: true } );
     }
 
-    // Run once after script.js has finished building and injecting the banner/modal.
-    // fazcookie_banner_loaded is dispatched by _fazInit() in script.js on DOMContentLoaded.
-    // Since a11y.js is loaded after script.js, this listener is always registered before
-    // the event fires.
-    document.addEventListener( 'fazcookie_banner_loaded', init, { once: true } );
+    /**
+     * Re-apply the enhancements when script.js replaces the top-level banner.
+     *
+     * Browser-language detection renders the server-default banner first, then
+     * asynchronously inserts a localized replacement and removes the original.
+     * fazcookie_banner_loaded is intentionally emitted only once, so listening
+     * to that event alone leaves the replacement with its template <p>/<span>
+     * headings and without the runtime ARIA attributes.
+     *
+     * The renderer inserts top-level nodes directly under <body>; observing only
+     * that child list avoids a page-wide subtree observer. Comparing node
+     * identity also makes unrelated body mutations and batched insert/remove
+     * records no-ops.
+     */
+    function observeBannerReplacements() {
+        var root = document.body || document.documentElement;
+        if ( ! root ) return;
+
+        new MutationObserver( function () {
+            var banner = document.querySelector( '.faz-consent-container' );
+            if ( banner && banner !== currentBanner ) {
+                init();
+            }
+        } ).observe( root, { childList: true } );
+    }
+
+    // Track replacements before resolving the initial-load ordering, so a
+    // localized banner cannot slip through between the initial init() and the
+    // observer registration.
+    observeBannerReplacements();
+
+    // fazcookie_banner_loaded is dispatched once by script.js. Normally this
+    // listener is registered before DOMContentLoaded; the recorded state is a
+    // fallback for script optimizers or alternate loading paths that execute
+    // a11y.js after the one-shot event has already fired.
+    if ( window._fazBannerLoaded ) {
+        init();
+    } else {
+        document.addEventListener( 'fazcookie_banner_loaded', init, { once: true } );
+    }
 } )();
