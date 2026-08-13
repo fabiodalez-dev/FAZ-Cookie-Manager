@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-12T19:47:59+00:00\n"
+"POT-Creation-Date: 2026-08-13T07:47:51+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
@@ -4966,7 +4966,7 @@ msgid "One per line: googleapis.com/youtube/v3, recaptcha, my-inline-script-id"
 msgstr ""
 
 #: admin/views/settings.php:184
-msgid "Scripts that should never be blocked, even before consent. One per line. Accepts three types of pattern:<br>- <strong>URL fragment</strong> (contains <code>.</code> or <code>/</code>): matched against the script's <code>src</code> or related URL attribute, e.g. <code>googleapis.com/youtube/v3</code>.<br>- <strong>Script ID</strong> (no dots/slashes): matched against the <code>id</code> attribute of the script tag, e.g. <code>my-product-form-data</code>.<br>- <strong>CSS class</strong> (no dots/slashes): matched against the script's <code>class</code> attribute, e.g. <code>recaptcha</code>.<br>These exceptions bypass blocking entirely. Use them only for scripts that genuinely do not set tracking cookies. <strong>Be specific</strong> to avoid accidentally unblocking trackers.<br><strong>Tip:</strong> You can also add <code>class=\"faz-skip\"</code> directly to any script tag to exclude it without adding anything here — no configuration needed."
+msgid "Scripts that should never be blocked, even before consent. One per line. Accepts three types of pattern:<br>- <strong>URL fragment</strong> (contains <code>.</code> or <code>/</code>): matched against the script's <code>src</code> or related URL attribute, e.g. <code>googleapis.com/youtube/v3</code>.<br>- <strong>Script ID</strong> (no dots/slashes): matched against the <code>id</code> attribute of the script tag, e.g. <code>my-product-form-data</code>.<br>- <strong>CSS class</strong> (no dots/slashes): matched against the script's <code>class</code> attribute, e.g. <code>recaptcha</code>.<br>- <strong>How IDs and classes match:</strong> whole words, plus their hyphen or underscore children. <code>recaptcha</code> matches <code>recaptcha</code>, <code>recaptcha-badge</code> and <code>recaptcha_frame</code>, but not <code>myrecaptcha</code>. Ending a pattern with <code>-</code> or <code>_</code> (e.g. <code>wp-</code>) matches <em>every</em> word starting with it, which is much broader — prefer the exact ID or class wherever you can.<br>These exceptions bypass blocking entirely. Use them only for scripts that genuinely do not set tracking cookies. <strong>Be specific</strong> to avoid accidentally unblocking trackers.<br><strong>Tip:</strong> You can also add <code>class=\"faz-skip\"</code> directly to any script tag to exclude it without adding anything here — no configuration needed."
 msgstr ""
 
 #: admin/views/settings.php:190
