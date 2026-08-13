@@ -4576,6 +4576,17 @@ function _fazBuildRestoredScript(script, extraSkipAttributes) {
         clone.setAttribute(attr.name, attr.value);
     }
 
+    // The nonce cannot travel with the attributes above. Once an element is
+    // connected to the document the browser CLEARS the nonce content attribute
+    // and keeps the value only in the IDL property, deliberately, so that a CSS
+    // attribute selector cannot read it back out. So attr.value is the empty
+    // string here and the clone would arrive without a nonce — blocked by
+    // exactly the strict CSP this restore path exists to survive, and blocked
+    // silently, since a refused script reports nothing to the page.
+    if (script.nonce) {
+        clone.nonce = script.nonce;
+    }
+
     if (scriptSrc) {
         if (/^data:/i.test(scriptSrc)) {
             var decodedScript = _fazDecodeDataUriPayload(scriptSrc);
@@ -4632,6 +4643,35 @@ function _fazBuildRestoredIframe(iframe, placeholder) {
     return clone;
 }
 
+/**
+ * Put a blocked <script> back to its declared type in place, without executing.
+ *
+ * For payloads that are data rather than code (JSON-LD, config blobs), being
+ * "restored" means being readable again — the type goes back and the FAZ
+ * markers come off. Nothing is inserted, so nothing runs.
+ *
+ * @param {HTMLScriptElement} script            The blocked element.
+ * @param {string[]}          extraRemoveAttrs  Caller-specific markers to drop.
+ * @return {void}
+ */
+function _fazUnblockInPlace(script, extraRemoveAttrs) {
+    var origType = script.getAttribute('data-faz-original-type');
+    // Markers off BEFORE the type goes back, and the order is load-bearing. The
+    // blocker intercepts type changes: a script still carrying
+    // data-faz-category that turns runnable is, from its point of view, exactly
+    // what it exists to stop, so it re-applies the placeholder and the restore
+    // silently undoes itself. Strip what it keys on first, then restore.
+    (extraRemoveAttrs || []).concat([
+        'data-faz-category',
+        'data-faz-service',
+        'data-faz-original-type',
+    ]).forEach(function (attrName) {
+        script.removeAttribute(attrName);
+    });
+    script.setAttribute('type', origType || 'text/javascript');
+    script.setAttribute('data-faz-executed', '1');
+}
+
 function _fazRestoreInlineScript(script, extraRemoveAttributes) {
     // CSP-safe restore: build a fresh <script> clone and let the browser execute
     // it on insertion, instead of eval()-ing the payload in place. Mutating the
@@ -4643,8 +4683,15 @@ function _fazRestoreInlineScript(script, extraRemoveAttributes) {
 
     var clone = _fazBuildRestoredScript(script, extraRemoveAttributes);
     if (!clone) {
-        // JSON-shaped payload — validated inside _fazBuildRestoredScript, nothing to execute.
-        script.setAttribute('data-faz-executed', '1');
+        // JSON-shaped payload: nothing to execute, but the element still has to
+        // be UNBLOCKED. It is sitting there with the placeholder type and the
+        // data-faz-* markers, and an application/ld+json block left as
+        // text/plain is structured data that never comes back after consent —
+        // invisible to anything reading the DOM, and silent, because no script
+        // failed to run. The pre-clone code restored the type before it ever
+        // looked at the payload, so this branch inherited the restoration for
+        // free; delegating the build moved it out of reach.
+        _fazUnblockInPlace(script, extraRemoveAttributes);
         return;
     }
     clone.setAttribute('data-faz-executed', '1');
