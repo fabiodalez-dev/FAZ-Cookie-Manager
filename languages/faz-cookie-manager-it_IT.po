@@ -49,6 +49,7 @@ msgstr "Banner cookie"
 
 #: admin/class-admin.php:229 admin/views/base.php:21
 #: frontend/class-frontend.php:2366
+#: frontend/modules/banner-rest/class-banner-rest.php:561
 msgid "Cookies"
 msgstr "Cookie"
 
@@ -6023,31 +6024,35 @@ msgid "Service consent"
 msgstr "Consenso al servizio"
 
 #: frontend/class-frontend.php:2367
+#: frontend/modules/banner-rest/class-banner-rest.php:562
 msgid "Cookie consent"
 msgstr "Consenso ai cookie"
 
 #: frontend/class-frontend.php:2368
-#: frontend/modules/banner-rest/class-banner-rest.php:561
+#: frontend/modules/banner-rest/class-banner-rest.php:563
 msgid "Vendor consent"
 msgstr "Consenso fornitore"
 
 #: frontend/class-frontend.php:2369
+#: frontend/modules/banner-rest/class-banner-rest.php:564
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr "Questi cookie sono impostati dal servizio incorporato sul proprio dominio e si controllano consentendo o bloccando l'embed qui sopra — non possono essere rimossi singolarmente."
 
 #. translators: %d is the minimum digital age of consent.
 #: frontend/class-frontend.php:2373
-#: frontend/modules/banner-rest/class-banner-rest.php:566
+#: frontend/modules/banner-rest/class-banner-rest.php:569
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Confermo di avere almeno %d anni"
 
 #: frontend/class-frontend.php:2374
-#: frontend/modules/banner-rest/class-banner-rest.php:567
+#: frontend/modules/banner-rest/class-banner-rest.php:570
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Conferma di avere l’età minima per accettare i cookie facoltativi."
 
-#: frontend/class-frontend.php:2380
+#. translators: %d is a number of seconds.
+#: frontend/class-frontend.php:2381
+#: frontend/modules/banner-rest/class-banner-rest.php:572
 #, php-format
 msgid "Banner closes automatically in %d s..."
 msgstr "Il banner si chiude automaticamente tra %d s..."

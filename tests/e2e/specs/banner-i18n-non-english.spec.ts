@@ -104,4 +104,37 @@ test.describe('Banner i18n — non-English locale renders translated copy', () =
     expect(title).toBe(bundledItalianNotice().title);
     expect(title).not.toBe('We value your privacy');
   });
+
+  test('REST language swap carries every dynamically rendered Italian string', async ({ request, wpBaseURL }) => {
+    const res = await request.get(
+      `${wpBaseURL}/?rest_route=/faz/v1/banner/it&faz_i18n_e2e=${Date.now()}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    expect(res.status()).toBe(200);
+    const payload = await res.json();
+
+    // _fazApplyBannerPayload merges this object into the server-default store.
+    // Missing keys therefore remain in the old locale instead of falling back;
+    // keep the complete client-rendered set pinned here so the two PHP payload
+    // builders cannot silently drift apart again.
+    expect(Object.keys(payload.i18n)).toEqual([
+      'privacy_region_label',
+      'consent_saved',
+      'optout_preferences_label',
+      'customise_consent_preferences_label',
+      'service_consent_label',
+      'cookies',
+      'cookie_consent_label',
+      'vendor_consent_label',
+      'third_party_cookie_note',
+      'age_confirm_label',
+      'age_confirm_error',
+      'optout_autoclose_countdown',
+    ]);
+    expect(payload.i18n.optout_autoclose_countdown).toBe(
+      'Il banner si chiude automaticamente tra 0 s...',
+    );
+    expect(payload.i18n.cookie_consent_label).toBe('Consenso ai cookie');
+    expect(payload.i18n.third_party_cookie_note).toContain('non possono essere rimossi singolarmente');
+  });
 });

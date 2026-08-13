@@ -558,13 +558,18 @@ class Banner_Rest {
 			'optout_preferences_label'            => __( 'Opt-out Preferences', 'faz-cookie-manager' ),
 			'customise_consent_preferences_label' => __( 'Customise Consent Preferences', 'faz-cookie-manager' ),
 			'service_consent_label'               => __( 'Service consent', 'faz-cookie-manager' ),
+			'cookies'                             => __( 'Cookies', 'faz-cookie-manager' ),
+			'cookie_consent_label'                => __( 'Cookie consent', 'faz-cookie-manager' ),
 			'vendor_consent_label'                => __( 'Vendor consent', 'faz-cookie-manager' ),
+			'third_party_cookie_note'             => __( 'These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually.', 'faz-cookie-manager' ),
 			// Age gate (GDPR Art. 8) — sprintf'd for the swapped locale so the
 			// client-side language swap keeps the localized age-confirmation
 			// label instead of reverting to English.
 			// translators: %d is the minimum digital age of consent.
 			'age_confirm_label'                   => sprintf( __( 'I confirm I am at least %d years old', 'faz-cookie-manager' ), $age_min ),
 			'age_confirm_error'                   => __( 'Please confirm you meet the minimum age to accept optional cookies.', 'faz-cookie-manager' ),
+			// translators: %d is a number of seconds.
+			'optout_autoclose_countdown'          => sprintf( __( 'Banner closes automatically in %d s...', 'faz-cookie-manager' ), 0 ),
 		);
 	}
 
