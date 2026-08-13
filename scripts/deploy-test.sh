@@ -45,6 +45,7 @@ EXCLUDES=(
 	'.github'
 	'node_modules'
 	'.phpcs-tools'
+	'vendor'
 	'graphify-out'
 	'.code-review-graph'
 	'.serena'
