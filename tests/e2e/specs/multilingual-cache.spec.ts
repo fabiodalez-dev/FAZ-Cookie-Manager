@@ -184,6 +184,18 @@ test.describe.serial('Issue #67 — multilingual banner', () => {
       && typeof category.defaultConsent.ccpa === 'boolean'
       && Array.isArray(category.cookies)
     ))).toBe(true);
+
+    // The swap above replaces the complete banner DOM after the one-shot
+    // fazcookie_banner_loaded event. Accessibility enhancements must follow the
+    // replacement rather than remaining attached to the detached default-
+    // language nodes.
+    await expect(page.locator('h2.faz-title#faz-banner-title')).toBeAttached();
+    await expect(page.locator('h2.faz-preference-title#faz-modal-title')).toBeAttached();
+    await expect(page.locator('.faz-consent-container')).toHaveAttribute('aria-labelledby', 'faz-banner-title');
+    await expect(page.locator('.faz-preference-center')).toHaveAttribute('aria-labelledby', 'faz-modal-title');
+    await expect(
+      page.locator('[data-faz-tag="detail-category-toggle"] input[role="switch"][aria-label]').first(),
+    ).toBeAttached();
     await page.waitForTimeout(500);
     const fatalRuntimeErrors = [
       ...pageErrors.filter(isRelevantFrontendRuntimeError),

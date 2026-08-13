@@ -1852,6 +1852,12 @@ function _fazShowBanner() {
         notice.classList.remove('faz-hide');
         if (!_fazBannerLoadedFired) {
             _fazBannerLoadedFired = true;
+            // Record the one-shot event before dispatch so late-running
+            // enhancers (script optimizers, alternate asset paths) can recover
+            // its state. a11y.js separately observes banner node replacement,
+            // because a browser-language re-render does not emit this event a
+            // second time and must not double-count banner-view analytics.
+            window._fazBannerLoaded = true;
             document.dispatchEvent(new CustomEvent("fazcookie_banner_loaded"));
         }
     }
