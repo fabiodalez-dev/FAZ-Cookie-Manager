@@ -309,7 +309,15 @@ class Cookie_Controller extends Base_Controller {
 		global $wpdb;
 		$date_modified = current_time( 'mysql' );
 		$object->set_date_modified( $date_modified );
-		$stored = $object->get_data();
+		// Revisions merged over data, and that is the whole point. On an object
+		// LOADED from the database, set_object_data() stages every change in
+		// $this->revisions and leaves $this->data holding the values as read;
+		// get_data() returns only the latter. Reading description and duration
+		// straight from it therefore wrote back exactly what was already stored and
+		// dropped the edit — silently, because name, category and every other field
+		// go through getters, which DO consult revisions, so a save looked like it
+		// worked while the two multilingual fields snapped back.
+		$stored = array_merge( $object->get_data(), $object->get_revisions() );
 		$result = $wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prefix . 'faz_cookies',
 			array(

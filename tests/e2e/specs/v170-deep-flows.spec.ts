@@ -191,7 +191,14 @@ test.describe.serial('v1.7.0 deep flows', () => {
       });
       await page.reload({ waitUntil: 'domcontentloaded' });
 
-      const templates = page.locator('#faz-blocker-templates > button');
+      // The clickable element is the button INSIDE each card, not the card. The
+      // cards became `<div class="faz-template-card"><button
+      // class="faz-template-card-action">` when the "not applied" badge landed;
+      // a direct-child button selector matches nothing now, and the test failed
+      // with "Expected 1, Received 0" against a UI doing exactly the right
+      // thing. Anchored on the action class rather than on the DOM shape, so
+      // wrapping the card again does not break it a third time.
+      const templates = page.locator('#faz-blocker-templates button.faz-template-card-action');
       // Anchor on the card *name* element (`.faz-template-card-name`) so we
       // match only the canonical "Google Analytics" template — not other
       // Google-* templates whose descriptions mention Google Analytics.
