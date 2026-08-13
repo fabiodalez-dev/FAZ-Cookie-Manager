@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.9.2\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-08-13T07:47:51+00:00\n"
+"POT-Creation-Date: 2026-08-13T15:06:17+00:00\n"
 "PO-Revision-Date: 2026-04-10\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: German\n"
@@ -1657,7 +1657,7 @@ msgid "Its GDPR setting is set to Yes, so it serves local copies of images and n
 msgstr ""
 
 #: admin/class-admin.php:1817
-#: admin/modules/cookies/api/class-cookies-api.php:677
+#: admin/modules/cookies/api/class-cookies-api.php:685
 msgid "Open Instagram Feed settings"
 msgstr ""
 
@@ -1763,7 +1763,7 @@ msgstr "Details anzeigen"
 #: admin/modules/cookies/api/class-categories-api.php:95
 #: admin/modules/cookies/api/class-categories-api.php:244
 #: admin/modules/cookies/api/class-cookies-api.php:144
-#: admin/modules/cookies/api/class-cookies-api.php:432
+#: admin/modules/cookies/api/class-cookies-api.php:440
 #: admin/modules/scanner/api/class-api.php:160
 #: admin/modules/scanner/api/class-api.php:676
 #: admin/modules/settings/api/class-api.php:566
@@ -2525,7 +2525,7 @@ msgid "The date the category was last modified, as GMT."
 msgstr "Das Datum der letzten Änderung der Kategorie, in GMT."
 
 #: admin/modules/cookies/api/class-categories-api.php:262
-#: admin/modules/cookies/api/class-cookies-api.php:454
+#: admin/modules/cookies/api/class-cookies-api.php:462
 msgid "Cookie category name."
 msgstr "Name der Cookie-Kategorie."
 
@@ -2595,83 +2595,83 @@ msgstr ""
 msgid "The registration engine is unavailable."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:357
+#: admin/modules/cookies/api/class-cookies-api.php:365
 msgid "The service cookies could not be registered. Review the scanner log and try again."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:438
+#: admin/modules/cookies/api/class-cookies-api.php:446
 msgid "The date the cookie was created, as GMT."
 msgstr "Das Erstellungsdatum des Cookies, in GMT."
 
-#: admin/modules/cookies/api/class-cookies-api.php:444
+#: admin/modules/cookies/api/class-cookies-api.php:452
 msgid "The date the cookie was last modified, as GMT."
 msgstr "Das Datum der letzten Änderung des Cookies, in GMT."
 
-#: admin/modules/cookies/api/class-cookies-api.php:449
+#: admin/modules/cookies/api/class-cookies-api.php:457
 msgid "Cookie name."
 msgstr "Cookie-Name."
 
-#: admin/modules/cookies/api/class-cookies-api.php:459
+#: admin/modules/cookies/api/class-cookies-api.php:467
 msgid "Cookie unique name"
 msgstr "Eindeutiger Cookie-Name"
 
-#: admin/modules/cookies/api/class-cookies-api.php:464
+#: admin/modules/cookies/api/class-cookies-api.php:472
 msgid "Cookie description."
 msgstr "Cookie-Beschreibung."
 
-#: admin/modules/cookies/api/class-cookies-api.php:469
+#: admin/modules/cookies/api/class-cookies-api.php:477
 msgid "Cookie duration"
 msgstr "Cookie-Laufzeit"
 
-#: admin/modules/cookies/api/class-cookies-api.php:474
+#: admin/modules/cookies/api/class-cookies-api.php:482
 msgid "Cookie language."
 msgstr "Cookie-Sprache."
 
-#: admin/modules/cookies/api/class-cookies-api.php:479
+#: admin/modules/cookies/api/class-cookies-api.php:487
 msgid "Cookie type."
 msgstr "Cookie-Typ."
 
-#: admin/modules/cookies/api/class-cookies-api.php:484
+#: admin/modules/cookies/api/class-cookies-api.php:492
 msgid "Cookie domain."
 msgstr "Cookie-Domain."
 
-#: admin/modules/cookies/api/class-cookies-api.php:489
+#: admin/modules/cookies/api/class-cookies-api.php:497
 msgid "If cookies added from the scanner or not."
 msgstr "Gibt an, ob Cookies vom Scanner hinzugefügt wurden oder nicht."
 
-#: admin/modules/cookies/api/class-cookies-api.php:494
+#: admin/modules/cookies/api/class-cookies-api.php:502
 msgid "URL patterns for blocking purposes"
 msgstr "URL-Muster für Blockierungszwecke"
 
-#: admin/modules/cookies/api/class-cookies-api.php:499
+#: admin/modules/cookies/api/class-cookies-api.php:507
 msgid "Third-country (Schrems II) personal-data transfer disclosure for this cookie."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:515
+#: admin/modules/cookies/api/class-cookies-api.php:523
 msgid "JavaScript executed when this cookie's category is accepted."
 msgstr "JavaScript, das ausgeführt wird, wenn die Kategorie dieses Cookies akzeptiert wird."
 
-#: admin/modules/cookies/api/class-cookies-api.php:527
+#: admin/modules/cookies/api/class-cookies-api.php:535
 msgid "JavaScript executed when this cookie's category is rejected or revoked."
 msgstr "JavaScript, das ausgeführt wird, wenn die Kategorie dieses Cookies abgelehnt oder widerrufen wird."
 
-#: admin/modules/cookies/api/class-cookies-api.php:553
+#: admin/modules/cookies/api/class-cookies-api.php:561
 msgid "No cookies provided."
 msgstr "Keine Cookies angegeben."
 
-#: admin/modules/cookies/api/class-cookies-api.php:625
+#: admin/modules/cookies/api/class-cookies-api.php:633
 msgid "No cookie IDs provided."
 msgstr "Keine Cookie-IDs angegeben."
 
-#: admin/modules/cookies/api/class-cookies-api.php:669
+#: admin/modules/cookies/api/class-cookies-api.php:677
 msgid "Not applied"
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:675
+#: admin/modules/cookies/api/class-cookies-api.php:683
 msgid "Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:716
+#: admin/modules/cookies/api/class-cookies-api.php:724
 msgid "You do not have permission to modify script fields."
 msgstr "Du hast keine Berechtigung, Skriptfelder zu bearbeiten."
 
@@ -5843,6 +5843,11 @@ msgstr ""
 #: frontend/class-frontend.php:2374
 #: frontend/modules/banner-rest/class-banner-rest.php:567
 msgid "Please confirm you meet the minimum age to accept optional cookies."
+msgstr ""
+
+#: frontend/class-frontend.php:2380
+#, php-format
+msgid "Banner closes automatically in %d s..."
 msgstr ""
 
 #. translators: %s: service name (e.g., "YouTube", "Google Maps")

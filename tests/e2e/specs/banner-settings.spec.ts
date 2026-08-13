@@ -3,6 +3,7 @@ import { resetDefaultBannerState } from '../utils/seed-defaults';
 import type { Page } from '@playwright/test';
 import { getWpLoginPath } from '../utils/wp-auth';
 import { fazApiPut } from '../utils/faz-api';
+import { wpEval } from '../utils/wp-env';
 
 /* ─── Helpers ──────────────────────────────────────────────── */
 
@@ -699,17 +700,16 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     try {
       await expect(visitor.page.locator('[data-faz-tag="notice"]')).toBeVisible({ timeout: 10_000 });
 
-      const titleText = await visitor.page.locator('[data-faz-tag="title"]').textContent();
-      expect(titleText?.trim()).toBe(testTitle);
-
-      const acceptText = await visitor.page.locator('[data-faz-tag="accept-button"]').textContent();
-      expect(acceptText?.trim()).toBe(testAcceptLabel);
-
-      const rejectText = await visitor.page.locator('[data-faz-tag="reject-button"]').textContent();
-      expect(rejectText?.trim()).toBe(testRejectLabel);
-
-      const settingsText = await visitor.page.locator('[data-faz-tag="settings-button"]').textContent();
-      expect(settingsText?.trim()).toBe(testSettingsLabel);
+      // Retrying assertions, not one-shot textContent() reads. The banner is
+      // rendered from the server template first and then REPLACED by the
+      // localized one once language detection resolves, so a single read taken
+      // the moment the notice becomes visible can land before the swap and see
+      // the default-language copy — which on this install is Italian. That race
+      // is what made this test intermittently red for months.
+      await expect(visitor.page.locator('[data-faz-tag="title"]')).toHaveText(testTitle);
+      await expect(visitor.page.locator('[data-faz-tag="accept-button"]')).toHaveText(testAcceptLabel);
+      await expect(visitor.page.locator('[data-faz-tag="reject-button"]')).toHaveText(testRejectLabel);
+      await expect(visitor.page.locator('[data-faz-tag="settings-button"]')).toHaveText(testSettingsLabel);
     } finally {
       await visitor.ctx.close();
     }
@@ -837,6 +837,32 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     const readMore = '#1a8a00';     // green — Read More / Cookie Policy link
     const toggleActive = '#ff7a00'; // orange — category toggle active (inline + modal)
 
+    // The Show More control is BUILT AT RUNTIME and only when there is something
+    // to truncate: script.js requires the category description to exceed the
+    // length limit AND to contain more than one <p> (it returns early on
+    // `innerElements.length <= 1`). The shipped copy is a single paragraph, so
+    // without this the element never exists and the colour assertion below
+    // times out against a perfectly healthy banner. Seeded here rather than
+    // inherited from whatever an earlier test in this serial group happened to
+    // leave behind.
+    const longDesc = wpEval(`
+      global $wpdb;
+      $table = $wpdb->prefix . 'faz_cookie_categories';
+      $row = $wpdb->get_row( $wpdb->prepare( "SELECT id, description FROM {$table} WHERE slug = %s LIMIT 1", 'analytics' ) );
+      if ( ! $row ) { echo wp_json_encode( array( 'id' => 0 ) ); return; }
+      $prev = $row->description;
+      $long = '<p>' . str_repeat( 'Analytics cookies help us understand how visitors use this website. ', 6 ) . '</p>'
+            . '<p>' . str_repeat( 'A second paragraph so the truncation logic has more than one block to work with. ', 6 ) . '</p>';
+      $decoded = json_decode( (string) $prev, true );
+      $langs = is_array( $decoded ) ? array_keys( $decoded ) : array( 'en' );
+      $next = array();
+      foreach ( $langs as $lang ) { $next[ $lang ] = $long; }
+      $wpdb->update( $table, array( 'description' => wp_json_encode( $next ) ), array( 'id' => (int) $row->id ) );
+      \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller::get_instance()->delete_cache();
+      if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
+      echo wp_json_encode( array( 'id' => (int) $row->id, 'prev' => $prev ) );
+    `).trim();
+
     await setColorHex(page, 'faz-b-showdesc-color-hex', showDesc);
     await setColorHex(page, 'faz-b-readmore-color-hex', readMore);
     await setColorHex(page, 'faz-b-catprev-toggle-active-hex', toggleActive);
@@ -879,6 +905,19 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       expect(toggleBg).toBe('rgb(255, 122, 0)'); // #ff7a00 — modal toggle driven by the catprev picker
     } finally {
       await visitor.ctx.close();
+      // Put the category description back. Leaving a seeded fixture behind is
+      // how a later test inherits state it never asked for — the failure mode
+      // this precondition exists to escape.
+      const seeded = JSON.parse(longDesc || '{}');
+      if (seeded.id) {
+        const prev = Buffer.from(String(seeded.prev ?? ''), 'utf8').toString('base64');
+        wpEval(`
+          global $wpdb;
+          $wpdb->update( $wpdb->prefix . 'faz_cookie_categories', array( 'description' => base64_decode( '${prev}' ) ), array( 'id' => ${seeded.id} ) );
+          \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller::get_instance()->delete_cache();
+          if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
+        `);
+      }
     }
 
     // Restore light theme — theme select is on the General tab.

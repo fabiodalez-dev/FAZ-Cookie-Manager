@@ -18,6 +18,11 @@ const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
 /** Seed the default banner to CCPA with the exact bundled CCPA default copy
  *  (so it's recognised as un-customised) and return the original for restore. */
+/** Collapse whitespace so formatting differences do not fail an equality check. */
+function normCopy(value: unknown): string {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
 function seedCcpaDefaultCopy(): string {
   return wpEval(`
     global $wpdb;
@@ -28,20 +33,27 @@ function seedCcpaDefaultCopy(): string {
     $settings = json_decode( $row->settings, true );
     if ( ! isset( $settings['settings'] ) || ! is_array( $settings['settings'] ) ) { $settings['settings'] = array(); }
     $settings['settings']['applicableLaw'] = 'ccpa';
-    // Put the bundled CCPA default description into the default language so the
-    // editor sees it as un-customised and the law-switch reload kicks in.
-    $descs = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner::get_law_notice_descriptions( 'en' );
+    // Each language gets ITS OWN bundled CCPA default, not English everywhere.
+    // The editor decides a copy is un-customised by comparing it against the
+    // default FOR THAT LANGUAGE, so seeding English into, say, the Italian slot
+    // makes the product read it as authored text and — correctly — refuse to
+    // overwrite it. The test then fails while the plugin is doing exactly the
+    // right thing. This install's default language is not English, which is how
+    // the hardcoded 'en' went unnoticed.
     $contents = json_decode( $row->contents, true );
     if ( ! is_array( $contents ) ) { $contents = array(); }
+    $default_lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+    if ( empty( $contents ) ) { $contents = array( $default_lang => array( 'notice' => array( 'elements' => array() ) ) ); }
     foreach ( array_keys( $contents ) as $lang ) {
       if ( ! isset( $contents[ $lang ]['notice']['elements'] ) || ! is_array( $contents[ $lang ]['notice']['elements'] ) ) { continue; }
-      $contents[ $lang ]['notice']['elements']['description'] = $descs['ccpa'];
+      $lang_descs = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner::get_law_notice_descriptions( $lang );
+      $contents[ $lang ]['notice']['elements']['description'] = $lang_descs['ccpa'];
     }
-    if ( empty( $contents ) ) { $contents = array( 'en' => array( 'notice' => array( 'elements' => array( 'description' => $descs['ccpa'] ) ) ) ); }
     $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => wp_json_encode( $settings ), 'contents' => wp_json_encode( $contents ) ), array( 'banner_id' => $row->banner_id ), array( '%s', '%s' ), array( '%d' ) );
     \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
     faz_clear_banner_template_cache();
-    echo wp_json_encode( array( 'banner_id' => $row->banner_id, 'original_settings' => $original_settings, 'original_contents' => $original_contents ) );
+    $editor_descs = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner::get_law_notice_descriptions( $default_lang );
+    echo wp_json_encode( array( 'banner_id' => $row->banner_id, 'original_settings' => $original_settings, 'original_contents' => $original_contents, 'lang' => $default_lang, 'ccpa_copy' => $editor_descs['ccpa'], 'gdpr_copy' => $editor_descs['gdpr'] ) );
   `).trim();
 }
 
@@ -104,23 +116,27 @@ test.describe('Banner law switch reloads the notice copy', () => {
       await expect(page.locator('#faz-b-law')).toHaveValue('ccpa');
       await openTab(page, 'content');
       await ensureNoticeEditorReady(page);
-      await expect.poll(() => noticeDescription(page), { message: 'starts with CCPA copy' })
-        .toMatch(/do not sell/i);
+      // Compared against the bundled default FOR THE EDITOR'S LANGUAGE. The old
+      // assertion looked for the English words "do not sell", which silently
+      // stops meaning anything the moment the install's default language is not
+      // English — and this one is Italian.
+      await expect.poll(async () => normCopy(await noticeDescription(page)), { message: 'starts with CCPA copy' })
+        .toBe(normCopy(meta.ccpa_copy));
 
       // Switch to GDPR → un-customised copy reloads to the GDPR default, which
       // does NOT mention Do Not Sell.
       await openTab(page, 'general');
       await page.selectOption('#faz-b-law', 'gdpr');
       await openTab(page, 'content');
-      await expect.poll(() => noticeDescription(page), { message: 'GDPR copy no longer mentions Do Not Sell' })
-        .not.toMatch(/do not sell/i);
+      await expect.poll(async () => normCopy(await noticeDescription(page)), { message: 'GDPR copy replaced the CCPA copy' })
+        .toBe(normCopy(meta.gdpr_copy));
 
       // Switch back to CCPA → the CCPA copy (with the link) returns.
       await openTab(page, 'general');
       await page.selectOption('#faz-b-law', 'ccpa');
       await openTab(page, 'content');
-      await expect.poll(() => noticeDescription(page), { message: 'CCPA copy restored' })
-        .toMatch(/do not sell/i);
+      await expect.poll(async () => normCopy(await noticeDescription(page)), { message: 'CCPA copy restored' })
+        .toBe(normCopy(meta.ccpa_copy));
 
       // Saving a banner converted from GDPR must also enable the target popup,
       // not merely the visible link that opens it.
@@ -457,14 +473,18 @@ function seedGdprWithCcpaCopy(): string {
     $settings['config']['notice']['elements']['donotSell']['status'] = false;
     $settings['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = false;
     $settings['config']['optoutPopup']['status'] = false;
-    $en = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner::get_law_notice_descriptions( 'en' );
+    // Per language, as above: the mismatch repair compares each language's copy
+    // against that language's default, so English seeded into a non-English slot
+    // reads as authored text and is deliberately left alone.
     $contents = json_decode( $row->contents, true );
     if ( ! is_array( $contents ) ) { $contents = array(); }
+    $default_lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
+    if ( empty( $contents ) ) { $contents = array( $default_lang => array( 'notice' => array( 'elements' => array() ) ) ); }
     foreach ( array_keys( $contents ) as $lang ) {
       if ( ! isset( $contents[ $lang ]['notice']['elements'] ) || ! is_array( $contents[ $lang ]['notice']['elements'] ) ) { continue; }
-      $contents[ $lang ]['notice']['elements']['description'] = $en['ccpa'];
+      $lang_descs = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Banner::get_law_notice_descriptions( $lang );
+      $contents[ $lang ]['notice']['elements']['description'] = $lang_descs['ccpa'];
     }
-    if ( empty( $contents ) ) { $contents = array( 'en' => array( 'notice' => array( 'elements' => array( 'description' => $en['ccpa'] ) ) ) ); }
     $wpdb->update( $wpdb->prefix . 'faz_banners', array( 'settings' => wp_json_encode( $settings ), 'contents' => wp_json_encode( $contents ) ), array( 'banner_id' => $row->banner_id ), array( '%s', '%s' ), array( '%d' ) );
     \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
     faz_clear_banner_template_cache();
