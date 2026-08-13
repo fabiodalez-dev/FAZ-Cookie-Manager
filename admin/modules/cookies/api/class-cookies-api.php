@@ -351,6 +351,14 @@ class Cookies_API extends API_Controller {
 		try {
 			\call_user_func( array( $scanner, 'get_instance' ) )->save_cookies( $payload );
 		} catch ( \Throwable $e ) {
+			// save_cookies() writes row by row, so an exception on one entry
+			// leaves the earlier ones persisted. The runtime map is rebuilt from
+			// that table, and it is what decides which scripts are held before
+			// consent: leaving it stale means cookies that ARE registered are
+			// not yet blocked. Failing the request does not undo the writes, so
+			// the map has to be invalidated on the way out too — the error path
+			// needs this more than the success path, not less.
+			delete_transient( 'faz_cookie_scripts_map' );
 			error_log( 'FAZ: service registration failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- preserve diagnostics while returning a safe REST error.
 			return new WP_Error(
 				'faz_service_registration_failed',
