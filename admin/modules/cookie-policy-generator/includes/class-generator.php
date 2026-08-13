@@ -196,7 +196,7 @@ class Generator {
 			if ( in_array( $path, array( 'company.email', 'dpo.email' ), true ) ) {
 				$invalid = $invalid || false === filter_var( $value, FILTER_VALIDATE_EMAIL );
 			} elseif ( 'privacy_policy_url' === $path ) {
-				$scheme  = strtolower( (string) parse_url( $value, PHP_URL_SCHEME ) );
+				$scheme  = strtolower( (string) wp_parse_url( $value, PHP_URL_SCHEME ) );
 				$invalid = $invalid || false === filter_var( $value, FILTER_VALIDATE_URL ) || ! in_array( $scheme, array( 'http', 'https' ), true );
 			}
 			if ( $invalid ) {

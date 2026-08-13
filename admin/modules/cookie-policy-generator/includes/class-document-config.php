@@ -134,7 +134,7 @@ class Document_Config {
 		foreach ( array( 'slug', 'shortcode', 'option', 'templates_dir', 'gettext_catalog', 'wrapper_class' ) as $key ) {
 			if ( ! isset( $config[ $key ] ) || ! is_string( $config[ $key ] ) || '' === trim( $config[ $key ] ) ) {
 				throw new \InvalidArgumentException(
-					sprintf( 'Document_Config: "%s" must be a non-empty string.', $key )
+					sprintf( 'Document_Config: "%s" must be a non-empty string.', esc_html( $key ) )
 				);
 			}
 		}
@@ -165,13 +165,13 @@ class Document_Config {
 		$missing_langs = array_diff( $config['jurisdictions'], array_keys( $config['native_lang'] ) );
 		if ( array() !== $missing_langs ) {
 			throw new \InvalidArgumentException(
-				sprintf( 'Document_Config: "native_lang" has no entry for %s.', implode( ', ', $missing_langs ) )
+				sprintf( 'Document_Config: "native_lang" has no entry for %s.', esc_html( implode( ', ', $missing_langs ) ) )
 			);
 		}
 		$unknown_langs = array_diff( array_keys( $config['native_lang'] ), $config['jurisdictions'] );
 		if ( array() !== $unknown_langs ) {
 			throw new \InvalidArgumentException(
-				sprintf( 'Document_Config: "native_lang" names unknown jurisdiction(s) %s.', implode( ', ', $unknown_langs ) )
+				sprintf( 'Document_Config: "native_lang" names unknown jurisdiction(s) %s.', esc_html( implode( ', ', $unknown_langs ) ) )
 			);
 		}
 
@@ -187,7 +187,7 @@ class Document_Config {
 		foreach ( array( 'data_builder', 'required_fields' ) as $key ) {
 			if ( ! isset( $config[ $key ] ) || ! is_callable( $config[ $key ] ) ) {
 				throw new \InvalidArgumentException(
-					sprintf( 'Document_Config: "%s" must be callable.', $key )
+					sprintf( 'Document_Config: "%s" must be callable.', esc_html( $key ) )
 				);
 			}
 		}

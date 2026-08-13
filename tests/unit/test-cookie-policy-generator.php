@@ -49,6 +49,14 @@ if ( ! function_exists( 'wp_json_encode' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wp_parse_url' ) ) {
+	// Stubbed rather than avoided in the source: production code should call
+	// the WordPress wrapper, and the harness is what has to keep up.
+	function wp_parse_url( $url, $component = -1 ) {
+		return parse_url( $url, $component ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- this stub IS the WordPress-less substitute.
+	}
+}
+
 require_once dirname( __DIR__, 2 ) . '/admin/modules/cookie-policy-generator/includes/class-generator.php';
 use FazCookie\Admin\Modules\Cookie_Policy_Generator\Includes\Generator;
 
