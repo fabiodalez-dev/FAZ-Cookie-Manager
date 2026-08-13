@@ -341,6 +341,12 @@ class Cookie_Content_I18n {
 	 * @return string
 	 */
 	private static function lookup_duration( $source, $lang ) {
+		// The function_exists() guard is NOT about old WordPress versions —
+		// wp_strip_all_tags() has shipped since 2.9, far below this plugin's floor.
+		// It is what lets tests/unit/ load this class with no WordPress at all, which
+		// is the only environment where the fallback actually runs. Removing it as
+		// dead code takes six unit suites down with a fatal.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- see above: the fallback exists for the WordPress-less unit harness.
 		$source = function_exists( 'wp_strip_all_tags' ) ? wp_strip_all_tags( (string) $source ) : strip_tags( (string) $source );
 		$raw    = trim( $source );
 		$source = strtolower( $raw );
