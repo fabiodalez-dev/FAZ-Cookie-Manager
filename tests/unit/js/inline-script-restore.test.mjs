@@ -127,9 +127,10 @@ const w = loadFrontend();
 
 // ── 1-4. A JSON payload is data: unblocked, never executed. ────────────────
 {
+  const payload = '{"@context":"https://schema.org","@type":"Organization"}';
   const { script: s, holder } = blocked(w, {
     originalType: 'application/ld+json',
-    text: '{"@context":"https://schema.org","@type":"Organization"}',
+    text: payload,
   });
   w._fazRestoreInlineScript(s, []);
   const live = holder.querySelector('script');
@@ -139,7 +140,9 @@ const w = loadFrontend();
   check('json: the original-type marker is removed', live.getAttribute('data-faz-original-type') === null);
   // Not replaced: there is nothing to execute, so the node stays put and its
   // payload is untouched.
-  check('json: the element is unblocked in place, payload intact', live === s && live.textContent.indexOf('schema.org') !== -1);
+  // Compared whole, not searched for a substring: a restore that mangles part
+  // of the JSON would still contain "schema.org" and pass.
+  check('json: the element is unblocked in place, payload intact', live === s && live.textContent === payload);
 }
 
 // ── 5-8. Executable code is rebuilt as a fresh node the browser will run. ──
@@ -169,7 +172,9 @@ const w = loadFrontend();
   const first = holder.querySelector('script');
   check('guard: the restored script is marked executed', first.getAttribute('data-faz-executed') === '1');
   w._fazRestoreInlineScript(first, []);
-  check('guard: a second restore is a no-op', holder.querySelectorAll('script').length === 1);
+  // Identity, not count: replacing the node with a fresh clone would keep the
+  // count at one and hand the browser something to execute a second time.
+  check('guard: a second restore is a no-op', holder.querySelector('script') === first);
 }
 
 // ── 12. A detached node still gets restored rather than dropped. ──────────
@@ -179,9 +184,17 @@ const w = loadFrontend();
   s.setAttribute('data-faz-original-type', 'text/javascript');
   s.textContent = 'window.__fazOrphan = 1;';
   w._fazRestoreInlineScript(s, []);
-  const inHead = Array.from(w.document.head.querySelectorAll('script'))
-    .some((el) => el.textContent === 'window.__fazOrphan = 1;');
-  check('orphan: a script with no parent is appended rather than lost', inHead);
+  // Appending the untouched blocked node would satisfy "is in head" while still
+  // carrying the placeholder type — restored in name only.
+  const restored = Array.from(w.document.head.querySelectorAll('script'))
+    .find((el) => el.textContent === 'window.__fazOrphan = 1;');
+  check(
+    'orphan: a script with no parent is restored and appended, not merely reattached',
+    !!restored
+      && restored !== s
+      && (restored.getAttribute('type') || restored.type) === 'text/javascript'
+      && restored.getAttribute('data-faz-original-type') === null,
+  );
 }
 
 // ── 13. eval() is gone from the restore path, structurally. ───────────────
