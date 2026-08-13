@@ -227,8 +227,13 @@ fi
 # ── Status preview ───────────────────────────────────────────────────────
 echo
 cyan "═══ svn status preview (first 40 lines) ═══"
-svn status | head -40
-TOTAL_CHANGES="$(svn status | wc -l | tr -d ' ')"
+# Captured once, then sliced. Piping `svn status` straight into `head` makes
+# head close the pipe after 40 lines, svn takes SIGPIPE, and under
+# `set -o pipefail` the whole script dies here with no message — which is
+# exactly what happened on the first release large enough to exceed 40 changes.
+SVN_STATUS="$(svn status)"
+printf '%s\n' "${SVN_STATUS}" | head -40
+TOTAL_CHANGES="$(printf '%s\n' "${SVN_STATUS}" | grep -c . | tr -d ' ')"
 echo
 echo "  Total SVN changes staged: ${TOTAL_CHANGES}"
 
