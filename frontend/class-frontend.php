@@ -2376,7 +2376,8 @@ class Frontend {
 				// reuses the text the template already rendered (translated), but
 				// falls back when that element is empty — which happened, and put
 				// an English sentence under an Italian success message on a
-				// non-English site. translators: %d is a number of seconds.
+				// non-English site.
+				// translators: %d is a number of seconds.
 				'optout_autoclose_countdown'            => sprintf( __( 'Banner closes automatically in %d s...', 'faz-cookie-manager' ), 0 ),
 			),
 			'_rtl'          => $this->is_rtl(),
