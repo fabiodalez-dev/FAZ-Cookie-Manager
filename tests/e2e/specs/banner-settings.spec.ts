@@ -699,17 +699,16 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     try {
       await expect(visitor.page.locator('[data-faz-tag="notice"]')).toBeVisible({ timeout: 10_000 });
 
-      const titleText = await visitor.page.locator('[data-faz-tag="title"]').textContent();
-      expect(titleText?.trim()).toBe(testTitle);
-
-      const acceptText = await visitor.page.locator('[data-faz-tag="accept-button"]').textContent();
-      expect(acceptText?.trim()).toBe(testAcceptLabel);
-
-      const rejectText = await visitor.page.locator('[data-faz-tag="reject-button"]').textContent();
-      expect(rejectText?.trim()).toBe(testRejectLabel);
-
-      const settingsText = await visitor.page.locator('[data-faz-tag="settings-button"]').textContent();
-      expect(settingsText?.trim()).toBe(testSettingsLabel);
+      // Retrying assertions, not one-shot textContent() reads. The banner is
+      // rendered from the server template first and then REPLACED by the
+      // localized one once language detection resolves, so a single read taken
+      // the moment the notice becomes visible can land before the swap and see
+      // the default-language copy — which on this install is Italian. That race
+      // is what made this test intermittently red for months.
+      await expect(visitor.page.locator('[data-faz-tag="title"]')).toHaveText(testTitle);
+      await expect(visitor.page.locator('[data-faz-tag="accept-button"]')).toHaveText(testAcceptLabel);
+      await expect(visitor.page.locator('[data-faz-tag="reject-button"]')).toHaveText(testRejectLabel);
+      await expect(visitor.page.locator('[data-faz-tag="settings-button"]')).toHaveText(testSettingsLabel);
     } finally {
       await visitor.ctx.close();
     }
