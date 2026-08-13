@@ -6282,13 +6282,24 @@ function _fazShowOptoutSuccessMessage() {
         ( countdownElement && countdownElement.querySelector( "#fazCountdownTimer" ) ) ||
         document.getElementById( "fazCountdownTimer" );
 
+    // Localized countdown subtext. _fazTranslate falls back to the English
+    // literal only when no translation is available at all, which is the same
+    // behaviour every other visitor-facing string in this file already has.
+    function _fazOptoutCountdownText( seconds ) {
+        var tmpl = _fazTranslate( 'optout_autoclose_countdown', 'Banner closes automatically in %d s...' );
+        return String( tmpl ).replace( /%d|\d+/, String( seconds ) );
+    }
+
     let timeRemaining = _FAZ_OPTOUT_SUCCESS_SECONDS;
     // When the subtext has no countdown <span> (e.g. kses stripped the id),
     // memo its text once so we can swap the digit in place each tick.
     if ( countdownElement && ! countdownTimerEl && ! _fazStore._optoutSuccessSubtextTemplate ) {
+        // The fallback goes through the localized payload: hardcoding English
+        // here put "Banner closes automatically in 15 s..." under an Italian
+        // success message whenever the template's subtext arrived empty.
         _fazStore._optoutSuccessSubtextTemplate =
             countdownElement.textContent ||
-            ( "Banner closes automatically in " + _FAZ_OPTOUT_SUCCESS_SECONDS + " s..." );
+            _fazOptoutCountdownText( _FAZ_OPTOUT_SUCCESS_SECONDS );
     }
     const template = _fazStore._optoutSuccessSubtextTemplate;
     const hasDigit = template && /\d+/.test( template );
@@ -6300,7 +6311,7 @@ function _fazShowOptoutSuccessMessage() {
         }
         countdownElement.textContent = hasDigit
             ? template.replace( /\d+/, String( timeRemaining ) )
-            : ( "Banner closes automatically in " + timeRemaining + " s..." );
+            : _fazOptoutCountdownText( timeRemaining );
     };
     updateSubtext();
 
