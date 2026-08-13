@@ -4633,35 +4633,25 @@ function _fazBuildRestoredIframe(iframe, placeholder) {
 }
 
 function _fazRestoreInlineScript(script, extraRemoveAttributes) {
-    var inlineText = script.textContent || '';
-    var origType = script.getAttribute('data-faz-original-type');
-    var removeAttrs = (extraRemoveAttributes || []).concat([
-        'data-faz-category',
-        'data-faz-service',
-        'data-faz-original-type',
-    ]);
-
+    // CSP-safe restore: build a fresh <script> clone and let the browser execute
+    // it on insertion, instead of eval()-ing the payload in place. Mutating the
+    // type attribute on a <script> that has already been parsed does not cause
+    // re-execution, which is why the original code reached for indirect eval.
     if (script.getAttribute('data-faz-executed') === '1') {
         return;
     }
 
-    script.setAttribute('type', origType || 'text/javascript');
-    removeAttrs.forEach(function (attrName) {
-        script.removeAttribute(attrName);
-    });
-    script.setAttribute('data-faz-executed', '1');
-
-    if (inlineText.trim() && /^\s*\{/.test(inlineText) && /\}\s*$/.test(inlineText)) {
-        try {
-            JSON.parse(inlineText);
-            return;
-        } catch (_e) { /* not JSON, continue */ }
+    var clone = _fazBuildRestoredScript(script, extraRemoveAttributes);
+    if (!clone) {
+        // JSON-shaped payload — validated inside _fazBuildRestoredScript, nothing to execute.
+        script.setAttribute('data-faz-executed', '1');
+        return;
     }
-
-    try {
-        (0, eval)(inlineText);
-    } catch (error) {
-        console.error(error);
+    clone.setAttribute('data-faz-executed', '1');
+    if (script.parentNode) {
+        script.parentNode.replaceChild(clone, script);
+    } else {
+        (document.head || document.documentElement).appendChild(clone);
     }
 }
 
