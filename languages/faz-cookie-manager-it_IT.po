@@ -598,11 +598,11 @@ msgstr "Il test A/B è disattivato quando la Modalità compatibilità cache è a
 
 #: admin/class-admin.php:660
 msgid "Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on."
-msgstr ""
+msgstr "La Modalità Compatibilità Cache serve un unico banner a tutti i visitatori, quindi le regole di geo-targeting non vengono applicate mentre è attiva."
 
 #: admin/class-admin.php:661
 msgid "Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country."
-msgstr ""
+msgstr "La Modalità Compatibilità Cache applica a tutti i visitatori l'impostazione IAB TCF predefinita e conservativa (si applica il GDPR) invece di decidere in base al Paese."
 
 #: admin/class-admin.php:665
 msgid "Failed to load GCM settings."
@@ -1653,7 +1653,7 @@ msgstr "Ignora"
 
 #: admin/class-admin.php:1821
 msgid "Set it to Automatic or No there if you would rather the visitor's choice decided whether that feed loads."
-msgstr ""
+msgstr "Impostalo su Automatico o No lì, se preferisci che sia la scelta del visitatore a decidere se quel feed viene caricato."
 
 #: admin/class-admin.php:1861
 msgid "Payment plugin detected"
@@ -2178,7 +2178,7 @@ msgid ""
 "**Last updated:** {{LAST_UPDATED_DATE}}\n"
 "\n"
 "This Notice at Collection and Cookie Policy explains how **{{COMPANY_NAME}}** (\"we\", \"us\", \"our\") collects, uses, and shares Personal Information through this website, in compliance with the California Consumer Privacy Act of 2018 as amended by the California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 et seq.) and the implementing regulations issued by the California Privacy Protection Agency (CPPA)."
-msgstr ""
+msgstr "# Informativa al momento della raccolta e Cookie Policy\n\n**Ultimo aggiornamento:** {{LAST_UPDATED_DATE}}\n\nLa presente Informativa al momento della raccolta e Cookie Policy spiega come **{{COMPANY_NAME}}** (\"noi\") raccoglie, utilizza e condivide le Informazioni Personali attraverso questo sito web, in conformità al California Consumer Privacy Act del 2018 come modificato dal California Privacy Rights Act (CCPA/CPRA, Cal. Civ. Code §§ 1798.100 e segg.) e ai regolamenti attuativi emanati dalla California Privacy Protection Agency (CPPA)."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:126
 msgctxt "Cookie policy template: ccpa-california / section-1"
@@ -2189,7 +2189,7 @@ msgid ""
 "- **Address:** {{COMPANY_ADDRESS}}\n"
 "- **Privacy contact email:** {{COMPANY_EMAIL}}\n"
 "- **Registration:** {{COMPANY_REGISTRY}}"
-msgstr ""
+msgstr "## Contatti dell'azienda\n\n- **Ragione sociale:** {{COMPANY_NAME}}\n- **Indirizzo:** {{COMPANY_ADDRESS}}\n- **Email di contatto privacy:** {{COMPANY_EMAIL}}\n- **Registrazione:** {{COMPANY_REGISTRY}}"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:136
 msgctxt "Cookie policy template: ccpa-california / section-2"
@@ -2206,7 +2206,7 @@ msgid ""
 "We do **not** knowingly collect:\n"
 "- Sensitive Personal Information (Cal. Civ. Code § 1798.140(ae)) without your explicit opt-in\n"
 "- Personal Information of consumers under 16 without affirmative opt-in (children under 13 require parental consent)"
-msgstr ""
+msgstr "## Categorie di Informazioni Personali raccolte\n\nRaccogliamo le seguenti categorie di Informazioni Personali come definite dal CCPA § 1798.140(v):\n\n- **Identificativi** — indirizzo IP (con hash), identificativi del dispositivo, identificativi online (cookie, beacon)\n- **Informazioni sull'attività su Internet o su altre reti elettroniche** — cronologia di navigazione, cronologia delle ricerche, interazioni con il nostro sito web\n- **Dati di geolocalizzazione** — posizione approssimativa ricavata dall'IP (solo Paese/regione; non GPS preciso)\n- **Inferenze** — preferenze e caratteristiche dedotte dalle tue interazioni, utilizzate per le analisi del sito\n\n**Non** raccogliamo consapevolmente:\n- Informazioni Personali Sensibili (Cal. Civ. Code § 1798.140(ae)) senza il tuo consenso esplicito\n- Informazioni Personali di consumatori di età inferiore a 16 anni senza consenso affermativo (per i minori di 13 anni è necessario il consenso dei genitori)"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:152
 msgctxt "Cookie policy template: ccpa-california / section-3"
@@ -2216,7 +2216,7 @@ msgid ""
 "- Directly from you when you interact with the site (forms, banner choices, account creation)\n"
 "- Automatically via cookies and tracking technologies\n"
 "- From third-party services where you have authorized data sharing"
-msgstr ""
+msgstr "## Fonti delle Informazioni Personali\n\n- Direttamente da te quando interagisci con il sito (moduli, scelte sul banner, creazione di un account)\n- Automaticamente tramite cookie e tecnologie di tracciamento\n- Da servizi di terze parti per i quali hai autorizzato la condivisione dei dati"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:161
 msgctxt "Cookie policy template: ccpa-california / section-4"
@@ -2229,7 +2229,7 @@ msgid ""
 "- Maintain and improve quality and safety of our service\n"
 "- Conduct analytics with your consent\n"
 "- Personalize advertising **only with your opt-in consent**"
-msgstr ""
+msgstr "## Finalità della raccolta delle Informazioni Personali\n\n- Far funzionare e mettere in sicurezza il sito web (finalità aziendale necessaria, § 1798.140(e))\n- Verificare le interazioni con il sito web\n- Uso transitorio e di breve durata delle Informazioni Personali\n- Mantenere e migliorare la qualità e la sicurezza del nostro servizio\n- Svolgere analisi con il tuo consenso\n- Personalizzare la pubblicità **solo con il tuo consenso esplicito**"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:173
 msgctxt "Cookie policy template: ccpa-california / section-5"
@@ -2237,7 +2237,7 @@ msgid ""
 "## Cookies used\n"
 "\n"
 "{{COOKIE_CATEGORIES}}"
-msgstr ""
+msgstr "## Cookie utilizzati\n\n{{COOKIE_CATEGORIES}}"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:180
 msgctxt "Cookie policy template: ccpa-california / section-6"
@@ -2249,7 +2249,7 @@ msgid ""
 "{{THIRD_PARTY_SERVICES}}\n"
 "\n"
 "We **do not sell or share Personal Information** for cross-context behavioral advertising unless you have opted in. To opt out at any time, click the \"Do Not Sell or Share My Personal Information\" link in the website footer."
-msgstr ""
+msgstr "## Destinatari terzi\n\nSe non hai esercitato l'opt-out, condividiamo le Informazioni Personali con i seguenti fornitori di servizi e appaltatori (CCPA § 1798.140(j) e (ag)):\n\n{{THIRD_PARTY_SERVICES}}\n\n**Non vendiamo né condividiamo Informazioni Personali** per pubblicità comportamentale cross-contestuale, salvo tuo consenso esplicito. Per esercitare l'opt-out in qualsiasi momento, usa il link \"Non vendere o condividere le mie informazioni personali\" nel piè di pagina del sito."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:191
 msgctxt "Cookie policy template: ccpa-california / section-7"
@@ -2257,7 +2257,7 @@ msgid ""
 "## Retention\n"
 "\n"
 "Personal Information is retained for {{RETENTION_PERIOD}} from collection, unless a longer period is required by law or for legitimate business purposes (CCPA § 1798.100(a)(3))."
-msgstr ""
+msgstr "## Conservazione\n\nLe Informazioni Personali sono conservate per {{RETENTION_PERIOD}} dalla raccolta, salvo che un periodo più lungo sia richiesto dalla legge o da legittime finalità aziendali (CCPA § 1798.100(a)(3))."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:198
 msgctxt "Cookie policy template: ccpa-california / section-8"
@@ -2277,7 +2277,7 @@ msgid ""
 "To submit a request, email **{{COMPANY_EMAIL}}** or use the \"Do Not Sell or Share\" and \"Manage Preferences\" links in the website footer. We will verify your identity (CCPA § 1798.130(a)(2)) and respond within **45 days** (extendable to 90 with notice, § 1798.130(a)(2)(B)).\n"
 "\n"
 "You may also designate an authorized agent to submit a request on your behalf (Cal. Civ. Code § 1798.135(c))."
-msgstr ""
+msgstr "## I tuoi diritti ai sensi del CCPA/CPRA\n\nIn quanto residente in California, hai il diritto di:\n\n- **Diritto di conoscere** (§ 1798.100, .110, .115) — richiedere quali Informazioni Personali raccogliamo, utilizziamo, divulghiamo o vendiamo\n- **Diritto alla cancellazione** (§ 1798.105) — richiedere la cancellazione delle tue Informazioni Personali\n- **Diritto di rettifica** (§ 1798.106) — richiedere la correzione di Informazioni Personali inesatte\n- **Diritto di opporsi alla vendita o condivisione** (§ 1798.120) — chiederci di non vendere né condividere le tue Informazioni Personali\n- **Diritto di limitare l'uso delle Informazioni Personali Sensibili** (§ 1798.121) — limitare il nostro uso delle Informazioni Personali Sensibili alle finalità dichiarate\n- **Diritto alla non discriminazione** (§ 1798.125) — non ti tratteremo in modo discriminatorio per aver esercitato uno di questi diritti\n- **Diritto alla portabilità dei dati** (§ 1798.130(a)(2)) — ricevere le Informazioni Personali in un formato prontamente utilizzabile\n\nPer inviare una richiesta, scrivi a **{{COMPANY_EMAIL}}** oppure usa i link \"Non vendere o condividere\" e \"Gestisci preferenze\" nel piè di pagina del sito. Verificheremo la tua identità (CCPA § 1798.130(a)(2)) e risponderemo entro **45 giorni** (prorogabili a 90 con preavviso, § 1798.130(a)(2)(B)).\n\nPuoi inoltre designare un agente autorizzato a presentare una richiesta per tuo conto (Cal. Civ. Code § 1798.135(c))."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:217
 msgctxt "Cookie policy template: ccpa-california / section-9"
@@ -2285,7 +2285,7 @@ msgid ""
 "## Global Privacy Control (GPC)\n"
 "\n"
 "We honor the [Global Privacy Control](https://globalprivacycontrol.org/) signal as a valid opt-out of sale/sharing per California AG enforcement guidance."
-msgstr ""
+msgstr "## Global Privacy Control (GPC)\n\nRispettiamo il segnale [Global Privacy Control](https://globalprivacycontrol.org/) come valido opt-out dalla vendita/condivisione, secondo le indicazioni applicative del Procuratore Generale della California."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:224
 msgctxt "Cookie policy template: ccpa-california / section-10"
@@ -2293,7 +2293,7 @@ msgid ""
 "## Supervisory authority\n"
 "\n"
 "Complaints may be filed with the California Privacy Protection Agency: {{CA_PIPC_CONTACT}}, or at [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})."
-msgstr ""
+msgstr "## Autorità di controllo\n\nI reclami possono essere presentati alla California Privacy Protection Agency: {{CA_PIPC_CONTACT}}, oppure su [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:231
 msgctxt "Cookie policy template: ccpa-california / section-11"
@@ -2301,7 +2301,7 @@ msgid ""
 "## Changes\n"
 "\n"
 "We may update this Notice. Material changes will be announced 30 days in advance via a banner on the homepage. The \"Last updated\" date above is authoritative."
-msgstr ""
+msgstr "## Modifiche\n\nPotremmo aggiornare la presente Informativa. Le modifiche sostanziali saranno annunciate con 30 giorni di anticipo tramite un banner in home page. Fa fede la data di \"Ultimo aggiornamento\" riportata sopra."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:238
 msgctxt "Cookie policy template: ccpa-california / section-12"
@@ -2309,7 +2309,7 @@ msgid ""
 "## Contact\n"
 "\n"
 "Email **{{COMPANY_EMAIL}}** with any privacy question."
-msgstr ""
+msgstr "## Contatti\n\nPer qualsiasi domanda sulla privacy scrivi a **{{COMPANY_EMAIL}}**."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:247
 msgctxt "Cookie policy template: lgpd-brazil / introduction"
@@ -2319,7 +2319,7 @@ msgid ""
 "**Last updated:** {{LAST_UPDATED_DATE}}\n"
 "\n"
 "This Cookie Policy describes how **{{COMPANY_NAME}}** (\"we\") uses cookies and similar technologies on this website, in compliance with the Brazilian General Data Protection Law (Lei Geral de Proteção de Dados Pessoais — LGPD, Lei nº 13.709/2018) and the Marco Civil da Internet (Lei nº 12.965/2014)."
-msgstr ""
+msgstr "# Cookie Policy (LGPD — Brasile)\n\n**Ultimo aggiornamento:** {{LAST_UPDATED_DATE}}\n\nLa presente Cookie Policy descrive come **{{COMPANY_NAME}}** (\"noi\") utilizza cookie e tecnologie simili su questo sito web, in conformità alla legge generale brasiliana sulla protezione dei dati (Lei Geral de Proteção de Dados Pessoais — LGPD, Lei nº 13.709/2018) e al Marco Civil da Internet (Lei nº 12.965/2014)."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:256
 msgctxt "Cookie policy template: lgpd-brazil / section-1"
@@ -2331,7 +2331,7 @@ msgid ""
 "- **Privacy contact:** {{COMPANY_EMAIL}}\n"
 "- **CNPJ:** {{COMPANY_REGISTRY}}\n"
 "- **Encarregado de Dados (DPO) — mandatory under Art. 41 LGPD:** {{DPO_NAME}} — {{DPO_EMAIL}}"
-msgstr ""
+msgstr "## Titolare del trattamento\n\n- **Titolare del trattamento:** {{COMPANY_NAME}}\n- **Indirizzo:** {{COMPANY_ADDRESS}}\n- **Contatto privacy:** {{COMPANY_EMAIL}}\n- **CNPJ:** {{COMPANY_REGISTRY}}\n- **Encarregado de Dados (DPO) — obbligatorio ai sensi dell'Art. 41 LGPD:** {{DPO_NAME}} — {{DPO_EMAIL}}"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:267
 msgctxt "Cookie policy template: lgpd-brazil / section-2"
@@ -2343,7 +2343,7 @@ msgid ""
 "For **all other** categories: **explicit consent** of the data subject (Art. 7, I), collected via the cookie banner before any non-essential cookie is set.\n"
 "\n"
 "You may withdraw consent at any time (Art. 8, § 5) via the \"Cookie settings\" link."
-msgstr ""
+msgstr "## Basi giuridiche (Art. 7 LGPD)\n\nPer i cookie **strettamente necessari**: legittimo interesse (Art. 7, IX) e obbligo contrattuale/tecnico (Art. 7, V).\n\nPer **tutte le altre** categorie: **consenso esplicito** dell'interessato (Art. 7, I), raccolto tramite il banner dei cookie prima che venga impostato qualsiasi cookie non essenziale.\n\nPuoi revocare il consenso in qualsiasi momento (Art. 8, § 5) tramite il link \"Impostazioni cookie\"."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:278
 msgctxt "Cookie policy template: lgpd-brazil / section-3"
@@ -2356,7 +2356,7 @@ msgid ""
 "- **Preferences** — consent categories, language\n"
 "\n"
 "We do **not** process sensitive personal data (Art. 5, II) via cookies without specific and highlighted consent (Art. 11 LGPD)."
-msgstr ""
+msgstr "## Categorie di dati personali trattati (Art. 5, I)\n\n- **Identificativi online** — IP (con hash e salt mensile), ID del dispositivo, ID di sessione\n- **Dati di navigazione** — pagine visitate, tempo di permanenza, interazioni\n- **Posizione approssimativa** — Paese/regione dall'IP (non GPS preciso)\n- **Preferenze** — categorie di consenso, lingua\n\n**Non** trattiamo dati personali sensibili (Art. 5, II) tramite cookie senza consenso specifico ed evidenziato (Art. 11 LGPD)."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:290
 msgctxt "Cookie policy template: lgpd-brazil / section-4"
@@ -2364,7 +2364,7 @@ msgid ""
 "## Cookies used\n"
 "\n"
 "{{COOKIE_CATEGORIES}}"
-msgstr ""
+msgstr "## Cookie utilizzati\n\n{{COOKIE_CATEGORIES}}"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:297
 msgctxt "Cookie policy template: lgpd-brazil / section-5"
@@ -2374,7 +2374,7 @@ msgid ""
 "{{THIRD_PARTY_SERVICES}}\n"
 "\n"
 "International transfers (Art. 33-36 LGPD) are subject to adequate-protection countries / standard contractual clauses / specific consent."
-msgstr ""
+msgstr "## Destinatari terzi\n\n{{THIRD_PARTY_SERVICES}}\n\nI trasferimenti internazionali (Art. 33-36 LGPD) sono soggetti a Paesi con protezione adeguata / clausole contrattuali standard / consenso specifico."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:306
 msgctxt "Cookie policy template: lgpd-brazil / section-6"
@@ -2382,7 +2382,7 @@ msgid ""
 "## Retention (Art. 15-16 LGPD)\n"
 "\n"
 "{{RETENTION_PERIOD}} from collection."
-msgstr ""
+msgstr "## Conservazione (Art. 15-16 LGPD)\n\n{{RETENTION_PERIOD}} dalla raccolta."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:313
 msgctxt "Cookie policy template: lgpd-brazil / section-7"
@@ -2392,7 +2392,7 @@ msgid ""
 "I — confirmation, II — access, III — correction, IV — anonymization/blocking/deletion, V — portability, VI — deletion, VII — info on sharing, VIII — info on non-consent consequences, IX — withdraw consent.\n"
 "\n"
 "Exercise these rights by contacting the controller at **{{COMPANY_EMAIL}}** or the DPO (Encarregado) named at the top of this policy."
-msgstr ""
+msgstr "## Diritti dell'interessato (Art. 18 LGPD)\n\nI — conferma, II — accesso, III — rettifica, IV — anonimizzazione/blocco/cancellazione, V — portabilità, VI — cancellazione, VII — informazioni sulla condivisione, VIII — informazioni sulle conseguenze del diniego di consenso, IX — revoca del consenso.\n\nEsercita questi diritti contattando il titolare all'indirizzo **{{COMPANY_EMAIL}}** oppure il DPO (Encarregado) indicato in cima alla presente policy."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:322
 msgctxt "Cookie policy template: lgpd-brazil / section-8"
@@ -2400,7 +2400,7 @@ msgid ""
 "## Supervisory authority\n"
 "\n"
 "ANPD — Autoridade Nacional de Proteção de Dados: {{ANPD_CONTACT}}, [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})"
-msgstr ""
+msgstr "## Autorità di controllo\n\nANPD — Autoridade Nacional de Proteção de Dados: {{ANPD_CONTACT}}, [{{OFFICIAL_RESOURCES_URL}}]({{OFFICIAL_RESOURCES_URL}})"
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:329
 msgctxt "Cookie policy template: lgpd-brazil / section-9"
@@ -2408,7 +2408,7 @@ msgid ""
 "## Contact\n"
 "\n"
 "**{{COMPANY_EMAIL}}** (or the DPO named at the top of this policy)."
-msgstr ""
+msgstr "## Contatti\n\n**{{COMPANY_EMAIL}}** (oppure il DPO — Encarregado — indicato in cima alla presente policy)."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:338
 msgctxt "Cookie policy template: popia-southafrica / introduction"
@@ -2464,7 +2464,6 @@ msgstr ""
 "Utilizziamo anche tecnologie simili come **localStorage**, **sessionStorage** e **pixel tag**. Dove questa policy parla di \"cookie\", include anche queste tecnologie."
 
 #: admin/modules/cookie-policy-generator/includes/cookie-policy-gettext-catalog.php:369
-#, fuzzy
 msgctxt "Cookie policy template: popia-southafrica / section-3"
 msgid ""
 "## Lawful basis for processing\n"
@@ -2481,7 +2480,7 @@ msgstr ""
 "\n"
 "Per i cookie **strettamente necessari**, il trattamento è giustificato dal perseguimento del nostro legittimo interesse a gestire un sito web sicuro e funzionante (POPIA, sezione 11(1)(f)) e non prevale sui tuoi interessi o diritti.\n"
 "\n"
-"Per **tutte le altre** categorie di cookie, il trattamento si basa sul tuo **consenso** ai sensi della sezione 11(1)(a) POPIA — una manifestazione di volontà libera, specifica e informata — raccolto tramite il cookie banner prima che venga impostato qualsiasi cookie non essenziale.\n"
+"Per le **categorie non essenziali configurate dietro il nostro cookie banner**, il trattamento si basa sul tuo **consenso** ai sensi della sezione 11(1)(a) POPIA — una manifestazione di volontà libera, specifica e informata — raccolto prima che tali cookie vengano impostati. La sezione 11(1)(b)-(f) POPIA consente altre basi di liceità; la presente policy utilizza il consenso per queste categorie configurate e deve essere adattata se il nostro trattamento effettivo si fonda su una base diversa.\n"
 "\n"
 "Le informazioni personali raccolte tramite queste tecnologie possono includere identificatori online, informazioni sul dispositivo e sul browser, eventi di utilizzo, posizione approssimativa e le preferenze descritte nella tabella dei cookie e nella nostra Privacy Policy separata. Il conferimento tramite tecnologie non essenziali è volontario; in caso di rifiuto, le relative funzioni di analisi, personalizzazione o pubblicità non saranno operative. Il trattamento necessario a fornire e proteggere il sito è indispensabile per tali funzioni tecniche e il suo blocco può impedire il funzionamento di alcune parti del sito.\n"
 "\n"
@@ -3005,16 +3004,16 @@ msgstr "I gateway di pagamento devono essere inviati come elenco oppure come map
 
 #: admin/modules/settings/includes/class-onboarding.php:719
 msgid "Unknown payment gateway in the submitted list."
-msgstr ""
+msgstr "Gateway di pagamento sconosciuto nell'elenco inviato."
 
 #: admin/modules/settings/includes/class-onboarding.php:728
 msgid "Unknown payment gateway key."
-msgstr ""
+msgstr "Chiave gateway di pagamento sconosciuta."
 
 #: admin/modules/settings/includes/class-onboarding.php:737
 #: admin/modules/settings/includes/class-onboarding.php:748
 msgid "Payment gateway values must be true or false."
-msgstr ""
+msgstr "I valori dei gateway di pagamento devono essere true o false."
 
 #: admin/views/banner.php:22
 msgid "Banners:"

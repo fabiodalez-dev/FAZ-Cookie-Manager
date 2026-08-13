@@ -132,6 +132,13 @@ if ( 0 !== $has_msgfmt ) {
 	exit( ( $unattended || $failed > 0 ) ? 1 : 0 );
 }
 
+// msgcmp ships in the same gettext package as msgfmt, so reaching here without
+// it means a partial install rather than a missing dependency. Asserted instead
+// of branched on: the alternative is a second silent-skip path, and the check it
+// guards is the one that was missing when this went wrong.
+exec( 'command -v msgcmp', $which_cmp, $has_msgcmp );
+cat_eq( 0, $has_msgcmp, 'msgcmp is available to compare catalogues against the POT' );
+
 $tmp = sys_get_temp_dir() . '/faz-catalogue-check-' . getmypid() . '.mo';
 
 // `wp i18n make-pot` derives the support-forum slug in Report-Msgid-Bugs-To
@@ -158,7 +165,18 @@ cat_eq( '' !== $domain, true, 'the plugin declares a Text Domain to check catalo
 // touched, which are the ones worth checking. And a skip here is never silent:
 // a guard that quietly declines to run reads as a pass.
 $pots = glob( $languages . '/*.pot' );
-foreach ( array_merge( $pos, is_array( $pots ) ? $pots : array() ) as $catalogue ) {
+$pots = is_array( $pots ) ? $pots : array();
+
+// The plugin's own POT, named from the Text Domain rather than picked as
+// "whatever .pot is first in the directory" — the same reason the slug check
+// above reads the header instead of the folder name.
+$pot_path = '';
+if ( '' !== $domain && file_exists( $languages . '/' . $domain . '.pot' ) ) {
+	$pot_path = $languages . '/' . $domain . '.pot';
+}
+cat_eq( '' !== $pot_path, true, 'the POT the catalogues are compared against is present' );
+
+foreach ( array_merge( $pos, $pots ) as $catalogue ) {
 	$name  = basename( $catalogue );
 	$lines = explode( "\n", (string) @file_get_contents( $catalogue ) );
 	$joined = '';
@@ -195,14 +213,51 @@ foreach ( $pos as $po ) {
 	exec( 'msgfmt --check-format --check-header --check-domain -o /dev/null ' . escapeshellarg( $po ) . ' 2>&1', $out, $code );
 	cat_eq( $code, 0, "{$name} — msgfmt --check-* accepts the catalogue" . ( 0 === $code ? '' : ': ' . implode( ' | ', $out ) ) );
 
-	// 2. A .po with no .mo never reaches a visitor.
+	// 2. The catalogue must carry every string the POT does.
+	//
+	// This is the check that was missing, and the gap it left was invisible from
+	// every other angle: the POT was current, each .mo was a faithful compile of
+	// its .po, and this suite passed — while all six catalogues sat four msgids
+	// behind the POT. `wp i18n make-pot` had been re-run and `msgmerge` had not,
+	// so five user-facing failure messages existed only in English and no
+	// translator could reach them in any language. Comparing .mo to .po can never
+	// see that: both sides were consistent with each other and both were stale.
+	//
+	// --use-untranslated is the point of the comparison: this asserts that the
+	// ENTRY EXISTS, not that someone has translated it. Five locales are
+	// deliberately left for human translators, and demanding completeness here
+	// would turn that policy into a permanently red suite.
+	if ( 0 === $has_msgcmp && '' !== $pot_path ) {
+		$out  = array();
+		$code = 0;
+		exec(
+			'msgcmp --use-fuzzy --use-untranslated ' . escapeshellarg( $po ) . ' ' . escapeshellarg( $pot_path ) . ' 2>&1',
+			$out,
+			$code
+		);
+		$in_po  = preg_match_all( '/^msgid /m', (string) @file_get_contents( $po ) );
+		$in_pot = preg_match_all( '/^msgid /m', (string) @file_get_contents( $pot_path ) );
+		cat_eq(
+			$code,
+			0,
+			"{$name} — carries every msgid in the POT"
+				. ( 0 === $code ? '' : " ({$in_po} entries vs {$in_pot} in the POT; run: msgmerge --update --no-fuzzy-matching {$name} " . basename( $pot_path ) . ')' )
+		);
+		if ( 0 !== $code ) {
+			foreach ( array_slice( $out, 0, 3 ) as $line ) {
+				echo '        ' . $line . "\n";
+			}
+		}
+	}
+
+	// 3. A .po with no .mo never reaches a visitor.
 	if ( ! file_exists( $mo ) ) {
 		cat_eq( false, true, "{$name} — a compiled .mo exists beside the .po" );
 		continue;
 	}
 	cat_eq( true, true, "{$name} — a compiled .mo exists beside the .po" );
 
-	// 3. The shipped binary must carry what the committed source says.
+	// 4. The shipped binary must carry what the committed source says.
 	$out  = array();
 	$code = 0;
 	exec( 'msgfmt -o ' . escapeshellarg( $tmp ) . ' ' . escapeshellarg( $po ) . ' 2>&1', $out, $code );
