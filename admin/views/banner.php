@@ -468,17 +468,25 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		</div>
 
-		<div class="faz-card" id="faz-catprev-colors-card" style="display:none;">
-			<div class="faz-card-header"><h3><?php esc_html_e( 'Category Preview Colours', 'faz-cookie-manager' ); ?></h3></div>
+		<?php
+		/*
+		 * The consent toggles get their own card, and it is ALWAYS visible.
+		 *
+		 * These two colours feed --faz-toggle-active/inactive-background-color
+		 * (class-template.php), which style `.faz-modal .faz-switch` — the
+		 * preference-centre toggles, present for EVERY banner type. They used to
+		 * live inside the Category Preview card, which JavaScript reveals only
+		 * for the Classic type, so an admin running a Box or Full-width banner
+		 * had modal toggles they could see but not colour.
+		 *
+		 * The Category Preview card below keeps only what genuinely applies to
+		 * the Classic inline preview.
+		 */
+		?>
+		<div class="faz-card" id="faz-toggle-colors-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Consent Toggle Colours', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
 				<div class="faz-grid faz-grid-3">
-					<div class="faz-form-group">
-						<label><?php esc_html_e( 'Label Text', 'faz-cookie-manager' ); ?></label>
-						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-catprev-label">
-							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-label-hex" style="width:90px;">
-						</div>
-					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Toggle — Active', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
@@ -491,6 +499,22 @@ defined( 'ABSPATH' ) || exit;
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-catprev-toggle-inactive">
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-toggle-inactive-hex" style="width:90px;">
+						</div>
+					</div>
+				</div>
+				<div class="faz-help"><?php esc_html_e( 'Applies to the category switches in the preference centre, and to the inline category toggles when the Classic banner type shows them.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+
+		<div class="faz-card" id="faz-catprev-colors-card" style="display:none;">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Category Preview Colours', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label><?php esc_html_e( 'Label Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-label">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-label-hex" style="width:90px;">
 						</div>
 					</div>
 					<div class="faz-form-group">
