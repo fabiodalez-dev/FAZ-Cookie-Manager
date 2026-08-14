@@ -73,6 +73,23 @@ namespace {
 			return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
 		}
 	}
+	// get_faz_settings() memoizes the raw option; that memoization arrived after
+	// this suite was written, so the harness has to supply the option it reads.
+	// The gateway map is what the assertions below turn on: which gateways the
+	// site has opted into loading before consent.
+	if ( ! function_exists( 'get_option' ) ) {
+		function get_option( $name, $default = false ) {
+			if ( 'faz_settings' === $name ) {
+				return array(
+					'script_blocking' => array(
+						'payment_gateways' => $GLOBALS['faz_test_gateways'] ?? array(),
+					),
+				);
+			}
+			return $default;
+		}
+	}
+
 	if ( ! function_exists( 'apply_filters' ) ) {
 		function apply_filters( $tag, $value ) {
 			return $value;
@@ -90,6 +107,10 @@ namespace {
 	$GLOBALS['wpdb'] = new FazTest_WPDB();
 
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
+	// The gateway map is read through faz_sanitize_bool_strict(), so the real
+	// helper is loaded rather than stubbed: a stub here would let the string
+	// 'false' pass as true, which is exactly the defect that helper exists for.
+	require_once dirname( __DIR__, 2 ) . '/includes/class-formatting.php';
 
 	use FazCookie\Frontend\Frontend;
 
@@ -130,6 +151,18 @@ namespace {
 	// short patterns must NOT silently exempt themselves.
 	// ---------------------------------------------------------------------
 	echo "is_always_allowed_gateway_pattern()\n";
+	$gw = function ( $pattern ) use ( $fe ) {
+		return faz_call( $fe, 'is_always_allowed_gateway_pattern', array( $pattern ) );
+	};
+
+	// Stripe has to be OPTED IN before any of its patterns are exempt. Since
+	// 1.24.0 the gateway exemption is per gateway and defaults to OFF: loading a
+	// payment SDK before consent is an explicit admin decision, not automatic.
+	// This suite predates that change and assumed Stripe was always exempt, so
+	// the opt-in is what it was missing — the boundary rules it checks below are
+	// unchanged and still worth pinning.
+	$GLOBALS['faz_test_gateways'] = array( 'stripe' => true );
+	$fe = faz_new_frontend();
 	$gw = function ( $pattern ) use ( $fe ) {
 		return faz_call( $fe, 'is_always_allowed_gateway_pattern', array( $pattern ) );
 	};
