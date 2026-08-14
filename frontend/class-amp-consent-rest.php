@@ -411,18 +411,38 @@ class AMP_Consent_Rest {
 			return new \WP_Error( 'faz_amp_inactive_banner', __( 'The AMP consent banner is no longer active.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 		}
 
-		$law      = 'ccpa' === $banner->get_law() ? 'ccpa' : 'gdpr';
-		$settings = $banner->get_settings();
+		// The RAW law, not a gdpr/ccpa fold. class-frontend.php hashes
+		// $banner->get_law() verbatim into _scopeFingerprint, and the banner UI
+		// offers a third value ("gdpr_ccpa"), with the setup wizard writing
+		// "both" and "popia" as well. Folding here produced a different
+		// fingerprint for every one of those, so an AMP-written cookie read as
+		// scope-tampered to the classic JS and a classic cookie was never
+		// recognised by state_from_cookie() — the two surfaces silently stopped
+		// reconciling on a mainstream GDPR+CCPA configuration.
+		// Taken verbatim, not sanitize_key()'d: class-frontend.php feeds the raw
+		// return value into both _activeLaw and the fingerprint hash, and the
+		// classic JS writes that same raw string into __scope.law. Normalising
+		// on only one side is how the two formulas drift apart again.
+		$law = (string) $banner->get_law();
+		if ( '' === $law ) {
+			$law = 'gdpr';
+		}
+		// The expiry rule itself is only CCPA-vs-rest, so that one keeps the
+		// fold — a "gdpr_ccpa" banner is a GDPR-family banner for lifetime
+		// purposes and must not inherit the 365-day CCPA floor.
+		$expiry_law        = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
+		$settings          = $banner->get_settings();
 		$configured_expiry = isset( $settings['settings']['consentExpiry']['value'] )
 			? absint( $settings['settings']['consentExpiry']['value'] )
-			: ( 'ccpa' === $law ? 365 : 180 );
-		$expiry_days = Frontend::normalize_consent_expiry( $law, $configured_expiry );
+			: ( 'ccpa' === $expiry_law ? 365 : 182 );
+		$expiry_days = Frontend::normalize_consent_expiry( $expiry_law, $configured_expiry );
 		$revision    = function_exists( 'faz_get_consent_revision' ) ? faz_get_consent_revision() : 1;
 
 		return array(
 			'banner'            => $banner,
 			'slug'              => $slug,
 			'law'               => $law,
+			'expiry_law'        => $expiry_law,
 			'instance'          => self::instance_id( $slug ),
 			'purposes'          => self::get_purposes(),
 			'expiry_days'       => $expiry_days,
@@ -614,11 +634,78 @@ class AMP_Consent_Rest {
 	}
 
 	/**
+	 * Keys build_cookie_value() owns outright.
+	 *
+	 * A category slug is admin-editable, so one could legitimately be named
+	 * "action" or "consent". Writing purposes into the same flat namespace
+	 * without this guard let such a slug overwrite the control field that
+	 * state_from_cookie() hard-gates on, which would make every later AMP read
+	 * behave as if no decision had ever been recorded.
+	 *
+	 * @var string[]
+	 */
+	private static $reserved_cookie_keys = array(
+		'consentid',
+		'consent',
+		'action',
+		'necessary',
+		'rev',
+		'__scope.banner',
+		'__scope.law',
+		'__scope.fp',
+		'source',
+		'ts',
+		'exp',
+	);
+
+	/**
+	 * Parse the flat "key:value,key:value" consent cookie into a map.
+	 *
+	 * @param string $cookie Raw cookie value.
+	 * @return array<string,string>
+	 */
+	private static function parse_cookie_pairs( $cookie ) {
+		$pairs = array();
+		foreach ( explode( ',', (string) $cookie ) as $chunk ) {
+			if ( '' === $chunk || false === strpos( $chunk, ':' ) ) {
+				continue;
+			}
+			list( $key, $value ) = explode( ':', $chunk, 2 );
+			$key                 = trim( $key );
+			if ( '' === $key ) {
+				continue;
+			}
+			$pairs[ $key ] = trim( $value );
+		}
+		return $pairs;
+	}
+
+	/**
 	 * Build the standard FAZ cookie from an AMP decision.
 	 *
+	 * The previous implementation built a fresh array and imploded it, so an AMP
+	 * decision DESTROYED every key it does not know about. Two of those matter a
+	 * great deal: `svc.*` holds per-service grants, and `gpc` records that the
+	 * visitor sent a Global Privacy Control opt-out. Turning a recorded GPC
+	 * opt-out into an AMP "accepted" cookie is the worst outcome this plugin can
+	 * produce, so the existing cookie is now read and its unowned keys carried
+	 * forward.
+	 *
+	 * @param string $state           accepted|rejected.
+	 * @param array  $purposes        Purpose slug => bool.
+	 * @param array  $context         Resolved banner context.
+	 * @param string $consent_id      Consent identifier.
+	 * @param int    $expires         Absolute expiry timestamp.
+	 * @param string $existing_cookie Current cookie value; read from $_COOKIE when null.
 	 * @return string
 	 */
-	public static function build_cookie_value( $state, $purposes, $context, $consent_id, $expires ) {
+	public static function build_cookie_value( $state, $purposes, $context, $consent_id, $expires, $existing_cookie = null ) {
+		if ( null === $existing_cookie ) {
+			$existing_cookie = isset( $_COOKIE['fazcookie-consent'] )
+				? sanitize_text_field( wp_unslash( $_COOKIE['fazcookie-consent'] ) )
+				: '';
+		}
+
 		$pairs = array(
 			'consentid'     => sanitize_text_field( (string) $consent_id ),
 			'consent'       => 'accepted' === $state ? 'yes' : 'no',
@@ -626,15 +713,35 @@ class AMP_Consent_Rest {
 			'necessary'     => 'yes',
 			'rev'           => (string) absint( $context['revision'] ),
 			'__scope.banner' => sanitize_title( $context['slug'] ),
-			'__scope.law'    => 'ccpa' === $context['law'] ? 'ccpa' : 'gdpr',
+			'__scope.law'    => (string) $context['law'],
 			'__scope.fp'     => sanitize_text_field( $context['scope_fingerprint'] ),
 			'source'        => 'amp',
 			'ts'            => (string) time(),
 			'exp'           => (string) absint( $expires ),
 		);
+
+		$purpose_keys = array();
 		foreach ( (array) $purposes as $purpose => $allowed ) {
-			$pairs[ sanitize_key( $purpose ) ] = $allowed ? 'yes' : 'no';
+			$key = sanitize_key( $purpose );
+			if ( '' === $key || in_array( $key, self::$reserved_cookie_keys, true ) ) {
+				// A category whose slug collides with a control field is dropped
+				// rather than allowed to corrupt the decision it would overwrite.
+				continue;
+			}
+			$pairs[ $key ]        = $allowed ? 'yes' : 'no';
+			$purpose_keys[ $key ] = true;
 		}
+
+		// Carry forward everything this bridge does not own — notably `gpc` and
+		// every `svc.*` per-service grant. A key the AMP decision explicitly
+		// wrote wins; anything else survives untouched.
+		foreach ( self::parse_cookie_pairs( $existing_cookie ) as $key => $value ) {
+			if ( isset( $pairs[ $key ] ) || isset( $purpose_keys[ $key ] ) ) {
+				continue;
+			}
+			$pairs[ $key ] = $value;
+		}
+
 		$out = array();
 		foreach ( $pairs as $key => $value ) {
 			$out[] = $key . ':' . $value;

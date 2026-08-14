@@ -326,6 +326,68 @@ namespace {
 	amp_same( AMP_Consent_Rest::decode_state_string( $expired, $context ), false, 'expired signed AMP state is rejected' );
 	amp_same( AMP_Consent_Rest::state_from_cookie( $GLOBALS['faz_test_cookie'], $context_new_revision ), false, 'revision bump invalidates synchronized cookie state' );
 
+	// ── The AMP cookie must not destroy what it does not own ────────────────
+	// build_cookie_value() used to build a fresh array and implode it, so an AMP
+	// decision wiped every key the bridge is unaware of. Two of those carry real
+	// weight: svc.* per-service grants, and gpc — the recorded Global Privacy
+	// Control opt-out. A GPC opt-out silently becoming an AMP "accepted" is the
+	// worst outcome this plugin can produce, so it gets an explicit test.
+	$existing = 'consentid:old-id,consent:no,action:yes,necessary:yes,gpc:yes,svc.youtube:no,svc.maps:yes,rev:2';
+	$merged   = AMP_Consent_Rest::build_cookie_value(
+		'accepted',
+		array( 'analytics' => true, 'marketing' => true ),
+		$context,
+		'new-id',
+		time() + 3600,
+		$existing
+	);
+	amp_ok( false !== strpos( $merged, 'gpc:yes' ), 'an AMP accept preserves a recorded GPC opt-out signal' );
+	amp_ok( false !== strpos( $merged, 'svc.youtube:no' ), 'an AMP accept preserves a denied per-service grant' );
+	amp_ok( false !== strpos( $merged, 'svc.maps:yes' ), 'an AMP accept preserves an allowed per-service grant' );
+	amp_ok( false !== strpos( $merged, 'consent:yes' ), 'the AMP decision itself still wins over the stored one' );
+	amp_ok( false !== strpos( $merged, 'consentid:new-id' ), 'the AMP consent id replaces the stored one' );
+
+	// A category slug is admin-editable, so one can collide with a control key.
+	// It must be dropped, never allowed to overwrite the field state_from_cookie()
+	// hard-gates on — otherwise every later read behaves as if no decision existed.
+	$collision = AMP_Consent_Rest::build_cookie_value(
+		'accepted',
+		array( 'action' => false, 'consent' => false, 'analytics' => true ),
+		$context,
+		'cid',
+		time() + 3600,
+		''
+	);
+	amp_ok( false !== strpos( $collision, 'action:yes' ), 'a category slug named "action" cannot overwrite the control field' );
+	amp_ok( false !== strpos( $collision, 'consent:yes' ), 'a category slug named "consent" cannot overwrite the decision' );
+	amp_ok( false !== strpos( $collision, 'analytics:yes' ), 'a non-colliding category is still written' );
+
+	// ── AMP and the classic page must agree on the scope fingerprint ────────
+	// resolve_context() folded any non-ccpa law to "gdpr" while class-frontend
+	// hashes $banner->get_law() verbatim. The banner UI offers "gdpr_ccpa" and
+	// the setup wizard writes "both"/"popia", so on those the two fingerprints
+	// diverged and each surface permanently rejected the other's cookie.
+	foreach ( array( 'gdpr', 'ccpa', 'gdpr_ccpa', 'both', 'popia' ) as $raw_law ) {
+		$classic_fp = substr( wp_hash( 'main-banner|' . $raw_law, 'auth' ), 0, 32 );
+		$amp_context = array(
+			'slug'              => 'main-banner',
+			'law'               => $raw_law,
+			'revision'          => 2,
+			'expiry_days'       => 180,
+			'scope_fingerprint' => $classic_fp,
+			'purposes'          => AMP_Consent_Rest::get_purposes(),
+		);
+		$cookie = AMP_Consent_Rest::build_cookie_value( 'accepted', array( 'analytics' => true ), $amp_context, 'cid', time() + 3600, '' );
+		amp_ok(
+			false !== strpos( $cookie, '__scope.law:' . $raw_law ),
+			"the AMP cookie records the raw law '{$raw_law}' exactly as the classic page does"
+		);
+		amp_ok(
+			false !== AMP_Consent_Rest::state_from_cookie( $cookie, $amp_context ),
+			"an AMP cookie written under '{$raw_law}' is readable back under the same scope"
+		);
+	}
+
 	// Failure paths cannot mutate state.
 	$before_cookie = $GLOBALS['faz_test_cookie'];
 	$bad_scope = $bridge->handle_update( new Faz_AMP_Test_Request( array_merge( $base, array( 'scope' => 'tampered', 'consentStateValue' => 'accepted' ) ), '/faz/v1/amp-consent/update' ) );
