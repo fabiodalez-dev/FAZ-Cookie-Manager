@@ -143,30 +143,57 @@
 	var lawEl = document.getElementById('faz-b-law');
 	if (lawEl) {
 		lawEl.addEventListener('change', function () {
-			syncConsentExpiryConstraints(lawEl.value);
+			// Only here is clamping legitimate: the admin just changed the
+			// regulation, so a value outside the new bounds has to move — and
+			// the helper announces it rather than rewriting in silence.
+			syncConsentExpiryConstraints(lawEl.value, true);
 			toggleDoNotSellColorRow(lawEl.value);
 			syncClassicLawCompat();
 			syncLawNoticeContent(lawEl.value);
 		});
 	}
 
-	// Keep the editor and runtime on the same law-aware consent lifetime. Both
-	// is a GDPR-family banner with an additional US opt-out control, so it keeps
-	// the stricter 180-182 day range. Switching law clamps an existing value
-	// immediately instead of saving a number that the frontend will later alter.
-	function syncConsentExpiryConstraints(law) {
+	// Keep the editor and the runtime on the same law-aware consent lifetime.
+	// The bounds must match Frontend::normalize_consent_expiry() exactly.
+	//
+	// GDPR-family has a CAP and no floor: six months is a maximum, and asking
+	// again sooner is more protective, so 30 days is a legitimate choice the
+	// editor must not overwrite. CCPA has a floor, because a consumer who opted
+	// out may not be re-asked for twelve months.
+	//
+	// `clamp` is only ever true for a user-initiated law change. On page load
+	// and on every form sync the bounds are refreshed but the VALUE is left
+	// alone — rewriting it there made the field show 180 while the database
+	// still held 30, so the form lied about persisted state until an unrelated
+	// save destroyed the admin's number.
+	function syncConsentExpiryConstraints(law, clamp) {
 		var expiryEl = document.getElementById('faz-b-expiry');
 		if (!expiryEl) return;
 		var isCcpa = law === 'ccpa';
-		var min = isCcpa ? 365 : 180;
+		var min = isCcpa ? 365 : 1;
 		var max = isCcpa ? 3650 : 182;
-		var value = parseInt(expiryEl.value, 10);
-		if (!isFinite(value)) value = min;
-		value = Math.max(min, Math.min(max, value));
 		expiryEl.min = String(min);
 		expiryEl.max = String(max);
 		expiryEl.step = '1';
-		expiryEl.value = String(value);
+		if (!clamp) return;
+
+		var value = parseInt(expiryEl.value, 10);
+		if (!isFinite(value)) return;
+		var clamped = Math.max(min, Math.min(max, value));
+		if (clamped === value) return;
+
+		expiryEl.value = String(clamped);
+		var hint = document.getElementById('faz-b-expiry-hint');
+		if (hint) {
+			// Say what changed and from what — a silent rewrite under the cursor
+			// is how an admin loses a deliberate setting without noticing. The
+			// template is translated server-side and carries %1$d / %2$d.
+			var tpl = hint.getAttribute('data-template') || '';
+			hint.textContent = tpl
+				? tpl.replace('%1$d', String(value)).replace('%2$d', String(clamped))
+				: '';
+			hint.style.display = '';
+		}
 	}
 
 	FAZ.ready(function () {

@@ -2277,11 +2277,19 @@ class Frontend {
 	/**
 	 * Normalize the consent-cookie lifetime for the active legal model.
 	 *
-	 * GDPR-family banners may only persist a banner decision for the six-month
-	 * window represented by 180-182 days. CCPA/CPRA banners must retain the
-	 * visitor's choice for at least 12 months, so a shorter configured value is
-	 * raised to 365 days. Unknown models deliberately use the stricter opt-in
-	 * rule instead of silently falling back to a long-lived cookie.
+	 * GDPR-family: the Garante's six-month rule is a MAXIMUM, and there is no
+	 * legal minimum. A publisher who deliberately re-asks every 30 days is being
+	 * MORE protective, so the cap applies and nothing is raised. An earlier
+	 * revision of this method imposed a 180-day floor; that silently extended
+	 * the stored consent of every install configured below it — restrictive in
+	 * the wrong direction — and is not something a consent plugin may do.
+	 *
+	 * CCPA/CPRA is the one place a floor belongs: §1798.135 bars asking a
+	 * consumer who opted out to consent again for at least 12 months, so a
+	 * shorter value would re-prompt sooner than the statute allows. The 3650-day
+	 * ceiling is the same bound the banner UI advertises — enforced here too,
+	 * because a value can reach this method from the REST API, an import or a
+	 * direct DB edit without ever passing the admin field.
 	 *
 	 * Kept as a pure public helper so migrations, integrations and the unit suite
 	 * can exercise the same rule used by get_store_data().
@@ -2295,10 +2303,16 @@ class Frontend {
 		$configured_days = absint( $configured_days );
 
 		if ( 'ccpa' === $law ) {
-			return max( 365, $configured_days );
+			return min( 3650, max( 365, $configured_days ) );
 		}
 
-		return max( 180, min( 182, $configured_days ) );
+		// A zero/absent configuration still has to produce a usable lifetime;
+		// the cap, not a floor, is what the law dictates above that.
+		if ( $configured_days < 1 ) {
+			return 182;
+		}
+
+		return min( 182, $configured_days );
 	}
 
 	/**

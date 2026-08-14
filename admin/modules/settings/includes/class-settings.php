@@ -228,11 +228,25 @@ class Settings extends Store {
 				// Google Fonts unlawful without consent). Site owners can still
 				// add any of them explicitly via Settings → Script Blocking if
 				// their lawful basis warrants it.
-				// No third-party URL is whitelisted by default. CAPTCHA and payment
-				// providers can set identifiers or make external requests; a publisher
-				// must make the lawful-basis/necessity decision explicitly and add a
-				// narrow exception only where appropriate.
-				'whitelist_patterns' => array(),
+				//
+				// These four were briefly emptied. That reads as the stricter
+				// choice, but the blocker DOES provider-match all four, so on a
+				// fresh install every CAPTCHA-guarded contact, login and checkout
+				// form silently stopped working for non-consented visitors — with
+				// no error surfaced to the visitor or the admin. It also split the
+				// install base in two, since upgrades keep their stored option
+				// while new sites got the empty list, and it made the readme's
+				// "nothing is whitelisted by default" claim false for everyone
+				// already running the plugin. A challenge endpoint that gates a
+				// form the visitor is actively trying to submit is the textbook
+				// Art. 5(3) strictly-necessary case; the profiling resources above
+				// are not, and stay out.
+				'whitelist_patterns' => array(
+					'www.google.com/recaptcha/api',
+					'www.gstatic.com/recaptcha/',
+					'challenges.cloudflare.com/',
+					'hcaptcha.com/',
+				),
 				// Per-gateway payment-SDK opt-in. Each toggle, when the site owner
 				// enables it, allows that gateway's payment scripts (PayPal SDK,
 				// Stripe.js, …) to load BEFORE consent site-wide — for stores whose

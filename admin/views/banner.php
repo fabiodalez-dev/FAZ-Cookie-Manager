@@ -227,8 +227,10 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Days until consent expires', 'faz-cookie-manager' ); ?></label>
-					<input type="number" class="faz-input" id="faz-b-expiry" min="180" max="182" step="1" style="width:120px;" aria-describedby="faz-b-expiry-help">
-					<div class="faz-help" id="faz-b-expiry-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. GDPR and Both use a 180–182 day six-month window. CCPA / US State Laws requires at least 365 days; its maximum configurable value is 3650 days. The field limits update automatically when the regulation changes, and the same rule is enforced at serve time.', 'faz-cookie-manager' ); ?></div>
+					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="182" step="1" style="width:120px;" aria-describedby="faz-b-expiry-help">
+					<div class="faz-help" id="faz-b-expiry-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. GDPR and Both are capped at 182 days (six months) — a shorter value is allowed and asks again sooner, which is more protective. CCPA / US State Laws keeps the choice for at least 365 days, because a consumer who opted out may not be asked again for twelve months; its maximum is 3650 days. The field limits update automatically when the regulation changes, and the same limits are enforced at serve time.', 'faz-cookie-manager' ); ?></div>
+					<div class="faz-help" id="faz-b-expiry-hint" style="display:none;color:#92400e;" role="status"
+						data-template="<?php echo esc_attr__( 'Consent lifetime changed from %1$d to %2$d days to stay within the selected regulation.', 'faz-cookie-manager' ); ?>"></div>
 				</div>
 			</div>
 		</div>

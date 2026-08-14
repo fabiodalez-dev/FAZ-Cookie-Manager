@@ -57,14 +57,23 @@ const changeLaw = (value) => {
   law.dispatchEvent(new window.Event('change', { bubbles: true }));
 };
 
+// Six months is a cap, not a floor. A shorter re-prompt is more protective, so
+// the editor must offer it and must not raise it. These assertions previously
+// demanded a 180-day minimum and so encoded the defect.
 changeLaw('gdpr');
-same(expiry.min, '180', 'GDPR sets a 180-day minimum');
+same(expiry.min, '1', 'GDPR imposes no minimum — a shorter lifetime is stricter, not invalid');
 same(expiry.max, '182', 'GDPR sets a 182-day maximum');
-same(expiry.value, '180', 'GDPR raises an undersized value');
+// The fixture ships 90 days. Under the old floor this became 180; it must now
+// survive untouched, because that is a publisher choice and not an error.
+same(expiry.value, '90', 'GDPR leaves an already-short value alone');
+
+expiry.value = '30';
+changeLaw('gdpr');
+same(expiry.value, '30', 'A deliberate 30-day re-prompt survives a law re-selection');
 
 expiry.value = '365';
 changeLaw('gdpr_ccpa');
-same(expiry.min, '180', 'Both keeps the GDPR-family minimum');
+same(expiry.min, '1', 'Both inherits the GDPR-family cap-only rule');
 same(expiry.max, '182', 'Both keeps the GDPR-family maximum');
 same(expiry.value, '182', 'Both caps an oversized value');
 

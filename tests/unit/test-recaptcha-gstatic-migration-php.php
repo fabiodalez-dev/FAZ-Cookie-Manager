@@ -135,9 +135,14 @@ rg_eq( $GLOBALS['faz_test_writes'], 2, 'exactly two writes: the marker and the s
 // The migration above remains intentionally narrow for existing sites that
 // already made the explicit decision to allow reCAPTCHA before consent.
 $settings_src = (string) file_get_contents( $root . '/admin/modules/settings/includes/class-settings.php' );
-rg_eq( false !== strpos( $settings_src, "'whitelist_patterns' => array()," ), true, 'the shipped defaults require an explicit third-party exception' );
-rg_eq( false !== strpos( $settings_src, "'www.google.com/recaptcha/api'," ), false, 'the reCAPTCHA endpoint is not pre-whitelisted for new installs' );
-rg_eq( false !== strpos( $settings_src, "'www.gstatic.com/recaptcha/'," ), false, 'the reCAPTCHA widget script is not pre-whitelisted for new installs' );
+// A fresh install ships the four anti-abuse challenge endpoints allowed, so a
+// CAPTCHA-guarded form works for a visitor who has not yet decided. The
+// migration below exists for installs predating the gstatic entry; it must keep
+// adding it, and must stay idempotent now that the default carries it too.
+rg_eq( false !== strpos( $settings_src, "'www.google.com/recaptcha/api'," ), true, 'the reCAPTCHA endpoint ships allowed so guarded forms work before consent' );
+rg_eq( false !== strpos( $settings_src, "'www.gstatic.com/recaptcha/'," ), true, 'the reCAPTCHA widget script ships allowed alongside its API endpoint' );
+rg_eq( false !== strpos( $settings_src, "'challenges.cloudflare.com/'," ), true, 'Cloudflare Turnstile ships allowed' );
+rg_eq( false !== strpos( $settings_src, "'hcaptcha.com/'," ), true, 'hCaptcha ships allowed' );
 
 echo "\n" . ( $failed === 0 ? "\033[32m" : "\033[31m" ) . "{$passed} passed, {$failed} failed\033[0m\n";
 exit( 0 === $failed ? 0 : 1 );

@@ -32,8 +32,16 @@ echo "== Default whitelist boundaries ==\n";
 foreach ( array( 'plugins/elementor/', 'plugins/contact-form-7/', 'plugins/woocommerce/', 'plugins/wp-rocket/' ) as $broad_pattern ) {
 	whitelist_boundary_check( false === strpos( $frontend, "'{$broad_pattern}'" ), "built-in whitelist excludes {$broad_pattern}" );
 }
-foreach ( array( 'www.google.com/recaptcha/api', 'www.gstatic.com/recaptcha/', 'challenges.cloudflare.com/', 'hcaptcha.com/' ) as $external_pattern ) {
-	whitelist_boundary_check( false === strpos( $settings, "'{$external_pattern}'" ), "settings do not pre-allow {$external_pattern}" );
+// The boundary that matters is not "external vs not" — it is "does this
+// resource profile the visitor". A challenge endpoint gating a form the visitor
+// is actively submitting is the Art. 5(3) strictly-necessary case, and blocking
+// it breaks the form with no error shown to anyone. A font, map, OAuth endpoint
+// or generic CDN profiles, and must stay blocked until consent.
+foreach ( array( 'www.google.com/recaptcha/api', 'www.gstatic.com/recaptcha/', 'challenges.cloudflare.com/', 'hcaptcha.com/' ) as $challenge_pattern ) {
+	whitelist_boundary_check( false !== strpos( $settings, "'{$challenge_pattern}'" ), "anti-abuse challenge {$challenge_pattern} is allowed before consent" );
+}
+foreach ( array( 'fonts.googleapis.com', 'fonts.gstatic.com', 'maps.googleapis.com', 'cdn.jsdelivr.net', 'unpkg.com', 'www.googleapis.com/oauth2/' ) as $profiling_pattern ) {
+	whitelist_boundary_check( false === strpos( $settings, "'{$profiling_pattern}'" ), "profiling resource {$profiling_pattern} stays blocked until consent" );
 }
 whitelist_boundary_check( false !== strpos( $frontend, "'faz-cookie-manager'" ), 'plugin-owned frontend assets remain protected from self-blocking' );
 whitelist_boundary_check( false !== strpos( $frontend, "'wp-includes/'" ), 'WordPress core assets remain protected from false positives' );
