@@ -40,12 +40,36 @@ namespace {
 		public function header( $name, $value ) { $this->headers[ $name ] = $value; }
 		public function get_headers() { return $this->headers; }
 	}
+	/**
+	 * Request double.
+	 *
+	 * The original version handed $params straight to get_param(), which meant
+	 * it bypassed the exact WordPress layer the bridge was breaking on: the AMP
+	 * runtime sends its JSON body as text/plain, WordPress never parses that
+	 * into params, and every real request arrived empty. The suite was green
+	 * because it validated the author's model of AMP rather than AMP.
+	 *
+	 * It can now carry a raw body and a content type, so a test can post the way
+	 * the runtime actually does and watch hydrate_amp_body() do its work.
+	 */
 	class Faz_AMP_Test_Request {
 		private $params;
 		private $route;
-		public function __construct( $params, $route = '/faz/v1/amp-consent/check' ) { $this->params = $params; $this->route = $route; }
+		private $body;
+		private $content_type;
+		public function __construct( $params, $route = '/faz/v1/amp-consent/check', $body = '', $content_type = '' ) {
+			$this->params       = $params;
+			$this->route        = $route;
+			$this->body         = $body;
+			$this->content_type = $content_type;
+		}
 		public function get_param( $key ) { return array_key_exists( $key, $this->params ) ? $this->params[ $key ] : null; }
+		public function set_param( $key, $value ) { $this->params[ $key ] = $value; }
 		public function get_route() { return $this->route; }
+		public function get_body() { return $this->body; }
+		public function get_content_type() {
+			return '' === $this->content_type ? null : array( 'value' => $this->content_type );
+		}
 	}
 	class Faz_AMP_Test_Banner {
 		public $slug = 'main-banner';
@@ -153,8 +177,15 @@ namespace FazCookie\Includes {
 namespace FazCookie\Admin\Modules\Banners\Includes {
 	class Controller {
 		public static $banner;
+		// Separate from $banner on purpose: "the slug in this cached AMP
+		// document no longer resolves" and "this site has stopped asking for
+		// consent altogether" are different situations, and the bridge has to
+		// answer them differently. A single flag could not express the case
+		// that matters — a banner renamed or replaced while another stays live.
+		public static $any_active = null;
 		public static function get_instance() { return new self(); }
 		public function get_active_banner_by_slug( $slug ) { return self::$banner && self::$banner->get_slug() === $slug ? self::$banner : false; }
+		public function get_active_banner() { return null === self::$any_active ? self::$banner : self::$any_active; }
 		public function get_active_banner_for_country() { return self::$banner; }
 		public function has_country_dependent_banners() { return false; }
 	}
@@ -388,6 +419,42 @@ namespace {
 		);
 	}
 
+	// ── Clearing cookies must reach AMP as a withdrawal ─────────────────────
+	// The signed consentString exists for a browser that REFUSES the publisher
+	// cookie in a third-party context. On a same-origin request the cookie is
+	// first-party, so its absence means it was deleted — and clearing cookies is
+	// a recognised way of withdrawing consent. Falling back to the signed state
+	// there answered "accepted" for the rest of the lifetime (up to 180/365
+	// days) while the canonical page had already gone back to prompting.
+	// decode_state_string() could not catch it: a plain deletion changes neither
+	// banner, nor law, nor revision.
+	$live_signed = AMP_Consent_Rest::encode_state_string(
+		array( 'state' => 'accepted', 'purposes' => array( 'analytics' => true, 'marketing' => true ), 'expires' => time() + 86400 ),
+		$context
+	);
+	$GLOBALS['faz_test_cookie'] = '';
+
+	$_SERVER    = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$withdrawn  = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted', 'consentString' => $live_signed ) ) );
+	amp_same( $withdrawn->get_data()['consentStateValue'], 'unknown', 'a deleted first-party cookie reaches AMP as a withdrawal, not a stale accept' );
+	amp_same( $withdrawn->get_data()['expireCache'], true, 'the withdrawal also expires AMP local storage' );
+	amp_same( $withdrawn->get_data()['purposeConsents'], array( 'analytics' => false, 'marketing' => false ), 'every optional purpose is denied after the withdrawal' );
+
+	// From an AMP cache the same missing cookie proves nothing — the browser may
+	// simply have refused a third-party Set-Cookie — so the signed state is still
+	// the only evidence available and remains authoritative.
+	$_SERVER    = array( 'HTTP_ORIGIN' => 'https://publisher-example.cdn.ampproject.org' );
+	$from_cache = $bridge->handle_check( new Faz_AMP_Test_Request(
+		$base + array(
+			'consentStateValue'    => 'accepted',
+			'consentString'        => $live_signed,
+			'__amp_source_origin'  => 'https://publisher.example',
+		)
+	) );
+	amp_ok( ! is_wp_error( $from_cache ), 'a genuine AMP Cache request is authorized' );
+	amp_same( $from_cache->get_data()['consentStateValue'], 'accepted', 'a cached request with no cookie still honours the signed state' );
+	$_SERVER    = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+
 	// Failure paths cannot mutate state.
 	$before_cookie = $GLOBALS['faz_test_cookie'];
 	$bad_scope = $bridge->handle_update( new Faz_AMP_Test_Request( array_merge( $base, array( 'scope' => 'tampered', 'consentStateValue' => 'accepted' ) ), '/faz/v1/amp-consent/update' ) );
@@ -459,11 +526,36 @@ namespace {
 	amp_same( $disabled_update->get_error_code(), 'faz_amp_banner_disabled', 'disabled banner control rejects stale AMP updates' );
 	amp_same( $GLOBALS['faz_test_cookie'], $before_disabled_cookie, 'disabled banner update cannot mutate consent' );
 	$GLOBALS['faz_test_options']['faz_settings']['banner_control']['status'] = true;
-	Banner_Controller::$banner = false;
+	// A cached AMP document naming a banner that no longer resolves. The old
+	// answer here was consentRequired:false, which in AMP unblocks EVERY gated
+	// component — so renaming or replacing a banner silently turned tracker
+	// gating off for everyone still served that document from the cache, until
+	// it re-crawled. This assertion used to demand that behaviour.
+	//
+	// The distinction the bridge now makes: is any banner still active?
+	// Restore the optional categories first — an earlier fixture left only
+	// "necessary", and a site with no optional purposes cannot show whether the
+	// replaced-banner answer denies them.
+	Category_Controller::$items = array(
+		array( 'slug' => 'necessary', 'name' => 'Necessary', 'visibility' => 1 ),
+		array( 'slug' => 'analytics', 'name' => 'Analytics', 'visibility' => 1 ),
+		array( 'slug' => 'marketing', 'name' => 'Marketing', 'visibility' => 1 ),
+	);
+	Banner_Controller::$banner     = false;
+	Banner_Controller::$any_active = $banner;
+	$replaced_check = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
+	amp_same( $replaced_check->get_data()['consentRequired'], true, 'a replaced banner still requires consent — the canonical page is prompting for it' );
+	amp_same( $replaced_check->get_data()['purposeConsents'], array( 'analytics' => false, 'marketing' => false ), 'a replaced banner denies every optional purpose until the visitor decides' );
+	amp_same( $replaced_check->get_data()['expireCache'], true, 'a replaced banner expires the cached AMP decision so the document is refetched' );
+
+	// Only when the publisher has genuinely stopped asking anywhere is
+	// "no consent required" the honest answer.
+	Banner_Controller::$any_active = false;
 	$inactive_check = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
-	amp_same( $inactive_check->get_data()['consentRequired'], false, 'inactive scoped banner stops prompting cached AMP pages' );
+	amp_same( $inactive_check->get_data()['consentRequired'], false, 'with no banner active anywhere there is nothing left to gate' );
 	amp_same( $inactive_check->get_data()['expireCache'], true, 'inactive scoped banner expires cached AMP consent' );
-	Banner_Controller::$banner = $banner;
+	Banner_Controller::$banner     = $banner;
+	Banner_Controller::$any_active = null;
 
 	// A denied subrequest must clear CORS state left by a previous success.
 	$_SERVER = array( 'HTTP_ORIGIN' => 'https://evil.example' );
@@ -490,6 +582,82 @@ namespace {
 	amp_ok( false !== strpos( $bootstrap_source, "\$same_site = 'Lax', \$force_secure = null" ), 'shared cookie helper keeps Lax/default call compatibility' );
 	amp_ok( false !== strpos( $bootstrap_source, "if ( 'None' === \$same_site && ! \$secure )" ), 'shared cookie helper rejects insecure SameSite=None combinations' );
 	amp_ok( false !== strpos( $bootstrap_source, "'samesite' => \$same_site" ) && false !== strpos( $bootstrap_source, "'secure'   => \$secure" ), 'normalized AMP cookie options reach the real setcookie call' );
+
+	// ── The transport the runtime actually uses ────────────────────────────
+	// amp-consent serializes its payload as JSON but labels it
+	// text/plain;charset=utf-8 so the request stays preflight-free. WordPress
+	// parses a body into params only for application/json or form-urlencoded, so
+	// with the real runtime every body param was null: check failed its instance
+	// comparison and 400'd, update was rejected during dispatch by a `required`
+	// arg. The bridge never served a single real AMP request.
+	//
+	// No assertion could catch that while the request double fed get_param()
+	// directly. These post the way the runtime does.
+	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	Banner_Controller::$banner     = $banner;
+	Banner_Controller::$any_active = null;
+	$GLOBALS['faz_test_cookie'] = '';
+
+	$amp_body = wp_json_encode(
+		array(
+			'consentInstanceId' => $instance,
+			'consentStateValue' => 'accepted',
+			'purposeConsents'   => array( 'analytics' => true, 'marketing' => false ),
+		)
+	);
+	// banner/scope travel in the query string, exactly as endpoint_urls() bakes
+	// them into checkConsentHref — only the rest comes from the body.
+	$url_params = array( 'banner' => 'main-banner', 'scope' => $scope );
+
+	$plain_check = $bridge->handle_check(
+		new Faz_AMP_Test_Request( $url_params, '/faz/v1/amp-consent/check', $amp_body, 'text/plain;charset=utf-8' )
+	);
+	amp_ok( ! is_wp_error( $plain_check ), 'a text/plain AMP check body is understood instead of 400ing' );
+	amp_same( $plain_check->get_data()['consentRequired'], true, 'the hydrated check still answers restrictively with no stored state' );
+
+	$plain_update = $bridge->handle_update(
+		new Faz_AMP_Test_Request( $url_params, '/faz/v1/amp-consent/update', $amp_body, 'text/plain;charset=utf-8' )
+	);
+	amp_ok( ! is_wp_error( $plain_update ), 'a text/plain AMP update body reaches the callback instead of rest_missing_callback_param' );
+	amp_same( $plain_update->get_data()['consentStateValue'], 'accepted', 'the decision carried in the text/plain body is the one recorded' );
+	amp_ok( false !== strpos( $GLOBALS['faz_test_cookie'], 'analytics:yes' ), 'a granted purpose from the text/plain body reaches the cookie' );
+	amp_ok( false !== strpos( $GLOBALS['faz_test_cookie'], 'marketing:no' ), 'a denied purpose from the text/plain body reaches the cookie' );
+
+	// A URL param must win over a body key claiming otherwise: banner and scope
+	// are what the server itself signed into the endpoint URL.
+	$spoof_body = wp_json_encode(
+		array(
+			'consentInstanceId' => $instance,
+			'consentStateValue' => 'accepted',
+			'banner'            => 'attacker-banner',
+			'scope'             => 'forged',
+		)
+	);
+	$spoofed = $bridge->handle_check(
+		new Faz_AMP_Test_Request( $url_params, '/faz/v1/amp-consent/check', $spoof_body, 'text/plain;charset=utf-8' )
+	);
+	amp_ok( ! is_wp_error( $spoofed ), 'a body key cannot override the signed banner/scope from the URL' );
+
+	// An update with no state anywhere is refused by the callback, since the
+	// route arg can no longer enforce it during dispatch.
+	$stateless = $bridge->handle_update(
+		new Faz_AMP_Test_Request( $url_params, '/faz/v1/amp-consent/update', wp_json_encode( array( 'consentInstanceId' => $instance ) ), 'text/plain;charset=utf-8' )
+	);
+	amp_ok( is_wp_error( $stateless ), 'an update carrying no consent state is still rejected' );
+	amp_same( $stateless->get_error_code(), 'faz_amp_missing_state', 'the missing-state rejection is explicit rather than a dispatch-level 400' );
+
+	// Malformed JSON must be ignored rather than throwing or half-populating
+	// params: the request then simply has no stored state, which is the
+	// restrictive answer.
+	$garbage_request = new Faz_AMP_Test_Request( $url_params, '/faz/v1/amp-consent/check', '{not json', 'text/plain;charset=utf-8' );
+	$garbage         = $bridge->handle_check( $garbage_request );
+	amp_same( $garbage_request->get_param( 'consentStateValue' ), null, 'a malformed body injects no params' );
+	// It fails, and failing is right: with nothing decoded there is no
+	// consentInstanceId, and an unidentified check must not be answered. What
+	// matters is that it is a clean, explicit rejection rather than a crash or a
+	// permissive default.
+	amp_ok( is_wp_error( $garbage ), 'a malformed body is rejected rather than answered' );
+	amp_same( $garbage->get_error_code(), 'faz_amp_invalid_instance', 'the rejection names the missing instance instead of failing open' );
 
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

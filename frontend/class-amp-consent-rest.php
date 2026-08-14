@@ -95,9 +95,16 @@ class AMP_Consent_Rest {
 								'type'              => 'string',
 								'sanitize_callback' => 'sanitize_text_field',
 							),
+							// NOT `required`. This value arrives in the POST body, and
+							// the body is JSON sent as text/plain (see
+							// hydrate_amp_body()), which WordPress does not parse into
+							// params. A `required` arg is enforced during dispatch,
+							// BEFORE the callback runs — so marking it required made
+							// WordPress reject every real AMP update with
+							// rest_missing_callback_param before the bridge saw it.
+							// handle_update() validates its presence itself.
 							'consentStateValue' => array(
 								'type'              => 'string',
-								'required'          => true,
 								'sanitize_callback' => 'sanitize_key',
 							),
 							'purposeConsent' => array(
@@ -127,6 +134,61 @@ class AMP_Consent_Rest {
 					'permission_callback' => '__return_true',
 				)
 			);
+		}
+	}
+
+	/**
+	 * Make the AMP runtime's request body readable as request params.
+	 *
+	 * amp-consent posts its payload as JSON but deliberately labels it
+	 * `text/plain;charset=utf-8` so the request stays preflight-free (see
+	 * amphtml's setupJsonFetchInit). WordPress only turns a body into params for
+	 * `application/json` or `application/x-www-form-urlencoded`
+	 * (WP_REST_Request::parse_body_params + parse_json_params), so with the real
+	 * runtime every body param resolved to null: checkConsentHref failed its
+	 * instance comparison and returned 400 on every request, and onUpdateHref
+	 * was rejected during dispatch. The bridge never ran once against real AMP.
+	 *
+	 * Decoding here rather than switching AMP to application/json is deliberate:
+	 * that content type would trigger a CORS preflight, and preflight against
+	 * these routes does not currently work (core answers OPTIONS before our
+	 * callbacks, so no allow-origin header is emitted).
+	 *
+	 * Query-string params are left alone — `banner`, `scope` and
+	 * `__amp_source_origin` travel in the URL and WordPress parses those
+	 * normally. Body values never overwrite them.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return void
+	 */
+	private function hydrate_amp_body( $request ) {
+		$body = $request->get_body();
+		if ( '' === trim( (string) $body ) ) {
+			return;
+		}
+
+		$content_type = $request->get_content_type();
+		$type         = isset( $content_type['value'] ) ? strtolower( $content_type['value'] ) : '';
+		if ( 'application/json' === $type || 'application/x-www-form-urlencoded' === $type ) {
+			return; // WordPress already parsed it.
+		}
+
+		$decoded = json_decode( (string) $body, true );
+		if ( ! is_array( $decoded ) || JSON_ERROR_NONE !== json_last_error() ) {
+			return;
+		}
+
+		foreach ( $decoded as $key => $value ) {
+			if ( ! is_string( $key ) || '' === $key ) {
+				continue;
+			}
+			// A URL param is authoritative: it is the one the server itself
+			// baked into checkConsentHref/onUpdateHref, so a body key must not
+			// be able to restate `banner` or `scope` with something else.
+			if ( null !== $request->get_param( $key ) ) {
+				continue;
+			}
+			$request->set_param( $key, $value );
 		}
 	}
 
@@ -216,6 +278,10 @@ class AMP_Consent_Rest {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_check( $request ) {
+		// Before anything reads a param: the AMP runtime's body is JSON labelled
+		// text/plain, which WordPress leaves unparsed.
+		$this->hydrate_amp_body( $request );
+
 		$cors = $this->authorize_request( $request );
 		if ( is_wp_error( $cors ) ) {
 			return $cors;
@@ -234,11 +300,41 @@ class AMP_Consent_Rest {
 		$context = $this->resolve_context( $request );
 		if ( is_wp_error( $context ) ) {
 			if ( 'faz_amp_inactive_banner' === $context->get_error_code() ) {
+				// The slug baked into a cached AMP document no longer resolves.
+				// Answering consentRequired:false here told amp-consent to
+				// unblock EVERY gated component — so a publisher who simply
+				// renamed or replaced a banner turned tracker gating off for
+				// every visitor still being served that document from the AMP
+				// cache, for as long as it took the cache to re-crawl. No
+				// attacker was needed; the signed scope stops forgery, not a
+				// routine configuration change.
+				//
+				// If any banner is still active site-wide, consent is still
+				// required — the canonical page is prompting for it. Answer
+				// restrictively and expire the cache so the document gets
+				// re-fetched with the current banner's scope.
+				$replacement = Banner_Controller::get_instance()->get_active_banner();
+				if ( $replacement ) {
+					$purposes = self::get_purposes();
+					return $this->response(
+						array(
+							'consentRequired'   => true,
+							'consentStateValue' => 'unknown',
+							'purposeConsents'   => self::purpose_defaults( $purposes, false ),
+							'purposeConsent'    => self::purpose_defaults( $purposes, false ),
+							'expireCache'       => true,
+						)
+					);
+				}
+
+				// No banner is active anywhere: the publisher has genuinely
+				// stopped asking for consent, so there is nothing to gate.
 				return $this->response(
 					array(
 						'consentRequired'   => false,
 						'consentStateValue' => 'unknown',
 						'purposeConsents'   => array(),
+						'purposeConsent'    => array(),
 						'expireCache'       => true,
 					)
 				);
@@ -256,11 +352,24 @@ class AMP_Consent_Rest {
 		$server_state   = self::state_from_cookie( $cookie, $context );
 
 		// A signed state returned by checkConsentHref binds AMP's local cache to
-		// the server expiry/revision. It is available after the bridge has first
-		// reconciled a valid publisher cookie; onUpdateHref responses are not used
-		// by AMP to update consentString, so this must not be presented as a way to
-		// bypass browsers that reject the initial third-party Set-Cookie entirely.
-		if ( false === $server_state ) {
+		// the server expiry/revision. It exists for exactly one situation: a
+		// browser that REFUSES the publisher cookie in a third-party context, so
+		// the cookie's absence proves nothing about the visitor's wishes.
+		//
+		// It must never substitute for a cookie that could have been sent and
+		// was not. On a same-origin request the consent cookie is first-party;
+		// if it is missing, it was deleted — and clearing cookies is a
+		// recognised way of withdrawing consent. Honouring the signed state
+		// there kept answering "accepted" for the whole remaining lifetime (up
+		// to 180 or 365 days) while the canonical page had already gone back to
+		// prompting: the withdrawal simply never reached AMP.
+		//
+		// Scope changes were already covered — decode_state_string() rejects a
+		// token whose banner, law or revision no longer match — but a plain
+		// cookie deletion changes none of those, so it slipped through.
+		$site_origin      = self::origin_from_url( home_url( '/' ) );
+		$request_from_cache = '' !== $this->cors_origin && $this->cors_origin !== $site_origin;
+		if ( false === $server_state && $request_from_cache ) {
 			$signed = sanitize_text_field( (string) $request->get_param( 'consentString' ) );
 			$server_state = self::decode_state_string( $signed, $context );
 		}
@@ -305,12 +414,26 @@ class AMP_Consent_Rest {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_update( $request ) {
+		$this->hydrate_amp_body( $request );
+
 		$cors = $this->authorize_request( $request );
 		if ( is_wp_error( $cors ) ) {
 			return $cors;
 		}
 		if ( ! $this->is_banner_control_enabled() ) {
 			return new \WP_Error( 'faz_amp_banner_disabled', __( 'The AMP consent banner is disabled.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+		}
+
+		// Validated here rather than via a `required` route arg: the value comes
+		// from the body, and dispatch-time enforcement rejected every real AMP
+		// request before this callback could decode it.
+		$requested_state = sanitize_key( (string) $request->get_param( 'consentStateValue' ) );
+		if ( '' === $requested_state ) {
+			return new \WP_Error(
+				'faz_amp_missing_state',
+				__( 'Missing AMP consent state.', 'faz-cookie-manager' ),
+				array( 'status' => 400 )
+			);
 		}
 
 		$context = $this->resolve_context( $request );
