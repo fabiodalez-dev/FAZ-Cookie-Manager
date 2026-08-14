@@ -6272,7 +6272,7 @@
   ],
   "Burst Statistics": [
     {
-      "id": "d21dee4a-c3ff-41f6-89a1-670f4f227119",
+      "id": "0179c214-2254-451c-a039-e5761c3184d5",
       "category": "Analytics",
       "cookie": "burst_uid",
       "domain": "",
@@ -12280,11 +12280,77 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "a380bbc5-91ae-4c16-a9bd-b6c2a96c7c68",
+      "category": "Functional",
+      "cookie": "ct_checkjs",
+      "domain": "",
+      "description": "Confirms whether JavaScript is enabled in the visitor’s browser to distinguish humans from bots.",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "587f6112-a3b9-4002-8551-08e504b108a0",
+      "category": "Functional",
+      "cookie": "ct_screen_info",
+      "domain": "",
+      "description": "Saves basic screen and browser details (like screen size) for anti-spam checks.",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "ad43e9ff-dff4-47eb-8062-532e24da5259",
+      "category": "Functional",
+      "cookie": "apbct_headless",
+      "domain": "",
+      "description": "Set by the CleanTalk Anti-Spam plugin to distinguish between legitimate users and automated bots",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "4c4d0278-b2d8-4401-adf9-289ab555fcdb",
+      "category": "Functional",
+      "cookie": "apbct_page_hits",
+      "domain": "",
+      "description": "Set by the CleanTalk Anti-Spam plugin to distinguish between legitimate users and automated bots",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "1f16be2d-910f-439d-b2d3-d8e28fbd879c",
       "category": "Functional",
       "cookie": "apbct_session_id",
       "domain": "",
       "description": "Set by the CleanTalk Anti-Spam plugin to distinguish between legitimate users and automated bots",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "da474b78-453b-4ade-a10d-c08416588fd7",
+      "category": "Functional",
+      "cookie": "apbct_prev_referer",
+      "domain": "",
+      "description": "Set by the CleanTalk Anti-Spam plugin to distinguish between legitimate users and automated bots",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "f3c3a302-2598-4196-8e71-f55a8d9cd7e0",
+      "category": "Functional",
+      "cookie": "ct_checked_emails",
+      "domain": "",
+      "description": "Saves information about email addresses entered in forms to detect spam submissions.",
       "retentionPeriod": "",
       "dataController": "CleanTalk Inc.",
       "privacyLink": "",
@@ -12302,11 +12368,33 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "8c463c0c-5a2d-4bcd-9792-349a9ee578d3",
+      "category": "Functional",
+      "cookie": "apbct_pixel_url",
+      "domain": "",
+      "description": "Set by the CleanTalk Anti-Spam plugin to distinguish between legitimate users and automated bots",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "e3318ef1-8de2-4a46-95ee-d2aebfcb436c",
       "category": "Functional",
       "cookie": "apbct_session_current_page",
       "domain": "",
       "description": "Set by the CleanTalk Anti-Spam plugin to distinguish between legitimate users and automated bots",
+      "retentionPeriod": "",
+      "dataController": "CleanTalk Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "b56a09ee-86aa-4855-913f-93427d4093a5",
+      "category": "Functional",
+      "cookie": "ct_mouse_moved",
+      "domain": "",
+      "description": "Tracks mouse movement on the page to confirm human interaction.",
       "retentionPeriod": "",
       "dataController": "CleanTalk Inc.",
       "privacyLink": "",
@@ -14301,6 +14389,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "1842a174-010a-43ad-b4af-b28c07cdeafb",
+      "category": "Marketing",
+      "cookie": "UID",
+      "domain": ".scorecardresearch.com",
+      "description": "Collects information of the user and his/her movement, such as timestamp for visits, most recently loaded pages and IP address. The data is used by the marketing research network, Scorecard Research, to analyse traffic patterns and carry out surveys to help their clients better understand the customer's preferences.",
+      "retentionPeriod": "2 years",
+      "dataController": "ComScore",
+      "privacyLink": "https://www.comscore.com/About/Privacy-Policy",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "4e6c97e1-d42b-42ec-a37f-1979a5da04c3",
       "category": "Marketing",
       "cookie": "PID",
@@ -15859,6 +15958,17 @@
   ],
   "CreativeCDN": [
     {
+      "id": "c3c96be1-5140-4eda-a602-46922d29a0a6",
+      "category": "Marketing",
+      "cookie": "c",
+      "domain": "creativecdn.com",
+      "description": "Regulates the synchronization of user identification and the exchange of your data between various promotional content services.",
+      "retentionPeriod": "364 days",
+      "dataController": "RTB House",
+      "privacyLink": "https://rtbhouse.com/privacy-center",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "4d78a605-8c8c-45b7-b634-e302f2de71b9",
       "category": "Marketing",
       "cookie": "g",
@@ -15870,6 +15980,39 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "c94b8488-dd75-498c-acc2-0066d3491366",
+      "category": "Functional",
+      "cookie": "ts",
+      "domain": "creativecdn.com",
+      "description": "This cookie is associated with creativecdn.com. It is provided by PayPal and facilitates payment services in the website.",
+      "retentionPeriod": "365 days",
+      "dataController": "RTB House",
+      "privacyLink": "https://rtbhouse.com/privacy-center",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "f72e5a6e-eef9-4a06-953f-dceb9b83d2a2",
+      "category": "Marketing",
+      "cookie": "u",
+      "domain": "creativecdn.com",
+      "description": "This cookie is associated with creativecdn.com. It collects unidentifiable data that is sent to an unidentifiable source. The source's identity is kept secret by the company, Perfect Privacy LLC.",
+      "retentionPeriod": "365 days",
+      "dataController": "RTB House",
+      "privacyLink": "https://rtbhouse.com/privacy-center",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "e25aead6-0189-442e-ac9a-0d26d69c3f55",
+      "category": "Marketing",
+      "cookie": "c",
+      "domain": "rubiconproject.com",
+      "description": "Regulates the synchronization of user identification and the exchange of your data between various promotional content services.",
+      "retentionPeriod": "1 month",
+      "dataController": "Magnite",
+      "privacyLink": "https://www.magnite.com/legal/platform-cookie-statement/",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "b6449029-8677-4810-889f-9485c0dae9ab",
       "category": "Functional",
       "cookie": "ts",
@@ -15878,6 +16021,17 @@
       "retentionPeriod": "3 years",
       "dataController": "PayPal",
       "privacyLink": "https://www.paypal.com/privacy-center",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "67999a45-2f58-4064-8b57-ea0f249c937a",
+      "category": "Marketing",
+      "cookie": "u",
+      "domain": ".t.tailtarget.com",
+      "description": "This cookie is associated with creativecdn.com. It collects unidentifiable data that is sent to an unidentifiable source. The source's identity is kept secret by the company, Perfect Privacy LLC.",
+      "retentionPeriod": "1 year",
+      "dataController": "Totvs",
+      "privacyLink": "https://www.totvs.com/protecao-e-privacidade-de-dados/",
       "wildcardMatch": "0"
     },
     {
@@ -15921,6 +16075,17 @@
   "Criteo": [
     {
       "id": "fd7a99ff-2b7a-40b9-b4ee-207f155410d3",
+      "category": "Marketing",
+      "cookie": "cto_bundle",
+      "domain": "",
+      "description": "Presents the user with relevant content and ad campaigns. The service is provided by third-party ad campaigns hubs, which facilitate real-time bidding for advertisers.",
+      "retentionPeriod": "",
+      "dataController": "Criteo SA",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "d395bc9b-0741-458e-912e-fe3afc997825",
       "category": "Marketing",
       "cookie": "cto_bundle",
       "domain": "",
@@ -17072,6 +17237,17 @@
       "domain": "doubleclick.net (3rd party)",
       "description": "This cookie is used for targeting, analyzing and optimisation of ad campaigns in DoubleClick/Google Marketing Suite ",
       "retentionPeriod": "2 years",
+      "dataController": "Google",
+      "privacyLink": "https://business.safety.google/privacy/",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "256c8af8-d881-11e9-8a34-2a2ae2dbcce4",
+      "category": "Marketing",
+      "cookie": "DSID",
+      "domain": "doubleclick.net (3rd party)",
+      "description": "This cookie is used for targeting, analyzing and optimisation of ad campaigns in DoubleClick/Google Marketing Suite ",
+      "retentionPeriod": "2 weeks",
       "dataController": "Google",
       "privacyLink": "https://business.safety.google/privacy/",
       "wildcardMatch": "0"
@@ -18466,6 +18642,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "ddbb67b2-33f2-4844-ae27-19e02b20c0e8",
+      "category": "Marketing",
+      "cookie": "pid",
+      "domain": "xplosion.de",
+      "description": "This cookie is used by Xplosion/emetriq. Used to analyze the behavior of visitors to the website and derive settings. These allow for interest-based promotional content on third party websites.",
+      "retentionPeriod": "1 year",
+      "dataController": "Emetric",
+      "privacyLink": "https://www.emetriq.com/datenschutz/",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "faed0348-d26e-44c1-b482-85c0efe3792a",
       "category": "Marketing",
       "cookie": "ep",
@@ -18474,6 +18661,17 @@
       "retentionPeriod": "1 year",
       "dataController": "Emetric",
       "privacyLink": "https://www.emetriq.com/datenschutz/",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "72ccbe92-6c9b-4441-8b3e-2ec84120b80d",
+      "category": "Marketing",
+      "cookie": "pid",
+      "domain": ".smartadserver.com",
+      "description": "This cookie is used by Xplosion/emetriq. Used to analyze the behavior of visitors to the website and derive settings. These allow for interest-based promotional content on third party websites.",
+      "retentionPeriod": "13 months",
+      "dataController": "Equativ.com",
+      "privacyLink": "https://equativ.com/end-users-privacy-policy/",
       "wildcardMatch": "0"
     }
   ],
@@ -27724,14 +27922,14 @@
   ],
   "Loggly": [
     {
-      "id": "37ef0bb9-7cf9-48f8-aa88-0b79f3716dd0",
-      "category": "Functional",
+      "id": "66be5efa-7d7d-425b-908b-a0bf983bf586",
+      "category": "Uncategorized",
       "cookie": "logglytrackingsession",
       "domain": "",
-      "description": "Used by Loggly for performance and error tracking.",
+      "description": "Cookie belonging to Loggly",
       "retentionPeriod": "session",
-      "dataController": "Solarwinds",
-      "privacyLink": "https://www.solarwinds.com/legal/privacy",
+      "dataController": "Loggly",
+      "privacyLink": "",
       "wildcardMatch": "0"
     }
   ],
@@ -28887,6 +29085,17 @@
       "wildcardMatch": "1"
     },
     {
+      "id": "564934ab-9342-4963-967f-657ff376b8b2",
+      "category": "Analytics",
+      "cookie": "_s",
+      "domain": "events.newsroom.bi",
+      "description": "This cookie is used to save for temporary visit session",
+      "retentionPeriod": "Session",
+      "dataController": "Marfeel",
+      "privacyLink": "https://community.marfeel.com/t/marfeel-com-privacy-policy/10383",
+      "wildcardMatch": "1"
+    },
+    {
       "id": "6362438b-2660-4d6d-9a51-34051cd52ee5",
       "category": "Analytics",
       "cookie": "_lv",
@@ -29480,6 +29689,17 @@
       "domain": ".mediarithmics.com",
       "description": "This cookie is added by mediarithmics which determines the last time the browser has been seen",
       "retentionPeriod": "1 year",
+      "dataController": "Mediarithmics",
+      "privacyLink": "https://developer.mediarithmics.io/advanced-usages/data-privacy-compliance/cookies",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "a7caa710-320c-4e77-bcc9-9bd269ec710d",
+      "category": "Marketing",
+      "cookie": "chk",
+      "domain": ".mediarithmics.com",
+      "description": "This cookie is added by mediarithmics In the case of a call on events.mediarithmics.com without a cookie mics_vid, this cookie is written to check that the user browser facilitates third party cookies. It contains a randomly generated UUID.",
+      "retentionPeriod": "1 hour",
       "dataController": "Mediarithmics",
       "privacyLink": "https://developer.mediarithmics.io/advanced-usages/data-privacy-compliance/cookies",
       "wildcardMatch": "0"
@@ -33169,6 +33389,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "6bb347de-93fd-4ef7-b8a9-c0915904a99d",
+      "category": "Marketing",
+      "cookie": "auid",
+      "domain": "",
+      "description": "This cooki holds the promotional content ID of the User on mobile devices. Used for tracking user actions, such as pages visited and clicks on recommendations, and personalized promotional contente",
+      "retentionPeriod": "90 days",
+      "dataController": "Outbrain",
+      "privacyLink": "https://www.outbrain.com/privacy/",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "73575c75-8275-4def-8e2e-0cfaaa0863da",
       "category": "Marketing",
       "cookie": "outbrain_dicbo_id",
@@ -34043,6 +34274,17 @@
       "domain": "",
       "description": "This cookie saves the result of previous Adblock detection, removes false-positive AdBlock detection clauses.",
       "retentionPeriod": "90 days",
+      "dataController": "Piano",
+      "privacyLink": "https://piano.io/privacy-policy/",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "fba28545-7582-4809-94c6-738f237868e4",
+      "category": "Functional",
+      "cookie": "LANG",
+      "domain": "tinypass.com",
+      "description": "This cookie saves the selected locale",
+      "retentionPeriod": "1500 days",
       "dataController": "Piano",
       "privacyLink": "https://piano.io/privacy-policy/",
       "wildcardMatch": "0"
@@ -35452,6 +35694,17 @@
       "dataController": "Quality Unit, s.r.o.",
       "privacyLink": "",
       "wildcardMatch": "0"
+    },
+    {
+      "id": "14b8a39b-bcea-4628-a84e-0ec0debfa37a",
+      "category": "Analytics",
+      "cookie": "PAPVisitorId",
+      "domain": "",
+      "description": "Set by Post Affiliate Pro to assign a unique ID to each visitor. This cookie is used to track affiliate referrals and conversions, ensuring that sales or signups are attributed to the correct affiliate partner.",
+      "retentionPeriod": "",
+      "dataController": "Quality Unit, s.r.o.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
     }
   ],
   "Post Snippets": [
@@ -35470,6 +35723,17 @@
   "PostHog Analytics": [
     {
       "id": "d4799623-8f68-4367-8508-7b587ff58fc0",
+      "category": "Analytics",
+      "cookie": "ph_phc_*",
+      "domain": "",
+      "description": "Used by Posthog Analytics to get insights into their user behavior",
+      "retentionPeriod": "",
+      "dataController": "PostHog, Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "2420823b-c8a0-4739-9c13-596f17a23e7f",
       "category": "Analytics",
       "cookie": "ph_phc_*",
       "domain": "",
@@ -35624,6 +35888,28 @@
       "cookie": "privacypillar-cookie-consent",
       "domain": "",
       "description": "Saves the user's current consent status.",
+      "retentionPeriod": "1 year",
+      "dataController": "PrivacyPillar",
+      "privacyLink": "https://privacypillar.com/privacy-policy/",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "2bbba96a-7732-45e8-bbd6-4edaa69ecbe5",
+      "category": "Functional",
+      "cookie": "euconsent-v2",
+      "domain": "",
+      "description": "This cookie saves the TC string.",
+      "retentionPeriod": "1 year",
+      "dataController": "PrivacyPillar",
+      "privacyLink": "https://privacypillar.com/privacy-policy/",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "3c664df2-a6cc-43a0-87e0-c79a1f6aee8a",
+      "category": "Functional",
+      "cookie": "usprivacy",
+      "domain": "",
+      "description": "This cookie saves the US privacy string.",
       "retentionPeriod": "1 year",
       "dataController": "PrivacyPillar",
       "privacyLink": "https://privacypillar.com/privacy-policy/",
@@ -38584,6 +38870,17 @@
       "wildcardMatch": "1"
     },
     {
+      "id": "63132c86-f1b6-4c12-b0a8-d1aa197158b5",
+      "category": "Functional",
+      "cookie": "oid",
+      "domain": "salesforce.com",
+      "description": "Used to redirect a user to the correct Salesforce org and assist the user for the next login.",
+      "retentionPeriod": "2 years",
+      "dataController": "Salesforce",
+      "privacyLink": "https://www.salesforce.com/company/privacy/",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "9ac305e4-6765-47cd-80bf-478fbdd0b9cc",
       "category": "Functional",
       "cookie": "CookieConsentPolicy",
@@ -39851,6 +40148,17 @@
       "domain": "sharethis.com",
       "description": "ShareThis Tag Management System cookie to track status of pixel rotation loading. ShareThis uses a different cookie for different groups of sites within the ShareThis network.",
       "retentionPeriod": "1 year",
+      "dataController": "ShareThis",
+      "privacyLink": "https://sharethis.com/privacy/",
+      "wildcardMatch": "1"
+    },
+    {
+      "id": "7da07b97-f381-4af9-bce6-fa6f5af03b93",
+      "category": "Functional",
+      "cookie": "euconsent",
+      "domain": "",
+      "description": "ShareThis reads if the euconsent cookie is present in the publisher domain.",
+      "retentionPeriod": "session",
       "dataController": "ShareThis",
       "privacyLink": "https://sharethis.com/privacy/",
       "wildcardMatch": "1"
@@ -42413,6 +42721,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "9334749f-8d44-4eec-9b58-50f1ba61d7b2",
+      "category": "Marketing",
+      "cookie": "__uis",
+      "domain": "go.sonobi.com",
+      "description": "This domain is owned by Sonobi, an automated online promotional content buying and selling platform.",
+      "retentionPeriod": "29 Days",
+      "dataController": "Sonobi",
+      "privacyLink": "https://sonobi.com/privacy-policy/",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "ad9387f5-e05f-4f72-b6c1-4e811f8b99f7",
       "category": "Marketing",
       "cookie": "HAPLB3A",
@@ -42592,6 +42911,17 @@
   ],
   "Springserve": [
     {
+      "id": "730f2148-258f-4b10-af8d-a6c252673b11",
+      "category": "Marketing",
+      "cookie": "ssid",
+      "domain": ".springserve.com",
+      "description": "This cookie is associated with SpringServe. It is used for serving video ads.",
+      "retentionPeriod": "365 days",
+      "dataController": "Magnite",
+      "privacyLink": "https://www.magnite.com/legal/platform-cookie-policy/",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "cda734ff-dfe7-4301-8e3a-5d2954ac8800",
       "category": "Marketing",
       "cookie": "sst",
@@ -42719,7 +43049,40 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "b1e2be92-d8b9-4f07-a5cb-d415571535d0",
+      "category": "Marketing",
+      "cookie": "sa-user-id-v2",
+      "domain": "",
+      "description": "Stack Adapt promotional content first-party cookie. Used by Stack Adapt to track visits across websites to deliver a series of ad campaigns products such as real time bidding from third party advertisers.",
+      "retentionPeriod": "",
+      "dataController": "StackAdapt Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "70069f96-825d-4233-b947-e339a57a1b8d",
+      "category": "Marketing",
+      "cookie": "sa-user-id",
+      "domain": "",
+      "description": "Stack Adapt promotional content first-party cookie. Used by Stack Adapt to track visits across websites to deliver a series of ad campaigns products such as real time bidding from third party advertisers.",
+      "retentionPeriod": "",
+      "dataController": "StackAdapt Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "253d3efc-fe36-48b4-a979-a20469ca65d9",
+      "category": "Marketing",
+      "cookie": "sa-user-id-v3",
+      "domain": "",
+      "description": "Stack Adapt promotional content first-party cookie. Used by Stack Adapt to track visits across websites to deliver a series of ad campaigns products such as real time bidding from third party advertisers.",
+      "retentionPeriod": "",
+      "dataController": "StackAdapt Inc.",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "42190ade-543e-44f8-a092-a5d55171f306",
       "category": "Marketing",
       "cookie": "sa-user-id-v3",
       "domain": "",
@@ -43600,12 +43963,45 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "235735ae-0c85-4009-b6f4-4dc283345c44",
+      "category": "Marketing",
+      "cookie": "tp",
+      "domain": ".t.tailtarget.com",
+      "description": "This cookie is used for deliver ads, using synchronous id for DSP",
+      "retentionPeriod": "30 days",
+      "dataController": "Totvs",
+      "privacyLink": "https://www.totvs.com/protecao-e-privacidade-de-dados/",
+      "wildcardMatch": "1"
+    },
+    {
+      "id": "49615b53-95cd-4ce3-a6ea-d31d36669a04",
+      "category": "Functional",
+      "cookie": "dc",
+      "domain": ".t.tailtarget.com",
+      "description": "This cookie is used for sync with Google services",
+      "retentionPeriod": "30 days",
+      "dataController": "Totvs",
+      "privacyLink": "https://www.totvs.com/protecao-e-privacidade-de-dados/",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "93bcd441-ff31-4e3c-948f-367c052cac59",
       "category": "Marketing",
       "cookie": "ttgcm",
       "domain": ".t.tailtarget.com",
       "description": "This cookie is used for sync with Google services",
       "retentionPeriod": "14 days",
+      "dataController": "Totvs",
+      "privacyLink": "https://www.totvs.com/protecao-e-privacidade-de-dados/",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "97c3b930-9f3f-4f62-8ddd-6fb07a4fe3a3",
+      "category": "Marketing",
+      "cookie": "_ssc",
+      "domain": ".t.tailtarget.com",
+      "description": "This cookie is used for indicate user access to the same site",
+      "retentionPeriod": "2 days",
       "dataController": "Totvs",
       "privacyLink": "https://www.totvs.com/protecao-e-privacidade-de-dados/",
       "wildcardMatch": "0"
@@ -45862,17 +46258,6 @@
     }
   ],
   "Unknown": [
-    {
-      "id": "d22b350f-8ecb-47d1-8abc-5803e583f97b",
-      "category": "Functional",
-      "cookie": "ContinueReview",
-      "domain": "",
-      "description": "Data storage used by the associated service.",
-      "retentionPeriod": "",
-      "dataController": "Unknown",
-      "privacyLink": "",
-      "wildcardMatch": "0"
-    },
     {
       "id": "86531df2-94a9-43e0-9262-856c57f16160",
       "category": "Security",
@@ -49196,6 +49581,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "b8f41a1a-3002-4450-bb4a-f78f28e82389",
+      "category": "Functional",
+      "cookie": "elementor",
+      "domain": "",
+      "description": "Used in context with the website's WordPress theme. The cookie allows the website owner to implement or change the website's content in real-time.",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "d534d9a7-b7df-4051-8e41-59297fccc9ce",
       "category": "Uncategorized",
       "cookie": "prli_click_*",
@@ -49548,6 +49944,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "59c59a57-5632-4933-8599-00aca3391885",
+      "category": "Uncategorized",
+      "cookie": "is_eu",
+      "domain": "",
+      "description": "No description available",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "cf3e0e2f-2b28-42fe-9e71-ab06f19f34c9",
       "category": "Uncategorized",
       "cookie": "lastsearchpage",
@@ -49716,6 +50123,17 @@
       "id": "2494ca18-f7de-4180-861d-9705fc8ad57c",
       "category": "Uncategorized",
       "cookie": "AVPUID",
+      "domain": "",
+      "description": "No description available",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "94c00dd0-7cde-4313-86c6-1fdab761eb76",
+      "category": "Uncategorized",
+      "cookie": "__rtbh.lid",
       "domain": "",
       "description": "No description available",
       "retentionPeriod": "",
@@ -50527,6 +50945,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "64613f0c-3ad4-4a31-a3d2-4670799a5192",
+      "category": "Uncategorized",
+      "cookie": "crisp-client*",
+      "domain": "",
+      "description": "No description available",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "1ea343d3-b414-4072-9492-e3983f9374ed",
       "category": "Uncategorized",
       "cookie": "_scc_session",
@@ -50772,6 +51201,17 @@
       "id": "cafb522a-c653-4d48-bb58-528359fa492b",
       "category": "Analytics",
       "cookie": "__mpq*",
+      "domain": "",
+      "description": "No description available",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "37c81314-9440-48ed-81d5-4a8bf85e0997",
+      "category": "Uncategorized",
+      "cookie": "_reb2buid",
       "domain": "",
       "description": "No description available",
       "retentionPeriod": "",
@@ -51418,6 +51858,17 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "ffda6b0e-3229-4e5a-87a6-f3c4a3ed185b",
+      "category": "Uncategorized",
+      "cookie": "gt_autoswitch",
+      "domain": "",
+      "description": "No description available",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "02dd6933-b8dd-48f8-8acf-6d77d677db0e",
       "category": "Uncategorized",
       "cookie": "electron_cpv_*",
@@ -51432,6 +51883,17 @@
       "id": "5411efe2-1589-489c-92ba-6344b2fedae0",
       "category": "Uncategorized",
       "cookie": "_fai__ga_*",
+      "domain": "",
+      "description": "No description available",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "ca22a1eb-b6ae-431b-a57e-6bd4aa59f9a4",
+      "category": "Functional",
+      "cookie": "__cmpcccx*",
       "domain": "",
       "description": "No description available",
       "retentionPeriod": "",
@@ -51793,6 +52255,17 @@
     },
     {
       "id": "69fb81e7-aa66-4f6a-9260-4abc990e2916",
+      "category": "Functional",
+      "cookie": "__cmpcccu*",
+      "domain": "",
+      "description": "No description available",
+      "retentionPeriod": "",
+      "dataController": "",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "3f65e999-d62b-45ae-bc84-8627fb5e6dfb",
       "category": "Functional",
       "cookie": "__cmpcccu*",
       "domain": "",
@@ -68567,6 +69040,17 @@
       "wildcardMatch": "1"
     },
     {
+      "id": "d22b350f-8ecb-47d1-8abc-5803e583f97b",
+      "category": "Functional",
+      "cookie": "ContinueReview",
+      "domain": "",
+      "description": "Data storage used by the associated service.",
+      "retentionPeriod": "",
+      "dataController": "Unknown",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "cdfe4474-c830-4067-b0fb-852283507a7c",
       "category": "Functional",
       "cookie": "intercom-state-*",
@@ -72722,6 +73206,28 @@
       "wildcardMatch": "0"
     },
     {
+      "id": "b52d31f6-1786-4cbb-978c-55520a9c81fd",
+      "category": "Functional",
+      "cookie": "token",
+      "domain": ".adnxs.com",
+      "description": "Cookies that start with token are helper cookies used as a security measure with industry opt-out pages. They contain a unique value only to verify the origin of opt-out requests.",
+      "retentionPeriod": "1440 Minutes",
+      "dataController": "Xandr",
+      "privacyLink": "https://about.ads.microsoft.com/en-us/solutions/xandr/platform-privacy-policy",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "ea5bede7-3bed-4141-9268-522d13d33592",
+      "category": "Marketing",
+      "cookie": "uids",
+      "domain": ".adnxs.com",
+      "description": "This cookie contains a base 64 encoded JSON object which contains external unique randomly-generated values that enable other Prebid Server demand partners to distinguish browsers and mobile devices.",
+      "retentionPeriod": "120 days",
+      "dataController": "Xandr",
+      "privacyLink": "https://about.ads.microsoft.com/en-us/solutions/xandr/platform-privacy-policy",
+      "wildcardMatch": "0"
+    },
+    {
       "id": "8a8c67fa-4cb8-4a8c-a108-f3d0c6c068fe",
       "category": "Functional",
       "cookie": "sess",
@@ -73163,6 +73669,17 @@
       "domain": ".yahoo.com",
       "description": "This cookie is used to collect information on a visitor. This information will become an ID string with information on a specific visitor – ID information strings can be used to target groups with similar preferences, or can be used by third-party domains or ad-exchanges.",
       "retentionPeriod": "1 year",
+      "dataController": "Yahoo",
+      "privacyLink": "https://legal.yahoo.com/ie/en/yahoo/privacy/cookies/index.html",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "a61b7954-4fe9-4da3-acf1-ea89e23ec02c",
+      "category": "Marketing",
+      "cookie": "optout",
+      "domain": ".yahoo.com",
+      "description": "This cookie collect and store data of ads from user opted out",
+      "retentionPeriod": "2 years",
       "dataController": "Yahoo",
       "privacyLink": "https://legal.yahoo.com/ie/en/yahoo/privacy/cookies/index.html",
       "wildcardMatch": "0"
