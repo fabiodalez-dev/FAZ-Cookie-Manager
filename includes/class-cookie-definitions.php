@@ -52,11 +52,17 @@ class Cookie_Definitions {
 	 * @var array
 	 */
 	private static $category_map = array(
-		'necessary'  => 'necessary',
-		'functional' => 'functional',
-		'analytics'  => 'analytics',
-		'marketing'  => 'marketing',
-		'security'   => 'necessary',
+		'necessary'       => 'necessary',
+		'functional'      => 'functional',
+		'analytics'       => 'analytics',
+		'marketing'       => 'marketing',
+		'security'        => 'necessary',
+		// Google's taxonomy, not the GDPR one: personalization_storage is a
+		// Consent Mode v2 signal, and gcm.js already drives it from the
+		// functional category. Without this row the database's own
+		// "Personalization" entries fell through to uncategorized, so the same
+		// cookie was functional to Google and unclassified to the banner.
+		'personalization' => 'functional',
 	);
 
 	/**
