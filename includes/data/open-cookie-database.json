@@ -12505,7 +12505,7 @@
   "Clerk": [
     {
       "id": "c7d8e9f0-0007-4567-890a-000000000007",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "clerk_",
       "domain": "",
       "description": "Clerk authentication service session and user management cookies.",
@@ -15986,6 +15986,17 @@
       "retentionPeriod": "session",
       "dataController": "Crazy Egg",
       "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "946819fc-a397-4bcd-bdab-02c28fd4881c",
+      "category": "Analytics",
+      "cookie": "ce_need_secure_cookie",
+      "domain": "",
+      "description": "This cookie is used to determine cookie protection parameters.",
+      "retentionPeriod": "1 second",
+      "dataController": "Crazy Egg",
+      "privacyLink": "https://www.crazyegg.com/cookies",
       "wildcardMatch": "0"
     }
   ],
@@ -30548,7 +30559,7 @@
     },
     {
       "id": "c7d8e9f0-0004-4567-890a-000000000004",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "next-auth.",
       "domain": "",
       "description": "Authentication session cookies for NextAuth.js (Auth.js) - popular authentication library for Next.js.",
@@ -36870,7 +36881,7 @@
   "QookieQloud": [
     {
       "id": "47686e93-18a8-4a28-af7e-0f33617ba46f",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "__cmpQQ_CookieConsent",
       "domain": "",
       "description": "Stores the user's cookie consent state for the current domain",
@@ -36881,7 +36892,7 @@
     },
     {
       "id": "a85ff7d7-bc7c-4ee1-a106-50a872b16530",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "__cpmQQ_trackers",
       "domain": "",
       "description": "Saves information about trackers to block based on Consent.",
@@ -36892,7 +36903,7 @@
     },
     {
       "id": "5d50468b-2d25-4754-974f-11a975939863",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "__cpmQQ_trackers_timestamp",
       "domain": "",
       "description": "Last update for the trackers.",
@@ -36903,7 +36914,7 @@
     },
     {
       "id": "153fc9f0-7e35-45d3-998c-4951ba3b5dd6",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "__cmpQQ_usedCoookies",
       "domain": "",
       "description": "Saves the sites cookies for faster experience.",
@@ -36914,7 +36925,7 @@
     },
     {
       "id": "167501cd-b50d-42b6-aa0c-97347b8ecb55",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "__cmpQQ_consentID",
       "domain": "",
       "description": "This cookie is used as a distinctive identifierentification for the users who has accepted the cookie consent box.",
@@ -38256,7 +38267,7 @@
   "Ruby on Rails": [
     {
       "id": "c7d8e9f0-0002-4567-890a-000000000002",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "_rails_session",
       "domain": "",
       "description": "Session management cookie for Ruby on Rails applications. Contains encrypted session data.",
@@ -43543,7 +43554,7 @@
   "Supabase": [
     {
       "id": "c7d8e9f0-0006-4567-890a-000000000006",
-      "category": "Functional",
+      "category": "Necessary",
       "cookie": "sb-",
       "domain": "",
       "description": "Supabase authentication and session management cookies.",
