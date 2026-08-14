@@ -9,7 +9,7 @@
  *   - GPC ruleset flag integrity (5 UOOM states + fallback)
  *   - PIPEDA hybrid reclassification
  *   - GPC honoured server-side (Sec-GPC + DNSMPI cookie)
- *   - 6-month (182-day) consent-expiry cap logic
+ *   - 6-month (180-182 day) consent-expiry window logic
  *   - Trusted-proxy CIDR allowlist (faz_ip_in_cidr_list)
  *   - Accept/Reject equal-weight default button styling
  *
@@ -264,18 +264,19 @@ foreach ( array( '', '6.0.0/', '6.2.0/' ) as $ver ) {
 }
 
 // ===========================================================================
-// 6. 6-month (182-day) consent-expiry cap logic (main caps at 182)
+// 6. 6-month consent-expiry window (main enforces 180-182)
 // ===========================================================================
-echo "\n-- Consent expiry cap (182 days) --\n";
+echo "\n-- Consent expiry window (180-182 days) --\n";
 
-// Mirror the clamp applied in frontend/class-frontend.php (main caps at 182).
+// Mirror the GDPR-family clamp applied in frontend/class-frontend.php. The
+// separate production-class regression suite covers the CCPA 365-day floor.
 $clamp_expiry = function ( $value ) {
-	return min( 182, max( 1, (int) $value ) );
+	return min( 182, max( 180, (int) $value ) );
 };
 assert_eq( $clamp_expiry( 3650 ), 182, '10-year request clamps to 182 days' );
 assert_eq( $clamp_expiry( 365 ), 182, '1-year request clamps to 182 days' );
 assert_eq( $clamp_expiry( 180 ), 180, 'compliant 180 passes through' );
-assert_eq( $clamp_expiry( 0 ), 1, 'zero floors to 1 day' );
+assert_eq( $clamp_expiry( 0 ), 180, 'zero floors to the six-month minimum' );
 // The shipped default must be within the cap.
 $gdpr_cfg = load_json( "$configs_dir/6.2.0/gdpr.json" );
 assert_true(

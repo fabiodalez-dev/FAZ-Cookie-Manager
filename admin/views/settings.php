@@ -165,6 +165,11 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Tracks pageviews and banner interactions (accept, reject, settings) for the dashboard analytics. Data is aggregate-only: it sends the page URL and title with no per-visitor identifier or cookie, so the events cannot be linked across pages or sessions. Counts are stored first-party in your own database. Disable for stricter compliance.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Retention Period (months)', 'faz-cookie-manager' ); ?></label>
+				<input type="number" class="faz-input faz-input-sm" data-path="pageviews.retention" value="6" min="0" max="120" style="width:120px;">
+				<div class="faz-help"><?php esc_html_e( 'How long aggregate pageview records are kept before automatic deletion. Enter 0 to disable automatic deletion; choose and document a period appropriate to your analytics purpose.', 'faz-cookie-manager' ); ?></div>
+			</div>
 		</div>
 	</div>
 
@@ -226,7 +231,20 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Retention Period (months)', 'faz-cookie-manager' ); ?></label>
 				<input type="number" class="faz-input faz-input-sm" data-path="consent_logs.retention" value="12" min="1" max="120" style="width:120px;">
-				<div class="faz-help"><?php esc_html_e( 'How long consent records are kept before automatic deletion. Most DPAs recommend 12 months. Logs older than this period are purged daily.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'How long consent records are kept before automatic deletion. Choose a documented period appropriate to your accountability obligations. Logs older than this period are purged daily.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header">
+			<h3><?php esc_html_e( 'Data Subject Requests', 'faz-cookie-manager' ); ?></h3>
+		</div>
+		<div class="faz-card-body">
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Retention Period (months)', 'faz-cookie-manager' ); ?></label>
+				<input type="number" class="faz-input faz-input-sm" data-path="dsar.retention" value="24" min="1" max="120" style="width:120px;">
+				<div class="faz-help"><?php esc_html_e( 'How long completed data-subject request records are kept before automatic deletion. Keep a period that supports your ability to demonstrate and manage requests.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>

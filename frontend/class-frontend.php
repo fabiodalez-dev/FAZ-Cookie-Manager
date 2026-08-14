@@ -2275,6 +2275,33 @@ class Frontend {
 	}
 
 	/**
+	 * Normalize the consent-cookie lifetime for the active legal model.
+	 *
+	 * GDPR-family banners may only persist a banner decision for the six-month
+	 * window represented by 180-182 days. CCPA/CPRA banners must retain the
+	 * visitor's choice for at least 12 months, so a shorter configured value is
+	 * raised to 365 days. Unknown models deliberately use the stricter opt-in
+	 * rule instead of silently falling back to a long-lived cookie.
+	 *
+	 * Kept as a pure public helper so migrations, integrations and the unit suite
+	 * can exercise the same rule used by get_store_data().
+	 *
+	 * @param string $law             Banner law/model identifier.
+	 * @param int    $configured_days Configured lifetime in days.
+	 * @return int Effective lifetime in days.
+	 */
+	public static function normalize_consent_expiry( $law, $configured_days ) {
+		$law             = strtolower( (string) $law );
+		$configured_days = absint( $configured_days );
+
+		if ( 'ccpa' === $law ) {
+			return max( 365, $configured_days );
+		}
+
+		return max( 180, min( 182, $configured_days ) );
+	}
+
+	/**
 	 * Get store data
 	 *
 	 * @return array
@@ -2292,21 +2319,14 @@ class Frontend {
 		// _ageGate store and the sprintf'd age-confirmation label below.
 		$age_min = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
 
-		// Consent-cookie lifetime, with a law-aware hard cap applied here so the
-		// EFFECTIVE expiry can never exceed the legal maximum regardless of any
-		// larger value an admin saved (the UI allows up to 10 years). The
-		// Italian Garante (Linee guida cookie, 10 Jun 2021) caps consent
-		// validity at 6 months for opt-in (GDPR-family) banners, so those are
-		// clamped to 182 days. Opt-out (CCPA/CPRA) banners are NOT subject to
-		// that cap — a LONGER lifetime is actually preferable there (CPRA bars
-		// asking a user to re-confirm an opt-out more than once per 12 months),
-		// so their configured value (default 365) is honoured as-is.
+		// Consent-cookie lifetime is normalized at the final runtime boundary so
+		// legacy rows, imports and direct API writes cannot bypass the law-aware
+		// limits shown in the admin editor.
+		$faz_law = $banner->get_law();
 		$faz_configured_expiry = isset( $banner_settings['settings']['consentExpiry']['value'] )
 			? absint( $banner_settings['settings']['consentExpiry']['value'] )
-			: 180;
-		$faz_expiry = ( 'ccpa' === $banner->get_law() )
-			? max( 1, $faz_configured_expiry )
-			: max( 1, min( 182, $faz_configured_expiry ) );
+			: ( 'ccpa' === $faz_law ? 365 : 180 );
+		$faz_expiry = self::normalize_consent_expiry( $faz_law, $faz_configured_expiry );
 
 		$providers = array();
 		$store     = array(
@@ -4069,117 +4089,19 @@ class Frontend {
 			'regenerator-runtime',
 		);
 
-		// ── Page builders — essential for layout rendering ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/elementor/',
-			'plugins/elementor-pro/',
-			'elementor-frontend',
-			'elementor-common',
-			'elementor-waypoints',
-			'plugins/js_composer/',
-			'plugins/wpbakery/',
-			'js_composer_front',
-			'wpb_composer_front_js',
-			'plugins/beaver-builder-lite-version/',
-			'plugins/bb-plugin/',
-			'fl-builder-',
-			'plugins/divi-builder/',
-			'et_pb_',
-			'et-builder-',
-			'plugins/oxygen/',
-			'plugins/bricks/',
-			'bricks-frontend',
-		) );
-
-		// ── Form plugins — necessary for form submission ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/contact-form-7/',
-			'wpcf7',
-			'plugins/wpforms/',
-			'wpforms-',
-			'plugins/gravityforms/',
-			'gform_',
-			'plugins/formidable/',
-			'frm_',
-			'plugins/ninja-forms/',
-			'nf-front-end',
-			'plugins/happyforms/',
-			'plugins/forminator/',
-			'forminator-front',
-			'plugins/fluent-forms/',
-			'fluentform',
-			'plugins/ws-form/',
-		) );
-
-		// ── Anti-spam / CAPTCHA — necessary for form protection ──
-		$whitelist = array_merge( $whitelist, array(
-			'google.com/recaptcha',
-			'gstatic.com/recaptcha',
-			'grecaptcha',
-			'recaptcha/api.js',
-			'hcaptcha.com',
-			'js.hcaptcha.com',
-			'challenges.cloudflare.com/turnstile',
-			'akismet',
-		) );
-
-		// ── Security plugins ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/wordfence/',
-			'plugins/better-wp-security/',
-			'plugins/sucuri-scanner/',
-			'plugins/all-in-one-wp-security-and-firewall/',
-		) );
-
-		// ── WooCommerce essential scripts ──
-		$whitelist = array_merge( $whitelist, array(
-			'woocommerce/assets/js/',
-			'wc-cart-fragments',
-			'wc-checkout',
-			'wc-add-to-cart',
-		) );
-
-		// ── Caching / optimisation plugins ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/wp-rocket/',
-			'plugins/litespeed-cache/',
-			'plugins/w3-total-cache/',
-			'plugins/wp-super-cache/',
-			'plugins/autoptimize/',
-			'plugins/wp-fastest-cache/',
-		) );
-
-		// ── Translation / multilingual ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/sitepress-multilingual-cms/',
-			'plugins/polylang/',
-			'plugins/translatepress-multilingual/',
-		) );
-
-		// ── Other WordPress essentials ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/advanced-custom-fields/',
-			'plugins/acf/',
-			'plugins/classic-editor/',
-			'plugins/shortcodes-ultimate/',
-		) );
+		// Do not whitelist whole third-party plugins or generic handles here.
+		// A plugin directory is not a consent category: it can contain a tracker,
+		// an inline pixel, or a later update that adds one. Unmatched assets already
+		// pass through unchanged, while a recognised provider remains blockable.
+		// Publishers may add a narrowly-scoped, audited exception in Settings when
+		// a resource is genuinely strictly necessary for their own use case.
 		$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
 
 		// ── WooCommerce core infrastructure ──
 		if ( class_exists( 'WooCommerce', false ) ) {
-			$whitelist = array_merge( $whitelist, array(
-				'plugins/woocommerce/',
-				'wc-settings',
-				'wc-blocks-',
-				'wc-cart',
-				'wc-checkout',
-				'wc-payment-method-',
-				'woocommerce-layout',
-				'woocommerce-smallscreen',
-				'woocommerce-general',
-			) );
-			// On checkout/cart pages, also whitelist payment gateway scripts
-			// (PayPal SDK, Mollie, Klarna, etc.) — they are necessary for purchases.
+			// On checkout/cart pages, explicitly allow the selected payment SDKs
+			// only. Core WooCommerce assets that do not match a provider pass through
+			// naturally; broad plugin paths would also exempt an embedded tracker.
 			if ( $this->is_wc_checkout_or_cart() ) {
 				$whitelist = array_merge( $whitelist, $this->get_payment_gateway_whitelist() );
 			}

@@ -42,6 +42,10 @@ class AMP_Consent {
 	 * Constructor — hooks into `wp` to detect AMP pages.
 	 */
 	public function __construct() {
+		// The REST bridge is registered on every public/REST bootstrap, not only
+		// after AMP page detection: checkConsentHref/onUpdateHref are separate
+		// requests and therefore cannot depend on the rendering request's hooks.
+		new AMP_Consent_Rest();
 		add_action( 'wp', array( $this, 'maybe_init' ) );
 	}
 
@@ -95,6 +99,12 @@ class AMP_Consent {
 		// AMP consent component in footer.
 		add_action( 'amp_post_template_footer', array( $this, 'output_amp_consent' ) );
 		add_action( 'wp_footer', array( $this, 'output_amp_consent' ) );
+
+		// Apply granular blocking attributes only to AMP components FAZ can
+		// classify deterministically. Theme/plugin markup that already carries a
+		// consent policy is left untouched; unknown components are never claimed
+		// as covered by this integration.
+		add_action( 'template_redirect', array( $this, 'start_component_blocking_buffer' ), 11 );
 	}
 
 	/**
@@ -291,6 +301,11 @@ class AMP_Consent {
 			.faz-amp-banner-inner{max-width:960px;margin:0 auto}
 			.faz-amp-title{font-size:16px;font-weight:700;margin:0 0 8px;color:<?php echo esc_attr( $c['title_color'] ); ?>}
 			.faz-amp-desc{font-size:13px;line-height:1.5;color:<?php echo esc_attr( $c['text_color'] ); ?>;margin:0 0 12px}
+			.faz-amp-purposes{display:grid;gap:8px;margin:0 0 12px;padding:0;border:0}
+			.faz-amp-purpose{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid rgba(127,127,127,.25)}
+			.faz-amp-purpose-name{font-size:13px;font-weight:600;color:<?php echo esc_attr( $c['text_color'] ); ?>}
+			.faz-amp-purpose-choice{display:flex;align-items:center;gap:7px;font-size:12px;color:<?php echo esc_attr( $c['reject_color'] ); ?>;cursor:pointer}
+			.faz-amp-purpose-choice input{width:18px;height:18px;margin:0;accent-color:<?php echo esc_attr( $c['accept_bg'] ); ?>}
 			.faz-amp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 			.faz-amp-btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer}
 			.faz-amp-btn-accept{background:<?php echo esc_attr( $c['accept_bg'] ); ?>;color:<?php echo esc_attr( $c['accept_color'] ); ?>}
@@ -347,36 +362,68 @@ class AMP_Consent {
 		$title       = isset( $notice['title'] ) ? wp_strip_all_tags( $notice['title'] ) : '';
 		$description = isset( $notice['description'] ) ? wp_strip_all_tags( $notice['description'] ) : '';
 		$btn         = isset( $notice['buttons']['elements'] ) ? $notice['buttons']['elements'] : array();
-		$accept_label   = ! empty( $btn['accept'] ) ? wp_strip_all_tags( $btn['accept'] ) : __( 'Accept All', 'faz-cookie-manager' );
-		$reject_label   = ! empty( $btn['reject'] ) ? wp_strip_all_tags( $btn['reject'] ) : __( 'Reject All', 'faz-cookie-manager' );
-		$settings_label = ! empty( $btn['readMore'] ) ? wp_strip_all_tags( $btn['readMore'] ) : __( 'Cookie Policy', 'faz-cookie-manager' );
+		$accept_label    = ! empty( $btn['accept'] ) ? wp_strip_all_tags( $btn['accept'] ) : __( 'Accept All', 'faz-cookie-manager' );
+		$reject_label    = ! empty( $btn['reject'] ) ? wp_strip_all_tags( $btn['reject'] ) : __( 'Reject All', 'faz-cookie-manager' );
+		$settings_label  = ! empty( $btn['readMore'] ) ? wp_strip_all_tags( $btn['readMore'] ) : __( 'Cookie Policy', 'faz-cookie-manager' );
+		$preference      = isset( $content['preferenceCenter']['elements'] ) && is_array( $content['preferenceCenter']['elements'] )
+			? $content['preferenceCenter']['elements']
+			: array();
+		$preference_btn = isset( $preference['buttons']['elements'] ) && is_array( $preference['buttons']['elements'] )
+			? $preference['buttons']['elements']
+			: array();
+		$save_label      = ! empty( $preference_btn['save'] )
+			? wp_strip_all_tags( $preference_btn['save'] )
+			: __( 'Save preferences', 'faz-cookie-manager' );
 
 		// Cookie policy link.
 		$privacy_url = ! empty( $notice['privacyLink'] ) ? $notice['privacyLink'] : '/cookie-policy';
 
-		// NOTE on consent expiry: the banner's configured lifetime
-		// (settings.consentExpiry.value, law-clamped in class-frontend.php)
-		// cannot be enforced here — the amp-consent component persists the
-		// visitor's decision in AMP's own client storage and exposes no
-		// client-side TTL in its JSON config. A previous revision computed an
-		// $expiry_days value (from a wrong config path, at that) and never
-		// used it; removed rather than pretending the promise is applied.
+		$purposes   = AMP_Consent_Rest::get_purposes();
+		$purpose_ids = array();
+		foreach ( $purposes as $purpose ) {
+			if ( ! empty( $purpose['id'] ) ) {
+				$purpose_ids[] = $purpose['id'];
+			}
+		}
+		$endpoints = AMP_Consent_Rest::endpoint_urls( $banner );
 
-		// Build consent config.
+		// Remote mode is required for parity with the standard first-party
+		// cookie. The check endpoint compares banner scope, revision and expiry;
+		// `expireCache` invalidates AMP localStorage when any of them changed.
+		// A rejected timeout is an explicit fail-closed policy for components
+		// blocked by this consent instance when the endpoint is unreachable.
 		$consent_config = array(
-			'consentInstanceId' => 'faz-cookie-consent',
-			'consentRequired'   => true,
+			'consentInstanceId' => $endpoints['instance'],
+			'consentRequired'   => 'remote',
+			'checkConsentHref'  => $endpoints['check'],
+			'onUpdateHref'      => $endpoints['update'],
 			'promptUI'          => 'faz-amp-consent-ui',
 			'postPromptUI'      => 'faz-amp-post-consent',
+			'policy'            => array(
+				'default' => array(
+					'timeout' => array(
+						'seconds'        => 5,
+						'fallbackAction' => 'reject',
+					),
+				),
+			),
+			'captions'          => array(
+				'consentPromptCaption' => $title ? $title : __( 'Cookie preferences', 'faz-cookie-manager' ),
+				'buttonActionCaption'  => __( 'Choose and save your cookie preferences.', 'faz-cookie-manager' ),
+			),
 		);
+		if ( ! empty( $purpose_ids ) ) {
+			$consent_config['purposeConsentRequired'] = $purpose_ids;
+		}
 
-		// Build outer consents wrapper.
-		$amp_config = array( 'consents' => array( 'faz' => $consent_config ) );
+		// amp-consent's public contract expects the instance configuration at
+		// the top level (not the legacy multi-consent `consents` wrapper).
+		$amp_config = $consent_config;
 
 		// GCM integration for AMP.
 		$gcm_settings = get_option( 'faz_gcm_settings' );
 		if ( ! empty( $gcm_settings['status'] ) ) {
-			$amp_config['consents']['faz']['gtagServices'] = array(
+			$amp_config['gtagServices'] = array(
 				'default_consent' => array(
 					'analytics_storage' => 'denied',
 					'ad_storage'        => 'denied',
@@ -398,9 +445,25 @@ class AMP_Consent {
 					<?php if ( $description ) : ?>
 						<p class="faz-amp-desc"><?php echo esc_html( $description ); ?></p>
 					<?php endif; ?>
+					<?php if ( ! empty( $purposes ) ) : ?>
+						<div class="faz-amp-purposes" role="group" aria-label="<?php esc_attr_e( 'Optional cookie categories', 'faz-cookie-manager' ); ?>">
+							<?php foreach ( $purposes as $purpose ) : ?>
+								<div class="faz-amp-purpose">
+									<span class="faz-amp-purpose-name"><?php echo esc_html( $purpose['name'] ? $purpose['name'] : $purpose['slug'] ); ?></span>
+									<label class="faz-amp-purpose-choice">
+										<input type="checkbox" on="<?php echo esc_attr( 'change:faz-amp-consent.setPurpose(' . $purpose['id'] . '=event.checked)' ); ?>" aria-label="<?php echo esc_attr( sprintf( __( 'Allow %s cookies', 'faz-cookie-manager' ), $purpose['name'] ? $purpose['name'] : $purpose['slug'] ) ); ?>">
+										<span><?php esc_html_e( 'Allow', 'faz-cookie-manager' ); ?></span>
+									</label>
+								</div>
+							<?php endforeach; ?>
+						</div>
+					<?php endif; ?>
 					<div class="faz-amp-actions">
-						<button on="tap:faz-amp-consent.accept" class="faz-amp-btn faz-amp-btn-accept"><?php echo esc_html( $accept_label ); ?></button>
-						<button on="tap:faz-amp-consent.reject" class="faz-amp-btn faz-amp-btn-reject"><?php echo esc_html( $reject_label ); ?></button>
+						<button on="tap:faz-amp-consent.accept(purposeConsentDefault=true)" class="faz-amp-btn faz-amp-btn-accept"><?php echo esc_html( $accept_label ); ?></button>
+						<button on="tap:faz-amp-consent.reject(purposeConsentDefault=false)" class="faz-amp-btn faz-amp-btn-reject"><?php echo esc_html( $reject_label ); ?></button>
+						<?php if ( ! empty( $purposes ) ) : ?>
+							<button on="tap:faz-amp-consent.accept(purposeConsentDefault=false)" class="faz-amp-btn faz-amp-btn-reject"><?php echo esc_html( $save_label ); ?></button>
+						<?php endif; ?>
 					</div>
 					<a href="<?php echo esc_url( $privacy_url ); ?>" class="faz-amp-link"><?php echo esc_html( $settings_label ); ?></a>
 				</div>
@@ -413,6 +476,121 @@ class AMP_Consent {
 			</div>
 		</amp-consent>
 		<?php
+	}
+
+	/**
+	 * Start the late AMP markup pass that applies purpose blocking.
+	 *
+	 * @return void
+	 */
+	public function start_component_blocking_buffer() {
+		$settings = get_option( 'faz_settings', array() );
+		if ( empty( $settings['banner_control']['status'] ) || false === $this->get_active_banner() ) {
+			return;
+		}
+		ob_start( array( $this, 'apply_component_blocking' ) );
+	}
+
+	/**
+	 * Add consent-purpose attributes to AMP components FAZ can classify.
+	 *
+	 * This pass deliberately has a narrow boundary. It covers common AMP
+	 * analytics, advertising and embedded-media components and exposes a filter
+	 * for site-specific extensions. It does not claim to control opaque markup
+	 * emitted after this buffer, requests made server-side, or a third-party AMP
+	 * component that ignores amp-consent. Existing publisher policies always win.
+	 *
+	 * @param string $html Complete AMP response.
+	 * @return string
+	 */
+	public function apply_component_blocking( $html ) {
+		if ( ! is_string( $html ) || '' === $html ) {
+			return $html;
+		}
+		$purposes   = AMP_Consent_Rest::get_purposes();
+		$purpose_ids = array();
+		foreach ( $purposes as $purpose ) {
+			if ( ! empty( $purpose['id'] ) ) {
+				$purpose_ids[] = sanitize_key( $purpose['id'] );
+			}
+		}
+		$map = array(
+			'amp-analytics'     => 'analytics',
+			'amp-pixel'         => 'analytics',
+			'amp-experiment'    => 'analytics',
+			'amp-ad'            => 'marketing',
+			'amp-auto-ads'       => 'marketing',
+			'amp-sticky-ad'     => 'marketing',
+			'amp-call-tracking' => 'marketing',
+			'amp-iframe'        => 'functional',
+			'amp-youtube'       => 'functional',
+			'amp-vimeo'         => 'functional',
+			'amp-twitter'       => 'functional',
+			'amp-facebook'      => 'functional',
+			'amp-instagram'     => 'functional',
+			'amp-pinterest'     => 'functional',
+		);
+		$map = (array) apply_filters( 'faz_amp_component_purpose_map', $map, $purpose_ids );
+		$parse_purposes = static function ( $value ) {
+			$values = is_array( $value ) ? $value : explode( ',', (string) $value );
+			$clean  = array();
+			foreach ( $values as $candidate ) {
+				if ( ! is_scalar( $candidate ) ) {
+					continue;
+				}
+				$candidate = sanitize_key( trim( (string) $candidate ) );
+				if ( '' !== $candidate && ! in_array( $candidate, $clean, true ) ) {
+					$clean[] = $candidate;
+				}
+			}
+			return $clean;
+		};
+
+		$result = preg_replace_callback(
+			'#<(amp-[a-z0-9-]+)\b([^>]*)>#i',
+			function ( $match ) use ( $map, $purpose_ids, $parse_purposes ) {
+				$tag   = strtolower( $match[1] );
+				$attrs = $match[2];
+				if (
+					'amp-consent' === $tag
+					|| preg_match( '/\sdata-block-on-consent(?:-purposes)?(?:\s|=|$)/i', $attrs )
+				) {
+					return $match[0];
+				}
+
+				// Site-owned/custom AMP components can declare their category at
+				// the markup boundary without requiring a PHP filter. Preserve the
+				// declaration for diagnostics and translate it into AMP's native
+				// blocking attribute. data-faz-purpose is the more specific alias.
+				$explicit = null;
+				if ( preg_match( '/\sdata-faz-(?:purpose|category)\s*=\s*(["\'])(.*?)\1/i', $attrs, $declared ) ) {
+					$explicit = $declared[2];
+				}
+				if ( null === $explicit && ! isset( $map[ $tag ] ) ) {
+					return $match[0];
+				}
+				$requested = $parse_purposes( null !== $explicit ? $explicit : $map[ $tag ] );
+				if ( empty( $requested ) || array( 'necessary' ) === $requested ) {
+					return $match[0];
+				}
+				$requested = array_values( array_diff( $requested, array( 'necessary' ) ) );
+				$valid     = array_values( array_intersect( $requested, $purpose_ids ) );
+				if ( ! empty( $requested ) && count( $valid ) === count( $requested ) ) {
+					$attribute = ' data-block-on-consent-purposes="' . esc_attr( implode( ',', $valid ) ) . '"';
+				} elseif ( ! empty( $purpose_ids ) ) {
+					// A classified optional component with no matching custom category
+					// requires every configured optional purpose. This over-blocks but
+					// cannot silently grant a request under an unrelated category.
+					$attribute = ' data-block-on-consent-purposes="' . esc_attr( implode( ',', $purpose_ids ) ) . '"';
+				} else {
+					$attribute = ' data-block-on-consent="_till_accepted"';
+				}
+				return '<' . $match[1] . $attribute . $attrs . '>';
+			},
+			$html
+		);
+
+		return null === $result ? $html : $result;
 	}
 
 	/**

@@ -228,12 +228,11 @@ class Settings extends Store {
 				// Google Fonts unlawful without consent). Site owners can still
 				// add any of them explicitly via Settings → Script Blocking if
 				// their lawful basis warrants it.
-				'whitelist_patterns' => array(
-					'www.google.com/recaptcha/api',
-					'www.gstatic.com/recaptcha/',
-					'challenges.cloudflare.com/',
-					'hcaptcha.com/',
-				),
+				// No third-party URL is whitelisted by default. CAPTCHA and payment
+				// providers can set identifiers or make external requests; a publisher
+				// must make the lawful-basis/necessity decision explicitly and add a
+				// narrow exception only where appropriate.
+				'whitelist_patterns' => array(),
 				// Per-gateway payment-SDK opt-in. Each toggle, when the site owner
 				// enables it, allows that gateway's payment scripts (PayPal SDK,
 				// Stripe.js, …) to load BEFORE consent site-wide — for stores whose

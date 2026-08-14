@@ -131,11 +131,13 @@ rg_eq( in_array( 'www.gstatic.com/recaptcha/', $out, true ), true, 'non-string e
 rg_run( array( 'www.google.com/recaptcha/api' ) );
 rg_eq( $GLOBALS['faz_test_writes'], 2, 'exactly two writes: the marker and the settings row' );
 
-// The shipped defaults carry both halves of the reCAPTCHA entry — which is
-// what makes the missing one on older installs a gap rather than a policy.
+// New installs must not receive a third-party CAPTCHA exception implicitly.
+// The migration above remains intentionally narrow for existing sites that
+// already made the explicit decision to allow reCAPTCHA before consent.
 $settings_src = (string) file_get_contents( $root . '/admin/modules/settings/includes/class-settings.php' );
-rg_eq( false !== strpos( $settings_src, 'www.google.com/recaptcha/api' ), true, 'the shipped defaults whitelist the reCAPTCHA endpoint' );
-rg_eq( false !== strpos( $settings_src, 'www.gstatic.com/recaptcha/' ), true, 'and the widget script too' );
+rg_eq( false !== strpos( $settings_src, "'whitelist_patterns' => array()," ), true, 'the shipped defaults require an explicit third-party exception' );
+rg_eq( false !== strpos( $settings_src, "'www.google.com/recaptcha/api'," ), false, 'the reCAPTCHA endpoint is not pre-whitelisted for new installs' );
+rg_eq( false !== strpos( $settings_src, "'www.gstatic.com/recaptcha/'," ), false, 'the reCAPTCHA widget script is not pre-whitelisted for new installs' );
 
 echo "\n" . ( $failed === 0 ? "\033[32m" : "\033[31m" ) . "{$passed} passed, {$failed} failed\033[0m\n";
 exit( 0 === $failed ? 0 : 1 );

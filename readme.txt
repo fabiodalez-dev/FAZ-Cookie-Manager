@@ -155,13 +155,13 @@ Service URL:
 Terms of Service / Privacy Policy:
 * https://ip-api.com/docs/legal
 
-= ipinfo.io (geo-routing v2 only) =
+= ipinfo.io (admin preview only) =
 
-Used for VPN/proxy/Tor detection when the admin opts in to enhanced geo detection via Settings → Geo-routing → ipinfo settings. The plugin sends the visitor IP to ipinfo.io to determine whether the visitor is masking their location; when VPN is detected, the most-protective rule-set is applied regardless of the visitor's apparent country.
+The live geo-ruleset runtime is intentionally disabled while its jurisdiction-specific UI obligations are being completed. Therefore ipinfo.io is not called for visitor-facing banner selection or consent enforcement. If an administrator enables it and runs the Geo-routing admin preview, the preview may use ipinfo.io to test VPN/proxy/Tor classification; this is not a live-banner feature.
 
-Triggered when: a frontend page renders the banner AND the admin has configured an ipinfo API key AND has explicitly attested to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs. Without the admin opt-in, ipinfo is NEVER called.
+Triggered when: an administrator has configured an ipinfo API key, confirmed the transfer terms, and explicitly runs an admin preview that uses the geo detector. Without the admin opt-in, ipinfo is never called.
 
-Data sent: the visitor's IP address (in cleartext, as required by ipinfo's lookup contract), the configured API key, and standard HTTP request headers. The plugin caches the VPN classification locally for 24 hours hash-keyed by the IP (with monthly salt rotation) so repeat visitors do not trigger fresh calls.
+Data sent: the IP address entered/resolved for that admin preview, the configured API key, and standard HTTP request headers. The result is cached locally for 24 hours hash-keyed by IP.
 
 Service URL:
 * https://ipinfo.io/{ip}/privacy
@@ -181,6 +181,20 @@ Data sent: only what the visitor's browser already sends with any page request t
 
 Service URL:
 * https://{your-site}/wp-json/faz/v1/banner
+
+= Plugin REST endpoints /faz/v1/amp-consent/check and /update (public) =
+
+Used by the plugin's AMP banner to reconcile the AMP consent cache with the first-party FAZ consent cookie. Both endpoints are hosted by the same WordPress install. Requests must pass the AMP CORS provenance checks (the publisher origin, or that publisher's exact HTTPS Google AMP Cache origin with the exact publisher `__amp_source_origin`); arbitrary origins, another publisher's cache subdomain and requests without AMP provenance are rejected before consent can be changed. Sites whose long/IDN domain uses a hashed Google cache hostname, or which use another registered AMP cache, can add only their verified exact origin with the `faz_amp_consent_allowed_cache_origin` filter.
+
+Triggered when: an AMP page checks an existing decision or the visitor saves new AMP cookie preferences.
+
+Data sent: banner scope, consent state, per-category purpose choices and the AMP-generated user ID included by `amp-consent`. FAZ does not store or log that AMP user ID and does not derive its consent identifier from it. The update endpoint attempts to synchronize the first-party consent cookie with `SameSite=None; Secure`. Browsers that completely block third-party cookies may reject that cookie when the page is served from an AMP Cache; in that case the bridge fails closed and can require the choice again rather than claiming guaranteed cross-origin parity.
+
+Service URLs:
+* https://{your-site}/wp-json/faz/v1/amp-consent/check
+* https://{your-site}/wp-json/faz/v1/amp-consent/update
+
+Proprietary AMP components can opt into granular blocking with `data-faz-category="category-slug"` or `data-faz-purpose="category-slug"`. Developers can also extend the tag mapping with the `faz_amp_component_purpose_map` filter. Components that bypass the AMP lifecycle or perform independent server-side requests require their own integration.
 
 = AMP Project CDN =
 
@@ -202,9 +216,9 @@ Documentation / Privacy:
 The plugin source includes several third-party domain names (e.g. `js.stripe.com`, `connect.facebook.net`, `cdn.jsdelivr.net`, `unpkg.com`, `googletagmanager.com`, etc.) as **string patterns** for two purposes:
 
 1. **Script-blocking detection patterns** — used to identify analytics, advertising, and tracking scripts that the *site administrator's other plugins* may inject, so we can block them until the visitor has given consent. The plugin itself does **not** load any of these scripts.
-2. **Whitelist defaults** — domains such as `unpkg.com/`, `cdn.jsdelivr.net/`, `fonts.googleapis.com/`, `www.google.com/recaptcha/api`, etc. are seeded as default *whitelist* entries so the script blocker leaves them alone unless the admin explicitly removes them. They are configuration data, not outbound HTTP calls.
+2. **Detection and explicit exceptions** — third-party domains can appear in the provider catalogue so the blocker can identify them. No external domain or whole third-party plugin is whitelisted by default. A site administrator may add a narrow, audited exception in Settings when a resource is genuinely necessary for that site's lawful use case.
 
-The only outbound HTTP requests this plugin makes are the six documented above (Open Cookie Database, IAB GVL, MaxMind, ip-api.com fallback, ipinfo.io VPN detection (opt-in), AMP CDN). All six are gated behind explicit administrator action or an enabled feature. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
+The plugin makes the outbound requests documented above only when their relevant feature is used. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
 
 == Cache Plugin Compatibility ==
 

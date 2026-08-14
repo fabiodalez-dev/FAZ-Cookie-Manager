@@ -143,10 +143,30 @@
 	var lawEl = document.getElementById('faz-b-law');
 	if (lawEl) {
 		lawEl.addEventListener('change', function () {
+			syncConsentExpiryConstraints(lawEl.value);
 			toggleDoNotSellColorRow(lawEl.value);
 			syncClassicLawCompat();
 			syncLawNoticeContent(lawEl.value);
 		});
+	}
+
+	// Keep the editor and runtime on the same law-aware consent lifetime. Both
+	// is a GDPR-family banner with an additional US opt-out control, so it keeps
+	// the stricter 180-182 day range. Switching law clamps an existing value
+	// immediately instead of saving a number that the frontend will later alter.
+	function syncConsentExpiryConstraints(law) {
+		var expiryEl = document.getElementById('faz-b-expiry');
+		if (!expiryEl) return;
+		var isCcpa = law === 'ccpa';
+		var min = isCcpa ? 365 : 180;
+		var max = isCcpa ? 3650 : 182;
+		var value = parseInt(expiryEl.value, 10);
+		if (!isFinite(value)) value = min;
+		value = Math.max(min, Math.min(max, value));
+		expiryEl.min = String(min);
+		expiryEl.max = String(max);
+		expiryEl.step = '1';
+		expiryEl.value = String(value);
 	}
 
 	FAZ.ready(function () {
@@ -1386,6 +1406,7 @@
 		var buttonDoNotSell = (noticeElements.buttons && noticeElements.buttons.elements && noticeElements.buttons.elements.donotSell) || {};
 		if (lawVal === 'gdpr' && buttonDoNotSell.status === true) lawVal = 'gdpr_ccpa';
 		setVal('faz-b-law', lawVal);
+		syncConsentExpiryConstraints(lawVal);
 		// Seed the law-change baseline so the first law change can compare against
 		// the right previous default. The per-law defaults themselves are already
 		// in fazConfig.lawNoticeDescriptions (localized for every language).
@@ -2036,6 +2057,8 @@
 		props.settings.theme = getVal('faz-b-theme');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		props.settings.softCookieWall = wallEl ? wallEl.checked : false;
+		var law = getVal('faz-b-law') || 'gdpr';
+		syncConsentExpiryConstraints(law);
 		if (!props.settings.consentExpiry) props.settings.consentExpiry = {};
 		props.settings.consentExpiry.status = true;
 		props.settings.consentExpiry.value = getVal('faz-b-expiry');
@@ -2050,7 +2073,6 @@
 		}
 
 		// Applicable law
-		var law = getVal('faz-b-law') || 'gdpr';
 		props.settings.applicableLaw = law === 'gdpr_ccpa' ? 'gdpr' : law;
 
 		// "Do Not Sell" button: on for ccpa/both, off for gdpr-only

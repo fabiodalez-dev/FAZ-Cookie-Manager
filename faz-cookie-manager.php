@@ -315,16 +315,25 @@ function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
  * @param string      $value Cookie value.
  * @param int         $expires Unix timestamp.
  * @param string|null $domain Cookie domain. Null uses the FAZ consent domain.
+ * @param string      $same_site SameSite policy (Lax, Strict or None).
+ * @param bool|null   $force_secure Override the normal is_ssl() result.
  * @return void
  */
-function faz_set_browser_cookie( $name, $value, $expires, $domain = null ) {
+function faz_set_browser_cookie( $name, $value, $expires, $domain = null, $same_site = 'Lax', $force_secure = null ) {
 	$domain = null === $domain ? faz_get_cookie_domain() : (string) $domain;
+	$same_site = in_array( $same_site, array( 'Lax', 'Strict', 'None' ), true ) ? $same_site : 'Lax';
+	$secure    = null === $force_secure ? is_ssl() : (bool) $force_secure;
+	// Browsers reject SameSite=None without Secure. Fold an invalid caller
+	// combination back to Lax instead of emitting a cookie that cannot stick.
+	if ( 'None' === $same_site && ! $secure ) {
+		$same_site = 'Lax';
+	}
 
 	if ( ! headers_sent() ) {
 		$options = array(
 			'expires'  => (int) $expires,
 			'path'     => '/',
-			'secure'   => is_ssl(),
+			'secure'   => $secure,
 			// httponly=false is REQUIRED by design: the consent cookie
 			// (`fazcookie-consent`) is the source of truth for what
 			// frontend JS may or may not do (load GA, load Meta Pixel,
@@ -336,7 +345,7 @@ function faz_set_browser_cookie( $name, $value, $expires, $domain = null ) {
 			// auth secret — so the CWE-1004 / CWE-614 threat model
 			// (session theft via JS) does not apply.
 			'httponly' => false,
-			'samesite' => 'Lax',
+			'samesite' => $same_site,
 		);
 		if ( '' !== $domain ) {
 			$options['domain'] = $domain;

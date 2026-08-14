@@ -227,8 +227,8 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Days until consent expires', 'faz-cookie-manager' ); ?></label>
-					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="3650" style="width:120px;">
-					<div class="faz-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. Note: for opt-in (GDPR) banners the consent lifetime is capped at 182 days (the Italian Garante limits consent validity to 6 months) — larger values are automatically clamped to 182 at serve time. Opt-out (CCPA/CPRA) banners are not capped.', 'faz-cookie-manager' ); ?></div>
+					<input type="number" class="faz-input" id="faz-b-expiry" min="180" max="182" step="1" style="width:120px;" aria-describedby="faz-b-expiry-help">
+					<div class="faz-help" id="faz-b-expiry-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. GDPR and Both use a 180–182 day six-month window. CCPA / US State Laws requires at least 365 days; its maximum configurable value is 3650 days. The field limits update automatically when the regulation changes, and the same rule is enforced at serve time.', 'faz-cookie-manager' ); ?></div>
 				</div>
 			</div>
 		</div>
