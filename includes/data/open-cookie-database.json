@@ -2634,6 +2634,19 @@
       "wildcardMatch": "0"
     }
   ],
+  "Altervista, Google various services": [
+    {
+      "id": "4a0b1f15-43fe-4035-a50f-6b8d5de73f20",
+      "category": "Analytics",
+      "cookie": "gtag_ga_R5PDW0TTSP",
+      "domain": "",
+      "description": "Used by Altervista and Google services to store a unique user ID.",
+      "retentionPeriod": "2 years",
+      "dataController": "Altervista, Google various services",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    }
+  ],
   "Amazon": [
     {
       "id": "c61e67a6-083a-40dc-ab3c-2a10f520fbd9",
@@ -2983,6 +2996,41 @@
       "dataController": "Amplitude",
       "privacyLink": "https://amplitude.com/privacy",
       "wildcardMatch": "1"
+    }
+  ],
+  "Analytics Insights for WordPress": [
+    {
+      "id": "8ff94b55-a426-49e9-a0be-d3776b02629a",
+      "category": "Analytics",
+      "cookie": "aiwp_wg_default_metric",
+      "domain": "First Party",
+      "description": "Used by Analytics Insights for WordPress (GAinWP) plugin to store the default metric preference for the admin dashboard analytics widget.",
+      "retentionPeriod": "Session",
+      "dataController": "Analytics Insights for WordPress",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "b052f03c-aa25-473b-be0e-bf98f68db969",
+      "category": "Analytics",
+      "cookie": "aiwp_wg_default_dimension",
+      "domain": "First Party",
+      "description": "Used by Analytics Insights for WordPress (GAinWP) plugin to store the default dimension preference for the admin dashboard analytics widget.",
+      "retentionPeriod": "Session",
+      "dataController": "Analytics Insights for WordPress",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "7416fdd5-4062-4587-bf5a-ffb5c27b41a3",
+      "category": "Analytics",
+      "cookie": "aiwp_wg_default_swmetric",
+      "domain": "First Party",
+      "description": "Used by Analytics Insights for WordPress (GAinWP) plugin to store the secondary widget metric preference.",
+      "retentionPeriod": "Session",
+      "dataController": "Analytics Insights for WordPress",
+      "privacyLink": "",
+      "wildcardMatch": "0"
     }
   ],
   "Aniview": [
@@ -3397,6 +3445,30 @@
       "retentionPeriod": "at least one session",
       "dataController": "Awesome Support",
       "privacyLink": "",
+      "wildcardMatch": "0"
+    }
+  ],
+  "Awin": [
+    {
+      "id": "4efff242-8a7b-4426-ad6e-8aabb3ba5b6d",
+      "category": "Marketing",
+      "cookie": "lantern",
+      "domain": "",
+      "description": "This cookie is used by the affiliate marketing platform AWIN to store a reference to a visit to attribute a sale to marketing channels.",
+      "retentionPeriod": "Awin",
+      "dataController": "29 days",
+      "privacyLink": "https://www.awin.com/gb/privacy",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "0cd3a546-59b5-4565-a181-dc0d5f0c2d17",
+      "category": "Marketing",
+      "cookie": "AwinChannelCookie",
+      "domain": "",
+      "description": "Tracks sales for bookings made via links provided by Awin.",
+      "retentionPeriod": "Awin",
+      "dataController": "29 days",
+      "privacyLink": "https://www.awin.com/gb/privacy",
       "wildcardMatch": "0"
     }
   ],
@@ -5469,6 +5541,39 @@
       "domain": "",
       "description": "Cookie set by the Booking.com service",
       "retentionPeriod": "5 years",
+      "dataController": "Booking.com",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "a6d723d2-491c-4487-a5d1-45b3c40d148b",
+      "category": "Functional",
+      "cookie": "btest",
+      "domain": "",
+      "description": "Local storage used by Booking.com.",
+      "retentionPeriod": "persistent",
+      "dataController": "Booking.com",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "63f8a340-7fa8-4cea-ba1d-c1fafe43c3c4",
+      "category": "Functional",
+      "cookie": "has_preloaded",
+      "domain": "",
+      "description": "Used by Booking.com to estimate bandwidth.",
+      "retentionPeriod": "1 year",
+      "dataController": "Booking.com",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "6d18ddfe-ae60-404b-89ec-8745bd2206bf",
+      "category": "Functional",
+      "cookie": "lastSeen",
+      "domain": "",
+      "description": "Used by Booking.com to store the visitor's last visit.",
+      "retentionPeriod": "session",
       "dataController": "Booking.com",
       "privacyLink": "",
       "wildcardMatch": "0"
@@ -12793,6 +12898,19 @@
       "wildcardMatch": "0"
     }
   ],
+  "Clerk": [
+    {
+      "id": "c7d8e9f0-0007-4567-890a-000000000007",
+      "category": "Functional",
+      "cookie": "clerk_",
+      "domain": "",
+      "description": "Clerk authentication service session and user management cookies.",
+      "retentionPeriod": "Varies",
+      "dataController": "Clerk",
+      "privacyLink": "https://clerk.com/privacy",
+      "wildcardMatch": "1"
+    }
+  ],
   "Cleverpush": [
     {
       "id": "9fffcc76-6271-427d-ab2b-6f9eae895904",
@@ -14628,6 +14746,72 @@
       "dataController": "Complianz",
       "privacyLink": "",
       "wildcardMatch": "0"
+    },
+    {
+      "id": "24f89fbb-c651-41ba-b8c7-8a20e9ab1f91",
+      "category": "Functional",
+      "cookie": "cmplz_consenttype",
+      "domain": "",
+      "description": "Used by Complianz to determine which cookie banner to show.",
+      "retentionPeriod": "persistent",
+      "dataController": "Complianz",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "544ba0a2-87d8-478c-8071-5be1b45d6b5a",
+      "category": "Functional",
+      "cookie": "cmplz_elementor_manage_consent_banner_id",
+      "domain": "",
+      "description": "Used by Complianz to store cookie consent preferences.",
+      "retentionPeriod": "1 year",
+      "dataController": "Complianz",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "445e64aa-2a0f-4cf0-a774-6634f1699852",
+      "category": "Functional",
+      "cookie": "cmplz_rt_consented_services",
+      "domain": "",
+      "description": "Used by Complianz to store cookie consent preferences.",
+      "retentionPeriod": "1 year",
+      "dataController": "Complianz",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "d00572d3-48ce-40bc-9f3a-4680e4f9e08b",
+      "category": "Functional",
+      "cookie": "cmplz_rt_banner-status",
+      "domain": "",
+      "description": "Used by Complianz to store if the cookie banner has been dismissed.",
+      "retentionPeriod": "1 year",
+      "dataController": "Complianz",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "7a9be855-e1cf-4ccf-a96a-f7f8bca77cc0",
+      "category": "Functional",
+      "cookie": "cmplz_rt_saved_categories",
+      "domain": "",
+      "description": "Used by Complianz to store cookie consent preferences.",
+      "retentionPeriod": "1 year",
+      "dataController": "Complianz",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "7c3876bd-00dc-4e86-b571-966ccc6bdf6c",
+      "category": "Functional",
+      "cookie": "cmplz_rt_saved_services",
+      "domain": "",
+      "description": "Used by Complianz to store cookie consent preferences.",
+      "retentionPeriod": "1 year",
+      "dataController": "Complianz",
+      "privacyLink": "",
+      "wildcardMatch": "0"
     }
   ],
   "comScore": [
@@ -16368,6 +16552,19 @@
       "wildcardMatch": "0"
     }
   ],
+  "Crisp": [
+    {
+      "id": "c7d8e9f0-0008-4567-890a-000000000008",
+      "category": "Functional",
+      "cookie": "crisp-client/",
+      "domain": "",
+      "description": "Crisp live chat widget session and preferences cookies.",
+      "retentionPeriod": "6 months",
+      "dataController": "Crisp IM SAS",
+      "privacyLink": "https://crisp.chat/en/privacy/",
+      "wildcardMatch": "1"
+    }
+  ],
   "Crisp Live Chat": [
     {
       "id": "7c25f58c-04a2-431a-aece-e4fa56527b3c",
@@ -17075,6 +17272,19 @@
       "retentionPeriod": "at least one session",
       "dataController": "DesignWall",
       "privacyLink": "",
+      "wildcardMatch": "0"
+    }
+  ],
+  "Devise (Ruby on Rails)": [
+    {
+      "id": "c7d8e9f0-0003-4567-890a-000000000003",
+      "category": "Functional",
+      "cookie": "remember_user_token",
+      "domain": "",
+      "description": "Remember me functionality for Devise authentication gem in Rails applications.",
+      "retentionPeriod": "2 weeks",
+      "dataController": "Ruby on Rails",
+      "privacyLink": "https://github.com/heartcombo/devise",
       "wildcardMatch": "0"
     }
   ],
@@ -17945,6 +18155,17 @@
       "dataController": "Drift",
       "privacyLink": "",
       "wildcardMatch": "0"
+    },
+    {
+      "id": "c7d8e9f0-0009-4567-890a-000000000009",
+      "category": "Functional",
+      "cookie": "drift_",
+      "domain": "",
+      "description": "Drift conversational marketing platform chat widget cookies.",
+      "retentionPeriod": "2 years",
+      "dataController": "Drift.com",
+      "privacyLink": "https://www.drift.com/privacy-policy/",
+      "wildcardMatch": "1"
     }
   ],
   "Drip": [
@@ -18894,6 +19115,17 @@
       "domain": "",
       "description": "Cookie supplied by Elementor",
       "retentionPeriod": "session",
+      "dataController": "Elementor",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "258be233-38a0-426a-8930-92f1188e3700",
+      "category": "Functional",
+      "cookie": "e_document/global",
+      "domain": "",
+      "description": "Used by Elementor to provide admin functions.",
+      "retentionPeriod": "various",
       "dataController": "Elementor",
       "privacyLink": "",
       "wildcardMatch": "0"
@@ -19932,6 +20164,19 @@
       "dataController": "Epsilon",
       "privacyLink": "https://legal.epsilon.com/global-privacy-policies/",
       "wildcardMatch": "0"
+    }
+  ],
+  "Fathom Analytics": [
+    {
+      "id": "c7d8e9f0-0013-4567-890a-000000000013",
+      "category": "Analytics",
+      "cookie": "_fathom",
+      "domain": "",
+      "description": "Privacy-focused simple website analytics with minimal data collection.",
+      "retentionPeriod": "Varies",
+      "dataController": "Conva Ventures Inc",
+      "privacyLink": "https://usefathom.com/privacy",
+      "wildcardMatch": "1"
     }
   ],
   "Federated Media Publishing": [
@@ -28538,6 +28783,17 @@
       "dataController": "LiveChat",
       "privacyLink": "",
       "wildcardMatch": "0"
+    },
+    {
+      "id": "c7d8e9f0-0011-4567-890a-000000000011",
+      "category": "Functional",
+      "cookie": "lc_",
+      "domain": "",
+      "description": "LiveChat customer service platform widget session and visitor tracking cookies.",
+      "retentionPeriod": "3 years",
+      "dataController": "LiveChat Inc",
+      "privacyLink": "https://www.livechat.com/legal/privacy-policy/",
+      "wildcardMatch": "1"
     }
   ],
   "LiveIntent": [
@@ -28898,6 +29154,39 @@
       "cookie": "lo-visits",
       "domain": "",
       "description": "Lucky Orange cookie for site operations",
+      "retentionPeriod": "2 years",
+      "dataController": "Lucky Orange",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "f410819a-a0dd-4718-a10e-affe4b63aa83",
+      "category": "Marketing",
+      "cookie": "lo-visitor",
+      "domain": "",
+      "description": "Used by Lucky Orange to store number of visits.",
+      "retentionPeriod": "various",
+      "dataController": "Lucky Orange",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "653930aa-3371-42a8-9b3e-d3d801725588",
+      "category": "Functional",
+      "cookie": "lo-messenger",
+      "domain": "",
+      "description": "Used by Lucky Orange to provide a responsive website.",
+      "retentionPeriod": "various",
+      "dataController": "Lucky Orange",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "b8b24271-3310-44d5-96ad-430a6fabdcfc",
+      "category": "Functional",
+      "cookie": "lo-opt-out",
+      "domain": "",
+      "description": "Used by Lucky Orange to store cookie consent preferences.",
       "retentionPeriod": "2 years",
       "dataController": "Lucky Orange",
       "privacyLink": "",
@@ -29688,6 +29977,19 @@
       "description": "Cookie deployed by mailpoet",
       "retentionPeriod": "",
       "dataController": "mailpoet",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    }
+  ],
+  "MailPoet": [
+    {
+      "id": "896d8d4b-0eb9-426e-9d29-ea8acd3b9705",
+      "category": "Marketing",
+      "cookie": "mailpoet_subscriber",
+      "domain": "",
+      "description": "Used by MailPoet to provide its subscription service.",
+      "retentionPeriod": "persistent",
+      "dataController": "MailPoet",
       "privacyLink": "",
       "wildcardMatch": "0"
     }
@@ -31187,6 +31489,19 @@
       "wildcardMatch": "0"
     }
   ],
+  "Next.js": [
+    {
+      "id": "c7d8e9f0-0005-4567-890a-000000000005",
+      "category": "Functional",
+      "cookie": "__next_",
+      "domain": "",
+      "description": "Next.js framework cookies for routing and user preferences.",
+      "retentionPeriod": "Varies",
+      "dataController": "Vercel",
+      "privacyLink": "https://nextjs.org/docs",
+      "wildcardMatch": "1"
+    }
+  ],
   "NextAuth.js": [
     {
       "id": "c60a3ee4-9ab9-4773-bb9d-79c90e5825ff",
@@ -31209,6 +31524,17 @@
       "dataController": "NextAuth.js",
       "privacyLink": "",
       "wildcardMatch": "0"
+    },
+    {
+      "id": "c7d8e9f0-0004-4567-890a-000000000004",
+      "category": "Functional",
+      "cookie": "next-auth.",
+      "domain": "",
+      "description": "Authentication session cookies for NextAuth.js (Auth.js) - popular authentication library for Next.js.",
+      "retentionPeriod": "Session to 30 days",
+      "dataController": "NextAuth.js",
+      "privacyLink": "https://authjs.dev/",
+      "wildcardMatch": "1"
     }
   ],
   "Nexx360": [
@@ -35870,6 +36196,17 @@
       "dataController": "PixelYourSite",
       "privacyLink": "",
       "wildcardMatch": "0"
+    },
+    {
+      "id": "9ca2f638-321f-4230-8956-da6d33eb338b",
+      "category": "Marketing",
+      "cookie": "pys_advanced_form_data",
+      "domain": "First Party",
+      "description": "Used by PixelYourSite plugin to track form interactions for conversion pixels (Meta Pixel, Google Ads). Stores form field data temporarily for pixel event firing.",
+      "retentionPeriod": "Session",
+      "dataController": "PixelYourSite",
+      "privacyLink": "https://www.pixelyoursite.com/privacy-policy",
+      "wildcardMatch": "0"
     }
   ],
   "Platform161": [
@@ -35938,6 +36275,19 @@
       "dataController": "Platform161",
       "privacyLink": "https://platform161.com/cookie-and-privacy-policy/",
       "wildcardMatch": "0"
+    }
+  ],
+  "Plausible Analytics": [
+    {
+      "id": "c7d8e9f0-0012-4567-890a-000000000012",
+      "category": "Analytics",
+      "cookie": "plausible_",
+      "domain": "",
+      "description": "Privacy-friendly web analytics. Does not use cookies by default but may store preferences if enabled.",
+      "retentionPeriod": "Varies",
+      "dataController": "Plausible Insights OÜ",
+      "privacyLink": "https://plausible.io/privacy",
+      "wildcardMatch": "1"
     }
   ],
   "Plesk": [
@@ -36118,6 +36468,19 @@
       "description": "Podium-provided cookie",
       "retentionPeriod": "1 day",
       "dataController": "Podium",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    }
+  ],
+  "Podsights": [
+    {
+      "id": "948aee23-2798-4ceb-a7d3-7f0400758fe5",
+      "category": "Analytics",
+      "cookie": "__pdst",
+      "domain": "",
+      "description": "Used by Podsights to store and track interaction.",
+      "retentionPeriod": "persistent",
+      "dataController": "Podsights",
       "privacyLink": "",
       "wildcardMatch": "0"
     }
@@ -37835,6 +38198,19 @@
       "wildcardMatch": "0"
     }
   ],
+  "QookieQloud": [
+    {
+      "id": "47686e93-18a8-4a28-af7e-0f33617ba46f",
+      "category": "Functional",
+      "cookie": "__cmpQQ_CookieConsent",
+      "domain": "",
+      "description": "Stores the user's cookie consent state for the current domain",
+      "retentionPeriod": "Local Storage",
+      "dataController": "Qodli AB",
+      "privacyLink": "https://qookieqloud.com/privacy-policy",
+      "wildcardMatch": "0"
+    }
+  ],
   "Qualaroo": [
     {
       "id": "13af3659-80a8-4d4f-94ca-b8c5ec317cc9",
@@ -39172,6 +39548,19 @@
       "retentionPeriod": "at least one session",
       "dataController": "Roundcube",
       "privacyLink": "",
+      "wildcardMatch": "0"
+    }
+  ],
+  "Ruby on Rails": [
+    {
+      "id": "c7d8e9f0-0002-4567-890a-000000000002",
+      "category": "Functional",
+      "cookie": "_rails_session",
+      "domain": "",
+      "description": "Session management cookie for Ruby on Rails applications. Contains encrypted session data.",
+      "retentionPeriod": "Session",
+      "dataController": "Ruby on Rails",
+      "privacyLink": "https://guides.rubyonrails.org/security.html",
       "wildcardMatch": "0"
     }
   ],
@@ -44625,6 +45014,19 @@
       "wildcardMatch": "0"
     }
   ],
+  "Supabase": [
+    {
+      "id": "c7d8e9f0-0006-4567-890a-000000000006",
+      "category": "Functional",
+      "cookie": "sb-",
+      "domain": "",
+      "description": "Supabase authentication and session management cookies.",
+      "retentionPeriod": "1 week to 1 year",
+      "dataController": "Supabase",
+      "privacyLink": "https://supabase.com/privacy",
+      "wildcardMatch": "1"
+    }
+  ],
   "SuperPWA": [
     {
       "id": "5c3ffe99-f792-4a5d-acd3-dcebdc908142",
@@ -47327,6 +47729,19 @@
       "retentionPeriod": "at least one session",
       "dataController": "Ultimate Post List",
       "privacyLink": "",
+      "wildcardMatch": "1"
+    }
+  ],
+  "Umami": [
+    {
+      "id": "c7d8e9f0-0014-4567-890a-000000000014",
+      "category": "Analytics",
+      "cookie": "umami.",
+      "domain": "",
+      "description": "Open-source privacy-friendly web analytics alternative.",
+      "retentionPeriod": "Varies",
+      "dataController": "Website operator",
+      "privacyLink": "https://umami.is/docs/about",
       "wildcardMatch": "1"
     }
   ],
@@ -76620,6 +77035,50 @@
       "dataController": "",
       "privacyLink": "",
       "wildcardMatch": "1"
+    },
+    {
+      "id": "d22b350f-8ecb-47d1-8abc-5803e583f97b",
+      "category": "Functional",
+      "cookie": "ContinueReview",
+      "domain": "",
+      "description": "Data storage used by the associated service.",
+      "retentionPeriod": "",
+      "dataController": "Unknown",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "cdfe4474-c830-4067-b0fb-852283507a7c",
+      "category": "Functional",
+      "cookie": "intercom-state-*",
+      "domain": "",
+      "description": "Data storage used by the associated service.",
+      "retentionPeriod": "",
+      "dataController": "Unknown",
+      "privacyLink": "",
+      "wildcardMatch": "1"
+    },
+    {
+      "id": "d23e273e-7e24-4986-8db8-f347c967e703",
+      "category": "Functional",
+      "cookie": "id_page:::*",
+      "domain": "",
+      "description": "Data storage used by the associated service.",
+      "retentionPeriod": "",
+      "dataController": "Unknown",
+      "privacyLink": "",
+      "wildcardMatch": "1"
+    },
+    {
+      "id": "8cdb22cb-a5a3-4b8a-a01f-194d959b389f",
+      "category": "Functional",
+      "cookie": "popup_form_dismissed_*",
+      "domain": "",
+      "description": "Data storage used by the associated service.",
+      "retentionPeriod": "",
+      "dataController": "Unknown",
+      "privacyLink": "",
+      "wildcardMatch": "1"
     }
   ],
   "Unrulymedia.com": [
@@ -76975,6 +77434,19 @@
       "dataController": "vBulletin",
       "privacyLink": "https://www.internetbrands.com/privacy/privacy-main",
       "wildcardMatch": "0"
+    }
+  ],
+  "Vercel": [
+    {
+      "id": "c7d8e9f0-0015-4567-890a-000000000015",
+      "category": "Functional",
+      "cookie": "_vercel_",
+      "domain": "",
+      "description": "Vercel platform cookies for deployment previews and analytics.",
+      "retentionPeriod": "Varies",
+      "dataController": "Vercel Inc",
+      "privacyLink": "https://vercel.com/legal/privacy-policy",
+      "wildcardMatch": "1"
     }
   ],
   "Verve": [
@@ -78656,6 +79128,39 @@
       "dataController": "WooCommerce Pixel Manager",
       "privacyLink": "",
       "wildcardMatch": "0"
+    },
+    {
+      "id": "5e56720f-1089-44f7-a6f2-8e5d3e1f3973",
+      "category": "Marketing",
+      "cookie": "wpmReferrer",
+      "domain": "",
+      "description": "Used by WooCommerce Pixel Manager to store referring website.",
+      "retentionPeriod": "session",
+      "dataController": "WooCommerce Pixel Manager",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "285b766d-0910-42f3-949d-00e20c783886",
+      "category": "Analytics",
+      "cookie": "wpmFirstPageLoad",
+      "domain": "",
+      "description": "Used by WooCommerce Pixel Manager to store first visit to the site.",
+      "retentionPeriod": "session",
+      "dataController": "WooCommerce Pixel Manager",
+      "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "07bbcb44-8de0-42e9-b76b-632d6dfcee92",
+      "category": "Marketing",
+      "cookie": "wpmMiniCartActive",
+      "domain": "",
+      "description": "Used by WooCommerce Pixel Manager to store configuration.",
+      "retentionPeriod": "session",
+      "dataController": "WooCommerce Pixel Manager",
+      "privacyLink": "",
+      "wildcardMatch": "0"
     }
   ],
   "WooCommerce Tools": [
@@ -79338,6 +79843,17 @@
       "retentionPeriod": "",
       "dataController": "WordPress",
       "privacyLink": "",
+      "wildcardMatch": "0"
+    },
+    {
+      "id": "c7d8e9f0-0001-4567-890a-000000000001",
+      "category": "Functional",
+      "cookie": "wp_lang",
+      "domain": "",
+      "description": "Stores the user's language preference in WordPress admin panel.",
+      "retentionPeriod": "Session",
+      "dataController": "WordPress",
+      "privacyLink": "https://wordpress.org/about/privacy/",
       "wildcardMatch": "0"
     }
   ],
