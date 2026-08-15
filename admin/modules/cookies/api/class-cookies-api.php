@@ -29,6 +29,26 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Cookies_API extends API_Controller {
 
 	/**
+	 * Snapshots of bulk-deleted cookies, most recent first.
+	 *
+	 * A bulk delete removes entries from the site's public cookie declaration,
+	 * and the usual trigger is a scan that did not observe them — which is not
+	 * the same as their being absent. This makes that judgement reversible.
+	 *
+	 * @var string
+	 */
+	const RECYCLE_BIN_OPTION = 'faz_cookies_recycle_bin';
+
+	/**
+	 * How many delete batches stay restorable.
+	 *
+	 * An undo for a mistake noticed soon after, not an archive.
+	 *
+	 * @var int
+	 */
+	const RECYCLE_BIN_BATCHES = 3;
+
+	/**
 	 * Endpoint namespace.
 	 *
 	 * @var string
@@ -89,6 +109,18 @@ class Cookies_API extends API_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'bulk_delete' ),
 				'permission_callback' => array( $this, 'delete_item_permissions_check' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/restore-deleted',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'restore_deleted' ),
+				// Restoring writes cookie rows, so it is gated on the create
+				// capability rather than the delete one that produced the batch.
+				'permission_callback' => array( $this, 'create_item_permissions_check' ),
 			)
 		);
 
@@ -633,6 +665,12 @@ class Cookies_API extends API_Controller {
 			return new \WP_Error( 'invalid_data', __( 'No cookie IDs provided.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 		$deleted = 0;
+		// Snapshot before deleting. A bulk delete here removes entries from the
+		// site's PUBLIC cookie declaration, and the usual trigger is a scan that
+		// did not observe them — which is not the same as their being absent.
+		// The snapshot makes that judgement reversible; without it a wrong purge
+		// is unrecoverable and the declaration is quietly incomplete.
+		$recycled = array();
 		foreach ( $ids as $id ) {
 			$id = absint( $id );
 			if ( ! $id ) {
@@ -640,12 +678,85 @@ class Cookies_API extends API_Controller {
 			}
 			$cookie = new Cookie( $id );
 			if ( $cookie->get_loaded() ) {
+				$recycled[] = $cookie->get_prepared_data();
 				$cookie->delete();
 				$deleted++;
 			}
 		}
+
+		if ( ! empty( $recycled ) ) {
+			$bin = get_option( self::RECYCLE_BIN_OPTION, array() );
+			$bin = is_array( $bin ) ? $bin : array();
+			array_unshift(
+				$bin,
+				array(
+					'deleted_at' => time(),
+					'cookies'    => $recycled,
+				)
+			);
+			// Keep a handful of batches, not a growing history: this is an undo
+			// for a mistake noticed soon after, not an archive.
+			$bin = array_slice( $bin, 0, self::RECYCLE_BIN_BATCHES );
+			update_option( self::RECYCLE_BIN_OPTION, $bin, false );
+		}
+
 		do_action( 'faz_after_delete_cookie' );
-		return rest_ensure_response( array( 'deleted' => $deleted ) );
+		return rest_ensure_response(
+			array(
+				'deleted'     => $deleted,
+				'restorable'  => count( $recycled ),
+			)
+		);
+	}
+
+	/**
+	 * Restore the most recent bulk-deleted batch.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function restore_deleted( $request ) {
+		$bin = get_option( self::RECYCLE_BIN_OPTION, array() );
+		$bin = is_array( $bin ) ? $bin : array();
+		if ( empty( $bin ) ) {
+			return new \WP_Error( 'faz_nothing_to_restore', __( 'There is no recently deleted batch to restore.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
+		}
+
+		$batch         = array_shift( $bin );
+		$restored      = 0;
+		$current_names = array();
+		foreach ( (array) Cookie_Controller::get_instance()->get_item_from_db() as $current ) {
+			if ( ! empty( $current->name ) ) {
+				$current_names[ (string) $current->name ] = true;
+			}
+		}
+		foreach ( isset( $batch['cookies'] ) ? (array) $batch['cookies'] : array() as $data ) {
+			if ( ! is_array( $data ) || empty( $data['name'] ) ) {
+				continue;
+			}
+			// A restore must not resurrect a duplicate if the cookie has since
+			// been re-discovered or re-added by hand. There is no by-name
+			// lookup on the controller, so the current set is read once above
+			// and consulted here.
+			if ( isset( $current_names[ (string) $data['name'] ] ) ) {
+				continue;
+			}
+			unset( $data['cookie_id'] );
+			$cookie = new Cookie();
+			foreach ( $data as $field => $value ) {
+				$setter = 'set_' . $field;
+				if ( method_exists( $cookie, $setter ) ) {
+					$cookie->$setter( $value );
+				}
+			}
+			if ( $cookie->save() ) {
+				$restored++;
+			}
+		}
+
+		update_option( self::RECYCLE_BIN_OPTION, $bin, false );
+		do_action( 'faz_after_create_cookie' );
+		return rest_ensure_response( array( 'restored' => $restored ) );
 	}
 
 	/**

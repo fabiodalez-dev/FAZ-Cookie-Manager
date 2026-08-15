@@ -84,6 +84,26 @@ class Controller {
 	/** Atomic option lock protecting the shared enrichment queue. */
 	const HTTPONLY_LOCK_OPTION = 'faz_httponly_scan_lock';
 
+	/**
+	 * How many consecutive FULL scans a discovered cookie has gone unobserved.
+	 *
+	 * Keyed "name|domain". A single scan missing a cookie proves nothing: a site
+	 * using delay-JS-until-interaction never fires its trackers inside a passive
+	 * scan iframe, and flow-only cookies (checkout, login) are never reached at
+	 * all — yet both are set for every real visitor. Deleting on one miss
+	 * removes live entries from the public cookie declaration.
+	 *
+	 * @var string
+	 */
+	const MISSED_SCANS_OPTION = 'faz_cookie_missed_scans';
+
+	/**
+	 * Consecutive full scans a cookie must be missing before deletion is offered.
+	 *
+	 * @var int
+	 */
+	const MISSED_SCANS_THRESHOLD = 2;
+
 	/** Short-lived marker used only while an administrator runs a browser scan. */
 	const BROWSER_SCAN_COOKIE = 'faz_scan_session';
 
@@ -1553,6 +1573,67 @@ class Controller {
 	 * @param array $metrics       Optional scan metrics from the client.
 	 * @return array Scan result summary.
 	 */
+	/**
+	 * Update the consecutive-miss tally after a COMPLETE scan.
+	 *
+	 * Only a full, healthy scan may increment: an incremental run or one that
+	 * stopped early has not looked everywhere, so its silence is not evidence.
+	 *
+	 * @param string[] $observed_names Cookie names this scan actually saw.
+	 * @param bool     $is_complete    Whether the scan covered the whole site.
+	 * @return array<string,int> Updated tally, keyed "name|domain".
+	 */
+	public function record_scan_observations( $observed_names, $is_complete ) {
+		$counts = get_option( self::MISSED_SCANS_OPTION, array() );
+		$counts = is_array( $counts ) ? $counts : array();
+
+		if ( ! $is_complete ) {
+			return $counts;
+		}
+
+		$observed = array();
+		foreach ( (array) $observed_names as $observed_name ) {
+			$observed_name = sanitize_text_field( (string) $observed_name );
+			if ( '' !== $observed_name ) {
+				$observed[ $observed_name ] = true;
+			}
+		}
+
+		$existing = Cookie_Controller::get_instance()->get_item_from_db();
+		$updated  = array();
+		foreach ( (array) $existing as $cookie ) {
+			if ( empty( $cookie->name ) || empty( $cookie->discovered ) ) {
+				continue; // Hand-added cookies are never judged by a scan.
+			}
+			$key = $cookie->name . '|' . ( isset( $cookie->domain ) ? $cookie->domain : '' );
+			if ( isset( $observed[ $cookie->name ] ) ) {
+				continue; // Seen again: the tally resets by omission.
+			}
+			$previous       = isset( $counts[ $key ] ) ? absint( $counts[ $key ] ) : 0;
+			$updated[ $key ] = $previous + 1;
+		}
+
+		update_option( self::MISSED_SCANS_OPTION, $updated, false );
+		return $updated;
+	}
+
+	/**
+	 * Names that have been missing long enough for deletion to be offered.
+	 *
+	 * @return string[] Keys in "name|domain" form.
+	 */
+	public function deletable_stale_keys() {
+		$counts = get_option( self::MISSED_SCANS_OPTION, array() );
+		$counts = is_array( $counts ) ? $counts : array();
+		$keys   = array();
+		foreach ( $counts as $key => $count ) {
+			if ( absint( $count ) >= self::MISSED_SCANS_THRESHOLD ) {
+				$keys[] = (string) $key;
+			}
+		}
+		return $keys;
+	}
+
 	public function save_scan_result( $cookies, $pages_scanned, $scripts = array(), $metrics = array() ) {
 		$logger = Scanner_Logger::get_instance();
 		$logger->start( 'Browser scan import' );

@@ -625,23 +625,51 @@ class Api extends Rest_Controller {
 		// Runtime responses made by scan-tagged pages can set HttpOnly cookies
 		// through AJAX, REST, pixels or dynamically loaded resources. PHP captured
 		// their Set-Cookie metadata through the short-lived scan marker.
-		$raw_cookies = array_merge( $raw_cookies, $this->controller->finish_browser_scan_session( $scan_id ) );
+		$session_cookies   = $this->controller->finish_browser_scan_session( $scan_id );
+		$raw_cookies       = array_merge( $raw_cookies, $session_cookies );
 		$capture_truncated = $this->controller->browser_scan_capture_was_truncated();
+
+		// Names the site was actually SEEN setting during this scan. This is the
+		// attributable set, and it is what separates a server-set site cookie
+		// from one the administrator merely happens to be carrying.
+		$attributable = array();
+		foreach ( $session_cookies as $session_cookie ) {
+			if ( is_array( $session_cookie ) && ! empty( $session_cookie['name'] ) ) {
+				$attributable[ (string) $session_cookie['name'] ] = true;
+			}
+		}
+		foreach ( $raw_cookies as $raw_cookie ) {
+			if ( is_array( $raw_cookie ) && ! empty( $raw_cookie['name'] ) ) {
+				$attributable[ (string) $raw_cookie['name'] ] = true;
+			}
+		}
 
 		// The import request itself carries every root/path-compatible cookie,
 		// including HttpOnly names that document.cookie cannot expose. Keep names
 		// only; values are neither read into the inventory nor persisted.
+		// This request comes from the SAME administrator browser that ran the
+		// scan, so its Cookie header is that admin's jar — the wider twin of the
+		// iframe channel, and it carries httpOnly names too. Walking it exists to
+		// catch server-set cookies document.cookie cannot see, which is a real
+		// need; but a name here is only evidence of the site setting it if the
+		// scan actually observed it being set. Anything else is the admin's own
+		// jar and goes to the reported-not-imported bucket.
 		$request_cookie_header = method_exists( $request, 'get_header' ) ? (string) $request->get_header( 'cookie' ) : '';
 		foreach ( $this->controller->extract_request_cookie_names( $request_cookie_header, $_COOKIE ) as $request_cookie_name ) {
 			if ( Controller::BROWSER_SCAN_COOKIE === $request_cookie_name ) {
 				continue;
 			}
-			$raw_cookies[] = array(
+			$entry = array(
 				'name'     => $request_cookie_name,
 				'domain'   => wp_parse_url( home_url(), PHP_URL_HOST ),
 				'duration' => 'session',
 				'source'   => 'request-cookie',
 			);
+			if ( isset( $attributable[ $request_cookie_name ] ) ) {
+				$raw_cookies[] = $entry;
+			} else {
+				$jar_cookies[] = $entry;
+			}
 		}
 
 		// Sanitize cookie data.
@@ -682,6 +710,24 @@ class Api extends Rest_Controller {
 		}
 
 		$result['capture_truncated'] = $capture_truncated;
+
+		// A single missed scan is not evidence of absence. Only a scan that
+		// covered the whole site without incident may add to the tally, and only
+		// a cookie missing from several consecutive such scans becomes
+		// deletable — see Controller::MISSED_SCANS_THRESHOLD.
+		$scan_was_complete = 0 === $pages_scanned
+			? false
+			: ( empty( $metrics['incremental'] ) && empty( $metrics['earlyStopReason'] ) );
+		$observed_names    = array();
+		foreach ( $cookies as $observed_cookie ) {
+			if ( ! empty( $observed_cookie['name'] ) ) {
+				$observed_names[] = $observed_cookie['name'];
+			}
+		}
+		$this->controller->record_scan_observations( $observed_names, $scan_was_complete );
+		$result['scan_was_complete']   = $scan_was_complete;
+		$result['deletable_stale_keys'] = $this->controller->deletable_stale_keys();
+
 		// Reported, never imported. Surfacing the count is the point: silently
 		// dropping them would trade one invisible behaviour for another, and an
 		// admin who recognises a name as a real site cookie can add it by hand.
