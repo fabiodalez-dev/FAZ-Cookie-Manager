@@ -63,14 +63,16 @@ console.log('shared scan engine origin handling (6 checks)');
   check('01 different public/admin hosts are retried through the admin origin', result.error?.stage === 'browser');
   check('02 diagnostics record both the retry and its later iframe-host blocker', result.error?.message.includes('retried through the WordPress admin origin')
     && result.error?.message.includes('container missing'));
-  check('03 an unobservable scan never imports server-only fallback findings', JSON.stringify(result.calls) === JSON.stringify(['scans/discover']));
+  check('03 an unobservable scan never imports server-only fallback findings', result.calls[0] === 'scans/discover'
+    && !result.calls.includes('scans/server-scan') && !result.calls.includes('scans/import'));
 }
 
 {
   const result = await runCrossOriginCase('https://www.admin.example.test/');
   check('04 www and apex paths also use the observable admin-origin retry', result.error?.stage === 'browser');
   check('05 the diagnostic identifies the admin-origin retry', result.error?.message.includes('retried through the WordPress admin origin'));
-  check('06 the www mismatch also stops before enrichment and import', JSON.stringify(result.calls) === JSON.stringify(['scans/discover']));
+  check('06 the www mismatch also stops before enrichment and import', result.calls[0] === 'scans/discover'
+    && !result.calls.includes('scans/server-scan') && !result.calls.includes('scans/import'));
 }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);

@@ -65,6 +65,9 @@ class Controller {
 	 */
 	private $scanned_embed_urls = array();
 
+	/** Anonymous cookie jar shared across pages in one server replay worker. */
+	private $server_cookie_jar = array();
+
 	/**
 	 * WP-Cron action name for async scanning.
 	 */
@@ -74,6 +77,27 @@ class Controller {
 	 * WP-Cron action name for async httpOnly cookie checks.
 	 */
 	const HTTPONLY_CRON_HOOK = 'faz_async_httponly_cookie_check';
+
+	/** Queue of browser-visited URLs awaiting server header enrichment. */
+	const HTTPONLY_URLS_OPTION = 'faz_httponly_scan_urls';
+
+	/** Atomic option lock protecting the shared enrichment queue. */
+	const HTTPONLY_LOCK_OPTION = 'faz_httponly_scan_lock';
+
+	/** Short-lived marker used only while an administrator runs a browser scan. */
+	const BROWSER_SCAN_COOKIE = 'faz_scan_session';
+
+	/** Per-user append-only observations captured from outgoing Set-Cookie headers. */
+	const BROWSER_SCAN_META = '_faz_scan_cookie_observation';
+
+	/** Browser scan capture lifetime in seconds. */
+	const BROWSER_SCAN_TTL = 900;
+
+	/** Maximum unique Set-Cookie observations retained for one browser scan. */
+	const BROWSER_SCAN_OBSERVATION_LIMIT = 2000;
+
+	/** Whether the most recently drained browser capture reached its safety cap. */
+	private $browser_scan_capture_truncated = false;
 
 	/**
 	 * Last scan info.
@@ -147,6 +171,342 @@ class Controller {
 				}
 			}
 		);
+	}
+
+	/**
+	 * Observe Set-Cookie headers emitted by scan-tagged same-origin requests.
+	 *
+	 * The marker is HttpOnly and created only by the authenticated discover
+	 * endpoint. Resource, REST and admin-ajax requests made by scanned pages
+	 * carry it automatically, which lets PHP record cookie metadata that browser
+	 * JavaScript is forbidden to read. Values are never persisted.
+	 *
+	 * @return void
+	 */
+	public static function register_browser_scan_observer() {
+		if ( empty( $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) ) {
+			return;
+		}
+
+		$token = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
+			return;
+		}
+
+		// Use WordPress' composable shutdown hook instead of PHP's single global
+		// header_register_callback(), which would replace (or be replaced by) a
+		// callback installed by another plugin. headers_list() remains available
+		// during shutdown and contains the final outgoing header set.
+		add_action(
+			'shutdown',
+			static function () use ( $token ) {
+				$session = get_transient( self::browser_scan_transient_key( $token ) );
+				$user_id = get_current_user_id();
+				if ( ! is_array( $session ) || empty( $session['user_id'] ) || $user_id !== absint( $session['user_id'] ) ) {
+					return;
+				}
+
+				$controller = self::get_instance();
+				$existing   = (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false );
+				$seen       = array();
+				$stored     = 0;
+				$truncated  = false;
+				foreach ( $existing as $row ) {
+					if ( ! is_array( $row ) || ! hash_equals( $token, isset( $row['token'] ) ? (string) $row['token'] : '' ) ) {
+						continue;
+					}
+					if ( ! empty( $row['truncated'] ) ) {
+						$truncated = true;
+						continue;
+					}
+					$key          = strtolower( (string) ( isset( $row['name'] ) ? $row['name'] : '' ) ) . '|' . strtolower( (string) ( isset( $row['domain'] ) ? $row['domain'] : '' ) ) . '|' . (string) ( isset( $row['path'] ) ? $row['path'] : '' );
+					$seen[ $key ] = true;
+					++$stored;
+				}
+				foreach ( headers_list() as $header_line ) {
+					if ( 0 !== stripos( $header_line, 'Set-Cookie:' ) ) {
+						continue;
+					}
+					$parsed = $controller->parse_set_cookie( trim( substr( $header_line, strlen( 'Set-Cookie:' ) ) ) );
+					if ( empty( $parsed['name'] ) || self::BROWSER_SCAN_COOKIE === $parsed['name'] ) {
+						continue;
+					}
+					$key = strtolower( (string) $parsed['name'] ) . '|' . strtolower( (string) $parsed['domain'] ) . '|' . (string) $parsed['path'];
+					if ( isset( $seen[ $key ] ) ) {
+						continue;
+					}
+					if ( $stored >= self::BROWSER_SCAN_OBSERVATION_LIMIT ) {
+						if ( ! $truncated ) {
+							add_user_meta( $user_id, self::BROWSER_SCAN_META, array( 'token' => $token, 'observed_at' => time(), 'truncated' => true ), false );
+							$truncated = true;
+						}
+						break;
+					}
+
+					$request_path = isset( $_SERVER['REQUEST_URI'] )
+						? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH )
+						: '';
+					$observation = array(
+						'token'       => $token,
+						'observed_at' => time(),
+						'request_path'=> sanitize_text_field( $request_path ),
+						'name'        => sanitize_text_field( $parsed['name'] ),
+						'domain'      => sanitize_text_field( $parsed['domain'] ),
+						'path'        => sanitize_text_field( $parsed['path'] ),
+						'expires'     => sanitize_text_field( $parsed['expires'] ),
+						'max-age'     => sanitize_text_field( $parsed['max-age'] ),
+						'secure'      => ! empty( $parsed['secure'] ),
+						'httponly'    => ! empty( $parsed['httponly'] ),
+						'samesite'    => sanitize_text_field( $parsed['samesite'] ),
+					);
+					add_user_meta( $user_id, self::BROWSER_SCAN_META, $observation, false );
+					$seen[ $key ] = true;
+					++$stored;
+				}
+			},
+			PHP_INT_MAX
+		);
+	}
+
+	/**
+	 * Start a short-lived browser scan capture session and set its marker.
+	 *
+	 * @param string $scan_id Client-generated identifier used to isolate retries/tabs.
+	 * @return string|\WP_Error Opaque session token, or a conflict response.
+	 */
+	public function start_browser_scan_session( $scan_id = '' ) {
+		$user_id = get_current_user_id();
+		if ( $user_id <= 0 ) {
+			return '';
+		}
+		$scan_id = sanitize_key( (string) $scan_id );
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) ) {
+			return new \WP_Error( 'faz_invalid_browser_scan_id', __( 'Invalid browser scan identifier.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
+		}
+
+		$active_key = self::browser_scan_active_transient_key( $user_id );
+		$active     = get_transient( $active_key );
+		if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
+			if ( ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
+				return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+			}
+			$token = sanitize_key( (string) $active['token'] );
+		} else {
+			$token = str_replace( '-', '', wp_generate_uuid4() );
+			set_transient(
+				$active_key,
+				array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => time() ),
+				self::BROWSER_SCAN_TTL
+			);
+		}
+
+		set_transient(
+			self::browser_scan_transient_key( $token ),
+			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => time() ),
+			self::BROWSER_SCAN_TTL
+		);
+
+		// Remove abandoned observations from expired scans without touching a
+		// still-live parallel session owned by the same administrator.
+		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $old ) {
+			if ( ! is_array( $old ) || empty( $old['observed_at'] ) || (int) $old['observed_at'] < time() - self::BROWSER_SCAN_TTL ) {
+				delete_user_meta( $user_id, self::BROWSER_SCAN_META, $old );
+			}
+		}
+
+		if ( ! headers_sent() ) {
+			setcookie(
+				self::BROWSER_SCAN_COOKIE,
+				$token,
+				array(
+					'expires'  => time() + self::BROWSER_SCAN_TTL,
+					'path'     => '/',
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Strict',
+				)
+			);
+		}
+
+		return $token;
+	}
+
+	/**
+	 * Drain cookie metadata captured from scan-tagged runtime responses.
+	 *
+	 * @return array[] Cookie inventory rows, without cookie values.
+	 */
+	public function finish_browser_scan_session( $scan_id = '' ) {
+		$this->browser_scan_capture_truncated = false;
+		if ( empty( $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) ) {
+			return array();
+		}
+		$token   = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		$scan_id = sanitize_key( (string) $scan_id );
+		$user_id = get_current_user_id();
+		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) || ! is_array( $session ) || $user_id !== absint( $session['user_id'] ) || ! isset( $session['scan_id'] ) || ! hash_equals( (string) $session['scan_id'], $scan_id ) ) {
+			return array();
+		}
+
+		$cookies = array();
+		$seen    = array();
+		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
+			if ( ! is_array( $observation ) || ! hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
+				continue;
+			}
+			delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
+			if ( ! empty( $observation['truncated'] ) ) {
+				$this->browser_scan_capture_truncated = true;
+				continue;
+			}
+
+			$name = isset( $observation['name'] ) ? sanitize_text_field( $observation['name'] ) : '';
+			if ( '' === $name || isset( $seen[ $name ] ) ) {
+				continue;
+			}
+			$seen[ $name ] = true;
+			$duration = 'session';
+			if ( ! empty( $observation['max-age'] ) ) {
+				$duration = $this->seconds_to_human( absint( $observation['max-age'] ) );
+			} elseif ( ! empty( $observation['expires'] ) ) {
+				$expires = strtotime( $observation['expires'] );
+				if ( false !== $expires && $expires > time() ) {
+					$duration = $this->seconds_to_human( $expires - time() );
+				}
+			}
+			$cookies[] = array(
+				'name'        => $name,
+				'domain'      => ! empty( $observation['domain'] ) ? sanitize_text_field( $observation['domain'] ) : wp_parse_url( home_url(), PHP_URL_HOST ),
+				'duration'    => $duration,
+				'description' => '',
+				'category'    => 'uncategorized',
+				'source'      => 'server-runtime',
+			);
+		}
+
+		delete_transient( self::browser_scan_transient_key( $token ) );
+		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
+		if ( ! headers_sent() ) {
+			setcookie(
+				self::BROWSER_SCAN_COOKIE,
+				'',
+				array(
+					'expires'  => time() - YEAR_IN_SECONDS,
+					'path'     => '/',
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Strict',
+				)
+			);
+		}
+
+		return $cookies;
+	}
+
+	/**
+	 * Verify that an import belongs to the active marker/session pair.
+	 *
+	 * @param string $scan_id Client scan identifier.
+	 * @return bool
+	 */
+	public function browser_scan_session_matches( $scan_id ) {
+		if ( empty( $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) ) {
+			return false;
+		}
+		$token   = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		$scan_id = sanitize_key( (string) $scan_id );
+		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		return preg_match( '/^[a-f0-9]{32}$/', $token )
+			&& preg_match( '/^[a-f0-9]{32}$/', $scan_id )
+			&& is_array( $session )
+			&& isset( $session['user_id'] )
+			&& get_current_user_id() === absint( $session['user_id'] )
+			&& isset( $session['scan_id'] )
+			&& hash_equals( (string) $session['scan_id'], $scan_id );
+	}
+
+	/**
+	 * Release a failed/cancelled browser scan without importing observations.
+	 *
+	 * @param string $scan_id Client scan identifier.
+	 * @return bool
+	 */
+	public function abort_browser_scan_session( $scan_id ) {
+		if ( ! $this->browser_scan_session_matches( $scan_id ) ) {
+			return false;
+		}
+		$token   = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		$user_id = get_current_user_id();
+		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
+			if ( is_array( $observation ) && hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
+				delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
+			}
+		}
+		delete_transient( self::browser_scan_transient_key( $token ) );
+		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
+		if ( ! headers_sent() ) {
+			setcookie(
+				self::BROWSER_SCAN_COOKIE,
+				'',
+				array(
+					'expires'  => time() - YEAR_IN_SECONDS,
+					'path'     => '/',
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Strict',
+				)
+			);
+		}
+		return true;
+	}
+
+	/** @return bool */
+	public function browser_scan_capture_was_truncated() {
+		return $this->browser_scan_capture_truncated;
+	}
+
+	/**
+	 * Extract cookie names from an HTTP Cookie header and parsed cookie map.
+	 *
+	 * @param string $header Raw Cookie request header.
+	 * @param array  $parsed Parsed request cookies (normally $_COOKIE).
+	 * @return string[]
+	 */
+	public function extract_request_cookie_names( $header, $parsed = array() ) {
+		$names = array();
+		foreach ( explode( ';', (string) $header ) as $pair ) {
+			$equals = strpos( $pair, '=' );
+			$name   = trim( false === $equals ? $pair : substr( $pair, 0, $equals ) );
+			if ( '' !== $name ) {
+				$names[ $name ] = true;
+			}
+		}
+		// PHP normalizes dots and spaces in $_COOKIE keys. Prefer the raw header
+		// whenever available so `foo.bar` never becomes a second `foo_bar` row.
+		if ( empty( $names ) ) {
+			foreach ( array_keys( (array) $parsed ) as $name ) {
+				$names[ (string) $name ] = true;
+			}
+		}
+
+		$result = array();
+		foreach ( array_keys( $names ) as $name ) {
+			if ( strlen( $name ) <= 200 && ! preg_match( '/[=;,\s\x00-\x1F\x7F]/', $name ) ) {
+				$result[] = sanitize_text_field( $name );
+			}
+		}
+		return array_values( array_unique( $result ) );
+	}
+
+	/** @return string */
+	private static function browser_scan_transient_key( $token ) {
+		return 'faz_scan_session_' . hash( 'sha256', (string) $token );
+	}
+
+	/** @return string */
+	private static function browser_scan_active_transient_key( $user_id ) {
+		return 'faz_scan_active_' . absint( $user_id );
 	}
 
 	/**
@@ -278,17 +638,26 @@ class Controller {
 	}
 
 	/**
-	 * Schedule a background server-side check of the homepage to detect
-	 * httpOnly cookies that JavaScript cannot read via document.cookie.
+	 * Schedule a background server-side check of browser-visited URLs to detect
+	 * Set-Cookie headers that JavaScript cannot read via document.cookie.
 	 *
 	 * Uses a background PHP-CLI process to avoid single-threaded deadlocks.
 	 *
+	 * @param string[] $urls URLs actually visited by the browser scanner.
 	 * @return void
 	 */
-	public function schedule_httponly_check() {
+	public function schedule_httponly_check( $urls = array() ) {
+		$safe_urls = $this->sanitize_scanned_urls( $urls );
+		if ( empty( $safe_urls ) ) {
+			$safe_urls = array( home_url( '/' ) );
+		}
+		$queued = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
+		$queued = array_slice( array_values( array_unique( array_merge( $queued, $safe_urls ) ) ), 0, 2000 );
+		update_option( self::HTTPONLY_URLS_OPTION, $queued, false );
+		wp_clear_scheduled_hook( self::HTTPONLY_CRON_HOOK );
+
 		// Fallback for hosts without exec/system: enqueue via WP-Cron to avoid blocking imports.
 		if ( ! $this->can_spawn_background_process() ) {
-			wp_clear_scheduled_hook( self::HTTPONLY_CRON_HOOK );
 			wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK );
 			if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
 				$cron_spawn = wp_remote_post(
@@ -324,8 +693,11 @@ class Controller {
 			if ( false === $runner || 0 !== strpos( $runner, realpath( FAZ_PLUGIN_BASEPATH ) ) ) {
 				return;
 			}
-			$php_bin = defined( 'PHP_BINARY' ) ? PHP_BINARY : '';
-			$php     = ( '' !== $php_bin ) ? $php_bin : 'php';
+			$php = $this->find_php_cli();
+			if ( '' === $php ) {
+				wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK );
+				return;
+			}
 			// Note: all values passed to escapeshellarg are safe — $runner is a hardcoded path, $abspath is ABSPATH.
 			$cmd     = sprintf(
 				'%s %s %s httponly > /dev/null 2>&1 &',
@@ -337,32 +709,120 @@ class Controller {
 
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Required for background scan.
 		exec( $cmd ); // nosemgrep: php.lang.security.exec-use
+		// Durable recovery if the detached process cannot start or is killed.
+		if ( ! wp_next_scheduled( self::HTTPONLY_CRON_HOOK ) ) {
+			wp_schedule_single_event( time() + 60, self::HTTPONLY_CRON_HOOK );
+		}
 	}
 
 	/**
-	 * Run a server-side check for httpOnly cookies on the homepage.
+	 * Run a server-side check for Set-Cookie headers on browser-visited URLs.
 	 *
-	 * Called as a background process — scans the homepage via HTTP and
-	 * saves any httpOnly cookies not already in the database.
+	 * Called as a background process so broad/deep scans do not hold the REST
+	 * import open while each page is fetched again.
 	 *
 	 * @return void
 	 */
 	public function run_httponly_check() {
+		$lock_time = absint( get_option( self::HTTPONLY_LOCK_OPTION, 0 ) );
+		if ( $lock_time > 0 && $lock_time < time() - 600 ) {
+			delete_option( self::HTTPONLY_LOCK_OPTION );
+		}
+		if ( ! add_option( self::HTTPONLY_LOCK_OPTION, time(), '', false ) ) {
+			return;
+		}
+
 		$logger       = Scanner_Logger::get_instance();
 		$logger->start( 'httpOnly cookie check' );
+		$this->server_cookie_jar = array();
+		$remaining = array();
 
 		try {
-			$site_url     = home_url( '/' );
-			$logger->log( 'Checking homepage for httpOnly cookies: ' . $site_url );
-			$page_cookies = $this->scan_page( $site_url );
-			$logger->log( 'Found ' . count( $page_cookies ) . ' cookies from Set-Cookie headers' );
-
-			if ( ! empty( $page_cookies ) ) {
-				$this->save_cookies( $page_cookies );
+			// phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.NoSilencedErrors -- background enrichment may revisit many admin-selected pages.
+			@set_time_limit( 300 );
+			$queued = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
+			if ( empty( $queued ) ) {
+				$queued = array( home_url( '/' ) );
 			}
+			$urls      = array_slice( $queued, 0, 20 );
+			// Do not dequeue a batch before it is processed. A fatal/timeout must
+			// leave the current and all following URLs available to recovery cron.
+			if ( ! wp_next_scheduled( self::HTTPONLY_CRON_HOOK ) ) {
+				wp_schedule_single_event( time() + 60, self::HTTPONLY_CRON_HOOK );
+			}
+
+			$logger->log( 'Checking ' . count( $urls ) . ' browser-visited URLs for Set-Cookie headers' );
+			$cookies = array();
+			foreach ( $urls as $url ) {
+				$page_cookies = $this->scan_page( $url );
+				$logger->log( 'Header enrichment: ' . $url . ' → ' . count( $page_cookies ) . ' cookies' );
+				foreach ( $page_cookies as $cookie ) {
+					if ( ! empty( $cookie['name'] ) && ! isset( $cookies[ $cookie['name'] ] ) ) {
+						$cookies[ $cookie['name'] ] = $cookie;
+					}
+				}
+				if ( ! empty( $page_cookies ) ) {
+					// Checkpoint results before advancing the durable queue. If this
+					// worker dies on a later URL, earlier findings remain persisted.
+					$this->save_cookies( $page_cookies );
+				}
+				$latest = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
+				$latest = array_values( array_diff( $latest, array( $url ) ) );
+				if ( empty( $latest ) ) {
+					delete_option( self::HTTPONLY_URLS_OPTION );
+				} else {
+					update_option( self::HTTPONLY_URLS_OPTION, $latest, false );
+				}
+			}
+
+			$logger->log( 'Found ' . count( $cookies ) . ' unique cookies from Set-Cookie headers' );
+			$remaining = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
 		} finally {
+			delete_option( self::HTTPONLY_LOCK_OPTION );
 			$logger->finish();
 		}
+
+		if ( ! empty( $remaining ) ) {
+			$this->schedule_httponly_check( $remaining );
+		} else {
+			wp_clear_scheduled_hook( self::HTTPONLY_CRON_HOOK );
+		}
+	}
+
+	/**
+	 * Validate browser-reported URLs before any server-side replay.
+	 *
+	 * @param array $urls Candidate URLs.
+	 * @return string[] Same-site HTTP(S) URLs, capped to the scanner limit.
+	 */
+	public function sanitize_scanned_urls( $urls ) {
+		$site_url    = wp_parse_url( home_url() );
+		$site_host   = is_array( $site_url ) && ! empty( $site_url['host'] ) ? preg_replace( '/^www\./i', '', strtolower( $site_url['host'] ) ) : '';
+		$site_scheme = is_array( $site_url ) && ! empty( $site_url['scheme'] ) ? strtolower( $site_url['scheme'] ) : 'https';
+		$site_port   = is_array( $site_url ) && isset( $site_url['port'] ) ? absint( $site_url['port'] ) : ( 'https' === $site_scheme ? 443 : 80 );
+		$loopback  = array( 'localhost', '127.0.0.1', '::1' );
+		$result    = array();
+		foreach ( (array) $urls as $url ) {
+			$parsed = wp_parse_url( (string) $url );
+			if ( ! is_array( $parsed ) || empty( $parsed['host'] ) || empty( $parsed['scheme'] ) ) {
+				continue;
+			}
+			$scheme = strtolower( $parsed['scheme'] );
+			$host   = preg_replace( '/^www\./i', '', strtolower( $parsed['host'] ) );
+			$port   = isset( $parsed['port'] ) ? absint( $parsed['port'] ) : ( 'https' === $scheme ? 443 : 80 );
+			$local_match = in_array( $site_host, $loopback, true ) && in_array( $host, $loopback, true );
+			if ( $scheme !== $site_scheme || $port !== $site_port || ( $host !== $site_host && ! $local_match ) || isset( $parsed['user'] ) || isset( $parsed['pass'] ) ) {
+				continue;
+			}
+			$normalized = esc_url_raw( $this->normalize_url( (string) $url ) );
+			if ( '' !== $normalized ) {
+				$result[ $normalized ] = true;
+			}
+			if ( count( $result ) >= 2000 ) {
+				break;
+			}
+		}
+		return array_keys( $result );
 	}
 
 	/**
@@ -489,6 +949,7 @@ class Controller {
 
 		try {
 			$this->scanned_embed_urls = array();
+			$this->server_cookie_jar  = array();
 			$logger->log( 'Max pages: ' . $max_pages );
 
 			$site_url = home_url( '/' );
@@ -826,50 +1287,83 @@ class Controller {
 	 * @return array Array of discovered cookie data.
 	 */
 	public function scan_page( $url ) {
-		$cookies   = array();
-		$settings  = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
-		$static_ip = $settings->get( 'scanner', 'static_ip' );
-		$args      = array(
-			'timeout'     => 15,
-			'sslverify'   => (bool) apply_filters( 'faz_scanner_sslverify', true, $url ),
-			'redirection' => 3,
-		);
-		if ( ! empty( $static_ip ) && filter_var( $static_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-			$parsed = wp_parse_url( $url );
-			$host   = isset( $parsed['host'] ) ? $parsed['host'] : '';
-			$scheme = isset( $parsed['scheme'] ) ? $parsed['scheme'] : 'https';
-			$port   = isset( $parsed['port'] ) ? ':' . $parsed['port'] : '';
-			$path   = isset( $parsed['path'] ) ? $parsed['path'] : '/';
-			$query  = isset( $parsed['query'] ) ? '?' . $parsed['query'] : '';
-			$url    = $scheme . '://' . $static_ip . $port . $path . $query;
-			$args['headers'] = array( 'Host' => $host );
-		}
-		$response = wp_remote_get( $url, $args );
-
-		if ( is_wp_error( $response ) ) {
+		$cookies      = array();
+		$raw_cookies  = array();
+		$safe_initial = $this->sanitize_scanned_urls( array( $url ) );
+		if ( empty( $safe_initial ) ) {
 			return $cookies;
 		}
 
-		// Harvest embedded provider URLs (script/iframe src) from the page so
-		// run_scan() can infer Known_Providers whose cookie is never set on a
-		// block-first site (#134/#146).
-		foreach ( $this->extract_embed_urls( wp_remote_retrieve_body( $response ) ) as $embed_url ) {
-			$this->scanned_embed_urls[] = $embed_url;
-		}
+		$settings  = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
+		$static_ip = $settings->get( 'scanner', 'static_ip' );
+		$static_ip = filter_var( $static_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ? $static_ip : '';
+		$current   = $safe_initial[0];
+		$site_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		$loopback  = array( 'localhost', '127.0.0.1', '::1' );
 
-		// Parse Set-Cookie headers.
-		$headers = wp_remote_retrieve_headers( $response );
-		$raw_cookies = array();
+		// Follow redirects manually. Automatic redirects validate only the first
+		// URL and also hide Set-Cookie headers emitted by intermediate hops.
+		for ( $hop = 0; $hop < 4; ++$hop ) {
+			$parsed      = wp_parse_url( $current );
+			$current_host = is_array( $parsed ) && isset( $parsed['host'] ) ? strtolower( (string) $parsed['host'] ) : '';
+			$is_loopback = in_array( $site_host, $loopback, true ) && in_array( $current_host, $loopback, true );
+			$request_url = $current;
+			$headers     = array();
+			if ( '' !== $static_ip ) {
+				$scheme      = isset( $parsed['scheme'] ) ? $parsed['scheme'] : 'https';
+				$port        = isset( $parsed['port'] ) ? ':' . $parsed['port'] : '';
+				$path        = isset( $parsed['path'] ) ? $parsed['path'] : '/';
+				$query       = isset( $parsed['query'] ) ? '?' . $parsed['query'] : '';
+				$request_url = $scheme . '://' . $static_ip . $port . $path . $query;
+				$headers     = array( 'Host' => $current_host );
+			}
 
-		if ( $headers instanceof \WpOrg\Requests\Utility\CaseInsensitiveDictionary || ( class_exists( '\Requests_Utility_CaseInsensitiveDictionary' ) && $headers instanceof \Requests_Utility_CaseInsensitiveDictionary ) ) {
-			$all = $headers->getAll();
-			if ( isset( $all['set-cookie'] ) ) {
-				$raw_cookies = (array) $all['set-cookie'];
+			$response = wp_remote_get(
+				$request_url,
+				array(
+					'timeout'            => 15,
+					'sslverify'          => (bool) apply_filters( 'faz_scanner_sslverify', ! $is_loopback, $current ),
+					'redirection'        => 0,
+					'reject_unsafe_urls' => ! $is_loopback && '' === $static_ip,
+					'headers'            => $headers,
+					'cookies'            => array_values( $this->server_cookie_jar ),
+				)
+			);
+			if ( is_wp_error( $response ) ) {
+				break;
 			}
-		} elseif ( is_array( $headers ) ) {
-			if ( isset( $headers['set-cookie'] ) ) {
-				$raw_cookies = (array) $headers['set-cookie'];
+
+			$raw_cookies = array_merge( $raw_cookies, $this->get_set_cookie_headers( $response ) );
+			foreach ( (array) wp_remote_retrieve_cookies( $response ) as $response_cookie ) {
+				if ( ! is_object( $response_cookie ) || empty( $response_cookie->name ) ) {
+					continue;
+				}
+				$cookie_domain = isset( $response_cookie->domain ) ? (string) $response_cookie->domain : '';
+				$cookie_path   = isset( $response_cookie->path ) ? (string) $response_cookie->path : '';
+				$jar_key       = strtolower( (string) $response_cookie->name ) . '|' . strtolower( $cookie_domain ) . '|' . $cookie_path;
+				$this->server_cookie_jar[ $jar_key ] = $response_cookie;
 			}
+			foreach ( $this->extract_embed_urls( wp_remote_retrieve_body( $response ) ) as $embed_url ) {
+				$this->scanned_embed_urls[] = $embed_url;
+			}
+
+			$status = wp_remote_retrieve_response_code( $response );
+			if ( $status < 300 || $status >= 400 ) {
+				break;
+			}
+			$location = wp_remote_retrieve_header( $response, 'location' );
+			if ( is_array( $location ) ) {
+				$location = end( $location );
+			}
+			if ( empty( $location ) ) {
+				break;
+			}
+			$next = \WP_Http::make_absolute_url( (string) $location, $current );
+			$safe = $this->sanitize_scanned_urls( array( $next ) );
+			if ( empty( $safe ) ) {
+				break;
+			}
+			$current = $safe[0];
 		}
 
 		$site_domain = wp_parse_url( home_url(), PHP_URL_HOST );
@@ -933,6 +1427,24 @@ class Controller {
 		}
 
 		return $cookies;
+	}
+
+	/**
+	 * Return every Set-Cookie header from a WordPress HTTP response.
+	 *
+	 * @param array|\WP_Error $response HTTP response.
+	 * @return string[]
+	 */
+	public function get_set_cookie_headers( $response ) {
+		$headers = wp_remote_retrieve_headers( $response );
+		if ( $headers instanceof \WpOrg\Requests\Utility\CaseInsensitiveDictionary || ( class_exists( '\Requests_Utility_CaseInsensitiveDictionary' ) && $headers instanceof \Requests_Utility_CaseInsensitiveDictionary ) ) {
+			$all = $headers->getAll();
+			return isset( $all['set-cookie'] ) ? (array) $all['set-cookie'] : array();
+		}
+		if ( is_array( $headers ) && isset( $headers['set-cookie'] ) ) {
+			return (array) $headers['set-cookie'];
+		}
+		return array();
 	}
 
 	/**
@@ -1003,7 +1515,7 @@ class Controller {
 			return 'session';
 		}
 
-		$years  = floor( $seconds / ( 365.25 * DAY_IN_SECONDS ) );
+		$years  = floor( $seconds / ( 365 * DAY_IN_SECONDS ) );
 		$months = floor( $seconds / ( 30.44 * DAY_IN_SECONDS ) );
 		$days   = floor( $seconds / DAY_IN_SECONDS );
 		$hours  = floor( $seconds / HOUR_IN_SECONDS );
@@ -1380,7 +1892,7 @@ class Controller {
 			return array();
 		}
 		$urls = array();
-		if ( preg_match_all( '/<(?:script|iframe)\b[^>]*\bsrc\s*=\s*(["\'])(.*?)\1/i', $html, $matches ) ) {
+		if ( preg_match_all( '/<(?:script|iframe)\b[^>]*\b(?:src|data-src|data-litespeed-src|data-rocket-src|data-wpr-src|data-lazy-src)\s*=\s*(["\'])(.*?)\1/i', $html, $matches ) ) {
 			foreach ( $matches[2] as $url ) {
 				$url = trim( html_entity_decode( $url, ENT_QUOTES ) );
 				if ( '' !== $url ) {

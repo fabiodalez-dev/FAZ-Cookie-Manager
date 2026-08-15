@@ -463,6 +463,23 @@
 		});
 	}
 
+	function resetStaleCookies() {
+		staleCookieNames = {};
+		staleCookieCount = 0;
+	}
+
+	function scanCoverageIsComplete(result, maxPages) {
+		var diagnostics = result && result.diagnostics;
+		return !!result
+			&& maxPages === 0
+			&& result.incremental === false
+			&& !result.earlyStopReason
+			&& diagnostics
+			&& typeof diagnostics.totalIssues === 'number'
+			&& isFinite(diagnostics.totalIssues)
+			&& diagnostics.totalIssues === 0;
+	}
+
 	function snapshotDiscoveredCookies() {
 		return FAZ.get('cookies').then(function (data) {
 			var list = Array.isArray(data) ? data : (data.items || []);
@@ -967,7 +984,7 @@
 
 	function deleteAllStaleCookies() {
 		if (!staleCookieCount) return;
-		FAZ.confirm(__('cookies.staleAllConfirm', 'Delete all stale cookies not found in the latest scan?')).then(function (ok) {
+		FAZ.confirm(__('cookies.staleAllConfirm', 'Remove these cookie-policy entries? Cookies that load only after an interaction, during a flow, or as httpOnly cookies may still be present even if the scan did not observe them.')).then(function (ok) {
 			if (!ok) return;
 			FAZ.get('cookies').then(function (data) {
 				var list = Array.isArray(data) ? data : (data.items || []);
@@ -1060,18 +1077,21 @@
 					});
 				}
 
-				if (res.incremental) {
-					// An incremental scan covers only a subset of pages, so a
-					// cookie missing from it is not evidence that it is gone.
-					staleCookieNames = {};
-					staleCookieCount = 0;
+				var coverageIsComplete = scanCoverageIsComplete(res, maxPages);
+				if (!coverageIsComplete) {
+					// A depth-capped, incremental, early-stopped, or degraded scan
+					// cannot prove a cookie is gone. Never
+					// expose a destructive stale-cookie action from incomplete evidence.
+					resetStaleCookies();
 				} else {
 					setStaleCookies(previousDiscoveredSet, currentDetectedSet);
 				}
 
 				var msg = 'Scan complete — ' + res.total + ' cookies found on ' + res.pagesScanned + ' pages';
 				if (res.earlyStopReason) { msg += ' (early stop: ' + res.earlyStopReason + ')'; }
-				if (staleCookieCount > 0) { msg += ' | ' + staleCookieCount + ' stale cookie(s) highlighted'; }
+				if (!coverageIsComplete) {
+					msg += ' | ' + __('cookies.scanCoverageIncomplete', 'coverage incomplete; stale cookies were not marked');
+				} else if (staleCookieCount > 0) { msg += ' | ' + staleCookieCount + ' stale cookie(s) highlighted'; }
 				msg += FAZ.scanEngine.diagnosticsHint(res.diagnostics, res.total);
 				if (res.diagnostics && res.diagnostics.totalIssues > 0) {
 					console.warn('[FAZ Scanner] Diagnostics:', res.diagnostics);

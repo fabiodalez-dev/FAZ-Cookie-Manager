@@ -433,5 +433,5 @@ $faz_setup_step_titles = array(
 	</div>
 </div>
 
-<!-- Hidden iframe container for the browser-based cookie scan (shared engine). -->
-<div id="faz-scan-frame" style="display:none;position:absolute;left:-9999px;"></div>
+<!-- Rendered but invisible viewport for the shared browser scan engine. -->
+<div id="faz-scan-frame" aria-hidden="true" style="position:fixed;inset:0 auto auto 0;width:1365px;height:900px;opacity:0;pointer-events:none;overflow:hidden;z-index:-2147483647;"></div>

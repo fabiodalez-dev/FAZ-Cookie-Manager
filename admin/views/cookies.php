@@ -265,8 +265,9 @@ defined( 'ABSPATH' ) || exit;
 	</div>
 </div>
 
-<!-- Hidden iframe container for browser-based cookie scanning -->
-<div id="faz-scan-frame" style="display:none;position:absolute;left:-9999px;"></div>
+<!-- Rendered but invisible viewport for browser-based scanning. display:none or
+     a 1px frame prevents responsive/lazy/IntersectionObserver trackers. -->
+<div id="faz-scan-frame" aria-hidden="true" style="position:fixed;inset:0 auto auto 0;width:1365px;height:900px;opacity:0;pointer-events:none;overflow:hidden;z-index:-2147483647;"></div>
 
 <?php
 /*

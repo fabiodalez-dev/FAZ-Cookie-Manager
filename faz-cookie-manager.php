@@ -536,6 +536,7 @@ $faz_loader->run();
 // here (a pair of cheap add_action calls) guarantees the loopback cron worker
 // has the handler.
 \FazCookie\Admin\Modules\Scanner\Includes\Controller::register_cron_hook();
+\FazCookie\Admin\Modules\Scanner\Includes\Controller::register_browser_scan_observer();
 
 /**
  * Force every /faz/v1/* REST response out of the LiteSpeed / CDN cache.
