@@ -232,6 +232,10 @@ class AMP_Consent_Rest {
 			return;
 		}
 
+		// The only body keys that legitimately carry a structure are the purpose
+		// maps; everything else the bridge reads is a single scalar.
+		$map_params = array( 'purposeConsent', 'purposeConsents' );
+
 		foreach ( $decoded as $key => $value ) {
 			if ( ! is_string( $key ) || '' === $key ) {
 				continue;
@@ -240,6 +244,19 @@ class AMP_Consent_Rest {
 			// baked into checkConsentHref/onUpdateHref, so a body key must not
 			// be able to restate `banner` or `scope` with something else.
 			if ( null !== $request->get_param( $key ) ) {
+				continue;
+			}
+			// Hydrate a value only in the shape its key can be read in. A body
+			// like {"consentStateValue":{"a":1}} reached sanitize_key( (string)
+			// $value ) and emitted an "Array to string conversion" warning on its
+			// way to the same fail-closed answer. The outcome was never wrong, but
+			// a payload any stranger can send that fills the error log is worth
+			// dropping at the boundary rather than tolerating downstream.
+			if ( in_array( $key, $map_params, true ) ) {
+				if ( ! is_array( $value ) ) {
+					continue;
+				}
+			} elseif ( ! is_scalar( $value ) ) {
 				continue;
 			}
 			$request->set_param( $key, $value );
@@ -323,6 +340,53 @@ class AMP_Consent_Rest {
 			);
 		}
 		return $purposes;
+	}
+
+	/**
+	 * Name each purpose gets as an AMP action argument.
+	 *
+	 * `setPurpose(<name>=event.checked)` takes a plain identifier, so a slug's
+	 * hyphens have to become underscores. That substitution is not injective,
+	 * and category slugs are admin-editable: a site with both "social-media" and
+	 * "social_media" rendered the same argument twice, and the server — which
+	 * accepted the underscore form as an alias of the hyphenated slug — read one
+	 * value for both. Ticking one box granted the other category too, which is
+	 * the one direction a consent bridge may never fail in.
+	 *
+	 * Every raw id is reserved before any alias is handed out, so an argument
+	 * can never collide with a different category's own slug, and an argument
+	 * already taken gains a numeric suffix. Both the renderer and
+	 * normalize_purpose_consent() derive this map from the same purpose list, so
+	 * the two ends stay in step by construction rather than by convention.
+	 *
+	 * @param array[] $purposes Purposes as returned by get_purposes().
+	 * @return array<string,string> Purpose id => action-argument name.
+	 */
+	public static function purpose_action_args( $purposes ) {
+		$reserved = array();
+		foreach ( (array) $purposes as $purpose ) {
+			$id = isset( $purpose['id'] ) ? sanitize_key( $purpose['id'] ) : '';
+			if ( '' !== $id ) {
+				$reserved[ $id ] = true;
+			}
+		}
+
+		$args  = array();
+		$taken = $reserved;
+		foreach ( array_keys( $reserved ) as $id ) {
+			$base  = str_replace( '-', '_', $id );
+			$arg   = $base;
+			$index = 2;
+			// A slug that needs no translation keeps its own name: the entry it
+			// finds in $taken is its own reservation.
+			while ( $arg !== $id && isset( $taken[ $arg ] ) ) {
+				$arg = $base . '_' . $index;
+				$index++;
+			}
+			$args[ $id ]   = $arg;
+			$taken[ $arg ] = true;
+		}
+		return $args;
 	}
 
 	/**
@@ -557,20 +621,6 @@ class AMP_Consent_Rest {
 	}
 
 	/**
-	 * CORS preflight callback.
-	 *
-	 * @param \WP_REST_Request $request Request.
-	 * @return \WP_REST_Response|\WP_Error
-	 */
-	public function handle_options( $request ) {
-		$cors = $this->authorize_request( $request );
-		if ( is_wp_error( $cors ) ) {
-			return $cors;
-		}
-		return $this->response( array( 'ok' => true ) );
-	}
-
-	/**
 	 * Resolve and validate the banner scope carried by a cached AMP document.
 	 *
 	 * @param \WP_REST_Request $request Request.
@@ -768,22 +818,28 @@ class AMP_Consent_Rest {
 	public static function normalize_purpose_consent( $input, $purposes, $state ) {
 		$input  = is_array( $input ) ? $input : array();
 		$result = array();
+		$args   = self::purpose_action_args( $purposes );
 		foreach ( (array) $purposes as $purpose ) {
 			$id = isset( $purpose['id'] ) ? sanitize_key( $purpose['id'] ) : '';
 			if ( '' === $id ) {
 				continue;
 			}
-			// AMP action-argument names cannot contain hyphens, so the rendered
-			// setPurpose() call uses an underscore form of the slug. Accept that
-			// alias here — a category named "social-media" arrives as
-			// "social_media" and must still be recognised, or its checkbox would
-			// record nothing while appearing to work.
-			$alias = str_replace( '-', '_', $id );
+			// AMP action-argument names cannot contain hyphens, so a checkbox
+			// reports under the name purpose_action_args() assigned it — read that
+			// first, or a category named "social-media" would record nothing while
+			// appearing to work.
+			//
+			// The plain slug remains a valid key because it is the vocabulary of
+			// everything that is not a checkbox: the server's own purposeConsents
+			// responses and the signed consentString both use it. That fallback is
+			// unambiguous only because purpose_action_args() never hands one
+			// category an argument equal to another category's slug.
+			$arg   = isset( $args[ $id ] ) ? $args[ $id ] : $id;
 			$given = null;
-			if ( array_key_exists( $id, $input ) ) {
+			if ( array_key_exists( $arg, $input ) ) {
+				$given = $input[ $arg ];
+			} elseif ( $arg !== $id && array_key_exists( $id, $input ) ) {
 				$given = $input[ $id ];
-			} elseif ( $alias !== $id && array_key_exists( $alias, $input ) ) {
-				$given = $input[ $alias ];
 			}
 
 			// Reject-all always wins. Accepted requests must explicitly carry a

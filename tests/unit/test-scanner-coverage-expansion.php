@@ -63,6 +63,65 @@ function coverage_check( $condition, $label ) {
 	$checks[] = array( (bool) $condition, $label );
 }
 
+/**
+ * Extract one method body, comments stripped.
+ *
+ * Two things go wrong when a claim about a single method is matched against a
+ * whole file. A prose comment can satisfy an assertion that the code does NOT
+ * call something, and an identical line in an unrelated method can satisfy one
+ * that it does — `'blocking' => false` appears in the cron nudge as well, so a
+ * file-wide search would keep passing after the httpOnly queue lost it.
+ *
+ * @param string $source PHP source of the file.
+ * @param string $name   Method name.
+ * @return string|null Body without comments, or null when the method is gone.
+ */
+function faz_method_body( $source, $name ) {
+	$tokens = token_get_all( $source );
+	$count  = count( $tokens );
+	for ( $i = 0; $i < $count; $i++ ) {
+		if ( ! is_array( $tokens[ $i ] ) || T_FUNCTION !== $tokens[ $i ][0] ) {
+			continue;
+		}
+		$j = $i + 1;
+		while ( $j < $count && is_array( $tokens[ $j ] ) && T_WHITESPACE === $tokens[ $j ][0] ) {
+			++$j;
+		}
+		if ( $j >= $count || ! is_array( $tokens[ $j ] ) || T_STRING !== $tokens[ $j ][0] || $name !== $tokens[ $j ][1] ) {
+			continue;
+		}
+		$depth = 0;
+		$body  = '';
+		for ( $k = $j; $k < $count; $k++ ) {
+			$token = $tokens[ $k ];
+			$text  = is_array( $token ) ? $token[1] : $token;
+			if ( '{' === $token || ( is_array( $token ) && in_array( $token[0], array( T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES ), true ) ) ) {
+				++$depth;
+			} elseif ( '}' === $token ) {
+				--$depth;
+				if ( 0 === $depth ) {
+					return $body;
+				}
+			}
+			if ( $depth > 0 && ( ! is_array( $token ) || ! in_array( $token[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) ) {
+				$body .= $text;
+			}
+		}
+		return null;
+	}
+	return null;
+}
+
+/** Collapse whitespace so a reformat cannot fail a test whose subject did not change. */
+function faz_squeeze( $text ) {
+	return preg_replace( '/\s+/', ' ', (string) $text );
+}
+
+/** Whitespace-insensitive containment. */
+function faz_contains_code( $haystack, $needle ) {
+	return false !== strpos( faz_squeeze( $haystack ), faz_squeeze( $needle ) );
+}
+
 $controller = new Controller();
 
 $first_scan_id  = str_repeat( '1', 32 );
@@ -139,10 +198,22 @@ coverage_check( false !== strpos( $engine, 'triggerDelayedScripts();' ), 'intera
 coverage_check( false !== strpos( $engine, 'MAX_RESOURCE_URLS' ), 'runtime resource payloads are capped and diagnosed' );
 coverage_check( false !== strpos( $api, 'finish_browser_scan_session( $scan_id )' ), 'REST import merges only its own runtime Set-Cookie observations' );
 coverage_check( false !== strpos( $bootstrap, 'register_browser_scan_observer()' ), 'Set-Cookie observer is registered on every same-origin request' );
-coverage_check( false === strpos( $controller_source, "header_register_callback(\n" ) && false !== strpos( $controller_source, "add_action(\n\t\t\t'shutdown'" ), 'runtime observer coexists with other PHP header callbacks' );
+$observer_body = faz_method_body( $controller_source, 'register_browser_scan_observer' );
+coverage_check(
+	null !== $observer_body
+		&& false === strpos( $observer_body, 'header_register_callback' )
+		&& faz_contains_code( $observer_body, "add_action( 'shutdown'," ),
+	'runtime observer coexists with other PHP header callbacks'
+);
 coverage_check( false !== strpos( $controller_source, "'redirection'        => 0" ) && false !== strpos( $controller_source, 'WP_Http::make_absolute_url' ), 'server replay validates every redirect hop and retains intermediate headers' );
 coverage_check( false !== strpos( $controller_source, 'BROWSER_SCAN_OBSERVATION_LIMIT' ), 'repeated runtime Set-Cookie observations are deduplicated and capped' );
-coverage_check( false !== strpos( $controller_source, "wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK )" ) && false !== strpos( $controller_source, "'blocking'  => false" ), 'httpOnly enrichment is durably queued without holding the REST import open' );
+$httponly_queue_body = faz_method_body( $controller_source, 'schedule_httponly_check' );
+coverage_check(
+	null !== $httponly_queue_body
+		&& faz_contains_code( $httponly_queue_body, 'wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK )' )
+		&& faz_contains_code( $httponly_queue_body, "'blocking' => false" ),
+	'httpOnly enrichment is durably queued without holding the REST import open'
+);
 
 $failed = 0;
 foreach ( $checks as $index => $check ) {

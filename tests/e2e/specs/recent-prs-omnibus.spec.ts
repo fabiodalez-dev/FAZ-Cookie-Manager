@@ -463,9 +463,11 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 		touchPosts('page', ['faz-lab-js-basic']);
 
 		try {
+			// scan_id is a required, validated route arg (32 lowercase hex).
 			const discoverResponse = await fazApiPost<DiscoverResponse>(page, nonce, 'scans/discover', {
 				max_pages: 100,
 				fingerprint: '',
+				scan_id: 'b'.repeat(32),
 			});
 			expect(discoverResponse.status).toBe(200);
 			expect(discoverResponse.data.total).toBeGreaterThan(0);

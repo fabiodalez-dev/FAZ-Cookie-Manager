@@ -118,7 +118,13 @@ namespace {
 	function sanitize_title( $value ) { return trim( preg_replace( '/[^a-z0-9_-]+/i', '-', strtolower( (string) $value ) ), '-' ); }
 	function absint( $value ) { return abs( (int) $value ); }
 	function wp_unslash( $value ) { return is_string( $value ) ? stripslashes( $value ) : $value; }
-	function wp_parse_url( $value ) { return parse_url( (string) $value ); }
+	// WordPress's wp_parse_url() takes a $component argument, and site_scope_id()
+	// passes PHP_URL_HOST. A one-argument double silently returned the whole array
+	// there, so the cast to string raised "Array to string conversion" on every
+	// run and the site binding was compared as the literal "Array".
+	function wp_parse_url( $value, $component = -1 ) {
+		return -1 === $component ? parse_url( (string) $value ) : parse_url( (string) $value, $component );
+	}
 	function wp_strip_all_tags( $value ) { return trim( strip_tags( (string) $value ) ); }
 	function wp_json_encode( $value ) { return json_encode( $value ); }
 	function wp_salt( $scheme = 'auth' ) { return 'amp-test-salt-' . $scheme; }
@@ -164,9 +170,34 @@ namespace {
 }
 
 namespace FazCookie\Frontend {
+	/**
+	 * Double for the production expiry rule.
+	 *
+	 * It has to reproduce frontend/class-frontend.php::normalize_consent_expiry()
+	 * exactly, because every AMP lifetime assertion is really an assertion about
+	 * that method. The previous version imposed a 180-day floor on the GDPR family
+	 * and omitted the CCPA ceiling, neither of which production does — so the
+	 * 90-day banner fixture "passed" a >= 180-day assertion that the real code
+	 * would have failed. The suite was measuring its own stand-in.
+	 *
+	 * The real rule: the six-month GDPR-family limit is a MAXIMUM and has no
+	 * floor, since re-asking sooner is more protective; an absent value still has
+	 * to yield something usable, so it becomes 182. CCPA is the one model with a
+	 * floor (§1798.135's 12 months) and carries the 3650-day ceiling the banner UI
+	 * advertises.
+	 */
 	class Frontend {
-		public static function normalize_consent_expiry( $law, $days ) {
-			return 'ccpa' === $law ? max( 365, abs( (int) $days ) ) : max( 180, min( 182, abs( (int) $days ) ) );
+		public static function normalize_consent_expiry( $law, $configured_days ) {
+			$law  = strtolower( (string) $law );
+			$days = abs( (int) $configured_days );
+
+			if ( 'ccpa' === $law ) {
+				return min( 3650, max( 365, $days ) );
+			}
+			if ( $days < 1 ) {
+				return 182;
+			}
+			return min( 182, $days );
 		}
 	}
 }
@@ -320,7 +351,14 @@ namespace {
 	amp_ok( false === strpos( $cookie['consentid'], 'stable-amp-user-id' ), 'consent id is not derived from AMP user id' );
 	amp_same( $GLOBALS['faz_test_set_cookie']['same_site'], 'Lax', 'same-origin AMP update keeps the standard SameSite=Lax policy' );
 	amp_same( $GLOBALS['faz_test_set_cookie']['secure'], null, 'same-origin AMP update does not force a cookie security override' );
-	amp_ok( $GLOBALS['faz_test_set_cookie']['expires'] >= time() + ( 180 * DAY_IN_SECONDS ) - 2, 'GDPR expiry is normalized to at least 180 days' );
+	// The banner fixture is configured for 90 days, and 90 is what it must get:
+	// the six-month rule is a ceiling, so a publisher who re-asks sooner is being
+	// more protective and nothing may lengthen that. An assertion of ">= 180 days"
+	// stood here and passed only because the harness double invented a floor.
+	amp_ok(
+		abs( $GLOBALS['faz_test_set_cookie']['expires'] - ( time() + ( 90 * DAY_IN_SECONDS ) ) ) <= 2,
+		'a 90-day GDPR configuration is written to the cookie unchanged'
+	);
 	amp_same( Log_Controller::$rows[0]['status'], 'partial', 'mixed AMP purposes use existing consent logger as partial' );
 
 	// A cached AMP document needs None+Secure for browsers that permit
@@ -477,11 +515,33 @@ namespace {
 	$bad_state = $bridge->handle_update( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'unknown' ), '/faz/v1/amp-consent/update' ) );
 	amp_same( $bad_state->get_error_code(), 'faz_amp_invalid_state', 'unknown update state cannot clear or grant consent' );
 
-	// CCPA runtime boundary is at least 365 days.
-	$banner->law = 'ccpa'; $banner->expiry = 2;
-	$GLOBALS['faz_test_cookie'] = '';
-	$ccpa = $bridge->handle_update( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'rejected', 'purposeConsent' => array() ), '/faz/v1/amp-consent/update' ) );
-	amp_ok( ! is_wp_error( $ccpa ) && $GLOBALS['faz_test_set_cookie']['expires'] >= time() + ( 365 * DAY_IN_SECONDS ) - 2, 'CCPA preference cookie is normalized to at least 365 days' );
+	// ── Lifetime bounds, at the values where the two rules actually differ ──
+	// One update per configuration, reading back the absolute expiry the browser
+	// cookie was given. Asserting the exact day count is what makes these able to
+	// fail: a floor, a missing ceiling or a swapped law all move the number.
+	$faz_expiry_for = function ( $law, $configured ) use ( $bridge, $banner, $base ) {
+		$banner->law                = $law;
+		$banner->expiry             = $configured;
+		$GLOBALS['faz_test_cookie'] = '';
+		$response = $bridge->handle_update( new Faz_AMP_Test_Request(
+			$base + array( 'consentStateValue' => 'rejected', 'purposeConsent' => array() ),
+			'/faz/v1/amp-consent/update'
+		) );
+		if ( is_wp_error( $response ) ) {
+			return -1;
+		}
+		return (int) round( ( $GLOBALS['faz_test_set_cookie']['expires'] - time() ) / DAY_IN_SECONDS );
+	};
+
+	amp_same( $faz_expiry_for( 'ccpa', 2 ), 365, 'CCPA raises an undersized lifetime to its 12-month floor' );
+	amp_same( $faz_expiry_for( 'ccpa', 9999 ), 3650, 'CCPA stops at the 3650-day ceiling the banner UI advertises' );
+	amp_same( $faz_expiry_for( 'ccpa', 730 ), 730, 'CCPA leaves a lifetime between floor and ceiling alone' );
+	amp_same( $faz_expiry_for( 'gdpr', 365 ), 182, 'the GDPR family caps an oversized lifetime at six months' );
+	amp_same( $faz_expiry_for( 'gdpr', 30 ), 30, 'a 30-day GDPR re-prompt is stricter than the cap and is kept' );
+	amp_same( $faz_expiry_for( 'gdpr', 0 ), 182, 'an absent GDPR configuration still yields a usable lifetime' );
+	// "gdpr_ccpa" is a GDPR-family banner for lifetime purposes: resolve_context()
+	// folds it to gdpr precisely so it cannot inherit the CCPA floor.
+	amp_same( $faz_expiry_for( 'gdpr_ccpa', 90 ), 90, 'a combined GDPR/CCPA banner keeps the stricter GDPR-family rule' );
 	$banner->law = 'gdpr'; $banner->expiry = 90;
 
 	// Rendering config and controls.
@@ -503,12 +563,47 @@ namespace {
 	amp_ok( false !== strpos( $html, 'tap:faz-amp-consent.prompt' ), 'post-prompt revisit control remains available' );
 
 	// Markup blocking is narrow, granular and preserves publisher policies.
-	$GLOBALS['faz_test_amp_map'] = array( 'amp-owner-widget' => 'marketing', 'amp-owner-filter-multi' => array( 'analytics', 'marketing' ) );
-	$markup = '<amp-analytics type="x"></amp-analytics><amp-ad width="1"></amp-ad><amp-iframe src="x"></amp-iframe><amp-video src="local.mp4"></amp-video><amp-pixel data-block-on-consent="_auto_reject"></amp-pixel><amp-owner-explicit data-faz-category="analytics"></amp-owner-explicit><amp-owner-purpose data-faz-purpose="marketing"></amp-owner-purpose><amp-owner-multi data-faz-purpose="analytics,marketing"></amp-owner-multi><amp-owner-widget></amp-owner-widget><amp-owner-filter-multi></amp-owner-filter-multi><amp-unknown-widget></amp-unknown-widget>';
+	//
+	// Note the fixture categories: analytics and marketing exist, "functional"
+	// does NOT — the state a publisher reaches by hiding or deleting that default
+	// category, while amp-iframe/amp-youtube still map to it. That case has its
+	// own assertions below.
+	$GLOBALS['faz_test_amp_map'] = array(
+		'amp-owner-widget'       => 'marketing',
+		'amp-owner-filter-multi' => array( 'analytics', 'marketing' ),
+		// One configured purpose and one the site does not offer.
+		'amp-owner-partial'      => array( 'analytics', 'functional' ),
+	);
+	$markup = '<amp-analytics type="x"></amp-analytics><amp-ad width="1"></amp-ad><amp-iframe src="x"></amp-iframe><amp-youtube data-videoid="x"></amp-youtube><amp-video src="local.mp4"></amp-video><amp-pixel data-block-on-consent="_auto_reject"></amp-pixel><amp-owner-explicit data-faz-category="analytics"></amp-owner-explicit><amp-owner-purpose data-faz-purpose="marketing"></amp-owner-purpose><amp-owner-multi data-faz-purpose="analytics,marketing"></amp-owner-multi><amp-owner-widget></amp-owner-widget><amp-owner-filter-multi></amp-owner-filter-multi><amp-owner-partial></amp-owner-partial><amp-unknown-widget></amp-unknown-widget>';
 	$blocked = $amp->apply_component_blocking( $markup );
 	amp_ok( false !== strpos( $blocked, '<amp-analytics data-block-on-consent-purposes="analytics"' ), 'amp-analytics is blocked on analytics purpose' );
 	amp_ok( false !== strpos( $blocked, '<amp-ad data-block-on-consent-purposes="marketing"' ), 'amp-ad is blocked on marketing purpose' );
-	amp_ok( false !== strpos( $blocked, '<amp-iframe data-block-on-consent-purposes="analytics,marketing"' ), 'unmapped custom category fails conservatively across all purposes' );
+
+	// ── A mapped purpose the site does not configure ────────────────────────
+	// "functional" is a default category, but an admin may hide or delete it, and
+	// get_purposes() then omits it. Gating on every configured purpose is clumsy:
+	// a YouTube embed ends up waiting on marketing AND analytics, categories that
+	// have nothing to do with it. An earlier revision replaced that with
+	// data-block-on-consent="_till_accepted" for exactly that reason.
+	//
+	// It was reverted, and the direction of the trade is why. _till_accepted
+	// unblocks on ACCEPTED, and Save sends accept(purposeConsentDefault=false) —
+	// so ticking nothing and saving would have loaded the component on a decision
+	// that granted no category. Over-blocking is a usability complaint with an
+	// obvious remedy; under-blocking is a tracker running without consent.
+	amp_ok(
+		1 === preg_match( '/<amp-iframe data-block-on-consent-purposes="[^"]*analytics[^"]*"/', $blocked ),
+		'a component mapped to an absent purpose stays gated on the purposes that exist'
+	);
+	amp_ok(
+		false === strpos( $blocked, '<amp-youtube data-block-on-consent="_till_accepted"' ),
+		'it never unblocks on a bare accept, which Save sends with zero categories granted'
+	);
+	amp_ok(
+		1 === preg_match( '/<amp-youtube data-block-on-consent-purposes="[^"]+"/', $blocked ),
+		'the YouTube embed keeps a purpose gate rather than the global decision'
+	);
+	amp_ok( false !== strpos( $blocked, '<amp-owner-partial data-block-on-consent-purposes="analytics">' ), 'a partly configurable mapping gates on the purposes the site does offer' );
 	amp_ok( false !== strpos( $blocked, '<amp-video src="local.mp4">' ), 'unclassified first-party AMP video is not claimed or rewritten' );
 	amp_ok( false !== strpos( $blocked, '<amp-pixel data-block-on-consent="_auto_reject">' ), 'publisher-provided consent policy is preserved exactly' );
 	amp_ok( false !== strpos( $blocked, '<amp-owner-explicit data-block-on-consent-purposes="analytics" data-faz-category="analytics">' ), 'custom component data-faz-category maps to native AMP purpose blocking' );
@@ -728,6 +823,170 @@ namespace {
 	amp_same( $bridge->cors_origin_for_tests(), '', 'a POST is not treated as a preflight' );
 	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/wp/v2/posts', '', '', 'OPTIONS' ) );
 	amp_same( $bridge->cors_origin_for_tests(), '', 'an unrelated route is left alone' );
+
+	// ── Where a logged AMP consent claims to have been given ───────────────
+	// resolve_consent_url() trusts the referer only when its origin is the
+	// publisher's own or the AMP cache origin already accepted for this request,
+	// and otherwise records the home URL. The rejection path carries the risk: an
+	// attacker-chosen referer written into the accountability record is a false
+	// statement about where consent was collected, in the one table meant to be
+	// evidence. Nothing asserted on the url field before this.
+	$faz_logged_url = function ( $server, $params ) use ( $bridge, $base ) {
+		$GLOBALS['faz_test_cookie'] = '';
+		$_SERVER                    = $server;
+		$before                     = count( Log_Controller::$rows );
+		$response                   = $bridge->handle_update( new Faz_AMP_Test_Request(
+			$base + $params + array( 'consentStateValue' => 'accepted', 'purposeConsent' => array() ),
+			'/faz/v1/amp-consent/update'
+		) );
+		if ( is_wp_error( $response ) || count( Log_Controller::$rows ) === $before ) {
+			return '';
+		}
+		$rows = Log_Controller::$rows;
+		$row  = end( $rows );
+		return $row['url'];
+	};
+
+	amp_same(
+		$faz_logged_url(
+			array( 'HTTP_AMP_SAME_ORIGIN' => 'true', 'HTTP_REFERER' => 'https://publisher.example/amp/article/' ),
+			array()
+		),
+		'https://publisher.example/amp/article/',
+		'a referer from the publisher itself is recorded as the consent page'
+	);
+	amp_same(
+		$faz_logged_url(
+			array(
+				'HTTP_ORIGIN'  => 'https://publisher-example.cdn.ampproject.org',
+				'HTTP_REFERER' => 'https://publisher-example.cdn.ampproject.org/c/s/publisher.example/amp/article/',
+			),
+			array( '__amp_source_origin' => 'https://publisher.example' )
+		),
+		'https://publisher-example.cdn.ampproject.org/c/s/publisher.example/amp/article/',
+		'the AMP cache document accepted for this request is recorded as given'
+	);
+	amp_same(
+		$faz_logged_url(
+			array( 'HTTP_AMP_SAME_ORIGIN' => 'true', 'HTTP_REFERER' => 'https://evil.example/claimed-page/' ),
+			array()
+		),
+		'https://publisher.example/',
+		'a foreign referer is replaced by the home URL rather than recorded as fact'
+	);
+	amp_same(
+		$faz_logged_url( array( 'HTTP_AMP_SAME_ORIGIN' => 'true' ), array() ),
+		'https://publisher.example/',
+		'and a request with no referer falls back to the home URL'
+	);
+
+	// ── A structured value where a scalar belongs ──────────────────────────
+	// A body like {"consentStateValue":{"a":1}} used to be hydrated as-is and
+	// then handed to sanitize_key( (string) $value ), which emits "Array to string
+	// conversion". The answer stayed fail-closed, so this was never a hole — but
+	// filling a publisher's error log is something any stranger could do on
+	// demand. Values are now dropped at the boundary unless the key's shape allows
+	// them, leaving a request that simply carries no state.
+	$_SERVER            = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$structured_request = new Faz_AMP_Test_Request(
+		$url_params,
+		'/faz/v1/amp-consent/update',
+		wp_json_encode(
+			array(
+				'consentInstanceId' => $instance,
+				'consentStateValue' => array( 'a' => 1 ),
+				// The mirror image: a scalar where the purpose map belongs.
+				'purposeConsents'   => 'not-a-map',
+			)
+		),
+		'text/plain;charset=utf-8'
+	);
+	$faz_php_diagnostics = array();
+	set_error_handler(
+		function ( $errno, $errstr ) use ( &$faz_php_diagnostics ) {
+			$faz_php_diagnostics[] = $errstr;
+			return true;
+		}
+	);
+	$structured = $bridge->handle_update( $structured_request );
+	restore_error_handler();
+	amp_same( $structured_request->get_param( 'consentStateValue' ), null, 'a structured value never becomes a scalar param' );
+	amp_same( $structured_request->get_param( 'purposeConsents' ), null, 'nor a scalar a purpose map' );
+	amp_ok( is_wp_error( $structured ), 'the malformed update is refused' );
+	amp_same( $structured->get_error_code(), 'faz_amp_missing_state', 'and refused for the honest reason: no state was sent' );
+	amp_ok( empty( $faz_php_diagnostics ), 'handling it raises no PHP diagnostics: ' . implode( ' | ', $faz_php_diagnostics ) );
+
+	// ── Two slugs that used to share one AMP action argument ───────────────
+	// setPurpose() arguments must be plain identifiers, so hyphens become
+	// underscores — and "social-media" and "social_media" are both legal
+	// admin-editable slugs that collapsed onto "social_media". Both boxes then
+	// reported under one name and the server, matching the underscore form back to
+	// the hyphenated slug, gave both categories the same answer: ticking one
+	// granted the other. Granting a category the visitor did not choose is the one
+	// direction this bridge may never fail in.
+	$_SERVER                    = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	Category_Controller::$items = array(
+		array( 'slug' => 'necessary', 'name' => 'Necessary', 'visibility' => 1 ),
+		array( 'slug' => 'social-media', 'name' => 'Social media', 'visibility' => 1 ),
+		array( 'slug' => 'social_media', 'name' => 'Social media (legacy)', 'visibility' => 1 ),
+	);
+	$collide_purposes = AMP_Consent_Rest::get_purposes();
+	$collide_args     = AMP_Consent_Rest::purpose_action_args( $collide_purposes );
+	amp_same( count( array_unique( array_values( $collide_args ) ) ), 2, 'two colliding slugs get two distinct action arguments' );
+	amp_ok( false === strpos( $collide_args['social-media'], '-' ), 'the hyphenated slug still yields an identifier AMP can parse' );
+	$faz_arg_shadows_slug = false;
+	foreach ( $collide_args as $faz_purpose_id => $faz_arg ) {
+		if ( $faz_arg !== $faz_purpose_id && isset( $collide_args[ $faz_arg ] ) ) {
+			// An argument equal to ANOTHER category's slug is the same ambiguity
+			// wearing a different hat: the server could not tell whose answer it is.
+			$faz_arg_shadows_slug = true;
+		}
+	}
+	amp_ok( ! $faz_arg_shadows_slug, 'no action argument doubles as a different category slug' );
+
+	amp_same(
+		AMP_Consent_Rest::normalize_purpose_consent( array( $collide_args['social_media'] => 1 ), $collide_purposes, 'accepted' ),
+		array( 'social-media' => false, 'social_media' => true ),
+		'granting the underscore category leaves the hyphenated one denied'
+	);
+	amp_same(
+		AMP_Consent_Rest::normalize_purpose_consent( array( $collide_args['social-media'] => 1 ), $collide_purposes, 'accepted' ),
+		array( 'social-media' => true, 'social_media' => false ),
+		'and granting the hyphenated category leaves the underscore one denied'
+	);
+	// The plain slug stays readable, because that is the vocabulary of the signed
+	// consentString and of the bridge's own purposeConsents responses.
+	amp_same(
+		AMP_Consent_Rest::normalize_purpose_consent( array( 'social-media' => 1 ), $collide_purposes, 'accepted' ),
+		array( 'social-media' => true, 'social_media' => false ),
+		'a stored map keyed by the raw slug still round-trips'
+	);
+
+	// The rendered markup is where the collision was produced, so it gets its own
+	// assertion. output_amp_consent() renders once per request by design; the
+	// static guard has to be released to render a second fixture.
+	$faz_render_guard = new ReflectionProperty( AMP_Consent::class, 'consent_output' );
+	$faz_render_guard->setAccessible( true );
+	$faz_render_guard->setValue( null, false );
+	ob_start();
+	$amp->output_amp_consent();
+	$collide_html = ob_get_clean();
+	foreach ( $collide_args as $faz_purpose_id => $faz_arg ) {
+		amp_ok(
+			// The trailing "=event.checked)" closes the needle: without it
+			// "setPurpose(social_media" also matches the social_media_2 call and the
+			// assertion passes for the wrong checkbox.
+			false !== strpos( $collide_html, 'setPurpose(' . $faz_arg . '=event.checked)' ),
+			"the '{$faz_purpose_id}' checkbox reports under its own argument"
+		);
+	}
+	amp_same( substr_count( $collide_html, '.setPurpose(' ), 2, 'two categories render exactly two setPurpose calls' );
+
+	Category_Controller::$items = array(
+		array( 'slug' => 'necessary', 'name' => 'Necessary', 'visibility' => 1 ),
+		array( 'slug' => 'analytics', 'name' => 'Analytics', 'visibility' => 1 ),
+		array( 'slug' => 'marketing', 'name' => 'Marketing', 'visibility' => 1 ),
+	);
 
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

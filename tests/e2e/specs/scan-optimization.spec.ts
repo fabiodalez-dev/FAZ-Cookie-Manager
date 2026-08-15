@@ -91,7 +91,10 @@ test.describe('Scan optimization features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    const result = await apiPost(page, nonce, 'scans/discover', { max_pages: 5 });
+    // scan_id is a required, validated route arg: the endpoint mints nothing
+    // itself, so a caller that omits it gets rest_missing_callback_param.
+    const scanId = 'a'.repeat(32);
+    const result = await apiPost(page, nonce, 'scans/discover', { max_pages: 5, scan_id: scanId });
     expect(result.status).toBe(200);
 
     // Response must include the new priority_urls field (backward compat)

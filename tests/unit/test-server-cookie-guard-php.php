@@ -11,9 +11,25 @@ namespace FazCookie\Includes {
 	}
 }
 
+namespace FazCookie\Frontend {
+	// Frontend calls headers_sent()/headers_list() unqualified from inside its own
+	// namespace, so PHP resolves them here before falling back to the globals.
+	// That is what lets the disabled-guard test observe whether the response
+	// headers were read at all, instead of guessing from the source text.
+	function headers_sent() { return false; }
+	function headers_list() {
+		++$GLOBALS['faz_headers_list_reads'];
+		// Nothing cookie-shaped: the caller returns right after this read, which
+		// keeps the probe confined to the one question it asks.
+		return array( 'Content-Type: text/html' );
+	}
+}
+
 namespace {
 	define( 'ABSPATH', __DIR__ . '/' );
 	define( 'HOUR_IN_SECONDS', 3600 );
+
+	$GLOBALS['faz_headers_list_reads'] = 0;
 
 	function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 	function sanitize_key( $value ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $value ) ); }
@@ -21,6 +37,10 @@ namespace {
 	function get_transient( $key ) { return false; }
 	function set_transient( $key, $value, $expiration = 0 ) { return true; }
 	function wp_strip_all_tags( $value ) { return trim( strip_tags( (string) $value ) ); }
+	function wp_doing_cron() { return false; }
+	function wp_doing_ajax() { return false; }
+	function is_admin() { return false; }
+	function faz_disable_banner() { return false; }
 
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
 
@@ -106,9 +126,45 @@ namespace {
 	guard_check( 1 === count( $explicit_deny['blocked'] ), 'an explicit cookie/service denial wins over category consent' );
 
 	$settings_source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/settings/includes/class-settings.php' );
-	$frontend_source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
 	guard_check( (bool) preg_match( "/'block_server_cookies'\\s*=>\\s*false/", $settings_source ), 'PHP Set-Cookie blocking is opt-in by default' );
-	guard_check( strpos( $frontend_source, '! $enabled' ) < strpos( $frontend_source, 'headers_list()' ), 'disabled guard exits before reading response headers' );
+
+	/**
+	 * Build a Frontend whose only configured input is the opt-in switch, then run
+	 * the header-rewriting entry point on it.
+	 *
+	 * @param bool $block_server_cookies Whether the operator opted in.
+	 * @return int Number of times the response header list was read.
+	 */
+	function guard_header_reads( $block_server_cookies ) {
+		$GLOBALS['faz_headers_list_reads'] = 0;
+		$frontend = guard_frontend();
+		$values   = array(
+			'settings_option_cache' => array(
+				'script_blocking' => array( 'block_server_cookies' => $block_server_cookies ),
+			),
+			// Only consulted once the switch is on; an empty exclusion list keeps
+			// the page-level opt-out out of the way.
+			'settings'              => new class() {
+				public function get( $group, $key ) { return array(); }
+			},
+		);
+		foreach ( $values as $property => $value ) {
+			$ref = new \ReflectionProperty( Frontend::class, $property );
+			$ref->setAccessible( true );
+			$ref->setValue( $frontend, $value );
+		}
+		$method = new \ReflectionMethod( Frontend::class, 'filter_current_set_cookie_headers' );
+		$method->setAccessible( true );
+		$method->invoke( $frontend );
+		return $GLOBALS['faz_headers_list_reads'];
+	}
+
+	// Reading headers_list() on a site that never opted in is the failure this
+	// pins: it means the guard ran, and a rewrite of the Set-Cookie set is one
+	// step away. The opted-in case proves the probe can see a read at all —
+	// without it the first assertion would pass on a guard that is simply dead.
+	guard_check( 0 === guard_header_reads( false ), 'disabled guard exits before reading response headers' );
+	guard_check( 1 === guard_header_reads( true ), 'enabled guard does read the response headers' );
 
 	echo $run . ' checks, ' . $failed . " failed\n";
 	exit( $failed > 0 ? 1 : 0 );

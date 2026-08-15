@@ -54,12 +54,86 @@ ok(/var jarList = jarOnlyCookies \|\| \[\];/.test(src) && /var observedNames = c
 // The bucket must be reported, not silently dropped: swapping one invisible
 // behaviour for another would leave a real cookie undeclared with no trace.
 const api = readFileSync(join(here, '../../../admin/modules/scanner/api/class-api.php'), 'utf8');
-ok(/\$jar_cookies = isset\( \$body\['jar_cookies'\] \)/.test(api),
-  'the import endpoint accepts the jar bucket');
+
+/**
+ * Body of one PHP method, comments stripped and braces counted outside string
+ * literals. Scoping matters here: the import endpoint handles three cookie
+ * arrays, and a claim about where the jar bucket goes is only meaningful
+ * against the code that routes it.
+ */
+function phpMethodBody(source, name) {
+  const start = source.search(new RegExp(`function\\s+${name}\\s*\\(`));
+  if (start === -1) return null;
+  let i = source.indexOf('{', start);
+  if (i === -1) return null;
+  const open = i;
+  let depth = 0;
+  for (; i < source.length; i += 1) {
+    const c = source[i];
+    if (c === "'" || c === '"') {
+      const quote = c;
+      i += 1;
+      while (i < source.length && source[i] !== quote) {
+        if (source[i] === '\\') i += 1;
+        i += 1;
+      }
+      continue;
+    }
+    if (c === '/' && source[i + 1] === '/') {
+      i = source.indexOf('\n', i);
+      if (i === -1) return null;
+      continue;
+    }
+    if (c === '/' && source[i + 1] === '*') {
+      i = source.indexOf('*/', i);
+      if (i === -1) return null;
+      i += 1;
+      continue;
+    }
+    if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(open, i + 1);
+    }
+  }
+  return null;
+}
+
+const importBody = phpMethodBody(api, 'import_cookies');
+ok(importBody !== null, 'the import endpoint is still where the jar bucket is handled');
+
+// Every line that touches the bucket, with comments dropped so prose about it
+// cannot stand in for code. Anything outside these three shapes — an
+// array_merge into the imported set, an extra append — is a leak.
+const jarLines = (importBody || '')
+  .split('\n')
+  .map((line) => line.trim().replace(/\s+/g, ' '))
+  .filter((line) => line.includes('$jar_cookies') && !line.startsWith('//') && !line.startsWith('*'));
+const allowedJarShapes = [
+  /^\$jar_cookies\s*=\s*isset\( \$body\['jar_cookies'\] \)/,
+  /^\$jar_cookies\[\] = \$entry;$/,
+  /^foreach \( \$jar_cookies as \$jar_cookie \) \{$/,
+];
+ok(jarLines.length === 3 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
+  'the bucket is only filled and iterated — never merged into the imported set');
+
+const jarLoopStart = (importBody || '').indexOf('foreach ( $jar_cookies as $jar_cookie ) {');
+const jarLoop = jarLoopStart === -1
+  ? ''
+  : (importBody || '').slice(jarLoopStart, (importBody || '').indexOf('\n\t\t}', jarLoopStart));
+ok(/\$jar_names\[\] = \$jar_name;/.test(jarLoop) && !/\$(raw_)?cookies\[\]/.test(jarLoop),
+  'a jar name becomes a reported name and nothing else');
+ok(/\$result\['jar_only_cookies'\]\s*= \$jar_names;/.test(importBody || ''),
+  'the reported names reach the response');
 ok(/\$result\['jar_only_count'\]\s+= count\( \$jar_names \);/.test(api),
   'the endpoint reports how many were held back');
-ok(!/save_cookies\(\s*\$jar_cookies/.test(api),
-  'the jar bucket is never written into the cookie table');
+
+// What actually reaches the cookie table is built from $raw_cookies alone. If
+// the bucket ever joined that array upstream this would still pass, which is
+// why the shape check above stands next to it.
+ok(/foreach \( \$raw_cookies as \$c \) \{/.test(importBody || '')
+  && /save_scan_result\( \$cookies,/.test(importBody || ''),
+  'the persisted set is assembled from attributable cookies only');
 
 if (failures) {
   console.error(`\n${failures} of ${checks} jar-provenance checks failed.`);

@@ -8,10 +8,26 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SOURCE = readFileSync(resolve(HERE, '../../../admin/assets/js/modules/scan-engine.js'), 'utf8');
+const ENGINE = resolve(HERE, '../../../admin/assets/js/modules/scan-engine.js');
+const SOURCE = readFileSync(ENGINE, 'utf8');
+
+// scanSingleUrl is a closure inside the module, so the only way to drive it is
+// to splice an export in beside the public one. String.replace() is silent when
+// its anchor is gone: it hands back the source untouched and the suite dies
+// several statements later on `undefined.scanSingleUrl`, which reads like a
+// scanner bug. Say what actually happened, here, where it is still obvious.
+const ANCHOR = 'window.FAZ.scanEngine = {';
+const anchorCount = SOURCE.split(ANCHOR).length - 1;
+if (anchorCount !== 1) {
+  console.error(
+    `Cannot instrument the scan engine: expected exactly one \`${ANCHOR}\` in ${ENGINE}, found ${anchorCount}. `
+    + 'The test harness reaches scanSingleUrl through that line — update the anchor to match the module.',
+  );
+  process.exit(1);
+}
 const SCRIPT = SOURCE.replace(
-  'window.FAZ.scanEngine = {',
-  'window.__fazScanCoverageTest = { scanSingleUrl: scanSingleUrl }; window.FAZ.scanEngine = {',
+  ANCHOR,
+  `window.__fazScanCoverageTest = { scanSingleUrl: scanSingleUrl }; ${ANCHOR}`,
 );
 
 let passed = 0;

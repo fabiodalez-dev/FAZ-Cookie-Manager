@@ -117,6 +117,7 @@ class Api extends Rest_Controller {
 						'scan_id'     => array(
 							'type'              => 'string',
 							'required'          => true,
+							'validate_callback' => array( $this, 'validate_scan_id' ),
 							'sanitize_callback' => 'sanitize_key',
 						),
 					),
@@ -165,6 +166,14 @@ class Api extends Rest_Controller {
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'abort_browser_scan' ),
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+					'args'                => array(
+						'scan_id' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'validate_callback' => array( $this, 'validate_scan_id' ),
+							'sanitize_callback' => 'sanitize_key',
+						),
+					),
 				),
 			)
 		);
@@ -206,6 +215,36 @@ class Api extends Rest_Controller {
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
 				),
 			)
+		);
+	}
+
+	/**
+	 * Reject browser-scan identifiers that cannot have come from the scanner.
+	 *
+	 * `createScanId()` in admin/assets/js/modules/scan-engine.js mints sixteen
+	 * random bytes rendered as thirty-two lowercase hex characters, and every
+	 * session check in the scanner controller matches that exact shape. Enforcing
+	 * it at the route boundary turns a truncated, empty or hand-crafted id into an
+	 * explicit 400 instead of letting it travel on to be read as "no capture
+	 * session in progress" — to an administrator watching a scan those two look
+	 * identical, and only one of them is a real state.
+	 *
+	 * The REST dispatcher validates before it sanitizes, so this sees the value
+	 * exactly as the client sent it: an id that only becomes well-formed once
+	 * sanitize_key() has stripped characters out of it is still refused.
+	 *
+	 * @param mixed $value Raw parameter value as supplied by the client.
+	 * @return true|WP_Error
+	 */
+	public function validate_scan_id( $value ) {
+		if ( is_string( $value ) && preg_match( '/^[a-f0-9]{32}$/', $value ) ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'faz_invalid_browser_scan_id',
+			__( 'Invalid browser scan identifier.', 'faz-cookie-manager' ),
+			array( 'status' => 400 )
 		);
 	}
 
@@ -748,10 +787,18 @@ class Api extends Rest_Controller {
 		return rest_ensure_response( $result );
 	}
 
-	/** Release a browser capture after a client-side failure. */
+	/**
+	 * Release a browser capture after a client-side failure.
+	 *
+	 * Reads the registered `scan_id` argument rather than the raw JSON body so the
+	 * route's own validate/sanitize pair is what governs the value: reaching past
+	 * it would quietly reinstate the unvalidated path this endpoint used to take.
+	 *
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
 	public function abort_browser_scan( $request ) {
-		$body    = $request->get_json_params();
-		$scan_id = is_array( $body ) && isset( $body['scan_id'] ) ? sanitize_key( (string) $body['scan_id'] ) : '';
+		$scan_id = sanitize_key( (string) $request['scan_id'] );
 		return rest_ensure_response( array( 'aborted' => $this->controller->abort_browser_scan_session( $scan_id ) ) );
 	}
 

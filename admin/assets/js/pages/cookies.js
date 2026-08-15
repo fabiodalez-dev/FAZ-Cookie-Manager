@@ -1087,13 +1087,25 @@
 					setStaleCookies(previousDiscoveredSet, currentDetectedSet);
 				}
 
-				var msg = 'Scan complete — ' + res.total + ' cookies found on ' + res.pagesScanned + ' pages';
-				if (res.earlyStopReason) { msg += ' (early stop: ' + res.earlyStopReason + ')'; }
+				// Every fragment of this summary goes through __(): a half-translated
+				// sentence is worse than an untranslated one, and the two clauses
+				// below were already localized. Replacements use callbacks so a
+				// value containing "$&" cannot be read as a replacement pattern.
+				var msg = __('cookies.scanComplete', 'Scan complete — %1$d cookies found on %2$d pages')
+					.replace('%1$d', function () { return String(res.total); })
+					.replace('%2$d', function () { return String(res.pagesScanned); });
+				if (res.earlyStopReason) {
+					msg += ' ' + __('cookies.scanEarlyStop', '(early stop: %s)')
+						.replace('%s', function () { return String(res.earlyStopReason); });
+				}
 				if (!coverageIsComplete) {
-					msg += ' | ' + __('cookies.scanCoverageIncomplete', 'coverage incomplete; stale cookies were not marked');
-				} else if (staleCookieCount > 0) { msg += ' | ' + staleCookieCount + ' stale cookie(s) highlighted'; }
+					msg += ' | ' + __('cookies.scanCoverageIncomplete', 'Scan coverage was incomplete, so no cookie was marked as stale.');
+				} else if (staleCookieCount > 0) {
+					msg += ' | ' + __('cookies.staleHighlighted', '%d stale cookie(s) highlighted')
+						.replace('%d', function () { return String(staleCookieCount); });
+				}
 				if (res.importResult && res.importResult.enrichment_pending) {
-					msg += ' | ' + __('cookies.enrichmentPending', 'browser scan saved; server-header enrichment continues in the background');
+					msg += ' | ' + __('cookies.enrichmentPending', 'The browser scan was saved. Server-header enrichment is still running in the background, so a few more cookies may appear shortly.');
 				}
 				msg += FAZ.scanEngine.diagnosticsHint(res.diagnostics, res.total);
 				if (res.diagnostics && res.diagnostics.totalIssues > 0) {

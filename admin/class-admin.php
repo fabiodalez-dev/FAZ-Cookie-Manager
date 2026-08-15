@@ -578,7 +578,17 @@ class Admin {
 						'scanStarted'              => __( 'Scanning...', 'faz-cookie-manager' ),
 						'scanSite'                 => __( 'Scan Site', 'faz-cookie-manager' ),
 						'scanFailed'               => __( 'Scan failed.', 'faz-cookie-manager' ),
-						'scanCoverageIncomplete'   => __( 'coverage incomplete; stale cookies were not marked', 'faz-cookie-manager' ),
+						/* translators: %1$d: number of cookies found by the scan, %2$d: number of pages scanned */
+						'scanComplete'             => __( 'Scan complete — %1$d cookies found on %2$d pages', 'faz-cookie-manager' ),
+						/* translators: %s: machine-readable reason the scan stopped before visiting every page, e.g. "no-new-findings" */
+						'scanEarlyStop'            => __( '(early stop: %s)', 'faz-cookie-manager' ),
+						/* translators: %d: number of catalogued cookies the latest scan did not observe */
+						'staleHighlighted'         => __( '%d stale cookie(s) highlighted', 'faz-cookie-manager' ),
+						/* translators: appended to the scan summary when the scan was capped, incremental, early-stopped or degraded, and therefore could not prove that a catalogued cookie is gone. */
+						'scanCoverageIncomplete'   => __( 'Scan coverage was incomplete, so no cookie was marked as stale.', 'faz-cookie-manager' ),
+						// Shown when the browser pass finished but the server-side
+						// header enrichment is still queued, so the inventory may still grow.
+						'enrichmentPending'        => __( 'The browser scan was saved. Server-header enrichment is still running in the background, so a few more cookies may appear shortly.', 'faz-cookie-manager' ),
 						'noPagesFound'             => __( 'No pages found to scan.', 'faz-cookie-manager' ),
 						'discoverFailed'           => __( 'Failed to discover pages.', 'faz-cookie-manager' ),
 						'scanSaveFailed'           => __( 'Scan finished but failed to save results.', 'faz-cookie-manager' ),

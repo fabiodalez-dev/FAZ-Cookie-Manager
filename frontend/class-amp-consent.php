@@ -387,6 +387,10 @@ class AMP_Consent {
 				$purpose_ids[] = $purpose['id'];
 			}
 		}
+		// The names the checkboxes will report under. Derived from the same
+		// purpose list the REST bridge reads, which is what keeps the two ends
+		// from drifting apart.
+		$purpose_args = AMP_Consent_Rest::purpose_action_args( $purposes );
 		$endpoints = AMP_Consent_Rest::endpoint_urls( $banner );
 
 		// Remote mode is required for parity with the standard first-party
@@ -484,10 +488,19 @@ class AMP_Consent {
 											 * legitimately contain hyphens ("social-media"), which AMP
 											 * cannot parse: it drops the whole action, so the checkbox
 											 * silently stops recording while the category still appears
-											 * in purposeConsentRequired. Underscores are valid, and the
-											 * server maps the argument back to the slug.
+											 * in purposeConsentRequired.
+											 *
+											 * Translating the hyphens here was not enough on its own:
+											 * "social-media" and "social_media" are both legal slugs and
+											 * both became "social_media", so two boxes reported under one
+											 * name and one category silently inherited the other's answer.
+											 * purpose_action_args() gives each category a distinct name and
+											 * is the same map the server reads the answer back through.
 											 */
-											$faz_purpose_arg = str_replace( '-', '_', (string) $purpose['id'] );
+											$faz_purpose_id  = (string) $purpose['id'];
+											$faz_purpose_arg = isset( $purpose_args[ $faz_purpose_id ] )
+												? $purpose_args[ $faz_purpose_id ]
+												: str_replace( '-', '_', $faz_purpose_id );
 											/* translators: %s: cookie category name, for example Analytics. */
 											$faz_purpose_label = sprintf( __( 'Allow %s cookies', 'faz-cookie-manager' ), $purpose['name'] ? $purpose['name'] : $purpose['slug'] );
 											?>
@@ -643,14 +656,39 @@ class AMP_Consent {
 				}
 				$requested = array_values( array_diff( $requested, array( 'necessary' ) ) );
 				$valid     = array_values( array_intersect( $requested, $purpose_ids ) );
-				if ( ! empty( $requested ) && count( $valid ) === count( $requested ) ) {
+				if ( ! empty( $valid ) ) {
+					// Gate on the categories this site actually offers. A requested
+					// purpose the site does not configure is dropped rather than
+					// carried into the attribute: no visitor could grant it, so
+					// naming it would block the component permanently.
 					$attribute = ' data-block-on-consent-purposes="' . esc_attr( implode( ',', $valid ) ) . '"';
 				} elseif ( ! empty( $purpose_ids ) ) {
-					// A classified optional component with no matching custom category
-					// requires every configured optional purpose. This over-blocks but
-					// cannot silently grant a request under an unrelated category.
+					// Nothing the visitor can answer maps to this component — the usual
+					// case is a default category ("functional") the admin hid or deleted
+					// while amp-iframe/amp-youtube still map to it.
+					//
+					// Gating on every configured purpose is clumsy: a YouTube embed ends
+					// up waiting on marketing AND analytics, categories that have nothing
+					// to do with it, so a visitor who granted exactly what the embed needs
+					// still sees nothing. An earlier revision of this branch replaced it
+					// with data-block-on-consent="_till_accepted" for that reason.
+					//
+					// That is not safe here, and the direction of the trade is what
+					// settles it. _till_accepted unblocks on ACCEPTED, and the Save
+					// button sends accept(purposeConsentDefault=false) — so a visitor who
+					// opens preferences, ticks nothing and saves would load the component
+					// on a decision that granted no category at all. Over-blocking is a
+					// usability complaint with an obvious remedy; under-blocking is a
+					// tracker running without consent. In a consent plugin those are not
+					// comparable costs, so the clumsy gate stays.
+					//
+					// The real remedy is one admin action: configure a category for the
+					// component, which is also the only way a visitor can be asked about
+					// it in the first place.
 					$attribute = ' data-block-on-consent-purposes="' . esc_attr( implode( ',', $purpose_ids ) ) . '"';
 				} else {
+					// The site offers no optional category at all, so there is no purpose
+					// to name. This is the pre-existing fallback and the only gate left.
 					$attribute = ' data-block-on-consent="_till_accepted"';
 				}
 				return '<' . $match[1] . $attribute . $attrs . '>';
