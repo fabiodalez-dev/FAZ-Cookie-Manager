@@ -605,6 +605,14 @@ class Api extends Rest_Controller {
 		}
 
 		$raw_cookies   = isset( $body['cookies'] ) && is_array( $body['cookies'] ) ? $body['cookies'] : array();
+		// Names the browser engine saw only as ALREADY present in the scanning
+		// browser's jar before a page loaded. The scan runs in the
+		// administrator's browser, so this is where wp-admin-only cookies live
+		// (Automattic Tracks tk_*, anything a plugin left behind). They are not
+		// attributable to the site and must not enter the public declaration as
+		// discoveries; they are counted and reported so the admin can add any
+		// that genuinely belong.
+		$jar_cookies = isset( $body['jar_cookies'] ) && is_array( $body['jar_cookies'] ) ? $body['jar_cookies'] : array();
 		$pages_scanned = isset( $body['pages_scanned'] ) ? absint( $body['pages_scanned'] ) : 0;
 		$scripts       = isset( $body['scripts'] ) && is_array( $body['scripts'] ) ? $body['scripts'] : array();
 		$metrics       = isset( $body['metrics'] ) && is_array( $body['metrics'] ) ? $body['metrics'] : array();
@@ -674,6 +682,21 @@ class Api extends Rest_Controller {
 		}
 
 		$result['capture_truncated'] = $capture_truncated;
+		// Reported, never imported. Surfacing the count is the point: silently
+		// dropping them would trade one invisible behaviour for another, and an
+		// admin who recognises a name as a real site cookie can add it by hand.
+		$jar_names = array();
+		foreach ( $jar_cookies as $jar_cookie ) {
+			if ( ! is_array( $jar_cookie ) || empty( $jar_cookie['name'] ) ) {
+				continue;
+			}
+			$jar_name = sanitize_text_field( (string) $jar_cookie['name'] );
+			if ( '' !== $jar_name && ! in_array( $jar_name, $jar_names, true ) ) {
+				$jar_names[] = $jar_name;
+			}
+		}
+		$result['jar_only_cookies'] = $jar_names;
+		$result['jar_only_count']   = count( $jar_names );
 		return rest_ensure_response( $result );
 	}
 

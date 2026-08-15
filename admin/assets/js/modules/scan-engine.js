@@ -358,9 +358,20 @@
 							incremental: scanMetrics.incremental,
 						};
 
+						// Reconcile: a name held in the jar bucket that some page
+						// later actually set is a genuine discovery, so it is only
+						// reported as jar-only if no page ever wrote it.
+						var jarOnlyRemaining = [];
+						for (var jr = 0; jr < jarOnlyCookies.length; jr++) {
+							if (!Object.prototype.hasOwnProperty.call(cookieSet, jarOnlyCookies[jr].name)) {
+								jarOnlyRemaining.push(jarOnlyCookies[jr]);
+							}
+						}
+
 						FAZ.post('scans/import', {
 							scan_id: scanId,
 							cookies: collectedCookies,
+							jar_cookies: jarOnlyRemaining,
 							pages_scanned: scanMetrics.pagesScanned,
 							scanned_urls: scanMetrics.scannedUrls,
 							scripts: collectedScripts,
@@ -381,6 +392,7 @@
 								total: res.total_cookies || collectedCookies.length,
 								pagesScanned: scanMetrics.pagesScanned,
 								cookies: collectedCookies,
+								jarCookies: jarOnlyRemaining,
 								scripts: collectedScripts,
 								diagnostics: diagnostics,
 								metrics: scanMetrics,
@@ -435,6 +447,11 @@
 		};
 		var cookieSet = {};    // O(1) dedup for cookie names.
 		var scriptSet = {};    // O(1) dedup for script URLs.
+		// Names seen only as already-present in the scanning browser's jar. The
+		// scan runs in the administrator's browser, so this bucket is where
+		// wp-admin-only cookies land instead of the public declaration.
+		var jarOnlyCookies = [];
+		var jarSet = {};
 		var nextIndex = 0;     // Next URL to dispatch.
 		var completed = 0;     // URLs finished.
 		var active = 0;        // Currently scanning.
@@ -509,6 +526,18 @@
 					addUnique(cookieSet, collectedCookies, pageCookies[i].name, pageCookies[i]);
 				}
 
+				// Cookies that were already in the jar when this page started
+				// loading. They are held apart, not discarded: one of them may be
+				// a genuine site cookie set by an earlier page in this same run
+				// (or by the admin simply browsing the site), and dropping it
+				// would lose a real declaration entry. A later page that actually
+				// sets the name promotes it, and the reconciliation after the
+				// crawl removes anything promoted from this list.
+				var pageJarCookies = pageResult.jarCookies || [];
+				for (var jc = 0; jc < pageJarCookies.length; jc++) {
+					addUnique(jarSet, jarOnlyCookies, pageJarCookies[jc].name, pageJarCookies[jc]);
+				}
+
 				// Diff cookies: find new ones set during this page load.
 				var newCookies = diffCookies(cookiesBefore, parseBrowserCookies());
 				for (var j = 0; j < newCookies.length; j++) {
@@ -536,6 +565,7 @@
 				loadTimeoutMs: loadTimeoutMs,
 				settleTimeoutMs: settleTimeoutMs,
 				scanId: scanId,
+				jarBaseline: cookiesBefore,
 			});
 		}
 
@@ -553,9 +583,12 @@
 		var loadTimeoutMs = (typeof options.loadTimeoutMs === 'number' && options.loadTimeoutMs > 0) ? options.loadTimeoutMs : IFRAME_LOAD_TIMEOUT;
 		var settleTimeoutMs = (typeof options.settleTimeoutMs === 'number' && options.settleTimeoutMs > 0) ? options.settleTimeoutMs : 3800;
 		var scanId = typeof options.scanId === 'string' ? options.scanId : '';
+		// The cookie jar as it stood immediately before this page loaded. Names
+		// already in it cannot be attributed to this page — see readIframe().
+		var jarBaseline = options.jarBaseline || null;
 
 		function emptyResult(issue, originRebased) {
-			return { cookies: [], scripts: [], issue: issue || '', originRebased: !!originRebased };
+			return { cookies: [], jarCookies: [], scripts: [], issue: issue || '', originRebased: !!originRebased };
 		}
 		var hadAccessError = false;
 
@@ -614,14 +647,32 @@
 		var lastRead = null;
 
 		function readIframe() {
-			var result = { cookies: [], scripts: [], issue: '', originRebased: originRebased };
+			var result = { cookies: [], jarCookies: [], scripts: [], issue: '', originRebased: originRebased };
 			try {
 				var doc = iframe.contentDocument || iframe.contentWindow.document;
 
 				var iframeCookieStr = '';
 				try { iframeCookieStr = doc.cookie || ''; } catch (e) { hadAccessError = true; }
 				if (iframeCookieStr) {
-					result.cookies = parseCookieString(iframeCookieStr, parsedUrl.hostname);
+					// A same-origin iframe shares the top-level document's cookie jar,
+					// so doc.cookie is not "what this page set" — it is EVERY cookie
+					// the scanning browser holds for this domain. The scan runs in the
+					// administrator's browser, so wp-admin-only cookies (Automattic
+					// Tracks tk_ai/tk_qs, anything left by a plugin the admin uses)
+					// were being imported into the PUBLIC cookie declaration as
+					// first-class discoveries, for services a visitor never touches.
+					//
+					// Splitting against the jar as it stood immediately before this
+					// page loaded separates the two: a name that was already there
+					// cannot be attributed to this page.
+					var all = parseCookieString(iframeCookieStr, parsedUrl.hostname);
+					for (var ci = 0; ci < all.length; ci++) {
+						if (jarBaseline && Object.prototype.hasOwnProperty.call(jarBaseline, all[ci].name)) {
+							result.jarCookies.push(all[ci]);
+						} else {
+							result.cookies.push(all[ci]);
+						}
+					}
 				}
 
 				try {
