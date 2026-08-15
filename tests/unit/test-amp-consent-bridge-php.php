@@ -57,15 +57,18 @@ namespace {
 		private $route;
 		private $body;
 		private $content_type;
-		public function __construct( $params, $route = '/faz/v1/amp-consent/check', $body = '', $content_type = '' ) {
+		private $method;
+		public function __construct( $params, $route = '/faz/v1/amp-consent/check', $body = '', $content_type = '', $method = 'POST' ) {
 			$this->params       = $params;
 			$this->route        = $route;
 			$this->body         = $body;
 			$this->content_type = $content_type;
+			$this->method       = $method;
 		}
 		public function get_param( $key ) { return array_key_exists( $key, $this->params ) ? $this->params[ $key ] : null; }
 		public function set_param( $key, $value ) { $this->params[ $key ] = $value; }
 		public function get_route() { return $this->route; }
+		public function get_method() { return $this->method; }
 		public function get_body() { return $this->body; }
 		public function get_content_type() {
 			return '' === $this->content_type ? null : array( 'value' => $this->content_type );
@@ -683,6 +686,40 @@ namespace {
 			"{$embed_component} is gated rather than left to load before consent"
 		);
 	}
+
+	// ── Preflight ──────────────────────────────────────────────────────────
+	// Core answers OPTIONS at rest_pre_dispatch priority 10, before any route
+	// callback, so the bridge has exactly one place to establish the CORS origin
+	// for a preflight. Running later meant serve_cors_headers() had nothing to
+	// emit and stripped the header core had set — every real preflight failed.
+	$preflight_hook = null;
+	foreach ( $GLOBALS['faz_test_filters'] as $registered_filter ) {
+		if ( 'rest_pre_dispatch' === $registered_filter['hook'] ) {
+			$preflight_hook = $registered_filter;
+		}
+	}
+	amp_ok( null !== $preflight_hook, 'the bridge hooks rest_pre_dispatch for preflight' );
+	amp_same( $preflight_hook ? $preflight_hook['priority'] : 0, 9, 'it runs before core answers OPTIONS at priority 10' );
+
+	// A denied preflight must leave no origin behind: emitting nothing makes the
+	// browser refuse the follow-up request, which is the fail-closed direction.
+	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$ok_preflight = new Faz_AMP_Test_Request( array(), '/faz/v1/amp-consent/check', '', '', 'OPTIONS' );
+	amp_same( $bridge->authorize_preflight( null, null, $ok_preflight ), null, 'preflight authorisation is a side effect, never a response' );
+	amp_same( $bridge->cors_origin_for_tests(), 'https://publisher.example', 'a same-origin preflight establishes the origin core will need' );
+
+	// A denied origin must leave nothing behind: with no origin recorded,
+	// serve_cors_headers() emits none and the browser refuses the follow-up.
+	$_SERVER = array( 'HTTP_ORIGIN' => 'https://evil.example' );
+	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/faz/v1/amp-consent/check', '', '', 'OPTIONS' ) );
+	amp_same( $bridge->cors_origin_for_tests(), '', 'a foreign preflight origin is not recorded' );
+
+	// A POST is left to the normal path, and an unrelated route is ignored.
+	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/faz/v1/amp-consent/check', '', '', 'POST' ) );
+	amp_same( $bridge->cors_origin_for_tests(), '', 'a POST is not treated as a preflight' );
+	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/wp/v2/posts', '', '', 'OPTIONS' ) );
+	amp_same( $bridge->cors_origin_for_tests(), '', 'an unrelated route is left alone' );
 
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

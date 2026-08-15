@@ -41,6 +41,13 @@ class AMP_Consent_Rest {
 	 */
 	public function __construct() {
 		add_action( 'rest_api_init', array( $this, 'register_routes' ) );
+		// Authorise preflight BEFORE core answers it. WordPress short-circuits
+		// every OPTIONS request in rest_handle_options_request(), hooked on
+		// rest_pre_dispatch at priority 10, so a route callback never sees one.
+		// Running at 9 is the only place the bridge can establish the CORS origin
+		// for a preflight; without it serve_cors_headers() had nothing to emit
+		// and stripped the header core had already set, failing every preflight.
+		add_filter( 'rest_pre_dispatch', array( $this, 'authorize_preflight' ), 9, 3 );
 		// WordPress core reflects arbitrary REST origins. Replace that broad
 		// header for these two routes after core's rest_send_cors_headers runs.
 		add_filter( 'rest_pre_serve_request', array( $this, 'serve_cors_headers' ), 20, 4 );
@@ -140,6 +147,48 @@ class AMP_Consent_Rest {
 		 * Supporting preflight properly means authorising it at rest_pre_dispatch,
 		 * which is a separate change with its own risk.
 		 */
+	}
+
+	/**
+	 * The origin accepted for the request currently being served.
+	 *
+	 * Exposed so a test can assert that a denied preflight records nothing —
+	 * the difference between failing closed and failing open is invisible from
+	 * the return value alone.
+	 *
+	 * @return string
+	 */
+	public function cors_origin_for_tests() {
+		return $this->cors_origin;
+	}
+
+	/**
+	 * Establish the CORS origin for a preflight against the AMP routes.
+	 *
+	 * Returns $result untouched — this is an authorisation side effect, not a
+	 * response. A denied origin simply leaves cors_origin empty, and
+	 * serve_cors_headers() then emits nothing, so the browser refuses the
+	 * follow-up request. Fail-closed by construction.
+	 *
+	 * @param mixed            $result  Existing short-circuit result.
+	 * @param \WP_REST_Server  $server  REST server.
+	 * @param \WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public function authorize_preflight( $result, $server, $request ) {
+		if ( ! is_object( $request ) || ! method_exists( $request, 'get_method' ) ) {
+			return $result;
+		}
+		if ( 'OPTIONS' !== strtoupper( (string) $request->get_method() ) ) {
+			return $result;
+		}
+		$route = method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
+		if ( '/' . self::REST_NAMESPACE . self::CHECK_ROUTE !== $route
+			&& '/' . self::REST_NAMESPACE . self::UPDATE_ROUTE !== $route ) {
+			return $result;
+		}
+		$this->authorize_request( $request );
+		return $result;
 	}
 
 	/**

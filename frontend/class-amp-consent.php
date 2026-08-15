@@ -310,6 +310,7 @@ class AMP_Consent {
 			.faz-amp-btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer}
 			.faz-amp-btn-accept{background:<?php echo esc_attr( $c['accept_bg'] ); ?>;color:<?php echo esc_attr( $c['accept_color'] ); ?>}
 			.faz-amp-btn-reject{background:<?php echo esc_attr( $c['reject_bg'] ); ?>;color:<?php echo esc_attr( $c['reject_color'] ); ?>;border:1px solid <?php echo esc_attr( $c['reject_border'] ); ?>}
+			.faz-amp-purposes-note{font-size:12px;margin:0 0 8px;opacity:.85}
 			.faz-amp-btn-save{background:transparent;color:<?php echo esc_attr( $c['reject_color'] ); ?>;border:1px dashed <?php echo esc_attr( $c['reject_color'] ); ?>}
 			.faz-amp-link{font-size:12px;color:<?php echo esc_attr( $c['link_color'] ); ?>;text-decoration:underline}
 			.faz-amp-revisit{position:fixed;bottom:16px;left:16px;z-index:9998}
@@ -451,7 +452,27 @@ class AMP_Consent {
 						<p class="faz-amp-desc"><?php echo esc_html( $description ); ?></p>
 					<?php endif; ?>
 					<?php if ( ! empty( $purposes ) ) : ?>
+						<?php
+						/*
+						 * These boxes always render unticked and cannot yet reflect a
+						 * previous choice: amp-consent exposes no per-purpose value plain
+						 * markup can bind to, and doing it properly needs amp-bind plus
+						 * state this bridge does not render.
+						 *
+						 * Left unsaid, that is a trap. A visitor returning through the
+						 * revisit button sees "nothing allowed" whatever they granted
+						 * before, and pressing Save writes exactly that — a withdrawal they
+						 * never asked for. Under-reporting feels harmless because it is the
+						 * restrictive direction; it is not, because the record then stops
+						 * matching what the visitor actually expressed.
+						 *
+						 * Until amp-bind lands, the boxes say what they are: a fresh choice
+						 * that Save applies as shown. Stating it turns a silent
+						 * misrepresentation into an explicit instruction.
+						 */
+						?>
 						<div class="faz-amp-purposes" role="group" aria-label="<?php esc_attr_e( 'Optional cookie categories', 'faz-cookie-manager' ); ?>">
+							<p class="faz-amp-purposes-note"><?php esc_html_e( 'Tick the categories you want to allow. Saving applies exactly what is shown here, so anything left unticked stays blocked.', 'faz-cookie-manager' ); ?></p>
 							<?php foreach ( $purposes as $purpose ) : ?>
 								<div class="faz-amp-purpose">
 									<span class="faz-amp-purpose-name"><?php echo esc_html( $purpose['name'] ? $purpose['name'] : $purpose['slug'] ); ?></span>
