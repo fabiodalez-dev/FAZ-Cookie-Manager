@@ -77,8 +77,8 @@ faz_expiry_same(
 	'only the user-initiated law change clamps the stored value'
 );
 faz_expiry_same(
-	1,
 	substr_count( $banner_js, 'syncConsentExpiryConstraints(lawEl.value, true)' ),
+	1,
 	'page load and form sync refresh the bounds without touching the value'
 );
 

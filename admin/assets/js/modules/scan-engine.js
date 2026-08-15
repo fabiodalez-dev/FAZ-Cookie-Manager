@@ -278,7 +278,7 @@
 
 				var scanStart = Date.now();
 
-				scanUrlsConcurrent(urls, function (collectedCookies, collectedScripts, diagnostics) {
+				scanUrlsConcurrent(urls, function (collectedCookies, collectedScripts, diagnostics, jarOnlyCookies, cookieSet) {
 					scanMetrics.scanMs = Date.now() - scanStart;
 					scanMetrics.cookiesFound = collectedCookies.length;
 					scanMetrics.scriptsFound = collectedScripts.length;
@@ -362,9 +362,11 @@
 						// later actually set is a genuine discovery, so it is only
 						// reported as jar-only if no page ever wrote it.
 						var jarOnlyRemaining = [];
-						for (var jr = 0; jr < jarOnlyCookies.length; jr++) {
-							if (!Object.prototype.hasOwnProperty.call(cookieSet, jarOnlyCookies[jr].name)) {
-								jarOnlyRemaining.push(jarOnlyCookies[jr]);
+						var jarList = jarOnlyCookies || [];
+						var observedNames = cookieSet || {};
+						for (var jr = 0; jr < jarList.length; jr++) {
+							if (!Object.prototype.hasOwnProperty.call(observedNames, jarList[jr].name)) {
+								jarOnlyRemaining.push(jarList[jr]);
 							}
 						}
 
@@ -495,7 +497,7 @@
 				metrics.pagesScanned = completed;
 				// Clean up any orphaned iframes.
 				try { document.getElementById('faz-scan-frame').textContent = ''; } catch (e) {}
-				done(collectedCookies, collectedScripts, diagnostics);
+				done(collectedCookies, collectedScripts, diagnostics, jarOnlyCookies, cookieSet);
 			}
 		}
 

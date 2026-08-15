@@ -44,10 +44,11 @@ ds_ok( false !== strpos( $scan_api, "\$result['deletable_stale_keys']" ), 'the i
 
 echo "== Reversibility ==\n";
 ds_ok( false !== strpos( $cookie_api, 'const RECYCLE_BIN_OPTION' ), 'deleted rows are snapshotted' );
-ds_ok( false !== strpos( $cookie_api, '$recycled[] = $cookie->get_prepared_data();' ), 'the snapshot is taken BEFORE the row is deleted' );
+ds_ok( false !== strpos( $cookie_api, '$snapshot = $cookie->get_prepared_data();' ) && false !== strpos( $cookie_api, '$recycled[] = $snapshot;' ), 'the snapshot is taken BEFORE the row is deleted' );
+ds_ok( false !== strpos( $cookie_api, "method_exists( \$cookie, 'get_script_data' )" ), 'the snapshot carries the blocker scripts, which get_prepared_data() omits' );
 ds_ok( false !== strpos( $cookie_api, 'public function restore_deleted' ), 'a restore path exists' );
 ds_ok( false !== strpos( $cookie_api, "'/' . \$this->rest_base . '/restore-deleted'" ), 'the restore path is reachable — a registered route, not dead code' );
-ds_ok( false !== strpos( $cookie_api, 'if ( isset( $current_names[ (string) $data[\'name\'] ] ) ) {' ), 'a restore does not duplicate a cookie that came back on its own' );
+ds_ok( false !== strpos( $cookie_api, 'isset( $current_names[ strtolower( (string) $data[\'name\'] ) ] )' ), 'a restore does not duplicate a cookie that came back on its own' );
 ds_ok( false !== strpos( $cookie_api, 'array_slice( $bin, 0, self::RECYCLE_BIN_BATCHES )' ), 'the bin is bounded — an undo, not a growing history' );
 
 echo "\nPassed: {$passed}; Failed: {$failed}\n";

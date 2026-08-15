@@ -419,7 +419,10 @@ namespace {
 		);
 		$cookie = AMP_Consent_Rest::build_cookie_value( 'accepted', array( 'analytics' => true ), $amp_context, 'cid', time() + 3600, '' );
 		amp_ok(
-			false !== strpos( $cookie, '__scope.law:' . $raw_law ),
+			// The pair delimiter closes the match: without it '__scope.law:gdpr'
+			// also matches the gdpr_ccpa cookie, and the assertion passes for the
+			// wrong banner.
+			false !== strpos( $cookie . ',', '__scope.law:' . $raw_law . ',' ),
 			"the AMP cookie records the raw law '{$raw_law}' exactly as the classic page does"
 		);
 		amp_ok(
@@ -580,8 +583,13 @@ namespace {
 	$rest_source = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-amp-consent-rest.php' );
 	$serve_start = strpos( $rest_source, 'public function serve_cors_headers' );
 	$serve_code  = substr( $rest_source, $serve_start, 2200 );
+	// strpos() returns false when the needle is absent, and false < N is true
+	// after coercion to 0 — comparing positions without first proving both exist
+	// gives an assertion that survives the removal of the very call it checks.
+	$faz_remove_pos = strpos( $serve_code, "header_remove( 'Access-Control-Allow-Origin' )" );
+	$faz_guard_pos  = strpos( $serve_code, "if ( '' !== \$this->cors_origin )" );
 	amp_ok(
-		strpos( $serve_code, "header_remove( 'Access-Control-Allow-Origin' )" ) < strpos( $serve_code, "if ( '' !== \$this->cors_origin )" ),
+		false !== $faz_remove_pos && false !== $faz_guard_pos && $faz_remove_pos < $faz_guard_pos,
 		'generic WordPress CORS grant is removed even when an AMP route returns an error'
 	);
 

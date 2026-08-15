@@ -9,7 +9,7 @@
  *   - GPC ruleset flag integrity (5 UOOM states + fallback)
  *   - PIPEDA hybrid reclassification
  *   - GPC honoured server-side (Sec-GPC + DNSMPI cookie)
- *   - 6-month (180-182 day) consent-expiry window logic
+ *   - 6-month (182-day) consent-expiry CAP — a maximum, never a minimum
  *   - Trusted-proxy CIDR allowlist (faz_ip_in_cidr_list)
  *   - Accept/Reject equal-weight default button styling
  *
@@ -264,19 +264,27 @@ foreach ( array( '', '6.0.0/', '6.2.0/' ) as $ver ) {
 }
 
 // ===========================================================================
-// 6. 6-month consent-expiry window (main enforces 180-182)
+// 6. 6-month consent-expiry CAP (a maximum, never a minimum)
 // ===========================================================================
-echo "\n-- Consent expiry window (180-182 days) --\n";
+echo "\n-- Consent expiry cap (182 days) --\n";
 
-// Mirror the GDPR-family clamp applied in frontend/class-frontend.php. The
-// separate production-class regression suite covers the CCPA 365-day floor.
+// Mirror the GDPR-family rule in Frontend::normalize_consent_expiry(). It is a
+// CAP: the Garante's six-month rule is a maximum and no legal minimum exists,
+// so a publisher re-asking every 30 days is being MORE protective and must be
+// left alone. An earlier revision imposed a 180-day floor and this suite pinned
+// it — the test defended the defect. A zero/absent configuration still needs a
+// usable lifetime, which is where 182 comes from. The CCPA 365-day floor and
+// its 3650-day ceiling live in the production-class regression suite.
 $clamp_expiry = function ( $value ) {
-	return min( 182, max( 180, (int) $value ) );
+	$value = (int) $value;
+	return $value < 1 ? 182 : min( 182, $value );
 };
 assert_eq( $clamp_expiry( 3650 ), 182, '10-year request clamps to 182 days' );
 assert_eq( $clamp_expiry( 365 ), 182, '1-year request clamps to 182 days' );
 assert_eq( $clamp_expiry( 180 ), 180, 'compliant 180 passes through' );
-assert_eq( $clamp_expiry( 0 ), 180, 'zero floors to the six-month minimum' );
+assert_eq( $clamp_expiry( 30 ), 30, 'a deliberate 30-day re-prompt is stricter and survives' );
+assert_eq( $clamp_expiry( 1 ), 1, 'no floor is imposed on a short lifetime' );
+assert_eq( $clamp_expiry( 0 ), 182, 'an absent configuration still yields a usable lifetime' );
 // The shipped default must be within the cap.
 $gdpr_cfg = load_json( "$configs_dir/6.2.0/gdpr.json" );
 assert_true(

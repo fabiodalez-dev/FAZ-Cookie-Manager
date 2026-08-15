@@ -115,7 +115,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 			printf(
 				/* translators: %s URL to ipinfo.io */
 				wp_kses_post( __( 'Optionally use <a href="%s" target="_blank" rel="noopener noreferrer">ipinfo.io</a> for VPN/proxy/Tor classification in the admin preview. Live rule-set application is disabled, so this setting does not send visitor IP addresses during banner rendering. Opt-in is gated by your acknowledgment of the cross-border data-transfer obligations under GDPR / DPF / SCC.', 'faz-cookie-manager' ) ),
-				'https://ipinfo.io'
+				esc_url( 'https://ipinfo.io' )
 			);
 			?>
 		</p>

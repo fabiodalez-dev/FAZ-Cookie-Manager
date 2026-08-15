@@ -436,7 +436,7 @@
 				found > 0
 					? interpolate(__('setup.scan_done_found', 'Scan complete — %d cookies found.'), found)
 					: __('setup.scan_done_empty', 'Scan complete. No new cookies were found.');
-			if (res.importResult && res.importResult.enrichment_pending) {
+			if (res && res.importResult && res.importResult.enrichment_pending) {
 				doneMessage += ' ' + __('setup.scan_enrichment_pending', 'Server-header enrichment continues in the background.');
 			}
 			setScanStatus(doneMessage);

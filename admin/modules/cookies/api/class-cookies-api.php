@@ -678,7 +678,14 @@ class Cookies_API extends API_Controller {
 			}
 			$cookie = new Cookie( $id );
 			if ( $cookie->get_loaded() ) {
-				$recycled[] = $cookie->get_prepared_data();
+				// get_prepared_data() omits opt_in_script/opt_out_script, and
+				// restore_deleted() can only put back what the snapshot holds —
+				// so restoring would have silently dropped the blocker scripts.
+				$snapshot = $cookie->get_prepared_data();
+				if ( method_exists( $cookie, 'get_script_data' ) ) {
+					$snapshot = array_merge( $snapshot, (array) $cookie->get_script_data() );
+				}
+				$recycled[] = $snapshot;
 				$cookie->delete();
 				$deleted++;
 			}
@@ -727,7 +734,7 @@ class Cookies_API extends API_Controller {
 		$current_names = array();
 		foreach ( (array) Cookie_Controller::get_instance()->get_item_from_db() as $current ) {
 			if ( ! empty( $current->name ) ) {
-				$current_names[ (string) $current->name ] = true;
+				$current_names[ strtolower( (string) $current->name ) ] = true;
 			}
 		}
 		foreach ( isset( $batch['cookies'] ) ? (array) $batch['cookies'] : array() as $data ) {
@@ -738,7 +745,7 @@ class Cookies_API extends API_Controller {
 			// been re-discovered or re-added by hand. There is no by-name
 			// lookup on the controller, so the current set is read once above
 			// and consulted here.
-			if ( isset( $current_names[ (string) $data['name'] ] ) ) {
+			if ( isset( $current_names[ strtolower( (string) $data['name'] ) ] ) ) {
 				continue;
 			}
 			unset( $data['cookie_id'] );

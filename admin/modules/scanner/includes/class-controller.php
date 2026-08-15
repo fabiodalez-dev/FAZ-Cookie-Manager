@@ -389,7 +389,7 @@ class Controller {
 		$scan_id = sanitize_key( (string) $scan_id );
 		$user_id = get_current_user_id();
 		$session = get_transient( self::browser_scan_transient_key( $token ) );
-		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) || ! is_array( $session ) || $user_id !== absint( $session['user_id'] ) || ! isset( $session['scan_id'] ) || ! hash_equals( (string) $session['scan_id'], $scan_id ) ) {
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) || ! is_array( $session ) || ! isset( $session['user_id'] ) || $user_id !== absint( $session['user_id'] ) || ! isset( $session['scan_id'] ) || ! hash_equals( (string) $session['scan_id'], $scan_id ) ) {
 			return array();
 		}
 

@@ -175,15 +175,21 @@
 		expiryEl.min = String(min);
 		expiryEl.max = String(max);
 		expiryEl.step = '1';
+		var hint = document.getElementById('faz-b-expiry-hint');
 		if (!clamp) return;
 
 		var value = parseInt(expiryEl.value, 10);
 		if (!isFinite(value)) return;
 		var clamped = Math.max(min, Math.min(max, value));
-		if (clamped === value) return;
+		if (clamped === value) {
+			// Nothing moved this time. The notice must go: left standing it keeps
+			// reporting an older clamp, with two numbers that no longer describe
+			// the field — a stale explanation is worse than none.
+			if (hint) { hint.style.display = 'none'; hint.textContent = ''; }
+			return;
+		}
 
 		expiryEl.value = String(clamped);
-		var hint = document.getElementById('faz-b-expiry-hint');
 		if (hint) {
 			// Say what changed and from what — a silent rewrite under the cursor
 			// is how an admin loses a deliberate setting without noticing. The

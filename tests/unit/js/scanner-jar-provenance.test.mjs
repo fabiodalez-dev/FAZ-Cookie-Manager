@@ -35,10 +35,21 @@ ok(/jarCookies: \[\]/.test(src),
 
 // Reconciliation matters: a cookie can sit in the jar when page 2 loads
 // precisely because page 1 set it. That is a real discovery, not contamination.
-ok(/if \(!Object\.prototype\.hasOwnProperty\.call\(cookieSet, jarOnlyCookies\[jr\]\.name\)\)/.test(src),
+ok(/if \(!Object\.prototype\.hasOwnProperty\.call\(observedNames, jarList\[jr\]\.name\)\)/.test(src),
   'a jar name that some page actually set is promoted back to a discovery');
 ok(/jar_cookies: jarOnlyRemaining,/.test(src),
   'only names no page ever set are reported as jar-only');
+
+// The bucket and the observed-name set are LOCALS of scanUrlsConcurrent, while
+// the reconciliation lives in the import callback. Reading them across that
+// boundary threw a ReferenceError and broke every scan import — and the checks
+// above did not notice, because they match source text rather than run it.
+ok(/done\(collectedCookies, collectedScripts, diagnostics, jarOnlyCookies, cookieSet\)/.test(src),
+  'the crawl hands the jar bucket and observed-name set to its callback');
+ok(/function \(collectedCookies, collectedScripts, diagnostics, jarOnlyCookies, cookieSet\)/.test(src),
+  'the import callback receives them as parameters instead of reaching out of scope');
+ok(/var jarList = jarOnlyCookies \|\| \[\];/.test(src) && /var observedNames = cookieSet \|\| \{\};/.test(src),
+  'a caller that omits them degrades to an empty bucket rather than throwing');
 
 // The bucket must be reported, not silently dropped: swapping one invisible
 // behaviour for another would leave a real cookie undeclared with no trace.
