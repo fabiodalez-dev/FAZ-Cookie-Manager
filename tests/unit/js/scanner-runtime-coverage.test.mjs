@@ -96,8 +96,8 @@ check('03 scanner does not finish at the first stable checkpoint', runTimer(1500
 check('04 scanner still observes a cookie created after 2.5 seconds', runTimer(2500) && result === undefined);
 check('05 scanner keeps the final post-interaction observation window', runTimer(1800) && result !== undefined);
 check('06 interaction-created cookies are collected', result.cookies.some((cookie) => cookie.name === 'interaction_cookie'));
-check('07 optimizer-deferred script attributes are collected', result.scripts.includes('https://cdn.tracker.test/delayed.js'));
-check('08 lazy iframe attributes are collected', result.scripts.includes('https://video.tracker.test/embed'));
+check('07 optimizer-deferred script attributes are collected', result.scripts.some((url) => url === 'https://cdn.tracker.test/delayed.js'));
+check('08 lazy iframe attributes are collected', result.scripts.some((url) => url === 'https://video.tracker.test/embed'));
 check('09 cache-busted runtime resources are canonicalized and deduplicated', result.scripts.filter((url) => url === 'https://pixel.tracker.test/collect').length === 1);
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
