@@ -289,6 +289,30 @@ class Controller {
 	}
 
 	/**
+	 * Whether this request belongs to a live authenticated browser scan.
+	 *
+	 * Used by the optional outgoing-cookie guard so scanner AJAX/REST requests
+	 * can observe the original Set-Cookie header. A marker value alone never
+	 * bypasses blocking: it must resolve to a live transient owned by the current
+	 * authenticated user.
+	 *
+	 * @return bool
+	 */
+	public static function is_browser_scan_request() {
+		if ( empty( $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) ) {
+			return false;
+		}
+		$token = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
+			return false;
+		}
+		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		return is_array( $session )
+			&& ! empty( $session['user_id'] )
+			&& get_current_user_id() === absint( $session['user_id'] );
+	}
+
+	/**
 	 * Start a short-lived browser scan capture session and set its marker.
 	 *
 	 * @param string $scan_id Client-generated identifier used to isolate retries/tabs.
@@ -661,10 +685,14 @@ class Controller {
 	 * Schedule a background server-side check of browser-visited URLs to detect
 	 * Set-Cookie headers that JavaScript cannot read via document.cookie.
 	 *
-	 * Uses a background PHP-CLI process to avoid single-threaded deadlocks.
+	 * Uses WP-Cron plus a non-blocking loopback nudge. Starting a detached shell
+	 * process from PHP-FPM is not reliably detached on every host: inherited file
+	 * descriptors can keep the REST import request open until the worker exits.
+	 * Cron gives the queue a durable execution boundary and never makes the UI
+	 * wait for the replay crawl.
 	 *
 	 * @param string[] $urls URLs actually visited by the browser scanner.
-	 * @return void
+	 * @return int Number of URLs pending enrichment.
 	 */
 	public function schedule_httponly_check( $urls = array() ) {
 		$safe_urls = $this->sanitize_scanned_urls( $urls );
@@ -675,64 +703,21 @@ class Controller {
 		$queued = array_slice( array_values( array_unique( array_merge( $queued, $safe_urls ) ) ), 0, 2000 );
 		update_option( self::HTTPONLY_URLS_OPTION, $queued, false );
 		wp_clear_scheduled_hook( self::HTTPONLY_CRON_HOOK );
-
-		// Fallback for hosts without exec/system: enqueue via WP-Cron to avoid blocking imports.
-		if ( ! $this->can_spawn_background_process() ) {
-			wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK );
-			if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
-				$cron_spawn = wp_remote_post(
-					site_url( '/wp-cron.php?doing_wp_cron=' . rawurlencode( sprintf( '%.22F', microtime( true ) ) ) ),
-					array(
-						'timeout'  => 0.5,
-						'blocking' => false,
-					)
-				);
-				if ( is_wp_error( $cron_spawn ) ) {
-					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-					error_log( '[FAZ Scanner] Unable to trigger wp-cron for httpOnly check: ' . $cron_spawn->get_error_message() );
-				}
-			}
-			return;
+		wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK );
+		$cron_spawn = wp_remote_post(
+			site_url( '/wp-cron.php?doing_wp_cron=' . rawurlencode( sprintf( '%.22F', microtime( true ) ) ) ),
+			array(
+				'timeout'   => 0.01,
+				'blocking'  => false,
+				'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+			)
+		);
+		if ( is_wp_error( $cron_spawn ) ) {
+			// The event stays scheduled for the next normal/external cron tick.
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( '[FAZ Scanner] Unable to nudge wp-cron for httpOnly check: ' . $cron_spawn->get_error_message() );
 		}
-
-		$abspath = ABSPATH;
-		$wp_cli  = $this->find_wp_cli();
-
-		if ( $wp_cli ) {
-			$eval_code = 'FazCookie\\Admin\\Modules\\Scanner\\Includes\\Controller::get_instance()->run_httponly_check();';
-			$cmd_parts = array(
-				escapeshellarg( $wp_cli ),
-				'eval',
-				escapeshellarg( $eval_code ),
-				'--path=' . escapeshellarg( $abspath ),
-			);
-			$cmd = implode( ' ', $cmd_parts ) . ' > /dev/null 2>&1 &';
-		} else {
-			$runner  = ( defined( 'FAZ_PLUGIN_BASEPATH' ) ? FAZ_PLUGIN_BASEPATH : plugin_dir_path( __DIR__ ) . '../../../' ) . 'admin/modules/scanner/run-scan.php';
-			$runner  = realpath( $runner );
-			if ( false === $runner || 0 !== strpos( $runner, realpath( FAZ_PLUGIN_BASEPATH ) ) ) {
-				return;
-			}
-			$php = $this->find_php_cli();
-			if ( '' === $php ) {
-				wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK );
-				return;
-			}
-			// Note: all values passed to escapeshellarg are safe — $runner is a hardcoded path, $abspath is ABSPATH.
-			$cmd     = sprintf(
-				'%s %s %s httponly > /dev/null 2>&1 &',
-				escapeshellarg( $php ),
-				escapeshellarg( $runner ),
-				escapeshellarg( $abspath )
-			);
-		}
-
-		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Required for background scan.
-		exec( $cmd ); // nosemgrep: php.lang.security.exec-use
-		// Durable recovery if the detached process cannot start or is killed.
-		if ( ! wp_next_scheduled( self::HTTPONLY_CRON_HOOK ) ) {
-			wp_schedule_single_event( time() + 60, self::HTTPONLY_CRON_HOOK );
-		}
+		return count( $queued );
 	}
 
 	/**

@@ -696,7 +696,7 @@ class Api extends Rest_Controller {
 
 		// Replay every URL the browser actually visited in a background server
 		// pass. This adds Set-Cookie headers and metadata that are invisible to JS.
-		$this->controller->schedule_httponly_check( $scanned_urls );
+		$enrichment_pending = $this->controller->schedule_httponly_check( $scanned_urls );
 
 		try {
 			$result = $this->controller->save_scan_result( $cookies, $pages_scanned, $clean_scripts, $metrics );
@@ -710,6 +710,8 @@ class Api extends Rest_Controller {
 		}
 
 		$result['capture_truncated'] = $capture_truncated;
+		$result['enrichment_pending'] = $enrichment_pending > 0;
+		$result['enrichment_urls']    = $enrichment_pending;
 
 		// A single missed scan is not evidence of absence. Only a scan that
 		// covered the whole site without incident may add to the tally, and only

@@ -432,11 +432,14 @@
 			stopScanActivity();
 			btn.disabled = false;
 			var found = (res && typeof res.total === 'number') ? res.total : 0;
-			setScanStatus(
+			var doneMessage =
 				found > 0
 					? interpolate(__('setup.scan_done_found', 'Scan complete — %d cookies found.'), found)
-					: __('setup.scan_done_empty', 'Scan complete. No new cookies were found.')
-			);
+					: __('setup.scan_done_empty', 'Scan complete. No new cookies were found.');
+			if (res.importResult && res.importResult.enrichment_pending) {
+				doneMessage += ' ' + __('setup.scan_enrichment_pending', 'Server-header enrichment continues in the background.');
+			}
+			setScanStatus(doneMessage);
 			// The scan may have discovered payment-gateway cookies — refresh the
 			// suggestions so the payments block reflects them.
 			loadRecommendations();

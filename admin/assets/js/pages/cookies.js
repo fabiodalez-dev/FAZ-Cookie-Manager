@@ -1092,6 +1092,9 @@
 				if (!coverageIsComplete) {
 					msg += ' | ' + __('cookies.scanCoverageIncomplete', 'coverage incomplete; stale cookies were not marked');
 				} else if (staleCookieCount > 0) { msg += ' | ' + staleCookieCount + ' stale cookie(s) highlighted'; }
+				if (res.importResult && res.importResult.enrichment_pending) {
+					msg += ' | ' + __('cookies.enrichmentPending', 'browser scan saved; server-header enrichment continues in the background');
+				}
 				msg += FAZ.scanEngine.diagnosticsHint(res.diagnostics, res.total);
 				if (res.diagnostics && res.diagnostics.totalIssues > 0) {
 					console.warn('[FAZ Scanner] Diagnostics:', res.diagnostics);

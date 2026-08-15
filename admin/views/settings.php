@@ -196,6 +196,14 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php echo wp_kses_post( __( 'Optional high-coverage mode for CSS-based third-party loads. The default blocker already handles server-rendered <code>&lt;style&gt;</code> tags and direct <code>HTMLStyleElement</code> updates. Enable this only if you have confirmed that a theme, page builder, or CSS-in-JS library injects blocked <code>url()</code> or <code>@import</code> rules through broader runtime channels such as <code>Element.innerHTML</code>, <code>insertAdjacentHTML</code>, <code>CharacterData</code> edits inside a style tag, or Constructable Stylesheets. This strengthens pre-consent blocking but hooks global browser APIs and may affect builders, editors, icon fonts, or CSS-in-JS libraries. Test the site before enabling in production.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label class="faz-toggle">
+					<input type="checkbox" data-path="script_blocking.block_server_cookies">
+					<span class="faz-toggle-track"></span>
+					<span class="faz-toggle-label"><?php esc_html_e( 'Block non-consented cookies emitted by PHP', 'faz-cookie-manager' ); ?></span>
+				</label>
+				<div class="faz-help"><?php echo wp_kses_post( __( '<strong>Advanced, off by default.</strong> Filters outgoing <code>Set-Cookie</code> headers from pages, AJAX, REST and redirects, including HttpOnly cookies that JavaScript cannot remove. Necessary, WordPress-internal, security and checkout cookies are preserved, and deletion headers always pass. Enable only after testing login, forms, cart and checkout; unknown cookies fail permissive until the scanner classifies them.', 'faz-cookie-manager' ) ); ?></div>
+			</div>
 			<?php if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) : ?>
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Payment gateway scripts (e-commerce)', 'faz-cookie-manager' ); ?></label>

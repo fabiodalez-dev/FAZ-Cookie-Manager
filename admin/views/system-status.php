@@ -40,6 +40,8 @@ if ( false === $table_info ) {
 // Cron status.
 $next_scan    = wp_next_scheduled( 'faz_scheduled_scan' );
 $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
+$blocked_server_cookies = get_transient( 'faz_recent_blocked_server_cookies' );
+$blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $blocked_server_cookies ) : array();
 ?>
 <div id="faz-system-status">
 
@@ -90,7 +92,28 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 				<tr><td><?php esc_html_e( 'Ad-Blocker Compat', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['alternative_asset_path'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Microsoft UET', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['microsoft']['uet_consent_mode'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Microsoft Clarity', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['microsoft']['clarity_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
+				<tr><td><?php esc_html_e( 'PHP Set-Cookie Blocking', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['script_blocking']['block_server_cookies'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 			</table>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header"><h3><?php esc_html_e( 'Recently Blocked Server Cookies', 'faz-cookie-manager' ); ?></h3></div>
+		<div class="faz-card-body">
+			<?php if ( empty( $blocked_server_cookies ) ) : ?>
+				<p><?php esc_html_e( 'No outgoing PHP Set-Cookie header has been blocked in the last 24 hours.', 'faz-cookie-manager' ); ?></p>
+			<?php else : ?>
+				<table class="faz-status-table">
+					<?php foreach ( array_slice( $blocked_server_cookies, 0, 20 ) as $blocked_cookie ) : ?>
+						<tr>
+							<td><code><?php echo esc_html( isset( $blocked_cookie['name'] ) ? $blocked_cookie['name'] : '' ); ?></code></td>
+							<td><?php echo esc_html( isset( $blocked_cookie['category'] ) ? $blocked_cookie['category'] : '' ); ?></td>
+							<td><code><?php echo esc_html( isset( $blocked_cookie['request'] ) ? $blocked_cookie['request'] : '' ); ?></code></td>
+							<td><?php echo ! empty( $blocked_cookie['blocked_at'] ) ? esc_html( date_i18n( 'Y-m-d H:i:s', absint( $blocked_cookie['blocked_at'] ) ) ) : '&mdash;'; ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</table>
+			<?php endif; ?>
 		</div>
 	</div>
 

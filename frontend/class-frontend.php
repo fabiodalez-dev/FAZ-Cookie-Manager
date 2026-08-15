@@ -120,6 +120,11 @@ class Frontend {
 	private $enforceable_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
+	private $service_cookie_decisions_cache = null;
+	private $whitelisted_cookie_patterns_cache = null;
+	private $catalog_cookie_categories_cache = null;
+	private $cookie_allowed_cache = array();
+	private $server_cookie_guard_started = false;
 	/**
 	 * Precomputed provider-pattern metadata (lowercased pattern, URL-vs-code
 	 * classification) for the output-buffer matching hot loop.
@@ -178,6 +183,13 @@ class Frontend {
 		// scripts are actually allowed.
 		add_action( 'template_redirect', array( $this, 'shred_non_consented_cookies' ), 1 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
+		// Optional server-cookie guard. Opening a dedicated buffer on init keeps
+		// headers pending until page, AJAX, REST and redirect callbacks have had a
+		// chance to emit Set-Cookie. The output callback then filters the final
+		// header set immediately before PHP sends it.
+		add_action( 'init', array( $this, 'start_server_cookie_guard' ), 20 );
+		add_filter( 'rest_pre_echo_response', array( $this, 'filter_server_cookies_before_rest_echo' ), PHP_INT_MAX, 3 );
+		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
 
@@ -6624,6 +6636,232 @@ class Frontend {
 	}
 
 	/**
+	 * Open the opt-in output buffer that guards outgoing Set-Cookie headers.
+	 *
+	 * @return void
+	 */
+	public function start_server_cookie_guard() {
+		if ( $this->server_cookie_guard_started || ! $this->server_cookie_guard_enabled() || headers_sent() ) {
+			return;
+		}
+		$this->server_cookie_guard_started = true;
+		ob_start( array( $this, 'filter_outgoing_cookies' ) );
+	}
+
+	/** @return bool */
+	private function server_cookie_guard_enabled() {
+		$settings = $this->get_faz_settings();
+		$enabled  = ! empty( $settings['script_blocking']['block_server_cookies'] );
+		if ( ! $enabled || wp_doing_cron() || ( is_admin() && ! wp_doing_ajax() && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) ) {
+			return false;
+		}
+		if ( true === faz_disable_banner() || $this->is_blocking_disabled_for_page() ) {
+			return false;
+		}
+		// A valid authenticated scanner marker is the only bypass for AJAX/REST
+		// subrequests. It lets the scanner observe the exact header that a visitor
+		// would receive; a forged cookie alone is insufficient because the token
+		// must resolve to the current user's live transient.
+		if ( class_exists( '\FazCookie\Admin\Modules\Scanner\Includes\Controller' )
+			&& \FazCookie\Admin\Modules\Scanner\Includes\Controller::is_browser_scan_request()
+		) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Output-buffer callback. The body is returned byte-for-byte unchanged.
+	 *
+	 * @param string $buffer Buffered response body.
+	 * @return string
+	 */
+	public function filter_outgoing_cookies( $buffer ) {
+		$this->filter_current_set_cookie_headers();
+		return (string) $buffer;
+	}
+
+	/** REST transport boundary: filter after the route callback, before echo. */
+	public function filter_server_cookies_before_rest_echo( $result, $server, $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress filter signature.
+		if ( $this->server_cookie_guard_enabled() ) {
+			$this->filter_current_set_cookie_headers();
+		}
+		return $result;
+	}
+
+	/** Redirect transport boundary: filter headers already queued by callbacks. */
+	public function filter_server_cookies_before_redirect( $location, $status ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress filter signature.
+		if ( $this->server_cookie_guard_enabled() ) {
+			$this->filter_current_set_cookie_headers();
+		}
+		return $location;
+	}
+
+	/** @return void */
+	private function filter_current_set_cookie_headers() {
+		if ( ! $this->server_cookie_guard_enabled() || headers_sent() ) {
+			return;
+		}
+		$headers = headers_list();
+		$result  = $this->filter_outgoing_cookie_header_lines( $headers );
+		if ( empty( $result['blocked'] ) ) {
+			return;
+		}
+		header_remove( 'Set-Cookie' );
+		foreach ( $result['set_cookie_headers'] as $header_line ) {
+			header( $header_line, false );
+		}
+		$this->record_blocked_server_cookies( $result['blocked'] );
+	}
+
+	/**
+	 * Pure header-list filter used by the transport boundary and unit tests.
+	 * Cookie values are never returned in the blocked diagnostics.
+	 *
+	 * @param string[] $headers Full response header lines.
+	 * @return array{set_cookie_headers:string[],blocked:array<int,array{name:string,category:string}>}
+	 */
+	public function filter_outgoing_cookie_header_lines( $headers ) {
+		$keep    = array();
+		$blocked = array();
+		foreach ( (array) $headers as $header_line ) {
+			if ( ! is_string( $header_line ) || 0 !== stripos( $header_line, 'Set-Cookie:' ) ) {
+				continue;
+			}
+			$cookie_string = trim( substr( $header_line, strlen( 'Set-Cookie:' ) ) );
+			$first_part    = trim( (string) strtok( $cookie_string, ';' ) );
+			$equals        = strpos( $first_part, '=' );
+			$name          = false === $equals ? '' : trim( substr( $first_part, 0, $equals ) );
+			if ( '' === $name || $this->is_cookie_deletion_header( $cookie_string ) || $this->is_cookie_allowed( $name, $this->set_cookie_attribute( $cookie_string, 'domain' ) ) ) {
+				$keep[] = $header_line;
+				continue;
+			}
+			$blocked[] = array(
+				'name'     => sanitize_text_field( $name ),
+				'category' => $this->get_cookie_category_slug( $name ),
+			);
+		}
+		return array(
+			'set_cookie_headers' => $keep,
+			'blocked'            => $blocked,
+		);
+	}
+
+	/** @return string */
+	private function set_cookie_attribute( $cookie_string, $attribute ) {
+		if ( preg_match( '/(?:^|;)\s*' . preg_quote( $attribute, '/' ) . '\s*=\s*([^;]+)/i', (string) $cookie_string, $match ) ) {
+			return trim( $match[1] );
+		}
+		return '';
+	}
+
+	/** @return bool */
+	private function is_cookie_deletion_header( $cookie_string ) {
+		$max_age = $this->set_cookie_attribute( $cookie_string, 'max-age' );
+		if ( '' !== $max_age && is_numeric( $max_age ) && (int) $max_age <= 0 ) {
+			return true;
+		}
+		$expires = $this->set_cookie_attribute( $cookie_string, 'expires' );
+		return '' !== $expires && false !== strtotime( $expires ) && strtotime( $expires ) <= time();
+	}
+
+	/** @return void */
+	private function record_blocked_server_cookies( $blocked ) {
+		$recent = get_transient( 'faz_recent_blocked_server_cookies' );
+		$recent = is_array( $recent ) ? $recent : array();
+		$uri    = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		foreach ( (array) $blocked as $entry ) {
+			if ( empty( $entry['name'] ) ) {
+				continue;
+			}
+			$recent[] = array(
+				'name'       => sanitize_text_field( $entry['name'] ),
+				'category'   => sanitize_key( isset( $entry['category'] ) ? $entry['category'] : '' ),
+				'request'    => $uri,
+				'blocked_at' => time(),
+			);
+			do_action( 'faz_server_cookie_blocked', $entry['name'], isset( $entry['category'] ) ? $entry['category'] : '' );
+		}
+		set_transient( 'faz_recent_blocked_server_cookies', array_slice( $recent, -50 ), DAY_IN_SECONDS );
+	}
+
+	/** @return bool */
+	private function is_always_allowed_cookie_name( $name ) {
+		$patterns = array(
+			'fazcookie-consent', 'fazcookie-dnsmpi', 'faz_scan_session',
+			'wordpress_*', 'wp-settings-*', 'wp-settings-time-*', 'wp-postpass_*',
+			'comment_author_*', 'wp_lang', 'wordpress_test_cookie',
+			'wp_woocommerce_session_*', 'woocommerce_*', 'wc_cart_hash_*', 'wc_fragments_*',
+			'PHPSESSID', '_GRECAPTCHA', 'cf_clearance',
+		);
+		foreach ( $patterns as $pattern ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** @return string */
+	private function get_cookie_category_slug( $name ) {
+		$name = (string) $name;
+		// The administrator-owned inventory is authoritative. A reviewed or
+		// manually corrected classification must win over bundled heuristics.
+		foreach ( $this->get_catalog_cookie_categories() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return $category;
+			}
+		}
+		foreach ( Known_Providers::get_cookie_map() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return sanitize_key( $category );
+			}
+		}
+		if ( class_exists( '\FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database' ) ) {
+			$known = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup( $name );
+			if ( is_array( $known ) && ! empty( $known['category'] ) ) {
+				return sanitize_key( $known['category'] );
+			}
+		}
+		if ( class_exists( '\FazCookie\Includes\Cookie_Definitions' ) ) {
+			$definition = \FazCookie\Includes\Cookie_Definitions::get_instance()->lookup( $name );
+			if ( is_array( $definition ) && ! empty( $definition['category'] ) ) {
+				$category = sanitize_key( $definition['category'] );
+				return 'advertising' === $category ? 'marketing' : $category;
+			}
+		}
+		return '';
+	}
+
+	/** @return array<string,string> */
+	private function get_catalog_cookie_categories() {
+		if ( null !== $this->catalog_cookie_categories_cache ) {
+			return $this->catalog_cookie_categories_cache;
+		}
+		$cached = get_transient( 'faz_server_cookie_category_map' );
+		if ( is_array( $cached ) ) {
+			$this->catalog_cookie_categories_cache = $cached;
+			return $cached;
+		}
+		$this->catalog_cookie_categories_cache = array();
+		$category_slugs = array();
+		foreach ( \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items() as $category_row ) {
+			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category_row );
+			$category_slugs[ $category->get_id() ] = sanitize_key( $category->get_slug() );
+		}
+		foreach ( \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_items() as $cookie_row ) {
+			$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $cookie_row );
+			$name   = $cookie->get_name();
+			$cat_id = $cookie->get_category();
+			if ( '' !== $name && ! empty( $category_slugs[ $cat_id ] ) ) {
+				$this->catalog_cookie_categories_cache[ $name ] = $category_slugs[ $cat_id ];
+			}
+		}
+		set_transient( 'faz_server_cookie_category_map', $this->catalog_cookie_categories_cache, HOUR_IN_SECONDS );
+		return $this->catalog_cookie_categories_cache;
+	}
+
+	/**
 	 * Delete non-consented cookies before the page renders (cookie shredding).
 	 *
 	 * Runs on template_redirect, after the main query has resolved but before
@@ -6641,135 +6879,13 @@ class Frontend {
 			return;
 		}
 
-		$blocked_categories = $this->get_blocked_categories();
-
-		// Per-service consent overrides the category fallback for matching
-		// cookies. A denied service wins over an allowed service when providers
-		// share a cookie pattern.
-		$service_consent = $this->get_service_consent();
-		// Per-cookie consent (ck.<svc>.<cookie>) is the most-specific override on
-		// top of per-service: a cookie denied inside an otherwise-accepted service
-		// is shredded server-side too. Mirrors the client resolver
-		// _fazGetServiceCookieDecision (per-cookie > per-service > category).
-		$shred_settings       = $this->get_faz_settings();
-		$shred_banner_control = isset( $shred_settings['banner_control'] ) ? (array) $shred_settings['banner_control'] : array();
-		$per_cookie_enabled   = ! empty( $shred_banner_control['per_cookie_consent'] ) && ! empty( $shred_banner_control['per_service_consent'] );
-		// Parse ck.* from the SAME validated (non-stale) consent string as svc.*,
-		// so a revision-bumped/expired cookie does not enforce old per-cookie picks.
-		$valid_consent_str = ( $per_cookie_enabled && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
-		$consent_cookie    = ( '' !== $valid_consent_str && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid_consent_str ) : array();
-		$svc_cookie_decisions = array(); // pattern => array( 'yes'|'no' ).
-		if ( ! empty( $service_consent ) || $per_cookie_enabled ) {
-			// Use the broad enforceable set (same source as get_service_consent()
-			// and get_pattern_service_map()), not the narrow scanner-detected
-			// list. Otherwise a svc.<id>:no for an enforceable-but-undetected
-			// provider is honoured for script-blocking but its already-set cookie
-			// is never shredded — the three layers must agree. (#134/#146)
-			// The `|| $per_cookie_enabled` guard keeps the loop running for
-			// per-cookie (ck.*) denials even when no service-level svc.* exists. (#135)
-			foreach ( $this->get_enforceable_services() as $service ) {
-				$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
-				if ( '' === $svc_id || empty( $service['cookies'] ) ) {
-					continue;
-				}
-				$svc_decision = isset( $service_consent[ $svc_id ] ) ? $service_consent[ $svc_id ] : '';
-				if ( 'yes' !== $svc_decision && 'no' !== $svc_decision ) {
-					$svc_decision = '';
-				}
-				foreach ( $service['cookies'] as $cookie_pattern ) {
-					$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
-					if ( '' === $cookie_pattern ) {
-						continue;
-					}
-					$pattern_decision = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent_cookie, $per_cookie_enabled );
-					if ( 'yes' !== $pattern_decision && 'no' !== $pattern_decision ) {
-						continue; // No explicit svc/ck decision -> category fallback handles it.
-					}
-					if ( ! isset( $svc_cookie_decisions[ $cookie_pattern ] ) ) {
-						$svc_cookie_decisions[ $cookie_pattern ] = array();
-					}
-					$svc_cookie_decisions[ $cookie_pattern ][] = $pattern_decision;
-				}
-			}
-		}
-
-		// Nothing to evaluate: no blocked categories and no explicit services.
-		if ( empty( $blocked_categories ) && empty( $svc_cookie_decisions ) ) {
-			return;
-		}
-
-		$cookie_map = Known_Providers::get_cookie_map();
-		if ( empty( $cookie_map ) && empty( $svc_cookie_decisions ) ) {
-			return;
-		}
-
 		$host              = isset( $_SERVER['HTTP_HOST'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_HOST'] ) ) : '';
 		$current_host      = preg_replace( '/^www\./', '', preg_replace( '/:\d+$/', '', $host ) );
 		$shared_domain     = ltrim( (string) $this->get_cookie_domain(), '.' );
 		$domain_candidates = array_values( array_unique( array_filter( array( $current_host, $shared_domain ) ) ) );
 
-		// Whitelist short-circuit: cookies belonging to services the admin
-		// has whitelisted (Settings → Script Blocking → whitelist_patterns)
-		// must survive `template_redirect` shredding too, otherwise the frontend
-		// whitelist is only honored on the first page load and is silently
-		// neutralized on every subsequent request.
-		$settings                    = $this->get_faz_settings();
-		$user_whitelist              = isset( $settings['script_blocking']['whitelist_patterns'] )
-			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
-			: array();
-		$whitelisted_cookie_patterns = $this->compute_whitelisted_cookie_patterns(
-			$user_whitelist,
-			$this->get_valid_category_slugs()
-		);
-
 		foreach ( array_keys( $_COOKIE ) as $name ) {
-			$should_shred    = false;
-			$service_allows  = false;
-			$service_denied  = false;
-
-			foreach ( $svc_cookie_decisions as $pattern => $decisions ) {
-				if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
-					continue;
-				}
-				foreach ( $decisions as $decision ) {
-					if ( 'no' === $decision ) {
-						$should_shred   = true;
-						$service_denied = true;
-						break 2;
-					}
-					if ( 'yes' === $decision ) {
-						$service_allows = true;
-					}
-				}
-			}
-
-			// Category consent is only the fallback when no matching service has
-			// an explicit decision.
-			if ( ! $should_shred && ! $service_allows ) {
-				foreach ( $cookie_map as $pattern => $category ) {
-					if ( ! in_array( $category, $blocked_categories, true ) ) {
-						continue;
-					}
-					if ( $this->cookie_name_matches( $name, $pattern ) ) {
-						$should_shred = true;
-						break;
-					}
-				}
-			}
-
-			// A whitelist can override the category fallback, but never an explicit
-			// per-service/per-cookie denial. This preserves genuine checkout/admin
-			// gateway exemptions without making consent revocation ineffective.
-			if ( $should_shred && ! $service_denied && ! empty( $whitelisted_cookie_patterns ) ) {
-				foreach ( $whitelisted_cookie_patterns as $wl_pattern ) {
-					if ( $this->cookie_name_matches( $name, $wl_pattern ) ) {
-						$should_shred = false;
-						break;
-					}
-				}
-			}
-
-			if ( $should_shred ) {
+			if ( ! $this->is_cookie_allowed( $name ) ) {
 				setcookie( $name, '', -1, '/' );
 				foreach ( $domain_candidates as $domain ) {
 					setcookie( $name, '', -1, '/', $domain );
@@ -6778,6 +6894,121 @@ class Frontend {
 				unset( $_COOKIE[ $name ] );
 			}
 		}
+	}
+
+	/**
+	 * Decide whether a cookie may exist for the current visitor.
+	 *
+	 * This is the single policy used by both the existing-cookie shredder and
+	 * the outgoing Set-Cookie guard: per-cookie > per-service > category, with
+	 * explicit denials winning shared patterns and necessary/internal cookies
+	 * always preserved.
+	 *
+	 * Unknown cookies fail permissive because blocking an unclassified session
+	 * token can break authentication or checkout. The scanner inventories them;
+	 * once classified, this guard enforces their category automatically.
+	 *
+	 * @param string $name   Cookie name.
+	 * @param string $domain Optional cookie domain (reserved for future rules).
+	 * @return bool
+	 */
+	public function is_cookie_allowed( $name, $domain = '' ) {
+		$name      = sanitize_text_field( (string) $name );
+		$cache_key = strtolower( $name . '|' . (string) $domain );
+		if ( isset( $this->cookie_allowed_cache[ $cache_key ] ) ) {
+			return $this->cookie_allowed_cache[ $cache_key ];
+		}
+		if ( '' === $name || $this->is_always_allowed_cookie_name( $name ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
+		$service_allows = false;
+		foreach ( $this->get_service_cookie_decisions() as $pattern => $decisions ) {
+			if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
+				continue;
+			}
+			if ( in_array( 'no', $decisions, true ) ) {
+				$this->cookie_allowed_cache[ $cache_key ] = false;
+				return false;
+			}
+			if ( in_array( 'yes', $decisions, true ) ) {
+				$service_allows = true;
+			}
+		}
+		if ( $service_allows ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
+		$category = $this->get_cookie_category_slug( $name );
+		if ( '' === $category || in_array( $category, array( 'necessary', 'wordpress-internal' ), true ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+		if ( ! in_array( $category, $this->get_blocked_categories(), true ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
+		foreach ( $this->get_whitelisted_cookie_patterns() as $pattern ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				$this->cookie_allowed_cache[ $cache_key ] = true;
+				return true;
+			}
+		}
+
+		$this->cookie_allowed_cache[ $cache_key ] = false;
+		return false;
+	}
+
+	/** @return array<string,array<int,string>> */
+	private function get_service_cookie_decisions() {
+		if ( null !== $this->service_cookie_decisions_cache ) {
+			return $this->service_cookie_decisions_cache;
+		}
+		$this->service_cookie_decisions_cache = array();
+		$service_consent = $this->get_service_consent();
+		$settings        = $this->get_faz_settings();
+		$banner_control  = isset( $settings['banner_control'] ) ? (array) $settings['banner_control'] : array();
+		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );
+		$valid           = ( $per_cookie && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
+		$consent         = ( '' !== $valid && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid ) : array();
+		if ( empty( $service_consent ) && ! $per_cookie ) {
+			return $this->service_cookie_decisions_cache;
+		}
+		foreach ( $this->get_enforceable_services() as $service ) {
+			$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
+			if ( '' === $svc_id || empty( $service['cookies'] ) ) {
+				continue;
+			}
+			$svc_decision = isset( $service_consent[ $svc_id ] ) && in_array( $service_consent[ $svc_id ], array( 'yes', 'no' ), true ) ? $service_consent[ $svc_id ] : '';
+			foreach ( $service['cookies'] as $cookie_pattern ) {
+				$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
+				$decision       = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent, $per_cookie );
+				if ( '' === $cookie_pattern || ! in_array( $decision, array( 'yes', 'no' ), true ) ) {
+					continue;
+				}
+				if ( ! isset( $this->service_cookie_decisions_cache[ $cookie_pattern ] ) ) {
+					$this->service_cookie_decisions_cache[ $cookie_pattern ] = array();
+				}
+				$this->service_cookie_decisions_cache[ $cookie_pattern ][] = $decision;
+			}
+		}
+		return $this->service_cookie_decisions_cache;
+	}
+
+	/** @return string[] */
+	private function get_whitelisted_cookie_patterns() {
+		if ( null !== $this->whitelisted_cookie_patterns_cache ) {
+			return $this->whitelisted_cookie_patterns_cache;
+		}
+		$settings       = $this->get_faz_settings();
+		$user_whitelist = isset( $settings['script_blocking']['whitelist_patterns'] )
+			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
+			: array();
+		$this->whitelisted_cookie_patterns_cache = $this->compute_whitelisted_cookie_patterns( $user_whitelist, $this->get_valid_category_slugs() );
+		return $this->whitelisted_cookie_patterns_cache;
 	}
 
 	/**

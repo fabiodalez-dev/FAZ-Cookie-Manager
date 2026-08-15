@@ -53,6 +53,7 @@ type DiscoverResponse = {
   total: number;
   fingerprint: string;
   incremental: boolean;
+  scan_id?: string;
 };
 
 type ServerScanCookie = {
@@ -99,6 +100,10 @@ function makeToken(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${random}`.toLowerCase();
 }
 
+function makeScanId(): string {
+  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
 function findCookie(cookies: CookieRow[], name: string): CookieRow | undefined {
   const lower = name.toLowerCase();
   return cookies.find((cookie) => String(cookie.name ?? '').toLowerCase() === lower);
@@ -133,13 +138,14 @@ async function cleanupLabCookies(page: Parameters<typeof openCookiesPage>[0], no
   await deleteCookiesByNames(page, nonce, [...COMMON_KNOWN_COOKIE_NAMES, ...extraNames]);
 }
 
-async function discoverUrls(page: Parameters<typeof openCookiesPage>[0], nonce: string, maxPages: number, fingerprint = ''): Promise<DiscoverResponse> {
+async function discoverUrls(page: Parameters<typeof openCookiesPage>[0], nonce: string, maxPages: number, fingerprint = '', scanId = makeScanId()): Promise<DiscoverResponse> {
   const response = await fazApiPost<DiscoverResponse>(page, nonce, 'scans/discover', {
     max_pages: maxPages,
     fingerprint,
+    scan_id: scanId,
   });
   expect(response.status).toBe(200);
-  return response.data;
+  return { ...response.data, scan_id: scanId };
 }
 
 async function serverScan(page: Parameters<typeof openCookiesPage>[0], nonce: string, scenario: string, token: string): Promise<ServerScanResponse> {
@@ -151,9 +157,17 @@ async function serverScan(page: Parameters<typeof openCookiesPage>[0], nonce: st
 }
 
 async function importScan(page: Parameters<typeof openCookiesPage>[0], nonce: string, payload: Record<string, unknown>): Promise<ImportResponse> {
-  const response = await fazApiPost<ImportResponse>(page, nonce, 'scans/import', payload);
+  const scanId = makeScanId();
+  await discoverUrls(page, nonce, 1, '', scanId);
+  const response = await fazApiPost<ImportResponse>(page, nonce, 'scans/import', { ...payload, scan_id: scanId });
   expect(response.status).toBe(200);
   return response.data;
+}
+
+async function abortScan(page: Parameters<typeof openCookiesPage>[0], nonce: string, scanId?: string): Promise<void> {
+  if (!scanId) return;
+  const response = await fazApiPost(page, nonce, 'scans/abort', { scan_id: scanId });
+  expect(response.status).toBe(200);
 }
 
 async function listCookiesWithRetry(page: Parameters<typeof openCookiesPage>[0], nonce: string, attempts = 3): Promise<CookieRow[]> {
@@ -343,7 +357,7 @@ test.describe('Deep scan and catalog flows', () => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
 
     const first = await discoverUrls(page, nonce, 10);
-    const second = await discoverUrls(page, nonce, 10);
+    const second = await discoverUrls(page, nonce, 10, '', first.scan_id);
 
     expect(first.fingerprint).toBeTruthy();
     expect(second.fingerprint).toBe(first.fingerprint);
@@ -354,7 +368,7 @@ test.describe('Deep scan and catalog flows', () => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
 
     const first = await discoverUrls(page, nonce, 10);
-    const second = await discoverUrls(page, nonce, 10, first.fingerprint);
+    const second = await discoverUrls(page, nonce, 10, first.fingerprint, first.scan_id);
 
     expect(second.incremental).toBe(true);
     expect(second.fingerprint).toBe(first.fingerprint);
@@ -367,7 +381,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const first = await discoverUrls(page, nonce, 10);
     touchPosts('page', ['faz-lab-js-basic']);
-    const second = await discoverUrls(page, nonce, 10, first.fingerprint);
+    const second = await discoverUrls(page, nonce, 10, first.fingerprint, first.scan_id);
 
     expect(second.incremental).toBe(false);
     expect(second.fingerprint).not.toBe(first.fingerprint);
@@ -400,6 +414,91 @@ test.describe('Deep scan and catalog flows', () => {
 
     const cookies = await listCookiesWithRetry(page, nonce);
     expect(findCookie(cookies, `_faz_lab_js_delayed_${token}`)).toBeTruthy();
+  });
+
+  test('06b. scanner captures a one-year HttpOnly cookie emitted by delayed PHP AJAX', async ({ page, loginAsAdmin }) => {
+    const token = makeToken('ajax-httponly');
+    setLabToken(token);
+    touchPosts('page', ['faz-lab-ajax-httponly']);
+
+    const settingsNonce = await openSettingsPage(page, loginAsAdmin);
+    const originalSettings = (await fazApiGet<any>(page, settingsNonce, 'settings')).data;
+    try {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: true,
+        },
+      });
+
+      const nonce = await openCookiesPage(page, loginAsAdmin);
+      await cleanupLabCookies(page, nonce, ['brikpanel_vid']);
+      const scanId = makeScanId();
+      await discoverUrls(page, nonce, 1, '', scanId);
+      const ajaxResponse = page.waitForResponse((response) => response.url().includes('action=faz_e2e_scan_ajax_cookie'));
+      const scannedUrl = `${WP_BASE}/faz-lab-ajax-httponly/?faz_scanning=1&faz_scan_id=${scanId}`;
+      await page.goto(scannedUrl, { waitUntil: 'domcontentloaded' });
+      expect((await ajaxResponse).status()).toBe(200);
+
+      const imported = await fazApiPost<ImportResponse>(page, nonce, 'scans/import', {
+        scan_id: scanId,
+        cookies: [],
+        pages_scanned: 1,
+        scanned_urls: [scannedUrl],
+        scripts: [],
+        metrics: { pagesScanned: 1, cookiesFound: 0 },
+      });
+      expect(imported.status).toBe(200);
+      expect(imported.data.cookie_names).toContain('brikpanel_vid');
+
+      const cookies = await listCookiesUntil(page, nonce, ['brikpanel_vid'], 60_000);
+      const cookie = findCookie(cookies, 'brikpanel_vid');
+      const analyticsId = await findCategoryId(page, nonce, 'analytics');
+
+      expect(cookie?.discovered).toBe(true);
+      expect(cookie?.category).toBe(analyticsId);
+      expect(cookie?.duration?.en ?? Object.values(cookie?.duration ?? {})[0]).toMatch(/1 year/i);
+    } finally {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: originalSettings.script_blocking,
+      });
+    }
+  });
+
+  test('06c. opt-in PHP guard blocks brikpanel_vid but preserves necessary AJAX cookies', async ({ page, loginAsAdmin }) => {
+    const settingsNonce = await openSettingsPage(page, loginAsAdmin);
+    const originalSettings = (await fazApiGet<any>(page, settingsNonce, 'settings')).data;
+    const endpoint = `${WP_BASE}/wp-admin/admin-ajax.php?action=faz_e2e_scan_ajax_cookie`;
+
+    try {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: true,
+        },
+      });
+
+      const blocked = await page.request.get(endpoint);
+      expect(blocked.status()).toBe(200);
+      expect(blocked.headers()['set-cookie'] ?? '').not.toContain('brikpanel_vid=');
+
+      const necessary = await page.request.get(`${endpoint}&necessary=1`);
+      expect(necessary.status()).toBe(200);
+      expect(necessary.headers()['set-cookie'] ?? '').toContain('wp_woocommerce_session_fazlab=');
+
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: false,
+        },
+      });
+      const disabled = await page.request.get(endpoint);
+      expect(disabled.headers()['set-cookie'] ?? '').toContain('brikpanel_vid=');
+    } finally {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: originalSettings.script_blocking,
+      });
+    }
   });
 
   test('07. browser scan deduplicates the same cookie seen on multiple pages', async ({ page, loginAsAdmin }) => {
@@ -840,6 +939,8 @@ test.describe('Deep scan and catalog flows', () => {
       wooUrls.myaccount,
       wooUrls.product,
     ]));
+
+    await abortScan(page, nonce, discover.scan_id);
 
     await runQuickScan(page, 100);
 

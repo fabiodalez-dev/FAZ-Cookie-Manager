@@ -102,6 +102,10 @@ $_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
 $GLOBALS['faz_test_transients'][ 'faz_scan_session_' . hash( 'sha256', $token ) ] = array( 'user_id' => 7, 'created_at' => time() );
 $runtime_scan_id = str_repeat( 'b', 32 );
 $GLOBALS['faz_test_transients'][ 'faz_scan_session_' . hash( 'sha256', $token ) ]['scan_id'] = $runtime_scan_id;
+coverage_check( Controller::is_browser_scan_request(), 'a live scanner marker is accepted by the PHP Set-Cookie observer and guard' );
+$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = str_repeat( 'f', 32 );
+coverage_check( ! Controller::is_browser_scan_request(), 'a forged scanner marker cannot bypass PHP Set-Cookie blocking' );
+$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
 $GLOBALS['faz_test_user_meta'][7][ Controller::BROWSER_SCAN_META ] = array(
 	array(
 		'token'       => $token,
@@ -138,7 +142,7 @@ coverage_check( false !== strpos( $bootstrap, 'register_browser_scan_observer()'
 coverage_check( false === strpos( $controller_source, "header_register_callback(\n" ) && false !== strpos( $controller_source, "add_action(\n\t\t\t'shutdown'" ), 'runtime observer coexists with other PHP header callbacks' );
 coverage_check( false !== strpos( $controller_source, "'redirection'        => 0" ) && false !== strpos( $controller_source, 'WP_Http::make_absolute_url' ), 'server replay validates every redirect hop and retains intermediate headers' );
 coverage_check( false !== strpos( $controller_source, 'BROWSER_SCAN_OBSERVATION_LIMIT' ), 'repeated runtime Set-Cookie observations are deduplicated and capped' );
-coverage_check( false !== strpos( $controller_source, '$php = $this->find_php_cli();' ), 'httpOnly worker resolves a real CLI binary instead of trusting PHP_BINARY under FPM' );
+coverage_check( false !== strpos( $controller_source, "wp_schedule_single_event( time() + 1, self::HTTPONLY_CRON_HOOK )" ) && false !== strpos( $controller_source, "'blocking'  => false" ), 'httpOnly enrichment is durably queued without holding the REST import open' );
 
 $failed = 0;
 foreach ( $checks as $index => $check ) {

@@ -1,8 +1,9 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-08-15T11:10:00+00:00\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-"
+"manager\n"
+"POT-Creation-Date: 2026-08-15T13:55:07+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -54,18 +55,18 @@ msgid "Cookie Banner"
 msgstr "Banner cookie"
 
 #: admin/class-admin.php:229 admin/views/base.php:21
-#: frontend/class-frontend.php:2400
+#: frontend/class-frontend.php:2412
 #: frontend/modules/banner-rest/class-banner-rest.php:561
 msgid "Cookies"
 msgstr "Cookie"
 
 #: admin/class-admin.php:234 admin/views/base.php:22
-#: admin/views/dashboard.php:193 admin/views/settings.php:220
+#: admin/views/dashboard.php:193 admin/views/settings.php:228
 msgid "Consent Logs"
 msgstr "Registri di consenso"
 
 #: admin/class-admin.php:239 admin/views/base.php:23
-#: admin/views/dashboard.php:189 admin/views/system-status.php:78
+#: admin/views/dashboard.php:189 admin/views/system-status.php:80
 msgid "Google Consent Mode"
 msgstr "Google Consent Mode"
 
@@ -310,8 +311,10 @@ msgid ""
 "Remove these cookie-policy entries? Cookies that load only after an "
 "interaction, during a flow, or as httpOnly cookies may still be present even "
 "if the scan did not observe them."
-msgstr "Rimuovere queste voci dalla cookie policy? I cookie che si caricano solo dopo un'interazione, durante un percorso, o come cookie httpOnly possono essere comunque presenti anche se la scansione non li ha osservati."
-
+msgstr ""
+"Rimuovere queste voci dalla cookie policy? I cookie che si caricano solo "
+"dopo un'interazione, durante un percorso, o come cookie httpOnly possono "
+"essere comunque presenti anche se la scansione non li ha osservati."
 
 #: admin/class-admin.php:575
 msgid "No stale cookies to delete."
@@ -1357,7 +1360,7 @@ msgstr "Statcounter"
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:890 admin/views/system-status.php:92
+#: admin/class-admin.php:890 admin/views/system-status.php:94
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
@@ -1401,7 +1404,7 @@ msgstr "TikTok Pixel"
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:902 admin/views/system-status.php:91
+#: admin/class-admin.php:902 admin/views/system-status.php:93
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
@@ -1945,7 +1948,7 @@ msgstr "Visualizza dettagli"
 #: admin/modules/cookies/api/class-cookies-api.php:176
 #: admin/modules/cookies/api/class-cookies-api.php:472
 #: admin/modules/scanner/api/class-api.php:178
-#: admin/modules/scanner/api/class-api.php:815
+#: admin/modules/scanner/api/class-api.php:817
 #: admin/modules/settings/api/class-api.php:566
 #: admin/modules/settings/api/class-api.php:572
 msgid "Unique identifier for the resource."
@@ -3549,11 +3552,14 @@ msgstr "L'URL di scansione deve corrispondere al dominio del sito corrente."
 
 #: admin/modules/scanner/api/class-api.php:476
 msgid "The scan URL must use the current site protocol, host, and port."
-msgstr "L'URL di scansione deve usare protocollo, host e porta del sito corrente."
+msgstr ""
+"L'URL di scansione deve usare protocollo, host e porta del sito corrente."
 
 #: admin/modules/scanner/api/class-api.php:517
 msgid "A server-scan redirect left the current site and was rejected."
-msgstr "Un reindirizzamento della scansione lato server è uscito dal sito ed è stato rifiutato."
+msgstr ""
+"Un reindirizzamento della scansione lato server è uscito dal sito ed è stato "
+"rifiutato."
 
 #: admin/modules/scanner/api/class-api.php:604
 msgid "Empty or invalid request body."
@@ -3563,8 +3569,9 @@ msgstr "Corpo della richiesta vuoto o non valido."
 msgid ""
 "This scan session expired or belongs to another browser tab. Start a new "
 "scan."
-msgstr "Questa sessione di scansione è scaduta o appartiene a un'altra scheda del browser. Avvia una nuova scansione."
-
+msgstr ""
+"Questa sessione di scansione è scaduta o appartiene a un'altra scheda del "
+"browser. Avvia una nuova scansione."
 
 #: admin/modules/scanner/api/class-api.php:707
 msgid ""
@@ -3575,37 +3582,38 @@ msgstr ""
 "registrato alcuno stato di completamento; controlla il log dello scanner e "
 "riprova."
 
-#: admin/modules/scanner/api/class-api.php:821
+#: admin/modules/scanner/api/class-api.php:823
 msgid "Scan status."
 msgstr "Stato della scansione."
 
-#: admin/modules/scanner/api/class-api.php:827
+#: admin/modules/scanner/api/class-api.php:829
 msgid "Scan type."
 msgstr "Tipo di scansione."
 
-#: admin/modules/scanner/api/class-api.php:833
+#: admin/modules/scanner/api/class-api.php:835
 msgid "Scan date."
 msgstr "Data della scansione."
 
-#: admin/modules/scanner/api/class-api.php:839
+#: admin/modules/scanner/api/class-api.php:841
 msgid "Total cookies found."
 msgstr "Totale cookie trovati."
 
-#: admin/modules/scanner/api/class-api.php:845
+#: admin/modules/scanner/api/class-api.php:847
 msgid "Total pages scanned."
 msgstr "Totale pagine scansionate."
 
-#: admin/modules/scanner/api/class-api.php:851
+#: admin/modules/scanner/api/class-api.php:853
 msgid "Maximum pages to scan."
 msgstr "Numero massimo di pagine da scansionare."
 
-#: admin/modules/scanner/includes/class-controller.php:304
+#: admin/modules/scanner/includes/class-controller.php:328
 msgid "Invalid browser scan identifier."
 msgstr "Identificativo di scansione del browser non valido."
 
-#: admin/modules/scanner/includes/class-controller.php:311
+#: admin/modules/scanner/includes/class-controller.php:335
 msgid "Another browser scan is already in progress for this administrator."
-msgstr "Un'altra scansione del browser è già in corso per questo amministratore."
+msgstr ""
+"Un'altra scansione del browser è già in corso per questo amministratore."
 
 #: admin/modules/settings/api/class-api.php:308
 #: admin/modules/settings/includes/class-onboarding.php:160
@@ -4048,8 +4056,15 @@ msgid ""
 "for twelve months; its maximum is 3650 days. The field limits update "
 "automatically when the regulation changes, and the same limits are enforced "
 "at serve time."
-msgstr "Dopo questo numero di giorni i visitatori rivedranno il banner. GDPR ed Entrambe hanno un tetto di 182 giorni (sei mesi): un valore più breve è ammesso e richiede il consenso prima, quindi è più protettivo. CCPA / Leggi statali USA conserva la scelta per almeno 365 giorni, perché a chi ha esercitato l'opt-out non si può richiedere il consenso per dodici mesi; il massimo è 3650 giorni. I limiti del campo si aggiornano automaticamente al cambio di normativa e vengono applicati anche al momento di servire la pagina."
-
+msgstr ""
+"Dopo questo numero di giorni i visitatori rivedranno il banner. GDPR ed "
+"Entrambe hanno un tetto di 182 giorni (sei mesi): un valore più breve è "
+"ammesso e richiede il consenso prima, quindi è più protettivo. CCPA / Leggi "
+"statali USA conserva la scelta per almeno 365 giorni, perché a chi ha "
+"esercitato l'opt-out non si può richiedere il consenso per dodici mesi; il "
+"massimo è 3650 giorni. I limiti del campo si aggiornano automaticamente al "
+"cambio di normativa e vengono applicati anche al momento di servire la "
+"pagina."
 
 #. translators: 1: the lifetime the admin had entered, in days. 2: the lifetime it was changed to.
 #: admin/views/banner.php:236
@@ -4057,8 +4072,9 @@ msgstr "Dopo questo numero di giorni i visitatori rivedranno il banner. GDPR ed 
 msgid ""
 "Consent lifetime changed from %1$d to %2$d days to stay within the selected "
 "regulation."
-msgstr "Durata del consenso modificata da %1$d a %2$d giorni per restare entro la normativa selezionata."
-
+msgstr ""
+"Durata del consenso modificata da %1$d a %2$d giorni per restare entro la "
+"normativa selezionata."
 
 #: admin/views/banner.php:244
 msgid "Brand Logo"
@@ -4100,7 +4116,7 @@ msgstr "Lingua:"
 msgid "Notice Title"
 msgstr "Titolo dell'avviso"
 
-#: admin/views/banner.php:284 frontend/class-frontend.php:2395
+#: admin/views/banner.php:284 frontend/class-frontend.php:2407
 #: frontend/modules/banner-rest/class-banner-rest.php:556
 msgid "We value your privacy"
 msgstr "La tua privacy è importante"
@@ -4285,8 +4301,9 @@ msgstr "Interruttore — Inattivo"
 msgid ""
 "Applies to the category switches in the preference centre, and to the inline "
 "category toggles when the Classic banner type shows them."
-msgstr "Si applica agli interruttori di categoria nel centro preferenze e a quelli in linea quando il tipo di banner Classic li mostra."
-
+msgstr ""
+"Si applica agli interruttori di categoria nel centro preferenze e a quelli "
+"in linea quando il tipo di banner Classic li mostra."
 
 #: admin/views/banner.php:515
 msgid "Category Preview Colours"
@@ -4457,7 +4474,7 @@ msgstr ""
 "solo sui banner CCPA / US State Laws (ed Entrambi). Segue la lingua "
 "selezionata qui sopra."
 
-#: admin/views/banner.php:730 frontend/class-frontend.php:2397
+#: admin/views/banner.php:730 frontend/class-frontend.php:2409
 #: frontend/modules/banner-rest/class-banner-rest.php:558
 msgid "Opt-out Preferences"
 msgstr "Preferenze di opt-out"
@@ -4656,7 +4673,7 @@ msgstr "Canada (PIPEDA)"
 msgid "Brazil (LGPD)"
 msgstr "Brasile (LGPD)"
 
-#: admin/views/banner.php:931 admin/views/settings.php:407
+#: admin/views/banner.php:931 admin/views/settings.php:415
 #: admin/views/setup.php:162
 msgid "Australia"
 msgstr "Australia"
@@ -6025,7 +6042,7 @@ msgstr ""
 msgid "Global Vendor List (IAB TCF 2.3)"
 msgstr "Lista globale dei fornitori (IAB TCF 2.3)"
 
-#: admin/views/gvl.php:15 admin/views/settings.php:379
+#: admin/views/gvl.php:15 admin/views/settings.php:387
 msgid "Update GVL Now"
 msgstr "Aggiorna GVL ora"
 
@@ -6371,7 +6388,7 @@ msgstr ""
 msgid "Loading banners…"
 msgstr "Caricamento banner…"
 
-#: admin/views/settings.php:136 admin/views/system-status.php:89
+#: admin/views/settings.php:136 admin/views/system-status.php:91
 msgid "Cross-Domain Consent"
 msgstr "Consenso cross-domain"
 
@@ -6405,7 +6422,7 @@ msgstr ""
 "URL completi di altri siti che devono ricevere lo stato del consenso. Ogni "
 "sito deve avere FAZ Cookie Manager installato. Un URL per riga."
 
-#: admin/views/settings.php:157 admin/views/system-status.php:80
+#: admin/views/settings.php:157 admin/views/system-status.php:82
 msgid "Pageview Tracking"
 msgstr "Tracciamento visualizzazioni pagina"
 
@@ -6440,8 +6457,11 @@ msgid ""
 "How long aggregate pageview records are kept before automatic deletion. "
 "Enter 0 to disable automatic deletion; choose and document a period "
 "appropriate to your analytics purpose."
-msgstr "Per quanto tempo vengono conservati i dati aggregati sulle visualizzazioni prima della cancellazione automatica. Inserisci 0 per disattivare la cancellazione automatica; scegli un periodo documentato e adeguato alle tue esigenze di rendicontazione."
-
+msgstr ""
+"Per quanto tempo vengono conservati i dati aggregati sulle visualizzazioni "
+"prima della cancellazione automatica. Inserisci 0 per disattivare la "
+"cancellazione automatica; scegli un periodo documentato e adeguato alle tue "
+"esigenze di rendicontazione."
 
 #: admin/views/settings.php:178
 msgid "Script Blocking"
@@ -6548,11 +6568,32 @@ msgstr ""
 "interferire con builder, editor, icon font o librerie CSS-in-JS. Prova il "
 "sito prima di abilitarla in produzione."
 
-#: admin/views/settings.php:201
+#: admin/views/settings.php:203
+msgid "Block non-consented cookies emitted by PHP"
+msgstr "Blocca i cookie non consentiti inviati da PHP"
+
+#: admin/views/settings.php:205
+msgid ""
+"<strong>Advanced, off by default.</strong> Filters outgoing <code>Set-"
+"Cookie</code> headers from pages, AJAX, REST and redirects, including "
+"HttpOnly cookies that JavaScript cannot remove. Necessary, WordPress-"
+"internal, security and checkout cookies are preserved, and deletion headers "
+"always pass. Enable only after testing login, forms, cart and checkout; "
+"unknown cookies fail permissive until the scanner classifies them."
+msgstr ""
+"<strong>Avanzata, disattivata per impostazione predefinita.</strong> Filtra "
+"gli header <code>Set-Cookie</code> in uscita da pagine, AJAX, REST e "
+"reindirizzamenti, inclusi i cookie HttpOnly che JavaScript non può rimuovere. "
+"I cookie necessari, interni di WordPress, di sicurezza e del checkout vengono "
+"preservati e gli header di eliminazione passano sempre. Abilitala solo dopo "
+"aver verificato accesso, moduli, carrello e checkout; i cookie sconosciuti "
+"restano consentiti finché lo scanner non li classifica."
+
+#: admin/views/settings.php:209
 msgid "Payment gateway scripts (e-commerce)"
 msgstr "Script dei gateway di pagamento (e-commerce)"
 
-#: admin/views/settings.php:202
+#: admin/views/settings.php:210
 msgid ""
 "<strong>Only enable a gateway if your site takes payments.</strong> A "
 "payment provider's SDK (PayPal, Stripe, …) can set cookies and fingerprint "
@@ -6578,16 +6619,16 @@ msgstr ""
 "gateway (per esempio <code>pptm.js</code> di PayPal) resta comunque bloccato."
 
 #. translators: %s: payment gateway name, e.g. PayPal.
-#: admin/views/settings.php:209
+#: admin/views/settings.php:217
 #, php-format
 msgid "Allow %s payment scripts before consent"
 msgstr "Consenti gli script di pagamento %s prima del consenso"
 
-#: admin/views/settings.php:227
+#: admin/views/settings.php:235
 msgid "Enable consent logging"
 msgstr "Attiva la registrazione del consenso"
 
-#: admin/views/settings.php:229
+#: admin/views/settings.php:237
 msgid ""
 "Records each visitor's consent choice (accepted, rejected, or partial) for "
 "GDPR accountability. Required by Art. 7(1) GDPR to demonstrate that consent "
@@ -6597,43 +6638,47 @@ msgstr ""
 "parziale) ai fini della responsabilizzazione GDPR. Richiesto dall'Art. 7(1) "
 "GDPR per dimostrare che il consenso è stato prestato."
 
-#: admin/views/settings.php:232
+#: admin/views/settings.php:240
 msgid "Consent log retention (months)"
 msgstr "Conservazione del registro dei consensi (mesi)"
 
-#: admin/views/settings.php:234
+#: admin/views/settings.php:242
 msgid ""
 "How long consent records are kept before automatic deletion. Choose a "
 "documented period appropriate to your accountability obligations. Logs older "
 "than this period are purged daily."
-msgstr "Per quanto tempo vengono conservate le registrazioni dei consensi prima della cancellazione automatica. Scegli un periodo documentato e adeguato ai tuoi obblighi di rendicontazione."
+msgstr ""
+"Per quanto tempo vengono conservate le registrazioni dei consensi prima "
+"della cancellazione automatica. Scegli un periodo documentato e adeguato ai "
+"tuoi obblighi di rendicontazione."
 
-
-#: admin/views/settings.php:241
+#: admin/views/settings.php:249
 msgid "Data Subject Requests"
 msgstr "Richieste degli interessati"
 
-#: admin/views/settings.php:245
+#: admin/views/settings.php:253
 msgid "Data subject request retention (months)"
 msgstr "Conservazione delle richieste degli interessati (mesi)"
 
-#: admin/views/settings.php:247
+#: admin/views/settings.php:255
 msgid ""
 "How long completed data-subject request records are kept before automatic "
 "deletion. Keep a period that supports your ability to demonstrate and manage "
 "requests."
-msgstr "Per quanto tempo vengono conservate le richieste degli interessati già evase prima della cancellazione automatica. Mantieni un periodo che sostenga i tuoi obblighi di rendicontazione."
+msgstr ""
+"Per quanto tempo vengono conservate le richieste degli interessati già evase "
+"prima della cancellazione automatica. Mantieni un periodo che sostenga i "
+"tuoi obblighi di rendicontazione."
 
-
-#: admin/views/settings.php:254
+#: admin/views/settings.php:262
 msgid "Scanner"
 msgstr "Scanner"
 
-#: admin/views/settings.php:258
+#: admin/views/settings.php:266
 msgid "Max Pages to Scan"
 msgstr "Numero massimo di pagine da scansionare"
 
-#: admin/views/settings.php:260
+#: admin/views/settings.php:268
 msgid ""
 "Maximum number of pages the cookie scanner will crawl. Higher values find "
 "more cookies but take longer. 100 pages is sufficient for most sites."
@@ -6642,11 +6687,11 @@ msgstr ""
 "trovano più cookie ma richiedono più tempo. 100 pagine sono sufficienti per "
 "la maggior parte dei siti."
 
-#: admin/views/settings.php:266
+#: admin/views/settings.php:274
 msgid "Scanner Debug Mode"
 msgstr "Modalità debug dello scanner"
 
-#: admin/views/settings.php:268
+#: admin/views/settings.php:276
 msgid ""
 "When enabled, the scanner logs every categorization decision. Download logs "
 "from the Cookies page."
@@ -6654,15 +6699,15 @@ msgstr ""
 "Se abilitato, lo scanner registra ogni decisione di categorizzazione. "
 "Scarica i log dalla pagina Cookie."
 
-#: admin/views/settings.php:275
+#: admin/views/settings.php:283
 msgid "Automatic Scanning"
 msgstr "Scansione automatica"
 
-#: admin/views/settings.php:282
+#: admin/views/settings.php:290
 msgid "Enable automatic cookie scanning"
 msgstr "Abilita la scansione automatica dei cookie"
 
-#: admin/views/settings.php:284
+#: admin/views/settings.php:292
 msgid ""
 "Automatically scan your site for new cookies on a schedule. You will receive "
 "an email notification if new uncategorized cookies are found."
@@ -6671,23 +6716,23 @@ msgstr ""
 "cookie secondo una pianificazione. Riceverai una notifica via e-mail se "
 "vengono trovati nuovi cookie non categorizzati."
 
-#: admin/views/settings.php:287
+#: admin/views/settings.php:295
 msgid "Scan Frequency"
 msgstr "Frequenza di scansione"
 
-#: admin/views/settings.php:289
+#: admin/views/settings.php:297
 msgid "Daily"
 msgstr "Giornaliero"
 
-#: admin/views/settings.php:290 includes/class-activator.php:447
+#: admin/views/settings.php:298 includes/class-activator.php:447
 msgid "Weekly"
 msgstr "Settimanale"
 
-#: admin/views/settings.php:291
+#: admin/views/settings.php:299
 msgid "Monthly"
 msgstr "Mensile"
 
-#: admin/views/settings.php:293
+#: admin/views/settings.php:301
 msgid ""
 "How often the scanner runs automatically. Weekly is recommended for most "
 "sites."
@@ -6695,15 +6740,15 @@ msgstr ""
 "Con quale frequenza lo scanner viene eseguito automaticamente. Si consiglia "
 "cadenza settimanale per la maggior parte dei siti."
 
-#: admin/views/settings.php:300
+#: admin/views/settings.php:308
 msgid "Microsoft Consent APIs"
 msgstr "API di consenso Microsoft"
 
-#: admin/views/settings.php:307
+#: admin/views/settings.php:315
 msgid "Microsoft UET Consent Mode"
 msgstr "Microsoft UET Consent Mode"
 
-#: admin/views/settings.php:309
+#: admin/views/settings.php:317
 msgid ""
 "Signals consent status to Microsoft Advertising (Bing Ads) via the UET tag. "
 "Enable if you use Microsoft Advertising and need to respect consent for ad "
@@ -6713,11 +6758,11 @@ msgstr ""
 "tag UET. Attivare se si utilizza Microsoft Advertising e si deve rispettare "
 "il consenso per il tracciamento pubblicitario."
 
-#: admin/views/settings.php:315
+#: admin/views/settings.php:323
 msgid "Microsoft Clarity Consent API"
 msgstr "API di consenso Microsoft Clarity"
 
-#: admin/views/settings.php:317
+#: admin/views/settings.php:325
 msgid ""
 "Signals consent status to Microsoft Clarity (heatmaps and session "
 "recordings). Enable if you use Clarity and want it to pause tracking until "
@@ -6727,15 +6772,15 @@ msgstr ""
 "registrazioni delle sessioni). Attivare se si utilizza Clarity e si desidera "
 "sospendere il tracciamento fino alla prestazione del consenso."
 
-#: admin/views/settings.php:324
+#: admin/views/settings.php:332
 msgid "Age Verification"
 msgstr "Verifica dell'età"
 
-#: admin/views/settings.php:331
+#: admin/views/settings.php:339
 msgid "Require age verification for consent"
 msgstr "Richiedi la verifica dell'età per il consenso"
 
-#: admin/views/settings.php:333
+#: admin/views/settings.php:341
 msgid ""
 "Under GDPR Art. 8, children below the minimum age cannot give valid consent "
 "for data processing. When enabled, the visitor sees an age-confirmation "
@@ -6750,7 +6795,7 @@ msgstr ""
 "Rifiuta resta sempre disponibile e non viene mai bloccato, e la casella non "
 "è mai pre-selezionata."
 
-#: admin/views/settings.php:334
+#: admin/views/settings.php:342
 msgid ""
 "This is a self-declared age affirmation only. It is NOT a substitute for "
 "verifying parental consent for under-age children under GDPR Art. 8(2), "
@@ -6762,11 +6807,11 @@ msgstr ""
 "del GDPR, che richiede una verifica separata con sforzi ragionevoli che "
 "questa funzione non fornisce."
 
-#: admin/views/settings.php:337
+#: admin/views/settings.php:345
 msgid "Minimum Age"
 msgstr "Età minima"
 
-#: admin/views/settings.php:339
+#: admin/views/settings.php:347
 msgid ""
 "GDPR default is 16. Some EU member states allow 13-15 (e.g. Italy 14, Spain "
 "14, France 15, Germany 16). Check your local law."
@@ -6775,15 +6820,15 @@ msgstr ""
 "consentono 13-15 (ad es. Italia 14, Spagna 14, Francia 15, Germania 16). "
 "Verifica la normativa locale."
 
-#: admin/views/settings.php:346 admin/views/setup.php:174
+#: admin/views/settings.php:354 admin/views/setup.php:174
 msgid "IAB TCF"
 msgstr "IAB TCF"
 
-#: admin/views/settings.php:353
+#: admin/views/settings.php:361
 msgid "Enable IAB TCF v2.3"
 msgstr "Attiva IAB TCF v2.3"
 
-#: admin/views/settings.php:355
+#: admin/views/settings.php:363
 msgid ""
 "Enables the IAB Transparency & Consent Framework. Required if you work with "
 "ad-tech vendors that need a standardised TC String for programmatic "
@@ -6793,11 +6838,11 @@ msgstr ""
 "con fornitori ad-tech che richiedono una stringa TC standardizzata per la "
 "pubblicità programmatica nell'UE."
 
-#: admin/views/settings.php:358
+#: admin/views/settings.php:366
 msgid "Publisher Country Code"
 msgstr "Codice paese dell'editore"
 
-#: admin/views/settings.php:360
+#: admin/views/settings.php:368
 msgid ""
 "ISO 3166-1 alpha-2 code of the publisher's country (e.g. IT, DE, FR). Used "
 "in the TCF consent string."
@@ -6805,11 +6850,11 @@ msgstr ""
 "Codice ISO 3166-1 alpha-2 del paese dell'editore (ad es. IT, DE, FR). "
 "Utilizzato nella stringa di consenso TCF."
 
-#: admin/views/settings.php:363 admin/views/setup.php:320
+#: admin/views/settings.php:371 admin/views/setup.php:320
 msgid "CMP ID"
 msgstr "ID CMP"
 
-#: admin/views/settings.php:365
+#: admin/views/settings.php:373
 msgid ""
 "Your registered IAB CMP ID (<a href=\"https://iabeurope.eu/cmp-list/\" "
 "target=\"_blank\" rel=\"noopener noreferrer\">IAB CMP List</a>). With "
@@ -6823,11 +6868,11 @@ msgstr ""
 "fornitori ad-tech ignoreranno la stringa TC. Google Consent Mode v2 funziona "
 "indipendentemente dalla registrazione CMP."
 
-#: admin/views/settings.php:371
+#: admin/views/settings.php:379
 msgid "Purpose One Treatment"
 msgstr "Trattamento della Finalità Uno"
 
-#: admin/views/settings.php:373
+#: admin/views/settings.php:381
 msgid ""
 "Set to true if Purpose 1 consent was NOT disclosed (e.g. publisher in a "
 "country where Purpose 1 is not required)."
@@ -6835,19 +6880,19 @@ msgstr ""
 "Impostare su vero se il consenso per la Finalità 1 NON è stato dichiarato "
 "(ad es. editore in un paese in cui la Finalità 1 non è richiesta)."
 
-#: admin/views/settings.php:377
+#: admin/views/settings.php:385
 msgid "Loading GVL status..."
 msgstr "Caricamento stato GVL..."
 
-#: admin/views/settings.php:386 admin/views/system-status.php:82
+#: admin/views/settings.php:394 admin/views/system-status.php:84
 msgid "Geo-Targeting"
 msgstr "Geo-Targeting"
 
-#: admin/views/settings.php:393
+#: admin/views/settings.php:401
 msgid "Enable geo-targeted banner display"
 msgstr "Abilita la visualizzazione del banner in base alla geolocalizzazione"
 
-#: admin/views/settings.php:395
+#: admin/views/settings.php:403
 msgid ""
 "Show the cookie banner only to visitors from specific regions. Requires a "
 "MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry "
@@ -6861,43 +6906,43 @@ msgstr ""
 "attiva il filtro faz_trust_cf_ipcountry_header). Quando il paese non può "
 "essere determinato, il banner viene mostrato a tutti (fail-open)."
 
-#: admin/views/settings.php:398
+#: admin/views/settings.php:406
 msgid "Target Regions"
 msgstr "Regioni di destinazione"
 
-#: admin/views/settings.php:402 admin/views/setup.php:157
+#: admin/views/settings.php:410 admin/views/setup.php:157
 msgid "EU / EEA"
 msgstr "UE / SEE"
 
-#: admin/views/settings.php:403 admin/views/setup.php:158
+#: admin/views/settings.php:411 admin/views/setup.php:158
 msgid "United Kingdom"
 msgstr "Regno Unito"
 
-#: admin/views/settings.php:404 admin/views/setup.php:159
+#: admin/views/settings.php:412 admin/views/setup.php:159
 msgid "United States"
 msgstr "Stati Uniti"
 
-#: admin/views/settings.php:405 admin/views/setup.php:160
+#: admin/views/settings.php:413 admin/views/setup.php:160
 msgid "Canada"
 msgstr "Canada"
 
-#: admin/views/settings.php:406 admin/views/setup.php:161
+#: admin/views/settings.php:414 admin/views/setup.php:161
 msgid "Brazil"
 msgstr "Brasile"
 
-#: admin/views/settings.php:408 admin/views/setup.php:163
+#: admin/views/settings.php:416 admin/views/setup.php:163
 msgid "Japan"
 msgstr "Giappone"
 
-#: admin/views/settings.php:409 admin/views/setup.php:164
+#: admin/views/settings.php:417 admin/views/setup.php:164
 msgid "Switzerland"
 msgstr "Svizzera"
 
-#: admin/views/settings.php:410 admin/views/setup.php:165
+#: admin/views/settings.php:418 admin/views/setup.php:165
 msgid "South Africa"
 msgstr "Sudafrica"
 
-#: admin/views/settings.php:420
+#: admin/views/settings.php:428
 msgid ""
 "Select which regions should see the cookie banner. Visitors from other "
 "regions will not see it (if \"Hide banner\" is selected below)."
@@ -6906,19 +6951,19 @@ msgstr ""
 "visitatori provenienti da altre regioni non lo vedranno (se è selezionato "
 "«Nascondi banner» in basso)."
 
-#: admin/views/settings.php:423
+#: admin/views/settings.php:431
 msgid "Non-target visitors"
 msgstr "Visitatori non target"
 
-#: admin/views/settings.php:425
+#: admin/views/settings.php:433
 msgid "Show banner anyway (safest)"
 msgstr "Mostra comunque il banner (più sicuro)"
 
-#: admin/views/settings.php:426
+#: admin/views/settings.php:434
 msgid "Hide banner (scripts load normally)"
 msgstr "Nascondi banner (gli script si caricano normalmente)"
 
-#: admin/views/settings.php:428
+#: admin/views/settings.php:436
 msgid ""
 "What happens when a visitor is from outside the target regions. \"Show "
 "banner anyway\" is the safest option and recommended for sites with global "
@@ -6928,11 +6973,11 @@ msgstr ""
 "destinazione. \"Mostra comunque il banner\" è l'opzione più sicura e "
 "consigliata per i siti con un pubblico globale."
 
-#: admin/views/settings.php:435
+#: admin/views/settings.php:443
 msgid "GeoIP Database (MaxMind GeoLite2)"
 msgstr "Database GeoIP (MaxMind GeoLite2)"
 
-#: admin/views/settings.php:439
+#: admin/views/settings.php:447
 msgid ""
 "Geo-targeting requires a MaxMind GeoLite2 database. <a href=\"https://"
 "www.maxmind.com/en/geolite2/signup\" target=\"_blank\" rel=\"noopener\">Get "
@@ -6942,19 +6987,19 @@ msgstr ""
 "www.maxmind.com/en/geolite2/signup\" target=\"_blank\" "
 "rel=\"noopener\">Ottieni una chiave di licenza gratuita</a>."
 
-#: admin/views/settings.php:442
+#: admin/views/settings.php:450
 msgid "Database edition"
 msgstr "Edizione del database"
 
-#: admin/views/settings.php:444
+#: admin/views/settings.php:452
 msgid "Country &#8212; country-level only (recommended)"
 msgstr "Country &#8212; solo a livello di paese (consigliato)"
 
-#: admin/views/settings.php:445
+#: admin/views/settings.php:453
 msgid "City &#8212; adds region / state detection"
 msgstr "City &#8212; aggiunge il rilevamento di regione / stato"
 
-#: admin/views/settings.php:448
+#: admin/views/settings.php:456
 msgid ""
 "<strong>Country</strong> (~10 MB) resolves the visitor&#8217;s country only "
 "&#8212; enough for country-based banner targeting and most per-jurisdiction "
@@ -6980,27 +7025,27 @@ msgstr ""
 "questa impostazione e facendo clic su &#8220;Aggiorna database&#8221; il "
 "database installato viene sostituito."
 
-#: admin/views/settings.php:452
+#: admin/views/settings.php:460
 msgid "MaxMind License Key"
 msgstr "Chiave di licenza MaxMind"
 
-#: admin/views/settings.php:453
+#: admin/views/settings.php:461
 msgid "Enter your MaxMind license key"
 msgstr "Inserire la chiave di licenza MaxMind"
 
-#: admin/views/settings.php:457
+#: admin/views/settings.php:465
 msgid "Update Database"
 msgstr "Aggiorna database"
 
-#: admin/views/settings.php:463
+#: admin/views/settings.php:471
 msgid "Data Management"
 msgstr "Gestione dei dati"
 
-#: admin/views/settings.php:470
+#: admin/views/settings.php:478
 msgid "Remove all data on uninstall"
 msgstr "Rimuovi tutti i dati alla disinstallazione"
 
-#: admin/views/settings.php:472
+#: admin/views/settings.php:480
 msgid ""
 "When enabled, deleting the plugin will permanently remove ALL data: cookies, "
 "categories, consent logs, pageviews, banner settings, and scan history. Keep "
@@ -7011,11 +7056,11 @@ msgstr ""
 "impostazioni del banner e cronologia delle scansioni. Tieni questa opzione "
 "DISATTIVATA se prevedi di reinstallare o aggiornare il plugin."
 
-#: admin/views/settings.php:480
+#: admin/views/settings.php:488
 msgid "Paid Memberships Pro integration"
 msgstr "Integrazione Paid Memberships Pro"
 
-#: admin/views/settings.php:484
+#: admin/views/settings.php:492
 msgid ""
 "Implement a \"Pay-or-Accept\" model: logged-in members on selected PMP "
 "levels skip the cookie banner and have consent <strong>programmatically "
@@ -7032,11 +7077,11 @@ msgstr ""
 "un'interazione esplicita con il banner. I visitatori non registrati "
 "continuano a vedere il banner standard e il relativo flusso di consenso."
 
-#: admin/views/settings.php:487
+#: admin/views/settings.php:495
 msgid "Legal note:"
 msgstr "Nota legale:"
 
-#: admin/views/settings.php:488
+#: admin/views/settings.php:496
 msgid ""
 "Because this option grants consent on behalf of the member (it does not "
 "merely hide the banner), you must disclose it clearly in your Terms of "
@@ -7053,19 +7098,19 @@ msgstr ""
 "membri devono poter revocare o modificare il proprio consenso in qualsiasi "
 "momento tramite il widget di revisita standard."
 
-#: admin/views/settings.php:494
+#: admin/views/settings.php:502
 msgid "Enable PMP integration"
 msgstr "Abilita integrazione PMP"
 
-#: admin/views/settings.php:498
+#: admin/views/settings.php:506
 msgid "Exempt membership level IDs"
 msgstr "ID livello di iscrizione esenti"
 
-#: admin/views/settings.php:499
+#: admin/views/settings.php:507
 msgid "e.g. 2, 3, 5"
 msgstr "es. 2, 3, 5"
 
-#: admin/views/settings.php:501
+#: admin/views/settings.php:509
 msgid ""
 "Comma-separated PMP level IDs whose members should be exempted. Find level "
 "IDs in <strong>Memberships → Settings → Levels</strong>. Leave empty to "
@@ -7075,15 +7120,15 @@ msgstr ""
 "gli ID livello in <strong>Memberships → Settings → Levels</strong>. Lascia "
 "vuoto per disabilitare l'esenzione."
 
-#: admin/views/settings.php:510
+#: admin/views/settings.php:518
 msgid "Footer legal links"
 msgstr "Link legali nel footer"
 
-#: admin/views/settings.php:517
+#: admin/views/settings.php:525
 msgid "Show legal links in the footer"
 msgstr "Mostra i link legali nel footer"
 
-#: admin/views/settings.php:519
+#: admin/views/settings.php:527
 msgid ""
 "Off by default. When enabled, the pages you select below are printed as a "
 "small navigation block in your theme footer (via wp_footer). The markup is "
@@ -7096,23 +7141,23 @@ msgstr ""
 "dipende dal consenso, dallo stato di accesso o dal Paese — quindi può essere "
 "servito in sicurezza dalla cache delle pagine."
 
-#: admin/views/settings.php:522
+#: admin/views/settings.php:530
 msgid "Pages to link"
 msgstr "Pagine da collegare"
 
 #. translators: %d: WordPress page ID.
-#: admin/views/settings.php:560
+#: admin/views/settings.php:568
 #, php-format
 msgid "Page #%d (unavailable)"
 msgstr "Pagina #%d (non disponibile)"
 
 #. translators: %d: WordPress page ID.
-#: admin/views/settings.php:566
+#: admin/views/settings.php:574
 #, php-format
 msgid "Page #%d (untitled)"
 msgstr "Pagina #%d (senza titolo)"
 
-#: admin/views/settings.php:596
+#: admin/views/settings.php:604
 msgid ""
 "No published pages yet. Publish your Cookie Policy or Privacy Policy page "
 "first."
@@ -7120,11 +7165,11 @@ msgstr ""
 "Non ci sono ancora pagine pubblicate. Pubblica prima la pagina della Cookie "
 "Policy o della Privacy Policy."
 
-#: admin/views/settings.php:605
+#: admin/views/settings.php:613
 msgid "Custom label (optional)"
 msgstr "Etichetta personalizzata (facoltativa)"
 
-#: admin/views/settings.php:609
+#: admin/views/settings.php:617
 msgid ""
 "Selected links appear first in their saved order. Leave the label empty to "
 "use the page title. Unpublished or unavailable selections stay visible here "
@@ -7135,11 +7180,11 @@ msgstr ""
 "non disponibili restano visibili qui per poterle rimuovere; non vengono mai "
 "mostrate nel footer."
 
-#: admin/views/settings.php:617
+#: admin/views/settings.php:625
 msgid "Force re-consent"
 msgstr "Forza nuovo consenso"
 
-#: admin/views/settings.php:621
+#: admin/views/settings.php:629
 msgid ""
 "Show the cookie banner again to all returning visitors. Useful when you "
 "change which cookies or services are used on your site (e.g. new AdSense "
@@ -7151,15 +7196,15 @@ msgstr ""
 "nuovi tag AdSense, analisi aggiunte) e si desidera che i visitatori "
 "precedenti rinnovino il consenso prima che tali servizi vengano eseguiti."
 
-#: admin/views/settings.php:624
+#: admin/views/settings.php:632
 msgid "Current consent revision"
 msgstr "Revisione del consenso attuale"
 
-#: admin/views/settings.php:628
+#: admin/views/settings.php:636
 msgid "Invalidate all consents"
 msgstr "Invalida tutti i consensi"
 
-#: admin/views/settings.php:631
+#: admin/views/settings.php:639
 msgid ""
 "Visitors whose stored consent has a lower revision will see the banner again "
 "on their next visit. This does not affect the current page load."
@@ -7168,7 +7213,7 @@ msgstr ""
 "nuovamente il banner alla loro prossima visita. Questo non influisce sul "
 "caricamento della pagina corrente."
 
-#: admin/views/settings.php:639
+#: admin/views/settings.php:647
 msgid "Save Settings"
 msgstr "Salva impostazioni"
 
@@ -7748,131 +7793,145 @@ msgstr "Indietro"
 msgid "Next"
 msgstr "Avanti"
 
-#: admin/views/system-status.php:49
+#: admin/views/system-status.php:51
 msgid "Copy Status to Clipboard"
 msgstr "Copia lo stato negli appunti"
 
-#: admin/views/system-status.php:54
+#: admin/views/system-status.php:56
 msgid "Environment"
 msgstr "Ambiente"
 
-#: admin/views/system-status.php:57
+#: admin/views/system-status.php:59
 msgid "Plugin Version"
 msgstr "Versione del plugin"
 
-#: admin/views/system-status.php:58
+#: admin/views/system-status.php:60
 msgid "WordPress Version"
 msgstr "Versione WordPress"
 
-#: admin/views/system-status.php:59
+#: admin/views/system-status.php:61
 msgid "PHP Version"
 msgstr "Versione PHP"
 
-#: admin/views/system-status.php:60
+#: admin/views/system-status.php:62
 msgid "MySQL Version"
 msgstr "Versione MySQL"
 
-#: admin/views/system-status.php:61
+#: admin/views/system-status.php:63
 msgid "Server"
 msgstr "Server"
 
-#: admin/views/system-status.php:62
+#: admin/views/system-status.php:64
 msgid "Memory Limit"
 msgstr "Limite di memoria"
 
-#: admin/views/system-status.php:63
+#: admin/views/system-status.php:65
 msgid "Max Execution Time"
 msgstr "Tempo massimo di esecuzione"
 
-#: admin/views/system-status.php:64
+#: admin/views/system-status.php:66
 msgid "PCRE Backtrack Limit"
 msgstr "Limite di backtrack PCRE"
 
-#: admin/views/system-status.php:65
+#: admin/views/system-status.php:67
 msgid "Multisite"
 msgstr "Multisito"
 
-#: admin/views/system-status.php:66
+#: admin/views/system-status.php:68
 msgid "HTTPS"
 msgstr "HTTPS"
 
-#: admin/views/system-status.php:67
+#: admin/views/system-status.php:69
 msgid "Active Theme"
 msgstr "Tema attivo"
 
-#: admin/views/system-status.php:73
+#: admin/views/system-status.php:75
 msgid "Plugin Configuration"
 msgstr "Configurazione del plugin"
 
-#: admin/views/system-status.php:76
+#: admin/views/system-status.php:78
 msgid "Banner Enabled"
 msgstr "Banner abilitato"
 
-#: admin/views/system-status.php:77
+#: admin/views/system-status.php:79
 msgid "Consent Logging"
 msgstr "Registrazione consensi"
 
-#: admin/views/system-status.php:79
+#: admin/views/system-status.php:81
 msgid "IAB TCF v2.3"
 msgstr "IAB TCF v2.3"
 
-#: admin/views/system-status.php:81
+#: admin/views/system-status.php:83
 msgid "Auto Scan"
 msgstr "Scansione automatica"
 
-#: admin/views/system-status.php:84
+#: admin/views/system-status.php:86
 msgid "Per-Service Consent"
 msgstr "Consenso per servizio"
 
-#: admin/views/system-status.php:84 admin/views/system-status.php:85
+#: admin/views/system-status.php:86 admin/views/system-status.php:87
 msgid "not available: category-level consent is enforced"
 msgstr "non disponibile: viene applicato il consenso per categoria"
 
-#: admin/views/system-status.php:85
+#: admin/views/system-status.php:87
 msgid "Per-Cookie Consent"
 msgstr "Consenso per singolo cookie"
 
-#: admin/views/system-status.php:86
+#: admin/views/system-status.php:88
 msgid "Bot Detection"
 msgstr "Rilevamento bot"
 
-#: admin/views/system-status.php:87
+#: admin/views/system-status.php:89
 msgid "GTM Data Layer"
 msgstr "GTM Data Layer"
 
-#: admin/views/system-status.php:88
+#: admin/views/system-status.php:90
 msgid "Age Gate"
 msgstr "Verifica dell'età"
 
-#: admin/views/system-status.php:90
+#: admin/views/system-status.php:92
 msgid "Ad-Blocker Compat"
 msgstr "Compat. Ad-Blocker"
 
-#: admin/views/system-status.php:98
+#: admin/views/system-status.php:95
+msgid "PHP Set-Cookie Blocking"
+msgstr "Blocco Set-Cookie PHP"
+
+#: admin/views/system-status.php:101
+msgid "Recently Blocked Server Cookies"
+msgstr "Cookie server bloccati di recente"
+
+#: admin/views/system-status.php:104
+msgid ""
+"No outgoing PHP Set-Cookie header has been blocked in the last 24 hours."
+msgstr ""
+"Nessun header Set-Cookie PHP in uscita è stato bloccato nelle ultime 24 ore."
+
+#: admin/views/system-status.php:121
 msgid "Database"
 msgstr "Database"
 
-#: admin/views/system-status.php:104
+#: admin/views/system-status.php:127
 msgid "Table missing"
 msgstr "Tabella mancante"
 
-#: admin/views/system-status.php:106
+#: admin/views/system-status.php:129
 msgid "rows"
 msgstr "righe"
 
-#: admin/views/system-status.php:115
+#: admin/views/system-status.php:138
 msgid "Cron Jobs"
 msgstr "Cron Jobs"
 
-#: admin/views/system-status.php:119
+#: admin/views/system-status.php:142
 msgid "Next Scheduled Scan"
 msgstr "Prossima scansione pianificata"
 
-#: admin/views/system-status.php:123
+#: admin/views/system-status.php:146
 msgid "Next Consent Log Cleanup"
 msgstr "Prossima pulizia log consensi"
 
-#: admin/views/system-status.php:131
+#: admin/views/system-status.php:154
 msgid "Active Plugins"
 msgstr "Plugin attivi"
 
@@ -7934,8 +7993,10 @@ msgstr "Categorie cookie"
 msgid ""
 "Tick the categories you want to allow. Saving applies exactly what is shown "
 "here, so anything left unticked stays blocked."
-msgstr "Seleziona le categorie che vuoi consentire. Il salvataggio applica esattamente ciò che vedi qui: tutto ciò che resta deselezionato rimane bloccato."
-
+msgstr ""
+"Seleziona le categorie che vuoi consentire. Il salvataggio applica "
+"esattamente ciò che vedi qui: tutto ciò che resta deselezionato rimane "
+"bloccato."
 
 #. translators: %s: cookie category name, for example Analytics.
 #: frontend/class-amp-consent.php:492
@@ -7952,41 +8013,41 @@ msgid "Manage cookie preferences"
 msgstr "Gestisci le preferenze sui cookie"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:804
+#: frontend/class-frontend.php:816
 msgid "{name} enabled, disable {name}"
 msgstr "{name} abilitato, disabilita {name}"
 
 #. translators: {name} is replaced with the cookie category name (appears twice, do not translate {name})
-#: frontend/class-frontend.php:806
+#: frontend/class-frontend.php:818
 msgid "{name} disabled, enable {name}"
 msgstr "{name} disabilitato, abilita {name}"
 
-#: frontend/class-frontend.php:2396
+#: frontend/class-frontend.php:2408
 #: frontend/modules/banner-rest/class-banner-rest.php:557
 msgid "Your cookie preferences have been saved."
 msgstr "Le tue preferenze sui cookie sono state salvate."
 
-#: frontend/class-frontend.php:2398
+#: frontend/class-frontend.php:2410
 #: frontend/modules/banner-rest/class-banner-rest.php:559
 msgid "Customise Consent Preferences"
 msgstr "Personalizza le preferenze di consenso"
 
-#: frontend/class-frontend.php:2399
+#: frontend/class-frontend.php:2411
 #: frontend/modules/banner-rest/class-banner-rest.php:560
 msgid "Service consent"
 msgstr "Consenso al servizio"
 
-#: frontend/class-frontend.php:2401
+#: frontend/class-frontend.php:2413
 #: frontend/modules/banner-rest/class-banner-rest.php:562
 msgid "Cookie consent"
 msgstr "Consenso ai cookie"
 
-#: frontend/class-frontend.php:2402
+#: frontend/class-frontend.php:2414
 #: frontend/modules/banner-rest/class-banner-rest.php:563
 msgid "Vendor consent"
 msgstr "Consenso fornitore"
 
-#: frontend/class-frontend.php:2403
+#: frontend/class-frontend.php:2415
 #: frontend/modules/banner-rest/class-banner-rest.php:564
 msgid ""
 "These cookies are set by the embedded service on its own domain and are "
@@ -7998,19 +8059,19 @@ msgstr ""
 "essere rimossi singolarmente."
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2407
+#: frontend/class-frontend.php:2419
 #: frontend/modules/banner-rest/class-banner-rest.php:569
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr "Confermo di avere almeno %d anni"
 
-#: frontend/class-frontend.php:2408
+#: frontend/class-frontend.php:2420
 #: frontend/modules/banner-rest/class-banner-rest.php:570
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr "Conferma di avere l’età minima per accettare i cookie facoltativi."
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2415
+#: frontend/class-frontend.php:2427
 #: frontend/modules/banner-rest/class-banner-rest.php:572
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -8132,11 +8193,11 @@ msgstr "Una volta alla settimana (FAZ)"
 msgid "Once Monthly (FAZ)"
 msgstr "Una volta al mese (FAZ)"
 
-#: includes/class-cli.php:296
+#: includes/class-cli.php:297
 msgid "Cookie Consent (FAZ Cookie Manager)"
 msgstr "Cookie Consent (FAZ Cookie Manager)"
 
-#: includes/class-cli.php:297
+#: includes/class-cli.php:298
 msgid ""
 "This site uses the FAZ Cookie Manager plugin to collect and manage cookie "
 "consent. When you interact with the cookie banner, we record your consent "
@@ -8154,7 +8215,7 @@ msgstr ""
 "configurato nelle impostazioni del plugin (impostazione predefinita: 12 "
 "mesi)."
 
-#: includes/class-cli.php:298
+#: includes/class-cli.php:299
 msgid ""
 "You can change your cookie preferences at any time using the cookie icon in "
 "the bottom corner of the page."
@@ -8162,7 +8223,7 @@ msgstr ""
 "Puoi modificare le tue preferenze sui cookie in qualsiasi momento usando "
 "l’icona dei cookie nell’angolo inferiore della pagina."
 
-#: includes/class-cli.php:311 includes/class-cli.php:320
+#: includes/class-cli.php:312 includes/class-cli.php:321
 msgid "FAZ Cookie Manager — Consent Logs & Privacy Requests"
 msgstr "FAZ Cookie Manager — Registri consensi e richieste privacy"
 

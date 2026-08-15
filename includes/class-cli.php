@@ -183,6 +183,7 @@ class CLI {
 		$faz_bust_frontend_caches = static function () {
 			\delete_transient( 'faz_cookie_scripts_map' );
 			\delete_transient( 'faz_detected_cookie_names' );
+			\delete_transient( 'faz_server_cookie_category_map' );
 		};
 		foreach ( array(
 			'faz_after_update_cookie',

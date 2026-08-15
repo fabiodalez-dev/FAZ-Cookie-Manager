@@ -36,6 +36,7 @@ const WP_CLI_TIMEOUT_MS = Number.isFinite(WP_CLI_TIMEOUT_ENV) && WP_CLI_TIMEOUT_
 export const SCAN_LAB_PAGE_SLUGS = [
   'faz-lab-js-basic',
   'faz-lab-js-delayed',
+  'faz-lab-ajax-httponly',
   'faz-lab-js-dupe-a',
   'faz-lab-js-dupe-b',
   'faz-lab-headers',
@@ -535,10 +536,15 @@ export function readWooUrls(): { cart: string; checkout: string; myaccount: stri
 
 export function resetScanState(): void {
   wpEval(`
+	global $wpdb;
     delete_option( 'faz_scan_history' );
     delete_option( 'faz_scan_details' );
     delete_option( 'faz_scan_counter' );
     delete_option( 'faz_scanner_debug_log' );
+	$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_faz_scan_session_%' OR option_name LIKE '_transient_timeout_faz_scan_session_%' OR option_name LIKE '_transient_faz_scan_active_%' OR option_name LIKE '_transient_timeout_faz_scan_active_%' OR option_name LIKE '_site_transient_faz_scan_session_%' OR option_name LIKE '_site_transient_timeout_faz_scan_session_%'" );
+	delete_option( 'faz_httponly_scan_urls' );
+	delete_option( 'faz_httponly_scan_lock' );
+	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE meta_key = %s", '_faz_scan_cookie_observation' ) );
   `);
 }
 

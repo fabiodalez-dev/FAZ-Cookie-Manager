@@ -17,6 +17,8 @@ final class Faz_E2E_Scan_Lab {
 		add_action( 'send_headers', array( $this, 'send_header_cookie' ) );
 		add_action( 'wp_head', array( $this, 'render_page_signals' ), 1 );
 		add_action( 'wp_footer', array( $this, 'render_page_signals' ), 100 );
+		add_action( 'wp_ajax_faz_e2e_scan_ajax_cookie', array( $this, 'send_ajax_cookie' ) );
+		add_action( 'wp_ajax_nopriv_faz_e2e_scan_ajax_cookie', array( $this, 'send_ajax_cookie' ) );
 	}
 
 	private function token() {
@@ -72,6 +74,22 @@ final class Faz_E2E_Scan_Lab {
 		);
 	}
 
+	/** Emit the real-world regression cookie from a delayed PHP AJAX response. */
+	public function send_ajax_cookie() {
+		$necessary = isset( $_GET['necessary'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['necessary'] ) );
+		$name      = $necessary ? 'wp_woocommerce_session_fazlab' : 'brikpanel_vid';
+		$value     = $necessary ? 'cart-session' : 'private-visitor-id';
+		header(
+			sprintf(
+				'Set-Cookie: %1$s=%2$s; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax',
+				$name,
+				$value
+			),
+			false
+		);
+		wp_send_json_success( array( 'cookie' => $name ) );
+	}
+
 	public function render_page_signals() {
 		$scenario = $this->scenario();
 
@@ -91,6 +109,18 @@ final class Faz_E2E_Scan_Lab {
 				break;
 			case 'js-delayed':
 				$this->print_js_cookie( '_faz_lab_js_delayed_' . $token, 500 );
+				break;
+			case 'ajax-httponly':
+				?>
+				<script>
+				if (!window.__fazAjaxHttpOnlyLabStarted) {
+					window.__fazAjaxHttpOnlyLabStarted = true;
+					setTimeout(function () {
+						fetch(<?php echo wp_json_encode( admin_url( 'admin-ajax.php?action=faz_e2e_scan_ajax_cookie' ) ); ?>, { credentials: 'same-origin' });
+					}, 350);
+				}
+				</script>
+				<?php
 				break;
 			case 'js-dupe-a':
 			case 'js-dupe-b':
