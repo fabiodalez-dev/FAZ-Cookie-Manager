@@ -122,19 +122,24 @@ class AMP_Consent_Rest {
 			)
 		);
 
-		// Explicit OPTIONS routes make preflight obey the same origin checks as
-		// state-changing POSTs instead of inheriting WordPress's generic CORS.
-		foreach ( array( self::CHECK_ROUTE, self::UPDATE_ROUTE ) as $route ) {
-			register_rest_route(
-				self::REST_NAMESPACE,
-				$route,
-				array(
-					'methods'             => 'OPTIONS',
-					'callback'            => array( $this, 'handle_options' ),
-					'permission_callback' => '__return_true',
-				)
-			);
-		}
+		/*
+		 * No explicit OPTIONS routes.
+		 *
+		 * They used to be registered here, described as making preflight obey the
+		 * same origin checks as the POSTs. They never ran: core short-circuits
+		 * every OPTIONS request in rest_handle_options_request() on
+		 * rest_pre_dispatch, before route callbacks. So authorize_request() never
+		 * executed for a preflight, $this->cors_origin stayed empty, and
+		 * serve_cors_headers() then STRIPPED the Access-Control-Allow-Origin
+		 * header core had already emitted — meaning a real preflight against
+		 * these routes failed outright rather than being checked more strictly.
+		 *
+		 * This is latent rather than breaking, because amp-consent sends its body
+		 * as text/plain precisely to stay preflight-free (see hydrate_amp_body()).
+		 * Registering routes that cannot run only made the situation look handled.
+		 * Supporting preflight properly means authorising it at rest_pre_dispatch,
+		 * which is a separate change with its own risk.
+		 */
 	}
 
 	/**
@@ -719,11 +724,24 @@ class AMP_Consent_Rest {
 			if ( '' === $id ) {
 				continue;
 			}
+			// AMP action-argument names cannot contain hyphens, so the rendered
+			// setPurpose() call uses an underscore form of the slug. Accept that
+			// alias here — a category named "social-media" arrives as
+			// "social_media" and must still be recognised, or its checkbox would
+			// record nothing while appearing to work.
+			$alias = str_replace( '-', '_', $id );
+			$given = null;
+			if ( array_key_exists( $id, $input ) ) {
+				$given = $input[ $id ];
+			} elseif ( $alias !== $id && array_key_exists( $alias, $input ) ) {
+				$given = $input[ $alias ];
+			}
+
 			// Reject-all always wins. Accepted requests must explicitly carry a
 			// boolean true for each purpose; missing/ambiguous values are denied.
 			$result[ $id ] = 'accepted' === $state
-				&& array_key_exists( $id, $input )
-				&& true === self::to_bool_or_null( $input[ $id ] );
+				&& null !== $given
+				&& true === self::to_bool_or_null( $given );
 		}
 		return $result;
 	}
@@ -918,10 +936,52 @@ class AMP_Consent_Rest {
 	 *
 	 * @return string
 	 */
+	/**
+	 * Best available URL for the page an AMP consent was given on.
+	 *
+	 * @return string
+	 */
+	private function resolve_consent_url() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] )
+			? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) )
+			: '';
+		if ( '' === $referer ) {
+			return home_url( '/' );
+		}
+		// Accept the publisher's own origin and its AMP cache form; anything
+		// else is an unverified claim and is not worth recording as fact.
+		$referer_origin = self::origin_from_url( $referer );
+		if ( '' === $referer_origin ) {
+			return home_url( '/' );
+		}
+		if ( $referer_origin === self::origin_from_url( home_url( '/' ) ) || $referer_origin === $this->cors_origin ) {
+			return $referer;
+		}
+		return home_url( '/' );
+	}
+
+	/**
+	 * Identifier of the site a signed state belongs to.
+	 *
+	 * @return string
+	 */
+	private static function site_scope_id() {
+		if ( function_exists( 'get_current_blog_id' ) ) {
+			return (string) get_current_blog_id();
+		}
+		return (string) wp_parse_url( home_url( '/' ), PHP_URL_HOST );
+	}
+
 	public static function encode_state_string( $state, $context ) {
 		$payload = wp_json_encode(
 			array(
 				'v'        => self::STATE_VERSION,
+				// Bind the token to THIS site. WordPress salts are network-wide on
+				// multisite, so without a site component a token minted on subsite
+				// A validated on subsite B whenever slug and law coincided — which
+				// they routinely do with default slugs. One site's consent silently
+				// honoured by another is a consent-boundary violation.
+				'site'     => self::site_scope_id(),
 				'banner'   => $context['slug'],
 				'law'      => $context['law'],
 				'rev'      => absint( $context['revision'] ),
@@ -945,6 +1005,10 @@ class AMP_Consent_Rest {
 		if (
 			! is_array( $data )
 			|| self::STATE_VERSION !== absint( isset( $data['v'] ) ? $data['v'] : 0 )
+			// Verified, not merely signed: a field that is put into the payload
+			// and never compared changes nothing. This is what stops a token
+			// minted on one multisite subsite from validating on another.
+			|| ! hash_equals( self::site_scope_id(), (string) ( isset( $data['site'] ) ? $data['site'] : '' ) )
 			|| ! hash_equals( (string) $context['slug'], (string) ( isset( $data['banner'] ) ? $data['banner'] : '' ) )
 			|| ! hash_equals( (string) $context['law'], (string) ( isset( $data['law'] ) ? $data['law'] : '' ) )
 			|| absint( isset( $data['rev'] ) ? $data['rev'] : 0 ) !== absint( $context['revision'] )
@@ -1026,7 +1090,13 @@ class AMP_Consent_Rest {
 				'consent_id'     => $consent_id,
 				'status'         => $status,
 				'categories'     => $categories,
-				'url'            => home_url( '/' ),
+				// The page consent was actually collected on, when AMP tells us.
+				// Recording home_url() for every AMP row made the accountability
+				// record look plausible and be wrong, and silently weaker than the
+				// one the standard flow writes — mixed into the same table with no
+				// marker. The referer is the AMP document; it is validated against
+				// the site before being trusted, and falls back to the home URL.
+				'url'            => $this->resolve_consent_url(),
 				'banner_slug'    => $context['slug'],
 				'policy_revision' => $context['revision'],
 				'signal_gpc'     => isset( $_SERVER['HTTP_SEC_GPC'] ) && '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) ) ? 1 : 0,

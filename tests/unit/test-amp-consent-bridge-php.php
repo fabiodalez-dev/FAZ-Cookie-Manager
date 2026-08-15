@@ -131,6 +131,7 @@ namespace {
 	function esc_attr( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
 	function esc_html( $text ) { return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' ); }
 	function esc_url( $text ) { return (string) $text; }
+	function esc_url_raw( $text ) { return (string) $text; }
 	function esc_attr_e( $text ) { echo esc_attr( $text ); }
 	function esc_html_e( $text ) { echo esc_html( $text ); }
 	function faz_current_language() { return 'en'; }
@@ -248,7 +249,12 @@ namespace {
 	// Route contract.
 	$bridge = new AMP_Consent_Rest();
 	$bridge->register_routes();
-	amp_same( count( $GLOBALS['faz_test_routes'] ), 4, 'check/update POST plus two explicit OPTIONS routes are registered' );
+	// Two routes, not four. The OPTIONS pair used to be registered and could
+	// never run: core answers OPTIONS at rest_pre_dispatch, before route
+	// callbacks, so authorize_request() never executed and serve_cors_headers()
+	// then stripped the allow-origin header core had emitted. Registering them
+	// only made preflight look handled while it failed outright.
+	amp_same( count( $GLOBALS['faz_test_routes'] ), 2, 'only the two POST routes are registered' );
 	amp_same( $GLOBALS['faz_test_routes'][0]['route'], '/amp-consent/check', 'check route path is stable' );
 	amp_same( $GLOBALS['faz_test_routes'][1]['route'], '/amp-consent/update', 'update route path is stable' );
 	$rendered_endpoints = AMP_Consent_Rest::endpoint_urls( $banner );
@@ -658,6 +664,25 @@ namespace {
 	// permissive default.
 	amp_ok( is_wp_error( $garbage ), 'a malformed body is rejected rather than answered' );
 	amp_same( $garbage->get_error_code(), 'faz_amp_invalid_instance', 'the rejection names the missing instance instead of failing open' );
+
+	// ── Blocking coverage ───────────────────────────────────────────────────
+	// amp-embed is the documented ALIAS of amp-ad and is how Taboola/Outbrain
+	// embeds are conventionally written. It was absent from the map, so
+	// advertising rendered before consent on exactly the placements most likely
+	// to carry it — while the feature claimed advertising was natively blocked.
+	$amp_source = file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-amp-consent.php' );
+	foreach ( array( 'amp-embed', 'amp-story-auto-ads' ) as $ad_component ) {
+		amp_ok(
+			(bool) preg_match( "/'" . preg_quote( $ad_component, '/' ) . "'\\s*=>\\s*'marketing'/", $amp_source ),
+			"{$ad_component} is gated as advertising"
+		);
+	}
+	foreach ( array( 'amp-brightcove', 'amp-dailymotion', 'amp-jwplayer', 'amp-tiktok', 'amp-reddit', 'amp-connatix-player', 'amp-3q-player', 'amp-brid-player' ) as $embed_component ) {
+		amp_ok(
+			false !== strpos( $amp_source, "'" . $embed_component . "'" ),
+			"{$embed_component} is gated rather than left to load before consent"
+		);
+	}
 
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

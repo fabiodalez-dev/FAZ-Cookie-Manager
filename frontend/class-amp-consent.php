@@ -310,6 +310,7 @@ class AMP_Consent {
 			.faz-amp-btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer}
 			.faz-amp-btn-accept{background:<?php echo esc_attr( $c['accept_bg'] ); ?>;color:<?php echo esc_attr( $c['accept_color'] ); ?>}
 			.faz-amp-btn-reject{background:<?php echo esc_attr( $c['reject_bg'] ); ?>;color:<?php echo esc_attr( $c['reject_color'] ); ?>;border:1px solid <?php echo esc_attr( $c['reject_border'] ); ?>}
+			.faz-amp-btn-save{background:transparent;color:<?php echo esc_attr( $c['reject_color'] ); ?>;border:1px dashed <?php echo esc_attr( $c['reject_color'] ); ?>}
 			.faz-amp-link{font-size:12px;color:<?php echo esc_attr( $c['link_color'] ); ?>;text-decoration:underline}
 			.faz-amp-revisit{position:fixed;bottom:16px;left:16px;z-index:9998}
 			.faz-amp-revisit-btn{width:40px;height:40px;border-radius:50%;border:none;background:<?php echo esc_attr( $c['revisit_bg'] ); ?>;color:<?php echo esc_attr( $c['revisit_color'] ); ?>;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center}
@@ -420,18 +421,22 @@ class AMP_Consent {
 		// the top level (not the legacy multi-consent `consents` wrapper).
 		$amp_config = $consent_config;
 
-		// GCM integration for AMP.
-		$gcm_settings = get_option( 'faz_gcm_settings' );
-		if ( ! empty( $gcm_settings['status'] ) ) {
-			$amp_config['gtagServices'] = array(
-				'default_consent' => array(
-					'analytics_storage' => 'denied',
-					'ad_storage'        => 'denied',
-					'ad_user_data'      => 'denied',
-					'ad_personalization' => 'denied',
-				),
-			);
-		}
+		/*
+		 * No gtagServices key.
+		 *
+		 * It used to be written here when GCM was enabled, and amp-consent has no
+		 * such key in its configuration contract (consentInstanceId,
+		 * consentRequired, checkConsentHref, onUpdateHref, promptUI, postPromptUI,
+		 * policy, captions, purposeConsentRequired, geoOverride, uiConfig,
+		 * exposesTcfApi, clientConfig). The runtime ignored it, so the page
+		 * advertised Consent Mode defaults it never applied — decorative
+		 * configuration that reads, to anyone auditing the markup, as a working
+		 * GCM integration.
+		 *
+		 * Consent Mode on AMP is configured inside <amp-analytics type="gtag">,
+		 * which this bridge does not render. Emitting nothing is the honest state
+		 * until that is built.
+		 */
 
 		?>
 		<amp-consent id="faz-amp-consent" layout="nodisplay">
@@ -451,7 +456,21 @@ class AMP_Consent {
 								<div class="faz-amp-purpose">
 									<span class="faz-amp-purpose-name"><?php echo esc_html( $purpose['name'] ? $purpose['name'] : $purpose['slug'] ); ?></span>
 									<label class="faz-amp-purpose-choice">
-										<input type="checkbox" on="<?php echo esc_attr( 'change:faz-amp-consent.setPurpose(' . $purpose['id'] . '=event.checked)' ); ?>" aria-label="<?php echo esc_attr( sprintf( __( 'Allow %s cookies', 'faz-cookie-manager' ), $purpose['name'] ? $purpose['name'] : $purpose['slug'] ) ); ?>">
+										<?php
+											/*
+											 * The purpose id becomes an AMP action-argument NAME, and
+											 * those must be plain identifiers. A category slug may
+											 * legitimately contain hyphens ("social-media"), which AMP
+											 * cannot parse: it drops the whole action, so the checkbox
+											 * silently stops recording while the category still appears
+											 * in purposeConsentRequired. Underscores are valid, and the
+											 * server maps the argument back to the slug.
+											 */
+											$faz_purpose_arg = str_replace( '-', '_', (string) $purpose['id'] );
+											/* translators: %s: cookie category name, for example Analytics. */
+											$faz_purpose_label = sprintf( __( 'Allow %s cookies', 'faz-cookie-manager' ), $purpose['name'] ? $purpose['name'] : $purpose['slug'] );
+											?>
+											<input type="checkbox" on="<?php echo esc_attr( 'change:faz-amp-consent.setPurpose(' . $faz_purpose_arg . '=event.checked)' ); ?>" aria-label="<?php echo esc_attr( $faz_purpose_label ); ?>">
 										<span><?php esc_html_e( 'Allow', 'faz-cookie-manager' ); ?></span>
 									</label>
 								</div>
@@ -462,7 +481,7 @@ class AMP_Consent {
 						<button on="tap:faz-amp-consent.accept(purposeConsentDefault=true)" class="faz-amp-btn faz-amp-btn-accept"><?php echo esc_html( $accept_label ); ?></button>
 						<button on="tap:faz-amp-consent.reject(purposeConsentDefault=false)" class="faz-amp-btn faz-amp-btn-reject"><?php echo esc_html( $reject_label ); ?></button>
 						<?php if ( ! empty( $purposes ) ) : ?>
-							<button on="tap:faz-amp-consent.accept(purposeConsentDefault=false)" class="faz-amp-btn faz-amp-btn-reject"><?php echo esc_html( $save_label ); ?></button>
+							<button on="tap:faz-amp-consent.accept(purposeConsentDefault=false)" class="faz-amp-btn faz-amp-btn-save"><?php echo esc_html( $save_label ); ?></button>
 						<?php endif; ?>
 					</div>
 					<a href="<?php echo esc_url( $privacy_url ); ?>" class="faz-amp-link"><?php echo esc_html( $settings_label ); ?></a>
@@ -519,8 +538,16 @@ class AMP_Consent {
 			'amp-pixel'         => 'analytics',
 			'amp-experiment'    => 'analytics',
 			'amp-ad'            => 'marketing',
+			// amp-embed is the DOCUMENTED ALIAS of amp-ad, and it is how Taboola
+			// and Outbrain embeds are conventionally written
+			// (<amp-embed type="taboola">). Leaving it out meant advertising
+			// rendered before consent on exactly the placements most likely to
+			// carry it, while the feature claimed advertising was blocked.
+			'amp-embed'         => 'marketing',
 			'amp-auto-ads'       => 'marketing',
 			'amp-sticky-ad'     => 'marketing',
+			// Injects amp-ad into stories, so it inherits the advertising gate.
+			'amp-story-auto-ads' => 'marketing',
 			'amp-call-tracking' => 'marketing',
 			'amp-iframe'        => 'functional',
 			'amp-youtube'       => 'functional',
@@ -529,6 +556,26 @@ class AMP_Consent {
 			'amp-facebook'      => 'functional',
 			'amp-instagram'     => 'functional',
 			'amp-pinterest'     => 'functional',
+			// Third-party players. Each loads a remote SDK that can set
+			// identifiers; several are ad-monetised, but they are gated as
+			// functional because a visitor embedding one has asked for the
+			// content. A publisher who wants them stricter can re-map any entry
+			// through faz_amp_component_purpose_map.
+			'amp-brightcove'    => 'functional',
+			'amp-dailymotion'   => 'functional',
+			'amp-jwplayer'      => 'functional',
+			'amp-soundcloud'    => 'functional',
+			'amp-tiktok'        => 'functional',
+			'amp-reddit'        => 'functional',
+			'amp-wistia-player' => 'functional',
+			'amp-connatix-player' => 'functional',
+			'amp-3q-player'     => 'functional',
+			'amp-o2-player'     => 'functional',
+			'amp-brid-player'   => 'functional',
+			'amp-gfycat'        => 'functional',
+			'amp-imgur'         => 'functional',
+			'amp-vk'            => 'functional',
+			'amp-yotpo'         => 'functional',
 		);
 		$map = (array) apply_filters( 'faz_amp_component_purpose_map', $map, $purpose_ids );
 		$parse_purposes = static function ( $value ) {
