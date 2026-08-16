@@ -37,6 +37,17 @@
 	var CONCURRENCY = 2;             // Parallel iframes (reduced for slow hosts).
 	var SAFE_SCAN_THRESHOLD = 1000;  // Deep/full scans use longer observation timings.
 	var MAX_RESOURCE_URLS = 10000;   // Bound imports without sacrificing normal-site coverage.
+	// How often to slide the server-side capture window forward. The session is
+	// an IDLE timeout (Controller::BROWSER_SCAN_TTL, 900s) renewed by every
+	// scan-tagged page load; this is the fallback for fully page-cached sites,
+	// where scanned pages are served off disk and never reach PHP. Comfortably
+	// inside the window so one dropped heartbeat is not fatal.
+	var HEARTBEAT_INTERVAL_MS = 300000; // 5 minutes.
+	// How long after the interaction signal a page may still restore delayed
+	// scripts. Cache/optimizer plugins commonly do so 1-3s in, which is why a
+	// settled pair of reads inside this window is not yet evidence that the page
+	// is done. See the settle schedule in scanSingleUrl().
+	var DELAYED_SCRIPT_WINDOW_MS = 3000;
 
 	// `result.scripts` means "URLs that can execute or beacon". Both PHP matchers
 	// (Cookie_Database::lookup_scripts and infer_cookies_from_scripts) substring-
@@ -74,6 +85,20 @@
 	};
 	// css/link/font/video/audio/track are absent on purpose: they can never execute.
 	var NON_CODE_ASSET_PATH = /\.(?:png|jpe?g|gif|webp|avif|bmp|ico|cur|svgz?|tiff?|heic|heif|css|less|sass|scss|woff2?|ttf|otf|eot|mp4|m4v|mov|avi|mkv|webm|ogv|mp3|m4a|wav|flac|aac|oga|ogg|opus|vtt|srt|pdf|zip|gz|tgz|bz2|xz|rar|7z|map)$/;
+
+	/**
+	 * Whether two consecutive iframe reads observed the same thing.
+	 *
+	 * Counts only — the arrays are already deduplicated per read, so a stable
+	 * count over cookies, jar names and executable resources means nothing new
+	 * appeared in the interval.
+	 */
+	function readsAreStable(first, second) {
+		if (!first || !second) return false;
+		return first.cookies.length === second.cookies.length
+			&& first.scripts.length === second.scripts.length
+			&& first.jarCookies.length === second.jarCookies.length;
+	}
 
 	function isRuntimeCodeResource(entry, base) {
 		if (!entry || !entry.name) return false;
@@ -152,7 +177,14 @@
 		} else if (status === 403) {
 			parts.push('Nonce/permissions error. Refresh the page and verify admin access.');
 		} else if (status === 409) {
-			parts.push('Another scan is already in progress.');
+			// Two very different 409s. The server names which one it is; only
+			// guess when it did not, so an expired capture window is never
+			// reported as "another tab is scanning".
+			if (err && err.code === 'faz_browser_scan_session_expired') {
+				parts.push('The scan capture session expired before the results could be saved.');
+			} else if (!err || !err.code) {
+				parts.push('Another scan is already in progress.');
+			}
 		} else if (status === 413) {
 			parts.push('Request too large. Reduce scan depth and retry.');
 		} else if (status === 429) {
@@ -217,12 +249,21 @@
 	 * Cookies page and the setup wizard can present it however each prefers
 	 * without the engine knowing either page exists.
 	 *
+	 * The returned promise carries a `.cancel()` handle. Cancellation is
+	 * cooperative: it stops the dispatcher from starting further pages, lets the
+	 * in-flight iframes settle, and then imports what was collected with
+	 * `metrics.stoppedReason = 'cancelled'` so every downstream coverage gate
+	 * can see that the run is incomplete. It is NOT the early-stop heuristic
+	 * this engine deliberately dropped — nothing here shortens a depth the
+	 * administrator chose; only an explicit human action does.
+	 *
 	 * @param {Object} options       { maxPages } — 0 requests the server cap (full scan).
 	 * @param {Object} hooks         { status(text), progress(pct), pages(text) } — all optional.
 	 * @return {Promise<Object>}     Resolves { total, pagesScanned, cookies, scripts,
 	 *                               diagnostics, metrics, importResult, fingerprint,
-	 *                               earlyStopReason }; rejects with an Error carrying
-	 *                               a display-ready .message.
+	 *                               earlyStopReason, stoppedReason }; rejects with an
+	 *                               Error carrying a display-ready .message. Carries
+	 *                               a `.cancel()` method.
 	 */
 	function runScan(options, hooks) {
 		options = options || {};
@@ -233,14 +274,67 @@
 			pages: function (t) { if (typeof hooks.pages === 'function') { hooks.pages(t); } },
 		};
 
-		return new Promise(function (resolve, reject) {
-			var scanId = createScanId();
+		// Shared between runScan and the crawl loop so a cancel that lands during
+		// discovery is still honoured once dispatching begins.
+		var control = { cancelled: false, settled: false };
+		var scanId = createScanId();
+
+		var promise = new Promise(function (resolve, reject) {
+			var heartbeatTimer = null;
+			var unloadHandler = null;
+
+			// Renew the server-side capture window while the crawl runs. Without
+			// this the window is a fixed wall clock opened once at discovery, and
+			// a crawl that outlives it loses 100% of its work to a 409 at import.
+			function startHeartbeat() {
+				if (heartbeatTimer) { return; }
+				heartbeatTimer = setInterval(function () {
+					FAZ.post('scans/heartbeat', { scan_id: scanId }).catch(function () {});
+				}, HEARTBEAT_INTERVAL_MS);
+			}
+
+			function stopHeartbeat() {
+				if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+			}
+
+			// Closing the tab used to strand the administrator: no abort fired, the
+			// active-scan transient survived, and every new scan 409'd until the
+			// window expired. sendBeacon survives the unload that a fetch would not.
+			function registerUnloadAbort() {
+				unloadHandler = function () {
+					if (control.settled) { return; }
+					try {
+						var cfg = (window.fazConfig && window.fazConfig.api) || {};
+						if (!cfg.base || typeof navigator.sendBeacon !== 'function') { return; }
+						var url = cfg.base + 'scans/abort?_wpnonce=' + encodeURIComponent(cfg.nonce || '');
+						navigator.sendBeacon(url, new Blob([JSON.stringify({ scan_id: scanId })], { type: 'application/json' }));
+					} catch (_beaconError) {}
+				};
+				window.addEventListener('pagehide', unloadHandler);
+			}
+
+			function releaseRunHooks() {
+				control.settled = true;
+				stopHeartbeat();
+				if (unloadHandler) {
+					try { window.removeEventListener('pagehide', unloadHandler); } catch (_removeError) {}
+					unloadHandler = null;
+				}
+			}
+
 			function rejectAndAbort(error) {
 				// Best effort: avoid leaving this administrator locked out for the
 				// capture TTL when an iframe/network/import phase fails.
+				releaseRunHooks();
 				FAZ.post('scans/abort', { scan_id: scanId }).catch(function () {});
 				reject(error);
 			}
+			function resolveRun(value) {
+				releaseRunHooks();
+				resolve(value);
+			}
+			startHeartbeat();
+			registerUnloadAbort();
 			var parsedMaxPages = parseInt(options.maxPages, 10);
 			var requestPages = 20;
 			var isFullScan = false;
@@ -258,6 +352,7 @@
 				loadTimeoutMs: IFRAME_LOAD_TIMEOUT,
 				settleTimeoutMs: safeMode ? 5200 : 3800,
 				scanId: scanId,
+				control: control,
 			};
 
 			var scanMetrics = {
@@ -266,6 +361,11 @@
 				cookiesFound: 0, scriptsFound: 0,
 				earlyStopReason: null, pagesScanned: 0,
 				incremental: false,
+				// Set only by an explicit cancel(). Travels to the server so the
+				// consecutive-miss tally never counts a run that stopped short,
+				// and to the caller so its coverage gate can disable the
+				// destructive stale action.
+				stoppedReason: null,
 			};
 			var discoverStart = Date.now();
 
@@ -404,6 +504,7 @@
 							cookiesFound: scanMetrics.cookiesFound,
 							scriptsFound: scanMetrics.scriptsFound,
 							earlyStopReason: scanMetrics.earlyStopReason,
+							stoppedReason: scanMetrics.stoppedReason,
 							pagesScanned: scanMetrics.pagesScanned,
 							incremental: scanMetrics.incremental,
 						};
@@ -440,7 +541,7 @@
 							} catch (e) {
 								console.warn('[FAZ Scanner] Cannot persist fingerprint — next scan will be full.', e.message);
 							}
-							resolve({
+							resolveRun({
 								total: res.total_cookies || collectedCookies.length,
 								pagesScanned: scanMetrics.pagesScanned,
 								cookies: collectedCookies,
@@ -451,6 +552,7 @@
 								importResult: res,
 								fingerprint: result.fingerprint || '',
 								earlyStopReason: scanMetrics.earlyStopReason,
+								stoppedReason: scanMetrics.stoppedReason,
 								incremental: scanMetrics.incremental,
 							});
 						}).catch(function (err) {
@@ -468,6 +570,22 @@
 				rejectAndAbort(e1);
 			});
 		});
+
+		/**
+		 * Stop dispatching new pages and finish with whatever was collected.
+		 *
+		 * Cooperative on purpose: the iframes already in flight are allowed to
+		 * settle, so a cancel never throws away a page that was nearly done, and
+		 * the partial set is still imported (a partial import keeps the jar
+		 * reconciliation intact). Idempotent, and a no-op once the run settled.
+		 */
+		promise.cancel = function () {
+			if (control.settled || control.cancelled) { return false; }
+			control.cancelled = true;
+			if (typeof control.onCancel === 'function') { control.onCancel(); }
+			return true;
+		};
+		return promise;
 	}
 	/**
 	 * Scan URLs concurrently with a pool of iframes.
@@ -482,6 +600,9 @@
 		var loadTimeoutMs = (typeof options.loadTimeoutMs === 'number' && options.loadTimeoutMs > 0) ? options.loadTimeoutMs : IFRAME_LOAD_TIMEOUT;
 		var settleTimeoutMs = (typeof options.settleTimeoutMs === 'number' && options.settleTimeoutMs > 0) ? options.settleTimeoutMs : 3800;
 		var scanId = typeof options.scanId === 'string' ? options.scanId : '';
+		// Shared cancellation flag owned by runScan(). Absent when the crawl is
+		// driven directly, in which case it can never be cancelled.
+		var control = options.control || { cancelled: false };
 		var collectedCookies = [];
 		var collectedScripts = [];
 		var diagnostics = {
@@ -536,20 +657,38 @@
 				collectedCookies.length + ' cookies | ' + collectedScripts.length + ' scripts' + eta);
 		}
 
+		var crawlFinished = false;
+
 		function dispatch() {
-			while (active < CONCURRENCY && nextIndex < total) {
+			// A cancel stops the dispatcher only. Pages already loading are left
+			// to settle: their cookies are real observations, and dropping them
+			// would make the partial import poorer than it needs to be.
+			while (!control.cancelled && active < CONCURRENCY && nextIndex < total) {
 				var idx = nextIndex;
 				nextIndex++;
 				active++;
 				scanOne(idx);
 			}
-			if (active === 0 && nextIndex >= total) {
-				metrics.pagesScanned = completed;
-				// Clean up any orphaned iframes.
-				try { document.getElementById('faz-scan-frame').textContent = ''; } catch (e) {}
-				done(collectedCookies, collectedScripts, diagnostics, jarOnlyCookies, cookieSet);
+			if (crawlFinished || active !== 0) {
+				return;
 			}
+			if (!control.cancelled && nextIndex < total) {
+				return;
+			}
+			crawlFinished = true;
+			metrics.pagesScanned = completed;
+			if (control.cancelled) {
+				metrics.stoppedReason = 'cancelled';
+			}
+			// Clean up any orphaned iframes.
+			try { document.getElementById('faz-scan-frame').textContent = ''; } catch (e) {}
+			done(collectedCookies, collectedScripts, diagnostics, jarOnlyCookies, cookieSet);
 		}
+
+		// A cancel that lands while every worker is between pages (or before the
+		// first dispatch) has nothing in flight to re-enter dispatch() for, so the
+		// crawl would hang until the run was abandoned. Re-enter it explicitly.
+		control.onCancel = function () { dispatch(); };
 
 		function scanOne(idx) {
 			var cookiesBefore = parseBrowserCookies();
@@ -834,19 +973,38 @@
 
 			var firstRead = readIframe();
 			lastRead = firstRead;
+			// Stays BEFORE the first checkpoint: the delayed-loader activation is
+			// the coverage win this settle budget was widened for, and a fast path
+			// that ran before it would simply observe the un-activated page.
 			triggerDelayedScripts();
 
 			var firstWait = settleTimeoutMs >= 5000 ? 2000 : 1500;
 			var finalWait = settleTimeoutMs >= 5000 ? 2500 : 1800;
+			// Where a page that produced nothing new is finalised. Not at the
+			// first checkpoint: optimizers restore delayed scripts 1-3s after the
+			// interaction signal, so a stable pair taken inside that window proves
+			// only that the restore has not happened YET — finishing there loses
+			// exactly the coverage this settle budget was widened to buy. Past the
+			// window a stable pair is real evidence, and paying the rest of the
+			// budget buys nothing but wall clock: a full scan's floor drops from
+			// 4.5s to 3s per page, which is the third of the crawl this reclaims.
+			var stableFinishAt = Math.min(firstWait + finalWait, DELAYED_SCRIPT_WINDOW_MS);
 			setTimeout(function () {
 				if (finished) return;
 				var secondRead = readIframe();
 				lastRead = secondRead;
+				var remainingWait = readsAreStable(firstRead, secondRead)
+					? Math.max(0, stableFinishAt - firstWait)
+					: finalWait;
+				if (0 === remainingWait) {
+					finish(secondRead);
+					return;
+				}
 				setTimeout(function () {
 					if (finished) return;
 					lastRead = readIframe();
 					finish(lastRead);
-				}, finalWait);
+				}, remainingWait);
 			}, firstWait);
 		});
 

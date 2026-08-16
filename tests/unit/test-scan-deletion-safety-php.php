@@ -46,14 +46,55 @@ function ds_contains( $haystack, $needle ) {
 $controller = file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php' );
 $scan_api   = file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/api/class-api.php' );
 $cookie_api = file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/api/class-cookies-api.php' );
+$cookies_js   = file_get_contents( dirname( __DIR__, 2 ) . '/admin/assets/js/pages/cookies.js' );
+$cookies_view = file_get_contents( dirname( __DIR__, 2 ) . '/admin/views/cookies.php' );
 
 echo "== Consecutive-miss tally ==\n";
 ds_ok( ds_contains( $controller, 'const MISSED_SCANS_THRESHOLD = 2;' ), 'a cookie must be missing from more than one scan before deletion is offered' );
 ds_ok( ds_contains( $controller, 'public function record_scan_observations' ), 'the tally is updated from the scan result' );
 ds_ok( ds_contains( $controller, 'if ( ! $is_complete ) { return $counts; }' ), 'an incomplete scan cannot add to the tally — its silence is not evidence' );
 ds_ok( ds_contains( $controller, 'if ( empty( $cookie->name ) || empty( $cookie->discovered ) ) { continue;' ), 'a hand-added cookie is never judged by a scan' );
-ds_ok( ds_contains( $controller, 'if ( isset( $observed[ $cookie->name ] ) ) { continue;' ), 'seeing a cookie again clears its tally' );
-ds_ok( ds_contains( $controller, 'public function deletable_stale_keys' ), 'the threshold is applied server-side, not left to the browser' );
+ds_ok( ds_contains( $controller, 'if ( isset( $observed[ self::canonical_name( $cookie->name ) ] ) ) { continue;' ), 'seeing a cookie again clears its tally' );
+
+// The old assertion here read "the threshold is applied server-side, not left
+// to the browser" and proved it by grepping for the DEFINITION of
+// deletable_stale_keys(). A definition with no callers is exactly what shipped:
+// the tally was computed, returned in the REST response, and read by nobody, so
+// the browser was the sole arbiter of what got deleted while this suite
+// reported the opposite in green. A claim about enforcement has to be a claim
+// about CONSUMERS, so all three of them are named — delete any one and this
+// goes red.
+ds_ok( ds_contains( $controller, 'public function deletable_stale_keys' ), 'the earned-deletable list is computed server-side' );
+ds_ok(
+	ds_contains( $cookie_api, 'Scanner_Controller::get_instance()->deletable_stale_keys()' )
+		&& ds_contains( $cookie_api, "if ( 'stale' === \$reason ) {" )
+		&& ds_contains( $cookie_api, 'if ( \'\' === $key || ! isset( $earned[ $key ] ) ) { ++$refused; continue; }' ),
+	'the threshold is ENFORCED server-side on a stale purge, not merely computed'
+);
+ds_ok(
+	ds_contains( $cookie_api, "'reason' => array(" )
+		&& ds_contains( $cookie_api, '$earned = null;' ),
+	'the gate is scoped to reason=stale — an unscoped admin bulk delete still deletes what was selected'
+);
+ds_ok(
+	false !== strpos( $cookies_js, 'importResult.deletable_stale_keys' )
+		&& false !== strpos( $cookies_js, 'getEarnedDeletableSet(res)' ),
+	'the Cookies page intersects its single-scan diff with the earned-deletable list'
+);
+// The two ends must key identities the same way or the intersection is empty
+// forever: a stale bar that never appears, inert while looking wired.
+ds_ok(
+	ds_contains( $controller, 'public static function canonical_key( $name, $domain ) {' )
+		&& ds_contains( $controller, "\$domain = ltrim( \$domain, '.' );" )
+		&& ds_contains( $controller, "\$domain = preg_replace( '/:\\d+\$/', '', \$domain );" )
+		&& false !== strpos( $cookies_js, ".replace(/^\\.+/, '').replace(/:\\d+\$/, '')" ),
+	'client and server build the same canonical key — lowercase name, dot- and port-stripped domain'
+);
+ds_ok(
+	ds_contains( $controller, 'private static function canonical_missed_scan_counts' )
+		&& ds_contains( $controller, 'self::canonical_missed_scan_counts( get_option( self::MISSED_SCANS_OPTION, array() ) )' ),
+	'tallies written in the pre-canonical key format are migrated, not orphaned'
+);
 // The rows the tally judges are written from the POST-merge set inside
 // save_scan_result(), which folds in script/embed-inferred cookies the client
 // never sent. Judging them against the pre-merge client array would mark every
@@ -64,7 +105,7 @@ ds_ok( ds_contains( $scan_api, "\$observed_names = \$result['cookie_names'];" ),
 ds_ok( ds_contains( $scan_api, "if ( ! empty( \$result['cookie_names'] ) && is_array( \$result['cookie_names'] ) ) {" ), 'a missing or empty cookie_names falls back instead of emptying the observed set' );
 
 echo "== The scan must declare its own completeness ==\n";
-ds_ok( ds_contains( $scan_api, "empty( \$metrics['incremental'] ) && empty( \$metrics['earlyStopReason'] )" ), 'incremental runs and early stops do not count as complete' );
+ds_ok( ds_contains( $scan_api, "empty( \$metrics['incremental'] ) && empty( \$metrics['earlyStopReason'] ) && empty( \$metrics['stoppedReason'] )" ), 'incremental runs, early stops and cancelled runs do not count as complete' );
 ds_ok( ds_contains( $scan_api, '0 === $pages_scanned ? false' ), 'a scan that visited nothing is never complete' );
 ds_ok( ds_contains( $scan_api, "\$result['deletable_stale_keys']" ), 'the import reports which entries have earned deletability' );
 
@@ -87,7 +128,33 @@ ds_ok(
 );
 ds_ok( ds_contains( $cookie_api, "method_exists( \$cookie, 'get_script_data' )" ), 'the snapshot carries the blocker scripts, which get_prepared_data() omits' );
 ds_ok( ds_contains( $cookie_api, 'public function restore_deleted' ), 'a restore path exists' );
-ds_ok( ds_contains( $cookie_api, "'/' . \$this->rest_base . '/restore-deleted'" ), 'the restore path is reachable — a registered route, not dead code' );
+// "Reachable" used to be proved by grepping the route string out of the file
+// that registers it, which shows only that someone typed it. The route was
+// registered and correct; no admin JS called it and no view offered a control,
+// so an administrator could reach the undo only by hand-crafting an
+// authenticated REST POST — and this suite called that reachable, in green.
+// Reachability is a claim about the product, so the product surface is what
+// gets asserted: the route, the read path that lets the affordance survive a
+// reload, the JS that calls both, and the region it renders into.
+ds_ok( ds_contains( $cookie_api, "'/' . \$this->rest_base . '/restore-deleted'" ), 'the restore route is registered' );
+ds_ok( ds_contains( $cookie_api, "'/' . \$this->rest_base . '/deleted-batches'" ), 'the bin can be read back, so the undo survives a page reload' );
+ds_ok(
+	false !== strpos( $cookies_js, "FAZ.post('cookies/restore-deleted'" )
+		&& false !== strpos( $cookies_js, "FAZ.get('cookies/deleted-batches')" )
+		&& false !== strpos( $cookies_js, 'function updateRestoreBar()' ),
+	'the restore path is reachable from the admin UI — not only by a hand-crafted REST call'
+);
+ds_ok(
+	false !== strpos( $cookies_view, 'id="faz-restore-bar"' )
+		&& false !== strpos( $cookies_view, 'aria-live="polite"' ),
+	'the undo control has a live region to render into, beside the control that caused the loss'
+);
+// Both destructive callers must refresh it, or the affordance appears only
+// after a reload — the moment it is least likely to be looked for.
+ds_ok(
+	substr_count( $cookies_js, 'updateRestoreBar();' ) >= 3,
+	'both bulk-delete paths refresh the undo affordance, as does page load'
+);
 ds_ok( ds_contains( $cookie_api, 'isset( $current_names[ strtolower( (string) $data[\'name\'] ) ] )' ), 'a restore does not duplicate a cookie that came back on its own' );
 ds_ok( ds_contains( $cookie_api, 'array_slice( $bin, 0, self::RECYCLE_BIN_BATCHES )' ), 'the bin is bounded — an undo, not a growing history' );
 
@@ -109,7 +176,10 @@ ds_ok(
 );
 // (2) The invariant stated as an assertion rather than left to depend on which
 // keys the snapshot happened to carry.
-ds_ok( ds_contains( $cookie_api, 'if ( 0 !== $cookie->get_id() ) { continue; }' ), 'a restore is always an INSERT' );
+// The row is retained rather than merely skipped: a snapshot that reached this
+// branch was not restored, so dropping it from the bin with the rest of the
+// batch would lose it. test-recycle-bin-restore-php.php drives that behaviour.
+ds_ok( ds_contains( $cookie_api, 'if ( 0 !== $cookie->get_id() ) { $retained[] = $data; continue; }' ), 'a restore is always an INSERT' );
 // (3) save() returns get_id() unconditionally, so `if ( $cookie->save() )` on
 // a row that failed to insert is not a success test — it is a success claim.
 ds_ok(

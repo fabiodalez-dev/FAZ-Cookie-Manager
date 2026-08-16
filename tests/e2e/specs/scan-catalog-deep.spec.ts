@@ -509,11 +509,29 @@ test.describe('Deep scan and catalog flows', () => {
   // normally-configured site the same AJAX endpoint IS still guarded.
   test('06d. banner_control status false stands the PHP guard down on AJAX', async ({ page, loginAsAdmin }) => {
     const settingsNonce = await openSettingsPage(page, loginAsAdmin);
-    const originalSettings = (await fazApiGet<any>(page, settingsNonce, 'settings')).data;
+
+    // Every REST call in this test is status-checked, because each one fails
+    // in a way that is invisible from the assertion that follows it:
+    //  - a failed READ leaves originalSettings holding a WP_Error body, and the
+    //    finally block then writes that shape back over the real settings —
+    //    corrupting global state for every spec that runs after this one;
+    //  - a failed WRITE means banner_control.status:false was never applied, so
+    //    the standdown assertion below passes on a guard that simply never ran;
+    //  - a failed RESTORE leaves the site with the banner switched off.
+    const settingsRead = await fazApiGet<any>(page, settingsNonce, 'settings');
+    expect(settingsRead.status).toBe(200);
+    const originalSettings = settingsRead.data;
+    // WP_Error bodies are objects too, so shape alone is not enough: a REST
+    // error serialises as { code, message, data } and must not be mistaken for
+    // a settings snapshot worth writing back.
+    expect(originalSettings, 'settings GET returned no body').toBeTruthy();
+    expect(typeof originalSettings).toBe('object');
+    expect(originalSettings.code, 'settings GET returned a WP_Error, not a settings snapshot').toBeUndefined();
+
     const endpoint = `${WP_BASE}/wp-admin/admin-ajax.php?action=faz_e2e_scan_ajax_cookie`;
 
     try {
-      await fazApiPost(page, settingsNonce, 'settings', {
+      const applied = await fazApiPost(page, settingsNonce, 'settings', {
         script_blocking: {
           ...(originalSettings.script_blocking ?? {}),
           block_server_cookies: true,
@@ -523,15 +541,19 @@ test.describe('Deep scan and catalog flows', () => {
           status: false,
         },
       });
+      expect(applied.status, 'the standdown configuration was not applied').toBe(200);
 
       const response = await page.request.get(endpoint);
       expect(response.status()).toBe(200);
       expect(response.headers()['set-cookie'] ?? '').toContain('brikpanel_vid=');
     } finally {
-      await fazApiPost(page, settingsNonce, 'settings', {
+      const restored = await fazApiPost(page, settingsNonce, 'settings', {
         script_blocking: originalSettings.script_blocking,
         banner_control: originalSettings.banner_control,
       });
+      // Soft on purpose: a hard expect() thrown from finally would replace the
+      // real failure from the try block with a restore failure and hide it.
+      expect.soft(restored.status, 'settings were NOT restored — later specs run against a mutated site').toBe(200);
     }
   });
 

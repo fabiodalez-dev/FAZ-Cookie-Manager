@@ -166,6 +166,32 @@ class Api extends Rest_Controller {
 			)
 		);
 
+		// Fallback renewal channel for the browser capture window. A fully
+		// page-cached site serves scanned pages off disk without booting PHP, so
+		// the capture-path renewal in Controller::register_browser_scan_observer()
+		// can silently never fire — on exactly the large, cached sites whose
+		// crawls are most likely to outlast the window. Permission-gated
+		// identically to scans/import: same capability, same write nonce.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/heartbeat',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'heartbeat_browser_scan' ),
+					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+					'args'                => array(
+						'scan_id' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'validate_callback' => array( $this, 'validate_scan_id' ),
+							'sanitize_callback' => 'sanitize_key',
+						),
+					),
+				),
+			)
+		);
+
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/abort',
@@ -671,7 +697,24 @@ class Api extends Rest_Controller {
 		// administrator as an expired scan rather than a bad request.
 		$scan_id       = sanitize_key( (string) $request->get_param( 'scan_id' ) );
 		if ( ! $this->controller->browser_scan_session_matches( $scan_id ) ) {
-			return new \WP_Error( 'faz_browser_scan_session_mismatch', __( 'This scan session expired or belongs to another browser tab. Start a new scan.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+			// Expiry and a genuine cross-tab conflict are one 409 to the
+			// transport but two different problems for the administrator. Naming
+			// which one happened — and, for expiry, naming the idle limit that
+			// was exceeded — is the difference between an actionable error and
+			// the "Scan finished but failed to save results." dead end that a
+			// long crawl used to hit.
+			if ( 'conflict' === $this->controller->browser_scan_session_failure_reason( $scan_id ) ) {
+				return new \WP_Error( 'faz_browser_scan_session_mismatch', __( 'Another browser tab is running a scan for this administrator. Finish or close it, then start a new scan.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+			}
+			return new \WP_Error(
+				'faz_browser_scan_session_expired',
+				sprintf(
+					/* translators: %d: number of minutes a scan may stay idle before its capture session expires. */
+					__( 'This scan session expired: the capture window closes after %d minutes without a scanned page reaching the server. Start a new scan.', 'faz-cookie-manager' ),
+					(int) round( Controller::BROWSER_SCAN_TTL / MINUTE_IN_SECONDS )
+				),
+				array( 'status' => 409 )
+			);
 		}
 
 		// Runtime responses made by scan-tagged pages can set HttpOnly cookies
@@ -769,9 +812,13 @@ class Api extends Rest_Controller {
 		// covered the whole site without incident may add to the tally, and only
 		// a cookie missing from several consecutive such scans becomes
 		// deletable — see Controller::MISSED_SCANS_THRESHOLD.
+		// `stoppedReason` is set when the administrator cancels a running crawl.
+		// Cancellation is a NEW way for a scan to be incomplete and has to be
+		// named here as well: a cancelled forty-page run treated as full
+		// coverage would tally a miss against every cookie it never reached.
 		$scan_was_complete = 0 === $pages_scanned
 			? false
-			: ( empty( $metrics['incremental'] ) && empty( $metrics['earlyStopReason'] ) );
+			: ( empty( $metrics['incremental'] ) && empty( $metrics['earlyStopReason'] ) && empty( $metrics['stoppedReason'] ) );
 		// Judge the catalogue against the names that were actually PERSISTED, not
 		// the pre-merge client list. save_scan_result() additionally merges
 		// script/embed-inferred cookies into the rows it writes, and returns that
@@ -795,7 +842,12 @@ class Api extends Rest_Controller {
 			}
 		}
 		$this->controller->record_scan_observations( $observed_names, $scan_was_complete );
-		$result['scan_was_complete']   = $scan_was_complete;
+		$result['scan_was_complete'] = $scan_was_complete;
+		// Emitted in Controller::canonical_key() form — lowercase name, domain
+		// without leading dots or :port — because the Cookies page intersects it
+		// with its own client-side stale set, which is keyed the same way. Two
+		// key formats here means an intersection that is always empty and a
+		// stale bar that never appears.
 		$result['deletable_stale_keys'] = $this->controller->deletable_stale_keys();
 
 		// Reported, never imported. Surfacing the count is the point: silently
@@ -829,6 +881,22 @@ class Api extends Rest_Controller {
 	public function abort_browser_scan( $request ) {
 		$scan_id = sanitize_key( (string) $request['scan_id'] );
 		return rest_ensure_response( array( 'aborted' => $this->controller->abort_browser_scan_session( $scan_id ) ) );
+	}
+
+	/**
+	 * Slide the browser capture window forward without importing anything.
+	 *
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
+	public function heartbeat_browser_scan( $request ) {
+		$scan_id = sanitize_key( (string) $request->get_param( 'scan_id' ) );
+		return rest_ensure_response(
+			array(
+				'renewed'    => $this->controller->touch_browser_scan_session( '', $scan_id ),
+				'expires_in' => Controller::BROWSER_SCAN_TTL,
+			)
+		);
 	}
 
 	/**

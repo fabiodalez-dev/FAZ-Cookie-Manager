@@ -110,8 +110,29 @@ class Controller {
 	/** Per-user append-only observations captured from outgoing Set-Cookie headers. */
 	const BROWSER_SCAN_META = '_faz_scan_cookie_observation';
 
-	/** Browser scan capture lifetime in seconds. */
+	/**
+	 * Browser scan capture lifetime in seconds.
+	 *
+	 * This is an IDLE timeout, not a total budget. It is opened by
+	 * scans/discover and slid forward by touch_browser_scan_session() on every
+	 * scan-tagged page load (and by the scans/heartbeat fallback), so a crawl of
+	 * any length stays importable while an abandoned tab still releases the lock.
+	 * It was a fixed wall clock until the per-page settle cost roughly tripled,
+	 * at which point an ordinary 500-page scan spent longer crawling than the
+	 * window allowed and lost 100% of its work to a 409 at import.
+	 */
 	const BROWSER_SCAN_TTL = 900;
+
+	/**
+	 * Hard ceiling on how long one capture session may be kept alive.
+	 *
+	 * A sliding idle timeout with no ceiling turns a wedged tab into a permanent
+	 * scan lock — worse than the fifteen-minute lockout it replaces. Six hours is
+	 * far beyond any legitimate crawl and still bounded.
+	 *
+	 * @var int
+	 */
+	const BROWSER_SCAN_MAX_AGE = 21600; // 6 * HOUR_IN_SECONDS.
 
 	/** Maximum unique Set-Cookie observations retained for one browser scan. */
 	const BROWSER_SCAN_OBSERVATION_LIMIT = 2000;
@@ -211,6 +232,28 @@ class Controller {
 		$token = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
 		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) ) {
 			return;
+		}
+
+		// Slide the capture window forward on every scan-tagged page load. The
+		// session is opened once by scans/discover; without this it expires on a
+		// fixed wall clock the client cannot see or extend, and a long crawl is
+		// discarded wholesale by the 409 at scans/import.
+		//
+		// Deferred to `init` because this runs while plugins are still loading,
+		// before pluggable.php defines wp_get_current_user() — and because the
+		// cookie has to be re-issued before headers go out, which rules out the
+		// shutdown hook used for the observation capture below.
+		//
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only marker read; renewal is refused unless the httpOnly session cookie resolves to a live session owned by the current user whose scan_id matches.
+		$scan_id = isset( $_GET['faz_scan_id'] ) ? sanitize_key( wp_unslash( (string) $_GET['faz_scan_id'] ) ) : '';
+		if ( '' !== $scan_id ) {
+			add_action(
+				'init',
+				static function () use ( $token, $scan_id ) {
+					self::get_instance()->touch_browser_scan_session( $token, $scan_id );
+				},
+				1
+			);
 		}
 
 		// Use WordPress' composable shutdown hook instead of PHP's single global
@@ -358,21 +401,126 @@ class Controller {
 			}
 		}
 
-		if ( ! headers_sent() ) {
-			setcookie(
-				self::BROWSER_SCAN_COOKIE,
-				$token,
-				array(
-					'expires'  => time() + self::BROWSER_SCAN_TTL,
-					'path'     => '/',
-					'secure'   => is_ssl(),
-					'httponly' => true,
-					'samesite' => 'Strict',
-				)
-			);
-		}
+		$this->issue_browser_scan_cookie( $token );
 
 		return $token;
+	}
+
+	/**
+	 * (Re-)issue the httpOnly scan marker with a fresh window.
+	 *
+	 * Kept in one place so the attributes — httpOnly, Secure on TLS,
+	 * SameSite=Strict, path=/ — stay byte-for-byte identical everywhere the
+	 * cookie is written. A renewal that quietly widened the scope or dropped
+	 * SameSite would be a silent security regression.
+	 *
+	 * @param string $token Session token to write.
+	 * @return void
+	 */
+	private function issue_browser_scan_cookie( $token ) {
+		if ( headers_sent() ) {
+			return;
+		}
+		setcookie(
+			self::BROWSER_SCAN_COOKIE,
+			$token,
+			array(
+				'expires'  => time() + self::BROWSER_SCAN_TTL,
+				'path'     => '/',
+				'secure'   => is_ssl(),
+				'httponly' => true,
+				'samesite' => 'Strict',
+			)
+		);
+	}
+
+	/**
+	 * Slide an existing capture session forward by another idle window.
+	 *
+	 * Called from the capture path on every scan-tagged page load, and from the
+	 * scans/heartbeat route — which exists because a fully page-cached site
+	 * serves scanned pages straight off disk without booting PHP, so the capture
+	 * path can silently never fire on exactly the large sites whose crawls
+	 * outlast the window.
+	 *
+	 * Renewal is refused unless the presented scan_id matches the one the
+	 * session was opened with, so two tabs still collide instead of one
+	 * indefinitely renewing the other's lock. `created_at` is carried forward
+	 * untouched and compared against BROWSER_SCAN_MAX_AGE, which is what stops
+	 * a wedged tab from holding the lock forever.
+	 *
+	 * @param string $token   Session token; empty reads the httpOnly marker.
+	 * @param string $scan_id Client scan identifier that must own the session.
+	 * @return bool Whether the window was extended.
+	 */
+	public function touch_browser_scan_session( $token = '', $scan_id = '' ) {
+		if ( '' === $token ) {
+			if ( empty( $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) ) {
+				return false;
+			}
+			$token = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		} else {
+			$token = sanitize_key( (string) $token );
+		}
+		$scan_id = sanitize_key( (string) $scan_id );
+		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) ) {
+			return false;
+		}
+
+		$session_key = self::browser_scan_transient_key( $token );
+		$session     = get_transient( $session_key );
+		$user_id     = get_current_user_id();
+		if ( ! is_array( $session )
+			|| empty( $session['user_id'] )
+			|| $user_id !== absint( $session['user_id'] )
+			|| ! isset( $session['scan_id'] )
+			|| ! hash_equals( (string) $session['scan_id'], $scan_id ) ) {
+			return false;
+		}
+
+		// Absolute-age ceiling. Sliding indefinitely would replace a bounded
+		// fifteen-minute lockout with an unbounded one.
+		$created_at = isset( $session['created_at'] ) ? absint( $session['created_at'] ) : 0;
+		if ( $created_at > 0 && ( time() - $created_at ) > self::BROWSER_SCAN_MAX_AGE ) {
+			return false;
+		}
+
+		set_transient( $session_key, $session, self::BROWSER_SCAN_TTL );
+
+		$active_key = self::browser_scan_active_transient_key( $user_id );
+		$active     = get_transient( $active_key );
+		if ( ! is_array( $active ) ) {
+			$active = array( 'token' => $token, 'scan_id' => $scan_id, 'created_at' => $created_at );
+		}
+		set_transient( $active_key, $active, self::BROWSER_SCAN_TTL );
+
+		$this->issue_browser_scan_cookie( $token );
+
+		return true;
+	}
+
+	/**
+	 * Why a presented scan_id did not match the live session.
+	 *
+	 * "Expired" and "another tab is scanning" are the same 409 to the client but
+	 * completely different problems for the administrator: one says the crawl
+	 * outlived its window, the other says to close the other tab. Reporting them
+	 * as one message is what let a fifteen-minute limit hide behind a
+	 * conflict-shaped error.
+	 *
+	 * @param string $scan_id Client scan identifier.
+	 * @return string 'match', 'conflict' or 'expired'.
+	 */
+	public function browser_scan_session_failure_reason( $scan_id ) {
+		if ( $this->browser_scan_session_matches( $scan_id ) ) {
+			return 'match';
+		}
+		$scan_id = sanitize_key( (string) $scan_id );
+		$active  = get_transient( self::browser_scan_active_transient_key( get_current_user_id() ) );
+		if ( is_array( $active ) && ! empty( $active['scan_id'] ) && ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
+			return 'conflict';
+		}
+		return 'expired';
 	}
 
 	/**
@@ -1569,16 +1717,25 @@ class Controller {
 	 * @return array<string,int> Updated tally, keyed "name|domain".
 	 */
 	public function record_scan_observations( $observed_names, $is_complete ) {
-		$counts = get_option( self::MISSED_SCANS_OPTION, array() );
-		$counts = is_array( $counts ) ? $counts : array();
+		$counts = self::canonical_missed_scan_counts( get_option( self::MISSED_SCANS_OPTION, array() ) );
 
 		if ( ! $is_complete ) {
 			return $counts;
 		}
 
+		// Observed names arrive without a domain (save_scan_result() returns the
+		// merged name list, and script-inferred entries never had one), so the
+		// reset is — and already was — a NAME comparison against a bare-name
+		// index, and it did match. What it was not is case-insensitive: a `_GA`
+		// catalogue row was never cleared by an observed `_ga`, so its tally
+		// accrued a miss on every complete scan until the row crossed
+		// MISSED_SCANS_THRESHOLD and was offered for deletion on a site where
+		// the cookie was in fact still being set. Folding both sides through
+		// canonical_name() — the same canonicaliser the tally keys use — is
+		// what closes that.
 		$observed = array();
 		foreach ( (array) $observed_names as $observed_name ) {
-			$observed_name = sanitize_text_field( (string) $observed_name );
+			$observed_name = self::canonical_name( sanitize_text_field( (string) $observed_name ) );
 			if ( '' !== $observed_name ) {
 				$observed[ $observed_name ] = true;
 			}
@@ -1590,11 +1747,14 @@ class Controller {
 			if ( empty( $cookie->name ) || empty( $cookie->discovered ) ) {
 				continue; // Hand-added cookies are never judged by a scan.
 			}
-			$key = $cookie->name . '|' . ( isset( $cookie->domain ) ? $cookie->domain : '' );
-			if ( isset( $observed[ $cookie->name ] ) ) {
+			$key = self::canonical_key( $cookie->name, isset( $cookie->domain ) ? $cookie->domain : '' );
+			if ( '' === $key ) {
+				continue;
+			}
+			if ( isset( $observed[ self::canonical_name( $cookie->name ) ] ) ) {
 				continue; // Seen again: the tally resets by omission.
 			}
-			$previous       = isset( $counts[ $key ] ) ? absint( $counts[ $key ] ) : 0;
+			$previous        = isset( $counts[ $key ] ) ? absint( $counts[ $key ] ) : 0;
 			$updated[ $key ] = $previous + 1;
 		}
 
@@ -1603,13 +1763,12 @@ class Controller {
 	}
 
 	/**
-	 * Names that have been missing long enough for deletion to be offered.
+	 * Entries that have been missing long enough for deletion to be offered.
 	 *
-	 * @return string[] Keys in "name|domain" form.
+	 * @return string[] Canonical keys — see canonical_key().
 	 */
 	public function deletable_stale_keys() {
-		$counts = get_option( self::MISSED_SCANS_OPTION, array() );
-		$counts = is_array( $counts ) ? $counts : array();
+		$counts = self::canonical_missed_scan_counts( get_option( self::MISSED_SCANS_OPTION, array() ) );
 		$keys   = array();
 		foreach ( $counts as $key => $count ) {
 			if ( absint( $count ) >= self::MISSED_SCANS_THRESHOLD ) {
@@ -1617,6 +1776,76 @@ class Controller {
 			}
 		}
 		return $keys;
+	}
+
+	/**
+	 * The one canonical form of a cookie identity, shared by client and server.
+	 *
+	 * This MUST stay byte-identical to getStaleKey()/normalizeDomain() in
+	 * admin/assets/js/pages/cookies.js: lowercase trimmed name, then lowercase
+	 * domain with leading dots and any `:port` suffix removed. The tally used to
+	 * be keyed on the raw name and the raw domain while the browser keyed on the
+	 * normalized pair, and because cookie domains routinely carry a leading dot
+	 * the two sets could never intersect. Wiring them together without this
+	 * would have produced a stale bar that shows zero forever — inert, but
+	 * looking wired, which is worse than an obviously dead field.
+	 *
+	 * Public rather than private because the cookies bulk-delete endpoint has to
+	 * derive the same key to enforce the threshold on a scoped stale purge; one
+	 * shared builder is the entire point.
+	 *
+	 * @param string $name   Cookie name.
+	 * @param string $domain Cookie domain.
+	 * @return string Canonical "name|domain" key, or '' for a nameless row.
+	 */
+	public static function canonical_key( $name, $domain ) {
+		$name = self::canonical_name( $name );
+		if ( '' === $name ) {
+			return '';
+		}
+		$domain = strtolower( trim( (string) $domain ) );
+		$domain = ltrim( $domain, '.' );
+		$domain = preg_replace( '/:\d+$/', '', $domain );
+		return $name . '|' . $domain;
+	}
+
+	/**
+	 * Canonical form of a cookie name alone.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string
+	 */
+	public static function canonical_name( $name ) {
+		return strtolower( trim( (string) $name ) );
+	}
+
+	/**
+	 * Re-key a stored tally into canonical form.
+	 *
+	 * Applied on every read so tallies written before the canonicalization are
+	 * carried across instead of orphaned. Dropping them would silently reset
+	 * every site's counters and delay every deletion offer by two extra complete
+	 * scans — the migration is the difference between a fix and a regression.
+	 * Where two legacy keys collapse onto one canonical key the higher count
+	 * wins: the entry has demonstrably been missed that many times.
+	 *
+	 * @param mixed $counts Stored option value.
+	 * @return array<string,int>
+	 */
+	private static function canonical_missed_scan_counts( $counts ) {
+		$canonical = array();
+		foreach ( (array) $counts as $key => $count ) {
+			$parts = explode( '|', (string) $key, 2 );
+			$item  = self::canonical_key( $parts[0], isset( $parts[1] ) ? $parts[1] : '' );
+			if ( '' === $item ) {
+				continue;
+			}
+			$count = absint( $count );
+			if ( ! isset( $canonical[ $item ] ) || $count > $canonical[ $item ] ) {
+				$canonical[ $item ] = $count;
+			}
+		}
+		return $canonical;
 	}
 
 	public function save_scan_result( $cookies, $pages_scanned, $scripts = array(), $metrics = array() ) {

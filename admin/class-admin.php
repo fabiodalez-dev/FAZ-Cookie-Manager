@@ -573,6 +573,20 @@ class Admin {
 						'registerFailed'           => __( 'Could not register service.', 'faz-cookie-manager' ),
 						'staleAllConfirm'          => __( 'Remove these cookie-policy entries? Cookies that load only after an interaction, during a flow, or as httpOnly cookies may still be present even if the scan did not observe them.', 'faz-cookie-manager' ),
 						'staleNone'                => __( 'No stale cookies to delete.', 'faz-cookie-manager' ),
+						/* translators: %d: number of entries the server kept because they have not yet been missing from enough consecutive complete scans. */
+						'staleRefusedNotEarned'    => __( '%d entry(ies) were kept: they have not yet been missing from enough complete scans.', 'faz-cookie-manager' ),
+						// Recycle bin — the undo affordance for a bulk delete.
+						'restoreDeleted'           => __( 'Undo delete', 'faz-cookie-manager' ),
+						/* translators: %d: number of cookies in the most recent deleted batch that can still be restored. */
+						'restoreDeletedHint'       => __( '%d recently deleted cookie(s) can still be restored.', 'faz-cookie-manager' ),
+						/* translators: %d: number of cookies put back by the restore. */
+						'restoreSucceeded'         => __( '%d cookie(s) restored.', 'faz-cookie-manager' ),
+						'restoreFailed'            => __( 'Could not restore the deleted cookies.', 'faz-cookie-manager' ),
+						'nothingToRestore'         => __( 'There is nothing left to restore.', 'faz-cookie-manager' ),
+						// Scan cancellation.
+						'stopScan'                 => __( 'Stop scan', 'faz-cookie-manager' ),
+						'stoppingScan'             => __( 'Stopping…', 'faz-cookie-manager' ),
+						'scanStopped'              => __( '(stopped by you before every page was visited)', 'faz-cookie-manager' ),
 						'staleDeleteAllFailed'     => __( 'Failed to delete stale cookies.', 'faz-cookie-manager' ),
 						'staleLoadFailed'          => __( 'Failed to load cookies for stale cleanup.', 'faz-cookie-manager' ),
 						'scanStarted'              => __( 'Scanning...', 'faz-cookie-manager' ),

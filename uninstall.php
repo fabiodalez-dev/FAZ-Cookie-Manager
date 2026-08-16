@@ -183,6 +183,12 @@ if ( $faz_force_remove_all || faz_should_remove_on_uninstall() || is_multisite()
 				'faz_file_write_access',
 				'faz_legal_doc_acknowledged',
 				'faz_legal_doc_material_pending',
+				// Scanner consecutive-miss tally and the bulk-delete recycle bin.
+				// The faz_% catch-all further down would sweep both, but naming
+				// them here keeps the explicit list the audit trail it is meant
+				// to be — and the bin can hold raw blocker scripts.
+				'faz_cookie_missed_scans',
+				'faz_cookies_recycle_bin',
 			);
 			foreach ( $faz_options as $option_name ) {
 				delete_option( $option_name );

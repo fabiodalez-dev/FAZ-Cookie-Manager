@@ -121,6 +121,13 @@ defined( 'ABSPATH' ) || exit;
 							<button type="button" class="faz-btn faz-btn-sm" id="faz-bulk-delete-btn" style="color:var(--faz-danger)"><?php esc_html_e( 'Delete Selected', 'faz-cookie-manager' ); ?></button>
 						</div>
 						<div id="faz-stale-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
+						<?php
+						// The recovery control sits beside the control that caused
+						// the loss. Same live-region attributes as the stale bar
+						// above: both announce a state change that the admin did
+						// not navigate to.
+						?>
+						<div id="faz-restore-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
 						<div class="faz-table-wrap">
 						<table class="faz-table" id="faz-cookies-table">
 							<thead>

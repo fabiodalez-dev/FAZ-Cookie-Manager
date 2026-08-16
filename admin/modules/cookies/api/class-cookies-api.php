@@ -14,6 +14,7 @@ use WP_Error;
 use FazCookie\Admin\Modules\Cookies\Api\API_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -109,6 +110,19 @@ class Cookies_API extends API_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'bulk_delete' ),
 				'permission_callback' => array( $this, 'delete_item_permissions_check' ),
+				'args'                => array(
+					// Optional, and deliberately opt-in. Only the Cookies page's
+					// stale-purge sends reason=stale, and only that value turns on
+					// the consecutive-miss threshold below. The default unscoped
+					// path stays exactly as it was: an administrator selecting
+					// rows by hand must keep being able to delete any of them,
+					// including hand-added and never-scanned entries.
+					'reason' => array(
+						'type'              => 'string',
+						'default'           => '',
+						'sanitize_callback' => 'sanitize_key',
+					),
+				),
 			)
 		);
 
@@ -121,6 +135,22 @@ class Cookies_API extends API_Controller {
 				// Restoring writes cookie rows, so it is gated on the create
 				// capability rather than the delete one that produced the batch.
 				'permission_callback' => array( $this, 'create_item_permissions_check' ),
+			)
+		);
+
+		// What is still undoable. A read path is what lets the Cookies page show
+		// the undo affordance on load rather than only in the seconds after a
+		// delete — the bin persists several batches across reloads, and an
+		// administrator notices a wrong purge after navigating away.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/deleted-batches',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_deleted_batches' ),
+				// A read uses the read permission, matching the other READABLE
+				// routes here; create_item_* would also demand the write nonce.
+				'permission_callback' => array( $this, 'get_items_permissions_check' ),
 			)
 		);
 
@@ -665,6 +695,25 @@ class Cookies_API extends API_Controller {
 			return new \WP_Error( 'invalid_data', __( 'No cookie IDs provided.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 		$deleted = 0;
+		$refused = 0;
+
+		// Scoped threshold enforcement. reason=stale means "delete these because
+		// a scan did not see them", and that claim is only admissible once an
+		// entry has been missing from Controller::MISSED_SCANS_THRESHOLD
+		// consecutive COMPLETE scans. The browser computes the candidate list, so
+		// without this check the safeguard is advisory: a stale request, or a
+		// direct REST call, could purge on a single missed scan.
+		//
+		// Deliberately NOT a blanket gate. Applying it to every caller would take
+		// away an administrator's ability to delete a hand-added or never-scanned
+		// row — a visible regression across the whole Cookies page, and a worse
+		// outcome than the gap being closed.
+		$reason = sanitize_key( (string) $request->get_param( 'reason' ) );
+		$earned = null;
+		if ( 'stale' === $reason ) {
+			$earned = array_flip( Scanner_Controller::get_instance()->deletable_stale_keys() );
+		}
+
 		// Snapshot before deleting. A bulk delete here removes entries from the
 		// site's PUBLIC cookie declaration, and the usual trigger is a scan that
 		// did not observe them — which is not the same as their being absent.
@@ -677,6 +726,15 @@ class Cookies_API extends API_Controller {
 				continue;
 			}
 			$cookie = new Cookie( $id );
+			if ( null !== $earned && $cookie->get_loaded() ) {
+				// Same canonical form the tally is keyed on and the client
+				// intersects against — one builder, no second key format.
+				$key = Scanner_Controller::canonical_key( $cookie->get_name(), $cookie->get_domain() );
+				if ( '' === $key || ! isset( $earned[ $key ] ) ) {
+					++$refused;
+					continue;
+				}
+			}
 			if ( $cookie->get_loaded() ) {
 				// get_prepared_data() omits opt_in_script/opt_out_script, and
 				// restore_deleted() can only put back what the snapshot holds —
@@ -710,8 +768,45 @@ class Cookies_API extends API_Controller {
 		do_action( 'faz_after_delete_cookie' );
 		return rest_ensure_response(
 			array(
-				'deleted'     => $deleted,
-				'restorable'  => count( $recycled ),
+				'deleted'    => $deleted,
+				'restorable' => count( $recycled ),
+				// Rows the stale purge asked for that have not yet earned
+				// deletability. Reported so the page can say so rather than
+				// quietly deleting fewer entries than the admin was shown.
+				'refused'    => $refused,
+			)
+		);
+	}
+
+	/**
+	 * Describe what is still restorable from the recycle bin.
+	 *
+	 * Metadata only — never the snapshotted rows, which carry raw opt-in/opt-out
+	 * blocker scripts.
+	 *
+	 * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function get_deleted_batches( $request ) {
+		$bin      = get_option( self::RECYCLE_BIN_OPTION, array() );
+		$bin      = is_array( $bin ) ? $bin : array();
+		$batches  = array();
+		foreach ( array_values( $bin ) as $index => $batch ) {
+			if ( ! is_array( $batch ) ) {
+				continue;
+			}
+			$batches[] = array(
+				'index'      => (int) $index,
+				'count'      => isset( $batch['cookies'] ) ? count( (array) $batch['cookies'] ) : 0,
+				'deleted_at' => isset( $batch['deleted_at'] ) ? absint( $batch['deleted_at'] ) : 0,
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'batches'     => $batches,
+				'batch_count' => count( $batches ),
 			)
 		);
 	}
@@ -729,8 +824,32 @@ class Cookies_API extends API_Controller {
 			return new \WP_Error( 'faz_nothing_to_restore', __( 'There is no recently deleted batch to restore.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
 		}
 
-		$batch         = array_shift( $bin );
+		$batch     = array_shift( $bin );
+		$snapshots = isset( $batch['cookies'] ) ? array_values( (array) $batch['cookies'] ) : array();
+
+		// A restore is not a save: nobody typed this script, it is being put
+		// back exactly as it was. But set_opt_in_script()/set_opt_out_script()
+		// route through set_meta(), whose sanitizer strips raw JavaScript for a
+		// caller below `unfiltered_html` — so for such a user the row comes
+		// back with its name, category and duration intact and its BLOCKING
+		// BEHAVIOUR silently gone. The declaration then looks complete while the
+		// service it was supposed to gate loads unconditionally, which is worse
+		// than not restoring at all because nothing on the page says so.
+		//
+		// Refuse instead, before the setter loop and before the bin is touched,
+		// so the batch stays intact for an administrator who can restore it
+		// whole. Batches carrying no script data are unaffected, as is every
+		// caller who does hold the capability.
+		if ( self::batch_carries_scripts( $snapshots ) && ! current_user_can( 'unfiltered_html' ) ) {
+			return new \WP_Error(
+				'faz_restore_requires_unfiltered_html',
+				__( 'This batch contains opt-in/opt-out blocker scripts, which your account is not allowed to save. Restoring it would put the cookies back without their blocking behaviour, so the batch has been left in the recycle bin for an administrator to restore.', 'faz-cookie-manager' ),
+				array( 'status' => 403 )
+			);
+		}
+
 		$restored      = 0;
+		$retained      = array();
 		$current_names = array();
 		foreach ( (array) Cookie_Controller::get_instance()->get_item_from_db() as $current ) {
 			if ( ! empty( $current->name ) ) {
@@ -762,7 +881,7 @@ class Cookies_API extends API_Controller {
 			'opt_in_script',
 			'opt_out_script',
 		);
-		foreach ( isset( $batch['cookies'] ) ? (array) $batch['cookies'] : array() as $data ) {
+		foreach ( $snapshots as $data ) {
 			if ( ! is_array( $data ) || empty( $data['name'] ) ) {
 				continue;
 			}
@@ -787,6 +906,7 @@ class Cookies_API extends API_Controller {
 			// that an asserted invariant rather than an accident of which keys
 			// the snapshot happened to hold.
 			if ( 0 !== $cookie->get_id() ) {
+				$retained[] = $data;
 				continue;
 			}
 			// save() returns get_id() unconditionally and can never signal
@@ -797,6 +917,8 @@ class Cookies_API extends API_Controller {
 			$new_id = $cookie->save();
 			if ( $new_id ) {
 				$restored++;
+			} else {
+				$retained[] = $data;
 			}
 		}
 
@@ -805,11 +927,47 @@ class Cookies_API extends API_Controller {
 		// otherwise the failure also destroys the only undo record and the
 		// retry has nothing left to restore, which is what turns a bug into
 		// data loss.
+		//
+		// A PARTIAL restore is the same failure at a smaller scale, and it used
+		// to be invisible: three rows offered, one insert rejected, `$restored`
+		// is 2 and the whole batch — including the row that never came back —
+		// was dropped from the bin. The rows that did not save are therefore put
+		// back as a batch of their own, so the retry still has exactly what is
+		// still missing. Rows skipped as duplicates are NOT retained: the name
+		// is already live, so there is nothing left to restore.
 		if ( $restored > 0 ) {
+			if ( ! empty( $retained ) ) {
+				$batch['cookies'] = array_values( $retained );
+				array_unshift( $bin, $batch );
+			}
 			update_option( self::RECYCLE_BIN_OPTION, $bin, false );
 		}
 		do_action( 'faz_after_create_cookie' );
 		return rest_ensure_response( array( 'restored' => $restored ) );
+	}
+
+	/**
+	 * Whether a recycle-bin batch carries opt-in/opt-out blocker scripts.
+	 *
+	 * Only non-empty values count: a snapshot of a cookie that never had a
+	 * blocker holds two empty strings, and refusing that restore would block
+	 * the common case for no benefit.
+	 *
+	 * @param array $snapshots Snapshot rows from one batch.
+	 * @return bool
+	 */
+	private static function batch_carries_scripts( $snapshots ) {
+		foreach ( (array) $snapshots as $data ) {
+			if ( ! is_array( $data ) ) {
+				continue;
+			}
+			foreach ( array( 'opt_in_script', 'opt_out_script' ) as $field ) {
+				if ( isset( $data[ $field ] ) && '' !== trim( (string) $data[ $field ] ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

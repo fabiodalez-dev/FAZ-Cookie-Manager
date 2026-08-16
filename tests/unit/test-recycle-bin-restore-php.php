@@ -56,14 +56,24 @@ namespace FazCookie\Admin\Modules\Cookies\Includes {
 		public static $id_at_save = array();
 		/** @var int What the next save() reports back as the written row id. */
 		public static $next_save_id = 0;
+		/**
+		 * @var int[]|null Per-call save() outcomes, consumed in order.
+		 *
+		 * A single $next_save_id cannot express the case the partial-restore
+		 * assertion needs — one row written, the next rejected — which is
+		 * precisely the shape the old "drop the whole batch if anything saved"
+		 * code lost rows in.
+		 */
+		public static $save_id_queue = null;
 
 		/** @var int Identity, exactly as Store models it: 0 until set. */
 		private $id = 0;
 
-		public static function reset( $next_save_id ) {
-			self::$calls        = array();
-			self::$id_at_save   = array();
-			self::$next_save_id = $next_save_id;
+		public static function reset( $next_save_id, $save_id_queue = null ) {
+			self::$calls         = array();
+			self::$id_at_save    = array();
+			self::$next_save_id  = $next_save_id;
+			self::$save_id_queue = $save_id_queue;
 		}
 
 		/**
@@ -86,8 +96,12 @@ namespace FazCookie\Admin\Modules\Cookies\Includes {
 		public function save() {
 			self::$calls[]      = 'save';
 			self::$id_at_save[] = $this->get_id();
-			if ( self::$next_save_id ) {
-				$this->id = self::$next_save_id;
+			$written            = self::$next_save_id;
+			if ( is_array( self::$save_id_queue ) ) {
+				$written = (int) array_shift( self::$save_id_queue );
+			}
+			if ( $written ) {
+				$this->id = $written;
 			}
 			return $this->get_id();
 		}
@@ -126,15 +140,21 @@ namespace FazCookie\Admin\Modules\Cookies\Includes {
 	/**
 	 * Stand-in for the controller the restore consults for duplicates.
 	 *
-	 * An empty current set is the interesting case: nothing is skipped as an
-	 * already-present name, so every snapshot row reaches the restore loop.
+	 * An empty current set is the interesting case for most of this suite:
+	 * nothing is skipped as an already-present name, so every snapshot row
+	 * reaches the restore loop. The set is configurable so the deduplication
+	 * branch — the guard against resurrecting a cookie that has since been
+	 * re-discovered — can be driven for real instead of merely being read.
 	 */
 	class Cookie_Controller {
+		/** @var object[] Rows the restore should see as already live. */
+		public static $current = array();
+
 		public static function get_instance() {
 			return new self();
 		}
 		public function get_item_from_db() {
-			return array();
+			return self::$current;
 		}
 	}
 }
@@ -154,6 +174,14 @@ namespace {
 
 	$GLOBALS['faz_options']       = array();
 	$GLOBALS['faz_option_writes'] = array();
+	// Default to the LOW-privilege restorer, so every batch in this suite that
+	// carries no script data proves the capability check does not get in the
+	// way of the ordinary case.
+	$GLOBALS['faz_unfiltered_html'] = false;
+
+	function current_user_can( $capability ) {
+		return 'unfiltered_html' === $capability ? (bool) $GLOBALS['faz_unfiltered_html'] : true;
+	}
 
 	function get_option( $name, $default = false ) {
 		return array_key_exists( $name, $GLOBALS['faz_options'] ) ? $GLOBALS['faz_options'][ $name ] : $default;
@@ -179,6 +207,7 @@ namespace {
 
 	use FazCookie\Admin\Modules\Cookies\Api\Cookies_API;
 	use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
+	use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
 
 	$passed = 0;
 	$failed = 0;
@@ -256,6 +285,105 @@ namespace {
 	rb_ok( is_array( $response ) && 0 === $response['restored'], 'save() returning 0 is not counted as a restore' );
 	rb_ok( ! in_array( $bin_option, $GLOBALS['faz_option_writes'], true ), 'the recycle bin is not written at all when nothing was restored' );
 	rb_ok( array( $batch ) === get_option( $bin_option, 'missing' ), 'the batch survives the failed restore, so the retry still has something to put back' );
+
+	echo "== A partial restore keeps the rows that did not come back ==\n";
+	/*
+	 * Two rows offered, one insert rejected. The bug this pins dropped the
+	 * WHOLE batch as soon as anything saved, so the rejected row was gone with
+	 * no undo left — the same data loss as the all-failed case, just quieter.
+	 * Deleting the retained-rows re-unshift in restore_deleted() turns the
+	 * second assertion red; the first stays green either way, which is exactly
+	 * why the first alone was not enough.
+	 */
+	$second_snapshot         = $snapshot;
+	$second_snapshot['name'] = '_gid';
+	$second_snapshot['slug'] = '_gid';
+	$partial_batch           = array(
+		'deleted_at' => 1700000000,
+		'cookies'    => array( $snapshot, $second_snapshot ),
+	);
+	$GLOBALS['faz_options']       = array( $bin_option => array( $partial_batch ) );
+	$GLOBALS['faz_option_writes'] = array();
+	Cookie::reset( 0, array( 7, 0 ) );
+	$response = $api->restore_deleted( null );
+
+	rb_ok( is_array( $response ) && 1 === $response['restored'], 'only the row the database actually wrote is counted' );
+	$bin_after = get_option( $bin_option, 'missing' );
+	rb_ok(
+		is_array( $bin_after )
+			&& 1 === count( $bin_after )
+			&& 1 === count( $bin_after[0]['cookies'] )
+			&& '_gid' === $bin_after[0]['cookies'][0]['name'],
+		'the row that did not save is still in the bin, alone — the retry restores exactly what is missing'
+	);
+
+	echo "== A name that is live again is not resurrected as a duplicate ==\n";
+	/*
+	 * The dedup guard exists because a cookie deleted by a stale purge is often
+	 * re-discovered by the very next scan. Restoring it again would leave the
+	 * declaration listing it twice. The live name is spelled '_GA' against a
+	 * snapshot of '_ga' so the strtolower() folding is pinned too: dropping it
+	 * turns all three assertions red, as does deleting the guard outright.
+	 */
+	$GLOBALS['faz_options']       = array( $bin_option => array( $batch ) );
+	$GLOBALS['faz_option_writes'] = array();
+	Cookie_Controller::$current   = array( (object) array( 'name' => '_GA' ) );
+	Cookie::reset( 7 );
+	$response = $api->restore_deleted( null );
+
+	rb_ok( is_array( $response ) && 0 === $response['restored'], 'a snapshot whose name is live again restores nothing' );
+	rb_ok( array() === Cookie::$calls, 'no setter and no save() ran for the skipped snapshot' );
+	rb_ok( array( $batch ) === get_option( $bin_option, 'missing' ), 'a batch that restored nothing stays in the bin' );
+	Cookie_Controller::$current = array();
+
+	echo "== An empty recycle bin is refused, not silently reported as a restore ==\n";
+	/*
+	 * Deleting the empty-bin guard makes array_shift() hand back null, the loop
+	 * iterates nothing, and the caller receives {"restored":0} — a success
+	 * shape for a request that could never succeed. Both assertions go red.
+	 */
+	$GLOBALS['faz_options']       = array();
+	$GLOBALS['faz_option_writes'] = array();
+	Cookie::reset( 7 );
+	$response = $api->restore_deleted( null );
+
+	rb_ok( $response instanceof WP_Error && 'faz_nothing_to_restore' === $response->code, 'an empty bin returns the faz_nothing_to_restore error' );
+	rb_ok( array() === Cookie::$calls, 'nothing was constructed or saved for an empty bin' );
+
+	echo "== A restore that would strip blocker scripts is refused, not degraded ==\n";
+	/*
+	 * set_opt_in_script()/set_opt_out_script() route through set_meta(), whose
+	 * sanitizer strips raw JavaScript for a caller below unfiltered_html. The
+	 * row would come back complete-looking and no longer blocking anything.
+	 * Removing the capability check in restore_deleted() turns the first three
+	 * red; the authorised control below stays green either way, so a check that
+	 * simply refuses everyone cannot pass this pair.
+	 */
+	$script_snapshot                  = $snapshot;
+	$script_snapshot['opt_in_script'] = '<script>console.log("blocker");</script>';
+	$script_batch                     = array(
+		'deleted_at' => 1700000000,
+		'cookies'    => array( $script_snapshot ),
+	);
+	$GLOBALS['faz_options']         = array( $bin_option => array( $script_batch ) );
+	$GLOBALS['faz_option_writes']   = array();
+	$GLOBALS['faz_unfiltered_html'] = false;
+	Cookie::reset( 7 );
+	$response = $api->restore_deleted( null );
+
+	rb_ok( $response instanceof WP_Error && 'faz_restore_requires_unfiltered_html' === $response->code, 'a restorer without unfiltered_html is refused a batch carrying scripts' );
+	rb_ok( array() === Cookie::$calls, 'the refusal happens before the setter loop — no degraded row is written' );
+	rb_ok( array( $script_batch ) === get_option( $bin_option, 'missing' ), 'the refused batch stays in the bin for an administrator to restore whole' );
+
+	// Re-seeded rather than leaning on the refusal above having left the bin
+	// alone: the control has to stay green under the mutation that removes the
+	// capability check, or it is not a control.
+	$GLOBALS['faz_options']         = array( $bin_option => array( $script_batch ) );
+	$GLOBALS['faz_unfiltered_html'] = true;
+	Cookie::reset( 7 );
+	$response = $api->restore_deleted( null );
+	rb_ok( is_array( $response ) && 1 === $response['restored'], 'the same batch restores normally for a user who holds unfiltered_html' );
+	$GLOBALS['faz_unfiltered_html'] = false;
 
 	echo "\nPassed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );

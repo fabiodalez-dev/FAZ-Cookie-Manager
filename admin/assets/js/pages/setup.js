@@ -394,10 +394,22 @@
 		setScanProgress(0);
 	}
 
+	// The run currently crawling in this tab, so leaving the step can stop it.
+	var activeScanRun = null;
+
 	// Also called on step change, so leaving the scan step tidies the UI.
+	//
+	// It used to ONLY hide the progress bar: the dispatch loop kept creating
+	// iframes invisibly and kept holding the server-side capture lock, so the
+	// function's name promised a behaviour it did not implement. Cancelling is
+	// cooperative — pages already loading settle and the partial result is still
+	// imported, flagged as incomplete coverage.
 	function stopScanActivity() {
 		var wrap = document.getElementById('faz-setup-scan-progress');
 		if (wrap) { wrap.hidden = true; }
+		if (activeScanRun && typeof activeScanRun.cancel === 'function') {
+			activeScanRun.cancel();
+		}
 	}
 
 	/**
@@ -424,11 +436,13 @@
 		setScanStatus(__('setup.scan_starting', 'Starting scan…'));
 		startScanActivity();
 
-		FAZ.scanEngine.run({ maxPages: 20 }, {
+		activeScanRun = FAZ.scanEngine.run({ maxPages: 20 }, {
 			status: setScanStatus,
 			progress: setScanProgress,
 			pages: function () {},
-		}).then(function (res) {
+		});
+		activeScanRun.then(function (res) {
+			activeScanRun = null;
 			stopScanActivity();
 			btn.disabled = false;
 			var found = (res && typeof res.total === 'number') ? res.total : 0;
@@ -444,6 +458,7 @@
 			// suggestions so the payments block reflects them.
 			loadRecommendations();
 		}).catch(function (err) {
+			activeScanRun = null;
 			stopScanActivity();
 			btn.disabled = false;
 			console.error('[FAZ Setup] Scan failed:', err);

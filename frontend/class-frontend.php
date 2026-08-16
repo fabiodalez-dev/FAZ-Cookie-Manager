@@ -107,6 +107,16 @@ class Frontend {
 	protected $providers = array();
 
 	/**
+	 * Shortest Open Cookie Database wildcard PREFIX that may authorise a
+	 * server-side deletion. The bundled dataset ships prefixes as short as two
+	 * characters (`_s`, `ct`, `sr`, `tp`, `p_`), matched by a bare
+	 * `0 === strpos()`, which classifies ordinary first-party names such as
+	 * `_session` or `ct_checkout` into a category that is blocked pre-consent.
+	 * Classification keeps those hits; enforcement refuses them.
+	 */
+	const ENFORCEABLE_WILDCARD_MIN_LENGTH = 6;
+
+	/**
 	 * Per-request cache for blocked categories and provider map.
 	 *
 	 * @var array|null
@@ -4920,6 +4930,12 @@ class Frontend {
 	 * minimum matches the behaviour documented for the frontend
 	 * `_fazIsUserWhitelisted()` consumer.
 	 *
+	 * Each whitelist entry is ALSO emitted verbatim as a cookie-name pattern,
+	 * so an admin can exempt a specific cookie by name (or `name_*`) even when
+	 * it belongs to no Known_Providers service. That is the supported remedy
+	 * for a false positive, and it must exist before enforcement is allowed to
+	 * delete anything.
+	 *
 	 * @param string[] $user_whitelist   Sanitised patterns from settings.
 	 * @param string[] $valid_categories Category slugs that exist in this install.
 	 * @return string[] Unique cookie-name patterns to skip on shred/interceptor.
@@ -4927,6 +4943,21 @@ class Frontend {
 	private function compute_whitelisted_cookie_patterns( $user_whitelist, $valid_categories ) {
 		$patterns = array();
 		$known    = Known_Providers::get_all();
+
+		// A whitelist entry is also honoured as a literal cookie-NAME pattern
+		// (wildcards included, via cookie_name_matches()). Without this the
+		// whitelist can only rescue cookies belonging to a Known_Providers
+		// service, so an admin whose own catalogued cookie is being shredded —
+		// or a false positive from any tier outside that map — has no supported
+		// remedy at all. The same three-character minimum applies: a one- or
+		// two-character token is not a cookie name, it is a typo.
+		foreach ( (array) $user_whitelist as $allowed ) {
+			$allowed = sanitize_text_field( (string) $allowed );
+			if ( '' === $allowed || strlen( $allowed ) < 3 ) {
+				continue;
+			}
+			$patterns[] = $allowed;
+		}
 
 		foreach ( $known as $service ) {
 			if ( 'necessary' === $service['category']
@@ -6672,9 +6703,10 @@ class Frontend {
 		// reversible client-side; a Set-Cookie header that was never sent is
 		// gone for that response, and on a page where no banner is shown there
 		// is no script.js and no way for that visitor to ever record consent —
-		// so the stripping would be permanent with no remedy. The shredder and
-		// the output buffer both stand down in that situation already; this
-		// makes the third enforcement layer agree with them.
+		// so the stripping would be permanent with no remedy. Every destructive
+		// server-side layer — the output buffer, the REST/redirect transport
+		// boundaries and shred_non_consented_cookies() — asks this one function,
+		// so they cannot drift apart on it.
 		//
 		// Cache Compatibility Mode is excluded for the same reason: there
 		// get_blocked_categories() returns every non-necessary slug
@@ -6843,6 +6875,18 @@ class Frontend {
 
 	/** @return bool */
 	private function is_always_allowed_cookie_name( $name ) {
+		// Single source of truth with the display layer. is_wp_internal_cookie()
+		// is the plugin's own never-show / never-shred allowlist: WordPress auth
+		// and settings cookies, comment_author_*, _litespeed_*, lscache_vary and
+		// wpdiscuz_nonce_*. Commit ad72cd3 added wpdiscuz_nonce_ there after the
+		// server-side shredder deleted a live site's comment CSRF nonce
+		// (gooloo.de, FAZ 1.13.6) — but only the banner/table/policy renderers
+		// ever consulted that list, so enforcement never received the fix.
+		// Delegating here makes the invariant hold in the one direction that
+		// matters: a cookie the plugin refuses to SHOW can never be DELETED.
+		if ( self::is_wp_internal_cookie( $name ) ) {
+			return true;
+		}
 		$patterns = array(
 			'fazcookie-consent', 'fazcookie-dnsmpi', 'faz_scan_session',
 			'wordpress_*', 'wp-settings-*', 'wp-settings-time-*', 'wp-postpass_*',
@@ -6858,7 +6902,22 @@ class Frontend {
 		return false;
 	}
 
-	/** @return string */
+	/**
+	 * Classify a cookie across every tier available to this install.
+	 *
+	 * CLASSIFICATION ONLY — this answers "what is this cookie?" for the admin
+	 * screens, the cookie policy and the blocked-cookie diagnostics. It is
+	 * deliberately wide: the admin catalogue, Known_Providers, the curated
+	 * Cookie_Database and the 6,754-entry bundled Open Cookie Database. That
+	 * breadth is a genuine accuracy win for a human reading a report.
+	 *
+	 * It is NOT an authority to destroy anything. Deletion is decided by
+	 * get_enforceable_cookie_category_slug(), which is narrower on purpose.
+	 * Do not point an enforcement path back at this method.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when no tier recognises the name.
+	 */
 	private function get_cookie_category_slug( $name ) {
 		$name = (string) $name;
 		// The administrator-owned inventory is authoritative. A reviewed or
@@ -6883,6 +6942,97 @@ class Frontend {
 			return $this->lookup_definition_category( $name );
 		}
 		return '';
+	}
+
+	/**
+	 * Category slug the server is permitted to ACT on: the narrow twin of
+	 * get_cookie_category_slug(), and the only classifier is_cookie_allowed()
+	 * may consult.
+	 *
+	 * Two tiers by default, both reviewable by a human on this site:
+	 *
+	 *   1. The admin catalogue (wp_faz_cookies). An administrator who marks a
+	 *      cookie `marketing` must have that decision enforced, and most such
+	 *      corrections sit outside Known_Providers by definition — which is why
+	 *      this is NOT a revert to a Known_Providers-only map.
+	 *   2. Known_Providers, the curated 283-pattern bundled map.
+	 *
+	 * The Cookie_Database and Open Cookie Database tiers are excluded because
+	 * they are third-party datasets, refreshable from GitHub, in which 99.5% of
+	 * entries land in a slug that is blocked pre-consent under an opt-in law,
+	 * and whose wildcard entries are bare prefixes as short as two characters
+	 * (`_s`, `ct`, `sr`, `tp`). Excellent hints for an admin screen; not an
+	 * acceptable authority for issuing setcookie( …, -1 ) against a visitor's
+	 * session. A site that wants them can opt in per the filter below, and even
+	 * then short wildcard prefixes stay non-enforceable.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when no enforceable tier knows it.
+	 */
+	private function get_enforceable_cookie_category_slug( $name ) {
+		$name = (string) $name;
+		foreach ( $this->get_catalog_cookie_categories() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return $category;
+			}
+		}
+		foreach ( Known_Providers::get_cookie_map() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return sanitize_key( $category );
+			}
+		}
+		/**
+		 * Whether the bundled third-party cookie datasets (Cookie_Database and
+		 * the Open Cookie Database) may authorise server-side DELETION, not
+		 * merely classification.
+		 *
+		 * Off by default: see the method docblock. Turning it on still cannot
+		 * enforce an Open Cookie Database wildcard whose prefix is shorter than
+		 * self::ENFORCEABLE_WILDCARD_MIN_LENGTH.
+		 *
+		 * @param bool $enabled Whether the bundled datasets may authorise deletion.
+		 */
+		if ( ! apply_filters( 'faz_shred_uses_cookie_database', false ) ) {
+			return '';
+		}
+		if ( class_exists( '\FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database' ) ) {
+			$known = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup( $name );
+			if ( is_array( $known ) && ! empty( $known['category'] ) ) {
+				return sanitize_key( $known['category'] );
+			}
+		}
+		return $this->enforceable_definition_category( $name );
+	}
+
+	/**
+	 * Open Cookie Database tier of get_enforceable_cookie_category_slug().
+	 *
+	 * Unlike lookup_definition_category(), this inspects HOW the dataset
+	 * matched. Cookie_Definitions::lookup() falls back to a bare
+	 * `0 === strpos( $name, $pattern )` prefix test over its wildcard entries,
+	 * and the bundled snapshot ships two- and three-character prefixes, so
+	 * `_session` matches `_s` (Analytics) and `tp_visitor` matches `tp`
+	 * (Marketing). A prefix that short carries no evidence about an ordinary
+	 * first-party cookie, so it is refused enforcement even when the operator
+	 * opted the dataset in. Exact-name hits are unaffected.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when the dataset must not be acted on.
+	 */
+	private function enforceable_definition_category( $name ) {
+		if ( ! class_exists( '\FazCookie\Includes\Cookie_Definitions' ) ) {
+			return '';
+		}
+		$definition = \FazCookie\Includes\Cookie_Definitions::get_instance()->lookup( $name );
+		if ( ! is_array( $definition ) || empty( $definition['category'] ) ) {
+			return '';
+		}
+		$matched = isset( $definition['name'] ) ? (string) $definition['name'] : '';
+		if ( ! empty( $definition['wildcard'] ) && strlen( $matched ) < self::ENFORCEABLE_WILDCARD_MIN_LENGTH ) {
+			return '';
+		}
+		$category = sanitize_key( $definition['category'] );
+		return 'advertising' === $category ? 'marketing' : $category;
 	}
 
 	/**
@@ -6946,12 +7096,28 @@ class Frontend {
 		set_transient( 'faz_server_cookie_definition_map', $this->definition_category_memo, HOUR_IN_SECONDS );
 	}
 
-	/** @return array<string,string> */
+	/**
+	 * Cookie-name → category map derived from the admin catalogue.
+	 *
+	 * WordPress-internal rows are skipped, exactly as prepare_frontend_cookies()
+	 * and get_cookies() already skip them: a cookie the plugin deliberately
+	 * hides from the banner must not be the thing that drives a server-side
+	 * deletion. This was the one place a hidden technical cookie could reach
+	 * setcookie( …, -1 ).
+	 *
+	 * The transient key is versioned (`…_v2`): a map persisted by an earlier
+	 * build still contains the unfiltered rows, and without the bump it would
+	 * keep answering for up to an hour after deploy — the bug would look fixed
+	 * in test and stay live in production. includes/class-cli.php busts both
+	 * keys on every cookie/category/settings write.
+	 *
+	 * @return array<string,string>
+	 */
 	private function get_catalog_cookie_categories() {
 		if ( null !== $this->catalog_cookie_categories_cache ) {
 			return $this->catalog_cookie_categories_cache;
 		}
-		$cached = get_transient( 'faz_server_cookie_category_map' );
+		$cached = get_transient( 'faz_server_cookie_category_map_v2' );
 		if ( is_array( $cached ) ) {
 			$this->catalog_cookie_categories_cache = $cached;
 			return $cached;
@@ -6966,11 +7132,14 @@ class Frontend {
 			$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $cookie_row );
 			$name   = $cookie->get_name();
 			$cat_id = $cookie->get_category();
-			if ( '' !== $name && ! empty( $category_slugs[ $cat_id ] ) ) {
+			if ( '' === $name || self::is_wp_internal_cookie( $name ) ) {
+				continue;
+			}
+			if ( ! empty( $category_slugs[ $cat_id ] ) ) {
 				$this->catalog_cookie_categories_cache[ $name ] = $category_slugs[ $cat_id ];
 			}
 		}
-		set_transient( 'faz_server_cookie_category_map', $this->catalog_cookie_categories_cache, HOUR_IN_SECONDS );
+		set_transient( 'faz_server_cookie_category_map_v2', $this->catalog_cookie_categories_cache, HOUR_IN_SECONDS );
 		return $this->catalog_cookie_categories_cache;
 	}
 
@@ -6978,17 +7147,54 @@ class Frontend {
 	 * Delete non-consented cookies before the page renders (cookie shredding).
 	 *
 	 * Runs on template_redirect, after the main query has resolved but before
-	 * template output. Compares cookies against the Known_Providers cookie map
-	 * and deletes any that belong to categories the visitor has not consented to.
+	 * template output. Classifies each existing cookie through
+	 * is_cookie_allowed() — admin catalogue then Known_Providers — and deletes
+	 * those belonging to categories the visitor has not consented to.
+	 *
+	 * Gated on `server_cookie_guard_enabled()` — the single decision that
+	 * governs every destructive server-side enforcement layer, not a private
+	 * copy of the `script_blocking.block_server_cookies` opt-in. Destroying a
+	 * visitor's existing cookie is irreversible for that request and the failure
+	 * signature is indirect — "users randomly logged out, cart empties, comments
+	 * 403" with nothing pointing at this plugin — so it must be a decision an
+	 * operator made, not something an upgrade turns on underneath them.
+	 * Client-side cleanup on consent-save (script.js _fazCleanupRevokedCookies)
+	 * is unaffected and remains the default enforcement for existing cookies.
+	 *
+	 * Three clauses of that gate matter here beyond the opt-in, and all three
+	 * are wanted:
+	 *
+	 * - Cache Compatibility Mode. There get_blocked_categories() returns every
+	 *   non-necessary slug unconditionally, returning before it ever reads the
+	 *   consent cookie. Under a private opt-in check this shredder passed its
+	 *   own gate, is_cookie_allowed() resolved a CONSENTED visitor's `_ga` to
+	 *   false, and every enforceably-classified cookie was destroyed on every
+	 *   front-end render. That is the regression the shared gate closes, and it
+	 *   is why the cache-compat decision must be made in exactly one place.
+	 * - No consent context (faz_disable_banner(), page exclusions, no banner,
+	 *   banner_control off, geo no-banner routing). Such a visitor has no
+	 *   script.js and can never record consent, so deleting their cookies is
+	 *   permanent with no remedy. This also subsumes the `! $this->template` and
+	 *   faz_disable_banner()/is_blocking_disabled_for_page() checks this method
+	 *   used to repeat — one gate, not two that can drift apart.
+	 * - A valid authenticated browser-scan request. Standing down there lets the
+	 *   scanner inventory exactly the cookies a real visitor would keep instead
+	 *   of scanning a page it has just emptied.
 	 */
 	public function shred_non_consented_cookies() {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
 			return;
 		}
-		if ( ! $this->template ) {
+		if ( ! $this->server_cookie_guard_enabled() ) {
 			return;
 		}
-		if ( true === faz_disable_banner() || $this->is_blocking_disabled_for_page() ) {
+		// Early bail: with no blocked category and no explicit per-service or
+		// per-cookie denial, is_cookie_allowed() provably returns true for every
+		// name, so the loop below would classify every cookie in the request to
+		// reach a foregone conclusion. Both conditions are required — a
+		// `svc.<id>:no` / `ck.<svc>.<cookie>:no` denial stays enforceable on a
+		// site where no category is blocked.
+		if ( empty( $this->get_blocked_categories() ) && empty( $this->get_service_cookie_decisions() ) ) {
 			return;
 		}
 
@@ -7042,11 +7248,11 @@ class Frontend {
 
 		// Nothing is blocked and no explicit per-service/per-cookie decision
 		// exists: every remaining path in this method provably returns true, so
-		// the four-tier classification cascade below (admin catalogue →
-		// Known_Providers → Cookie_Database → the bundled Open Cookie Database)
-		// would be paid for an answer that is already determined. The shredder
-		// runs at template_redirect priority 1 on every front-end render, so
-		// that cost is charged per request.
+		// the enforcement classification cascade below (admin catalogue →
+		// Known_Providers, plus the opt-in bundled-dataset tiers) would be paid
+		// for an answer that is already determined. The shredder runs at
+		// template_redirect priority 1 on every front-end render, so that cost
+		// is charged per request.
 		//
 		// BOTH conditions are required. Guarding on the category list alone
 		// would silently stop honouring explicit `svc.<id>:no` /
@@ -7077,8 +7283,20 @@ class Frontend {
 			return true;
 		}
 
-		$category = $this->get_cookie_category_slug( $name );
-		if ( '' === $category || in_array( $category, array( 'necessary', 'wordpress-internal' ), true ) ) {
+		// Enforcement reads the NARROW classifier. get_cookie_category_slug()
+		// stays wide for the admin UI and the blocked-cookie diagnostics, but a
+		// third-party dataset must never be what authorises a deletion.
+		$category = $this->get_enforceable_cookie_category_slug( $name );
+		// 'uncategorized' is the ABSENCE of a classification, not a verdict: the
+		// scanner writes every cookie it fails to recognise as uncategorized
+		// (Scanner\Controller::…, "Default fallback category for unknown
+		// cookies"), and get_blocked_categories() blocks every non-necessary
+		// slug pre-consent. Treating it as a real blocked category inverts this
+		// method's own contract — "unknown cookies fail permissive because
+		// blocking an unclassified session token can break authentication or
+		// checkout" — into "we do not know what this is, so delete it". That
+		// inversion is what broke comments on gooloo.de (commit ad72cd3).
+		if ( '' === $category || in_array( $category, array( 'necessary', 'wordpress-internal', 'uncategorized' ), true ) ) {
 			$this->cookie_allowed_cache[ $cache_key ] = true;
 			return true;
 		}

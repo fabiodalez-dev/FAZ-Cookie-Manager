@@ -9,8 +9,27 @@ define( 'HOUR_IN_SECONDS', 3600 );
 define( 'MINUTE_IN_SECONDS', 60 );
 define( 'YEAR_IN_SECONDS', 31536000 );
 
-$GLOBALS['faz_test_transients'] = array();
-$GLOBALS['faz_test_user_meta']  = array();
+$GLOBALS['faz_test_transients']        = array();
+$GLOBALS['faz_test_transient_expiry']   = array();
+$GLOBALS['faz_test_user_meta']         = array();
+
+/**
+ * Simulate elapsed wall-clock time.
+ *
+ * Rewinding the recorded expiries is equivalent to advancing the clock and needs
+ * no override of PHP's time(): a transient written with a 900s TTL and then
+ * rewound by 901s is expired, exactly as it would be after 901 real seconds.
+ * The sliding capture window is a claim about elapsed time, so a test of it has
+ * to be able to move time.
+ *
+ * @param int $seconds Seconds to pretend have passed.
+ * @return void
+ */
+function faz_test_advance_clock( $seconds ) {
+	foreach ( $GLOBALS['faz_test_transient_expiry'] as $key => $expires ) {
+		$GLOBALS['faz_test_transient_expiry'][ $key ] = $expires - (int) $seconds;
+	}
+}
 
 class WP_Error {
 	public $code;
@@ -30,9 +49,30 @@ function esc_url_raw( $url ) { return filter_var( $url, FILTER_SANITIZE_URL ); }
 function trailingslashit( $value ) { return rtrim( $value, '/' ) . '/'; }
 function is_ssl() { return true; }
 function get_current_user_id() { return 7; }
-function get_transient( $key ) { return isset( $GLOBALS['faz_test_transients'][ $key ] ) ? $GLOBALS['faz_test_transients'][ $key ] : false; }
-function set_transient( $key, $value ) { $GLOBALS['faz_test_transients'][ $key ] = $value; return true; }
-function delete_transient( $key ) { unset( $GLOBALS['faz_test_transients'][ $key ] ); }
+// Transients here honour their TTL, because the capture session's whole
+// behaviour is a TTL. Direct writes to faz_test_transients (used further down to
+// stage a session) record no expiry and therefore never expire, so the older
+// cases are unaffected.
+function get_transient( $key ) {
+	if ( ! isset( $GLOBALS['faz_test_transients'][ $key ] ) ) {
+		return false;
+	}
+	if ( isset( $GLOBALS['faz_test_transient_expiry'][ $key ] ) && $GLOBALS['faz_test_transient_expiry'][ $key ] <= time() ) {
+		unset( $GLOBALS['faz_test_transients'][ $key ], $GLOBALS['faz_test_transient_expiry'][ $key ] );
+		return false;
+	}
+	return $GLOBALS['faz_test_transients'][ $key ];
+}
+function set_transient( $key, $value, $ttl = 0 ) {
+	$GLOBALS['faz_test_transients'][ $key ] = $value;
+	if ( $ttl > 0 ) {
+		$GLOBALS['faz_test_transient_expiry'][ $key ] = time() + (int) $ttl;
+	} else {
+		unset( $GLOBALS['faz_test_transient_expiry'][ $key ] );
+	}
+	return true;
+}
+function delete_transient( $key ) { unset( $GLOBALS['faz_test_transients'][ $key ], $GLOBALS['faz_test_transient_expiry'][ $key ] ); }
 function wp_generate_uuid4() { return '12345678-1234-1234-1234-123456789abc'; }
 function is_wp_error( $value ) { return $value instanceof WP_Error; }
 function get_user_meta( $user_id, $key, $single = false ) {
@@ -182,6 +222,58 @@ coverage_check( 1 === count( $runtime ) && 'brikpanel_vid' === $runtime[0]['name
 coverage_check( 'server-runtime' === $runtime[0]['source'], 'runtime observation preserves its discovery provenance' );
 coverage_check( '1 year' === $runtime[0]['duration'], 'runtime Max-Age metadata becomes a useful duration' );
 coverage_check( empty( $GLOBALS['faz_test_user_meta'][7][ Controller::BROWSER_SCAN_META ] ), 'drained observations are removed' );
+
+/* ── The capture window must outlive the crawl it was opened for ──────
+ *
+ * BROWSER_SCAN_TTL is opened once by scans/discover and scans/import hard-409s
+ * on an expired session, so a fixed wall clock means a long crawl spends its
+ * whole run collecting evidence and then throws away 100% of it. These cases
+ * pin the idle-timeout semantics: an ACTIVE crawl of any length survives, an
+ * ABANDONED tab still releases, and a wedged one cannot slide forever.
+ */
+$GLOBALS['faz_test_transients']      = array();
+$GLOBALS['faz_test_transient_expiry'] = array();
+$GLOBALS['faz_test_user_meta']       = array();
+
+$slide_scan_id = str_repeat( 'c', 32 );
+$slide_token   = $controller->start_browser_scan_session( $slide_scan_id );
+$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $slide_token;
+
+// 800s in — inside the window, and the point at which a scanned page arrives.
+faz_test_advance_clock( 800 );
+coverage_check( $controller->browser_scan_session_matches( $slide_scan_id ), 'a session is still live 800s into a crawl' );
+coverage_check( $controller->touch_browser_scan_session( $slide_token, $slide_scan_id ), 'a scanned page slides the capture window forward' );
+
+// Past the original 900s deadline. Under the fixed wall clock this is where
+// the import used to 409 and discard the entire run.
+faz_test_advance_clock( 300 );
+coverage_check( $controller->browser_scan_session_matches( $slide_scan_id ), 'a touched session outlives the original TTL — 1100s in and still importable' );
+coverage_check( false !== get_transient( 'faz_scan_active_7' ), 'the active-scan lock is renewed alongside the session, not left to expire under it' );
+
+// A renewal must belong to the session presenting it. Two tabs still collide.
+coverage_check( ! $controller->touch_browser_scan_session( $slide_token, str_repeat( 'd', 32 ) ), 'a foreign scan id cannot renew someone else\'s session' );
+
+// The absolute ceiling: a wedged tab must not hold the lock indefinitely.
+$slide_key = 'faz_scan_session_' . hash( 'sha256', $slide_token );
+$GLOBALS['faz_test_transients'][ $slide_key ]['created_at'] = time() - ( Controller::BROWSER_SCAN_MAX_AGE + 60 );
+coverage_check( ! $controller->touch_browser_scan_session( $slide_token, $slide_scan_id ), 'a session past BROWSER_SCAN_MAX_AGE stops sliding' );
+
+// And the idle timeout still bites on an abandoned tab.
+$GLOBALS['faz_test_transients']      = array();
+$GLOBALS['faz_test_transient_expiry'] = array();
+$idle_scan_id = str_repeat( 'e', 32 );
+$idle_token   = $controller->start_browser_scan_session( $idle_scan_id );
+$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $idle_token;
+faz_test_advance_clock( Controller::BROWSER_SCAN_TTL + 1 );
+coverage_check( ! $controller->browser_scan_session_matches( $idle_scan_id ), 'an untouched session still expires on schedule, so an abandoned tab releases the lock' );
+coverage_check( ! $controller->touch_browser_scan_session( $idle_token, $idle_scan_id ), 'an already-expired session cannot be revived by a late heartbeat' );
+
+// One canonical key on both sides of the stale-cookie tally. A leading dot or a
+// :port on either end is what would make the client/server intersection empty
+// forever — inert, while looking wired.
+coverage_check( '_ga|example.test' === Controller::canonical_key( '  _GA  ', '.Example.TEST:8443' ), 'canonical_key folds case, leading dots and ports exactly as the browser does' );
+coverage_check( '' === Controller::canonical_key( '   ', 'example.test' ), 'a nameless row has no canonical identity' );
+coverage_check( '_ga|' === Controller::canonical_key( '_ga', '' ), 'a domainless row still canonicalizes to a usable key' );
 
 coverage_check( 'wordpress-internal' === Cookie_Database::lookup( 'tk_ai' )['category'], 'Automattic dashboard cookies remain inventoried but classified internal' );
 coverage_check( 'analytics' === Cookie_Database::lookup( 'brikpanel_vid' )['category'], 'Brikpanel visitor ID is classified when observed' );
