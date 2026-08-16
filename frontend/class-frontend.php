@@ -6824,7 +6824,26 @@ class Frontend {
 	private function record_blocked_server_cookies( $blocked ) {
 		$recent = get_transient( 'faz_recent_blocked_server_cookies' );
 		$recent = is_array( $recent ) ? $recent : array();
-		$uri    = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		// PATH ONLY, and capped.
+		//
+		// sanitize_text_field() strips tags; it does NOT strip the query string
+		// and does not truncate. WordPress query strings routinely carry
+		// personal data — ?email=, the WooCommerce order_key, the password-reset
+		// key+login pair, _wpnonce, site-search terms — and this diagnostic is
+		// written by ANONYMOUS front-end requests, then kept for 24 hours and
+		// rendered in a manage_options table. Nothing erases it: the plugin's
+		// GDPR eraser is email-keyed and covers consent logs only, and the
+		// default uninstall path skips cleanup (gated on remove_data_on_uninstall,
+		// default false). The question this column exists to answer is "which
+		// page emitted the cookie", which the path answers exactly as well as
+		// the full URI does, so the query string is discarded before storage
+		// rather than after.
+		//
+		// The 255-char cap bounds the row as well: with no length limit an
+		// anonymous visitor requesting a URL with an 8 KB query string drove a
+		// ~400 KB wp_options rewrite per request.
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$path = substr( (string) strtok( $uri, '?' ), 0, 255 );
 		foreach ( (array) $blocked as $entry ) {
 			if ( empty( $entry['name'] ) ) {
 				continue;
@@ -6832,12 +6851,15 @@ class Frontend {
 			$recent[] = array(
 				'name'       => sanitize_text_field( $entry['name'] ),
 				'category'   => sanitize_key( isset( $entry['category'] ) ? $entry['category'] : '' ),
-				'request'    => $uri,
+				'request'    => $path,
 				'blocked_at' => time(),
 			);
 			do_action( 'faz_server_cookie_blocked', $entry['name'], isset( $entry['category'] ) ? $entry['category'] : '' );
 		}
-		set_transient( 'faz_recent_blocked_server_cookies', array_slice( $recent, -50 ), DAY_IN_SECONDS );
+		// Retain exactly what the System Status table renders (its own
+		// array_slice(…, 0, 20) after array_reverse). The previous 50 kept 30
+		// entries no reader ever saw, which is retention without a purpose.
+		set_transient( 'faz_recent_blocked_server_cookies', array_slice( $recent, -20 ), DAY_IN_SECONDS );
 	}
 
 	/** @return bool */

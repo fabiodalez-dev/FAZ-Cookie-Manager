@@ -1,0 +1,445 @@
+<?php
+/**
+ * The browser-scan Set-Cookie observer captures far more than the scan, and
+ * what it captures beyond the scan must be REPORTED, not DECLARED.
+ *
+ * The observer is registered on every same-origin request and is deliberately
+ * not gated on a matching faz_scan_id: the sub-resource, AJAX and REST requests
+ * worth observing structurally cannot carry one. The consequence is that for
+ * the life of the capture window — 900s idle, slid forward on every scan-tagged
+ * page, ceiling 6h, while the setup page asks the admin to keep the tab open —
+ * the administrator's own wp-admin traffic is observed too, and every
+ * Set-Cookie it emits used to be merged into the imported set AND seeded into
+ * $attributable (which additionally un-bucketed matching names on the
+ * request-cookie path that was already fixed).
+ *
+ * These tests run the observer, the drain and the import route, and pin:
+ *   1. the admin-context test itself, over the request shapes involved;
+ *   2. that observations record which side they came from;
+ *   3. that a name seen from BOTH sides counts as the site's;
+ *   4. that the import declares the front-end ones and reports the admin ones.
+ *
+ * Run: php tests/unit/test-scanner-admin-context-capture-php.php
+ *
+ * @package FazCookie\Tests\Unit
+ */
+
+namespace FazCookie\Admin\Modules\Scanner\Includes {
+	class Scanner_Logger {
+		public static function get_instance() {
+			return new self();
+		}
+		public function start( $context ) {}
+		public function log( $message, $context = null ) {}
+		public function finish() {}
+	}
+
+	/**
+	 * Namespaced override of the PHP builtin, resolved before the global one for
+	 * unqualified calls made from this namespace — which is how the observer
+	 * calls it. Lets the test drive the outgoing header set.
+	 */
+	function headers_list() {
+		return isset( $GLOBALS['__faz_headers'] ) ? $GLOBALS['__faz_headers'] : array();
+	}
+
+	/** Same trick: the drain must not try to expire a real cookie under CLI. */
+	function headers_sent() {
+		return true;
+	}
+}
+
+namespace FazCookie\Includes {
+	class Rest_Controller {}
+}
+
+namespace {
+	if ( ! defined( 'ABSPATH' ) ) {
+		define( 'ABSPATH', __DIR__ . '/' );
+	}
+	define( 'MINUTE_IN_SECONDS', 60 );
+	define( 'HOUR_IN_SECONDS', 3600 );
+	define( 'DAY_IN_SECONDS', 86400 );
+	define( 'YEAR_IN_SECONDS', 31536000 );
+
+	$GLOBALS['__faz_options']     = array();
+	$GLOBALS['__faz_transients']  = array();
+	$GLOBALS['__faz_user_meta']   = array();
+	$GLOBALS['__faz_actions']     = array();
+	$GLOBALS['__faz_headers']     = array();
+	$GLOBALS['__faz_is_admin']    = false;
+	$GLOBALS['__faz_doing_ajax']  = false;
+
+	class WP_Error {
+		public $code;
+		public $message;
+		public $data;
+		public function __construct( $code = '', $message = '', $data = array() ) {
+			$this->code    = $code;
+			$this->message = $message;
+			$this->data    = $data;
+		}
+		public function get_error_message() {
+			return $this->message;
+		}
+	}
+
+	class WP_REST_Response {
+		public $data;
+		public $status;
+		public function __construct( $data = null, $status = 200 ) {
+			$this->data   = $data;
+			$this->status = $status;
+		}
+	}
+
+	/** WP_REST_Request stand-in for the import route. */
+	class FazTest_Import_Request {
+		public $body;
+		public $params;
+		public $headers;
+		public function __construct( $body, $params = array(), $headers = array() ) {
+			$this->body    = $body;
+			$this->params  = $params;
+			$this->headers = $headers;
+		}
+		public function get_json_params() {
+			return $this->body;
+		}
+		public function get_param( $key ) {
+			return isset( $this->params[ $key ] ) ? $this->params[ $key ] : null;
+		}
+		public function get_header( $key ) {
+			return isset( $this->headers[ $key ] ) ? $this->headers[ $key ] : '';
+		}
+	}
+
+	function absint( $value ) { return abs( (int) $value ); }
+	function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
+	function sanitize_key( $value ) { return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $value ) ); }
+	function __( $value, ...$unused ) { return $value; }
+	function wp_unslash( $value ) { return $value; }
+	function wp_parse_url( $url, $component = -1 ) { return parse_url( $url, $component ); }
+	function wp_parse_args( $args, $defaults = array() ) { return array_merge( (array) $defaults, (array) $args ); }
+	function esc_url_raw( $url ) { return (string) $url; }
+	function trailingslashit( $value ) { return rtrim( (string) $value, '/' ) . '/'; }
+	function home_url( $path = '' ) { return 'https://example.test/' . ltrim( (string) $path, '/' ); }
+	function admin_url( $path = '' ) { return 'https://example.test/wp-admin/' . ltrim( (string) $path, '/' ); }
+	function is_ssl() { return true; }
+	function is_admin() { return (bool) $GLOBALS['__faz_is_admin']; }
+	function wp_doing_ajax() { return (bool) $GLOBALS['__faz_doing_ajax']; }
+	function get_current_user_id() { return 7; }
+	function current_time( $type ) { return '2026-08-16 12:00:00'; }
+	function apply_filters( $hook, $value, ...$rest ) { return $value; }
+	function do_action( ...$unused ) { return true; }
+	function is_wp_error( $value ) { return $value instanceof WP_Error; }
+	function rest_ensure_response( $value ) { return $value; }
+	function add_action( $hook, $callback, $priority = 10, $args = 1 ) {
+		$GLOBALS['__faz_actions'][ $hook ][] = $callback;
+		return true;
+	}
+	function get_option( $key, $default = false ) {
+		return array_key_exists( $key, $GLOBALS['__faz_options'] ) ? $GLOBALS['__faz_options'][ $key ] : $default;
+	}
+	function update_option( $key, $value, $autoload = null ) {
+		$GLOBALS['__faz_options'][ $key ] = $value;
+		return true;
+	}
+	function get_transient( $key ) {
+		return isset( $GLOBALS['__faz_transients'][ $key ] ) ? $GLOBALS['__faz_transients'][ $key ] : false;
+	}
+	function set_transient( $key, $value, $ttl = 0 ) {
+		$GLOBALS['__faz_transients'][ $key ] = $value;
+		return true;
+	}
+	function delete_transient( $key ) {
+		unset( $GLOBALS['__faz_transients'][ $key ] );
+		return true;
+	}
+	function get_user_meta( $user_id, $key, $single = false ) {
+		$values = isset( $GLOBALS['__faz_user_meta'][ $user_id ][ $key ] ) ? $GLOBALS['__faz_user_meta'][ $user_id ][ $key ] : array();
+		return $single ? ( isset( $values[0] ) ? $values[0] : '' ) : $values;
+	}
+	function add_user_meta( $user_id, $key, $value, $unique = false ) {
+		$GLOBALS['__faz_user_meta'][ $user_id ][ $key ][] = $value;
+		return true;
+	}
+	function delete_user_meta( $user_id, $key, $value = '' ) {
+		if ( empty( $GLOBALS['__faz_user_meta'][ $user_id ][ $key ] ) ) {
+			return true;
+		}
+		$GLOBALS['__faz_user_meta'][ $user_id ][ $key ] = array_values(
+			array_filter(
+				$GLOBALS['__faz_user_meta'][ $user_id ][ $key ],
+				static function ( $stored ) use ( $value ) {
+					return $stored !== $value;
+				}
+			)
+		);
+		return true;
+	}
+
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
+	require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/api/class-api.php';
+
+	use FazCookie\Admin\Modules\Scanner\Includes\Controller;
+
+	$checks   = 0;
+	$failures = 0;
+	function check( $condition, $label ) {
+		global $checks, $failures;
+		++$checks;
+		if ( $condition ) {
+			echo "  [PASS] {$label}\n";
+			return;
+		}
+		++$failures;
+		echo "  [FAIL] {$label}\n";
+	}
+
+	/**
+	 * Put the process into one request shape.
+	 *
+	 * @param bool   $admin   Whether WordPress reports is_admin().
+	 * @param bool   $ajax    Whether this is admin-ajax.
+	 * @param string $referer Referring URL, '' for none.
+	 * @param string $uri     REQUEST_URI.
+	 */
+	function shape( $admin, $ajax, $referer = '', $uri = '/' ) {
+		$GLOBALS['__faz_is_admin']   = $admin;
+		$GLOBALS['__faz_doing_ajax'] = $ajax;
+		$_SERVER['REQUEST_URI']      = $uri;
+		if ( '' === $referer ) {
+			unset( $_SERVER['HTTP_REFERER'] );
+		} else {
+			$_SERVER['HTTP_REFERER'] = $referer;
+		}
+	}
+
+	/*
+	 * ── 1. The classifier, over the shapes that actually occur ────────────
+	 *
+	 * The load-bearing negatives are the admin-ajax and REST calls a SCANNED
+	 * front-end page makes: is_admin() is true for the former no matter who
+	 * called it, so a bare is_admin() gate would delete the very capability the
+	 * observer exists for.
+	 */
+	shape( true, false, '', '/wp-admin/admin.php?page=faz-cookie-manager' );
+	check( Controller::request_is_admin_context(), 'a wp-admin screen rendering itself is admin context' );
+
+	shape( true, true, 'https://example.test/wp-admin/admin.php?page=faz-cookie-manager', '/wp-admin/admin-ajax.php' );
+	check( Controller::request_is_admin_context(), 'admin-ajax called BY a wp-admin screen is admin context' );
+
+	shape( true, true, 'https://example.test/shop/', '/wp-admin/admin-ajax.php' );
+	check( ! Controller::request_is_admin_context(), 'admin-ajax called by a scanned front-end page is NOT admin context, despite is_admin()' );
+
+	shape( false, false, 'https://example.test/shop/', '/wp-json/wc/store/cart' );
+	check( ! Controller::request_is_admin_context(), 'a REST call from a scanned page is not admin context' );
+
+	shape( false, false, 'https://example.test/wp-admin/post.php?post=12&action=edit', '/wp-json/wp/v2/posts/12/autosaves' );
+	check( Controller::request_is_admin_context(), 'a REST call from the block editor IS admin context, which is_admin() alone cannot see' );
+
+	shape( false, false, '', '/shop/' );
+	check( ! Controller::request_is_admin_context(), 'a plain front-end page load is not admin context' );
+
+	shape( true, false, '', '/wp-admin/load-styles.php' );
+	check( Controller::request_is_admin_context(), 'a wp-admin asset endpoint is admin context' );
+
+	// admin-post.php is the other front-end-callable wp-admin file: WP_ADMIN is
+	// defined for it and its path is under wp-admin, so both the is_admin() and
+	// the path branch have to stand aside for the Referer.
+	shape( true, false, 'https://example.test/contact/', '/wp-admin/admin-post.php' );
+	check( ! Controller::request_is_admin_context(), 'admin-post.php submitted from a front-end form is not admin context' );
+
+	shape( true, false, 'https://example.test/wp-admin/options-general.php', '/wp-admin/admin-post.php' );
+	check( Controller::request_is_admin_context(), 'admin-post.php submitted from a wp-admin screen is admin context' );
+
+	shape( false, false, 'https://example.test/wp-admin-tips/', '/wp-admin-tips/' );
+	check( ! Controller::request_is_admin_context(), 'a front-end path merely PREFIXED by wp-admin is not admin context' );
+
+	/*
+	 * ── 2. The observer records which side each Set-Cookie came from ──────
+	 */
+	$token = str_repeat( 'a', 32 );
+	$session_key = 'faz_scan_session_' . hash( 'sha256', $token );
+
+	function run_observer( $token, $session_key ) {
+		$GLOBALS['__faz_actions'] = array();
+		$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
+		$GLOBALS['__faz_transients'][ $session_key ] = array(
+			'user_id'    => 7,
+			'scan_id'    => str_repeat( 'b', 32 ),
+			'created_at' => time(),
+		);
+		Controller::register_browser_scan_observer();
+		foreach ( $GLOBALS['__faz_actions']['shutdown'] as $callback ) {
+			$callback();
+		}
+	}
+
+	function observations() {
+		return isset( $GLOBALS['__faz_user_meta'][7][ Controller::BROWSER_SCAN_META ] )
+			? $GLOBALS['__faz_user_meta'][7][ Controller::BROWSER_SCAN_META ]
+			: array();
+	}
+
+	function observation_for( $name ) {
+		foreach ( observations() as $row ) {
+			if ( isset( $row['name'] ) && $name === $row['name'] ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+
+	$GLOBALS['__faz_user_meta'] = array();
+	shape( false, false, 'https://example.test/shop/', '/shop/product/' );
+	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: shop_session=abc; Path=/; Max-Age=3600' );
+	run_observer( $token, $session_key );
+	$front = observation_for( 'shop_session' );
+	check( null !== $front, 'a front-end Set-Cookie is still captured — the observer is not gated away' );
+	check( null !== $front && empty( $front['admin_context'] ), 'a front-end observation is not marked admin context' );
+
+	shape( true, false, '', '/wp-admin/plugins.php' );
+	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: thirdparty_admin_ui=1; Path=/wp-admin' );
+	run_observer( $token, $session_key );
+	$adm = observation_for( 'thirdparty_admin_ui' );
+	check( null !== $adm, 'a wp-admin Set-Cookie is still captured (bucketed, not discarded)' );
+	check( null !== $adm && ! empty( $adm['admin_context'] ), 'a wp-admin observation is marked admin context' );
+
+	/*
+	 * ── 3. The drain classifies, and a name seen from both sides is the site's
+	 */
+	$scan_id = str_repeat( 'b', 32 );
+	function stage_observations( $token, $session_key, $scan_id, $rows ) {
+		$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] = $token;
+		$GLOBALS['__faz_transients'][ $session_key ] = array(
+			'user_id'    => 7,
+			'scan_id'    => $scan_id,
+			'created_at' => time(),
+		);
+		$GLOBALS['__faz_user_meta'] = array();
+		foreach ( $rows as $row ) {
+			$GLOBALS['__faz_user_meta'][7][ Controller::BROWSER_SCAN_META ][] = array_merge(
+				array(
+					'token'       => $token,
+					'observed_at' => time(),
+					'name'        => '',
+					'domain'      => '',
+					'path'        => '/',
+					'expires'     => '',
+					'max-age'     => '',
+				),
+				$row
+			);
+		}
+	}
+
+	$controller = new Controller();
+
+	stage_observations(
+		$token,
+		$session_key,
+		$scan_id,
+		array(
+			array( 'name' => 'shop_session', 'admin_context' => false ),
+			array( 'name' => 'thirdparty_admin_ui', 'admin_context' => true ),
+		)
+	);
+	$drained = $controller->finish_browser_scan_session( $scan_id );
+	$by_name = array();
+	foreach ( $drained as $row ) {
+		$by_name[ $row['name'] ] = $row;
+	}
+	check( 2 === count( $drained ), 'both sightings are drained' );
+	check( isset( $by_name['shop_session'] ) && empty( $by_name['shop_session']['admin_context'] ) && 'server-runtime' === $by_name['shop_session']['source'], 'the front-end row keeps its server-runtime provenance' );
+	check( isset( $by_name['thirdparty_admin_ui'] ) && ! empty( $by_name['thirdparty_admin_ui']['admin_context'] ) && 'admin-runtime' === $by_name['thirdparty_admin_ui']['source'], 'the wp-admin row is drained as admin-runtime' );
+
+	// Order must not decide provenance: a cookie the site sets is the site's
+	// even if the admin's own browsing happened to hit it first.
+	foreach ( array( 'admin-first', 'front-first' ) as $order ) {
+		$rows = array(
+			array( 'name' => 'both_sides', 'admin_context' => true ),
+			array( 'name' => 'both_sides', 'admin_context' => false ),
+		);
+		if ( 'front-first' === $order ) {
+			$rows = array_reverse( $rows );
+		}
+		stage_observations( $token, $session_key, $scan_id, $rows );
+		$drained = $controller->finish_browser_scan_session( $scan_id );
+		check(
+			1 === count( $drained ) && 'both_sides' === $drained[0]['name'] && empty( $drained[0]['admin_context'] ),
+			"a name seen from both sides is the site's, not the admin's ({$order})"
+		);
+	}
+
+	/*
+	 * ── 4. The import declares the front-end ones and reports the rest ────
+	 */
+	class FazTest_Import_Controller {
+		public $session_cookies = array();
+		public $request_names   = array();
+		public $persisted       = array();
+
+		public function browser_scan_session_matches( $scan_id ) { return true; }
+		public function browser_scan_session_failure_reason( $scan_id ) { return 'match'; }
+		public function finish_browser_scan_session( $scan_id ) { return $this->session_cookies; }
+		public function browser_scan_capture_was_truncated() { return false; }
+		public function extract_request_cookie_names( $header, $parsed ) { return $this->request_names; }
+		public function schedule_httponly_check( $urls ) { return 0; }
+		public function record_scan_observations( $names, $complete ) {}
+		public function deletable_stale_keys() { return array(); }
+		public function save_scan_result( $cookies, $pages, $scripts, $metrics ) {
+			$this->persisted = $cookies;
+			$names           = array();
+			foreach ( $cookies as $cookie ) {
+				$names[] = $cookie['name'];
+			}
+			return array( 'cookie_names' => $names );
+		}
+	}
+
+	$fake = new FazTest_Import_Controller();
+	$fake->session_cookies = array(
+		array( 'name' => 'shop_session', 'domain' => 'example.test', 'duration' => '1 hour', 'source' => 'server-runtime', 'admin_context' => false ),
+		array( 'name' => 'thirdparty_admin_ui', 'domain' => 'example.test', 'duration' => 'session', 'source' => 'admin-runtime', 'admin_context' => true ),
+	);
+	// Both names are ALSO in the admin browser's Cookie header on the import
+	// request, which is where seeding $attributable from admin observations used
+	// to un-bucket the admin-only one on the already-fixed request-cookie path.
+	$fake->request_names = array( 'shop_session', 'thirdparty_admin_ui', 'tk_ai' );
+
+	$api      = new \FazCookie\Admin\Modules\Scanner\Api\Api( $fake );
+	$request  = new FazTest_Import_Request(
+		array( 'cookies' => array(), 'jar_cookies' => array(), 'pages_scanned' => 3, 'scripts' => array(), 'metrics' => array(), 'scanned_urls' => array() ),
+		array( 'scan_id' => str_repeat( 'b', 32 ) ),
+		array( 'cookie' => 'shop_session=1; thirdparty_admin_ui=1; tk_ai=1' )
+	);
+	$result = $api->import_cookies( $request );
+
+	$persisted_names = array();
+	foreach ( $fake->persisted as $row ) {
+		$persisted_names[] = $row['name'];
+	}
+	$jar_names = isset( $result['jar_only_cookies'] ) ? $result['jar_only_cookies'] : array();
+
+	check( in_array( 'shop_session', $persisted_names, true ), 'a front-end runtime observation is still declared' );
+	check( ! in_array( 'thirdparty_admin_ui', $persisted_names, true ), 'a wp-admin runtime observation is NOT declared' );
+	check( in_array( 'thirdparty_admin_ui', $jar_names, true ), 'the wp-admin observation is reported instead of dropped in silence' );
+	check( in_array( 'tk_ai', $jar_names, true ), 'an unattributable jar name is still reported' );
+	check( ! in_array( 'tk_ai', $persisted_names, true ), 'an unattributable jar name is still not declared' );
+	$persisted_sources = array();
+	foreach ( $fake->persisted as $row ) {
+		$persisted_sources[] = isset( $row['source'] ) ? $row['source'] : '';
+	}
+	check(
+		! in_array( 'admin-runtime', $persisted_sources, true ),
+		'no admin-runtime row reaches the persisted set by any route'
+	);
+
+	if ( $failures ) {
+		echo "\n{$failures} of {$checks} admin-context capture checks failed.\n";
+		exit( 1 );
+	}
+	echo "\n{$checks} admin-context capture checks passed.\n";
+}

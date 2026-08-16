@@ -119,7 +119,21 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 						<tr>
 							<th scope="col"><?php esc_html_e( 'Cookie', 'faz-cookie-manager' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Category', 'faz-cookie-manager' ); ?></th>
-							<th scope="col"><?php esc_html_e( 'Request URI', 'faz-cookie-manager' ); ?></th>
+							<?php
+							/*
+							 * "Path", not "URI": record_blocked_server_cookies()
+							 * stores strtok( REQUEST_URI, '?' ) capped at 255
+							 * chars, because WordPress query strings routinely
+							 * carry personal data (?email=, order_key, the
+							 * password-reset key+login pair, search terms) and
+							 * this row is written by anonymous visitors. An
+							 * administrator reading this column to check that
+							 * Set-Cookie blocking is not breaking checkout or
+							 * login must not expect a query string that is
+							 * deliberately never captured.
+							 */
+							?>
+							<th scope="col"><?php esc_html_e( 'Request Path', 'faz-cookie-manager' ); ?></th>
 							<th scope="col"><?php esc_html_e( 'Blocked At', 'faz-cookie-manager' ); ?></th>
 						</tr>
 					</thead>

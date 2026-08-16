@@ -50,6 +50,19 @@ class Cookies_API extends API_Controller {
 	const RECYCLE_BIN_BATCHES = 3;
 
 	/**
+	 * Soft ceiling, in bytes, for the serialized recycle bin.
+	 *
+	 * A purge of 1000 rows serializes to roughly 1.8 MB across three batches,
+	 * so this is a guard against a pathological catalogue, not a hot path. It
+	 * matters because the option is a single row: past the server's
+	 * max_allowed_packet the write fails outright, and a bin that cannot be
+	 * written is a purge that must not happen (see bulk_delete()).
+	 *
+	 * @var int
+	 */
+	const RECYCLE_BIN_MAX_BYTES = 2097152;
+
+	/**
 	 * Endpoint namespace.
 	 *
 	 * @var string
@@ -714,12 +727,16 @@ class Cookies_API extends API_Controller {
 			$earned = array_flip( Scanner_Controller::get_instance()->deletable_stale_keys() );
 		}
 
-		// Snapshot before deleting. A bulk delete here removes entries from the
-		// site's PUBLIC cookie declaration, and the usual trigger is a scan that
-		// did not observe them — which is not the same as their being absent.
-		// The snapshot makes that judgement reversible; without it a wrong purge
-		// is unrecoverable and the declaration is quietly incomplete.
+		// Two phases, and the order is the whole point.
+		//
+		// PHASE 1 collects the snapshots. Nothing is deleted here. A bulk delete
+		// removes entries from the site's PUBLIC cookie declaration, and the
+		// usual trigger is a scan that did not observe them — which is not the
+		// same as their being absent. The snapshot makes that judgement
+		// reversible; without it a wrong purge is unrecoverable and the
+		// declaration is quietly incomplete.
 		$recycled = array();
+		$doomed   = array();
 		foreach ( $ids as $id ) {
 			$id = absint( $id );
 			if ( ! $id ) {
@@ -744,11 +761,21 @@ class Cookies_API extends API_Controller {
 					$snapshot = array_merge( $snapshot, (array) $cookie->get_script_data() );
 				}
 				$recycled[] = $snapshot;
-				$cookie->delete();
-				$deleted++;
+				$doomed[]   = $cookie;
 			}
 		}
 
+		// PHASE 2 persists the snapshot BEFORE a single row is removed.
+		//
+		// Deleting first and saving afterwards looks equivalent and is not. When
+		// the write fails — oversize packet, an OOM part-way through a large
+		// purge, any transient database error $wpdb swallows with WP_DEBUG off —
+		// the rows are already gone while wp_options still holds the PREVIOUS
+		// batch. The page then re-reads the bin, finds that older batch, and
+		// offers an Undo button that restores a DIFFERENT set of cookies while
+		// the administrator believes the purge was reversed. An affirmative
+		// false undo is worse than no undo at all, so a bin that cannot be
+		// written aborts the purge instead.
 		if ( ! empty( $recycled ) ) {
 			$bin = get_option( self::RECYCLE_BIN_OPTION, array() );
 			$bin = is_array( $bin ) ? $bin : array();
@@ -762,13 +789,37 @@ class Cookies_API extends API_Controller {
 			// Keep a handful of batches, not a growing history: this is an undo
 			// for a mistake noticed soon after, not an archive.
 			$bin = array_slice( $bin, 0, self::RECYCLE_BIN_BATCHES );
-			update_option( self::RECYCLE_BIN_OPTION, $bin, false );
+			$bin = self::trim_recycle_bin_to_size( $bin );
+
+			if ( ! self::store_recycle_bin( $bin ) ) {
+				do_action( 'faz_after_delete_cookie' );
+				return new \WP_Error(
+					'faz_recycle_bin_write_failed',
+					__( 'The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place.', 'faz-cookie-manager' ),
+					array(
+						'status'          => 500,
+						'deleted'         => 0,
+						'restorable'      => 0,
+						'refused'         => $refused,
+						'snapshot_failed' => true,
+					)
+				);
+			}
+		}
+
+		// PHASE 3. The snapshot is on disk and verified; now the rows may go.
+		foreach ( $doomed as $cookie ) {
+			$cookie->delete();
+			$deleted++;
 		}
 
 		do_action( 'faz_after_delete_cookie' );
 		return rest_ensure_response(
 			array(
 				'deleted'    => $deleted,
+				// Backed by a verified write, not by an in-memory array: this
+				// line is only reached once store_recycle_bin() confirmed the
+				// option really holds these snapshots.
 				'restorable' => count( $recycled ),
 				// Rows the stale purge asked for that have not yet earned
 				// deletability. Reported so the page can say so rather than
@@ -776,6 +827,45 @@ class Cookies_API extends API_Controller {
 				'refused'    => $refused,
 			)
 		);
+	}
+
+	/**
+	 * Write the recycle bin and confirm the write actually landed.
+	 *
+	 * update_option() answers false for two unrelated situations: the write
+	 * failed, and the stored value was already identical. Treating both as
+	 * failure would abort purges that are perfectly safe; treating both as
+	 * success is the bug this exists to prevent. So a false is resolved by
+	 * reading the option back and comparing — on a genuine failure the cache
+	 * and the row still hold the previous value, and the comparison says so.
+	 *
+	 * @param array $bin Recycle bin to store.
+	 * @return bool True when the option demonstrably holds $bin.
+	 */
+	private static function store_recycle_bin( $bin ) {
+		if ( update_option( self::RECYCLE_BIN_OPTION, $bin, false ) ) {
+			return true;
+		}
+		$written = get_option( self::RECYCLE_BIN_OPTION, null );
+		return is_array( $written ) && $written === $bin;
+	}
+
+	/**
+	 * Drop the oldest batches until the bin fits in one option row.
+	 *
+	 * The newest batch is never dropped: it is the undo for the purge being
+	 * performed right now, which is the one an administrator is most likely to
+	 * want back. If that batch alone is over the ceiling it is still attempted —
+	 * a write that then fails aborts the purge, which is the correct outcome.
+	 *
+	 * @param array $bin Recycle bin, newest first.
+	 * @return array Possibly shortened bin.
+	 */
+	private static function trim_recycle_bin_to_size( $bin ) {
+		while ( count( $bin ) > 1 && strlen( (string) maybe_serialize( $bin ) ) > self::RECYCLE_BIN_MAX_BYTES ) {
+			array_pop( $bin );
+		}
+		return $bin;
 	}
 
 	/**
@@ -789,17 +879,34 @@ class Cookies_API extends API_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function get_deleted_batches( $request ) {
-		$bin      = get_option( self::RECYCLE_BIN_OPTION, array() );
-		$bin      = is_array( $bin ) ? $bin : array();
-		$batches  = array();
+		$bin     = get_option( self::RECYCLE_BIN_OPTION, array() );
+		$bin     = is_array( $bin ) ? $bin : array();
+		$now     = time();
+		$batches = array();
 		foreach ( array_values( $bin ) as $index => $batch ) {
 			if ( ! is_array( $batch ) ) {
 				continue;
 			}
-			$batches[] = array(
-				'index'      => (int) $index,
-				'count'      => isset( $batch['cookies'] ) ? count( (array) $batch['cookies'] ) : 0,
-				'deleted_at' => isset( $batch['deleted_at'] ) ? absint( $batch['deleted_at'] ) : 0,
+			$deleted_at = isset( $batch['deleted_at'] ) ? absint( $batch['deleted_at'] ) : 0;
+			$batches[]  = array(
+				'index'            => (int) $index,
+				'count'            => isset( $batch['cookies'] ) ? count( (array) $batch['cookies'] ) : 0,
+				'deleted_at'       => $deleted_at,
+				// The timestamp was recorded from the first release of the bin
+				// and read by nothing, so the bar called an eight-month-old
+				// purge "recently deleted" and offered to resurrect cookies
+				// whose categories and policy text had long moved on.
+				//
+				// Rendered rather than age-pruned on purpose: pruning would
+				// destroy the only recovery path on a schedule nobody sees,
+				// which is the same class of silent loss the bin was added to
+				// prevent. Showing the age lets the administrator judge, and
+				// costs nothing when the answer is "two minutes".
+				//
+				// Formatted server-side because human_time_diff() is
+				// translated and locale-aware; the raw timestamp stays in the
+				// payload for any caller that wants to do its own arithmetic.
+				'deleted_at_human' => $deleted_at > 0 ? human_time_diff( $deleted_at, $now ) : '',
 			);
 		}
 

@@ -103,8 +103,11 @@ const importBody = phpMethodBody(api, 'import_cookies');
 ok(importBody !== null, 'the import endpoint is still where the jar bucket is handled');
 
 // Every line that touches the bucket, with comments dropped so prose about it
-// cannot stand in for code. Anything outside these three shapes — an
-// array_merge into the imported set, an extra append — is a leak.
+// cannot stand in for code. Anything outside these four shapes — an
+// array_merge into the imported set, an extra append — is a leak. The fourth
+// is the runtime-observation split: the capture window also sees the admin's
+// own wp-admin traffic, and those sightings join the bucket rather than the
+// declaration.
 const jarLines = (importBody || '')
   .split('\n')
   .map((line) => line.trim().replace(/\s+/g, ' '))
@@ -112,9 +115,10 @@ const jarLines = (importBody || '')
 const allowedJarShapes = [
   /^\$jar_cookies\s*=\s*isset\( \$body\['jar_cookies'\] \)/,
   /^\$jar_cookies\[\] = \$entry;$/,
+  /^\$jar_cookies\[\] = \$session_cookie;$/,
   /^foreach \( \$jar_cookies as \$jar_cookie \) \{$/,
 ];
-ok(jarLines.length === 3 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
+ok(jarLines.length === 4 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
   'the bucket is only filled and iterated — never merged into the imported set');
 
 const jarLoopStart = (importBody || '').indexOf('foreach ( $jar_cookies as $jar_cookie ) {');

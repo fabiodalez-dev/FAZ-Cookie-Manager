@@ -612,6 +612,107 @@ namespace {
 
 	$GLOBALS['faz_headers_list_payload'] = array( 'Content-Type: text/html' );
 
+	/* ───────────────────────────────────────────────────────────────────────
+	 * What the blocked-cookie DIAGNOSTIC is allowed to retain.
+	 *
+	 * record_blocked_server_cookies() is written by anonymous front-end
+	 * requests, kept for 24 hours, and rendered in a manage_options table. It
+	 * used to store the full REQUEST_URI: sanitize_text_field() strips tags but
+	 * keeps the query string, and WordPress query strings routinely carry
+	 * ?email=, the WooCommerce order_key, the password-reset key+login pair,
+	 * _wpnonce and search terms. Nothing erases it — the plugin's GDPR eraser
+	 * is email-keyed and covers consent logs only, and the default uninstall
+	 * path is gated on remove_data_on_uninstall (default false).
+	 * ─────────────────────────────────────────────────────────────────────── */
+
+	function guard_record( $request_uri, $blocked ) {
+		$_SERVER['REQUEST_URI']          = $request_uri;
+		$GLOBALS['faz_transient_writes'] = array();
+		$GLOBALS['faz_transient_reads']  = array();
+		$method = new \ReflectionMethod( Frontend::class, 'record_blocked_server_cookies' );
+		$method->setAccessible( true );
+		$method->invoke( guard_frontend(), $blocked );
+		$written = $GLOBALS['faz_transient_writes']['faz_recent_blocked_server_cookies'];
+		return is_array( $written ) ? $written : array();
+	}
+
+	$one = array( array( 'name' => 'brikpanel_vid', 'category' => 'analytics' ) );
+
+	// A password-reset link and a WooCommerce order-received URL, which are the
+	// two shapes that actually walk into this code on a live site.
+	$reset = guard_record(
+		'/wp-login.php?action=rp&key=8f3a9c2b1d4e&login=fabio%40example.com&_wpnonce=abc123',
+		$one
+	);
+	guard_check(
+		1 === count( $reset ) && '/wp-login.php' === $reset[0]['request'],
+		'the blocked-cookie diagnostic stores the request PATH, not the full URI'
+	);
+	// Named individually so a partial strip cannot pass, and so the failure
+	// message says which secret survived.
+	$reset_blob = serialize( $reset );
+	foreach ( array( 'key=', '8f3a9c2b1d4e', 'login=', 'example.com', '_wpnonce' ) as $secret ) {
+		guard_check(
+			false === strpos( $reset_blob, $secret ),
+			'the query-string token "' . $secret . '" is never written to the diagnostic transient'
+		);
+	}
+
+	$order = guard_record(
+		'/checkout/order-received/1842/?key=wc_order_kR9xQ&email=buyer%40example.com',
+		$one
+	);
+	guard_check(
+		'/checkout/order-received/1842/' === $order[0]['request'],
+		'a WooCommerce order-received path is retained in full while its order_key and email are not'
+	);
+	guard_check(
+		false === strpos( serialize( $order ), 'wc_order_kR9xQ' ) && false === strpos( serialize( $order ), 'buyer' ),
+		'the WooCommerce order_key and customer email never reach the transient'
+	);
+
+	// The path is genuinely still there — otherwise every assertion above would
+	// pass on an empty string and the admin would have lost the diagnostic.
+	$plain = guard_record( '/shop/product/blue-widget/', $one );
+	guard_check(
+		'/shop/product/blue-widget/' === $plain[0]['request'],
+		'a query-free path is stored verbatim, so the diagnostic still answers "which page"'
+	);
+
+	// Length. An anonymous visitor picks the URL, so an unbounded value is an
+	// unbounded wp_options row rewrite on every request.
+	$long = guard_record( '/' . str_repeat( 'a', 8192 ), $one );
+	guard_check(
+		255 === strlen( $long[0]['request'] ),
+		'an 8 KB request path is capped at 255 characters before storage'
+	);
+
+	// Retention depth must match what the reader renders: admin/views/
+	// system-status.php reverses the list and takes 20.
+	$many = array();
+	for ( $i = 0; $i < 25; $i++ ) {
+		$many[] = array( 'name' => 'cookie_' . $i, 'category' => 'analytics' );
+	}
+	$capped = guard_record( '/', $many );
+	guard_check(
+		20 === count( $capped ),
+		'the transient retains 20 entries — exactly the number System Status renders'
+	);
+	guard_check(
+		'cookie_24' === $capped[19]['name'] && 'cookie_5' === $capped[0]['name'],
+		'the retained window is the most recent 20, not the oldest'
+	);
+
+	$status_view = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/views/system-status.php' );
+	guard_check(
+		false !== strpos( $status_view, "'Request Path'" ) && false === strpos( $status_view, "'Request URI'" ),
+		'the System Status column is labelled Request Path, matching what is stored'
+	);
+	guard_check(
+		(bool) preg_match( '/array_slice\(\s*\$blocked_server_cookies,\s*0,\s*20\s*\)/', $status_view ),
+		'System Status still renders 20 rows, so the storage cap above is pinned to a real reader'
+	);
+
 	echo $run . ' checks, ' . $failed . " failed\n";
 	exit( $failed > 0 ? 1 : 0 );
 }

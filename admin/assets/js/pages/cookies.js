@@ -192,8 +192,18 @@
 					// `restorable` is what makes the undo affordance appear; the
 					// bar reads the bin itself so it survives a reload.
 					updateRestoreBar();
-				}).catch(function () {
-					FAZ.notify(__('cookies.bulkDeleteFailed', 'Bulk delete failed.'), 'error');
+				}).catch(function (err) {
+					// A refused purge is not a generic failure: the server
+					// aborted because it could not save the undo snapshot, and
+					// the rows are still there. Saying "delete failed" would
+					// leave the admin unsure whether some rows went.
+					var snapshotFailed = !!(err && err.code === 'faz_recycle_bin_write_failed');
+					FAZ.notify(
+						snapshotFailed
+							? __('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
+							: __('cookies.bulkDeleteFailed', 'Bulk delete failed.'),
+						'error'
+					);
 				});
 			});
 		});
@@ -560,6 +570,97 @@
 	}
 
 	/**
+	 * Names a scan saw in the browser jar but could not attribute to any page.
+	 *
+	 * The scan runs in the administrator's own browser, so a same-origin iframe
+	 * exposes every cookie that browser already held for the domain — including
+	 * wp-admin-only ones a visitor never receives. The engine holds those apart
+	 * and the import route reports them back as `jar_only_cookies` without ever
+	 * writing them to the declaration.
+	 *
+	 * Prefer the server's list: it is the authoritative record of what was
+	 * withheld, after the same sanitising and de-duplication the import applied.
+	 * Fall back to the engine's own array so an older or partial import response
+	 * still discloses something rather than silently nothing.
+	 *
+	 * @param {Object} res Resolved scan run.
+	 * @return {string[]} Unique cookie names, never null.
+	 */
+	function jarOnlyNames(res) {
+		var fromServer = res && res.importResult && res.importResult.jar_only_cookies;
+		var source = Array.isArray(fromServer)
+			? fromServer
+			: (Array.isArray(res && res.jarCookies) ? res.jarCookies : []);
+		var seen = {};
+		var names = [];
+		source.forEach(function (entry) {
+			var name = (typeof entry === 'string')
+				? entry
+				: ((entry && entry.name) ? String(entry.name) : '');
+			name = name.trim();
+			// Object.create(null) is not available on the ES5 floor this file
+			// targets, so guard the prototype keys explicitly.
+			if (!name || Object.prototype.hasOwnProperty.call(seen, name)) { return; }
+			seen[name] = true;
+			names.push(name);
+		});
+		return names;
+	}
+
+	/**
+	 * Disclose the withheld jar cookies after a scan.
+	 *
+	 * Withholding them is correct and is pinned by tests. Saying nothing about
+	 * it was not: the import route's own comment says "surfacing the count is
+	 * the point… an admin who recognises a name as a real site cookie can add it
+	 * by hand", and until now no product surface read either field. A scan could
+	 * therefore drop a genuine first-party cookie from the declaration and
+	 * report a clean run.
+	 *
+	 * Collapsed by default — the count is the headline, the names are for the
+	 * administrator who wants to check them.
+	 *
+	 * @param {Object} res Resolved scan run.
+	 */
+	function updateJarOnlyBar(res) {
+		var bar = document.getElementById('faz-jar-bar');
+		if (!bar) { return; }
+		bar.textContent = '';
+		var names = jarOnlyNames(res);
+		if (!names.length) {
+			bar.style.display = 'none';
+			return;
+		}
+		bar.style.display = '';
+
+		var msg = document.createElement('span');
+		msg.textContent = __('cookies.jarOnlyHint', '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.')
+			.replace('%d', function () { return String(names.length); });
+		bar.appendChild(msg);
+
+		var details = document.createElement('details');
+		details.className = 'faz-jar-details';
+		var summary = document.createElement('summary');
+		summary.textContent = __('cookies.jarOnlyToggle', 'Show the names');
+		details.appendChild(summary);
+
+		var explain = document.createElement('p');
+		explain.textContent = __('cookies.jarOnlyExplain', 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.');
+		details.appendChild(explain);
+
+		var list = document.createElement('ul');
+		names.forEach(function (name) {
+			var li = document.createElement('li');
+			// textContent, never innerHTML: these names come from a scanned
+			// page's cookie jar and are attacker-influenceable content.
+			li.textContent = name;
+			list.appendChild(li);
+		});
+		details.appendChild(list);
+		bar.appendChild(details);
+	}
+
+	/**
 	 * Show an undo affordance while a bulk delete is still reversible.
 	 *
 	 * Every bulk delete snapshots the rows it removes into a bounded recycle bin
@@ -588,9 +689,20 @@
 
 			var newest = batches[0] || {};
 			var count = (typeof newest.count === 'number') ? newest.count : 0;
+			// The bin is bounded by batch count, not by age, so "recently
+			// deleted" was a claim nothing checked: a purge from eight months
+			// ago read exactly like one from eight seconds ago, and Undo would
+			// put back rows whose categories and policy text have since moved
+			// on. The server sends the age already formatted and translated.
+			var age = (typeof newest.deleted_at_human === 'string') ? newest.deleted_at_human : '';
 			var msg = document.createElement('span');
-			msg.textContent = __('cookies.restoreDeletedHint', '%d recently deleted cookie(s) can still be restored.')
-				.replace('%d', function () { return String(count); });
+			msg.textContent = age
+				/* translators: 1: number of cookies, 2: human-readable age such as "3 hours". */
+				? __('cookies.restoreDeletedHintAged', '%1$d deleted cookie(s) can still be restored (deleted %2$s ago).')
+					.replace('%1$d', function () { return String(count); })
+					.replace('%2$s', function () { return age; })
+				: __('cookies.restoreDeletedHint', '%d recently deleted cookie(s) can still be restored.')
+					.replace('%d', function () { return String(count); });
 			bar.appendChild(msg);
 
 			var restoreBtn = document.createElement('button');
@@ -1135,8 +1247,14 @@
 					loadCookies();
 					loadCategories();
 					updateRestoreBar();
-				}).catch(function () {
-					FAZ.notify(__('cookies.staleDeleteAllFailed', 'Failed to delete stale cookies.'), 'error');
+				}).catch(function (err) {
+					var snapshotFailed = !!(err && err.code === 'faz_recycle_bin_write_failed');
+					FAZ.notify(
+						snapshotFailed
+							? __('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
+							: __('cookies.staleDeleteAllFailed', 'Failed to delete stale cookies.'),
+						'error'
+					);
 				});
 			}).catch(function () {
 				FAZ.notify(__('cookies.staleLoadFailed', 'Failed to load cookies for stale cleanup.'), 'error');
@@ -1221,6 +1339,11 @@
 						});
 					});
 				}
+
+				// Unconditional, including the empty case: the bar has to clear
+				// itself when a later scan withholds nothing, or a stale list
+				// would sit there describing a run that is over.
+				updateJarOnlyBar(res);
 
 				var coverageIsComplete = scanCoverageIsComplete(res, maxPages);
 				if (!coverageIsComplete) {

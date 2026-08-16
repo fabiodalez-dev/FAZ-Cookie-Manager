@@ -152,6 +152,30 @@ class Activator {
 			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+
+		// Bust the frontend caches once, for the whole batch.
+		//
+		// CLI::define_public_hooks() registers the cache-bust closure on seven
+		// hooks — faz_after_{update,create,delete}_cookie,
+		// faz_after_{update,delete}_cookie_category, faz_after_update_settings
+		// and faz_clear_cache — and every controller write path fires one of
+		// them. Migrations are the one class of write that structurally cannot:
+		// they reach the tables with direct $wpdb->update/delete calls, by
+		// design, because they run before/around the controller layer.
+		//
+		// rename_advertisement_to_marketing() is the concrete case. It rewrites
+		// the category slug and reassigns wp_faz_cookies.category without firing
+		// any hook, so faz_server_cookie_category_map_v2 — the classifier that
+		// authorises server-side cookie destruction, one-hour TTL — could keep
+		// answering "advertisement" for up to an hour while the blocked-category
+		// list already said "marketing", and the cookie was allowed through.
+		//
+		// Firing here rather than inside that one migration covers every
+		// migration in the list above and every migration added later, without
+		// each author having to remember. It is deliberately AFTER the try
+		// block: a batch that threw returns early and leaves the caches alone,
+		// because nothing was committed and it will be retried.
+		do_action( 'faz_clear_cache' );
 	}
 
 	/**

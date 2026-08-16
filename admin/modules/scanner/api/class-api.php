@@ -643,7 +643,21 @@ class Api extends Rest_Controller {
 			}
 
 			// Infer cookies from detected scripts using Cookie_Database.
-			$inferred = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup_scripts( $scripts );
+			//
+			// Filter first. The extraction above matches any attribute ending in
+			// `src` (the `\b` before the attribute name makes `data-thumb-src`
+			// match `src`), so a lazy-loader thumbnail such as
+			// img.youtube.com/vi/ID/hqdefault.jpg is harvested as a "script" —
+			// and lookup_scripts() would then mint YSC / VISITOR_INFO1_LIVE from
+			// an image that sets nothing. This response is not advisory: the scan
+			// engine merges `cookies` straight into the imported set, so a
+			// fabrication here reaches the public declaration (F019).
+			$inferable = Controller::filter_inferable_script_urls( $scripts );
+			$dropped   = count( $scripts ) - count( $inferable );
+			if ( $dropped > 0 ) {
+				$logger->log( 'Dropped ' . $dropped . ' non-code asset URL(s) before inference (images/CSS/fonts/media never set cookies)' );
+			}
+			$inferred = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup_scripts( $inferable );
 			$logger->log( 'Inferred cookies from scripts: ' . count( $inferred ) );
 			foreach ( $inferred as $inf ) {
 				$logger->log( '  Inferred: "' . $inf['name'] . '" → ' . ( isset( $inf['category'] ) ? $inf['category'] : 'uncategorized' ) );
@@ -721,17 +735,36 @@ class Api extends Rest_Controller {
 		// through AJAX, REST, pixels or dynamically loaded resources. PHP captured
 		// their Set-Cookie metadata through the short-lived scan marker.
 		$session_cookies   = $this->controller->finish_browser_scan_session( $scan_id );
-		$raw_cookies       = array_merge( $raw_cookies, $session_cookies );
 		$capture_truncated = $this->controller->browser_scan_capture_was_truncated();
+
+		// The capture window is not scoped to one scan_id — it cannot be, because
+		// the sub-resource and AJAX requests worth observing carry no scan id —
+		// so it also sees the administrator's own wp-admin traffic for as long as
+		// the tab the setup page asks them to keep open stays open. Those
+		// sightings are split off here by the same rule the request-cookie path
+		// below applies to the admin's jar: reported, never imported. Merging
+		// them into $raw_cookies would declare an admin-only cookie to visitors,
+		// and seeding $attributable from them would additionally un-bucket the
+		// matching names on the request-cookie path.
+		$site_session_cookies = array();
+		foreach ( $session_cookies as $session_cookie ) {
+			if ( ! is_array( $session_cookie ) || empty( $session_cookie['name'] ) ) {
+				continue;
+			}
+			if ( ! empty( $session_cookie['admin_context'] ) ) {
+				$jar_cookies[] = $session_cookie;
+				continue;
+			}
+			$site_session_cookies[] = $session_cookie;
+		}
+		$raw_cookies = array_merge( $raw_cookies, $site_session_cookies );
 
 		// Names the site was actually SEEN setting during this scan. This is the
 		// attributable set, and it is what separates a server-set site cookie
 		// from one the administrator merely happens to be carrying.
 		$attributable = array();
-		foreach ( $session_cookies as $session_cookie ) {
-			if ( is_array( $session_cookie ) && ! empty( $session_cookie['name'] ) ) {
-				$attributable[ (string) $session_cookie['name'] ] = true;
-			}
+		foreach ( $site_session_cookies as $session_cookie ) {
+			$attributable[ (string) $session_cookie['name'] ] = true;
 		}
 		foreach ( $raw_cookies as $raw_cookie ) {
 			if ( is_array( $raw_cookie ) && ! empty( $raw_cookie['name'] ) ) {

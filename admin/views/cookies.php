@@ -128,6 +128,15 @@ defined( 'ABSPATH' ) || exit;
 						// not navigate to.
 						?>
 						<div id="faz-restore-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
+						<?php
+						// Cookies the scan saw in the administrator's own browser
+						// jar and deliberately did NOT import, because they cannot
+						// be attributed to any scanned page. The withholding is
+						// correct; announcing it is what was missing, and one of
+						// those names may be a real first-party cookie that now
+						// has to be added by hand.
+						?>
+						<div id="faz-jar-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
 						<div class="faz-table-wrap">
 						<table class="faz-table" id="faz-cookies-table">
 							<thead>

@@ -222,6 +222,15 @@ class Controller {
 	 * carry it automatically, which lets PHP record cookie metadata that browser
 	 * JavaScript is forbidden to read. Values are never persisted.
 	 *
+	 * Deliberately NOT gated on a matching `faz_scan_id`: the requests worth
+	 * capturing are the sub-resource, AJAX and REST calls a scanned page makes,
+	 * and those structurally cannot carry the scan id. The cost is that the
+	 * administrator's OWN wp-admin browsing, in the same browser, for the life
+	 * of the session, is observed too. That is handled by classification rather
+	 * than exclusion: each observation records whether it came from an admin
+	 * context (see request_is_admin_context()), and the import reports those
+	 * instead of declaring them.
+	 *
 	 * @return void
 	 */
 	public static function register_browser_scan_observer() {
@@ -269,11 +278,12 @@ class Controller {
 					return;
 				}
 
-				$controller = self::get_instance();
-				$existing   = (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false );
-				$seen       = array();
-				$stored     = 0;
-				$truncated  = false;
+				$controller    = self::get_instance();
+				$admin_context = self::request_is_admin_context();
+				$existing      = (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false );
+				$seen          = array();
+				$stored        = 0;
+				$truncated     = false;
 				foreach ( $existing as $row ) {
 					if ( ! is_array( $row ) || ! hash_equals( $token, isset( $row['token'] ) ? (string) $row['token'] : '' ) ) {
 						continue;
@@ -282,7 +292,12 @@ class Controller {
 						$truncated = true;
 						continue;
 					}
-					$key          = strtolower( (string) ( isset( $row['name'] ) ? $row['name'] : '' ) ) . '|' . strtolower( (string) ( isset( $row['domain'] ) ? $row['domain'] : '' ) ) . '|' . (string) ( isset( $row['path'] ) ? $row['path'] : '' );
+					// The admin flag is part of the key on purpose: the same cookie
+					// seen once from wp-admin and once from a scanned front-end
+					// page must not be collapsed into whichever was observed
+					// first, or a genuine site cookie stays bucketed as the
+					// administrator's own.
+					$key          = strtolower( (string) ( isset( $row['name'] ) ? $row['name'] : '' ) ) . '|' . strtolower( (string) ( isset( $row['domain'] ) ? $row['domain'] : '' ) ) . '|' . (string) ( isset( $row['path'] ) ? $row['path'] : '' ) . '|' . ( empty( $row['admin_context'] ) ? '0' : '1' );
 					$seen[ $key ] = true;
 					++$stored;
 				}
@@ -294,7 +309,7 @@ class Controller {
 					if ( empty( $parsed['name'] ) || self::BROWSER_SCAN_COOKIE === $parsed['name'] ) {
 						continue;
 					}
-					$key = strtolower( (string) $parsed['name'] ) . '|' . strtolower( (string) $parsed['domain'] ) . '|' . (string) $parsed['path'];
+					$key = strtolower( (string) $parsed['name'] ) . '|' . strtolower( (string) $parsed['domain'] ) . '|' . (string) $parsed['path'] . '|' . ( $admin_context ? '1' : '0' );
 					if ( isset( $seen[ $key ] ) ) {
 						continue;
 					}
@@ -310,8 +325,9 @@ class Controller {
 						? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH )
 						: '';
 					$observation = array(
-						'token'       => $token,
-						'observed_at' => time(),
+						'token'         => $token,
+						'observed_at'   => time(),
+						'admin_context' => $admin_context,
 						'request_path'=> sanitize_text_field( $request_path ),
 						'name'        => sanitize_text_field( $parsed['name'] ),
 						'domain'      => sanitize_text_field( $parsed['domain'] ),
@@ -329,6 +345,86 @@ class Controller {
 			},
 			PHP_INT_MAX
 		);
+	}
+
+	/**
+	 * Whether this request is the administrator's own wp-admin traffic rather
+	 * than something a scanned front-end page caused.
+	 *
+	 * The capture session is deliberately not scoped to a single scan_id (see
+	 * register_browser_scan_observer()), so everything the administrator's
+	 * browser does same-origin while the window is open is observed. This is the
+	 * test that decides whether an observation may be DECLARED as a site cookie
+	 * or only REPORTED — the same reported-not-imported bucket the request-cookie
+	 * path already uses for the admin's jar.
+	 *
+	 * Three request shapes have to be told apart, and no single signal does it:
+	 *
+	 * - A wp-admin screen rendering itself: is_admin() is true. Admin.
+	 * - admin-ajax.php and admin-post.php: is_admin() is true NO MATTER who
+	 *   called them, and their path is under wp-admin either way, yet scanned
+	 *   front-end pages legitimately call them (that is a large part of why the
+	 *   observer exists). is_admin() alone would throw those away, so these two
+	 *   are excluded from both the is_admin() and the path branch and decided by
+	 *   their Referer alone.
+	 * - REST: is_admin() is false even when the block editor is the caller, so
+	 *   the Referer is again what separates an editor autosave from a scanned
+	 *   page's fetch().
+	 *
+	 * The Referer is sent by the browser on same-origin subresource, AJAX and
+	 * fetch requests, which is exactly the traffic in question; when it is
+	 * absent the request is treated as non-admin, keeping the failure in the
+	 * direction of declaring rather than silently discarding.
+	 *
+	 * @return bool
+	 */
+	public static function request_is_admin_context() {
+		$admin_path = function_exists( 'admin_url' ) ? (string) wp_parse_url( admin_url( '/' ), PHP_URL_PATH ) : '';
+		$admin_path = rtrim( $admin_path, '/' );
+
+		$doing_ajax = function_exists( 'wp_doing_ajax' )
+			? wp_doing_ajax()
+			: ( defined( 'DOING_AJAX' ) && DOING_AJAX );
+
+		$request_path = isset( $_SERVER['REQUEST_URI'] )
+			? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH )
+			: '';
+
+		// admin-ajax.php and admin-post.php are the two wp-admin endpoints
+		// WordPress intends FRONT-END pages to call, and both define WP_ADMIN —
+		// so is_admin() and the request path each say "admin" about a request a
+		// scanned page made. For those two the Referer is the only honest
+		// signal, and both other branches stand aside for it.
+		$front_end_callable = in_array(
+			'' === $request_path ? '' : basename( $request_path ),
+			array( 'admin-ajax.php', 'admin-post.php' ),
+			true
+		);
+
+		if ( ! $front_end_callable && function_exists( 'is_admin' ) && is_admin() && ! $doing_ajax ) {
+			return true;
+		}
+
+		if ( '' === $admin_path ) {
+			return false;
+		}
+
+		$under_admin = static function ( $path ) use ( $admin_path ) {
+			if ( ! is_string( $path ) || '' === $path ) {
+				return false;
+			}
+			return $path === $admin_path || 0 === strpos( $path, $admin_path . '/' );
+		};
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- classification only; no state is changed on the strength of this read.
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? (string) wp_unslash( $_SERVER['HTTP_REFERER'] ) : '';
+		if ( '' !== $referer && $under_admin( wp_parse_url( $referer, PHP_URL_PATH ) ) ) {
+			return true;
+		}
+
+		// A wp-admin file reached without WP_ADMIN being defined for it (an
+		// admin asset endpoint, a direct hit on an admin script).
+		return ! $front_end_callable && $under_admin( $request_path );
 	}
 
 	/**
@@ -526,6 +622,11 @@ class Controller {
 	/**
 	 * Drain cookie metadata captured from scan-tagged runtime responses.
 	 *
+	 * Each row carries `admin_context`: true when the only sighting of that name
+	 * was on the administrator's own wp-admin traffic, which the capture window
+	 * necessarily also observes. The caller must report those rather than import
+	 * them — see Api::import_cookies().
+	 *
 	 * @return array[] Cookie inventory rows, without cookie values.
 	 */
 	public function finish_browser_scan_session( $scan_id = '' ) {
@@ -542,7 +643,6 @@ class Controller {
 		}
 
 		$cookies = array();
-		$seen    = array();
 		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
 			if ( ! is_array( $observation ) || ! hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
 				continue;
@@ -554,10 +654,18 @@ class Controller {
 			}
 
 			$name = isset( $observation['name'] ) ? sanitize_text_field( $observation['name'] ) : '';
-			if ( '' === $name || isset( $seen[ $name ] ) ) {
+			if ( '' === $name ) {
 				continue;
 			}
-			$seen[ $name ] = true;
+			$admin_context = ! empty( $observation['admin_context'] );
+			if ( isset( $cookies[ $name ] ) ) {
+				// One row per name, but a name seen from BOTH sides belongs to
+				// the site: a front-end sighting always wins over an admin one,
+				// whichever arrived first.
+				if ( $admin_context || empty( $cookies[ $name ]['admin_context'] ) ) {
+					continue;
+				}
+			}
 			$duration = 'session';
 			if ( ! empty( $observation['max-age'] ) ) {
 				$duration = $this->seconds_to_human( absint( $observation['max-age'] ) );
@@ -567,15 +675,17 @@ class Controller {
 					$duration = $this->seconds_to_human( $expires - time() );
 				}
 			}
-			$cookies[] = array(
-				'name'        => $name,
-				'domain'      => ! empty( $observation['domain'] ) ? sanitize_text_field( $observation['domain'] ) : wp_parse_url( home_url(), PHP_URL_HOST ),
-				'duration'    => $duration,
-				'description' => '',
-				'category'    => 'uncategorized',
-				'source'      => 'server-runtime',
+			$cookies[ $name ] = array(
+				'name'          => $name,
+				'domain'        => ! empty( $observation['domain'] ) ? sanitize_text_field( $observation['domain'] ) : wp_parse_url( home_url(), PHP_URL_HOST ),
+				'duration'      => $duration,
+				'description'   => '',
+				'category'      => 'uncategorized',
+				'source'        => $admin_context ? 'admin-runtime' : 'server-runtime',
+				'admin_context' => $admin_context,
 			);
 		}
+		$cookies = array_values( $cookies );
 
 		delete_transient( self::browser_scan_transient_key( $token ) );
 		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
@@ -1140,8 +1250,16 @@ class Controller {
 			// across the crawl, so a provider present only as an embed (e.g. a
 			// blocked YouTube video) becomes a detected per-service even when its
 			// cookie is never set on a block-first site (#134/#146).
+			//
+			// extract_embed_urls() harvests every `*src`-shaped attribute on a
+			// <script>/<iframe>, which includes lazy-loader thumbnails
+			// (data-thumb-src="…/hqdefault.jpg"). Those are passive assets that
+			// set nothing, but they still contain provider tokens — so they go
+			// through the same import-boundary filter the browser-scan path uses
+			// before they are allowed near the pattern matchers (F019).
 			if ( ! empty( $this->scanned_embed_urls ) ) {
-				$embed_inferred = $this->infer_cookies_from_scripts( array_values( array_unique( $this->scanned_embed_urls ) ) );
+				$embed_urls     = self::filter_inferable_script_urls( array_values( array_unique( $this->scanned_embed_urls ) ) );
+				$embed_inferred = $this->infer_cookies_from_scripts( $embed_urls );
 				$embed_added    = 0;
 				foreach ( $embed_inferred as $inf ) {
 					if ( empty( $inf['name'] ) || isset( $cookies[ $inf['name'] ] ) ) {
@@ -1150,7 +1268,7 @@ class Controller {
 					$cookies[ $inf['name'] ] = $inf;
 					++$embed_added;
 				}
-				$logger->log( 'Embed inference: +' . $embed_added . ' cookies from ' . count( $this->scanned_embed_urls ) . ' embed URLs' );
+				$logger->log( 'Embed inference: +' . $embed_added . ' cookies from ' . count( $embed_urls ) . ' inferable embed URLs (' . count( $this->scanned_embed_urls ) . ' seen)' );
 			}
 
 			$total_cookies = count( $cookies );
@@ -2014,7 +2132,7 @@ class Controller {
 			// authoritative about what counts as a "script": filter at this trust
 			// boundary so a stale cached admin bundle — or any future writer of
 			// the array — cannot feed a passive asset to the pattern matchers.
-			$inferable = $this->filter_inferable_script_urls( $scripts );
+			$inferable = self::filter_inferable_script_urls( $scripts );
 			$dropped   = count( $scripts ) - count( $inferable );
 			if ( $dropped > 0 ) {
 				$logger->log( 'Dropped ' . $dropped . ' non-code asset URL(s) before inference (images/CSS/fonts/media never set cookies)' );
@@ -2357,14 +2475,27 @@ class Controller {
 	 * i.ytimg.com thumbnail yields YSC/VISITOR_INFO1_LIVE/LOGIN_INFO even on a
 	 * page that only renders a privacy facade.
 	 *
-	 * The guard lives here, at the import boundary, rather than inside the
-	 * matchers: the same pattern lists are legitimately matched against arbitrary
-	 * resource URLs by the frontend blocker, and that semantics must not change.
+	 * The guard lives here, on the URLs, rather than inside the matchers,
+	 * because the patterns cannot be anchored without losing real detections.
+	 * Roughly a quarter of the shipped patterns are bare tokens, script
+	 * filenames and inline-code signatures ("yotuwp", "gtag(", "matomo.js")
+	 * that exist precisely to catch SELF-HOSTED trackers, where the provider's
+	 * host never appears in the URL at all; host-anchoring the lists deletes
+	 * those. Under-declaration is the dangerous direction, so the shape of the
+	 * URL is filtered instead of the shape of the pattern, at every point where
+	 * a match is allowed to MINT a cookie declaration.
+	 *
+	 * (The frontend blocker does not consume these matchers unanchored: it runs
+	 * its own boundary-checked matcher — Frontend::has_provider_boundary(),
+	 * mirrored in frontend/js/script.js — so nothing here constrains it.)
+	 *
+	 * Static because both scanner entry points need it: the browser-scan import
+	 * on this class, and the server-scan REST route in the scanner Api.
 	 *
 	 * @param array $scripts Candidate script URLs.
 	 * @return array Only the URLs that can execute or beacon.
 	 */
-	private function filter_inferable_script_urls( $scripts ) {
+	public static function filter_inferable_script_urls( $scripts ) {
 		if ( ! is_array( $scripts ) || empty( $scripts ) ) {
 			return array();
 		}

@@ -579,10 +579,20 @@ class Admin {
 						'restoreDeleted'           => __( 'Undo delete', 'faz-cookie-manager' ),
 						/* translators: %d: number of cookies in the most recent deleted batch that can still be restored. */
 						'restoreDeletedHint'       => __( '%d recently deleted cookie(s) can still be restored.', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies in the most recent deleted batch, 2: human-readable age of that batch, such as "3 hours" or "8 months". */
+						'restoreDeletedHintAged'   => __( '%1$d deleted cookie(s) can still be restored (deleted %2$s ago).', 'faz-cookie-manager' ),
 						/* translators: %d: number of cookies put back by the restore. */
 						'restoreSucceeded'         => __( '%d cookie(s) restored.', 'faz-cookie-manager' ),
 						'restoreFailed'            => __( 'Could not restore the deleted cookies.', 'faz-cookie-manager' ),
 						'nothingToRestore'         => __( 'There is nothing left to restore.', 'faz-cookie-manager' ),
+						'bulkDeleteSnapshotFailed' => __( 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.', 'faz-cookie-manager' ),
+						// Jar-only disclosure — cookies the scan saw in the
+						// administrator's browser but could not attribute to any
+						// page, and therefore never imported.
+						/* translators: %d: number of cookies that were present in the browser before the scan started and were not imported. */
+						'jarOnlyHint'              => __( '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.', 'faz-cookie-manager' ),
+						'jarOnlyToggle'            => __( 'Show the names', 'faz-cookie-manager' ),
+						'jarOnlyExplain'           => __( 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.', 'faz-cookie-manager' ),
 						// Scan cancellation.
 						'stopScan'                 => __( 'Stop scan', 'faz-cookie-manager' ),
 						'stoppingScan'             => __( 'Stopping…', 'faz-cookie-manager' ),
