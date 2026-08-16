@@ -91,5 +91,54 @@ ds_ok( ds_contains( $cookie_api, "'/' . \$this->rest_base . '/restore-deleted'" 
 ds_ok( ds_contains( $cookie_api, 'isset( $current_names[ strtolower( (string) $data[\'name\'] ) ] )' ), 'a restore does not duplicate a cookie that came back on its own' );
 ds_ok( ds_contains( $cookie_api, 'array_slice( $bin, 0, self::RECYCLE_BIN_BATCHES )' ), 'the bin is bounded — an undo, not a growing history' );
 
+// A restore path that exists is not a restore path that works. The three
+// checks below pin the guarantees the restore turns on, because "a function
+// called restore_deleted is present" is exactly the assertion shape that let a
+// restore which restored nothing ship green.
+//
+// (1) The snapshot is replayed through a fixed list of setters. A blind
+// `foreach ( $data as $field => $value )` hands a wp_options blob the power to
+// pick which public setter it calls — and get_prepared_data() names the
+// identity 'id', so the very first key it would reach is the one that turns
+// every INSERT into an UPDATE of a row that no longer exists.
+ds_ok(
+	ds_contains( $cookie_api, "\$restorable = array( 'name', 'slug', 'description', 'duration', 'type', 'domain', 'discovered', 'url_pattern', 'category', 'transfer', 'opt_in_script', 'opt_out_script', );" )
+		&& ds_contains( $cookie_api, "\$setter = 'set_' . \$field; if ( method_exists( \$cookie, \$setter ) ) {" )
+		&& ! ds_contains( $cookie_api, 'foreach ( $data as $field => $value )' ),
+	'a snapshot value can never choose which public setter it calls'
+);
+// (2) The invariant stated as an assertion rather than left to depend on which
+// keys the snapshot happened to carry.
+ds_ok( ds_contains( $cookie_api, 'if ( 0 !== $cookie->get_id() ) { continue; }' ), 'a restore is always an INSERT' );
+// (3) save() returns get_id() unconditionally, so `if ( $cookie->save() )` on
+// a row that failed to insert is not a success test — it is a success claim.
+ds_ok(
+	ds_contains( $cookie_api, '$new_id = $cookie->save(); if ( $new_id ) { $restored++; }' )
+		&& ! ds_contains( $cookie_api, 'if ( $cookie->save() ) {' ),
+	'save() is not trusted as a success signal'
+);
+// Ordering again, in F045's shape, and scoped to restore_deleted: the file
+// writes RECYCLE_BIN_OPTION twice, and the earlier write (the delete path)
+// would satisfy a whole-file positional check no matter what the restore does.
+// Consuming the batch before knowing anything was restored is what turns a
+// failed restore into data loss — the undo record is destroyed and the retry
+// has nothing left to put back.
+$restore_starts_at = strpos( $cookie_api_squeezed, 'public function restore_deleted' );
+$restore_ends_at   = false === $restore_starts_at
+	? false
+	: strpos( $cookie_api_squeezed, "return rest_ensure_response( array( 'restored' => \$restored ) );", $restore_starts_at );
+$restore_body      = ( false !== $restore_starts_at && false !== $restore_ends_at )
+	? substr( $cookie_api_squeezed, $restore_starts_at, $restore_ends_at - $restore_starts_at )
+	: '';
+$bin_guarded_at    = '' === $restore_body ? false : strpos( $restore_body, 'if ( $restored > 0 ) {' );
+$bin_consumed_at   = '' === $restore_body ? false : strpos( $restore_body, 'update_option( self::RECYCLE_BIN_OPTION, $bin, false );' );
+ds_ok(
+	'' !== $restore_body
+		&& false !== $bin_guarded_at
+		&& false !== $bin_consumed_at
+		&& $bin_guarded_at < $bin_consumed_at,
+	'the bin is consumed only AFTER something was actually restored'
+);
+
 echo "\nPassed: {$passed}; Failed: {$failed}\n";
 exit( $failed > 0 ? 1 : 0 );
