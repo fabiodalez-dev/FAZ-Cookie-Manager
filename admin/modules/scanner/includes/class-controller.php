@@ -382,9 +382,7 @@ class Controller {
 		$admin_path = function_exists( 'admin_url' ) ? (string) wp_parse_url( admin_url( '/' ), PHP_URL_PATH ) : '';
 		$admin_path = rtrim( $admin_path, '/' );
 
-		$doing_ajax = function_exists( 'wp_doing_ajax' )
-			? wp_doing_ajax()
-			: ( defined( 'DOING_AJAX' ) && DOING_AJAX );
+		$doing_ajax = wp_doing_ajax();
 
 		$request_path = isset( $_SERVER['REQUEST_URI'] )
 			? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH )
