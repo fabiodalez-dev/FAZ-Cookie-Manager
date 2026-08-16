@@ -93,6 +93,16 @@ Object.defineProperty(iframe.contentWindow.performance, 'getEntriesByType', {
       ? [
         { name: 'https://pixel.tracker.test/collect?cache=one', initiatorType: 'beacon' },
         { name: 'https://pixel.tracker.test/collect?cache=two', initiatorType: 'fetch' },
+        // Extension-less pixel loaded via new Image() — the reason `img` stays
+        // in the allow-list and the extension test does the rejecting.
+        { name: 'https://www.facebook.com/tr?id=1&ev=PageView', initiatorType: 'img' },
+        // Passive assets whose URL contains a provider pattern. Importing any of
+        // these fabricates cookie declarations for a service the page never
+        // loaded (ytimg -> YSC, vimeocdn -> vuid, googleads -> IDE).
+        { name: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg', initiatorType: 'img' },
+        { name: 'https://i.vimeocdn.com/video/1234567-abc_640x360.jpg', initiatorType: 'img' },
+        { name: 'https://example.test/wp-content/uploads/2024/01/googleads-guide.png', initiatorType: 'img' },
+        { name: 'https://example.test/wp-content/themes/acme/css/slimstat.css', initiatorType: 'css' },
       ]
       : [];
   },
@@ -115,6 +125,11 @@ check('06 interaction-created cookies are collected', result.cookies.some((cooki
 check('07 optimizer-deferred script attributes are collected', result.scripts.some((url) => url === 'https://cdn.tracker.test/delayed.js'));
 check('08 lazy iframe attributes are collected', result.scripts.some((url) => url === 'https://video.tracker.test/embed'));
 check('09 cache-busted runtime resources are canonicalized and deduplicated', result.scripts.filter((url) => url === 'https://pixel.tracker.test/collect').length === 1);
+check('10 extension-less img beacons are still imported', result.scripts.includes('https://www.facebook.com/tr'));
+check('11 ytimg thumbnails do not fabricate YouTube cookies', !result.scripts.some((url) => url.includes('ytimg.com')));
+check('12 vimeocdn thumbnails do not fabricate Vimeo cookies', !result.scripts.some((url) => url.includes('vimeocdn.com')));
+check('13 uploaded images do not fabricate ad cookies', !result.scripts.some((url) => url.includes('googleads-guide')));
+check('14 stylesheets are not imported as scripts', !result.scripts.some((url) => url.endsWith('.css')));
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
-process.exit(failed === 0 && passed === 9 ? 0 : 1);
+process.exit(failed === 0 && passed === 14 ? 0 : 1);

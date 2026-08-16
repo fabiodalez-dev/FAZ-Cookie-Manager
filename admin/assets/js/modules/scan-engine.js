@@ -38,6 +38,56 @@
 	var SAFE_SCAN_THRESHOLD = 1000;  // Deep/full scans use longer observation timings.
 	var MAX_RESOURCE_URLS = 10000;   // Bound imports without sacrificing normal-site coverage.
 
+	// `result.scripts` means "URLs that can execute or beacon". Both PHP matchers
+	// (Cookie_Database::lookup_scripts and infer_cookies_from_scripts) substring-
+	// match those URLs against provider patterns, and the resulting declaration
+	// becomes the AUTHORITATIVE catalogue entry — shown in the public preference
+	// centre, used as the deletion policy for a real cookie of that name, and
+	// enough to promote a provider into pre-consent blocking. So a passive
+	// subresource must never reach that array: the pattern list contains image
+	// CDNs (youtube -> ytimg.com, vimeo -> i.vimeocdn.com, linkedin ->
+	// snap.licdn.com) and short tokens that occur in ordinary file paths.
+	// Concretely, without this filter i.ytimg.com/vi/<id>/hqdefault.jpg fabricates
+	// YSC + VISITOR_INFO1_LIVE + LOGIN_INFO — declaring exactly the cookies a
+	// YouTube privacy facade exists to prevent — and any
+	// uploads/googleads-guide.png fabricates _gcl_au + IDE + test_cookie.
+	//
+	// The test is deliberately in two parts. `img` STAYS in the allow-list so
+	// extension-less tracking pixels (facebook.com/tr, google-analytics.com/collect,
+	// bat.bing.com/action/0) are still imported — that is the coverage this
+	// runtime pass exists for — and the extension check is what rejects the
+	// thumbnails. Removing either half re-opens the fabrication.
+	var RUNTIME_CODE_INITIATORS = {
+		'': true,
+		script: true,
+		xmlhttprequest: true,
+		fetch: true,
+		beacon: true,
+		ping: true,
+		iframe: true,
+		frame: true,
+		embed: true,
+		object: true,
+		img: true,
+		image: true,
+		other: true
+	};
+	// css/link/font/video/audio/track are absent on purpose: they can never execute.
+	var NON_CODE_ASSET_PATH = /\.(?:png|jpe?g|gif|webp|avif|bmp|ico|cur|svgz?|tiff?|heic|heif|css|less|sass|scss|woff2?|ttf|otf|eot|mp4|m4v|mov|avi|mkv|webm|ogv|mp3|m4a|wav|flac|aac|oga|ogg|opus|vtt|srt|pdf|zip|gz|tgz|bz2|xz|rar|7z|map)$/;
+
+	function isRuntimeCodeResource(entry, base) {
+		if (!entry || !entry.name) return false;
+		var initiator = typeof entry.initiatorType === 'string' ? entry.initiatorType.toLowerCase() : '';
+		if (!Object.prototype.hasOwnProperty.call(RUNTIME_CODE_INITIATORS, initiator)) return false;
+		var pathname;
+		try {
+			pathname = new URL(entry.name, base || window.location.origin).pathname.toLowerCase();
+		} catch (_unused) {
+			return false;
+		}
+		return !NON_CODE_ASSET_PATH.test(pathname);
+	}
+
 	function createScanId() {
 		var bytes = new Uint8Array(16);
 		if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
@@ -704,9 +754,12 @@
 				try {
 					// Runtime entries cover dynamically injected scripts, pixels,
 					// beacons and AJAX resources that no longer exist in the DOM.
+					// Only the entries that can actually execute or beacon are
+					// imported — see isRuntimeCodeResource() for why a bare
+					// "push every subresource" fabricates cookie declarations.
 					var resources = iframe.contentWindow.performance.getEntriesByType('resource') || [];
 					resources.forEach(function (entry) {
-						if (entry && entry.name) { result.scripts.push(entry.name); }
+						if (isRuntimeCodeResource(entry, parsedUrl.href)) { result.scripts.push(entry.name); }
 					});
 				} catch (_performanceError) {}
 			} catch (e) { hadAccessError = true; }

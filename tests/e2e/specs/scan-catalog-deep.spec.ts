@@ -501,6 +501,40 @@ test.describe('Deep scan and catalog flows', () => {
     }
   });
 
+  // Stand-down pin for the guard's consent-context gate. With the banner turned
+  // off site-wide the visitor is never shown a banner, never loads script.js and
+  // can therefore never record consent — so a stripped Set-Cookie header would
+  // be permanent with no remedy. The guard must not run for them at all, even
+  // though the operator opted into it. 06c above is the opposite pin: on a
+  // normally-configured site the same AJAX endpoint IS still guarded.
+  test('06d. banner_control status false stands the PHP guard down on AJAX', async ({ page, loginAsAdmin }) => {
+    const settingsNonce = await openSettingsPage(page, loginAsAdmin);
+    const originalSettings = (await fazApiGet<any>(page, settingsNonce, 'settings')).data;
+    const endpoint = `${WP_BASE}/wp-admin/admin-ajax.php?action=faz_e2e_scan_ajax_cookie`;
+
+    try {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: true,
+        },
+        banner_control: {
+          ...(originalSettings.banner_control ?? {}),
+          status: false,
+        },
+      });
+
+      const response = await page.request.get(endpoint);
+      expect(response.status()).toBe(200);
+      expect(response.headers()['set-cookie'] ?? '').toContain('brikpanel_vid=');
+    } finally {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: originalSettings.script_blocking,
+        banner_control: originalSettings.banner_control,
+      });
+    }
+  });
+
   test('07. browser scan deduplicates the same cookie seen on multiple pages', async ({ page, loginAsAdmin }) => {
     const token = makeToken('js-dupe');
     setLabToken(token);

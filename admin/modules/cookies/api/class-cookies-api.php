@@ -737,6 +737,31 @@ class Cookies_API extends API_Controller {
 				$current_names[ strtolower( (string) $current->name ) ] = true;
 			}
 		}
+		// The snapshot is replayed through an explicit allowlist, not a blind
+		// set_{key} dispatch. get_prepared_data() names the identity 'id', so
+		// the snapshot carries the id of a row that no longer exists; handed to
+		// set_id() it would send save() down the UPDATE branch, which matches
+		// nothing — and, once a settings import has re-inserted rows with
+		// explicit cookie_id values, could match a DIFFERENT live cookie and
+		// overwrite it. The allowlist closes the whole class rather than that
+		// one key: no value out of a wp_options blob gets to choose which
+		// public setter it calls. The scripts stay on their setters on purpose,
+		// so the unfiltered_html gate inside them still strips raw JS for a
+		// restorer below that capability.
+		$restorable = array(
+			'name',
+			'slug',
+			'description',
+			'duration',
+			'type',
+			'domain',
+			'discovered',
+			'url_pattern',
+			'category',
+			'transfer',
+			'opt_in_script',
+			'opt_out_script',
+		);
 		foreach ( isset( $batch['cookies'] ) ? (array) $batch['cookies'] : array() as $data ) {
 			if ( ! is_array( $data ) || empty( $data['name'] ) ) {
 				continue;
@@ -748,20 +773,41 @@ class Cookies_API extends API_Controller {
 			if ( isset( $current_names[ strtolower( (string) $data['name'] ) ] ) ) {
 				continue;
 			}
-			unset( $data['cookie_id'] );
 			$cookie = new Cookie();
-			foreach ( $data as $field => $value ) {
+			foreach ( $restorable as $field ) {
+				if ( ! array_key_exists( $field, $data ) ) {
+					continue;
+				}
 				$setter = 'set_' . $field;
 				if ( method_exists( $cookie, $setter ) ) {
-					$cookie->$setter( $value );
+					$cookie->$setter( $data[ $field ] );
 				}
 			}
-			if ( $cookie->save() ) {
+			// A restore is always an INSERT: the row it came from is gone. Make
+			// that an asserted invariant rather than an accident of which keys
+			// the snapshot happened to hold.
+			if ( 0 !== $cookie->get_id() ) {
+				continue;
+			}
+			// save() returns get_id() unconditionally and can never signal
+			// failure. On an object that entered at 0, a non-zero id coming
+			// back is the one honest piece of evidence that the row was
+			// written: create_item() returns before set_id() when the insert
+			// fails, so the id stays 0 on a rejected row.
+			$new_id = $cookie->save();
+			if ( $new_id ) {
 				$restored++;
 			}
 		}
 
-		update_option( self::RECYCLE_BIN_OPTION, $bin, false );
+		// Consuming the batch is only legitimate once the rows are actually
+		// back. A restore that wrote nothing must leave the bin untouched:
+		// otherwise the failure also destroys the only undo record and the
+		// retry has nothing left to restore, which is what turns a bug into
+		// data loss.
+		if ( $restored > 0 ) {
+			update_option( self::RECYCLE_BIN_OPTION, $bin, false );
+		}
 		do_action( 'faz_after_create_cookie' );
 		return rest_ensure_response( array( 'restored' => $restored ) );
 	}

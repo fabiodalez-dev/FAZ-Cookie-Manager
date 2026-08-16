@@ -17,7 +17,7 @@ mkdir -p "$OUT"
 cd "$REPO" || exit 1
 # macOS ships bash 3.2, which has no mapfile; fill the array portably.
 SPECS=()
-while IFS= read -r line; do SPECS+=("$line"); done < <(ls tests/e2e/specs/*.spec.ts | sort)
+while IFS= read -r line; do SPECS+=("$line"); done < <(find tests/e2e/specs -maxdepth 1 -type f -name '*.spec.ts' -print | LC_ALL=C sort)
 TOTAL=${#SPECS[@]}
 
 reset_site() {
@@ -34,7 +34,7 @@ SUMMARY="$OUT/summary.txt"
 START_BATCH="${START_BATCH:-1}"
 i=$(( (START_BATCH-1) * BATCH_SIZE ))
 batch=$((START_BATCH-1))
-while [ $i -lt $TOTAL ]; do
+while [ "$i" -lt "$TOTAL" ]; do
   batch=$((batch+1))
   slice=("${SPECS[@]:$i:$BATCH_SIZE}")
   log="$OUT/batch-$(printf '%02d' $batch).log"

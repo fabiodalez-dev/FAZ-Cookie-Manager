@@ -154,6 +154,14 @@ class Api extends Rest_Controller {
 					'methods'             => WP_REST_Server::CREATABLE,
 					'callback'            => array( $this, 'import_cookies' ),
 					'permission_callback' => array( $this, 'create_item_permissions_check' ),
+					'args'                => array(
+						'scan_id' => array(
+							'type'              => 'string',
+							'required'          => true,
+							'validate_callback' => array( $this, 'validate_scan_id' ),
+							'sanitize_callback' => 'sanitize_key',
+						),
+					),
 				),
 			)
 		);
@@ -656,7 +664,12 @@ class Api extends Rest_Controller {
 		$scripts       = isset( $body['scripts'] ) && is_array( $body['scripts'] ) ? $body['scripts'] : array();
 		$metrics       = isset( $body['metrics'] ) && is_array( $body['metrics'] ) ? $body['metrics'] : array();
 		$scanned_urls  = isset( $body['scanned_urls'] ) && is_array( $body['scanned_urls'] ) ? $body['scanned_urls'] : array();
-		$scan_id       = isset( $body['scan_id'] ) ? sanitize_key( (string) $body['scan_id'] ) : '';
+		// Read the registered `scan_id` argument rather than the raw JSON body so
+		// the route's own validate/sanitize pair governs the value. Casting an
+		// unvalidated body field to string turned an array into a PHP notice, and
+		// a malformed id into a 409 "session mismatch" — which reads to an
+		// administrator as an expired scan rather than a bad request.
+		$scan_id       = sanitize_key( (string) $request->get_param( 'scan_id' ) );
 		if ( ! $this->controller->browser_scan_session_matches( $scan_id ) ) {
 			return new \WP_Error( 'faz_browser_scan_session_mismatch', __( 'This scan session expired or belongs to another browser tab. Start a new scan.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 		}
@@ -759,10 +772,26 @@ class Api extends Rest_Controller {
 		$scan_was_complete = 0 === $pages_scanned
 			? false
 			: ( empty( $metrics['incremental'] ) && empty( $metrics['earlyStopReason'] ) );
-		$observed_names    = array();
-		foreach ( $cookies as $observed_cookie ) {
-			if ( ! empty( $observed_cookie['name'] ) ) {
-				$observed_names[] = $observed_cookie['name'];
+		// Judge the catalogue against the names that were actually PERSISTED, not
+		// the pre-merge client list. save_scan_result() additionally merges
+		// script/embed-inferred cookies into the rows it writes, and returns that
+		// merged, deduplicated set as `cookie_names`. Using $cookies here would
+		// guarantee a false miss on every complete scan for every entry that
+		// exists purely by inference — the block-first per-service entries, which
+		// are inference-only by design and would be the first casualties.
+		//
+		// The $cookies loop stays as a fallback: an empty observed set increments
+		// EVERY discovered row at once, so a future refactor that stops returning
+		// cookie_names — or returns it empty — must degrade to the narrower set,
+		// never to nothing.
+		$observed_names = array();
+		if ( ! empty( $result['cookie_names'] ) && is_array( $result['cookie_names'] ) ) {
+			$observed_names = $result['cookie_names'];
+		} else {
+			foreach ( $cookies as $observed_cookie ) {
+				if ( ! empty( $observed_cookie['name'] ) ) {
+					$observed_names[] = $observed_cookie['name'];
+				}
 			}
 		}
 		$this->controller->record_scan_observations( $observed_names, $scan_was_complete );

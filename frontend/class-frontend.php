@@ -123,6 +123,16 @@ class Frontend {
 	private $service_cookie_decisions_cache = null;
 	private $whitelisted_cookie_patterns_cache = null;
 	private $catalog_cookie_categories_cache = null;
+	/**
+	 * Per-cookie-name memo for the Open Cookie Database tier, mirrored into the
+	 * faz_server_cookie_definition_map transient. Misses are memoized too — an
+	 * unknown name is the common case and re-answering it costs a full rebuild.
+	 *
+	 * @var array<string,string>|null
+	 */
+	private $definition_category_memo = null;
+	/** @var bool Whether the memo gained an entry that is not persisted yet. */
+	private $definition_category_memo_dirty = false;
 	private $cookie_allowed_cache = array();
 	private $server_cookie_guard_started = false;
 	/**
@@ -6658,6 +6668,21 @@ class Frontend {
 		if ( true === faz_disable_banner() || $this->is_blocking_disabled_for_page() ) {
 			return false;
 		}
+		// Enforcement must not outlive the banner. Blocking a script is
+		// reversible client-side; a Set-Cookie header that was never sent is
+		// gone for that response, and on a page where no banner is shown there
+		// is no script.js and no way for that visitor to ever record consent —
+		// so the stripping would be permanent with no remedy. The shredder and
+		// the output buffer both stand down in that situation already; this
+		// makes the third enforcement layer agree with them.
+		//
+		// Cache Compatibility Mode is excluded for the same reason: there
+		// get_blocked_categories() returns every non-necessary slug
+		// unconditionally, without ever reading the consent cookie, which is
+		// safe only for enforcement the client can undo.
+		if ( $this->is_cache_compatibility_enabled() || ! $this->server_cookie_guard_has_consent_context() ) {
+			return false;
+		}
 		// A valid authenticated scanner marker is the only bypass for AJAX/REST
 		// subrequests. It lets the scanner observe the exact header that a visitor
 		// would receive; a forged cookie alone is insufficient because the token
@@ -6668,6 +6693,36 @@ class Frontend {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Whether a consent context exists for the visitor the guard would enforce.
+	 *
+	 * @return bool
+	 */
+	private function server_cookie_guard_has_consent_context() {
+		if ( faz_is_front_end_request() ) {
+			// load_banner() runs at init priority 10, before this guard opens
+			// its buffer at init priority 20, and leaves $this->template null on
+			// every no-banner path: the global toggle, page exclusions, AMP,
+			// geo no-banner routing, "no active banner" and geo blocking.
+			// Leaning on that single already-made decision keeps the three
+			// enforcement layers in agreement instead of duplicating six
+			// conditions that could drift apart.
+			//
+			// is_banner_disabled_by_settings() is re-evaluated on top of it
+			// because a numeric page-ID exclusion is not resolvable at init but
+			// is at the flush call site, which is where the destructive
+			// filtering actually happens.
+			return (bool) $this->template && ! $this->is_banner_disabled_by_settings();
+		}
+		// REST and admin-ajax subrequests: faz_is_front_end_request() is false
+		// there, so load_banner() never runs and $this->template is
+		// structurally null. Gating on it would silently kill the guard on
+		// subrequests — the one thing it does that the shredder cannot — so
+		// re-evaluate instead the two visitor-facing decisions that do not
+		// depend on the main query.
+		return ! $this->is_banner_disabled_by_settings() && ! $this->is_geo_banner_disabled();
 	}
 
 	/**
@@ -6741,6 +6796,7 @@ class Frontend {
 				'category' => $this->get_cookie_category_slug( $name ),
 			);
 		}
+		$this->persist_definition_category_memo();
 		return array(
 			'set_cookie_headers' => $keep,
 			'blocked'            => $blocked,
@@ -6824,13 +6880,70 @@ class Frontend {
 			}
 		}
 		if ( class_exists( '\FazCookie\Includes\Cookie_Definitions' ) ) {
-			$definition = \FazCookie\Includes\Cookie_Definitions::get_instance()->lookup( $name );
-			if ( is_array( $definition ) && ! empty( $definition['category'] ) ) {
-				$category = sanitize_key( $definition['category'] );
-				return 'advertising' === $category ? 'marketing' : $category;
-			}
+			return $this->lookup_definition_category( $name );
 		}
 		return '';
+	}
+
+	/**
+	 * Open Cookie Database tier of get_cookie_category_slug(), memoized by name.
+	 *
+	 * Materializing the bundled Open Cookie Database costs ~13 ms and ~16 MB of
+	 * peak memory, and it is otherwise rebuilt on every request that reaches
+	 * this tier — including the pre-consent first page view of every visitor,
+	 * where blocked categories are non-empty by design and the guard in
+	 * is_cookie_allowed() cannot short-circuit. The cookie names seen on a site
+	 * are a small and stable set, so the resolved verdicts are persisted next to
+	 * faz_server_cookie_category_map: same TTL, and the same invalidation hooks
+	 * in class-cli.php, so an admin reclassification takes effect on both maps
+	 * at the same moment rather than trading a performance bug for a staleness
+	 * bug.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when the database does not know it.
+	 */
+	private function lookup_definition_category( $name ) {
+		if ( null === $this->definition_category_memo ) {
+			$cached                         = get_transient( 'faz_server_cookie_definition_map' );
+			$this->definition_category_memo = is_array( $cached ) ? $cached : array();
+		}
+		// array_key_exists, not isset: a memoized miss is stored as '' and must
+		// not be re-resolved.
+		if ( array_key_exists( $name, $this->definition_category_memo ) ) {
+			return $this->definition_category_memo[ $name ];
+		}
+
+		$category   = '';
+		$definition = \FazCookie\Includes\Cookie_Definitions::get_instance()->lookup( $name );
+		if ( is_array( $definition ) && ! empty( $definition['category'] ) ) {
+			$category = sanitize_key( $definition['category'] );
+			$category = 'advertising' === $category ? 'marketing' : $category;
+		}
+
+		$this->definition_category_memo[ $name ] = $category;
+		// Bounded: a crawler spraying junk cookie names must not grow the stored
+		// row without limit. Least-recently-added entries fall off first.
+		if ( count( $this->definition_category_memo ) > 200 ) {
+			$this->definition_category_memo = array_slice( $this->definition_category_memo, -200, null, true );
+		}
+		$this->definition_category_memo_dirty = true;
+		return $category;
+	}
+
+	/**
+	 * Persist the Open Cookie Database memo once per request, if it grew.
+	 *
+	 * Called from the two entry points that classify cookies in bulk so a
+	 * request that meets fifteen unknown names performs one write, not fifteen.
+	 *
+	 * @return void
+	 */
+	private function persist_definition_category_memo() {
+		if ( ! $this->definition_category_memo_dirty || ! is_array( $this->definition_category_memo ) ) {
+			return;
+		}
+		$this->definition_category_memo_dirty = false;
+		set_transient( 'faz_server_cookie_definition_map', $this->definition_category_memo, HOUR_IN_SECONDS );
 	}
 
 	/** @return array<string,string> */
@@ -6894,6 +7007,8 @@ class Frontend {
 				unset( $_COOKIE[ $name ] );
 			}
 		}
+
+		$this->persist_definition_category_memo();
 	}
 
 	/**
@@ -6923,8 +7038,29 @@ class Frontend {
 			return true;
 		}
 
+		$service_decisions = $this->get_service_cookie_decisions();
+
+		// Nothing is blocked and no explicit per-service/per-cookie decision
+		// exists: every remaining path in this method provably returns true, so
+		// the four-tier classification cascade below (admin catalogue →
+		// Known_Providers → Cookie_Database → the bundled Open Cookie Database)
+		// would be paid for an answer that is already determined. The shredder
+		// runs at template_redirect priority 1 on every front-end render, so
+		// that cost is charged per request.
+		//
+		// BOTH conditions are required. Guarding on the category list alone
+		// would silently stop honouring explicit `svc.<id>:no` /
+		// `ck.<svc>.<cookie>:no` denials, which remain enforceable even when no
+		// category is blocked — a consent regression, and one that a casual
+		// smoke test would miss because most sites configure no per-service
+		// consent at all.
+		if ( empty( $service_decisions ) && empty( $this->get_blocked_categories() ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
 		$service_allows = false;
-		foreach ( $this->get_service_cookie_decisions() as $pattern => $decisions ) {
+		foreach ( $service_decisions as $pattern => $decisions ) {
 			if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
 				continue;
 			}

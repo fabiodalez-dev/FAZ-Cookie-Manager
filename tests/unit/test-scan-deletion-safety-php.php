@@ -54,6 +54,14 @@ ds_ok( ds_contains( $controller, 'if ( ! $is_complete ) { return $counts; }' ), 
 ds_ok( ds_contains( $controller, 'if ( empty( $cookie->name ) || empty( $cookie->discovered ) ) { continue;' ), 'a hand-added cookie is never judged by a scan' );
 ds_ok( ds_contains( $controller, 'if ( isset( $observed[ $cookie->name ] ) ) { continue;' ), 'seeing a cookie again clears its tally' );
 ds_ok( ds_contains( $controller, 'public function deletable_stale_keys' ), 'the threshold is applied server-side, not left to the browser' );
+// The rows the tally judges are written from the POST-merge set inside
+// save_scan_result(), which folds in script/embed-inferred cookies the client
+// never sent. Judging them against the pre-merge client array would mark every
+// inference-only entry as missing on every complete scan — so the observed set
+// must come from the merged list the save returned, with the client array kept
+// only as a fallback (an empty observed set increments every discovered row).
+ds_ok( ds_contains( $scan_api, "\$observed_names = \$result['cookie_names'];" ), 'the tally judges the names actually persisted, inference included' );
+ds_ok( ds_contains( $scan_api, "if ( ! empty( \$result['cookie_names'] ) && is_array( \$result['cookie_names'] ) ) {" ), 'a missing or empty cookie_names falls back instead of emptying the observed set' );
 
 echo "== The scan must declare its own completeness ==\n";
 ds_ok( ds_contains( $scan_api, "empty( \$metrics['incremental'] ) && empty( \$metrics['earlyStopReason'] )" ), 'incremental runs and early stops do not count as complete' );
@@ -62,7 +70,21 @@ ds_ok( ds_contains( $scan_api, "\$result['deletable_stale_keys']" ), 'the import
 
 echo "== Reversibility ==\n";
 ds_ok( ds_contains( $cookie_api, 'const RECYCLE_BIN_OPTION' ), 'deleted rows are snapshotted' );
-ds_ok( ds_contains( $cookie_api, '$snapshot = $cookie->get_prepared_data();' ) && ds_contains( $cookie_api, '$recycled[] = $snapshot;' ), 'the snapshot is taken BEFORE the row is deleted' );
+// Ordering, not co-presence. Both fragments existing somewhere in the file
+// says nothing about which runs first, and moving $cookie->delete() above the
+// snapshot is exactly the edit that makes a bulk delete irreversible — so the
+// check compares positions on a whitespace-squeezed copy and fails if the
+// delete comes first, or if either fragment has gone away.
+$cookie_api_squeezed = preg_replace( '/\s+/', ' ', $cookie_api );
+$snapshot_taken_at   = strpos( $cookie_api_squeezed, '$recycled[] = $snapshot;' );
+$row_deleted_at      = strpos( $cookie_api_squeezed, '$cookie->delete();' );
+ds_ok(
+	ds_contains( $cookie_api, '$snapshot = $cookie->get_prepared_data();' )
+		&& false !== $snapshot_taken_at
+		&& false !== $row_deleted_at
+		&& $snapshot_taken_at < $row_deleted_at,
+	'the snapshot is taken BEFORE the row is deleted'
+);
 ds_ok( ds_contains( $cookie_api, "method_exists( \$cookie, 'get_script_data' )" ), 'the snapshot carries the blocker scripts, which get_prepared_data() omits' );
 ds_ok( ds_contains( $cookie_api, 'public function restore_deleted' ), 'a restore path exists' );
 ds_ok( ds_contains( $cookie_api, "'/' . \$this->rest_base . '/restore-deleted'" ), 'the restore path is reachable — a registered route, not dead code' );

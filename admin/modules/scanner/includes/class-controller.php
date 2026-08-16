@@ -1644,10 +1644,18 @@ class Controller {
 			}
 			$logger->log( 'Deduplicating: ' . count( $unique ) . ' unique cookies from client data' );
 
-			// Merge inferred cookies from script patterns.
-			if ( ! empty( $scripts ) ) {
-				$logger->log( 'Script inference from ' . count( $scripts ) . ' scripts (Cookie_Database)...' );
-				$inferred = Cookie_Database::lookup_scripts( $scripts );
+			// Merge inferred cookies from script patterns. The client is not
+			// authoritative about what counts as a "script": filter at this trust
+			// boundary so a stale cached admin bundle — or any future writer of
+			// the array — cannot feed a passive asset to the pattern matchers.
+			$inferable = $this->filter_inferable_script_urls( $scripts );
+			$dropped   = count( $scripts ) - count( $inferable );
+			if ( $dropped > 0 ) {
+				$logger->log( 'Dropped ' . $dropped . ' non-code asset URL(s) before inference (images/CSS/fonts/media never set cookies)' );
+			}
+			if ( ! empty( $inferable ) ) {
+				$logger->log( 'Script inference from ' . count( $inferable ) . ' scripts (Cookie_Database)...' );
+				$inferred = Cookie_Database::lookup_scripts( $inferable );
 				$logger->log( 'Cookie_Database::lookup_scripts returned ' . count( $inferred ) . ' inferred cookies' );
 				foreach ( $inferred as $inf ) {
 					if ( ! is_array( $inf ) || empty( $inf['name'] ) ) {
@@ -1667,7 +1675,7 @@ class Controller {
 
 				// Also infer cookies from Known Providers based on detected scripts.
 				$logger->log( 'Script inference from Known Providers...' );
-				$kp_inferred = $this->infer_cookies_from_scripts( $scripts );
+				$kp_inferred = $this->infer_cookies_from_scripts( $inferable );
 				$logger->log( 'Known Providers returned ' . count( $kp_inferred ) . ' inferred cookies' );
 				foreach ( $kp_inferred as $inf ) {
 					$name = sanitize_text_field( $inf['name'] );
@@ -1967,6 +1975,55 @@ class Controller {
 			}
 		}
 		return $urls;
+	}
+
+	/**
+	 * Drop passive asset URLs before provider-pattern inference.
+	 *
+	 * Both matchers (Cookie_Database::lookup_scripts and
+	 * infer_cookies_from_scripts) do an unanchored substring match of provider
+	 * patterns against the whole URL, and whatever they return is written to the
+	 * catalogue — which is the FIRST authority for a cookie's category, drives
+	 * server-side cookie deletion, and is shown to visitors as a cookie this site
+	 * sets. Provider patterns include image CDNs (ytimg.com, i.vimeocdn.com,
+	 * snap.licdn.com) and short tokens that occur in ordinary paths, so an image
+	 * or stylesheet URL reaching the matchers fabricates declarations: an
+	 * i.ytimg.com thumbnail yields YSC/VISITOR_INFO1_LIVE/LOGIN_INFO even on a
+	 * page that only renders a privacy facade.
+	 *
+	 * The guard lives here, at the import boundary, rather than inside the
+	 * matchers: the same pattern lists are legitimately matched against arbitrary
+	 * resource URLs by the frontend blocker, and that semantics must not change.
+	 *
+	 * @param array $scripts Candidate script URLs.
+	 * @return array Only the URLs that can execute or beacon.
+	 */
+	private function filter_inferable_script_urls( $scripts ) {
+		if ( ! is_array( $scripts ) || empty( $scripts ) ) {
+			return array();
+		}
+
+		$filtered = array();
+		foreach ( $scripts as $url ) {
+			if ( ! is_string( $url ) || '' === trim( $url ) ) {
+				continue;
+			}
+			$path = wp_parse_url( $url, PHP_URL_PATH );
+			if ( ! is_string( $path ) || '' === $path ) {
+				// No path component (e.g. "https://pixel.example.com") — an
+				// extension-less endpoint, which is exactly the tracking-pixel
+				// shape that must stay importable.
+				$filtered[] = $url;
+				continue;
+			}
+			// Mirrors NON_CODE_ASSET_PATH in admin/assets/js/modules/scan-engine.js.
+			if ( preg_match( '/\.(?:png|jpe?g|gif|webp|avif|bmp|ico|cur|svgz?|tiff?|heic|heif|css|less|sass|scss|woff2?|ttf|otf|eot|mp4|m4v|mov|avi|mkv|webm|ogv|mp3|m4a|wav|flac|aac|oga|ogg|opus|vtt|srt|pdf|zip|gz|tgz|bz2|xz|rar|7z|map)$/i', $path ) ) {
+				continue;
+			}
+			$filtered[] = $url;
+		}
+
+		return $filtered;
 	}
 
 	/**
