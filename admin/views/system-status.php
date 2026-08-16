@@ -103,15 +103,36 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 			<?php if ( empty( $blocked_server_cookies ) ) : ?>
 				<p><?php esc_html_e( 'No outgoing PHP Set-Cookie header has been blocked in the last 24 hours.', 'faz-cookie-manager' ); ?></p>
 			<?php else : ?>
-				<table class="faz-status-table">
-					<?php foreach ( array_slice( $blocked_server_cookies, 0, 20 ) as $blocked_cookie ) : ?>
+				<?php
+				/*
+				 * Four DATA columns, so this one carries faz-status-table-data.
+				 * Every other table on this page is a label:value pair, which is
+				 * what the bare .faz-status-table rules are built for — they bold
+				 * the first cell and give it 40% width. Applied here that made the
+				 * cookie name read as a row label and left the remaining three
+				 * columns captionless, on the page an administrator uses to check
+				 * that PHP Set-Cookie blocking is not breaking checkout or login.
+				 */
+				?>
+				<table class="faz-status-table faz-status-table-data">
+					<thead>
 						<tr>
-							<td><code><?php echo esc_html( isset( $blocked_cookie['name'] ) ? $blocked_cookie['name'] : '' ); ?></code></td>
-							<td><?php echo esc_html( isset( $blocked_cookie['category'] ) ? $blocked_cookie['category'] : '' ); ?></td>
-							<td><code><?php echo esc_html( isset( $blocked_cookie['request'] ) ? $blocked_cookie['request'] : '' ); ?></code></td>
-							<td><?php echo ! empty( $blocked_cookie['blocked_at'] ) ? esc_html( date_i18n( 'Y-m-d H:i:s', absint( $blocked_cookie['blocked_at'] ) ) ) : '&mdash;'; ?></td>
+							<th scope="col"><?php esc_html_e( 'Cookie', 'faz-cookie-manager' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Category', 'faz-cookie-manager' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Request URI', 'faz-cookie-manager' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Blocked At', 'faz-cookie-manager' ); ?></th>
 						</tr>
-					<?php endforeach; ?>
+					</thead>
+					<tbody>
+						<?php foreach ( array_slice( $blocked_server_cookies, 0, 20 ) as $blocked_cookie ) : ?>
+							<tr>
+								<td><code><?php echo esc_html( isset( $blocked_cookie['name'] ) ? $blocked_cookie['name'] : '' ); ?></code></td>
+								<td><?php echo esc_html( isset( $blocked_cookie['category'] ) ? $blocked_cookie['category'] : '' ); ?></td>
+								<td><code><?php echo esc_html( isset( $blocked_cookie['request'] ) ? $blocked_cookie['request'] : '' ); ?></code></td>
+								<td><?php echo ! empty( $blocked_cookie['blocked_at'] ) ? esc_html( date_i18n( 'Y-m-d H:i:s', absint( $blocked_cookie['blocked_at'] ) ) ) : '&mdash;'; ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
 				</table>
 			<?php endif; ?>
 		</div>

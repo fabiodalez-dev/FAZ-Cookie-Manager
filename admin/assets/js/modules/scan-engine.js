@@ -507,6 +507,19 @@
 							stoppedReason: scanMetrics.stoppedReason,
 							pagesScanned: scanMetrics.pagesScanned,
 							incremental: scanMetrics.incremental,
+							// The DEPTH the administrator asked for. Without these two
+							// the server is structurally unable to tell a 20-page
+							// sample from a full crawl — the fact never crossed the
+							// wire — so every capped run reported itself as full-site
+							// evidence and tallied a miss against every cookie it
+							// never reached.
+							//
+							// `maxPages` is the raw choice (0 = whole site), the same
+							// value the local coverage gate in pages/cookies.js tests;
+							// `isFullScan` is its derived twin. Both travel so the
+							// server can refuse a payload in which they disagree.
+							maxPages: isFullScan ? 0 : requestPages,
+							isFullScan: isFullScan,
 						};
 
 						// Reconcile: a name held in the jar bucket that some page

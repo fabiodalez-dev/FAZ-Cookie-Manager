@@ -229,13 +229,11 @@ defined( 'ABSPATH' ) || exit;
 					<label><?php esc_html_e( 'Days until consent expires', 'faz-cookie-manager' ); ?></label>
 					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="182" step="1" style="width:120px;" aria-describedby="faz-b-expiry-help">
 					<div class="faz-help" id="faz-b-expiry-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. GDPR and Both are capped at 182 days (six months) — a shorter value is allowed and asks again sooner, which is more protective. CCPA / US State Laws keeps the choice for at least 365 days, because a consumer who opted out may not be asked again for twelve months; its maximum is 3650 days. The field limits update automatically when the regulation changes, and the same limits are enforced at serve time.', 'faz-cookie-manager' ); ?></div>
+					<?php // data-template is read verbatim by banner.js (getAttribute + two .replace() calls) and written into the notice as-is, so the echo stays on the attribute's own line: split across lines, the source indentation became part of the translated string. ?>
 					<div class="faz-help" id="faz-b-expiry-hint" style="display:none;color:#92400e;" role="status"
-						data-template="
-						<?php
+						data-template="<?php
 						/* translators: 1: the lifetime the admin had entered, in days. 2: the lifetime it was changed to. */
-						echo esc_attr__( 'Consent lifetime changed from %1$d to %2$d days to stay within the selected regulation.', 'faz-cookie-manager' );
-						?>
-						"></div>
+						echo esc_attr__( 'Consent lifetime changed from %1$d to %2$d days to stay within the selected regulation.', 'faz-cookie-manager' ); ?>"></div>
 				</div>
 			</div>
 		</div>

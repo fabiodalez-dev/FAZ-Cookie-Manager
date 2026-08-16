@@ -1960,6 +1960,30 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	color: var(--faz-text-secondary);
 }
 
+/*
+ * Multi-column variant, for a status table whose cells are DATA rather than
+ * label:value pairs (System Status → "Recently Blocked Server Cookies").
+ *
+ * Scoping, deliberately: the two selectors below reach a table only if it
+ * carries .faz-status-table-data or has a <thead>, and the four label:value
+ * tables on that page have neither. So no override here can travel to them —
+ * which is why this is a variant rather than an edit to the shared rules.
+ */
+.faz-status-table thead th {
+	padding: 6px 12px;
+	border-bottom: 2px solid var(--faz-border);
+	font-size: 12px;
+	font-weight: 600;
+	text-align: left;
+	white-space: nowrap;
+	color: var(--faz-text-secondary);
+}
+.faz-status-table-data td:first-child {
+	font-weight: 400;
+	width: auto;
+	color: var(--faz-text);
+}
+
 /* ── Guided setup wizard ────────────────────────────────────── */
 .faz-wizard-progress {
 	display: flex;

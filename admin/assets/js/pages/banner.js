@@ -153,6 +153,16 @@
 		});
 	}
 
+	// Typing a lifetime the runtime will not honour must say so at the moment it
+	// is typed, not only on the next page load. clamp stays false here: the
+	// admin's number is left exactly as entered.
+	var expiryFieldEl = document.getElementById('faz-b-expiry');
+	if (expiryFieldEl) {
+		expiryFieldEl.addEventListener('change', function () {
+			syncConsentExpiryConstraints(lawEl ? lawEl.value : 'gdpr', false);
+		});
+	}
+
 	// Keep the editor and the runtime on the same law-aware consent lifetime.
 	// The bounds must match Frontend::normalize_consent_expiry() exactly.
 	//
@@ -176,7 +186,33 @@
 		expiryEl.max = String(max);
 		expiryEl.step = '1';
 		var hint = document.getElementById('faz-b-expiry-hint');
-		if (!clamp) return;
+		if (!clamp) {
+			// Leaving the VALUE alone is right — but staying silent about it is
+			// not. Frontend::normalize_consent_expiry() applies these same bounds
+			// when the banner is served, so a stored CCPA lifetime of 30 shows 30
+			// here and reaches visitors as 365. Not clamping avoided one lie
+			// (about what is stored) by telling another (about what is served);
+			// saying both numbers is the only version that is true.
+			if (!hint) return;
+			var stored = parseInt(expiryEl.value, 10);
+			var served = isFinite(stored) ? Math.max(min, Math.min(max, stored)) : stored;
+			if (isFinite(stored) && served !== stored) {
+				hint.textContent = __('banner.expiryRuntimeBounded', 'This banner stores %1$d days, but visitors are served %2$d days: the selected regulation bounds the lifetime when the banner is served.')
+					.replace('%1$d', String(stored))
+					.replace('%2$d', String(served));
+				hint.style.display = '';
+				// Tagged so this branch only ever clears its OWN message: the clamp
+				// notice below is managed by the clamp path, and a runtime notice
+				// wiping it would delete the explanation of a rewrite the admin has
+				// just watched happen.
+				hint.setAttribute('data-notice', 'runtime');
+			} else if ('runtime' === hint.getAttribute('data-notice')) {
+				hint.style.display = 'none';
+				hint.textContent = '';
+				hint.removeAttribute('data-notice');
+			}
+			return;
+		}
 
 		var value = parseInt(expiryEl.value, 10);
 		if (!isFinite(value)) return;
@@ -185,7 +221,7 @@
 			// Nothing moved this time. The notice must go: left standing it keeps
 			// reporting an older clamp, with two numbers that no longer describe
 			// the field — a stale explanation is worse than none.
-			if (hint) { hint.style.display = 'none'; hint.textContent = ''; }
+			if (hint) { hint.style.display = 'none'; hint.textContent = ''; hint.removeAttribute('data-notice'); }
 			return;
 		}
 
@@ -199,6 +235,7 @@
 				? tpl.replace('%1$d', String(value)).replace('%2$d', String(clamped))
 				: '';
 			hint.style.display = '';
+			hint.setAttribute('data-notice', 'clamp');
 		}
 	}
 

@@ -114,6 +114,44 @@ same(expiry.step, '1', 'Consent expiry only accepts whole days');
 same(hint.style.display, 'none', 'a clamp that did not happen clears the previous notice');
 same(hint.textContent, '', 'and clears its text with it');
 
+// ── A lifetime the editor keeps but the runtime will not honour ────────────
+// Not clamping on load is right: the field must show what is stored. But
+// Frontend::normalize_consent_expiry() bounds the value again when the banner is
+// served, so a CCPA banner holding 30 reaches visitors as 365. Showing 30 and
+// saying nothing swaps one lie for another; the editor has to name both numbers.
+// The law is set WITHOUT dispatching change, so nothing is clamped — this is the
+// page-load/typing path, not the law-change path.
+law.value = 'ccpa';
+expiry.value = '30';
+const editExpiry = () => expiry.dispatchEvent(new window.Event('change', { bubbles: true }));
+editExpiry();
+same(expiry.value, '30', 'a short CCPA lifetime is still not rewritten under the cursor');
+same(hint.style.display, '', 'but the editor now discloses what visitors are actually served');
+same(
+  hint.textContent,
+  'This banner stores 30 days, but visitors are served 365 days: the selected regulation bounds the lifetime when the banner is served.',
+  'the disclosure names the stored lifetime and the served one'
+);
+
+expiry.value = '400';
+editExpiry();
+same(hint.style.display, 'none', 'and it withdraws once the stored value is one the runtime will honour');
+same(hint.textContent, '', 'leaving no stale numbers behind');
+
+// ── The clamp template must not carry the view's indentation ──────────────
+// banner.js reads data-template verbatim and only substitutes the two
+// placeholders, so any literal whitespace the view emits inside the attribute
+// ends up in the rendered notice. Everything between the quotes must therefore
+// be PHP: the check strips the PHP blocks and requires nothing to remain.
+const viewSource = fs.readFileSync(new URL('../../../admin/views/banner.php', import.meta.url), 'utf8');
+const attribute = /data-template="([\s\S]*?)"/.exec(viewSource);
+same(Boolean(attribute), true, 'the clamp-notice template is still declared in the view');
+same(
+  attribute ? attribute[1].replace(/<\?php[\s\S]*?\?>/g, '') : 'missing',
+  '',
+  'data-template emits the translated string alone, with no literal whitespace around it'
+);
+
 if (failures) {
   console.error(`\n${failures} of ${checks} banner expiry checks failed.`);
   process.exit(1);

@@ -266,5 +266,75 @@ console.log('\nsettle schedule (3 checks)');
     scheduled.length === 1 && 1500 + scheduled[0].delay >= 3000);
 }
 
+/* ── Scan depth on the wire ────────────────────────────────────────────
+ *
+ * The server's coverage gate decides whether a scan's silence about a cookie may
+ * advance the consecutive-miss tally that eventually offers that cookie for
+ * deletion. It could not check the DEPTH of the run, because the depth was never
+ * in the payload: `metricsToSend` carried incremental/earlyStop/stopped and
+ * nothing about how much of the site the administrator asked for. So a 20-page
+ * sample of a 500-page site, finishing cleanly, arrived indistinguishable from a
+ * full crawl.
+ *
+ * Driven rather than grepped: the payload is read off the actual import call the
+ * engine makes. Remove either field from metricsToSend and these go red.
+ */
+console.log('\nscan depth reaches the server (4 checks)');
+
+async function drainToImport(app) {
+  app.loadAll();
+  for (let step = 0; step < 40; step += 1) {
+    await settle();
+    const done = app.posts.find((call) => call.endpoint === 'scans/import');
+    if (done) return done;
+    // Smallest live delay first: firing the 15s load fallback ahead of the
+    // 1.5s settle checkpoint would simulate a page that never loaded, which is
+    // a different scenario from the one under test.
+    const timer = app.timers
+      .filter((item) => item.active)
+      .sort((a, b) => a.delay - b.delay)[0];
+    if (!timer) break;
+    timer.active = false;
+    timer.callback();
+    app.loadAll();
+  }
+  await settle();
+  return app.posts.find((call) => call.endpoint === 'scans/import');
+}
+
+{
+  const app = bootCrawl({ urls: ['/a/'], maxPages: 20 });
+  await settle();
+  const imported = await drainToImport(app);
+  check('20 a depth-capped run declares its cap to the server',
+    !!imported && imported.payload.metrics.maxPages === 20 && imported.payload.metrics.isFullScan === false);
+  // The pre-existing terms say nothing about depth on this run — which is
+  // exactly why the server used to read it as full-site evidence.
+  check('21 and it is otherwise indistinguishable from a full crawl, which is the whole point',
+    !!imported && !imported.payload.metrics.incremental
+      && !imported.payload.metrics.earlyStopReason && !imported.payload.metrics.stoppedReason);
+  await app.run.catch(() => {});
+}
+
+{
+  const app = bootCrawl({ urls: ['/a/'], maxPages: 0 });
+  await settle();
+  const imported = await drainToImport(app);
+  check('22 a full scan declares maxPages 0, the same value the local coverage gate tests',
+    !!imported && imported.payload.metrics.maxPages === 0 && imported.payload.metrics.isFullScan === true);
+  await app.run.catch(() => {});
+}
+
+{
+  // No depth given at all: the engine's own default is 20 pages, so it must not
+  // report the run as uncapped just because the caller said nothing.
+  const app = bootCrawl({ urls: ['/a/'], maxPages: undefined });
+  await settle();
+  const imported = await drainToImport(app);
+  check('23 an unspecified depth reports the default cap, not a full scan',
+    !!imported && imported.payload.metrics.maxPages === 20 && imported.payload.metrics.isFullScan === false);
+  await app.run.catch(() => {});
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
 process.exit(failed === 0 ? 0 : 1);

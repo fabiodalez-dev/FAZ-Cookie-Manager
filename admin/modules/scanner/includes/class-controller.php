@@ -918,6 +918,20 @@ class Controller {
 					// Checkpoint results before advancing the durable queue. If this
 					// worker dies on a later URL, earlier findings remain persisted.
 					$this->save_cookies( $page_cookies );
+					// Saving the row was never the whole job. A cookie only this
+					// replay ever sees — a first-visit session cookie, which is
+					// re-issued to this cookie-less client and to nobody else —
+					// was being written to the catalogue on every run while its
+					// consecutive-miss tally climbed toward deletion in parallel.
+					// Checkpointed alongside the save for the same reason: a
+					// worker that dies on a later URL must keep what it proved.
+					$replayed_names = array();
+					foreach ( $page_cookies as $page_cookie ) {
+						if ( is_array( $page_cookie ) && ! empty( $page_cookie['name'] ) ) {
+							$replayed_names[] = $page_cookie['name'];
+						}
+					}
+					$this->clear_scan_observations( $replayed_names );
 				}
 				$latest = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
 				$latest = array_values( array_diff( $latest, array( $url ) ) );
@@ -1759,6 +1773,129 @@ class Controller {
 		}
 
 		update_option( self::MISSED_SCANS_OPTION, $updated, false );
+		return $updated;
+	}
+
+	/**
+	 * Decide whether one scan's silence about a cookie is evidence of absence.
+	 *
+	 * The single place that answers "did this run actually look everywhere?".
+	 * It lives here, next to the tally it guards, because the tally is the only
+	 * thing the answer feeds and a second copy of this rule elsewhere is how the
+	 * two ends drift apart.
+	 *
+	 * Depth is the term that was missing. `incremental`, `earlyStopReason` and
+	 * `stoppedReason` describe a run that did not finish what it set out to do;
+	 * none of them describes a run that set out to do 20 pages of a 500-page
+	 * site and finished. That run is not evidence of anything, and the client's
+	 * own gate has always agreed — scanCoverageIsComplete() in
+	 * admin/assets/js/pages/cookies.js requires `maxPages === 0`. Requiring the
+	 * same fact here is what stops the two gates disagreeing about the word
+	 * "complete".
+	 *
+	 * Every unknown fails CLOSED. A client that does not send the depth at all
+	 * (an older cached admin bundle) yields false, so the tally simply stops
+	 * advancing: no deletion is ever offered from evidence nobody described.
+	 * The opposite default would keep the pre-existing bug and call it
+	 * backwards compatibility.
+	 *
+	 * @param array $metrics           Client-reported scan metrics.
+	 * @param int   $pages_scanned     Pages the browser actually visited.
+	 * @param bool  $capture_truncated Whether the server's Set-Cookie capture
+	 *                                 hit its per-session cap and dropped
+	 *                                 observations.
+	 * @return bool
+	 */
+	public static function scan_coverage_is_complete( $metrics, $pages_scanned, $capture_truncated = false ) {
+		$metrics = is_array( $metrics ) ? $metrics : array();
+
+		if ( absint( $pages_scanned ) < 1 ) {
+			return false;
+		}
+		// Observations were dropped on the floor by the capture cap. The import
+		// already reports this to the administrator; letting it also silence the
+		// tally is the difference between reporting a degraded run and acting on
+		// one. It was computed and then ignored.
+		if ( ! empty( $capture_truncated ) ) {
+			return false;
+		}
+		if ( ! empty( $metrics['incremental'] ) ) {
+			return false;
+		}
+		if ( ! empty( $metrics['earlyStopReason'] ) ) {
+			return false;
+		}
+		// Set only by an explicit administrator cancel.
+		if ( ! empty( $metrics['stoppedReason'] ) ) {
+			return false;
+		}
+		// The administrator's own choice, and its derived flag. Both must agree
+		// and both must be present: a payload claiming a full scan while naming
+		// a page cap is describing two different runs, and the safe reading of a
+		// contradiction is the narrower one.
+		if ( ! array_key_exists( 'maxPages', $metrics ) || 0 !== (int) $metrics['maxPages'] ) {
+			return false;
+		}
+		if ( empty( $metrics['isFullScan'] ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Clear the miss tally for cookies re-confirmed outside a browser scan.
+	 *
+	 * CLEAR-ONLY, and that restriction is the whole design. The background
+	 * header-replay pass (run_httponly_check()) works through a 20-URL batch as
+	 * a deliberately cookie-less client, so a first-visit session cookie is
+	 * re-issued to it on every single run — and never to the administrator's
+	 * browser, which already holds it. That name therefore lands in the
+	 * jar-only bucket at import, never reaches record_scan_observations()'s
+	 * observed set, and its tally climbs forever while this very plugin keeps
+	 * watching the site set it.
+	 *
+	 * Reusing record_scan_observations() here would be worse than the bug: it
+	 * increments every catalogue row absent from the set it is handed, and this
+	 * worker's set is 20 URLs of an arbitrarily large site. One false positive
+	 * would become a site-wide one. So this method can only ever REMOVE keys —
+	 * it never adds one, never increments one, and leaves every entry the batch
+	 * did not touch exactly as it found it.
+	 *
+	 * @param string[] $observed_names Cookie names re-observed being set.
+	 * @return array<string,int> The tally after clearing.
+	 */
+	public function clear_scan_observations( $observed_names ) {
+		$counts = self::canonical_missed_scan_counts( get_option( self::MISSED_SCANS_OPTION, array() ) );
+		if ( empty( $counts ) ) {
+			return $counts;
+		}
+
+		$observed = array();
+		foreach ( (array) $observed_names as $observed_name ) {
+			$observed_name = self::canonical_name( sanitize_text_field( (string) $observed_name ) );
+			if ( '' !== $observed_name ) {
+				$observed[ $observed_name ] = true;
+			}
+		}
+		if ( empty( $observed ) ) {
+			return $counts;
+		}
+
+		// Name-only comparison, matching record_scan_observations(): the tally is
+		// keyed "name|domain" but a replay observes the name, and a Set-Cookie
+		// domain routinely differs in its leading dot from the catalogue row.
+		$updated = $counts;
+		foreach ( $counts as $key => $count ) {
+			$parts = explode( '|', (string) $key, 2 );
+			if ( isset( $observed[ self::canonical_name( $parts[0] ) ] ) ) {
+				unset( $updated[ $key ] );
+			}
+		}
+
+		if ( count( $updated ) !== count( $counts ) ) {
+			update_option( self::MISSED_SCANS_OPTION, $updated, false );
+		}
 		return $updated;
 	}
 

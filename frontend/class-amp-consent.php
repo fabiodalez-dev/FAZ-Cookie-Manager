@@ -632,9 +632,16 @@ class AMP_Consent {
 			function ( $match ) use ( $map, $purpose_ids, $parse_purposes ) {
 				$tag   = strtolower( $match[1] );
 				$attrs = $match[2];
+				// The trailing "/" belongs in the terminator class. AMP custom
+				// elements are never validly self-closed, but the buffer carries
+				// whatever the theme emitted, and on <amp-ad data-block-on-consent/>
+				// the attribute is followed by a solidus: without it the publisher's
+				// own policy went unseen and a SECOND blocking attribute was injected
+				// beside it — a duplicate attribute, which is invalid markup in a
+				// place that was previously only sloppy.
 				if (
 					'amp-consent' === $tag
-					|| preg_match( '/\sdata-block-on-consent(?:-purposes)?(?:\s|=|$)/i', $attrs )
+					|| preg_match( '#\sdata-block-on-consent(?:-purposes)?(?:\s|=|/|$)#i', $attrs )
 				) {
 					return $match[0];
 				}
@@ -813,46 +820,23 @@ class AMP_Consent {
 	}
 
 	/**
-	 * Compact region-set lookup (mirror of Frontend::is_country_in_regions).
+	 * Compact region-set lookup.
+	 *
+	 * This is no longer a hand-kept mirror of Frontend::is_country_in_regions().
+	 * Both now delegate to faz_country_in_regions() (includes/class-utils.php),
+	 * which reads the one region table in faz_region_map(). The mirror this
+	 * method used to be had already drifted — the 'za' bucket existed only on
+	 * the Frontend side — which is why the copy is gone rather than corrected.
+	 *
+	 * The one deliberate difference that remains is on the Frontend side: it
+	 * runs the `faz_is_target_region` filter over the unmatched result. AMP
+	 * pages have never exposed that filter and still do not.
 	 *
 	 * @param string $country_code ISO 3166-1 alpha-2 country code.
 	 * @param array  $regions      List of region keys ('eu', 'uk', 'us', ...) or direct country codes.
 	 * @return bool
 	 */
 	private static function country_in_regions( $country_code, $regions ) {
-		$country_code = strtoupper( $country_code );
-		$region_map   = array(
-			// F105 fix: align with Frontend::is_country_in_regions which
-			// excludes GB from the 'eu' preset (F008). The pre-fix
-			// divergence meant a publisher with target_regions=['eu']
-			// got different UK-visitor behaviour on AMP pages vs
-			// regular pages — exactly the divergence the F008 fix was
-			// meant to close. UK has its own bucket ('uk' → ['GB']);
-			// UK GDPR is a separate regime.
-			'eu' => array(
-				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
-				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
-				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
-				'IS', 'LI', 'NO',
-			),
-			'uk' => array( 'GB' ),
-			'us' => array( 'US' ),
-			'ca' => array( 'CA' ),
-			'br' => array( 'BR' ),
-			'au' => array( 'AU' ),
-			'jp' => array( 'JP' ),
-			'ch' => array( 'CH' ),
-		);
-		foreach ( (array) $regions as $region ) {
-			$region = strtolower( $region );
-			if ( isset( $region_map[ $region ] ) ) {
-				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
-					return true;
-				}
-			} elseif ( strtoupper( $region ) === $country_code ) {
-				return true;
-			}
-		}
-		return false;
+		return faz_country_in_regions( $country_code, $regions );
 	}
 }

@@ -988,6 +988,66 @@ namespace {
 		array( 'slug' => 'marketing', 'name' => 'Marketing', 'visibility' => 1 ),
 	);
 
+	// ── A banner that never stored a lifetime ──────────────────────────────
+	// The two entry points must fall back to the SAME number. Frontend's classic
+	// path uses 180 (what gdpr.json ships and the wizard writes); the bridge used
+	// 182, so the AMP copy of a default banner outlived its canonical twin by two
+	// days. Goes red again the moment either fallback is edited alone.
+	$_SERVER                    = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$GLOBALS['faz_test_cookie'] = '';
+	$faz_saved_expiry           = $banner->expiry;
+	$banner->expiry             = null; // isset() is false → the fallback branch runs.
+	$faz_default_update         = $bridge->handle_update( new Faz_AMP_Test_Request(
+		$base + array( 'consentStateValue' => 'accepted', 'purposeConsent' => array() ),
+		'/faz/v1/amp-consent/update'
+	) );
+	amp_ok( ! is_wp_error( $faz_default_update ), 'a banner with no stored consentExpiry still updates' );
+	amp_same(
+		(int) round( ( $faz_default_update->get_data()['sharedData']['fazExpiresAt'] - time() ) / DAY_IN_SECONDS ),
+		180,
+		'an unset GDPR-family lifetime falls back to 180 days, exactly as the classic path does'
+	);
+	$banner->expiry = $faz_saved_expiry;
+
+	// ── An expiry that is not known is not an expiry of zero ───────────────
+	// A pre-bridge cookie carries no absolute `exp`, so state_from_cookie() reports
+	// expires = 0. Published as fazExpiresAt: 0 that reads as "expired at the
+	// epoch" to anything consuming sharedData; the honest encoding is no key.
+	$GLOBALS['faz_test_cookie'] = 'action:yes,consent:yes,rev:2,__scope.banner:main-banner,__scope.law:gdpr,__scope.fp:'
+		. substr( wp_hash( 'main-banner|gdpr', 'auth' ), 0, 32 ) . ',analytics:yes,marketing:no';
+	$faz_legacy_check = $bridge->handle_check( new Faz_AMP_Test_Request( $base + array( 'consentStateValue' => 'accepted' ) ) );
+	amp_same( $faz_legacy_check->get_data()['consentStateValue'], 'accepted', 'a legacy cookie without exp is still honoured' );
+	amp_same(
+		array_key_exists( 'fazExpiresAt', $faz_legacy_check->get_data()['sharedData'] ),
+		false,
+		'an unknown deadline is omitted from sharedData rather than published as epoch zero'
+	);
+	amp_ok(
+		! isset( $faz_legacy_check->get_data()['consentString'] ),
+		'and no state is signed into AMP local storage for a lifetime the server cannot prove'
+	);
+	$GLOBALS['faz_test_cookie'] = '';
+
+	// ── A CORS origin is never inherited on the AMP routes ─────────────────
+	// serve_cors_headers() acts on exactly these two routes, so anything that can
+	// reach it without running a callback (a dispatch-time 400, a denied
+	// preflight) must find the state already cleared. Before the reset moved into
+	// authorize_preflight() this assertion returned the previous request's origin.
+	$_SERVER = array( 'HTTP_AMP_SAME_ORIGIN' => 'true' );
+	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/faz/v1/amp-consent/check', '', '', 'OPTIONS' ) );
+	amp_same( $bridge->cors_origin_for_tests(), 'https://publisher.example', 'the preflight establishes an origin to inherit' );
+	$bridge->authorize_preflight( null, null, new Faz_AMP_Test_Request( array(), '/faz/v1/amp-consent/update', '', '', 'POST' ) );
+	amp_same( $bridge->cors_origin_for_tests(), '', 'a later AMP-route request starts from no origin at all' );
+
+	// ── A publisher policy written on a self-closed tag ────────────────────
+	// AMP custom elements are never validly self-closed, but the buffer carries
+	// whatever the theme emitted. The guard used to require whitespace, "=" or
+	// end-of-string after the attribute, so a trailing solidus hid it and a second
+	// blocking attribute was injected next to the publisher's own.
+	$faz_selfclosed = $amp->apply_component_blocking( '<amp-ad width="1" data-block-on-consent/>' );
+	amp_same( substr_count( $faz_selfclosed, 'data-block-on-consent' ), 1, 'a self-closed tag keeps exactly one blocking attribute' );
+	amp_same( $faz_selfclosed, '<amp-ad width="1" data-block-on-consent/>', 'and the publisher policy is preserved verbatim' );
+
 	echo "Passed: {$passed}; Failed: {$failed}\n";
 	exit( $failed > 0 ? 1 : 0 );
 }

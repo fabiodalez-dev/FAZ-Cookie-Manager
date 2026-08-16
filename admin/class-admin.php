@@ -648,6 +648,11 @@ class Admin {
 						'enabled'                  => __( 'Cookie banner enabled.', 'faz-cookie-manager' ),
 						'disabled'                 => __( 'Cookie banner disabled.', 'faz-cookie-manager' ),
 						'toggleFailed'             => __( 'Failed to update banner status.', 'faz-cookie-manager' ),
+						// Consent Expiry: the editor never rewrites a stored lifetime,
+						// but Frontend::normalize_consent_expiry() bounds it at serve
+						// time, so the field has to name both numbers when they differ.
+						/* translators: 1: the lifetime stored on the banner, in days. 2: the lifetime visitors are actually served, in days. */
+						'expiryRuntimeBounded'     => __( 'This banner stores %1$d days, but visitors are served %2$d days: the selected regulation bounds the lifetime when the banner is served.', 'faz-cookie-manager' ),
 						// Colour-contrast checker (Colours tab, WCAG SC 1.4.3).
 						'contrastTitle'            => __( 'Accessibility: low colour contrast', 'faz-cookie-manager' ),
 						'contrastIntro'            => __( 'These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:', 'faz-cookie-manager' ),

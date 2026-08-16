@@ -168,7 +168,15 @@ class AMP_Consent_Rest {
 	 * Returns $result untouched — this is an authorisation side effect, not a
 	 * response. A denied origin simply leaves cors_origin empty, and
 	 * serve_cors_headers() then emits nothing, so the browser refuses the
-	 * follow-up request. Fail-closed by construction.
+	 * follow-up request.
+	 *
+	 * "Fail-closed by construction" only holds if nothing can be inherited, so
+	 * the state is cleared for EVERY request on the two AMP routes — the exact
+	 * surface serve_cors_headers() acts on — before the method is even looked at.
+	 * The clearing used to live solely in authorize_request(), which a request
+	 * that never reaches its callback (a dispatch-time 400, a denied preflight)
+	 * does not run: within one PHP process serving several REST sub-requests, such
+	 * a response could then carry the origin an earlier request had established.
 	 *
 	 * @param mixed            $result  Existing short-circuit result.
 	 * @param \WP_REST_Server  $server  REST server.
@@ -179,12 +187,14 @@ class AMP_Consent_Rest {
 		if ( ! is_object( $request ) || ! method_exists( $request, 'get_method' ) ) {
 			return $result;
 		}
-		if ( 'OPTIONS' !== strtoupper( (string) $request->get_method() ) ) {
-			return $result;
-		}
 		$route = method_exists( $request, 'get_route' ) ? (string) $request->get_route() : '';
 		if ( '/' . self::REST_NAMESPACE . self::CHECK_ROUTE !== $route
 			&& '/' . self::REST_NAMESPACE . self::UPDATE_ROUTE !== $route ) {
+			return $result;
+		}
+		$this->cors_origin        = '';
+		$this->cors_source_origin = '';
+		if ( 'OPTIONS' !== strtoupper( (string) $request->get_method() ) ) {
 			return $result;
 		}
 		$this->authorize_request( $request );
@@ -659,9 +669,16 @@ class AMP_Consent_Rest {
 		// purposes and must not inherit the 365-day CCPA floor.
 		$expiry_law        = ( 'ccpa' === $law ) ? 'ccpa' : 'gdpr';
 		$settings          = $banner->get_settings();
+		// The fallback for a banner that never stored consentExpiry must be the
+		// SAME number Frontend::get_store_data() falls back to, or the classic page
+		// and its AMP twin hand the same visitor two different lifetimes. 180 is the
+		// plugin's canonical GDPR-family value: it is what gdpr.json ships, what the
+		// setup wizard writes and what the editor pre-fills. 182 (the bare six-month
+		// cap) was the outlier and made the AMP copy of a default banner outlive the
+		// canonical one by two days.
 		$configured_expiry = isset( $settings['settings']['consentExpiry']['value'] )
 			? absint( $settings['settings']['consentExpiry']['value'] )
-			: ( 'ccpa' === $expiry_law ? 365 : 182 );
+			: ( 'ccpa' === $expiry_law ? 365 : 180 );
 		$expiry_days = Frontend::normalize_consent_expiry( $expiry_law, $configured_expiry );
 		$revision    = function_exists( 'faz_get_consent_revision' ) ? faz_get_consent_revision() : 1;
 
@@ -808,9 +825,16 @@ class AMP_Consent_Rest {
 	/**
 	 * Convert AMP purpose input into a complete, fail-closed map.
 	 *
-	 * @param mixed  $input    Incoming purposeConsents map. AMP sends numeric
-	 *                         states (1 accepted, 2 rejected); boolean aliases
-	 *                         are accepted for backwards compatibility.
+	 * @param mixed  $input    Incoming purposeConsents map. amp-consent sends one
+	 *                         BOOLEAN per purpose (purposeConsentDefault, or
+	 *                         setPurpose(x=event.checked)); the scalar aliases
+	 *                         1/'1'/'true' and 0/'0'/'false' are also accepted.
+	 *                         Nothing else is recognised — in particular the
+	 *                         numeric CONSENT_ITEM_STATE codes (1 accepted,
+	 *                         2 rejected) are a GLOBAL-state vocabulary that never
+	 *                         appears in this map, and a stray 2 here resolves to
+	 *                         null and is denied by the fail-closed default below,
+	 *                         not by any 1/2 translation.
 	 * @param array  $purposes Configured purposes.
 	 * @param string $state    Global state.
 	 * @return array<string,bool>
@@ -1212,12 +1236,20 @@ class AMP_Consent_Rest {
 
 	/** @return array */
 	private static function shared_data( $context, $expires ) {
-		return array(
+		$data = array(
 			'fazConsentRevision' => absint( $context['revision'] ),
 			'fazBanner'          => $context['slug'],
 			'fazLaw'             => $context['law'],
-			'fazExpiresAt'       => absint( $expires ),
 		);
+		// Two situations produce no deadline: consent is unknown, and a classic
+		// pre-bridge cookie that never recorded its absolute `exp`. Neither is a
+		// deadline of zero. Publishing fazExpiresAt: 0 states that consent expired
+		// at the epoch — a false fact for any template or amp-analytics that reads
+		// sharedData — where an absent key is the honest encoding of "unknown".
+		if ( absint( $expires ) > 0 ) {
+			$data['fazExpiresAt'] = absint( $expires );
+		}
+		return $data;
 	}
 
 	/**

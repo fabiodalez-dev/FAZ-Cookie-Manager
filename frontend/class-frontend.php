@@ -1667,6 +1667,12 @@ class Frontend {
 	/**
 	 * Check if a country code belongs to any of the given region groups.
 	 *
+	 * The region table itself lives in faz_region_map() (includes/class-utils.php)
+	 * and the matching is done by faz_country_in_regions(). Only the
+	 * `faz_is_target_region` filter is local to this call site — AMP pages
+	 * resolve their target regions without it, and moving it into the shared
+	 * helper would silently extend the filter to a surface that never had it.
+	 *
 	 * @param string $country_code ISO 3166-1 alpha-2 country code.
 	 * @param array  $regions      List of region keys (e.g. 'eu', 'uk') or direct country codes.
 	 * @return bool
@@ -1675,47 +1681,8 @@ class Frontend {
 		$country_code = strtoupper( $country_code );
 		$regions      = is_array( $regions ) ? $regions : (array) $regions;
 
-		$region_map = array(
-			// F008 fix: align with admin/assets/js/pages/banner.js
-			// REGION_PRESETS.EU which deliberately EXCLUDES GB (UK is its
-			// own preset). The pre-fix table included GB for "consistency
-			// with Geolocation::$eu_countries", but that produced a
-			// silent divergence: a publisher selecting "EU" in the admin
-			// (per-banner target_countries) got a 30-country set without
-			// GB; the same publisher's global Settings → Geolocation →
-			// target_regions=eu got a 31-country set with GB. UK has its
-			// own data-protection regime (UK GDPR) and deserves its own
-			// preset — keep the 'uk' bucket as the canonical home for GB.
-			// Geolocation::$eu_countries is a separate concern (lex
-			// generalis EU+UK shorthand for "is this visitor under any
-			// GDPR-class law") and remains unchanged.
-			'eu' => array(
-				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
-				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
-				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
-				// EEA.
-				'IS', 'LI', 'NO',
-			),
-			'uk' => array( 'GB' ),
-			'us' => array( 'US' ),
-			'ca' => array( 'CA' ),
-			'br' => array( 'BR' ),
-			'au' => array( 'AU' ),
-			'jp' => array( 'JP' ),
-			'ch' => array( 'CH' ),
-			'za' => array( 'ZA' ),
-		);
-
-		foreach ( $regions as $region ) {
-			$region = strtolower( $region );
-			if ( isset( $region_map[ $region ] ) ) {
-				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
-					return true;
-				}
-			} elseif ( strtoupper( $region ) === $country_code ) {
-				// Direct country code match (e.g., 'ZA' for South Africa).
-				return true;
-			}
+		if ( faz_country_in_regions( $country_code, $regions ) ) {
+			return true;
 		}
 
 		/**

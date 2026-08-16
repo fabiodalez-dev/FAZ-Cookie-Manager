@@ -812,13 +812,14 @@ class Api extends Rest_Controller {
 		// covered the whole site without incident may add to the tally, and only
 		// a cookie missing from several consecutive such scans becomes
 		// deletable — see Controller::MISSED_SCANS_THRESHOLD.
-		// `stoppedReason` is set when the administrator cancels a running crawl.
-		// Cancellation is a NEW way for a scan to be incomplete and has to be
-		// named here as well: a cancelled forty-page run treated as full
-		// coverage would tally a miss against every cookie it never reached.
-		$scan_was_complete = 0 === $pages_scanned
-			? false
-			: ( empty( $metrics['incremental'] ) && empty( $metrics['earlyStopReason'] ) && empty( $metrics['stoppedReason'] ) );
+		//
+		// The rule itself lives in Controller::scan_coverage_is_complete(), one
+		// method away from the tally it guards, and it now includes the two
+		// facts this expression used to leave out: the DEPTH the administrator
+		// chose (a 20-page run on a 500-page site finishing is not full-site
+		// coverage), and $capture_truncated, which is computed ninety lines
+		// above and was reported to the admin while the tally ignored it.
+		$scan_was_complete = Controller::scan_coverage_is_complete( $metrics, $pages_scanned, $capture_truncated );
 		// Judge the catalogue against the names that were actually PERSISTED, not
 		// the pre-merge client list. save_scan_result() additionally merges
 		// script/embed-inferred cookies into the rows it writes, and returns that

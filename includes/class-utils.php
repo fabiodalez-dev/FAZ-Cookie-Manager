@@ -745,6 +745,86 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_region_map' ) ) {
+	/**
+	 * The canonical region-key to country-code table.
+	 *
+	 * This is the single definition in the plugin. It used to be written out
+	 * twice — once in Frontend::is_country_in_regions() and once in
+	 * AMP_Consent::country_in_regions(), the second one carrying a docblock
+	 * that called itself a mirror of the first. Hand-copied mirrors drift:
+	 * the 'za' bucket was added to the Frontend table and never to the AMP
+	 * one, and the divergence stayed invisible only because a single-country
+	 * region token also matches through the direct-country-code fallback in
+	 * faz_country_in_regions(). A multi-country region added to one table and
+	 * not the other would not have been rescued that way. Both call sites now
+	 * read this array, so "the two tables are identical" is a property of the
+	 * code rather than something a reviewer has to re-check by eye.
+	 *
+	 * The 'eu' preset deliberately EXCLUDES GB, matching REGION_PRESETS.EU in
+	 * admin/assets/js/pages/banner.js: the UK has its own data-protection
+	 * regime (UK GDPR) and its own 'uk' bucket. Geolocation::$eu_countries is
+	 * a separate concern (an EU+UK shorthand for "is this visitor under any
+	 * GDPR-class law") and is intentionally not derived from this table.
+	 *
+	 * @since 1.26.0
+	 * @return array<string, string[]> Lowercase region key => uppercase ISO 3166-1 alpha-2 codes.
+	 */
+	function faz_region_map() {
+		return array(
+			'eu' => array(
+				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
+				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
+				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
+				// EEA.
+				'IS', 'LI', 'NO',
+			),
+			'uk' => array( 'GB' ),
+			'us' => array( 'US' ),
+			'ca' => array( 'CA' ),
+			'br' => array( 'BR' ),
+			'au' => array( 'AU' ),
+			'jp' => array( 'JP' ),
+			'ch' => array( 'CH' ),
+			'za' => array( 'ZA' ),
+		);
+	}
+}
+
+if ( ! function_exists( 'faz_country_in_regions' ) ) {
+	/**
+	 * Whether a country code belongs to any of the given region groups.
+	 *
+	 * Region keys are matched case-insensitively against faz_region_map(). A
+	 * token that is not a known region key is treated as a direct country code
+	 * (e.g. 'ZA' before the 'za' bucket existed), so publisher configurations
+	 * naming a plain ISO code keep working. Unmatched means false.
+	 *
+	 * @since 1.26.0
+	 * @param string   $country_code ISO 3166-1 alpha-2 country code.
+	 * @param string[] $regions      Region keys ('eu', 'uk', ...) or direct country codes.
+	 * @return bool True when $country_code matches any entry in $regions.
+	 */
+	function faz_country_in_regions( $country_code, $regions ) {
+		$country_code = strtoupper( (string) $country_code );
+		$region_map   = faz_region_map();
+
+		foreach ( (array) $regions as $region ) {
+			$region = strtolower( (string) $region );
+			if ( isset( $region_map[ $region ] ) ) {
+				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
+					return true;
+				}
+			} elseif ( strtoupper( $region ) === $country_code ) {
+				// Direct country code match (e.g., 'ZA' for South Africa).
+				return true;
+			}
+		}
+
+		return false;
+	}
+}
+
 /**
  * Merge settings arrays recursively, replacing sequential (numeric-keyed)
  * arrays entirely instead of concatenating them.

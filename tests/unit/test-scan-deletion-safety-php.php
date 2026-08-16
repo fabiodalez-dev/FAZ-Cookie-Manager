@@ -47,6 +47,7 @@ $controller = file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner
 $scan_api   = file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/api/class-api.php' );
 $cookie_api = file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/cookies/api/class-cookies-api.php' );
 $cookies_js   = file_get_contents( dirname( __DIR__, 2 ) . '/admin/assets/js/pages/cookies.js' );
+$scan_engine_js = file_get_contents( dirname( __DIR__, 2 ) . '/admin/assets/js/modules/scan-engine.js' );
 $cookies_view = file_get_contents( dirname( __DIR__, 2 ) . '/admin/views/cookies.php' );
 
 echo "== Consecutive-miss tally ==\n";
@@ -105,8 +106,26 @@ ds_ok( ds_contains( $scan_api, "\$observed_names = \$result['cookie_names'];" ),
 ds_ok( ds_contains( $scan_api, "if ( ! empty( \$result['cookie_names'] ) && is_array( \$result['cookie_names'] ) ) {" ), 'a missing or empty cookie_names falls back instead of emptying the observed set' );
 
 echo "== The scan must declare its own completeness ==\n";
-ds_ok( ds_contains( $scan_api, "empty( \$metrics['incremental'] ) && empty( \$metrics['earlyStopReason'] ) && empty( \$metrics['stoppedReason'] )" ), 'incremental runs, early stops and cancelled runs do not count as complete' );
-ds_ok( ds_contains( $scan_api, '0 === $pages_scanned ? false' ), 'a scan that visited nothing is never complete' );
+// The rule itself is DRIVEN in test-scan-tally-evidence-php.php, which calls it
+// with real payloads; what is pinned here is the wiring, because the rule can
+// be perfect and still be bypassed.
+//
+// $capture_truncated is named explicitly: it was computed ninety lines above
+// this call, reported to the administrator, and passed to nothing. Drop the
+// third argument and the truncated-capture case in the behavioural suite is the
+// only thing left standing between a half-observed run and the tally.
+ds_ok(
+	ds_contains( $scan_api, '$scan_was_complete = Controller::scan_coverage_is_complete( $metrics, $pages_scanned, $capture_truncated );' ),
+	'the import decides completeness through the one shared rule, and hands it the truncation flag it used to ignore'
+);
+ds_ok( ds_contains( $controller, 'public static function scan_coverage_is_complete' ), 'that rule lives beside the tally it guards, not in the transport' );
+// The depth has to cross the wire or the server is structurally unable to check
+// it, however careful the gate is. This is the fact that never travelled.
+ds_ok(
+	false !== strpos( $scan_engine_js, 'maxPages: isFullScan ? 0 : requestPages' )
+		&& false !== strpos( $scan_engine_js, 'isFullScan: isFullScan,' ),
+	'the client transmits the depth the administrator chose, so the server has something to check'
+);
 ds_ok( ds_contains( $scan_api, "\$result['deletable_stale_keys']" ), 'the import reports which entries have earned deletability' );
 
 echo "== Reversibility ==\n";
