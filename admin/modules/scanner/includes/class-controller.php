@@ -414,6 +414,31 @@ class Controller {
 			return $path === $admin_path || 0 === strpos( $path, $admin_path . '/' );
 		};
 
+		// The scanner dispatches every page it crawls through an iframe embedded
+		// in its own wp-admin screen, so the Referer of a legitimately scanned
+		// front-end page is ALWAYS a wp-admin URL. Reading that as "the admin
+		// was browsing" is what the referer branch below would do, and it
+		// misclassified the entire crawl: each observation was stamped
+		// admin_context, import routed it to the reported-never-imported bucket,
+		// and — because that bucket is also excluded from $attributable — the
+		// request-cookie path dropped the same names a second time. The net
+		// effect was that a cookie a scanned page sets through its own
+		// Set-Cookie header, which is precisely what the server-side capture
+		// exists to find, could never be imported by a browser scan.
+		//
+		// Two conditions, because either alone is too broad. The faz_scanning
+		// marker is what the engine appends to the URLs it dispatches, so it
+		// separates a page the scanner loaded from one the administrator merely
+		// visited while a session happened to be open — that browsing must stay
+		// classified as admin. And is_browser_scan_request() resolves the
+		// capture token against the live transient AND the current user, so the
+		// query parameter alone cannot be used to launder an observation.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- classification only; no state is changed on the strength of this read.
+		$scan_marked = isset( $_GET['faz_scanning'] ) && '1' === $_GET['faz_scanning'];
+		if ( $scan_marked && ! $under_admin( $request_path ) && self::is_browser_scan_request() ) {
+			return false;
+		}
+
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- classification only; no state is changed on the strength of this read.
 		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? (string) wp_unslash( $_SERVER['HTTP_REFERER'] ) : '';
 		if ( '' !== $referer && $under_admin( wp_parse_url( $referer, PHP_URL_PATH ) ) ) {

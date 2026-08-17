@@ -258,6 +258,77 @@ namespace {
 	check( ! Controller::request_is_admin_context(), 'a front-end path merely PREFIXED by wp-admin is not admin context' );
 
 	/*
+	 * ── 1b. The scanner's own iframe ──────────────────────────────────────
+	 *
+	 * Every page the engine crawls is dispatched through an iframe embedded in
+	 * its wp-admin screen, so a legitimately scanned page ALWAYS carries a
+	 * wp-admin Referer. Reading that as admin browsing stamped the whole crawl
+	 * admin_context: import then routed those observations to the
+	 * reported-never-imported bucket, and because that bucket is excluded from
+	 * $attributable the request-cookie path dropped the same names again. A
+	 * cookie a scanned page sets via its own Set-Cookie header — the exact
+	 * thing the server-side capture exists to find — could not be imported.
+	 *
+	 * The exemption needs BOTH the faz_scanning marker and a live capture
+	 * session, so neither the admin's own browsing nor a forged query
+	 * parameter can borrow it. The negatives below are what hold that line.
+	 */
+	$scan_token       = str_repeat( 'c', 32 );
+	$scan_session_key = 'faz_scan_session_' . hash( 'sha256', $scan_token );
+
+	$arm_scan_session = static function () use ( $scan_token, $scan_session_key ) {
+		$_COOKIE[ Controller::BROWSER_SCAN_COOKIE ]      = $scan_token;
+		$GLOBALS['__faz_transients'][ $scan_session_key ] = array(
+			'user_id'    => 7,
+			'scan_id'    => str_repeat( 'd', 32 ),
+			'created_at' => time(),
+		);
+	};
+	$disarm_scan_session = static function () use ( $scan_session_key ) {
+		unset( $_COOKIE[ Controller::BROWSER_SCAN_COOKIE ] );
+		unset( $GLOBALS['__faz_transients'][ $scan_session_key ] );
+	};
+
+	$arm_scan_session();
+	$_GET['faz_scanning'] = '1';
+	shape( false, false, 'https://example.test/wp-admin/admin.php?page=faz-cookie-manager-cookies', '/shop/' );
+	check(
+		! Controller::request_is_admin_context(),
+		'a scanned front-end page is NOT admin context despite the wp-admin Referer its own iframe produces'
+	);
+
+	// Same session, same wp-admin Referer, but the page was not dispatched by
+	// the engine: this is the administrator browsing their own site while a
+	// scan happens to be open, and it must stay classified as admin.
+	unset( $_GET['faz_scanning'] );
+	shape( false, false, 'https://example.test/wp-admin/admin.php?page=faz-cookie-manager-cookies', '/shop/' );
+	check(
+		Controller::request_is_admin_context(),
+		'without the faz_scanning marker the same request is admin browsing, not a scanned page'
+	);
+
+	// The marker alone must not launder anything: with no live capture session
+	// the query parameter is just an attacker-supplied string.
+	$disarm_scan_session();
+	$_GET['faz_scanning'] = '1';
+	shape( false, false, 'https://example.test/wp-admin/admin.php?page=faz-cookie-manager-cookies', '/shop/' );
+	check(
+		Controller::request_is_admin_context(),
+		'the faz_scanning marker without a live capture session cannot exempt a request'
+	);
+
+	// And the exemption must never reach a genuine wp-admin path.
+	$arm_scan_session();
+	shape( true, false, 'https://example.test/wp-admin/admin.php?page=faz-cookie-manager', '/wp-admin/admin.php' );
+	check(
+		Controller::request_is_admin_context(),
+		'a wp-admin path stays admin context even with a live scan session and the marker set'
+	);
+
+	unset( $_GET['faz_scanning'] );
+	$disarm_scan_session();
+
+	/*
 	 * ── 2. The observer records which side each Set-Cookie came from ──────
 	 */
 	$token = str_repeat( 'a', 32 );

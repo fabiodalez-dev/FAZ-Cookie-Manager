@@ -40,7 +40,14 @@ final class Faz_E2E_Scan_Lab {
 			return '';
 		}
 
-		return substr( $post->post_name, 8 );
+		// A trailing -NNN is an instance counter, not part of the scenario
+		// name: WordPress slugs are unique, so a scenario that must run on
+		// many pages at once (the long-crawl spec needs one PHP Set-Cookie
+		// emitter per sampled page) can only be seeded as faz-lab-headers-000,
+		// -001, … Stripping the counter keeps every one of them on the
+		// 'headers' branch. Unsuffixed slugs are unaffected: 'faz-lab-headers'
+		// still yields exactly 'headers'.
+		return (string) preg_replace( '/-\d+$/', '', substr( $post->post_name, 8 ) );
 	}
 
 	private function print_js_cookie( $name, $delay_ms = 0 ) {
