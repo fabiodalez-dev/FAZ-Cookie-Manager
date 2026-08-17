@@ -165,7 +165,13 @@ final class Faz_E2E_Audit_Lab {
 			);
 		}
 
-		$country = \FazCookie\Includes\Geolocation::get_country();
+		// get_visitor_country(), not get_country(): the former is what every
+		// visitor-facing geo decision in the plugin actually calls, and it is
+		// the only one that honours the CF-IPCountry header the E2E harness
+		// injects. get_country() is IP-based and returns '' on loopback, so a
+		// probe built on it reports "no country" for every local run and makes
+		// each geo assertion downstream fail on its own precondition.
+		$country = \FazCookie\Includes\Geolocation::get_visitor_country();
 		$is_eu   = \FazCookie\Includes\Geolocation::is_eu();
 
 		wp_send_json(

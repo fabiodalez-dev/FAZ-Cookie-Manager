@@ -141,11 +141,10 @@ class AMP_Consent_Rest {
 		 * header core had already emitted — meaning a real preflight against
 		 * these routes failed outright rather than being checked more strictly.
 		 *
-		 * This is latent rather than breaking, because amp-consent sends its body
-		 * as text/plain precisely to stay preflight-free (see hydrate_amp_body()).
-		 * Registering routes that cannot run only made the situation look handled.
-		 * Supporting preflight properly means authorising it at rest_pre_dispatch,
-		 * which is a separate change with its own risk.
+		 * amp-consent sends its body as text/plain and normally stays preflight-
+		 * free (see hydrate_amp_body()). JSON/custom clients can still preflight,
+		 * so authorize_preflight() now performs the origin check at priority 9,
+		 * before core's priority-10 short circuit.
 		 */
 	}
 
@@ -214,9 +213,9 @@ class AMP_Consent_Rest {
 	 * was rejected during dispatch. The bridge never ran once against real AMP.
 	 *
 	 * Decoding here rather than switching AMP to application/json is deliberate:
-	 * that content type would trigger a CORS preflight, and preflight against
-	 * these routes does not currently work (core answers OPTIONS before our
-	 * callbacks, so no allow-origin header is emitted).
+	 * text/plain is the amp-consent wire contract and avoids an unnecessary CORS
+	 * round trip. JSON callers are still supported; authorize_preflight() handles
+	 * their OPTIONS request before WordPress core short-circuits it.
 	 *
 	 * Query-string params are left alone — `banner`, `scope` and
 	 * `__amp_source_origin` travel in the URL and WordPress parses those
