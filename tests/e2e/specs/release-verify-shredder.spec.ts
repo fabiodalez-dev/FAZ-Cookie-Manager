@@ -262,7 +262,7 @@ test.describe('release verify — server-side cookie shredder', () => {
     }
   });
 
-  test('with block_server_cookies off the shredder deletes nothing, even catalogued trackers', async ({ page, browser, loginAsAdmin }) => {
+  test('the shredder still runs with block_server_cookies off — the opt-in gates the new header guard, not the established shredder', async ({ page, browser, loginAsAdmin }) => {
     test.setTimeout(120_000);
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const snapshot = await readSettingsSnapshot(page, nonce);
@@ -270,8 +270,8 @@ test.describe('release verify — server-side cookie shredder', () => {
     try {
       const analyticsId = await findCategoryId(page, nonce, 'analytics');
       trackerRowId = await createCatalogueRow(page, nonce, 'faz_relverify_optout', analyticsId);
-      // Explicitly OFF — the shipped default. If a leaky earlier spec left it
-      // on, this write re-establishes the state under test either way.
+      // Explicitly OFF — the shipped default, and exactly what an install that
+      // upgrades into this release looks like.
       await applyScriptBlocking(page, nonce, {
         ...(snapshot.script_blocking ?? {}),
         block_server_cookies: false,
@@ -279,10 +279,19 @@ test.describe('release verify — server-side cookie shredder', () => {
 
       const survivors = await survivorsAfterFreshVisit(browser, ['faz_relverify_optout']);
 
+      // An earlier revision of this test asserted the opposite — that the
+      // opt-in silences the shredder — and so pinned a real regression as if it
+      // were the contract. On the base branch shred_non_consented_cookies() had
+      // no setting to consult at all: it ran on every front-end render. Routing
+      // it through a new default-false opt-in meant every existing install
+      // silently lost server-side shredding on upgrade, with no migration and
+      // no notice. The opt-in exists to stop a NEW capability (stripping
+      // outgoing Set-Cookie headers) being switched on under an operator; it
+      // must not switch an established one off.
       expect(
         survivors.has('faz_relverify_optout'),
-        'REGRESSION: the server-side shredder deleted a cookie while block_server_cookies was OFF — the opt-in gate is not being honoured and upgrades would turn destructive enforcement on underneath operators',
-      ).toBe(true);
+        'REGRESSION: a catalogued tracker survived pre-consent with the opt-in off — the established shredder has been silenced by a setting that postdates it, so upgrading installs lose enforcement they already had',
+      ).toBe(false);
     } finally {
       await restoreScriptBlocking(page, nonce, snapshot.script_blocking);
       await removeCatalogueRow(page, nonce, trackerRowId);

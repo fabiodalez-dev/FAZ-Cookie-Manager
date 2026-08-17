@@ -4110,6 +4110,39 @@ class Frontend {
 		// a resource is genuinely strictly necessary for their own use case.
 		$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
 
+		// ── Anti-abuse challenge endpoints — strictly necessary ──
+		//
+		// These are NOT plugin directories or generic handles, and the rule above
+		// does not reach them: each is one third-party endpoint whose only
+		// function is to protect a form the visitor is actively trying to use.
+		// Blocking them pre-consent does not degrade a feature, it removes the
+		// login, registration, comment or checkout form outright — the visitor
+		// cannot even reach the banner's Accept button on a login screen. ePrivacy
+		// exempts measures strictly necessary to deliver a service the user
+		// requested, and anti-abuse protection of that same service qualifies.
+		//
+		// google-recaptcha is a matchable entry in known-providers.json, so
+		// without this the provider matcher blocks it by name. Restored after the
+		// hardcoded strictly-necessary list was removed: Activator::
+		// seed_default_whitelist() returns early on any install that already has
+		// stored patterns, so no migration would have given these back to an
+		// existing site. Substring matching means 'hcaptcha.com' also covers
+		// js.hcaptcha.com, and 'google.com/recaptcha' covers recaptcha/api.js.
+		//
+		// Deliberately NOT restored from the old list: the bare 'grecaptcha' JS
+		// global and 'akismet' (a server-side filter with no browser asset that
+		// needs unblocking) — both are generic handles the rule above rightly
+		// rejects.
+		$whitelist = array_merge(
+			$whitelist,
+			array(
+				'google.com/recaptcha',
+				'gstatic.com/recaptcha',
+				'hcaptcha.com',
+				'challenges.cloudflare.com/turnstile',
+			)
+		);
+
 		// ── WooCommerce core infrastructure ──
 		if ( class_exists( 'WooCommerce', false ) ) {
 			// On checkout/cart pages, explicitly allow the selected payment SDKs
@@ -6656,11 +6689,19 @@ class Frontend {
 		ob_start( array( $this, 'filter_outgoing_cookies' ) );
 	}
 
-	/** @return bool */
-	private function server_cookie_guard_enabled() {
-		$settings = $this->get_faz_settings();
-		$enabled  = ! empty( $settings['script_blocking']['block_server_cookies'] );
-		if ( ! $enabled || wp_doing_cron() || ( is_admin() && ! wp_doing_ajax() && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) ) {
+	/**
+	 * Whether the destructive server-side layers may run at all on this request.
+	 *
+	 * Everything below the opt-in is a SAFETY standdown: conditions under which
+	 * enforcement must not happen no matter which layer is asking. Split out so
+	 * the pre-existing shredder can consult the standdowns WITHOUT inheriting
+	 * the opt-in that gates the new outgoing-header guard — see
+	 * cookie_shredder_enabled().
+	 *
+	 * @return bool
+	 */
+	private function server_cookie_enforcement_permitted() {
+		if ( wp_doing_cron() || ( is_admin() && ! wp_doing_ajax() && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) ) {
 			return false;
 		}
 		if ( true === faz_disable_banner() || $this->is_blocking_disabled_for_page() ) {
@@ -6692,6 +6733,47 @@ class Frontend {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Whether the NEW outgoing Set-Cookie guard may run.
+	 *
+	 * Opt-in, because stripping a Set-Cookie header a third-party plugin just
+	 * emitted is a capability this plugin did not previously have: it must be a
+	 * decision an operator made, not something an upgrade turns on underneath
+	 * them.
+	 *
+	 * @return bool
+	 */
+	private function server_cookie_guard_enabled() {
+		$settings = $this->get_faz_settings();
+		if ( empty( $settings['script_blocking']['block_server_cookies'] ) ) {
+			return false;
+		}
+		return $this->server_cookie_enforcement_permitted();
+	}
+
+	/**
+	 * Whether the pre-existing cookie shredder may run.
+	 *
+	 * Deliberately NOT gated on script_blocking.block_server_cookies. That
+	 * setting is new in this release and defaults to false; routing the
+	 * shredder through it turned a behaviour that had run on every front-end
+	 * render since the feature shipped into one every existing install silently
+	 * lost on upgrade, with no migration and no notice. An opt-in protects
+	 * operators from a NEW capability being switched on under them; it must not
+	 * switch an established one off.
+	 *
+	 * The safety standdowns still apply in full — the shredder is destructive
+	 * and irreversible in exactly the same way, so it stands down wherever the
+	 * visitor has no way to consent (no banner, geo no-banner routing, excluded
+	 * page) and under Cache Compatibility Mode, where get_blocked_categories()
+	 * answers without ever reading the consent cookie.
+	 *
+	 * @return bool
+	 */
+	private function cookie_shredder_enabled() {
+		return $this->server_cookie_enforcement_permitted();
 	}
 
 	/**
@@ -7140,7 +7222,9 @@ class Frontend {
 	 * is_cookie_allowed() — admin catalogue then Known_Providers — and deletes
 	 * those belonging to categories the visitor has not consented to.
 	 *
-	 * Gated on `server_cookie_guard_enabled()` — the single decision that
+	 * Gated on `cookie_shredder_enabled()` — the safety standdowns only, NOT
+	 * the new block_server_cookies opt-in, which governs only the outgoing
+	 * Set-Cookie guard. The decision that
 	 * governs every destructive server-side enforcement layer, not a private
 	 * copy of the `script_blocking.block_server_cookies` opt-in. Destroying a
 	 * visitor's existing cookie is irreversible for that request and the failure
@@ -7174,7 +7258,7 @@ class Frontend {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
 			return;
 		}
-		if ( ! $this->server_cookie_guard_enabled() ) {
+		if ( ! $this->cookie_shredder_enabled() ) {
 			return;
 		}
 		// Early bail: with no blocked category and no explicit per-service or

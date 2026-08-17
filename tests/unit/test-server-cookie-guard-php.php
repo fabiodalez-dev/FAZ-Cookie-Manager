@@ -400,8 +400,17 @@ namespace {
 	$shred_on = guard_shred( true );
 	guard_check( $shred_on['setcookies'] > 0 && false === $shred_on['survived'], 'with the opt-in on, a blocked catalogued cookie is shredded' );
 	guard_check( $shred_on['classified'] > 0, 'the enabled shredder does classify the request cookies — the bail probe below is live' );
+	// The shredder predates script_blocking.block_server_cookies: on the base
+	// branch it ran on every front-end render with no setting to consult. An
+	// earlier revision of this file asserted the opposite — that the opt-in
+	// silences it — which pinned a real regression as though it were the
+	// contract: every existing install would have lost server-side shredding
+	// on upgrade, silently and with no migration. The opt-in exists to stop a
+	// NEW capability (stripping outgoing Set-Cookie headers) being switched on
+	// under an operator; it must not switch an established one off.
 	$shred_off = guard_shred( false );
-	guard_check( 0 === $shred_off['setcookies'] && true === $shred_off['survived'], 'with the opt-in off, the shredder never runs — an upgrade cannot start deleting cookies' );
+	guard_check( $shred_off['setcookies'] > 0 && false === $shred_off['survived'], 'the shredder still runs with the opt-in off — it predates that setting and an upgrade must not silently disable it' );
+	guard_check( $shred_off['classified'] > 0, 'the opt-in-off shredder really classified the request cookies, so the assertion above cannot pass vacuously' );
 	$shred_bail = guard_shred( true, array(), array() );
 	guard_check(
 		0 === $shred_bail['setcookies'] && true === $shred_bail['survived'] && 0 === $shred_bail['classified'],
@@ -712,6 +721,51 @@ namespace {
 		(bool) preg_match( '/array_slice\(\s*\$blocked_server_cookies,\s*0,\s*20\s*\)/', $status_view ),
 		'System Status still renders 20 rows, so the storage cap above is pinned to a real reader'
 	);
+
+	// ── Anti-abuse challenge endpoints stay strictly necessary ──
+	//
+	// The hardcoded strictly-necessary whitelist was removed in favour of
+	// "publishers add their own narrow exception in Settings". That rule is
+	// right for plugin directories and generic handles, but it also dropped the
+	// CAPTCHA challenge endpoints — and Activator::seed_default_whitelist()
+	// returns early on any install that already has stored patterns, so no
+	// migration gives them back. google-recaptcha is a matchable entry in
+	// known-providers.json, so the net effect on an upgraded site was a blocked
+	// login/comment form: the visitor cannot reach the Accept button at all.
+	$reflection   = new \ReflectionClass( Frontend::class );
+	$wl_frontend  = $reflection->newInstanceWithoutConstructor();
+	$wl_method    = new \ReflectionMethod( Frontend::class, 'get_whitelist' );
+	$wl_method->setAccessible( true );
+	$wl_cache     = new \ReflectionProperty( Frontend::class, 'whitelist_cache' );
+	$wl_cache->setAccessible( true );
+	$wl_cache->setValue( $wl_frontend, null );
+	// Seed the settings cache directly: get_faz_settings() would otherwise call
+	// get_option(), which this harness does not stub. An empty stored whitelist
+	// is also the case that matters — it is what an install that never edited
+	// Settings looks like, and the one the removal silently broke.
+	$wl_settings  = new \ReflectionProperty( Frontend::class, 'settings_option_cache' );
+	$wl_settings->setAccessible( true );
+	$wl_settings->setValue( $wl_frontend, array( 'script_blocking' => array( 'whitelist_patterns' => array() ) ) );
+	$whitelist    = (array) $wl_method->invoke( $wl_frontend );
+
+	$wl_matches = static function ( $url ) use ( $whitelist ) {
+		foreach ( $whitelist as $pattern ) {
+			if ( '' !== (string) $pattern && false !== stripos( $url, (string) $pattern ) ) {
+				return true;
+			}
+		}
+		return false;
+	};
+
+	guard_check( $wl_matches( 'https://www.google.com/recaptcha/api.js' ), 'reCAPTCHA challenge endpoint is strictly necessary' );
+	guard_check( $wl_matches( 'https://js.hcaptcha.com/1/api.js' ), 'hCaptcha challenge endpoint is strictly necessary' );
+	guard_check( $wl_matches( 'https://challenges.cloudflare.com/turnstile/v0/api.js' ), 'Turnstile challenge endpoint is strictly necessary' );
+	// The negative is what stops this from being a licence to whitelist widely:
+	// an analytics loader must still be blockable.
+	guard_check( ! $wl_matches( 'https://www.googletagmanager.com/gtag/js?id=G-TEST' ), 'the exemption is narrow — an analytics loader is still blockable' );
+	// And the generic handles deliberately NOT restored stay out, so a script
+	// merely mentioning them in its path is not laundered through.
+	guard_check( ! $wl_matches( 'https://cdn.example.test/akismet-bundle.js' ), 'akismet was not restored as a generic handle' );
 
 	echo $run . ' checks, ' . $failed . " failed\n";
 	exit( $failed > 0 ? 1 : 0 );

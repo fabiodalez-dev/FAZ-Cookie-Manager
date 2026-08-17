@@ -35,8 +35,8 @@
  */
 import type { Browser, Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
-import { fazApiGet, fazApiPost, openSettingsPage } from '../utils/faz-api';
-import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles, WP_PATH } from '../utils/wp-env';
+import { fazApiGet, fazApiPost, findCategoryId, openSettingsPage } from '../utils/faz-api';
+import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles, wpEval, WP_PATH } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const AJAX_ENDPOINT = `${WP_BASE}/wp-admin/admin-ajax.php?action=faz_e2e_scan_ajax_cookie`;
@@ -128,6 +128,8 @@ async function probeAjaxCookie(
 
 test.describe('Release verify — Set-Cookie guard standdown (one gate, no orphaned strips)', () => {
   let initialActivePluginFiles: string[] | null = null;
+  // Catalogue row id for the probe cookie, seeded by the control test below.
+  let probeRowId = 0;
 
   test.beforeAll(() => {
     // The observable surface is the scan-lab fixture plugin. With WP_PATH we
@@ -142,6 +144,16 @@ test.describe('Release verify — Set-Cookie guard standdown (one gate, no orpha
   test.afterAll(() => {
     if (initialActivePluginFiles) {
       restoreActivePluginFiles(initialActivePluginFiles);
+    }
+    // Remove the seeded probe row so this file leaves the catalogue as it
+    // found it — a leftover row is what made the ordering coupling invisible
+    // in the first place.
+    if (probeRowId && WP_PATH) {
+      wpEval(`
+        global $wpdb;
+        $wpdb->delete( $wpdb->prefix . 'faz_cookies', array( 'name' => 'brikpanel_vid' ), array( '%s' ) );
+        do_action( 'faz_after_delete_cookie' );
+      `);
     }
   });
 
@@ -161,6 +173,29 @@ test.describe('Release verify — Set-Cookie guard standdown (one gate, no orpha
         // rather than inheriting whatever a previous spec left behind.
         banner_control: { ...(original.banner_control ?? {}), status: true, cache_compatibility: false },
       });
+
+      // brikpanel_vid is enforceable ONLY through the admin catalogue: it is
+      // not in known-providers.json, and the enforcement helper deliberately
+      // does not consult Cookie_Database / the Open Cookie Database. With no
+      // row the cookie is unknown, unknown fails permissive, and the guard
+      // correctly strips nothing — so this control would fail for a reason
+      // that has nothing to do with the guard. It used to pass only because an
+      // earlier scan spec happened to leave the row behind, which made this
+      // whole file silently order-dependent. Seed it here instead.
+      if (!probeRowId) {
+        const analyticsId = await findCategoryId(page, nonce, 'analytics');
+        const created = await fazApiPost<Record<string, unknown>>(page, nonce, 'cookies', {
+          name: 'brikpanel_vid',
+          slug: 'brikpanel_vid',
+          domain: new URL(WP_BASE).hostname,
+          category: analyticsId,
+          duration: { en: '1 year' },
+          description: { en: 'guard-standdown probe row' },
+        });
+        expect([200, 201], `probe catalogue row was not created (status ${created.status})`).toContain(created.status);
+        probeRowId = Number((created.data as Record<string, unknown>)?.id ?? 0);
+        expect(probeRowId, 'probe catalogue row returned no id').toBeGreaterThan(0);
+      }
 
       const probe = await probeAjaxCookie(browser);
       // Positive anchor: the handler really emitted brikpanel_vid this request…
