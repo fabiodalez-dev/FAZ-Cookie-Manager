@@ -425,6 +425,42 @@ namespace {
 	amp_ok( false !== strpos( $merged, 'consent:yes' ), 'the AMP decision itself still wins over the stored one' );
 	amp_ok( false !== strpos( $merged, 'consentid:new-id' ), 'the AMP consent id replaces the stored one' );
 
+	// ── A withdrawal must withdraw everything, not just what AMP names ─────
+	//
+	// The accept case above pins that grants SURVIVE an acceptance. The
+	// rejection is the opposite obligation, and it was unasserted: carrying
+	// `yes` forward unchanged meant an AMP "Reject All" wrote consent:no with
+	// every category denied while still saying svc.<id>:yes. is_cookie_allowed()
+	// returns true on a matching service decision BEFORE it consults the
+	// category, so the shredder spared those cookies, the outgoing guard passed
+	// their Set-Cookie headers, and script.js unblocked the provider on the next
+	// classic page — an explicit withdrawal that left the service running.
+	$rejected = AMP_Consent_Rest::build_cookie_value(
+		'rejected',
+		array( 'analytics' => false, 'marketing' => false ),
+		$context,
+		'new-id',
+		time() + 3600,
+		'consentid:old-id,consent:yes,action:yes,necessary:yes,gpc:yes,svc.maps:yes,svc.youtube:no,ck.maps._gid:yes,rev:2'
+	);
+	amp_ok( false === strpos( $rejected, 'svc.maps:yes' ), 'an AMP reject withdraws a granted per-service consent' );
+	amp_ok( false === strpos( $rejected, 'ck.maps._gid:yes' ), 'an AMP reject withdraws a granted per-cookie consent' );
+	amp_ok( false !== strpos( $rejected, 'svc.youtube:no' ), 'an AMP reject preserves an existing DENIAL — only grants are refused' );
+	amp_ok( false !== strpos( $rejected, 'gpc:yes' ), 'an AMP reject still preserves the GPC opt-out signal' );
+
+	// A category hidden AFTER the visitor consented never reaches get_purposes(),
+	// so the purpose loop cannot write it and its old grant would ride through a
+	// total withdrawal untouched. Same rule, same guarantee.
+	$hidden = AMP_Consent_Rest::build_cookie_value(
+		'rejected',
+		array( 'marketing' => false ),
+		$context,
+		'cid',
+		time() + 3600,
+		'consent:yes,action:yes,necessary:yes,analytics:yes,rev:2'
+	);
+	amp_ok( false === strpos( $hidden, 'analytics:yes' ), 'a hidden category cannot keep a stale grant through an AMP reject' );
+
 	// A category slug is admin-editable, so one can collide with a control key.
 	// It must be dropped, never allowed to overwrite the field state_from_cookie()
 	// hard-gates on — otherwise every later read behaves as if no decision existed.

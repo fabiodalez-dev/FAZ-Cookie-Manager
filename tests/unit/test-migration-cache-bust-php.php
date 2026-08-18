@@ -214,9 +214,18 @@ namespace {
 		false === get_option( 'faz_migrations_version' ),
 		'a batch that threw leaves the version flag alone so it retries'
 	);
+	// This assertion used to read the other way — "a batch that threw does not
+	// bust the caches, nothing was committed to invalidate" — and it pinned a
+	// defect. The migrations are plain $wpdb writes under autocommit with no
+	// surrounding transaction, and each sets its own completion flag, so they
+	// commit incrementally: a throw in a LATER migration leaves an EARLIER one
+	// committed. On that path the old placement skipped the bust, leaving
+	// faz_server_cookie_category_map_v2 answering with the pre-migration slug
+	// for up to an hour while the blocked-category list already used the new
+	// one. The bust now lives in a `finally`, so it fires on both paths.
 	mig_check(
-		! in_array( 'faz_clear_cache', $threw, true ),
-		'a batch that threw does not bust the caches — nothing was committed to invalidate'
+		in_array( 'faz_clear_cache', $threw, true ),
+		'a batch that threw STILL busts the caches — migrations commit incrementally, so an earlier one may have landed'
 	);
 
 	/* ── 4. The hook name is the one actually listened on ─────────────────── */

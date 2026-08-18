@@ -27,6 +27,29 @@ if ( preg_match( '#^/[^/]+/(wp-(?:admin|includes|content)/.+|wp-login\.php|wp-cr
 			require $root . $mapped;
 			return true;
 		}
+		// Send the real type. php -S answers with default_mimetype (text/html)
+		// otherwise, and Chromium refuses a stylesheet whose MIME is not
+		// text/css in standards mode — so every remapped child-site asset
+		// arrives unstyled, and any future spec asserting layout, visibility or
+		// computed style fails for a reason pointing nowhere near its subject.
+		$faz_types = array(
+			'css'   => 'text/css',
+			'js'    => 'text/javascript',
+			'json'  => 'application/json',
+			'svg'   => 'image/svg+xml',
+			'png'   => 'image/png',
+			'jpg'   => 'image/jpeg',
+			'jpeg'  => 'image/jpeg',
+			'gif'   => 'image/gif',
+			'ico'   => 'image/x-icon',
+			'woff'  => 'font/woff',
+			'woff2' => 'font/woff2',
+			'ttf'   => 'font/ttf',
+		);
+		$faz_ext = strtolower( (string) pathinfo( $mapped, PATHINFO_EXTENSION ) );
+		if ( isset( $faz_types[ $faz_ext ] ) ) {
+			header( 'Content-Type: ' . $faz_types[ $faz_ext ] );
+		}
 		readfile( $root . $mapped );
 		return true;
 	}

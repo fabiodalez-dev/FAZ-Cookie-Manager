@@ -520,6 +520,18 @@
 							// server can refuse a payload in which they disagree.
 							maxPages: isFullScan ? 0 : requestPages,
 							isFullScan: isFullScan,
+							// The count of degraded-capture issues this run hit
+							// (iframe timeouts, cross-origin refusals, a failed
+							// server-scan, the resource cap). The LOCAL coverage
+							// gate in pages/cookies.js has always required this to
+							// be zero; the server's twin could not, because the
+							// number never crossed the wire. A run with timed-out
+							// iframes therefore read as full-site evidence server-
+							// side, and every catalogue row it failed to observe
+							// took a miss toward deletion.
+							diagnosticsIssues: (diagnostics && typeof diagnostics.totalIssues === 'number')
+								? diagnostics.totalIssues
+								: null,
 						};
 
 						// Reconcile: a name held in the jar bucket that some page

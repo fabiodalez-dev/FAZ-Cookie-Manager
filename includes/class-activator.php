@@ -150,6 +150,21 @@ class Activator {
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
+		} finally {
+			// In a `finally`, not after the try. The migrations above are plain
+			// $wpdb writes under autocommit with no surrounding transaction, and
+			// each sets its own completion flag — so they commit incrementally.
+			// A throw in a LATER migration therefore leaves an EARLIER one
+			// committed, and the old placement skipped the bust on exactly that
+			// path: rename_advertisement_to_marketing() had already rewritten the
+			// slug while faz_server_cookie_category_map_v2 kept answering
+			// "advertisement" for up to an hour — the precise window this call
+			// was added to close. The early return on the already-migrated fast
+			// path sits BEFORE the try, so the no-op case is untouched; the cost
+			// on a persistently failing install is four extra transient deletes
+			// per admin load, which is strictly cheaper than a stale classifier
+			// authorising the wrong deletions.
+			do_action( 'faz_clear_cache' );
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
 
@@ -170,12 +185,10 @@ class Activator {
 		// answering "advertisement" for up to an hour while the blocked-category
 		// list already said "marketing", and the cookie was allowed through.
 		//
-		// Firing here rather than inside that one migration covers every
-		// migration in the list above and every migration added later, without
-		// each author having to remember. It is deliberately AFTER the try
-		// block: a batch that threw returns early and leaves the caches alone,
-		// because nothing was committed and it will be retried.
-		do_action( 'faz_clear_cache' );
+		// Firing in the `finally` above rather than inside that one migration
+		// covers every migration in the list and every migration added later,
+		// without each author having to remember — and covers the partial-batch
+		// case, which an after-the-try placement silently did not.
 	}
 
 	/**

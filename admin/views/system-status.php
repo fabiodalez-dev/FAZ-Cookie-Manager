@@ -82,9 +82,19 @@ $blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $
 				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['pageview_tracking'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Auto Scan', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['scanner']['auto_scan'] ) ? '&#9989; ' . esc_html( $settings['scanner']['scan_frequency'] ?? 'weekly' ) : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Geo-Targeting', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['geolocation']['geo_targeting'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<?php // Granular per-service/per-cookie consent remains intentionally hard-disabled until its end-to-end enforcement is available. Report the effective state rather than the stored option. ?>
-				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo '&#10060; '; esc_html_e( 'not available: category-level consent is enforced', 'faz-cookie-manager' ); ?></td></tr>
-				<tr><td><?php esc_html_e( 'Per-Cookie Consent', 'faz-cookie-manager' ); ?></td><td><?php echo '&#10060; '; esc_html_e( 'not available: category-level consent is enforced', 'faz-cookie-manager' ); ?></td></tr>
+				<?php
+				// Both features were masked off in an earlier release and this
+				// page said so. The mask was removed when they began to be driven
+				// from the saved setting — see
+				// Activator::reset_stale_per_cookie_consent() — but the copy here
+				// was left behind, so the one page whose job is to report the
+				// effective configuration went on reporting a live, enforced
+				// feature as unavailable. Read the option, like every other row
+				// does. The sanitiser already forces per_cookie false whenever
+				// per_service is off, so a plain read IS the effective state.
+				?>
+				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['per_service_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
+				<tr><td><?php esc_html_e( 'Per-Cookie Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['per_cookie_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Bot Detection', 'faz-cookie-manager' ); ?></td><td><?php echo ( ! isset( $settings['banner_control']['hide_from_bots'] ) || ! empty( $settings['banner_control']['hide_from_bots'] ) ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'GTM Data Layer', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['gtm_datalayer'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Age Gate', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['age_gate']['enabled'] ) ? '&#9989; (min ' . absint( $settings['age_gate']['min_age'] ?? 16 ) . ')' : '&#10060;'; ?></td></tr>

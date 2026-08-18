@@ -107,12 +107,51 @@ function ev_full_scan_metrics( $overrides = array() ) {
 			'stoppedReason'   => null,
 			'maxPages'        => 0,
 			'isFullScan'      => true,
+			// A clean run: no iframe timeout, no cross-origin refusal, no
+			// failed server-scan, no resource cap. The client gate has always
+			// required this to be zero before offering the stale action.
+			'diagnosticsIssues' => 0,
 		),
 		$overrides
 	);
 }
 
 echo "== A scan's silence only counts when the scan looked everywhere ==\n";
+
+// ── Degraded capture is a way to be incomplete ────────────────────────────
+//
+// scanCoverageIsComplete() in admin/assets/js/pages/cookies.js has always
+// required diagnostics.totalIssues === 0, but the metrics payload carried no
+// such field, so the server's twin could not test it. A crawl with timed-out
+// iframes or a failed server-scan therefore read here as full-site evidence,
+// and every catalogue row it failed to observe took a miss toward deletion —
+// MISSED_SCANS_THRESHOLD is 2, so two degraded runs are enough.
+ev_ok(
+	false === Controller::scan_coverage_is_complete( ev_full_scan_metrics( array( 'diagnosticsIssues' => 3 ) ), 40, false ),
+	'a full-depth run that hit capture issues is NOT complete coverage'
+);
+ev_ok(
+	true === Controller::scan_coverage_is_complete( ev_full_scan_metrics( array( 'diagnosticsIssues' => 0 ) ), 40, false ),
+	'the same run with zero issues still counts — the term is not a blanket refusal'
+);
+// Fail CLOSED on absence: an older client that does not send the field must
+// not be read as "no issues", or the gap re-opens for every un-upgraded tab.
+ev_ok(
+	false === Controller::scan_coverage_is_complete(
+		array( 'incremental' => false, 'earlyStopReason' => null, 'stoppedReason' => null, 'maxPages' => 0, 'isFullScan' => true ),
+		40,
+		false
+	),
+	'a payload with no diagnosticsIssues field at all is refused, not assumed clean'
+);
+// Parity guard: the client must actually send what the server now demands, so
+// the two gates cannot drift apart again.
+$ev_engine_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/assets/js/modules/scan-engine.js' );
+ev_ok(
+	false !== strpos( $ev_engine_src, 'diagnosticsIssues:' ),
+	'the shipped scan engine sends diagnosticsIssues in its metrics payload'
+);
+
 
 // If this one goes red the whole section is meaningless, so it comes first.
 ev_ok(

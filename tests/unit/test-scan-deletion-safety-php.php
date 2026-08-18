@@ -174,7 +174,20 @@ ds_ok(
 	substr_count( $cookies_js, 'updateRestoreBar();' ) >= 3,
 	'both bulk-delete paths refresh the undo affordance, as does page load'
 );
-ds_ok( ds_contains( $cookie_api, 'isset( $current_names[ strtolower( (string) $data[\'name\'] ) ] )' ), 'a restore does not duplicate a cookie that came back on its own' );
+// Grep the PROPERTY, not the expression. The previous form pinned the literal
+// `$current_names[ strtolower( $data['name'] ) ]`, which is the very bug that
+// was fixed: keying the duplicate check on the bare name discarded a snapshot
+// whose name collided with an unrelated cookie on another domain. What must
+// hold is that the check uses the catalogue's canonical name+domain identity —
+// the same key the stale set and the delete gate use. The behavioural coverage
+// (same name/same domain skipped, same name/different domain restored) lives in
+// tests/unit/test-recycle-bin-restore-php.php; this is the cheap cross-file
+// guard that the two stay on one identity.
+ds_ok(
+	ds_contains( $cookie_api, 'Scanner_Controller::canonical_key' )
+		&& ds_contains( $cookie_api, '$current_keys[ $faz_snapshot_key ]' ),
+	'a restore de-duplicates on the catalogue identity (name+domain), not on the bare name'
+);
 ds_ok( ds_contains( $cookie_api, 'array_slice( $bin, 0, self::RECYCLE_BIN_BATCHES )' ), 'the bin is bounded — an undo, not a growing history' );
 
 // A restore path that exists is not a restore path that works. The three
@@ -215,11 +228,16 @@ ds_ok(
 $restore_starts_at = strpos( $cookie_api_squeezed, 'public function restore_deleted' );
 $restore_ends_at   = false === $restore_starts_at
 	? false
-	: strpos( $cookie_api_squeezed, "return rest_ensure_response( array( 'restored' => \$restored ) );", $restore_starts_at );
+	: strpos( $cookie_api_squeezed, "return rest_ensure_response(", $restore_starts_at );
 $restore_body      = ( false !== $restore_starts_at && false !== $restore_ends_at )
 	? substr( $cookie_api_squeezed, $restore_starts_at, $restore_ends_at - $restore_starts_at )
 	: '';
-$bin_guarded_at    = '' === $restore_body ? false : strpos( $restore_body, 'if ( $restored > 0 ) {' );
+// The guard also admits a batch whose rows were ALL already live ($skipped > 0
+// with nothing retained): that batch is settled, and leaving it at the head of
+// the bin kept the Undo bar advertising a restore that answered 0 forever.
+// What this assertion pins is the ORDER — the guard precedes the write — not
+// its exact condition.
+$bin_guarded_at    = '' === $restore_body ? false : strpos( $restore_body, 'if ( $restored > 0' );
 $bin_consumed_at   = '' === $restore_body ? false : strpos( $restore_body, 'update_option( self::RECYCLE_BIN_OPTION, $bin, false );' );
 ds_ok(
 	'' !== $restore_body

@@ -713,20 +713,55 @@
 				restoreBtn.disabled = true;
 				FAZ.post('cookies/restore-deleted', {}).then(function (res) {
 					var restored = (res && typeof res.restored === 'number') ? res.restored : 0;
-					FAZ.notify(__('cookies.restoreSucceeded', '%d cookie(s) restored.')
-						.replace('%d', function () { return String(restored); }), 'success');
+					var skipped = (res && typeof res.skipped === 'number') ? res.skipped : 0;
+					// A zero restore is not a success. It happens when every row
+					// in the batch is already live again — the scanner
+					// re-discovered it, or someone re-added it by hand — and
+					// reporting that as a green "0 cookie(s) restored." told the
+					// admin nothing about why, next to a bar still offering the
+					// undo. Name the reason and drop the success tone.
+					if (0 === restored) {
+						FAZ.notify(
+							skipped > 0
+								? __('cookies.restoreAllPresent', 'Nothing to restore: those cookies are already in the list again.')
+								: __('cookies.restoreNoneRestored', 'No cookies were restored.'),
+							'info'
+						);
+					} else if (skipped > 0) {
+						FAZ.notify(
+							__('cookies.restoreSucceededPartial', '%1$d cookie(s) restored. %2$d were already in the list.')
+								.replace('%1$d', String(restored))
+								.replace('%2$d', String(skipped)),
+							'success'
+						);
+					} else {
+						FAZ.notify(__('cookies.restoreSucceeded', '%d cookie(s) restored.')
+							.replace('%d', function () { return String(restored); }), 'success');
+					}
 					loadCookies();
 					loadCategories();
 				}).catch(function (err) {
 					// An empty bin answers 404 faz_nothing_to_restore. That is a
 					// state, not a fault — say so plainly instead of surfacing a
 					// raw REST error.
-					var emptied = !!(err && err.code === 'faz_nothing_to_restore');
+					//
+					// A 403 faz_restore_requires_unfiltered_html carries a
+					// specific, carefully written explanation: the batch holds
+					// blocker scripts this account may not save, so it was left
+					// intact for an administrator. Discarding that for a generic
+					// failure message left the restorer with no idea their data
+					// was safe, or what to do next — so it is surfaced verbatim.
+					var code = err && err.code;
+					var emptied = 'faz_nothing_to_restore' === code;
+					var needsCap = 'faz_restore_requires_unfiltered_html' === code;
+					var serverMessage = (err && typeof err.message === 'string' && err.message) ? err.message : '';
 					FAZ.notify(
 						emptied
 							? __('cookies.nothingToRestore', 'There is nothing left to restore.')
-							: __('cookies.restoreFailed', 'Could not restore the deleted cookies.'),
-						emptied ? 'info' : 'error'
+							: (needsCap && serverMessage
+								? serverMessage
+								: __('cookies.restoreFailed', 'Could not restore the deleted cookies.')),
+						emptied ? 'info' : (needsCap ? 'warning' : 'error')
 					);
 				}).then(function () {
 					restoreBtn.disabled = false;

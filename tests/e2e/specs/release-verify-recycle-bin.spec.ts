@@ -48,7 +48,7 @@ const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const BIN_OPTION = 'faz_cookies_recycle_bin';
 
 type BulkDeleteResponse = { deleted: number; restorable: number; refused: number };
-type RestoreResponse = { restored: number };
+type RestoreResponse = { restored: number; skipped?: number };
 type DeletedBatch = { index: number; count: number; deleted_at: number; deleted_at_human: string };
 type DeletedBatchesResponse = { batches: DeletedBatch[]; batch_count: number };
 
@@ -227,23 +227,95 @@ test.describe('Release verify — cookies recycle bin (bulk-delete / restore-del
       expect(del.restorable).toBe(1);
 
       // The cookie "comes back on its own" — re-added by hand (or a rescan)
-      // between the delete and the undo.
+      // between the delete and the undo. Same name AND same domain: that is
+      // what makes it the same cookie. An earlier revision of this fixture gave
+      // the two rows DIFFERENT domains and still called the second a duplicate,
+      // which pinned the defect it was meant to guard: identity in this
+      // catalogue is name+domain everywhere else — canonical_key(), the stale
+      // set, the delete gate, the browser's getStaleKey() — so keying the
+      // restore's skip on the bare name discarded a snapshot whose name merely
+      // collided, and since a skipped row is not retained either, it was gone
+      // from both the live table and the undo record.
       const handAddedId = await createCookie(page, nonce, {
         name: cookieName,
         category: categoryId,
-        domain: 'rvbin-dup-manual.example.test',
+        domain: 'rvbin-dup.example.test',
         description: { en: 'Hand re-added before the undo.' },
         duration: { en: '1 year' },
       });
 
       const restore = await restoreDeleted(page, nonce);
       expect(restore.status, 'restore-deleted answers 200, a skip is not a fault').toBe(200);
-      expect((restore.data as RestoreResponse).restored, 'nothing restored: the only snapshot row is a live duplicate').toBe(0);
+      expect((restore.data as RestoreResponse).restored, 'nothing restored: the snapshot row is genuinely live again').toBe(0);
+      expect((restore.data as RestoreResponse).skipped, 'the skip is reported, so the UI need not present a bare zero as success').toBe(1);
 
       const rows = await listCookies(page, nonce);
       const matches = rows.filter((c: any) => String(c?.name ?? '') === cookieName);
       expect(matches.length, 'exactly one row with the name survives — no duplicate resurrected').toBe(1);
       expect(Number(matches[0].id ?? matches[0].cookie_id), 'the surviving row is the hand-added one').toBe(handAddedId);
+
+      // The batch was fully settled, so it must not stay at the head of the
+      // bin: leaving it there kept the Undo bar advertising a restore that
+      // answered 0 forever, with a success tone and no way out.
+      const second = await restoreDeleted(page, nonce);
+      expect(second.status, 'a settled batch is consumed, so the next restore finds an empty bin').toBe(404);
+    } finally {
+      await deleteCookiesByPrefix(page, nonce, prefix);
+      restoreRecycleBin(binBefore);
+    }
+  });
+
+  test('a same-named cookie on a DIFFERENT domain does not suppress the restore', async ({ page, loginAsAdmin }) => {
+    // The regression F005/F020 named: keying the restore's duplicate check on
+    // the bare name meant an unrelated cookie sharing only its name suppressed
+    // the restore — and because a skipped row is never retained, the snapshot
+    // vanished from the recycle bin too as soon as any sibling restored. Gone
+    // from both the live table and the undo record, silently, in the feature
+    // whose entire purpose is making a wrong purge reversible.
+    const nonce = await openCookiesPage(page, loginAsAdmin);
+    const prefix = `faz-rvbin-xdom-${Date.now()}`;
+    const cookieName = `${prefix}-cookie`;
+    const binBefore = snapshotRecycleBin();
+    try {
+      const categoryId = await pickHostCategoryId(page, nonce);
+      const originalId = await createCookie(page, nonce, {
+        name: cookieName,
+        category: categoryId,
+        domain: 'rvbin-xdom-a.example.test',
+        description: { en: 'Cross-domain restore fixture.' },
+        duration: { en: '1 year' },
+      });
+      void originalId;
+
+      const del = await bulkDelete(page, nonce, [originalId]);
+      expect(del.deleted).toBe(1);
+
+      // Same NAME, different DOMAIN — a different cookie by every other
+      // identity the catalogue uses.
+      await createCookie(page, nonce, {
+        name: cookieName,
+        category: categoryId,
+        domain: 'rvbin-xdom-b.example.test',
+        description: { en: 'Unrelated cookie that merely shares the name.' },
+        duration: { en: '1 year' },
+      });
+
+      const restore = await restoreDeleted(page, nonce);
+      expect(restore.status).toBe(200);
+      expect(
+        (restore.data as RestoreResponse).restored,
+        'the deleted cookie is restored — a name collision on another domain is not a duplicate',
+      ).toBe(1);
+
+      const rows = await listCookies(page, nonce);
+      const domains = rows
+        .filter((c: any) => String(c?.name ?? '') === cookieName)
+        .map((c: any) => String(c?.domain ?? ''))
+        .sort();
+      expect(domains, 'both cookies now exist, one per domain').toEqual([
+        'rvbin-xdom-a.example.test',
+        'rvbin-xdom-b.example.test',
+      ]);
     } finally {
       await deleteCookiesByPrefix(page, nonce, prefix);
       restoreRecycleBin(binBefore);
@@ -267,7 +339,23 @@ test.describe('Release verify — cookies recycle bin (bulk-delete / restore-del
     }
   });
 
-  test('a restore that restored nothing leaves the undo batch in the bin, so a later retry still works', async ({ page, loginAsAdmin }) => {
+  test('a batch whose rows are all live again is consumed, not offered forever', async ({ page, loginAsAdmin }) => {
+    // This test used to build its no-op restore by re-creating the name on a
+    // DIFFERENT domain and calling that a duplicate. That is the F005 defect,
+    // not a fixture: identity in this catalogue is name+domain everywhere else,
+    // so a name-only collision suppressed a restore of a genuinely different
+    // cookie and — because a skipped row is never retained — dropped it from
+    // the bin too. With identity fixed, that scenario restores normally (see
+    // the cross-domain test above), and the honest no-op is a batch whose rows
+    // are ALL genuinely live again.
+    //
+    // Such a batch is settled, so it is consumed. Leaving it at the head of the
+    // bin is what kept the Undo bar advertising a restore that answered 0
+    // forever, in a success tone, with no exit. The other half of the old
+    // property — a restore that FAILED must keep its batch so the retry still
+    // has something to restore — is covered in tests/unit/
+    // test-recycle-bin-restore-php.php, where a save failure can actually be
+    // induced; it cannot be provoked over HTTP.
     const nonce = await openCookiesPage(page, loginAsAdmin);
     const prefix = `faz-rvbin-keep-${Date.now()}`;
     const cookieName = `${prefix}-cookie`;
@@ -279,50 +367,31 @@ test.describe('Release verify — cookies recycle bin (bulk-delete / restore-del
         name: cookieName,
         category: categoryId,
         domain: 'rvbin-keep.example.test',
-        description: { en: 'Batch-survival fixture.' },
+        description: { en: 'Batch-settlement fixture.' },
         duration: { en: '6 months' },
       });
       const del = await bulkDelete(page, nonce, [originalId]);
       expect(del.restorable).toBe(1);
 
-      // Blocker: the same name is live again, so the restore writes nothing.
-      const blockerId = await createCookie(page, nonce, {
+      // The same cookie is live again — same name AND same domain, which is
+      // what makes it the same cookie.
+      await createCookie(page, nonce, {
         name: cookieName,
         category: categoryId,
-        domain: 'rvbin-keep-blocker.example.test',
-        description: { en: 'Blocks the first restore.' },
+        domain: 'rvbin-keep.example.test',
+        description: { en: 'Re-added before the undo.' },
         duration: { en: '6 months' },
       });
 
       const first = await restoreDeleted(page, nonce);
       expect(first.status).toBe(200);
-      expect((first.data as RestoreResponse).restored, 'first restore writes nothing (duplicate name is live)').toBe(0);
+      expect((first.data as RestoreResponse).restored, 'nothing to restore — the row is genuinely live again').toBe(0);
+      expect((first.data as RestoreResponse).skipped, 'and the skip is reported rather than left as a bare zero').toBe(1);
 
-      // The old code consumed the batch on this exact path. The fix: the bin
-      // is only rewritten when something was actually written.
-      const batches = await getDeletedBatches(page, nonce);
-      expect(batches.batch_count, 'the batch SURVIVES the no-op restore').toBeGreaterThanOrEqual(1);
-      expect(batches.batches[0].count, 'the surviving batch still holds our snapshot row').toBe(1);
-
-      // Remove the blocker; the retry must now succeed off the same batch.
-      const remove = await bulkDelete(page, nonce, [blockerId]);
-      expect(remove.deleted, 'blocker row removed to unblock the retry').toBe(1);
-      // That delete pushed its own (newest) batch; restore it away first so
-      // the retry reaches the ORIGINAL batch underneath. Restoring the
-      // blocker batch re-creates the name, so delete the resurrected copy
-      // again via the row id it came back under — simpler: consume batches
-      // until our original row is back.
-      let restoredOriginal = false;
-      for (let i = 0; i < 4 && !restoredOriginal; i += 1) {
-        const retry = await restoreDeleted(page, nonce);
-        expect(retry.status, 'retry restore answers 200 while batches remain').toBe(200);
-        const rows = await listCookies(page, nonce);
-        const back = rows.filter((c: any) => String(c?.name ?? '') === cookieName);
-        if (back.length > 0) {
-          restoredOriginal = true;
-        }
-      }
-      expect(restoredOriginal, 'the undo record survived and the retry brought the cookie back').toBe(true);
+      // Settled, therefore consumed: the affordance must not keep offering it.
+      const restoreAgain = await restoreDeleted(page, nonce);
+      expect(restoreAgain.status, 'the settled batch was consumed, so the bin is now empty').toBe(404);
+      expect(restoreAgain.data?.code).toBe('faz_nothing_to_restore');
     } finally {
       await deleteCookiesByPrefix(page, nonce, prefix);
       restoreRecycleBin(binBefore);

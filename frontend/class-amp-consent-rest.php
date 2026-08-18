@@ -1004,8 +1004,33 @@ class AMP_Consent_Rest {
 		// Carry forward everything this bridge does not own — notably `gpc` and
 		// every `svc.*` per-service grant. A key the AMP decision explicitly
 		// wrote wins; anything else survives untouched.
+		//
+		// EXCEPT a grant across a withdrawal. Carrying `yes` forward unchanged
+		// meant an AMP "Reject All" produced a cookie that read consent:no with
+		// every category denied while still saying `svc.<id>:yes` — and
+		// is_cookie_allowed() returns true on a matching service decision
+		// BEFORE it ever consults the category, so the shredder spared those
+		// cookies, the outgoing guard passed their Set-Cookie headers, and
+		// script.js unblocked the provider on the next classic page. The
+		// visitor's withdrawal was recorded everywhere an auditor looks while
+		// the service kept running. The classic runtime already does the
+		// opposite — _fazClearStoredServiceConsent() runs on revoke, on GPC
+		// opt-out and on save/reject — so this also stops the two runtimes
+		// disagreeing about what "reject" means.
+		//
+		// The same rule closes the hidden-category case: get_purposes() omits
+		// a category whose visibility is off, so the purpose loop above never
+		// writes it and its old `yes` would survive a total withdrawal.
+		//
+		// Denials and the GPC opt-out are exactly what the carry-forward exists
+		// to protect, so they still survive: only `yes` is refused, and only
+		// when the decision was not an acceptance.
+		$faz_carry_grants = ( 'accepted' === $state );
 		foreach ( self::parse_cookie_pairs( $existing_cookie ) as $key => $value ) {
 			if ( isset( $pairs[ $key ] ) || isset( $purpose_keys[ $key ] ) ) {
+				continue;
+			}
+			if ( ! $faz_carry_grants && 'gpc' !== $key && 'yes' === $value ) {
 				continue;
 			}
 			$pairs[ $key ] = $value;

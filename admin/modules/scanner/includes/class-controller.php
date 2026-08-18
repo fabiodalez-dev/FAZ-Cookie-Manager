@@ -506,9 +506,22 @@ class Controller {
 			);
 		}
 
+		// created_at is the ABSOLUTE-age ceiling: touch_browser_scan_session()
+		// slides the idle window but refuses once the session is older than
+		// BROWSER_SCAN_MAX_AGE, which is what stops a wedged tab holding the
+		// capture lock indefinitely. Writing time() unconditionally here reset
+		// that ceiling on the REUSE branch too, so any caller re-entering with
+		// the same scan_id renewed the guarantee — and could revive a session
+		// that had already idled out. Carry the original forward; only a
+		// genuinely new session starts its clock now.
+		$existing_session = get_transient( self::browser_scan_transient_key( $token ) );
+		$created_at       = ( is_array( $existing_session ) && ! empty( $existing_session['created_at'] ) )
+			? absint( $existing_session['created_at'] )
+			: time();
+
 		set_transient(
 			self::browser_scan_transient_key( $token ),
-			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => time() ),
+			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at ),
 			self::BROWSER_SCAN_TTL
 		);
 
@@ -1978,6 +1991,25 @@ class Controller {
 			return false;
 		}
 		if ( empty( $metrics['isFullScan'] ) ) {
+			return false;
+		}
+		// Degraded capture is a way to be incomplete, and until this term
+		// existed only the CLIENT gate knew it. scanCoverageIsComplete() in
+		// pages/cookies.js has always required diagnostics.totalIssues === 0;
+		// the payload carried no such field, so a crawl with timed-out iframes,
+		// a cross-origin refusal, a failed server-scan or a hit resource cap
+		// read here as full-site evidence. That verdict is not cosmetic: it
+		// feeds record_scan_observations(), which advances the consecutive-miss
+		// tally for every catalogue row the degraded run failed to observe, and
+		// MISSED_SCANS_THRESHOLD is 2 — two such runs are enough to offer a
+		// live cookie for deletion.
+		//
+		// Fail CLOSED on absence, exactly as the maxPages term above does: an
+		// older client that does not send the field must not be read as
+		// "no issues", or the gap re-opens for every un-upgraded browser tab.
+		if ( ! array_key_exists( 'diagnosticsIssues', $metrics )
+			|| ! is_numeric( $metrics['diagnosticsIssues'] )
+			|| 0 !== (int) $metrics['diagnosticsIssues'] ) {
 			return false;
 		}
 

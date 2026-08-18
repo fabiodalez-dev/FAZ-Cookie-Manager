@@ -35,6 +35,34 @@ namespace FazCookie\Admin\Modules\Cookies\Api {
 	abstract class API_Controller {}
 }
 
+namespace FazCookie\Admin\Modules\Scanner\Includes {
+	/**
+	 * Minimal stand-in for the scanner Controller.
+	 *
+	 * Only canonical_key()/canonical_name() are needed here: restore_deleted()
+	 * keys its duplicate check on the SAME catalogue identity the stale set and
+	 * the delete gate use, so the test must exercise the real normalisation
+	 * (lower-case, leading dot stripped, :port stripped) rather than a
+	 * lookalike — a stand-in that merely lower-cased would let a domain bug
+	 * through.
+	 */
+	class Controller {
+		public static function canonical_name( $name ) {
+			return strtolower( trim( (string) $name ) );
+		}
+		public static function canonical_key( $name, $domain ) {
+			$name = self::canonical_name( $name );
+			if ( '' === $name ) {
+				return '';
+			}
+			$domain = strtolower( trim( (string) $domain ) );
+			$domain = ltrim( $domain, '.' );
+			$domain = preg_replace( '/:\d+$/', '', $domain );
+			return $name . '|' . $domain;
+		}
+	}
+}
+
 namespace FazCookie\Admin\Modules\Cookies\Includes {
 
 	/**
@@ -322,18 +350,45 @@ namespace {
 	 * The dedup guard exists because a cookie deleted by a stale purge is often
 	 * re-discovered by the very next scan. Restoring it again would leave the
 	 * declaration listing it twice. The live name is spelled '_GA' against a
-	 * snapshot of '_ga' so the strtolower() folding is pinned too: dropping it
-	 * turns all three assertions red, as does deleting the guard outright.
+	 * snapshot of '_ga' so the case folding is pinned too, and the live row
+	 * carries the SAME domain as the snapshot — identity here is name+domain,
+	 * the key canonical_key() builds and the one the stale set and the delete
+	 * gate already use. An earlier revision of this fixture omitted the domain,
+	 * which was harmless while the check keyed on the bare name and became
+	 * under-specified the moment it did not.
 	 */
 	$GLOBALS['faz_options']       = array( $bin_option => array( $batch ) );
 	$GLOBALS['faz_option_writes'] = array();
-	Cookie_Controller::$current   = array( (object) array( 'name' => '_GA' ) );
+	Cookie_Controller::$current   = array( (object) array( 'name' => '_GA', 'domain' => 'example.com' ) );
 	Cookie::reset( 7 );
 	$response = $api->restore_deleted( null );
 
-	rb_ok( is_array( $response ) && 0 === $response['restored'], 'a snapshot whose name is live again restores nothing' );
+	rb_ok( is_array( $response ) && 0 === $response['restored'], 'a snapshot whose name AND domain are live again restores nothing' );
 	rb_ok( array() === Cookie::$calls, 'no setter and no save() ran for the skipped snapshot' );
-	rb_ok( array( $batch ) === get_option( $bin_option, 'missing' ), 'a batch that restored nothing stays in the bin' );
+	rb_ok( 1 === $response['skipped'], 'the skip is reported, so the client need not present a bare zero as success' );
+	// The batch is settled — every row is already live — so it must NOT stay at
+	// the head of the bin. Leaving it there kept the Undo bar advertising a
+	// restore that answered 0 forever, with a success tone and no way out.
+	rb_ok( array() === get_option( $bin_option, 'missing' ), 'a batch whose rows are all already live is consumed, not offered forever' );
+	Cookie_Controller::$current = array();
+
+	echo "== A same-named cookie on a DIFFERENT domain is a different cookie ==\n";
+	/*
+	 * The regression this pins: keying the duplicate check on the bare name
+	 * meant an unrelated `_ga` on another domain suppressed the restore, and
+	 * because a skipped row is not retained either, the snapshot was dropped
+	 * from the bin as soon as any sibling restored — gone from both the live
+	 * table and the undo record, silently, in the one feature whose purpose is
+	 * making a wrong purge reversible.
+	 */
+	$GLOBALS['faz_options']       = array( $bin_option => array( $batch ) );
+	$GLOBALS['faz_option_writes'] = array();
+	Cookie_Controller::$current   = array( (object) array( 'name' => '_ga', 'domain' => 'cdn.other.test' ) );
+	Cookie::reset( 7 );
+	$response = $api->restore_deleted( null );
+
+	rb_ok( is_array( $response ) && 1 === $response['restored'], 'a snapshot is restored despite a same-named cookie living on another domain' );
+	rb_ok( 0 === $response['skipped'], 'and it is not counted as a skip' );
 	Cookie_Controller::$current = array();
 
 	echo "== An empty recycle bin is refused, not silently reported as a restore ==\n";

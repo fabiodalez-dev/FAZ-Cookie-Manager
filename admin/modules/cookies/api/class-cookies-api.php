@@ -792,7 +792,12 @@ class Cookies_API extends API_Controller {
 			$bin = self::trim_recycle_bin_to_size( $bin );
 
 			if ( ! self::store_recycle_bin( $bin ) ) {
-				do_action( 'faz_after_delete_cookie' );
+				// No hook here. Phase 3 never ran, so provably zero rows were
+				// removed — firing the same action the success path fires made
+				// every listener (page-cache purge, banner-template
+				// regeneration, category cache, IAB vendor recount) invalidate
+				// for a deletion that did not happen, at the exact moment the
+				// admin is told nothing was deleted.
 				return new \WP_Error(
 					'faz_recycle_bin_write_failed',
 					__( 'The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place.', 'faz-cookie-manager' ),
@@ -955,12 +960,28 @@ class Cookies_API extends API_Controller {
 			);
 		}
 
-		$restored      = 0;
-		$retained      = array();
-		$current_names = array();
+		$restored     = 0;
+		$skipped      = 0;
+		$retained     = array();
+		// Keyed on the SAME identity the rest of the catalogue uses — the stale
+		// set, the delete gate at line 749 and the browser's getStaleKey() all
+		// key on name+domain via canonical_key(). Keying the duplicate check on
+		// the bare name meant a snapshot for `_ga` on one domain was skipped
+		// because an unrelated `_ga` existed on another; the skipped row is not
+		// retained either, so when any sibling in the batch did restore, the
+		// shortened bin was written and that row was gone from BOTH the live
+		// table and the recycle bin. Silent, unrecoverable, in the one feature
+		// whose whole purpose is making a wrong purge reversible.
+		$current_keys = array();
 		foreach ( (array) Cookie_Controller::get_instance()->get_item_from_db() as $current ) {
 			if ( ! empty( $current->name ) ) {
-				$current_names[ strtolower( (string) $current->name ) ] = true;
+				$faz_key = Scanner_Controller::canonical_key(
+					(string) $current->name,
+					isset( $current->domain ) ? (string) $current->domain : ''
+				);
+				if ( '' !== $faz_key ) {
+					$current_keys[ $faz_key ] = true;
+				}
 			}
 		}
 		// The snapshot is replayed through an explicit allowlist, not a blind
@@ -995,8 +1016,14 @@ class Cookies_API extends API_Controller {
 			// A restore must not resurrect a duplicate if the cookie has since
 			// been re-discovered or re-added by hand. There is no by-name
 			// lookup on the controller, so the current set is read once above
-			// and consulted here.
-			if ( isset( $current_names[ strtolower( (string) $data['name'] ) ] ) ) {
+			// and consulted here — on name+domain, so a same-named cookie on a
+			// DIFFERENT domain is a different cookie and still gets restored.
+			$faz_snapshot_key = Scanner_Controller::canonical_key(
+				(string) $data['name'],
+				isset( $data['domain'] ) ? (string) $data['domain'] : ''
+			);
+			if ( '' !== $faz_snapshot_key && isset( $current_keys[ $faz_snapshot_key ] ) ) {
+				++$skipped;
 				continue;
 			}
 			$cookie = new Cookie();
@@ -1040,9 +1067,18 @@ class Cookies_API extends API_Controller {
 		// is 2 and the whole batch — including the row that never came back —
 		// was dropped from the bin. The rows that did not save are therefore put
 		// back as a batch of their own, so the retry still has exactly what is
-		// still missing. Rows skipped as duplicates are NOT retained: the name
+		// still missing. Rows skipped as duplicates are NOT retained: the cookie
 		// is already live, so there is nothing left to restore.
-		if ( $restored > 0 ) {
+		//
+		// A batch whose rows were ALL already live is settled too, and the
+		// `$restored > 0` guard alone left it at the head of the bin forever:
+		// the Undo bar kept advertising it, every click answered restored:0 —
+		// with a SUCCESS-toned "0 cookie(s) restored." — and re-rendered the
+		// identical bar. The only exit was a later purge pushing it off the end.
+		// Consuming it when every row was skipped and nothing is retained ends
+		// that loop while keeping the write-nothing-leave-the-bin rule intact
+		// for the case it exists for: a restore that FAILED.
+		if ( $restored > 0 || ( $skipped > 0 && empty( $retained ) ) ) {
 			if ( ! empty( $retained ) ) {
 				$batch['cookies'] = array_values( $retained );
 				array_unshift( $bin, $batch );
@@ -1050,7 +1086,14 @@ class Cookies_API extends API_Controller {
 			update_option( self::RECYCLE_BIN_OPTION, $bin, false );
 		}
 		do_action( 'faz_after_create_cookie' );
-		return rest_ensure_response( array( 'restored' => $restored ) );
+		// `skipped` travels so the client can say "already present" instead of
+		// reporting a success-toned zero the admin cannot act on.
+		return rest_ensure_response(
+			array(
+				'restored' => $restored,
+				'skipped'  => $skipped,
+			)
+		);
 	}
 
 	/**

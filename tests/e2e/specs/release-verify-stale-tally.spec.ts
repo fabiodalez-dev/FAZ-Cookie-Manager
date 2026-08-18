@@ -395,13 +395,34 @@ test.describe('Release verify: stale-tally safeguard on destructive deletion', (
         ],
         scripts: [],
         pages_scanned: 1,
-        metrics: { pagesScanned: 1, maxPages: 0, isFullScan: true },
+        // diagnosticsIssues is what the real engine sends and what the server
+        // now requires: a run with timed-out iframes or a failed server-scan is
+        // degraded, and degraded coverage must not advance the deletion tally.
+        // Fail-closed on absence, so a healthy run has to say so explicitly.
+        metrics: { pagesScanned: 1, maxPages: 0, isFullScan: true, diagnosticsIssues: 0 },
       });
 
       expect(result.scan_was_complete, 'full-depth healthy run counts as complete').toBe(true);
       expect(result.cookie_names, 'the observed cookie was persisted by the import').toContain(observedName);
       expect(readTally()[key], 'second consecutive complete miss recorded').toBe(2);
       expect(result.deletable_stale_keys, 'threshold reached → key earns deletability, in canonical form, over REST').toContain(key);
+
+      // …and the same run, degraded, must NOT. The client gate has always
+      // required diagnostics.totalIssues === 0 before offering the stale
+      // action; the server could not test it because the number never crossed
+      // the wire, so a crawl with timed-out iframes read here as full-site
+      // evidence and advanced the tally toward deletion of cookies it simply
+      // never reached.
+      const degraded = await importSyntheticScan(page, nonce, {
+        cookies: [],
+        scripts: [],
+        pages_scanned: 1,
+        metrics: { pagesScanned: 1, maxPages: 0, isFullScan: true, diagnosticsIssues: 4 },
+      });
+      expect(
+        degraded.scan_was_complete,
+        'a full-depth run that hit capture issues is NOT complete coverage — it must not earn deletability',
+      ).toBe(false);
     } finally {
       purgeCookieRowsByNames([missedName, observedName]);
       restoreOption(MISSED_SCANS_OPTION, tallySnapshot);
