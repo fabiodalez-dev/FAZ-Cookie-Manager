@@ -47,6 +47,9 @@ function is_favicon() {
 function apply_filters( $tag, $value ) {
 	return isset( $GLOBALS['faz_filters'][ $tag ] ) ? $GLOBALS['faz_filters'][ $tag ] : $value;
 }
+function wp_doing_cron() {
+	return ! empty( $GLOBALS['faz_cond']['cron'] );
+}
 
 require_once dirname( __DIR__, 2 ) . '/includes/class-utils.php';
 
@@ -135,6 +138,41 @@ mr_check(
 	false !== strpos( $buffer_head, 'faz_is_machine_readable_request()' ),
 	'start_output_buffer() bails early on a machine-readable request'
 );
+
+echo "== Every content path guards feeds AND cron ==\n";
+
+// f637c26 fixed filter_content_blocking() and start_output_buffer() but left
+// filter_oembed_blocking() open — and WP_Embed::autoembed runs on `the_content`
+// at priority 8, which get_the_content_feed() applies, so a post carrying a
+// bare YouTube URL still shipped to every subscriber as a placeholder div.
+// Reproduced before the fix; verified after: feed 0 markers, page 6.
+//
+// wp_doing_cron() is the second half. faz_is_front_end_request() does not
+// cover cron (the file documents this), so a newsletter plugin rendering post
+// content on WP-Cron mailed out data-faz-src placeholders and text/plain
+// scripts — and there is no JS in an email either.
+$faz_guarded = array(
+	'filter_content_blocking',
+	'filter_oembed_blocking',
+	'start_output_buffer',
+);
+foreach ( $faz_guarded as $faz_method ) {
+	$faz_at = strpos( $frontend_src, 'public function ' . $faz_method );
+	mr_check( false !== $faz_at, "{$faz_method}() exists" );
+	if ( false === $faz_at ) {
+		continue;
+	}
+	$faz_head = substr( $frontend_src, $faz_at, 2000 );
+	mr_check(
+		false !== strpos( $faz_head, 'faz_is_machine_readable_request()' ),
+		"{$faz_method}() bails on a machine-readable request"
+	);
+	// start_output_buffer() already had its own cron guard before this change.
+	mr_check(
+		false !== strpos( $faz_head, 'wp_doing_cron()' ),
+		"{$faz_method}() bails on cron"
+	);
+}
 
 echo "\n{$run} checks, {$failed} failed\n";
 exit( $failed > 0 ? 1 : 0 );

@@ -693,8 +693,42 @@ class Activator {
 	 * This check is done on all requests and runs if the versions do not match.
 	 */
 	public static function check_version() {
+		self::repair_db_version_namespace();
 		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '0.0.0' ), FAZ_VERSION, '<' ) ) {
 			self::install();
+		}
+	}
+
+	/**
+	 * Heal a DB-version option written in the PLUGIN's numbering space.
+	 *
+	 * update_db_version() used to store FAZ_VERSION, which the fork renumbered
+	 * to 1.x while the migration keys stayed on the inherited 3.x scheme. Any
+	 * value below the FIRST migration key can only have come from that write —
+	 * a genuinely un-migrated install reads the '3.0.7' default because the
+	 * option is absent, and every real key is >= 3.0.7.
+	 *
+	 * Such a site has already replayed the full chain on every single release
+	 * bump, so its schema is at the latest revision by construction; the right
+	 * repair is to close the gate, not to run the migrations one final time.
+	 * Absent option, or a value already in the migration space, is untouched —
+	 * so a fresh install and a genuinely-behind install both still migrate.
+	 *
+	 * @return void
+	 */
+	private static function repair_db_version_namespace() {
+		$stored = get_option( 'faz_cookie_consent_db_version', null );
+		if ( null === $stored || '' === $stored ) {
+			return;
+		}
+		$keys = array_keys( self::$db_updates );
+		if ( empty( $keys ) ) {
+			return;
+		}
+		usort( $keys, 'version_compare' );
+		$first = (string) reset( $keys );
+		if ( version_compare( (string) $stored, $first, '<' ) ) {
+			update_option( 'faz_cookie_consent_db_version', self::highest_db_update_version() );
 		}
 	}
 	/**
@@ -994,7 +1028,17 @@ class Activator {
 	 * @return void
 	 */
 	public static function update_db_version( $version = null ) {
-		$target = is_null( $version ) ? FAZ_VERSION : $version;
+		// The stored value is compared against the MIGRATION KEYS by
+		// needs_db_update(), so it must live in their numbering space — not the
+		// plugin's. Those two spaces were the same until the fork renumbered
+		// the plugin to 1.x while the migration keys stayed on the inherited
+		// 3.x scheme, at which point writing FAZ_VERSION here made
+		// version_compare( '1.27.0', '3.6.0', '<' ) true forever: the gate
+		// never closed, and every release bump replayed the entire migration
+		// chain — Migration_V2 included — against live data on the first
+		// front-end request. It also silently disabled the geo-migration
+		// re-entry pin below, whose own comparison is against '3.6.0'.
+		$target = is_null( $version ) ? self::highest_db_update_version() : $version;
 
 		// If the v2 geo-routing migration didn't complete (status was
 		// 'partial' / 'no_table'), pin the DB-version option below 3.6.0
@@ -1009,6 +1053,24 @@ class Activator {
 		}
 
 		update_option( 'faz_cookie_consent_db_version', $target );
+	}
+
+	/**
+	 * The highest declared migration version.
+	 *
+	 * Single source of truth for both the write (update_db_version) and the
+	 * read (needs_db_update), so the two can no longer drift into different
+	 * numbering spaces.
+	 *
+	 * @return string
+	 */
+	private static function highest_db_update_version() {
+		$versions = array_keys( self::$db_updates );
+		if ( empty( $versions ) ) {
+			return '0.0.0';
+		}
+		usort( $versions, 'version_compare' );
+		return (string) end( $versions );
 	}
 
 	/**

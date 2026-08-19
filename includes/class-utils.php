@@ -269,12 +269,37 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 	function faz_disable_banner() {
 		global $wp_customize;
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended,WordPress.Security.NonceVerification.Missing
-		if ( isset( $_GET['et_fb'] ) || ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED )
-		|| isset( $_GET['elementor-preview'] )
-		|| isset( $_POST['cs_preview_state'] )
-		|| isset( $wp_customize )
-		|| ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) )
-		{
+
+		// A builder-preview marker in the URL is NOT proof of a builder
+		// preview. These markers used to be honoured on presence alone — no
+		// capability check, and no check that the builder was even installed —
+		// and this function gates every destructive layer we have: the output
+		// buffer, the script/style/inline tag filters and both content
+		// filters. `?elementor-preview=1` therefore served any anonymous
+		// visitor a page with every tracker unblocked and no banner, on any
+		// site, including sites with no page builder at all. A crawler, a
+		// shared link or a screenshot tool was enough to produce a
+		// pre-consent tracking page.
+		//
+		// Editing is the capability the real preview always has, and the
+		// builder's own constant/function is the proof it is installed.
+		// Upstream carries the same markers, but there they only hide the
+		// banner — we wired them into blocking, so the blast radius is ours.
+		$faz_can_preview = function_exists( 'current_user_can' ) && current_user_can( 'edit_posts' );
+
+		if ( $faz_can_preview
+			&& ( ( isset( $_GET['et_fb'] ) && function_exists( 'et_fb_is_enabled' ) )
+				|| ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED )
+				|| ( isset( $_GET['elementor-preview'] ) && did_action( 'elementor/loaded' ) )
+				|| ( isset( $_POST['cs_preview_state'] ) && defined( 'CS_VERSION' ) ) )
+		) {
+			return true;
+		}
+
+		// The Customizer is core, not a third-party builder: it authenticates
+		// on its own and $wp_customize only exists inside it.
+		if ( isset( $wp_customize )
+			|| ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) ) {
 			return true;
 		}
 		// Bricks Builder visual editor (?bricks=run) and its preview iframe
@@ -282,9 +307,9 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 		// the_content filter, so the banner template would otherwise paint
 		// on top of the editor canvas and block element clicks. Reported on
 		// gooloo.de (#87 follow-up).
-		if ( ( isset( $_GET['bricks'] ) && 'run' === $_GET['bricks'] )
-			|| isset( $_GET['bricks_preview'] )
-			|| isset( $_GET['_bricksmode'] )
+		if ( ( $faz_can_preview && isset( $_GET['bricks'] ) && 'run' === $_GET['bricks'] )
+			|| ( $faz_can_preview && isset( $_GET['bricks_preview'] ) )
+			|| ( $faz_can_preview && isset( $_GET['_bricksmode'] ) )
 			|| ( function_exists( 'bricks_is_builder' ) && bricks_is_builder() )
 			|| ( function_exists( 'bricks_is_builder_main' ) && bricks_is_builder_main() )
 			|| ( function_exists( 'bricks_is_builder_iframe' ) && bricks_is_builder_iframe() ) )

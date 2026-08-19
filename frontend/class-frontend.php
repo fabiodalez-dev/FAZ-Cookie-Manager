@@ -7531,7 +7531,7 @@ class Frontend {
 		// Blocking is also meaningless in a feed: consent is a browser-side
 		// state, a feed reader has no banner to accept, and the third-party
 		// resource is fetched (or not) by the reader under its own rules.
-		if ( faz_is_machine_readable_request() ) {
+		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
 			return $content;
 		}
 		if ( ! $this->template ) {
@@ -7614,6 +7614,18 @@ class Frontend {
 	 * @return string Modified HTML.
 	 */
 	public function filter_oembed_blocking( $html, $url ) {
+		// Same reason as filter_content_blocking(): WP_Embed::autoembed runs on
+		// `the_content` at priority 8, and get_the_content_feed() applies
+		// `the_content`, so this fires in feeds too — and $this->template IS
+		// populated there. A post carrying a bare YouTube URL shipped to every
+		// subscriber as a placeholder div that no script.js would ever restore.
+		//
+		// wp_doing_cron() is the second half: a newsletter plugin rendering
+		// post content on WP-Cron mails out data-faz-src placeholders and
+		// type="text/plain" scripts, and there is no JS in an email either.
+		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
+			return $html;
+		}
 		if ( empty( $html ) || is_admin() ) {
 			return $html;
 		}
