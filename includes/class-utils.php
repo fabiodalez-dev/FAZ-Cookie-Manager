@@ -202,6 +202,49 @@ if ( ! function_exists( 'faz_is_front_end_request' ) ) {
 		return true;
 	}
 }
+if ( ! function_exists( 'faz_is_machine_readable_request' ) ) {
+
+	/**
+	 * Whether this request renders a machine-readable representation of the
+	 * site rather than a page a visitor browses.
+	 *
+	 * Feeds, robots.txt and trackbacks reach template_redirect and run
+	 * `the_content`, so neither the is_admin() guards on the output buffer nor
+	 * the one on filter_content_blocking() catches them. Rewriting there is
+	 * both harmful and pointless: harmful because a feed carries no script.js,
+	 * so an embed replaced by a data-faz-src placeholder can never be restored
+	 * and is simply lost to every subscriber; pointless because consent is a
+	 * browser-side state and a feed reader has no banner to accept.
+	 *
+	 * Deliberately NOT including is_404() or is_search() — those are ordinary
+	 * pages a visitor sees, and third-party embeds can appear in both.
+	 *
+	 * @return bool
+	 */
+	function faz_is_machine_readable_request() {
+		if ( function_exists( 'is_feed' ) && is_feed() ) {
+			return true;
+		}
+		if ( function_exists( 'is_robots' ) && is_robots() ) {
+			return true;
+		}
+		if ( function_exists( 'is_trackback' ) && is_trackback() ) {
+			return true;
+		}
+		// Core added is_favicon() in 5.4; the plugin floor is 5.0.
+		if ( function_exists( 'is_favicon' ) && is_favicon() ) {
+			return true;
+		}
+		/**
+		 * Filter whether this request is machine-readable and must never have
+		 * its content rewritten by the blocker.
+		 *
+		 * @since 1.27.0
+		 * @param bool $is_machine_readable Whether to skip blocking entirely.
+		 */
+		return (bool) apply_filters( 'faz_is_machine_readable_request', false );
+	}
+}
 if ( ! function_exists( 'faz_is_banner_preview_request' ) ) {
 
 	/**

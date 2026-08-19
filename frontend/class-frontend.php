@@ -2995,6 +2995,12 @@ class Frontend {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
 			return;
 		}
+		// A feed, robots.txt or a trackback is not a page a visitor consents
+		// on — see the rationale on filter_content_blocking(). These pass
+		// through template_redirect, so the guards above do not catch them.
+		if ( faz_is_machine_readable_request() ) {
+			return;
+		}
 		if ( ! $this->template ) {
 			return;
 		}
@@ -7511,6 +7517,21 @@ class Frontend {
 	 */
 	public function filter_content_blocking( $content ) {
 		if ( empty( $content ) || is_admin() ) {
+			return $content;
+		}
+		// Never rewrite a machine-readable representation of the content.
+		//
+		// WordPress applies `the_content` inside get_the_content_feed(), so a
+		// post carrying an embed was shipped to feed readers as a
+		// data-faz-src placeholder — and script.js does not exist there, so
+		// nothing would ever restore it. The embed was simply gone for every
+		// RSS subscriber, every Mailchimp RSS-to-email campaign and every
+		// headless consumer, with no error anywhere to show for it.
+		//
+		// Blocking is also meaningless in a feed: consent is a browser-side
+		// state, a feed reader has no banner to accept, and the third-party
+		// resource is fetched (or not) by the reader under its own rules.
+		if ( faz_is_machine_readable_request() ) {
 			return $content;
 		}
 		if ( ! $this->template ) {

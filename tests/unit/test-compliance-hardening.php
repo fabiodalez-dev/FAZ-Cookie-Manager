@@ -313,6 +313,69 @@ assert_true( ! faz_ip_in_cidr_list( '10.1.2.3', array( '2400:cb00::/32' ) ), 'IP
 
 // ---------- Summary ----------
 
+// ---------- Theme presets must not weaken Reject (EDPB 03/2022) ----------
+//
+// The banner's shipped DEFAULT is symmetric, but picking a theme in the admin
+// runs applyThemePreset() -> stripStyles() -> populateButtonColors(), which
+// rewrites the buttons from theme.json. Three of the four presets gave Accept a
+// solid fill and Reject a transparent outline, so a single UI action silently
+// produced the button asymmetry EDPB Guidelines 03/2022 treats as a dark
+// pattern — the thing CNIL and the Garante actually fine. Upstream fixed the
+// same defect in their 3.5.4 "updated button colors in the banner themes".
+//
+// Asserting equality of the RENDERED properties, not of any particular colour,
+// so a future re-skin stays free to change the palette and cannot reintroduce
+// the asymmetry.
+echo "\n\033[1mTheme presets: Accept and Reject carry equal visual weight\033[0m\n";
+
+$faz_theme_files = array(
+	$root . '/admin/modules/banners/includes/templates/6.0.0/theme.json',
+	$root . '/admin/modules/banners/includes/templates/6.2.0/theme.json',
+);
+
+$faz_collect_pairs = function ( $node, &$pairs ) use ( &$faz_collect_pairs ) {
+	if ( ! is_array( $node ) ) {
+		return;
+	}
+	foreach ( $node as $key => $value ) {
+		if ( 'elements' === $key && is_array( $value )
+			&& isset( $value['accept']['styles'], $value['reject']['styles'] ) ) {
+			$pairs[] = array( $value['accept']['styles'], $value['reject']['styles'] );
+			continue;
+		}
+		$faz_collect_pairs( $value, $pairs );
+	}
+};
+
+$faz_pairs_checked = 0;
+foreach ( $faz_theme_files as $faz_theme_file ) {
+	$faz_themes = load_json( $faz_theme_file );
+	$faz_label  = basename( dirname( $faz_theme_file ) );
+	assert_true( is_array( $faz_themes ) && ! empty( $faz_themes ), "theme.json for {$faz_label} loads" );
+	foreach ( (array) $faz_themes as $faz_theme ) {
+		$faz_name  = isset( $faz_theme['name'] ) ? $faz_theme['name'] : '?';
+		$faz_pairs = array();
+		$faz_collect_pairs( isset( $faz_theme['settings'] ) ? $faz_theme['settings'] : array(), $faz_pairs );
+		assert_true( ! empty( $faz_pairs ), "{$faz_label}/{$faz_name}: an accept/reject pair was found to compare" );
+		foreach ( $faz_pairs as $faz_pair ) {
+			list( $faz_accept, $faz_reject ) = $faz_pair;
+			++$faz_pairs_checked;
+			foreach ( array( 'background-color', 'border-color', 'color' ) as $faz_prop ) {
+				if ( ! isset( $faz_accept[ $faz_prop ] ) ) {
+					continue;
+				}
+				assert_eq(
+					isset( $faz_reject[ $faz_prop ] ) ? strtolower( $faz_reject[ $faz_prop ] ) : null,
+					strtolower( $faz_accept[ $faz_prop ] ),
+					"{$faz_label}/{$faz_name}: reject {$faz_prop} matches accept"
+				);
+			}
+		}
+	}
+}
+// Without this the loop above could pass by finding nothing at all.
+assert_true( $faz_pairs_checked >= 8, 'every preset x surface pair was actually compared (>= 8)' );
+
 echo "\n";
 echo "Tests run:    $tests_run\n";
 echo "\033[32mPassed:       $tests_passed\033[0m\n";

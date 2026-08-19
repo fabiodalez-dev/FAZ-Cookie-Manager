@@ -1,538 +1,538 @@
 [
-    {
-        "name": "light",
-        "settings": {
-            "notice": {
-                "styles": {
-                    "background-color": "#FFFFFF",
-                    "border-color": "#F4F4F4"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#212121"
-                        }
-                    },
-                    "description": {
-                        "styles": {
-                            "color": "#212121"
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "accept": {
-                                "styles": {
-                                    "color": "#FFFFFF",
-                                    "background-color": "#1863DC",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "reject": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "settings": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "readMore": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "transparent"
-                                }
-                            },
-                            "donotSell": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "transparent"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "categoryPreview": {
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#212121"
-                        }
-                    },
-                    "toggle": {
-                        "states": {
-                            "active": {
-                                "styles": {
-                                    "background-color": "#1863DC"
-                                }
-                            },
-                            "inactive": {
-                                "styles": {
-                                    "background-color": "#D0D5D2"
-                                }
-                            }
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "save": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "#1863DC"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "preferenceCenter": {
-                "styles": {
-                    "color": "#212121",
-                    "background-color": "#FFFFFF",
-                    "border-color": "#F4F4F4"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#212121"
-                        }
-                    },
-                    "description": {
-                        "styles": {
-                            "color": "#212121"
-                        }
-                    },
-                    "categories": {
-                        "elements": {
-                            "title": {
-                                "styles": {
-                                    "color": "#212121"
-                                }
-                            },
-                            "description": {
-                                "styles": {
-                                    "color": "#212121"
-                                }
-                            },
-                            "toggle": {
-                                "states": {
-                                    "active": {
-                                        "styles": {
-                                            "background-color": "#1863DC"
-                                        }
-                                    },
-                                    "inactive": {
-                                        "styles": {
-                                            "background-color": "#D0D5D2"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "accept": {
-                                "styles": {
-                                    "color": "#ffffff",
-                                    "background-color": "#1863DC",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "reject": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "save": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "#1863DC"
-                                }
-                            }
-                        }
-                    },
-                    "poweredBy": {
-                        "styles": {
-                            "background-color": "#EDEDED",
-                            "color": "#293C5B"
-                        }
-                    }
-                }
-            },
-            "optoutPopup": {
-                "styles": {
-                    "color": "#212121",
-                    "background-color": "#FFFFFF",
-                    "border-color": "#F4F4F4"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#212121"
-                        }
-                    },
-                    "description": {
-                        "styles": {
-                            "color": "#212121"
-                        }
-                    },
-                    "optOption": {
-                        "elements": {
-                            "toggle": {
-                                "states": {
-                                    "active": {
-                                        "styles": {
-                                            "background-color": "#1863dc"
-                                        }
-                                    },
-                                    "inactive": {
-                                        "styles": {
-                                            "background-color": "#FFFFFF"
-                                        }
-                                    }
-                                }
-                            },
-                            "title": {
-                                "styles": {
-                                    "color": "#212121"
-                                }
-                            }
-                        }
-                    },
-                    "gpcOption": {
-                        "elements": {
-                            "description": {
-                                "styles": {
-                                    "color": "#212121"
-                                }
-                            }
-                        }
-                    },
-                    "poweredBy": {
-                        "styles": {
-                            "background-color": "#EDEDED",
-                            "color": "#293C5B"
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "confirm": {
-                                "styles": {
-                                    "color": "#f4f4f4",
-                                    "background-color": "#1863dc",
-                                    "border-color": "#1863dc"
-                                }
-                            },
-                            "cancel": {
-                                "styles": {
-                                    "color": "#858585",
-                                    "background-color": "#FFFFFF",
-                                    "border-color": "#dedfe0"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "auditTable": {
-                "styles": {
-                    "color": "#212121",
-                    "background-color": "#f4f4f4",
-                    "border-color": "#ebebeb"
-                }
-            },
-            "revisitConsent": {
-                "styles": {
-                    "background-color": "#0056A7"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#0056a7"
-                        }
-                    }
-                }
+  {
+    "name": "light",
+    "settings": {
+      "notice": {
+        "styles": {
+          "background-color": "#FFFFFF",
+          "border-color": "#F4F4F4"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#212121"
             }
-        }
-    },
-    {
-        "name": "dark",
-        "settings": {
-            "notice": {
-                "styles": {
-                    "background-color": "#121212",
-                    "border-color": "#2a2a2a"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#d0d0d0"
-                        }
-                    },
-                    "description": {
-                        "styles": {
-                            "color": "#d0d0d0"
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "accept": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "#1863DC",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "reject": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "transparent",
-                                    "border-color": "#d0d0d0"
-                                }
-                            },
-                            "settings": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "transparent",
-                                    "border-color": "#d0d0d0"
-                                }
-                            },
-                            "readMore": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "transparent"
-                                }
-                            },
-                            "donotSell": {
-                                "styles": {
-                                    "color": "#1863DC",
-                                    "background-color": "transparent",
-                                    "border-color": "transparent"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "categoryPreview": {
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#d0d0d0"
-                        }
-                    },
-                    "toggle": {
-                        "states": {
-                            "active": {
-                                "styles": {
-                                    "background-color": "#1863DC"
-                                }
-                            },
-                            "inactive": {
-                                "styles": {
-                                    "background-color": "#D0D5D2"
-                                }
-                            }
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "save": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "transparent",
-                                    "border-color": "#d0d0d0"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "preferenceCenter": {
-                "styles": {
-                    "color": "#d0d0d0",
-                    "background-color": "#121212",
-                    "border-color": "#2A2A2A"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#d0d0d0"
-                        }
-                    },
-                    "description": {
-                        "styles": {
-                            "color": "#d0d0d0"
-                        }
-                    },
-                    "categories": {
-                        "elements": {
-                            "title": {
-                                "styles": {
-                                    "color": "#d0d0d0"
-                                }
-                            },
-                            "description": {
-                                "styles": {
-                                    "color": "#d0d0d0"
-                                }
-                            },
-                            "toggle": {
-                                "states": {
-                                    "active": {
-                                        "styles": {
-                                            "background-color": "#1863DC"
-                                        }
-                                    },
-                                    "inactive": {
-                                        "styles": {
-                                            "background-color": "#D0D5D2"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "accept": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "#1863DC",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "reject": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "transparent",
-                                    "border-color": "#d0d0d0"
-                                }
-                            },
-                            "save": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "transparent",
-                                    "border-color": "#d0d0d0"
-                                }
-                            }
-                        }
-                    },
-                    "poweredBy": {
-                        "styles": {
-                            "background-color": "#EDEDED",
-                            "color": "#293C5B"
-                        }
-                    }
-                }
-            },
-            "optoutPopup": {
-                "styles": {
-                    "color": "#d0d0d0",
-                    "background-color": "#121212",
-                    "border-color": "#2A2A2A"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#d0d0d0"
-                        }
-                    },
-                    "description": {
-                        "styles": {
-                            "color": "#d0d0d0"
-                        }
-                    },
-                    "optOption": {
-                        "elements": {
-                            "toggle": {
-                                "states": {
-                                    "active": {
-                                        "styles": {
-                                            "background-color": "#1863DC"
-                                        }
-                                    },
-                                    "inactive": {
-                                        "styles": {
-                                            "background-color": "#d0d5d2"
-                                        }
-                                    }
-                                }
-                            },
-                            "title": {
-                                "styles": {
-                                    "color": "#d0d0d0"
-                                }
-                            }
-                        }
-                    },
-                    "gpcOption": {
-                        "elements": {
-                            "description": {
-                                "styles": {
-                                    "color": "#d0d0d0"
-                                }
-                            }
-                        }
-                    },
-                    "poweredBy": {
-                        "styles": {
-                            "background-color": "#EDEDED",
-                            "color": "#293C5B"
-                        }
-                    },
-                    "buttons": {
-                        "elements": {
-                            "confirm": {
-                                "styles": {
-                                    "color": "#f4f4f4",
-                                    "background-color": "#1863DC",
-                                    "border-color": "#1863DC"
-                                }
-                            },
-                            "cancel": {
-                                "styles": {
-                                    "color": "#d0d0d0",
-                                    "background-color": "transparent",
-                                    "border-color": "#d0d0d0"
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "auditTable": {
-                "styles": {
-                    "color": "#d0d0d0",
-                    "background-color": "#2a2a2a",
-                    "border-color": "#474444"
-                }
-            },
-            "revisitConsent": {
-                "styles": {
-                    "background-color": "#0056A7"
-                },
-                "elements": {
-                    "title": {
-                        "styles": {
-                            "color": "#0056a7"
-                        }
-                    }
-                }
+          },
+          "description": {
+            "styles": {
+              "color": "#212121"
             }
+          },
+          "buttons": {
+            "elements": {
+              "accept": {
+                "styles": {
+                  "color": "#FFFFFF",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "reject": {
+                "styles": {
+                  "color": "#FFFFFF",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "settings": {
+                "styles": {
+                  "color": "#1863DC",
+                  "background-color": "transparent",
+                  "border-color": "#1863DC"
+                }
+              },
+              "readMore": {
+                "styles": {
+                  "color": "#1863DC",
+                  "background-color": "transparent",
+                  "border-color": "transparent"
+                }
+              },
+              "donotSell": {
+                "styles": {
+                  "color": "#1863DC",
+                  "background-color": "transparent",
+                  "border-color": "transparent"
+                }
+              }
+            }
+          }
         }
+      },
+      "categoryPreview": {
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#212121"
+            }
+          },
+          "toggle": {
+            "states": {
+              "active": {
+                "styles": {
+                  "background-color": "#1863DC"
+                }
+              },
+              "inactive": {
+                "styles": {
+                  "background-color": "#D0D5D2"
+                }
+              }
+            }
+          },
+          "buttons": {
+            "elements": {
+              "save": {
+                "styles": {
+                  "color": "#1863DC",
+                  "background-color": "transparent",
+                  "border-color": "#1863DC"
+                }
+              }
+            }
+          }
+        }
+      },
+      "preferenceCenter": {
+        "styles": {
+          "color": "#212121",
+          "background-color": "#FFFFFF",
+          "border-color": "#F4F4F4"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#212121"
+            }
+          },
+          "description": {
+            "styles": {
+              "color": "#212121"
+            }
+          },
+          "categories": {
+            "elements": {
+              "title": {
+                "styles": {
+                  "color": "#212121"
+                }
+              },
+              "description": {
+                "styles": {
+                  "color": "#212121"
+                }
+              },
+              "toggle": {
+                "states": {
+                  "active": {
+                    "styles": {
+                      "background-color": "#1863DC"
+                    }
+                  },
+                  "inactive": {
+                    "styles": {
+                      "background-color": "#D0D5D2"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "buttons": {
+            "elements": {
+              "accept": {
+                "styles": {
+                  "color": "#ffffff",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "reject": {
+                "styles": {
+                  "color": "#ffffff",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "save": {
+                "styles": {
+                  "color": "#1863DC",
+                  "background-color": "transparent",
+                  "border-color": "#1863DC"
+                }
+              }
+            }
+          },
+          "poweredBy": {
+            "styles": {
+              "background-color": "#EDEDED",
+              "color": "#293C5B"
+            }
+          }
+        }
+      },
+      "optoutPopup": {
+        "styles": {
+          "color": "#212121",
+          "background-color": "#FFFFFF",
+          "border-color": "#F4F4F4"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#212121"
+            }
+          },
+          "description": {
+            "styles": {
+              "color": "#212121"
+            }
+          },
+          "optOption": {
+            "elements": {
+              "toggle": {
+                "states": {
+                  "active": {
+                    "styles": {
+                      "background-color": "#1863dc"
+                    }
+                  },
+                  "inactive": {
+                    "styles": {
+                      "background-color": "#FFFFFF"
+                    }
+                  }
+                }
+              },
+              "title": {
+                "styles": {
+                  "color": "#212121"
+                }
+              }
+            }
+          },
+          "gpcOption": {
+            "elements": {
+              "description": {
+                "styles": {
+                  "color": "#212121"
+                }
+              }
+            }
+          },
+          "poweredBy": {
+            "styles": {
+              "background-color": "#EDEDED",
+              "color": "#293C5B"
+            }
+          },
+          "buttons": {
+            "elements": {
+              "confirm": {
+                "styles": {
+                  "color": "#f4f4f4",
+                  "background-color": "#1863dc",
+                  "border-color": "#1863dc"
+                }
+              },
+              "cancel": {
+                "styles": {
+                  "color": "#858585",
+                  "background-color": "#FFFFFF",
+                  "border-color": "#dedfe0"
+                }
+              }
+            }
+          }
+        }
+      },
+      "auditTable": {
+        "styles": {
+          "color": "#212121",
+          "background-color": "#f4f4f4",
+          "border-color": "#ebebeb"
+        }
+      },
+      "revisitConsent": {
+        "styles": {
+          "background-color": "#0056A7"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#0056a7"
+            }
+          }
+        }
+      }
     }
+  },
+  {
+    "name": "dark",
+    "settings": {
+      "notice": {
+        "styles": {
+          "background-color": "#121212",
+          "border-color": "#2a2a2a"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#d0d0d0"
+            }
+          },
+          "description": {
+            "styles": {
+              "color": "#d0d0d0"
+            }
+          },
+          "buttons": {
+            "elements": {
+              "accept": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "reject": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "settings": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "transparent",
+                  "border-color": "#d0d0d0"
+                }
+              },
+              "readMore": {
+                "styles": {
+                  "color": "#1863DC",
+                  "background-color": "transparent",
+                  "border-color": "transparent"
+                }
+              },
+              "donotSell": {
+                "styles": {
+                  "color": "#1863DC",
+                  "background-color": "transparent",
+                  "border-color": "transparent"
+                }
+              }
+            }
+          }
+        }
+      },
+      "categoryPreview": {
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#d0d0d0"
+            }
+          },
+          "toggle": {
+            "states": {
+              "active": {
+                "styles": {
+                  "background-color": "#1863DC"
+                }
+              },
+              "inactive": {
+                "styles": {
+                  "background-color": "#D0D5D2"
+                }
+              }
+            }
+          },
+          "buttons": {
+            "elements": {
+              "save": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "transparent",
+                  "border-color": "#d0d0d0"
+                }
+              }
+            }
+          }
+        }
+      },
+      "preferenceCenter": {
+        "styles": {
+          "color": "#d0d0d0",
+          "background-color": "#121212",
+          "border-color": "#2A2A2A"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#d0d0d0"
+            }
+          },
+          "description": {
+            "styles": {
+              "color": "#d0d0d0"
+            }
+          },
+          "categories": {
+            "elements": {
+              "title": {
+                "styles": {
+                  "color": "#d0d0d0"
+                }
+              },
+              "description": {
+                "styles": {
+                  "color": "#d0d0d0"
+                }
+              },
+              "toggle": {
+                "states": {
+                  "active": {
+                    "styles": {
+                      "background-color": "#1863DC"
+                    }
+                  },
+                  "inactive": {
+                    "styles": {
+                      "background-color": "#D0D5D2"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "buttons": {
+            "elements": {
+              "accept": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "reject": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "save": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "transparent",
+                  "border-color": "#d0d0d0"
+                }
+              }
+            }
+          },
+          "poweredBy": {
+            "styles": {
+              "background-color": "#EDEDED",
+              "color": "#293C5B"
+            }
+          }
+        }
+      },
+      "optoutPopup": {
+        "styles": {
+          "color": "#d0d0d0",
+          "background-color": "#121212",
+          "border-color": "#2A2A2A"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#d0d0d0"
+            }
+          },
+          "description": {
+            "styles": {
+              "color": "#d0d0d0"
+            }
+          },
+          "optOption": {
+            "elements": {
+              "toggle": {
+                "states": {
+                  "active": {
+                    "styles": {
+                      "background-color": "#1863DC"
+                    }
+                  },
+                  "inactive": {
+                    "styles": {
+                      "background-color": "#d0d5d2"
+                    }
+                  }
+                }
+              },
+              "title": {
+                "styles": {
+                  "color": "#d0d0d0"
+                }
+              }
+            }
+          },
+          "gpcOption": {
+            "elements": {
+              "description": {
+                "styles": {
+                  "color": "#d0d0d0"
+                }
+              }
+            }
+          },
+          "poweredBy": {
+            "styles": {
+              "background-color": "#EDEDED",
+              "color": "#293C5B"
+            }
+          },
+          "buttons": {
+            "elements": {
+              "confirm": {
+                "styles": {
+                  "color": "#f4f4f4",
+                  "background-color": "#1863DC",
+                  "border-color": "#1863DC"
+                }
+              },
+              "cancel": {
+                "styles": {
+                  "color": "#d0d0d0",
+                  "background-color": "transparent",
+                  "border-color": "#d0d0d0"
+                }
+              }
+            }
+          }
+        }
+      },
+      "auditTable": {
+        "styles": {
+          "color": "#d0d0d0",
+          "background-color": "#2a2a2a",
+          "border-color": "#474444"
+        }
+      },
+      "revisitConsent": {
+        "styles": {
+          "background-color": "#0056A7"
+        },
+        "elements": {
+          "title": {
+            "styles": {
+              "color": "#0056a7"
+            }
+          }
+        }
+      }
+    }
+  }
 ]
