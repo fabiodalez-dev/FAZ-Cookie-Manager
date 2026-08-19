@@ -289,6 +289,78 @@ test.describe('Release verify — browser-scan session TTL and import boundary',
     }
   });
 
+  test('the installed scan engine retries a transient import with the same scan id and payload', async ({ page, loginAsAdmin }) => {
+    test.setTimeout(180_000);
+    clearBrowserScanSessionState();
+    await openCookiesPage(page, loginAsAdmin);
+    await page.evaluate(() => localStorage.removeItem('faz_scan_fingerprint'));
+
+    let discoverCalls = 0;
+    const importPayloads: Array<Record<string, unknown>> = [];
+    const endpointIn = (rawURL: string, endpoint: string): boolean => {
+      let decoded = rawURL;
+      try { decoded = decodeURIComponent(rawURL); } catch {}
+      return decoded.includes(`/wp-json/faz/v1/scans/${endpoint}`)
+        || decoded.includes(`rest_route=/faz/v1/scans/${endpoint}`);
+    };
+
+    await page.route('**/*', async (route) => {
+      const request = route.request();
+      if (endpointIn(request.url(), 'discover')) {
+        discoverCalls += 1;
+        const response = await route.fetch();
+        const body = await response.json() as Record<string, unknown>;
+        await route.fulfill({
+          response,
+          json: {
+            ...body,
+            urls: [`${WP_BASE}/`],
+            priority_urls: [],
+            total: 1,
+            incremental: false,
+          },
+        });
+        return;
+      }
+      if (endpointIn(request.url(), 'import')) {
+        importPayloads.push(request.postDataJSON() as Record<string, unknown>);
+        if (importPayloads.length === 1) {
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            json: {
+              code: 'faz_scan_import_failed',
+              message: 'Induced transient persistence failure',
+              data: { status: 500 },
+            },
+          });
+          return;
+        }
+      }
+      await route.continue();
+    });
+
+    try {
+      const result = await page.evaluate(async () => {
+        const engine = (window as any).FAZ?.scanEngine;
+        if (!engine?.run) throw new Error('FAZ.scanEngine is not loaded on the Cookies page');
+        return engine.run({ maxPages: 1 }, {});
+      });
+
+      expect(result.importResult).toBeTruthy();
+      expect(discoverCalls, 'retry must not start another crawl/session').toBe(1);
+      expect(importPayloads).toHaveLength(2);
+      expect(importPayloads[0].scan_id).toMatch(/^[a-f0-9]{32}$/);
+      expect(importPayloads[1].scan_id).toBe(importPayloads[0].scan_id);
+      expect(importPayloads[1]).toEqual(importPayloads[0]);
+      expect(countBrowserScanSessionRows(), 'successful retried import must close the session').toBe(0);
+    } finally {
+      await page.unroute('**/*');
+      clearBrowserScanSessionState();
+      await page.context().clearCookies();
+    }
+  });
+
   test('scans/import rejects a malformed scan_id as 400 at the route boundary, never as 409', async ({ page, loginAsAdmin }) => {
     // Pre-fix, a malformed id travelled into the session check and came back
     // as a 409 "session mismatch" — indistinguishable, to an administrator,

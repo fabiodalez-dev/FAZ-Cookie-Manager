@@ -363,6 +363,17 @@ namespace {
 		return null;
 	}
 
+	function observations_named( $name ) {
+		return array_values(
+			array_filter(
+				observations(),
+				static function ( $row ) use ( $name ) {
+					return isset( $row['name'] ) && $name === $row['name'];
+				}
+			)
+		);
+	}
+
 	$GLOBALS['__faz_user_meta'] = array();
 	shape( false, false, 'https://example.test/shop/', '/shop/product/' );
 	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: shop_session=abc; Path=/; Max-Age=3600' );
@@ -370,6 +381,24 @@ namespace {
 	$front = observation_for( 'shop_session' );
 	check( null !== $front, 'a front-end Set-Cookie is still captured — the observer is not gated away' );
 	check( null !== $front && empty( $front['admin_context'] ), 'a front-end observation is not marked admin context' );
+	check( null !== $front && 'example.test' === $front['domain'] && '/' === $front['path'], 'captured observations store their effective domain and path identity' );
+
+	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: ephemeral=live; Path=/shop; Max-Age=3600' );
+	run_observer( $token, $session_key );
+	check( null !== observation_for( 'ephemeral' ), 'an active runtime directive is observed before a later clear' );
+	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: ephemeral=; Path=/shop; Max-Age=0' );
+	run_observer( $token, $session_key );
+	check( null === observation_for( 'ephemeral' ), 'a later Max-Age=0 removes the matching captured observation' );
+
+	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: scoped_cookie=live; Path=/one; Max-Age=3600' );
+	run_observer( $token, $session_key );
+	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: scoped_cookie=; Path=/two; Max-Age=-1' );
+	run_observer( $token, $session_key );
+	check( 1 === count( observations_named( 'scoped_cookie' ) ), 'a clearing directive with another path does not erase the active identity' );
+
+	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: already_expired=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT' );
+	run_observer( $token, $session_key );
+	check( null === observation_for( 'already_expired' ), 'a deletion-only past Expires header is never persisted as an observation' );
 
 	shape( true, false, '', '/wp-admin/plugins.php' );
 	$GLOBALS['__faz_headers'] = array( 'Set-Cookie: thirdparty_admin_ui=1; Path=/wp-admin' );
@@ -417,7 +446,7 @@ namespace {
 			array( 'name' => 'thirdparty_admin_ui', 'admin_context' => true ),
 		)
 	);
-	$drained = $controller->finish_browser_scan_session( $scan_id );
+	$drained = $controller->collect_browser_scan_session( $scan_id );
 	$by_name = array();
 	foreach ( $drained as $row ) {
 		$by_name[ $row['name'] ] = $row;
@@ -437,7 +466,7 @@ namespace {
 			$rows = array_reverse( $rows );
 		}
 		stage_observations( $token, $session_key, $scan_id, $rows );
-		$drained = $controller->finish_browser_scan_session( $scan_id );
+		$drained = $controller->collect_browser_scan_session( $scan_id );
 		check(
 			1 === count( $drained ) && 'both_sides' === $drained[0]['name'] && empty( $drained[0]['admin_context'] ),
 			"a name seen from both sides is the site's, not the admin's ({$order})"
@@ -451,16 +480,40 @@ namespace {
 		public $session_cookies = array();
 		public $request_names   = array();
 		public $persisted       = array();
+		public $finished        = 0;
+		public $scheduled       = 0;
+		public $fail_next_save  = false;
 
-		public function browser_scan_session_matches( $scan_id ) { return true; }
-		public function browser_scan_session_failure_reason( $scan_id ) { return 'match'; }
-		public function finish_browser_scan_session( $scan_id ) { return $this->session_cookies; }
+		// The session must be MODELLED, not stubbed true. Returning true
+		// unconditionally made the retry assertion structurally unable to fail:
+		// it could not express "the session is gone", which is the entire
+		// failure mode F011 describes — a save failure tore the capture down,
+		// so the retry the 500 advertised answered 409. With a real flag, the
+		// assertion goes red the moment teardown moves back above the save.
+		public $session_open = true;
+
+		public function browser_scan_session_matches( $scan_id ) { return $this->session_open; }
+		public function browser_scan_session_failure_reason( $scan_id ) { return $this->session_open ? 'match' : 'expired'; }
+		public function collect_browser_scan_session( $scan_id ) { return $this->session_cookies; }
+		public function finish_browser_scan_session( $scan_id ) {
+			++$this->finished;
+			$this->session_cookies = array();
+			$this->session_open    = false;
+			return true;
+		}
 		public function browser_scan_capture_was_truncated() { return false; }
 		public function extract_request_cookie_names( $header, $parsed ) { return $this->request_names; }
-		public function schedule_httponly_check( $urls ) { return 0; }
+		public function schedule_httponly_check( $urls ) {
+			++$this->scheduled;
+			return count( $urls );
+		}
 		public function record_scan_observations( $names, $complete ) {}
 		public function deletable_stale_keys() { return array(); }
 		public function save_scan_result( $cookies, $pages, $scripts, $metrics ) {
+			if ( $this->fail_next_save ) {
+				$this->fail_next_save = false;
+				throw new \RuntimeException( 'induced persistence failure' );
+			}
 			$this->persisted = $cookies;
 			$names           = array();
 			foreach ( $cookies as $cookie ) {
@@ -507,6 +560,33 @@ namespace {
 		! in_array( 'admin-runtime', $persisted_sources, true ),
 		'no admin-runtime row reaches the persisted set by any route'
 	);
+	check( 1 === $fake->finished, 'successful persistence closes the browser capture exactly once' );
+	check( 1 === $fake->scheduled, 'successful persistence schedules HttpOnly enrichment exactly once' );
+
+	/*
+	 * ── 5. A persistence failure keeps the same capture retryable ─────────
+	 */
+	$retry_fake = new FazTest_Import_Controller();
+	$retry_fake->session_cookies = array(
+		array( 'name' => 'retry_httponly', 'domain' => 'example.test', 'duration' => '1 hour', 'source' => 'server-runtime', 'admin_context' => false ),
+	);
+	$retry_fake->fail_next_save = true;
+	$retry_api     = new \FazCookie\Admin\Modules\Scanner\Api\Api( $retry_fake );
+	$retry_request = new FazTest_Import_Request(
+		array( 'cookies' => array(), 'jar_cookies' => array(), 'pages_scanned' => 1, 'scripts' => array(), 'metrics' => array(), 'scanned_urls' => array( 'https://example.test/' ) ),
+		array( 'scan_id' => str_repeat( 'c', 32 ) ),
+		array()
+	);
+	$failed_import = $retry_api->import_cookies( $retry_request );
+	check( is_wp_error( $failed_import ) && 'faz_scan_import_failed' === $failed_import->code, 'an induced save failure returns the explicit retryable import error' );
+	check( 0 === $retry_fake->finished && 1 === count( $retry_fake->session_cookies ), 'a failed save preserves the capture session and its HttpOnly evidence' );
+	check( 0 === $retry_fake->scheduled, 'a failed save schedules no background replay' );
+
+	$retried_import = $retry_api->import_cookies( $retry_request );
+	check( ! is_wp_error( $retried_import ), 'the same scan id can retry successfully after persistence recovers' );
+	check( 1 === $retry_fake->finished && empty( $retry_fake->session_cookies ), 'the successful retry closes and clears the capture' );
+	check( 1 === $retry_fake->scheduled, 'the successful retry schedules one background replay' );
+	check( isset( $retry_fake->persisted[0]['name'] ) && 'retry_httponly' === $retry_fake->persisted[0]['name'], 'the retry persists the same server-captured HttpOnly row' );
 
 	if ( $failures ) {
 		echo "\n{$failures} of {$checks} admin-context capture checks failed.\n";

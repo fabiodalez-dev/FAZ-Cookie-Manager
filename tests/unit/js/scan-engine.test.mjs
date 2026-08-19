@@ -66,7 +66,7 @@ async function runCrossOriginCase(publicUrl) {
  * 29c9916 records a source-text test that stayed green while the feature threw
  * a ReferenceError on every import, which is the failure mode being avoided.
  */
-function bootCrawl({ urls, maxPages = 20 }) {
+function bootCrawl({ urls, maxPages = 20, importOutcomes = [] }) {
   const dom = new JSDOM('<!doctype html><div id="faz-scan-frame"></div>', {
     runScripts: 'outside-only',
     url: 'https://example.test/wp-admin/admin.php?page=faz-cookies',
@@ -75,6 +75,7 @@ function bootCrawl({ urls, maxPages = 20 }) {
   const posts = [];
   const timers = [];
   const intervals = [];
+  let importAttempt = 0;
   let nextId = 1;
 
   window.setTimeout = (callback, delay = 0) => {
@@ -105,7 +106,11 @@ function bootCrawl({ urls, maxPages = 20 }) {
         return Promise.resolve({ urls, priority_urls: [], home_url: 'https://example.test/' });
       }
       if (endpoint === 'scans/import') {
-        return Promise.resolve({ total_cookies: 0 });
+		const outcome = importOutcomes[importAttempt++];
+		if (outcome instanceof Error || (outcome && outcome.reject)) {
+			return Promise.reject(outcome instanceof Error ? outcome : outcome.reject);
+		}
+		return Promise.resolve(outcome || { total_cookies: 0 });
       }
       return Promise.resolve({});
     },
@@ -334,6 +339,72 @@ async function drainToImport(app) {
   check('23 an unspecified depth reports the default cap, not a full scan',
     !!imported && imported.payload.metrics.maxPages === 20 && imported.payload.metrics.isFullScan === false);
   await app.run.catch(() => {});
+}
+
+/* ── Retryable import ──────────────────────────────────────────────────
+ *
+ * Persistence happens after the expensive crawl and after PHP captured
+ * HttpOnly observations. A transient 500 must retry that same import instead
+ * of rejecting to the UI, whose next click would create a new scan id and 409
+ * against the still-active old session.
+ */
+console.log('\nretryable import keeps one scan session (8 checks)');
+
+function apiFailure(status, code = 'faz_scan_import_failed') {
+  const error = new Error(`HTTP ${status}`);
+  error.status = status;
+  error.code = code;
+  return error;
+}
+
+{
+  const app = bootCrawl({
+    urls: ['/a/'],
+    importOutcomes: [{ reject: apiFailure(500) }, { total_cookies: 2 }],
+  });
+  await settle();
+  await drainToImport(app);
+  await settle();
+
+  check('24 a transient persistence failure schedules the first bounded retry', app.activeDelays().includes(1000));
+  app.runTimer(1000);
+  await settle();
+  const result = await app.run;
+  const imports = app.posts.filter((call) => call.endpoint === 'scans/import');
+  const aborts = app.posts.filter((call) => call.endpoint === 'scans/abort');
+  check('25 the retry succeeds without a second crawl', imports.length === 2 && result.total === 2);
+  check('26 every import attempt reuses the exact scan id',
+    imports.length === 2 && imports[0].payload.scan_id === imports[1].payload.scan_id);
+  check('27 every import attempt reuses the collected payload',
+    imports.length === 2
+      && JSON.stringify(imports[0].payload.cookies) === JSON.stringify(imports[1].payload.cookies)
+      && JSON.stringify(imports[0].payload.scanned_urls) === JSON.stringify(imports[1].payload.scanned_urls));
+  check('28 a recovered import never aborts the capture session', aborts.length === 0);
+}
+
+{
+  const failure = () => ({ reject: apiFailure(500) });
+  const app = bootCrawl({ urls: ['/a/'], importOutcomes: [failure(), failure(), failure()] });
+  await settle();
+  await drainToImport(app);
+  await settle();
+  app.runTimer(1000);
+  await settle();
+  app.runTimer(3000);
+  await settle();
+
+  let rejected;
+  try {
+    await app.run;
+  } catch (error) {
+    rejected = error;
+  }
+  const imports = app.posts.filter((call) => call.endpoint === 'scans/import');
+  const abort = app.posts.find((call) => call.endpoint === 'scans/abort');
+  check('29 retries stop after the configured two delays', imports.length === 3);
+  check('30 exhausted retries close the same session before returning control to the UI',
+    rejected?.stage === 'import' && !!abort && abort.payload.scan_id === imports[0].payload.scan_id);
+  check('31 exhausted retries release the heartbeat', app.intervals.every((item) => !item.active));
 }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);

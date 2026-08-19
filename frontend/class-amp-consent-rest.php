@@ -515,11 +515,12 @@ class AMP_Consent_Rest {
 			return $this->response( $data );
 		}
 
-		$data = array(
+		$amp_purposes = self::purpose_values_for_amp( $server_state['purposes'], $context['purposes'] );
+		$data         = array(
 			'consentRequired'   => true,
 			'consentStateValue' => $server_state['state'],
-			'purposeConsents'   => $server_state['purposes'],
-			'purposeConsent'    => $server_state['purposes'],
+			'purposeConsents'   => $amp_purposes,
+			'purposeConsent'    => $amp_purposes,
 			'expireCache'       => 'unknown' !== $incoming_state && $incoming_state !== $server_state['state'],
 			'sharedData'        => self::shared_data( $context, $server_state['expires'] ),
 		);
@@ -617,13 +618,14 @@ class AMP_Consent_Rest {
 			'purposes' => $purposes,
 			'expires'  => $expires,
 		);
+		$amp_purposes = self::purpose_values_for_amp( $purposes, $context['purposes'] );
 		return $this->response(
 			array(
 				'updated'           => true,
 				'consentStateValue' => $state,
 				'consentString'     => self::encode_state_string( $server_state, $context ),
-				'purposeConsents'   => $purposes,
-				'purposeConsent'    => $purposes,
+				'purposeConsents'   => $amp_purposes,
+				'purposeConsent'    => $amp_purposes,
 				'sharedData'        => self::shared_data( $context, $expires ),
 			)
 		);
@@ -898,6 +900,28 @@ class AMP_Consent_Rest {
 			if ( ! empty( $purpose['id'] ) ) {
 				$result[ sanitize_key( $purpose['id'] ) ] = (bool) $value;
 			}
+		}
+		return self::purpose_values_for_amp( $result, $purposes );
+	}
+
+	/**
+	 * Translate persisted purpose slugs to the identifiers AMP actions use.
+	 *
+	 * The standard cookie and signed consent string intentionally retain raw
+	 * category slugs. The AMP runtime cannot use a hyphenated slug as an action
+	 * argument, so every map crossing the AMP boundary must use the same
+	 * collision-safe aliases as setPurpose() and purposeConsentRequired.
+	 *
+	 * @param array   $values   Purpose slug => boolean map.
+	 * @param array[] $purposes Purposes as returned by get_purposes().
+	 * @return array<string,bool>
+	 */
+	public static function purpose_values_for_amp( $values, $purposes ) {
+		$values = is_array( $values ) ? $values : array();
+		$args   = self::purpose_action_args( $purposes );
+		$result = array();
+		foreach ( $args as $id => $arg ) {
+			$result[ $arg ] = isset( $values[ $id ] ) && true === (bool) $values[ $id ];
 		}
 		return $result;
 	}

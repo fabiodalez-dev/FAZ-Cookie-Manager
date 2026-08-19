@@ -41,6 +41,13 @@ namespace FazCookie\Includes {
 	class Rest_Controller {}
 }
 
+namespace FazCookie\Admin\Modules\Settings\Includes {
+	class Settings {
+		public static function get_instance() { return new self(); }
+		public function get( $section, $key, $default = '' ) { return $default; }
+	}
+}
+
 namespace {
 	if ( ! defined( 'ABSPATH' ) ) {
 		define( 'ABSPATH', __DIR__ . '/' );
@@ -126,15 +133,17 @@ namespace {
 	function add_user_meta( $user_id, $key, $value, $unique = false ) { return true; }
 
 	// wp_remote_* are driven by this fixture so the REST route runs for real.
-	$GLOBALS['__faz_http_body'] = '';
+	$GLOBALS['__faz_http_body']    = '';
+	$GLOBALS['__faz_http_headers'] = array();
+	$GLOBALS['__faz_http_cookies'] = array();
 	function wp_remote_get( $url, $args = array() ) {
-		return array( 'body' => $GLOBALS['__faz_http_body'], 'response' => array( 'code' => 200 ), 'headers' => array() );
+		return array( 'body' => $GLOBALS['__faz_http_body'], 'response' => array( 'code' => 200 ), 'headers' => $GLOBALS['__faz_http_headers'] );
 	}
 	function wp_remote_retrieve_body( $response ) { return isset( $response['body'] ) ? $response['body'] : ''; }
 	function wp_remote_retrieve_response_code( $response ) { return isset( $response['response']['code'] ) ? $response['response']['code'] : 0; }
 	function wp_remote_retrieve_header( $response, $header ) { return ''; }
 	function wp_remote_retrieve_headers( $response ) { return isset( $response['headers'] ) ? $response['headers'] : array(); }
-	function wp_remote_retrieve_cookies( $response ) { return array(); }
+	function wp_remote_retrieve_cookies( $response ) { return $GLOBALS['__faz_http_cookies']; }
 
 	require_once dirname( __DIR__, 2 ) . '/includes/class-known-providers.php';
 	require_once dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php';
@@ -321,6 +330,53 @@ namespace {
 		in_array( '_ga', $mixed_api_names, true ) && ! has_any( $mixed_api_names, $youtube_names ),
 		'server-scan: the real script is kept while the thumbnail beside it is dropped'
 	);
+
+	/*
+	 * ── 4. Ordered Set-Cookie deletion semantics ─────────────────────────
+	 *
+	 * Known-cookie lookup must happen only after a header has been identified as
+	 * active. Otherwise `_ga=; Max-Age=0` is resurrected with the catalogue's
+	 * two-year duration. Identity includes path, matching browser deletion.
+	 */
+	$GLOBALS['__faz_http_body'] = '<html></html>';
+	$GLOBALS['__faz_http_headers'] = array(
+		'set-cookie' => array(
+			'_ga=active; Path=/; Max-Age=3600',
+			'_ga=; Path=/; Max-Age=0',
+			'brikpanel_vid=; Path=/; Max-Age=-1',
+			'_gid=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+		),
+	);
+	$deleted_names = names_of( ( new Controller() )->scan_page( 'https://example.test/account/page' ) );
+	check( ! in_array( '_ga', $deleted_names, true ), 'scan_page: a later Max-Age=0 removes a known cookie observation' );
+	check( ! in_array( 'brikpanel_vid', $deleted_names, true ), 'scan_page: a deletion-only known cookie is never imported' );
+	check( ! in_array( '_gid', $deleted_names, true ), 'scan_page: a past Expires date deletes when Max-Age is absent' );
+
+	$GLOBALS['__faz_http_headers'] = array(
+		'set-cookie' => array(
+			'_ga=active; Path=/one; Max-Age=3600',
+			'_ga=; Path=/two; Max-Age=0',
+		),
+	);
+	$scoped_names = names_of( ( new Controller() )->scan_page( 'https://example.test/account/page' ) );
+	check( in_array( '_ga', $scoped_names, true ), 'scan_page: a deletion at another path cannot erase the active identity' );
+
+	$GLOBALS['__faz_http_headers'] = array(
+		'set-cookie' => array(
+			'_ga=; Max-Age=0',
+			'_ga=active; Max-Age=3600',
+		),
+	);
+	$reset_names = names_of( ( new Controller() )->scan_page( 'https://example.test/account/page' ) );
+	check( in_array( '_ga', $reset_names, true ), 'scan_page: a later active header can set an identity cleared earlier in the stream' );
+
+	$GLOBALS['__faz_http_headers'] = array( 'set-cookie' => array( '_ga=; Path=/; Max-Age=0' ) );
+	$GLOBALS['__faz_http_cookies'] = array( (object) array( 'name' => '_ga', 'domain' => 'example.test', 'path' => '/' ) );
+	$jar_controller = new Controller();
+	$jar_controller->scan_page( 'https://example.test/account/page' );
+	$jar_property = new \ReflectionProperty( Controller::class, 'server_cookie_jar' );
+	$jar_property->setAccessible( true );
+	check( array() === $jar_property->getValue( $jar_controller ), 'scan_page: a raw clearing directive cannot be resurrected in the redirect cookie jar' );
 
 	if ( $failures ) {
 		echo "\n{$failures} of {$checks} inference-boundary checks failed.\n";

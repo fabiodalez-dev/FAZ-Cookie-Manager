@@ -185,14 +185,31 @@ $safe_urls = $controller->sanitize_scanned_urls(
 	array(
 		'https://example.test/product/one',
 		'https://www.example.test/checkout?step=2',
+		'https://example.test/index.php?probe=1',
+		'https://example.test/wp-sitemap.xml',
 		'https://evil.test/steal',
 		'https://example.test:8443/internal-service',
 		'file:///etc/passwd',
 		'https://user:pass@example.test/private',
 	)
 );
-coverage_check( 2 === count( $safe_urls ), 'server enrichment keeps every safe same-site browser URL' );
+// A bare count is not a check on normalisation: it went 2 -> 4 only because two
+// URLs were added to the INPUT, and it stayed green with normalize_url()
+// reverted. What the filter is FOR is the split — four same-site URLs kept,
+// four hostile shapes refused — so assert both halves by name. The two
+// in_array() checks below pin the normalisation itself.
+$unsafe_expected = array(
+	'https://evil.test/steal',                 // cross-origin
+	'https://example.test:8443/internal-service', // non-standard port
+	'file:///etc/passwd',                      // non-http scheme
+	'https://user:pass@example.test/private',  // embedded credentials
+);
+$unsafe_present = array_values( array_intersect( $unsafe_expected, $safe_urls ) );
+coverage_check( 4 === count( $safe_urls ), 'the four same-site URLs survive the safety filter' );
+coverage_check( array() === $unsafe_present, 'every hostile URL shape is refused — cross-origin, odd port, non-http scheme, embedded credentials' );
 coverage_check( false !== strpos( implode( ' ', $safe_urls ), '/checkout/' ), 'www/apex equivalent URLs remain eligible' );
+coverage_check( in_array( 'https://example.test/index.php?probe=1', $safe_urls, true ), 'file-like PHP routes keep their original path during replay' );
+coverage_check( in_array( 'https://example.test/wp-sitemap.xml', $safe_urls, true ), 'file-like XML routes are not rewritten to a different trailing-slash URL' );
 coverage_check( false === strpos( implode( ' ', $safe_urls ), 'evil.test' ), 'foreign hosts are excluded from server replay' );
 coverage_check( false === strpos( implode( ' ', $safe_urls ), ':8443' ), 'alternate same-host ports are excluded from server replay' );
 
@@ -216,12 +233,79 @@ $GLOBALS['faz_test_user_meta'][7][ Controller::BROWSER_SCAN_META ] = array(
 		'max-age'     => '31536000',
 		'httponly'    => true,
 	),
+	array(
+		'token'       => $token,
+		'observed_at' => time(),
+		'name'        => 'cleared_cookie',
+		'domain'      => '',
+		'path'        => '/',
+		'expires'     => '',
+		'max-age'     => '-1',
+		'httponly'    => true,
+	),
+	array(
+		'token'       => $token,
+		'observed_at' => time(),
+		'name'        => 'ordered_cookie',
+		'domain'      => 'example.test',
+		'path'        => '/account',
+		'expires'     => '',
+		'max-age'     => '3600',
+	),
+	array(
+		'token'       => $token,
+		'observed_at' => time(),
+		'name'        => 'ordered_cookie',
+		'domain'      => 'example.test',
+		'path'        => '/account',
+		'expires'     => '',
+		'max-age'     => '0',
+	),
+	array(
+		'token'       => $token,
+		'observed_at' => time(),
+		'name'        => 'path_cookie',
+		'domain'      => 'example.test',
+		'path'        => '/one',
+		'expires'     => '',
+		'max-age'     => '3600',
+	),
+	array(
+		'token'       => $token,
+		'observed_at' => time(),
+		'name'        => 'path_cookie',
+		'domain'      => 'example.test',
+		'path'        => '/two',
+		'expires'     => '',
+		'max-age'     => '-1',
+	),
+	array(
+		'token'       => $token,
+		'observed_at' => time(),
+		'name'        => 'expired_cookie',
+		'domain'      => 'example.test',
+		'path'        => '/',
+		'expires'     => 'Thu, 01 Jan 1970 00:00:00 GMT',
+		'max-age'     => '',
+	),
 );
-$runtime = $controller->finish_browser_scan_session( $runtime_scan_id );
-coverage_check( 1 === count( $runtime ) && 'brikpanel_vid' === $runtime[0]['name'], 'runtime Set-Cookie observation is drained into the inventory' );
-coverage_check( 'server-runtime' === $runtime[0]['source'], 'runtime observation preserves its discovery provenance' );
-coverage_check( '1 year' === $runtime[0]['duration'], 'runtime Max-Age metadata becomes a useful duration' );
-coverage_check( empty( $GLOBALS['faz_test_user_meta'][7][ Controller::BROWSER_SCAN_META ] ), 'drained observations are removed' );
+$runtime         = $controller->collect_browser_scan_session( $runtime_scan_id );
+$runtime_by_name = array();
+foreach ( $runtime as $runtime_cookie ) {
+	$runtime_by_name[ $runtime_cookie['name'] ] = $runtime_cookie;
+}
+coverage_check( isset( $runtime_by_name['brikpanel_vid'] ), 'runtime Set-Cookie observation is collected into the inventory' );
+coverage_check( 'server-runtime' === $runtime_by_name['brikpanel_vid']['source'], 'runtime observation preserves its discovery provenance' );
+coverage_check( '1 year' === $runtime_by_name['brikpanel_vid']['duration'], 'runtime Max-Age metadata becomes a useful duration' );
+coverage_check( ! isset( $runtime_by_name['cleared_cookie'] ), 'a deletion-only runtime directive is not presented as a session cookie' );
+coverage_check( ! isset( $runtime_by_name['ordered_cookie'] ), 'a later Max-Age=0 removes the earlier observation with the same name/domain/path' );
+coverage_check( isset( $runtime_by_name['path_cookie'] ), 'a deletion with a different path cannot erase an active cookie identity' );
+coverage_check( ! isset( $runtime_by_name['expired_cookie'] ), 'an Expires date in the past is treated as deletion when Max-Age is absent' );
+coverage_check( 7 === count( $GLOBALS['faz_test_user_meta'][7][ Controller::BROWSER_SCAN_META ] ), 'collection remains non-destructive until persistence succeeds' );
+coverage_check( $controller->browser_scan_session_matches( $runtime_scan_id ), 'collection leaves the same scan id retryable' );
+coverage_check( $controller->finish_browser_scan_session( $runtime_scan_id ), 'a successful import can explicitly close its capture session' );
+coverage_check( empty( $GLOBALS['faz_test_user_meta'][7][ Controller::BROWSER_SCAN_META ] ), 'finishing removes the collected observations' );
+coverage_check( ! $controller->browser_scan_session_matches( $runtime_scan_id ), 'finishing removes the session transient' );
 
 /* ── The capture window must outlive the crawl it was opened for ──────
  *
@@ -288,7 +372,53 @@ coverage_check( false !== strpos( $engine, 'scanned_urls: scanMetrics.scannedUrl
 coverage_check( false !== strpos( $engine, "getEntriesByType('resource')" ), 'runtime network resources feed provider inference' );
 coverage_check( false !== strpos( $engine, 'triggerDelayedScripts();' ), 'interaction-delayed scripts receive a controlled activation signal' );
 coverage_check( false !== strpos( $engine, 'MAX_RESOURCE_URLS' ), 'runtime resource payloads are capped and diagnosed' );
-coverage_check( false !== strpos( $api, 'finish_browser_scan_session( $scan_id )' ), 'REST import merges only its own runtime Set-Cookie observations' );
+$import_body = faz_method_body( $api, 'import_cookies' );
+coverage_check( null !== $import_body && false !== strpos( $import_body, 'collect_browser_scan_session( $scan_id )' ), 'REST import reads only its own runtime Set-Cookie observations without consuming them' );
+$save_position     = null !== $import_body ? strpos( $import_body, 'save_scan_result(' ) : false;
+$finish_position   = null !== $import_body ? strpos( $import_body, 'finish_browser_scan_session( $scan_id )' ) : false;
+$schedule_position = null !== $import_body ? strpos( $import_body, 'schedule_httponly_check( $scanned_urls )' ) : false;
+coverage_check(
+	false !== $save_position
+		&& false !== $finish_position
+		&& false !== $schedule_position
+		&& $finish_position > $save_position
+		&& $schedule_position > $save_position,
+	'session teardown and background replay both happen only after persistence'
+);
+// strpos finds the FIRST occurrence, so the check above is satisfied by a
+// teardown placed after the save even when a SECOND one sits inside the catch
+// — which is the exact regression it is named after, verified by injecting it.
+// The catch is where the promise lives: import_cookies() answers 500 saying the
+// administrator may retry, and a retry is only possible if nothing in that
+// branch destroys the session. Assert the branch itself is inert.
+$catch_at   = null !== $import_body ? strpos( $import_body, 'catch (' ) : false;
+$catch_body = '';
+if ( false !== $catch_at ) {
+	// Brace-match the catch BLOCK. Taking substr() to the end of the method
+	// instead would sweep in the legitimate post-try teardown and schedule
+	// calls and make this assertion permanently red — the mirror-image error
+	// of the strpos check above, and worth naming so it is not "fixed" that
+	// way again.
+	$open  = strpos( $import_body, '{', $catch_at );
+	$depth = 0;
+	for ( $i = $open; false !== $open && $i < strlen( $import_body ); $i++ ) {
+		if ( '{' === $import_body[ $i ] ) {
+			$depth++;
+		} elseif ( '}' === $import_body[ $i ] ) {
+			$depth--;
+			if ( 0 === $depth ) {
+				$catch_body = substr( $import_body, $open, $i - $open + 1 );
+				break;
+			}
+		}
+	}
+}
+coverage_check(
+	'' !== $catch_body
+		&& false === strpos( $catch_body, 'finish_browser_scan_session(' )
+		&& false === strpos( $catch_body, 'schedule_httponly_check(' ),
+	'the failure branch neither tears the session down nor queues a replay — the retry it promises stays possible'
+);
 coverage_check( false !== strpos( $bootstrap, 'register_browser_scan_observer()' ), 'Set-Cookie observer is registered on every same-origin request' );
 $observer_body = faz_method_body( $controller_source, 'register_browser_scan_observer' );
 coverage_check(

@@ -31,9 +31,9 @@
  *     strings carry personal data (?email=, order_key, reset keys) and the
  *     diagnostic is written by anonymous visitors and rendered in admin.
  *     Observable surface: the faz-e2e-scan-lab fixture's admin-ajax endpoint
- *     (action=faz_e2e_scan_ajax_cookie) emits `brikpanel_vid`, which the
- *     built-in Cookie_Database classifies as analytics — strippable, and
- *     therefore recordable, pre-consent (same anchor as
+ *     (action=faz_e2e_scan_ajax_cookie) emits `brikpanel_vid`. The guard does
+ *     not consult Cookie_Database, so each test seeds the analytics catalogue
+ *     row it needs and removes it afterwards (same discipline as
  *     release-verify-guard-standdown.spec.ts).
  *
  *  4. Region map single source (issue #238)
@@ -50,7 +50,7 @@
  */
 import type { Browser, Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
-import { fazApiGet, fazApiPost, openSettingsPage } from '../utils/faz-api';
+import { fazApiDelete, fazApiGet, fazApiPost, findCategoryId, listCookies, openSettingsPage } from '../utils/faz-api';
 import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles, WP_PATH, wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
@@ -61,6 +61,7 @@ const AJAX_PATH = '/wp-admin/admin-ajax.php';
 const ABSENT = '__faz_e2e_absent__';
 /** Marker that must NEVER survive into the stored diagnostic. */
 const QUERY_MARKER = 'FAZPATHLEAK';
+const GUARD_COOKIE = 'brikpanel_vid';
 
 type FazSettings = Record<string, any>;
 type BlockedEntry = { name: string; category: string; request: string; blocked_at: number };
@@ -191,6 +192,48 @@ async function armServerCookieGuard(page: Page, nonce: string, original: FazSett
     banner_control: { ...(original.banner_control ?? {}), status: true, cache_compatibility: false },
   });
   wpEval(`delete_transient( '${BLOCKED_TRANSIENT}' );`);
+}
+
+/**
+ * Ensure the guard probe is classifiable by the admin catalogue.
+ *
+ * The enforcement helper deliberately does not consult the Open Cookie
+ * Database, so recognising brikpanel_vid there is insufficient. Return only an
+ * id created by this test; a pre-existing operator row must never be deleted by
+ * cleanup.
+ */
+async function ensureGuardProbeRow(page: Page, nonce: string): Promise<number | null> {
+  const domain = new URL(WP_BASE).hostname;
+  const existing = (await listCookies(page, nonce)).find(
+    (cookie: any) => String(cookie?.name ?? '') === GUARD_COOKIE && String(cookie?.domain ?? '') === domain,
+  );
+  if (existing) {
+    return null;
+  }
+
+  const analyticsId = await findCategoryId(page, nonce, 'analytics');
+  const created = await fazApiPost<Record<string, unknown>>(page, nonce, 'cookies', {
+    name: GUARD_COOKIE,
+    slug: GUARD_COOKIE,
+    domain,
+    category: analyticsId,
+    duration: { en: '1 year' },
+    description: { en: 'Release-verify server-cookie guard probe' },
+  });
+  expect([200, 201], `guard probe catalogue row was not created (status ${created.status})`).toContain(created.status);
+
+  const row = (await listCookies(page, nonce)).find(
+    (cookie: any) => String(cookie?.name ?? '') === GUARD_COOKIE && String(cookie?.domain ?? '') === domain,
+  );
+  const id = Number(row?.id ?? row?.cookie_id ?? 0);
+  expect(id, 'created guard probe row returned no id').toBeGreaterThan(0);
+  return id;
+}
+
+async function removeGuardProbeRow(page: Page, nonce: string, id: number | null): Promise<void> {
+  if (!id) return;
+  const deleted = await fazApiDelete(page, nonce, `cookies/${id}`);
+  expect.soft([200, 204], 'the test-created guard probe row was not removed').toContain(deleted.status);
 }
 
 // ── Region surfaces via reflection on the INSTALLED classes ──────────────────
@@ -398,7 +441,9 @@ test.describe('Release verify — admin surfaces and cross-cutting fixes', () =>
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await snapshotSettings(page, nonce);
     const transientSnapshot = snapshotTransient(BLOCKED_TRANSIENT);
+    let probeRowId: number | null = null;
     try {
+      probeRowId = await ensureGuardProbeRow(page, nonce);
       await armServerCookieGuard(page, nonce, original);
 
       const probe = await probeBlockedCookieWithQueryString(browser);
@@ -424,6 +469,7 @@ test.describe('Release verify — admin surfaces and cross-cutting fixes', () =>
       restoreTransient(BLOCKED_TRANSIENT, transientSnapshot);
       assertTransientRestored(BLOCKED_TRANSIENT, transientSnapshot);
       await restoreSettingsGroups(page, nonce, original, ['script_blocking', 'banner_control']);
+      await removeGuardProbeRow(page, nonce, probeRowId);
     }
   });
 
@@ -431,7 +477,9 @@ test.describe('Release verify — admin surfaces and cross-cutting fixes', () =>
     const nonce = await openSettingsPage(page, loginAsAdmin);
     const original = await snapshotSettings(page, nonce);
     const transientSnapshot = snapshotTransient(BLOCKED_TRANSIENT);
+    let probeRowId: number | null = null;
     try {
+      probeRowId = await ensureGuardProbeRow(page, nonce);
       await armServerCookieGuard(page, nonce, original);
 
       const probe = await probeBlockedCookieWithQueryString(browser);
@@ -458,6 +506,7 @@ test.describe('Release verify — admin surfaces and cross-cutting fixes', () =>
       restoreTransient(BLOCKED_TRANSIENT, transientSnapshot);
       assertTransientRestored(BLOCKED_TRANSIENT, transientSnapshot);
       await restoreSettingsGroups(page, nonce, original, ['script_blocking', 'banner_control']);
+      await removeGuardProbeRow(page, nonce, probeRowId);
     }
   });
 

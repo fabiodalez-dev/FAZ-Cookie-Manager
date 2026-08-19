@@ -380,18 +380,13 @@ class AMP_Consent {
 		// Cookie policy link.
 		$privacy_url = ! empty( $notice['privacyLink'] ) ? $notice['privacyLink'] : '/cookie-policy';
 
-		$purposes   = AMP_Consent_Rest::get_purposes();
-		$purpose_ids = array();
-		foreach ( $purposes as $purpose ) {
-			if ( ! empty( $purpose['id'] ) ) {
-				$purpose_ids[] = $purpose['id'];
-			}
-		}
+		$purposes = AMP_Consent_Rest::get_purposes();
 		// The names the checkboxes will report under. Derived from the same
 		// purpose list the REST bridge reads, which is what keeps the two ends
 		// from drifting apart.
 		$purpose_args = AMP_Consent_Rest::purpose_action_args( $purposes );
-		$endpoints = AMP_Consent_Rest::endpoint_urls( $banner );
+		$purpose_ids  = array_values( $purpose_args );
+		$endpoints    = AMP_Consent_Rest::endpoint_urls( $banner );
 
 		// Remote mode is required for parity with the standard first-party
 		// cookie. The check endpoint compares banner scope, revision and expiry;
@@ -560,13 +555,10 @@ class AMP_Consent {
 		if ( ! is_string( $html ) || '' === $html ) {
 			return $html;
 		}
-		$purposes   = AMP_Consent_Rest::get_purposes();
-		$purpose_ids = array();
-		foreach ( $purposes as $purpose ) {
-			if ( ! empty( $purpose['id'] ) ) {
-				$purpose_ids[] = sanitize_key( $purpose['id'] );
-			}
-		}
+		$purposes      = AMP_Consent_Rest::get_purposes();
+		$purpose_args  = AMP_Consent_Rest::purpose_action_args( $purposes );
+		$purpose_slugs = array_keys( $purpose_args );
+		$purpose_ids   = array_values( $purpose_args );
 		$map = array(
 			'amp-analytics'     => 'analytics',
 			'amp-pixel'         => 'analytics',
@@ -611,7 +603,7 @@ class AMP_Consent {
 			'amp-vk'            => 'functional',
 			'amp-yotpo'         => 'functional',
 		);
-		$map = (array) apply_filters( 'faz_amp_component_purpose_map', $map, $purpose_ids );
+		$map = (array) apply_filters( 'faz_amp_component_purpose_map', $map, $purpose_slugs );
 		$parse_purposes = static function ( $value ) {
 			$values = is_array( $value ) ? $value : explode( ',', (string) $value );
 			$clean  = array();
@@ -627,9 +619,33 @@ class AMP_Consent {
 			return $clean;
 		};
 
+		// Do not interpret serialized markup inside raw-text elements as live
+		// components. AMP documents routinely carry application/json config,
+		// JSON-LD and amp-state data whose string values may contain `<amp-*>`.
+		// Injecting a quoted HTML attribute into those strings corrupts the JSON.
+		// Comments, CDATA and the other HTML raw-text containers are equally not
+		// part of the executable component tree.
+		$raw_blocks = array();
+		$raw_prefix = '__FAZ_AMP_RAW_' . hash( 'sha256', $html ) . '_';
+		while ( false !== strpos( $html, $raw_prefix ) ) {
+			$raw_prefix .= '_';
+		}
+		$masked_html = preg_replace_callback(
+			'#<!--.*?(?:-->|$)|<!\[CDATA\[.*?(?:\]\]>|$)|<(script|style|textarea|title)\b[^>]*>.*?(?:</\1\s*>|$)#is',
+			static function ( $match ) use ( &$raw_blocks, $raw_prefix ) {
+				$placeholder                = $raw_prefix . count( $raw_blocks ) . '__';
+				$raw_blocks[ $placeholder ] = $match[0];
+				return $placeholder;
+			},
+			$html
+		);
+		if ( null === $masked_html ) {
+			return $html;
+		}
+
 		$result = preg_replace_callback(
 			'#<(amp-[a-z0-9-]+)\b([^>]*)>#i',
-			function ( $match ) use ( $map, $purpose_ids, $parse_purposes ) {
+			function ( $match ) use ( $map, $purpose_ids, $purpose_slugs, $purpose_args, $parse_purposes ) {
 				$tag   = strtolower( $match[1] );
 				$attrs = $match[2];
 				// The trailing "/" belongs in the terminator class. AMP custom
@@ -661,14 +677,20 @@ class AMP_Consent {
 				if ( empty( $requested ) || array( 'necessary' ) === $requested ) {
 					return $match[0];
 				}
-				$requested = array_values( array_diff( $requested, array( 'necessary' ) ) );
-				$valid     = array_values( array_intersect( $requested, $purpose_ids ) );
-				if ( ! empty( $valid ) ) {
+				$requested         = array_values( array_diff( $requested, array( 'necessary' ) ) );
+				$valid_slugs       = array_values( array_intersect( $requested, $purpose_slugs ) );
+				$valid_purpose_ids = array();
+				foreach ( $valid_slugs as $valid_slug ) {
+					if ( isset( $purpose_args[ $valid_slug ] ) ) {
+						$valid_purpose_ids[] = $purpose_args[ $valid_slug ];
+					}
+				}
+				if ( ! empty( $valid_purpose_ids ) ) {
 					// Gate on the categories this site actually offers. A requested
 					// purpose the site does not configure is dropped rather than
 					// carried into the attribute: no visitor could grant it, so
 					// naming it would block the component permanently.
-					$attribute = ' data-block-on-consent-purposes="' . esc_attr( implode( ',', $valid ) ) . '"';
+					$attribute = ' data-block-on-consent-purposes="' . esc_attr( implode( ',', $valid_purpose_ids ) ) . '"';
 				} elseif ( ! empty( $purpose_ids ) ) {
 					// Nothing the visitor can answer maps to this component — the usual
 					// case is a default category ("functional") the admin hid or deleted
@@ -700,10 +722,10 @@ class AMP_Consent {
 				}
 				return '<' . $match[1] . $attribute . $attrs . '>';
 			},
-			$html
+			$masked_html
 		);
 
-		return null === $result ? $html : $result;
+		return null === $result ? $html : strtr( $result, $raw_blocks );
 	}
 
 	/**

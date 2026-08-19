@@ -648,6 +648,20 @@ namespace {
 	amp_ok( false !== strpos( $blocked, '<amp-owner-widget data-block-on-consent-purposes="marketing">' ), 'custom component mapping filter is applied' );
 	amp_ok( false !== strpos( $blocked, '<amp-owner-filter-multi data-block-on-consent-purposes="analytics,marketing">' ), 'custom component mapping filter supports multiple required purposes' );
 	amp_ok( false !== strpos( $blocked, '<amp-unknown-widget></amp-unknown-widget>' ), 'unknown AMP component without declaration remains unchanged' );
+
+	$json_payload = '{"html":"<amp-ad type=\\"serialized\\"></amp-ad>","nested":{"component":"<amp-analytics></amp-analytics>"}}';
+	$raw_markup   = '<script type="application/json">' . $json_payload . '</script>'
+		. '<style>.fixture::before{content:"<amp-ad></amp-ad>"}</style>'
+		. '<textarea><amp-analytics></amp-analytics></textarea>'
+		. '<!-- <amp-ad width="99"></amp-ad> -->'
+		. '<amp-ad width="1"></amp-ad>';
+	$raw_blocked = $amp->apply_component_blocking( $raw_markup );
+	amp_ok( false !== strpos( $raw_blocked, '<script type="application/json">' . $json_payload . '</script>' ), 'serialized AMP-looking strings inside application/json stay byte-identical' );
+	amp_ok( false !== strpos( $raw_blocked, '<style>.fixture::before{content:"<amp-ad></amp-ad>"}</style>' ), 'AMP-looking CSS strings stay byte-identical' );
+	amp_ok( false !== strpos( $raw_blocked, '<textarea><amp-analytics></amp-analytics></textarea>' ), 'AMP-looking textarea content is not treated as live markup' );
+	amp_ok( false !== strpos( $raw_blocked, '<!-- <amp-ad width="99"></amp-ad> -->' ), 'commented AMP markup is not rewritten' );
+	amp_ok( preg_match( '#<script type="application/json">(.*?)</script>#s', $raw_blocked, $raw_json ) === 1 && is_array( json_decode( $raw_json[1], true ) ), 'the protected application/json block remains valid JSON' );
+	amp_ok( false !== strpos( $raw_blocked, '<amp-ad data-block-on-consent-purposes="marketing" width="1">' ), 'a live AMP component beside protected raw text is still gated' );
 	unset( $GLOBALS['faz_test_amp_map'] );
 
 	// Accepted decision with no optional purposes must log accepted, not rejected.
@@ -1007,6 +1021,13 @@ namespace {
 	ob_start();
 	$amp->output_amp_consent();
 	$collide_html = ob_get_clean();
+	amp_ok( preg_match( '#<script type="application/json">(.*?)</script>#s', $collide_html, $collide_json_match ) === 1, 'colliding-purpose fixture emits AMP configuration' );
+	$collide_config = json_decode( $collide_json_match[1], true );
+	amp_same(
+		$collide_config['purposeConsentRequired'],
+		array_values( $collide_args ),
+		'purposeConsentRequired uses the same collision-safe identifiers as the checkboxes'
+	);
 	foreach ( $collide_args as $faz_purpose_id => $faz_arg ) {
 		amp_ok(
 			// The trailing "=event.checked)" closes the needle: without it
@@ -1017,6 +1038,19 @@ namespace {
 		);
 	}
 	amp_same( substr_count( $collide_html, '.setPurpose(' ), 2, 'two categories render exactly two setPurpose calls' );
+	$collide_blocked = $amp->apply_component_blocking( '<amp-owner-social data-faz-purpose="social-media"></amp-owner-social>' );
+	amp_ok(
+		false !== strpos( $collide_blocked, 'data-block-on-consent-purposes="' . $collide_args['social-media'] . '"' ),
+		'a component gate uses the same identifier as the hyphenated category checkbox'
+	);
+	amp_same(
+		AMP_Consent_Rest::purpose_values_for_amp(
+			array( 'social-media' => true, 'social_media' => false ),
+			$collide_purposes
+		),
+		array( $collide_args['social-media'] => true, $collide_args['social_media'] => false ),
+		'REST responses expose the same identifiers while persisted consent keeps raw slugs'
+	);
 
 	Category_Controller::$items = array(
 		array( 'slug' => 'necessary', 'name' => 'Necessary', 'visibility' => 1 ),

@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.0
-Stable tag: 1.26.0
+Stable tag: 1.27.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -386,6 +386,16 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.27.0 =
+* Added: authenticated browser-scan capture for PHP/HttpOnly Set-Cookie metadata from pages, AJAX, REST and subresources, plus background header replay limited to the URLs the browser actually visited.
+* Added: granular AMP consent synchronized with the standard FAZ cookie. Category decisions are scope- and revision-bound, stale cached decisions fail closed, and AMP components stay blocked until their purposes are granted.
+* Added: evidence-based stale-cookie deletion after repeated complete scans, recoverable bulk deletion, and a persistent recycle-bin Undo action that survives page reloads.
+* Changed: scan completeness now includes selected depth, diagnostics, early stops and capture truncation. Administrator-only jar cookies are reported for review but never imported as public declarations.
+* Changed: the opt-in outgoing Set-Cookie guard is separate from the established cookie shredder, respects banner/geo/excluded-page context, preserves necessary/CAPTCHA boundaries, and records value-free diagnostics without query strings.
+* Fixed: transient scan-import failures automatically retry the exact payload and scan ID; exhausted retries close the session before the UI can start another scan, while HttpOnly observations remain intact until persistence succeeds.
+* Fixed: hyphenated AMP category slugs now use one collision-safe identifier across purposeConsentRequired, checkboxes, REST responses and component blocking attributes.
+* Fixed: file-like replay URLs keep their path, cookie-clearing headers remove the matching name/domain/path observation instead of becoming inventory entries, and AMP-looking strings inside JSON, CSS, text or comments are not rewritten.
+
 = 1.26.0 =
 * Added: Cookie Policy change review linked to consent revision. Mark a change minor to keep existing consents, or material to re-show the banner. The review token includes the default policy and every saved jurisdiction/language override variant.
 * Added: opt-in footer legal links with ordered page selections and optional custom labels. Output is visitor-invariant and cache-safe; unpublished or unavailable selections remain visible in Settings so they can be removed, but never render publicly.
@@ -490,9 +500,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Change: runtime geo-routing no longer applies a resolved ruleset to the live banner (a CCPA-style jurisdiction was mapped to a GDPR banner without rendering its Do-Not-Sell / GPC / sensitive-opt-in obligations). Catalogue-based multi-banner geo-routing — choosing which saved banner to show per country — is unaffected.
 * Fix: corrected an overstated per-cookie help text that claimed a denied cookie "is deleted whenever it appears." That enforcement only ran client-side at save time and did not persist, so the claim was inaccurate.
 
-= 1.18.1 =
-* Fix: the Cookies admin "Scan Site" and "Auto-categorize" dropdown menus are no longer clipped by the card's rounded-corner overflow — the menu now drops over the table below and shows all options.
-
 
 = Older versions =
-Older releases (1.14.x and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
+Older releases (1.18.1 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.

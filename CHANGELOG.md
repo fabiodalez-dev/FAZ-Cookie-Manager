@@ -2,6 +2,24 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [1.27.0] — 2026-08-19
+
+### Added
+- **The scanner captures server-set and HttpOnly cookies from real browser activity.** Each browser scan opens an authenticated, bounded capture session that observes `Set-Cookie` metadata from page, AJAX, REST and subresource responses without storing cookie values. A background replay of the URLs the browser actually visited adds header-only discoveries that JavaScript cannot see, including on isolated multisite subsites.
+- **AMP pages use the same granular consent model as canonical pages.** A real `amp-consent` bridge synchronizes category decisions with the first-party FAZ cookie, validates publisher/cache origins and signed scope, expires stale AMP state after policy or banner changes, and blocks AMP components on the categories the visitor can actually choose.
+- **Scanner-driven deletion is recoverable and evidence-based.** Cookies become stale only after repeated complete, healthy full-site scans. Bulk deletion snapshots rows into a newest-first recycle bin, and the Cookies page offers a persistent Undo action that survives reloads and safely handles partial or duplicate restores.
+
+### Changed
+- **Scan completion now has one fail-closed definition across browser and server.** Selected depth, early stops, diagnostics, capture truncation and persisted script-inferred discoveries all participate in the stale tally, while administrator-only jar cookies are reported but never imported as public declarations.
+- **Server-side cookie enforcement is explicit and observable.** The opt-in outgoing `Set-Cookie` guard and the established cookie shredder have separate gates, honour banner/geo/excluded-page context, keep CAPTCHA and WordPress-internal boundaries, and expose value-free recently-blocked diagnostics with query strings removed.
+
+### Fixed
+- **A failed scanner import is retried by the product, not only by the endpoint.** Runtime observations, session transients and the HttpOnly marker survive transient database/network failures while the browser retries the exact payload with the same scan ID. After the bounded retry budget is exhausted the client waits for session teardown before returning control, so another click cannot collide with its own 15-minute lock. The capture closes and background replay is scheduled only after persistence succeeds.
+- **Hyphenated AMP category slugs can be granted and unblock components.** `purposeConsentRequired`, `setPurpose()`, REST purpose maps and `data-block-on-consent-purposes` now share one collision-safe identifier map while the consent cookie retains the original category slugs.
+- **Header replay preserves URL, lifetime and deletion semantics.** File-like paths such as `/index.php` and `/wp-sitemap.xml` are no longer rewritten with a trailing slash. `Max-Age=0`, negative Max-Age and past Expires directives now remove only the matching name/domain/path observation, instead of becoming session cookies or being resurrected from the known-cookie catalogue.
+- **AMP component blocking leaves serialized content untouched.** AMP-looking strings inside application/json, JSON-LD, CSS, text containers, CDATA and comments remain byte-identical and valid while live classified components beside them still receive granular purpose gates.
+- **Upgrade and deletion safety gaps are closed.** Existing installs retain CAPTCHA exemptions and the always-on shredder; failed recycle-bin writes emit no deletion hook; restore identity is name plus domain; AMP reject-all removes stale granular grants; and partial migration failures still invalidate affected caches.
+
 ## [1.26.0] — 2026-08-12
 
 ### Added

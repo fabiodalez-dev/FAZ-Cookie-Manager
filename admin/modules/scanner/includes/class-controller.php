@@ -137,7 +137,7 @@ class Controller {
 	/** Maximum unique Set-Cookie observations retained for one browser scan. */
 	const BROWSER_SCAN_OBSERVATION_LIMIT = 2000;
 
-	/** Whether the most recently drained browser capture reached its safety cap. */
+	/** Whether the most recently collected browser capture reached its safety cap. */
 	private $browser_scan_capture_truncated = false;
 
 	/**
@@ -282,6 +282,7 @@ class Controller {
 				$admin_context = self::request_is_admin_context();
 				$existing      = (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false );
 				$seen          = array();
+				$stored_by_key = array();
 				$stored        = 0;
 				$truncated     = false;
 				foreach ( $existing as $row ) {
@@ -297,10 +298,27 @@ class Controller {
 					// page must not be collapsed into whichever was observed
 					// first, or a genuine site cookie stays bucketed as the
 					// administrator's own.
-					$key          = strtolower( (string) ( isset( $row['name'] ) ? $row['name'] : '' ) ) . '|' . strtolower( (string) ( isset( $row['domain'] ) ? $row['domain'] : '' ) ) . '|' . (string) ( isset( $row['path'] ) ? $row['path'] : '' ) . '|' . ( empty( $row['admin_context'] ) ? '0' : '1' );
+					$request_url = home_url( isset( $row['request_path'] ) ? (string) $row['request_path'] : '/' );
+					$key         = $controller->set_cookie_identity( $row, $request_url ) . '|' . ( empty( $row['admin_context'] ) ? '0' : '1' );
+					if ( $controller->set_cookie_is_deletion( $row ) ) {
+						foreach ( isset( $stored_by_key[ $key ] ) ? $stored_by_key[ $key ] : array() as $stored_row ) {
+							delete_user_meta( $user_id, self::BROWSER_SCAN_META, $stored_row );
+							$stored = max( 0, $stored - 1 );
+						}
+						// Older plugin versions persisted the clearing directive itself.
+						// Remove it while rebuilding the ordered active set.
+						delete_user_meta( $user_id, self::BROWSER_SCAN_META, $row );
+						unset( $seen[ $key ], $stored_by_key[ $key ] );
+						continue;
+					}
 					$seen[ $key ] = true;
+					$stored_by_key[ $key ][] = $row;
 					++$stored;
 				}
+				$request_path = isset( $_SERVER['REQUEST_URI'] )
+					? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH )
+					: '/';
+				$request_url  = home_url( $request_path );
 				foreach ( headers_list() as $header_line ) {
 					if ( 0 !== stripos( $header_line, 'Set-Cookie:' ) ) {
 						continue;
@@ -309,7 +327,20 @@ class Controller {
 					if ( empty( $parsed['name'] ) || self::BROWSER_SCAN_COOKIE === $parsed['name'] ) {
 						continue;
 					}
-					$key = strtolower( (string) $parsed['name'] ) . '|' . strtolower( (string) $parsed['domain'] ) . '|' . (string) $parsed['path'] . '|' . ( $admin_context ? '1' : '0' );
+					$key = $controller->set_cookie_identity( $parsed, $request_url ) . '|' . ( $admin_context ? '1' : '0' );
+					if ( $controller->set_cookie_is_deletion( $parsed ) ) {
+						// Set-Cookie is an ordered mutation stream. A deletion removes a
+						// prior sighting of the same effective name/domain/path instead
+						// of becoming a fictitious session cookie. Remove every legacy
+						// duplicate too, then allow a later header in this response to
+						// set the identity again.
+						foreach ( isset( $stored_by_key[ $key ] ) ? $stored_by_key[ $key ] : array() as $stored_row ) {
+							delete_user_meta( $user_id, self::BROWSER_SCAN_META, $stored_row );
+							$stored = max( 0, $stored - 1 );
+						}
+						unset( $seen[ $key ], $stored_by_key[ $key ] );
+						continue;
+					}
 					if ( isset( $seen[ $key ] ) ) {
 						continue;
 					}
@@ -321,25 +352,24 @@ class Controller {
 						break;
 					}
 
-					$request_path = isset( $_SERVER['REQUEST_URI'] )
-						? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH )
-						: '';
+					$scope       = $controller->set_cookie_scope( $parsed, $request_url );
 					$observation = array(
 						'token'         => $token,
 						'observed_at'   => time(),
 						'admin_context' => $admin_context,
-						'request_path'=> sanitize_text_field( $request_path ),
-						'name'        => sanitize_text_field( $parsed['name'] ),
-						'domain'      => sanitize_text_field( $parsed['domain'] ),
-						'path'        => sanitize_text_field( $parsed['path'] ),
-						'expires'     => sanitize_text_field( $parsed['expires'] ),
-						'max-age'     => sanitize_text_field( $parsed['max-age'] ),
-						'secure'      => ! empty( $parsed['secure'] ),
-						'httponly'    => ! empty( $parsed['httponly'] ),
-						'samesite'    => sanitize_text_field( $parsed['samesite'] ),
+						'request_path' => sanitize_text_field( $request_path ),
+						'name'         => sanitize_text_field( $parsed['name'] ),
+						'domain'       => sanitize_text_field( $scope['domain'] ),
+						'path'         => sanitize_text_field( $scope['path'] ),
+						'expires'      => sanitize_text_field( $parsed['expires'] ),
+						'max-age'      => sanitize_text_field( $parsed['max-age'] ),
+						'secure'       => ! empty( $parsed['secure'] ),
+						'httponly'     => ! empty( $parsed['httponly'] ),
+						'samesite'     => sanitize_text_field( $parsed['samesite'] ),
 					);
 					add_user_meta( $user_id, self::BROWSER_SCAN_META, $observation, false );
 					$seen[ $key ] = true;
+					$stored_by_key[ $key ][] = $observation;
 					++$stored;
 				}
 			},
@@ -656,39 +686,50 @@ class Controller {
 	}
 
 	/**
-	 * Drain cookie metadata captured from scan-tagged runtime responses.
+	 * Read cookie metadata captured from scan-tagged runtime responses.
 	 *
 	 * Each row carries `admin_context`: true when the only sighting of that name
 	 * was on the administrator's own wp-admin traffic, which the capture window
 	 * necessarily also observes. The caller must report those rather than import
 	 * them — see Api::import_cookies().
 	 *
+	 * This method is deliberately non-destructive. Api::import_cookies() may still
+	 * fail while persisting the inventory, and the same scan id must remain
+	 * retryable with the same server-captured evidence in that case. The caller
+	 * closes the session explicitly with finish_browser_scan_session() only after
+	 * the save commits.
+	 *
+	 * @param string $scan_id Client scan identifier.
 	 * @return array[] Cookie inventory rows, without cookie values.
 	 */
-	public function finish_browser_scan_session( $scan_id = '' ) {
+	public function collect_browser_scan_session( $scan_id = '' ) {
 		$this->browser_scan_capture_truncated = false;
-		if ( empty( $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) ) {
+		if ( ! $this->browser_scan_session_matches( $scan_id ) ) {
 			return array();
 		}
 		$token   = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
-		$scan_id = sanitize_key( (string) $scan_id );
 		$user_id = get_current_user_id();
-		$session = get_transient( self::browser_scan_transient_key( $token ) );
-		if ( ! preg_match( '/^[a-f0-9]{32}$/', $token ) || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) || ! is_array( $session ) || ! isset( $session['user_id'] ) || $user_id !== absint( $session['user_id'] ) || ! isset( $session['scan_id'] ) || ! hash_equals( (string) $session['scan_id'], $scan_id ) ) {
-			return array();
-		}
 
-		$cookies = array();
+		$cookies            = array();
+		$active_observations = array();
 		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
 			if ( ! is_array( $observation ) || ! hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
 				continue;
 			}
-			delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
 			if ( ! empty( $observation['truncated'] ) ) {
 				$this->browser_scan_capture_truncated = true;
 				continue;
 			}
+			$request_url = home_url( isset( $observation['request_path'] ) ? (string) $observation['request_path'] : '/' );
+			$identity    = $this->set_cookie_identity( $observation, $request_url ) . '|' . ( empty( $observation['admin_context'] ) ? '0' : '1' );
+			if ( $this->set_cookie_is_deletion( $observation ) ) {
+				unset( $active_observations[ $identity ] );
+				continue;
+			}
+			$active_observations[ $identity ] = $observation;
+		}
 
+		foreach ( $active_observations as $observation ) {
 			$name = isset( $observation['name'] ) ? sanitize_text_field( $observation['name'] ) : '';
 			if ( '' === $name ) {
 				continue;
@@ -703,8 +744,11 @@ class Controller {
 				}
 			}
 			$duration = 'session';
-			if ( ! empty( $observation['max-age'] ) ) {
-				$duration = $this->seconds_to_human( absint( $observation['max-age'] ) );
+			if ( isset( $observation['max-age'] ) && '' !== (string) $observation['max-age'] ) {
+				$max_age = (int) $observation['max-age'];
+				if ( $max_age > 0 ) {
+					$duration = $this->seconds_to_human( $max_age );
+				}
 			} elseif ( ! empty( $observation['expires'] ) ) {
 				$expires = strtotime( $observation['expires'] );
 				if ( false !== $expires && $expires > time() ) {
@@ -721,8 +765,29 @@ class Controller {
 				'admin_context' => $admin_context,
 			);
 		}
-		$cookies = array_values( $cookies );
+		return array_values( $cookies );
+	}
 
+	/**
+	 * Permanently close a browser capture after a successful import or abort.
+	 *
+	 * Every destructive session operation lives here so the import failure path
+	 * cannot consume observations, transients or the marker by accident.
+	 *
+	 * @param string $scan_id Client scan identifier.
+	 * @return bool Whether a matching session was closed.
+	 */
+	public function finish_browser_scan_session( $scan_id = '' ) {
+		if ( ! $this->browser_scan_session_matches( $scan_id ) ) {
+			return false;
+		}
+		$token   = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		$user_id = get_current_user_id();
+		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
+			if ( is_array( $observation ) && hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
+				delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
+			}
+		}
 		delete_transient( self::browser_scan_transient_key( $token ) );
 		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
 		if ( ! headers_sent() ) {
@@ -739,7 +804,7 @@ class Controller {
 			);
 		}
 
-		return $cookies;
+		return true;
 	}
 
 	/**
@@ -771,32 +836,7 @@ class Controller {
 	 * @return bool
 	 */
 	public function abort_browser_scan_session( $scan_id ) {
-		if ( ! $this->browser_scan_session_matches( $scan_id ) ) {
-			return false;
-		}
-		$token   = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
-		$user_id = get_current_user_id();
-		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
-			if ( is_array( $observation ) && hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
-				delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
-			}
-		}
-		delete_transient( self::browser_scan_transient_key( $token ) );
-		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
-		if ( ! headers_sent() ) {
-			setcookie(
-				self::BROWSER_SCAN_COOKIE,
-				'',
-				array(
-					'expires'  => time() - YEAR_IN_SECONDS,
-					'path'     => '/',
-					'secure'   => is_ssl(),
-					'httponly' => true,
-					'samesite' => 'Strict',
-				)
-			);
-		}
-		return true;
+		return $this->finish_browser_scan_session( $scan_id );
 	}
 
 	/** @return bool */
@@ -1065,8 +1105,8 @@ class Controller {
 					// worker dies on a later URL, earlier findings remain persisted.
 					$this->save_cookies( $page_cookies );
 					// Saving the row was never the whole job. A cookie only this
-					// replay ever sees — a first-visit session cookie, which is
-					// re-issued to this cookie-less client and to nobody else —
+					// replay ever sees — a first-visit session cookie issued to
+					// this worker's private jar and to nobody else —
 					// was being written to the catalogue on every run while its
 					// consecutive-miss tally climbed toward deletion in parallel.
 					// Checkpointed alongside the save for the same reason: a
@@ -1375,7 +1415,13 @@ class Controller {
 		$path   = isset( $parsed['path'] ) ? $parsed['path'] : '/';
 		$query  = isset( $parsed['query'] ) && '' !== $parsed['query'] ? '?' . $parsed['query'] : '';
 
-		return trailingslashit( $scheme . '://' . $host . $port . $path ) . $query;
+		$last_segment = basename( $path );
+		$is_file_path = '/' !== substr( $path, -1 )
+			&& false !== strpos( $last_segment, '.' )
+			&& 0 !== strpos( $last_segment, '.' );
+		$normalized_path = $is_file_path ? $path : trailingslashit( $path );
+
+		return $scheme . '://' . $host . $port . $normalized_path . $query;
 	}
 
 	/**
@@ -1654,15 +1700,35 @@ class Controller {
 				break;
 			}
 
-			$raw_cookies = array_merge( $raw_cookies, $this->get_set_cookie_headers( $response ) );
+			$response_set_cookie_headers = $this->get_set_cookie_headers( $response );
+			foreach ( $response_set_cookie_headers as $set_cookie_header ) {
+				$raw_cookies[] = array(
+					'header'      => $set_cookie_header,
+					'request_url' => $current,
+				);
+			}
 			foreach ( (array) wp_remote_retrieve_cookies( $response ) as $response_cookie ) {
 				if ( ! is_object( $response_cookie ) || empty( $response_cookie->name ) ) {
 					continue;
 				}
-				$cookie_domain = isset( $response_cookie->domain ) ? (string) $response_cookie->domain : '';
-				$cookie_path   = isset( $response_cookie->path ) ? (string) $response_cookie->path : '';
-				$jar_key       = strtolower( (string) $response_cookie->name ) . '|' . strtolower( $cookie_domain ) . '|' . $cookie_path;
+				$jar_key = $this->set_cookie_identity(
+					array(
+						'name'   => (string) $response_cookie->name,
+						'domain' => isset( $response_cookie->domain ) ? (string) $response_cookie->domain : '',
+						'path'   => isset( $response_cookie->path ) ? (string) $response_cookie->path : '',
+					),
+					$current
+				);
 				$this->server_cookie_jar[ $jar_key ] = $response_cookie;
+			}
+			// Requests may expose an already-expired cookie object. Apply the raw
+			// mutation stream last so a clearing directive cannot be resurrected
+			// and sent to a redirect target as an active jar entry.
+			foreach ( $response_set_cookie_headers as $set_cookie_header ) {
+				$parsed_set_cookie = $this->parse_set_cookie( $set_cookie_header );
+				if ( ! empty( $parsed_set_cookie['name'] ) && $this->set_cookie_is_deletion( $parsed_set_cookie ) ) {
+					unset( $this->server_cookie_jar[ $this->set_cookie_identity( $parsed_set_cookie, $current ) ] );
+				}
 			}
 			foreach ( $this->extract_embed_urls( wp_remote_retrieve_body( $response ) ) as $embed_url ) {
 				$this->scanned_embed_urls[] = $embed_url;
@@ -1689,20 +1755,32 @@ class Controller {
 
 		$site_domain = wp_parse_url( home_url(), PHP_URL_HOST );
 
-		foreach ( $raw_cookies as $cookie_string ) {
-			$parsed = $this->parse_set_cookie( $cookie_string );
+		foreach ( $raw_cookies as $cookie_directive ) {
+			$cookie_string = is_array( $cookie_directive ) && isset( $cookie_directive['header'] ) ? $cookie_directive['header'] : $cookie_directive;
+			$request_url   = is_array( $cookie_directive ) && isset( $cookie_directive['request_url'] ) ? $cookie_directive['request_url'] : $url;
+			$parsed        = $this->parse_set_cookie( $cookie_string );
 			if ( empty( $parsed['name'] ) ) {
 				continue;
 			}
 
-			$name   = $parsed['name'];
-			$domain = ! empty( $parsed['domain'] ) ? $parsed['domain'] : $site_domain;
+			$name     = $parsed['name'];
+			$scope    = $this->set_cookie_scope( $parsed, $request_url );
+			$domain   = $scope['domain'] ? $scope['domain'] : $site_domain;
+			$identity = $this->set_cookie_identity( $parsed, $request_url );
+
+			// Set-Cookie is ordered. A clearing directive removes only the
+			// matching name/domain/path observation and must be handled before a
+			// known-cookie lookup can turn it back into a catalogue declaration.
+			if ( $this->set_cookie_is_deletion( $parsed ) ) {
+				unset( $cookies[ $identity ] );
+				continue;
+			}
 
 			// Look up in known cookies database.
 			$known = Cookie_Database::lookup( $name );
 
 			if ( $known ) {
-				$cookies[] = array(
+				$cookies[ $identity ] = array(
 					'name'        => $name,
 					'domain'      => $domain,
 					'duration'    => $known['duration'],
@@ -1715,7 +1793,7 @@ class Controller {
 			// Fallback: Open Cookie Database (1400+ cookie definitions).
 			$ocd = Cookie_Definitions::get_instance()->lookup( $name );
 			if ( $ocd ) {
-				$cookies[] = array(
+				$cookies[ $identity ] = array(
 					'name'        => $name,
 					'domain'      => $domain,
 					'duration'    => ! empty( $ocd['duration'] ) ? $ocd['duration'] : 'session',
@@ -1725,20 +1803,21 @@ class Controller {
 				continue;
 			}
 
-			// Unknown cookie — try to extract duration from headers.
+			// Unknown active cookie — extract its positive lifetime from headers.
 			$duration = 'session';
-			if ( ! empty( $parsed['expires'] ) ) {
-				$expires_time = strtotime( $parsed['expires'] );
-				if ( false !== $expires_time ) {
-					$diff     = $expires_time - time();
-					$duration = $diff > 0 ? $this->seconds_to_human( $diff ) : 'session';
+			if ( isset( $parsed['max-age'] ) && '' !== (string) $parsed['max-age'] ) {
+				$max_age = (int) $parsed['max-age'];
+				if ( $max_age > 0 ) {
+					$duration = $this->seconds_to_human( $max_age );
 				}
-			} elseif ( ! empty( $parsed['max-age'] ) ) {
-				$max_age  = absint( $parsed['max-age'] );
-				$duration = $max_age > 0 ? $this->seconds_to_human( $max_age ) : 'session';
+			} elseif ( ! empty( $parsed['expires'] ) ) {
+				$expires_time = strtotime( $parsed['expires'] );
+				if ( false !== $expires_time && $expires_time > time() ) {
+					$duration = $this->seconds_to_human( $expires_time - time() );
+				}
 			}
 
-			$cookies[] = array(
+			$cookies[ $identity ] = array(
 				'name'        => $name,
 				'domain'      => $domain,
 				'duration'    => $duration,
@@ -1747,7 +1826,7 @@ class Controller {
 			);
 		}
 
-		return $cookies;
+		return array_values( $cookies );
 	}
 
 	/**
@@ -1766,6 +1845,74 @@ class Controller {
 			return (array) $headers['set-cookie'];
 		}
 		return array();
+	}
+
+	/**
+	 * Resolve the effective cookie scope used by the browser.
+	 *
+	 * Domain defaults to the response host. Path follows RFC 6265's
+	 * default-path algorithm rather than assuming '/', because a clearing header
+	 * only removes a prior cookie when all three identity coordinates match.
+	 *
+	 * @param array  $parsed      Parsed Set-Cookie attributes.
+	 * @param string $request_url URL that emitted the header.
+	 * @return array{domain:string,path:string}
+	 */
+	public function set_cookie_scope( $parsed, $request_url = '' ) {
+		$domain = isset( $parsed['domain'] ) ? strtolower( ltrim( trim( (string) $parsed['domain'] ), '.' ) ) : '';
+		if ( '' === $domain ) {
+			$domain = strtolower( (string) wp_parse_url( $request_url ? $request_url : home_url(), PHP_URL_HOST ) );
+		}
+
+		$path = isset( $parsed['path'] ) ? trim( (string) $parsed['path'] ) : '';
+		if ( '' === $path || '/' !== substr( $path, 0, 1 ) ) {
+			$request_path = (string) wp_parse_url( $request_url ? $request_url : home_url(), PHP_URL_PATH );
+			if ( '' === $request_path || '/' !== substr( $request_path, 0, 1 ) ) {
+				$path = '/';
+			} else {
+				$last_slash = strrpos( $request_path, '/' );
+				$path       = false === $last_slash || 0 === $last_slash ? '/' : substr( $request_path, 0, $last_slash );
+			}
+		}
+
+		return array(
+			'domain' => $domain,
+			'path'   => $path,
+		);
+	}
+
+	/**
+	 * Canonical identity for ordered Set-Cookie mutation handling.
+	 *
+	 * @param array  $parsed      Parsed Set-Cookie attributes.
+	 * @param string $request_url URL that emitted the header.
+	 * @return string
+	 */
+	public function set_cookie_identity( $parsed, $request_url = '' ) {
+		$scope = $this->set_cookie_scope( $parsed, $request_url );
+		return strtolower( trim( isset( $parsed['name'] ) ? (string) $parsed['name'] : '' ) ) . '|' . $scope['domain'] . '|' . $scope['path'];
+	}
+
+	/**
+	 * Whether a Set-Cookie directive expires its identity immediately.
+	 *
+	 * A syntactically valid Max-Age takes precedence over Expires. Invalid
+	 * Max-Age text is ignored, allowing a valid Expires attribute to decide.
+	 *
+	 * @param array $parsed Parsed Set-Cookie attributes.
+	 * @return bool
+	 */
+	public function set_cookie_is_deletion( $parsed ) {
+		$max_age = isset( $parsed['max-age'] ) ? trim( (string) $parsed['max-age'] ) : '';
+		if ( '' !== $max_age && preg_match( '/^-?[0-9]+$/', $max_age ) ) {
+			return (int) $max_age <= 0;
+		}
+		$expires = isset( $parsed['expires'] ) ? trim( (string) $parsed['expires'] ) : '';
+		if ( '' === $expires ) {
+			return false;
+		}
+		$expires_time = strtotime( $expires );
+		return false !== $expires_time && $expires_time <= time();
 	}
 
 	/**
@@ -2020,13 +2167,12 @@ class Controller {
 	 * Clear the miss tally for cookies re-confirmed outside a browser scan.
 	 *
 	 * CLEAR-ONLY, and that restriction is the whole design. The background
-	 * header-replay pass (run_httponly_check()) works through a 20-URL batch as
-	 * a deliberately cookie-less client, so a first-visit session cookie is
-	 * re-issued to it on every single run — and never to the administrator's
-	 * browser, which already holds it. That name therefore lands in the
-	 * jar-only bucket at import, never reaches record_scan_observations()'s
-	 * observed set, and its tally climbs forever while this very plugin keeps
-	 * watching the site set it.
+	 * header-replay pass (run_httponly_check()) starts each worker with an empty
+	 * jar and then shares that jar across its 20-URL batch. A first-visit session
+	 * cookie is therefore seen on the first URL that issues it, but may never be
+	 * seen by the administrator's browser, which already holds it. Its name can
+	 * remain absent from record_scan_observations()'s browser-import set while
+	 * its tally climbs forever and this worker keeps watching the site set it.
 	 *
 	 * Reusing record_scan_observations() here would be worse than the bug: it
 	 * increments every catalogue row absent from the set it is handed, and this

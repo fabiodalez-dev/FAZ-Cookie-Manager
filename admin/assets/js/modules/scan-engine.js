@@ -43,6 +43,11 @@
 	// where scanned pages are served off disk and never reach PHP. Comfortably
 	// inside the window so one dropped heartbeat is not fatal.
 	var HEARTBEAT_INTERVAL_MS = 300000; // 5 minutes.
+	// Persisting a completed crawl may fail transiently after PHP has already
+	// collected HttpOnly evidence. Reuse the exact same scan id and payload while
+	// that server-side session is still alive; starting a fresh crawl would 409
+	// against our own active-session lock and strand the administrator for 15m.
+	var IMPORT_RETRY_DELAYS_MS = [1000, 3000];
 	// How long after the interaction signal a page may still restore delayed
 	// scripts. Cache/optimizer plugins commonly do so 1-3s in, which is why a
 	// settled pair of reads inside this window is not yet evidence that the page
@@ -324,10 +329,14 @@
 
 			function rejectAndAbort(error) {
 				// Best effort: avoid leaving this administrator locked out for the
-				// capture TTL when an iframe/network/import phase fails.
+				// capture TTL when an iframe or network phase fails.
 				releaseRunHooks();
-				FAZ.post('scans/abort', { scan_id: scanId }).catch(function () {});
-				reject(error);
+				// Wait for teardown before exposing the rejected run to the caller.
+				// Otherwise an immediate click on Scan can race the abort and receive
+				// a 409 from the session this run is still closing.
+				FAZ.post('scans/abort', { scan_id: scanId })
+					.catch(function () {})
+					.then(function () { reject(error); });
 			}
 			function resolveRun(value) {
 				releaseRunHooks();
@@ -546,7 +555,7 @@
 							}
 						}
 
-						FAZ.post('scans/import', {
+						var importPayload = {
 							scan_id: scanId,
 							cookies: collectedCookies,
 							jar_cookies: jarOnlyRemaining,
@@ -554,7 +563,27 @@
 							scanned_urls: scanMetrics.scannedUrls,
 							scripts: collectedScripts,
 							metrics: metricsToSend,
-						}).then(function (res) {
+						};
+
+						function importIsRetryable(err) {
+							var status = getApiErrorStatus(err);
+							return status === 0 || status === 408 || status === 429 || status >= 500;
+						}
+
+						function importWithRetry(attempt) {
+							return FAZ.post('scans/import', importPayload).catch(function (err) {
+								if (attempt >= IMPORT_RETRY_DELAYS_MS.length || !importIsRetryable(err)) {
+									throw err;
+								}
+								var delay = IMPORT_RETRY_DELAYS_MS[attempt];
+								emit.status(__('cookies.serverBusyRetrying', 'Server busy, retrying in %ds...').replace('%d', delay / 1000));
+								console.warn('[FAZ Scanner] Import attempt ' + (attempt + 1) + ' failed, retrying the same scan...', err.message);
+								return new Promise(function (retry) { setTimeout(retry, delay); })
+									.then(function () { return importWithRetry(attempt + 1); });
+							});
+						}
+
+						importWithRetry(0).then(function (res) {
 							scanMetrics.importMs = Date.now() - importStart;
 							if (res && res.capture_truncated) {
 								diagnostics.captureTruncated++;

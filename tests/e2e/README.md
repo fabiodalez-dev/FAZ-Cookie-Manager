@@ -29,7 +29,18 @@ Copia `.env.e2e.example` e imposta:
 - Crawl integrato da almeno 330 pagine con TTL compresso:
   `npx playwright test -c tests/e2e/playwright.config.ts tests/e2e/specs/release-verify-long-crawl.spec.ts --project=chromium`
 - Multisite isolato (crea una rete e un database temporanei e li elimina sempre):
-  `WP_PATH=/path/to/reference-wordpress bash scripts/run-multisite-scanner-e2e.sh`
+  `WP_PATH=/path/to/reference-wordpress npm run test:e2e:multisite`
+
+La suite multisite non va lanciata con la configurazione E2E ordinaria: il runner
+crea una rete temporanea, passa al test gli URL main/child e usa il relativo
+`playwright.multisite.config.ts`. Eseguire direttamente lo spec contro il sito
+single-site produce correttamente un errore di topologia (`/child` mancante).
+
+Prima della suite E2E ordinaria, sincronizza il worktree nel WordPress di test:
+`FAZ_DEPLOY_TARGET="$FAZ_PLUGIN_DEPLOY_PATH" npm run test:e2e:deploy`. Il preflight
+confronta poi i checksum e interrompe il run se anche un solo file, incluso
+`admin/assets/js/modules/scan-engine.js`, diverge. Non usare
+`FAZ_E2E_SKIP_DEPLOY_CHECK=1` per una verifica di release.
 
 `FAZ_E2E_BROWSERS` accetta una lista separata da virgole tra `chromium`,
 `firefox` e `webkit`; il default resta `chromium`, quindi il costo della suite

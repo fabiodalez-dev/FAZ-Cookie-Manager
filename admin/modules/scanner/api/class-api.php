@@ -734,7 +734,7 @@ class Api extends Rest_Controller {
 		// Runtime responses made by scan-tagged pages can set HttpOnly cookies
 		// through AJAX, REST, pixels or dynamically loaded resources. PHP captured
 		// their Set-Cookie metadata through the short-lived scan marker.
-		$session_cookies   = $this->controller->finish_browser_scan_session( $scan_id );
+		$session_cookies   = $this->controller->collect_browser_scan_session( $scan_id );
 		$capture_truncated = $this->controller->browser_scan_capture_was_truncated();
 
 		// The capture window is not scoped to one scan_id — it cannot be, because
@@ -822,10 +822,6 @@ class Api extends Rest_Controller {
 			$clean_scripts[] = esc_url_raw( $s );
 		}
 
-		// Replay every URL the browser actually visited in a background server
-		// pass. This adds Set-Cookie headers and metadata that are invisible to JS.
-		$enrichment_pending = $this->controller->schedule_httponly_check( $scanned_urls );
-
 		try {
 			$result = $this->controller->save_scan_result( $cookies, $pages_scanned, $clean_scripts, $metrics );
 		} catch ( \Throwable $e ) {
@@ -836,6 +832,16 @@ class Api extends Rest_Controller {
 				array( 'status' => 500 )
 			);
 		}
+
+		// Nothing irreversible happens until persistence succeeds. In particular,
+		// the failure response above promises that the administrator may retry the
+		// same scan: its observations, transients and marker must still exist, and
+		// no background replay may write data for the failed import.
+		$this->controller->finish_browser_scan_session( $scan_id );
+
+		// Replay every URL the browser actually visited in a background server
+		// pass. This adds Set-Cookie headers and metadata that are invisible to JS.
+		$enrichment_pending = $this->controller->schedule_httponly_check( $scanned_urls );
 
 		$result['capture_truncated'] = $capture_truncated;
 		$result['enrichment_pending'] = $enrichment_pending > 0;

@@ -610,6 +610,16 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### 1.27.0 — 2026-08-19
+- **Added**: authenticated browser-scan capture for PHP/HttpOnly `Set-Cookie` metadata, followed by a safe background replay of the URLs the browser actually visited.
+- **Added**: a granular AMP consent bridge that synchronizes category decisions with the standard FAZ cookie and blocks AMP components using the same purposes.
+- **Added**: evidence-based stale-cookie deletion with consecutive complete-scan tallies, recoverable bulk deletion and a persistent recycle-bin Undo action.
+- **Changed**: scan completeness now includes selected depth, diagnostics, early stops and capture truncation; administrator-only jar cookies are reported without being imported.
+- **Changed**: outgoing server-cookie blocking is opt-in, context-aware and separately gated from the established shredder, with value-free diagnostics that retain request paths but never query strings.
+- **Fixed**: a failed scanner import automatically retries the same payload and scan ID; exhausted retries close the session before the UI can start another scan, while HttpOnly observations remain intact until persistence succeeds.
+- **Fixed**: hyphenated AMP category slugs use one collision-safe identifier across configuration, controls, REST responses and component gates.
+- **Fixed**: file-like replay URLs keep their original path; clearing `Set-Cookie` directives remove the matching name/domain/path observation instead of becoming inventory entries; AMP-looking strings inside JSON, CSS, text and comments are never rewritten.
+
 ### 1.26.0 — 2026-08-12
 - **Added**: an administrator review notice links Cookie Policy versions to consent revision. Classify a change as minor to preserve existing consents, or material to re-show the banner; saved jurisdiction/language overrides participate in the review token.
 - **Added**: opt-in footer legal links with ordered page selections and custom labels. The output is visitor-invariant and cache-safe; unpublished or missing selections stay removable in Settings but never render publicly.
