@@ -18,7 +18,7 @@
  * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
  * Version:           1.27.0
  * Requires at least: 5.0
- * Tested up to:      7.0
+ * Tested up to:      7.1
  * Stable tag:        1.27.0
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro
@@ -294,18 +294,33 @@ function faz_get_valid_consent_cookie( $cookie = '' ) {
 }
 
 /**
- * Whether the given consent cookie was auto-granted by the PMP integration.
+ * Whether the given consent cookie is managed by the PMP integration.
  *
  * @param string $cookie Raw cookie string. Falls back to the current request.
  * @return bool
  */
-function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
+function faz_is_pmp_managed_consent_cookie( $cookie = '' ) {
 	$cookie = '' !== $cookie ? (string) $cookie : faz_get_valid_consent_cookie();
 	if ( '' === $cookie ) {
 		return false;
 	}
 	$parsed = faz_parse_consent_cookie( $cookie );
 	return isset( $parsed['source'] ) && 'pmp' === $parsed['source'];
+}
+
+/**
+ * Backward-compatible alias for the pre-1.27.0 helper name.
+ *
+ * The PMP integration no longer grants optional purposes automatically: it
+ * applies a privacy-preserving necessary-only state. Keep this function so
+ * third-party integrations do not fatal, but route new code through the
+ * accurately named predicate above.
+ *
+ * @param string $cookie Raw cookie string. Falls back to the current request.
+ * @return bool
+ */
+function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
+	return faz_is_pmp_managed_consent_cookie( $cookie );
 }
 
 /**

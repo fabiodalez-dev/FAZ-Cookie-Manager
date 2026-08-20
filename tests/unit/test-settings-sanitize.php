@@ -13,6 +13,16 @@ namespace {
 	if ( ! defined( 'ABSPATH' ) ) {
 		define( 'ABSPATH', __DIR__ );
 	}
+	if ( ! function_exists( 'sanitize_key' ) ) {
+		function sanitize_key( $value ) {
+			return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $value ) );
+		}
+	}
+	if ( ! function_exists( 'absint' ) ) {
+		function absint( $value ) {
+			return abs( (int) $value );
+		}
+	}
 
 	// The real coercions, not stubs. This suite exercises the settings write
 	// path, and a local filter_var() copy is not what ships: it accepts 'on' and
@@ -50,6 +60,10 @@ namespace {
 		),
 		'geolocation' => array(
 			'geo_targeting' => false,
+			'target_regions' => array( 'eu', 'uk' ),
+		),
+		'scanner' => array(
+			'max_pages' => 20,
 		),
 		'iab' => array(
 			'enabled' => false,
@@ -222,6 +236,22 @@ namespace {
 		$defaults
 	);
 	faz_assert_same( $iab_cache['banner_control']['cache_compatibility'], true, 'cache mode survives a save while IAB TCF is on (frontend forces the conservative gdpr_applies instead)' );
+
+	$bounded = Settings::sanitize(
+		array(
+			'geolocation' => array( 'target_regions' => array( 'EU', 'mars', 'za', 'ZA', '<script>' ) ),
+			'scanner'     => array( 'max_pages' => 999999 ),
+		),
+		$defaults
+	);
+	faz_assert_same( $bounded['geolocation']['target_regions'], array( 'eu', 'za' ), 'target regions are normalized, deduplicated and constrained to the runtime catalogue' );
+	faz_assert_same( $bounded['scanner']['max_pages'], 2000, 'scanner settings clamp a crafted oversized crawl depth' );
+
+	$minimum_scan = Settings::sanitize(
+		array( 'scanner' => array( 'max_pages' => -50 ) ),
+		$defaults
+	);
+	faz_assert_same( $minimum_scan['scanner']['max_pages'], 1, 'scanner settings clamp negative crawl depth to the minimum instead of turning it positive' );
 
 	// The WRITE path must agree with the read path. It used the general coercion,
 	// whose negatives are enumerated, so 'garbage' persisted as an ENABLED

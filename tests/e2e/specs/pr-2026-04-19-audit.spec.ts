@@ -22,6 +22,13 @@ import {
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
+function sameOriginRequestHeaders(): Record<string, string> {
+  return {
+    Origin: new URL(WP_BASE).origin,
+    Referer: `${WP_BASE}/`,
+  };
+}
+
 type ConsentLogConfig = {
   bannerSlug: string;
   policyRevision: number;
@@ -994,6 +1001,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       const config = await waitForConsentLogConfig(page);
 
       const first = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-a',
@@ -1009,6 +1017,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       clearConsentThrottle('ip');
 
       const sameConsentAgain = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-a',
@@ -1024,6 +1033,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       clearConsentThrottle('all');
 
       const secondConsent = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-b',
@@ -1039,6 +1049,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       clearConsentThrottle('consent');
 
       const ipBucketOnly = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-c',
@@ -1071,6 +1082,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
 
       const response = await page.request.post(config.restUrl, {
         headers: {
+          ...sameOriginRequestHeaders(),
           'User-Agent': userAgent,
         },
         data: {
@@ -1117,6 +1129,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       expect(columnProbe.map((item) => item.Field).sort()).toEqual(['banner_slug', 'policy_revision']);
 
       const response = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           banner_slug: config.bannerSlug,
           categories: { analytics: 'yes' },

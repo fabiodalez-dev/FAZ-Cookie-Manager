@@ -280,11 +280,11 @@ class Settings extends Store {
 					// the PMP plugin is active on the site.
 					'enabled'        => false,
 					// Comma-separated list of PMP level IDs (stored as an
-					// array of integers) whose members are exempted from the
-					// cookie banner and whose consent is auto-granted across
-					// all categories. This is the "Pay-or-Accept" (PUR)
-					// branch: paying subscribers skip the banner, free
-					// visitors keep the standard consent flow.
+					// array of integers) whose members receive the paid,
+					// privacy-preserving alternative: the banner is skipped,
+					// necessary storage remains available, and every optional
+					// purpose stays denied until the member explicitly changes
+					// it through the preference centre.
 					'exempt_levels'  => array(),
 				),
 			),
@@ -541,8 +541,15 @@ class Settings extends Store {
 				break;
 			case 'installed':
 			case 'step':
-			case 'max_pages':
 				$value = absint( $value );
+				break;
+			case 'max_pages':
+				// Keep every entry point aligned with the browser scanner's
+				// discover endpoint. An unbounded stored value can turn the cron
+				// fallback into thousands of loopback requests after a crafted
+				// settings import or REST write.
+				$value = is_numeric( $value ) ? (int) $value : 0;
+				$value = max( 1, min( 2000, $value ) );
 				break;
 			case 'consent_revision':
 				// Revision counter: always >= 1. Bounded upper limit to avoid
@@ -772,7 +779,16 @@ class Settings extends Store {
 				if ( ! is_array( $value ) ) {
 					$value = array();
 				}
-				$value = array_values( array_unique( array_map( 'sanitize_text_field', $value ) ) );
+				// Same finite vocabulary rendered by Settings and accepted by
+				// onboarding. Unknown tokens used to survive direct REST/import
+				// writes even though no runtime resolver could interpret them.
+				$allowed = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za' );
+				$value   = array_values( array_unique( array_intersect( array_map( function ( $region ) {
+					if ( ! is_scalar( $region ) ) {
+						return '';
+					}
+					return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( trim( (string) $region ) ) );
+				}, $value ), $allowed ) ) );
 				break;
 			case 'publisher_cc':
 				$value = strtoupper( sanitize_text_field( (string) $value ) );

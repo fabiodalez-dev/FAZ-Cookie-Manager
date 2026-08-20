@@ -489,11 +489,11 @@ defined( 'ABSPATH' ) || exit;
 		</div>
 		<div class="faz-card-body">
 			<p style="margin:0 0 12px;color:var(--faz-text-secondary);">
-				<?php echo wp_kses_post( __( 'Implement a "Pay-or-Accept" model: logged-in members on selected PMP levels skip the cookie banner and have consent <strong>programmatically recorded as granted for all categories</strong> via a server-side cookie. Marketing, analytics, functional and other non-necessary scripts will run for them without an explicit banner interaction. Free visitors continue to see the standard banner and consent flow.', 'faz-cookie-manager' ) ); ?>
+				<?php echo wp_kses_post( __( 'Offer selected Paid Memberships Pro levels a privacy-preserving membership alternative: logged-in members skip the cookie banner, necessary storage remains available, and <strong>all optional purposes stay denied</strong> until the member explicitly changes them in the preference center. Other visitors continue to use the standard consent flow.', 'faz-cookie-manager' ) ); ?>
 			</p>
 			<p style="margin:0 0 12px;padding:10px 12px;border-radius:6px;background:var(--faz-bg-secondary);color:var(--faz-text-secondary);font-size:13px;">
 				<strong><?php esc_html_e( 'Legal note:', 'faz-cookie-manager' ); ?></strong>
-				<?php esc_html_e( 'Because this option grants consent on behalf of the member (it does not merely hide the banner), you must disclose it clearly in your Terms of Service, Privacy Policy, and at the point of subscription so the membership fee is understood as a genuine alternative to giving consent (EDPB Opinion 08/2024). Members must remain able to revoke or adjust their consent at any time via the standard revisit widget.', 'faz-cookie-manager' ); ?>
+				<?php esc_html_e( 'This option does not grant consent on the member\'s behalf. Disclose the privacy-preserving membership alternative in your Terms and Privacy Policy, keep the paid service genuinely equivalent, and leave the standard preference control available so members can change any optional purpose at any time. Assess your specific model with qualified counsel; EDPB Opinion 08/2024 does not make every consent-or-pay implementation lawful.', 'faz-cookie-manager' ); ?>
 			</p>
 			<div class="faz-form-group">
 				<label class="faz-toggle">

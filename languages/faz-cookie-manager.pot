@@ -2,20 +2,21 @@
 # This file is distributed under the GPL-3.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
+"Project-Id-Version: FAZ Cookie Manager 1.27.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-16T14:52:16+00:00\n"
+"POT-Creation-Date: 2026-08-20T01:53:15+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: faz-cookie-manager\n"
 
 #. Plugin Name of the plugin
-#: faz-cookie-manager.php admin/views/base.php:71
+#: faz-cookie-manager.php
+#: admin/views/base.php:71
 msgid "FAZ Cookie Manager"
 msgstr ""
 
@@ -39,32 +40,40 @@ msgstr ""
 msgid "https://fabiodalez.it/"
 msgstr ""
 
-#: admin/class-admin.php:219 admin/views/base.php:19
+#: admin/class-admin.php:219
+#: admin/views/base.php:19
 msgid "Dashboard"
 msgstr ""
 
-#: admin/class-admin.php:224 admin/views/base.php:20
+#: admin/class-admin.php:224
+#: admin/views/base.php:20
 #: admin/views/dashboard.php:185
 msgid "Cookie Banner"
 msgstr ""
 
-#: admin/class-admin.php:229 admin/views/base.php:21
-#: frontend/class-frontend.php:2399
+#: admin/class-admin.php:229
+#: admin/views/base.php:21
+#: frontend/class-frontend.php:2395
 #: frontend/modules/banner-rest/class-banner-rest.php:561
 msgid "Cookies"
 msgstr ""
 
-#: admin/class-admin.php:234 admin/views/base.php:22
-#: admin/views/dashboard.php:193 admin/views/settings.php:228
+#: admin/class-admin.php:234
+#: admin/views/base.php:22
+#: admin/views/dashboard.php:193
+#: admin/views/settings.php:228
 msgid "Consent Logs"
 msgstr ""
 
-#: admin/class-admin.php:239 admin/views/base.php:23
-#: admin/views/dashboard.php:189 admin/views/system-status.php:80
+#: admin/class-admin.php:239
+#: admin/views/base.php:23
+#: admin/views/dashboard.php:189
+#: admin/views/system-status.php:80
 msgid "Google Consent Mode"
 msgstr ""
 
-#: admin/class-admin.php:244 admin/views/base.php:24
+#: admin/class-admin.php:244
+#: admin/views/base.php:24
 #: admin/views/dashboard.php:197
 msgid "Languages"
 msgstr ""
@@ -73,26 +82,36 @@ msgstr ""
 msgid "Vendor List (IAB)"
 msgstr ""
 
-#: admin/class-admin.php:254 admin/views/geo-routing.php:26
+#: admin/class-admin.php:254
+#: admin/views/geo-routing.php:26
 msgid "Geo-routing"
 msgstr ""
 
-#: admin/class-admin.php:259 admin/views/banner.php:325 admin/views/base.php:28
-#: frontend/class-amp-consent.php:369 includes/blocks/class-blocks.php:67
+#: admin/class-admin.php:259
+#: admin/views/banner.php:325
+#: admin/views/base.php:28
+#: frontend/class-amp-consent.php:369
+#: includes/blocks/class-blocks.php:67
 msgid "Cookie Policy"
 msgstr ""
 
-#: admin/class-admin.php:264 admin/class-admin.php:2404 admin/views/base.php:25
-#: admin/views/dashboard.php:201 includes/blocks/editor.js:27
-#: includes/blocks/editor.js:60 includes/blocks/editor.js:93
+#: admin/class-admin.php:264
+#: admin/class-admin.php:2404
+#: admin/views/base.php:25
+#: admin/views/dashboard.php:201
+#: includes/blocks/editor.js:27
+#: includes/blocks/editor.js:60
+#: includes/blocks/editor.js:93
 msgid "Settings"
 msgstr ""
 
-#: admin/class-admin.php:269 admin/views/base.php:27
+#: admin/class-admin.php:269
+#: admin/views/base.php:27
 msgid "Import / Export"
 msgstr ""
 
-#: admin/class-admin.php:274 admin/views/base.php:29
+#: admin/class-admin.php:274
+#: admin/views/base.php:29
 msgid "System Status"
 msgstr ""
 
@@ -100,13 +119,17 @@ msgstr ""
 msgid "Setup"
 msgstr ""
 
-#: admin/class-admin.php:510 admin/class-admin.php:2377
-#: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
+#: admin/class-admin.php:510
+#: admin/class-admin.php:2377
+#: admin/views/consent-logs.php:27
+#: admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr ""
 
-#: admin/class-admin.php:511 admin/class-admin.php:2381
-#: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
+#: admin/class-admin.php:511
+#: admin/class-admin.php:2381
+#: admin/views/consent-logs.php:34
+#: admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr ""
 
@@ -114,19 +137,23 @@ msgstr ""
 msgid "total responses"
 msgstr ""
 
-#: admin/class-admin.php:514 admin/class-admin.php:682
+#: admin/class-admin.php:514
+#: admin/class-admin.php:682
 msgid "Settings saved successfully."
 msgstr ""
 
-#: admin/class-admin.php:515 admin/class-admin.php:683
+#: admin/class-admin.php:515
+#: admin/class-admin.php:683
 msgid "Failed to save settings."
 msgstr ""
 
-#: admin/class-admin.php:516 admin/class-admin.php:681
+#: admin/class-admin.php:516
+#: admin/class-admin.php:681
 msgid "Failed to load settings."
 msgstr ""
 
-#: admin/class-admin.php:519 admin/class-admin.php:876
+#: admin/class-admin.php:519
+#: admin/class-admin.php:876
 msgid "Saving…"
 msgstr ""
 
@@ -140,7 +167,8 @@ msgstr ""
 
 #: admin/class-admin.php:533
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:494
-#: admin/views/cookies.php:146 includes/class-cookie-table-shortcode.php:226
+#: admin/views/cookies.php:146
+#: includes/class-cookie-table-shortcode.php:226
 msgid "Domain"
 msgstr ""
 
@@ -158,8 +186,10 @@ msgstr ""
 
 #: admin/class-admin.php:536
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:496
-#: admin/views/banner.php:683 admin/views/banner.php:731
-#: admin/views/cookies.php:52 admin/views/cookies.php:148
+#: admin/views/banner.php:683
+#: admin/views/banner.php:731
+#: admin/views/cookies.php:52
+#: admin/views/cookies.php:148
 #: admin/views/cookies.php:240
 #: frontend/modules/shortcodes/class-shortcodes.php:250
 #: includes/class-cookie-table-shortcode.php:228
@@ -182,7 +212,8 @@ msgstr ""
 msgid "Delete all stale"
 msgstr ""
 
-#: admin/class-admin.php:541 admin/views/cookies.php:76
+#: admin/class-admin.php:541
+#: admin/views/cookies.php:76
 #: admin/views/cookies.php:83
 msgid "All Cookies"
 msgstr ""
@@ -223,7 +254,8 @@ msgstr ""
 msgid "All cookies from %s already exist"
 msgstr ""
 
-#: admin/class-admin.php:553 includes/class-cookie-table-shortcode.php:297
+#: admin/class-admin.php:553
+#: includes/class-cookie-table-shortcode.php:297
 msgid "No cookies found."
 msgstr ""
 
@@ -231,7 +263,8 @@ msgstr ""
 msgid "Edit"
 msgstr ""
 
-#: admin/class-admin.php:555 admin/class-admin.php:828
+#: admin/class-admin.php:555
+#: admin/class-admin.php:828
 msgid "Delete"
 msgstr ""
 
@@ -239,8 +272,9 @@ msgstr ""
 msgid "Delete stale"
 msgstr ""
 
-#: admin/class-admin.php:557 admin/views/cookies.php:205
-#: admin/views/system-status.php:121
+#: admin/class-admin.php:557
+#: admin/views/cookies.php:205
+#: admin/views/system-status.php:131
 #: includes/class-cookie-table-shortcode.php:229
 msgid "Category"
 msgstr ""
@@ -387,7 +421,8 @@ msgstr ""
 msgid "Scanning..."
 msgstr ""
 
-#: admin/class-admin.php:603 admin/views/cookies.php:86
+#: admin/class-admin.php:603
+#: admin/views/cookies.php:86
 msgid "Scan Site"
 msgstr ""
 
@@ -494,7 +529,8 @@ msgstr ""
 msgid "— Select —"
 msgstr ""
 
-#: admin/class-admin.php:634 admin/views/banner.php:257
+#: admin/class-admin.php:634
+#: admin/views/banner.php:257
 msgid "Remove"
 msgstr ""
 
@@ -634,11 +670,13 @@ msgstr ""
 msgid "Do Not Sell text vs banner background"
 msgstr ""
 
-#: admin/class-admin.php:684 admin/class-admin.php:755
+#: admin/class-admin.php:684
+#: admin/class-admin.php:755
 msgid "GVL updated."
 msgstr ""
 
-#: admin/class-admin.php:685 admin/class-admin.php:757
+#: admin/class-admin.php:685
+#: admin/class-admin.php:757
 msgid "Failed to update GVL."
 msgstr ""
 
@@ -654,7 +692,8 @@ msgstr ""
 msgid "Failed to update database."
 msgstr ""
 
-#: admin/class-admin.php:689 admin/class-admin.php:737
+#: admin/class-admin.php:689
+#: admin/class-admin.php:737
 msgid "No GVL data downloaded yet. Click \"Update GVL Now\" to download."
 msgstr ""
 
@@ -662,15 +701,18 @@ msgstr ""
 msgid "No GVL data available."
 msgstr ""
 
-#: admin/class-admin.php:691 admin/class-admin.php:758
+#: admin/class-admin.php:691
+#: admin/class-admin.php:758
 msgid "GVL Version: "
 msgstr ""
 
-#: admin/class-admin.php:692 admin/class-admin.php:759
+#: admin/class-admin.php:692
+#: admin/class-admin.php:759
 msgid "Vendors: "
 msgstr ""
 
-#: admin/class-admin.php:693 admin/class-admin.php:760
+#: admin/class-admin.php:693
+#: admin/class-admin.php:760
 msgid "Last Updated: "
 msgstr ""
 
@@ -682,7 +724,8 @@ msgstr ""
 msgid "{file} ({size} KB) - Last updated: {date}"
 msgstr ""
 
-#: admin/class-admin.php:696 admin/class-admin.php:756
+#: admin/class-admin.php:696
+#: admin/class-admin.php:756
 msgid "GVL updated: v{version} ({count} vendors)"
 msgstr ""
 
@@ -846,11 +889,13 @@ msgstr ""
 msgid "Failed to save selection."
 msgstr ""
 
-#: admin/class-admin.php:762 admin/class-admin.php:892
+#: admin/class-admin.php:762
+#: admin/class-admin.php:892
 msgid "Scanning cookie inventory…"
 msgstr ""
 
-#: admin/class-admin.php:763 admin/views/cookie-policy.php:193
+#: admin/class-admin.php:763
+#: admin/views/cookie-policy.php:193
 #: admin/views/gvl.php:52
 msgid "Loading saved selection…"
 msgstr ""
@@ -859,7 +904,8 @@ msgstr ""
 msgid "Update the Global Vendor List first, then try Auto-detect again."
 msgstr ""
 
-#: admin/class-admin.php:765 admin/class-admin.php:893
+#: admin/class-admin.php:765
+#: admin/class-admin.php:893
 msgid "No scanner data yet. Run the cookie scanner first."
 msgstr ""
 
@@ -1066,7 +1112,8 @@ msgstr ""
 msgid "Runtime rule-set application"
 msgstr ""
 
-#: admin/class-admin.php:839 admin/class-admin.php:848
+#: admin/class-admin.php:839
+#: admin/class-admin.php:848
 msgid "✅ active"
 msgstr ""
 
@@ -1206,9 +1253,12 @@ msgstr ""
 msgid "Consents invalidated — returning visitors will be asked again."
 msgstr ""
 
-#: admin/class-admin.php:887 admin/views/dashboard.php:168
-#: admin/views/geo-routing.php:56 admin/views/geo-routing.php:67
-#: admin/views/geo-routing.php:78 admin/views/geo-routing.php:123
+#: admin/class-admin.php:887
+#: admin/views/dashboard.php:168
+#: admin/views/geo-routing.php:56
+#: admin/views/geo-routing.php:67
+#: admin/views/geo-routing.php:78
+#: admin/views/geo-routing.php:123
 #: admin/views/geo-routing.php:134
 msgid "Loading…"
 msgstr ""
@@ -1345,7 +1395,8 @@ msgstr ""
 msgid "Hotjar"
 msgstr ""
 
-#: admin/class-admin.php:929 admin/views/system-status.php:94
+#: admin/class-admin.php:929
+#: admin/views/system-status.php:104
 msgid "Microsoft Clarity"
 msgstr ""
 
@@ -1389,7 +1440,8 @@ msgstr ""
 msgid "LinkedIn Insight Tag"
 msgstr ""
 
-#: admin/class-admin.php:941 admin/views/system-status.php:93
+#: admin/class-admin.php:941
+#: admin/views/system-status.php:103
 msgid "Microsoft UET"
 msgstr ""
 
@@ -1665,8 +1717,10 @@ msgstr ""
 msgid "Firebase Cloud Messaging"
 msgstr ""
 
-#: admin/class-admin.php:1403 admin/class-admin.php:1404
-#: admin/class-admin.php:1433 admin/class-admin.php:1434
+#: admin/class-admin.php:1403
+#: admin/class-admin.php:1404
+#: admin/class-admin.php:1433
+#: admin/class-admin.php:1434
 msgid "FAZ Cookie"
 msgstr ""
 
@@ -1694,11 +1748,13 @@ msgstr ""
 msgid "Site"
 msgstr ""
 
-#: admin/class-admin.php:1466 admin/views/banner.php:110
+#: admin/class-admin.php:1466
+#: admin/views/banner.php:110
 msgid "Banner Status"
 msgstr ""
 
-#: admin/class-admin.php:1467 admin/views/cookies.php:149
+#: admin/class-admin.php:1467
+#: admin/views/cookies.php:149
 #: admin/views/cookies.php:206
 msgid "Actions"
 msgstr ""
@@ -1731,7 +1787,8 @@ msgstr ""
 msgid "filters."
 msgstr ""
 
-#: admin/class-admin.php:1757 admin/class-admin.php:1909
+#: admin/class-admin.php:1757
+#: admin/class-admin.php:1909
 msgid "Dismiss this notice"
 msgstr ""
 
@@ -1744,11 +1801,12 @@ msgid "Its GDPR setting is set to Yes, so it serves local copies of images and n
 msgstr ""
 
 #: admin/class-admin.php:1857
-#: admin/modules/cookies/api/class-cookies-api.php:1114
+#: admin/modules/cookies/api/class-cookies-api.php:1157
 msgid "Open Instagram Feed settings"
 msgstr ""
 
-#: admin/class-admin.php:1858 admin/class-admin.php:2010
+#: admin/class-admin.php:1858
+#: admin/class-admin.php:2010
 #: admin/views/dashboard.php:30
 msgid "Dismiss"
 msgstr ""
@@ -1815,7 +1873,8 @@ msgstr ""
 msgid "If you do NOT need per-country banners, the safe fix is to disable Geo-routing. If you DO want per-country banners, select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner — the warning will clear on its own."
 msgstr ""
 
-#: admin/class-admin.php:2144 admin/class-admin.php:2186
+#: admin/class-admin.php:2144
+#: admin/class-admin.php:2186
 msgid "Disable Geo-routing now"
 msgstr ""
 
@@ -1851,8 +1910,8 @@ msgstr ""
 #: admin/modules/cookies/api/class-categories-api.php:244
 #: admin/modules/cookies/api/class-cookies-api.php:219
 #: admin/modules/cookies/api/class-cookies-api.php:515
-#: admin/modules/scanner/api/class-api.php:221
-#: admin/modules/scanner/api/class-api.php:995
+#: admin/modules/scanner/api/class-api.php:224
+#: admin/modules/scanner/api/class-api.php:1003
 #: admin/modules/settings/api/class-api.php:566
 #: admin/modules/settings/api/class-api.php:572
 msgid "Unique identifier for the resource."
@@ -1864,7 +1923,7 @@ msgstr ""
 #: admin/modules/cookies/api/class-api-controller.php:172
 #: admin/modules/cookies/api/class-api-controller.php:225
 #: admin/modules/cookies/api/class-api-controller.php:232
-#: admin/modules/scanner/api/class-api.php:350
+#: admin/modules/scanner/api/class-api.php:353
 msgid "Invalid ID."
 msgstr ""
 
@@ -2043,7 +2102,7 @@ msgid "Complete all fields required for the selected jurisdiction before saving 
 msgstr ""
 
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:493
-#: admin/views/system-status.php:120
+#: admin/views/system-status.php:130
 #: frontend/modules/shortcodes/class-shortcodes.php:246
 #: includes/class-cookie-table-shortcode.php:225
 msgid "Cookie"
@@ -2577,8 +2636,10 @@ msgstr ""
 #: admin/modules/cookies/api/class-api-controller.php:44
 #: admin/modules/cookies/api/class-api-controller.php:54
 #: admin/modules/cookies/api/class-api-controller.php:71
-#: includes/class-store.php:145 includes/class-store.php:156
-#: includes/class-store.php:167 includes/class-store.php:178
+#: includes/class-store.php:145
+#: includes/class-store.php:156
+#: includes/class-store.php:167
+#: includes/class-store.php:178
 #, php-format
 msgid "Method '%s' not implemented. Must be overridden in subclass."
 msgstr ""
@@ -2748,27 +2809,27 @@ msgstr ""
 msgid "No cookie IDs provided."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:798
+#: admin/modules/cookies/api/class-cookies-api.php:803
 msgid "The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:931
+#: admin/modules/cookies/api/class-cookies-api.php:936
 msgid "There is no recently deleted batch to restore."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:953
+#: admin/modules/cookies/api/class-cookies-api.php:958
 msgid "This batch contains opt-in/opt-out blocker scripts, which your account is not allowed to save. Restoring it would put the cookies back without their blocking behaviour, so the batch has been left in the recycle bin for an administrator to restore."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:1106
+#: admin/modules/cookies/api/class-cookies-api.php:1149
 msgid "Not applied"
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:1112
+#: admin/modules/cookies/api/class-cookies-api.php:1155
 msgid "Instagram Feed is set to serve local copies and contact nobody, so there is nothing left for this rule to block. Change its GDPR setting to Automatic or No to put this rule back in effect."
 msgstr ""
 
-#: admin/modules/cookies/api/class-cookies-api.php:1153
+#: admin/modules/cookies/api/class-cookies-api.php:1196
 msgid "You do not have permission to modify script fields."
 msgstr ""
 
@@ -2832,70 +2893,70 @@ msgstr ""
 msgid "Failed to record event."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:280
-#: admin/modules/scanner/includes/class-controller.php:467
+#: admin/modules/scanner/api/class-api.php:283
+#: admin/modules/scanner/includes/class-controller.php:533
 msgid "Invalid browser scan identifier."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:381
+#: admin/modules/scanner/api/class-api.php:384
 msgid "A scan is already in progress, please wait for it to complete."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:539
+#: admin/modules/scanner/api/class-api.php:541
 msgid "The scan URL must match the current site domain."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:549
+#: admin/modules/scanner/api/class-api.php:551
 msgid "The scan URL must use the current site protocol, host, and port."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:590
+#: admin/modules/scanner/api/class-api.php:592
 msgid "A server-scan redirect left the current site and was rejected."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:691
+#: admin/modules/scanner/api/class-api.php:693
 msgid "Empty or invalid request body."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:721
+#: admin/modules/scanner/api/class-api.php:723
 msgid "Another browser tab is running a scan for this administrator. Finish or close it, then start a new scan."
 msgstr ""
 
 #. translators: %d: number of minutes a scan may stay idle before its capture session expires.
-#: admin/modules/scanner/api/class-api.php:727
+#: admin/modules/scanner/api/class-api.php:729
 #, php-format
 msgid "This scan session expired: the capture window closes after %d minutes without a scanned page reaching the server. Start a new scan."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:835
+#: admin/modules/scanner/api/class-api.php:833
 msgid "The cookie import could not be completed. No completion status was recorded; review the scanner log and try again."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:1001
+#: admin/modules/scanner/api/class-api.php:1009
 msgid "Scan status."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:1007
+#: admin/modules/scanner/api/class-api.php:1015
 msgid "Scan type."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:1013
+#: admin/modules/scanner/api/class-api.php:1021
 msgid "Scan date."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:1019
+#: admin/modules/scanner/api/class-api.php:1027
 msgid "Total cookies found."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:1025
+#: admin/modules/scanner/api/class-api.php:1033
 msgid "Total pages scanned."
 msgstr ""
 
-#: admin/modules/scanner/api/class-api.php:1031
+#: admin/modules/scanner/api/class-api.php:1039
 msgid "Maximum pages to scan."
 msgstr ""
 
-#: admin/modules/scanner/includes/class-controller.php:474
+#: admin/modules/scanner/includes/class-controller.php:540
 msgid "Another browser scan is already in progress for this administrator."
 msgstr ""
 
@@ -3054,11 +3115,13 @@ msgstr ""
 msgid "General"
 msgstr ""
 
-#: admin/views/banner.php:44 admin/views/banner.php:890
+#: admin/views/banner.php:44
+#: admin/views/banner.php:890
 msgid "Geo Targeting"
 msgstr ""
 
-#: admin/views/banner.php:45 admin/views/banner.php:891
+#: admin/views/banner.php:45
+#: admin/views/banner.php:891
 #: admin/views/banner.php:901
 msgid "Content"
 msgstr ""
@@ -3109,7 +3172,8 @@ msgstr ""
 msgid "Used to tell your banners apart in the switcher above. Not shown to visitors."
 msgstr ""
 
-#: admin/views/banner.php:116 admin/views/settings.php:21
+#: admin/views/banner.php:116
+#: admin/views/settings.php:21
 msgid "Enable cookie banner"
 msgstr ""
 
@@ -3167,11 +3231,13 @@ msgstr ""
 msgid "Position"
 msgstr ""
 
-#: admin/views/banner.php:169 admin/views/banner.php:786
+#: admin/views/banner.php:169
+#: admin/views/banner.php:786
 msgid "Bottom Left"
 msgstr ""
 
-#: admin/views/banner.php:170 admin/views/banner.php:787
+#: admin/views/banner.php:170
+#: admin/views/banner.php:787
 msgid "Bottom Right"
 msgstr ""
 
@@ -3297,7 +3363,8 @@ msgstr ""
 msgid "Banner Text"
 msgstr ""
 
-#: admin/views/banner.php:274 admin/views/banner.php:672
+#: admin/views/banner.php:274
+#: admin/views/banner.php:672
 msgid "Language:"
 msgstr ""
 
@@ -3305,7 +3372,8 @@ msgstr ""
 msgid "Notice Title"
 msgstr ""
 
-#: admin/views/banner.php:282 frontend/class-frontend.php:2394
+#: admin/views/banner.php:282
+#: frontend/class-frontend.php:2390
 #: frontend/modules/banner-rest/class-banner-rest.php:556
 msgid "We value your privacy"
 msgstr ""
@@ -3326,7 +3394,8 @@ msgstr ""
 msgid "Accept Button"
 msgstr ""
 
-#: admin/views/banner.php:313 admin/views/banner.php:705
+#: admin/views/banner.php:313
+#: admin/views/banner.php:705
 #: frontend/class-amp-consent.php:367
 msgid "Accept All"
 msgstr ""
@@ -3335,7 +3404,8 @@ msgstr ""
 msgid "Reject Button"
 msgstr ""
 
-#: admin/views/banner.php:317 admin/views/banner.php:713
+#: admin/views/banner.php:317
+#: admin/views/banner.php:713
 #: frontend/class-amp-consent.php:368
 msgid "Reject All"
 msgstr ""
@@ -3380,7 +3450,8 @@ msgstr ""
 msgid "Notice Banner Colours"
 msgstr ""
 
-#: admin/views/banner.php:355 admin/views/banner.php:575
+#: admin/views/banner.php:355
+#: admin/views/banner.php:575
 msgid "Background"
 msgstr ""
 
@@ -3578,7 +3649,8 @@ msgstr ""
 msgid "Preference Center Text"
 msgstr ""
 
-#: admin/views/banner.php:679 admin/views/banner.php:727
+#: admin/views/banner.php:679
+#: admin/views/banner.php:727
 msgid "Title"
 msgstr ""
 
@@ -3586,7 +3658,8 @@ msgstr ""
 msgid "Customize consent preferences"
 msgstr ""
 
-#: admin/views/banner.php:700 admin/views/banner.php:748
+#: admin/views/banner.php:700
+#: admin/views/banner.php:748
 msgid "Supports plain text or HTML. Keep it short enough to stay readable on mobile."
 msgstr ""
 
@@ -3614,7 +3687,8 @@ msgstr ""
 msgid "Text for the \"Opt-out Preferences\" modal a visitor sees after clicking the \"Do Not Sell or Share My Personal Information\" link. Shown only on CCPA / US State Laws (and Both) banners. Follows the language selected above."
 msgstr ""
 
-#: admin/views/banner.php:728 frontend/class-frontend.php:2396
+#: admin/views/banner.php:728
+#: frontend/class-frontend.php:2392
 #: frontend/modules/banner-rest/class-banner-rest.php:558
 msgid "Opt-out Preferences"
 msgstr ""
@@ -3623,7 +3697,8 @@ msgstr ""
 msgid "Opt-out Toggle Label"
 msgstr ""
 
-#: admin/views/banner.php:752 includes/class-do-not-sell-shortcode.php:90
+#: admin/views/banner.php:752
+#: includes/class-do-not-sell-shortcode.php:90
 msgid "Do Not Sell or Share My Personal Information"
 msgstr ""
 
@@ -3745,7 +3820,8 @@ msgstr ""
 msgid "Brazil (LGPD)"
 msgstr ""
 
-#: admin/views/banner.php:929 admin/views/settings.php:415
+#: admin/views/banner.php:929
+#: admin/views/settings.php:415
 #: admin/views/setup.php:162
 msgid "Australia"
 msgstr ""
@@ -3882,7 +3958,8 @@ msgstr ""
 msgid "Total Logs"
 msgstr ""
 
-#: admin/views/consent-logs.php:41 admin/views/consent-logs.php:54
+#: admin/views/consent-logs.php:41
+#: admin/views/consent-logs.php:54
 msgid "Partial"
 msgstr ""
 
@@ -3910,11 +3987,13 @@ msgstr ""
 msgid "Consent ID"
 msgstr ""
 
-#: admin/views/consent-logs.php:78 includes/class-utils.php:650
+#: admin/views/consent-logs.php:78
+#: includes/class-utils.php:718
 msgid "Status"
 msgstr ""
 
-#: admin/views/consent-logs.php:79 admin/views/cookies.php:72
+#: admin/views/consent-logs.php:79
+#: admin/views/cookies.php:72
 msgid "Categories"
 msgstr ""
 
@@ -3926,8 +4005,10 @@ msgstr ""
 msgid "Page URL"
 msgstr ""
 
-#: admin/views/consent-logs.php:85 admin/views/cookies.php:59
-#: admin/views/cookies.php:153 admin/views/dashboard.php:145
+#: admin/views/consent-logs.php:85
+#: admin/views/cookies.php:59
+#: admin/views/cookies.php:153
+#: admin/views/dashboard.php:145
 msgid "Loading..."
 msgstr ""
 
@@ -4025,7 +4106,8 @@ msgstr ""
 msgid "Mandatory for LGPD (Art. 41). Under POPIA, the head of a public or private body is the Information Officer by default; name and contact email are required by this POPIA template. Recommended for GDPR where no DPO is legally required."
 msgstr ""
 
-#: admin/views/cookie-policy.php:152 admin/views/cookie-policy.php:221
+#: admin/views/cookie-policy.php:152
+#: admin/views/cookie-policy.php:221
 msgid "Jurisdiction"
 msgstr ""
 
@@ -4033,19 +4115,23 @@ msgstr ""
 msgid "Primary jurisdiction"
 msgstr ""
 
-#: admin/views/cookie-policy.php:158 admin/views/cookie-policy.php:223
+#: admin/views/cookie-policy.php:158
+#: admin/views/cookie-policy.php:223
 msgid "GDPR (EU / EEA / UK)"
 msgstr ""
 
-#: admin/views/cookie-policy.php:159 admin/views/cookie-policy.php:224
+#: admin/views/cookie-policy.php:159
+#: admin/views/cookie-policy.php:224
 msgid "CCPA / CPRA (California, USA)"
 msgstr ""
 
-#: admin/views/cookie-policy.php:160 admin/views/cookie-policy.php:225
+#: admin/views/cookie-policy.php:160
+#: admin/views/cookie-policy.php:225
 msgid "LGPD (Brazil)"
 msgstr ""
 
-#: admin/views/cookie-policy.php:161 admin/views/cookie-policy.php:226
+#: admin/views/cookie-policy.php:161
+#: admin/views/cookie-policy.php:226
 #: admin/views/setup.php:119
 msgid "POPIA (South Africa)"
 msgstr ""
@@ -4058,7 +4144,8 @@ msgstr ""
 msgid "Third-party services"
 msgstr ""
 
-#: admin/views/cookie-policy.php:182 admin/views/cookie-policy.php:211
+#: admin/views/cookie-policy.php:182
+#: admin/views/cookie-policy.php:211
 msgid "— advanced, optional"
 msgstr ""
 
@@ -4070,7 +4157,8 @@ msgstr ""
 msgid "Pre-tick services whose tracking domains were observed by the cookie scanner. You still need to click Save to commit."
 msgstr ""
 
-#: admin/views/cookie-policy.php:192 admin/views/gvl.php:50
+#: admin/views/cookie-policy.php:192
+#: admin/views/gvl.php:50
 msgid "Auto-detect from cookie scan"
 msgstr ""
 
@@ -4082,7 +4170,8 @@ msgstr ""
 msgid "<strong>You probably don't need this.</strong> The shipped sections are reviewed starting points. Fill a box only to replace that section with your own wording — placeholders such as <code>{{COMPANY_NAME}}</code> keep working inside it. Text you write here is <strong>your</strong> document, so review the disclaimer setting below accordingly. Leave a box empty to keep the shipped text."
 msgstr ""
 
-#: admin/views/cookie-policy.php:230 admin/views/setup.php:171
+#: admin/views/cookie-policy.php:230
+#: admin/views/setup.php:171
 msgid "Language"
 msgstr ""
 
@@ -4160,7 +4249,8 @@ msgstr ""
 msgid "Save settings"
 msgstr ""
 
-#: admin/views/cookie-policy.php:345 admin/views/geo-routing.php:42
+#: admin/views/cookie-policy.php:345
+#: admin/views/geo-routing.php:42
 msgid "Preview"
 msgstr ""
 
@@ -4324,8 +4414,9 @@ msgstr ""
 msgid "Select all cookies"
 msgstr ""
 
-#: admin/views/cookies.php:145 includes/class-dsar-shortcode.php:127
-#: includes/class-utils.php:634
+#: admin/views/cookies.php:145
+#: includes/class-dsar-shortcode.php:127
+#: includes/class-utils.php:702
 msgid "Name"
 msgstr ""
 
@@ -4386,7 +4477,8 @@ msgstr ""
 msgid "Use the following shortcode to display a table of all cookies on any page or post (e.g. your Cookie Policy page):"
 msgstr ""
 
-#: admin/views/cookies.php:229 admin/views/cookies.php:277
+#: admin/views/cookies.php:229
+#: admin/views/cookies.php:277
 msgid "Copy"
 msgstr ""
 
@@ -4418,7 +4510,8 @@ msgstr ""
 msgid "Filter by category slug (e.g. <code>analytics</code>) or ID"
 msgstr ""
 
-#: admin/views/cookies.php:256 includes/class-dsar-shortcode.php:433
+#: admin/views/cookies.php:256
+#: includes/class-dsar-shortcode.php:433
 msgid "(none)"
 msgstr ""
 
@@ -4454,7 +4547,8 @@ msgstr ""
 msgid "A few guided steps configure consent correctly for the privacy law that applies to your visitors."
 msgstr ""
 
-#: admin/views/dashboard.php:29 admin/views/setup.php:429
+#: admin/views/dashboard.php:29
+#: admin/views/setup.php:429
 msgid "Finish setup"
 msgstr ""
 
@@ -4489,7 +4583,8 @@ msgid "Pageviews &mdash; %s"
 msgstr ""
 
 #. translators: %s: date range label injected by JS
-#: admin/views/dashboard.php:84 admin/views/dashboard.php:99
+#: admin/views/dashboard.php:84
+#: admin/views/dashboard.php:99
 #: admin/views/dashboard.php:162
 msgid "Last 7 Days"
 msgstr ""
@@ -4552,7 +4647,8 @@ msgstr ""
 msgid "Manage Cookies"
 msgstr ""
 
-#: admin/views/gcm.php:14 admin/views/setup.php:278
+#: admin/views/gcm.php:14
+#: admin/views/setup.php:278
 msgid "Google Consent Mode v2"
 msgstr ""
 
@@ -4576,14 +4672,23 @@ msgstr ""
 msgid "When Granted"
 msgstr ""
 
-#: admin/views/gcm.php:44 admin/views/gcm.php:49 admin/views/gcm.php:54
-#: admin/views/gcm.php:59 admin/views/gcm.php:64 admin/views/gcm.php:69
+#: admin/views/gcm.php:44
+#: admin/views/gcm.php:49
+#: admin/views/gcm.php:54
+#: admin/views/gcm.php:59
+#: admin/views/gcm.php:64
+#: admin/views/gcm.php:69
 msgid "denied"
 msgstr ""
 
-#: admin/views/gcm.php:45 admin/views/gcm.php:50 admin/views/gcm.php:55
-#: admin/views/gcm.php:60 admin/views/gcm.php:65 admin/views/gcm.php:70
-#: admin/views/gcm.php:74 admin/views/gcm.php:75
+#: admin/views/gcm.php:45
+#: admin/views/gcm.php:50
+#: admin/views/gcm.php:55
+#: admin/views/gcm.php:60
+#: admin/views/gcm.php:65
+#: admin/views/gcm.php:70
+#: admin/views/gcm.php:74
+#: admin/views/gcm.php:75
 msgid "granted"
 msgstr ""
 
@@ -4671,15 +4776,18 @@ msgstr ""
 msgid "Geo-routing sections"
 msgstr ""
 
-#: admin/views/geo-routing.php:33 admin/views/geo-routing.php:54
+#: admin/views/geo-routing.php:33
+#: admin/views/geo-routing.php:54
 msgid "Pipeline status"
 msgstr ""
 
-#: admin/views/geo-routing.php:36 admin/views/geo-routing.php:62
+#: admin/views/geo-routing.php:36
+#: admin/views/geo-routing.php:62
 msgid "Ruleset coverage"
 msgstr ""
 
-#: admin/views/geo-routing.php:39 admin/views/geo-routing.php:73
+#: admin/views/geo-routing.php:39
+#: admin/views/geo-routing.php:73
 msgid "Per-country overrides"
 msgstr ""
 
@@ -4745,7 +4853,8 @@ msgstr ""
 msgid "Global Vendor List (IAB TCF 2.3)"
 msgstr ""
 
-#: admin/views/gvl.php:15 admin/views/settings.php:387
+#: admin/views/gvl.php:15
+#: admin/views/settings.php:387
 msgid "Update GVL Now"
 msgstr ""
 
@@ -4785,7 +4894,8 @@ msgstr ""
 msgid "Pre-tick vendors whose tracking domains were found by the cookie scanner. You still need to click Save Selection to apply."
 msgstr ""
 
-#: admin/views/import-export.php:14 admin/views/import-export.php:20
+#: admin/views/import-export.php:14
+#: admin/views/import-export.php:20
 msgid "Export Settings"
 msgstr ""
 
@@ -4793,7 +4903,8 @@ msgstr ""
 msgid "Download all plugin settings, banner configuration, cookie categories, and cookies as a JSON file. Consent logs, pageview data, and API keys are excluded for privacy and security."
 msgstr ""
 
-#: admin/views/import-export.php:27 admin/views/import-export.php:41
+#: admin/views/import-export.php:27
+#: admin/views/import-export.php:41
 msgid "Import Settings"
 msgstr ""
 
@@ -4947,7 +5058,8 @@ msgstr ""
 msgid "Loading banners…"
 msgstr ""
 
-#: admin/views/settings.php:136 admin/views/system-status.php:91
+#: admin/views/settings.php:136
+#: admin/views/system-status.php:101
 msgid "Cross-Domain Consent"
 msgstr ""
 
@@ -4971,7 +5083,8 @@ msgstr ""
 msgid "Full URLs of other sites that should receive consent state. Each site must also have FAZ Cookie Manager installed. One URL per line."
 msgstr ""
 
-#: admin/views/settings.php:157 admin/views/system-status.php:82
+#: admin/views/settings.php:157
+#: admin/views/system-status.php:82
 msgid "Pageview Tracking"
 msgstr ""
 
@@ -5117,7 +5230,8 @@ msgstr ""
 msgid "Daily"
 msgstr ""
 
-#: admin/views/settings.php:298 includes/class-activator.php:471
+#: admin/views/settings.php:298
+#: includes/class-activator.php:484
 msgid "Weekly"
 msgstr ""
 
@@ -5173,7 +5287,8 @@ msgstr ""
 msgid "GDPR default is 16. Some EU member states allow 13-15 (e.g. Italy 14, Spain 14, France 15, Germany 16). Check your local law."
 msgstr ""
 
-#: admin/views/settings.php:354 admin/views/setup.php:174
+#: admin/views/settings.php:354
+#: admin/views/setup.php:174
 msgid "IAB TCF"
 msgstr ""
 
@@ -5193,7 +5308,8 @@ msgstr ""
 msgid "ISO 3166-1 alpha-2 code of the publisher's country (e.g. IT, DE, FR). Used in the TCF consent string."
 msgstr ""
 
-#: admin/views/settings.php:371 admin/views/setup.php:320
+#: admin/views/settings.php:371
+#: admin/views/setup.php:320
 msgid "CMP ID"
 msgstr ""
 
@@ -5213,7 +5329,8 @@ msgstr ""
 msgid "Loading GVL status..."
 msgstr ""
 
-#: admin/views/settings.php:394 admin/views/system-status.php:84
+#: admin/views/settings.php:394
+#: admin/views/system-status.php:84
 msgid "Geo-Targeting"
 msgstr ""
 
@@ -5229,35 +5346,43 @@ msgstr ""
 msgid "Target Regions"
 msgstr ""
 
-#: admin/views/settings.php:410 admin/views/setup.php:157
+#: admin/views/settings.php:410
+#: admin/views/setup.php:157
 msgid "EU / EEA"
 msgstr ""
 
-#: admin/views/settings.php:411 admin/views/setup.php:158
+#: admin/views/settings.php:411
+#: admin/views/setup.php:158
 msgid "United Kingdom"
 msgstr ""
 
-#: admin/views/settings.php:412 admin/views/setup.php:159
+#: admin/views/settings.php:412
+#: admin/views/setup.php:159
 msgid "United States"
 msgstr ""
 
-#: admin/views/settings.php:413 admin/views/setup.php:160
+#: admin/views/settings.php:413
+#: admin/views/setup.php:160
 msgid "Canada"
 msgstr ""
 
-#: admin/views/settings.php:414 admin/views/setup.php:161
+#: admin/views/settings.php:414
+#: admin/views/setup.php:161
 msgid "Brazil"
 msgstr ""
 
-#: admin/views/settings.php:416 admin/views/setup.php:163
+#: admin/views/settings.php:416
+#: admin/views/setup.php:163
 msgid "Japan"
 msgstr ""
 
-#: admin/views/settings.php:417 admin/views/setup.php:164
+#: admin/views/settings.php:417
+#: admin/views/setup.php:164
 msgid "Switzerland"
 msgstr ""
 
-#: admin/views/settings.php:418 admin/views/setup.php:165
+#: admin/views/settings.php:418
+#: admin/views/setup.php:165
 msgid "South Africa"
 msgstr ""
 
@@ -5334,7 +5459,7 @@ msgid "Paid Memberships Pro integration"
 msgstr ""
 
 #: admin/views/settings.php:492
-msgid "Implement a \"Pay-or-Accept\" model: logged-in members on selected PMP levels skip the cookie banner and have consent <strong>programmatically recorded as granted for all categories</strong> via a server-side cookie. Marketing, analytics, functional and other non-necessary scripts will run for them without an explicit banner interaction. Free visitors continue to see the standard banner and consent flow."
+msgid "Offer selected Paid Memberships Pro levels a privacy-preserving membership alternative: logged-in members skip the cookie banner, necessary storage remains available, and <strong>all optional purposes stay denied</strong> until the member explicitly changes them in the preference center. Other visitors continue to use the standard consent flow."
 msgstr ""
 
 #: admin/views/settings.php:495
@@ -5342,7 +5467,7 @@ msgid "Legal note:"
 msgstr ""
 
 #: admin/views/settings.php:496
-msgid "Because this option grants consent on behalf of the member (it does not merely hide the banner), you must disclose it clearly in your Terms of Service, Privacy Policy, and at the point of subscription so the membership fee is understood as a genuine alternative to giving consent (EDPB Opinion 08/2024). Members must remain able to revoke or adjust their consent at any time via the standard revisit widget."
+msgid "This option does not grant consent on the member's behalf. Disclose the privacy-preserving membership alternative in your Terms and Privacy Policy, keep the paid service genuinely equivalent, and leave the standard preference control available so members can change any optional purpose at any time. Assess your specific model with qualified counsel; EDPB Opinion 08/2024 does not make every consent-or-pay implementation lawful."
 msgstr ""
 
 #: admin/views/settings.php:502
@@ -5437,12 +5562,14 @@ msgstr ""
 msgid "Opt-in model: no cookie is set before consent."
 msgstr ""
 
-#: admin/views/setup.php:101 admin/views/setup.php:115
+#: admin/views/setup.php:101
+#: admin/views/setup.php:115
 #: admin/views/setup.php:122
 msgid "Consent is remembered for up to 180 days."
 msgstr ""
 
-#: admin/views/setup.php:102 admin/views/setup.php:123
+#: admin/views/setup.php:102
+#: admin/views/setup.php:123
 msgid "Equal-weight Accept and Reject buttons are shown, with no pre-ticked categories."
 msgstr ""
 
@@ -5530,11 +5657,13 @@ msgstr ""
 msgid "Re-asserts the legally required consent banner if an ad-block cosmetic filter hides it. It never blocks content and never forces interaction."
 msgstr ""
 
-#: admin/views/setup.php:170 admin/views/setup.php:406
+#: admin/views/setup.php:170
+#: admin/views/setup.php:406
 msgid "Applicable law"
 msgstr ""
 
-#: admin/views/setup.php:172 admin/views/setup.php:244
+#: admin/views/setup.php:172
+#: admin/views/setup.php:244
 msgid "Banner options"
 msgstr ""
 
@@ -5542,7 +5671,8 @@ msgstr ""
 msgid "Consent Mode"
 msgstr ""
 
-#: admin/views/setup.php:175 admin/views/setup.php:334
+#: admin/views/setup.php:175
+#: admin/views/setup.php:334
 #: admin/views/setup.php:412
 msgid "Geo targeting"
 msgstr ""
@@ -5551,7 +5681,8 @@ msgstr ""
 msgid "Find cookies"
 msgstr ""
 
-#: admin/views/setup.php:177 admin/views/setup.php:402
+#: admin/views/setup.php:177
+#: admin/views/setup.php:402
 msgid "Review & finish"
 msgstr ""
 
@@ -5571,7 +5702,8 @@ msgstr ""
 msgid "Applicable privacy law"
 msgstr ""
 
-#: admin/views/setup.php:216 admin/views/setup.php:409
+#: admin/views/setup.php:216
+#: admin/views/setup.php:409
 msgid "Banner language"
 msgstr ""
 
@@ -5603,8 +5735,10 @@ msgstr ""
 msgid "Open the Languages page"
 msgstr ""
 
-#: admin/views/setup.php:244 admin/views/setup.php:271
-#: admin/views/setup.php:305 admin/views/setup.php:334
+#: admin/views/setup.php:244
+#: admin/views/setup.php:271
+#: admin/views/setup.php:305
+#: admin/views/setup.php:334
 #: admin/views/setup.php:371
 msgid "(optional)"
 msgstr ""
@@ -5877,83 +6011,79 @@ msgstr ""
 msgid "Auto Scan"
 msgstr ""
 
-#: admin/views/system-status.php:86
+#: admin/views/system-status.php:96
 msgid "Per-Service Consent"
 msgstr ""
 
-#: admin/views/system-status.php:86 admin/views/system-status.php:87
-msgid "not available: category-level consent is enforced"
-msgstr ""
-
-#: admin/views/system-status.php:87
+#: admin/views/system-status.php:97
 msgid "Per-Cookie Consent"
 msgstr ""
 
-#: admin/views/system-status.php:88
+#: admin/views/system-status.php:98
 msgid "Bot Detection"
 msgstr ""
 
-#: admin/views/system-status.php:89
+#: admin/views/system-status.php:99
 msgid "GTM Data Layer"
 msgstr ""
 
-#: admin/views/system-status.php:90
+#: admin/views/system-status.php:100
 msgid "Age Gate"
 msgstr ""
 
-#: admin/views/system-status.php:92
+#: admin/views/system-status.php:102
 msgid "Ad-Blocker Compat"
 msgstr ""
 
-#: admin/views/system-status.php:95
+#: admin/views/system-status.php:105
 msgid "PHP Set-Cookie Blocking"
 msgstr ""
 
-#: admin/views/system-status.php:101
+#: admin/views/system-status.php:111
 msgid "Recently Blocked Server Cookies"
 msgstr ""
 
-#: admin/views/system-status.php:104
+#: admin/views/system-status.php:114
 msgid "No outgoing PHP Set-Cookie header has been blocked in the last 24 hours."
 msgstr ""
 
-#: admin/views/system-status.php:136
+#: admin/views/system-status.php:146
 msgid "Request Path"
 msgstr ""
 
-#: admin/views/system-status.php:137
+#: admin/views/system-status.php:147
 msgid "Blocked At"
 msgstr ""
 
-#: admin/views/system-status.php:156
+#: admin/views/system-status.php:166
 msgid "Database"
 msgstr ""
 
-#: admin/views/system-status.php:162
+#: admin/views/system-status.php:172
 msgid "Table missing"
 msgstr ""
 
-#: admin/views/system-status.php:164
+#: admin/views/system-status.php:174
 msgid "rows"
 msgstr ""
 
-#: admin/views/system-status.php:173
+#: admin/views/system-status.php:183
 msgid "Cron Jobs"
 msgstr ""
 
-#: admin/views/system-status.php:177
+#: admin/views/system-status.php:187
 msgid "Next Scheduled Scan"
 msgstr ""
 
-#: admin/views/system-status.php:181
+#: admin/views/system-status.php:191
 msgid "Next Consent Log Cleanup"
 msgstr ""
 
-#: admin/views/system-status.php:189
+#: admin/views/system-status.php:199
 msgid "Active Plugins"
 msgstr ""
 
-#: frontend/class-amp-consent-rest.php:475
+#: frontend/class-amp-consent-rest.php:474
 #: frontend/class-amp-consent-rest.php:574
 msgid "Invalid AMP consent instance."
 msgstr ""
@@ -5974,11 +6104,11 @@ msgstr ""
 msgid "Too many consent updates."
 msgstr ""
 
-#: frontend/class-amp-consent-rest.php:643
+#: frontend/class-amp-consent-rest.php:644
 msgid "Invalid AMP consent scope."
 msgstr ""
 
-#: frontend/class-amp-consent-rest.php:648
+#: frontend/class-amp-consent-rest.php:649
 msgid "The AMP consent banner is no longer active."
 msgstr ""
 
@@ -5986,33 +6116,33 @@ msgstr ""
 msgid "Save preferences"
 msgstr ""
 
-#: frontend/class-amp-consent.php:417
+#: frontend/class-amp-consent.php:412
 msgid "Cookie preferences"
 msgstr ""
 
-#: frontend/class-amp-consent.php:418
+#: frontend/class-amp-consent.php:413
 msgid "Choose and save your cookie preferences."
 msgstr ""
 
-#: frontend/class-amp-consent.php:478
+#: frontend/class-amp-consent.php:473
 msgid "Optional cookie categories"
 msgstr ""
 
-#: frontend/class-amp-consent.php:479
+#: frontend/class-amp-consent.php:474
 msgid "Tick the categories you want to allow. Saving applies exactly what is shown here, so anything left unticked stays blocked."
 msgstr ""
 
 #. translators: %s: cookie category name, for example Analytics.
-#: frontend/class-amp-consent.php:505
+#: frontend/class-amp-consent.php:500
 #, php-format
 msgid "Allow %s cookies"
 msgstr ""
 
-#: frontend/class-amp-consent.php:508
+#: frontend/class-amp-consent.php:503
 msgid "Allow"
 msgstr ""
 
-#: frontend/class-amp-consent.php:526
+#: frontend/class-amp-consent.php:521
 msgid "Manage cookie preferences"
 msgstr ""
 
@@ -6026,50 +6156,50 @@ msgstr ""
 msgid "{name} disabled, enable {name}"
 msgstr ""
 
-#: frontend/class-frontend.php:2395
+#: frontend/class-frontend.php:2391
 #: frontend/modules/banner-rest/class-banner-rest.php:557
 msgid "Your cookie preferences have been saved."
 msgstr ""
 
-#: frontend/class-frontend.php:2397
+#: frontend/class-frontend.php:2393
 #: frontend/modules/banner-rest/class-banner-rest.php:559
 msgid "Customise Consent Preferences"
 msgstr ""
 
-#: frontend/class-frontend.php:2398
+#: frontend/class-frontend.php:2394
 #: frontend/modules/banner-rest/class-banner-rest.php:560
 msgid "Service consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2400
+#: frontend/class-frontend.php:2396
 #: frontend/modules/banner-rest/class-banner-rest.php:562
 msgid "Cookie consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2401
+#: frontend/class-frontend.php:2397
 #: frontend/modules/banner-rest/class-banner-rest.php:563
 msgid "Vendor consent"
 msgstr ""
 
-#: frontend/class-frontend.php:2402
+#: frontend/class-frontend.php:2398
 #: frontend/modules/banner-rest/class-banner-rest.php:564
 msgid "These cookies are set by the embedded service on its own domain and are controlled by allowing or blocking the embed above — they cannot be removed individually."
 msgstr ""
 
 #. translators: %d is the minimum digital age of consent.
-#: frontend/class-frontend.php:2406
+#: frontend/class-frontend.php:2402
 #: frontend/modules/banner-rest/class-banner-rest.php:569
 #, php-format
 msgid "I confirm I am at least %d years old"
 msgstr ""
 
-#: frontend/class-frontend.php:2407
+#: frontend/class-frontend.php:2403
 #: frontend/modules/banner-rest/class-banner-rest.php:570
 msgid "Please confirm you meet the minimum age to accept optional cookies."
 msgstr ""
 
 #. translators: %d is a number of seconds.
-#: frontend/class-frontend.php:2414
+#: frontend/class-frontend.php:2410
 #: frontend/modules/banner-rest/class-banner-rest.php:572
 #, php-format
 msgid "Banner closes automatically in %d s..."
@@ -6174,15 +6304,15 @@ msgstr ""
 msgid "Manage Cookie Preferences"
 msgstr ""
 
-#: includes/class-activator.php:477
+#: includes/class-activator.php:490
 msgid "Once Daily (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:483
+#: includes/class-activator.php:496
 msgid "Once Weekly (FAZ)"
 msgstr ""
 
-#: includes/class-activator.php:489
+#: includes/class-activator.php:502
 msgid "Once Monthly (FAZ)"
 msgstr ""
 
@@ -6198,7 +6328,8 @@ msgstr ""
 msgid "You can change your cookie preferences at any time using the cookie icon in the bottom corner of the page."
 msgstr ""
 
-#: includes/class-cli.php:321 includes/class-cli.php:330
+#: includes/class-cli.php:321
+#: includes/class-cli.php:330
 msgid "FAZ Cookie Manager — Consent Logs & Privacy Requests"
 msgstr ""
 
@@ -6399,15 +6530,18 @@ msgstr ""
 msgid "Please fill in all required fields."
 msgstr ""
 
-#: includes/class-dsar-shortcode.php:126 includes/class-dsar-shortcode.php:305
+#: includes/class-dsar-shortcode.php:126
+#: includes/class-dsar-shortcode.php:305
 msgid "Please enter a valid email address."
 msgstr ""
 
-#: includes/class-dsar-shortcode.php:128 includes/class-utils.php:638
+#: includes/class-dsar-shortcode.php:128
+#: includes/class-utils.php:706
 msgid "Email"
 msgstr ""
 
-#: includes/class-dsar-shortcode.php:129 includes/class-utils.php:642
+#: includes/class-dsar-shortcode.php:129
+#: includes/class-utils.php:710
 msgid "Request type"
 msgstr ""
 
@@ -6588,7 +6722,8 @@ msgstr ""
 msgid "PharData extension is required to extract the database."
 msgstr ""
 
-#: includes/class-geolocation.php:694 includes/class-geolocation.php:726
+#: includes/class-geolocation.php:694
+#: includes/class-geolocation.php:726
 msgid "Failed to copy database file."
 msgstr ""
 
@@ -6622,28 +6757,28 @@ msgstr ""
 msgid "Sorry, you are not allowed to delete this resource."
 msgstr ""
 
-#: includes/class-utils.php:576
+#: includes/class-utils.php:644
 msgid "Invalid nonce. Please refresh the page and try again."
 msgstr ""
 
-#: includes/class-utils.php:630
+#: includes/class-utils.php:698
 msgid "Privacy requests (FAZ Cookie Manager)"
 msgstr ""
 
-#: includes/class-utils.php:646
+#: includes/class-utils.php:714
 msgid "Message"
 msgstr ""
 
-#: includes/class-utils.php:654
+#: includes/class-utils.php:722
 msgid "Submitted"
 msgstr ""
 
-#: includes/class-utils.php:695
+#: includes/class-utils.php:763
 msgid "FAZ Cookie Manager consent logs use anonymized IP hashes and cannot be linked to email addresses; they auto-purge after the configured retention period."
 msgstr ""
 
 #. translators: %d: number of privacy-request records deleted.
-#: includes/class-utils.php:732
+#: includes/class-utils.php:800
 #, php-format
 msgid "Deleted %d FAZ Cookie Manager privacy request."
 msgid_plural "Deleted %d FAZ Cookie Manager privacy requests."

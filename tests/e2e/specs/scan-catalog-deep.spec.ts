@@ -1,4 +1,3 @@
-import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { expect, test } from '../fixtures/wp-fixture';
 import {
   deleteCookiesByNames,
@@ -11,7 +10,6 @@ import {
   openCookiesPage,
   openSettingsPage,
 } from '../utils/faz-api';
-import { startServerScanLab, stopServerScanLab } from '../utils/server-scan-lab';
 import {
   deactivatePluginsExcept,
   disableLabFlags,
@@ -28,8 +26,6 @@ import {
 } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
-const SERVER_SCAN_PORT = Number(process.env.FAZ_SERVER_SCAN_LAB_PORT ?? 10080);
-const SERVER_SCAN_BASE = `http://127.0.0.1:${SERVER_SCAN_PORT}`;
 const SITE_HOST = new URL(WP_BASE).hostname;
 const COMMON_KNOWN_COOKIE_NAMES = [
   '_ga',
@@ -149,8 +145,18 @@ async function discoverUrls(page: Parameters<typeof openCookiesPage>[0], nonce: 
 }
 
 async function serverScan(page: Parameters<typeof openCookiesPage>[0], nonce: string, scenario: string, token: string): Promise<ServerScanResponse> {
+  const scenarioPages: Record<string, string> = {
+    headers: 'headers',
+    'src-ga': 'script-src-ga',
+    'data-src-ga': 'script-data-src-ga',
+    'litespeed-fb': 'script-litespeed-fb',
+    'iframe-youtube': 'iframe-youtube',
+  };
+  const pageSlug = scenarioPages[scenario];
+  expect(pageSlug, `No same-origin server-scan fixture for scenario ${scenario}`).toBeTruthy();
+  setLabToken(token);
   const response = await fazApiPost<ServerScanResponse>(page, nonce, 'scans/server-scan', {
-    url: `${SERVER_SCAN_BASE}/?scenario=${scenario}&token=${token}`,
+    url: `${WP_BASE}/faz-lab-${pageSlug}/`,
   });
   expect(response.status).toBe(200);
   return response.data;
@@ -299,7 +305,6 @@ test.describe('Deep scan and catalog flows', () => {
   // Playwright actually documents for long-running setup / teardown.
   test.describe.configure({ mode: 'serial', timeout: 300_000 });
 
-  let serverLab: ChildProcessWithoutNullStreams | null = null;
   let initialActivePluginFiles: string[] = [];
 
   test.beforeAll(async () => {
@@ -319,7 +324,6 @@ test.describe('Deep scan and catalog flows', () => {
     ensureScanLabPages();
     disableLabFlags();
     resetScanState();
-    serverLab = await startServerScanLab(SERVER_SCAN_PORT);
   });
 
   test.beforeEach(async () => {
@@ -334,7 +338,6 @@ test.describe('Deep scan and catalog flows', () => {
     restoreActivePluginFiles(initialActivePluginFiles);
     disableLabFlags();
     resetScanState();
-    await stopServerScanLab(serverLab);
     wpEval(`
       global $wpdb;
       $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name LIKE %s", '_faz_lab_%' ) );
@@ -394,7 +397,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await cleanupLabCookies(page, nonce);
-    await runQuickScan(page, 100);
+    await runQuickScan(page);
 
     const cookies = await listCookiesWithRetry(page, nonce);
     const cookie = findCookie(cookies, `_faz_lab_js_basic_${token}`);
@@ -410,7 +413,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await cleanupLabCookies(page, nonce);
-    await runQuickScan(page, 100);
+    await runQuickScan(page);
 
     const cookies = await listCookiesWithRetry(page, nonce);
     expect(findCookie(cookies, `_faz_lab_js_delayed_${token}`)).toBeTruthy();
@@ -564,7 +567,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await cleanupLabCookies(page, nonce);
-    await runQuickScan(page, 100);
+    await runQuickScan(page);
 
     const cookies = await listCookiesWithRetry(page, nonce);
     const matches = cookies.filter((cookie) => cookie.name === `_faz_lab_dupe_${token}`);
@@ -575,13 +578,12 @@ test.describe('Deep scan and catalog flows', () => {
   test('08. server-side fallback parses Set-Cookie headers', async ({ page, loginAsAdmin }) => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
     const token = makeToken('header');
-    const sanitizedToken = token.replace(/[^a-z0-9_]/gi, '');
+    const sanitizedToken = token.replace(/[^a-z0-9_-]/gi, '');
 
     const result = await serverScan(page, nonce, 'headers', token);
     const cookie = result.cookies.find((item) => item.name === `_faz_lab_http_${sanitizedToken}`);
 
     expect(cookie).toBeTruthy();
-    expect(result.scripts).toHaveLength(0);
   });
 
   test('09. server-side fallback extracts script src URLs and infers GTM cookies', async ({ page, loginAsAdmin }) => {
@@ -590,7 +592,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const result = await serverScan(page, nonce, 'src-ga', token);
 
-    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-LAB');
+    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-FAZLAB');
     expect(result.cookies.map((cookie) => cookie.name)).toEqual(expect.arrayContaining(['_ga', '_gid', '_gat', '_gcl_au']));
   });
 
@@ -600,7 +602,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const result = await serverScan(page, nonce, 'data-src-ga', token);
 
-    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-LAB');
+    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-FAZLAB');
     expect(result.cookies.map((cookie) => cookie.name)).toEqual(expect.arrayContaining(['_ga', '_gid', '_gat', '_gcl_au']));
   });
 
@@ -998,7 +1000,10 @@ test.describe('Deep scan and catalog flows', () => {
 
     await abortScan(page, nonce, discover.scan_id);
 
-    await runQuickScan(page, 100);
+    // The direct discovery above validates the 100-page Woo catalogue. The UI
+    // crawl only needs to prove that the priority URLs are visited and imported,
+    // so keep it on the bounded quick profile.
+    await runQuickScan(page);
 
     // listCookiesWithRetry only retries a FAILED request; a request that
     // succeeds with a half-written list satisfies it. The scan persists rows

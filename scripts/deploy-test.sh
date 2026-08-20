@@ -97,16 +97,18 @@ case "$TARGET" in
 		;;
 esac
 
-# --delete is deliberate: a stale file left behind after a rename is how a test
-# passes against code that no longer ships. It also means the exclusions above
-# are the only thing standing between this and deleting them at the target, so
-# every entry is repository-side clutter, never plugin content.
+# --delete and --delete-excluded are deliberate: a stale file left behind after
+# a rename is how a test passes against code that no longer ships. Plain
+# --delete preserves excluded files already present at the destination, which
+# previously left old vendor/tests/analysis trees under the test webroot. The
+# exact plugin-directory guard above makes deleting that destination-only
+# repository clutter safe.
 RSYNC_EXCLUDES=()
 for pattern in "${EXCLUDES[@]}"; do
 	RSYNC_EXCLUDES+=( "--exclude=${pattern}" )
 done
 
-rsync -a --delete "${RSYNC_EXCLUDES[@]}" ./ "$TARGET"
+rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" ./ "$TARGET"
 
 echo "deployed → ${TARGET}"
 du -sh "$TARGET" 2>/dev/null | awk '{print "size: " $1}'

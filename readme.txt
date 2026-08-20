@@ -3,7 +3,7 @@ Contributors: fabiodalez
 Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
-Tested up to: 7.0
+Tested up to: 7.1
 Stable tag: 1.27.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later

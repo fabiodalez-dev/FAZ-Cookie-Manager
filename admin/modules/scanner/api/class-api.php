@@ -107,7 +107,10 @@ class Api extends Rest_Controller {
 						'max_pages'   => array(
 							'type'              => 'integer',
 							'default'           => 20,
+							'minimum'           => 1,
+							'maximum'           => Controller::MAX_SCAN_PAGES,
 							'sanitize_callback' => 'absint',
+							'validate_callback' => 'rest_validate_request_arg',
 						),
 						'fingerprint' => array(
 							'type'              => 'string',
@@ -393,7 +396,7 @@ class Api extends Rest_Controller {
 		);
 
 		// Schedule async scan (avoids loopback deadlock with single-threaded PHP dev server).
-		$max_pages = isset( $request['max_pages'] ) ? absint( $request['max_pages'] ) : 20;
+		$max_pages = Controller::normalize_max_pages( isset( $request['max_pages'] ) ? $request['max_pages'] : 20 );
 		$this->controller->schedule_scan( $max_pages );
 
 		return rest_ensure_response( $this->controller->get_info() );
@@ -445,8 +448,7 @@ class Api extends Rest_Controller {
 	 * @return \WP_REST_Response
 	 */
 	public function discover_urls( $request ) {
-		$requested   = absint( $request['max_pages'] );
-		$max_pages   = ( $requested > 0 ) ? min( $requested, 2000 ) : 20;
+		$max_pages   = Controller::normalize_max_pages( $request['max_pages'] );
 		$fingerprint = $request['fingerprint'];
 		$scan_id     = sanitize_key( (string) $request['scan_id'] );
 		$session     = $this->controller->start_browser_scan_session( $scan_id );

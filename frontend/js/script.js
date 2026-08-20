@@ -415,6 +415,18 @@ function _fazCurrentScopeFingerprint() {
 }
 function _fazConsentScopeChanged() {
     if (!_fazHasConsentCookie || !_fazStore || !_fazStore._geoRouting) return false;
+    // The PMP membership alternative is a server-refreshed, necessary-only
+    // privacy state, not consent. It is safe across every banner/law scope and
+    // deliberately carries no user identifier or scope fingerprint. Requiring
+    // a fingerprint here would invalidate action:auto under strict geo mode and
+    // reopen the notice, defeating the paid no-tracking alternative. Keep the
+    // exception narrow: a forged source marker cannot preserve action:yes or
+    // consent:yes, so it can never manufacture permission.
+    if (
+        fazcookieConsentMap.source === "pmp" &&
+        fazcookieConsentMap.action === "auto" &&
+        fazcookieConsentMap.consent === "no"
+    ) return false;
     const currentBannerSlug = _fazCurrentBannerSlug();
     const currentLaw = _fazCurrentLaw();
     // Read directly from fazcookieConsentMap — this function runs at module

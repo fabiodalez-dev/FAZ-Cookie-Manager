@@ -282,7 +282,9 @@ const settings: SettingCase[] = [
     validValue: 37,
     expectedValid: 37,
     invalidValue: -5,
-    expectedInvalid: 5,
+    // Negative depths clamp to the safe minimum; treating -5 as +5 silently
+    // changed operator intent and diverged from the REST route contract.
+    expectedInvalid: 1,
   },
   booleanSetting('scanner.debug_mode'),
   booleanSetting('scanner.auto_scan'),

@@ -137,6 +137,9 @@ class Controller {
 	/** Maximum unique Set-Cookie observations retained for one browser scan. */
 	const BROWSER_SCAN_OBSERVATION_LIMIT = 2000;
 
+	/** Maximum pages accepted by every browser, REST, cron and CLI scan path. */
+	const MAX_SCAN_PAGES = 2000;
+
 	/** Whether the most recently collected browser capture reached its safety cap. */
 	private $browser_scan_capture_truncated = false;
 
@@ -146,6 +149,17 @@ class Controller {
 	 * @var array|null
 	 */
 	protected $last_scan_info;
+
+	/**
+	 * Clamp a requested scan depth to the product safety envelope.
+	 *
+	 * @param mixed $value Requested number of pages.
+	 * @return int Value between 1 and MAX_SCAN_PAGES.
+	 */
+	public static function normalize_max_pages( $value ) {
+		$value = is_numeric( $value ) ? (int) $value : 0;
+		return max( 1, min( self::MAX_SCAN_PAGES, $value ) );
+	}
 
 	/**
 	 * Return the current instance of the class
@@ -912,7 +926,7 @@ class Controller {
 	 * @return array Current scan info.
 	 */
 	public function schedule_scan( $max_pages = 20 ) {
-		$max_pages = max( 1, min( 2000, absint( $max_pages ) ) );
+		$max_pages = self::normalize_max_pages( $max_pages );
 
 		// A background process spawned with exec( '… &' ) only survives when the
 		// parent is a long-lived CLI process (WP-CLI, real cron). Under a web
@@ -1288,7 +1302,7 @@ class Controller {
 	 * wp-cron.php); the CLI exec spawn is the exception, not the rule.
 	 */
 	public function run_scan_async() {
-		$max_pages = max( 1, min( 2000, absint( get_option( 'faz_scan_max_pages', 20 ) ) ) );
+		$max_pages = self::normalize_max_pages( get_option( 'faz_scan_max_pages', 20 ) );
 		try {
 			$this->run_scan( $max_pages );
 		} catch ( \Throwable $e ) {
@@ -1304,7 +1318,7 @@ class Controller {
 	 * @return array Scan results summary.
 	 */
 	public function run_scan( $max_pages = 20 ) {
-		$max_pages = max( 1, min( 2000, absint( $max_pages ) ) );
+		$max_pages = self::normalize_max_pages( $max_pages );
 		// Scanning makes many HTTP requests; prevent PHP timeout.
 		// phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.NoSilencedErrors -- scanner crawls 20-1000 URLs over wp_remote_get; PHP default max_execution_time (30s) consistently truncates the run on medium-sized sites. 5-minute window is the standard pattern for long-running plugin batch jobs (importers, scanners). Suppressed @ — read-only access on hardened hosts where set_time_limit is disabled returns false silently rather than emitting a warning.
 		@set_time_limit( 300 );

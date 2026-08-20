@@ -56,8 +56,15 @@ final class Faz_E2E_Audit_Lab {
 			add_filter( 'faz_trust_proxy_headers', '__return_true' );
 		}
 
-		if ( isset( $_GET['faz_e2e_trust_cf'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			add_filter( 'faz_trust_cf_ipcountry_header', '__return_true' );
+		if ( isset( $_GET['faz_e2e_geo_probe'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			// Make this probe deterministic even when the reference WordPress
+			// install has an unrelated MU-plugin that globally trusts Cloudflare.
+			// The query flag is the sole trust switch for this request.
+			add_filter(
+				'faz_trust_cf_ipcountry_header',
+				isset( $_GET['faz_e2e_trust_cf'] ) ? '__return_true' : '__return_false', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				99999
+			);
 		}
 
 		if ( isset( $_GET['faz_e2e_audit_headers'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended

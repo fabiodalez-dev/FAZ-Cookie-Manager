@@ -1105,8 +1105,8 @@ class Frontend {
 		if ( true === faz_disable_banner() || is_admin() ) {
 			return;
 		}
-		// Use the wider UI-suppressed check: if the banner UI is hidden (e.g.
-		// for PMP-exempt members), the placeholder CSS is unnecessary.
+		// Use the wider UI-suppressed check: if the banner UI is hidden by the
+		// current runtime/settings context, the placeholder CSS is unnecessary.
 		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
@@ -1151,11 +1151,7 @@ class Frontend {
 		}
 		// NOTE: We deliberately do NOT check is_banner_ui_suppressed() here.
 		// load_banner() populates $this->template, which enqueue_scripts()
-		// depends on to register script.js / gcm.js / tcf-cmp.js. PMP-exempt
-		// members must still receive those bootstrap scripts so GCM can fire
-		// the auto-granted consent signals to AdSense / GTM — only the
-		// visible banner HTML (insert_styles, banner_html) gets suppressed,
-		// and those two hooks check is_banner_ui_suppressed() themselves.
+		// depends on to register script.js / gcm.js / tcf-cmp.js.
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
@@ -1705,8 +1701,9 @@ class Frontend {
 		if ( ! $this->template || true === faz_disable_banner() ) {
 			return;
 		}
-		// Banner HTML is the actual visible UI — suppress for PMP-exempt
-		// members so they never see the consent dialog.
+		// Banner HTML is the actual visible UI. PMP members are deliberately not
+		// suppressed here: script.js closes the notice from action:auto while
+		// keeping the revisit preference control rendered and reachable.
 		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
@@ -2893,11 +2890,14 @@ class Frontend {
 	 * Check whether the visible banner UI (template HTML + CSS) should be
 	 * suppressed for the current request.
 	 *
-	 * Wider net than `is_banner_disabled_by_settings()`: also covers the
-	 * Paid Memberships Pro integration where exempted members must NOT see
-	 * the banner, even though all the consent bootstrap (script.js, gcm.js,
-	 * tcf-cmp.js) still needs to load so GCM can read the auto-granted
-	 * cookie and emit the right `consent` signals to AdSense / GTM.
+	 * Wider net than `is_banner_disabled_by_settings()`: also covers a runtime
+	 * geo fallback for which blocking must remain active without showing a
+	 * mismatched regional notice.
+	 *
+	 * PMP members are intentionally NOT suppressed here. Their `action:auto`
+	 * cookie makes script.js hide the first-layer notice immediately, while the
+	 * rendered revisit control remains available so changing optional purposes
+	 * is as easy as the normal consent flow.
 	 *
 	 * Use this for banner-rendering hooks. Use
 	 * `is_banner_disabled_by_settings()` for script enqueuing.
@@ -2912,12 +2912,6 @@ class Frontend {
 		// Runtime geo-routing opt-in fallback with no matching banner: keep
 		// blocking active (template loaded) but hide the mismatched opt-out UI.
 		if ( $this->faz_law_fallback_suppress ) {
-			return true;
-		}
-
-		if ( class_exists( '\\FazCookie\\Includes\\Integrations\\Paid_Memberships_Pro' )
-			&& \FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->is_current_user_exempted()
-		) {
 			return true;
 		}
 
