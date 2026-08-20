@@ -70,31 +70,39 @@ This plugin assists consent and privacy workflows. It does not itself create, pr
 
 Core banner functionality runs on your WordPress site. Optional update/download features may contact GitHub, IAB Europe, MaxMind, ip-api.com, ipinfo.io (opt-in VPN detection), or the AMP CDN depending on which features you enable and use.
 
-= Cookie Policy generator (1.16.0+) =
+= Cookie Policy generator =
 
-Need a Cookie Policy page that explains the cookies your site sets, the jurisdiction it operates under, and who the visitor should contact about their data? FAZ Cookie Manager 1.16.0 ships a dedicated **Cookie Policy** admin tab plus the `[faz_cookie_policy_complete]` shortcode.
+A dedicated **Cookie Policy** admin tab and the `[faz_cookie_policy_complete]` shortcode build a policy page from the cookies your site actually sets, rather than from a generic template you have to fill in by hand.
 
-* **Jurisdiction-aware** -- pick GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil), or POPIA (South Africa). Each jurisdiction ships its own template scaffold with the legal references and required sections for that framework.
-* **Multilingual (8 languages out of the box)** -- en, it, fr, de, es, pt-BR, bg, cs. Override per render with `[faz_cookie_policy_complete lang="it"]` or let the visitor's browser language pick. The GDPR, CCPA and LGPD sections are exposed through `faz-cookie-manager.pot` (the bundled Czech catalogue includes all 33 of them); the POPIA sections ship as reviewed per-language templates and will join the POT at the next catalogue resync.
-* **Editable section text, per jurisdiction and language** -- the advanced Policy text card exposes each effective section as an optional textarea. The shipped wording is the placeholder, not the saved value: leave it empty to keep receiving reviewed plugin updates, or write Markdown that still uses placeholders such as `{{COMPANY_NAME}}`. The language selector uses the full site-wide catalogue, so an administrator can author Slovak (`sk`) or another unbundled language against the reviewed jurisdiction fallback.
-* **Auto-populated cookie inventory** -- the rendered policy pulls live from `wp_faz_cookies`, so any cookie discovered by the scanner shows up at the next render with its category, duration and description, in the active language.
-* **Filled with your company data** -- name, address, DPO email, third-party services, retention period: stored in `faz_cookie_policy_data` option, edited via the admin form, never seeded from `admin_email` or `blogname` (PII protection).
-* **Legal disclaimer** -- every generated policy shows a localized warning by default that the templates are starting points, not legal advice. Administrators can hide it or replace it with reviewed custom text in the Cookie Policy settings.
-* **Versioning hash** -- a `data-faz-policy-version` attribute on the rendered article tracks effective template + gettext override + data drift over time. Display-only fields (the visible "Last updated" date) are excluded so the hash doesn't change daily.
-* **Filter for site builders** -- `faz_cookie_policy_data` lets you inject custom placeholders before template substitution.
-* **Backwards compatible** -- the long-standing `[faz_cookie_policy]` shortcode (with `site_name` / `contact` / `show_table` attributes from 1.7.0) is unchanged. The standalone `[faz_cookie_table]` shortcode and matching `faz/cookie-table` Gutenberg block still work for embedding just the cookie inventory table.
+* **Jurisdiction-aware** -- GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil) or POPIA (South Africa). Each ships its own scaffold with the legal references and the sections that framework requires.
+* **Auto-populated** -- the cookie inventory renders live from the scanner's results, so a newly discovered cookie appears at the next render with its category, duration and description.
+* **Multilingual** -- en, it, fr, de, es, pt-BR, bg and cs out of the box. Override per render with `[faz_cookie_policy_complete lang="it"]`, or let the visitor's browser decide.
+* **Editable per jurisdiction and language** -- every section can be replaced with your own Markdown, placeholders included. Leave one empty and it keeps receiving reviewed updates with each plugin release.
+* **Filled with your company data** -- name, address, DPO email, retention period, stored in the `faz_cookie_policy_data` option. Never seeded from `admin_email` or `blogname`.
+* **Honest by default** -- a localised disclaimer states that the templates are a starting point and not legal advice. It can be replaced with reviewed text of your own, or hidden.
 
-= Multi-banner geo-routing vs multilingual content (1.14.0+) =
+A `data-faz-policy-version` hash on the rendered article tracks template and data drift over time, and the `faz_cookie_policy_data` filter lets site builders inject custom placeholders. The older `[faz_cookie_policy]` shortcode, the standalone `[faz_cookie_table]` shortcode and the `faz/cookie-table` block are unchanged.
 
-These are two **orthogonal** features that combine freely — multi-banner is per **country**, multilingual content is per **language inside each banner**.
+= Multi-banner geo-routing and multilingual content =
 
-* **Multi-banner geo-routing** picks WHICH banner profile to serve based on the visitor's country. Typical setup: a strict GDPR banner for EU/EEA/UK and a CCPA opt-out banner for California (or any other per-region compliance profile). Country resolution chain: Cloudflare `CF-IPCountry` header (opt-in via the `faz_trust_cf_ipcountry_header` filter) → MaxMind GeoLite2 → ip-api.com fallback. Each banner row carries its own `target_countries` list and a `priority` integer for overlap resolution.
+Two orthogonal features that combine freely: the visitor's **country** decides which banner is served, and the visitor's **browser language** decides the translation shown inside it.
 
-* **Multilingual content** lives INSIDE each banner. A single banner stores translations of its title, description and button labels for as many languages as you enable on the Languages page. The language displayed to the visitor is resolved CLIENT-SIDE from `navigator.languages` so a country-targeted banner can still be served from a full-page cache (LiteSpeed / WP Rocket / Cloudflare APO) and the right language renders on hydration.
+Geo-routing selects a banner profile per country -- typically a strict GDPR banner for the EU/EEA/UK and a CCPA opt-out banner for California. Each banner row carries its own target countries and a priority integer that resolves overlaps. Country resolution walks Cloudflare's `CF-IPCountry` header (opt-in via the `faz_trust_cf_ipcountry_header` filter), then MaxMind GeoLite2, then ip-api.com.
 
-Practical example: an install needs only TWO banner rows, not eight. One EU-targeted GDPR banner with English + Italian + German + French + Polish translations inside, and one US-targeted CCPA banner with English + Spanish translations inside. The country selects the banner; the browser selects the translation inside the banner. Visitors hitting the right cache key get the right banner + the right language.
+Translations live inside each banner, and the language shown is resolved **client-side** from `navigator.languages` -- so a country-targeted banner can still be served from a full-page cache (LiteSpeed, WP Rocket, Cloudflare APO) and the right language renders on hydration.
 
-== External Services ==
+In practice this means two banner rows rather than eight: one EU-targeted GDPR banner holding English, Italian, German, French and Polish, and one US-targeted CCPA banner holding English and Spanish.
+
+== Other Notes ==
+
+**External services.** This plugin is cloud-free: consent is stored on your own
+site and there is no vendor account, dashboard or telemetry. What follows is the
+full outbound picture, one heading per item: the optional features that contact
+an external host (none of them run unless you use the feature), the public REST
+endpoints the plugin exposes on your own domain, and a note on third-party
+domain strings that appear in the code as matching patterns and are never
+contacted. Each entry states what triggers it, what leaves your server, and the
+provider's terms.
 
 = GitHub / Raw GitHubusercontent (Open Cookie Database) =
 
@@ -220,9 +228,9 @@ The plugin source includes several third-party domain names (e.g. `js.stripe.com
 
 The plugin makes the outbound requests documented above only when their relevant feature is used. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
 
-== Cache Plugin Compatibility ==
+= Cache Plugin Compatibility =
 
-When multi-banner geo-routing (1.14.0+) is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
+When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
 
 * `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
 * `Pragma: no-cache`
