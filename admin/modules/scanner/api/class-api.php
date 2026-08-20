@@ -712,6 +712,29 @@ class Api extends Rest_Controller {
 		// a malformed id into a 409 "session mismatch" — which reads to an
 		// administrator as an expired scan rather than a bad request.
 		$scan_id       = sanitize_key( (string) $request->get_param( 'scan_id' ) );
+
+		// A resubmit of an import that already succeeded must be answered with
+		// the success it produced, not with "this session expired". The session
+		// is finished as part of a successful save, so the second attempt finds
+		// nothing — which is indistinguishable, from here, from a genuine
+		// expiry. The client cannot tell the two apart either: a request whose
+		// response is lost (dropped connection, closed laptop, proxy timeout)
+		// surfaces as a status-0 error, which is exactly the case its retry
+		// treats as safe to repeat. Without this the administrator is told a
+		// scan failed that in fact imported, and re-runs the whole crawl.
+		//
+		// This check comes BEFORE the session gate on purpose: by the time a
+		// duplicate arrives there is no session left to match.
+		$completed = $this->controller->recall_browser_scan_result( $scan_id );
+		if ( null !== $completed ) {
+			// `duplicate` lets the client distinguish "already saved" from a
+			// fresh import. Nothing is re-run: no second save, and in
+			// particular no second replay schedule, which would double the
+			// background work for one crawl.
+			$completed['duplicate'] = true;
+			return rest_ensure_response( $completed );
+		}
+
 		if ( ! $this->controller->browser_scan_session_matches( $scan_id ) ) {
 			// Expiry and a genuine cross-tab conflict are one 409 to the
 			// transport but two different problems for the administrator. Naming
@@ -828,10 +851,23 @@ class Api extends Rest_Controller {
 			$result = $this->controller->save_scan_result( $cookies, $pages_scanned, $clean_scripts, $metrics );
 		} catch ( \Throwable $e ) {
 			error_log( 'FAZ: browser scan import failed: ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- preserve diagnostics while returning a safe REST error.
+			// Hold rather than discard. The observations are the only record of
+			// what this site set before consent, and reproducing them means
+			// re-running a crawl that can take many minutes. Held evidence does
+			// not block the next scan: starting one reclaims it.
+			$held = $this->controller->hold_browser_scan_session( $scan_id );
 			return new \WP_Error(
 				'faz_scan_import_failed',
-				__( 'The cookie import could not be completed. No completion status was recorded; review the scanner log and try again.', 'faz-cookie-manager' ),
-				array( 'status' => 500 )
+				$held
+					? __( 'The cookie import could not be completed, so nothing was saved. The scan results are kept for a few minutes — retry the import rather than re-running the scan. Review the scanner log if it fails again.', 'faz-cookie-manager' )
+					: __( 'The cookie import could not be completed. No completion status was recorded; review the scanner log and try again.', 'faz-cookie-manager' ),
+				array(
+					'status' => 500,
+					// The client only offers a retry when the evidence is
+					// actually still there. Promising one after the hold failed
+					// would send the administrator to a 409.
+					'faz_session_held' => $held,
+				)
 			);
 		}
 
@@ -839,6 +875,13 @@ class Api extends Rest_Controller {
 		// the failure response above promises that the administrator may retry the
 		// same scan: its observations, transients and marker must still exist, and
 		// no background replay may write data for the failed import.
+		//
+		// Order is load-bearing: record the outcome BEFORE closing the session.
+		// If the request dies between these two lines a retry finds the record
+		// and is told the truth — the import succeeded. Closing first would
+		// leave a retry with neither a session nor a record, and it would report
+		// a failure that never happened.
+		$this->controller->remember_browser_scan_result( $scan_id, $result );
 		$this->controller->finish_browser_scan_session( $scan_id );
 
 		// Replay every URL the browser actually visited in a background server
@@ -848,6 +891,14 @@ class Api extends Rest_Controller {
 		$result['capture_truncated'] = $capture_truncated;
 		$result['enrichment_pending'] = $enrichment_pending > 0;
 		$result['enrichment_urls']    = $enrichment_pending;
+
+		// Overwrite the crash-safety record above with the complete body, so a
+		// resubmit gets the same response the first attempt returned rather than
+		// a truthful-but-partial one. The earlier write is not redundant: it
+		// covers the window where the request dies before reaching here, and in
+		// that window an incomplete record still says the one thing that
+		// matters — the import succeeded, do not run the crawl again.
+		$this->controller->remember_browser_scan_result( $scan_id, $result );
 
 		// A single missed scan is not evidence of absence. Only a scan that
 		// covered the whole site without incident may add to the tally, and only

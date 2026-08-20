@@ -82,6 +82,12 @@ namespace {
 		public function get_error_message() {
 			return $this->message;
 		}
+		// The import error now carries faz_session_held, which the client reads
+		// to decide whether to offer a Retry at all, so the double has to expose
+		// the data the way core does.
+		public function get_error_data() {
+			return $this->data;
+		}
 	}
 
 	class WP_REST_Response {
@@ -492,10 +498,45 @@ namespace {
 		// assertion goes red the moment teardown moves back above the save.
 		public $session_open = true;
 
+		// Held and remembered are modelled for the same reason session_open is:
+		// stubbing them would make the assertions unable to fail. A held session
+		// stays OPEN — that is the whole point, the evidence survives — so a
+		// double that cleared it on hold would silently pass a test for the
+		// opposite behaviour.
+		public $held        = 0;
+		public $remembered  = array();
+		// Call ORDER is part of the contract, not an implementation detail, so
+		// the double records it. Remembering the outcome must happen BEFORE the
+		// session is closed: a request that dies between the two must leave a
+		// record a resubmit can find. An assertion that only checks the record
+		// EXISTS passes in either order and proves nothing.
+		public $seq         = 0;
+		public $seq_remember = 0;
+		public $seq_finish   = 0;
+
 		public function browser_scan_session_matches( $scan_id ) { return $this->session_open; }
+		public function hold_browser_scan_session( $scan_id ) {
+			if ( ! $this->session_open ) {
+				return false;
+			}
+			++$this->held;
+			return true;
+		}
+		public function remember_browser_scan_result( $scan_id, $result ) {
+			if ( 0 === $this->seq_remember ) {
+				$this->seq_remember = ++$this->seq;
+			} else {
+				++$this->seq;
+			}
+			$this->remembered[ $scan_id ] = $result;
+		}
+		public function recall_browser_scan_result( $scan_id ) {
+			return isset( $this->remembered[ $scan_id ] ) ? $this->remembered[ $scan_id ] : null;
+		}
 		public function browser_scan_session_failure_reason( $scan_id ) { return $this->session_open ? 'match' : 'expired'; }
 		public function collect_browser_scan_session( $scan_id ) { return $this->session_cookies; }
 		public function finish_browser_scan_session( $scan_id ) {
+			$this->seq_finish = ++$this->seq;
 			++$this->finished;
 			$this->session_cookies = array();
 			$this->session_open    = false;
@@ -587,6 +628,97 @@ namespace {
 	check( 1 === $retry_fake->finished && empty( $retry_fake->session_cookies ), 'the successful retry closes and clears the capture' );
 	check( 1 === $retry_fake->scheduled, 'the successful retry schedules one background replay' );
 	check( isset( $retry_fake->persisted[0]['name'] ) && 'retry_httponly' === $retry_fake->persisted[0]['name'], 'the retry persists the same server-captured HttpOnly row' );
+
+	// --- The import is now idempotent, and a failure HOLDS the evidence -------
+	//
+	// Two separate promises the endpoint makes, and each is only worth making if
+	// the other holds.
+	//
+	// A failed save keeps the capture instead of tearing it down: the
+	// observations are the only record of what this site set before consent, and
+	// reproducing them means re-running a crawl that can take many minutes.
+	//
+	// A successful save is REMEMBERED before the session is closed, so a
+	// resubmit is answered with the success that really happened. Without it,
+	// the one case the client's retry exists for — a request that reached the
+	// server and succeeded, whose response was then lost — is reported to the
+	// administrator as a failure, and they re-run the whole crawl for data that
+	// is already saved.
+
+	$hold_fake                 = new FazTest_Import_Controller();
+	$hold_fake->fail_next_save = true;
+	$hold_api                  = new \FazCookie\Admin\Modules\Scanner\Api\Api( $hold_fake );
+	$hold_id                   = str_repeat( 'c', 32 );
+	$hold_request              = new FazTest_Import_Request(
+		array( 'cookies' => array(), 'jar_cookies' => array(), 'pages_scanned' => 2, 'scripts' => array(), 'metrics' => array(), 'scanned_urls' => array() ),
+		array( 'scan_id' => $hold_id ),
+		array()
+	);
+	$hold_result = $hold_api->import_cookies( $hold_request );
+
+	check( is_wp_error( $hold_result ), 'a save failure still returns an error rather than a silent success' );
+	check( 1 === $hold_fake->held, 'a save failure HOLDS the capture session' );
+	check( 0 === $hold_fake->finished, 'a save failure does not tear the session down' );
+	check( $hold_fake->session_open, 'the evidence is still there for the retry the error advertises' );
+	// The client only offers a Retry button when this flag says the evidence
+	// survived. Advertising one after a failed hold would send the
+	// administrator to a 409.
+	$hold_data = is_wp_error( $hold_result ) ? $hold_result->get_error_data() : array();
+	check(
+		isset( $hold_data['faz_session_held'] ) && true === $hold_data['faz_session_held'],
+		'the error tells the client the session was held'
+	);
+	check( 0 === $hold_fake->scheduled, 'no background replay is scheduled for an import that saved nothing' );
+
+	// Now the same scan succeeds on the retry, and the outcome is remembered.
+	$hold_fake->fail_next_save = false;
+	$retry_ok                  = $hold_api->import_cookies( $hold_request );
+
+	check( ! is_wp_error( $retry_ok ), 'retrying the held scan succeeds' );
+	check( 1 === $hold_fake->finished, 'the session is closed once the save actually lands' );
+	check( isset( $hold_fake->remembered[ $hold_id ] ), 'the successful outcome is remembered against its scan id' );
+
+	// The load-bearing ordering: remembered BEFORE finished. If the request dies
+	// between the two, a resubmit finds the record and is told the truth. In the
+	// other order it would find neither session nor record and report a failure
+	// that never happened. Modelled by asking the double, whose
+	// finish_browser_scan_session() closes the session: a record that exists
+	// while the session is already closed proves nothing about order, but a
+	// record written by the FIRST of the two calls does.
+	$order_fake = new FazTest_Import_Controller();
+	$order_api  = new \FazCookie\Admin\Modules\Scanner\Api\Api( $order_fake );
+	$order_id   = str_repeat( 'd', 32 );
+	$order_fake->remembered = array();
+	$order_api->import_cookies(
+		new FazTest_Import_Request(
+			array( 'cookies' => array(), 'jar_cookies' => array(), 'pages_scanned' => 1, 'scripts' => array(), 'metrics' => array(), 'scanned_urls' => array() ),
+			array( 'scan_id' => $order_id ),
+			array()
+		)
+	);
+	check( isset( $order_fake->remembered[ $order_id ] ), 'a completed import leaves a record a resubmit can find' );
+	check(
+		$order_fake->seq_remember > 0 && $order_fake->seq_finish > 0
+			&& $order_fake->seq_remember < $order_fake->seq_finish,
+		'the outcome is recorded BEFORE the session is closed, so a request dying between them still answers a resubmit truthfully'
+	);
+
+	// And the resubmit itself: the session is gone, but the answer is the stored
+	// success, not "this session expired".
+	$dup = $order_api->import_cookies(
+		new FazTest_Import_Request(
+			array( 'cookies' => array(), 'jar_cookies' => array(), 'pages_scanned' => 1, 'scripts' => array(), 'metrics' => array(), 'scanned_urls' => array() ),
+			array( 'scan_id' => $order_id ),
+			array()
+		)
+	);
+	check( ! is_wp_error( $dup ), 'a resubmit of a completed import is not rejected as expired' );
+	$dup_body = is_array( $dup ) ? $dup : ( is_object( $dup ) && method_exists( $dup, 'get_data' ) ? $dup->get_data() : array() );
+	check( ! empty( $dup_body['duplicate'] ), 'the resubmit is marked as a duplicate rather than passed off as a fresh import' );
+	check( 1 === $order_fake->finished, 'the duplicate does not close the session a second time' );
+	// The expensive half: a duplicate must not re-run the background replay, or
+	// one crawl schedules two.
+	check( 1 === $order_fake->scheduled, 'the duplicate does not schedule the replay again' );
 
 	if ( $failures ) {
 		echo "\n{$failures} of {$checks} admin-context capture checks failed.\n";

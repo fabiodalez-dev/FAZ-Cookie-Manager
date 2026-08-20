@@ -66,7 +66,7 @@ async function runCrossOriginCase(publicUrl) {
  * 29c9916 records a source-text test that stayed green while the feature threw
  * a ReferenceError on every import, which is the failure mode being avoided.
  */
-function bootCrawl({ urls, maxPages = 20, importOutcomes = [] }) {
+function bootCrawl({ urls, maxPages = 20, importOutcomes = [], scanId }) {
   const dom = new JSDOM('<!doctype html><div id="faz-scan-frame"></div>', {
     runScripts: 'outside-only',
     url: 'https://example.test/wp-admin/admin.php?page=faz-cookies',
@@ -140,7 +140,9 @@ function bootCrawl({ urls, maxPages = 20, importOutcomes = [] }) {
     },
     run: null,
   };
-  api.run = window.FAZ.scanEngine.run({ maxPages }, {});
+  const runOptions = { maxPages };
+  if (scanId !== undefined) runOptions.scanId = scanId;
+  api.run = window.FAZ.scanEngine.run(runOptions, {});
   return api;
 }
 
@@ -348,12 +350,26 @@ async function drainToImport(app) {
  * of rejecting to the UI, whose next click would create a new scan id and 409
  * against the still-active old session.
  */
-console.log('\nretryable import keeps one scan session (8 checks)');
+console.log('\nretryable import keeps one scan session (9 checks)');
 
 function apiFailure(status, code = 'faz_scan_import_failed') {
   const error = new Error(`HTTP ${status}`);
   error.status = status;
   error.code = code;
+  return error;
+}
+
+/**
+ * The shape wp.apiFetch actually rejects with: the decoded WP_Error body, whose
+ * `data` array is where import_cookies() puts both the status and the hold flag.
+ * Nothing is set at the top level, so this also proves the client reads the flag
+ * from the same place it already reads the status.
+ */
+function heldApiFailure(held) {
+  const error = new Error('HTTP 500');
+  error.code = 'faz_scan_import_failed';
+  error.data = { status: 500 };
+  if (held !== undefined) error.data.faz_session_held = held;
   return error;
 }
 
@@ -402,9 +418,123 @@ function apiFailure(status, code = 'faz_scan_import_failed') {
   const imports = app.posts.filter((call) => call.endpoint === 'scans/import');
   const abort = app.posts.find((call) => call.endpoint === 'scans/abort');
   check('29 retries stop after the configured two delays', imports.length === 3);
-  check('30 exhausted retries close the same session before returning control to the UI',
-    rejected?.stage === 'import' && !!abort && abort.payload.scan_id === imports[0].payload.scan_id);
+  // BEHAVIOUR CHANGE (was: "exhausted retries close the same session"). Aborting
+  // deletes every observation the crawl produced, and those observations are the
+  // only record of what the site set before consent — a save failure used to
+  // cost the administrator a run that can take many minutes. The server now
+  // holds the evidence for a retry (Controller::hold_browser_scan_session), and
+  // a held session does not lock the next scan out: starting one reclaims it.
+  check('30 an exhausted import failure holds the capture session instead of aborting it',
+    rejected?.stage === 'import' && !abort);
   check('31 exhausted retries release the heartbeat', app.intervals.every((item) => !item.active));
+  // The server said nothing about a hold here (no faz_session_held anywhere in
+  // the error), and silence must never be read as a promise: offering a retry
+  // against evidence that is gone sends the administrator into a 409.
+  check('32 a failure that does not say the session was held reports sessionHeld false',
+    rejected?.sessionHeld === false && typeof rejected?.retryImport !== 'function');
+}
+
+/* ── Held import: retry the SAVE, not the scan ─────────────────────────
+ *
+ * The expensive half of a scan is the crawl. When only persistence fails, the
+ * server keeps the session, its observations and the marker cookie alive, and
+ * says so in `data.faz_session_held`. The engine must surface that fact and a
+ * way to act on it that does not walk the site again.
+ */
+console.log('\nheld import offers a save-only retry (7 checks)');
+
+{
+  const app = bootCrawl({
+    urls: ['/a/'],
+    importOutcomes: [
+      { reject: heldApiFailure(true) },
+      { reject: heldApiFailure(true) },
+      { reject: heldApiFailure(true) },
+      { total_cookies: 4, duplicate: true },
+    ],
+  });
+  await settle();
+  await drainToImport(app);
+  await settle();
+  app.runTimer(1000);
+  await settle();
+  app.runTimer(3000);
+  await settle();
+
+  let rejected;
+  try {
+    await app.run;
+  } catch (error) {
+    rejected = error;
+  }
+
+  const failedImports = app.posts.filter((call) => call.endpoint === 'scans/import');
+  check('33 the hold flag is read out of the WP_Error data, where the server put it',
+    rejected?.sessionHeld === true);
+  check('34 the rejection names the scan whose evidence is being held',
+    !!rejected?.scanId && rejected.scanId === failedImports[0].payload.scan_id);
+  check('35 nothing aborts, so the held observations survive the failure',
+    !app.posts.some((call) => call.endpoint === 'scans/abort'));
+  check('36 a retry handle is offered only because the server said the evidence is there',
+    typeof rejected?.retryImport === 'function');
+
+  const framesBefore = app.frames().length;
+  const retried = await rejected.retryImport();
+  const allImports = app.posts.filter((call) => call.endpoint === 'scans/import');
+  const discovers = app.posts.filter((call) => call.endpoint === 'scans/discover');
+  check('37 the retry resubmits the same payload under the same scan id — no second crawl',
+    allImports.length === failedImports.length + 1
+      && discovers.length === 1
+      && framesBefore === 0
+      && app.frames().length === 0
+      && allImports[allImports.length - 1].payload.scan_id === failedImports[0].payload.scan_id
+      && JSON.stringify(allImports[allImports.length - 1].payload.cookies)
+        === JSON.stringify(failedImports[0].payload.cookies));
+  check('38 a successful retry resolves the same result shape the first import would have',
+    retried && retried.total === 4 && retried.pagesScanned === 1
+      && Array.isArray(retried.cookies) && retried.scanId === rejected.scanId);
+  // `duplicate` is the server saying "an earlier submission already saved this";
+  // it must reach the caller so the page can say so instead of announcing a
+  // fresh import that never happened.
+  check('39 the duplicate marker reaches the caller untouched',
+    retried?.importResult?.duplicate === true);
+}
+
+/* ── Caller-supplied scan id ───────────────────────────────────────────
+ *
+ * Re-entering a held session requires the SAME id: a fresh one is a different
+ * scan to the server, and start_browser_scan_session() reclaims — i.e. deletes —
+ * the held evidence to make room for it.
+ */
+console.log('\ncaller-supplied scan id (4 checks)');
+
+{
+  const supplied = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+  const app = bootCrawl({ urls: ['/a/'], scanId: supplied });
+  await settle();
+  const discover = app.posts.find((call) => call.endpoint === 'scans/discover');
+  check('40 a supplied scan id is used instead of minting a new one',
+    !!discover && discover.payload.scan_id === supplied);
+  check('41 and it is readable off the run handle before it settles',
+    app.run.scanId === supplied);
+  const imported = await drainToImport(app);
+  check('42 the whole run stays on the supplied id, through to import',
+    !!imported && imported.payload.scan_id === supplied);
+  await app.run.catch(() => {});
+}
+
+{
+  const first = bootCrawl({ urls: ['/a/'] });
+  const second = bootCrawl({ urls: ['/a/'] });
+  await settle();
+  check('43 an absent scanId still mints a fresh 32-hex id per run',
+    /^[a-f0-9]{32}$/.test(first.run.scanId)
+      && /^[a-f0-9]{32}$/.test(second.run.scanId)
+      && first.run.scanId !== second.run.scanId);
+  await drainToImport(first);
+  await drainToImport(second);
+  await first.run.catch(() => {});
+  await second.run.catch(() => {});
 }
 
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);

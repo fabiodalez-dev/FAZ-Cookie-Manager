@@ -1309,6 +1309,16 @@
 		FAZ.btnLoading(btn, true);
 		btn.textContent = __('cookies.scanStarted', 'Scanning...');
 
+		// A previous run may have left its wrapper mounted on purpose — that is
+		// how a held import keeps its Retry offer reachable. Starting a new scan
+		// makes that offer void twice over: the server reclaims the held evidence
+		// for the new session, and a second wrapper would leave two progress bars
+		// on screen. Clear it before building this run's UI.
+		var lingering = document.querySelectorAll('.faz-scan-progress-wrap');
+		for (var l = 0; l < lingering.length; l++) {
+			if (lingering[l].parentNode) { lingering[l].parentNode.removeChild(lingering[l]); }
+		}
+
 		// Build progress UI.
 		var progressWrap = document.createElement('div');
 		progressWrap.className = 'faz-scan-progress-wrap';
@@ -1353,14 +1363,9 @@
 		// Snapshot first: the stale-cookie diff is the difference between what
 		// the catalogue knew before the run and what this run actually saw.
 		snapshotDiscoveredCookies().then(function (previousDiscoveredSet) {
-			var run = FAZ.scanEngine.run({ maxPages: maxPages }, hooks);
-			stopBtn.addEventListener('click', function () {
-				if (typeof run.cancel !== 'function') { return; }
-				stopBtn.disabled = true;
-				stopBtn.textContent = __('cookies.stoppingScan', 'Stopping…');
-				run.cancel();
-			});
-			return run.then(function (res) {
+			// Reached from the first import AND from a manual retry of a held
+			// one, so the stale-cookie bookkeeping is identical either way.
+			function handleScanSuccess(res) {
 				var currentDetectedSet = buildCookieNameSet(res.cookies, false);
 				var inferred = res.importResult && res.importResult.cookie_names;
 				if (Array.isArray(inferred) && inferred.length) {
@@ -1394,9 +1399,20 @@
 				// sentence is worse than an untranslated one, and the two clauses
 				// below were already localized. Replacements use callbacks so a
 				// value containing "$&" cannot be read as a replacement pattern.
-				var msg = __('cookies.scanComplete', 'Scan complete — %1$d cookies found on %2$d pages')
-					.replace('%1$d', function () { return String(res.total); })
-					.replace('%2$d', function () { return String(res.pagesScanned); });
+				//
+				// `duplicate` means the server answered this submission with the
+				// response an EARLIER one already produced — it did not save
+				// anything a second time. Reporting it as a fresh import would
+				// tell the administrator a scan ran that did not, so the counts
+				// below are described as what is already on record.
+				var duplicate = !!(res.importResult && res.importResult.duplicate);
+				var msg = duplicate
+					? __('cookies.scanAlreadySaved', 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.')
+						.replace('%1$d', function () { return String(res.total); })
+						.replace('%2$d', function () { return String(res.pagesScanned); })
+					: __('cookies.scanComplete', 'Scan complete — %1$d cookies found on %2$d pages')
+						.replace('%1$d', function () { return String(res.total); })
+						.replace('%2$d', function () { return String(res.pagesScanned); });
 				if (res.stoppedReason) {
 					msg += ' ' + __('cookies.scanStopped', '(stopped by you before every page was visited)');
 				} else if (res.earlyStopReason) {
@@ -1418,7 +1434,134 @@
 				}
 				finishScan(btn, progressWrap, msg);
 				loadCookies(function () { loadCategories(); });
+			}
+
+			function terminalFailure(err) {
+				finishScan(btn, progressWrap, (err && err.message) || __('cookies.scanFailed', 'Scan failed.'), true);
+			}
+
+			// The import stage is the only failure the administrator can still
+			// recover from without paying for the crawl again: the pages have
+			// already been walked and the server kept the evidence, so all that
+			// is left to redo is the save. `sessionHeld` is the server's own
+			// word for that (data.faz_session_held) — never an assumption, so a
+			// retry is never offered against evidence that is already gone.
+			function handleScanFailure(err) {
+				console.error('[FAZ Scanner] Scan failed:', err);
+				if (err && err.sessionHeld === true) {
+					offerImportRetry(err);
+					return;
+				}
+				terminalFailure(err);
+			}
+
+			/**
+			 * Keep the failed run on screen with a way out of it.
+			 *
+			 * Deliberately not a toast: FAZ.notify() has neither an action nor a
+			 * sticky mode — it fades after six seconds — so a recovery offered
+			 * there would be unreachable by the time anyone read it. The progress
+			 * wrapper this run already owns stays mounted and becomes the panel,
+			 * which also keeps the affordance next to the Scan button that
+			 * produced it.
+			 */
+			function offerImportRetry(err) {
+				FAZ.btnLoading(btn, false);
+				btn.textContent = __('cookies.scanSite', 'Scan Site') + ' ▾';
+				if (stopBtn.parentNode) { stopBtn.parentNode.removeChild(stopBtn); }
+				bar.style.width = '100%';
+				progressWrap.classList.add('faz-scan-progress-held');
+				statusEl.textContent = __('cookies.importNotSaved', 'Not saved');
+				pagesEl.textContent = '';
+
+				// The engine hands back a resubmit of the payload it already
+				// built whenever the evidence is held, which imports without
+				// touching the site again. Re-entering the held capture session
+				// by its scan id is the fallback for the case where it did not:
+				// it works, but the pages are walked a second time, and the two
+				// are not described to the administrator as if they were alike.
+				var savesOnly = !!(err && typeof err.retryImport === 'function');
+
+				var panel = document.createElement('div');
+				panel.className = 'faz-scan-held';
+				panel.setAttribute('role', 'status');
+				panel.setAttribute('aria-live', 'polite');
+
+				var explain = document.createElement('p');
+				explain.className = 'faz-scan-held-text';
+				explain.textContent = savesOnly
+					? __('cookies.importHeldRetrySave', 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.')
+					: __('cookies.importHeldRerun', 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.');
+				panel.appendChild(explain);
+
+				if (err && err.message) {
+					var detail = document.createElement('p');
+					detail.className = 'faz-scan-held-detail';
+					detail.textContent = err.message;
+					panel.appendChild(detail);
+				}
+
+				var actions = document.createElement('div');
+				actions.className = 'faz-scan-held-actions';
+				var retryBtn = document.createElement('button');
+				retryBtn.type = 'button';
+				retryBtn.className = 'faz-btn faz-btn-sm faz-btn-primary';
+				retryBtn.textContent = savesOnly
+					? __('cookies.retryImport', 'Retry import')
+					: __('cookies.retryImportRescan', 'Retry import (re-scans the site)');
+				var dismissBtn = document.createElement('button');
+				dismissBtn.type = 'button';
+				dismissBtn.className = 'faz-btn faz-btn-sm';
+				dismissBtn.textContent = __('cookies.discardHeldScan', 'Discard');
+				actions.appendChild(retryBtn);
+				actions.appendChild(dismissBtn);
+				panel.appendChild(actions);
+				progressWrap.appendChild(panel);
+
+				function closePanel() {
+					if (panel.parentNode) { panel.parentNode.removeChild(panel); }
+					progressWrap.classList.remove('faz-scan-progress-held');
+				}
+
+				retryBtn.addEventListener('click', function () {
+					retryBtn.disabled = true;
+					dismissBtn.disabled = true;
+					FAZ.btnLoading(btn, true);
+					btn.textContent = __('cookies.scanStarted', 'Scanning...');
+					statusEl.textContent = __('cookies.savingResults', 'Saving results...');
+					var attempt = savesOnly
+						? err.retryImport()
+						// Same scan id, so the held session is re-entered rather
+						// than 409'd against.
+						: FAZ.scanEngine.run({ maxPages: maxPages, scanId: err.scanId }, hooks);
+					Promise.resolve(attempt).then(function (res) {
+						closePanel();
+						handleScanSuccess(res);
+					}, function (retryErr) {
+						closePanel();
+						// Still held means still retryable. Once it is not, the
+						// evidence really is gone and this becomes terminal.
+						handleScanFailure(retryErr);
+					}).catch(function (fatal) {
+						console.error('[FAZ Scanner] Import retry handling failed:', fatal);
+						if (progressWrap.parentNode) { terminalFailure(fatal); }
+					});
+				});
+
+				dismissBtn.addEventListener('click', function () {
+					closePanel();
+					terminalFailure(err);
+				});
+			}
+
+			var run = FAZ.scanEngine.run({ maxPages: maxPages }, hooks);
+			stopBtn.addEventListener('click', function () {
+				if (typeof run.cancel !== 'function') { return; }
+				stopBtn.disabled = true;
+				stopBtn.textContent = __('cookies.stoppingScan', 'Stopping…');
+				run.cancel();
 			});
+			return run.then(handleScanSuccess, handleScanFailure);
 		}).catch(function (err) {
 			console.error('[FAZ Scanner] Scan failed:', err);
 			finishScan(btn, progressWrap, (err && err.message) || __('cookies.scanFailed', 'Scan failed.'), true);

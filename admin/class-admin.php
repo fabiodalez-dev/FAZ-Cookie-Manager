@@ -616,6 +616,17 @@ class Admin {
 						'noPagesFound'             => __( 'No pages found to scan.', 'faz-cookie-manager' ),
 						'discoverFailed'           => __( 'Failed to discover pages.', 'faz-cookie-manager' ),
 						'scanSaveFailed'           => __( 'Scan finished but failed to save results.', 'faz-cookie-manager' ),
+						// Import held for a retry. The crawl is finished and the
+						// server kept its evidence, so the administrator is offered
+						// the save again rather than the whole scan.
+						/* translators: %1$d: number of cookies an earlier attempt already imported, %2$d: number of pages scanned */
+						'scanAlreadySaved'         => __( 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.', 'faz-cookie-manager' ),
+						'importNotSaved'           => __( 'Not saved', 'faz-cookie-manager' ),
+						'importHeldRetrySave'      => __( 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.', 'faz-cookie-manager' ),
+						'importHeldRerun'          => __( 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.', 'faz-cookie-manager' ),
+						'retryImport'              => __( 'Retry import', 'faz-cookie-manager' ),
+						'retryImportRescan'        => __( 'Retry import (re-scans the site)', 'faz-cookie-manager' ),
+						'discardHeldScan'          => __( 'Discard', 'faz-cookie-manager' ),
 						'browserScanUnavailable'   => __( 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.', 'faz-cookie-manager' ),
 						'discoveringPages'         => __( 'Discovering pages...', 'faz-cookie-manager' ),
 						'enrichingServer'          => __( 'Enriching with server scan...', 'faz-cookie-manager' ),

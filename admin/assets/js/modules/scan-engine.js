@@ -191,6 +191,24 @@
 		return 0;
 	}
 
+	/**
+	 * Whether the server said it kept this scan's evidence for a retry.
+	 *
+	 * Reads the same two places as getApiErrorStatus(): wp.apiFetch rejects with
+	 * the decoded WP_Error body, so a value the server put in the WP_Error `data`
+	 * array arrives as `err.data.faz_session_held`, and a flattened error object
+	 * would carry it at the top level. Anything else — a network failure with no
+	 * body, an older server that does not hold at all — is NOT a hold: the
+	 * default is false on purpose, because offering a retry that then 409s is
+	 * worse for the administrator than never offering one.
+	 */
+	function getApiErrorSessionHeld(err) {
+		if (!err) return false;
+		if (typeof err.faz_session_held === 'boolean') return err.faz_session_held;
+		if (err.data && typeof err.data.faz_session_held === 'boolean') return err.data.faz_session_held;
+		return false;
+	}
+
 	function buildScanApiErrorDetail(err) {
 		var status = getApiErrorStatus(err);
 		var parts = [];
@@ -279,13 +297,22 @@
 	 * this engine deliberately dropped — nothing here shortens a depth the
 	 * administrator chose; only an explicit human action does.
 	 *
-	 * @param {Object} options       { maxPages } — 0 requests the server cap (full scan).
+	 * @param {Object} options       { maxPages, scanId } — maxPages 0 requests the
+	 *                               server cap (full scan). `scanId` reuses an
+	 *                               existing capture session instead of minting a
+	 *                               new one, which is what lets a caller re-enter
+	 *                               after a held import failure without 409-ing
+	 *                               against the session that still holds the
+	 *                               evidence.
 	 * @param {Object} hooks         { status(text), progress(pct), pages(text) } — all optional.
 	 * @return {Promise<Object>}     Resolves { total, pagesScanned, cookies, scripts,
 	 *                               diagnostics, metrics, importResult, fingerprint,
-	 *                               earlyStopReason, stoppedReason }; rejects with an
-	 *                               Error carrying a display-ready .message. Carries
-	 *                               a `.cancel()` method.
+	 *                               earlyStopReason, stoppedReason, scanId }; rejects
+	 *                               with an Error carrying a display-ready .message,
+	 *                               plus `.stage`, `.scanId`, `.sessionHeld` and —
+	 *                               when the evidence is held — a `.retryImport()`
+	 *                               that resubmits the SAME payload. Carries a
+	 *                               `.cancel()` method and a `.scanId` property.
 	 */
 	function runScan(options, hooks) {
 		options = options || {};
@@ -299,7 +326,10 @@
 		// Shared between runScan and the crawl loop so a cancel that lands during
 		// discovery is still honoured once dispatching begins.
 		var control = { cancelled: false, settled: false };
-		var scanId = createScanId();
+		// A caller-supplied id re-enters the capture session the server is already
+		// holding for this scan. Minting a fresh one there would be read as a
+		// different scan, and the held evidence would be discarded to make room.
+		var scanId = (typeof options.scanId === 'string' && options.scanId) ? options.scanId : createScanId();
 
 		var promise = new Promise(function (resolve, reject) {
 			var heartbeatTimer = null;
@@ -354,6 +384,26 @@
 				FAZ.post('scans/abort', { scan_id: scanId })
 					.catch(function () {})
 					.then(function () { reject(error); });
+			}
+			/**
+			 * Fail WITHOUT destroying the capture session.
+			 *
+			 * The sibling of rejectAndAbort, for the one stage where an abort is
+			 * the expensive answer: the import. By then the crawl is finished and
+			 * the observations are the only record of what this site set before
+			 * consent — POSTing `scans/abort` deletes every one of them, so a
+			 * transient persistence failure used to cost the administrator a run
+			 * that can take many minutes. The server holds that evidence instead
+			 * (see Controller::hold_browser_scan_session), and a held session does
+			 * not lock the next scan out: starting one reclaims it.
+			 *
+			 * releaseRunHooks() still runs, so the heartbeat stops and the held
+			 * session idles out on schedule rather than lingering for as long as
+			 * this tab stays open.
+			 */
+			function rejectAndHold(error) {
+				releaseRunHooks();
+				reject(error);
 			}
 			function resolveRun(value) {
 				releaseRunHooks();
@@ -600,7 +650,9 @@
 							});
 						}
 
-						importWithRetry(0).then(function (res) {
+						// Everything a successful import produces, whether it landed on
+						// the first attempt or on a later resubmit of the same payload.
+						function completeImport(res) {
 							scanMetrics.importMs = Date.now() - importStart;
 							if (res && res.capture_truncated) {
 								diagnostics.captureTruncated++;
@@ -612,7 +664,7 @@
 							} catch (e) {
 								console.warn('[FAZ Scanner] Cannot persist fingerprint — next scan will be full.', e.message);
 							}
-							resolveRun({
+							return {
 								total: res.total_cookies || collectedCookies.length,
 								pagesScanned: scanMetrics.pagesScanned,
 								cookies: collectedCookies,
@@ -625,12 +677,40 @@
 								earlyStopReason: scanMetrics.earlyStopReason,
 								stoppedReason: scanMetrics.stoppedReason,
 								incremental: scanMetrics.incremental,
+								scanId: scanId,
+							};
+						}
+
+						// One shape for every import failure, so the first attempt and
+						// a later manual retry are indistinguishable to the caller.
+						function buildImportError(err) {
+							var failure = new Error(__('cookies.scanSaveFailed', 'Scan finished but failed to save results.') + buildScanApiErrorDetail(err));
+							failure.stage = 'import';
+							failure.scanId = scanId;
+							// Only what the SERVER said. See getApiErrorSessionHeld().
+							failure.sessionHeld = getApiErrorSessionHeld(err);
+							// A retry handle exists only while the evidence does. It
+							// resubmits the payload this crawl already produced, so the
+							// site is not walked a second time; the server answers a
+							// resubmit that in fact succeeded with the response it
+							// already returned, marked `duplicate`.
+							failure.retryImport = failure.sessionHeld ? retryImport : null;
+							return failure;
+						}
+
+						function retryImport() {
+							importStart = Date.now();
+							return importWithRetry(0).then(completeImport, function (err) {
+								console.error('[FAZ Scanner] Import retry failed:', err);
+								throw buildImportError(err);
 							});
-						}).catch(function (err) {
+						}
+
+						importWithRetry(0).then(function (res) {
+							resolveRun(completeImport(res));
+						}, function (err) {
 							console.error('[FAZ Scanner] Import failed:', err);
-							var e2 = new Error(__('cookies.scanSaveFailed', 'Scan finished but failed to save results.') + buildScanApiErrorDetail(err));
-							e2.stage = 'import';
-							rejectAndAbort(e2);
+							rejectAndHold(buildImportError(err));
 						});
 					}
 				}, emit, scanMetrics, scanOptions);
@@ -650,6 +730,11 @@
 		 * the partial set is still imported (a partial import keeps the jar
 		 * reconciliation intact). Idempotent, and a no-op once the run settled.
 		 */
+		// The id this run is capturing under, readable before it settles. A caller
+		// that wants to re-enter the same session (a held import, a resumed page)
+		// can pass it straight back as options.scanId.
+		promise.scanId = scanId;
+
 		promise.cancel = function () {
 			if (control.settled || control.cancelled) { return false; }
 			control.cancelled = true;

@@ -538,8 +538,25 @@ class Controller {
 		$active     = get_transient( $active_key );
 		if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
 			if ( ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
-				return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+				// A HELD session is evidence kept for a retry after an import
+				// failed; nothing is driving it. Refusing a new scan because one
+				// exists would trade the old bug (evidence destroyed on failure)
+				// for a worse one: an administrator locked out of scanning until
+				// the idle window lapses, with no way to clear it from the UI.
+				// Starting a fresh scan is an unambiguous statement that the held
+				// evidence is no longer wanted, so reclaim it and continue.
+				//
+				// A LIVE session still gets the 409 — a second tab really is a
+				// conflict, and taking its capture away mid-crawl would silently
+				// corrupt a scan someone is watching.
+				if ( 'held' !== ( isset( $active['state'] ) ? $active['state'] : '' ) ) {
+					return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
+				}
+				$this->discard_held_browser_scan_session( $active );
+				$active = false;
 			}
+		}
+		if ( is_array( $active ) && ! empty( $active['token'] ) && ! empty( $active['scan_id'] ) ) {
 			$token = sanitize_key( (string) $active['token'] );
 		} else {
 			$token = str_replace( '-', '', wp_generate_uuid4() );
@@ -910,6 +927,140 @@ class Controller {
 	/** @return string */
 	private static function browser_scan_active_transient_key( $user_id ) {
 		return 'faz_scan_active_' . absint( $user_id );
+	}
+
+	/**
+	 * Where a completed import's response is remembered, keyed by scan id.
+	 *
+	 * @param int    $user_id Owner.
+	 * @param string $scan_id Scan identifier.
+	 * @return string
+	 */
+	private static function browser_scan_result_transient_key( $user_id, $scan_id ) {
+		return 'faz_scan_done_' . absint( $user_id ) . '_' . hash( 'sha256', (string) $scan_id );
+	}
+
+	/**
+	 * Keep a failed import's evidence so the same scan can be retried.
+	 *
+	 * Persistence failing is the one case where throwing the capture away costs
+	 * the administrator the whole crawl: the observations are the only record of
+	 * cookies set before consent, and a browser scan can take many minutes to
+	 * reproduce. The session, its observations and the marker cookie all stay.
+	 *
+	 * The session is marked `held` rather than merely left alone, because those
+	 * are different states to everyone who looks at it. A live session is being
+	 * driven by a tab that is still crawling; a held one is being kept for a
+	 * retry that may never come. start_browser_scan_session() reclaims the
+	 * second and refuses the first — without that distinction, holding the
+	 * evidence would lock this administrator out of scanning for the whole idle
+	 * window, which is precisely what the client's abort-on-failure existed to
+	 * prevent.
+	 *
+	 * @param string $scan_id Scan identifier whose session should be held.
+	 * @return bool True when a session was held.
+	 */
+	public function hold_browser_scan_session( $scan_id ) {
+		if ( ! $this->browser_scan_session_matches( $scan_id ) ) {
+			return false;
+		}
+
+		$user_id    = get_current_user_id();
+		$active_key = self::browser_scan_active_transient_key( $user_id );
+		$active     = get_transient( $active_key );
+		if ( ! is_array( $active ) ) {
+			return false;
+		}
+
+		$active['state']   = 'held';
+		$active['held_at'] = time();
+		set_transient( $active_key, $active, self::BROWSER_SCAN_TTL );
+
+		// Slide the session transient too. The client stops its heartbeat once
+		// the run has failed, so without this the retry window is whatever was
+		// left of the last touch rather than a full one.
+		$token = sanitize_key( wp_unslash( (string) $_COOKIE[ self::BROWSER_SCAN_COOKIE ] ) );
+		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		if ( is_array( $session ) ) {
+			set_transient( self::browser_scan_transient_key( $token ), $session, self::BROWSER_SCAN_TTL );
+		}
+
+		return true;
+	}
+
+	/**
+	 * Drop a held session's evidence so a new scan can take its place.
+	 *
+	 * Only ever called for a session already established as `held`. It cannot
+	 * reuse finish_browser_scan_session(), which reads the marker cookie of the
+	 * CURRENT request — the tab starting the new scan may carry a different
+	 * token, or none — so the token is taken from the active record instead.
+	 *
+	 * @param array $active The active-session record being discarded.
+	 * @return void
+	 */
+	private function discard_held_browser_scan_session( $active ) {
+		$user_id = get_current_user_id();
+		$token   = sanitize_key( isset( $active['token'] ) ? (string) $active['token'] : '' );
+		if ( '' !== $token ) {
+			foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
+				if ( is_array( $observation ) && hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
+					delete_user_meta( $user_id, self::BROWSER_SCAN_META, $observation );
+				}
+			}
+			delete_transient( self::browser_scan_transient_key( $token ) );
+		}
+		delete_transient( self::browser_scan_active_transient_key( $user_id ) );
+	}
+
+	/**
+	 * Remember a completed import's response so a resubmit can be answered.
+	 *
+	 * An import is not idempotent on its own: the session is finished as part of
+	 * a successful save, so a second submission of the same payload finds no
+	 * session and is rejected as expired. That is the wrong answer when the
+	 * first attempt actually succeeded and only its RESPONSE was lost — a
+	 * dropped connection, a closed laptop, a proxy timeout. The client cannot
+	 * tell that case apart from a genuine failure, so it retries, and the
+	 * administrator is told a scan failed that in fact imported.
+	 *
+	 * Storing the response makes the resubmit answerable. Callers must write
+	 * this BEFORE finishing the session: if the request dies between the two, a
+	 * retry finds the record and reports the success that really happened. In
+	 * the other order it would find nothing and report a failure that did not.
+	 *
+	 * @param string $scan_id Scan identifier.
+	 * @param array  $result  The response body that was returned.
+	 * @return void
+	 */
+	public function remember_browser_scan_result( $scan_id, $result ) {
+		$user_id = get_current_user_id();
+		if ( $user_id <= 0 || ! is_array( $result ) ) {
+			return;
+		}
+		set_transient(
+			self::browser_scan_result_transient_key( $user_id, sanitize_key( (string) $scan_id ) ),
+			$result,
+			self::BROWSER_SCAN_TTL
+		);
+	}
+
+	/**
+	 * The response a previous import for this scan id already returned, if any.
+	 *
+	 * @param string $scan_id Scan identifier.
+	 * @return array|null Stored response, or null when this scan has not completed.
+	 */
+	public function recall_browser_scan_result( $scan_id ) {
+		$user_id = get_current_user_id();
+		if ( $user_id <= 0 ) {
+			return null;
+		}
+		$stored = get_transient(
+			self::browser_scan_result_transient_key( $user_id, sanitize_key( (string) $scan_id ) )
+		);
+
+		return is_array( $stored ) ? $stored : null;
 	}
 
 	/**
