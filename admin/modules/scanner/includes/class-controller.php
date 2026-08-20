@@ -298,9 +298,9 @@ class Controller {
 					// page must not be collapsed into whichever was observed
 					// first, or a genuine site cookie stays bucketed as the
 					// administrator's own.
-					$request_url = home_url( isset( $row['request_path'] ) ? (string) $row['request_path'] : '/' );
+					$request_url = $controller->observation_url( isset( $row['request_path'] ) ? (string) $row['request_path'] : '/' );
 					$key         = $controller->set_cookie_identity( $row, $request_url ) . '|' . ( empty( $row['admin_context'] ) ? '0' : '1' );
-					if ( $controller->set_cookie_is_deletion( $row ) ) {
+					if ( $controller->set_cookie_is_deletion( $row, $controller->observation_reference_time( $row ) ) ) {
 						foreach ( isset( $stored_by_key[ $key ] ) ? $stored_by_key[ $key ] : array() as $stored_row ) {
 							delete_user_meta( $user_id, self::BROWSER_SCAN_META, $stored_row );
 							$stored = max( 0, $stored - 1 );
@@ -318,7 +318,7 @@ class Controller {
 				$request_path = isset( $_SERVER['REQUEST_URI'] )
 					? (string) wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ), PHP_URL_PATH )
 					: '/';
-				$request_url  = home_url( $request_path );
+				$request_url  = $controller->observation_url( $request_path );
 				foreach ( headers_list() as $header_line ) {
 					if ( 0 !== stripos( $header_line, 'Set-Cookie:' ) ) {
 						continue;
@@ -720,9 +720,9 @@ class Controller {
 				$this->browser_scan_capture_truncated = true;
 				continue;
 			}
-			$request_url = home_url( isset( $observation['request_path'] ) ? (string) $observation['request_path'] : '/' );
+			$request_url = $this->observation_url( isset( $observation['request_path'] ) ? (string) $observation['request_path'] : '/' );
 			$identity    = $this->set_cookie_identity( $observation, $request_url ) . '|' . ( empty( $observation['admin_context'] ) ? '0' : '1' );
-			if ( $this->set_cookie_is_deletion( $observation ) ) {
+			if ( $this->set_cookie_is_deletion( $observation, $this->observation_reference_time( $observation ) ) ) {
 				unset( $active_observations[ $identity ] );
 				continue;
 			}
@@ -744,15 +744,26 @@ class Controller {
 				}
 			}
 			$duration = 'session';
-			if ( isset( $observation['max-age'] ) && '' !== (string) $observation['max-age'] ) {
-				$max_age = (int) $observation['max-age'];
+			// Same Max-Age validator as set_cookie_is_deletion(): unparseable
+			// text is ignored so a valid Expires can still supply the lifetime.
+			$raw_max_age = isset( $observation['max-age'] ) ? trim( (string) $observation['max-age'] ) : '';
+			if ( '' !== $raw_max_age && preg_match( '/^-?[0-9]+$/', $raw_max_age ) ) {
+				$max_age = (int) $raw_max_age;
 				if ( $max_age > 0 ) {
 					$duration = $this->seconds_to_human( $max_age );
 				}
 			} elseif ( ! empty( $observation['expires'] ) ) {
-				$expires = strtotime( $observation['expires'] );
-				if ( false !== $expires && $expires > time() ) {
-					$duration = $this->seconds_to_human( $expires - time() );
+				// Expires is absolute, so it means what it meant when the header
+				// was seen — the same reasoning that gave set_cookie_is_deletion()
+				// its reference-time argument. Judging it against the current
+				// clock here would undo half of that: a cookie whose expiry fell
+				// inside the crawl window now correctly survives the deletion
+				// check, only to be reported as 'session' instead of its real
+				// lifetime.
+				$expires   = strtotime( $observation['expires'] );
+				$seen_at   = $this->observation_reference_time( $observation );
+				if ( false !== $expires && $expires > $seen_at ) {
+					$duration = $this->seconds_to_human( $expires - $seen_at );
 				}
 			}
 			$cookies[ $name ] = array(
@@ -901,7 +912,7 @@ class Controller {
 	 * @return array Current scan info.
 	 */
 	public function schedule_scan( $max_pages = 20 ) {
-		$max_pages = absint( $max_pages );
+		$max_pages = max( 1, min( 2000, absint( $max_pages ) ) );
 
 		// A background process spawned with exec( '… &' ) only survives when the
 		// parent is a long-lived CLI process (WP-CLI, real cron). Under a web
@@ -1277,7 +1288,7 @@ class Controller {
 	 * wp-cron.php); the CLI exec spawn is the exception, not the rule.
 	 */
 	public function run_scan_async() {
-		$max_pages = absint( get_option( 'faz_scan_max_pages', 20 ) );
+		$max_pages = max( 1, min( 2000, absint( get_option( 'faz_scan_max_pages', 20 ) ) ) );
 		try {
 			$this->run_scan( $max_pages );
 		} catch ( \Throwable $e ) {
@@ -1293,6 +1304,7 @@ class Controller {
 	 * @return array Scan results summary.
 	 */
 	public function run_scan( $max_pages = 20 ) {
+		$max_pages = max( 1, min( 2000, absint( $max_pages ) ) );
 		// Scanning makes many HTTP requests; prevent PHP timeout.
 		// phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged,WordPress.PHP.NoSilencedErrors -- scanner crawls 20-1000 URLs over wp_remote_get; PHP default max_execution_time (30s) consistently truncates the run on medium-sized sites. 5-minute window is the standard pattern for long-running plugin batch jobs (importers, scanners). Suppressed @ — read-only access on hardened hosts where set_time_limit is disabled returns false silently rather than emitting a warning.
 		@set_time_limit( 300 );
@@ -1804,9 +1816,13 @@ class Controller {
 			}
 
 			// Unknown active cookie — extract its positive lifetime from headers.
-			$duration = 'session';
-			if ( isset( $parsed['max-age'] ) && '' !== (string) $parsed['max-age'] ) {
-				$max_age = (int) $parsed['max-age'];
+			// Same Max-Age validator as set_cookie_is_deletion(): a remote server
+			// can send unparseable text, which must defer to Expires rather than
+			// cast to 0 and declare a multi-year cookie session-scoped.
+			$duration    = 'session';
+			$raw_max_age = isset( $parsed['max-age'] ) ? trim( (string) $parsed['max-age'] ) : '';
+			if ( '' !== $raw_max_age && preg_match( '/^-?[0-9]+$/', $raw_max_age ) ) {
+				$max_age = (int) $raw_max_age;
 				if ( $max_age > 0 ) {
 					$duration = $this->seconds_to_human( $max_age );
 				}
@@ -1845,6 +1861,61 @@ class Controller {
 			return (array) $headers['set-cookie'];
 		}
 		return array();
+	}
+
+	/**
+	 * Absolute URL for a path taken from REQUEST_URI.
+	 *
+	 * REQUEST_URI already carries the subdirectory a site may be installed in,
+	 * so home_url() would prefix it a second time ('/blog/shop' becoming
+	 * '/blog/blog/shop') and hand set_cookie_scope() a wrong RFC 6265
+	 * default-path. Build the URL from the site root instead.
+	 *
+	 * @param string $request_path Path component of the observed request.
+	 * @return string
+	 */
+	public function observation_url( $request_path ) {
+		$path = (string) $request_path;
+		// Collapse a leading '//' too, not just a missing slash: a path of
+		// '//evil.com/x' would otherwise survive the guard and yield
+		// 'https://site//evil.com/x', from which set_cookie_scope() derives a
+		// default-path of '//evil.com'. The host is taken from home_url() and
+		// the URL is never fetched, so this is a malformed capture key rather
+		// than a request-forgery hole — but a malformed key still splits one
+		// cookie into two rows.
+		if ( '' === $path || '/' !== substr( $path, 0, 1 ) || 0 === strpos( $path, '//' ) ) {
+			$path = '/' . ltrim( $path, '/' );
+		}
+
+		$home   = (array) wp_parse_url( home_url( '/' ) );
+		$scheme = ! empty( $home['scheme'] ) ? $home['scheme'] : 'http';
+		$host   = ! empty( $home['host'] ) ? $home['host'] : '';
+		$port   = ! empty( $home['port'] ) ? ':' . $home['port'] : '';
+
+		return $scheme . '://' . $host . $port . $path;
+	}
+
+	/**
+	 * The moment a persisted observation was seen, for judging absolute times.
+	 *
+	 * `Set-Cookie` attributes that carry an absolute instant — `Expires` — mean
+	 * what they meant when the header arrived, not what they mean now. Rows sit
+	 * in user meta for the length of a crawl, so anything comparing them to the
+	 * clock has to say WHICH clock.
+	 *
+	 * A row missing `observed_at`, or carrying a non-positive one, falls back to
+	 * the current time. `isset()` alone is not enough: a corrupt `0` would read
+	 * as the epoch, every `Expires` would look like the future, and a genuine
+	 * clearing directive would survive as a phantom active cookie — the exact
+	 * inverse of the bug the reference time was introduced to fix.
+	 *
+	 * @param array $observation Persisted observation row.
+	 * @return int Unix timestamp to judge absolute cookie attributes against.
+	 */
+	public function observation_reference_time( $observation ) {
+		$observed_at = isset( $observation['observed_at'] ) ? (int) $observation['observed_at'] : 0;
+
+		return $observed_at > 0 ? $observed_at : time();
 	}
 
 	/**
@@ -1899,10 +1970,16 @@ class Controller {
 	 * A syntactically valid Max-Age takes precedence over Expires. Invalid
 	 * Max-Age text is ignored, allowing a valid Expires attribute to decide.
 	 *
-	 * @param array $parsed Parsed Set-Cookie attributes.
+	 * Expires is absolute, so it has to be judged against the moment the header
+	 * was seen. A persisted observation carries its own observed_at and must
+	 * pass it: re-reading a row minutes later against the current clock would
+	 * reclassify a short-lived cookie as a clearing directive and drop it.
+	 *
+	 * @param array    $parsed         Parsed Set-Cookie attributes.
+	 * @param int|null $reference_time Moment the header was observed. Defaults to now.
 	 * @return bool
 	 */
-	public function set_cookie_is_deletion( $parsed ) {
+	public function set_cookie_is_deletion( $parsed, $reference_time = null ) {
 		$max_age = isset( $parsed['max-age'] ) ? trim( (string) $parsed['max-age'] ) : '';
 		if ( '' !== $max_age && preg_match( '/^-?[0-9]+$/', $max_age ) ) {
 			return (int) $max_age <= 0;
@@ -1911,8 +1988,9 @@ class Controller {
 		if ( '' === $expires ) {
 			return false;
 		}
+		$observed_at  = null === $reference_time ? time() : (int) $reference_time;
 		$expires_time = strtotime( $expires );
-		return false !== $expires_time && $expires_time <= time();
+		return false !== $expires_time && $expires_time <= $observed_at;
 	}
 
 	/**

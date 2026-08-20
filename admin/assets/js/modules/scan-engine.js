@@ -139,13 +139,30 @@
 	}
 
 	/**
-	 * Normalize a URL: strip hash, preserve query, ensure trailing slash.
+	 * Normalize a URL: strip hash, preserve query, enforce trailing slash
+	 * consistency.
+	 *
+	 * Mirrors the server rule in
+	 * admin/modules/scanner/includes/class-controller.php::normalize_url() —
+	 * a path whose last segment looks like a file (contains a dot, and does
+	 * not START with one) is left bare, so permalink structures such as
+	 * `/%postname%.html` keep the exact identity `discover` returned. A last
+	 * segment starting with a dot is deliberately NOT a file, which keeps
+	 * `/.well-known/` a directory. Any divergence here would make the same
+	 * page get scanned under two capture keys.
+	 *
 	 * Query params are kept by appending `u.search` to the normalized URL.
 	 */
 	function normalizeUrl(url) {
 		try {
 			var u = new URL(url, window.location.origin);
-			return u.origin + u.pathname.replace(/\/?$/, '/') + u.search;
+			var path = u.pathname || '/';
+			var lastSegment = path.slice(path.lastIndexOf('/') + 1);
+			var isFilePath = path.charAt(path.length - 1) !== '/'
+				&& lastSegment.indexOf('.') !== -1
+				&& lastSegment.charAt(0) !== '.';
+			var normalizedPath = isFilePath ? path : path.replace(/\/?$/, '/');
+			return u.origin + normalizedPath + u.search;
 		} catch (_unused) {
 			return url;
 		}

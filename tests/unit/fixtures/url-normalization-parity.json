@@ -1,0 +1,99 @@
+{
+  "_comment": [
+    "One table, two runners. The scanner normalizes a URL twice — once in PHP",
+    "(Scanner_Controller::normalize_url) when discovering and re-queueing pages, and",
+    "once in JavaScript (scan-engine.js normalizeUrl) before the browser crawls them.",
+    "Where they disagree, the same page is captured under two keys and the server-side",
+    "rule is silently undone on the browser path.",
+    "",
+    "That is not hypothetical. The PHP side stopped force-appending a trailing slash to",
+    "file-like paths without the client being updated, so on a /%postname%.html permalink",
+    "structure discover returned '/x.html' and the client crawled '/x.html/'.",
+    "",
+    "SCOPE — read this before trusting the table. What is pinned here is the",
+    "TRAILING-SLASH rule and nothing else. The two implementations are NOT identical in",
+    "general, and these known divergences are deliberately absent rather than covered:",
+    "  - the JS `new URL()` strips a default port (':443' on https), PHP keeps it;",
+    "  - `new URL()` lowercases scheme and host, PHP passes them through;",
+    "  - `new URL()` resolves dot segments ('/a/../b' -> '/b'), PHP does not;",
+    "  - `new URL()` percent-encodes reserved characters, PHP does not.",
+    "None of those are reachable from the scanner's own discover output, which emits",
+    "lowercase absolute permalinks with no dot segments — which is why they were left",
+    "alone rather than forced into agreement. If a future change starts feeding this",
+    "path arbitrary URLs, they stop being theoretical and belong in the table.",
+    "",
+    "Each runner asserts the same table against its own implementation, extracted from",
+    "the shipped source rather than reimplemented. Neither can be made green by editing",
+    "the other, and a change to one side alone turns its runner red.",
+    "Run: node --test tests/unit/js/scan-engine-normalize-parity.test.mjs",
+    "     php tests/unit/test-url-normalization-parity-php.php"
+  ],
+  "origin": "https://example.com",
+  "cases": [
+    {
+      "input": "https://example.com/hello-world",
+      "expected": "https://example.com/hello-world/",
+      "why": "An ordinary permalink is a directory and gets the trailing slash."
+    },
+    {
+      "input": "https://example.com/hello-world.html",
+      "expected": "https://example.com/hello-world.html",
+      "why": "The /%postname%.html permalink structure — the exact shape the divergence broke. Must be left bare on BOTH sides."
+    },
+    {
+      "input": "https://example.com/",
+      "expected": "https://example.com/",
+      "why": "Site root is already a directory."
+    },
+    {
+      "input": "https://example.com/page/",
+      "expected": "https://example.com/page/",
+      "why": "An already-slashed path is idempotent — normalizing twice must not double the slash."
+    },
+    {
+      "input": "https://example.com/.well-known",
+      "expected": "https://example.com/.well-known/",
+      "why": "The deliberate leading-dot exclusion: a segment starting with a dot is NOT a file, so /.well-known stays a directory. Reproducing this is what stops a near-miss port from creating a third rule."
+    },
+    {
+      "input": "https://example.com/dir/.hidden",
+      "expected": "https://example.com/dir/.hidden/",
+      "why": "Same exclusion, nested."
+    },
+    {
+      "input": "https://example.com/a/b.c/d",
+      "expected": "https://example.com/a/b.c/d/",
+      "why": "Only the LAST segment decides. A dot earlier in the path is not a file marker."
+    },
+    {
+      "input": "https://example.com/a/b.c/d.html",
+      "expected": "https://example.com/a/b.c/d.html",
+      "why": "Dot in both a middle and the last segment — the last one wins."
+    },
+    {
+      "input": "https://example.com/feed.xml?p=1",
+      "expected": "https://example.com/feed.xml?p=1",
+      "why": "The query string survives normalization on both sides."
+    },
+    {
+      "input": "https://example.com/page?p=1",
+      "expected": "https://example.com/page/?p=1",
+      "why": "The slash is appended to the PATH, not after the query."
+    },
+    {
+      "input": "https://example.com:8080/page.html",
+      "expected": "https://example.com:8080/page.html",
+      "why": "A non-default port is preserved verbatim."
+    },
+    {
+      "input": "https://example.com:8080/page",
+      "expected": "https://example.com:8080/page/",
+      "why": "Port preserved on the slashed branch too."
+    },
+    {
+      "input": "https://example.com/v1.2-release",
+      "expected": "https://example.com/v1.2-release",
+      "why": "A dotted slug is treated as a file by the heuristic on BOTH sides. This is the heuristic's known imprecision, not a parity bug — WordPress's sanitize_title_with_dashes strips dots from slugs, so a permalink cannot actually produce this shape. Pinned so the two implementations stay wrong together rather than differently."
+    }
+  ]
+}
