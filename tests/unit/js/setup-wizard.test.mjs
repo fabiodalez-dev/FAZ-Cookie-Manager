@@ -1,9 +1,10 @@
 /**
- * Guided setup wizard (jsdom) — 33 behavioural regression checks.
+ * Guided setup wizard (jsdom) — 46 behavioural regression checks.
  *
  * Loads the real admin/assets/js/pages/setup.js and exercises navigation,
  * review rendering, the exact onboarding payload, duplicate-submit protection,
- * and every quick-scan outcome without a WordPress/browser dependency.
+ * every quick-scan outcome, and the held-import retry offer without a
+ * WordPress/browser dependency.
  *
  * Run: node tests/unit/js/setup-wizard.test.mjs
  */
@@ -175,7 +176,7 @@ async function flush() {
   await Promise.resolve();
 }
 
-console.log('guided setup wizard (33 checks)');
+console.log('guided setup wizard (46 checks)');
 
 // Navigation, selection, and review rendering (14 checks).
 {
@@ -325,5 +326,125 @@ console.log('guided setup wizard (33 checks)');
   check('33 a manual region edit is preserved across later law changes', JSON.stringify(selectedRegions()) === JSON.stringify(['uk', 'za']));
 }
 
+// Held import failure — the server kept the crawl's evidence, so the step must
+// offer the save again instead of promising a retry it does not provide (7 checks).
+{
+  let runCalls = 0;
+  let retryCalls = 0;
+  const failure = new Error('Scan finished but failed to save results. Server error.');
+  failure.sessionHeld = true;
+  failure.scanId = 'held-scan-id';
+  failure.retryImport = () => {
+    retryCalls += 1;
+    return Promise.resolve({ total: 6, pagesScanned: 9, importResult: { duplicate: true } });
+  };
+  const app = boot({
+    scanRun() { runCalls += 1; return Promise.reject(failure); },
+  });
+  const { document } = app;
+  const button = document.getElementById('faz-setup-scan-btn');
+  button.click();
+  await flush();
+  const panel = document.getElementById('faz-setup-scan-held');
+  check('34 held import failure mounts the inline retry panel with the error detail', panel !== null
+    && panel.querySelectorAll('.faz-scan-held-actions button').length === 2
+    && panel.querySelector('.faz-scan-held-detail').textContent.includes('Server error'));
+  check('35 held failure leaves the scan button and wizard navigation untouched', !button.disabled
+    && !document.getElementById('faz-setup-next').hidden
+    && !document.getElementById('faz-setup-next').disabled);
+  check('36 held failure is not toasted as a scan-start error', !app.calls.notify.some((item) => item.type === 'error'));
+  const retryBtn = panel.querySelector('.faz-scan-held-actions button');
+  check('37 retry is worded as a save-only retry when the payload can be resubmitted', retryBtn.textContent === 'Retry import'
+    && panel.querySelector('.faz-scan-held-text').textContent.includes('does not scan the site again'));
+  retryBtn.click();
+  await flush();
+  check('38 retry resubmits the held payload instead of re-crawling the site', retryCalls === 1 && runCalls === 1);
+  check('39 a duplicate import is reported as already saved, with the on-record counts',
+    document.getElementById('faz-setup-scan-status').textContent
+      === 'Already saved — 6 cookies on 9 pages were imported by an earlier attempt. Nothing was saved twice.');
+  check('40 a successful retry removes the panel and re-enables the scan button',
+    document.getElementById('faz-setup-scan-held') === null && !button.disabled);
+}
+
+// Held failure WITHOUT a resubmit handle — the defensive fallback re-enters the
+// held session by scan id and says the site is walked again (2 checks).
+{
+  let runCalls = 0;
+  let lastOptions;
+  const failure = new Error('Scan finished but failed to save results.');
+  failure.sessionHeld = true;
+  failure.scanId = 'held-session-id';
+  const app = boot({
+    scanRun(options) {
+      runCalls += 1;
+      lastOptions = options;
+      return runCalls === 1
+        ? Promise.reject(failure)
+        : Promise.resolve({ total: 2, diagnostics: { totalIssues: 0 } });
+    },
+  });
+  const { document } = app;
+  document.getElementById('faz-setup-scan-btn').click();
+  await flush();
+  const panel = document.getElementById('faz-setup-scan-held');
+  const retryBtn = panel.querySelector('.faz-scan-held-actions button');
+  check('41 without a resubmit handle the retry is worded as a re-scan', retryBtn.textContent.includes('re-scans the site'));
+  retryBtn.click();
+  await flush();
+  check('42 the fallback retry re-enters the held session by its scan id', runCalls === 2
+    && lastOptions.scanId === 'held-session-id' && lastOptions.maxPages === 20);
+}
+
+// A failed scan never blocks finishing setup — the scan is optional (2 checks).
+{
+  const failure = new Error('Scan finished but failed to save results.');
+  failure.sessionHeld = true;
+  failure.scanId = 'held-scan-id';
+  failure.retryImport = () => Promise.reject(failure);
+  const app = boot({
+    scanRun() { return Promise.reject(failure); },
+  });
+  const { document } = app;
+  clickNext(document, 6); // reach the scan step
+  document.getElementById('faz-setup-scan-btn').click();
+  await flush();
+  check('43 the retry offer keeps "continue without scanning" a single Next click', document.getElementById('faz-setup-scan-held') !== null
+    && !document.getElementById('faz-setup-next').hidden
+    && !document.getElementById('faz-setup-next').disabled);
+  clickNext(document, 1);
+  document.getElementById('faz-setup-finish').click();
+  check('44 the wizard still finishes after a failed scan', app.calls.post.some((call) => call.endpoint === 'settings/onboarding'));
+}
+
+// A non-held failure must NOT offer a retry — the evidence is gone and a
+// resubmit would only 409 (1 check).
+{
+  const failure = new Error('Failed to discover pages.');
+  const app = boot({
+    scanRun() { return Promise.reject(failure); },
+  });
+  app.document.getElementById('faz-setup-scan-btn').click();
+  await flush();
+  check('45 a non-held failure offers no retry and stays the plain failure', app.document.getElementById('faz-setup-scan-held') === null
+    && app.document.getElementById('faz-setup-scan-status').textContent.includes('Failed to discover pages'));
+}
+
+// Discard reduces the step to the ordinary failed state (1 check).
+{
+  const failure = new Error('Scan finished but failed to save results.');
+  failure.sessionHeld = true;
+  failure.retryImport = () => Promise.resolve({});
+  const app = boot({
+    scanRun() { return Promise.reject(failure); },
+  });
+  const { document } = app;
+  document.getElementById('faz-setup-scan-btn').click();
+  await flush();
+  const buttons = document.querySelectorAll('#faz-setup-scan-held .faz-scan-held-actions button');
+  buttons[1].click();
+  check('46 Discard removes the offer and shows the plain failure', document.getElementById('faz-setup-scan-held') === null
+    && document.getElementById('faz-setup-scan-status').textContent.includes('failed to save'));
+}
+
 console.log(`\n${failed === 0 ? '\x1b[32m' : '\x1b[31m'}${passed} passed, ${failed} failed\x1b[0m`);
-process.exit(failed === 0 && passed === 33 ? 0 : 1);
+process.exit(failed === 0 && passed === 46 ? 0 : 1);
