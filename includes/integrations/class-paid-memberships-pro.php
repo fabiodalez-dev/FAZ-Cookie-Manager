@@ -1,11 +1,12 @@
 <?php
 /**
- * Paid Memberships Pro integration (Pay-or-Accept model).
+ * Paid Memberships Pro integration (paid privacy alternative).
  *
  * When a logged-in visitor has one of the configured PMP membership levels,
- * the cookie banner is suppressed and consent is auto-granted across all
- * categories. Non-paying visitors are unaffected and follow the standard
- * consent flow.
+ * the cookie banner is suppressed and a necessary-only privacy state is
+ * applied. Optional purposes stay denied unless the member later changes them
+ * explicitly in the preference centre. Non-paying visitors are unaffected and
+ * follow the standard consent flow.
  *
  * Activation conditions (ALL must be true for the exemption to apply):
  *   1. PMP plugin is active (PMPRO_VERSION defined or pmpro_hasMembershipLevel() exists)
@@ -75,8 +76,7 @@ class Paid_Memberships_Pro {
 	}
 
 	/**
-	 * Whether the current visitor should be exempted from the banner and
-	 * auto-granted consent for all categories.
+	 * Whether the current visitor should receive the paid privacy alternative.
 	 *
 	 * @return bool
 	 */
@@ -144,14 +144,14 @@ class Paid_Memberships_Pro {
 	 * Keep consent-tracking cookies aligned with the user's current PMP
 	 * exemption state.
 	 *
-	 * Exempted members must persist an allow-all consent cookie so server-side
-	 * blocking, client-side banner logic, GCM and TCF all read the same state
-	 * during the current page load. Visitors who are no longer exempted must
-	 * not retain a stale auto-granted cookie from a previous membership state.
+	 * Exempted members persist a necessary-only state so server-side blocking,
+	 * client-side banner logic, GCM and TCF agree during the current page load.
+	 * Visitors who are no longer exempted must not retain a stale PMP-managed
+	 * cookie from a previous membership state.
 	 */
 	public function sync_consent_cookie() {
 		$current_cookie    = function_exists( 'faz_get_valid_consent_cookie' ) ? faz_get_valid_consent_cookie() : '';
-		$is_auto_granted   = function_exists( 'faz_is_auto_granted_consent_cookie' ) ? faz_is_auto_granted_consent_cookie( $current_cookie ) : false;
+		$is_pmp_managed    = function_exists( 'faz_is_pmp_managed_consent_cookie' ) ? faz_is_pmp_managed_consent_cookie( $current_cookie ) : false;
 		$has_vendor_cookie = ! empty( $_COOKIE['fazVendorConsent'] );
 		$has_tcf_cookie    = ! empty( $_COOKIE['euconsent-v2'] );
 		$is_exempted       = $this->is_current_user_exempted();
@@ -160,28 +160,28 @@ class Paid_Memberships_Pro {
 			// Tear down PMP-sourced consent tracking for a member who is no
 			// longer exempt. Two PMP-specific triggers, EITHER of which is safe:
 			//
-			//   1. The main consent cookie is still the PMP auto-grant — it
-			//      carries `source:pmp` ($is_auto_granted). Clear the whole
+			//   1. The main consent cookie is still PMP-managed — it carries
+			//      `source:pmp` ($is_pmp_managed). Clear the whole
 			//      consent state.
 			//   2. The `fazVendorSource=pmp` companion marker is present. It is
 			//      set ONLY for exempt members (see the exempt branch below) and
 			//      outlives the main consent cookie, so it covers the ex-member
-			//      whose auto-granted `fazcookie-consent` has already expired
-			//      ($is_auto_granted is false) but who still carries residual
+			//      whose PMP-managed `fazcookie-consent` has already expired
+			//      ($is_pmp_managed is false) but who still carries residual
 			//      `fazVendorConsent` / `euconsent-v2` from the exempt period.
 			//
 			// Crucially, a STANDARD visitor never receives `source:pmp` nor the
 			// marker, so neither trigger can ever wipe their own, legitimately
 			// self-set vendor/TCF cookies — which is what previously forced the
-			// conservative `$is_auto_granted`-only check (clearing on the mere
+			// conservative `$is_pmp_managed`-only check (clearing on the mere
 			// presence of vendor cookies would loop: clear → banner → re-accept
 			// → vendor cookie re-created → clear → …). The marker breaks that
 			// tie without re-introducing the loop.
 			$pmp_vendor_marker = isset( $_COOKIE['fazVendorSource'] ) && 'pmp' === $_COOKIE['fazVendorSource'];
-			if ( $is_auto_granted && function_exists( 'faz_clear_consent_tracking_cookies' ) ) {
+			if ( $is_pmp_managed && function_exists( 'faz_clear_consent_tracking_cookies' ) ) {
 				faz_clear_consent_tracking_cookies();
 			}
-			if ( ( $is_auto_granted || $pmp_vendor_marker ) && function_exists( 'faz_expire_browser_cookie' ) ) {
+			if ( ( $is_pmp_managed || $pmp_vendor_marker ) && function_exists( 'faz_expire_browser_cookie' ) ) {
 				faz_expire_browser_cookie( 'fazVendorConsent' );
 				faz_expire_browser_cookie( 'euconsent-v2' );
 				faz_expire_browser_cookie( 'fazVendorSource' );
@@ -191,22 +191,22 @@ class Paid_Memberships_Pro {
 		}
 
 		// Revocation support (members can change or withdraw their consent).
-		// If the current cookie is valid and was NOT auto-granted by this
+		// If the current cookie is valid and was NOT automatically applied by this
 		// integration (it carries no `source:pmp`) yet records an explicit
 		// `action:yes`, the member opened the preference center and made their
-		// own decision. Honour it — do NOT overwrite with the all-categories
-		// auto-grant — so a member who rejects, say, marketing keeps that choice
+		// own decision. Honour it — do NOT overwrite with the necessary-only
+		// default — so a member who later enables, say, functional storage keeps
+		// that choice
 		// across page loads instead of having it silently re-granted on the next
 		// request. Manual saves drop the `source:pmp` marker automatically
 		// (script.js never loads `source` into the consent store, so re-
 		// serialising the cookie on a user action omits it), which is exactly
-		// what distinguishes a self-made choice from our auto-grant here.
+		// what distinguishes a self-made choice from our managed default here.
 		//
-		// This is what makes the "pay-or-accept" exemption a revocable DEFAULT
-		// rather than an irrevocable, forced all-consent state — the lawful
-		// basis for the initial auto-grant is the site owner's to decide, but
-		// the member must always be able to override it.
-		if ( '' !== $current_cookie && ! $is_auto_granted ) {
+		// This makes the paid privacy alternative a revocable default rather
+		// than a forced state: the member can still grant or withdraw each
+		// optional purpose through the ordinary preference centre.
+		if ( '' !== $current_cookie && ! $is_pmp_managed ) {
 			$parsed_current = function_exists( 'faz_parse_consent_cookie' )
 				? faz_parse_consent_cookie( $current_cookie )
 				: array();
@@ -215,19 +215,16 @@ class Paid_Memberships_Pro {
 			}
 		}
 
-		$desired_cookie = $this->build_exempted_consent_cookie_value( $current_cookie );
+		$desired_cookie = $this->build_exempted_privacy_cookie_value();
 		$needs_refresh  = $current_cookie !== $desired_cookie || $has_vendor_cookie || $has_tcf_cookie;
 		if ( ! $needs_refresh ) {
 			return;
 		}
 
-		// A "new grant" is one where there was no prior valid consent cookie for
-		// this member (first exemption, or the previous one expired / was a stale
-		// revision). sync_consent_cookie() runs on every page load, but only
-		// reaches this write when the cookie actually needs refreshing — gating
-		// the audit-log write on a new grant keeps the per-pageload sync from
-		// flooding the consent log with duplicate rows for the same membership.
-		$is_new_grant = ( '' === $current_cookie );
+		// A "new privacy state" is a first application, a stale/expired state, or
+		// conversion of the historical allow-all PMP cookie. The exact desired
+		// value is stable, so this logs once and cannot flood on page reloads.
+		$is_new_state = ( '' === $current_cookie || ( $is_pmp_managed && $current_cookie !== $desired_cookie ) );
 
 		if ( function_exists( 'faz_expire_browser_cookie' ) ) {
 			faz_expire_browser_cookie( 'fazVendorConsent' );
@@ -247,35 +244,39 @@ class Paid_Memberships_Pro {
 		}
 		$this->set_consent_cookie( $desired_cookie );
 
-		// Accountability: record the auto-grant in the consent log under a
-		// DISTINCT status ('pmp_grant') so it is never conflated with an
-		// explicit, freely-given consent. The lawful basis for this grant is the
-		// site owner's pay-or-accept / contract decision, NOT a clear affirmative
-		// action by the member — the log must reflect that. (The cookie already
-		// carries the matching `source:pmp` marker.)
-		if ( $is_new_grant ) {
-			$this->log_pmp_grant( $desired_cookie );
+		// Accountability: record the automatic necessary-only decision as a
+		// rejection, with an audit-only meta marker that distinguishes it from a
+		// banner click without polluting the dashboard's consent-status totals.
+		if ( $is_new_state ) {
+			$this->log_pmp_privacy_state( $desired_cookie );
 		}
 
 		/**
-		 * Fires after the PMP integration auto-grants consent for a member.
+		 * Fires after the PMP integration applies its necessary-only privacy state.
 		 *
 		 * @param int   $user_id     Current user ID.
 		 * @param array $parts       Cookie parts that were set.
 		 */
-		do_action( 'faz_pmp_consent_auto_granted', get_current_user_id(), explode( ',', $desired_cookie ) );
+		do_action( 'faz_pmp_privacy_applied', get_current_user_id(), explode( ',', $desired_cookie ) );
+		// Backward compatibility for integrations listening to the historical,
+		// inaccurately named hook. The payload now represents necessary-only state.
+		do_action_deprecated(
+			'faz_pmp_consent_auto_granted',
+			array( get_current_user_id(), explode( ',', $desired_cookie ) ),
+			'1.27.0',
+			'faz_pmp_privacy_applied'
+		);
 	}
 
 	/**
-	 * Write a consent-log row for a PMP auto-grant, tagged with the distinct
-	 * `pmp_grant` status so the audit trail distinguishes membership-basis
-	 * grants from explicit consent. No-op when consent logging is disabled or
-	 * the consent-log controller is unavailable.
+	 * Write a consent-log row for a PMP necessary-only state. It is a rejected
+	 * decision for aggregate reporting, with meta.pmp_privacy=yes preserving the
+	 * source in the accountability record.
 	 *
-	 * @param string $cookie_value The auto-granted consent cookie that was set.
+	 * @param string $cookie_value The PMP-managed privacy cookie that was set.
 	 * @return void
 	 */
-	private function log_pmp_grant( $cookie_value ) {
+	private function log_pmp_privacy_state( $cookie_value ) {
 		$settings = new Settings();
 		if ( true !== $settings->get( 'consent_logs', 'status' ) ) {
 			return;
@@ -288,8 +289,8 @@ class Paid_Memberships_Pro {
 		$parsed     = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie( $cookie_value ) : array();
 		$consent_id = isset( $parsed['consentid'] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) $parsed['consentid'] ) : '';
 		// Carry the policy revision baked into the cookie (set by
-		// build_exempted_consent_cookie_value) so the audit trail records the
-		// revision actually granted instead of the controller's default of 1.
+		// build_exempted_privacy_cookie_value) so the audit trail records the
+		// revision actually applied instead of the controller's default of 1.
 		$revision   = isset( $parsed['rev'] ) ? max( 1, absint( $parsed['rev'] ) ) : 1;
 
 		// Reduce the parsed cookie to category states only (drop meta + scope +
@@ -308,12 +309,13 @@ class Paid_Memberships_Pro {
 				$categories[ $key ] = $value;
 			}
 		}
+		$categories['meta.pmp_privacy'] = 'yes';
 
 		call_user_func(
 			array( $controller::get_instance(), 'log_consent' ),
 			array(
 				'consent_id'      => $consent_id,
-				'status'          => 'pmp_grant',
+				'status'          => 'rejected',
 				'categories'      => $categories,
 				'url'             => '',
 				'policy_revision' => $revision,
@@ -322,34 +324,22 @@ class Paid_Memberships_Pro {
 	}
 
 	/**
-	 * Build the consent cookie value used for exempted members.
+	 * Build the necessary-only cookie value used for exempted members.
 	 *
-	 * @param string $existing_cookie Current valid consent cookie, if any.
 	 * @return string
 	 */
-	private function build_exempted_consent_cookie_value( $existing_cookie = '' ) {
-		$parsed     = function_exists( 'faz_parse_consent_cookie' ) ? faz_parse_consent_cookie( $existing_cookie ) : array();
-		$consent_id = isset( $parsed['consentid'] ) ? preg_replace( '/[^A-Za-z0-9]/', '', (string) $parsed['consentid'] ) : '';
-		if ( '' === $consent_id ) {
-			$consent_id = $this->generate_consent_id();
-		}
-
-		$categories = $this->get_category_slugs();
-		// IMPORTANT: `consent:yes` is the only token recognized by script.js
-		// (_fazUnblock guard at ~line 1400) and by the CCPA opt-out checkbox
-		// (~line 2217). Using any other string here — e.g. `consent:accepted`,
-		// which would look equally valid to a human reader — would leave every
-		// `data-faz-tag` script blocked on the client side even though our
-		// server-side output buffer has already rewritten them, meaning
-		// PMP-exempt members would never actually see analytics / marketing
-		// scripts fire. Keep this aligned with frontend/js/script.js.
+	private function build_exempted_privacy_cookie_value() {
+		$categories = $this->get_category_states();
 		$parts      = array(
-			'action:yes',
-			'consent:yes',
-			'consentid:' . $consent_id,
+			// `auto` is deliberately truthy so the hidden banner stays closed, but
+			// is not `yes`: getFazConsent().isUserActionCompleted and cross-domain
+			// forwarding must not represent a server-applied privacy default as a
+			// visitor action.
+			'action:auto',
+			'consent:no',
 		);
-		foreach ( $categories as $slug ) {
-			$parts[] = $slug . ':yes';
+		foreach ( $categories as $slug => $state ) {
+			$parts[] = $slug . ':' . $state;
 		}
 
 		$settings = new Settings();
@@ -397,29 +387,15 @@ class Paid_Memberships_Pro {
 	}
 
 	/**
-	 * Cryptographically random 32-char consent ID, same format used by
-	 * script.js when the visitor interacts with the banner manually.
-	 *
-	 * @return string
-	 */
-	private function generate_consent_id() {
-		try {
-			return bin2hex( random_bytes( 16 ) );
-		} catch ( \Exception $e ) {
-			// Fallback for environments without CSPRNG.
-			return wp_generate_password( 32, false, false );
-		}
-	}
-
-	/**
-	 * Fetch all active cookie category slugs so the auto-grant covers every
-	 * category defined on the site (including admin-added custom ones).
+	 * Fetch every visible category and produce its privacy-default state.
+	 * Only the canonical necessary category remains available; every optional
+	 * category is denied, including custom categories configured as preactive.
 	 *
 	 * @return array
 	 */
-	private function get_category_slugs() {
+	private function get_category_states() {
 		$categories = Category_Controller::get_instance()->get_items();
-		$slugs      = array();
+		$states     = array();
 		foreach ( $categories as $category_data ) {
 			$category = new Cookie_Categories( $category_data );
 			// Skip categories the banner itself would hide: invisible
@@ -435,13 +411,21 @@ class Paid_Memberships_Pro {
 			if ( 'wordpress-internal' === $category->get_slug() ) {
 				continue;
 			}
-			$slugs[] = $category->get_slug();
+			$slug = sanitize_key( $category->get_slug() );
+			if ( '' !== $slug ) {
+				$states[ $slug ] = ( 'necessary' === $slug ) ? 'yes' : 'no';
+			}
 		}
-		$slugs = array_values( array_filter( array_map( 'sanitize_key', $slugs ) ) );
-		if ( empty( $slugs ) ) {
+		if ( empty( $states ) ) {
 			// Fallback to the default GDPR category set.
-			return array( 'necessary', 'analytics', 'functional', 'marketing', 'performance' );
+			return array(
+				'necessary'   => 'yes',
+				'analytics'   => 'no',
+				'functional'  => 'no',
+				'marketing'   => 'no',
+				'performance' => 'no',
+			);
 		}
-		return $slugs;
+		return $states;
 	}
 }

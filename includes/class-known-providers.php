@@ -86,6 +86,13 @@ class Known_Providers {
 	 * @return array [ '_fbp' => 'marketing', '_ga' => 'analytics', ... ]
 	 */
 	public static function get_cookie_map() {
+		// Memoized like get_all(): cookie classification calls this once per
+		// cookie name, and each call otherwise re-iterated every service to
+		// rebuild an identical array.
+		static $cached = null;
+		if ( null !== $cached ) {
+			return $cached;
+		}
 		$map = array();
 		foreach ( self::get_all() as $service ) {
 			if ( empty( $service['cookies'] ) ) {
@@ -95,7 +102,8 @@ class Known_Providers {
 				$map[ $cookie_pattern ] = $service['category'];
 			}
 		}
-		return $map;
+		$cached = $map;
+		return $cached;
 	}
 
 	/**

@@ -6,6 +6,15 @@ const isCI = Boolean(process.env.CI);
 // bound to 127.0.0.1. A localhost/127.0.0.1 mismatch loses the auth cookie and
 // REST nonce across the implied cross-host redirect.
 const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
+const requestedBrowsers = (process.env.FAZ_E2E_BROWSERS ?? 'chromium')
+  .split(',')
+  .map((name) => name.trim().toLowerCase())
+  .filter((name, index, all) => name.length > 0 && all.indexOf(name) === index);
+const supportedBrowsers = new Set(['chromium', 'firefox', 'webkit']);
+const invalidBrowsers = requestedBrowsers.filter((name) => !supportedBrowsers.has(name));
+if (invalidBrowsers.length > 0) {
+  throw new Error(`Unsupported FAZ_E2E_BROWSERS value(s): ${invalidBrowsers.join(', ')}`);
+}
 
 // Several specs skip fixture-page tests when the site is served by PHP's
 // built-in server, whose is_singular() handling is unreliable. That check
@@ -48,12 +57,18 @@ export default defineConfig({
     navigationTimeout: 30_000,
     ignoreHTTPSErrors: true,
   },
-  projects: [
-    {
-      name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome'],
-      },
+  // Chromium remains the default so the historical suite keeps its current
+  // cost. Release verification can opt into the actual browser matrix with
+  // FAZ_E2E_BROWSERS=chromium,firefox,webkit; this is deliberately a real
+  // Playwright project selection, not user-agent spoofing in Chromium.
+  projects: requestedBrowsers.map((name) => ({
+    name,
+    use: {
+      ...(name === 'firefox'
+        ? devices['Desktop Firefox']
+        : name === 'webkit'
+          ? devices['Desktop Safari']
+          : devices['Desktop Chrome']),
     },
-  ],
+  })),
 });

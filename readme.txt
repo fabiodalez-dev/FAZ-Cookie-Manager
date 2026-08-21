@@ -3,8 +3,8 @@ Contributors: fabiodalez
 Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
-Tested up to: 7.0
-Stable tag: 1.26.0
+Tested up to: 7.1
+Stable tag: 1.27.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -70,31 +70,39 @@ This plugin assists consent and privacy workflows. It does not itself create, pr
 
 Core banner functionality runs on your WordPress site. Optional update/download features may contact GitHub, IAB Europe, MaxMind, ip-api.com, ipinfo.io (opt-in VPN detection), or the AMP CDN depending on which features you enable and use.
 
-= Cookie Policy generator (1.16.0+) =
+= Cookie Policy generator =
 
-Need a Cookie Policy page that explains the cookies your site sets, the jurisdiction it operates under, and who the visitor should contact about their data? FAZ Cookie Manager 1.16.0 ships a dedicated **Cookie Policy** admin tab plus the `[faz_cookie_policy_complete]` shortcode.
+A dedicated **Cookie Policy** admin tab and the `[faz_cookie_policy_complete]` shortcode build a policy page from the cookies your site actually sets, rather than from a generic template you have to fill in by hand.
 
-* **Jurisdiction-aware** -- pick GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil), or POPIA (South Africa). Each jurisdiction ships its own template scaffold with the legal references and required sections for that framework.
-* **Multilingual (8 languages out of the box)** -- en, it, fr, de, es, pt-BR, bg, cs. Override per render with `[faz_cookie_policy_complete lang="it"]` or let the visitor's browser language pick. The GDPR, CCPA and LGPD sections are exposed through `faz-cookie-manager.pot` (the bundled Czech catalogue includes all 33 of them); the POPIA sections ship as reviewed per-language templates and will join the POT at the next catalogue resync.
-* **Editable section text, per jurisdiction and language** -- the advanced Policy text card exposes each effective section as an optional textarea. The shipped wording is the placeholder, not the saved value: leave it empty to keep receiving reviewed plugin updates, or write Markdown that still uses placeholders such as `{{COMPANY_NAME}}`. The language selector uses the full site-wide catalogue, so an administrator can author Slovak (`sk`) or another unbundled language against the reviewed jurisdiction fallback.
-* **Auto-populated cookie inventory** -- the rendered policy pulls live from `wp_faz_cookies`, so any cookie discovered by the scanner shows up at the next render with its category, duration and description, in the active language.
-* **Filled with your company data** -- name, address, DPO email, third-party services, retention period: stored in `faz_cookie_policy_data` option, edited via the admin form, never seeded from `admin_email` or `blogname` (PII protection).
-* **Legal disclaimer** -- every generated policy shows a localized warning by default that the templates are starting points, not legal advice. Administrators can hide it or replace it with reviewed custom text in the Cookie Policy settings.
-* **Versioning hash** -- a `data-faz-policy-version` attribute on the rendered article tracks effective template + gettext override + data drift over time. Display-only fields (the visible "Last updated" date) are excluded so the hash doesn't change daily.
-* **Filter for site builders** -- `faz_cookie_policy_data` lets you inject custom placeholders before template substitution.
-* **Backwards compatible** -- the long-standing `[faz_cookie_policy]` shortcode (with `site_name` / `contact` / `show_table` attributes from 1.7.0) is unchanged. The standalone `[faz_cookie_table]` shortcode and matching `faz/cookie-table` Gutenberg block still work for embedding just the cookie inventory table.
+* **Jurisdiction-aware** -- GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil) or POPIA (South Africa). Each ships its own scaffold with the legal references and the sections that framework requires.
+* **Auto-populated** -- the cookie inventory renders live from the scanner's results, so a newly discovered cookie appears at the next render with its category, duration and description.
+* **Multilingual** -- en, it, fr, de, es, pt-BR, bg and cs out of the box. Override per render with `[faz_cookie_policy_complete lang="it"]`, or let the visitor's browser decide.
+* **Editable per jurisdiction and language** -- every section can be replaced with your own Markdown, placeholders included. Leave one empty and it keeps receiving reviewed updates with each plugin release.
+* **Filled with your company data** -- name, address, DPO email, retention period, stored in the `faz_cookie_policy_data` option. Never seeded from `admin_email` or `blogname`.
+* **Honest by default** -- a localised disclaimer states that the templates are a starting point and not legal advice. It can be replaced with reviewed text of your own, or hidden.
 
-= Multi-banner geo-routing vs multilingual content (1.14.0+) =
+A `data-faz-policy-version` hash on the rendered article tracks template and data drift over time, and the `faz_cookie_policy_data` filter lets site builders inject custom placeholders. The older `[faz_cookie_policy]` shortcode, the standalone `[faz_cookie_table]` shortcode and the `faz/cookie-table` block are unchanged.
 
-These are two **orthogonal** features that combine freely — multi-banner is per **country**, multilingual content is per **language inside each banner**.
+= Multi-banner geo-routing and multilingual content =
 
-* **Multi-banner geo-routing** picks WHICH banner profile to serve based on the visitor's country. Typical setup: a strict GDPR banner for EU/EEA/UK and a CCPA opt-out banner for California (or any other per-region compliance profile). Country resolution chain: Cloudflare `CF-IPCountry` header (opt-in via the `faz_trust_cf_ipcountry_header` filter) → MaxMind GeoLite2 → ip-api.com fallback. Each banner row carries its own `target_countries` list and a `priority` integer for overlap resolution.
+Two orthogonal features that combine freely: the visitor's **country** decides which banner is served, and the visitor's **browser language** decides the translation shown inside it.
 
-* **Multilingual content** lives INSIDE each banner. A single banner stores translations of its title, description and button labels for as many languages as you enable on the Languages page. The language displayed to the visitor is resolved CLIENT-SIDE from `navigator.languages` so a country-targeted banner can still be served from a full-page cache (LiteSpeed / WP Rocket / Cloudflare APO) and the right language renders on hydration.
+Geo-routing selects a banner profile per country -- typically a strict GDPR banner for the EU/EEA/UK and a CCPA opt-out banner for California. Each banner row carries its own target countries and a priority integer that resolves overlaps. Country resolution walks Cloudflare's `CF-IPCountry` header (opt-in via the `faz_trust_cf_ipcountry_header` filter), then MaxMind GeoLite2, then ip-api.com.
 
-Practical example: an install needs only TWO banner rows, not eight. One EU-targeted GDPR banner with English + Italian + German + French + Polish translations inside, and one US-targeted CCPA banner with English + Spanish translations inside. The country selects the banner; the browser selects the translation inside the banner. Visitors hitting the right cache key get the right banner + the right language.
+Translations live inside each banner, and the language shown is resolved **client-side** from `navigator.languages` -- so a country-targeted banner can still be served from a full-page cache (LiteSpeed, WP Rocket, Cloudflare APO) and the right language renders on hydration.
 
-== External Services ==
+In practice this means two banner rows rather than eight: one EU-targeted GDPR banner holding English, Italian, German, French and Polish, and one US-targeted CCPA banner holding English and Spanish.
+
+== Other Notes ==
+
+**External services.** This plugin is cloud-free: consent is stored on your own
+site and there is no vendor account, dashboard or telemetry. What follows is the
+full outbound picture, one heading per item: the optional features that contact
+an external host (none of them run unless you use the feature), the public REST
+endpoints the plugin exposes on your own domain, and a note on third-party
+domain strings that appear in the code as matching patterns and are never
+contacted. Each entry states what triggers it, what leaves your server, and the
+provider's terms.
 
 = GitHub / Raw GitHubusercontent (Open Cookie Database) =
 
@@ -155,13 +163,13 @@ Service URL:
 Terms of Service / Privacy Policy:
 * https://ip-api.com/docs/legal
 
-= ipinfo.io (geo-routing v2 only) =
+= ipinfo.io (optional live VPN detection and admin preview) =
 
-Used for VPN/proxy/Tor detection when the admin opts in to enhanced geo detection via Settings → Geo-routing → ipinfo settings. The plugin sends the visitor IP to ipinfo.io to determine whether the visitor is masking their location; when VPN is detected, the most-protective rule-set is applied regardless of the visitor's apparent country.
+The live geo-ruleset runtime applies jurisdiction-specific consent defaults and mandatory controls. If an administrator explicitly enables ipinfo.io, the jurisdiction pipeline may use it to classify a visitor as VPN/proxy/Tor and apply the most-protective fallback; the Geo-routing admin preview uses the same detector. Leave this integration disabled to keep visitor geolocation entirely on trusted headers and the local GeoLite2 database.
 
-Triggered when: a frontend page renders the banner AND the admin has configured an ipinfo API key AND has explicitly attested to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs. Without the admin opt-in, ipinfo is NEVER called.
+Triggered when: an administrator has configured an ipinfo API key, confirmed the transfer terms, and enabled the integration, then either a visitor-facing jurisdiction lookup or an admin preview runs the geo detector. Without that explicit opt-in, ipinfo is never called.
 
-Data sent: the visitor's IP address (in cleartext, as required by ipinfo's lookup contract), the configured API key, and standard HTTP request headers. The plugin caches the VPN classification locally for 24 hours hash-keyed by the IP (with monthly salt rotation) so repeat visitors do not trigger fresh calls.
+Data sent: the visitor IP address or the IP entered/resolved for an admin preview, the configured API key, and standard HTTP request headers. The result is cached locally for 24 hours hash-keyed by IP.
 
 Service URL:
 * https://ipinfo.io/{ip}/privacy
@@ -181,6 +189,20 @@ Data sent: only what the visitor's browser already sends with any page request t
 
 Service URL:
 * https://{your-site}/wp-json/faz/v1/banner
+
+= Plugin REST endpoints /faz/v1/amp-consent/check and /update (public) =
+
+Used by the plugin's AMP banner to reconcile the AMP consent cache with the first-party FAZ consent cookie. Both endpoints are hosted by the same WordPress install. Requests must pass the AMP CORS provenance checks (the publisher origin, or that publisher's exact HTTPS Google AMP Cache origin with the exact publisher `__amp_source_origin`); arbitrary origins, another publisher's cache subdomain and requests without AMP provenance are rejected before consent can be changed. Sites whose long/IDN domain uses a hashed Google cache hostname, or which use another registered AMP cache, can add only their verified exact origin with the `faz_amp_consent_allowed_cache_origin` filter.
+
+Triggered when: an AMP page checks an existing decision or the visitor saves new AMP cookie preferences.
+
+Data sent: banner scope, consent state, per-category purpose choices and the AMP-generated user ID included by `amp-consent`. FAZ does not store or log that AMP user ID and does not derive its consent identifier from it. The update endpoint attempts to synchronize the first-party consent cookie with `SameSite=None; Secure`. Browsers that completely block third-party cookies may reject that cookie when the page is served from an AMP Cache; in that case the bridge fails closed and can require the choice again rather than claiming guaranteed cross-origin parity.
+
+Service URLs:
+* https://{your-site}/wp-json/faz/v1/amp-consent/check
+* https://{your-site}/wp-json/faz/v1/amp-consent/update
+
+Proprietary AMP components can opt into granular blocking with `data-faz-category="category-slug"` or `data-faz-purpose="category-slug"`. Developers can also extend the tag mapping with the `faz_amp_component_purpose_map` filter. Components that bypass the AMP lifecycle or perform independent server-side requests require their own integration.
 
 = AMP Project CDN =
 
@@ -202,13 +224,13 @@ Documentation / Privacy:
 The plugin source includes several third-party domain names (e.g. `js.stripe.com`, `connect.facebook.net`, `cdn.jsdelivr.net`, `unpkg.com`, `googletagmanager.com`, etc.) as **string patterns** for two purposes:
 
 1. **Script-blocking detection patterns** — used to identify analytics, advertising, and tracking scripts that the *site administrator's other plugins* may inject, so we can block them until the visitor has given consent. The plugin itself does **not** load any of these scripts.
-2. **Whitelist defaults** — domains such as `unpkg.com/`, `cdn.jsdelivr.net/`, `fonts.googleapis.com/`, `www.google.com/recaptcha/api`, etc. are seeded as default *whitelist* entries so the script blocker leaves them alone unless the admin explicitly removes them. They are configuration data, not outbound HTTP calls.
+2. **Detection and explicit exceptions** — third-party domains can appear in the provider catalogue so the blocker can identify them. No whole third-party plugin is whitelisted, and no profiling resource is: Google Fonts, Google Maps, OAuth endpoints and generic CDNs stay blocked until consent. The only defaults are four anti-abuse challenge endpoints (reCAPTCHA, its gstatic assets, Cloudflare Turnstile, hCaptcha), which gate a form the visitor is actively trying to submit and are therefore strictly necessary. A site administrator may add a narrow, audited exception in Settings when a resource is genuinely necessary for that site's lawful use case, and may remove the CAPTCHA defaults too.
 
-The only outbound HTTP requests this plugin makes are the six documented above (Open Cookie Database, IAB GVL, MaxMind, ip-api.com fallback, ipinfo.io VPN detection (opt-in), AMP CDN). All six are gated behind explicit administrator action or an enabled feature. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
+The plugin makes the outbound requests documented above only when their relevant feature is used. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
 
-== Cache Plugin Compatibility ==
+= Cache Plugin Compatibility =
 
-When multi-banner geo-routing (1.14.0+) is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
+When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
 
 * `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
 * `Pragma: no-cache`
@@ -372,6 +394,16 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.27.0 =
+* Added: authenticated browser-scan capture for PHP/HttpOnly Set-Cookie metadata from pages, AJAX, REST and subresources, plus background header replay limited to the URLs the browser actually visited.
+* Added: granular AMP consent synchronized with the standard FAZ cookie. Category decisions are scope- and revision-bound, stale cached decisions fail closed, and AMP components stay blocked until their purposes are granted.
+* Added: evidence-based stale-cookie deletion after repeated complete scans, recoverable bulk deletion, and a persistent recycle-bin Undo action that survives page reloads.
+* Changed: scan completeness now includes selected depth, diagnostics, early stops and capture truncation. Administrator-only jar cookies are reported for review but never imported as public declarations.
+* Changed: the opt-in outgoing Set-Cookie guard is separate from the established cookie shredder, respects banner/geo/excluded-page context, preserves necessary/CAPTCHA boundaries, and records value-free diagnostics without query strings.
+* Fixed: transient scan-import failures automatically retry the exact payload and scan ID; exhausted retries close the session before the UI can start another scan, while HttpOnly observations remain intact until persistence succeeds.
+* Fixed: hyphenated AMP category slugs now use one collision-safe identifier across purposeConsentRequired, checkboxes, REST responses and component blocking attributes.
+* Fixed: file-like replay URLs keep their path, cookie-clearing headers remove the matching name/domain/path observation instead of becoming inventory entries, and AMP-looking strings inside JSON, CSS, text or comments are not rewritten.
+
 = 1.26.0 =
 * Changed: all bundled jurisdiction rule-sets are now enforced by default across pre-consent defaults, blocking, mandatory banner controls and Consent Mode. The faz_geo_ruleset_runtime filter remains an emergency kill switch, and Cache Compatibility Mode is ignored while the response varies by jurisdiction.
 * Compliance: GPC now overrides conflicting prior and same-page sale/share grants without erasing unrelated choices. The classic and AMP paths retain an audit marker and remove granular overrides that could bypass the opt-out.
@@ -480,9 +512,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Change: runtime geo-routing no longer applies a resolved ruleset to the live banner (a CCPA-style jurisdiction was mapped to a GDPR banner without rendering its Do-Not-Sell / GPC / sensitive-opt-in obligations). Catalogue-based multi-banner geo-routing — choosing which saved banner to show per country — is unaffected.
 * Fix: corrected an overstated per-cookie help text that claimed a denied cookie "is deleted whenever it appears." That enforcement only ran client-side at save time and did not persist, so the claim was inaccurate.
 
-= 1.18.1 =
-* Fix: the Cookies admin "Scan Site" and "Auto-categorize" dropdown menus are no longer clipped by the card's rounded-corner overflow — the menu now drops over the table below and shows all options.
-
 
 = Older versions =
-Older releases (1.14.x and earlier) are listed in the full changelog on GitHub, linked at the top of this section.
+Older releases (1.18.1 and earlier) are listed in the full changelog on GitHub, linked at the top of this section.

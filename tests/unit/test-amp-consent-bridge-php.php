@@ -340,7 +340,6 @@ namespace {
 		'/faz/v1/amp-consent/update'
 	) );
 	amp_same( $update->get_data()['purposeConsents'], array( 'analytics' => true, 'marketing' => false ), 'accepted update reads AMP runtime purposeConsents and fills missing purpose as denied' );
-
 	// A current GPC signal overrides both an earlier category grant and a new
 	// Accept-All-style update. It must also leave an auditable marker in the
 	// canonical cookie and clear opaque granular grants that could bypass the

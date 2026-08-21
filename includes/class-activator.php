@@ -152,8 +152,45 @@ class Activator {
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
+		} finally {
+			// In a `finally`, not after the try. The migrations above are plain
+			// $wpdb writes under autocommit with no surrounding transaction, and
+			// each sets its own completion flag — so they commit incrementally.
+			// A throw in a LATER migration therefore leaves an EARLIER one
+			// committed, and the old placement skipped the bust on exactly that
+			// path: rename_advertisement_to_marketing() had already rewritten the
+			// slug while faz_server_cookie_category_map_v2 kept answering
+			// "advertisement" for up to an hour — the precise window this call
+			// was added to close. The early return on the already-migrated fast
+			// path sits BEFORE the try, so the no-op case is untouched; the cost
+			// on a persistently failing install is four extra transient deletes
+			// per admin load, which is strictly cheaper than a stale classifier
+			// authorising the wrong deletions.
+			do_action( 'faz_clear_cache' );
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+
+		// Bust the frontend caches once, for the whole batch.
+		//
+		// CLI::define_public_hooks() registers the cache-bust closure on seven
+		// hooks — faz_after_{update,create,delete}_cookie,
+		// faz_after_{update,delete}_cookie_category, faz_after_update_settings
+		// and faz_clear_cache — and every controller write path fires one of
+		// them. Migrations are the one class of write that structurally cannot:
+		// they reach the tables with direct $wpdb->update/delete calls, by
+		// design, because they run before/around the controller layer.
+		//
+		// rename_advertisement_to_marketing() is the concrete case. It rewrites
+		// the category slug and reassigns wp_faz_cookies.category without firing
+		// any hook, so faz_server_cookie_category_map_v2 — the classifier that
+		// authorises server-side cookie destruction, one-hour TTL — could keep
+		// answering "advertisement" for up to an hour while the blocked-category
+		// list already said "marketing", and the cookie was allowed through.
+		//
+		// Firing in the `finally` above rather than inside that one migration
+		// covers every migration in the list and every migration added later,
+		// without each author having to remember — and covers the partial-batch
+		// case, which an after-the-try placement silently did not.
 	}
 
 	/**
@@ -693,8 +730,42 @@ class Activator {
 	 * This check is done on all requests and runs if the versions do not match.
 	 */
 	public static function check_version() {
+		self::repair_db_version_namespace();
 		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '0.0.0' ), FAZ_VERSION, '<' ) ) {
 			self::install();
+		}
+	}
+
+	/**
+	 * Heal a DB-version option written in the PLUGIN's numbering space.
+	 *
+	 * update_db_version() used to store FAZ_VERSION, which the fork renumbered
+	 * to 1.x while the migration keys stayed on the inherited 3.x scheme. Any
+	 * value below the FIRST migration key can only have come from that write —
+	 * a genuinely un-migrated install reads the '3.0.7' default because the
+	 * option is absent, and every real key is >= 3.0.7.
+	 *
+	 * Such a site has already replayed the full chain on every single release
+	 * bump, so its schema is at the latest revision by construction; the right
+	 * repair is to close the gate, not to run the migrations one final time.
+	 * Absent option, or a value already in the migration space, is untouched —
+	 * so a fresh install and a genuinely-behind install both still migrate.
+	 *
+	 * @return void
+	 */
+	private static function repair_db_version_namespace() {
+		$stored = get_option( 'faz_cookie_consent_db_version', null );
+		if ( null === $stored || '' === $stored ) {
+			return;
+		}
+		$keys = array_keys( self::$db_updates );
+		if ( empty( $keys ) ) {
+			return;
+		}
+		usort( $keys, 'version_compare' );
+		$first = (string) reset( $keys );
+		if ( version_compare( (string) $stored, $first, '<' ) ) {
+			update_option( 'faz_cookie_consent_db_version', self::highest_db_update_version() );
 		}
 	}
 	/**
@@ -994,7 +1065,17 @@ class Activator {
 	 * @return void
 	 */
 	public static function update_db_version( $version = null ) {
-		$target = is_null( $version ) ? FAZ_VERSION : $version;
+		// The stored value is compared against the MIGRATION KEYS by
+		// needs_db_update(), so it must live in their numbering space — not the
+		// plugin's. Those two spaces were the same until the fork renumbered
+		// the plugin to 1.x while the migration keys stayed on the inherited
+		// 3.x scheme, at which point writing FAZ_VERSION here made
+		// version_compare( '1.27.0', '3.6.0', '<' ) true forever: the gate
+		// never closed, and every release bump replayed the entire migration
+		// chain — Migration_V2 included — against live data on the first
+		// front-end request. It also silently disabled the geo-migration
+		// re-entry pin below, whose own comparison is against '3.6.0'.
+		$target = is_null( $version ) ? self::highest_db_update_version() : $version;
 
 		// If the v2 geo-routing migration didn't complete (status was
 		// 'partial' / 'no_table'), pin the DB-version option below 3.6.0
@@ -1009,6 +1090,24 @@ class Activator {
 		}
 
 		update_option( 'faz_cookie_consent_db_version', $target );
+	}
+
+	/**
+	 * The highest declared migration version.
+	 *
+	 * Single source of truth for both the write (update_db_version) and the
+	 * read (needs_db_update), so the two can no longer drift into different
+	 * numbering spaces.
+	 *
+	 * @return string
+	 */
+	private static function highest_db_update_version() {
+		$versions = array_keys( self::$db_updates );
+		if ( empty( $versions ) ) {
+			return '0.0.0';
+		}
+		usort( $versions, 'version_compare' );
+		return (string) end( $versions );
 	}
 
 	/**

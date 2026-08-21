@@ -143,6 +143,14 @@ class Cookie extends Store {
 	 * 'edit' context. Use get_script_data() to retrieve them, and merge the
 	 * result in REST callers that should expose the scripts.
 	 *
+	 * Note: 'id' here is the row IDENTITY, not a settable field — and it is
+	 * named 'id', NOT 'cookie_id' as the database column is. Any caller that
+	 * replays this array back through setters (the recycle-bin restore does)
+	 * must drop it: handing it to set_id() sends Store::save() down the UPDATE
+	 * branch, which for a deleted row matches nothing, and for a reused id
+	 * overwrites an unrelated cookie. Prefer an explicit allowlist of fields
+	 * over a blind set_{key} dispatch over these keys.
+	 *
 	 * @return array
 	 */
 	public function get_prepared_data() {

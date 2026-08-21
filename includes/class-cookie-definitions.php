@@ -164,6 +164,16 @@ class Cookie_Definitions {
 		// Clear in-memory cache.
 		$this->lookup    = null;
 		$this->wildcards = null;
+		// …and the cross-request memo of this tier's verdicts. The frontend
+		// persists resolved name->category answers (misses included, stored as
+		// '') in faz_server_cookie_definition_map for an hour so the 2.5 MB
+		// dataset is not re-materialized on every render. That memo is derived
+		// from the option just overwritten, so leaving it in place would let a
+		// freshly downloaded database sit behind stale verdicts — including
+		// negative ones for names it can now classify — until the TTL expired.
+		// The catalogue-tier sibling faz_server_cookie_category_map is busted on
+		// every write to ITS source; this is the same rule applied to this one.
+		delete_transient( 'faz_server_cookie_definition_map' );
 
 		return array(
 			'success' => true,

@@ -9,7 +9,7 @@
  *   - GPC ruleset flag integrity (5 UOOM states + fallback)
  *   - PIPEDA hybrid reclassification
  *   - GPC honoured server-side (Sec-GPC + DNSMPI cookie)
- *   - 6-month (182-day) consent-expiry cap logic
+ *   - 6-month (182-day) consent-expiry CAP — a maximum, never a minimum
  *   - Trusted-proxy CIDR allowlist (faz_ip_in_cidr_list)
  *   - Accept/Reject equal-weight default button styling
  *
@@ -264,18 +264,27 @@ foreach ( array( '', '6.0.0/', '6.2.0/' ) as $ver ) {
 }
 
 // ===========================================================================
-// 6. 6-month (182-day) consent-expiry cap logic (main caps at 182)
+// 6. 6-month consent-expiry CAP (a maximum, never a minimum)
 // ===========================================================================
 echo "\n-- Consent expiry cap (182 days) --\n";
 
-// Mirror the clamp applied in frontend/class-frontend.php (main caps at 182).
+// Mirror the GDPR-family rule in Frontend::normalize_consent_expiry(). It is a
+// CAP: the Garante's six-month rule is a maximum and no legal minimum exists,
+// so a publisher re-asking every 30 days is being MORE protective and must be
+// left alone. An earlier revision imposed a 180-day floor and this suite pinned
+// it — the test defended the defect. A zero/absent configuration still needs a
+// usable lifetime, which is where 182 comes from. The CCPA 365-day floor and
+// its 3650-day ceiling live in the production-class regression suite.
 $clamp_expiry = function ( $value ) {
-	return min( 182, max( 1, (int) $value ) );
+	$value = (int) $value;
+	return $value < 1 ? 182 : min( 182, $value );
 };
 assert_eq( $clamp_expiry( 3650 ), 182, '10-year request clamps to 182 days' );
 assert_eq( $clamp_expiry( 365 ), 182, '1-year request clamps to 182 days' );
 assert_eq( $clamp_expiry( 180 ), 180, 'compliant 180 passes through' );
-assert_eq( $clamp_expiry( 0 ), 1, 'zero floors to 1 day' );
+assert_eq( $clamp_expiry( 30 ), 30, 'a deliberate 30-day re-prompt is stricter and survives' );
+assert_eq( $clamp_expiry( 1 ), 1, 'no floor is imposed on a short lifetime' );
+assert_eq( $clamp_expiry( 0 ), 182, 'an absent configuration still yields a usable lifetime' );
 // The shipped default must be within the cap.
 $gdpr_cfg = load_json( "$configs_dir/6.2.0/gdpr.json" );
 assert_true(
@@ -303,6 +312,69 @@ assert_true( ! faz_ip_in_cidr_list( '10.1.2.3', array( 'garbage/xx' ) ), 'malfor
 assert_true( ! faz_ip_in_cidr_list( '10.1.2.3', array( '2400:cb00::/32' ) ), 'IPv4 never matches IPv6 subnet' );
 
 // ---------- Summary ----------
+
+// ---------- Theme presets must not weaken Reject (EDPB 03/2022) ----------
+//
+// The banner's shipped DEFAULT is symmetric, but picking a theme in the admin
+// runs applyThemePreset() -> stripStyles() -> populateButtonColors(), which
+// rewrites the buttons from theme.json. Three of the four presets gave Accept a
+// solid fill and Reject a transparent outline, so a single UI action silently
+// produced the button asymmetry EDPB Guidelines 03/2022 treats as a dark
+// pattern — the thing CNIL and the Garante actually fine. Upstream fixed the
+// same defect in their 3.5.4 "updated button colors in the banner themes".
+//
+// Asserting equality of the RENDERED properties, not of any particular colour,
+// so a future re-skin stays free to change the palette and cannot reintroduce
+// the asymmetry.
+echo "\n\033[1mTheme presets: Accept and Reject carry equal visual weight\033[0m\n";
+
+$faz_theme_files = array(
+	$root . '/admin/modules/banners/includes/templates/6.0.0/theme.json',
+	$root . '/admin/modules/banners/includes/templates/6.2.0/theme.json',
+);
+
+$faz_collect_pairs = function ( $node, &$pairs ) use ( &$faz_collect_pairs ) {
+	if ( ! is_array( $node ) ) {
+		return;
+	}
+	foreach ( $node as $key => $value ) {
+		if ( 'elements' === $key && is_array( $value )
+			&& isset( $value['accept']['styles'], $value['reject']['styles'] ) ) {
+			$pairs[] = array( $value['accept']['styles'], $value['reject']['styles'] );
+			continue;
+		}
+		$faz_collect_pairs( $value, $pairs );
+	}
+};
+
+$faz_pairs_checked = 0;
+foreach ( $faz_theme_files as $faz_theme_file ) {
+	$faz_themes = load_json( $faz_theme_file );
+	$faz_label  = basename( dirname( $faz_theme_file ) );
+	assert_true( is_array( $faz_themes ) && ! empty( $faz_themes ), "theme.json for {$faz_label} loads" );
+	foreach ( (array) $faz_themes as $faz_theme ) {
+		$faz_name  = isset( $faz_theme['name'] ) ? $faz_theme['name'] : '?';
+		$faz_pairs = array();
+		$faz_collect_pairs( isset( $faz_theme['settings'] ) ? $faz_theme['settings'] : array(), $faz_pairs );
+		assert_true( ! empty( $faz_pairs ), "{$faz_label}/{$faz_name}: an accept/reject pair was found to compare" );
+		foreach ( $faz_pairs as $faz_pair ) {
+			list( $faz_accept, $faz_reject ) = $faz_pair;
+			++$faz_pairs_checked;
+			foreach ( array( 'background-color', 'border-color', 'color' ) as $faz_prop ) {
+				if ( ! isset( $faz_accept[ $faz_prop ] ) ) {
+					continue;
+				}
+				assert_eq(
+					isset( $faz_reject[ $faz_prop ] ) ? strtolower( $faz_reject[ $faz_prop ] ) : null,
+					strtolower( $faz_accept[ $faz_prop ] ),
+					"{$faz_label}/{$faz_name}: reject {$faz_prop} matches accept"
+				);
+			}
+		}
+	}
+}
+// Without this the loop above could pass by finding nothing at all.
+assert_true( $faz_pairs_checked >= 8, 'every preset x surface pair was actually compared (>= 8)' );
 
 echo "\n";
 echo "Tests run:    $tests_run\n";

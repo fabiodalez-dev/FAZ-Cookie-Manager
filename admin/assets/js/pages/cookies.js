@@ -52,6 +52,7 @@
 	FAZ.ready(function () {
 		loadCategories(true);
 		loadCookies();
+		updateRestoreBar();
 		var saveCatsBtn = document.getElementById('faz-save-categories');
 		if (saveCatsBtn) saveCatsBtn.addEventListener('click', saveCategoryEdits);
 
@@ -188,8 +189,21 @@
 					FAZ.notify(deletedCount + ' ' + __('cookies.cookieDeleted', 'Cookie deleted.'));
 					loadCookies();
 					loadCategories();
-				}).catch(function () {
-					FAZ.notify(__('cookies.bulkDeleteFailed', 'Bulk delete failed.'), 'error');
+					// `restorable` is what makes the undo affordance appear; the
+					// bar reads the bin itself so it survives a reload.
+					updateRestoreBar();
+				}).catch(function (err) {
+					// A refused purge is not a generic failure: the server
+					// aborted because it could not save the undo snapshot, and
+					// the rows are still there. Saying "delete failed" would
+					// leave the admin unsure whether some rows went.
+					var snapshotFailed = !!(err && err.code === 'faz_recycle_bin_write_failed');
+					FAZ.notify(
+						snapshotFailed
+							? __('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
+							: __('cookies.bulkDeleteFailed', 'Bulk delete failed.'),
+						'error'
+					);
 				});
 			});
 		});
@@ -452,15 +466,74 @@
 		return set;
 	}
 
-	function setStaleCookies(previousSet, currentSet) {
+	/**
+	 * Mark the entries this scan may offer to delete.
+	 *
+	 * TWO conditions, both required. The single-scan diff says the catalogue
+	 * knew a cookie the run did not observe; the server's earned-deletable list
+	 * says it has now been missing from MISSED_SCANS_THRESHOLD consecutive
+	 * COMPLETE scans. One missed scan proves nothing — a site that delays its
+	 * JavaScript until interaction never fires its trackers inside a passive
+	 * iframe, and flow-only cookies (checkout, login) are never reached at all,
+	 * yet both are set for every real visitor.
+	 *
+	 * `earnedSet` absent (an older server, or a response that lost the field) is
+	 * treated as "nothing has earned deletion". Failing closed is the only safe
+	 * direction here: the action this feeds deletes rows from the site's public
+	 * cookie declaration.
+	 */
+	function setStaleCookies(previousSet, currentSet, earnedSet) {
 		staleCookieNames = {};
 		staleCookieCount = 0;
 		Object.keys(previousSet || {}).forEach(function (key) {
-			if (!currentSet || !currentSet[key]) {
-				staleCookieNames[key] = true;
-				staleCookieCount++;
-			}
+			if (currentSet && currentSet[key]) { return; }
+			if (!earnedSet || !earnedSet[key]) { return; }
+			staleCookieNames[key] = true;
+			staleCookieCount++;
 		});
+	}
+
+	/**
+	 * Server-side consecutive-miss tally, re-keyed into this page's key form.
+	 *
+	 * The server already emits Controller::canonical_key() form, which is the
+	 * same shape getStaleKey() builds. Re-deriving it here rather than trusting
+	 * the string keeps the two ends from silently drifting apart: a mismatch
+	 * would not throw, it would just intersect to nothing and leave a stale bar
+	 * that never appears — inert while looking wired.
+	 */
+	function getEarnedDeletableSet(result) {
+		var earned = {};
+		var keys = result && result.importResult && result.importResult.deletable_stale_keys;
+		if (!Array.isArray(keys)) { return earned; }
+		keys.forEach(function (raw) {
+			var parts = String(raw).split('|');
+			var name = parts.shift();
+			var key = getStaleKeyFromName(name, parts.join('|'));
+			if (key) { earned[key] = true; }
+		});
+		return earned;
+	}
+
+	function resetStaleCookies() {
+		staleCookieNames = {};
+		staleCookieCount = 0;
+	}
+
+	function scanCoverageIsComplete(result, maxPages) {
+		var diagnostics = result && result.diagnostics;
+		return !!result
+			&& maxPages === 0
+			&& result.incremental === false
+			&& !result.earlyStopReason
+			// A cancelled crawl is a NEW way to be incomplete. Without this term
+			// a run stopped after forty pages would count as full coverage and
+			// offer to delete every cookie it never reached.
+			&& !result.stoppedReason
+			&& diagnostics
+			&& typeof diagnostics.totalIssues === 'number'
+			&& isFinite(diagnostics.totalIssues)
+			&& diagnostics.totalIssues === 0;
 	}
 
 	function snapshotDiscoveredCookies() {
@@ -494,6 +567,214 @@
 		deleteAllBtn.textContent = __('cookies.deleteAllStale', 'Delete all stale');
 		deleteAllBtn.addEventListener('click', deleteAllStaleCookies);
 		staleBar.appendChild(deleteAllBtn);
+	}
+
+	/**
+	 * Names a scan saw in the browser jar but could not attribute to any page.
+	 *
+	 * The scan runs in the administrator's own browser, so a same-origin iframe
+	 * exposes every cookie that browser already held for the domain — including
+	 * wp-admin-only ones a visitor never receives. The engine holds those apart
+	 * and the import route reports them back as `jar_only_cookies` without ever
+	 * writing them to the declaration.
+	 *
+	 * Prefer the server's list: it is the authoritative record of what was
+	 * withheld, after the same sanitising and de-duplication the import applied.
+	 * Fall back to the engine's own array so an older or partial import response
+	 * still discloses something rather than silently nothing.
+	 *
+	 * @param {Object} res Resolved scan run.
+	 * @return {string[]} Unique cookie names, never null.
+	 */
+	function jarOnlyNames(res) {
+		var fromServer = res && res.importResult && res.importResult.jar_only_cookies;
+		var source = Array.isArray(fromServer)
+			? fromServer
+			: (Array.isArray(res && res.jarCookies) ? res.jarCookies : []);
+		var seen = {};
+		var names = [];
+		source.forEach(function (entry) {
+			var name = (typeof entry === 'string')
+				? entry
+				: ((entry && entry.name) ? String(entry.name) : '');
+			name = name.trim();
+			// Object.create(null) is not available on the ES5 floor this file
+			// targets, so guard the prototype keys explicitly.
+			if (!name || Object.prototype.hasOwnProperty.call(seen, name)) { return; }
+			seen[name] = true;
+			names.push(name);
+		});
+		return names;
+	}
+
+	/**
+	 * Disclose the withheld jar cookies after a scan.
+	 *
+	 * Withholding them is correct and is pinned by tests. Saying nothing about
+	 * it was not: the import route's own comment says "surfacing the count is
+	 * the point… an admin who recognises a name as a real site cookie can add it
+	 * by hand", and until now no product surface read either field. A scan could
+	 * therefore drop a genuine first-party cookie from the declaration and
+	 * report a clean run.
+	 *
+	 * Collapsed by default — the count is the headline, the names are for the
+	 * administrator who wants to check them.
+	 *
+	 * @param {Object} res Resolved scan run.
+	 */
+	function updateJarOnlyBar(res) {
+		var bar = document.getElementById('faz-jar-bar');
+		if (!bar) { return; }
+		bar.textContent = '';
+		var names = jarOnlyNames(res);
+		if (!names.length) {
+			bar.style.display = 'none';
+			return;
+		}
+		bar.style.display = '';
+
+		var msg = document.createElement('span');
+		msg.textContent = __('cookies.jarOnlyHint', '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.')
+			.replace('%d', function () { return String(names.length); });
+		bar.appendChild(msg);
+
+		var details = document.createElement('details');
+		details.className = 'faz-jar-details';
+		var summary = document.createElement('summary');
+		summary.textContent = __('cookies.jarOnlyToggle', 'Show the names');
+		details.appendChild(summary);
+
+		var explain = document.createElement('p');
+		explain.textContent = __('cookies.jarOnlyExplain', 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.');
+		details.appendChild(explain);
+
+		var list = document.createElement('ul');
+		names.forEach(function (name) {
+			var li = document.createElement('li');
+			// textContent, never innerHTML: these names come from a scanned
+			// page's cookie jar and are attacker-influenceable content.
+			li.textContent = name;
+			list.appendChild(li);
+		});
+		details.appendChild(list);
+		bar.appendChild(details);
+	}
+
+	/**
+	 * Show an undo affordance while a bulk delete is still reversible.
+	 *
+	 * Every bulk delete snapshots the rows it removes into a bounded recycle bin
+	 * before touching them, but until now nothing in the product could reach the
+	 * restore route: the reversibility the code documents existed only for
+	 * someone hand-crafting an authenticated REST POST.
+	 *
+	 * Read from the server on page load rather than shown only in the seconds
+	 * after the delete. The bin persists across reloads, and an administrator
+	 * notices a wrong purge after navigating away — precisely when a toast is
+	 * already gone. FAZ.notify() is deliberately not used for the same reason:
+	 * it is text-only and auto-dismisses in three seconds, which is the wrong
+	 * lifetime for a recovery action.
+	 */
+	function updateRestoreBar() {
+		var bar = document.getElementById('faz-restore-bar');
+		if (!bar) { return; }
+		FAZ.get('cookies/deleted-batches').then(function (data) {
+			var batches = (data && Array.isArray(data.batches)) ? data.batches : [];
+			bar.textContent = '';
+			if (!batches.length) {
+				bar.style.display = 'none';
+				return;
+			}
+			bar.style.display = '';
+
+			var newest = batches[0] || {};
+			var count = (typeof newest.count === 'number') ? newest.count : 0;
+			// The bin is bounded by batch count, not by age, so "recently
+			// deleted" was a claim nothing checked: a purge from eight months
+			// ago read exactly like one from eight seconds ago, and Undo would
+			// put back rows whose categories and policy text have since moved
+			// on. The server sends the age already formatted and translated.
+			var age = (typeof newest.deleted_at_human === 'string') ? newest.deleted_at_human : '';
+			var msg = document.createElement('span');
+			msg.textContent = age
+				/* translators: 1: number of cookies, 2: human-readable age such as "3 hours". */
+				? __('cookies.restoreDeletedHintAged', '%1$d deleted cookie(s) can still be restored (deleted %2$s ago).')
+					.replace('%1$d', function () { return String(count); })
+					.replace('%2$s', function () { return age; })
+				: __('cookies.restoreDeletedHint', '%d recently deleted cookie(s) can still be restored.')
+					.replace('%d', function () { return String(count); });
+			bar.appendChild(msg);
+
+			var restoreBtn = document.createElement('button');
+			restoreBtn.type = 'button';
+			restoreBtn.className = 'faz-btn faz-btn-sm faz-restore-deleted';
+			restoreBtn.textContent = __('cookies.restoreDeleted', 'Undo delete');
+			restoreBtn.addEventListener('click', function () {
+				restoreBtn.disabled = true;
+				FAZ.post('cookies/restore-deleted', {}).then(function (res) {
+					var restored = (res && typeof res.restored === 'number') ? res.restored : 0;
+					var skipped = (res && typeof res.skipped === 'number') ? res.skipped : 0;
+					// A zero restore is not a success. It happens when every row
+					// in the batch is already live again — the scanner
+					// re-discovered it, or someone re-added it by hand — and
+					// reporting that as a green "0 cookie(s) restored." told the
+					// admin nothing about why, next to a bar still offering the
+					// undo. Name the reason and drop the success tone.
+					if (0 === restored) {
+						FAZ.notify(
+							skipped > 0
+								? __('cookies.restoreAllPresent', 'Nothing to restore: those cookies are already in the list again.')
+								: __('cookies.restoreNoneRestored', 'No cookies were restored.'),
+							'info'
+						);
+					} else if (skipped > 0) {
+						FAZ.notify(
+							__('cookies.restoreSucceededPartial', '%1$d cookie(s) restored. %2$d were already in the list.')
+								.replace('%1$d', String(restored))
+								.replace('%2$d', String(skipped)),
+							'success'
+						);
+					} else {
+						FAZ.notify(__('cookies.restoreSucceeded', '%d cookie(s) restored.')
+							.replace('%d', function () { return String(restored); }), 'success');
+					}
+					loadCookies();
+					loadCategories();
+				}).catch(function (err) {
+					// An empty bin answers 404 faz_nothing_to_restore. That is a
+					// state, not a fault — say so plainly instead of surfacing a
+					// raw REST error.
+					//
+					// A 403 faz_restore_requires_unfiltered_html carries a
+					// specific, carefully written explanation: the batch holds
+					// blocker scripts this account may not save, so it was left
+					// intact for an administrator. Discarding that for a generic
+					// failure message left the restorer with no idea their data
+					// was safe, or what to do next — so it is surfaced verbatim.
+					var code = err && err.code;
+					var emptied = 'faz_nothing_to_restore' === code;
+					var needsCap = 'faz_restore_requires_unfiltered_html' === code;
+					var serverMessage = (err && typeof err.message === 'string' && err.message) ? err.message : '';
+					FAZ.notify(
+						emptied
+							? __('cookies.nothingToRestore', 'There is nothing left to restore.')
+							: (needsCap && serverMessage
+								? serverMessage
+								: __('cookies.restoreFailed', 'Could not restore the deleted cookies.')),
+						emptied ? 'info' : (needsCap ? 'warning' : 'error')
+					);
+				}).then(function () {
+					restoreBtn.disabled = false;
+					updateRestoreBar();
+				});
+			});
+			bar.appendChild(restoreBtn);
+		}).catch(function () {
+			// Best effort: a failed read just means no undo affordance, never a
+			// broken page.
+			bar.textContent = '';
+			bar.style.display = 'none';
+		});
 	}
 
 	function renderCategories() {
@@ -967,7 +1248,7 @@
 
 	function deleteAllStaleCookies() {
 		if (!staleCookieCount) return;
-		FAZ.confirm(__('cookies.staleAllConfirm', 'Delete all stale cookies not found in the latest scan?')).then(function (ok) {
+		FAZ.confirm(__('cookies.staleAllConfirm', 'Remove these cookie-policy entries? Cookies that load only after an interaction, during a flow, or as httpOnly cookies may still be present even if the scan did not observe them.')).then(function (ok) {
 			if (!ok) return;
 			FAZ.get('cookies').then(function (data) {
 				var list = Array.isArray(data) ? data : (data.items || []);
@@ -983,15 +1264,32 @@
 					FAZ.notify(__('cookies.staleNone', 'No stale cookies to delete.'));
 					return;
 				}
-				FAZ.post('cookies/bulk-delete', { ids: ids }).then(function (res) {
+				// `reason: 'stale'` opts this call into the server-side threshold
+				// check. Only this caller sends it: the general multi-select bulk
+				// delete stays unscoped, so an administrator can still delete a
+				// hand-added or never-scanned row by hand.
+				FAZ.post('cookies/bulk-delete', { ids: ids, reason: 'stale' }).then(function (res) {
 					var deletedCount = (res && typeof res.deleted === 'number') ? res.deleted : ids.length;
+					var refusedCount = (res && typeof res.refused === 'number') ? res.refused : 0;
 					staleCookieNames = {};
 					staleCookieCount = 0;
-					FAZ.notify(deletedCount + ' ' + __('cookies.staleDeleted', 'stale cookie(s) deleted.'));
+					var message = deletedCount + ' ' + __('cookies.staleDeleted', 'stale cookie(s) deleted.');
+					if (refusedCount > 0) {
+						message += ' ' + __('cookies.staleRefusedNotEarned', '%d entry(ies) were kept: they have not yet been missing from enough complete scans.')
+							.replace('%d', function () { return String(refusedCount); });
+					}
+					FAZ.notify(message);
 					loadCookies();
 					loadCategories();
-				}).catch(function () {
-					FAZ.notify(__('cookies.staleDeleteAllFailed', 'Failed to delete stale cookies.'), 'error');
+					updateRestoreBar();
+				}).catch(function (err) {
+					var snapshotFailed = !!(err && err.code === 'faz_recycle_bin_write_failed');
+					FAZ.notify(
+						snapshotFailed
+							? __('cookies.bulkDeleteSnapshotFailed', 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.')
+							: __('cookies.staleDeleteAllFailed', 'Failed to delete stale cookies.'),
+						'error'
+					);
 				});
 			}).catch(function () {
 				FAZ.notify(__('cookies.staleLoadFailed', 'Failed to load cookies for stale cleanup.'), 'error');
@@ -1011,6 +1309,16 @@
 		FAZ.btnLoading(btn, true);
 		btn.textContent = __('cookies.scanStarted', 'Scanning...');
 
+		// A previous run may have left its wrapper mounted on purpose — that is
+		// how a held import keeps its Retry offer reachable. Starting a new scan
+		// makes that offer void twice over: the server reclaims the held evidence
+		// for the new session, and a second wrapper would leave two progress bars
+		// on screen. Clear it before building this run's UI.
+		var lingering = document.querySelectorAll('.faz-scan-progress-wrap');
+		for (var l = 0; l < lingering.length; l++) {
+			if (lingering[l].parentNode) { lingering[l].parentNode.removeChild(lingering[l]); }
+		}
+
 		// Build progress UI.
 		var progressWrap = document.createElement('div');
 		progressWrap.className = 'faz-scan-progress-wrap';
@@ -1024,10 +1332,20 @@
 		var pagesEl = document.createElement('div');
 		pagesEl.className = 'faz-scan-pages';
 		pagesEl.textContent = '0/0 pages';
+		// A full crawl is a long foreground operation in this tab, and until now
+		// nothing could interrupt it: the only way out was closing the tab, which
+		// stranded the administrator behind an "another scan is in progress" 409.
+		// The button stops the dispatcher; pages already loading still settle and
+		// the partial result is still imported, flagged as incomplete coverage.
+		var stopBtn = document.createElement('button');
+		stopBtn.type = 'button';
+		stopBtn.className = 'faz-btn faz-btn-sm faz-scan-stop';
+		stopBtn.textContent = __('cookies.stopScan', 'Stop scan');
 		progress.appendChild(bar);
 		progress.appendChild(statusEl);
 		progressWrap.appendChild(progress);
 		progressWrap.appendChild(pagesEl);
+		progressWrap.appendChild(stopBtn);
 		var card = dropdown.closest ? dropdown.closest('.faz-card') : null;
 		var cardHeader = card ? card.querySelector('.faz-card-header') : null;
 		if (card && cardHeader && cardHeader.parentNode) {
@@ -1045,7 +1363,9 @@
 		// Snapshot first: the stale-cookie diff is the difference between what
 		// the catalogue knew before the run and what this run actually saw.
 		snapshotDiscoveredCookies().then(function (previousDiscoveredSet) {
-			return FAZ.scanEngine.run({ maxPages: maxPages }, hooks).then(function (res) {
+			// Reached from the first import AND from a manual retry of a held
+			// one, so the stale-cookie bookkeeping is identical either way.
+			function handleScanSuccess(res) {
 				var currentDetectedSet = buildCookieNameSet(res.cookies, false);
 				var inferred = res.importResult && res.importResult.cookie_names;
 				if (Array.isArray(inferred) && inferred.length) {
@@ -1060,25 +1380,188 @@
 					});
 				}
 
-				if (res.incremental) {
-					// An incremental scan covers only a subset of pages, so a
-					// cookie missing from it is not evidence that it is gone.
-					staleCookieNames = {};
-					staleCookieCount = 0;
+				// Unconditional, including the empty case: the bar has to clear
+				// itself when a later scan withholds nothing, or a stale list
+				// would sit there describing a run that is over.
+				updateJarOnlyBar(res);
+
+				var coverageIsComplete = scanCoverageIsComplete(res, maxPages);
+				if (!coverageIsComplete) {
+					// A depth-capped, incremental, early-stopped, cancelled or
+					// degraded scan cannot prove a cookie is gone. Never
+					// expose a destructive stale-cookie action from incomplete evidence.
+					resetStaleCookies();
 				} else {
-					setStaleCookies(previousDiscoveredSet, currentDetectedSet);
+					setStaleCookies(previousDiscoveredSet, currentDetectedSet, getEarnedDeletableSet(res));
 				}
 
-				var msg = 'Scan complete — ' + res.total + ' cookies found on ' + res.pagesScanned + ' pages';
-				if (res.earlyStopReason) { msg += ' (early stop: ' + res.earlyStopReason + ')'; }
-				if (staleCookieCount > 0) { msg += ' | ' + staleCookieCount + ' stale cookie(s) highlighted'; }
+				// Every fragment of this summary goes through __(): a half-translated
+				// sentence is worse than an untranslated one, and the two clauses
+				// below were already localized. Replacements use callbacks so a
+				// value containing "$&" cannot be read as a replacement pattern.
+				//
+				// `duplicate` means the server answered this submission with the
+				// response an EARLIER one already produced — it did not save
+				// anything a second time. Reporting it as a fresh import would
+				// tell the administrator a scan ran that did not, so the counts
+				// below are described as what is already on record.
+				var duplicate = !!(res.importResult && res.importResult.duplicate);
+				var msg = duplicate
+					? __('cookies.scanAlreadySaved', 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.')
+						.replace('%1$d', function () { return String(res.total); })
+						.replace('%2$d', function () { return String(res.pagesScanned); })
+					: __('cookies.scanComplete', 'Scan complete — %1$d cookies found on %2$d pages')
+						.replace('%1$d', function () { return String(res.total); })
+						.replace('%2$d', function () { return String(res.pagesScanned); });
+				if (res.stoppedReason) {
+					msg += ' ' + __('cookies.scanStopped', '(stopped by you before every page was visited)');
+				} else if (res.earlyStopReason) {
+					msg += ' ' + __('cookies.scanEarlyStop', '(early stop: %s)')
+						.replace('%s', function () { return String(res.earlyStopReason); });
+				}
+				if (!coverageIsComplete) {
+					msg += ' | ' + __('cookies.scanCoverageIncomplete', 'Scan coverage was incomplete, so no cookie was marked as stale.');
+				} else if (staleCookieCount > 0) {
+					msg += ' | ' + __('cookies.staleHighlighted', '%d stale cookie(s) highlighted')
+						.replace('%d', function () { return String(staleCookieCount); });
+				}
+				if (res.importResult && res.importResult.enrichment_pending) {
+					msg += ' | ' + __('cookies.enrichmentPending', 'The browser scan was saved. Server-header enrichment is still running in the background, so a few more cookies may appear shortly.');
+				}
 				msg += FAZ.scanEngine.diagnosticsHint(res.diagnostics, res.total);
 				if (res.diagnostics && res.diagnostics.totalIssues > 0) {
 					console.warn('[FAZ Scanner] Diagnostics:', res.diagnostics);
 				}
 				finishScan(btn, progressWrap, msg);
 				loadCookies(function () { loadCategories(); });
+			}
+
+			function terminalFailure(err) {
+				finishScan(btn, progressWrap, (err && err.message) || __('cookies.scanFailed', 'Scan failed.'), true);
+			}
+
+			// The import stage is the only failure the administrator can still
+			// recover from without paying for the crawl again: the pages have
+			// already been walked and the server kept the evidence, so all that
+			// is left to redo is the save. `sessionHeld` is the server's own
+			// word for that (data.faz_session_held) — never an assumption, so a
+			// retry is never offered against evidence that is already gone.
+			function handleScanFailure(err) {
+				console.error('[FAZ Scanner] Scan failed:', err);
+				if (err && err.sessionHeld === true) {
+					offerImportRetry(err);
+					return;
+				}
+				terminalFailure(err);
+			}
+
+			/**
+			 * Keep the failed run on screen with a way out of it.
+			 *
+			 * Deliberately not a toast: FAZ.notify() has neither an action nor a
+			 * sticky mode — it fades after six seconds — so a recovery offered
+			 * there would be unreachable by the time anyone read it. The progress
+			 * wrapper this run already owns stays mounted and becomes the panel,
+			 * which also keeps the affordance next to the Scan button that
+			 * produced it.
+			 */
+			function offerImportRetry(err) {
+				FAZ.btnLoading(btn, false);
+				btn.textContent = __('cookies.scanSite', 'Scan Site') + ' ▾';
+				if (stopBtn.parentNode) { stopBtn.parentNode.removeChild(stopBtn); }
+				bar.style.width = '100%';
+				progressWrap.classList.add('faz-scan-progress-held');
+				statusEl.textContent = __('cookies.importNotSaved', 'Not saved');
+				pagesEl.textContent = '';
+
+				// The engine hands back a resubmit of the payload it already
+				// built whenever the evidence is held, which imports without
+				// touching the site again. Re-entering the held capture session
+				// by its scan id is the fallback for the case where it did not:
+				// it works, but the pages are walked a second time, and the two
+				// are not described to the administrator as if they were alike.
+				var savesOnly = !!(err && typeof err.retryImport === 'function');
+
+				var panel = document.createElement('div');
+				panel.className = 'faz-scan-held';
+				panel.setAttribute('role', 'status');
+				panel.setAttribute('aria-live', 'polite');
+
+				var explain = document.createElement('p');
+				explain.className = 'faz-scan-held-text';
+				explain.textContent = savesOnly
+					? __('cookies.importHeldRetrySave', 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.')
+					: __('cookies.importHeldRerun', 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.');
+				panel.appendChild(explain);
+
+				if (err && err.message) {
+					var detail = document.createElement('p');
+					detail.className = 'faz-scan-held-detail';
+					detail.textContent = err.message;
+					panel.appendChild(detail);
+				}
+
+				var actions = document.createElement('div');
+				actions.className = 'faz-scan-held-actions';
+				var retryBtn = document.createElement('button');
+				retryBtn.type = 'button';
+				retryBtn.className = 'faz-btn faz-btn-sm faz-btn-primary';
+				retryBtn.textContent = savesOnly
+					? __('cookies.retryImport', 'Retry import')
+					: __('cookies.retryImportRescan', 'Retry import (re-scans the site)');
+				var dismissBtn = document.createElement('button');
+				dismissBtn.type = 'button';
+				dismissBtn.className = 'faz-btn faz-btn-sm';
+				dismissBtn.textContent = __('cookies.discardHeldScan', 'Discard');
+				actions.appendChild(retryBtn);
+				actions.appendChild(dismissBtn);
+				panel.appendChild(actions);
+				progressWrap.appendChild(panel);
+
+				function closePanel() {
+					if (panel.parentNode) { panel.parentNode.removeChild(panel); }
+					progressWrap.classList.remove('faz-scan-progress-held');
+				}
+
+				retryBtn.addEventListener('click', function () {
+					retryBtn.disabled = true;
+					dismissBtn.disabled = true;
+					FAZ.btnLoading(btn, true);
+					btn.textContent = __('cookies.scanStarted', 'Scanning...');
+					statusEl.textContent = __('cookies.savingResults', 'Saving results...');
+					var attempt = savesOnly
+						? err.retryImport()
+						// Same scan id, so the held session is re-entered rather
+						// than 409'd against.
+						: FAZ.scanEngine.run({ maxPages: maxPages, scanId: err.scanId }, hooks);
+					Promise.resolve(attempt).then(function (res) {
+						closePanel();
+						handleScanSuccess(res);
+					}, function (retryErr) {
+						closePanel();
+						// Still held means still retryable. Once it is not, the
+						// evidence really is gone and this becomes terminal.
+						handleScanFailure(retryErr);
+					}).catch(function (fatal) {
+						console.error('[FAZ Scanner] Import retry handling failed:', fatal);
+						if (progressWrap.parentNode) { terminalFailure(fatal); }
+					});
+				});
+
+				dismissBtn.addEventListener('click', function () {
+					closePanel();
+					terminalFailure(err);
+				});
+			}
+
+			var run = FAZ.scanEngine.run({ maxPages: maxPages }, hooks);
+			stopBtn.addEventListener('click', function () {
+				if (typeof run.cancel !== 'function') { return; }
+				stopBtn.disabled = true;
+				stopBtn.textContent = __('cookies.stoppingScan', 'Stopping…');
+				run.cancel();
 			});
+			return run.then(handleScanSuccess, handleScanFailure);
 		}).catch(function (err) {
 			console.error('[FAZ Scanner] Scan failed:', err);
 			finishScan(btn, progressWrap, (err && err.message) || __('cookies.scanFailed', 'Scan failed.'), true);

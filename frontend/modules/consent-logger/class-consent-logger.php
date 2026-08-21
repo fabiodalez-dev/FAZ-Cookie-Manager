@@ -42,9 +42,10 @@ class Consent_Logger {
 		// records the GDPR consent decision of an anonymous visitor — it MUST
 		// be reachable without authentication, otherwise no consent could
 		// ever be logged. Abuse mitigation:
-		//   - Required HMAC `token` (server-issued, scoped to the consent_id).
+		//   - Required HMAC `token` embedded in a page rendered by this site.
+		//   - Same-origin request validation (Fetch Metadata / Origin / Referer).
 		//   - All inputs sanitized via `sanitize_callback`.
-		//   - The handler verifies the token before any DB write.
+		//   - The handler verifies both controls before any DB write.
 		// See `handle_rest_consent()` for the verification logic.
 		register_rest_route(
 			'faz/v1',
@@ -104,9 +105,21 @@ class Consent_Logger {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function handle_rest_consent( $request ) {
-		// Verify origin token: a time-bucketed HMAC generated server-side and
-		// embedded in the page. Prevents casual spoofing from external origins.
-		// Accepts current and previous buckets (24h total) to tolerate caching.
+		// The HMAC is intentionally cache-compatible, hence it is public to any
+		// visitor who receives the page and is not a CSRF credential by itself.
+		// Require a browser-provided same-origin signal before accepting it; this
+		// prevents a third-party page from replaying a leaked/current token to
+		// create arbitrary consent-log records in a visitor's context.
+		if ( ! $this->is_same_origin_request() ) {
+			return new \WP_Error(
+				'cross_origin_request',
+				__( 'This request must originate from this website.', 'faz-cookie-manager' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		// Verify the cache-compatible, time-bucketed token. Accept the previous
+		// bucket as well so a page held by a normal full-page cache remains usable.
 		$token = $request->get_param( 'token' );
 		if ( ! empty( $token ) ) {
 			$current_bucket  = (string) floor( time() / ( 12 * HOUR_IN_SECONDS ) );
@@ -174,5 +187,46 @@ class Consent_Logger {
 		}
 
 		return rest_ensure_response( $result );
+	}
+
+	/**
+	 * Accept only a browser POST initiated by this exact origin.
+	 *
+	 * Consent logging is an anonymous endpoint. A public, cache-compatible
+	 * token is useful as a request-origin marker but cannot distinguish the
+	 * site's own page from a cross-site form/fetch. Fetch Metadata is preferred;
+	 * when unavailable, match scheme, host and effective port of Origin (or
+	 * Referer) against home_url(). Reject when no trustworthy signal exists.
+	 *
+	 * @return bool
+	 */
+	private function is_same_origin_request() {
+		if ( ! empty( $_SERVER['HTTP_SEC_FETCH_SITE'] ) ) {
+			$fetch_site = sanitize_key( wp_unslash( $_SERVER['HTTP_SEC_FETCH_SITE'] ) );
+			return 'same-origin' === $fetch_site;
+		}
+
+		$site    = wp_parse_url( home_url( '/' ) );
+		$request = array();
+		if ( ! empty( $_SERVER['HTTP_ORIGIN'] ) ) {
+			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_ORIGIN'] ) ) );
+		} elseif ( ! empty( $_SERVER['HTTP_REFERER'] ) ) {
+			$request = wp_parse_url( esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) );
+		}
+		if ( ! is_array( $site ) || ! is_array( $request ) ) {
+			return false;
+		}
+
+		$site_scheme    = isset( $site['scheme'] ) ? strtolower( $site['scheme'] ) : '';
+		$request_scheme = isset( $request['scheme'] ) ? strtolower( $request['scheme'] ) : '';
+		$site_host      = isset( $site['host'] ) ? strtolower( $site['host'] ) : '';
+		$request_host   = isset( $request['host'] ) ? strtolower( $request['host'] ) : '';
+		$site_port      = isset( $site['port'] ) ? (int) $site['port'] : ( 'https' === $site_scheme ? 443 : 80 );
+		$request_port   = isset( $request['port'] ) ? (int) $request['port'] : ( 'https' === $request_scheme ? 443 : 80 );
+
+		return '' !== $site_scheme && '' !== $site_host
+			&& $site_scheme === $request_scheme
+			&& $site_host === $request_host
+			&& $site_port === $request_port;
 	}
 }

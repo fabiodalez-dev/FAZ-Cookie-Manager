@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { randomBytes } from 'node:crypto';
 import type { BrowserContext } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
@@ -77,35 +77,6 @@ const REPRESENTATIVE_CATEGORIES = [
   { category: 'functional', name: '__stripe_mid' },
 ];
 
-const SERVER_SCAN_MATRIX_HTML = `
-  <!doctype html>
-  <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <title>FAZ Provider Matrix Server Scan</title>
-      <script src="https://www.googletagmanager.com/gtag/js?id=G-FAZ-MATRIX"></script>
-      <script src="https://connect.facebook.net/en_US/fbevents.js"></script>
-      <script src="https://bat.bing.com/bat.js"></script>
-      <script src="https://clarity.ms/tag/faz-matrix.js"></script>
-      <script src="https://static.hotjar.com/c/hotjar.js"></script>
-      <script src="https://snap.licdn.com/li.lms-analytics/insight.min.js"></script>
-      <script src="https://js.stripe.com/v3/"></script>
-      <script src="https://cdn.mxpnl.com/libs/mixpanel-2-latest.min.js"></script>
-      <script src="https://js.hs-scripts.com/12345.js"></script>
-      <script src="https://platform.twitter.com/widgets.js"></script>
-      <script src="https://analytics.tiktok.com/i18n/pixel/events.js"></script>
-      <script src="https://assets.pinterest.com/js/pinit.js"></script>
-      <script src="https://sc-static.net/scevent.min.js"></script>
-      <script data-src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
-      <script data-src="https://matrix.local/wp-content/plugins/exactmetrics/assets/js/frontend.js?exactmetrics-frontend-script=1"></script>
-      <script data-litespeed-src="https://matrix.local/wp-content/plugins/pixel-caffeine/build/frontend.js"></script>
-    </head>
-    <body>
-      <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube"></iframe>
-    </body>
-  </html>
-`;
-
 function addQuery(url: string, key: string, value: string): string {
   const next = new URL(url);
   next.searchParams.set(key, value);
@@ -127,8 +98,13 @@ async function postSettings(page: Parameters<typeof openSettingsPage>[0], nonce:
   expect(response.status).toBe(200);
 }
 
-async function collectMatrixSignals(page: Parameters<typeof openCookiesPage>[0], matrixUrl: string): Promise<ScanSignalPayload> {
-  await page.goto(addQuery(matrixUrl, 'faz_scanning', '1'), { waitUntil: 'domcontentloaded' });
+async function collectMatrixSignals(
+  page: Parameters<typeof openCookiesPage>[0],
+  matrixUrl: string,
+  scanId: string,
+): Promise<ScanSignalPayload> {
+  const scanUrl = addQuery(addQuery(matrixUrl, 'faz_scanning', '1'), 'faz_scan_id', scanId);
+  await page.goto(scanUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(
     () =>
       document.cookie.includes('_ga=') &&
@@ -159,6 +135,33 @@ async function collectMatrixSignals(page: Parameters<typeof openCookiesPage>[0],
       scripts,
     };
   });
+}
+
+async function startBrowserScanSession(
+  page: Parameters<typeof openCookiesPage>[0],
+  nonce: string,
+): Promise<string> {
+  const scanId = randomBytes(16).toString('hex');
+  const discover = await fazApiPost<any>(page, nonce, 'scans/discover', {
+    max_pages: 1,
+    fingerprint: '',
+    scan_id: scanId,
+  });
+  expect(discover.status, `scans/discover refused provider-matrix session: ${JSON.stringify(discover.data)}`).toBe(200);
+  return scanId;
+}
+
+async function abortBrowserScanSession(
+  page: Parameters<typeof openCookiesPage>[0],
+  nonce: string,
+  scanId: string,
+): Promise<void> {
+  try {
+    await fazApiPost(page, nonce, 'scans/abort', { scan_id: scanId });
+  } catch {
+    // Best-effort cleanup for a failed assertion/network request. A successful
+    // import already closed the session, so abort is intentionally idempotent.
+  }
 }
 
 async function waitForCookie(page: Parameters<typeof openCookiesPage>[0], name: string): Promise<void> {
@@ -225,29 +228,6 @@ async function setConsentCookie(context: BrowserContext, url: string, values: Re
 
 function directCollectUrl(path: string): string {
   return `${WP_BASE}/faz-e2e-provider-collect/${path}`;
-}
-
-async function startServerScanFixture(html: string): Promise<{ server: Server; url: string }> {
-  const server = createServer((_req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(html);
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.listen(0, '127.0.0.1', () => resolve());
-    server.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-    throw new Error('Failed to resolve server-scan fixture address.');
-  }
-
-  return {
-    server,
-    url: `http://127.0.0.1:${address.port}/`,
-  };
 }
 
 async function runDirectFetch(page: Parameters<typeof openCookiesPage>[0], url: string): Promise<void> {
@@ -327,110 +307,111 @@ test.describe('Provider matrix scan and blocking', () => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await deleteCookiesByNames(page, nonce, MATRIX_COOKIE_NAMES);
 
-    const signals = await collectMatrixSignals(page, matrixUrl);
-    const result = await fazApiPost<any>(page, nonce, 'scans/import', {
-      cookies: signals.cookies,
-      metrics: { source: 'provider-matrix' },
-      pages_scanned: 1,
-      scripts: signals.scripts,
-    });
+    const scanId = await startBrowserScanSession(page, nonce);
+    try {
+      const signals = await collectMatrixSignals(page, matrixUrl, scanId);
+      const result = await fazApiPost<any>(page, nonce, 'scans/import', {
+        scan_id: scanId,
+        cookies: signals.cookies,
+        metrics: { source: 'provider-matrix' },
+        pages_scanned: 1,
+        scripts: signals.scripts,
+      });
 
-    expect(result.status).toBe(200);
-    expect(result.data.total_cookies).toBeGreaterThanOrEqual(12);
+      expect(result.status).toBe(200);
+      expect(result.data.total_cookies).toBeGreaterThanOrEqual(12);
 
-    const analyticsId = await findCategoryId(page, nonce, 'analytics');
-    const marketingId = await findCategoryId(page, nonce, 'marketing');
-    const functionalId = await findCategoryId(page, nonce, 'functional');
-    const cookies = await listCookies(page, nonce);
+      const analyticsId = await findCategoryId(page, nonce, 'analytics');
+      const marketingId = await findCategoryId(page, nonce, 'marketing');
+      const functionalId = await findCategoryId(page, nonce, 'functional');
+      const cookies = await listCookies(page, nonce);
 
-    for (const expected of REPRESENTATIVE_CATEGORIES) {
-      const row = cookies.find((entry: any) => String(entry.name ?? '').toLowerCase() === expected.name.toLowerCase());
-      expect(row, `Missing cookie ${expected.name}`).toBeTruthy();
+      for (const expected of REPRESENTATIVE_CATEGORIES) {
+        const row = cookies.find((entry: any) => String(entry.name ?? '').toLowerCase() === expected.name.toLowerCase());
+        expect(row, `Missing cookie ${expected.name}`).toBeTruthy();
 
-      const expectedCategory =
-        expected.category === 'analytics'
-          ? analyticsId
-          : expected.category === 'marketing'
-            ? marketingId
-            : functionalId;
+        const expectedCategory =
+          expected.category === 'analytics'
+            ? analyticsId
+            : expected.category === 'marketing'
+              ? marketingId
+              : functionalId;
 
-      expect(Number(row.category)).toBe(expectedCategory);
+        expect(Number(row.category)).toBe(expectedCategory);
+      }
+    } finally {
+      await abortBrowserScanSession(page, nonce, scanId);
+      await deleteCookiesByNames(page, nonce, MATRIX_COOKIE_NAMES);
     }
-
-    await deleteCookiesByNames(page, nonce, MATRIX_COOKIE_NAMES);
   });
 
   test('02. browser-import collects plugin-specific signatures and deduplicates overlapping cookie names', async ({ page, loginAsAdmin }) => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await deleteCookiesByNames(page, nonce, MATRIX_COOKIE_NAMES);
 
-    const signals = await collectMatrixSignals(page, matrixUrl);
-    const uniqueScripts = uniqueStrings(signals.scripts);
+    const scanId = await startBrowserScanSession(page, nonce);
+    try {
+      const signals = await collectMatrixSignals(page, matrixUrl, scanId);
+      const uniqueScripts = uniqueStrings(signals.scripts);
 
-    expect(uniqueScripts.some((value) => value.includes('monsterinsights-frontend-script'))).toBe(true);
-    expect(uniqueScripts.some((value) => value.includes('facebook-for-woocommerce'))).toBe(true);
-    expect(uniqueScripts.some((value) => value.includes('exactmetrics-frontend-script'))).toBe(true);
-    expect(uniqueScripts.some((value) => value.includes('gtm4wp/container-code'))).toBe(true);
-    expect(uniqueScripts.some((value) => value.includes('pixel-caffeine/build/frontend.js'))).toBe(true);
+      expect(uniqueScripts.some((value) => value.includes('monsterinsights-frontend-script'))).toBe(true);
+      expect(uniqueScripts.some((value) => value.includes('facebook-for-woocommerce'))).toBe(true);
+      expect(uniqueScripts.some((value) => value.includes('exactmetrics-frontend-script'))).toBe(true);
+      expect(uniqueScripts.some((value) => value.includes('gtm4wp/container-code'))).toBe(true);
+      expect(uniqueScripts.some((value) => value.includes('pixel-caffeine/build/frontend.js'))).toBe(true);
 
-    const result = await fazApiPost<any>(page, nonce, 'scans/import', {
-      cookies: signals.cookies,
-      metrics: { source: 'provider-matrix-signatures' },
-      pages_scanned: 1,
-      scripts: signals.scripts,
-    });
-    expect(result.status).toBe(200);
+      const result = await fazApiPost<any>(page, nonce, 'scans/import', {
+        scan_id: scanId,
+        cookies: signals.cookies,
+        metrics: { source: 'provider-matrix-signatures' },
+        pages_scanned: 1,
+        scripts: signals.scripts,
+      });
+      expect(result.status).toBe(200);
 
-    const cookies = await listCookies(page, nonce);
-    expect(cookies.filter((entry: any) => String(entry.name ?? '').toLowerCase() === '_ga').length).toBe(1);
-    expect(cookies.filter((entry: any) => String(entry.name ?? '').toLowerCase() === '_fbp').length).toBe(1);
-
-    await deleteCookiesByNames(page, nonce, MATRIX_COOKIE_NAMES);
+      const cookies = await listCookies(page, nonce);
+      expect(cookies.filter((entry: any) => String(entry.name ?? '').toLowerCase() === '_ga').length).toBe(1);
+      expect(cookies.filter((entry: any) => String(entry.name ?? '').toLowerCase() === '_fbp').length).toBe(1);
+    } finally {
+      await abortBrowserScanSession(page, nonce, scanId);
+      await deleteCookiesByNames(page, nonce, MATRIX_COOKIE_NAMES);
+    }
   });
 
   test('03. server-scan infers known cookies from the matrix provider URLs', async ({ page, loginAsAdmin }) => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
-    const fixture = await startServerScanFixture(SERVER_SCAN_MATRIX_HTML);
+    const response = await fazApiPost<{ cookies: ScanCookie[]; scripts: string[] }>(page, nonce, 'scans/server-scan', {
+      // Exercise the same-origin/port SSRF boundary the product enforces. The
+      // provider-matrix fixture page already contains live, deferred and iframe
+      // signatures, so a random localhost port is both unnecessary and invalid.
+      url: matrixUrl,
+    });
 
-    try {
-      const response = await fazApiPost<{ cookies: ScanCookie[]; scripts: string[] }>(page, nonce, 'scans/server-scan', {
-        url: fixture.url,
-      });
+    expect(response.status, JSON.stringify(response.data)).toBe(200);
+    const names = response.data.cookies.map((cookie) => cookie.name);
 
-      expect(response.status).toBe(200);
-      const names = response.data.cookies.map((cookie) => cookie.name);
+    for (const name of ['_ga', '_fbp', '_uetsid', '_clck', 'li_sugr', '__stripe_mid', 'distinct_id', 'hubspotutk', 'guest_id', '_ttp', '_pin_unauth', '_scid']) {
+      expect(names).toContain(name);
+    }
 
-      for (const name of ['_ga', '_fbp', '_uetsid', '_clck', 'li_sugr', '__stripe_mid', 'distinct_id', 'hubspotutk', 'guest_id', '_ttp', '_pin_unauth', '_scid']) {
-        expect(names).toContain(name);
-      }
-
-      for (const cookie of response.data.cookies.filter((entry) => ['_ga', '_fbp', '__stripe_mid'].includes(entry.name))) {
-        expect(cookie.domain).toBe(new URL(WP_BASE).hostname);
-      }
-    } finally {
-      await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
+    for (const cookie of response.data.cookies.filter((entry) => ['_ga', '_fbp', '__stripe_mid'].includes(entry.name))) {
+      expect(cookie.domain).toBe(new URL(WP_BASE).hostname);
     }
   });
 
   test('04. server-scan also captures deferred and iframe-based provider signatures', async ({ page, loginAsAdmin }) => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
-    const fixture = await startServerScanFixture(SERVER_SCAN_MATRIX_HTML);
+    const response = await fazApiPost<{ cookies: ScanCookie[]; scripts: string[] }>(page, nonce, 'scans/server-scan', {
+      url: matrixUrl,
+    });
 
-    try {
-      const response = await fazApiPost<{ cookies: ScanCookie[]; scripts: string[] }>(page, nonce, 'scans/server-scan', {
-        url: fixture.url,
-      });
+    expect(response.status, JSON.stringify(response.data)).toBe(200);
+    const scripts = response.data.scripts;
 
-      expect(response.status).toBe(200);
-      const scripts = response.data.scripts;
-
-      expect(scripts.some((value) => value.includes('doubleclick.net'))).toBe(true);
-      expect(scripts.some((value) => value.includes('youtube.com/embed'))).toBe(true);
-      expect(scripts.some((value) => value.includes('exactmetrics-frontend-script'))).toBe(true);
-      expect(scripts.some((value) => value.includes('pixel-caffeine/build/frontend.js'))).toBe(true);
-    } finally {
-      await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
-    }
+    expect(scripts.some((value) => value.includes('doubleclick.net'))).toBe(true);
+    expect(scripts.some((value) => value.includes('youtube.com/embed'))).toBe(true);
+    expect(scripts.some((value) => value.includes('exactmetrics-frontend-script'))).toBe(true);
+    expect(scripts.some((value) => value.includes('pixel-caffeine/build/frontend.js'))).toBe(true);
   });
 
   test('05. pre-consent the blocker stops matrix provider scripts and no matrix cookies are set', async ({ page }) => {

@@ -394,10 +394,22 @@
 		setScanProgress(0);
 	}
 
+	// The run currently crawling in this tab, so leaving the step can stop it.
+	var activeScanRun = null;
+
 	// Also called on step change, so leaving the scan step tidies the UI.
+	//
+	// It used to ONLY hide the progress bar: the dispatch loop kept creating
+	// iframes invisibly and kept holding the server-side capture lock, so the
+	// function's name promised a behaviour it did not implement. Cancelling is
+	// cooperative — pages already loading settle and the partial result is still
+	// imported, flagged as incomplete coverage.
 	function stopScanActivity() {
 		var wrap = document.getElementById('faz-setup-scan-progress');
 		if (wrap) { wrap.hidden = true; }
+		if (activeScanRun && typeof activeScanRun.cancel === 'function') {
+			activeScanRun.cancel();
+		}
 	}
 
 	/**
@@ -421,31 +433,168 @@
 		}
 
 		btn.disabled = true;
+		// A fresh scan reclaims any held capture session on the server, so a
+		// leftover retry offer would 409 the moment it was used. Remove it.
+		removeHeldPanel();
 		setScanStatus(__('setup.scan_starting', 'Starting scan…'));
 		startScanActivity();
 
-		FAZ.scanEngine.run({ maxPages: 20 }, {
+		var hooks = {
 			status: setScanStatus,
 			progress: setScanProgress,
 			pages: function () {},
-		}).then(function (res) {
+		};
+
+		runScanAttempt(FAZ.scanEngine.run({ maxPages: 20 }, hooks), btn, hooks);
+	}
+
+	// Shared by the first run and both retry shapes, so every path re-enables
+	// the button, tidies the progress UI, and lands in the same two handlers.
+	function runScanAttempt(run, btn, hooks) {
+		activeScanRun = run;
+		run.then(function (res) {
+			activeScanRun = null;
 			stopScanActivity();
 			btn.disabled = false;
-			var found = (res && typeof res.total === 'number') ? res.total : 0;
-			setScanStatus(
-				found > 0
-					? interpolate(__('setup.scan_done_found', 'Scan complete — %d cookies found.'), found)
-					: __('setup.scan_done_empty', 'Scan complete. No new cookies were found.')
-			);
-			// The scan may have discovered payment-gateway cookies — refresh the
-			// suggestions so the payments block reflects them.
-			loadRecommendations();
+			handleScanSuccess(res);
 		}).catch(function (err) {
+			activeScanRun = null;
 			stopScanActivity();
 			btn.disabled = false;
 			console.error('[FAZ Setup] Scan failed:', err);
-			setScanStatus((err && err.message) || __('setup.scan_failed', 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.'));
-			FAZ.notify(__('setup.scan_failed_notify', 'Cookie scan could not be started.'), 'error');
+			// The import stage is the only failure worth a second attempt here:
+			// the crawl already finished and the server says it kept the
+			// evidence (`sessionHeld` is the server's own word, never a guess —
+			// offering a retry without it would just 409). Everything else
+			// stays the plain, non-blocking failure this optional step has
+			// always had.
+			if (err && err.sessionHeld === true) {
+				offerImportRetry(btn, hooks, err);
+				return;
+			}
+			showTerminalScanFailure(err);
+		});
+	}
+
+	function showTerminalScanFailure(err) {
+		setScanStatus((err && err.message) || __('setup.scan_failed', 'The scan could not be started. You can skip this step or run a full scan on the Cookies page.'));
+		FAZ.notify(__('setup.scan_failed_notify', 'Cookie scan could not be started.'), 'error');
+	}
+
+	function handleScanSuccess(res) {
+		var found = (res && typeof res.total === 'number') ? res.total : 0;
+		var doneMessage;
+		// `duplicate` means the server answered this submission with the
+		// response an EARLIER attempt already produced — nothing was saved
+		// twice, so the counts are described as what is already on record
+		// rather than as a fresh import.
+		if (res && res.importResult && res.importResult.duplicate) {
+			doneMessage = __('cookies.scanAlreadySaved', 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.')
+				.replace('%1$d', function () { return String(found); })
+				.replace('%2$d', function () { return String((res && typeof res.pagesScanned === 'number') ? res.pagesScanned : 0); });
+		} else {
+			doneMessage = found > 0
+				? interpolate(__('setup.scan_done_found', 'Scan complete — %d cookies found.'), found)
+				: __('setup.scan_done_empty', 'Scan complete. No new cookies were found.');
+		}
+		if (res && res.importResult && res.importResult.enrichment_pending) {
+			doneMessage += ' ' + __('setup.scan_enrichment_pending', 'Server-header enrichment continues in the background.');
+		}
+		setScanStatus(doneMessage);
+		// The scan may have discovered payment-gateway cookies — refresh the
+		// suggestions so the payments block reflects them.
+		loadRecommendations();
+	}
+
+	function removeHeldPanel() {
+		var panel = document.getElementById('faz-setup-scan-held');
+		if (panel && panel.parentNode) { panel.parentNode.removeChild(panel); }
+	}
+
+	/**
+	 * Offer the save again without blocking the wizard.
+	 *
+	 * The failure message promises that the results are held for a retry, so
+	 * the step has to offer that retry — but the scan is an optional
+	 * convenience inside a step-based flow, so the offer is an inline panel in
+	 * the scan block only: Next/Back are never touched, the scan button stays
+	 * usable, and skipping the step remains at least as easy as retrying.
+	 *
+	 * The engine hands back `retryImport()` whenever the evidence is held,
+	 * which resubmits the payload the finished crawl already built — no
+	 * re-crawl. Re-entering the held session by `scanId` is the defensive
+	 * fallback: it works, but this browser walks the pages again, and the
+	 * button says so instead of pretending the two are alike.
+	 */
+	function offerImportRetry(btn, hooks, err) {
+		var statusEl = document.getElementById('faz-setup-scan-status');
+		if (!statusEl || !statusEl.parentNode) {
+			showTerminalScanFailure(err);
+			return;
+		}
+		removeHeldPanel();
+		setScanStatus(__('cookies.importNotSaved', 'Not saved'));
+
+		var savesOnly = !!(err && typeof err.retryImport === 'function');
+
+		var panel = document.createElement('div');
+		panel.id = 'faz-setup-scan-held';
+		panel.className = 'faz-scan-held';
+		panel.setAttribute('role', 'status');
+		panel.setAttribute('aria-live', 'polite');
+
+		var explain = document.createElement('p');
+		explain.className = 'faz-scan-held-text';
+		explain.textContent = savesOnly
+			? __('cookies.importHeldRetrySave', 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.')
+			: __('cookies.importHeldRerun', 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.');
+		panel.appendChild(explain);
+
+		if (err && err.message) {
+			var detail = document.createElement('p');
+			detail.className = 'faz-scan-held-detail';
+			detail.textContent = err.message;
+			panel.appendChild(detail);
+		}
+
+		var actions = document.createElement('div');
+		actions.className = 'faz-scan-held-actions';
+		var retryBtn = document.createElement('button');
+		retryBtn.type = 'button';
+		retryBtn.className = 'faz-btn faz-btn-sm faz-btn-primary';
+		retryBtn.textContent = savesOnly
+			? __('cookies.retryImport', 'Retry import')
+			: __('cookies.retryImportRescan', 'Retry import (re-scans the site)');
+		var dismissBtn = document.createElement('button');
+		dismissBtn.type = 'button';
+		dismissBtn.className = 'faz-btn faz-btn-sm';
+		dismissBtn.textContent = __('cookies.discardHeldScan', 'Discard');
+		actions.appendChild(retryBtn);
+		actions.appendChild(dismissBtn);
+		panel.appendChild(actions);
+		statusEl.parentNode.insertBefore(panel, statusEl.nextSibling);
+
+		retryBtn.addEventListener('click', function () {
+			removeHeldPanel();
+			btn.disabled = true;
+			setScanStatus(__('cookies.savingResults', 'Saving results...'));
+			var attempt;
+			if (savesOnly) {
+				attempt = err.retryImport();
+			} else {
+				// Same scan id, so the held session is re-entered rather than
+				// 409'd against — but the pages are walked a second time.
+				startScanActivity();
+				attempt = FAZ.scanEngine.run({ maxPages: 20, scanId: err.scanId }, hooks);
+			}
+			// Still-held retry failures re-offer the panel; once the evidence
+			// is gone the failure becomes the ordinary terminal one.
+			runScanAttempt(attempt, btn, hooks);
+		});
+
+		dismissBtn.addEventListener('click', function () {
+			removeHeldPanel();
+			showTerminalScanFailure(err);
 		});
 	}
 

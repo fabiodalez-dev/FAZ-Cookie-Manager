@@ -212,6 +212,9 @@ class Settings extends Store {
 				// prototypes, so they carry compatibility risk and stay off by
 				// default.
 				'aggressive_css_url_blocking' => false,
+				// Compatibility-sensitive: filters Set-Cookie headers emitted by
+				// PHP plugins. Explicit opt-in until the owner tests critical flows.
+				'block_server_cookies'        => false,
 				// Default "never block before consent" list. Kept deliberately
 				// narrow: only anti-abuse / security challenge endpoints that
 				// are strictly necessary for a service the visitor actively
@@ -224,6 +227,19 @@ class Settings extends Store {
 				// Google Fonts unlawful without consent). Site owners can still
 				// add any of them explicitly via Settings → Script Blocking if
 				// their lawful basis warrants it.
+				//
+				// These four were briefly emptied. That reads as the stricter
+				// choice, but the blocker DOES provider-match all four, so on a
+				// fresh install every CAPTCHA-guarded contact, login and checkout
+				// form silently stopped working for non-consented visitors — with
+				// no error surfaced to the visitor or the admin. It also split the
+				// install base in two, since upgrades keep their stored option
+				// while new sites got the empty list, and it made the readme's
+				// "nothing is whitelisted by default" claim false for everyone
+				// already running the plugin. A challenge endpoint that gates a
+				// form the visitor is actively trying to submit is the textbook
+				// Art. 5(3) strictly-necessary case; the profiling resources above
+				// are not, and stay out.
 				'whitelist_patterns' => array(
 					'www.google.com/recaptcha/api',
 					'www.gstatic.com/recaptcha/',
@@ -260,11 +276,11 @@ class Settings extends Store {
 					// the PMP plugin is active on the site.
 					'enabled'        => false,
 					// Comma-separated list of PMP level IDs (stored as an
-					// array of integers) whose members are exempted from the
-					// cookie banner and whose consent is auto-granted across
-					// all categories. This is the "Pay-or-Accept" (PUR)
-					// branch: paying subscribers skip the banner, free
-					// visitors keep the standard consent flow.
+					// array of integers) whose members receive the paid,
+					// privacy-preserving alternative: the banner is skipped,
+					// necessary storage remains available, and every optional
+					// purpose stays denied until the member explicitly changes
+					// it through the preference centre.
 					'exempt_levels'  => array(),
 				),
 			),
@@ -481,6 +497,7 @@ class Settings extends Store {
 			case 'per_service_consent':
 			case 'cache_compatibility':
 			case 'aggressive_css_url_blocking':
+			case 'block_server_cookies':
 				$value = faz_sanitize_bool( $value );
 				break;
 			case 'per_cookie_consent':
@@ -526,14 +543,12 @@ class Settings extends Store {
 				$value = absint( $value );
 				break;
 			case 'max_pages':
-				// Clamped to the same [1, 2000] window the interactive scan
-				// endpoint enforces at run time (scanner/api/class-api.php). The
-				// scheduled-scan cron and WP-CLI honour the STORED value without
-				// their own cap, so a bare absint() here let a settings PUT
-				// persist an unbounded page count for the weekly crawl — or 0
-				// (absint of any non-numeric string), which made every auto-scan
-				// a silent no-op while the admin believed scanning was on.
-				$value = max( 1, min( 2000, absint( $value ) ) );
+				// Keep every entry point aligned with the browser scanner's
+				// discover endpoint. An unbounded stored value can turn the cron
+				// fallback into thousands of loopback requests, while zero makes
+				// an enabled scheduled scan a silent no-op.
+				$value = is_numeric( $value ) ? (int) $value : 0;
+				$value = max( 1, min( 2000, $value ) );
 				break;
 			case 'consent_revision':
 				// Revision counter: always >= 1. Bounded upper limit to avoid
@@ -763,7 +778,16 @@ class Settings extends Store {
 				if ( ! is_array( $value ) ) {
 					$value = array();
 				}
-				$value = array_values( array_unique( array_map( 'sanitize_text_field', $value ) ) );
+				// Same finite vocabulary rendered by Settings and accepted by
+				// onboarding. Unknown tokens used to survive direct REST/import
+				// writes even though no runtime resolver could interpret them.
+				$allowed = array( 'eu', 'uk', 'us', 'ca', 'br', 'au', 'jp', 'ch', 'za' );
+				$value   = array_values( array_unique( array_intersect( array_map( function ( $region ) {
+					if ( ! is_scalar( $region ) ) {
+						return '';
+					}
+					return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( trim( (string) $region ) ) );
+				}, $value ), $allowed ) ) );
 				break;
 			case 'publisher_cc':
 				$value = strtoupper( sanitize_text_field( (string) $value ) );

@@ -36,6 +36,7 @@ const WP_CLI_TIMEOUT_MS = Number.isFinite(WP_CLI_TIMEOUT_ENV) && WP_CLI_TIMEOUT_
 export const SCAN_LAB_PAGE_SLUGS = [
   'faz-lab-js-basic',
   'faz-lab-js-delayed',
+  'faz-lab-ajax-httponly',
   'faz-lab-js-dupe-a',
   'faz-lab-js-dupe-b',
   'faz-lab-headers',
@@ -535,10 +536,38 @@ export function readWooUrls(): { cart: string; checkout: string; myaccount: stri
 
 export function resetScanState(): void {
   wpEval(`
+    global $wpdb;
     delete_option( 'faz_scan_history' );
     delete_option( 'faz_scan_details' );
     delete_option( 'faz_scan_counter' );
     delete_option( 'faz_scanner_debug_log' );
+
+    // Match on the faz_scan_ PREFIX rather than on each transient family by
+    // name. The enumerated form this replaces listed the session keys under
+    // both storage flavours but the per-user "a scan is already running" lock
+    // (faz_scan_active_<user id>) only under the plain one, so a leftover
+    // site-transient lock survived the reset and the next spec's discover call
+    // came back 409. Anything the scanner parks under this prefix is scan
+    // state by definition, and clearing it is what this helper is for.
+    $wpdb->query(
+      "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_faz_scan_%'"
+      . " OR option_name LIKE '_transient_timeout_faz_scan_%'"
+      . " OR option_name LIKE '_site_transient_faz_scan_%'"
+      . " OR option_name LIKE '_site_transient_timeout_faz_scan_%'"
+    );
+    delete_option( 'faz_httponly_scan_urls' );
+    delete_option( 'faz_httponly_scan_lock' );
+    $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->usermeta} WHERE meta_key = %s", '_faz_scan_cookie_observation' ) );
+
+    // Deleting the rows underneath WordPress leaves the object cache holding
+    // the values it read before. On a bare install that cache dies with the
+    // request and the DELETE alone is enough, but wherever a persistent
+    // drop-in is installed (the Redis configuration this plugin supports)
+    // get_transient() keeps answering from cache and the reset never reaches
+    // the web process — flakiness that reads as a scanner bug rather than as a
+    // dirty fixture. A whole-cache flush is blunt, but this runs between
+    // specs, where a correct starting state is worth more than a warm cache.
+    wp_cache_flush();
   `);
 }
 
