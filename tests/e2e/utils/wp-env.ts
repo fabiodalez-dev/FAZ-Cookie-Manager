@@ -251,18 +251,19 @@ export function restoreActivePluginFiles(pluginFiles: string[]): void {
 
 export function deactivatePluginsExcept(allowedSlugs: string[]): void {
   const allowed = new Set(allowedSlugs);
-  const extraActive = listActivePlugins().filter((slug) => !allowed.has(slug));
-  if (extraActive.length === 0) {
+  const activePluginFiles = listActivePluginFiles();
+  const retainedPluginFiles = activePluginFiles.filter((pluginFile) => {
+    const [directoryOrFile] = pluginFile.split('/');
+    const slug = pluginFile.includes('/') ? directoryOrFile : directoryOrFile.replace(/\.php$/i, '');
+    return allowed.has(slug);
+  });
+  if (retainedPluginFiles.length === activePluginFiles.length) {
     return;
   }
-  for (const slug of extraActive) {
-    try {
-      wp(['plugin', 'deactivate', slug]);
-    } catch {
-      // Test teardowns should be resilient when a fixture plugin was already
-      // removed or auto-deactivated earlier in the flow.
-    }
-  }
+  // Test isolation needs a deterministic active set, not third-party
+  // deactivation hooks. Updating the option once also mirrors the atomic
+  // restore path above and avoids bootstrapping WordPress once per plugin.
+  restoreActivePluginFiles(retainedPluginFiles);
 }
 
 export function activatePlugins(slugs: string[], options: { tolerateFailures?: boolean } = {}): void {
