@@ -44,7 +44,7 @@ $faz_e2e_cc = isset( $_COOKIE['${GEO_COOKIE}'] )
 	? strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $_COOKIE['${GEO_COOKIE}'] ) )
 	: '';
 if ( 1 === preg_match( '/^[A-Z]{2}$/', $faz_e2e_cc ) ) {
-	add_filter( 'faz_geo_ruleset_runtime', '__return_true' );
+	add_filter( 'faz_geo_ruleset_runtime', '__return_true', PHP_INT_MAX );
 	add_filter( 'faz_visitor_country', function () use ( $faz_e2e_cc ) { return $faz_e2e_cc; } );
 	add_filter( 'faz_geo_admin_override_country', function () use ( $faz_e2e_cc ) { return $faz_e2e_cc; } );
 	add_action( 'wp_footer', function () {
@@ -53,12 +53,7 @@ if ( 1 === preg_match( '/^[A-Z]{2}$/', $faz_e2e_cc ) ) {
 }
 `;
 
-// 1.18.2 HOTFIX: the geo-routing runtime is hard-disabled (Geo_Runtime::is_enabled()
-// returns false), so even with the faz_geo_ruleset_runtime filter forced on the
-// ruleset no longer drives the live banner — these enforcement assertions can no
-// longer hold. Skipped until the runtime is reworked and re-enabled (see the
-// CHANGELOG 1.18.2 entry); flip back to test.describe(...) at that point.
-test.describe.skip('geo-runtime enforcement (flag on, POPIA/ZA consent preset)', () => {
+test.describe('geo-runtime enforcement (POPIA/ZA consent preset)', () => {
   test.beforeAll(() => {
     if (!existsSync(MU_DIR)) {
       mkdirSync(MU_DIR, { recursive: true });

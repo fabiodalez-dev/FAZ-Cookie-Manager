@@ -60,10 +60,6 @@ class Settings extends Store {
 	 */
 	public function get_defaults() {
 		return array(
-			'site'         => array(
-				'url'       => get_site_url(),
-				'installed' => time(),
-			),
 			'consent_logs' => array(
 				'status'    => true,
 				'retention' => 12,
@@ -522,7 +518,10 @@ class Settings extends Store {
 				$allowed = array( 'country', 'city' );
 				$value   = in_array( $value, $allowed, true ) ? $value : 'country';
 				break;
-			case 'installed':
+			case 'static_ip':
+				$value = trim( (string) $value );
+				$value = filter_var( $value, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ? $value : '';
+				break;
 			case 'step':
 				$value = absint( $value );
 				break;
@@ -780,16 +779,6 @@ class Settings extends Store {
 	// Getter Functions.
 
 	/**
-	 * Get current site URL.
-	 *
-	 * @return mixed
-	 */
-	public function get_url() {
-		return $this->get( 'site', 'url' );
-	}
-
-
-	/**
 	 * Get consent log status
 	 *
 	 * @return boolean
@@ -818,12 +807,4 @@ class Settings extends Store {
 		return faz_sanitize_text( $this->get( 'languages', 'selected' ) );
 	}
 
-	/**
-	 * First installed date of the plugin.
-	 *
-	 * @return mixed
-	 */
-	public function get_installed_date() {
-		return $this->get( 'site', 'installed' );
-	}
 }

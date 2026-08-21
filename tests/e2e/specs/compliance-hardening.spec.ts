@@ -1,5 +1,10 @@
 import { expect, test } from '../fixtures/wp-fixture';
-import { deactivatePluginsExcept, wpEval } from '../utils/wp-env';
+import {
+  deactivatePluginsExcept,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+  wpEval,
+} from '../utils/wp-env';
 
 /**
  * Browser-observable compliance checks for the salvage-on-1.17.2 pass.
@@ -20,8 +25,10 @@ import { deactivatePluginsExcept, wpEval } from '../utils/wp-env';
 
 test.describe('Compliance hardening — Cookie Policy accessibility', () => {
   let policyUrl = '';
+  let initialActivePluginFiles: string[] = [];
 
   test.beforeAll(() => {
+    initialActivePluginFiles = listActivePluginFiles();
     deactivatePluginsExcept(['faz-cookie-manager']);
     policyUrl = wpEval(`
       $existing = get_page_by_path( 'faz-compliance-policy-test' );
@@ -38,6 +45,10 @@ test.describe('Compliance hardening — Cookie Policy accessibility', () => {
       }
       echo get_permalink( $id );
     `).trim();
+  });
+
+  test.afterAll(() => {
+    restoreActivePluginFiles(initialActivePluginFiles);
   });
 
   test('category-name heading exposes aria-level (WCAG 4.1.2 / axe-critical)', async ({ page }) => {

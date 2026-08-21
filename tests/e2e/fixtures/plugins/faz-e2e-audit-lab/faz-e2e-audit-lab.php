@@ -44,6 +44,18 @@ final class Faz_E2E_Audit_Lab {
 	 * @return void
 	 */
 	public function bootstrap() {
+		// Most E2E specs exercise one configured banner/settings feature at a time
+		// and predate jurisdictional overlay. Isolate those tests from the visitor
+		// country of the machine running WordPress; the dedicated geo-runtime spec
+		// opts in per browser context with faz_e2e_geo. This fixture exists only in
+		// tests and therefore does not alter the production default-on contract.
+		$faz_e2e_runtime = isset( $_COOKIE['faz_e2e_geo'] )
+			|| isset( $_GET['faz_e2e_enable_geo_runtime'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( isset( $_GET['faz_e2e_disable_geo_runtime'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$faz_e2e_runtime = false;
+		}
+		add_filter( 'faz_geo_ruleset_runtime', $faz_e2e_runtime ? '__return_true' : '__return_false', PHP_INT_MAX );
+
 		if ( isset( $_GET['faz_e2e_cf_country'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$_SERVER['HTTP_CF_IPCOUNTRY'] = strtoupper( sanitize_text_field( wp_unslash( $_GET['faz_e2e_cf_country'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		}

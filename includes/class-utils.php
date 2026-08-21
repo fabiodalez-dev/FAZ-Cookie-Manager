@@ -513,6 +513,58 @@ if ( ! function_exists( 'faz_path_matches_pattern' ) ) {
 	}
 }
 
+if ( ! function_exists( 'faz_region_map' ) ) {
+	/**
+	 * Return the canonical country groups used by classic and AMP targeting.
+	 *
+	 * The EU preset intentionally excludes GB; UK GDPR has its own `uk` group.
+	 *
+	 * @return array<string,array<int,string>> Region key to ISO country codes.
+	 */
+	function faz_region_map() {
+		return array(
+			'eu' => array(
+				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
+				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
+				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE', 'IS', 'LI', 'NO',
+			),
+			'uk' => array( 'GB' ),
+			'us' => array( 'US' ),
+			'ca' => array( 'CA' ),
+			'br' => array( 'BR' ),
+			'au' => array( 'AU' ),
+			'jp' => array( 'JP' ),
+			'ch' => array( 'CH' ),
+			'za' => array( 'ZA' ),
+		);
+	}
+}
+
+if ( ! function_exists( 'faz_country_in_regions' ) ) {
+	/**
+	 * Check whether a country belongs to a configured region or direct ISO code.
+	 *
+	 * @param string $country_code ISO 3166-1 alpha-2 country code.
+	 * @param array  $regions      Region keys or direct country codes.
+	 * @return bool
+	 */
+	function faz_country_in_regions( $country_code, $regions ) {
+		$country_code = strtoupper( (string) $country_code );
+		$region_map   = faz_region_map();
+		foreach ( (array) $regions as $region ) {
+			$region = strtolower( (string) $region );
+			if ( isset( $region_map[ $region ] ) ) {
+				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
+					return true;
+				}
+			} elseif ( strtoupper( $region ) === $country_code ) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
 if ( ! function_exists( 'faz_is_bot' ) ) {
 	/**
 	 * Detect search engine bots and crawlers by user agent.

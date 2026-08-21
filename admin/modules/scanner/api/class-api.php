@@ -459,7 +459,7 @@ class Api extends Rest_Controller {
 			// needs to reach the site itself, which may be on localhost/127.0.0.1.
 			// SSRF is mitigated by the host validation above. Loopback requests are
 			// allowed only when both the site and requested URL are loopback hosts.
-			$http_response = wp_remote_get(
+			$http_response = $this->controller->remote_get(
 				$url,
 				array(
 					'timeout'             => 20,

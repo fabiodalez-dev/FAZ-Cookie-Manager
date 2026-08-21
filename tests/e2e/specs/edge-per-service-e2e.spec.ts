@@ -304,7 +304,7 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
 
     try {
       const ctx = await browser.newContext();
-      // Pre-seed a PRE-ACTION cookie carrying a stale svc.google-analytics:yes
+      // Pre-seed a PRE-ACTION cookie carrying a stale svc.facebook:yes
       // override (no action:yes, so the GPC opt-out branch actually runs). This
       // proves _fazApplyGpcOptOut() CLEARS an existing override — without it the
       // "no svc.* in the cookie" assertion would pass vacuously.
@@ -313,7 +313,7 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
       await ctx.addCookies([
         {
           name: 'fazcookie-consent',
-          value: `necessary%3Ayes%2Canalytics%3Ayes%2Csvc.google-analytics%3Ayes%2Crev%3A${rev}`,
+          value: `necessary%3Ayes%2Cmarketing%3Ayes%2Csvc.facebook%3Ayes%2Crev%3A${rev}`,
           domain: seedDomain,
           path: '/',
           sameSite: 'Lax',
@@ -344,9 +344,9 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
           decoded,
           gpcMarker: /(?:^|,)gpc:1(?:,|$)/.test(decoded),
           hasSvcEntry: /(?:^|,)svc\./.test(decoded),
-          gaBlocked:
+          saleShareBlocked:
             typeof w._fazShouldBlockProvider === 'function'
-              ? w._fazShouldBlockProvider('https://www.google-analytics.com/analytics.js')
+              ? w._fazShouldBlockProvider('https://connect.facebook.net/en_US/fbevents.js')
               : null,
         };
       });
@@ -355,8 +355,8 @@ test.describe('Per-service consent — edge cases (per-service-e2e)', () => {
       expect(state.gpcMarker, 'GPC opt-out recorded with gpc:1 marker').toBe(true);
       // …and NO svc.* override leaked into the cookie (they were cleared)…
       expect(state.hasSvcEntry, 'svc.* overrides cleared by GPC opt-out').toBe(false);
-      // …and the analytics provider is blocked.
-      expect(state.gaBlocked, 'provider blocked after GPC opt-out').toBe(true);
+      // …and the sale/share provider is blocked.
+      expect(state.saleShareBlocked, 'sale/share provider blocked after GPC opt-out').toBe(true);
 
       await ctx.close();
     } finally {

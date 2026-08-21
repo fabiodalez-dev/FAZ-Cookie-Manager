@@ -792,12 +792,12 @@ class Admin {
 						/* translators: %d: number of country overrides configured */
 						'overridesConfiguredPlural'    => __( '%d overrides configured.', 'faz-cookie-manager' ),
 						'addOverride'                  => __( 'Add override', 'faz-cookie-manager' ),
-						'noOverrides'                  => __( 'No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only.', 'faz-cookie-manager' ),
+						'noOverrides'                  => __( 'No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state.', 'faz-cookie-manager' ),
 						'confirmDelete'                => __( 'Remove this override?', 'faz-cookie-manager' ),
 						// Pipeline status panel.
 						'runtimeApplicationLabel'      => __( 'Runtime rule-set application', 'faz-cookie-manager' ),
 						'runtimeApplicationActive'     => __( '✅ active', 'faz-cookie-manager' ),
-						'runtimeApplicationOff'        => __( '⚪ off — catalogue is preview/reference only', 'faz-cookie-manager' ),
+						'runtimeApplicationOff'        => __( '⚠️ disabled by the faz_geo_ruleset_runtime filter', 'faz-cookie-manager' ),
 						'catalogRulesets'              => __( 'Catalog rulesets', 'faz-cookie-manager' ),
 						'fallbackRuleset'              => __( 'Fallback ruleset', 'faz-cookie-manager' ),
 						'ipinfoOptin'                  => __( 'ipinfo opt-in', 'faz-cookie-manager' ),

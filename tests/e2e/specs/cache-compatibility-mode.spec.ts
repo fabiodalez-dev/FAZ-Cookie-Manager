@@ -14,12 +14,17 @@ import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles, u
  *
  * This suite drives the REAL header path: it flips IAB on (a country-dependent
  * trigger) and reads the front-end response headers from an ANONYMOUS context,
- * with the toggle off (cache-bust active) and on (cacheable). Serial + restores
- * the original settings in afterAll, so it is reusable in isolation or in-suite.
+ * with the toggle off (cache-bust active) and on (cacheable). Every request also
+ * opts into the test-only `faz_geo_ruleset_runtime` emergency kill switch: cache
+ * compatibility is intentionally ignored while legislative enforcement is live,
+ * and this suite preserves coverage of the explicitly disabled/legacy path.
+ * Serial + restores the original settings in afterAll, so it is reusable in
+ * isolation or in-suite.
  */
 
 const BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const CACHE_FIXTURE_SLUG = 'faz-cache-compat-provider';
+const RUNTIME_DISABLED_PARAM = 'faz_e2e_disable_geo_runtime=1';
 
 type FazSettings = Record<string, unknown>;
 
@@ -43,7 +48,9 @@ async function postSettings(page: Page, nonce: string, payload: FazSettings): Pr
 async function anonHeaders(browser: import('@playwright/test').Browser): Promise<Record<string, string>> {
   const ctx = await browser.newContext();
   try {
-    const res = await ctx.request.get(BASE + '/', { headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-e2e)' } });
+    const res = await ctx.request.get(`${BASE}/?${RUNTIME_DISABLED_PARAM}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-e2e)' },
+    });
     return res.headers();
   } finally {
     await ctx.close();
@@ -67,7 +74,10 @@ async function anonHtml(
         },
       ]);
     }
-    const res = await ctx.request.get(BASE + path, { headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-html-e2e)' } });
+    const separator = path.includes('?') ? '&' : '?';
+    const res = await ctx.request.get(`${BASE}${path}${separator}${RUNTIME_DISABLED_PARAM}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-html-e2e)' },
+    });
     expect(res.status()).toBeLessThan(400);
     return await res.text();
   } finally {
@@ -162,7 +172,7 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     const ctx = await browser.newContext();
     try {
       const page = await ctx.newPage();
-      await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await page.goto(`${BASE}/?${RUNTIME_DISABLED_PARAM}`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), { timeout: 8000 });
       // The banner config is localized and the consent runtime is present — the
       // cacheable HTML still carries everything the client needs.
@@ -219,7 +229,7 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     const fetchAsBot = async (): Promise<string> => {
       const ctx = await browser.newContext({ userAgent: GOOGLEBOT });
       try {
-        const res = await ctx.request.get(BASE + '/', { headers: { 'User-Agent': GOOGLEBOT } });
+        const res = await ctx.request.get(`${BASE}/?${RUNTIME_DISABLED_PARAM}`, { headers: { 'User-Agent': GOOGLEBOT } });
         expect(res.status()).toBeLessThan(400);
         return await res.text();
       } finally {

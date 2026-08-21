@@ -703,7 +703,7 @@ class Controller {
 
 		// Try sitemap.xml.
 		$sitemap_url = trailingslashit( $site_url ) . 'sitemap.xml';
-		$response    = wp_remote_get(
+		$response    = $this->remote_get(
 			$sitemap_url,
 			array(
 				'timeout'   => 15,
@@ -729,7 +729,7 @@ class Controller {
 								if ( wp_parse_url( $sub_url, PHP_URL_HOST ) !== wp_parse_url( home_url(), PHP_URL_HOST ) ) {
 									continue;
 								}
-								$sub_response = wp_remote_get(
+								$sub_response = $this->remote_get(
 									$sub_url,
 									array(
 										'timeout'     => 15,
@@ -776,7 +776,7 @@ class Controller {
 
 		// If sitemap didn't yield enough pages, parse homepage links.
 		if ( count( $pages ) < $max ) {
-			$homepage_response = wp_remote_get(
+			$homepage_response = $this->remote_get(
 				$site_url,
 				array(
 					'timeout'   => 15,
@@ -827,24 +827,13 @@ class Controller {
 	 */
 	public function scan_page( $url ) {
 		$cookies   = array();
-		$settings  = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
-		$static_ip = $settings->get( 'scanner', 'static_ip' );
 		$args      = array(
 			'timeout'     => 15,
 			'sslverify'   => (bool) apply_filters( 'faz_scanner_sslverify', true, $url ),
 			'redirection' => 3,
+			'reject_unsafe_urls' => true,
 		);
-		if ( ! empty( $static_ip ) && filter_var( $static_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
-			$parsed = wp_parse_url( $url );
-			$host   = isset( $parsed['host'] ) ? $parsed['host'] : '';
-			$scheme = isset( $parsed['scheme'] ) ? $parsed['scheme'] : 'https';
-			$port   = isset( $parsed['port'] ) ? ':' . $parsed['port'] : '';
-			$path   = isset( $parsed['path'] ) ? $parsed['path'] : '/';
-			$query  = isset( $parsed['query'] ) ? '?' . $parsed['query'] : '';
-			$url    = $scheme . '://' . $static_ip . $port . $path . $query;
-			$args['headers'] = array( 'Host' => $host );
-		}
-		$response = wp_remote_get( $url, $args );
+		$response = $this->remote_get( $url, $args );
 
 		if ( is_wp_error( $response ) ) {
 			return $cookies;
@@ -933,6 +922,83 @@ class Controller {
 		}
 
 		return $cookies;
+	}
+
+	/**
+	 * Fetch a scanner URL, optionally pinning the site's hostname to a public IP.
+	 *
+	 * CURLOPT_RESOLVE preserves the original URL, Host header, TLS SNI and
+	 * certificate validation. Rewriting an HTTPS URL to the numeric address (the
+	 * old implementation) breaks certificate-name validation and was applied to
+	 * scan_page() only, so sitemap discovery silently used different DNS.
+	 * When a static IP is configured we fail closed if WordPress does not use its
+	 * cURL transport; silently falling back to DNS would make the setting lie.
+	 *
+	 * @param string $url  Same-site URL.
+	 * @param array  $args WordPress HTTP arguments.
+	 * @return array|\WP_Error
+	 */
+	public function remote_get( $url, $args = array() ) {
+		// The scanner only consumes web URLs. Make WordPress reject loopback,
+		// private-network and non-HTTP redirect targets on every discovery/fetch
+		// path, not only scan_page().
+		$args['reject_unsafe_urls'] = true;
+		$settings  = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
+		$static_ip = $settings->get( 'scanner', 'static_ip' );
+		$entry     = self::build_static_resolve_entry( $url, $static_ip );
+		if ( '' === $entry ) {
+			return wp_remote_get( $url, $args );
+		}
+
+		$url_host  = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+		$site_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+		if ( '' === $url_host || $url_host !== $site_host ) {
+			return new \WP_Error( 'faz_scanner_static_ip_host', __( 'Static IP pinning is limited to this site hostname.', 'faz-cookie-manager' ) );
+		}
+
+		$applied  = false;
+		$resolver = static function ( $handle, $parsed_args, $request_url ) use ( $entry, $url_host, &$applied ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
+			if ( strtolower( (string) wp_parse_url( $request_url, PHP_URL_HOST ) ) !== $url_host
+				|| ! defined( 'CURLOPT_RESOLVE' ) || ! function_exists( 'curl_setopt' ) ) {
+				return;
+			}
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.curl_curl_setopt -- WordPress exposes this transport-specific hook precisely for cURL options.
+			curl_setopt( $handle, CURLOPT_RESOLVE, array( $entry ) );
+			$applied = true;
+		};
+		add_action( 'http_api_curl', $resolver, 10, 3 );
+		$response = wp_remote_get( $url, $args );
+		remove_action( 'http_api_curl', $resolver, 10 );
+
+		if ( ! $applied ) {
+			return new \WP_Error( 'faz_scanner_static_ip_transport', __( 'Static IP pinning requires the WordPress cURL HTTP transport.', 'faz-cookie-manager' ) );
+		}
+		return $response;
+	}
+
+	/**
+	 * Build a CURLOPT_RESOLVE entry for a public IP, or an empty string.
+	 *
+	 * @param string $url URL whose hostname and port should be pinned.
+	 * @param string $ip  Configured IP address.
+	 * @return string
+	 */
+	public static function build_static_resolve_entry( $url, $ip ) {
+		$ip = trim( (string) $ip );
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
+			return '';
+		}
+		$parsed = wp_parse_url( $url );
+		if ( ! is_array( $parsed ) || empty( $parsed['host'] ) ) {
+			return '';
+		}
+		$scheme = isset( $parsed['scheme'] ) ? strtolower( (string) $parsed['scheme'] ) : 'https';
+		if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+			return '';
+		}
+		$port = isset( $parsed['port'] ) ? absint( $parsed['port'] ) : ( 'https' === $scheme ? 443 : 80 );
+		$address = false !== strpos( $ip, ':' ) ? '[' . $ip . ']' : $ip;
+		return strtolower( (string) $parsed['host'] ) . ':' . $port . ':' . $address;
 	}
 
 	/**

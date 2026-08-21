@@ -2,6 +2,18 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Jurisdiction rulesets are enforced at runtime by default.** The 47-law catalogue now drives pre-consent category defaults, blocking, banner-law selection, mandatory Do-Not-Sell/GPC/revisit controls, independent sensitive-processing opt-in and Consent Mode defaults. The `faz_geo_ruleset_runtime` filter remains an emergency kill switch. Cache Compatibility Mode is ignored while enforcement is active so one country's consent model cannot be cached for another.
+- **GPC is a controlling sale/share opt-out.** `Sec-GPC: 1` and `navigator.globalPrivacyControl` are honoured without a publisher toggle and override conflicting prior or same-page consent. Unrelated category choices remain intact; targeted granular overrides are cleared and the audit marker is retained on classic and AMP flows.
+- **AMP now uses a server-reconciled granular consent bridge.** Purpose decisions, banner scope, revision and expiry are synchronized with the canonical consent cookie through strict AMP CORS endpoints; known AMP components are purpose-gated, endpoint timeouts fail closed, and global/excluded-page/bot/revisit settings are mirrored.
+- **Ad-blocker compatibility mode covers every frontend consent bundle**, including GCM, TCF, WP Consent API and Microsoft UET/Clarity, rather than only the main and accessibility scripts.
+- **The server-side scanner's optional static IP is now a complete setting.** Sitemap discovery and page fetches use cURL hostname pinning while preserving Host, TLS certificate validation and SNI; only public IPs are accepted and unsafe targets fail closed.
+
+### Removed
+- Removed unused `site.url` and `site.installed` settings and their public schema/getters. An idempotent migration deletes the legacy group; WordPress remains authoritative for the site URL and plugin version state.
+
 ## [1.26.0] — 2026-08-12
 
 ### Added

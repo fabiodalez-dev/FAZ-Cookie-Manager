@@ -8,7 +8,7 @@
  *   - default_consent()   (ruleset state -> { gdpr, ccpa })
  *   - apply_cmv2_to_gcm()  (ruleset CMv2 -> GCM default_settings canonical keys)
  *
- * These back the flag-gated `faz_geo_ruleset_runtime` feature: when the resolved
+ * These back the default-on `faz_geo_ruleset_runtime` enforcement: when the resolved
  * ruleset names a category, its default_categories state wins for BOTH laws
  * (necessary always granted) so the live banner reflects the visitor's
  * jurisdiction; its model decides the enforcement law; and its CMv2 block drives
@@ -63,6 +63,41 @@ function assert_eq( $actual, $expected, $label ) {
 $rs = function ( $cats ) {
 	return array( 'ui' => array( 'default_categories' => $cats ) );
 };
+
+echo "\n\033[1mGeo_Runtime runtime flag and mandatory UI overlay\033[0m\n";
+assert_eq( Geo_Runtime::is_enabled(), true, 'runtime ruleset enforcement is enabled by default' );
+
+$ui_ruleset = array(
+	'signals' => array( 'gpc_required' => true ),
+	'ui'      => array(
+		'equal_weight_buttons'     => true,
+		'donotsell_link_required'  => true,
+		'sensitive_separate_optin' => true,
+		'revisit_widget_required'  => true,
+	),
+);
+$ui_config = array(
+	'behaviours' => array( 'respectGPC' => array( 'status' => false ) ),
+	'config'     => array(
+		'notice' => array( 'elements' => array( 'buttons' => array( 'elements' => array(
+			'accept' => array( 'status' => false, 'styles' => array( 'background-color' => '#123456' ) ),
+			'reject' => array( 'status' => false, 'styles' => array( 'background-color' => '#ffffff' ) ),
+		) ) ) ),
+		'preferenceCenter' => array( 'elements' => array( 'buttons' => array( 'elements' => array(
+			'accept' => array( 'status' => false ), 'reject' => array( 'status' => false ), 'save' => array( 'status' => false ),
+		) ) ) ),
+	),
+);
+$ui_out = Geo_Runtime::apply_ui_requirements( $ui_ruleset, $ui_config );
+assert_eq( $ui_out['config']['notice']['elements']['buttons']['elements']['donotSell']['status'], true, 'Do Not Sell entry point is forced on' );
+assert_eq( $ui_out['config']['optoutPopup']['status'], true, 'Do Not Sell popup is forced on' );
+assert_eq( $ui_out['config']['revisitConsent']['status'], true, 'revisit widget is forced on' );
+assert_eq( $ui_out['behaviours']['respectGPC']['status'], true, 'GPC behaviour is forced on' );
+assert_eq( $ui_out['config']['notice']['elements']['buttons']['elements']['accept']['status'], true, 'accept is enabled under equal-weight requirement' );
+assert_eq( $ui_out['config']['notice']['elements']['buttons']['elements']['reject']['styles'], array( 'background-color' => '#123456' ), 'reject receives the same visual weight as accept' );
+assert_eq( $ui_out['config']['preferenceCenter']['elements']['buttons']['elements']['save']['status'], true, 'separate opt-in has a Save route' );
+assert_eq( Geo_Runtime::requires_separate_optin( $ui_ruleset, 'profiling' ), true, 'profiling is marked for separate opt-in' );
+assert_eq( Geo_Runtime::requires_separate_optin( $ui_ruleset, 'analytics' ), false, 'ordinary categories are not marked sensitive' );
 
 // ---------- category_default() state mapping ----------
 

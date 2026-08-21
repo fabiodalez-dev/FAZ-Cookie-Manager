@@ -2,6 +2,7 @@ import { type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { expect, test } from '../fixtures/wp-fixture';
 import { clickFirstVisible } from '../utils/ui';
 import { getWpLoginPath } from '../utils/wp-auth';
+import { wpEval } from '../utils/wp-env';
 
 type SettingsTree = Record<string, any>;
 
@@ -164,6 +165,28 @@ test.describe('Settings option behavior interactions', () => {
 
   test.afterEach(async () => {
     await restoreOriginalSettings();
+  });
+
+  test('notice expiry rejects malformed/negative values at REST boundary and preserves zero', async () => {
+    const endpoint = `${baseURL}/?rest_route=/faz/v1/settings/notices/pageviews_overage_notice`;
+    const headers = { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce };
+
+    for (const expiry of [-1, 'invalid', ['invalid']]) {
+      const response = await adminPage.request.post(endpoint, { headers, data: { expiry } });
+      expect(response.status(), `expiry ${JSON.stringify(expiry)} must be rejected`).toBe(400);
+    }
+
+    try {
+      const permanent = await adminPage.request.post(endpoint, { headers, data: { expiry: 0 } });
+      expect(permanent.status()).toBe(200);
+    } finally {
+      // Keep the shared WordPress fixture neutral for later specs.
+      wpEval(`
+        $notices = (array) get_option( 'faz_admin_notices', array() );
+        unset( $notices['pageviews_overage_notice'] );
+        update_option( 'faz_admin_notices', $notices, false );
+      `);
+    }
   });
 
   test('pageview_tracking gates both frontend config and public pageview route', async ({ browser }) => {

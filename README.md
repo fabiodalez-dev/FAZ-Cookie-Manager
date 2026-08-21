@@ -610,6 +610,12 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
+### Unreleased
+- **Compliance runtime**: all bundled jurisdiction rulesets are enforced by default across category defaults, server/client blocking, mandatory UI controls and Consent Mode. `faz_geo_ruleset_runtime` is retained only as an emergency disable filter; Cache Compatibility Mode is ignored while jurisdiction-specific output is active.
+- **GPC**: an asserted browser/header signal always controls sale/share purposes, including over a prior consent or a later same-page Accept All action, while preserving unrelated choices. Classic and AMP consent paths retain the audit marker and remove granular overrides that could bypass the opt-out.
+- **AMP parity**: remote scope/revision/expiry reconciliation, granular purpose controls, fail-closed component gating, and the same banner/bot/exclusion/revisit rules as the classic runtime.
+- **Operational completeness**: Ad-blocker compatibility mode now covers every frontend consent bundle; Scanner Static IP is exposed and pins all server-side crawl requests without breaking HTTPS; unused duplicate site settings are migrated away.
+
 ### 1.26.0 — 2026-08-12
 - **Added**: an administrator review notice links Cookie Policy versions to consent revision. Classify a change as minor to preserve existing consents, or material to re-show the banner; saved jurisdiction/language overrides participate in the review token.
 - **Added**: opt-in footer legal links with ordered page selections and custom labels. The output is visitor-invariant and cache-safe; unpublished or missing selections stay removable in Settings but never render publicly.

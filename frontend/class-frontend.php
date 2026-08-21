@@ -414,14 +414,7 @@ class Frontend {
 			}
 
 			if ( $alt_asset ) {
-				$script_path = plugin_dir_path( __FILE__ ) . 'js/script' . $suffix . '.js';
-				wp_register_script( $script_handle, false, array(), $this->version, false );
-				wp_enqueue_script( $script_handle );
-				if ( file_exists( $script_path ) ) {
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file
-					$script_content = file_get_contents( $script_path );
-					wp_add_inline_script( $script_handle, $script_content );
-				}
+				$this->enqueue_inline_bundle( $script_handle, 'js/script' . $suffix . '.js', array(), false );
 			} else {
 				/**
 				 * Opt-in: load the main banner bundle in the footer instead of
@@ -579,7 +572,11 @@ class Frontend {
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $script_handle . '-gcm';
-				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
+				if ( $alt_asset ) {
+					$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), false );
+				} else {
+					wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
+				}
 			}
 
 			// IAB TCF v2.3 CMP stub (when IAB is enabled AND a valid CMP ID is set).
@@ -597,7 +594,11 @@ class Frontend {
 				wp_add_inline_script( $script_handle, $tcf_stub, 'before' );
 				$tcf_suffix = $this->get_script_suffix( 'js/tcf-cmp' );
 				$tcf_handle = $script_handle . '-tcf-cmp';
-				wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+				if ( $alt_asset ) {
+					$this->enqueue_inline_bundle( $tcf_handle, 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), false );
+				} else {
+					wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+				}
 
 				// PublisherCC: use admin setting, fall back to site locale.
 				$saved_cc     = $this->settings->get( 'iab', 'publisher_cc' );
@@ -785,13 +786,7 @@ class Frontend {
 			$a11y_handle = $script_handle . '-a11y';
 			$a11y_suffix = $this->get_script_suffix( 'js/a11y' );
 			if ( $alt_asset ) {
-				$a11y_path = plugin_dir_path( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js';
-				wp_register_script( $a11y_handle, false, array( $script_handle ), $this->version, true );
-				wp_enqueue_script( $a11y_handle );
-				if ( file_exists( $a11y_path ) ) {
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file
-					wp_add_inline_script( $a11y_handle, file_get_contents( $a11y_path ) );
-				}
+				$this->enqueue_inline_bundle( $a11y_handle, 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), true );
 			} else {
 				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
 			}
@@ -807,11 +802,15 @@ class Frontend {
 				)
 			);
 		if ( true === $this->is_wpconsentapi_enabled() ) {
-			$handle = $this->plugin_name . '-wca';
+			$handle = $script_handle . '-wca';
 			// Compute the suffix per-file so SCRIPT_DEBUG and a missing generated
 			// asset both fall back safely to the readable source.
 			$wca_suffix = $this->get_script_suffix( 'js/wca' );
-			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
+			if ( $alt_asset ) {
+				$this->enqueue_inline_bundle( $handle, 'js/wca' . $wca_suffix . '.js', array( $script_handle ), false );
+			} else {
+				wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
+			}
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'var _fazGsk = true;', 'before' );
 			}
@@ -820,9 +819,13 @@ class Frontend {
 		$ms_uet     = (bool) $this->settings->get( 'microsoft', 'uet_consent_mode' );
 		$ms_clarity = (bool) $this->settings->get( 'microsoft', 'clarity_consent' );
 		if ( $ms_uet || $ms_clarity ) {
-			$ms_handle = $this->plugin_name . '-microsoft-consent';
+			$ms_handle = $script_handle . '-microsoft-consent';
 			$ms_suffix = $this->get_script_suffix( 'js/microsoft-consent' );
-			wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array(), $this->version, false );
+			if ( $alt_asset ) {
+				$this->enqueue_inline_bundle( $ms_handle, 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), false );
+			} else {
+				wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
+			}
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
 			}
@@ -830,6 +833,31 @@ class Frontend {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftClarity = true;', 'before' );
 			}
 		}
+	}
+
+	/**
+	 * Enqueue a bundled local script as inline code behind an empty WP handle.
+	 *
+	 * Alternative-asset mode exists specifically to avoid a public plugin URL
+	 * containing ad-blocker keywords. Every FAZ frontend bundle must therefore
+	 * use the same delivery path, not just the main and accessibility bundles.
+	 *
+	 * @param string $handle        Script handle.
+	 * @param string $relative_path Path relative to frontend/.
+	 * @param array  $dependencies  Script dependencies.
+	 * @param bool   $in_footer     Whether to print in the footer.
+	 * @return bool Whether the local bundle was found and attached.
+	 */
+	private function enqueue_inline_bundle( $handle, $relative_path, $dependencies = array(), $in_footer = false ) {
+		$path = plugin_dir_path( __FILE__ ) . ltrim( $relative_path, '/' );
+		wp_register_script( $handle, false, $dependencies, $this->version, $in_footer );
+		wp_enqueue_script( $handle );
+		if ( ! file_exists( $path ) ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- trusted local bundle.
+		wp_add_inline_script( $handle, file_get_contents( $path ) );
+		return true;
 	}
 
 	/**
@@ -1061,7 +1089,11 @@ class Frontend {
 	 */
 	private function is_cache_compatibility_enabled() {
 		$settings = $this->get_faz_settings();
-		return ! empty( $settings['banner_control']['cache_compatibility'] );
+		// A shared full-page cache cannot safely serve jurisdiction-specific law,
+		// defaults and mandatory controls. Runtime compliance therefore wins over
+		// this optimisation; the filter can still disable geo runtime entirely.
+		$geo_enabled = class_exists( Geo_Runtime::class ) && Geo_Runtime::is_enabled();
+		return ! $geo_enabled && ! empty( $settings['banner_control']['cache_compatibility'] );
 	}
 
 	/**
@@ -1200,6 +1232,12 @@ class Frontend {
 
 		if ( false === $this->banner ) {
 			return;
+		}
+
+		if ( null !== $runtime_ruleset ) {
+			$this->banner->set_settings(
+				Geo_Runtime::apply_ui_requirements( $runtime_ruleset, $this->banner->get_settings() )
+			);
 		}
 
 		// Per-banner geo-targeting: skip banner if visitor's country doesn't match the ruleSet.
@@ -1488,15 +1526,13 @@ class Frontend {
 			$dependent = true;
 		}
 
-		// Runtime geo-routing (flag-gated): when the resolved ruleset drives the
+		// Runtime geo-routing: when the resolved ruleset drives the
 		// pre-consent category defaults, the GCM signals and the blocked-category
 		// set, the rendered HTML/JS varies by the visitor's country/region. A
 		// cached response would leak one jurisdiction's defaults to another, so
 		// the output must always be treated as country-dependent while the flag
 		// is on — independent of any multi-banner geo-targeting configuration.
-		// 1.18.2 HOTFIX: routed through Geo_Runtime::is_enabled() (hard-false)
-		// so the disabled runtime no longer forces no-cache; restoring the
-		// feature restores the cache-bust automatically via the same gate.
+		// The filter is an emergency kill switch; enforcement is enabled by default.
 		if ( Geo_Runtime::is_enabled() ) {
 			$dependent = true;
 		}
@@ -1640,50 +1676,10 @@ class Frontend {
 	 * @return bool
 	 */
 	private function is_country_in_regions( $country_code, $regions ) {
-		$country_code = strtoupper( $country_code );
+		$country_code = strtoupper( (string) $country_code );
 		$regions      = is_array( $regions ) ? $regions : (array) $regions;
-
-		$region_map = array(
-			// F008 fix: align with admin/assets/js/pages/banner.js
-			// REGION_PRESETS.EU which deliberately EXCLUDES GB (UK is its
-			// own preset). The pre-fix table included GB for "consistency
-			// with Geolocation::$eu_countries", but that produced a
-			// silent divergence: a publisher selecting "EU" in the admin
-			// (per-banner target_countries) got a 30-country set without
-			// GB; the same publisher's global Settings → Geolocation →
-			// target_regions=eu got a 31-country set with GB. UK has its
-			// own data-protection regime (UK GDPR) and deserves its own
-			// preset — keep the 'uk' bucket as the canonical home for GB.
-			// Geolocation::$eu_countries is a separate concern (lex
-			// generalis EU+UK shorthand for "is this visitor under any
-			// GDPR-class law") and remains unchanged.
-			'eu' => array(
-				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
-				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
-				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
-				// EEA.
-				'IS', 'LI', 'NO',
-			),
-			'uk' => array( 'GB' ),
-			'us' => array( 'US' ),
-			'ca' => array( 'CA' ),
-			'br' => array( 'BR' ),
-			'au' => array( 'AU' ),
-			'jp' => array( 'JP' ),
-			'ch' => array( 'CH' ),
-			'za' => array( 'ZA' ),
-		);
-
-		foreach ( $regions as $region ) {
-			$region = strtolower( $region );
-			if ( isset( $region_map[ $region ] ) ) {
-				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
-					return true;
-				}
-			} elseif ( strtoupper( $region ) === $country_code ) {
-				// Direct country code match (e.g., 'ZA' for South Africa).
-				return true;
-			}
+		if ( faz_country_in_regions( $country_code, $regions ) ) {
+			return true;
 		}
 
 		/**
@@ -1857,9 +1853,9 @@ class Frontend {
 	/**
 	 * Resolved geo ruleset for the current visitor, or null.
 	 *
-	 * Gated behind the opt-in `faz_geo_ruleset_runtime` filter (default false),
-	 * so existing installs see ZERO behaviour change until they enable it. When
-	 * on, the resolved ruleset (model + default_categories + CMv2) drives the
+	 * Enabled by default and overridable through the emergency
+	 * `faz_geo_ruleset_runtime` filter. The resolved ruleset (model +
+	 * default_categories + CMv2) drives the
 	 * chosen banner's per-category consent defaults, the server-side blocking
 	 * decision, the GCM defaults AND the banner selection (the active banner
 	 * whose applicableLaw matches the ruleset model). Resolution uses the same
@@ -2304,9 +2300,7 @@ class Frontend {
 		$faz_configured_expiry = isset( $banner_settings['settings']['consentExpiry']['value'] )
 			? absint( $banner_settings['settings']['consentExpiry']['value'] )
 			: 180;
-		$faz_expiry = ( 'ccpa' === $banner->get_law() )
-			? max( 1, $faz_configured_expiry )
-			: max( 1, min( 182, $faz_configured_expiry ) );
+		$faz_expiry = self::normalize_consent_expiry( $banner->get_law(), $faz_configured_expiry );
 
 		$providers = array();
 		$store     = array(
@@ -2695,6 +2689,22 @@ class Frontend {
 		}
 
 		return $store;
+	}
+
+	/**
+	 * Apply the legal lifetime bounds shared by classic and AMP consent.
+	 *
+	 * @param string $law             Effective banner law.
+	 * @param int    $configured_days Configured lifetime in days.
+	 * @return int Effective lifetime in days.
+	 */
+	public static function normalize_consent_expiry( $law, $configured_days ) {
+		$law             = strtolower( (string) $law );
+		$configured_days = absint( $configured_days );
+		if ( 'ccpa' === $law ) {
+			return max( 1, min( 3650, $configured_days ? $configured_days : 365 ) );
+		}
+		return max( 1, min( 182, $configured_days ? $configured_days : 180 ) );
 	}
 
 	/**
@@ -4475,7 +4485,7 @@ class Frontend {
 		// blanket pre-consent block would otherwise cause under an opt-out law.
 		$is_optout_law = ( $this->banner && 'ccpa' === $this->banner->get_law() );
 
-		// Runtime geo-routing (flag-gated, default off): when a ruleset is
+		// Runtime geo-routing: when a ruleset is
 		// resolved it is authoritative for the pre-consent default of each
 		// category it names — denied-until-action → block now, granted → allow —
 		// regardless of the banner's own law. This is what makes a Quebec (opt-in)
@@ -4490,19 +4500,13 @@ class Frontend {
 		// and must be honoured immediately — including on the very first
 		// response, before the JS opt-out (_fazApplyGpcOptOut) has had a chance
 		// to write the consent cookie. So when no consent is recorded yet and the
-		// request carries Sec-GPC:1, block the sell/share (ccpaDoNotSell)
-		// categories server-side too, mirroring the client-side behaviour.
-		// GPC applies when EITHER the banner is an opt-out (CCPA) law OR the
-		// resolved runtime ruleset declares it honours GPC (signals.gpc_honored)
-		// — the latter covers US-state rulesets whose model maps to a gdpr-style
-		// banner (e.g. opt-out-with-sensitive-opt-in → California) yet still
-		// require GPC sale/share opt-out. Pure opt-in jurisdictions that don't
-		// honour GPC are unaffected (their non-necessary categories are already
-		// blocked pre-consent).
+		// request carries Sec-GPC:1, block the sell/share categories server-side,
+		// including when a prior consent cookie grants them. GPC is a visitor
+		// signal, not a publisher-configurable preference, and therefore is never
+		// gated on the banner toggle or binary law.
 		$gpc_header_on = isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$ruleset_honors_gpc = ( null !== $ruleset && ! empty( $ruleset['signals']['gpc_honored'] ) );
-		$gpc_optout = $gpc_header_on && ( $is_optout_law || $ruleset_honors_gpc );
+		$gpc_optout = $gpc_header_on;
 
 		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
 		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
@@ -4531,20 +4535,14 @@ class Frontend {
 				$blocked[] = $slug;
 				continue;
 			}
+			if ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
+				$blocked[] = $slug;
+				continue;
+			}
 			if ( empty( $consent ) ) {
 				$rs_default = ( null !== $ruleset ) ? Geo_Runtime::category_default( $ruleset, $slug ) : null;
 				if ( false === $rs_default ) {
 					// Ruleset denies this category until an explicit action.
-					$blocked[] = $slug;
-				} elseif ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
-					// A Global Privacy Control sale/share opt-out is a
-					// legally-binding signal that OVERRIDES a ruleset 'granted'
-					// default — a Sec-GPC:1 request must block sold/shared
-					// categories even when the resolved ruleset grants them
-					// (CPPA §7025). This check runs BEFORE the ruleset-granted
-					// branch below so the grant can't bypass GPC. $gpc_optout
-					// already embeds $is_optout_law, so opt-in visitors are
-					// unaffected.
 					$blocked[] = $slug;
 				} elseif ( true === $rs_default ) {
 					// Ruleset grants this category — do not block (overrides the
@@ -4894,9 +4892,8 @@ class Frontend {
 		// the tracker unblocked pre-consent while the client, which skips the
 		// rule, still blocked it. Skipping the rule keeps the built-in
 		// classification and fails closed on both layers.
-		$settings         = $this->get_faz_settings();
-		$valid_categories = $this->get_valid_category_slugs();
-		$custom_rules     = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		$settings        = $this->get_faz_settings();
+		$custom_rules    = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
 		$custom_patterns  = array();
 		foreach ( $custom_rules as $rule ) {
 			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
@@ -5394,6 +5391,9 @@ class Frontend {
 				// (use it) or must fall back to the effective-law logic (matching
 				// the server's get_blocked_categories split).
 				'defaultFromRuleset' => Geo_Runtime::is_ruleset_default( $this->get_runtime_ruleset(), $category->get_slug() ),
+				// Sensitive processing is never bundled into Accept All when the
+				// jurisdiction requires a distinct affirmative choice.
+				'requiresSeparateOptIn' => Geo_Runtime::requires_separate_optin( $this->get_runtime_ruleset(), $category->get_slug() ),
 			);
 		}
 		return $cookie_groups;

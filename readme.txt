@@ -373,6 +373,10 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.26.0 =
+* Changed: all bundled jurisdiction rule-sets are now enforced by default across pre-consent defaults, blocking, mandatory banner controls and Consent Mode. The faz_geo_ruleset_runtime filter remains an emergency kill switch, and Cache Compatibility Mode is ignored while the response varies by jurisdiction.
+* Compliance: GPC now overrides conflicting prior and same-page sale/share grants without erasing unrelated choices. The classic and AMP paths retain an audit marker and remove granular overrides that could bypass the opt-out.
+* Changed: AMP consent now reconciles purpose choices, scope, revision and expiry through strict same-site/AMP-cache endpoints, gates known AMP components by purpose and mirrors the classic runtime's banner, bot, exclusion and revisit settings.
+* Changed: Ad-blocker compatibility mode covers the banner, accessibility, GCM, TCF, WP Consent API and Microsoft bundles; Scanner Static IP is now configurable and preserves hostname/TLS/SNI across discovery and fetches; unused duplicate site settings are removed on upgrade.
 * Added: Cookie Policy change review linked to consent revision. Mark a change minor to keep existing consents, or material to re-show the banner. The review token includes the default policy and every saved jurisdiction/language override variant.
 * Added: opt-in footer legal links with ordered page selections and optional custom labels. Output is visitor-invariant and cache-safe; unpublished or unavailable selections remain visible in Settings so they can be removed, but never render publicly.
 * Added: a safe snapshot collector for privacy-policy text registered by installed plugins, preserving operator wording while tracking upstream changes.

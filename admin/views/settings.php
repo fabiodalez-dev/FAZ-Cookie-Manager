@@ -49,7 +49,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Ad-blocker compatibility mode', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'Uses generic script handle names to prevent ad blockers from blocking the cookie banner. Enable if visitors report the banner not appearing.', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Serves every frontend bundle (banner, accessibility, GCM, TCF, WP Consent API and Microsoft consent) through generic inline handles so plugin-URL filter rules cannot block only part of the consent runtime.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
@@ -111,7 +111,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Cache compatibility mode', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep the page fully cacheable by LiteSpeed, QUIC.cloud, Varnish, Nginx FastCGI or WP Rocket. The plugin stops emitting <code>no-cache</code>/<code>no-store</code> headers and the <code>DONOTCACHEPAGE</code> constant for anonymous visitors, so the static HTML is cached and the banner runs entirely client-side from the consent cookie. <strong>Only enable this if your banner output does NOT vary by visitor country.</strong> With IAB TCF, geo-targeting, country-targeted banners or runtime geo-routing active, the same cached HTML would be served to every region (e.g. an EU TCF <code>gdprApplies=true</code> page reaching a US visitor) — keep this OFF in that case, or vary the cache by country at the CDN. This mode also bypasses the bot-skip ("Hide banner from search engine bots") and pauses server-side A/B banner splitting.', 'faz-cookie-manager' ) ); ?></div>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep a visitor-invariant page fully cacheable only when jurisdiction runtime is explicitly disabled with the <code>faz_geo_ruleset_runtime</code> filter. Geo rule-sets are enforced by default, so this optimisation is automatically ignored: caching one country\'s consent model for another country is a compliance risk. It also pauses server-side A/B splitting and bot-specific output when it is actually active.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
@@ -245,6 +245,11 @@ defined( 'ABSPATH' ) || exit;
 				<label><?php esc_html_e( 'Max Pages to Scan', 'faz-cookie-manager' ); ?></label>
 				<input type="number" class="faz-input faz-input-sm" data-path="scanner.max_pages" value="100" min="1" style="width:120px;">
 				<div class="faz-help"><?php esc_html_e( 'Maximum number of pages the cookie scanner will crawl. Higher values find more cookies but take longer. 100 pages is sufficient for most sites.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Static public IP (optional)', 'faz-cookie-manager' ); ?></label>
+				<input type="text" class="faz-input" data-path="scanner.static_ip" inputmode="decimal" placeholder="203.0.113.10" style="max-width:320px;">
+				<div class="faz-help"><?php esc_html_e( 'Pin every server-side scanner request — sitemap discovery and page fetches — to this site IP while preserving the hostname, HTTPS certificate validation and SNI. Only public IPv4/IPv6 addresses are accepted; requires the WordPress cURL transport. Leave blank to use DNS.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">

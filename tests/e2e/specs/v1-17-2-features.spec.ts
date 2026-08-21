@@ -310,10 +310,9 @@ test.describe('1.17.2 — [faz_cookie_settings] revisit shortcode', () => {
 // ─────────────────────────────────────────────────────────────────────────
 // 15. Global Privacy Control (GPC) honouring.
 //
-// The "Respect Global Privacy Control" banner toggle was previously inert —
-// saved in admin but never surfaced to the frontend, so navigator.global-
-// PrivacyControl was never read. These tests provision the toggle on the
-// active banner and assert the signal now drives an automatic opt-out.
+// GPC is a controlling sale/share opt-out and is not conditional on a
+// publisher-side toggle. It must override both earlier and same-page grants,
+// while the notice remains available for unrelated/sensitive choices.
 // ─────────────────────────────────────────────────────────────────────────
 test.describe('GPC — Global Privacy Control honouring (1.17.2)', () => {
   // Flip behaviours.respectGPC.status on the default banner and bump the
@@ -332,10 +331,20 @@ test.describe('GPC — Global Privacy Control honouring (1.17.2)', () => {
     );
   }
 
-  test.beforeAll(() => setRespectGPC(true));
-  test.afterAll(() => setRespectGPC(false));
+  let originalGpcOn = false;
+  test.beforeAll(() => {
+    originalGpcOn = wpEval(
+      `global $wpdb; $t=$wpdb->prefix.'faz_banners';` +
+      `$id=(int)$wpdb->get_var("SELECT banner_id FROM $t WHERE banner_default=1 LIMIT 1");` +
+      `$s=$id?json_decode($wpdb->get_var($wpdb->prepare("SELECT settings FROM $t WHERE banner_id=%d",$id)),true):array();` +
+      `echo (is_array($s)&&!empty($s['behaviours']['respectGPC']['status']))?'1':'0';`,
+    ).trim() === '1';
+    // Deliberately OFF: the signal must still be honoured.
+    setRespectGPC(false);
+  });
+  test.afterAll(() => setRespectGPC(originalGpcOn));
 
-  test('GPC signal auto-applies an opt-out and suppresses the banner', async ({ browser, wpBaseURL }) => {
+  test('GPC auto-applies a sale/share opt-out even with the publisher toggle off', async ({ browser, wpBaseURL }) => {
     const context = await browser.newContext();
     // Assert the GPC DOM signal before any page script runs.
     await context.addInitScript(() => {
@@ -345,14 +354,15 @@ test.describe('GPC — Global Privacy Control honouring (1.17.2)', () => {
     await page.goto(`${wpBaseURL}/?n=${Date.now()}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
 
-    // Banner must NOT be shown — the opt-out is already recorded.
+    // GPC is not blanket consent. Keep the banner visible so the visitor can
+    // decide unrelated optional and sensitive purposes.
     const bannerVisible = await page.evaluate(() => {
-      const b = document.getElementById('faz-consent') || document.querySelector('.faz-consent-bar');
+      const b = document.querySelector('[data-faz-tag="notice"]') || document.querySelector('.faz-consent-bar');
       if (!b) return false;
       const cs = getComputedStyle(b);
-      return cs.display !== 'none' && cs.visibility !== 'hidden' && (b as HTMLElement).offsetParent !== null;
+      return cs.display !== 'none' && cs.visibility !== 'hidden';
     });
-    expect(bannerVisible, 'banner should be suppressed when GPC drove an opt-out').toBe(false);
+    expect(bannerVisible, 'banner should remain available for choices outside GPC').toBe(true);
 
     // Consent cookie records a reject with the gpc marker; non-necessary denied.
     const consent = await page.evaluate(() => {
@@ -371,10 +381,29 @@ test.describe('GPC — Global Privacy Control honouring (1.17.2)', () => {
     expect(consent!.necessary).toBe('yes');
     expect(consent!.marketing).toBe('no');
 
+    // A later Accept All on the same page may grant unrelated purposes but
+    // cannot override the still-asserted browser signal.
+    await page.evaluate(() => {
+      const w = window as unknown as { _fazAcceptCookies?: (choice: string, ungated?: boolean) => unknown };
+      w._fazAcceptCookies?.('all', true);
+    });
+    const afterAccept = await page.evaluate(() => {
+      const raw = document.cookie.split(';').map((s) => s.trim()).find((s) => s.startsWith('fazcookie-consent='));
+      const out: Record<string, string> = {};
+      if (raw) decodeURIComponent(raw.substring('fazcookie-consent='.length)).split(',').forEach((p) => {
+        const i = p.indexOf(':');
+        if (i > -1) out[p.slice(0, i).trim()] = p.slice(i + 1).trim();
+      });
+      return out;
+    });
+    expect(afterAccept.marketing, 'Accept All cannot re-grant sale/share under active GPC').toBe('no');
+    expect(afterAccept.functional, 'a category not marked as sold/shared remains independently grantable').toBe('yes');
+    expect(afterAccept.gpc, 'GPC audit marker survives the later action').toBe('1');
+
     await context.close();
   });
 
-  test('without a GPC signal the banner still appears (no auto opt-out)', async ({ browser, wpBaseURL }) => {
+  test('without a GPC signal the banner appears with no automatic action', async ({ browser, wpBaseURL }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(`${wpBaseURL}/?n=${Date.now()}`, { waitUntil: 'domcontentloaded' });

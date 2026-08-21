@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Consentlogs\Includes\Controller as ConsentLogs_Controller;
 use FazCookie\Admin\Modules\Pageviews\Includes\Controller as Pageviews_Controller;
 use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
+use FazCookie\Admin\Modules\Settings\Includes\Settings;
 
 /**
  * Fired during plugin activation.
@@ -116,7 +117,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.08.12.2';
+	const MIGRATIONS_VERSION = '2026.08.21.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -147,11 +148,35 @@ class Activator {
 			self::reset_stale_per_cookie_consent();
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
+			self::remove_dead_site_settings();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+	}
+
+	/**
+	 * Remove legacy settings that were written on every install but never read.
+	 *
+	 * The live site URL always comes from WordPress and installation state comes
+	 * from the plugin/database version options; keeping duplicate values in the
+	 * public settings payload creates stale, misleading configuration.
+	 *
+	 * @return void
+	 */
+	private static function remove_dead_site_settings() {
+		$settings = get_option( 'faz_settings', array() );
+		if ( ! is_array( $settings ) || ! array_key_exists( 'site', $settings ) ) {
+			return;
+		}
+		unset( $settings['site'] );
+		if ( ! update_option( 'faz_settings', $settings, false ) ) {
+			throw new \RuntimeException( 'FAZ: failed to remove legacy site settings; migration will retry.' );
+		}
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings' ) ) {
+			\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
+		}
 	}
 
 	/**
@@ -608,12 +633,14 @@ class Activator {
 	 * before and after the scan to determine how many new cookies were added.
 	 */
 	public static function run_scheduled_scan() {
-		$settings = get_option( 'faz_settings' );
-		if ( empty( $settings['scanner']['auto_scan'] ) ) {
+		$settings = Settings::get_instance();
+		if ( ! $settings->get( 'scanner', 'auto_scan' ) ) {
 			return;
 		}
 
-		$max_pages = isset( $settings['scanner']['max_pages'] ) ? absint( $settings['scanner']['max_pages'] ) : 20;
+		// Read through Settings so legacy/corrupt stored values are normalised to
+		// the same [1, 2000] range as new saves and interactive scans.
+		$max_pages = (int) $settings->get( 'scanner', 'max_pages' );
 
 		// Count cookies before scan to detect newly added ones.
 		$cookie_controller = Cookie_Controller::get_instance();

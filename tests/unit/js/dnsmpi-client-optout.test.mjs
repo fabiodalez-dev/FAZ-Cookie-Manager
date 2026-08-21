@@ -43,7 +43,7 @@ function check(label, condition) {
   }
 }
 
-function loadFrontend({ userWhitelist = [] } = {}) {
+function loadFrontend({ userWhitelist = [], applicableLaw = 'ccpa' } = {}) {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     runScripts: 'outside-only',
     url: 'https://shop.example.test/',
@@ -65,7 +65,7 @@ function loadFrontend({ userWhitelist = [] } = {}) {
     _perServiceConsent: false,
     _perCookieConsent: false,
     _rootDomain: '',
-    _bannerConfig: { settings: { applicableLaw: 'ccpa' } },
+    _bannerConfig: { settings: { applicableLaw } },
     i18n: {},
   };
 
@@ -109,17 +109,38 @@ console.log('DNSMPI client-side opt-out + user-whitelist matching (jsdom)');
   check('a second application is a no-op (no duplicate event)', events === 1);
 }
 
-// 4. Nothing granted → nothing happens (fresh visitor with the cookie).
+// 4. A fresh visitor still gets a persistent, granular-safe opt-out.
 {
   const window = loadFrontend();
   window.document.cookie = 'fazcookie-dnsmpi=1;path=/';
+  window.fazcookie._fazConsentStore.set('svc.facebook', 'yes');
+  window.fazcookie._fazConsentStore.set('ck.facebook._fbp', 'yes');
   let events = 0;
   window.document.addEventListener('fazcookie_consent_update', () => { events += 1; });
   window.eval('_fazApplyDnsmpiOptOut()');
-  check('a visitor with no stored grants triggers no event', events === 0);
+  check('fresh DNSMPI writes an auditable action', window.fazcookie._fazConsentStore.get('action') === 'yes');
+  check('fresh DNSMPI writes its audit marker', window.fazcookie._fazConsentStore.get('dnsmpi') === '1');
+  check('fresh DNSMPI denies the sell/share category', window.fazcookie._fazConsentStore.get('marketing') === 'no');
+  check('fresh DNSMPI clears an allowed service override', !window.fazcookie._fazConsentStore.has('svc.facebook'));
+  check('fresh DNSMPI clears an allowed cookie override', !window.fazcookie._fazConsentStore.has('ck.facebook._fbp'));
+  check('fresh DNSMPI emits the consent update once', events === 1);
 }
 
-// 5. User whitelist: bare tokens must not substring-match URLs.
+// 5. A "Both" banner keeps categories outside sale/share usable.
+{
+  const window = loadFrontend({ applicableLaw: 'gdpr_ccpa' });
+  window.document.cookie = 'fazcookie-dnsmpi=1;path=/';
+  window.fazcookie._fazConsentStore.set('action', 'yes');
+  window.fazcookie._fazConsentStore.set('consent', 'yes');
+  window.fazcookie._fazConsentStore.set('functional', 'yes');
+  window.fazcookie._fazConsentStore.set('marketing', 'yes');
+  window.eval('_fazApplyDnsmpiOptOut()');
+  check('Both: functional grant survives the targeted opt-out', window.fazcookie._fazConsentStore.get('functional') === 'yes');
+  check('Both: marketing remains denied', window.fazcookie._fazConsentStore.get('marketing') === 'no');
+  check('Both: global GDPR consent is not rewritten into a blanket rejection', window.fazcookie._fazConsentStore.get('consent') === 'yes');
+}
+
+// 6. User whitelist: bare tokens must not substring-match URLs.
 {
   const window = loadFrontend({ userWhitelist: ['js', 'recaptcha', 'googleapis.com/maps'] });
   check(

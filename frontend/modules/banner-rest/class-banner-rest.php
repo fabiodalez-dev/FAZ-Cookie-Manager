@@ -213,6 +213,12 @@ class Banner_Rest {
 			}
 		}
 
+		if ( null !== $runtime_ruleset ) {
+			$banner->set_settings(
+				Geo_Runtime::apply_ui_requirements( $runtime_ruleset, $banner->get_settings() )
+			);
+		}
+
 		// Force the language context for downstream helpers. The static cache
 		// inside faz_current_language() is reset so the added filter actually
 		// influences subsequent calls within this request.
@@ -337,7 +343,7 @@ class Banner_Rest {
 	 */
 	private function is_cache_compatibility_enabled() {
 		$settings = $this->get_faz_settings();
-		return ! empty( $settings['banner_control']['cache_compatibility'] );
+		return ! Geo_Runtime::is_enabled() && ! empty( $settings['banner_control']['cache_compatibility'] );
 	}
 
 	/**
