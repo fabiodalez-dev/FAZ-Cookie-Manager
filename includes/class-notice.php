@@ -86,6 +86,11 @@ class Notice {
 	 * @return void
 	 */
 	public function dismiss( $notice, $expiry = 0 ) {
+		// Coerce before the strict 0-check: callers pass request input here, and
+		// `time() + $expiry` below is a TypeError on a non-numeric value. The
+		// cast also keeps the string '0' meaning "dismiss permanently" instead
+		// of slipping past `0 !== $expiry` and expiring the dismissal instantly.
+		$expiry    = is_scalar( $expiry ) ? (int) $expiry : 0;
 		$dismissed = $this->get_dismissed();
 		if ( 0 !== $expiry ) {
 			$dismissed[ $notice ] = time() + $expiry;

@@ -429,7 +429,10 @@ class Api extends Rest_Controller {
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function dismiss_pageviews_overage_notice( $request ) {
-		$expiry = $request->get_param( 'expiry' );
+		// intval(), matching update_notice() below: Notice::dismiss() adds the
+		// expiry to time(), so a raw request value must never reach it as a
+		// non-numeric string or array.
+		$expiry = intval( $request->get_param( 'expiry' ) );
 		$notice = Notice::get_instance();
 		$notice->dismiss( 'pageviews_overage_notice', $expiry );
 		return rest_ensure_response( array( 'success' => true ) );

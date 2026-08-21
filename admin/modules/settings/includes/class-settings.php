@@ -524,8 +524,17 @@ class Settings extends Store {
 				break;
 			case 'installed':
 			case 'step':
-			case 'max_pages':
 				$value = absint( $value );
+				break;
+			case 'max_pages':
+				// Clamped to the same [1, 2000] window the interactive scan
+				// endpoint enforces at run time (scanner/api/class-api.php). The
+				// scheduled-scan cron and WP-CLI honour the STORED value without
+				// their own cap, so a bare absint() here let a settings PUT
+				// persist an unbounded page count for the weekly crawl — or 0
+				// (absint of any non-numeric string), which made every auto-scan
+				// a silent no-op while the admin believed scanning was on.
+				$value = max( 1, min( 2000, absint( $value ) ) );
 				break;
 			case 'consent_revision':
 				// Revision counter: always >= 1. Bounded upper limit to avoid

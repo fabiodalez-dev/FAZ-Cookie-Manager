@@ -274,11 +274,22 @@ class Controller {
 	 * @return void
 	 */
 	public function maybe_update_settings( $response ) {
-		$settings             = new Settings();
-		$data                 = $settings->get();
-		$data['consent_logs'] = isset( $response['consent_logs'] ) ? $response['consent_logs'] : array();
-		$data['languages']    = isset( $response['languages'] ) ? $response['languages'] : array();
-		update_option( 'faz_settings', $data );
+		$settings = new Settings();
+		$data     = $settings->get();
+		// Only overwrite the groups the response actually carries: a partial
+		// payload must not blank the stored consent-log/language settings.
+		if ( isset( $response['consent_logs'] ) && is_array( $response['consent_logs'] ) ) {
+			$data['consent_logs'] = $response['consent_logs'];
+		}
+		if ( isset( $response['languages'] ) && is_array( $response['languages'] ) ) {
+			$data['languages'] = $response['languages'];
+		}
+		// Settings::update(), never a bare update_option(): this is external
+		// input, and the direct write skipped the sanitiser, left the
+		// request-local settings cache stale, and never fired
+		// faz_after_update_settings — so page caches kept serving the old
+		// consent configuration.
+		$settings->update( $data );
 	}
 
 	/**
