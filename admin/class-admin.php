@@ -2150,8 +2150,7 @@ class Admin {
 	}
 
 	/**
-	 * AJAX handler — flips settings.geolocation.geo_targeting off in the
-	 * faz_settings option. Atomic (single update_option call), idempotent
+	 * AJAX handler — flips settings.geolocation.geo_targeting off. Idempotent
 	 * (running it twice on an already-disabled config is a no-op), guarded
 	 * by capability + nonce.
 	 *
@@ -2164,15 +2163,20 @@ class Admin {
 		}
 		check_ajax_referer( 'faz_disable_redundant_geo_routing', '_wpnonce' );
 
-		$settings = get_option( 'faz_settings', array() );
-		if ( ! is_array( $settings ) ) {
-			$settings = array();
-		}
+		// Settings::update(), never a bare update_option( 'faz_settings' ):
+		// geo-targeting decides who sees the banner, so the write must fire
+		// faz_after_update_settings — that hook is what purges the page caches
+		// and the banner template. The direct write left cached pages serving
+		// the geo-targeted behaviour until the cache happened to expire, and
+		// left the request-local settings cache stale for the rest of the
+		// request.
+		$settings_obj = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
+		$settings     = $settings_obj->get();
 		if ( ! isset( $settings['geolocation'] ) || ! is_array( $settings['geolocation'] ) ) {
 			$settings['geolocation'] = array();
 		}
 		$settings['geolocation']['geo_targeting'] = false;
-		update_option( 'faz_settings', $settings );
+		$settings_obj->update( $settings );
 		delete_transient( 'faz_dismiss_redundant_geo_routing' );
 		wp_send_json_success();
 	}

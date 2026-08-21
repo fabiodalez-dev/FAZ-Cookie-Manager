@@ -348,6 +348,10 @@ class Activator {
 		}
 		$settings['script_blocking']['whitelist_patterns'] = $defaults;
 		update_option( 'faz_settings', $settings );
+		// Drop the request-local settings cache: anything that read settings
+		// earlier in this same request would otherwise keep serving the
+		// pre-migration whitelist for the rest of it.
+		\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
 
 		// Verify by reading back rather than trusting update_option()'s return:
 		// it reports false BOTH when the write failed and when the value was
@@ -432,6 +436,12 @@ class Activator {
 		$patterns[] = 'www.gstatic.com/recaptcha/';
 		$settings['script_blocking']['whitelist_patterns'] = array_values( $patterns );
 		update_option( 'faz_settings', $settings );
+		// Same reason as seed_default_whitelist_patterns(): a stale
+		// request-local cache would hide the appended pattern until the
+		// next request.
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings' ) ) {
+			\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
+		}
 	}
 
 	/**
@@ -1660,6 +1670,12 @@ class Activator {
 		if ( ! empty( $settings['banner_control']['per_cookie_consent'] ) ) {
 			$settings['banner_control']['per_cookie_consent'] = false;
 			update_option( 'faz_settings', $settings );
+			// Without this, a frontend request that had already read settings
+			// would keep honouring the stale per_cookie_consent=true for the
+			// rest of this request — the exact window this reset exists to close.
+			if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings' ) ) {
+				\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
+			}
 		}
 		update_option( 'faz_reset_stale_per_cookie_consent_done', 1, false );
 	}

@@ -496,6 +496,13 @@ class Api extends Rest_Controller {
 			$clear = true;
 		} else {
 			$clear = filter_var( $clear, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE );
+			// FILTER_NULL_ON_FAILURE hands back null for anything it cannot
+			// read as a boolean. An unintelligible value must keep the safe
+			// default (clear the caches), not become a third state that the
+			// faz_after_update_settings listeners never anticipated.
+			if ( is_null( $clear ) ) {
+				$clear = true;
+			}
 		}
 		$object     = new Settings();
 		$data       = $object->get();
