@@ -2876,6 +2876,22 @@ class Frontend {
 			return true;
 		}
 
+		// hide_from_bots: mirror the enqueue_scripts() gate so a crawler gets
+		// no banner container markup or placeholder CSS either — the setting
+		// promises "cleaner HTML to crawlers", and skipping only the script
+		// left the full (visually hidden) container in the bot's copy. Same
+		// Cache Compatibility guard as the enqueue gate: under full-page
+		// caching the render must stay visitor-invariant, or a bot-warmed
+		// cache copy would hide the banner from every human visitor. (#158)
+		if ( ! $this->is_cache_compatibility_enabled() ) {
+			$bot_settings = $this->get_faz_settings();
+			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
+				if ( faz_is_bot() ) {
+					return true;
+				}
+			}
+		}
+
 		// Runtime geo-routing opt-in fallback with no matching banner: keep
 		// blocking active (template loaded) but hide the mismatched opt-out UI.
 		if ( $this->faz_law_fallback_suppress ) {
@@ -4870,13 +4886,22 @@ class Frontend {
 
 		// 3. Admin custom blocking rules (Settings → Script Blocking).
 		// Custom rules CAN override built-in providers (admin intent takes priority).
-		$settings     = $this->get_faz_settings();
-		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
-		$custom_patterns = array();
+		// The category must be a REAL category slug, mirroring the client-side
+		// check in get_store_data(): a rule whose category no longer exists
+		// (the legacy 'performance' slug, or a category the admin deleted)
+		// would otherwise override a built-in tracker's category with one that
+		// is never in get_blocked_categories() — i.e. the server would ship
+		// the tracker unblocked pre-consent while the client, which skips the
+		// rule, still blocked it. Skipping the rule keeps the built-in
+		// classification and fails closed on both layers.
+		$settings         = $this->get_faz_settings();
+		$valid_categories = $this->get_valid_category_slugs();
+		$custom_rules     = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		$custom_patterns  = array();
 		foreach ( $custom_rules as $rule ) {
 			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
 			$category = isset( $rule['category'] ) ? $rule['category'] : '';
-			if ( ! empty( $pattern ) && ! empty( $category ) ) {
+			if ( ! empty( $pattern ) && ! empty( $category ) && in_array( $category, $valid_categories, true ) ) {
 				$map[ $pattern ]               = $category;
 				$custom_patterns[ $pattern ] = true;
 			}

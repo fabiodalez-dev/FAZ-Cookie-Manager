@@ -165,6 +165,11 @@ defined( 'ABSPATH' ) || exit;
 				</label>
 				<div class="faz-help"><?php esc_html_e( 'Tracks pageviews and banner interactions (accept, reject, settings) for the dashboard analytics. Data is aggregate-only: it sends the page URL and title with no per-visitor identifier or cookie, so the events cannot be linked across pages or sessions. Counts are stored first-party in your own database. Disable for stricter compliance.', 'faz-cookie-manager' ); ?></div>
 			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Analytics Retention Period (months)', 'faz-cookie-manager' ); ?></label>
+				<input type="number" class="faz-input faz-input-sm" data-path="pageviews.retention" value="6" min="0" max="120" style="width:120px;">
+				<div class="faz-help"><?php esc_html_e( 'How long pageview and banner interaction records are kept before automatic deletion. Set 0 to keep them forever (they are aggregate-only and carry no personal data). Default is 6 months.', 'faz-cookie-manager' ); ?></div>
+			</div>
 		</div>
 	</div>
 
@@ -452,6 +457,11 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-label"><?php esc_html_e( 'Remove all data on uninstall', 'faz-cookie-manager' ); ?></span>
 				</label>
 				<div class="faz-help" style="color:var(--faz-danger);"><?php esc_html_e( 'When enabled, deleting the plugin will permanently remove ALL data: cookies, categories, consent logs, pageviews, banner settings, and scan history. Keep this OFF if you plan to reinstall or update the plugin.', 'faz-cookie-manager' ); ?></div>
+			</div>
+			<div class="faz-form-group">
+				<label><?php esc_html_e( 'Privacy Request Retention Period (months)', 'faz-cookie-manager' ); ?></label>
+				<input type="number" class="faz-input faz-input-sm" data-path="dsar.retention" value="24" min="1" max="120" style="width:120px;">
+				<div class="faz-help"><?php esc_html_e( 'How long completed privacy (DSAR) request records are kept before automatic deletion. They are the evidence that a data-subject request was answered, so a minimum of 12–24 months is recommended. Default is 24 months.', 'faz-cookie-manager' ); ?></div>
 			</div>
 		</div>
 	</div>

@@ -62,8 +62,13 @@ class Api extends Rest_Controller {
 		// and per-IP throttle bypass attempts on installs that don't use
 		// the dashboard analytics. The admin chart endpoints below are
 		// always registered (they need to render even with empty data).
+		// Strict `true ===`, matching the beacon emitter in
+		// Frontend::enqueue_scripts(): the two reads must agree, or a value
+		// written outside the sanitiser (import, WP-CLI) as '1' registers this
+		// public endpoint while the frontend emits no beacon — an anonymous
+		// POST route live on an install whose admin sees tracking as off.
 		$settings           = get_option( 'faz_settings', array() );
-		$pageview_tracking  = isset( $settings['pageview_tracking'] ) ? (bool) $settings['pageview_tracking'] : false;
+		$pageview_tracking  = isset( $settings['pageview_tracking'] ) && true === $settings['pageview_tracking'];
 
 		if ( $pageview_tracking ) {
 		// Public: record a pageview or banner event.

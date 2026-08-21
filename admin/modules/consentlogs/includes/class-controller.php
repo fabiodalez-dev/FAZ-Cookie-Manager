@@ -288,9 +288,13 @@ class Controller {
 		// validate_callback, so an unauthenticated POST could otherwise write an
 		// arbitrary string that pollutes the dashboard's GROUP BY statistics
 		// (total != accepted + rejected + partial). Unknown values fold to
-		// 'partial'; the internal-only dnsmpi_optout / dns_rescinded stay valid
-		// because the internal callers pass them verbatim.
-		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded' ), true ) ) {
+		// 'partial'; the internal-only dnsmpi_optout / dns_rescinded / pmp_grant
+		// stay valid because the internal callers pass them verbatim —
+		// 'pmp_grant' in particular exists so a membership-based programmatic
+		// grant (Paid_Memberships_Pro::log_pmp_grant) is never conflated with a
+		// consent the visitor gave through the banner; folding it to 'partial'
+		// was exactly that conflation.
+		if ( ! in_array( $status, array( 'accepted', 'rejected', 'partial', 'dnsmpi_optout', 'dns_rescinded', 'pmp_grant' ), true ) ) {
 			$status = 'partial';
 		}
 		$categories = isset( $data['categories'] ) ? $data['categories'] : array();

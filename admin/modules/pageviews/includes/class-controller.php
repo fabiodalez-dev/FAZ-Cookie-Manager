@@ -162,7 +162,6 @@ class Controller {
 		$page_title = (string) apply_filters( 'faz_pageview_title', $page_title );
 
 		$event_type = isset( $data['event_type'] ) ? sanitize_text_field( $data['event_type'] ) : 'pageview';
-		$session_id = isset( $data['session_id'] ) ? sanitize_text_field( $data['session_id'] ) : '';
 
 		if ( ! in_array( $event_type, $allowed_events, true ) ) {
 			$event_type = 'pageview';
@@ -175,7 +174,12 @@ class Controller {
 				'page_url'   => $page_url,
 				'page_title' => $page_title,
 				'event_type' => $event_type,
-				'session_id' => $session_id,
+				// Always empty by policy: aggregate metrics carry no session
+				// identifier (see the data-minimisation note above). The column
+				// survives for schema compatibility, but no caller-supplied
+				// value can reach it — the old passthrough was a live sink for
+				// any future caller that started posting one.
+				'session_id' => '',
 				'created_at' => current_time( 'mysql' ),
 			),
 			array( '%s', '%s', '%s', '%s', '%s' )

@@ -141,6 +141,22 @@ class Banner_Rest {
 			);
 		}
 
+		// Honour the site-wide kill switch. This route is public
+		// (permission_callback __return_true) and registered unconditionally,
+		// so without this check an install whose banner is switched off still
+		// served the full banner HTML/CSS/categories to anyone who asked —
+		// nothing legitimate calls it then (script.js is not enqueued), but a
+		// setting must not be ignored by one of its code paths.
+		$settings      = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
+		$banner_status = $settings->get( 'banner_control', 'status' );
+		if ( false === $banner_status ) {
+			return new WP_Error(
+				'faz_banner_disabled',
+				__( 'The cookie banner is disabled on this site.', 'faz-cookie-manager' ),
+				array( 'status' => 404 )
+			);
+		}
+
 		$controller = Banner_Controller::get_instance();
 		$cache_compatibility = $this->is_cache_compatibility_enabled();
 		$country    = $cache_compatibility ? '' : Geolocation::get_visitor_country();

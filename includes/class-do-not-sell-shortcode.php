@@ -362,12 +362,19 @@ class Do_Not_Sell_Shortcode {
 		// from the request) instead of COOKIEPATH/COOKIE_DOMAIN which are not
 		// defined in all WordPress contexts (e.g. REST routes, AJAX) and cause
 		// PHPStan errors when those constants are absent from the stub set.
+		// NOT httponly, deliberately: the cookie carries only the literal '1'
+		// (no secret to protect), and script.js must be able to read it —
+		// _fazApplyDnsmpiOptOut() denies the sell/share categories in the
+		// client store when this cookie is present. With httponly the client
+		// could not see the opt-out, so _fazUnblockServerSide() restored the
+		// very scripts the server had blocked for it (the stored consent still
+		// said "yes"), undoing the opt-out one tick after page load.
 		setcookie( self::COOKIE_NAME, '1', array(
 			'expires'  => $expires,
 			'path'     => '/',
 			'domain'   => '',
 			'secure'   => is_ssl(),
-			'httponly' => true,
+			'httponly' => false,
 			'samesite' => 'Lax',
 		) );
 	}
