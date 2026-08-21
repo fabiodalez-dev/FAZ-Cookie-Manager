@@ -1158,6 +1158,10 @@ class Admin {
 					$theme_file = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/templates/6.2.0/theme.json';
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
+					// The original banner normally has ID 1, but a valid install can
+					// promote another row after deletions/imports. Tell banner.js which
+					// row the bare editor URL should open instead of hard-coding ID 1.
+					wp_add_inline_script( 'faz-admin', 'fazConfig.bannerId=' . $this->get_banner_editor_id() . ';', 'after' );
 
 					// Per-law default notice descriptions for every selected or bundled
 					// language. Banner rows preserve unselected translations, so those
@@ -1219,7 +1223,7 @@ class Admin {
 		$paths = array();
 		switch ( $view ) {
 			case 'banner':
-				$paths = array( '/faz/v1/banners/1', '/faz/v1/banners/design-presets' );
+				$paths = array( '/faz/v1/banners/' . $this->get_banner_editor_id(), '/faz/v1/banners/design-presets' );
 				break;
 			case 'settings':
 				$paths = array( '/faz/v1/settings', '/faz/v1/settings/geolite2/status', '/faz/v1/gvl' );
@@ -1268,6 +1272,37 @@ class Admin {
 				'before'
 			);
 		}
+	}
+
+	/**
+	 * Resolve the banner row edited by the Cookie Banner admin page.
+	 *
+	 * An explicit banner_id is kept even when it is stale so banner.js can show
+	 * its recovery notice. Without an explicit ID, prefer banner_default and
+	 * then the first surviving row. Falling back to 1 only covers an empty table
+	 * during installation, before the controller creates its initial rows.
+	 *
+	 * @return int Banner ID.
+	 */
+	private function get_banner_editor_id() {
+		// Read-only navigation parameter; no state is changed from this value.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$requested_id = isset( $_GET['banner_id'] ) ? absint( wp_unslash( $_GET['banner_id'] ) ) : 0;
+		if ( $requested_id > 0 ) {
+			return $requested_id;
+		}
+
+		global $wpdb;
+		$banner_id = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			"SELECT banner_id FROM `{$wpdb->prefix}faz_banners` WHERE banner_default = 1 ORDER BY banner_id ASC LIMIT 1"
+		);
+		if ( $banner_id <= 0 ) {
+			$banner_id = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+				"SELECT banner_id FROM `{$wpdb->prefix}faz_banners` ORDER BY banner_id ASC LIMIT 1"
+			);
+		}
+
+		return $banner_id > 0 ? $banner_id : 1;
 	}
 
 	/**

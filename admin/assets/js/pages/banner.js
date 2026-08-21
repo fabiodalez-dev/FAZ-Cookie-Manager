@@ -19,13 +19,16 @@
 
 	// Banner the page is currently editing. Read from the ?banner_id= query
 	// string so the multi-banner switcher (1.14.0+) can deep-link to a
-	// specific row. Falls back to 1 (the system-default banner shipped
-	// with every install) when the param is missing or malformed.
+	// specific row. On a bare editor URL PHP supplies the current default row;
+	// this matters after deletion/import flows where the surviving default no
+	// longer has the original ID 1.
 	var bannerId = (function () {
 		try {
 			var match = (window.location.search || '').match(/[?&]banner_id=(\d+)/);
 			var parsed = match ? parseInt(match[1], 10) : NaN;
-			return isFinite(parsed) && parsed > 0 ? parsed : 1;
+			var fallback = parseInt((window.fazConfig && window.fazConfig.bannerId) || 0, 10);
+			if (isFinite(parsed) && parsed > 0) return parsed;
+			return isFinite(fallback) && fallback > 0 ? fallback : 1;
 		} catch (e) { return 1; }
 	})();
 	var bannerData = null; // full API response
