@@ -1431,8 +1431,15 @@
 
 	function formatClockTime(ts) {
 		if (!ts) { return ''; }
+		// `[]` means "the browser's locale", which is not necessarily the
+		// admin's: a WP admin set to it_IT on an en-US browser would get a
+		// 12-hour clock inside otherwise-Italian text. fazConfig.locale is the
+		// WP user_locale ('it_IT'), converted to a BCP-47 tag the way
+		// geo-routing.js and dashboard.js already do it.
+		var loc = (window.fazConfig && window.fazConfig.locale) || document.documentElement.lang;
+		loc = loc ? String(loc).replace(/_/g, '-') : undefined;
 		try {
-			return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			return new Date(ts * 1000).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
 		} catch (e) {
 			return new Date(ts * 1000).toLocaleTimeString();
 		}

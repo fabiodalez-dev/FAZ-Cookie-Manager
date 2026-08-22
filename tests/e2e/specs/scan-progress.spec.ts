@@ -19,6 +19,13 @@ test.describe('Scan progress UI', () => {
 
 	test('shows total pages immediately after discover and updates progress', async ({ page }) => {
 		await page.goto(`${BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`);
+		// networkidle, deliberately. A review suggested domcontentloaded, but after
+		// a goto() the load event has already fired, so that call is a no-op — it
+		// does not relax the wait, it REMOVES it. The click below then lands on
+		// #faz-scan-btn before the admin JS binds its handler, discover never
+		// fires, and the test dies at its 45s ceiling. Measured: the change made
+		// this spec flaky. The session poll runs at 10s intervals, so 500ms of
+		// network idle is reachable here.
 		await page.waitForLoadState('networkidle');
 
 		// Clear stored fingerprint for a full scan.
@@ -117,6 +124,13 @@ test.describe('Scan progress UI', () => {
 	// the true post-import total.
 	test('mid-crawl status never presents a partial cookie count; the true total arrives at completion', async ({ page }) => {
 		await page.goto(`${BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`);
+		// networkidle, deliberately. A review suggested domcontentloaded, but after
+		// a goto() the load event has already fired, so that call is a no-op — it
+		// does not relax the wait, it REMOVES it. The click below then lands on
+		// #faz-scan-btn before the admin JS binds its handler, discover never
+		// fires, and the test dies at its 45s ceiling. Measured: the change made
+		// this spec flaky. The session poll runs at 10s intervals, so 500ms of
+		// network idle is reachable here.
 		await page.waitForLoadState('networkidle');
 
 		await page.evaluate(() => {
@@ -163,6 +177,11 @@ test.describe('Scan progress UI', () => {
 		// Deferred, not dropped: the completion summary reports the true
 		// post-import total (client observations + server-captured HttpOnly +
 		// script-inferred cookies).
-		await expect(page.locator('.faz-toast').last()).toContainText(/\d+ cookies found on \d+ pages/);
+		// Two branches reach this toast: 'Scan complete — N cookies found on M
+		// pages' and, since the import became idempotent in this PR, the replay
+		// branch 'Already saved — N cookies on M pages …'. Matching only the
+		// first would fail on a legitimate retry with a message that reads like
+		// a scanner bug. Assert what both branches promise: a real total.
+		await expect(page.locator('.faz-toast').last()).toContainText(/\d+ cookies (?:found )?on \d+ pages/);
 	});
 });

@@ -128,6 +128,27 @@ vc_ok(
 	'a jar entry without a domain defaults to the site host too'
 );
 
+// ── a REAL scan id opens the ledger ───────────────────────────────────────
+// start_browser_scan_session() enforces /^[a-f0-9]{32}$/, so every id that
+// reaches this method in production is a hex STRING. The ledger keyed it with
+// absint(), which is 0 for all of them, and the guard below then returned
+// before writing a byte — the anonymous pass measured nothing on every
+// install, silently, and every assertion in this file passed because they all
+// used integer ids the real flow never produces. Pin the real shape.
+vc_reset();
+$hex_id = str_repeat( 'a1b2c3d4', 4 ); // 32 chars, matches the session regex
+$controller->begin_visitor_check( $hex_id, array(), array( 'shop_session' ), array( array( 'name' => 'tk_ai' ) ) );
+$hex_stored = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok( isset( $hex_stored[ $hex_id ] ), 'a 32-char hex scan id opens a ledger keyed on itself' );
+vc_ok(
+	isset( $hex_stored[ $hex_id ]['status'] ) && 'pending' === $hex_stored[ $hex_id ]['status'],
+	'that ledger is pending, so the replay worker will fill it'
+);
+vc_ok(
+	$hex_id === get_option( Controller::VISITOR_CHECK_TARGET_OPTION, null ),
+	'the target points at the hex id, so observations land in the right ledger'
+);
+
 // ── zero/invalid scan id refuses to open anything ─────────────────────────
 vc_reset();
 $controller->begin_visitor_check( 0, array(), array(), array() );
@@ -215,6 +236,34 @@ vc_ok(
 // Finalizing twice, or with no target, is a no-op.
 vc_ok( null === $controller->finalize_visitor_check(), 'a second finalize finds no open target and returns null' );
 
+// ── the replay worker must not close a ledger it never filled ─────────────
+// run_httponly_check() captures the target when it starts and hands it back
+// here. An import that lands mid-drain opens a NEW ledger; without this guard
+// the draining worker would freeze that fresh ledger as complete with zero
+// observations, and the worker that was meant to fill it would then find the
+// target already deleted and record nothing. One scan loses its whole check,
+// with no error anywhere.
+vc_reset();
+$controller->begin_visitor_check( str_repeat( 'f0', 16 ), array(), array( 'shop_session' ), array() );
+$race_id = str_repeat( 'f0', 16 );
+vc_ok(
+	null === $controller->finalize_visitor_check( str_repeat( 'ee', 16 ) ),
+	'a worker holding a STALE target closes nothing'
+);
+$race_stored = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok(
+	isset( $race_stored[ $race_id ]['status'] ) && 'pending' === $race_stored[ $race_id ]['status'],
+	'the newly opened ledger is left pending for its own worker'
+);
+vc_ok(
+	$race_id === get_option( Controller::VISITOR_CHECK_TARGET_OPTION, null ),
+	'and the target survives, so that worker can still find it'
+);
+vc_ok(
+	is_array( $controller->finalize_visitor_check( $race_id ) ),
+	'the worker holding the MATCHING target does close it'
+);
+
 echo "== THE safety rule: anonymous absence never demotes ==\n";
 
 // The tally that deletion offers are built from. If the visitor check ever
@@ -288,8 +337,8 @@ vc_ok(
 	'run_httponly_check() records observations beside its checkpoint writes'
 );
 vc_ok(
-	false !== strpos( $controller_src, '$this->finalize_visitor_check();' ),
-	'run_httponly_check() finalizes the ledger when the queue drains'
+	false !== strpos( $controller_src, '$this->finalize_visitor_check( $visitor_target );' ),
+	'run_httponly_check() finalizes the ledger it opened with, when the queue drains'
 );
 $begin_pos    = strpos( $api_src, 'begin_visitor_check(' );
 $schedule_pos = strpos( $api_src, 'schedule_httponly_check( $scanned_urls )' );

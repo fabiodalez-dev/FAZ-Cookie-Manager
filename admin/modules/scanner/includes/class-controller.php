@@ -976,6 +976,13 @@ class Controller {
 			if ( ! is_array( $observation ) || ! hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
 				continue;
 			}
+			// The sentinel row written when BROWSER_SCAN_OBSERVATION_LIMIT is hit
+			// is not a cookie sighting; collect_browser_scan_session() skips it
+			// and this count must agree, or the panel reports one observation
+			// more than the import will ever see.
+			if ( ! empty( $observation['truncated'] ) ) {
+				continue;
+			}
 			$observations++;
 			$observed_at = isset( $observation['observed_at'] ) ? absint( $observation['observed_at'] ) : 0;
 			if ( $observed_at > $last_observed ) {
@@ -1360,7 +1367,14 @@ class Controller {
 	 * @return void
 	 */
 	public function run_httponly_check() {
-		$lock_time = absint( get_option( self::HTTPONLY_LOCK_OPTION, 0 ) );
+		// Captured BEFORE the queue drains. finalize_visitor_check() used to
+		// re-read this option after the finally block, so an import landing in
+		// that window — which opens a ledger of its own — had its brand-new
+		// ledger frozen as complete with nothing observed, while the worker that
+		// should have filled it found the target already deleted and recorded
+		// nothing at all. One scan silently lost its whole visitor check.
+		$visitor_target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
+		$lock_time      = absint( get_option( self::HTTPONLY_LOCK_OPTION, 0 ) );
 		if ( $lock_time > 0 && $lock_time < time() - 600 ) {
 			delete_option( self::HTTPONLY_LOCK_OPTION );
 		}
@@ -1447,7 +1461,7 @@ class Controller {
 			// re-fetched anonymously. Freeze the ledger into the three-bucket
 			// diff. Pure bookkeeping — it writes only its own option, never
 			// the missed-scan tally and never a catalogue row.
-			$this->finalize_visitor_check();
+			$this->finalize_visitor_check( $visitor_target );
 		}
 	}
 
@@ -2749,8 +2763,15 @@ class Controller {
 	 * @return void
 	 */
 	public function begin_visitor_check( $scan_id, $imported_cookies, $imported_names, $jar_cookies ) {
-		$scan_id = absint( $scan_id );
-		if ( $scan_id < 1 ) {
+		// A scan id is a 32-char hex STRING (start_browser_scan_session enforces
+		// /^[a-f0-9]{32}$/). absint() on one of those is 0, so the guard below
+		// used to reject every real id and return before writing anything: the
+		// ledger was never opened and the anonymous pass measured nothing, on
+		// every install, silently. Key it as the string it is.
+		$scan_id = sanitize_key( (string) $scan_id );
+		// '0' is the historic no-id sentinel and sanitize_key() keeps it as a
+		// non-empty string, so it has to be refused by name.
+		if ( '' === $scan_id || '0' === $scan_id ) {
 			return;
 		}
 		$site_host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
@@ -2829,8 +2850,8 @@ class Controller {
 	 * @return void
 	 */
 	public function record_visitor_observations( $observed_cookies ) {
-		$target = absint( get_option( self::VISITOR_CHECK_TARGET_OPTION, 0 ) );
-		if ( $target < 1 ) {
+		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
+		if ( '' === $target ) {
 			return;
 		}
 		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
@@ -2892,9 +2913,16 @@ class Controller {
 	 *
 	 * @return array|null The completed ledger entry, or null when none is open.
 	 */
-	public function finalize_visitor_check() {
-		$target = absint( get_option( self::VISITOR_CHECK_TARGET_OPTION, 0 ) );
-		if ( $target < 1 ) {
+	public function finalize_visitor_check( $expected_target = '' ) {
+		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
+		if ( '' === $target ) {
+			return null;
+		}
+		// A ledger opened after this worker started belongs to a replay that has
+		// not run yet. Closing it here would freeze it empty and leave its own
+		// worker with nothing to write into.
+		$expected_target = sanitize_key( (string) $expected_target );
+		if ( '' !== $expected_target && $expected_target !== $target ) {
 			return null;
 		}
 		delete_option( self::VISITOR_CHECK_TARGET_OPTION );
