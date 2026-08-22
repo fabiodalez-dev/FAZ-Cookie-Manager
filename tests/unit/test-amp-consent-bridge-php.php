@@ -180,11 +180,8 @@ namespace FazCookie\Frontend {
 	 * 90-day banner fixture "passed" a >= 180-day assertion that the real code
 	 * would have failed. The suite was measuring its own stand-in.
 	 *
-	 * The real rule: the six-month GDPR-family limit is a MAXIMUM and has no
-	 * floor, since re-asking sooner is more protective; an absent value still has
-	 * to yield something usable, so it becomes 182. CCPA is the one model with a
-	 * floor (§1798.135's 12 months) and carries the 3650-day ceiling the banner UI
-	 * advertises.
+	 * The real rule: configured values are clamped only to the model's ceiling;
+	 * absent CCPA and GDPR-family values default to 365 and 180 respectively.
 	 */
 	class Frontend {
 		public static function normalize_consent_expiry( $law, $configured_days ) {
@@ -192,12 +189,9 @@ namespace FazCookie\Frontend {
 			$days = abs( (int) $configured_days );
 
 			if ( 'ccpa' === $law ) {
-				return min( 3650, max( 365, $days ) );
+				return max( 1, min( 3650, $days ? $days : 365 ) );
 			}
-			if ( $days < 1 ) {
-				return 182;
-			}
-			return min( 182, $days );
+			return max( 1, min( 182, $days ? $days : 180 ) );
 		}
 	}
 }
@@ -367,7 +361,12 @@ namespace {
 	amp_same(
 		AMP_Consent_Rest::normalize_purpose_consent( array( 'analytics' => 2, 'marketing' => 1 ), AMP_Consent_Rest::get_purposes(), 'accepted' ),
 		array( 'analytics' => false, 'marketing' => true ),
-		'AMP numeric purpose states map 1 to granted and 2 to denied'
+		'an unrecognized numeric purpose value fails closed while 1 is granted'
+	);
+	amp_same(
+		AMP_Consent_Rest::normalize_purpose_consent( array( 'analytics' => 'maybe', 'marketing' => 1 ), AMP_Consent_Rest::get_purposes(), 'accepted' ),
+		array( 'analytics' => false, 'marketing' => true ),
+		'an arbitrary unrecognized purpose value also fails closed'
 	);
 	$cookie = faz_parse_consent_cookie( $GLOBALS['faz_test_cookie'] );
 	amp_same( $cookie['analytics'], 'yes', 'accepted purpose is synchronized to standard cookie' );
@@ -596,12 +595,12 @@ namespace {
 		return (int) round( ( $GLOBALS['faz_test_set_cookie']['expires'] - time() ) / DAY_IN_SECONDS );
 	};
 
-	amp_same( $faz_expiry_for( 'ccpa', 2 ), 365, 'CCPA raises an undersized lifetime to its 12-month floor' );
+	amp_same( $faz_expiry_for( 'ccpa', 2 ), 2, 'CCPA keeps a configured lifetime below the default' );
 	amp_same( $faz_expiry_for( 'ccpa', 9999 ), 3650, 'CCPA stops at the 3650-day ceiling the banner UI advertises' );
-	amp_same( $faz_expiry_for( 'ccpa', 730 ), 730, 'CCPA leaves a lifetime between floor and ceiling alone' );
+	amp_same( $faz_expiry_for( 'ccpa', 730 ), 730, 'CCPA leaves a configured lifetime below the ceiling alone' );
 	amp_same( $faz_expiry_for( 'gdpr', 365 ), 182, 'the GDPR family caps an oversized lifetime at six months' );
 	amp_same( $faz_expiry_for( 'gdpr', 30 ), 30, 'a 30-day GDPR re-prompt is stricter than the cap and is kept' );
-	amp_same( $faz_expiry_for( 'gdpr', 0 ), 182, 'an absent GDPR configuration still yields a usable lifetime' );
+	amp_same( $faz_expiry_for( 'gdpr', 0 ), 180, 'an absent GDPR configuration uses the production default' );
 	// "gdpr_ccpa" is a GDPR-family banner for lifetime purposes: resolve_context()
 	// folds it to gdpr precisely so it cannot inherit the CCPA floor.
 	amp_same( $faz_expiry_for( 'gdpr_ccpa', 90 ), 90, 'a combined GDPR/CCPA banner keeps the stricter GDPR-family rule' );

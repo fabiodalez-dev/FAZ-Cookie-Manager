@@ -44,13 +44,12 @@ final class Faz_E2E_Audit_Lab {
 	 * @return void
 	 */
 	public function bootstrap() {
-		// Most E2E specs exercise one configured banner/settings feature at a time
-		// and predate jurisdictional overlay. Isolate those tests from the visitor
-		// country of the machine running WordPress; the dedicated geo-runtime spec
-		// opts in per browser context with faz_e2e_geo. This fixture exists only in
-		// tests and therefore does not alter the production default-on contract.
-		$faz_e2e_runtime = isset( $_COOKIE['faz_e2e_geo'] )
-			|| isset( $_GET['faz_e2e_enable_geo_runtime'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		// Mirror production's default-on runtime. Tests that need the legacy/cache
+		// branch opt out explicitly, while faz_e2e_geo still scopes deterministic
+		// country probes. The dedicated geo-runtime MU-plugin registers the same
+		// hook at the same priority; this normal plugin runs later, and both resolve
+		// cookie-bearing requests to true so load order cannot change the result.
+		$faz_e2e_runtime = true;
 		if ( isset( $_GET['faz_e2e_disable_geo_runtime'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$faz_e2e_runtime = false;
 		}

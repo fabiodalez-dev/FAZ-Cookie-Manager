@@ -677,7 +677,7 @@ class Activator {
 		}
 
 		// Check for unmatched IAB vendors (only if IAB TCF is enabled).
-		if ( ! empty( $settings['iab']['enabled'] ) ) {
+		if ( $settings->get( 'iab', 'enabled' ) ) {
 			$unmatched = self::detect_unmatched_vendors();
 			if ( ! empty( $unmatched ) ) {
 				set_transient( 'faz_unmatched_vendors', $unmatched, WEEK_IN_SECONDS );

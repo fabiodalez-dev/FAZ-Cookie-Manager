@@ -248,7 +248,7 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 			<div class="faz-form-group">
 				<label><?php esc_html_e( 'Static public IP (optional)', 'faz-cookie-manager' ); ?></label>
-				<input type="text" class="faz-input" data-path="scanner.static_ip" inputmode="decimal" placeholder="203.0.113.10" style="max-width:320px;">
+				<input type="text" class="faz-input" data-path="scanner.static_ip" placeholder="203.0.113.10" style="max-width:320px;">
 				<div class="faz-help"><?php esc_html_e( 'Pin every server-side scanner request — sitemap discovery and page fetches — to this site IP while preserving the hostname, HTTPS certificate validation and SNI. Only public IPv4/IPv6 addresses are accepted; requires the WordPress cURL transport. Leave blank to use DNS.', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group">

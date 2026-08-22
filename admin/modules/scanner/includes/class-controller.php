@@ -939,10 +939,12 @@ class Controller {
 	 * @return array|\WP_Error
 	 */
 	public function remote_get( $url, $args = array() ) {
-		// The scanner only consumes web URLs. Make WordPress reject loopback,
-		// private-network and non-HTTP redirect targets on every discovery/fetch
-		// path, not only scan_page().
-		$args['reject_unsafe_urls'] = true;
+		// Reject unsafe targets by default. Callers may explicitly allow a URL
+		// only after proving it is the current site's loopback host; this keeps
+		// local WordPress development scans working without widening redirects.
+		if ( ! array_key_exists( 'reject_unsafe_urls', $args ) ) {
+			$args['reject_unsafe_urls'] = true;
+		}
 		$settings  = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
 		$static_ip = $settings->get( 'scanner', 'static_ip' );
 		$entry     = self::build_static_resolve_entry( $url, $static_ip );
@@ -950,15 +952,16 @@ class Controller {
 			return wp_remote_get( $url, $args );
 		}
 
-		$url_host  = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
-		$site_host = strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
-		if ( '' === $url_host || $url_host !== $site_host ) {
+		$url_host  = self::canonical_scan_host( wp_parse_url( $url, PHP_URL_HOST ) );
+		$site_host = self::canonical_scan_host( wp_parse_url( home_url(), PHP_URL_HOST ) );
+		if ( '' === $url_host || ! self::scan_hosts_match( $url_host, $site_host ) ) {
 			return new \WP_Error( 'faz_scanner_static_ip_host', __( 'Static IP pinning is limited to this site hostname.', 'faz-cookie-manager' ) );
 		}
 
 		$applied  = false;
 		$resolver = static function ( $handle, $parsed_args, $request_url ) use ( $entry, $url_host, &$applied ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
-			if ( strtolower( (string) wp_parse_url( $request_url, PHP_URL_HOST ) ) !== $url_host
+			$request_host = self::canonical_scan_host( wp_parse_url( $request_url, PHP_URL_HOST ) );
+			if ( ! self::scan_hosts_match( $request_host, $url_host )
 				|| ! defined( 'CURLOPT_RESOLVE' ) || ! function_exists( 'curl_setopt' ) ) {
 				return;
 			}
@@ -974,6 +977,29 @@ class Controller {
 			return new \WP_Error( 'faz_scanner_static_ip_transport', __( 'Static IP pinning requires the WordPress cURL HTTP transport.', 'faz-cookie-manager' ) );
 		}
 		return $response;
+	}
+
+	/**
+	 * Canonical host shape shared by static-IP validation and its cURL hook.
+	 *
+	 * @param mixed $host Parsed URL host.
+	 * @return string
+	 */
+	private static function canonical_scan_host( $host ) {
+		return (string) preg_replace( '/^www\./i', '', strtolower( trim( (string) $host ) ) );
+	}
+
+	/**
+	 * Compare canonical site hosts, including the validated loopback aliases.
+	 *
+	 * @param string $left  First host.
+	 * @param string $right Second host.
+	 * @return bool
+	 */
+	private static function scan_hosts_match( $left, $right ) {
+		$loopback = array( 'localhost', '127.0.0.1', '::1' );
+		return $left === $right
+			|| ( in_array( $left, $loopback, true ) && in_array( $right, $loopback, true ) );
 	}
 
 	/**

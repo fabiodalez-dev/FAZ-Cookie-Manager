@@ -954,8 +954,8 @@ msgid "Add override"
 msgstr "Aggiungi override"
 
 #: admin/class-admin.php:795
-msgid "No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only."
-msgstr "Nessun override per paese configurato. I set di regole sono risolti automaticamente per paese e stato USA, solo a scopo di anteprima e riferimento."
+msgid "No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state."
+msgstr "Nessun override per paese configurato. I set di regole vengono risolti e applicati automaticamente per paese e stato USA."
 
 #: admin/class-admin.php:796
 msgid "Remove this override?"
@@ -970,8 +970,8 @@ msgid "✅ active"
 msgstr "✅ attivo"
 
 #: admin/class-admin.php:800
-msgid "⚪ off — catalogue is preview/reference only"
-msgstr "⚪ disattivata — il catalogo è solo anteprima/riferimento"
+msgid "⚠️ disabled by the faz_geo_ruleset_runtime filter"
+msgstr "⚠️ disabilitata dal filtro faz_geo_ruleset_runtime"
 
 #: admin/class-admin.php:801
 msgid "Catalog rulesets"

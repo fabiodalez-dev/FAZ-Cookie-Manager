@@ -26,5 +26,19 @@ faz_static_ip_check( 'private IPv4 is rejected', Controller::build_static_resolv
 faz_static_ip_check( 'loopback is rejected', Controller::build_static_resolve_entry( 'https://example.com/', '127.0.0.1' ), '' );
 faz_static_ip_check( 'non-HTTP scheme is rejected', Controller::build_static_resolve_entry( 'ftp://example.com/', '8.8.8.8' ), '' );
 
+$canonical_host = new ReflectionMethod( Controller::class, 'canonical_scan_host' );
+$canonical_host->setAccessible( true );
+$hosts_match = new ReflectionMethod( Controller::class, 'scan_hosts_match' );
+$hosts_match->setAccessible( true );
+faz_static_ip_check( 'www host is canonicalized', $canonical_host->invoke( null, 'WWW.Example.com' ), 'example.com' );
+faz_static_ip_check( 'loopback aliases compare equal', $hosts_match->invoke( null, 'localhost', '127.0.0.1' ), true );
+
+$controller_source = file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php' );
+faz_static_ip_check(
+	'validated callers may preserve reject_unsafe_urls=false',
+	false !== strpos( $controller_source, "if ( ! array_key_exists( 'reject_unsafe_urls', \$args ) )" ),
+	true
+);
+
 echo $failed ? "{$failed} failed\n" : "ALL PASS\n";
 exit( $failed ? 1 : 0 );

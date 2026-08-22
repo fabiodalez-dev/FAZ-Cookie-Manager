@@ -963,9 +963,8 @@ msgid "Add override"
 msgstr "Ajouter une substitution"
 
 #: admin/class-admin.php:795
-#, fuzzy
-msgid "No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only."
-msgstr "Aucune règle de substitution par pays configurée. Le plugin détecte automatiquement le jeu de règles selon le pays et l’État américain."
+msgid "No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state."
+msgstr "Aucune dérogation par pays n’est configurée. Les jeux de règles sont résolus et appliqués automatiquement par pays et État américain."
 
 #: admin/class-admin.php:796
 msgid "Remove this override?"
@@ -981,8 +980,8 @@ msgid "✅ active"
 msgstr "Inactif"
 
 #: admin/class-admin.php:800
-msgid "⚪ off — catalogue is preview/reference only"
-msgstr ""
+msgid "⚠️ disabled by the faz_geo_ruleset_runtime filter"
+msgstr "⚠️ désactivée par le filtre faz_geo_ruleset_runtime"
 
 #: admin/class-admin.php:801
 msgid "Catalog rulesets"
