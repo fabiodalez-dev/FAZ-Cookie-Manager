@@ -469,6 +469,15 @@ class Activator {
 			return;
 		}
 
+		// The scanner classes live in the admin module tree, which is not
+		// guaranteed to be loaded in every context this migration batch runs in.
+		// Returning WITHOUT the marker means the next migration retries; throwing
+		// would take the whole batch down with it, which is the failure this
+		// codebase already learned once in run_retention_cleanup().
+		if ( ! class_exists( Cookie_Database::class ) || ! class_exists( Scanner_Controller::class ) ) {
+			return;
+		}
+
 		$definition = Cookie_Database::lookup( 'fazcookie-consent' );
 		if ( ! is_array( $definition ) ) {
 			// The built-in record is the single source of truth for wording and
@@ -476,18 +485,35 @@ class Activator {
 			return;
 		}
 
-		$controller = Scanner_Controller::get_instance();
-		$controller->save_cookies(
-			array(
+		try {
+			// Wrapped, and the marker written only on success. save_cookies()
+			// needs the category catalogue, which a partly-built install may not
+			// have yet — and this is one step in a batch of migrations that all
+			// share one try block upstream, so an exception escaping here aborts
+			// every migration after it. That is the exact failure this codebase
+			// already fixed once in run_retention_cleanup(); it must not be
+			// reintroduced by a seeder that only adds a convenience.
+			//
+			// \wp_parse_url is fully qualified on purpose: an unqualified call
+			// resolves inside FazCookie\Includes first, which is a fatal wherever
+			// the plugin's own namespace has no such function loaded.
+			Scanner_Controller::get_instance()->save_cookies(
 				array(
-					'name'        => 'fazcookie-consent',
-					'category'    => isset( $definition['category'] ) ? $definition['category'] : 'necessary',
-					'duration'    => isset( $definition['duration'] ) ? $definition['duration'] : '1 year',
-					'description' => isset( $definition['description'] ) ? $definition['description'] : '',
-					'domain'      => (string) wp_parse_url( home_url(), PHP_URL_HOST ),
-				),
-			)
-		);
+					array(
+						'name'        => 'fazcookie-consent',
+						'category'    => isset( $definition['category'] ) ? $definition['category'] : 'necessary',
+						'duration'    => isset( $definition['duration'] ) ? $definition['duration'] : '1 year',
+						'description' => isset( $definition['description'] ) ? $definition['description'] : '',
+						'domain'      => (string) \wp_parse_url( \home_url(), PHP_URL_HOST ),
+					),
+				)
+			);
+		} catch ( \Throwable $e ) {
+			// No marker: the next migration retries. A cookie missing from the
+			// declaration for one more admin load costs nothing; a batch that
+			// stops here costs every migration behind it.
+			return;
+		}
 
 		add_option( 'faz_own_cookie_seeded', '1', '', false );
 	}

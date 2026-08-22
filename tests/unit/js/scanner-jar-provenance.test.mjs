@@ -117,9 +117,14 @@ const allowedJarShapes = [
   /^\$jar_cookies\[\] = \$entry;$/,
   /^\$jar_cookies\[\] = \$session_cookie;$/,
   /^foreach \( \$jar_cookies as \$jar_cookie \) \{$/,
+  // Read-only handoff: the bucket is passed BY VALUE into the visitor-check
+  // ledger (begin_visitor_check), which persists the classification so the
+  // anonymous replay can diff against it. It is a read, not a merge — the
+  // declaration path still sees only $raw_cookies.
+  /^\$jar_cookies$/,
 ];
-ok(jarLines.length === 4 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
-  'the bucket is only filled and iterated — never merged into the imported set');
+ok(jarLines.length === 5 && jarLines.every((line) => allowedJarShapes.some((shape) => shape.test(line))),
+  'the bucket is only filled, iterated, and handed to the ledger — never merged into the imported set');
 
 const jarLoopStart = (importBody || '').indexOf('foreach ( $jar_cookies as $jar_cookie ) {');
 const jarLoop = jarLoopStart === -1

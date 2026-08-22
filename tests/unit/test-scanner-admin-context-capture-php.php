@@ -550,6 +550,19 @@ namespace {
 		}
 		public function record_scan_observations( $names, $complete ) {}
 		public function deletable_stale_keys() { return array(); }
+		// Visitor-check ledger handoff. Modelled as a recording double so a
+		// later assertion CAN look at what the import handed over — in
+		// particular that the jar bucket reaches the ledger instead of dying
+		// with the response.
+		public $visitor_checks = array();
+		public function begin_visitor_check( $scan_id, $imported_cookies, $imported_names, $jar_cookies ) {
+			$this->visitor_checks[] = array(
+				'scan_id'  => $scan_id,
+				'imported' => $imported_cookies,
+				'names'    => $imported_names,
+				'jar'      => $jar_cookies,
+			);
+		}
 		public function save_scan_result( $cookies, $pages, $scripts, $metrics ) {
 			if ( $this->fail_next_save ) {
 				$this->fail_next_save = false;
