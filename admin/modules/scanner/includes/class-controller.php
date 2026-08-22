@@ -831,7 +831,6 @@ class Controller {
 			'timeout'     => 15,
 			'sslverify'   => (bool) apply_filters( 'faz_scanner_sslverify', true, $url ),
 			'redirection' => 3,
-			'reject_unsafe_urls' => true,
 		);
 		$response = $this->remote_get( $url, $args );
 
@@ -939,12 +938,27 @@ class Controller {
 	 * @return array|\WP_Error
 	 */
 	public function remote_get( $url, $args = array() ) {
-		// Reject unsafe targets by default. Callers may explicitly allow a URL
-		// only after proving it is the current site's loopback host; this keeps
-		// local WordPress development scans working without widening redirects.
-		if ( ! array_key_exists( 'reject_unsafe_urls', $args ) ) {
-			$args['reject_unsafe_urls'] = true;
+		$url_host              = self::canonical_scan_host( wp_parse_url( $url, PHP_URL_HOST ) );
+		$site_host             = self::canonical_scan_host( wp_parse_url( home_url(), PHP_URL_HOST ) );
+		$is_validated_loopback = self::is_loopback_scan_host( $url_host )
+			&& self::is_loopback_scan_host( $site_host )
+			&& self::scan_hosts_match( $url_host, $site_host );
+
+		// Reject unsafe targets by default. The only exception is the current
+		// site's validated loopback alias. Never trust a caller-supplied false for
+		// another host, and never follow redirects while core URL validation is
+		// disabled: a loopback response could otherwise pivot to an internal URL.
+		$reject_unsafe_urls = array_key_exists( 'reject_unsafe_urls', $args )
+			? (bool) $args['reject_unsafe_urls']
+			: ! $is_validated_loopback;
+		if ( ! $reject_unsafe_urls && ! $is_validated_loopback ) {
+			$reject_unsafe_urls = true;
 		}
+		$args['reject_unsafe_urls'] = $reject_unsafe_urls;
+		if ( ! $reject_unsafe_urls ) {
+			$args['redirection'] = 0;
+		}
+
 		$settings  = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
 		$static_ip = $settings->get( 'scanner', 'static_ip' );
 		$entry     = self::build_static_resolve_entry( $url, $static_ip );
@@ -952,8 +966,6 @@ class Controller {
 			return wp_remote_get( $url, $args );
 		}
 
-		$url_host  = self::canonical_scan_host( wp_parse_url( $url, PHP_URL_HOST ) );
-		$site_host = self::canonical_scan_host( wp_parse_url( home_url(), PHP_URL_HOST ) );
 		if ( '' === $url_host || ! self::scan_hosts_match( $url_host, $site_host ) ) {
 			return new \WP_Error( 'faz_scanner_static_ip_host', __( 'Static IP pinning is limited to this site hostname.', 'faz-cookie-manager' ) );
 		}
@@ -985,8 +997,22 @@ class Controller {
 	 * @param mixed $host Parsed URL host.
 	 * @return string
 	 */
-	private static function canonical_scan_host( $host ) {
-		return (string) preg_replace( '/^www\./i', '', strtolower( trim( (string) $host ) ) );
+	public static function canonical_scan_host( $host ) {
+		$host = strtolower( trim( (string) $host ) );
+		if ( strlen( $host ) >= 2 && '[' === $host[0] && ']' === substr( $host, -1 ) ) {
+			$host = substr( $host, 1, -1 );
+		}
+		return (string) preg_replace( '/^www\./i', '', $host );
+	}
+
+	/**
+	 * Whether a canonical scanner host is a loopback alias.
+	 *
+	 * @param string $host Hostname or IP literal.
+	 * @return bool
+	 */
+	public static function is_loopback_scan_host( $host ) {
+		return in_array( self::canonical_scan_host( $host ), array( 'localhost', '127.0.0.1', '::1' ), true );
 	}
 
 	/**
@@ -996,10 +1022,11 @@ class Controller {
 	 * @param string $right Second host.
 	 * @return bool
 	 */
-	private static function scan_hosts_match( $left, $right ) {
-		$loopback = array( 'localhost', '127.0.0.1', '::1' );
+	public static function scan_hosts_match( $left, $right ) {
+		$left  = self::canonical_scan_host( $left );
+		$right = self::canonical_scan_host( $right );
 		return $left === $right
-			|| ( in_array( $left, $loopback, true ) && in_array( $right, $loopback, true ) );
+			|| ( self::is_loopback_scan_host( $left ) && self::is_loopback_scan_host( $right ) );
 	}
 
 	/**

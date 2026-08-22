@@ -233,6 +233,22 @@ assert_eq( $popia_row['functional'], 'denied', 'POPIA → functional mirror deni
 // Null ruleset → unchanged.
 assert_eq( Geo_Runtime::apply_cmv2_to_gcm( null, $gcm ), $gcm, 'null ruleset → GCM unchanged' );
 
+// ---------- Runtime disclosure and translation catalogues ----------
+
+$geo_view_source = file_get_contents( dirname( __DIR__, 2 ) . '/admin/views/geo-routing.php' );
+$runtime_intro   = 'Inspect, override, and preview the jurisdiction rule-set enforced for each country and US state. The resolved model, category defaults, GPC/Do-Not-Sell obligations, sensitive-data opt-in and Consent Mode defaults are applied automatically to the live banner.';
+$stale_intro     = 'Inspect, override, and preview the built-in jurisdiction rule-sets per country and US state. Automatic application of a rule-set to the live banner';
+assert_eq( false !== strpos( $geo_view_source, $runtime_intro ), true, 'geo-routing view describes the default-on runtime' );
+
+foreach ( glob( dirname( __DIR__, 2 ) . '/languages/*.po' ) as $catalogue ) {
+	$catalogue_source = file_get_contents( $catalogue );
+	assert_eq( false !== strpos( $catalogue_source, 'msgid "' . $runtime_intro . '"' ), true, basename( $catalogue ) . ' carries the live runtime intro' );
+	assert_eq( false === strpos( $catalogue_source, 'msgid "' . $stale_intro ), true, basename( $catalogue ) . ' drops the preview-only intro' );
+}
+$pot_source = file_get_contents( dirname( __DIR__, 2 ) . '/languages/faz-cookie-manager.pot' );
+assert_eq( false !== strpos( $pot_source, 'msgid "' . $runtime_intro . '"' ), true, 'POT carries the live runtime intro' );
+assert_eq( false === strpos( $pot_source, 'msgid "' . $stale_intro ), true, 'POT drops the preview-only intro' );
+
 // ---------- Summary ----------
 
 echo "\n";

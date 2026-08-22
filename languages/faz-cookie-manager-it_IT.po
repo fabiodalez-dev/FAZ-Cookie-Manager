@@ -4757,8 +4757,8 @@ msgid "Save GCM Settings"
 msgstr "Salva impostazioni GCM"
 
 #: admin/views/geo-routing.php:28
-msgid "Inspect, override, and preview the built-in jurisdiction rule-sets per country and US state. Automatic application of a rule-set to the live banner (consent model, GPC, Do Not Sell) is off — the catalogue is preview and reference only. Per-country banner selection still works: configure country-specific banners, such as a CCPA/CPRA \"Do Not Sell\" banner, on the Banner page."
-msgstr "Ispeziona, sovrascrivi e visualizza in anteprima i set di regole per giurisdizione integrati, per paese e per stato USA. L'applicazione automatica di un set di regole al banner attivo (modello di consenso, GPC, Do Not Sell) è disattivata: il catalogo è solo anteprima e riferimento. La selezione del banner per paese continua a funzionare: configura i banner specifici per paese, come un banner CCPA/CPRA \"Do Not Sell\", nella pagina Banner."
+msgid "Inspect, override, and preview the jurisdiction rule-set enforced for each country and US state. The resolved model, category defaults, GPC/Do-Not-Sell obligations, sensitive-data opt-in and Consent Mode defaults are applied automatically to the live banner."
+msgstr "Esamina, sovrascrivi e visualizza in anteprima il set di regole giurisdizionali applicato per ciascun paese e stato USA. Il modello risolto, i valori predefiniti delle categorie, gli obblighi GPC/Do Not Sell, l’opt-in per i dati sensibili e i valori predefiniti di Consent Mode vengono applicati automaticamente al banner attivo."
 
 #: admin/views/geo-routing.php:31
 msgid "Geo-routing sections"

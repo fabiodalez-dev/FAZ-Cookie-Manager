@@ -11,6 +11,7 @@ use WP_REST_Server;
 use WP_Error;
 use stdClass;
 use FazCookie\Includes\Rest_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
 use FazCookie\Admin\Modules\Scanner\Includes\Scanner_Logger;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -435,13 +436,11 @@ class Api extends Rest_Controller {
 			}
 
 			// SSRF protection: only allow URLs on the same domain as the site.
-			$site_host = preg_replace( '/^www\./i', '', strtolower( trim( (string) wp_parse_url( home_url(), PHP_URL_HOST ) ) ) );
-			$url_host  = preg_replace( '/^www\./i', '', strtolower( trim( (string) wp_parse_url( $url, PHP_URL_HOST ) ) ) );
-			// Treat localhost and 127.0.0.1 as equivalent for local dev environments.
-			$loopback  = array( 'localhost', '127.0.0.1', '::1' );
-			$site_is_local = in_array( $site_host, $loopback, true );
-			$url_is_local  = in_array( $url_host, $loopback, true );
-			$hosts_match   = ( $url_host === $site_host ) || ( $site_is_local && $url_is_local );
+			$site_host     = Scanner_Controller::canonical_scan_host( wp_parse_url( home_url(), PHP_URL_HOST ) );
+			$url_host      = Scanner_Controller::canonical_scan_host( wp_parse_url( $url, PHP_URL_HOST ) );
+			$site_is_local = Scanner_Controller::is_loopback_scan_host( $site_host );
+			$url_is_local  = Scanner_Controller::is_loopback_scan_host( $url_host );
+			$hosts_match   = Scanner_Controller::scan_hosts_match( $url_host, $site_host );
 			if ( ! $site_host || ! $url_host || ! $hosts_match ) {
 				$logger->log( 'Server-scan: URL domain mismatch (expected ' . $site_host . ', got ' . $url_host . ')' );
 				return new \WP_Error(
@@ -467,7 +466,7 @@ class Api extends Rest_Controller {
 					// scanned cookie inventory. Only validated loopback scans skip it
 					// (local self-signed certs). Filterable for other local setups.
 					'sslverify'           => (bool) apply_filters( 'faz_scanner_sslverify', ! $is_validated_loopback, $url ),
-					'redirection'         => 3,
+					'redirection'         => $is_validated_loopback ? 0 : 3,
 					'reject_unsafe_urls'  => ! $is_validated_loopback,
 					'user-agent'          => 'FAZCookieScanner/1.0 (WordPress; +' . home_url() . ')',
 				)
