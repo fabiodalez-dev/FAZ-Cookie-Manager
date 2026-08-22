@@ -240,7 +240,9 @@ $runtime_intro   = 'Inspect, override, and preview the jurisdiction rule-set enf
 $stale_intro     = 'Inspect, override, and preview the built-in jurisdiction rule-sets per country and US state. Automatic application of a rule-set to the live banner';
 assert_eq( false !== strpos( $geo_view_source, $runtime_intro ), true, 'geo-routing view describes the default-on runtime' );
 
-foreach ( glob( dirname( __DIR__, 2 ) . '/languages/*.po' ) as $catalogue ) {
+$catalogues = glob( dirname( __DIR__, 2 ) . '/languages/*.po' );
+assert_eq( is_array( $catalogues ) && count( $catalogues ) > 0, true, 'at least one PO catalogue exists' );
+foreach ( is_array( $catalogues ) ? $catalogues : array() as $catalogue ) {
 	$catalogue_source = file_get_contents( $catalogue );
 	assert_eq( false !== strpos( $catalogue_source, 'msgid "' . $runtime_intro . '"' ), true, basename( $catalogue ) . ' carries the live runtime intro' );
 	assert_eq( false === strpos( $catalogue_source, 'msgid "' . $stale_intro ), true, basename( $catalogue ) . ' drops the preview-only intro' );
