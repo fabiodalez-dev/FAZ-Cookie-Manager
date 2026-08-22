@@ -629,6 +629,16 @@ class Admin {
 						'retryImport'              => __( 'Retry import', 'faz-cookie-manager' ),
 						'retryImportRescan'        => __( 'Retry import (re-scans the site)', 'faz-cookie-manager' ),
 						'discardHeldScan'          => __( 'Discard', 'faz-cookie-manager' ),
+						// Already-open capture session surfaced after a reload
+						// (an abandoned tab, or a crawl running in another tab).
+						/* translators: %s: clock time the scan session was opened, e.g. "14:32" */
+						'activeScanNotice'         => __( 'A cookie scan session for your account is already open on the server (started at %s). A new scan cannot start until it ends.', 'faz-cookie-manager' ),
+						/* translators: %1$d: number of cookie observations captured so far, %2$s: clock time of the most recent one */
+						'activeScanLive'           => __( 'It is capturing right now — %1$d observation(s) so far, the last at %2$s. If one of your other tabs is running a scan, let it finish. Ending the session discards everything it has captured.', 'faz-cookie-manager' ),
+						/* translators: %s: clock time the scan session last showed any activity */
+						'activeScanStalled'        => __( 'Nothing has reached the server since %s. If none of your tabs is running a scan, the tab that was driving this one is gone. The session will expire on its own in a few minutes, or you can end it now — ending it discards everything it captured.', 'faz-cookie-manager' ),
+						'endActiveScan'            => __( 'End this scan and discard its capture', 'faz-cookie-manager' ),
+						'activeScanEnded'          => __( 'Scan session ended — its capture was discarded. You can start a new scan.', 'faz-cookie-manager' ),
 						'browserScanUnavailable'   => __( 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.', 'faz-cookie-manager' ),
 						'discoveringPages'         => __( 'Discovering pages...', 'faz-cookie-manager' ),
 						'enrichingServer'          => __( 'Enriching with server scan...', 'faz-cookie-manager' ),

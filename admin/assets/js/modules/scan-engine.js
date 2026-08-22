@@ -718,6 +718,12 @@
 				console.error('[FAZ Scanner] Discover failed:', err);
 				var e1 = new Error(__('cookies.discoverFailed', 'Failed to discover pages.') + buildScanApiErrorDetail(err));
 				e1.stage = 'discover';
+				// The server's error code already travels in the MESSAGE above,
+				// which is for humans. Carry it as data too, so a caller can
+				// react to a specific refusal — the Cookies page uses
+				// faz_browser_scan_in_progress to surface the session that
+				// caused it, with its stop affordance — without parsing text.
+				if (err && err.code) { e1.code = err.code; }
 				rejectAndAbort(e1);
 			});
 		});
@@ -809,8 +815,19 @@
 					eta = ' (~' + Math.ceil(etaMs / 1000) + 's left)';
 				}
 			}
-			emit.status(completed + '/' + total + ' pages | ' +
-				collectedCookies.length + ' cookies | ' + collectedScripts.length + ' scripts' + eta);
+			// No cookie count here, deliberately. The only number available to
+			// the client mid-crawl is collectedCookies.length — cookies NEWLY set
+			// where document.cookie can see them. Three whole classes of findings
+			// are structurally invisible to it until import: HttpOnly cookies PHP
+			// captured server-side (Controller::collect_browser_scan_session),
+			// cookies inferred from the collected script URLs at save time, and
+			// names already sitting in the administrator's jar (held apart in
+			// jarOnlyCookies). On a well-behaved site with pre-consent blocking
+			// that live number is 0 for the entire crawl while the finished
+			// import is not — which reads as "the scanner found nothing" and was
+			// reported as exactly that from production. The count is therefore
+			// stated once, at completion, where it is true.
+			emit.status(completed + '/' + total + ' pages | ' + collectedScripts.length + ' scripts' + eta);
 		}
 
 		var crawlFinished = false;

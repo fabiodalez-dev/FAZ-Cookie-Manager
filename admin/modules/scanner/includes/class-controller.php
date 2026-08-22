@@ -552,7 +552,7 @@ class Controller {
 				if ( 'held' !== ( isset( $active['state'] ) ? $active['state'] : '' ) ) {
 					return new \WP_Error( 'faz_browser_scan_in_progress', __( 'Another browser scan is already in progress for this administrator.', 'faz-cookie-manager' ), array( 'status' => 409 ) );
 				}
-				$this->discard_held_browser_scan_session( $active );
+				$this->discard_browser_scan_session_record( $active );
 				$active = false;
 			}
 		}
@@ -582,7 +582,7 @@ class Controller {
 
 		set_transient(
 			self::browser_scan_transient_key( $token ),
-			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at ),
+			array( 'user_id' => $user_id, 'scan_id' => $scan_id, 'created_at' => $created_at, 'touched_at' => time() ),
 			self::BROWSER_SCAN_TTL
 		);
 
@@ -678,6 +678,11 @@ class Controller {
 			return false;
 		}
 
+		// Liveness breadcrumb, not authorization: every successful renewal stamps
+		// the session, so describe_browser_scan_session() can honestly tell a
+		// crawl some tab is still driving from one nobody is. Written only after
+		// every ownership check above has passed.
+		$session['touched_at'] = time();
 		set_transient( $session_key, $session, self::BROWSER_SCAN_TTL );
 
 		$active_key = self::browser_scan_active_transient_key( $user_id );
@@ -874,11 +879,105 @@ class Controller {
 	/**
 	 * Release a failed/cancelled browser scan without importing observations.
 	 *
+	 * Two paths, tried in order. The marker-cookie path is the normal one: the
+	 * tab that ran the scan still carries the httpOnly token, so the session is
+	 * matched exactly as an import would match it. The fallback exists because
+	 * the marker belongs to the REQUEST while the session belongs to the
+	 * ADMINISTRATOR: after a reload, a new tab, or a different browser, the
+	 * request may carry a stale token or none at all, yet the stuck session is
+	 * still that administrator's own to end. In that case the session is looked
+	 * up through the user-keyed active record instead — which can only ever
+	 * name the CURRENT user's session, and only releases it when the caller
+	 * presents that session's own scan_id (obtainable only by having started it
+	 * or via the equally capability-gated scans/session route). Nothing here is
+	 * automatic: the server never ends a live session on its own; some request
+	 * this user made asked for it by id.
+	 *
 	 * @param string $scan_id Client scan identifier.
 	 * @return bool
 	 */
 	public function abort_browser_scan_session( $scan_id ) {
-		return $this->finish_browser_scan_session( $scan_id );
+		if ( $this->finish_browser_scan_session( $scan_id ) ) {
+			return true;
+		}
+
+		$user_id = get_current_user_id();
+		$scan_id = sanitize_key( (string) $scan_id );
+		if ( $user_id <= 0 || ! preg_match( '/^[a-f0-9]{32}$/', $scan_id ) ) {
+			return false;
+		}
+		$active = get_transient( self::browser_scan_active_transient_key( $user_id ) );
+		if ( ! is_array( $active )
+			|| empty( $active['token'] )
+			|| empty( $active['scan_id'] )
+			|| ! hash_equals( (string) $active['scan_id'], $scan_id ) ) {
+			return false;
+		}
+		$this->discard_browser_scan_session_record( $active );
+		return true;
+	}
+
+	/**
+	 * What the server knows about the current administrator's capture session.
+	 *
+	 * Exists so the Cookies page can SHOW an already-open session after a
+	 * reload instead of letting the administrator collide with it blindly as a
+	 * bare 409. Everything reported is genuinely server-side state: the client
+	 * counter that drove the progress bar died with the tab, so the only honest
+	 * signals left are when the session started, when a scan-tagged request or
+	 * heartbeat last renewed it (touched_at), when a Set-Cookie observation
+	 * last arrived, and how many observations exist. `last_activity` is the
+	 * max of those; the caller decides how to present a session nothing has
+	 * touched in a while. The scan_id is included deliberately — it is the
+	 * handle abort_browser_scan_session() needs, it names the caller's OWN
+	 * session, and this method never reaches across users.
+	 *
+	 * @return array{active:bool}|array{active:bool,state:string,scan_id:string,started_at:int,last_activity:int,observations:int,server_time:int}
+	 */
+	public function describe_browser_scan_session() {
+		$inactive = array( 'active' => false );
+		$user_id  = get_current_user_id();
+		if ( $user_id <= 0 ) {
+			return $inactive;
+		}
+		$active = get_transient( self::browser_scan_active_transient_key( $user_id ) );
+		if ( ! is_array( $active ) || empty( $active['token'] ) || empty( $active['scan_id'] ) ) {
+			return $inactive;
+		}
+		$token   = sanitize_key( (string) $active['token'] );
+		$session = get_transient( self::browser_scan_transient_key( $token ) );
+		if ( ! is_array( $session ) || empty( $session['user_id'] ) || $user_id !== absint( $session['user_id'] ) ) {
+			// An active record whose session transient is gone blocks nothing
+			// (start_browser_scan_session would mint a fresh session), so
+			// reporting it would invite an administrator to "end" a ghost.
+			return $inactive;
+		}
+
+		$observations  = 0;
+		$last_observed = 0;
+		foreach ( (array) get_user_meta( $user_id, self::BROWSER_SCAN_META, false ) as $observation ) {
+			if ( ! is_array( $observation ) || ! hash_equals( $token, isset( $observation['token'] ) ? (string) $observation['token'] : '' ) ) {
+				continue;
+			}
+			$observations++;
+			$observed_at = isset( $observation['observed_at'] ) ? absint( $observation['observed_at'] ) : 0;
+			if ( $observed_at > $last_observed ) {
+				$last_observed = $observed_at;
+			}
+		}
+
+		$started_at = isset( $session['created_at'] ) ? absint( $session['created_at'] ) : 0;
+		$touched_at = isset( $session['touched_at'] ) ? absint( $session['touched_at'] ) : 0;
+
+		return array(
+			'active'        => true,
+			'state'         => ( isset( $active['state'] ) && 'held' === $active['state'] ) ? 'held' : 'live',
+			'scan_id'       => sanitize_key( (string) $active['scan_id'] ),
+			'started_at'    => $started_at,
+			'last_activity' => max( $started_at, $touched_at, $last_observed ),
+			'observations'  => $observations,
+			'server_time'   => time(),
+		);
 	}
 
 	/** @return bool */
@@ -989,17 +1088,22 @@ class Controller {
 	}
 
 	/**
-	 * Drop a held session's evidence so a new scan can take its place.
+	 * Drop a session's evidence by its active record, without the marker cookie.
 	 *
-	 * Only ever called for a session already established as `held`. It cannot
-	 * reuse finish_browser_scan_session(), which reads the marker cookie of the
-	 * CURRENT request — the tab starting the new scan may carry a different
-	 * token, or none — so the token is taken from the active record instead.
+	 * Two callers, both of which have already decided the session must go: the
+	 * held-session reclaim in start_browser_scan_session(), and the owner-keyed
+	 * fallback in abort_browser_scan_session() (an administrator explicitly
+	 * ending their own stuck session from a request that no longer carries the
+	 * marker). Neither can reuse finish_browser_scan_session(), which reads the
+	 * marker cookie of the CURRENT request — the calling tab may carry a
+	 * different token, or none — so the token is taken from the active record
+	 * instead. The record is user-keyed, so this only ever tears down the
+	 * current user's own session.
 	 *
 	 * @param array $active The active-session record being discarded.
 	 * @return void
 	 */
-	private function discard_held_browser_scan_session( $active ) {
+	private function discard_browser_scan_session_record( $active ) {
 		$user_id = get_current_user_id();
 		$token   = sanitize_key( isset( $active['token'] ) ? (string) $active['token'] : '' );
 		if ( '' !== $token ) {

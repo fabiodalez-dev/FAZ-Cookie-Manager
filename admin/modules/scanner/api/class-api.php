@@ -195,6 +195,22 @@ class Api extends Rest_Controller {
 			)
 		);
 
+		// What the server knows about the caller's own capture session. Read-only
+		// and scoped to the authenticated administrator; exists so the Cookies
+		// page can surface an already-open session (an abandoned tab, a crawl in
+		// another tab) instead of leaving it to be discovered as a bare 409.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/session',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_browser_scan_session' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
+
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/abort',
@@ -972,6 +988,17 @@ class Api extends Rest_Controller {
 	public function abort_browser_scan( $request ) {
 		$scan_id = sanitize_key( (string) $request['scan_id'] );
 		return rest_ensure_response( array( 'aborted' => $this->controller->abort_browser_scan_session( $scan_id ) ) );
+	}
+
+	/**
+	 * Describe the current administrator's open capture session, if any.
+	 *
+	 * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
+	public function get_browser_scan_session( $request ) {
+		return rest_ensure_response( $this->controller->describe_browser_scan_session() );
 	}
 
 	/**
