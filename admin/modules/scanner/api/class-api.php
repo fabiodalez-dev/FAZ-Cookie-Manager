@@ -195,6 +195,22 @@ class Api extends Rest_Controller {
 			)
 		);
 
+		// What the server knows about the caller's own capture session. Read-only
+		// and scoped to the authenticated administrator; exists so the Cookies
+		// page can surface an already-open session (an abandoned tab, a crawl in
+		// another tab) instead of leaving it to be discovered as a bare 409.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/session',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_browser_scan_session' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
+
 		register_rest_route(
 			$this->namespace,
 			'/' . $this->rest_base . '/abort',
@@ -435,6 +451,10 @@ class Api extends Rest_Controller {
 			'new_cookies'   => isset( $data['new_cookies'] ) ? absint( $data['new_cookies'] ) : -1,
 			'pages_scanned' => isset( $data['pages_scanned'] ) ? absint( $data['pages_scanned'] ) : 0,
 		);
+		// Most recent completed server-side visitor check (headers only), or
+		// null. Already sanitized by latest_visitor_check(). Additive: nothing
+		// existing reads this field, and polling clients ignore it.
+		$safe['visitor_check'] = $this->controller->latest_visitor_check();
 		return rest_ensure_response( $safe );
 	}
 
@@ -882,6 +902,20 @@ class Api extends Rest_Controller {
 		$this->controller->remember_browser_scan_result( $scan_id, $result );
 		$this->controller->finish_browser_scan_session( $scan_id );
 
+		// Persist this pass's classification before the replay is scheduled, so
+		// the cron worker finds an open ledger: the imported set and the jar/
+		// admin-context bucket otherwise die with this response, and the
+		// visitor diff can never be computed.
+		$this->controller->begin_visitor_check(
+			// $scan_id, not $result['scan_id'] — the import result carries no
+			// such key, so this fell back to 0 on every call. The two lines
+			// above already key their writes on $scan_id.
+			$scan_id,
+			$cookies,
+			isset( $result['cookie_names'] ) && is_array( $result['cookie_names'] ) ? $result['cookie_names'] : array(),
+			$jar_cookies
+		);
+
 		// Replay every URL the browser actually visited in a background server
 		// pass. This adds Set-Cookie headers and metadata that are invisible to JS.
 		$enrichment_pending = $this->controller->schedule_httponly_check( $scanned_urls );
@@ -972,6 +1006,17 @@ class Api extends Rest_Controller {
 	public function abort_browser_scan( $request ) {
 		$scan_id = sanitize_key( (string) $request['scan_id'] );
 		return rest_ensure_response( array( 'aborted' => $this->controller->abort_browser_scan_session( $scan_id ) ) );
+	}
+
+	/**
+	 * Describe the current administrator's open capture session, if any.
+	 *
+	 * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+	 * @param \WP_REST_Request $request Full details about the request.
+	 * @return \WP_REST_Response
+	 */
+	public function get_browser_scan_session( $request ) {
+		return rest_ensure_response( $this->controller->describe_browser_scan_session() );
 	}
 
 	/**

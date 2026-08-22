@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Consentlogs\Includes\Controller as ConsentLogs_Controller;
 use FazCookie\Admin\Modules\Pageviews\Includes\Controller as Pageviews_Controller;
 use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database;
 use FazCookie\Admin\Modules\Settings\Includes\Settings;
 
 /**
@@ -141,6 +142,7 @@ class Activator {
 			self::fix_banner_gdpr_defaults();
 			self::fix_brand_logo_path();
 			self::seed_default_whitelist();
+			self::seed_own_consent_cookie();
 			self::add_recaptcha_gstatic_pattern();
 			self::enable_gpc_on_ccpa_banners();
 			self::ensure_share_personal_data_column();
@@ -431,6 +433,88 @@ class Activator {
 		// claim, not a record.
 		// Autoload NO: read once, during migrations, never on a front-end request.
 		add_option( 'faz_default_whitelist_seeded', '1', '', false );
+	}
+
+	/**
+	 * Declare the plugin's own consent cookie without waiting for a scan.
+	 *
+	 * `fazcookie-consent` is the one cookie this plugin certainly sets — it is
+	 * how consent is remembered — and it is strictly necessary, so it belongs in
+	 * every declaration regardless of what any scan finds.
+	 *
+	 * It was reaching the catalogue only by accident. The built-in cookie
+	 * database carries a record for it, but that database only CATEGORISES what
+	 * a scan observes; activation seeds banners, categories and the whitelist,
+	 * and no cookies at all. So a fresh install declared nothing until someone
+	 * scanned, and a scan only observes this cookie if it happens to catch it
+	 * being set — which needs a visitor to consent during the crawl, or the
+	 * administrator to have consented earlier so it already sits in their jar.
+	 * On the site where this was found it was present for exactly that second
+	 * reason. A Cookie Policy generator that can omit its own cookie is the one
+	 * omission it has no excuse for.
+	 *
+	 * Seeded, never enforced: save_cookies() skips names that already exist, so
+	 * an administrator who edited or recategorised the row keeps their version,
+	 * and one who deleted it does not get it silently restored — the marker is
+	 * written once and this never runs again.
+	 *
+	 * @return void
+	 */
+	private static function seed_own_consent_cookie() {
+		// Same discipline as the sibling seeders: marker first as a guard,
+		// written LAST and only on success, so a failed write is retried on the
+		// next migration rather than being recorded as done.
+		if ( get_option( 'faz_own_cookie_seeded' ) ) {
+			return;
+		}
+
+		// The scanner classes live in the admin module tree, which is not
+		// guaranteed to be loaded in every context this migration batch runs in.
+		// Returning WITHOUT the marker means the next migration retries; throwing
+		// would take the whole batch down with it, which is the failure this
+		// codebase already learned once in run_retention_cleanup().
+		if ( ! class_exists( Cookie_Database::class ) || ! class_exists( Scanner_Controller::class ) ) {
+			return;
+		}
+
+		$definition = Cookie_Database::lookup( 'fazcookie-consent' );
+		if ( ! is_array( $definition ) ) {
+			// The built-in record is the single source of truth for wording and
+			// category; inventing a second copy here would let the two drift.
+			return;
+		}
+
+		try {
+			// Wrapped, and the marker written only on success. save_cookies()
+			// needs the category catalogue, which a partly-built install may not
+			// have yet — and this is one step in a batch of migrations that all
+			// share one try block upstream, so an exception escaping here aborts
+			// every migration after it. That is the exact failure this codebase
+			// already fixed once in run_retention_cleanup(); it must not be
+			// reintroduced by a seeder that only adds a convenience.
+			//
+			// \wp_parse_url is fully qualified on purpose: an unqualified call
+			// resolves inside FazCookie\Includes first, which is a fatal wherever
+			// the plugin's own namespace has no such function loaded.
+			Scanner_Controller::get_instance()->save_cookies(
+				array(
+					array(
+						'name'        => 'fazcookie-consent',
+						'category'    => isset( $definition['category'] ) ? $definition['category'] : 'necessary',
+						'duration'    => isset( $definition['duration'] ) ? $definition['duration'] : '1 year',
+						'description' => isset( $definition['description'] ) ? $definition['description'] : '',
+						'domain'      => (string) \wp_parse_url( \home_url(), PHP_URL_HOST ),
+					),
+				)
+			);
+		} catch ( \Throwable $e ) {
+			// No marker: the next migration retries. A cookie missing from the
+			// declaration for one more admin load costs nothing; a batch that
+			// stops here costs every migration behind it.
+			return;
+		}
+
+		add_option( 'faz_own_cookie_seeded', '1', '', false );
 	}
 
 	/**
