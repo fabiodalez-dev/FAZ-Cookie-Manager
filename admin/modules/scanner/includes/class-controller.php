@@ -85,6 +85,23 @@ class Controller {
 	const HTTPONLY_LOCK_OPTION = 'faz_httponly_scan_lock';
 
 	/**
+	 * Per-scan visitor-check ledgers, keyed by numeric scan id.
+	 *
+	 * Each entry persists what the browser pass classified at import time (the
+	 * imported names and the jar/admin-context bucket that previously lived
+	 * only in the transient REST response) and accumulates what the anonymous
+	 * header replay actually observes, so the two vantage points can be
+	 * diffed once the replay queue drains.
+	 */
+	const VISITOR_CHECK_OPTION = 'faz_scan_visitor_check';
+
+	/** Numeric scan id whose import queued the replay currently being observed. */
+	const VISITOR_CHECK_TARGET_OPTION = 'faz_httponly_scan_target';
+
+	/** Ledger entries kept — pruned exactly like the 50-entry faz_scan_history. */
+	const VISITOR_CHECK_HISTORY_LIMIT = 50;
+
+	/**
 	 * How many consecutive FULL scans a discovered cookie has gone unobserved.
 	 *
 	 * Keyed "name|domain". A single scan missing a cookie proves nothing: a site
@@ -1398,6 +1415,13 @@ class Controller {
 						}
 					}
 					$this->clear_scan_observations( $replayed_names );
+					// Ledger, beside the other checkpoints and for the same
+					// reason: a worker that dies on a later URL must keep what
+					// this one proved. Append-only, positive observations only —
+					// a URL yielding no Set-Cookie writes nothing, so a cached
+					// page degrades the diff toward "no finding", never toward
+					// a demotion.
+					$this->record_visitor_observations( $page_cookies );
 				}
 				$latest = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
 				$latest = array_values( array_diff( $latest, array( $url ) ) );
@@ -1419,6 +1443,11 @@ class Controller {
 			$this->schedule_httponly_check( $remaining );
 		} else {
 			wp_clear_scheduled_hook( self::HTTPONLY_CRON_HOOK );
+			// The queue drained: every URL the browser visited has been
+			// re-fetched anonymously. Freeze the ledger into the three-bucket
+			// diff. Pure bookkeeping — it writes only its own option, never
+			// the missed-scan tally and never a catalogue row.
+			$this->finalize_visitor_check();
 		}
 	}
 
@@ -2695,6 +2724,296 @@ class Controller {
 			}
 		}
 		return $keys;
+	}
+
+	/**
+	 * Open a visitor-check ledger for one imported browser scan.
+	 *
+	 * Persists the browser pass's classification at the only moment it exists:
+	 * the imported set (the names the scan declared) and the jar/admin-context
+	 * bucket, which until now lived solely in the REST response and evaporated
+	 * with it. The anonymous header replay that import just scheduled will
+	 * append its own observations to this ledger, and the diff between the two
+	 * vantage points is computed when the replay queue drains.
+	 *
+	 * Keys are canonical_key() — lowercased name plus domain stripped of
+	 * leading dots and port. Deliberately NOT set_cookie_identity(): the
+	 * JS-visible cookies of the browser pass carry no trustworthy path, so
+	 * keying on path would fabricate diffs. A missing domain defaults to the
+	 * site host on BOTH sides for the same reason.
+	 *
+	 * @param int      $scan_id        Numeric scan id from save_scan_result().
+	 * @param array    $imported_cookies Sanitized cookies the import received (name/domain pairs).
+	 * @param string[] $imported_names   Merged persisted names from save_scan_result().
+	 * @param array    $jar_cookies      Reported-not-imported jar/admin-context bucket.
+	 * @return void
+	 */
+	public function begin_visitor_check( $scan_id, $imported_cookies, $imported_names, $jar_cookies ) {
+		$scan_id = absint( $scan_id );
+		if ( $scan_id < 1 ) {
+			return;
+		}
+		$site_host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+
+		$imported_keys = array();
+		foreach ( (array) $imported_cookies as $cookie ) {
+			if ( ! is_array( $cookie ) || empty( $cookie['name'] ) ) {
+				continue;
+			}
+			$domain = isset( $cookie['domain'] ) && '' !== $cookie['domain'] ? (string) $cookie['domain'] : $site_host;
+			$key    = self::canonical_key( sanitize_text_field( (string) $cookie['name'] ), $domain );
+			if ( '' !== $key ) {
+				$imported_keys[ $key ] = true;
+			}
+		}
+
+		$names = array();
+		foreach ( (array) $imported_names as $imported_name ) {
+			$imported_name = self::canonical_name( sanitize_text_field( (string) $imported_name ) );
+			if ( '' !== $imported_name ) {
+				$names[ $imported_name ] = true;
+			}
+		}
+
+		$jar = array();
+		foreach ( (array) $jar_cookies as $cookie ) {
+			if ( ! is_array( $cookie ) || empty( $cookie['name'] ) ) {
+				continue;
+			}
+			$display = sanitize_text_field( (string) $cookie['name'] );
+			$domain  = isset( $cookie['domain'] ) && '' !== $cookie['domain'] ? (string) $cookie['domain'] : $site_host;
+			$key     = self::canonical_key( $display, $domain );
+			if ( '' !== $key && ! isset( $jar[ $key ] ) ) {
+				$jar[ $key ] = $display;
+			}
+		}
+
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) ) {
+			$checks = array();
+		}
+		// A ledger still pending when a newer scan arrives will never be
+		// finalized — its replay queue was merged into the new one. Name that
+		// state instead of leaving a 'pending' that quietly means 'abandoned'.
+		foreach ( $checks as $existing_id => $existing_entry ) {
+			if ( is_array( $existing_entry ) && isset( $existing_entry['status'] ) && 'pending' === $existing_entry['status'] ) {
+				$checks[ $existing_id ]['status'] = 'superseded';
+			}
+		}
+		$checks[ (string) $scan_id ] = array(
+			'status'         => 'pending',
+			'date'           => current_time( 'mysql' ),
+			'imported_keys'  => array_keys( $imported_keys ),
+			'imported_names' => array_keys( $names ),
+			'jar'            => $jar,
+			'observed'       => array(),
+		);
+		// Pruned the way faz_scan_history is: newest entries win, 50 kept.
+		if ( count( $checks ) > self::VISITOR_CHECK_HISTORY_LIMIT ) {
+			$checks = array_slice( $checks, -self::VISITOR_CHECK_HISTORY_LIMIT, null, true );
+		}
+		update_option( self::VISITOR_CHECK_OPTION, $checks, false );
+		update_option( self::VISITOR_CHECK_TARGET_OPTION, $scan_id, false );
+	}
+
+	/**
+	 * Append anonymously observed Set-Cookie identities to the open ledger.
+	 *
+	 * Called by run_httponly_check() beside its existing checkpoint writes, so
+	 * a worker that dies on a later URL keeps what it proved. Append-only and
+	 * bounded: it records positive observations and nothing else, which is the
+	 * asymmetry the whole feature rests on — a page cache can suppress a
+	 * Set-Cookie, it cannot invent one.
+	 *
+	 * @param array $observed_cookies Cookie rows as returned by scan_page().
+	 * @return void
+	 */
+	public function record_visitor_observations( $observed_cookies ) {
+		$target = absint( get_option( self::VISITOR_CHECK_TARGET_OPTION, 0 ) );
+		if ( $target < 1 ) {
+			return;
+		}
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) || ! isset( $checks[ (string) $target ] ) || ! is_array( $checks[ (string) $target ] ) ) {
+			return;
+		}
+		$entry = $checks[ (string) $target ];
+		if ( ! isset( $entry['status'] ) || 'pending' !== $entry['status'] ) {
+			return;
+		}
+		$observed  = isset( $entry['observed'] ) && is_array( $entry['observed'] ) ? $entry['observed'] : array();
+		$site_host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+		$changed   = false;
+		foreach ( (array) $observed_cookies as $cookie ) {
+			if ( count( $observed ) >= self::BROWSER_SCAN_OBSERVATION_LIMIT ) {
+				break;
+			}
+			if ( ! is_array( $cookie ) || empty( $cookie['name'] ) ) {
+				continue;
+			}
+			$display = sanitize_text_field( (string) $cookie['name'] );
+			$domain  = isset( $cookie['domain'] ) && '' !== $cookie['domain'] ? (string) $cookie['domain'] : $site_host;
+			$key     = self::canonical_key( $display, $domain );
+			if ( '' === $key || isset( $observed[ $key ] ) ) {
+				continue;
+			}
+			$observed[ $key ] = $display;
+			$changed          = true;
+		}
+		if ( $changed ) {
+			$entry['observed']           = $observed;
+			$checks[ (string) $target ]  = $entry;
+			update_option( self::VISITOR_CHECK_OPTION, $checks, false );
+		}
+	}
+
+	/**
+	 * Freeze the open ledger into the three-bucket diff when the replay drains.
+	 *
+	 * The buckets, and what happens to each:
+	 *
+	 * - visitor_only: the anonymous pass saw a Set-Cookie the browser pass
+	 *   never imported. The row is already declared — run_httponly_check()'s
+	 *   save_cookies() checkpoint did that on positive observation — so this
+	 *   records the provenance the catalogue merge used to swallow silently.
+	 * - jar_promoted: the name sat in the browser scan's jar/admin-context
+	 *   bucket AND the anonymous pass observed the site setting it. A measured
+	 *   Set-Cookie outranks a request-shape inference, so the name is declared
+	 *   (again, by the existing checkpoint) and noted here.
+	 * - admin_only: the browser pass saw it, the anonymous pass did not.
+	 *   UNCHANGED — still reported, never declared, never deleted.
+	 *
+	 * The safety rule this method must never weaken: anonymous PRESENCE may
+	 * promote, anonymous ABSENCE may never demote. This method writes exactly
+	 * one option — its own — and in particular never touches
+	 * MISSED_SCANS_OPTION, never calls record_scan_observations(), and never
+	 * removes a catalogue row. A fully cached site therefore degrades to
+	 * today's behaviour, not below it.
+	 *
+	 * @return array|null The completed ledger entry, or null when none is open.
+	 */
+	public function finalize_visitor_check() {
+		$target = absint( get_option( self::VISITOR_CHECK_TARGET_OPTION, 0 ) );
+		if ( $target < 1 ) {
+			return null;
+		}
+		delete_option( self::VISITOR_CHECK_TARGET_OPTION );
+
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) || ! isset( $checks[ (string) $target ] ) || ! is_array( $checks[ (string) $target ] ) ) {
+			return null;
+		}
+		$entry = $checks[ (string) $target ];
+		if ( ! isset( $entry['status'] ) || 'pending' !== $entry['status'] ) {
+			return null;
+		}
+
+		$imported_keys  = array_flip( isset( $entry['imported_keys'] ) && is_array( $entry['imported_keys'] ) ? $entry['imported_keys'] : array() );
+		$imported_names = array_flip( isset( $entry['imported_names'] ) && is_array( $entry['imported_names'] ) ? $entry['imported_names'] : array() );
+		$jar            = isset( $entry['jar'] ) && is_array( $entry['jar'] ) ? $entry['jar'] : array();
+		$observed       = isset( $entry['observed'] ) && is_array( $entry['observed'] ) ? $entry['observed'] : array();
+
+		// Names observed anonymously, for jar promotion. The jar's domains are
+		// fabricated (the request-cookie header carries none), so promotion
+		// matches on the canonical NAME: the claim being tested is "the site
+		// sets this name for visitors", not a domain equality.
+		$observed_names = array();
+		foreach ( $observed as $observed_key => $observed_display ) {
+			$parts                        = explode( '|', (string) $observed_key, 2 );
+			$observed_names[ $parts[0] ] = true;
+		}
+		$jar_names = array();
+		foreach ( $jar as $jar_key => $jar_display ) {
+			$parts               = explode( '|', (string) $jar_key, 2 );
+			$jar_names[ $parts[0] ] = true;
+		}
+
+		$jar_promoted = array();
+		$admin_only   = array();
+		foreach ( $jar as $jar_key => $jar_display ) {
+			$parts = explode( '|', (string) $jar_key, 2 );
+			if ( isset( $observed_names[ $parts[0] ] ) ) {
+				$jar_promoted[ $jar_display ] = true;
+			} else {
+				$admin_only[ $jar_display ] = true;
+			}
+		}
+
+		$visitor_only = array();
+		foreach ( $observed as $observed_key => $observed_display ) {
+			$parts = explode( '|', (string) $observed_key, 2 );
+			if ( isset( $jar_names[ $parts[0] ] ) ) {
+				continue; // Counted as a promotion above.
+			}
+			// Imported under the same key, or under the same name with a
+			// different domain spelling (script-inferred rows carry provider
+			// domains): either way the browser pass already declared it, so
+			// claiming it as visitor-only would overstate the finding.
+			if ( isset( $imported_keys[ $observed_key ] ) || isset( $imported_names[ $parts[0] ] ) ) {
+				continue;
+			}
+			$visitor_only[ $observed_display ] = true;
+		}
+
+		// Keep the diff, drop the working sets: fifty ledgers each holding up
+		// to 2000 observation keys is not an option payload, a diff is.
+		$completed = array(
+			'status'       => 'complete',
+			'date'         => isset( $entry['date'] ) ? $entry['date'] : '',
+			'completed_at' => current_time( 'mysql' ),
+			'diff'         => array(
+				'visitor_only' => array_slice( array_keys( $visitor_only ), 0, 200 ),
+				'jar_promoted' => array_slice( array_keys( $jar_promoted ), 0, 200 ),
+				'admin_only'   => array_slice( array_keys( $admin_only ), 0, 200 ),
+			),
+		);
+		$checks[ (string) $target ] = $completed;
+		update_option( self::VISITOR_CHECK_OPTION, $checks, false );
+
+		$completed['scan_id'] = $target;
+		return $completed;
+	}
+
+	/**
+	 * The most recent completed visitor check, sanitized for REST/UI use.
+	 *
+	 * @return array|null
+	 */
+	public function latest_visitor_check() {
+		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $checks ) || empty( $checks ) ) {
+			return null;
+		}
+		$best    = null;
+		$best_id = 0;
+		foreach ( $checks as $check_id => $entry ) {
+			if ( ! is_array( $entry ) || ! isset( $entry['status'] ) || 'complete' !== $entry['status'] ) {
+				continue;
+			}
+			if ( absint( $check_id ) > $best_id ) {
+				$best_id = absint( $check_id );
+				$best    = $entry;
+			}
+		}
+		if ( null === $best ) {
+			return null;
+		}
+		$diff = isset( $best['diff'] ) && is_array( $best['diff'] ) ? $best['diff'] : array();
+		$out  = array(
+			'scan_id'      => $best_id,
+			'completed_at' => isset( $best['completed_at'] ) ? sanitize_text_field( (string) $best['completed_at'] ) : '',
+		);
+		foreach ( array( 'visitor_only', 'jar_promoted', 'admin_only' ) as $bucket ) {
+			$names = array();
+			foreach ( ( isset( $diff[ $bucket ] ) && is_array( $diff[ $bucket ] ) ? $diff[ $bucket ] : array() ) as $name ) {
+				$name = sanitize_text_field( (string) $name );
+				if ( '' !== $name ) {
+					$names[] = $name;
+				}
+			}
+			$out[ $bucket ] = $names;
+		}
+		return $out;
 	}
 
 	/**

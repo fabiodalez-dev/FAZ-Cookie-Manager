@@ -53,6 +53,7 @@
 		loadCategories(true);
 		loadCookies();
 		updateRestoreBar();
+		updateVisitorCheckBar();
 		// A capture session opened before this page load (another tab, or a
 		// crawl a reload killed) is invisible without asking the server.
 		refreshActiveScanSession();
@@ -661,6 +662,72 @@
 		});
 		details.appendChild(list);
 		bar.appendChild(details);
+	}
+
+	/**
+	 * Disclose the outcome of the anonymous server-side visitor check.
+	 *
+	 * After every browser scan the server replays the visited URLs without a
+	 * login and diffs its Set-Cookie observations against the logged-in pass.
+	 * Three buckets come back: cookies only the anonymous pass received
+	 * (declared, with this strip as their provenance), jar-bucket names the
+	 * anonymous pass confirmed as real site cookies (promoted to declared),
+	 * and names that stay admin-only (reported, never declared).
+	 *
+	 * Read on page load: the replay finishes in the background minutes after
+	 * the import response, so the strip describes the latest COMPLETED check.
+	 * Coverage is headers-only and the strip must say so — the copy must never
+	 * claim the visitor's view of the site has been fully checked.
+	 */
+	function updateVisitorCheckBar() {
+		var bar = document.getElementById('faz-visitor-check-bar');
+		if (!bar) { return; }
+		FAZ.get('scans/info').then(function (info) {
+			var check = info && info.visitor_check;
+			bar.textContent = '';
+			if (!check) {
+				bar.style.display = 'none';
+				return;
+			}
+			var visitorOnly = Array.isArray(check.visitor_only) ? check.visitor_only : [];
+			var promoted = Array.isArray(check.jar_promoted) ? check.jar_promoted : [];
+			var adminOnly = Array.isArray(check.admin_only) ? check.admin_only : [];
+			bar.style.display = '';
+
+			var title = document.createElement('strong');
+			title.textContent = __('cookies.visitorCheckTitle', 'Server-side visitor check (headers only) — scan #%d:')
+				.replace('%d', function () { return String(check.scan_id || 0); });
+			bar.appendChild(title);
+
+			var list = document.createElement('ul');
+			function addBucket(names, key, fallback) {
+				if (!names.length) { return; }
+				var li = document.createElement('li');
+				// textContent, never innerHTML: cookie names are content a
+				// scanned page (or a third party it embeds) controls.
+				li.textContent = __(key, fallback)
+					.replace('%1$d', function () { return String(names.length); })
+					.replace('%2$s', function () { return names.join(', '); });
+				list.appendChild(li);
+			}
+			addBucket(visitorOnly, 'cookies.visitorCheckVisitorOnly', '%1$d cookie(s) were set for the anonymous check but never seen by the logged-in browser scan, and were added to the declaration: %2$s');
+			addBucket(promoted, 'cookies.visitorCheckPromoted', '%1$d cookie(s) the scan could not attribute were confirmed by the anonymous check — the site sets them for visitors, so they are declared: %2$s');
+			addBucket(adminOnly, 'cookies.visitorCheckAdminOnly', '%1$d cookie(s) were seen only in your browser and not confirmed for visitors; they stay reported, not declared: %2$s');
+			if (list.childNodes.length) {
+				bar.appendChild(list);
+			} else {
+				var none = document.createElement('p');
+				none.textContent = __('cookies.visitorCheckNoDiff', 'The anonymous check found no cookie differences against the browser scan.');
+				bar.appendChild(none);
+			}
+
+			var disclaimer = document.createElement('p');
+			disclaimer.className = 'faz-help';
+			disclaimer.textContent = __('cookies.visitorCheckDisclaimer', 'This check re-fetches the scanned pages without a login and compares Set-Cookie headers only. It cannot see cookies that JavaScript sets for anonymous visitors, nor cookies set only after an interaction (for example an add-to-cart request), so a clean result does not mean the visitor view is fully verified.');
+			bar.appendChild(disclaimer);
+		}).catch(function () {
+			bar.style.display = 'none';
+		});
 	}
 
 	/**

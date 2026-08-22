@@ -593,6 +593,18 @@ class Admin {
 						'jarOnlyHint'              => __( '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.', 'faz-cookie-manager' ),
 						'jarOnlyToggle'            => __( 'Show the names', 'faz-cookie-manager' ),
 						'jarOnlyExplain'           => __( 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.', 'faz-cookie-manager' ),
+						// Server-side visitor check — the anonymous header
+						// replay diffed against the logged-in browser pass.
+						/* translators: %d: numeric id of the scan the visitor check belongs to. */
+						'visitorCheckTitle'        => __( 'Server-side visitor check (headers only) — scan #%d:', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies, 2: comma-separated cookie names. */
+						'visitorCheckVisitorOnly'  => __( '%1$d cookie(s) were set for the anonymous check but never seen by the logged-in browser scan, and were added to the declaration: %2$s', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies, 2: comma-separated cookie names. */
+						'visitorCheckPromoted'     => __( '%1$d cookie(s) the scan could not attribute were confirmed by the anonymous check — the site sets them for visitors, so they are declared: %2$s', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies, 2: comma-separated cookie names. */
+						'visitorCheckAdminOnly'    => __( '%1$d cookie(s) were seen only in your browser and not confirmed for visitors; they stay reported, not declared: %2$s', 'faz-cookie-manager' ),
+						'visitorCheckNoDiff'       => __( 'The anonymous check found no cookie differences against the browser scan.', 'faz-cookie-manager' ),
+						'visitorCheckDisclaimer'   => __( 'This check re-fetches the scanned pages without a login and compares Set-Cookie headers only. It cannot see cookies that JavaScript sets for anonymous visitors, nor cookies set only after an interaction (for example an add-to-cart request), so a clean result does not mean the visitor view is fully verified.', 'faz-cookie-manager' ),
 						// Scan cancellation.
 						'stopScan'                 => __( 'Stop scan', 'faz-cookie-manager' ),
 						'stoppingScan'             => __( 'Stopping…', 'faz-cookie-manager' ),

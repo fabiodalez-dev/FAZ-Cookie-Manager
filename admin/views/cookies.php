@@ -137,6 +137,15 @@ defined( 'ABSPATH' ) || exit;
 						// has to be added by hand.
 						?>
 						<div id="faz-jar-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
+						<?php
+						// Outcome of the anonymous header replay that runs after
+						// every browser scan: which cookies only an anonymous
+						// visitor received, which jar-bucket names the replay
+						// confirmed as real site cookies, and which remain
+						// admin-only. Populated by cookies.js from scans/info;
+						// coverage is headers-only and the strip says so.
+						?>
+						<div id="faz-visitor-check-bar" style="display:none" class="faz-stale-bar" role="status" aria-live="polite" aria-atomic="true"></div>
 						<div class="faz-table-wrap">
 						<table class="faz-table" id="faz-cookies-table">
 							<thead>

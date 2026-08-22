@@ -451,6 +451,10 @@ class Api extends Rest_Controller {
 			'new_cookies'   => isset( $data['new_cookies'] ) ? absint( $data['new_cookies'] ) : -1,
 			'pages_scanned' => isset( $data['pages_scanned'] ) ? absint( $data['pages_scanned'] ) : 0,
 		);
+		// Most recent completed server-side visitor check (headers only), or
+		// null. Already sanitized by latest_visitor_check(). Additive: nothing
+		// existing reads this field, and polling clients ignore it.
+		$safe['visitor_check'] = $this->controller->latest_visitor_check();
 		return rest_ensure_response( $safe );
 	}
 
@@ -897,6 +901,17 @@ class Api extends Rest_Controller {
 		// a failure that never happened.
 		$this->controller->remember_browser_scan_result( $scan_id, $result );
 		$this->controller->finish_browser_scan_session( $scan_id );
+
+		// Persist this pass's classification before the replay is scheduled, so
+		// the cron worker finds an open ledger: the imported set and the jar/
+		// admin-context bucket otherwise die with this response, and the
+		// visitor diff can never be computed.
+		$this->controller->begin_visitor_check(
+			isset( $result['scan_id'] ) ? $result['scan_id'] : 0,
+			$cookies,
+			isset( $result['cookie_names'] ) && is_array( $result['cookie_names'] ) ? $result['cookie_names'] : array(),
+			$jar_cookies
+		);
 
 		// Replay every URL the browser actually visited in a background server
 		// pass. This adds Set-Cookie headers and metadata that are invisible to JS.
