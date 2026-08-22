@@ -228,7 +228,7 @@ The plugin source includes several third-party domain names (e.g. `js.stripe.com
 
 The plugin makes the outbound requests documented above only when their relevant feature is used. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
 
-= Cache Plugin Compatibility =
+== Cache Plugin Compatibility ==
 
 When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
 
