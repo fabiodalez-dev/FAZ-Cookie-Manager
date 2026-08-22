@@ -23,26 +23,22 @@ No account to create. The plugin requires no cloud service connection. Basic fea
 
 Most cookie consent plugins follow the same pattern: a free version with crippled features, and a paid tier starting at $10-50/month that unlocks what you actually need (cookie scanning, consent logs, Google Consent Mode, IAB TCF). FAZ Cookie Manager breaks that model:
 
-* **Cookie scanner** -- Scans your site directly from your browser. No external service, no API limits, no waiting.
-* **Cookie Policy generator** -- Build a jurisdiction-aware Cookie Policy page directly from your admin. Pick GDPR / CCPA / LGPD / POPIA, fill in your company details, and publish via the `[faz_cookie_policy_complete]` shortcode. Output ships in en, it, fr, de, es, pt-BR, bg and cs, pulls the live cookie inventory from the scanner, and lets you replace individual sections per jurisdiction and language. Empty editors keep the shipped text as their placeholder; languages without a bundled scaffold, such as Slovak, use the reviewed fallback until you write their text. The standalone `[faz_cookie_table]` shortcode (and the matching Gutenberg block) still works for embedding just the cookie list.
-* **Consent logging with CSV export** -- Every consent is recorded locally in your database. Export anytime for audits.
-* **Google Consent Mode v2** -- Sends all 7 consent signals to Google tags. No premium required.
-* **IAB TCF v2.3** -- Full Transparency and Consent Framework API and UI, built in. To operate as a recognised CMP in the IAB framework you must enter your own registered IAB Europe CMP ID; without one the TCF interface stays inactive (no TC string is produced) so invalid signals are never broadcast to vendors.
-* **Geo-targeting** -- Show banners only to visitors from regulated regions (EU, California, etc.).
-* **180+ languages** -- Translate every string in the banner, or use one of the built-in translations.
-* **Script blocking** -- Tag any script with `data-faz-tag` to block it until the right category is accepted.
-* **Guided setup wizard (NEW in 1.25.0)** -- a first-run wizard detects your environment (multilingual plugin, page cache, WooCommerce, existing consent data) and configures defaults that match your jurisdiction, explaining each choice in plain language. First setup—or switching consent model—applies the expiry and notice controls shown in review; reopening without changing model preserves custom expiry and button visibility. Existing sites are treated as already set up and are never nagged.
-* **Editable Cookie Policy text (NEW in 1.25.0)** -- rewrite any section of the generated policy from the admin, per jurisdiction and per language. Placeholders such as {{COMPANY_NAME}} keep working inside your own wording, and an empty box keeps the reviewed text that ships with the plugin. You can also write the policy in a language the plugin ships no template for -- pick the language, and your text is stored against it. Each override remembers the section it was written for, so a future update that reorders the templates falls back to the reviewed original instead of putting your wording under the wrong heading.
-* **A/B test your consent banner (NEW in 1.25.0)** -- run two or more of your existing banners at once with a persistent random split, then read the accept rate per variant on the Dashboard. Only active, independently compliant banners take part, so improving your wording can never quietly turn into a dark pattern. Off by default.
-* **Schrems II transfer disclosure (NEW in 1.25.0)** -- flag, per cookie, that a service sends personal data to a country without an EU adequacy decision, together with the safeguard you rely on. It appears in the preference centre and in the generated Cookie Policy, worded neutrally: it states the fact and your described safeguard, and never claims that safeguard is legally sufficient. Off by default.
-* **Age-appropriate consent, GDPR Art. 8 (NEW in 1.25.0)** -- an optional age-confirmation checkbox above the buttons. It gates only Accept, never Reject or withdraw, so the two keep equal weight. This is a self-declared affirmation and is not a substitute for the parental-consent verification Art. 8(2) requires. Off by default.
-* **Ad-blocker resilience (NEW in 1.25.0)** -- keeps the legally required notice visible when a cosmetic filter list hides elements whose class contains "cookie" or "consent". A single deferred re-assert: no loop, no cookie wall. It protects a mandatory notice, it does not circumvent a privacy tool. Off by default.
-* **Editable "Do Not Sell" opt-out text** -- customise the title, description and toggle label of the CCPA / US State Laws "Opt-out Preferences" popup, per language, right from the banner editor.
-* **E-commerce & payment friendly** -- a per-gateway opt-in (PayPal, Stripe, Square, Braintree, Klarna, Mollie, Amazon Pay) lets your checkout and payment forms load their SDK before consent when you enable that gateway, so pre-consent blocking never breaks a payment button. Off by default; a real WooCommerce checkout/cart is exempt automatically.
-* **Cache & object-cache compatible** -- automatically purges and bypasses FlyingPress, LiteSpeed, WP Rocket, W3 Total Cache and more on save; epoch-invalidates on Redis Object Cache / Memcached; and keeps WPML, Polylang, TranslatePress and Weglot banners in the right language even behind a full-page cache. See "Cache Plugin Compatibility" below.
-* **Microsoft UET/Clarity** -- Consent integration for Microsoft advertising and analytics tools.
-* **Revisit consent widget** -- Floating button lets visitors change their preferences anytime.
-* **Accessibility-focused** -- Keyboard navigation (Tab, Enter, Escape), screen-reader support, mobile responsive.
+* **Cookie scanner** -- scans your site directly from your browser. No external service, no API limits, no waiting.
+* **Cookie Policy generator** -- a jurisdiction-aware policy page (GDPR / CCPA / LGPD / POPIA) built from your own company details and the scanner's live cookie inventory, published with `[faz_cookie_policy_complete]`. Ships in en, it, fr, de, es, pt-BR, bg and cs, and every section can be rewritten per jurisdiction and language.
+* **Consent logging with CSV export** -- every consent is recorded locally in your database. Export anytime for audits.
+* **Google Consent Mode v2** -- all 7 consent signals sent to Google tags. No premium required.
+* **IAB TCF v2.3** -- full Transparency and Consent Framework API and UI. Operating as a recognised CMP needs your own registered IAB Europe CMP ID; without one the TCF interface stays inactive and no TC string is produced, so invalid signals are never broadcast to vendors.
+* **Script blocking** -- tag any script with `data-faz-tag` to hold it until its category is accepted.
+* **Geo-targeting and 180+ languages** -- serve the right banner per region and translate every string, or use a built-in translation.
+* **Guided setup wizard** -- a first-run wizard detects your environment (multilingual plugin, page cache, WooCommerce, existing consent data) and configures jurisdiction-appropriate defaults, explaining each choice in plain language. Existing sites are treated as already set up and are never nagged.
+* **A/B test your consent banner** -- run two or more existing banners with a persistent random split and read the accept rate per variant. Only active, independently compliant banners take part, so improving your wording can never quietly become a dark pattern. Off by default.
+* **Schrems II transfer disclosure** -- flag per cookie that a service sends personal data to a country without an EU adequacy decision, with the safeguard you rely on. Worded neutrally: it states the fact and your described safeguard, and never claims that safeguard is legally sufficient. Off by default.
+* **Age-appropriate consent (GDPR Art. 8)** -- an optional age-confirmation checkbox above the buttons. It gates only Accept, never Reject or withdraw, so the two keep equal weight. This is a self-declared affirmation and is not a substitute for the parental-consent verification Art. 8(2) requires. Off by default.
+* **Ad-blocker resilience** -- keeps the legally required notice visible when a cosmetic filter list hides elements whose class contains "cookie" or "consent". A single deferred re-assert: no loop, no cookie wall. It protects a mandatory notice; it does not circumvent a privacy tool. Off by default.
+* **Editable "Do Not Sell" opt-out text** -- customise the title, description and toggle label of the CCPA / US State Laws opt-out popup, per language.
+* **E-commerce & payment friendly** -- a per-gateway opt-in (PayPal, Stripe, Square, Braintree, Klarna, Mollie, Amazon Pay) lets payment SDKs load before consent when you enable that gateway, so pre-consent blocking never breaks a payment button. Off by default; a real WooCommerce checkout/cart is exempt automatically.
+* **Cache & object-cache compatible** -- purges and bypasses FlyingPress, LiteSpeed, WP Rocket, W3 Total Cache and more on save, epoch-invalidates Redis / Memcached object caches, and keeps WPML, Polylang, TranslatePress and Weglot banners in the right language behind a full-page cache. Details in the FAQ.
+* **Microsoft UET/Clarity, revisit widget, accessibility** -- consent integration for Microsoft tags, a floating button so visitors can change their mind, and keyboard/screen-reader support throughout.
 
 = Helps with these frameworks =
 
@@ -72,16 +68,16 @@ Core banner functionality runs on your WordPress site. Optional update/download 
 
 = Cookie Policy generator =
 
-A dedicated **Cookie Policy** admin tab and the `[faz_cookie_policy_complete]` shortcode build a policy page from the cookies your site actually sets, rather than from a generic template you have to fill in by hand.
+A dedicated **Cookie Policy** admin tab and the `[faz_cookie_policy_complete]` shortcode build a policy page from the cookies your site actually sets.
 
-* **Jurisdiction-aware** -- GDPR (EU/EEA/UK), CCPA/CPRA (California), LGPD (Brazil) or POPIA (South Africa). Each ships its own scaffold with the legal references and the sections that framework requires.
-* **Auto-populated** -- the cookie inventory renders live from the scanner's results, so a newly discovered cookie appears at the next render with its category, duration and description.
-* **Multilingual** -- en, it, fr, de, es, pt-BR, bg and cs out of the box. Override per render with `[faz_cookie_policy_complete lang="it"]`, or let the visitor's browser decide.
-* **Editable per jurisdiction and language** -- every section can be replaced with your own Markdown, placeholders included. Leave one empty and it keeps receiving reviewed updates with each plugin release.
-* **Filled with your company data** -- name, address, DPO email, retention period, stored in the `faz_cookie_policy_data` option. Never seeded from `admin_email` or `blogname`.
-* **Honest by default** -- a localised disclaimer states that the templates are a starting point and not legal advice. It can be replaced with reviewed text of your own, or hidden.
+* **Jurisdiction-aware** -- GDPR (EU/EEA/UK), CCPA/CPRA, LGPD or POPIA, each with the legal references and sections that framework requires.
+* **Auto-populated** -- the inventory renders live from the scanner, so a newly discovered cookie appears with its category, duration and description.
+* **Multilingual** -- en, it, fr, de, es, pt-BR, bg, cs; override per render with `lang="it"` or let the browser decide.
+* **Editable per jurisdiction and language** -- replace any section with your own Markdown, placeholders included; leave one empty and it keeps receiving reviewed updates.
+* **Your company data** -- name, address, DPO email, retention period. Never seeded from `admin_email` or `blogname`.
+* **Honest by default** -- a localised disclaimer states the templates are a starting point, not legal advice.
 
-A `data-faz-policy-version` hash on the rendered article tracks template and data drift over time, and the `faz_cookie_policy_data` filter lets site builders inject custom placeholders. The older `[faz_cookie_policy]` shortcode, the standalone `[faz_cookie_table]` shortcode and the `faz/cookie-table` block are unchanged.
+The older `[faz_cookie_policy]` and `[faz_cookie_table]` shortcodes and the `faz/cookie-table` block are unchanged.
 
 = Multi-banner geo-routing and multilingual content =
 
@@ -93,16 +89,9 @@ Translations live inside each banner, and the language shown is resolved **clien
 
 In practice this means two banner rows rather than eight: one EU-targeted GDPR banner holding English, Italian, German, French and Polish, and one US-targeted CCPA banner holding English and Spanish.
 
-== Other Notes ==
+== External Services ==
 
-**External services.** This plugin is cloud-free: consent is stored on your own
-site and there is no vendor account, dashboard or telemetry. What follows is the
-full outbound picture, one heading per item: the optional features that contact
-an external host (none of them run unless you use the feature), the public REST
-endpoints the plugin exposes on your own domain, and a note on third-party
-domain strings that appear in the code as matching patterns and are never
-contacted. Each entry states what triggers it, what leaves your server, and the
-provider's terms.
+**Summary.** This plugin is cloud-free: consent is stored on your own site and there is no vendor account, dashboard or telemetry. Below is the full outbound picture, one heading per item -- the optional features that contact an external host (none run unless you enable them), the public REST endpoints this plugin exposes on your own domain, and a note on third-party domain strings that appear in the code as matching patterns and are never contacted. Each entry states its trigger, what leaves your server, and the provider's terms.
 
 = GitHub / Raw GitHubusercontent (Open Cookie Database) =
 
@@ -181,28 +170,26 @@ Terms of Service / Privacy Policy:
 
 = Plugin REST endpoint /faz/v1/banner (public) =
 
-Used by the plugin's own front-end JavaScript (`script.js`) to fetch the per-language / per-country banner payload after the page has loaded. This is an INTERNAL endpoint hosted by the plugin on the same WordPress install — no third-party network call leaves the visitor's browser to a remote service. It is documented here only because the response carries `bannerSlug` and `activeLaw`, two strings that describe which banner profile and which legal regime (gdpr / ccpa) currently applies to the visitor.
+Serves the banner configuration to the visitor's browser under Cache Compatibility Mode, so a full-page cache can store one visitor-invariant HTML document while the banner still resolves per request. Hosted by this WordPress install; no third-party host is involved.
 
-Triggered when: the front-end banner script bootstraps on a page that has multi-banner geo-routing active.
+Triggered when: Cache Compatibility Mode is enabled and a visitor loads a page with no stored consent.
 
-Data sent: only what the visitor's browser already sends with any page request to the same origin. The plugin does not forward the request to any remote service.
+Data sent: nothing about the visitor. The response carries banner text, categories and styling only.
 
 Service URL:
 * https://{your-site}/wp-json/faz/v1/banner
 
 = Plugin REST endpoints /faz/v1/amp-consent/check and /update (public) =
 
-Used by the plugin's AMP banner to reconcile the AMP consent cache with the first-party FAZ consent cookie. Both endpoints are hosted by the same WordPress install. Requests must pass the AMP CORS provenance checks (the publisher origin, or that publisher's exact HTTPS Google AMP Cache origin with the exact publisher `__amp_source_origin`); arbitrary origins, another publisher's cache subdomain and requests without AMP provenance are rejected before consent can be changed. Sites whose long/IDN domain uses a hashed Google cache hostname, or which use another registered AMP cache, can add only their verified exact origin with the `faz_amp_consent_allowed_cache_origin` filter.
+Used by the plugin's AMP banner to reconcile the AMP consent cache with the first-party FAZ consent cookie. Both are hosted by the same WordPress install. Requests must pass AMP CORS provenance checks -- the publisher origin, or that publisher's exact HTTPS Google AMP Cache origin with the matching `__amp_source_origin`. Arbitrary origins, another publisher's cache subdomain, and requests without AMP provenance are rejected before consent can change. Sites on another registered AMP cache can add their own verified exact origin with the `faz_amp_consent_allowed_cache_origin` filter.
 
-Triggered when: an AMP page checks an existing decision or the visitor saves new AMP cookie preferences.
+Triggered when: an AMP page checks an existing decision, or the visitor saves AMP cookie preferences.
 
-Data sent: banner scope, consent state, per-category purpose choices and the AMP-generated user ID included by `amp-consent`. FAZ does not store or log that AMP user ID and does not derive its consent identifier from it. The update endpoint attempts to synchronize the first-party consent cookie with `SameSite=None; Secure`. Browsers that completely block third-party cookies may reject that cookie when the page is served from an AMP Cache; in that case the bridge fails closed and can require the choice again rather than claiming guaranteed cross-origin parity.
+Data sent: banner scope, consent state, per-category purpose choices, and the AMP-generated user ID that `amp-consent` includes. FAZ neither stores nor logs that ID, and does not derive its consent identifier from it. The update endpoint tries to synchronise the first-party cookie with `SameSite=None; Secure`; a browser that blocks third-party cookies may refuse it behind an AMP Cache, and the bridge then **fails closed** and asks again rather than claiming cross-origin parity it cannot guarantee.
 
 Service URLs:
 * https://{your-site}/wp-json/faz/v1/amp-consent/check
 * https://{your-site}/wp-json/faz/v1/amp-consent/update
-
-Proprietary AMP components can opt into granular blocking with `data-faz-category="category-slug"` or `data-faz-purpose="category-slug"`. Developers can also extend the tag mapping with the `faz_amp_component_purpose_map` filter. Components that bypass the AMP lifecycle or perform independent server-side requests require their own integration.
 
 = AMP Project CDN =
 
@@ -221,42 +208,12 @@ Documentation / Privacy:
 
 = Note on third-party domain strings inside the plugin codebase =
 
-The plugin source includes several third-party domain names (e.g. `js.stripe.com`, `connect.facebook.net`, `cdn.jsdelivr.net`, `unpkg.com`, `googletagmanager.com`, etc.) as **string patterns** for two purposes:
+The source contains third-party domain names (`js.stripe.com`, `connect.facebook.net`, `googletagmanager.com` and others) purely as **string patterns**, for two purposes:
 
-1. **Script-blocking detection patterns** — used to identify analytics, advertising, and tracking scripts that the *site administrator's other plugins* may inject, so we can block them until the visitor has given consent. The plugin itself does **not** load any of these scripts.
-2. **Detection and explicit exceptions** — third-party domains can appear in the provider catalogue so the blocker can identify them. No whole third-party plugin is whitelisted, and no profiling resource is: Google Fonts, Google Maps, OAuth endpoints and generic CDNs stay blocked until consent. The only defaults are four anti-abuse challenge endpoints (reCAPTCHA, its gstatic assets, Cloudflare Turnstile, hCaptcha), which gate a form the visitor is actively trying to submit and are therefore strictly necessary. A site administrator may add a narrow, audited exception in Settings when a resource is genuinely necessary for that site's lawful use case, and may remove the CAPTCHA defaults too.
+1. **Blocking detection** -- to recognise analytics, advertising and tracking scripts injected by the site's *other* plugins, so they can be held until consent. This plugin loads none of them itself.
+2. **Explicit exceptions** -- no whole third-party plugin is whitelisted and no profiling resource is: Google Fonts, Google Maps, OAuth endpoints and generic CDNs stay blocked until consent. The only defaults are four anti-abuse challenge endpoints (reCAPTCHA, its gstatic assets, Cloudflare Turnstile, hCaptcha), which gate a form the visitor is actively submitting and are therefore strictly necessary. An administrator can add a narrow audited exception in Settings, and can remove the CAPTCHA defaults too.
 
-The plugin makes the outbound requests documented above only when their relevant feature is used. The internal `/faz/v1/banner` endpoint described above is hosted by this plugin on the same site — no third-party network call leaves the visitor's browser to a remote service.
-
-== Cache Plugin Compatibility ==
-
-When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
-
-* `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
-* `Pragma: no-cache`
-* `X-LiteSpeed-Cache-Control: no-cache`
-* `Vary: CF-IPCountry` (when the trust filter `faz_trust_cf_ipcountry_header` is enabled)
-* `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
-* `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
-
-= Verified compatible (no extra configuration needed) =
-
-* **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
-* **WP Rocket** — honors `DONOTCACHEPAGE` natively.
-* **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
-* **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
-* **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
-* **FlyingPress** — the plugin purges FlyingPress's cached HTML pages automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Only the rendered HTML is purged (that is all a consent change alters); FlyingPress's site-wide preload crawl is not triggered, matching the purge-only behaviour of the other supported caches. FlyingPress does not honor `DONOTCACHEPAGE`, so the plugin also hooks its documented `flying_press_is_cacheable` filter to skip caching on country-dependent pages, matching the bypass every other supported cache gets. The consent scripts are excluded automatically from minification and from "Delay all JavaScript": recent FlyingPress 4.x exposes delay/defer exclusion filters (added around 4.16), while FlyingPress 5 receives the same keywords in its in-memory delay-exclusion config without changing your saved FlyingPress settings. You normally do not need to touch anything. If FlyingPress 5 changes those internals the v5 bridge degrades quietly and leaves a note in the debug log when `WP_DEBUG` is on; on older FlyingPress builds that predate the delay/defer filters the automatic exclusion simply does not apply (the plugin cannot detect this). Either way, if you ever notice the banner appearing only after the first click, add `faz-cookie-manager` to FlyingPress's "Delay JavaScript" exclusion keywords as a fallback.
-* **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
-* **Cloudflare APO** — honors the `Cache-Control: no-store` header. With CF in front, also enable the trust filter so the `Vary: CF-IPCountry` header is emitted and CF caches per-country variants instead of bypassing entirely.
-* **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress and Weglot all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode falls back to the site default (a query string is not a reliable cache key).
-
-= Known limitations =
-
-* **CDNs without origin Cache-Control honoring** (e.g. some legacy CloudFront configurations) — verify the response Cache-Control header reaches the edge. If not, add a CF-IPCountry or country-based cache key rule at the CDN level.
-* **Minor / regional cache plugins** (Comet Cache, Cachify, Swift Performance Lite) — not formally tested. Most still honor `DONOTCACHEPAGE`; verify by inspecting the response Cache-Control on a country-targeted page.
-
-Override the bypass logic per request via the `faz_country_dependent_banner_output` filter (return false to force the cache to ignore the country dimension on a specific URL).
+Every outbound request documented above happens only when its feature is used. `/faz/v1/banner` is hosted by this plugin on the same site: no third-party call leaves the visitor's browser.
 
 == Installation ==
 
@@ -317,6 +274,36 @@ Yes. A floating revisit widget appears on every page, letting visitors reopen th
 Yes. The banner supports full keyboard navigation (Tab, Enter, Escape), proper ARIA labels, and is responsive down to 375px viewports. Buttons have equal visual prominence to avoid dark patterns.
 
 = Does it work with caching plugins? =
+
+When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
+
+* `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
+* `Pragma: no-cache`
+* `X-LiteSpeed-Cache-Control: no-cache`
+* `Vary: CF-IPCountry` (when the trust filter `faz_trust_cf_ipcountry_header` is enabled)
+* `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
+* `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
+
+**Verified compatible (no extra configuration needed)**
+
+* **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
+* **WP Rocket** — honors `DONOTCACHEPAGE` natively.
+* **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
+* **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
+* **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
+* **FlyingPress** — the plugin purges FlyingPress's cached HTML pages automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Only the rendered HTML is purged (that is all a consent change alters); FlyingPress's site-wide preload crawl is not triggered, matching the purge-only behaviour of the other supported caches. FlyingPress does not honor `DONOTCACHEPAGE`, so the plugin also hooks its documented `flying_press_is_cacheable` filter to skip caching on country-dependent pages, matching the bypass every other supported cache gets. The consent scripts are excluded automatically from minification and from "Delay all JavaScript": recent FlyingPress 4.x exposes delay/defer exclusion filters (added around 4.16), while FlyingPress 5 receives the same keywords in its in-memory delay-exclusion config without changing your saved FlyingPress settings. You normally do not need to touch anything. If FlyingPress 5 changes those internals the v5 bridge degrades quietly and leaves a note in the debug log when `WP_DEBUG` is on; on older FlyingPress builds that predate the delay/defer filters the automatic exclusion simply does not apply (the plugin cannot detect this). Either way, if you ever notice the banner appearing only after the first click, add `faz-cookie-manager` to FlyingPress's "Delay JavaScript" exclusion keywords as a fallback.
+* **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
+* **Cloudflare APO** — honors the `Cache-Control: no-store` header. With CF in front, also enable the trust filter so the `Vary: CF-IPCountry` header is emitted and CF caches per-country variants instead of bypassing entirely.
+* **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress and Weglot all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode falls back to the site default (a query string is not a reliable cache key).
+
+**Known limitations**
+
+* **CDNs without origin Cache-Control honoring** (e.g. some legacy CloudFront configurations) — verify the response Cache-Control header reaches the edge. If not, add a CF-IPCountry or country-based cache key rule at the CDN level.
+* **Minor / regional cache plugins** (Comet Cache, Cachify, Swift Performance Lite) — not formally tested. Most still honor `DONOTCACHEPAGE`; verify by inspecting the response Cache-Control on a country-targeted page.
+
+Override the bypass logic per request via the `faz_country_dependent_banner_output` filter (return false to force the cache to ignore the country dimension on a specific URL).
+
+= Short answer =
 
 Yes. The consent banner is rendered via JavaScript from a cached template, so it works with all major caching plugins (WP Super Cache, W3 Total Cache, LiteSpeed Cache, etc.).
 
