@@ -289,7 +289,6 @@ msgid "Select a service…"
 msgstr ""
 
 #: admin/class-admin.php:570
-#, fuzzy
 msgid "Could not load services"
 msgstr "Nije moguće učitati status definicija."
 
@@ -318,7 +317,6 @@ msgid "%d entry(ies) were kept: they have not yet been missing from enough compl
 msgstr ""
 
 #: admin/class-admin.php:579
-#, fuzzy
 msgid "Undo delete"
 msgstr "Kolačić obrisan."
 
@@ -341,7 +339,6 @@ msgid "%d cookie(s) restored."
 msgstr "Nisu navedeni kolačići."
 
 #: admin/class-admin.php:586
-#, fuzzy
 msgid "Could not restore the deleted cookies."
 msgstr "Brisanje kolačića nije uspjelo."
 
@@ -360,7 +357,6 @@ msgid "%d cookie(s) were already in your browser when the scan started, so they 
 msgstr ""
 
 #: admin/class-admin.php:594
-#, fuzzy
 msgid "Show the names"
 msgstr "Naziv stranice"
 
@@ -373,7 +369,6 @@ msgid "Stop scan"
 msgstr ""
 
 #: admin/class-admin.php:598
-#, fuzzy
 msgid "Stopping…"
 msgstr "Spremanje…"
 
@@ -398,7 +393,6 @@ msgid "Scan Site"
 msgstr "Skeniraj stranicu"
 
 #: admin/class-admin.php:604
-#, fuzzy
 msgid "Scan failed."
 msgstr "Spremanje nije uspjelo"
 
@@ -430,12 +424,10 @@ msgid "The browser scan was saved. Server-header enrichment is still running in 
 msgstr ""
 
 #: admin/class-admin.php:616
-#, fuzzy
 msgid "No pages found to scan."
 msgstr "Maksimalan broj stranica za skeniranje."
 
 #: admin/class-admin.php:617
-#, fuzzy
 msgid "Failed to discover pages."
 msgstr "Spremanje jezika nije uspjelo."
 
@@ -477,27 +469,27 @@ msgstr ""
 #: admin/class-admin.php:633
 #, php-format
 msgid "A cookie scan session for your account is already open on the server (started at %s). A new scan cannot start until it ends."
-msgstr ""
+msgstr "Za vaš je račun na poslužitelju već otvorena sesija skeniranja kolačića (pokrenuta u %s). Novo skeniranje ne može započeti dok ona ne završi."
 
 #. translators: %1$d: number of cookie observations captured so far, %2$s: clock time of the most recent one
 #: admin/class-admin.php:635
 #, php-format
 msgid "It is capturing right now — %1$d observation(s) so far, the last at %2$s. If one of your other tabs is running a scan, let it finish. Ending the session discards everything it has captured."
-msgstr ""
+msgstr "Trenutačno bilježi — dosad %1$d opažanja, posljednje u %2$s. Ako u nekoj od vaših drugih kartica traje skeniranje, pustite ga da završi. Završetkom sesije odbacuje se sve što je zabilježila."
 
 #. translators: %s: clock time the scan session last showed any activity
 #: admin/class-admin.php:637
 #, php-format
 msgid "Nothing has reached the server since %s. If none of your tabs is running a scan, the tab that was driving this one is gone. The session will expire on its own in a few minutes, or you can end it now — ending it discards everything it captured."
-msgstr ""
+msgstr "Od %s do poslužitelja nije stiglo ništa. Ako ni u jednoj vašoj kartici ne traje skeniranje, kartica koja je vodila ovo više ne postoji. Sesija će isteći sama za nekoliko minuta ili je možete završiti sada — time se odbacuje sve što je zabilježila."
 
 #: admin/class-admin.php:638
 msgid "End this scan and discard its capture"
-msgstr ""
+msgstr "Završi ovo skeniranje i odbaci njegov zapis"
 
 #: admin/class-admin.php:639
 msgid "Scan session ended — its capture was discarded. You can start a new scan."
-msgstr ""
+msgstr "Sesija skeniranja završena — njezin je zapis odbačen. Možete pokrenuti novo skeniranje."
 
 #: admin/class-admin.php:640
 msgid "The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked."
