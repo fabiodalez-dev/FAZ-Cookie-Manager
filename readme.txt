@@ -382,14 +382,21 @@ and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
 = 1.27.0 =
+* Changed: the jurisdiction geo-ruleset runtime now runs on live visitor traffic. With the ipinfo.io integration enabled and an API key stored, a visitor's IP address can be sent to ipinfo.io during ordinary browsing to classify VPN/proxy/Tor use — previously only the admin geo preview ran that lookup. Both switches are off by default and ipinfo.io is never contacted without them; revoking the opt-in also stops cached lookups. The External Services section describes the data flow.
 * Added: authenticated browser-scan capture for PHP/HttpOnly Set-Cookie metadata from pages, AJAX, REST and subresources, plus background header replay limited to the URLs the browser actually visited.
 * Added: granular AMP consent synchronized with the standard FAZ cookie. Category decisions are scope- and revision-bound, stale cached decisions fail closed, and AMP components stay blocked until their purposes are granted.
 * Added: evidence-based stale-cookie deletion after repeated complete scans, recoverable bulk deletion, and a persistent recycle-bin Undo action that survives page reloads.
 * Changed: scan completeness now includes selected depth, diagnostics, early stops and capture truncation. Administrator-only jar cookies are reported for review but never imported as public declarations.
 * Changed: the opt-in outgoing Set-Cookie guard is separate from the established cookie shredder, respects banner/geo/excluded-page context, preserves necessary/CAPTCHA boundaries, and records value-free diagnostics without query strings.
-* Fixed: transient scan-import failures automatically retry the exact payload and scan ID; exhausted retries close the session before the UI can start another scan, while HttpOnly observations remain intact until persistence succeeds.
+* Fixed: the [faz_do_not_sell] opt-out is enforced again — its HttpOnly cookie was invisible to the frontend, which restored the sell/share scripts the server had blocked; it is now script-readable and reconciled on load. On the combined GDPR+CCPA setting the opt-out confirm revoked nothing; it now revokes every sell/share category, never age-gated.
+* Fixed: a bare script-whitelist entry such as "js" substring-matched every URL and disabled client-side blocking wholesale — bare tokens now match element id/class only, as on the server; and a custom rule carrying a deleted category no longer leaves a built-in tracker unblocked before consent.
+* Fixed: Microsoft Clarity now hears revocation, not only grants; the banner REST endpoint honours the site-wide disable switch; hiding from bots now removes the banner markup and CSS too; and pageview tracking is strictly gated, stores no session id, and its retention windows (pageviews, DSAR) gained Settings fields.
+* Fixed: every settings write now runs the sanitiser and cache invalidation — partial saves no longer blank unrelated groups or leave page caches on stale consent configuration, an out-of-range scanner page limit no longer silences scheduled scans, and a malformed notice-dismissal expiry no longer errors.
+* Fixed: the Cookie Banner editor opens the surviving default banner instead of hard-coding ID 1, and scanner loopback fetches relax unsafe-URL rejection only for the site's proven loopback alias, with redirects disabled while relaxed.
+* Fixed: transient scan-import failures retry the exact payload and scan ID; exhausted retries close the session before another scan can start, and HttpOnly observations survive until persistence succeeds.
 * Fixed: hyphenated AMP category slugs now use one collision-safe identifier across purposeConsentRequired, checkboxes, REST responses and component blocking attributes.
-* Fixed: file-like replay URLs keep their path, cookie-clearing headers remove the matching name/domain/path observation instead of becoming inventory entries, and AMP-looking strings inside JSON, CSS, text or comments are not rewritten.
+* Fixed: file-like replay URLs keep their path, cookie-clearing headers remove the matching observation instead of becoming inventory entries, and AMP-looking strings inside JSON, CSS or comments are not rewritten.
+* Updated: translation catalogues resynchronized with the current source strings.
 
 = 1.26.0 =
 * Changed: all bundled jurisdiction rule-sets are now enforced by default across pre-consent defaults, blocking, mandatory banner controls and Consent Mode. The faz_geo_ruleset_runtime filter remains an emergency kill switch, and Cache Compatibility Mode is ignored while the response varies by jurisdiction.
