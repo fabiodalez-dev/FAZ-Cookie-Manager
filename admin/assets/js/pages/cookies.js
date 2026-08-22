@@ -53,6 +53,9 @@
 		loadCategories(true);
 		loadCookies();
 		updateRestoreBar();
+		// A capture session opened before this page load (another tab, or a
+		// crawl a reload killed) is invisible without asking the server.
+		refreshActiveScanSession();
 		var saveCatsBtn = document.getElementById('faz-save-categories');
 		if (saveCatsBtn) saveCatsBtn.addEventListener('click', saveCategoryEdits);
 
@@ -1303,11 +1306,194 @@
 	// What stays here is this page's own business: the progress UI, and the
 	// "stale cookie" bookkeeping that compares the catalogue before and after.
 
+	// ── Already-open capture session (survives a reload) ───
+	// A crawl only lives as long as the tab that drives it, but its capture
+	// session on the server does not: reload the page mid-scan (or lose the
+	// tab) and the session stays locked for up to fifteen minutes, previously
+	// discoverable only as a bare `faz_browser_scan_in_progress` 409 with no
+	// way out short of SSH. On load the page now asks the server what it knows
+	// (scans/session) and, when a session is open, shows it here with an
+	// explicit way to end it.
+	//
+	// What is shown is only what the server genuinely knows — when the session
+	// started, how many Set-Cookie observations arrived, when anything last
+	// reached it. The client-side page counter died with the old tab, so no
+	// percentage bar is faked for it. A session something is still driving
+	// (recent activity) pulses and is described as capturing; one nothing has
+	// touched is shown amber and stalled, because the difference is exactly
+	// what the administrator needs to decide whether ending it is safe.
+	// Ending is NEVER automatic — a live session may be another tab genuinely
+	// crawling, and only the human can tell that from an abandoned one.
+	// `epoch` fences the async gap: a scans/session response that was already
+	// in flight when the panel was explicitly removed (End clicked, a new scan
+	// started) must not resurrect the panel with its stale snapshot — every
+	// removal bumps the epoch and responses from an older one are dropped.
+	var activeSessionPanel = { wrap: null, timer: null, els: null, scanId: '', epoch: 0 };
+
+	// Recent-activity horizon, in seconds. During a crawl the capture path
+	// touches the session on every page load, so seconds-scale silence means
+	// nothing is driving it — except on fully page-cached sites, where only
+	// the five-minute heartbeat gets through; hence a generous margin and
+	// wording that reports facts ("nothing since …") rather than verdicts.
+	var SESSION_STALL_AFTER_S = 90;
+
+	function removeActiveSessionPanel() {
+		activeSessionPanel.epoch++;
+		if (activeSessionPanel.timer) {
+			clearInterval(activeSessionPanel.timer);
+			activeSessionPanel.timer = null;
+		}
+		if (activeSessionPanel.wrap && activeSessionPanel.wrap.parentNode) {
+			activeSessionPanel.wrap.parentNode.removeChild(activeSessionPanel.wrap);
+		}
+		activeSessionPanel.wrap = null;
+		activeSessionPanel.els = null;
+		activeSessionPanel.scanId = '';
+	}
+
+	function refreshActiveScanSession() {
+		var epoch = activeSessionPanel.epoch;
+		FAZ.get('scans/session').then(function (info) {
+			if (epoch !== activeSessionPanel.epoch) { return; }
+			renderActiveScanSession(info);
+		}, function () {
+			// The page must keep working when the endpoint is unreachable —
+			// the panel is an affordance, not a dependency.
+		});
+	}
+
+	function formatClockTime(ts) {
+		if (!ts) { return ''; }
+		try {
+			return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+		} catch (e) {
+			return new Date(ts * 1000).toLocaleTimeString();
+		}
+	}
+
+	function buildActiveSessionPanel() {
+		var dropdown = document.getElementById('faz-scan-dropdown');
+		if (!dropdown) { return null; }
+
+		var wrap = document.createElement('div');
+		wrap.className = 'faz-scan-progress-wrap faz-scan-session-wrap';
+		wrap.id = 'faz-scan-session-panel';
+
+		var progress = document.createElement('div');
+		progress.className = 'faz-scan-progress';
+		var bar = document.createElement('div');
+		bar.className = 'faz-scan-bar';
+		// Full width on purpose: the server does not know how many pages the
+		// dead tab meant to visit, so any partial width would be an invented
+		// percentage. The bar is a state light here — pulsing primary while
+		// something is driving the session, flat amber once nothing is.
+		bar.style.width = '100%';
+		var statusEl = document.createElement('span');
+		statusEl.className = 'faz-scan-status';
+		progress.appendChild(bar);
+		progress.appendChild(statusEl);
+		wrap.appendChild(progress);
+
+		var box = document.createElement('div');
+		box.className = 'faz-scan-held';
+		box.setAttribute('role', 'status');
+		box.setAttribute('aria-live', 'polite');
+		var notice = document.createElement('p');
+		notice.className = 'faz-scan-held-text';
+		var detail = document.createElement('p');
+		detail.className = 'faz-scan-held-text';
+		var actions = document.createElement('div');
+		actions.className = 'faz-scan-held-actions';
+		var endBtn = document.createElement('button');
+		endBtn.type = 'button';
+		endBtn.id = 'faz-scan-session-end';
+		endBtn.className = 'faz-btn faz-btn-sm faz-btn-danger';
+		endBtn.textContent = __('cookies.endActiveScan', 'End this scan and discard its capture');
+		actions.appendChild(endBtn);
+		box.appendChild(notice);
+		box.appendChild(detail);
+		box.appendChild(actions);
+		wrap.appendChild(box);
+
+		endBtn.addEventListener('click', function () {
+			endBtn.disabled = true;
+			// The scan id shown by scans/session names this administrator's own
+			// session; the abort route only ever releases the caller's own.
+			FAZ.post('scans/abort', { scan_id: activeSessionPanel.scanId }).then(function () {
+				// aborted:false means the session lapsed on its own between the
+				// last poll and the click — either way it no longer exists.
+				removeActiveSessionPanel();
+				FAZ.notify(__('cookies.activeScanEnded', 'Scan session ended — its capture was discarded. You can start a new scan.'), 'success');
+			}, function (err) {
+				endBtn.disabled = false;
+				FAZ.notify((err && err.message) || __('cookies.scanFailed', 'Scan failed.'), 'error');
+			});
+		});
+
+		// Same mount point as a run's own progress UI, so the session appears
+		// exactly where a scan this tab started would.
+		var card = dropdown.closest ? dropdown.closest('.faz-card') : null;
+		var cardHeader = card ? card.querySelector('.faz-card-header') : null;
+		if (card && cardHeader && cardHeader.parentNode) {
+			cardHeader.parentNode.insertBefore(wrap, cardHeader.nextSibling);
+		} else if (dropdown.parentNode) {
+			dropdown.parentNode.insertBefore(wrap, dropdown.nextSibling);
+		} else {
+			return null;
+		}
+
+		activeSessionPanel.wrap = wrap;
+		activeSessionPanel.els = { bar: bar, statusEl: statusEl, notice: notice, detail: detail, endBtn: endBtn };
+		return wrap;
+	}
+
+	function renderActiveScanSession(info) {
+		// Held sessions do not block a new scan (starting one reclaims them),
+		// and this tab's own run already has richer live UI mounted — in both
+		// cases showing this panel would only mislead.
+		var running = document.querySelector('.faz-scan-progress-wrap:not(.faz-scan-session-wrap)');
+		if (!info || info.active !== true || info.state !== 'live' || running) {
+			removeActiveSessionPanel();
+			return;
+		}
+		if (!activeSessionPanel.wrap && !buildActiveSessionPanel()) {
+			return;
+		}
+
+		activeSessionPanel.scanId = info.scan_id || '';
+		var els = activeSessionPanel.els;
+		var idleFor = (info.server_time || 0) - (info.last_activity || 0);
+		var isLive = idleFor >= 0 && idleFor <= SESSION_STALL_AFTER_S;
+
+		activeSessionPanel.wrap.classList.toggle('faz-scan-progress-held', !isLive);
+		els.statusEl.textContent = isLive ? __('cookies.scanStarted', 'Scanning...') : '';
+		els.notice.textContent = __('cookies.activeScanNotice', 'A cookie scan session for your account is already open on the server (started at %s). A new scan cannot start until it ends.')
+			.replace('%s', function () { return formatClockTime(info.started_at); });
+		els.detail.textContent = isLive
+			? __('cookies.activeScanLive', 'It is capturing right now — %1$d observation(s) so far, the last at %2$s. If one of your other tabs is running a scan, let it finish. Ending the session discards everything it has captured.')
+				.replace('%1$d', function () { return String(info.observations || 0); })
+				.replace('%2$s', function () { return formatClockTime(info.last_activity); })
+			: __('cookies.activeScanStalled', 'Nothing has reached the server since %s. If none of your tabs is running a scan, the tab that was driving this one is gone. The session will expire on its own in a few minutes, or you can end it now — ending it discards everything it captured.')
+				.replace('%s', function () { return formatClockTime(info.last_activity); });
+
+		if (!activeSessionPanel.timer) {
+			// Keep the shown state honest: another tab's crawl advances the
+			// observation count (real progress), an abandoned one visibly goes
+			// quiet, and a session that lapses or finishes takes the panel away.
+			activeSessionPanel.timer = window.setInterval(refreshActiveScanSession, 10000);
+		}
+	}
+
 	function startScan(maxPages) {
 		var btn = document.getElementById('faz-scan-btn');
 		var dropdown = document.getElementById('faz-scan-dropdown');
 		FAZ.btnLoading(btn, true);
 		btn.textContent = __('cookies.scanStarted', 'Scanning...');
+
+		// The session panel's poll timer must stop before its wrapper goes: the
+		// sweep below removes the DOM but would leave the interval re-creating
+		// the panel underneath this run's own progress UI.
+		removeActiveSessionPanel();
 
 		// A previous run may have left its wrapper mounted on purpose — that is
 		// how a held import keeps its Retry offer reachable. Starting a new scan
@@ -1453,6 +1639,13 @@
 					return;
 				}
 				terminalFailure(err);
+				// The refusal that used to be a dead end. The toast above names
+				// it; this puts the session it collided with on screen, with
+				// its explicit stop affordance, right where the collision
+				// happened.
+				if (err && err.code === 'faz_browser_scan_in_progress') {
+					refreshActiveScanSession();
+				}
 			}
 
 			/**
