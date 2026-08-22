@@ -30,6 +30,34 @@ import {
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const IS_PHP_BUILT_IN_E2E = (process.env.FAZ_E2E_SERVER ?? 'php-built-in').toLowerCase() === 'php-built-in';
 
+/**
+ * Does any captured script URL come from this host?
+ *
+ * A substring test is what CodeQL flags here, and it is right to: `.includes(
+ * 'doubleclick.net')` also matches `https://example.com/?ref=doubleclick.net`,
+ * so the assertion could pass on a URL that has nothing to do with the provider
+ * and the test would still look green. Parsing the host and matching it (or a
+ * subdomain of it) is what the assertion actually means.
+ *
+ * Non-URL values are skipped rather than throwing: the scan legitimately reports
+ * script handles and relative paths alongside absolute URLs.
+ */
+function hasScriptFromHost(scripts: string[], host: string, pathContains?: string): boolean {
+  return scripts.some((value) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(value, WP_BASE);
+    } catch {
+      return false;
+    }
+    const matchesHost = parsed.hostname === host || parsed.hostname.endsWith(`.${host}`);
+    if (!matchesHost) {
+      return false;
+    }
+    return pathContains === undefined || parsed.pathname.includes(pathContains);
+  });
+}
+
 type SettingsPayload = Record<string, any>;
 type ScanCookie = { name: string; domain?: string; category?: string };
 type ScanSignalPayload = {
@@ -408,8 +436,8 @@ test.describe('Provider matrix scan and blocking', () => {
     expect(response.status, JSON.stringify(response.data)).toBe(200);
     const scripts = response.data.scripts;
 
-    expect(scripts.some((value) => value.includes('doubleclick.net'))).toBe(true);
-    expect(scripts.some((value) => value.includes('youtube.com/embed'))).toBe(true);
+    expect(hasScriptFromHost(scripts, 'doubleclick.net')).toBe(true);
+    expect(hasScriptFromHost(scripts, 'youtube.com', '/embed')).toBe(true);
     expect(scripts.some((value) => value.includes('exactmetrics-frontend-script'))).toBe(true);
     expect(scripts.some((value) => value.includes('pixel-caffeine/build/frontend.js'))).toBe(true);
   });
