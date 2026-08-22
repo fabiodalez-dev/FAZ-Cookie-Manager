@@ -24,6 +24,7 @@ No account to create. The plugin requires no cloud service connection. Basic fea
 Most cookie consent plugins follow the same pattern: a free version with crippled features, and a paid tier starting at $10-50/month that unlocks what you actually need (cookie scanning, consent logs, Google Consent Mode, IAB TCF). FAZ Cookie Manager breaks that model:
 
 * **Cookie scanner** -- scans your site directly from your browser. No external service, no API limits, no waiting.
+* **Finds the cookies a JavaScript scanner cannot see** -- cookies set by PHP before the page renders, including `HttpOnly` ones your browser hides from scripts, are captured from the server response itself: from pages, AJAX, REST calls and sub-resources, then replayed across the URLs the crawl actually visited. Those are exactly the cookies that get set *before consent*, so a declaration built without them is incomplete.
 * **Cookie Policy generator** -- a jurisdiction-aware policy page (GDPR / CCPA / LGPD / POPIA) built from your own company details and the scanner's live cookie inventory, published with `[faz_cookie_policy_complete]`. Ships in en, it, fr, de, es, pt-BR, bg and cs, and every section can be rewritten per jurisdiction and language.
 * **Consent logging with CSV export** -- every consent is recorded locally in your database. Export anytime for audits.
 * **Google Consent Mode v2** -- all 7 consent signals sent to Google tags. No premium required.
@@ -81,13 +82,11 @@ The older `[faz_cookie_policy]` and `[faz_cookie_table]` shortcodes and the `faz
 
 = Multi-banner geo-routing and multilingual content =
 
-Two orthogonal features that combine freely: the visitor's **country** decides which banner is served, and the visitor's **browser language** decides the translation shown inside it.
+Two orthogonal features that combine freely: the visitor's **country** decides which banner is served, the visitor's **browser language** decides the translation shown inside it.
 
-Geo-routing selects a banner profile per country -- typically a strict GDPR banner for the EU/EEA/UK and a CCPA opt-out banner for California. Each banner row carries its own target countries and a priority integer that resolves overlaps. Country resolution walks Cloudflare's `CF-IPCountry` header (opt-in via the `faz_trust_cf_ipcountry_header` filter), then MaxMind GeoLite2, then ip-api.com.
+Geo-routing picks a banner per country — typically a strict GDPR banner for the EU/EEA/UK and a CCPA opt-out banner for California — resolving the country from Cloudflare's `CF-IPCountry` header (opt-in), then MaxMind GeoLite2, then ip-api.com. Translations live inside each banner and are resolved **client-side** from `navigator.languages`, so a country-targeted banner still works behind a full-page cache.
 
-Translations live inside each banner, and the language shown is resolved **client-side** from `navigator.languages` -- so a country-targeted banner can still be served from a full-page cache (LiteSpeed, WP Rocket, Cloudflare APO) and the right language renders on hydration.
-
-In practice this means two banner rows rather than eight: one EU-targeted GDPR banner holding English, Italian, German, French and Polish, and one US-targeted CCPA banner holding English and Spanish.
+In practice that means two banner rows rather than eight: one EU banner holding English, Italian, German, French and Polish, one US banner holding English and Spanish.
 
 == External Services ==
 
