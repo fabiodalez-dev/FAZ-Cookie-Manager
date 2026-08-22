@@ -590,20 +590,53 @@ class Activator {
 	 * Run consent log retention cleanup based on settings.
 	 */
 	public static function run_retention_cleanup() {
-		$settings  = get_option( 'faz_settings' );
+		$settings = get_option( 'faz_settings' );
+
+		// Four independent jobs on one cron hook. They used to run as a bare
+		// sequence, so ANY failure in the first cancelled the other three: a
+		// site whose consent-log controller could not load — seen in the wild on
+		// an install that shipped without that file — silently stopped purging
+		// DSAR requests and pageviews too, for as long as the install stayed
+		// broken. Each step is isolated now, so one failure costs one job.
+		//
+		// The two retention purges also REPORT when they cannot run. Storage
+		// limitation is an obligation, and "the purge quietly stopped months
+		// ago" must not look identical to "there was nothing to delete". The
+		// housekeeping steps stay silent: an unreaped asset file is untidy, not
+		// a compliance problem.
+
 		$retention = isset( $settings['consent_logs']['retention'] ) ? (int) $settings['consent_logs']['retention'] : 12;
 		if ( $retention > 0 ) {
-			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
+			self::run_cleanup_step(
+				'consent-log retention',
+				true,
+				static function () use ( $retention ) {
+					ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
+				}
+			);
 		}
-		self::cleanup_old_dsar_requests( $settings );
+
+		self::run_cleanup_step(
+			'DSAR request retention',
+			true,
+			static function () use ( $settings ) {
+				self::cleanup_old_dsar_requests( $settings );
+			}
+		);
 
 		// Reap superseded content-hashed frontend assets (config-*.js /
 		// banner-*.css). Every settings/banner change mints a new hash and
 		// orphans the previous file, so without this the generated-assets
 		// directory grows for the lifetime of the install.
-		if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
-			\FazCookie\Frontend\Frontend::cleanup_static_assets();
-		}
+		self::run_cleanup_step(
+			'static asset reap',
+			false,
+			static function () {
+				if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
+					\FazCookie\Frontend\Frontend::cleanup_static_assets();
+				}
+			}
+		);
 
 		// Pageview analytics rows grow one-per-visit when tracking is enabled
 		// and previously had NO purge wired up at all, so the table (and every
@@ -611,7 +644,50 @@ class Activator {
 		$pv_retention = isset( $settings['pageviews']['retention'] ) ? (int) $settings['pageviews']['retention'] : 6;
 		$pv_retention = (int) apply_filters( 'faz_pageviews_retention_months', $pv_retention );
 		if ( $pv_retention > 0 ) {
-			Pageviews_Controller::get_instance()->cleanup_old_records( $pv_retention );
+			self::run_cleanup_step(
+				'pageview retention',
+				false,
+				static function () use ( $pv_retention ) {
+					Pageviews_Controller::get_instance()->cleanup_old_records( $pv_retention );
+				}
+			);
+		}
+	}
+
+	/**
+	 * Run one daily-cleanup job without letting it take the others down.
+	 *
+	 * `Throwable` rather than `Exception` on purpose: the failure this was
+	 * written for is an `Error` — a missing class on a partial install — which
+	 * an `Exception` catch would not have caught.
+	 *
+	 * @param string   $label         Human-readable job name for the log line.
+	 * @param bool     $is_compliance Whether skipping this job has a retention
+	 *                                obligation behind it, and must be visible.
+	 * @param callable $step          The job.
+	 * @return bool True when the job completed.
+	 */
+	private static function run_cleanup_step( $label, $is_compliance, $step ) {
+		try {
+			call_user_func( $step );
+			return true;
+		} catch ( \Throwable $e ) {
+			if ( $is_compliance ) {
+				// Recorded in two places on purpose: the log is where an
+				// administrator with shell access looks, and the option is what
+				// a support request or a status screen can read without one.
+				error_log( 'FAZ daily cleanup: "' . $label . '" did not run — ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				update_option(
+					'faz_last_cleanup_issue',
+					array(
+						'step'    => (string) $label,
+						'message' => (string) $e->getMessage(),
+						'time'    => time(),
+					),
+					false
+				);
+			}
+			return false;
 		}
 	}
 

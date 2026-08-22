@@ -65,6 +65,22 @@ class Geo_Runtime {
 		$ui      = isset( $ruleset['ui'] ) && is_array( $ruleset['ui'] ) ? $ruleset['ui'] : array();
 		$signals = isset( $ruleset['signals'] ) && is_array( $ruleset['signals'] ) ? $ruleset['signals'] : array();
 
+		// $properties is decoded from the banner row's stored JSON, so these two
+		// containers are only arrays by convention. A legacy or hand-edited row
+		// can hold a string or false there, and PHP 8 raises a fatal — not a
+		// notice — when an offset is assigned on a scalar. That fatal would land
+		// on the PUBLIC front end, where this overlay runs for every visitor, so
+		// the row would take the whole page down rather than lose one setting.
+		//
+		// Normalising only the two top-level containers is enough: everything
+		// below them is created by the assignments themselves, which auto-vivify
+		// from a missing key without complaint.
+		foreach ( array( 'config', 'behaviours' ) as $faz_container ) {
+			if ( ! isset( $properties[ $faz_container ] ) || ! is_array( $properties[ $faz_container ] ) ) {
+				$properties[ $faz_container ] = array();
+			}
+		}
+
 		if ( ! empty( $ui['donotsell_link_required'] ) ) {
 			$properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = true;
 			$properties['config']['optoutPopup']['status'] = true;
