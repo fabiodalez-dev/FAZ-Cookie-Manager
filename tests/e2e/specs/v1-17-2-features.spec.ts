@@ -333,10 +333,11 @@ test.describe('GPC — Global Privacy Control honouring (1.17.2)', () => {
 
   let originalGpcOn = false;
   test.beforeAll(() => {
-    originalGpcOn = wpEval(
-      `global $wpdb; $t=$wpdb->prefix.'faz_banners';` +
-      `$id=(int)$wpdb->get_var("SELECT banner_id FROM $t WHERE banner_default=1 LIMIT 1");` +
-      `$s=$id?json_decode($wpdb->get_var($wpdb->prepare("SELECT settings FROM $t WHERE banner_id=%d",$id)),true):array();` +
+		originalGpcOn = wpEval(
+			`global $wpdb; $t=$wpdb->prefix.'faz_banners';` +
+			`$id=(int)$wpdb->get_var("SELECT banner_id FROM $t WHERE banner_default=1 LIMIT 1");` +
+			`if(!$id){$id=(int)$wpdb->get_var("SELECT banner_id FROM $t WHERE status=1 LIMIT 1");}` +
+			`$s=$id?json_decode($wpdb->get_var($wpdb->prepare("SELECT settings FROM $t WHERE banner_id=%d",$id)),true):array();` +
       `echo (is_array($s)&&!empty($s['behaviours']['respectGPC']['status']))?'1':'0';`,
     ).trim() === '1';
     // Deliberately OFF: the signal must still be honoured.

@@ -171,12 +171,12 @@ test.describe('Settings option behavior interactions', () => {
     const endpoint = `${baseURL}/?rest_route=/faz/v1/settings/notices/pageviews_overage_notice`;
     const headers = { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce };
 
-    for (const expiry of [-1, 'invalid', ['invalid']]) {
-      const response = await adminPage.request.post(endpoint, { headers, data: { expiry } });
-      expect(response.status(), `expiry ${JSON.stringify(expiry)} must be rejected`).toBe(400);
-    }
-
     try {
+      for (const expiry of [-1, 'invalid', ['invalid']]) {
+        const response = await adminPage.request.post(endpoint, { headers, data: { expiry } });
+        expect(response.status(), `expiry ${JSON.stringify(expiry)} must be rejected`).toBe(400);
+      }
+
       const permanent = await adminPage.request.post(endpoint, { headers, data: { expiry: 0 } });
       expect(permanent.status()).toBe(200);
     } finally {

@@ -1097,9 +1097,8 @@ msgid "Add override"
 msgstr "Überschreibung hinzufügen"
 
 #: admin/class-admin.php:846
-#, fuzzy
-msgid "No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only."
-msgstr "Keine länderspezifischen Überschreibungen konfiguriert. Das Plugin erkennt den Regelset automatisch anhand des Landes und US-Bundesstaats."
+msgid "No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state."
+msgstr "Keine länderspezifischen Überschreibungen konfiguriert. Regelsätze werden automatisch je Land und US-Bundesstaat aufgelöst und durchgesetzt."
 
 #: admin/class-admin.php:847
 msgid "Remove this override?"
@@ -1115,8 +1114,8 @@ msgid "✅ active"
 msgstr "Inaktiv"
 
 #: admin/class-admin.php:851
-msgid "⚪ off — catalogue is preview/reference only"
-msgstr ""
+msgid "⚠️ disabled by the faz_geo_ruleset_runtime filter"
+msgstr "⚠️ durch den Filter faz_geo_ruleset_runtime deaktiviert"
 
 #: admin/class-admin.php:852
 msgid "Catalog rulesets"

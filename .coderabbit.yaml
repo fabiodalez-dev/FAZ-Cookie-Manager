@@ -27,6 +27,10 @@ reviews:
           - /faz/v1/consent: permission_callback => '__return_true', no frontend
             nonce, abuse protection via faz_throttle_request().
           - /faz/v1/pageviews: same public pattern.
+          - /faz/v1/amp-consent/check and /faz/v1/amp-consent/update: public by
+            design because AMP Cache requests are anonymous and cross-origin. They
+            use exact-origin CORS, banner-scoped HMAC/instance validation, hash_equals()
+            and update throttling instead of a WordPress nonce.
         - All REST admin endpoints require manage_options capability.
         - Use absint() for IDs, sanitize_text_field() for strings.
         - Never suggest using WordPress deprecated functions.

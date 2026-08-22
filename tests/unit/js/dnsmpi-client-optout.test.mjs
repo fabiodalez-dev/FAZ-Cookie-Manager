@@ -57,7 +57,10 @@ function loadFrontend({ userWhitelist = [], applicableLaw = 'ccpa' } = {}) {
       // Neither sold nor shared — CCPA-exempt, must survive the opt-out.
       { slug: 'functional', isNecessary: false, ccpaDoNotSell: false, defaultConsent: { gdpr: false, ccpa: true } },
     ],
-    _services: [],
+    _services: [
+      { id: 'facebook', category: 'marketing' },
+      { id: 'maps', category: 'functional' },
+    ],
     _providersToBlock: [],
     _cookieCategoryMap: {},
     _whitelistedCookiePatterns: [],
@@ -115,6 +118,8 @@ console.log('DNSMPI client-side opt-out + user-whitelist matching (jsdom)');
   window.document.cookie = 'fazcookie-dnsmpi=1;path=/';
   window.fazcookie._fazConsentStore.set('svc.facebook', 'yes');
   window.fazcookie._fazConsentStore.set('ck.facebook._fbp', 'yes');
+  window.fazcookie._fazConsentStore.set('svc.maps', 'yes');
+  window.fazcookie._fazConsentStore.set('ck.maps.locale', 'yes');
   let events = 0;
   window.document.addEventListener('fazcookie_consent_update', () => { events += 1; });
   window.eval('_fazApplyDnsmpiOptOut()');
@@ -123,6 +128,8 @@ console.log('DNSMPI client-side opt-out + user-whitelist matching (jsdom)');
   check('fresh DNSMPI denies the sell/share category', window.fazcookie._fazConsentStore.get('marketing') === 'no');
   check('fresh DNSMPI clears an allowed service override', !window.fazcookie._fazConsentStore.has('svc.facebook'));
   check('fresh DNSMPI clears an allowed cookie override', !window.fazcookie._fazConsentStore.has('ck.facebook._fbp'));
+  check('fresh DNSMPI preserves an exempt service override', window.fazcookie._fazConsentStore.get('svc.maps') === 'yes');
+  check('fresh DNSMPI preserves an exempt cookie override', window.fazcookie._fazConsentStore.get('ck.maps.locale') === 'yes');
   check('fresh DNSMPI emits the consent update once', events === 1);
 }
 

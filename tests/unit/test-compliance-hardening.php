@@ -218,6 +218,12 @@ assert_true(
 	false !== strpos( $frontend_src, "fazcookie-dnsmpi" ),
 	'get_blocked_categories honours the DNSMPI opt-out cookie'
 );
+
+$activator_src = file_get_contents( $root . '/includes/class-activator.php' );
+assert_true(
+	false !== strpos( $activator_src, "\$settings->get( 'iab', 'enabled' )" ),
+	'scheduled scan reads IAB state through the Settings object instead of array access'
+);
 assert_true(
 	false !== strpos( $frontend_src, 'get_sell_personal_data' )
 		&& false !== strpos( $frontend_src, 'get_share_personal_data' ),

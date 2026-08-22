@@ -3057,8 +3057,8 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
         if (!category.isNecessary && category.ccpaDoNotSell) {
             bindingSaleShareSlugs.push(category.slug);
             if (bindingSaleShareOptOut) {
+                if (valueToSet !== "no") saleShareWithheld = true;
                 valueToSet = "no";
-                saleShareWithheld = true;
             }
         }
         ref._fazSetInStore(`${category.slug}`, valueToSet);

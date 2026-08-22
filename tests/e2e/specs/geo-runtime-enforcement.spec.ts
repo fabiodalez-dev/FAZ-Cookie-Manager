@@ -37,8 +37,9 @@ const MU_PHP = `<?php
  * E2E-only, per-request and per-context: activates ONLY when the request carries
  * the ${GEO_COOKIE} cookie (value = ISO 3166-1 country). It then forces the
  * geo-runtime flag, pins the visitor country, and injects a server-side blocked
- * analytics probe. With no cookie it is completely inert, so parallel workers
- * and other specs are unaffected. Removed by the spec's afterAll.
+ * analytics probe. The audit-lab fixture registers the same runtime hook later
+ * at the same priority and also returns true for this request, so plugin load
+ * order cannot disable the probe. Removed by the spec's afterAll.
  */
 $faz_e2e_cc = isset( $_COOKIE['${GEO_COOKIE}'] )
 	? strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $_COOKIE['${GEO_COOKIE}'] ) )

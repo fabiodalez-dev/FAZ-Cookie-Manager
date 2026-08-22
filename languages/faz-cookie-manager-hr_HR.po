@@ -1098,9 +1098,8 @@ msgid "Add override"
 msgstr "Dodaj nadjačavanje"
 
 #: admin/class-admin.php:846
-#, fuzzy
-msgid "No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only."
-msgstr "Nema konfiguriranih nadjačavanja po državi. Dodatak automatski detektira skup pravila prema zemlji i saveznoj državi SAD-a."
+msgid "No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state."
+msgstr "Nisu konfigurirana nadjačavanja po državama. Skupovi pravila automatski se određuju i primjenjuju prema državi i saveznoj državi SAD-a."
 
 #: admin/class-admin.php:847
 msgid "Remove this override?"
@@ -1116,8 +1115,8 @@ msgid "✅ active"
 msgstr "Neaktivno"
 
 #: admin/class-admin.php:851
-msgid "⚪ off — catalogue is preview/reference only"
-msgstr ""
+msgid "⚠️ disabled by the faz_geo_ruleset_runtime filter"
+msgstr "⚠️ onemogućeno filtrom faz_geo_ruleset_runtime"
 
 #: admin/class-admin.php:852
 msgid "Catalog rulesets"

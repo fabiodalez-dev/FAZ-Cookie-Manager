@@ -397,7 +397,7 @@ class Banner_Rest {
 	 */
 	private function is_country_dependent_output( $controller ) {
 		$settings = $this->get_faz_settings();
-		if ( ! empty( $settings['banner_control']['cache_compatibility'] ) ) {
+		if ( $this->is_cache_compatibility_enabled() ) {
 			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
 		}
 		return $controller->has_country_dependent_banners() || Geo_Runtime::is_enabled();
