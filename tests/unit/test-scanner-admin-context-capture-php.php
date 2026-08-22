@@ -606,6 +606,39 @@ namespace {
 	check( in_array( 'thirdparty_admin_ui', $jar_names, true ), 'the wp-admin observation is reported instead of dropped in silence' );
 	check( in_array( 'tk_ai', $jar_names, true ), 'an unattributable jar name is still reported' );
 	check( ! in_array( 'tk_ai', $persisted_names, true ), 'an unattributable jar name is still not declared' );
+
+	// The ledger handoff, asserted rather than merely recorded. The double has
+	// collected begin_visitor_check()'s arguments since it was written, but
+	// nothing looked at them — so a regression that handed the ledger an EMPTY
+	// jar bucket, or skipped the call outright, left every check in this file
+	// green. A recording double no one interrogates is not coverage.
+	//
+	// The jar bucket is the load-bearing argument: it is the reported-but-not-
+	// declared set, and the whole visitor check exists to promote names out of
+	// it on anonymous evidence. If it arrives empty the promotion bucket can
+	// never fire, silently, on every install.
+	check( 1 === count( $fake->visitor_checks ), 'the import opens exactly one visitor-check ledger' );
+	$handoff = isset( $fake->visitor_checks[0] ) ? $fake->visitor_checks[0] : array();
+	check(
+		isset( $handoff['scan_id'] ) && $scan_id === $handoff['scan_id'],
+		'the ledger is keyed on the scan that produced it, not on 0'
+	);
+	check(
+		isset( $handoff['jar'] ) && is_array( $handoff['jar'] ) && ! empty( $handoff['jar'] ),
+		'the jar bucket reaches the ledger instead of dying with the response'
+	);
+	$handoff_jar_names = array();
+	foreach ( (array) $handoff['jar'] as $jar_row ) {
+		$handoff_jar_names[] = is_array( $jar_row ) && isset( $jar_row['name'] ) ? $jar_row['name'] : (string) $jar_row;
+	}
+	check(
+		in_array( 'thirdparty_admin_ui', $handoff_jar_names, true ),
+		'the admin-context name the response reports is the same one the ledger receives'
+	);
+	check(
+		isset( $handoff['names'] ) && is_array( $handoff['names'] ) && in_array( 'shop_session', $handoff['names'], true ),
+		'the imported names reach the ledger, so visitor-only findings can be diffed against them'
+	);
 	$persisted_sources = array();
 	foreach ( $fake->persisted as $row ) {
 		$persisted_sources[] = isset( $row['source'] ) ? $row['source'] : '';

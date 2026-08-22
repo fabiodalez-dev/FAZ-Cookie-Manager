@@ -361,7 +361,12 @@ test.describe('Scan session resume — reload visibility and explicit stop', () 
     // the reload; the reloaded page must show it and end it on request —
     // this time through the marker-cookie path, since the same browser still
     // carries the httpOnly token — and a new crawl must then start.
-    test.setTimeout(240_000);
+    // The assertion ceilings inside this test sum to 285s (30+15+15+30+180+15)
+    // against a 240s budget, so a genuine failure in the last third died of a
+    // test-level timeout instead of naming the assertion that broke. These are
+    // ceilings, not expected durations — raising the budget costs nothing on a
+    // passing run and buys a readable failure.
+    test.setTimeout(360_000);
     clearBrowserScanSessionState();
 
     try {

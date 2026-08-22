@@ -907,7 +907,10 @@ class Api extends Rest_Controller {
 		// admin-context bucket otherwise die with this response, and the
 		// visitor diff can never be computed.
 		$this->controller->begin_visitor_check(
-			isset( $result['scan_id'] ) ? $result['scan_id'] : 0,
+			// $scan_id, not $result['scan_id'] — the import result carries no
+			// such key, so this fell back to 0 on every call. The two lines
+			// above already key their writes on $scan_id.
+			$scan_id,
 			$cookies,
 			isset( $result['cookie_names'] ) && is_array( $result['cookie_names'] ) ? $result['cookie_names'] : array(),
 			$jar_cookies
