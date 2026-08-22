@@ -131,8 +131,13 @@ test.describe('CodeRabbit PR #79 omnibus', () => {
         '"google-analytics" should add at least one provider cookie beyond the gateway baseline',
       ).toBeGreaterThan(gatewayBaseline.length);
 
-      // A needle nobody ships matches no provider → output stays the gateway baseline.
-      expect(callHelper(['long-needle-nobody-ships'])).toEqual(gatewayBaseline);
+      // A needle nobody ships matches no PROVIDER. It is still emitted verbatim
+      // as a cookie-NAME pattern: that is the admin's only supported remedy for
+      // a false-positive shred on a cookie outside Known_Providers, so the
+      // output is the gateway baseline plus exactly that one literal entry.
+      expect(callHelper(['long-needle-nobody-ships']).sort()).toEqual(
+        [...gatewayBaseline, 'long-needle-nobody-ships'].sort(),
+      );
     } finally {
       restoreSettingsOption(originalSettings);
     }

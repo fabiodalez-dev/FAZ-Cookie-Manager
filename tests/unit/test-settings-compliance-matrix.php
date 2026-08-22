@@ -65,7 +65,7 @@ namespace {
 		echo '      actual:   ' . var_export( $actual, true ) . "\n";
 	}
 
-	echo "\n== Settings compliance matrix (52 reusable checks) ==\n\n";
+	echo "\n== Settings compliance matrix (56 reusable checks) ==\n\n";
 
 	// 1-10: consent-affecting flags must become strict booleans.
 	$boolean_cases = array(
@@ -84,7 +84,7 @@ namespace {
 		compliance_same( Settings::sanitize_option( $case[0], $case[1] ), $case[2], $case[3] );
 	}
 
-	// 11-18: bounded retention, age and identifier values.
+	// 11-22: bounded retention, age, scan-budget and identifier values.
 	compliance_same( Settings::sanitize_option( 'retention', 0 ), 1, 'retention cannot be below one month' );
 	compliance_same( Settings::sanitize_option( 'retention', 999 ), 120, 'retention cannot exceed 120 months' );
 	compliance_same( Settings::sanitize_option( 'retention', 12 ), 12, 'normal retention is preserved' );
@@ -93,8 +93,17 @@ namespace {
 	compliance_same( Settings::sanitize_option( 'cmp_id', -4 ), 4, 'CMP identifier is normalized to a non-negative integer' );
 	compliance_same( Settings::sanitize_option( 'cmp_id', 9999 ), 4095, 'CMP identifier respects the TCF upper bound' );
 	compliance_same( Settings::sanitize_option( 'consent_revision', 0 ), 1, 'consent revision cannot be zero' );
+	// The scheduled-scan cron and WP-CLI honour the STORED page budget without a
+	// runtime cap of their own, so the write path must enforce the same [1, 2000]
+	// window as the interactive scan endpoint. A stored 0 (absint of any
+	// non-numeric string) made every auto-scan a silent no-op while the admin
+	// believed scanning was on.
+	compliance_same( Settings::sanitize_option( 'max_pages', 0 ), 1, 'zero scan budget cannot silently disable the scheduled scan' );
+	compliance_same( Settings::sanitize_option( 'max_pages', 'garbage' ), 1, 'non-numeric scan budget falls to the floor, not to zero' );
+	compliance_same( Settings::sanitize_option( 'max_pages', 999999 ), 2000, 'stored scan budget respects the interactive scan cap' );
+	compliance_same( Settings::sanitize_option( 'max_pages', 100 ), 100, 'normal scan budget is preserved' );
 
-	// 19-27: enums and identifiers are allowlisted.
+	// 23-31: enums and identifiers are allowlisted.
 	compliance_same( Settings::sanitize_option( 'scan_frequency', 'daily' ), 'daily', 'daily scan frequency is accepted' );
 	compliance_same( Settings::sanitize_option( 'scan_frequency', 'hourly' ), 'weekly', 'unknown scan frequency falls back safely' );
 	compliance_same( Settings::sanitize_option( 'geolite2_edition', 'city' ), 'city', 'GeoLite city edition is accepted' );
@@ -105,7 +114,7 @@ namespace {
 	compliance_same( Settings::sanitize_option( 'publisher_cc', 'ITA' ), '', 'invalid publisher country code is rejected' );
 	compliance_same( Settings::sanitize_option( 'law', 'malicious-law' ), '', 'unknown onboarding law is rejected' );
 
-	// 28-34: consent forwarding accepts only HTTP(S) destinations.
+	// 32-38: consent forwarding accepts only HTTP(S) destinations.
 	$domains = Settings::sanitize_option(
 		'target_domains',
 		array( 'https://shop.example.com', 'http://legacy.example.com/path', 'javascript:alert(1)', 'data:text/html,x', '', 'not-a-url' )
@@ -118,7 +127,7 @@ namespace {
 	compliance_same( Settings::sanitize_option( 'target_domains', 'https://example.com' ), array(), 'scalar forwarding configuration is rejected' );
 	compliance_same( Settings::sanitize_option( 'target_domains', array( '' ) ), array(), 'blank forwarding destinations are removed' );
 
-	// 35-41: gateway exemptions remain explicit and closed to unknown keys.
+	// 39-45: gateway exemptions remain explicit and closed to unknown keys.
 	$gateways = Settings::sanitize_option(
 		'payment_gateways',
 		array( 'paypal' => 'false', 'stripe' => '1', 'square' => 0, 'evil' => true )
@@ -145,7 +154,7 @@ namespace {
 	);
 	compliance_same( Settings::sanitize_option( 'payment_gateways', 'paypal' )['paypal'], false, 'scalar gateway input enables nothing' );
 
-	// 42-46: custom blocking rules are structurally constrained.
+	// 46-50: custom blocking rules are structurally constrained.
 	$rules = Settings::sanitize_option(
 		'custom_rules',
 		array(
@@ -162,7 +171,7 @@ namespace {
 	compliance_same( Settings::sanitize_option( 'custom_rules', 'bad' ), array(), 'scalar blocking rules input is rejected' );
 	compliance_same( Settings::sanitize_option( 'custom_rules', array( array( 'pattern' => 'x', 'category' => 'necessary' ) ) )[0]['category'], 'necessary', 'strictly necessary rule category is supported' );
 
-	// 47-52: cross-setting invariants are enforced for every write path.
+	// 51-56: cross-setting invariants are enforced for every write path.
 	$defaults = array(
 		'banner_control' => array(
 			'per_service_consent' => false,
@@ -203,9 +212,9 @@ namespace {
 	$plain_cache = Settings::sanitize( array( 'banner_control' => array( 'cache_compatibility' => true ) ), $defaults );
 	compliance_same( $plain_cache['banner_control']['cache_compatibility'], true, 'cache mode is preserved on its own' );
 
-	if ( 52 !== $run ) {
+	if ( 56 !== $run ) {
 		$failed++;
-		echo "  \033[31m✗\033[0m suite contract expected exactly 52 checks, ran {$run}\n";
+		echo "  \033[31m✗\033[0m suite contract expected exactly 56 checks, ran {$run}\n";
 	}
 
 	echo "\n--\nChecks: {$run}\nFailed: {$failed}\n\n";
@@ -213,6 +222,6 @@ namespace {
 		echo "\033[31mFAIL\033[0m\n";
 		exit( 1 );
 	}
-	echo "\033[32mPASS — 52/52 compliance checks passed\033[0m\n";
+	echo "\033[32mPASS — 56/56 compliance checks passed\033[0m\n";
 	exit( 0 );
 }

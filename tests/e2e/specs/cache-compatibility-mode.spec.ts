@@ -1,6 +1,14 @@
 import { test, expect } from '../fixtures/wp-fixture';
-import type { Page } from '@playwright/test';
-import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles, upsertPage, wp } from '../utils/wp-env';
+import type { BrowserContext, Page } from '@playwright/test';
+import { getWpLoginPath } from '../utils/wp-auth';
+import {
+  deactivatePluginsExcept,
+  ensureFixturePlugin,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+  upsertPage,
+  wp,
+} from '../utils/wp-env';
 
 /**
  * Cache Compatibility Mode (issue #158) — end-to-end header behaviour.
@@ -14,12 +22,17 @@ import { ensureFixturePlugin, listActivePluginFiles, restoreActivePluginFiles, u
  *
  * This suite drives the REAL header path: it flips IAB on (a country-dependent
  * trigger) and reads the front-end response headers from an ANONYMOUS context,
- * with the toggle off (cache-bust active) and on (cacheable). Serial + restores
- * the original settings in afterAll, so it is reusable in isolation or in-suite.
+ * with the toggle off (cache-bust active) and on (cacheable). Every request also
+ * opts into the test-only `faz_geo_ruleset_runtime` emergency kill switch: cache
+ * compatibility is intentionally ignored while legislative enforcement is live,
+ * and this suite preserves coverage of the explicitly disabled/legacy path.
+ * Serial + restores the original settings in afterAll, so it is reusable in
+ * isolation or in-suite.
  */
 
 const BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 const CACHE_FIXTURE_SLUG = 'faz-cache-compat-provider';
+const RUNTIME_DISABLED_PARAM = 'faz_e2e_disable_geo_runtime=1';
 
 type FazSettings = Record<string, unknown>;
 
@@ -43,7 +56,9 @@ async function postSettings(page: Page, nonce: string, payload: FazSettings): Pr
 async function anonHeaders(browser: import('@playwright/test').Browser): Promise<Record<string, string>> {
   const ctx = await browser.newContext();
   try {
-    const res = await ctx.request.get(BASE + '/', { headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-e2e)' } });
+    const res = await ctx.request.get(`${BASE}/?${RUNTIME_DISABLED_PARAM}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-e2e)' },
+    });
     return res.headers();
   } finally {
     await ctx.close();
@@ -67,7 +82,10 @@ async function anonHtml(
         },
       ]);
     }
-    const res = await ctx.request.get(BASE + path, { headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-html-e2e)' } });
+    const separator = path.includes('?') ? '&' : '?';
+    const res = await ctx.request.get(`${BASE}${path}${separator}${RUNTIME_DISABLED_PARAM}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (cache-compat-html-e2e)' },
+    });
     expect(res.status()).toBeLessThan(400);
     return await res.text();
   } finally {
@@ -76,9 +94,12 @@ async function anonHtml(
 }
 
 test.describe('Cache Compatibility Mode (issue #158)', () => {
-  test.describe.configure({ mode: 'serial' });
+  // Leave headroom for the shared compatibility site's WordPress setup and
+  // cache-header round trips without weakening assertion timeouts globally.
+  test.describe.configure({ mode: 'serial', timeout: 90_000 });
 
   let admin: Page;
+  let adminContext: BrowserContext;
   let nonce = '';
   let originalBannerControl: Record<string, unknown> = {};
   let originalIab: Record<string, unknown> = {};
@@ -92,17 +113,38 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     });
   }
 
-  test.beforeAll(async ({ browser, loginAsAdmin }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    testInfo.setTimeout(120_000);
     originalActivePluginFiles = listActivePluginFiles();
     ensureFixturePlugin('faz-e2e-audit-lab');
+    // A third-party analytics plugin on the shared compatibility site opens a
+    // PHP session and emits Cache-Control: no-store independently of FAZ. That
+    // makes a cache-header assertion incapable of measuring this plugin. Keep
+    // only the subject and its request-scoped geo fixture, then restore the
+    // exact original set below.
+    deactivatePluginsExcept(['faz-cookie-manager', 'faz-e2e-audit-lab']);
     fixtureId = upsertPage(
       CACHE_FIXTURE_SLUG,
       'FAZ Cache Compatibility Provider',
       '<p>FAZ cache compatibility provider fixture.</p><script src="https://www.googletagmanager.com/gtag/js?id=G-FAZCACHE"></script>'
     );
 
-    admin = await browser.newPage();
-    await loginAsAdmin(admin);
+    adminContext = await browser.newContext({ baseURL: BASE });
+    const loginPath = getWpLoginPath();
+    const loginUrl = `${BASE}${loginPath}`;
+    await adminContext.request.get(loginUrl);
+    const loginResponse = await adminContext.request.post(loginUrl, {
+      form: {
+        log: process.env.WP_ADMIN_USER ?? 'admin',
+        pwd: process.env.WP_ADMIN_PASS ?? 'admin',
+        'wp-submit': 'Log In',
+        redirect_to: `${BASE}/wp-admin/`,
+        testcookie: '1',
+      },
+    });
+    expect(loginResponse.url()).toContain('/wp-admin');
+
+    admin = await adminContext.newPage();
     await admin.goto('/wp-admin/admin.php?page=faz-cookie-manager-settings', { waitUntil: 'domcontentloaded' });
     nonce = await getAdminNonce(admin);
     expect(nonce.length).toBeGreaterThan(0);
@@ -111,21 +153,23 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     originalIab = { ...(current.iab as Record<string, unknown> | undefined) };
   });
 
-  test.afterAll(async () => {
-    if (nonce) {
-      await postSettings(admin, nonce, { banner_control: originalBannerControl, iab: originalIab });
-    }
-    if (fixtureId) {
-      try {
+  test.afterAll(async ({}, testInfo) => {
+    testInfo.setTimeout(120_000);
+    try {
+      if (nonce) {
+        await postSettings(admin, nonce, { banner_control: originalBannerControl, iab: originalIab });
+      }
+      if (fixtureId) {
         wp(['post', 'delete', String(fixtureId), '--force']);
-      } catch {
-        /* best-effort cleanup */
+      }
+    } finally {
+      if (originalActivePluginFiles !== null) {
+        restoreActivePluginFiles(originalActivePluginFiles);
+      }
+      if (adminContext) {
+        await adminContext.close();
       }
     }
-    if (originalActivePluginFiles !== null) {
-      restoreActivePluginFiles(originalActivePluginFiles);
-    }
-    await admin.close();
   });
 
   test('1. default (no country-dependent trigger) is already cacheable', async ({ browser }) => {
@@ -162,7 +206,7 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     const ctx = await browser.newContext();
     try {
       const page = await ctx.newPage();
-      await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await page.goto(`${BASE}/?${RUNTIME_DISABLED_PARAM}`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => document.documentElement.classList.contains('faz-ready'), { timeout: 8000 });
       // The banner config is localized and the consent runtime is present — the
       // cacheable HTML still carries everything the client needs.
@@ -219,7 +263,7 @@ test.describe('Cache Compatibility Mode (issue #158)', () => {
     const fetchAsBot = async (): Promise<string> => {
       const ctx = await browser.newContext({ userAgent: GOOGLEBOT });
       try {
-        const res = await ctx.request.get(BASE + '/', { headers: { 'User-Agent': GOOGLEBOT } });
+        const res = await ctx.request.get(`${BASE}/?${RUNTIME_DISABLED_PARAM}`, { headers: { 'User-Agent': GOOGLEBOT } });
         expect(res.status()).toBeLessThan(400);
         return await res.text();
       } finally {

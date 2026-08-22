@@ -797,10 +797,11 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     expect(result, 'targeted active banner makes the frontend output country-dependent').toBe('true');
   });
 
-  test('GEO-24: is_country_dependent_output returns false on single-banner installs (match-all only)', () => {
-    // Symmetric to GEO-23: when no banner targets a country and geo_targeting
-    // does NOT carry default_behavior='no_banner', the output is identical for
-    // every visitor and the cache layer is left alone.
+  test('GEO-24: live legislative runtime keeps single-banner output country-dependent', () => {
+    // Even with a match-all banner, the enforced ruleset and UI overlay vary by
+    // visitor jurisdiction. The page must therefore remain uncacheable while
+    // the default-on runtime is active. The explicit emergency-off legacy path
+    // is covered separately by cache-compatibility-mode.spec.ts.
     const result = wpEval(`
       global $wpdb;
       // Snapshot faz_settings so the geolocation mutation below doesn't
@@ -824,6 +825,7 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
       $s['geolocation']['default_behavior'] = 'show_banner';
       update_option( 'faz_settings', $s );
       \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+      add_filter( 'faz_geo_ruleset_runtime', '__return_true', PHP_INT_MAX );
 
       $fe = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.0' );
       $ref = new ReflectionClass( $fe );
@@ -844,7 +846,7 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
       echo $value;
     `).trim();
 
-    expect(result, "single-banner install with code=ALL must NOT be flagged country-dependent").toBe('false');
+    expect(result, 'default-on legislative runtime must make output country-dependent').toBe('true');
   });
 
   test('GEO-25: maybe_disable_country_page_cache defines DONOTCACHE* constants when country-dependent', () => {
@@ -916,10 +918,10 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     expect(String(ls).toLowerCase(), 'X-LiteSpeed-Cache-Control: no-cache hint').toContain('no-cache');
   });
 
-  test('GEO-27: public banner REST emits short public cache when NO banner is country-dependent', () => {
-    // Single-banner installs (the 99% baseline) get a CDN-cacheable response
-    // (max-age=300). The header switches to no-store only when target_countries
-    // makes the payload vary by visitor.
+  test('GEO-27: public banner REST remains no-store with a match-all banner while runtime is live', () => {
+    // The banner row itself is country-independent, but the legislative runtime
+    // still overlays jurisdiction-specific law and controls. Public caching is
+    // therefore unsafe until the emergency runtime filter is explicitly off.
     const result = wpEval(`
       global $wpdb;
       $wpdb->update( $wpdb->prefix . 'faz_banners',
@@ -931,6 +933,7 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
         array( 'banner_id' => 2 )
       );
       \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+      add_filter( 'faz_geo_ruleset_runtime', '__return_true', PHP_INT_MAX );
 
       $lang = function_exists( 'faz_default_language' ) ? faz_default_language() : 'en';
       $req = new WP_REST_Request( 'GET', '/faz/v1/banner/' . $lang );
@@ -944,9 +947,8 @@ test.describe.serial('Multi-banner geo-routing (Controller selector + Banner mod
     const data = JSON.parse(result);
     expect(data.status, 'REST request succeeds').toBe(200);
     const cc = (data.headers['Cache-Control'] || '').toString().toLowerCase();
-    expect(cc, 'Cache-Control: public when output is country-independent').toContain('public');
-    expect(cc, 'max-age=300 publicly cacheable').toContain('max-age=300');
-    expect(cc, 'no-store must NOT be emitted on the country-independent path').not.toContain('no-store');
+    expect(cc, 'Cache-Control remains private to the jurisdictional response').toContain('no-store');
+    expect(cc, 'runtime response must not be publicly cached').not.toContain('public');
   });
 
   test('GEO-28: public banner REST payload exposes bannerSlug and activeLaw for the frontend bootstrap', () => {

@@ -5,7 +5,7 @@
  *  DSAR-SEC-01  SMTP header injection: name with CRLF is sanitized
  *  DSAR-SEC-02  Rate limiting: second DSAR submission blocked within 60 s
  *  CCPA-SEC-01  Rate limiting: second CCPA opt-out blocked within 60 s
- *  CCPA-SEC-02  httponly: fazcookie-dnsmpi is not readable by JS
+ *  CCPA-SEC-02  client/server reconciliation: fazcookie-dnsmpi is JS-readable
  *  CCPA-DATA-01 Data quality: categories column stored as '' not NULL
  *  REST-ML-01   maxLength: opt_in_script > 10 000 chars rejected (400)
  *  REST-ML-02   maxLength: opt_out_script > 10 000 chars rejected (400)
@@ -223,7 +223,7 @@ test.describe('CCPA opt-out form — security fixes', () => {
     expect(String(body2.data ?? '').toLowerCase()).toContain('too many');
   });
 
-  test('CCPA-SEC-02: opt-out cookie fazcookie-dnsmpi is httponly', async ({
+  test('CCPA-SEC-02: opt-out cookie is readable so client cannot undo server blocking', async ({
     page, wpBaseURL,
   }) => {
     await page.goto(ccpaUrl, { waitUntil: 'domcontentloaded' });
@@ -236,16 +236,17 @@ test.describe('CCPA opt-out form — security fixes', () => {
     ]);
     await page.waitForTimeout(200);
 
-    // Playwright exposes httpOnly via context.cookies() using CDP.
+    // The frontend must see this strictly-necessary preference marker at boot;
+    // otherwise stale category consent can restore a script the server blocked.
     const cookies = await page.context().cookies(`${wpBaseURL}/`);
     const optOutCookie = cookies.find(c => c.name === 'fazcookie-dnsmpi');
 
     expect(optOutCookie, 'fazcookie-dnsmpi must be set after opt-out').toBeTruthy();
-    expect(optOutCookie!.httpOnly, 'fazcookie-dnsmpi must have httpOnly=true').toBe(true);
+    expect(optOutCookie!.httpOnly, 'fazcookie-dnsmpi must be readable by the consent runtime').toBe(false);
 
-    // Also verify the cookie is NOT readable from JavaScript.
+    // Verify the exact client-side visibility contract used by script.js.
     const jsReadable = await page.evaluate(() => document.cookie.includes('fazcookie-dnsmpi'));
-    expect(jsReadable, 'httponly cookie must not be accessible from document.cookie').toBe(false);
+    expect(jsReadable, 'document.cookie must expose the DNSMPI preference marker').toBe(true);
     void nonce;
   });
 });

@@ -423,12 +423,33 @@ class Api extends Rest_Controller {
 	}
 
 	/**
+	 * Normalize a notice-expiry integer without converting invalid input into a
+	 * valid value. In particular, absint() would turn -1 into 1 before schema
+	 * validation on runtimes that sanitize first.
+	 *
+	 * @param mixed $value Raw REST parameter.
+	 * @return mixed Integer for decimal non-negative input; original value otherwise.
+	 */
+	public function sanitize_notice_expiry( $value ) {
+		if ( is_int( $value ) ) {
+			return $value;
+		}
+		if ( is_string( $value ) && preg_match( '/^\d+$/D', $value ) ) {
+			return (int) $value;
+		}
+		return $value;
+	}
+
+	/**
 	 * Dismiss the pageviews overage notice.
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return WP_Error|WP_REST_Response
 	 */
 	public function dismiss_pageviews_overage_notice( $request ) {
+		// The route schema has already rejected malformed/negative values and
+		// normalised the remaining value. Keep 0 as the permanent-dismissal
+		// sentinel understood by Notice::dismiss().
 		$expiry = $request->get_param( 'expiry' );
 		$notice = Notice::get_instance();
 		$notice->dismiss( 'pageviews_overage_notice', $expiry );
@@ -444,7 +465,7 @@ class Api extends Rest_Controller {
 	public function update_notice( $request ) {
 		$response = array( 'status' => false );
 		$notice   = isset( $request['notice'] ) ? $request['notice'] : false;
-		$expiry   = isset( $request['expiry'] ) ? intval( $request['expiry'] ) : 0;
+		$expiry   = isset( $request['expiry'] ) ? $request['expiry'] : 0;
 		if ( $notice ) {
 			Notice::get_instance()->dismiss( $notice, $expiry );
 			$response['status'] = true;
@@ -493,6 +514,13 @@ class Api extends Rest_Controller {
 			$clear = true;
 		} else {
 			$clear = filter_var( $clear, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE );
+			// FILTER_NULL_ON_FAILURE hands back null for anything it cannot
+			// read as a boolean. An unintelligible value must keep the safe
+			// default (clear the caches), not become a third state that the
+			// faz_after_update_settings listeners never anticipated.
+			if ( is_null( $clear ) ) {
+				$clear = true;
+			}
 		}
 		$object     = new Settings();
 		$data       = $object->get();
@@ -548,6 +576,14 @@ class Api extends Rest_Controller {
 				'type'        => 'boolean',
 				'description' => __( 'Force fetch data', 'faz-cookie-manager' ),
 			),
+			'expiry'   => array(
+				'description'       => __( 'Notice dismissal duration in seconds; zero dismisses permanently.', 'faz-cookie-manager' ),
+				'type'              => 'integer',
+				'default'           => 0,
+				'minimum'           => 0,
+				'sanitize_callback' => array( $this, 'sanitize_notice_expiry' ),
+				'validate_callback' => 'rest_validate_request_arg',
+			),
 		);
 	}
 
@@ -567,11 +603,6 @@ class Api extends Rest_Controller {
 					'type'        => 'integer',
 					'context'     => array( 'view' ),
 					'readonly'    => true,
-				),
-				'site'         => array(
-					'description' => __( 'Unique identifier for the resource.', 'faz-cookie-manager' ),
-					'type'        => 'object',
-					'context'     => array( 'view', 'edit' ),
 				),
 				'api'          => array(
 					'description' => __( 'Language.', 'faz-cookie-manager' ),

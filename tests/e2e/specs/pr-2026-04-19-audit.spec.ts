@@ -11,16 +11,26 @@ import {
 } from '../utils/faz-api';
 import { clickFirstVisible } from '../utils/ui';
 import {
+  deactivatePluginsExcept,
   ensureFixturePlugin,
   ensureProviderMatrixPage,
   ensureWooCommerceLabData,
+  listActivePluginFiles,
   readProviderMatrixHits,
   readProviderMatrixUrl,
   resetProviderMatrixState,
+  restoreActivePluginFiles,
   wpEval,
 } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
+
+function sameOriginRequestHeaders(): Record<string, string> {
+  return {
+    Origin: new URL(WP_BASE).origin,
+    Referer: `${WP_BASE}/`,
+  };
+}
 
 type ConsentLogConfig = {
   bannerSlug: string;
@@ -420,43 +430,63 @@ test.describe('PR audit regressions (2026-04-19)', () => {
   test.setTimeout(240_000);
 
   let providerMatrixUrl = '';
+  let originalActivePluginFiles: string[] | null = null;
 
-  test.beforeAll(async () => {
+  test.beforeAll(async ({}, testInfo) => {
+    testInfo.setTimeout(240_000);
+    originalActivePluginFiles = listActivePluginFiles();
     ensureFixturePlugin('faz-e2e-audit-lab');
     ensureFixturePlugin('faz-e2e-provider-matrix');
     ensureFixturePlugin('faz-e2e-woo-lab');
+    // The regression cases below need these controlled providers, not the
+    // unrelated analytics plugins installed on the compatibility site. Those
+    // plugins can hold WordPress bootstrap requests open until beforeAll times
+    // out, causing every serial test to be reported as a retry.
+    deactivatePluginsExcept([
+      'faz-cookie-manager',
+      'faz-e2e-audit-lab',
+      'faz-e2e-provider-matrix',
+      'faz-e2e-woo-lab',
+    ]);
     ensureProviderMatrixPage();
     providerMatrixUrl = readProviderMatrixUrl();
     resetProviderMatrixState();
     ensureWooCommerceLabData();
   });
 
-  test.afterAll(() => {
+  test.afterAll(({}, testInfo) => {
+    testInfo.setTimeout(240_000);
     // The TCF timestamps spec mutates the active banner into
     // classic+pushdown and previously did not restore it. Downstream specs
     // (DSAR-VAL, DSAR-A11Y, DNSMPI-COOKIE) assume the default box+popup
     // shape, and inheriting classic+pushdown across files cascaded into
     // double-digit fail counts under full-suite load. Reset to the same
     // canonical shape global-setup.ts applies at suite start.
-    wpEval(`
-      global $wpdb;
-      $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
-      $banner = $controller->get_active_banner();
-      if ( $banner ) {
-        $s = $banner->get_settings();
-        if ( ! is_array( $s ) ) { $s = array(); }
-        if ( ! isset( $s['settings'] ) || ! is_array( $s['settings'] ) ) { $s['settings'] = array(); }
-        $s['settings']['type'] = 'box';
-        $s['settings']['preferenceCenterType'] = 'popup';
-        $banner->set_settings( $s );
-        $banner->save();
+    try {
+      wpEval(`
+        global $wpdb;
+        $controller = \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance();
+        $banner = $controller->get_active_banner();
+        if ( $banner ) {
+          $s = $banner->get_settings();
+          if ( ! is_array( $s ) ) { $s = array(); }
+          if ( ! isset( $s['settings'] ) || ! is_array( $s['settings'] ) ) { $s['settings'] = array(); }
+          $s['settings']['type'] = 'box';
+          $s['settings']['preferenceCenterType'] = 'popup';
+          $banner->set_settings( $s );
+          $banner->save();
+        }
+        delete_option( 'faz_banner_template' );
+        if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
+          faz_clear_banner_template_cache();
+        }
+        $controller->delete_cache();
+      `);
+    } finally {
+      if (originalActivePluginFiles !== null) {
+        restoreActivePluginFiles(originalActivePluginFiles);
       }
-      delete_option( 'faz_banner_template' );
-      if ( function_exists( 'faz_clear_banner_template_cache' ) ) {
-        faz_clear_banner_template_cache();
-      }
-      $controller->delete_cache();
-    `);
+    }
   });
 
   test('data: URI scripts are blocked when the decoded payload matches a provider signature', async ({ page }) => {
@@ -994,6 +1024,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       const config = await waitForConsentLogConfig(page);
 
       const first = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-a',
@@ -1009,6 +1040,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       clearConsentThrottle('ip');
 
       const sameConsentAgain = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-a',
@@ -1024,6 +1056,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       clearConsentThrottle('all');
 
       const secondConsent = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-b',
@@ -1039,6 +1072,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       clearConsentThrottle('consent');
 
       const ipBucketOnly = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: 'faz-throttle-c',
@@ -1071,6 +1105,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
 
       const response = await page.request.post(config.restUrl, {
         headers: {
+          ...sameOriginRequestHeaders(),
           'User-Agent': userAgent,
         },
         data: {
@@ -1117,6 +1152,7 @@ test.describe('PR audit regressions (2026-04-19)', () => {
       expect(columnProbe.map((item) => item.Field).sort()).toEqual(['banner_slug', 'policy_revision']);
 
       const response = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           banner_slug: config.bannerSlug,
           categories: { analytics: 'yes' },

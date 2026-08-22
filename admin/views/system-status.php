@@ -40,6 +40,8 @@ if ( false === $table_info ) {
 // Cron status.
 $next_scan    = wp_next_scheduled( 'faz_scheduled_scan' );
 $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
+$blocked_server_cookies = get_transient( 'faz_recent_blocked_server_cookies' );
+$blocked_server_cookies = is_array( $blocked_server_cookies ) ? array_reverse( $blocked_server_cookies ) : array();
 ?>
 <div id="faz-system-status">
 
@@ -80,8 +82,19 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 				<tr><td><?php esc_html_e( 'Pageview Tracking', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['pageview_tracking'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Auto Scan', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['scanner']['auto_scan'] ) ? '&#9989; ' . esc_html( $settings['scanner']['scan_frequency'] ?? 'weekly' ) : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Geo-Targeting', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['geolocation']['geo_targeting'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
-				<?php // 1.18.2: per-service / per-cookie consent is force-disabled regardless of the saved option, so report the effective (off) state — not the stored value — to avoid a misleading "enabled". ?>
-				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo '&#10060; '; esc_html_e( 'disabled in 1.18.2', 'faz-cookie-manager' ); ?></td></tr>
+				<?php
+				// Both features were masked off in an earlier release and this
+				// page said so. The mask was removed when they began to be driven
+				// from the saved setting — see
+				// Activator::reset_stale_per_cookie_consent() — but the copy here
+				// was left behind, so the one page whose job is to report the
+				// effective configuration went on reporting a live, enforced
+				// feature as unavailable. Read the option, like every other row
+				// does. The sanitiser already forces per_cookie false whenever
+				// per_service is off, so a plain read IS the effective state.
+				?>
+				<tr><td><?php esc_html_e( 'Per-Service Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['per_service_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
+				<tr><td><?php esc_html_e( 'Per-Cookie Consent', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['per_cookie_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Bot Detection', 'faz-cookie-manager' ); ?></td><td><?php echo ( ! isset( $settings['banner_control']['hide_from_bots'] ) || ! empty( $settings['banner_control']['hide_from_bots'] ) ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'GTM Data Layer', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['gtm_datalayer'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Age Gate', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['age_gate']['enabled'] ) ? '&#9989; (min ' . absint( $settings['age_gate']['min_age'] ?? 16 ) . ')' : '&#10060;'; ?></td></tr>
@@ -89,7 +102,63 @@ $next_cleanup = wp_next_scheduled( 'faz_daily_cleanup' );
 				<tr><td><?php esc_html_e( 'Ad-Blocker Compat', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['banner_control']['alternative_asset_path'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Microsoft UET', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['microsoft']['uet_consent_mode'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 				<tr><td><?php esc_html_e( 'Microsoft Clarity', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['microsoft']['clarity_consent'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
+				<tr><td><?php esc_html_e( 'PHP Set-Cookie Blocking', 'faz-cookie-manager' ); ?></td><td><?php echo ! empty( $settings['script_blocking']['block_server_cookies'] ) ? '&#9989;' : '&#10060;'; ?></td></tr>
 			</table>
+		</div>
+	</div>
+
+	<div class="faz-card">
+		<div class="faz-card-header"><h3><?php esc_html_e( 'Recently Blocked Server Cookies', 'faz-cookie-manager' ); ?></h3></div>
+		<div class="faz-card-body">
+			<?php if ( empty( $blocked_server_cookies ) ) : ?>
+				<p><?php esc_html_e( 'No outgoing PHP Set-Cookie header has been blocked in the last 24 hours.', 'faz-cookie-manager' ); ?></p>
+			<?php else : ?>
+				<?php
+				/*
+				 * Four DATA columns, so this one carries faz-status-table-data.
+				 * Every other table on this page is a label:value pair, which is
+				 * what the bare .faz-status-table rules are built for — they bold
+				 * the first cell and give it 40% width. Applied here that made the
+				 * cookie name read as a row label and left the remaining three
+				 * columns captionless, on the page an administrator uses to check
+				 * that PHP Set-Cookie blocking is not breaking checkout or login.
+				 */
+				?>
+				<table class="faz-status-table faz-status-table-data">
+					<thead>
+						<tr>
+							<th scope="col"><?php esc_html_e( 'Cookie', 'faz-cookie-manager' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Category', 'faz-cookie-manager' ); ?></th>
+							<?php
+							/*
+							 * "Path", not "URI": record_blocked_server_cookies()
+							 * stores strtok( REQUEST_URI, '?' ) capped at 255
+							 * chars, because WordPress query strings routinely
+							 * carry personal data (?email=, order_key, the
+							 * password-reset key+login pair, search terms) and
+							 * this row is written by anonymous visitors. An
+							 * administrator reading this column to check that
+							 * Set-Cookie blocking is not breaking checkout or
+							 * login must not expect a query string that is
+							 * deliberately never captured.
+							 */
+							?>
+							<th scope="col"><?php esc_html_e( 'Request Path', 'faz-cookie-manager' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Blocked At', 'faz-cookie-manager' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( array_slice( $blocked_server_cookies, 0, 20 ) as $blocked_cookie ) : ?>
+							<tr>
+								<td><code><?php echo esc_html( isset( $blocked_cookie['name'] ) ? $blocked_cookie['name'] : '' ); ?></code></td>
+								<td><?php echo esc_html( isset( $blocked_cookie['category'] ) ? $blocked_cookie['category'] : '' ); ?></td>
+								<td><code><?php echo esc_html( isset( $blocked_cookie['request'] ) ? $blocked_cookie['request'] : '' ); ?></code></td>
+								<td><?php echo ! empty( $blocked_cookie['blocked_at'] ) ? esc_html( date_i18n( 'Y-m-d H:i:s', absint( $blocked_cookie['blocked_at'] ) ) ) : '&mdash;'; ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
 		</div>
 	</div>
 

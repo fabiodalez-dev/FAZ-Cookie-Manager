@@ -532,6 +532,17 @@ test.describe('Blocking compliance coverage', () => {
           ...(original.banner_control ?? {}),
           per_service_consent: true,
         },
+        // This scenario proves service consent in isolation. A prior suite run
+        // may legitimately leave Facebook in the user whitelist or Stripe in
+        // the gateway allow-list; either setting executes those providers before
+        // consent and makes the assertion test the unrelated exemption instead.
+        script_blocking: {
+          ...(original.script_blocking ?? {}),
+          whitelist_patterns: [],
+          payment_gateways: Object.fromEntries(
+            Object.keys(original.script_blocking?.payment_gateways ?? {}).map((key) => [key, false]),
+          ),
+        },
       });
 
       await page.context().clearCookies();
@@ -638,6 +649,7 @@ test.describe('Blocking compliance coverage', () => {
         const restoreNonce = await openSettingsPage(page, loginAsAdmin);
         await postSettings(page, restoreNonce, {
           banner_control: original.banner_control ?? {},
+          script_blocking: original.script_blocking ?? {},
         });
       } catch (restoreError) {
         // eslint-disable-next-line no-console

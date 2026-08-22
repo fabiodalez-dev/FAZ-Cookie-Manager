@@ -25,6 +25,13 @@ import { wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
 
+function sameOriginRequestHeaders(): Record<string, string> {
+  return {
+    Origin: new URL(WP_BASE).origin,
+    Referer: `${WP_BASE}/`,
+  };
+}
+
 function b64(value: string): string {
   return Buffer.from(value, 'utf8').toString('base64');
 }
@@ -262,6 +269,7 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
       const config = await waitForConsentLogConfig(page);
 
       const first = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: '',
@@ -277,6 +285,7 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
       clearConsentThrottle('ip');
 
       const second = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'no' },
           consent_id: '',
@@ -308,6 +317,7 @@ test.describe('Session fixes coverage (codex/verify-report-findings)', () => {
       const config = await waitForConsentLogConfig(page);
 
       const response = await page.request.post(config.restUrl, {
+        headers: sameOriginRequestHeaders(),
         data: {
           categories: { analytics: 'yes' },
           consent_id: `faz-log-creds-${Date.now()}`,

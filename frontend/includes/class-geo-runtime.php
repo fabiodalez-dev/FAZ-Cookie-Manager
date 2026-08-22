@@ -3,8 +3,9 @@
  * Runtime geo-routing helpers.
  *
  * Shared, mostly-pure helpers that apply a resolved geo-routing ruleset to the
- * live banner when the opt-in `faz_geo_ruleset_runtime` filter is enabled
- * (default off → catalogue-only behaviour, zero change for existing installs).
+ * live banner. The catalogue is enforced by default; the
+ * `faz_geo_ruleset_runtime` filter remains available as an emergency kill
+ * switch for integrators.
  *
  * Consumed by both the server render (FazCookie\Frontend\Frontend) and the REST
  * language-swap endpoint (FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest) so
@@ -41,17 +42,111 @@ class Geo_Runtime {
 	 * @return bool
 	 */
 	public static function is_enabled() {
-		// 1.18.2 HOTFIX: the runtime application of geo rulesets is temporarily
-		// hard-disabled. A resolved jurisdiction (e.g. California, model
-		// "opt-out-with-sensitive-opt-in") is mapped to a GDPR banner and the
-		// ruleset's declared CCPA UI obligations — Do Not Sell link, GPC
-		// handling, sensitive-data separate opt-in — are NOT yet enforced, so
-		// the banner would not deliver the compliant UI the ruleset declares.
-		// Re-enable once those obligations are wired (see CHANGELOG 1.18.2).
-		// Catalogue-only (default) banner behaviour is unaffected by this.
-		// To restore after the rework, return:
-		//   (bool) apply_filters( 'faz_geo_ruleset_runtime', false );
-		return false;
+		return (bool) apply_filters( 'faz_geo_ruleset_runtime', true );
+	}
+
+	/**
+	 * Apply a ruleset's mandatory UI controls to an in-memory banner config.
+	 *
+	 * Nothing is persisted: the stored banner remains the publisher's editable
+	 * baseline, while the visitor receives the stricter jurisdictional overlay.
+	 * The overlay only enables controls or equalises accept/reject presentation;
+	 * it never weakens a publisher's stricter choices.
+	 *
+	 * @param array|null $ruleset   Resolved ruleset, or null.
+	 * @param array      $properties Banner settings.
+	 * @return array Modified settings.
+	 */
+	public static function apply_ui_requirements( $ruleset, $properties ) {
+		if ( null === $ruleset || ! is_array( $properties ) ) {
+			return $properties;
+		}
+
+		$ui      = isset( $ruleset['ui'] ) && is_array( $ruleset['ui'] ) ? $ruleset['ui'] : array();
+		$signals = isset( $ruleset['signals'] ) && is_array( $ruleset['signals'] ) ? $ruleset['signals'] : array();
+
+		// $properties is decoded from the banner row's stored JSON, so these two
+		// containers are only arrays by convention. A legacy or hand-edited row
+		// can hold a string or false there, and PHP 8 raises a fatal — not a
+		// notice — when an offset is assigned on a scalar. That fatal would land
+		// on the PUBLIC front end, where this overlay runs for every visitor, so
+		// the row would take the whole page down rather than lose one setting.
+		//
+		// Normalising only the two top-level containers is enough: everything
+		// below them is created by the assignments themselves, which auto-vivify
+		// from a missing key without complaint.
+		foreach ( array( 'config', 'behaviours' ) as $faz_container ) {
+			if ( ! isset( $properties[ $faz_container ] ) || ! is_array( $properties[ $faz_container ] ) ) {
+				$properties[ $faz_container ] = array();
+			}
+		}
+
+		if ( ! empty( $ui['donotsell_link_required'] ) ) {
+			$properties['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = true;
+			$properties['config']['optoutPopup']['status'] = true;
+		}
+		if ( ! empty( $ui['revisit_widget_required'] ) ) {
+			$properties['config']['revisitConsent']['status'] = true;
+		}
+		if ( ! empty( $signals['gpc_honored'] ) || ! empty( $signals['gpc_required'] ) ) {
+			$properties['behaviours']['respectGPC']['status'] = true;
+			$properties['config']['optoutPopup']['elements']['gpcOption']['status'] = true;
+		}
+
+		// A separate sensitive-data choice requires an accessible preference
+		// centre and a real Save action; Accept All must not be the only route.
+		if ( ! empty( $ui['sensitive_separate_optin'] ) ) {
+			$properties['config']['notice']['elements']['buttons']['elements']['settings']['status'] = true;
+			$properties['config']['preferenceCenter']['status'] = true;
+			$properties['config']['preferenceCenter']['elements']['buttons']['status'] = true;
+			$properties['config']['preferenceCenter']['elements']['buttons']['elements']['save']['status'] = true;
+		}
+
+		// Equal prominence is enforced by enabling both controls and applying the
+		// same visual style to each pair. Prefer Accept's existing style, falling
+		// back to Reject's, so custom brand colours are retained.
+		if ( ! empty( $ui['equal_weight_buttons'] ) ) {
+			$pairs = array(
+				array( 'notice', 'accept', 'reject' ),
+				array( 'preferenceCenter', 'accept', 'reject' ),
+			);
+			foreach ( $pairs as $pair ) {
+				$section = $pair[0];
+				$accept  = $pair[1];
+				$reject  = $pair[2];
+				$properties['config'][ $section ]['elements']['buttons']['status'] = true;
+				$properties['config'][ $section ]['elements']['buttons']['elements'][ $accept ]['status'] = true;
+				$properties['config'][ $section ]['elements']['buttons']['elements'][ $reject ]['status'] = true;
+				$a_styles = isset( $properties['config'][ $section ]['elements']['buttons']['elements'][ $accept ]['styles'] )
+					? $properties['config'][ $section ]['elements']['buttons']['elements'][ $accept ]['styles'] : array();
+				$r_styles = isset( $properties['config'][ $section ]['elements']['buttons']['elements'][ $reject ]['styles'] )
+					? $properties['config'][ $section ]['elements']['buttons']['elements'][ $reject ]['styles'] : array();
+				$styles = ! empty( $a_styles ) ? $a_styles : $r_styles;
+				if ( ! empty( $styles ) ) {
+					$properties['config'][ $section ]['elements']['buttons']['elements'][ $accept ]['styles'] = $styles;
+					$properties['config'][ $section ]['elements']['buttons']['elements'][ $reject ]['styles'] = $styles;
+				}
+			}
+		}
+
+		return $properties;
+	}
+
+	/**
+	 * Whether this category requires an independent opt-in in the jurisdiction.
+	 *
+	 * The current catalogue models sensitive processing as `profiling`; keeping
+	 * this decision in one helper makes the client payload explicit and leaves a
+	 * single extension point when the schema gains more sensitive slugs.
+	 *
+	 * @param array|null $ruleset Resolved ruleset.
+	 * @param string     $slug    Category slug.
+	 * @return bool
+	 */
+	public static function requires_separate_optin( $ruleset, $slug ) {
+		return null !== $ruleset
+			&& ! empty( $ruleset['ui']['sensitive_separate_optin'] )
+			&& 'profiling' === $slug;
 	}
 
 	/**
@@ -64,7 +159,7 @@ class Geo_Runtime {
 	 * filter and the GeoLite2-City subdivision lookup — and passed alongside the
 	 * country so sub-national rulesets (e.g. Law 25 for CA-QC) resolve, while a
 	 * region whose prefix does not match the country is discarded downstream.
-	 * Returns null when the flag is off or resolution fails.
+	 * Returns null when the emergency filter disables enforcement or resolution fails.
 	 *
 	 * @param string $country ISO 3166-1 alpha-2 country code (authoritative).
 	 * @return array|null

@@ -350,7 +350,7 @@ test.describe.serial('PR #61 regressions', () => {
 		}
 	});
 
-	test('PMP-exempt members do not log template errors and still emit granted GCM consent', async ({ page, loginAsAdmin }) => {
+	test('PMP privacy members retain revisit UI and emit denied optional GCM consent', async ({ page, loginAsAdmin }) => {
 		test.setTimeout(120_000);
 		const originalActive = listActivePluginFiles();
 		ensureFixturePlugin('faz-e2e-pmp-mock');
@@ -396,9 +396,13 @@ test.describe.serial('PR #61 regressions', () => {
 			const { consoleErrors, pageErrors } = captureRuntimeErrors(page);
 			await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
 
-			expect(await page.locator('#fazBannerTemplate').count()).toBe(0);
+			// The template must remain available: action:auto closes the first layer,
+			// while the rendered revisit control gives the member an equally easy way
+			// to make a later explicit choice.
+			expect(await page.locator('#fazBannerTemplate').count()).toBe(1);
 			const bannerHidden = await page.locator('#faz-consent, [data-faz-tag="notice"]').first().isHidden({ timeout: 3_000 }).catch(() => true);
 			expect(bannerHidden).toBe(true);
+			await expect(page.locator('[data-faz-tag="revisit-consent"]').first()).toBeVisible();
 
 			await page.waitForFunction(() => {
 				const dl = (window as any).dataLayer || [];
@@ -415,21 +419,31 @@ test.describe.serial('PR #61 regressions', () => {
 			const consentCookie = (await page.context().cookies()).find((cookie) => cookie.name === 'fazcookie-consent');
 			expect(consentCookie).toBeTruthy();
 			expect(consentCalls.length).toBeGreaterThan(0);
+			const consentState = Object.fromEntries(
+				decodeURIComponent(consentCookie!.value).split(',').map((part) => {
+					const separator = part.indexOf(':');
+					return separator > 0 ? [part.slice(0, separator), part.slice(separator + 1)] : [part, ''];
+				}),
+			) as Record<string, string>;
+			expect(consentState.action, 'server privacy state is not a user action').toBe('auto');
+			expect(consentState.consent, 'payment does not manufacture aggregate consent').toBe('no');
+			expect(consentState.necessary).toBe('yes');
+			expect(consentState.analytics).toBe('no');
+			expect(consentState.marketing).toBe('no');
+			expect(consentState.consentid, 'automatic privacy state creates no visitor identifier').toBeUndefined();
 
-			// GCM-correct sequence (issue #149): the FIRST `consent default` is the
-			// compliant denied/region baseline — it must NOT pre-grant storage
-			// before any consent signal. The PMP exemption is a saved auto-grant,
-			// so it is restored via a `consent update` (never a second granted
-			// `consent default`). Assert the exempt member's GRANTED state arrives
-			// on a consent call carrying granted ad/analytics storage — without
-			// requiring it to be the baseline default, which would reintroduce the
-			// pre-consent granted window #149 removed.
+			// Payment is not consent. Every GCM call on the automatic membership
+			// state must keep advertising and analytics denied; security storage may
+			// remain granted because it is strictly necessary.
 			const baseline = consentCalls[0];
 			expect(baseline.mode).toBe('default');
-			const grantedCall = consentCalls.find(
-				(c) => c.payload?.ad_storage === 'granted' && c.payload?.analytics_storage === 'granted',
-			);
-			expect(grantedCall, 'a consent call grants ad+analytics storage for the exempt member').toBeTruthy();
+			for (const call of consentCalls) {
+				expect(call.payload?.ad_storage, `${call.mode} keeps ad storage denied`).toBe('denied');
+				expect(call.payload?.analytics_storage, `${call.mode} keeps analytics storage denied`).toBe('denied');
+				expect(call.payload?.ad_user_data, `${call.mode} keeps ad user data denied`).toBe('denied');
+				expect(call.payload?.ad_personalization, `${call.mode} keeps ad personalization denied`).toBe('denied');
+			}
+			expect(baseline.payload?.security_storage).toBe('granted');
 
 			const allErrors = [...consoleErrors, ...pageErrors].join('\n');
 			expect(allErrors).not.toContain('Cannot read properties of null');

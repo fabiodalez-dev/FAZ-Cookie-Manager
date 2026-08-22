@@ -60,18 +60,23 @@
 	// Microsoft Clarity Consent API
 	if (window._fazMicrosoftClarity) {
 		// Same gap as UET above: without the ready event, clarity('consent') was
-		// never called for a returning visitor. clarity('consent') is itself
-		// idempotent, so no dedupe guard is needed here.
-		function grantClarityConsent(e) {
+		// never called for a returning visitor. clarity('consent', true/false) is
+		// itself idempotent, so no dedupe guard is needed here.
+		function pushClarityConsent(e) {
 			var cats = (e.detail && e.detail.accepted) ? e.detail.accepted : [];
-			if (typeof window.clarity === 'function' && hasAny(cats, ANALYTICS_SLUGS)) {
-				window.clarity('consent');
+			if (typeof window.clarity !== 'function') {
+				return;
 			}
+			// The explicit boolean matters: the grant-only call meant a visitor
+			// who revoked analytics in the preference center kept Clarity
+			// consented for the rest of the page load. clarity('consent', false)
+			// tells Clarity to drop to cookieless mode immediately.
+			window.clarity('consent', hasAny(cats, ANALYTICS_SLUGS));
 		}
-		document.addEventListener('fazcookie_consent_update', grantClarityConsent);
-		document.addEventListener('fazcookie_consent_ready', grantClarityConsent);
+		document.addEventListener('fazcookie_consent_update', pushClarityConsent);
+		document.addEventListener('fazcookie_consent_ready', pushClarityConsent);
 		if (window._fazConsentReady) {
-			grantClarityConsent({ detail: window._fazConsentReady });
+			pushClarityConsent({ detail: window._fazConsentReady });
 		}
 	}
 })();

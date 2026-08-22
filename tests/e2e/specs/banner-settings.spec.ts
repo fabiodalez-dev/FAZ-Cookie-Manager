@@ -1,21 +1,27 @@
-import { expect, test } from '../fixtures/wp-fixture';
+import { completeAdminLogin, expect, test } from '../fixtures/wp-fixture';
 import { resetDefaultBannerState } from '../utils/seed-defaults';
 import type { Page } from '@playwright/test';
-import { getWpLoginPath } from '../utils/wp-auth';
 import { fazApiPut } from '../utils/faz-api';
-import { wpEval } from '../utils/wp-env';
+import {
+  deactivatePluginsExcept,
+  ensureFixturePlugin,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+  wpEval,
+} from '../utils/wp-env';
 
 /* ─── Helpers ──────────────────────────────────────────────── */
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
-const WP_LOGIN_PATH = getWpLoginPath();
 
 async function getAdminNonce(page: Page): Promise<string> {
   return page.evaluate(() => (window as any).fazConfig?.api?.nonce ?? '');
 }
 
-async function getBanner(page: Page, nonce: string, id = 1) {
-  const r = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/banners/${id}`, {
+async function getBanner(page: Page, nonce: string, id?: number) {
+  const resolvedId = id ?? await page.evaluate(() => Number((window as any).fazConfig?.bannerId) || 0);
+  expect(resolvedId, 'banner editor must expose its resolved banner ID').toBeGreaterThan(0);
+  const r = await page.request.get(`${WP_BASE}/?rest_route=/faz/v1/banners/${resolvedId}`, {
     headers: { 'X-WP-Nonce': nonce },
   });
   expect(r.status()).toBe(200);
@@ -68,14 +74,14 @@ async function goToBannerPage(page: Page) {
     waitUntil: 'domcontentloaded',
     timeout: 45_000,
   });
-  // Wait for populateSettings to finish filling the form
-  await page.waitForFunction(
-    () => {
-      const el = document.getElementById('faz-b-type') as HTMLSelectElement;
-      return el && el.value !== '';
-    },
-    { timeout: 10_000 },
-  );
+  // The select has a non-empty HTML default even when the banner GET fails,
+  // so it cannot prove populateSettings() ran. The active switcher chip is
+  // created only after both the banner and list requests succeeded.
+  const resolvedId = await page.evaluate(() => Number((window as any).fazConfig?.bannerId) || 0);
+  expect(resolvedId, 'banner page must expose a resolved banner ID').toBeGreaterThan(0);
+  await page.locator(
+    `.faz-switcher-chip[data-banner-id="${resolvedId}"][aria-pressed="true"]`,
+  ).waitFor({ state: 'visible', timeout: 15_000 });
 }
 
 /** Click a tab button in the banner admin page. */
@@ -174,7 +180,9 @@ async function saveBanner(page: Page) {
   );
   await page.click('#faz-b-save');
   const response = await responsePromise;
-  expect(response.status()).toBe(200);
+  if (response.status() !== 200) {
+    throw new Error(`Banner save failed (${response.status()}): ${await response.text()}`);
+  }
   // Wait for the success toast to confirm save completed
   await page.waitForSelector('.faz-toast-success', { state: 'visible', timeout: 10_000 }).catch(() => {});
 }
@@ -328,11 +336,69 @@ async function expectPreviewMode(
 
 /* ─── Tests ────────────────────────────────────────────────── */
 
+let suiteActivePluginFiles: string[] | null = null;
+let suiteBannerStatuses: Array<{ banner_id: number; status: number }> = [];
+
 test.beforeAll(() => {
   // Self-provision the default box+popup GDPR banner so this spec is immune
   // to a prior full-suite spec leaving the shared banner in classic/pushdown
   // or CCPA mode (see utils/seed-defaults.ts).
   resetDefaultBannerState();
+
+  // Layout, timing and cache assertions must not inherit styles, sessions or
+  // admin hooks from the large third-party compatibility fixture installed on
+  // the shared WordPress site. Keep the request-scoped audit fixture so generic
+  // banner tests explicitly run without the jurisdictional overlay.
+  suiteActivePluginFiles = listActivePluginFiles();
+  ensureFixturePlugin('faz-e2e-audit-lab');
+  deactivatePluginsExcept(['faz-cookie-manager', 'faz-e2e-audit-lab']);
+
+  // This file edits the default banner and then verifies that exact row on the
+  // frontend. Other active geo-targeted banners left by multi-banner specs can
+  // legitimately win for the machine's simulated country, making the browser
+  // inspect a different row. Snapshot their status and isolate the subject.
+  suiteBannerStatuses = JSON.parse(wpEval(`
+    global $wpdb;
+    echo wp_json_encode( $wpdb->get_results(
+      "SELECT banner_id, status FROM {$wpdb->prefix}faz_banners ORDER BY banner_id ASC",
+      ARRAY_A
+    ) );
+  `)) as Array<{ banner_id: number; status: number }>;
+  wpEval(`
+    global $wpdb;
+    $wpdb->query( "UPDATE {$wpdb->prefix}faz_banners SET status = 0 WHERE banner_default <> 1" );
+    \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+    delete_option( 'faz_banner_template' );
+    if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
+  `);
+});
+
+test.afterAll(() => {
+  try {
+    if (suiteBannerStatuses.length > 0) {
+      const encoded = Buffer.from(JSON.stringify(suiteBannerStatuses), 'utf8').toString('base64');
+      wpEval(`
+        global $wpdb;
+        $rows = json_decode( base64_decode( '${encoded}' ), true );
+        foreach ( (array) $rows as $row ) {
+          $wpdb->update(
+            $wpdb->prefix . 'faz_banners',
+            array( 'status' => ! empty( $row['status'] ) ? 1 : 0 ),
+            array( 'banner_id' => absint( $row['banner_id'] ) ),
+            array( '%d' ),
+            array( '%d' )
+          );
+        }
+        \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
+        delete_option( 'faz_banner_template' );
+        if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
+      `);
+    }
+  } finally {
+    if (suiteActivePluginFiles !== null) {
+      restoreActivePluginFiles(suiteActivePluginFiles);
+    }
+  }
 });
 
 test.describe('Banner settings: persistence and frontend reflection', () => {
@@ -346,11 +412,12 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
     const ctx = await browser.newContext({ baseURL });
     const page = await ctx.newPage();
-    await page.goto(WP_LOGIN_PATH, { waitUntil: 'domcontentloaded' });
-    await page.locator('#user_login').fill(process.env.WP_ADMIN_USER ?? 'admin');
-    await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
-    await page.locator('#wp-submit').click();
-    await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
+    await completeAdminLogin(
+      page,
+      baseURL,
+      process.env.WP_ADMIN_USER ?? 'admin',
+      process.env.WP_ADMIN_PASS ?? 'admin',
+    );
 
     await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', {
       waitUntil: 'domcontentloaded',
@@ -364,25 +431,29 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     if (!originalBanner) return;
     const baseURL = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
     const ctx = await browser.newContext({ baseURL });
-    const page = await ctx.newPage();
-    await page.goto(WP_LOGIN_PATH, { waitUntil: 'domcontentloaded' });
-    await page.locator('#user_login').fill(process.env.WP_ADMIN_USER ?? 'admin');
-    await page.locator('#user_pass').fill(process.env.WP_ADMIN_PASS ?? 'admin');
-    await page.locator('#wp-submit').click();
-    await expect(page).toHaveURL(/\/wp-admin\//, { timeout: 20_000 });
+    try {
+      const page = await ctx.newPage();
+      await completeAdminLogin(
+        page,
+        baseURL,
+        process.env.WP_ADMIN_USER ?? 'admin',
+        process.env.WP_ADMIN_PASS ?? 'admin',
+      );
 
-    await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', {
-      waitUntil: 'domcontentloaded',
-    });
-    const n = await getAdminNonce(page);
-    await updateBanner(page, n, 1, {
-      name: originalBanner.name,
-      status: originalBanner.status,
-      default: originalBanner.default,
-      properties: originalBanner.properties,
-      contents: originalBanner.contents,
-    });
-    await ctx.close();
+      await page.goto('/wp-admin/admin.php?page=faz-cookie-manager-banner', {
+        waitUntil: 'domcontentloaded',
+      });
+      const n = await getAdminNonce(page);
+      await updateBanner(page, n, originalBanner.id, {
+        name: originalBanner.name,
+        status: originalBanner.status,
+        default: originalBanner.default,
+        properties: originalBanner.properties,
+        contents: originalBanner.contents,
+      });
+    } finally {
+      await ctx.close();
+    }
   });
 
   // ─── General Tab ───────────────────────────────────────
@@ -489,6 +560,11 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await loginAsAdmin(page);
     await goToBannerPage(page);
 
+    // Design presets intentionally change layout and colours only. Pin the
+    // GDPR precondition so a leaked CCPA/Both banner cannot silently make the
+    // compatibility guard rewrite the preset's pushdown preference centre.
+    await expect.poll(async () => getSelectValue(page, 'faz-b-law')).toBe('gdpr');
+
     await page.locator('.faz-preset-card', { hasText: 'Light Minimal' }).click();
 
     await expect.poll(async () => getSelectValue(page, 'faz-b-type')).toBe('box');
@@ -580,8 +656,15 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await loginAsAdmin(page);
     await goToBannerPage(page);
 
+    await expect.poll(async () => getSelectValue(page, 'faz-b-law')).toBe('gdpr');
     await setSelect(page, 'faz-b-type', 'classic');
     await saveBanner(page);
+
+    const saved = await getBanner(page, await getAdminNonce(page));
+    expect(saved.properties?.settings?.applicableLaw).toBe('gdpr');
+    expect(saved.properties?.settings?.type).toBe('classic');
+    expect(saved.properties?.settings?.preferenceCenterType).toBe('pushdown');
+    expect(saved.properties?.config?.notice?.elements?.buttons?.elements?.donotSell?.status).toBe(false);
 
     // Reload and verify
     await goToBannerPage(page);
@@ -848,7 +931,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     const longDesc = wpEval(`
       global $wpdb;
       $table = $wpdb->prefix . 'faz_cookie_categories';
-      $row = $wpdb->get_row( $wpdb->prepare( "SELECT id, description FROM {$table} WHERE slug = %s LIMIT 1", 'analytics' ) );
+      $row = $wpdb->get_row( $wpdb->prepare( "SELECT category_id, description FROM {$table} WHERE slug = %s LIMIT 1", 'analytics' ) );
       if ( ! $row ) { echo wp_json_encode( array( 'id' => 0 ) ); return; }
       $prev = $row->description;
       $long = '<p>' . str_repeat( 'Analytics cookies help us understand how visitors use this website. ', 6 ) . '</p>'
@@ -857,11 +940,13 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       $langs = is_array( $decoded ) ? array_keys( $decoded ) : array( 'en' );
       $next = array();
       foreach ( $langs as $lang ) { $next[ $lang ] = $long; }
-      $wpdb->update( $table, array( 'description' => wp_json_encode( $next ) ), array( 'id' => (int) $row->id ) );
+      $wpdb->update( $table, array( 'description' => wp_json_encode( $next ) ), array( 'category_id' => (int) $row->category_id ) );
       \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller::get_instance()->delete_cache();
       if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
-      echo wp_json_encode( array( 'id' => (int) $row->id, 'prev' => $prev ) );
+      echo wp_json_encode( array( 'id' => (int) $row->category_id, 'prev' => $prev ) );
     `).trim();
+    const seededCategory = JSON.parse(longDesc || '{}');
+    expect(seededCategory.id, 'analytics category fixture must exist').toBeGreaterThan(0);
 
     await setColorHex(page, 'faz-b-showdesc-color-hex', showDesc);
     await setColorHex(page, 'faz-b-readmore-color-hex', readMore);
@@ -908,12 +993,11 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
       // Put the category description back. Leaving a seeded fixture behind is
       // how a later test inherits state it never asked for — the failure mode
       // this precondition exists to escape.
-      const seeded = JSON.parse(longDesc || '{}');
-      if (seeded.id) {
-        const prev = Buffer.from(String(seeded.prev ?? ''), 'utf8').toString('base64');
+      if (seededCategory.id) {
+        const prev = Buffer.from(String(seededCategory.prev ?? ''), 'utf8').toString('base64');
         wpEval(`
           global $wpdb;
-          $wpdb->update( $wpdb->prefix . 'faz_cookie_categories', array( 'description' => base64_decode( '${prev}' ) ), array( 'id' => ${seeded.id} ) );
+          $wpdb->update( $wpdb->prefix . 'faz_cookie_categories', array( 'description' => base64_decode( '${prev}' ) ), array( 'category_id' => ${seededCategory.id} ) );
           \\FazCookie\\Admin\\Modules\\Cookies\\Includes\\Category_Controller::get_instance()->delete_cache();
           if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
         `);
@@ -1432,7 +1516,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     const modified = JSON.parse(JSON.stringify(banner));
     modified.properties.settings.type = updatedType;
 
-    const result = await updateBanner(page, n, 1, {
+    const result = await updateBanner(page, n, banner.id, {
       name: modified.name,
       status: modified.status,
       default: modified.default,
@@ -1447,7 +1531,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     expect(readBack.properties.settings.type).toBe(updatedType);
 
     // Restore original
-    await updateBanner(page, n, 1, {
+    await updateBanner(page, n, banner.id, {
       name: banner.name,
       status: banner.status,
       default: banner.default,
@@ -1460,9 +1544,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
 
   test('Empty banner title stays empty on frontend (no en.json fallback)', async ({ page, browser, loginAsAdmin, wpBaseURL }) => {
     await loginAsAdmin(page);
-    // Navigate to any admin page to get the nonce — skip goToBannerPage
-    // since preloading serves the banner API from cache (no network response to wait for).
-    await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-settings`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+    await goToBannerPage(page);
     const n = await getAdminNonce(page);
     const banner = await getBanner(page, n);
 

@@ -8,34 +8,52 @@ async function globalSetup(): Promise<void> {
   const adminUser = process.env.WP_ADMIN_USER ?? 'admin';
   const adminPass = process.env.WP_ADMIN_PASS ?? 'admin';
 
-  const api = await request.newContext({
-    baseURL,
-    ignoreHTTPSErrors: true,
-  });
-
   const loginPath = getWpLoginPath();
-  const loginPage = await api.get(loginPath);
-  if (!loginPage.ok()) {
-    await api.dispose();
-    throw new Error(`WordPress login page not reachable at ${baseURL}${loginPath} (status ${loginPage.status()}).`);
-  }
+  let loginVerified = false;
+  let loginFailure = '';
+  // A busy compatibility install can occasionally drop the first login POST
+  // while dozens of plugin hooks initialise. Use a fresh cookie jar for one
+  // retry, mirroring completeAdminLogin() instead of failing the whole suite
+  // before any product assertion runs.
+  for (let attempt = 1; attempt <= 2 && !loginVerified; attempt += 1) {
+    const api = await request.newContext({
+      baseURL,
+      ignoreHTTPSErrors: true,
+      timeout: 60_000,
+    });
+    try {
+      const loginPage = await api.get(loginPath);
+      if (!loginPage.ok()) {
+        loginFailure = `login page status ${loginPage.status()}`;
+        continue;
+      }
 
-  // Verify credentials actually work before running the full suite.
-  const loginResponse = await api.post(loginPath, {
-    form: {
-      log: adminUser,
-      pwd: adminPass,
-      'wp-submit': 'Log In',
-      redirect_to: '/wp-admin/',
-      testcookie: '1',
-    },
-  });
-  if (!loginResponse.url().includes('/wp-admin')) {
-    await api.dispose();
-    throw new Error(`WordPress login failed for user '${adminUser}' at ${baseURL}${loginPath}. Check WP_ADMIN_USER/WP_ADMIN_PASS.`);
+      const loginResponse = await api.post(loginPath, {
+        form: {
+          log: adminUser,
+          pwd: adminPass,
+          'wp-submit': 'Log In',
+          redirect_to: `${baseURL}/wp-admin/`,
+          testcookie: '1',
+        },
+      });
+      loginVerified = loginResponse.url().includes('/wp-admin');
+      if (!loginVerified) {
+        const body = await loginResponse.text().catch(() => '');
+        const match = body.match(/<div[^>]+id=["']login_error["'][^>]*>([\s\S]*?)<\/div>/i);
+        const detail = match ? match[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'no login_error';
+        loginFailure = `attempt ${attempt}: URL=${loginResponse.url()} status=${loginResponse.status()} ${detail}`;
+      }
+    } finally {
+      await api.dispose();
+    }
   }
-
-  await api.dispose();
+  if (!loginVerified) {
+    throw new Error(
+      `WordPress login failed for user '${adminUser}' at ${baseURL}${loginPath}. ${loginFailure}. ` +
+      'Check WP_ADMIN_USER/WP_ADMIN_PASS.',
+    );
+  }
 
   // Reachable, and the credentials work. Now hold the environment itself to
   // the suite's requirements — deployment freshness, server, permalinks,

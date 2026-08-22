@@ -1,5 +1,10 @@
 import { expect, test } from '../fixtures/wp-fixture';
 import type { Page, Response, ConsoleMessage } from '@playwright/test';
+import {
+  deactivatePluginsExcept,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+} from '../utils/wp-env';
 
 /**
  * Guard against issue #198: an admin page calling REST paths that no route
@@ -124,6 +129,24 @@ async function visitAllTabs(page: Page, selector: string): Promise<number> {
 }
 
 test.describe('Admin pages call REST routes that exist (#198)', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  let originalActivePluginFiles: string[] | null = null;
+
+  test.beforeAll(() => {
+    originalActivePluginFiles = listActivePluginFiles();
+    // These assertions cover FAZ admin routes. Unrelated analytics plugins on
+    // the shared compatibility site can hold admin responses open long enough
+    // to exhaust the test timeout without changing any FAZ route behaviour.
+    deactivatePluginsExcept(['faz-cookie-manager']);
+  });
+
+  test.afterAll(() => {
+    if (originalActivePluginFiles !== null) {
+      restoreActivePluginFiles(originalActivePluginFiles);
+    }
+  });
+
   for (const slug of ADMIN_PAGES) {
     test(`${slug}: no failed faz/v1 request`, async ({ page, wpBaseURL, loginAsAdmin }) => {
       await loginAsAdmin(page);

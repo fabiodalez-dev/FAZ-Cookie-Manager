@@ -25,7 +25,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 
 	<h1><?php esc_html_e( 'Geo-routing', 'faz-cookie-manager' ); ?></h1>
 	<p class="faz-page-intro">
-		<?php esc_html_e( 'Inspect, override, and preview the built-in jurisdiction rule-sets per country and US state. Automatic application of a rule-set to the live banner (consent model, GPC, Do Not Sell) is off — the catalogue is preview and reference only. Per-country banner selection still works: configure country-specific banners, such as a CCPA/CPRA "Do Not Sell" banner, on the Banner page.', 'faz-cookie-manager' ); ?>
+		<?php esc_html_e( 'Inspect, override, and preview the jurisdiction rule-set enforced for each country and US state. The resolved model, category defaults, GPC/Do-Not-Sell obligations, sensitive-data opt-in and Consent Mode defaults are applied automatically to the live banner.', 'faz-cookie-manager' ); ?>
 	</p>
 
 	<nav class="faz-geo-tabs" role="tablist" aria-label="<?php esc_attr_e( 'Geo-routing sections', 'faz-cookie-manager' ); ?>">
@@ -61,7 +61,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 	<section class="faz-geo-panel hidden" id="faz-geo-panel-coverage" role="tabpanel" aria-labelledby="faz-geo-tab-coverage">
 		<h2><?php esc_html_e( 'Ruleset coverage', 'faz-cookie-manager' ); ?></h2>
 		<p>
-			<?php esc_html_e( 'Each country (and US state with privacy law) maps to a specific rule-set that defines banner behaviour, default signals, and UI flags. Click any row to inspect the resolved ruleset configuration.', 'faz-cookie-manager' ); ?>
+			<?php esc_html_e( 'Each country (and US state with a privacy law) maps to the rule-set enforced by the live banner. Review the model, defaults and mandatory controls here before release; the faz_geo_ruleset_runtime filter is reserved as an emergency kill switch.', 'faz-cookie-manager' ); ?>
 		</p>
 		<div id="faz-geo-coverage-content">
 			<p class="faz-loading"><?php esc_html_e( 'Loading…', 'faz-cookie-manager' ); ?></p>
@@ -72,7 +72,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 	<section class="faz-geo-panel hidden" id="faz-geo-panel-overrides" role="tabpanel" aria-labelledby="faz-geo-tab-overrides">
 		<h2><?php esc_html_e( 'Per-country overrides', 'faz-cookie-manager' ); ?></h2>
 		<p>
-			<?php esc_html_e( 'Override the auto-detected rule-set for a specific country. Use the dot-notation delta to selectively change individual fields (e.g. signals.cmv2.ad_storage).', 'faz-cookie-manager' ); ?>
+			<?php esc_html_e( 'Override the enforced rule-set for a specific country. Overrides affect both the live banner and this preview. Use the dot-notation delta to selectively change individual fields (e.g. signals.cmv2.ad_storage).', 'faz-cookie-manager' ); ?>
 		</p>
 		<div id="faz-geo-overrides-content">
 			<p class="faz-loading"><?php esc_html_e( 'Loading…', 'faz-cookie-manager' ); ?></p>
@@ -83,7 +83,7 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 	<section class="faz-geo-panel hidden" id="faz-geo-panel-preview" role="tabpanel" aria-labelledby="faz-geo-tab-preview">
 		<h2><?php esc_html_e( 'Preview routing', 'faz-cookie-manager' ); ?></h2>
 		<p>
-			<?php esc_html_e( 'Simulate a visitor from any country / US state / VPN status and see the rule-set the plugin would apply.', 'faz-cookie-manager' ); ?>
+			<?php esc_html_e( 'Simulate a visitor from any country / US state / VPN status and inspect the rule-set the live banner would enforce. Previewing does not alter saved settings or a real visitor\'s state.', 'faz-cookie-manager' ); ?>
 		</p>
 		<form id="faz-geo-preview-form" novalidate>
 			<p>
@@ -114,8 +114,8 @@ $rest_url   = esc_url( rest_url( 'faz/v1/geo/' ) );
 			<?php
 			printf(
 				/* translators: %s URL to ipinfo.io */
-				wp_kses_post( __( 'Detect VPN/proxy/Tor visitors via <a href="%s" target="_blank" rel="noopener noreferrer">ipinfo.io</a>. When a VPN is detected, the plugin falls back to the most-protective rule-set (gdpr-strict) regardless of the visitor\'s apparent country. Opt-in is gated by your acknowledgment of the cross-border data-transfer obligations under GDPR / DPF / SCC.', 'faz-cookie-manager' ) ),
-				'https://ipinfo.io'
+				wp_kses_post( __( 'Optionally use <a href="%s" target="_blank" rel="noopener noreferrer">ipinfo.io</a> for VPN/proxy/Tor classification in the live jurisdiction pipeline and the admin preview. When enabled, visitor IP addresses may be sent to ipinfo.io during banner rendering so a detected privacy relay can receive the most-protective fallback. Opt-in is gated by your acknowledgment of the cross-border data-transfer obligations under GDPR / DPF / SCC.', 'faz-cookie-manager' ) ),
+				esc_url( 'https://ipinfo.io' )
 			);
 			?>
 		</p>

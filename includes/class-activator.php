@@ -20,6 +20,7 @@ use FazCookie\Admin\Modules\Cookies\Includes\Category_Controller;
 use FazCookie\Admin\Modules\Consentlogs\Includes\Controller as ConsentLogs_Controller;
 use FazCookie\Admin\Modules\Pageviews\Includes\Controller as Pageviews_Controller;
 use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
+use FazCookie\Admin\Modules\Settings\Includes\Settings;
 
 /**
  * Fired during plugin activation.
@@ -116,7 +117,7 @@ class Activator {
 	/**
 	 * Bump this only when adding/changing a migration in the sequence below.
 	 */
-	const MIGRATIONS_VERSION = '2026.08.12.2';
+	const MIGRATIONS_VERSION = '2026.08.21.1';
 
 	/**
 	 * Run all pending one-time data migrations in a single admin_init callback.
@@ -147,11 +148,72 @@ class Activator {
 			self::reset_stale_per_cookie_consent();
 			self::demote_bulky_autoloaded_options();
 			self::refresh_cookie_translation_caches();
+			self::remove_dead_site_settings();
 		} catch ( \Throwable $e ) {
 			// Do not mark migrations complete — retry on next admin load.
 			return;
+		} finally {
+			// In a `finally`, not after the try. The migrations above are plain
+			// $wpdb writes under autocommit with no surrounding transaction, and
+			// each sets its own completion flag — so they commit incrementally.
+			// A throw in a LATER migration therefore leaves an EARLIER one
+			// committed, and the old placement skipped the bust on exactly that
+			// path: rename_advertisement_to_marketing() had already rewritten the
+			// slug while faz_server_cookie_category_map_v2 kept answering
+			// "advertisement" for up to an hour — the precise window this call
+			// was added to close. The early return on the already-migrated fast
+			// path sits BEFORE the try, so the no-op case is untouched; the cost
+			// on a persistently failing install is four extra transient deletes
+			// per admin load, which is strictly cheaper than a stale classifier
+			// authorising the wrong deletions.
+			do_action( 'faz_clear_cache' );
 		}
 		update_option( 'faz_migrations_version', self::MIGRATIONS_VERSION, false );
+
+		// Bust the frontend caches once, for the whole batch.
+		//
+		// CLI::define_public_hooks() registers the cache-bust closure on seven
+		// hooks — faz_after_{update,create,delete}_cookie,
+		// faz_after_{update,delete}_cookie_category, faz_after_update_settings
+		// and faz_clear_cache — and every controller write path fires one of
+		// them. Migrations are the one class of write that structurally cannot:
+		// they reach the tables with direct $wpdb->update/delete calls, by
+		// design, because they run before/around the controller layer.
+		//
+		// rename_advertisement_to_marketing() is the concrete case. It rewrites
+		// the category slug and reassigns wp_faz_cookies.category without firing
+		// any hook, so faz_server_cookie_category_map_v2 — the classifier that
+		// authorises server-side cookie destruction, one-hour TTL — could keep
+		// answering "advertisement" for up to an hour while the blocked-category
+		// list already said "marketing", and the cookie was allowed through.
+		//
+		// Firing in the `finally` above rather than inside that one migration
+		// covers every migration in the list and every migration added later,
+		// without each author having to remember — and covers the partial-batch
+		// case, which an after-the-try placement silently did not.
+	}
+
+	/**
+	 * Remove legacy settings that were written on every install but never read.
+	 *
+	 * The live site URL always comes from WordPress and installation state comes
+	 * from the plugin/database version options; keeping duplicate values in the
+	 * public settings payload creates stale, misleading configuration.
+	 *
+	 * @return void
+	 */
+	private static function remove_dead_site_settings() {
+		$settings = get_option( 'faz_settings', array() );
+		if ( ! is_array( $settings ) || ! array_key_exists( 'site', $settings ) ) {
+			return;
+		}
+		unset( $settings['site'] );
+		if ( ! update_option( 'faz_settings', $settings, false ) ) {
+			throw new \RuntimeException( 'FAZ: failed to remove legacy site settings; migration will retry.' );
+		}
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings' ) ) {
+			\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
+		}
 	}
 
 	/**
@@ -348,6 +410,10 @@ class Activator {
 		}
 		$settings['script_blocking']['whitelist_patterns'] = $defaults;
 		update_option( 'faz_settings', $settings );
+		// Drop the request-local settings cache: anything that read settings
+		// earlier in this same request would otherwise keep serving the
+		// pre-migration whitelist for the rest of it.
+		\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
 
 		// Verify by reading back rather than trusting update_option()'s return:
 		// it reports false BOTH when the write failed and when the value was
@@ -432,6 +498,12 @@ class Activator {
 		$patterns[] = 'www.gstatic.com/recaptcha/';
 		$settings['script_blocking']['whitelist_patterns'] = array_values( $patterns );
 		update_option( 'faz_settings', $settings );
+		// Same reason as seed_default_whitelist_patterns(): a stale
+		// request-local cache would hide the appended pattern until the
+		// next request.
+		if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings' ) ) {
+			\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
+		}
 	}
 
 	/**
@@ -518,20 +590,53 @@ class Activator {
 	 * Run consent log retention cleanup based on settings.
 	 */
 	public static function run_retention_cleanup() {
-		$settings  = get_option( 'faz_settings' );
+		$settings = get_option( 'faz_settings' );
+
+		// Four independent jobs on one cron hook. They used to run as a bare
+		// sequence, so ANY failure in the first cancelled the other three: a
+		// site whose consent-log controller could not load — seen in the wild on
+		// an install that shipped without that file — silently stopped purging
+		// DSAR requests and pageviews too, for as long as the install stayed
+		// broken. Each step is isolated now, so one failure costs one job.
+		//
+		// The two retention purges also REPORT when they cannot run. Storage
+		// limitation is an obligation, and "the purge quietly stopped months
+		// ago" must not look identical to "there was nothing to delete". The
+		// housekeeping steps stay silent: an unreaped asset file is untidy, not
+		// a compliance problem.
+
 		$retention = isset( $settings['consent_logs']['retention'] ) ? (int) $settings['consent_logs']['retention'] : 12;
 		if ( $retention > 0 ) {
-			ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
+			self::run_cleanup_step(
+				'consent-log retention',
+				true,
+				static function () use ( $retention ) {
+					ConsentLogs_Controller::get_instance()->cleanup_old_logs( $retention );
+				}
+			);
 		}
-		self::cleanup_old_dsar_requests( $settings );
+
+		self::run_cleanup_step(
+			'DSAR request retention',
+			true,
+			static function () use ( $settings ) {
+				self::cleanup_old_dsar_requests( $settings );
+			}
+		);
 
 		// Reap superseded content-hashed frontend assets (config-*.js /
 		// banner-*.css). Every settings/banner change mints a new hash and
 		// orphans the previous file, so without this the generated-assets
 		// directory grows for the lifetime of the install.
-		if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
-			\FazCookie\Frontend\Frontend::cleanup_static_assets();
-		}
+		self::run_cleanup_step(
+			'static asset reap',
+			false,
+			static function () {
+				if ( class_exists( '\\FazCookie\\Frontend\\Frontend' ) ) {
+					\FazCookie\Frontend\Frontend::cleanup_static_assets();
+				}
+			}
+		);
 
 		// Pageview analytics rows grow one-per-visit when tracking is enabled
 		// and previously had NO purge wired up at all, so the table (and every
@@ -539,7 +644,50 @@ class Activator {
 		$pv_retention = isset( $settings['pageviews']['retention'] ) ? (int) $settings['pageviews']['retention'] : 6;
 		$pv_retention = (int) apply_filters( 'faz_pageviews_retention_months', $pv_retention );
 		if ( $pv_retention > 0 ) {
-			Pageviews_Controller::get_instance()->cleanup_old_records( $pv_retention );
+			self::run_cleanup_step(
+				'pageview retention',
+				false,
+				static function () use ( $pv_retention ) {
+					Pageviews_Controller::get_instance()->cleanup_old_records( $pv_retention );
+				}
+			);
+		}
+	}
+
+	/**
+	 * Run one daily-cleanup job without letting it take the others down.
+	 *
+	 * `Throwable` rather than `Exception` on purpose: the failure this was
+	 * written for is an `Error` — a missing class on a partial install — which
+	 * an `Exception` catch would not have caught.
+	 *
+	 * @param string   $label         Human-readable job name for the log line.
+	 * @param bool     $is_compliance Whether skipping this job has a retention
+	 *                                obligation behind it, and must be visible.
+	 * @param callable $step          The job.
+	 * @return bool True when the job completed.
+	 */
+	private static function run_cleanup_step( $label, $is_compliance, $step ) {
+		try {
+			call_user_func( $step );
+			return true;
+		} catch ( \Throwable $e ) {
+			if ( $is_compliance ) {
+				// Recorded in two places on purpose: the log is where an
+				// administrator with shell access looks, and the option is what
+				// a support request or a status screen can read without one.
+				error_log( 'FAZ daily cleanup: "' . $label . '" did not run — ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				update_option(
+					'faz_last_cleanup_issue',
+					array(
+						'step'    => (string) $label,
+						'message' => (string) $e->getMessage(),
+						'time'    => time(),
+					),
+					false
+				);
+			}
+			return false;
 		}
 	}
 
@@ -598,12 +746,14 @@ class Activator {
 	 * before and after the scan to determine how many new cookies were added.
 	 */
 	public static function run_scheduled_scan() {
-		$settings = get_option( 'faz_settings' );
-		if ( empty( $settings['scanner']['auto_scan'] ) ) {
+		$settings = Settings::get_instance();
+		if ( ! $settings->get( 'scanner', 'auto_scan' ) ) {
 			return;
 		}
 
-		$max_pages = isset( $settings['scanner']['max_pages'] ) ? absint( $settings['scanner']['max_pages'] ) : 20;
+		// Read through Settings so legacy/corrupt stored values are normalised to
+		// the same [1, 2000] range as new saves and interactive scans.
+		$max_pages = (int) $settings->get( 'scanner', 'max_pages' );
 
 		// Count cookies before scan to detect newly added ones.
 		$cookie_controller = Cookie_Controller::get_instance();
@@ -640,7 +790,7 @@ class Activator {
 		}
 
 		// Check for unmatched IAB vendors (only if IAB TCF is enabled).
-		if ( ! empty( $settings['iab']['enabled'] ) ) {
+		if ( $settings->get( 'iab', 'enabled' ) ) {
 			$unmatched = self::detect_unmatched_vendors();
 			if ( ! empty( $unmatched ) ) {
 				set_transient( 'faz_unmatched_vendors', $unmatched, WEEK_IN_SECONDS );
@@ -656,8 +806,42 @@ class Activator {
 	 * This check is done on all requests and runs if the versions do not match.
 	 */
 	public static function check_version() {
+		self::repair_db_version_namespace();
 		if ( ! defined( 'IFRAME_REQUEST' ) && version_compare( get_option( 'faz_version', '0.0.0' ), FAZ_VERSION, '<' ) ) {
 			self::install();
+		}
+	}
+
+	/**
+	 * Heal a DB-version option written in the PLUGIN's numbering space.
+	 *
+	 * update_db_version() used to store FAZ_VERSION, which the fork renumbered
+	 * to 1.x while the migration keys stayed on the inherited 3.x scheme. Any
+	 * value below the FIRST migration key can only have come from that write —
+	 * a genuinely un-migrated install reads the '3.0.7' default because the
+	 * option is absent, and every real key is >= 3.0.7.
+	 *
+	 * Such a site has already replayed the full chain on every single release
+	 * bump, so its schema is at the latest revision by construction; the right
+	 * repair is to close the gate, not to run the migrations one final time.
+	 * Absent option, or a value already in the migration space, is untouched —
+	 * so a fresh install and a genuinely-behind install both still migrate.
+	 *
+	 * @return void
+	 */
+	private static function repair_db_version_namespace() {
+		$stored = get_option( 'faz_cookie_consent_db_version', null );
+		if ( null === $stored || '' === $stored ) {
+			return;
+		}
+		$keys = array_keys( self::$db_updates );
+		if ( empty( $keys ) ) {
+			return;
+		}
+		usort( $keys, 'version_compare' );
+		$first = (string) reset( $keys );
+		if ( version_compare( (string) $stored, $first, '<' ) ) {
+			update_option( 'faz_cookie_consent_db_version', self::highest_db_update_version() );
 		}
 	}
 	/**
@@ -957,7 +1141,17 @@ class Activator {
 	 * @return void
 	 */
 	public static function update_db_version( $version = null ) {
-		$target = is_null( $version ) ? FAZ_VERSION : $version;
+		// The stored value is compared against the MIGRATION KEYS by
+		// needs_db_update(), so it must live in their numbering space — not the
+		// plugin's. Those two spaces were the same until the fork renumbered
+		// the plugin to 1.x while the migration keys stayed on the inherited
+		// 3.x scheme, at which point writing FAZ_VERSION here made
+		// version_compare( '1.27.0', '3.6.0', '<' ) true forever: the gate
+		// never closed, and every release bump replayed the entire migration
+		// chain — Migration_V2 included — against live data on the first
+		// front-end request. It also silently disabled the geo-migration
+		// re-entry pin below, whose own comparison is against '3.6.0'.
+		$target = is_null( $version ) ? self::highest_db_update_version() : $version;
 
 		// If the v2 geo-routing migration didn't complete (status was
 		// 'partial' / 'no_table'), pin the DB-version option below 3.6.0
@@ -972,6 +1166,24 @@ class Activator {
 		}
 
 		update_option( 'faz_cookie_consent_db_version', $target );
+	}
+
+	/**
+	 * The highest declared migration version.
+	 *
+	 * Single source of truth for both the write (update_db_version) and the
+	 * read (needs_db_update), so the two can no longer drift into different
+	 * numbering spaces.
+	 *
+	 * @return string
+	 */
+	private static function highest_db_update_version() {
+		$versions = array_keys( self::$db_updates );
+		if ( empty( $versions ) ) {
+			return '0.0.0';
+		}
+		usort( $versions, 'version_compare' );
+		return (string) end( $versions );
 	}
 
 	/**
@@ -1660,6 +1872,12 @@ class Activator {
 		if ( ! empty( $settings['banner_control']['per_cookie_consent'] ) ) {
 			$settings['banner_control']['per_cookie_consent'] = false;
 			update_option( 'faz_settings', $settings );
+			// Without this, a frontend request that had already read settings
+			// would keep honouring the stale per_cookie_consent=true for the
+			// rest of this request — the exact window this reset exists to close.
+			if ( class_exists( '\\FazCookie\\Admin\\Modules\\Settings\\Includes\\Settings' ) ) {
+				\FazCookie\Admin\Modules\Settings\Includes\Settings::clear_cache();
+			}
 		}
 		update_option( 'faz_reset_stale_per_cookie_consent_done', 1, false );
 	}

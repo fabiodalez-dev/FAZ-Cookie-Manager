@@ -2,6 +2,41 @@
 
 All notable changes to FAZ Cookie Manager are documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Jurisdiction rulesets are enforced at runtime by default.** The 47-law catalogue now drives pre-consent category defaults, blocking, banner-law selection, mandatory Do-Not-Sell/GPC/revisit controls, independent sensitive-processing opt-in and Consent Mode defaults. The `faz_geo_ruleset_runtime` filter remains an emergency kill switch. Cache Compatibility Mode is ignored while enforcement is active so one country's consent model cannot be cached for another.
+- **GPC is a controlling sale/share opt-out.** `Sec-GPC: 1` and `navigator.globalPrivacyControl` are honoured without a publisher toggle and override conflicting prior or same-page consent. Unrelated category choices remain intact; targeted granular overrides are cleared and the audit marker is retained on classic and AMP flows.
+- **AMP now uses a server-reconciled granular consent bridge.** Purpose decisions, banner scope, revision and expiry are synchronized with the canonical consent cookie through strict AMP CORS endpoints; known AMP components are purpose-gated, endpoint timeouts fail closed, and global/excluded-page/bot/revisit settings are mirrored.
+- **Ad-blocker compatibility mode covers every frontend consent bundle**, including GCM, TCF, WP Consent API and Microsoft UET/Clarity, rather than only the main and accessibility scripts.
+- **The server-side scanner's optional static IP is now a complete setting.** Sitemap discovery and page fetches use cURL hostname pinning while preserving Host, TLS certificate validation and SNI; only public IPs are accepted and unsafe targets fail closed.
+
+### Removed
+- Removed unused `site.url` and `site.installed` settings and their public schema/getters. An idempotent migration deletes the legacy group; WordPress remains authoritative for the site URL and plugin version state.
+
+## [1.27.0] — 2026-08-19
+
+### Added
+- **The scanner captures server-set and HttpOnly cookies from real browser activity.** Each browser scan opens an authenticated, bounded capture session that observes `Set-Cookie` metadata from page, AJAX, REST and subresource responses without storing cookie values. A background replay of the URLs the browser actually visited adds header-only discoveries that JavaScript cannot see, including on isolated multisite subsites.
+- **AMP pages use the same granular consent model as canonical pages.** A real `amp-consent` bridge synchronizes category decisions with the first-party FAZ cookie, validates publisher/cache origins and signed scope, expires stale AMP state after policy or banner changes, and blocks AMP components on the categories the visitor can actually choose.
+- **Scanner-driven deletion is recoverable and evidence-based.** Cookies become stale only after repeated complete, healthy full-site scans. Bulk deletion snapshots rows into a newest-first recycle bin, and the Cookies page offers a persistent Undo action that survives reloads and safely handles partial or duplicate restores.
+
+### Changed
+- **WordPress 7.1 is the tested release baseline.** Headers, release documentation and the reproducible Plugin Check environment now agree on WordPress 7.1; a fresh subdirectory multisite with network activation also passes a real-browser HttpOnly scanner capture on a child site without leaking the main site's observations.
+- **Scan completion now has one fail-closed definition across browser and server.** Selected depth, early stops, diagnostics, capture truncation and persisted script-inferred discoveries all participate in the stale tally, while administrator-only jar cookies are reported but never imported as public declarations.
+- **Server-side cookie enforcement is explicit and observable.** The opt-in outgoing `Set-Cookie` guard and the established cookie shredder have separate gates, honour banner/geo/excluded-page context, keep CAPTCHA and WordPress-internal boundaries, and expose value-free recently-blocked diagnostics with query strings removed.
+
+### Fixed
+- **Paid membership no longer fabricates consent.** The Paid Memberships Pro integration previously treated payment as an automatic grant for analytics, marketing and every other optional purpose. Selected members now receive the actual privacy alternative: the banner is suppressed, necessary storage stays enabled, optional purposes stay denied, and any later explicit preference is respected. Existing `source:pmp` auto-grants are converted on the next request; the log records the automatic state as rejected with a `meta.pmp_privacy` audit marker.
+- **Settings and scanner limits are enforced server-side.** Geo-target region tokens are constrained to the same catalogue shown in the UI/onboarding, and every local/browser scan entry point clamps depth to 1–2000 pages so a crafted import, REST payload or stale cron option cannot trigger an unbounded crawl.
+- **A failed scanner import is retried by the product, not only by the endpoint.** Runtime observations, session transients and the HttpOnly marker survive transient database/network failures while the browser retries the exact payload with the same scan ID. After the bounded retry budget is exhausted the client waits for session teardown before returning control, so another click cannot collide with its own 15-minute lock. The capture closes and background replay is scheduled only after persistence succeeds.
+- **Hyphenated AMP category slugs can be granted and unblock components.** `purposeConsentRequired`, `setPurpose()`, REST purpose maps and `data-block-on-consent-purposes` now share one collision-safe identifier map while the consent cookie retains the original category slugs.
+- **Header replay preserves URL, lifetime and deletion semantics.** File-like paths such as `/index.php` and `/wp-sitemap.xml` are no longer rewritten with a trailing slash. `Max-Age=0`, negative Max-Age and past Expires directives now remove only the matching name/domain/path observation, instead of becoming session cookies or being resurrected from the known-cookie catalogue.
+- **AMP component blocking leaves serialized content untouched.** AMP-looking strings inside application/json, JSON-LD, CSS, text containers, CDATA and comments remain byte-identical and valid while live classified components beside them still receive granular purpose gates.
+- **Upgrade and deletion safety gaps are closed.** Existing installs retain CAPTCHA exemptions and the always-on shredder; failed recycle-bin writes emit no deletion hook; restore identity is name plus domain; AMP reject-all removes stale granular grants; and partial migration failures still invalidate affected caches.
+- **Release validation now follows the scanner's production boundaries.** Browser-import tests open and close real scan sessions, server fallback fixtures stay on the site's protocol/host/port, UI progress tests avoid duplicating deep crawls, and consent-log probes include the same-origin evidence required by the hardened endpoint. The single-site batch runner executes one spec/worker at a time, reports an aggregate failure, and leaves the network-only scanner case to the isolated multisite job.
+- **Test deployments no longer retain excluded build debris.** The guarded rsync target now removes stale Git, vendor, test and analysis directories before each run, preventing an old 200 MB test tree from masquerading as the current 21 MB plugin build.
+
 ## [1.26.0] — 2026-08-12
 
 ### Added

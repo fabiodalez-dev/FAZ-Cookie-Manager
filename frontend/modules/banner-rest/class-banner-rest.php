@@ -141,6 +141,22 @@ class Banner_Rest {
 			);
 		}
 
+		// Honour the site-wide kill switch. This route is public
+		// (permission_callback __return_true) and registered unconditionally,
+		// so without this check an install whose banner is switched off still
+		// served the full banner HTML/CSS/categories to anyone who asked —
+		// nothing legitimate calls it then (script.js is not enqueued), but a
+		// setting must not be ignored by one of its code paths.
+		$settings      = \FazCookie\Admin\Modules\Settings\Includes\Settings::get_instance();
+		$banner_status = $settings->get( 'banner_control', 'status' );
+		if ( false === $banner_status ) {
+			return new WP_Error(
+				'faz_banner_disabled',
+				__( 'The cookie banner is disabled on this site.', 'faz-cookie-manager' ),
+				array( 'status' => 404 )
+			);
+		}
+
 		$controller = Banner_Controller::get_instance();
 		$cache_compatibility = $this->is_cache_compatibility_enabled();
 		$country    = $cache_compatibility ? '' : Geolocation::get_visitor_country();
@@ -195,6 +211,12 @@ class Banner_Rest {
 			if ( $requested_variant ) {
 				$banner = $requested_variant;
 			}
+		}
+
+		if ( null !== $runtime_ruleset ) {
+			$banner->set_settings(
+				Geo_Runtime::apply_ui_requirements( $runtime_ruleset, $banner->get_settings() )
+			);
 		}
 
 		// Force the language context for downstream helpers. The static cache
@@ -321,7 +343,7 @@ class Banner_Rest {
 	 */
 	private function is_cache_compatibility_enabled() {
 		$settings = $this->get_faz_settings();
-		return ! empty( $settings['banner_control']['cache_compatibility'] );
+		return ! Geo_Runtime::is_enabled() && ! empty( $settings['banner_control']['cache_compatibility'] );
 	}
 
 	/**
@@ -375,7 +397,7 @@ class Banner_Rest {
 	 */
 	private function is_country_dependent_output( $controller ) {
 		$settings = $this->get_faz_settings();
-		if ( ! empty( $settings['banner_control']['cache_compatibility'] ) ) {
+		if ( $this->is_cache_compatibility_enabled() ) {
 			return (bool) apply_filters( 'faz_country_dependent_banner_output', false, $settings );
 		}
 		return $controller->has_country_dependent_banners() || Geo_Runtime::is_enabled();

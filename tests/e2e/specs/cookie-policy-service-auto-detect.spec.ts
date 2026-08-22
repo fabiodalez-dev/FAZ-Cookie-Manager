@@ -34,7 +34,12 @@
 
 import { type Page } from '@playwright/test';
 import { test, expect } from '../fixtures/wp-fixture';
-import { wpEval } from '../utils/wp-env';
+import {
+  deactivatePluginsExcept,
+  listActivePluginFiles,
+  restoreActivePluginFiles,
+  wpEval,
+} from '../utils/wp-env';
 import { acquireCookiesTableLock, releaseCookiesTableLock } from '../utils/db-lock';
 import { withNoDiscoveredCookies, withOwnCookiesOnly } from '../utils/cookie-inventory';
 
@@ -43,6 +48,7 @@ const REST_BASE = '/wp-json/faz/v1/cookie-policy';
 
 let adminPage: Page;
 let nonce = '';
+let originalActivePluginFiles: string[] | null = null;
 
 function resetCookies(): void {
   wpEval(
@@ -108,6 +114,12 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
     // window must not overlap the gvl spec's table-scoped reads.
     // Released in afterAll. See utils/db-lock.ts for the rationale.
     await acquireCookiesTableLock();
+    originalActivePluginFiles = listActivePluginFiles();
+    // This spec exercises FAZ's cookie-policy database and REST/UI bridge.
+    // Analytics plugins on the shared compatibility site can keep the admin
+    // request open until the 45-second per-test timeout without contributing
+    // to any assertion in this file.
+    deactivatePluginsExcept(['faz-cookie-manager']);
   });
 
   test.beforeEach(async ({ page, loginAsAdmin }) => {
@@ -132,8 +144,17 @@ test.describe('Cookie Policy third-party auto-detect from cookies', () => {
   });
 
   test.afterAll(async () => {
-    resetCookies();
-    releaseCookiesTableLock();
+    try {
+      resetCookies();
+    } finally {
+      try {
+        releaseCookiesTableLock();
+      } finally {
+        if (originalActivePluginFiles !== null) {
+          restoreActivePluginFiles(originalActivePluginFiles);
+        }
+      }
+    }
   });
 
   test('1. /suggest-services returns the documented shape with all four keys present', async () => {

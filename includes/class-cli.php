@@ -183,6 +183,16 @@ class CLI {
 		$faz_bust_frontend_caches = static function () {
 			\delete_transient( 'faz_cookie_scripts_map' );
 			\delete_transient( 'faz_detected_cookie_names' );
+			\delete_transient( 'faz_server_cookie_category_map' );
+			// Versioned sibling: the map gained a wordpress-internal filter, so
+			// the key was bumped to stop a stale unfiltered map from answering
+			// for an hour after deploy. Both are deleted while installs that
+			// upgrade mid-hour may still hold the old one.
+			\delete_transient( 'faz_server_cookie_category_map_v2' );
+			// The Open Cookie Database memo answers the same question one tier
+			// lower, so it must expire on the same events: a reclassified cookie
+			// or category has to win over a memoized fallback verdict.
+			\delete_transient( 'faz_server_cookie_definition_map' );
 		};
 		foreach ( array(
 			'faz_after_update_cookie',

@@ -571,16 +571,62 @@ class Admin {
 						/* translators: 1: service label, 2: number of cookies registered. */
 						'serviceRegistered'        => __( '%1$s: %2$d cookie(s) registered', 'faz-cookie-manager' ),
 						'registerFailed'           => __( 'Could not register service.', 'faz-cookie-manager' ),
-						'staleAllConfirm'          => __( 'Delete all stale cookies not found in the latest scan?', 'faz-cookie-manager' ),
+						'staleAllConfirm'          => __( 'Remove these cookie-policy entries? Cookies that load only after an interaction, during a flow, or as httpOnly cookies may still be present even if the scan did not observe them.', 'faz-cookie-manager' ),
 						'staleNone'                => __( 'No stale cookies to delete.', 'faz-cookie-manager' ),
+						/* translators: %d: number of entries the server kept because they have not yet been missing from enough consecutive complete scans. */
+						'staleRefusedNotEarned'    => __( '%d entry(ies) were kept: they have not yet been missing from enough complete scans.', 'faz-cookie-manager' ),
+						// Recycle bin — the undo affordance for a bulk delete.
+						'restoreDeleted'           => __( 'Undo delete', 'faz-cookie-manager' ),
+						/* translators: %d: number of cookies in the most recent deleted batch that can still be restored. */
+						'restoreDeletedHint'       => __( '%d recently deleted cookie(s) can still be restored.', 'faz-cookie-manager' ),
+						/* translators: 1: number of cookies in the most recent deleted batch, 2: human-readable age of that batch, such as "3 hours" or "8 months". */
+						'restoreDeletedHintAged'   => __( '%1$d deleted cookie(s) can still be restored (deleted %2$s ago).', 'faz-cookie-manager' ),
+						/* translators: %d: number of cookies put back by the restore. */
+						'restoreSucceeded'         => __( '%d cookie(s) restored.', 'faz-cookie-manager' ),
+						'restoreFailed'            => __( 'Could not restore the deleted cookies.', 'faz-cookie-manager' ),
+						'nothingToRestore'         => __( 'There is nothing left to restore.', 'faz-cookie-manager' ),
+						'bulkDeleteSnapshotFailed' => __( 'Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place.', 'faz-cookie-manager' ),
+						// Jar-only disclosure — cookies the scan saw in the
+						// administrator's browser but could not attribute to any
+						// page, and therefore never imported.
+						/* translators: %d: number of cookies that were present in the browser before the scan started and were not imported. */
+						'jarOnlyHint'              => __( '%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported.', 'faz-cookie-manager' ),
+						'jarOnlyToggle'            => __( 'Show the names', 'faz-cookie-manager' ),
+						'jarOnlyExplain'           => __( 'If you recognise one as a cookie your site really sets, add it manually with Add Cookie.', 'faz-cookie-manager' ),
+						// Scan cancellation.
+						'stopScan'                 => __( 'Stop scan', 'faz-cookie-manager' ),
+						'stoppingScan'             => __( 'Stopping…', 'faz-cookie-manager' ),
+						'scanStopped'              => __( '(stopped by you before every page was visited)', 'faz-cookie-manager' ),
 						'staleDeleteAllFailed'     => __( 'Failed to delete stale cookies.', 'faz-cookie-manager' ),
 						'staleLoadFailed'          => __( 'Failed to load cookies for stale cleanup.', 'faz-cookie-manager' ),
 						'scanStarted'              => __( 'Scanning...', 'faz-cookie-manager' ),
 						'scanSite'                 => __( 'Scan Site', 'faz-cookie-manager' ),
 						'scanFailed'               => __( 'Scan failed.', 'faz-cookie-manager' ),
+						/* translators: %1$d: number of cookies found by the scan, %2$d: number of pages scanned */
+						'scanComplete'             => __( 'Scan complete — %1$d cookies found on %2$d pages', 'faz-cookie-manager' ),
+						/* translators: %s: machine-readable reason the scan stopped before visiting every page, e.g. "no-new-findings" */
+						'scanEarlyStop'            => __( '(early stop: %s)', 'faz-cookie-manager' ),
+						/* translators: %d: number of catalogued cookies the latest scan did not observe */
+						'staleHighlighted'         => __( '%d stale cookie(s) highlighted', 'faz-cookie-manager' ),
+						/* translators: appended to the scan summary when the scan was capped, incremental, early-stopped or degraded, and therefore could not prove that a catalogued cookie is gone. */
+						'scanCoverageIncomplete'   => __( 'Scan coverage was incomplete, so no cookie was marked as stale.', 'faz-cookie-manager' ),
+						// Shown when the browser pass finished but the server-side
+						// header enrichment is still queued, so the inventory may still grow.
+						'enrichmentPending'        => __( 'The browser scan was saved. Server-header enrichment is still running in the background, so a few more cookies may appear shortly.', 'faz-cookie-manager' ),
 						'noPagesFound'             => __( 'No pages found to scan.', 'faz-cookie-manager' ),
 						'discoverFailed'           => __( 'Failed to discover pages.', 'faz-cookie-manager' ),
 						'scanSaveFailed'           => __( 'Scan finished but failed to save results.', 'faz-cookie-manager' ),
+						// Import held for a retry. The crawl is finished and the
+						// server kept its evidence, so the administrator is offered
+						// the save again rather than the whole scan.
+						/* translators: %1$d: number of cookies an earlier attempt already imported, %2$d: number of pages scanned */
+						'scanAlreadySaved'         => __( 'Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice.', 'faz-cookie-manager' ),
+						'importNotSaved'           => __( 'Not saved', 'faz-cookie-manager' ),
+						'importHeldRetrySave'      => __( 'The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again.', 'faz-cookie-manager' ),
+						'importHeldRerun'          => __( 'The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again.', 'faz-cookie-manager' ),
+						'retryImport'              => __( 'Retry import', 'faz-cookie-manager' ),
+						'retryImportRescan'        => __( 'Retry import (re-scans the site)', 'faz-cookie-manager' ),
+						'discardHeldScan'          => __( 'Discard', 'faz-cookie-manager' ),
 						'browserScanUnavailable'   => __( 'The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked.', 'faz-cookie-manager' ),
 						'discoveringPages'         => __( 'Discovering pages...', 'faz-cookie-manager' ),
 						'enrichingServer'          => __( 'Enriching with server scan...', 'faz-cookie-manager' ),
@@ -623,6 +669,11 @@ class Admin {
 						'enabled'                  => __( 'Cookie banner enabled.', 'faz-cookie-manager' ),
 						'disabled'                 => __( 'Cookie banner disabled.', 'faz-cookie-manager' ),
 						'toggleFailed'             => __( 'Failed to update banner status.', 'faz-cookie-manager' ),
+						// Consent Expiry: the editor never rewrites a stored lifetime,
+						// but Frontend::normalize_consent_expiry() bounds it at serve
+						// time, so the field has to name both numbers when they differ.
+						/* translators: 1: the lifetime stored on the banner, in days. 2: the lifetime visitors are actually served, in days. */
+						'expiryRuntimeBounded'     => __( 'This banner stores %1$d days, but visitors are served %2$d days: the selected regulation bounds the lifetime when the banner is served.', 'faz-cookie-manager' ),
 						// Colour-contrast checker (Colours tab, WCAG SC 1.4.3).
 						'contrastTitle'            => __( 'Accessibility: low colour contrast', 'faz-cookie-manager' ),
 						'contrastIntro'            => __( 'These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:', 'faz-cookie-manager' ),
@@ -792,12 +843,12 @@ class Admin {
 						/* translators: %d: number of country overrides configured */
 						'overridesConfiguredPlural'    => __( '%d overrides configured.', 'faz-cookie-manager' ),
 						'addOverride'                  => __( 'Add override', 'faz-cookie-manager' ),
-						'noOverrides'                  => __( 'No per-country overrides configured. Rule-sets are auto-resolved per country and US state for preview and reference only.', 'faz-cookie-manager' ),
+						'noOverrides'                  => __( 'No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state.', 'faz-cookie-manager' ),
 						'confirmDelete'                => __( 'Remove this override?', 'faz-cookie-manager' ),
 						// Pipeline status panel.
 						'runtimeApplicationLabel'      => __( 'Runtime rule-set application', 'faz-cookie-manager' ),
 						'runtimeApplicationActive'     => __( '✅ active', 'faz-cookie-manager' ),
-						'runtimeApplicationOff'        => __( '⚪ off — catalogue is preview/reference only', 'faz-cookie-manager' ),
+						'runtimeApplicationOff'        => __( '⚠️ disabled by the faz_geo_ruleset_runtime filter', 'faz-cookie-manager' ),
 						'catalogRulesets'              => __( 'Catalog rulesets', 'faz-cookie-manager' ),
 						'fallbackRuleset'              => __( 'Fallback ruleset', 'faz-cookie-manager' ),
 						'ipinfoOptin'                  => __( 'ipinfo opt-in', 'faz-cookie-manager' ),
@@ -1107,6 +1158,10 @@ class Admin {
 					$theme_file = plugin_dir_path( __FILE__ ) . 'modules/banners/includes/templates/6.2.0/theme.json';
 					$presets    = file_exists( $theme_file ) ? json_decode( file_get_contents( $theme_file ), true ) : array(); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 					wp_add_inline_script( 'faz-admin', 'fazConfig.themePresets=' . wp_json_encode( $presets ) . ';', 'after' );
+					// The original banner normally has ID 1, but a valid install can
+					// promote another row after deletions/imports. Tell banner.js which
+					// row the bare editor URL should open instead of hard-coding ID 1.
+					wp_add_inline_script( 'faz-admin', 'fazConfig.bannerId=' . $this->get_banner_editor_id() . ';', 'after' );
 
 					// Per-law default notice descriptions for every selected or bundled
 					// language. Banner rows preserve unselected translations, so those
@@ -1168,7 +1223,7 @@ class Admin {
 		$paths = array();
 		switch ( $view ) {
 			case 'banner':
-				$paths = array( '/faz/v1/banners/1', '/faz/v1/banners/design-presets' );
+				$paths = array( '/faz/v1/banners/' . $this->get_banner_editor_id(), '/faz/v1/banners/design-presets' );
 				break;
 			case 'settings':
 				$paths = array( '/faz/v1/settings', '/faz/v1/settings/geolite2/status', '/faz/v1/gvl' );
@@ -1217,6 +1272,37 @@ class Admin {
 				'before'
 			);
 		}
+	}
+
+	/**
+	 * Resolve the banner row edited by the Cookie Banner admin page.
+	 *
+	 * An explicit banner_id is kept even when it is stale so banner.js can show
+	 * its recovery notice. Without an explicit ID, prefer banner_default and
+	 * then the first surviving row. Falling back to 1 only covers an empty table
+	 * during installation, before the controller creates its initial rows.
+	 *
+	 * @return int Banner ID.
+	 */
+	private function get_banner_editor_id() {
+		// Read-only navigation parameter; no state is changed from this value.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$requested_id = isset( $_GET['banner_id'] ) ? absint( wp_unslash( $_GET['banner_id'] ) ) : 0;
+		if ( $requested_id > 0 ) {
+			return $requested_id;
+		}
+
+		global $wpdb;
+		$banner_id = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+			"SELECT banner_id FROM `{$wpdb->prefix}faz_banners` WHERE banner_default = 1 ORDER BY banner_id ASC LIMIT 1"
+		);
+		if ( $banner_id <= 0 ) {
+			$banner_id = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+				"SELECT banner_id FROM `{$wpdb->prefix}faz_banners` ORDER BY banner_id ASC LIMIT 1"
+			);
+		}
+
+		return $banner_id > 0 ? $banner_id : 1;
 	}
 
 	/**
@@ -2150,8 +2236,7 @@ class Admin {
 	}
 
 	/**
-	 * AJAX handler — flips settings.geolocation.geo_targeting off in the
-	 * faz_settings option. Atomic (single update_option call), idempotent
+	 * AJAX handler — flips settings.geolocation.geo_targeting off. Idempotent
 	 * (running it twice on an already-disabled config is a no-op), guarded
 	 * by capability + nonce.
 	 *
@@ -2164,15 +2249,20 @@ class Admin {
 		}
 		check_ajax_referer( 'faz_disable_redundant_geo_routing', '_wpnonce' );
 
-		$settings = get_option( 'faz_settings', array() );
-		if ( ! is_array( $settings ) ) {
-			$settings = array();
-		}
+		// Settings::update(), never a bare update_option( 'faz_settings' ):
+		// geo-targeting decides who sees the banner, so the write must fire
+		// faz_after_update_settings — that hook is what purges the page caches
+		// and the banner template. The direct write left cached pages serving
+		// the geo-targeted behaviour until the cache happened to expire, and
+		// left the request-local settings cache stale for the rest of the
+		// request.
+		$settings_obj = new \FazCookie\Admin\Modules\Settings\Includes\Settings();
+		$settings     = $settings_obj->get();
 		if ( ! isset( $settings['geolocation'] ) || ! is_array( $settings['geolocation'] ) ) {
 			$settings['geolocation'] = array();
 		}
 		$settings['geolocation']['geo_targeting'] = false;
-		update_option( 'faz_settings', $settings );
+		$settings_obj->update( $settings );
 		delete_transient( 'faz_dismiss_redundant_geo_routing' );
 		wp_send_json_success();
 	}

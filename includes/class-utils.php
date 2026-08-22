@@ -202,6 +202,49 @@ if ( ! function_exists( 'faz_is_front_end_request' ) ) {
 		return true;
 	}
 }
+if ( ! function_exists( 'faz_is_machine_readable_request' ) ) {
+
+	/**
+	 * Whether this request renders a machine-readable representation of the
+	 * site rather than a page a visitor browses.
+	 *
+	 * Feeds, robots.txt and trackbacks reach template_redirect and run
+	 * `the_content`, so neither the is_admin() guards on the output buffer nor
+	 * the one on filter_content_blocking() catches them. Rewriting there is
+	 * both harmful and pointless: harmful because a feed carries no script.js,
+	 * so an embed replaced by a data-faz-src placeholder can never be restored
+	 * and is simply lost to every subscriber; pointless because consent is a
+	 * browser-side state and a feed reader has no banner to accept.
+	 *
+	 * Deliberately NOT including is_404() or is_search() — those are ordinary
+	 * pages a visitor sees, and third-party embeds can appear in both.
+	 *
+	 * @return bool
+	 */
+	function faz_is_machine_readable_request() {
+		if ( function_exists( 'is_feed' ) && is_feed() ) {
+			return true;
+		}
+		if ( function_exists( 'is_robots' ) && is_robots() ) {
+			return true;
+		}
+		if ( function_exists( 'is_trackback' ) && is_trackback() ) {
+			return true;
+		}
+		// Core added is_favicon() in 5.4; the plugin floor is 5.0.
+		if ( function_exists( 'is_favicon' ) && is_favicon() ) {
+			return true;
+		}
+		/**
+		 * Filter whether this request is machine-readable and must never have
+		 * its content rewritten by the blocker.
+		 *
+		 * @since 1.27.0
+		 * @param bool $is_machine_readable Whether to skip blocking entirely.
+		 */
+		return (bool) apply_filters( 'faz_is_machine_readable_request', false );
+	}
+}
 if ( ! function_exists( 'faz_is_banner_preview_request' ) ) {
 
 	/**
@@ -226,12 +269,37 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 	function faz_disable_banner() {
 		global $wp_customize;
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended,WordPress.Security.NonceVerification.Missing
-		if ( isset( $_GET['et_fb'] ) || ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED )
-		|| isset( $_GET['elementor-preview'] )
-		|| isset( $_POST['cs_preview_state'] )
-		|| isset( $wp_customize )
-		|| ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) )
-		{
+
+		// A builder-preview marker in the URL is NOT proof of a builder
+		// preview. These markers used to be honoured on presence alone — no
+		// capability check, and no check that the builder was even installed —
+		// and this function gates every destructive layer we have: the output
+		// buffer, the script/style/inline tag filters and both content
+		// filters. `?elementor-preview=1` therefore served any anonymous
+		// visitor a page with every tracker unblocked and no banner, on any
+		// site, including sites with no page builder at all. A crawler, a
+		// shared link or a screenshot tool was enough to produce a
+		// pre-consent tracking page.
+		//
+		// Editing is the capability the real preview always has, and the
+		// builder's own constant/function is the proof it is installed.
+		// Upstream carries the same markers, but there they only hide the
+		// banner — we wired them into blocking, so the blast radius is ours.
+		$faz_can_preview = function_exists( 'current_user_can' ) && current_user_can( 'edit_posts' );
+
+		if ( $faz_can_preview
+			&& ( ( isset( $_GET['et_fb'] ) && function_exists( 'et_fb_is_enabled' ) )
+				|| ( defined( 'ET_FB_ENABLED' ) && ET_FB_ENABLED )
+				|| ( isset( $_GET['elementor-preview'] ) && did_action( 'elementor/loaded' ) )
+				|| ( isset( $_POST['cs_preview_state'] ) && defined( 'CS_VERSION' ) ) )
+		) {
+			return true;
+		}
+
+		// The Customizer is core, not a third-party builder: it authenticates
+		// on its own and $wp_customize only exists inside it.
+		if ( isset( $wp_customize )
+			|| ( function_exists( 'is_customize_preview' ) && is_customize_preview() ) ) {
 			return true;
 		}
 		// Bricks Builder visual editor (?bricks=run) and its preview iframe
@@ -239,9 +307,9 @@ if ( ! function_exists( 'faz_disable_banner' ) ) {
 		// the_content filter, so the banner template would otherwise paint
 		// on top of the editor canvas and block element clicks. Reported on
 		// gooloo.de (#87 follow-up).
-		if ( ( isset( $_GET['bricks'] ) && 'run' === $_GET['bricks'] )
-			|| isset( $_GET['bricks_preview'] )
-			|| isset( $_GET['_bricksmode'] )
+		if ( ( $faz_can_preview && isset( $_GET['bricks'] ) && 'run' === $_GET['bricks'] )
+			|| ( $faz_can_preview && isset( $_GET['bricks_preview'] ) )
+			|| ( $faz_can_preview && isset( $_GET['_bricksmode'] ) )
 			|| ( function_exists( 'bricks_is_builder' ) && bricks_is_builder() )
 			|| ( function_exists( 'bricks_is_builder_main' ) && bricks_is_builder_main() )
 			|| ( function_exists( 'bricks_is_builder_iframe' ) && bricks_is_builder_iframe() ) )
@@ -742,6 +810,86 @@ if ( ! function_exists( 'faz_privacy_eraser' ) ) {
 			'messages'       => $messages,
 			'done'           => $done,
 		);
+	}
+}
+
+if ( ! function_exists( 'faz_region_map' ) ) {
+	/**
+	 * The canonical region-key to country-code table.
+	 *
+	 * This is the single definition in the plugin. It used to be written out
+	 * twice — once in Frontend::is_country_in_regions() and once in
+	 * AMP_Consent::country_in_regions(), the second one carrying a docblock
+	 * that called itself a mirror of the first. Hand-copied mirrors drift:
+	 * the 'za' bucket was added to the Frontend table and never to the AMP
+	 * one, and the divergence stayed invisible only because a single-country
+	 * region token also matches through the direct-country-code fallback in
+	 * faz_country_in_regions(). A multi-country region added to one table and
+	 * not the other would not have been rescued that way. Both call sites now
+	 * read this array, so "the two tables are identical" is a property of the
+	 * code rather than something a reviewer has to re-check by eye.
+	 *
+	 * The 'eu' preset deliberately EXCLUDES GB, matching REGION_PRESETS.EU in
+	 * admin/assets/js/pages/banner.js: the UK has its own data-protection
+	 * regime (UK GDPR) and its own 'uk' bucket. Geolocation::$eu_countries is
+	 * a separate concern (an EU+UK shorthand for "is this visitor under any
+	 * GDPR-class law") and is intentionally not derived from this table.
+	 *
+	 * @since 1.26.0
+	 * @return array<string, string[]> Lowercase region key => uppercase ISO 3166-1 alpha-2 codes.
+	 */
+	function faz_region_map() {
+		return array(
+			'eu' => array(
+				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
+				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
+				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
+				// EEA.
+				'IS', 'LI', 'NO',
+			),
+			'uk' => array( 'GB' ),
+			'us' => array( 'US' ),
+			'ca' => array( 'CA' ),
+			'br' => array( 'BR' ),
+			'au' => array( 'AU' ),
+			'jp' => array( 'JP' ),
+			'ch' => array( 'CH' ),
+			'za' => array( 'ZA' ),
+		);
+	}
+}
+
+if ( ! function_exists( 'faz_country_in_regions' ) ) {
+	/**
+	 * Whether a country code belongs to any of the given region groups.
+	 *
+	 * Region keys are matched case-insensitively against faz_region_map(). A
+	 * token that is not a known region key is treated as a direct country code
+	 * (e.g. 'ZA' before the 'za' bucket existed), so publisher configurations
+	 * naming a plain ISO code keep working. Unmatched means false.
+	 *
+	 * @since 1.26.0
+	 * @param string   $country_code ISO 3166-1 alpha-2 country code.
+	 * @param string[] $regions      Region keys ('eu', 'uk', ...) or direct country codes.
+	 * @return bool True when $country_code matches any entry in $regions.
+	 */
+	function faz_country_in_regions( $country_code, $regions ) {
+		$country_code = strtoupper( (string) $country_code );
+		$region_map   = faz_region_map();
+
+		foreach ( (array) $regions as $region ) {
+			$region = strtolower( (string) $region );
+			if ( isset( $region_map[ $region ] ) ) {
+				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
+					return true;
+				}
+			} elseif ( strtoupper( $region ) === $country_code ) {
+				// Direct country code match (e.g., 'ZA' for South Africa).
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
 

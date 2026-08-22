@@ -1077,6 +1077,36 @@ body[class*="faz-cookie-manager"] #wpbody-content {
 	0%, 100% { opacity: 0.7; }
 	50% { opacity: 1; }
 }
+/* A finished-but-unsaved run. The bar stops pulsing because nothing is still
+   happening, and turns amber because the result is being held, not lost. */
+.faz-scan-progress-held .faz-scan-bar {
+	animation: none;
+	background: var(--faz-warning);
+	opacity: 1;
+}
+.faz-scan-held {
+	margin-top: 8px;
+	padding: 10px 12px;
+	border: 1px solid var(--faz-warning);
+	border-radius: var(--faz-radius-sm);
+	background: var(--faz-warning-light);
+}
+.faz-scan-held-text {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.faz-scan-held-detail {
+	margin: 6px 0 0;
+	font-size: 12px;
+	color: var(--faz-text-muted);
+}
+.faz-scan-held-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 10px;
+}
 
 .faz-stale-bar {
 	margin-bottom: 10px;
@@ -1958,6 +1988,30 @@ body.auto-fold #faz-b-fixed-bottom { left: 36px; }
 	font-weight: 600;
 	width: 40%;
 	color: var(--faz-text-secondary);
+}
+
+/*
+ * Multi-column variant, for a status table whose cells are DATA rather than
+ * label:value pairs (System Status → "Recently Blocked Server Cookies").
+ *
+ * Scoping, deliberately: the two selectors below reach a table only if it
+ * carries .faz-status-table-data or has a <thead>, and the four label:value
+ * tables on that page have neither. So no override here can travel to them —
+ * which is why this is a variant rather than an edit to the shared rules.
+ */
+.faz-status-table thead th {
+	padding: 6px 12px;
+	border-bottom: 2px solid var(--faz-border);
+	font-size: 12px;
+	font-weight: 600;
+	text-align: left;
+	white-space: nowrap;
+	color: var(--faz-text-secondary);
+}
+.faz-status-table-data td:first-child {
+	font-weight: 400;
+	width: auto;
+	color: var(--faz-text);
 }
 
 /* ── Guided setup wizard ────────────────────────────────────── */

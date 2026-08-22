@@ -19,13 +19,16 @@
 
 	// Banner the page is currently editing. Read from the ?banner_id= query
 	// string so the multi-banner switcher (1.14.0+) can deep-link to a
-	// specific row. Falls back to 1 (the system-default banner shipped
-	// with every install) when the param is missing or malformed.
+	// specific row. On a bare editor URL PHP supplies the current default row;
+	// this matters after deletion/import flows where the surviving default no
+	// longer has the original ID 1.
 	var bannerId = (function () {
 		try {
 			var match = (window.location.search || '').match(/[?&]banner_id=(\d+)/);
 			var parsed = match ? parseInt(match[1], 10) : NaN;
-			return isFinite(parsed) && parsed > 0 ? parsed : 1;
+			var fallback = parseInt((window.fazConfig && window.fazConfig.bannerId) || 0, 10);
+			if (isFinite(parsed) && parsed > 0) return parsed;
+			return isFinite(fallback) && fallback > 0 ? fallback : 1;
 		} catch (e) { return 1; }
 	})();
 	var bannerData = null; // full API response
@@ -143,10 +146,100 @@
 	var lawEl = document.getElementById('faz-b-law');
 	if (lawEl) {
 		lawEl.addEventListener('change', function () {
+			// Only here is clamping legitimate: the admin just changed the
+			// regulation, so a value outside the new bounds has to move — and
+			// the helper announces it rather than rewriting in silence.
+			syncConsentExpiryConstraints(lawEl.value, true);
 			toggleDoNotSellColorRow(lawEl.value);
 			syncClassicLawCompat();
 			syncLawNoticeContent(lawEl.value);
 		});
+	}
+
+	// Typing a lifetime the runtime will not honour must say so at the moment it
+	// is typed, not only on the next page load. clamp stays false here: the
+	// admin's number is left exactly as entered.
+	var expiryFieldEl = document.getElementById('faz-b-expiry');
+	if (expiryFieldEl) {
+		expiryFieldEl.addEventListener('change', function () {
+			syncConsentExpiryConstraints(lawEl ? lawEl.value : 'gdpr', false);
+		});
+	}
+
+	// Keep the editor and the runtime on the same law-aware consent lifetime.
+	// The bounds must match Frontend::normalize_consent_expiry() exactly.
+	//
+	// GDPR-family has a CAP and no floor: six months is a maximum, and asking
+	// again sooner is more protective, so 30 days is a legitimate choice the
+	// editor must not overwrite. CCPA has a floor, because a consumer who opted
+	// out may not be re-asked for twelve months.
+	//
+	// `clamp` is only ever true for a user-initiated law change. On page load
+	// and on every form sync the bounds are refreshed but the VALUE is left
+	// alone — rewriting it there made the field show 180 while the database
+	// still held 30, so the form lied about persisted state until an unrelated
+	// save destroyed the admin's number.
+	function syncConsentExpiryConstraints(law, clamp) {
+		var expiryEl = document.getElementById('faz-b-expiry');
+		if (!expiryEl) return;
+		var isCcpa = law === 'ccpa';
+		var min = isCcpa ? 365 : 1;
+		var max = isCcpa ? 3650 : 182;
+		expiryEl.min = String(min);
+		expiryEl.max = String(max);
+		expiryEl.step = '1';
+		var hint = document.getElementById('faz-b-expiry-hint');
+		if (!clamp) {
+			// Leaving the VALUE alone is right — but staying silent about it is
+			// not. Frontend::normalize_consent_expiry() applies these same bounds
+			// when the banner is served, so a stored CCPA lifetime of 30 shows 30
+			// here and reaches visitors as 365. Not clamping avoided one lie
+			// (about what is stored) by telling another (about what is served);
+			// saying both numbers is the only version that is true.
+			if (!hint) return;
+			var stored = parseInt(expiryEl.value, 10);
+			var served = isFinite(stored) ? Math.max(min, Math.min(max, stored)) : stored;
+			if (isFinite(stored) && served !== stored) {
+				hint.textContent = __('banner.expiryRuntimeBounded', 'This banner stores %1$d days, but visitors are served %2$d days: the selected regulation bounds the lifetime when the banner is served.')
+					.replace('%1$d', String(stored))
+					.replace('%2$d', String(served));
+				hint.style.display = '';
+				// Tagged so this branch only ever clears its OWN message: the clamp
+				// notice below is managed by the clamp path, and a runtime notice
+				// wiping it would delete the explanation of a rewrite the admin has
+				// just watched happen.
+				hint.setAttribute('data-notice', 'runtime');
+			} else if ('runtime' === hint.getAttribute('data-notice')) {
+				hint.style.display = 'none';
+				hint.textContent = '';
+				hint.removeAttribute('data-notice');
+			}
+			return;
+		}
+
+		var value = parseInt(expiryEl.value, 10);
+		if (!isFinite(value)) return;
+		var clamped = Math.max(min, Math.min(max, value));
+		if (clamped === value) {
+			// Nothing moved this time. The notice must go: left standing it keeps
+			// reporting an older clamp, with two numbers that no longer describe
+			// the field — a stale explanation is worse than none.
+			if (hint) { hint.style.display = 'none'; hint.textContent = ''; hint.removeAttribute('data-notice'); }
+			return;
+		}
+
+		expiryEl.value = String(clamped);
+		if (hint) {
+			// Say what changed and from what — a silent rewrite under the cursor
+			// is how an admin loses a deliberate setting without noticing. The
+			// template is translated server-side and carries %1$d / %2$d.
+			var tpl = hint.getAttribute('data-template') || '';
+			hint.textContent = tpl
+				? tpl.replace('%1$d', String(value)).replace('%2$d', String(clamped))
+				: '';
+			hint.style.display = '';
+			hint.setAttribute('data-notice', 'clamp');
+		}
 	}
 
 	FAZ.ready(function () {
@@ -1386,6 +1479,7 @@
 		var buttonDoNotSell = (noticeElements.buttons && noticeElements.buttons.elements && noticeElements.buttons.elements.donotSell) || {};
 		if (lawVal === 'gdpr' && buttonDoNotSell.status === true) lawVal = 'gdpr_ccpa';
 		setVal('faz-b-law', lawVal);
+		syncConsentExpiryConstraints(lawVal);
 		// Seed the law-change baseline so the first law change can compare against
 		// the right previous default. The per-law defaults themselves are already
 		// in fazConfig.lawNoticeDescriptions (localized for every language).
@@ -2036,6 +2130,8 @@
 		props.settings.theme = getVal('faz-b-theme');
 		var wallEl = document.getElementById('faz-b-soft-cookie-wall');
 		props.settings.softCookieWall = wallEl ? wallEl.checked : false;
+		var law = getVal('faz-b-law') || 'gdpr';
+		syncConsentExpiryConstraints(law);
 		if (!props.settings.consentExpiry) props.settings.consentExpiry = {};
 		props.settings.consentExpiry.status = true;
 		props.settings.consentExpiry.value = getVal('faz-b-expiry');
@@ -2050,7 +2146,6 @@
 		}
 
 		// Applicable law
-		var law = getVal('faz-b-law') || 'gdpr';
 		props.settings.applicableLaw = law === 'gdpr_ccpa' ? 'gdpr' : law;
 
 		// "Do Not Sell" button: on for ccpa/both, off for gdpr-only

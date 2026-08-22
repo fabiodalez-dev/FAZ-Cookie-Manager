@@ -19,9 +19,9 @@
  *      → Race condition on revisit: GCM emits `default denied` first, then
  *        `update granted`, but AdSense can fire before the update arrives.
  *        The fix is to emit `default` already-granted for returning visitors.
- *   4. "Paid Memberships Pro integration (Pay-or-Accept / PUR model)."
+ *   4. "Paid Memberships Pro privacy-preserving membership alternative."
  *      → Members on selected PMP levels must bypass the banner and be
- *        auto-granted consent across all categories.
+ *        necessary-only state with optional categories denied.
  */
 
 import { expect, test, type Page } from '../fixtures/wp-fixture';
@@ -533,7 +533,7 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 	/* ─────────────────────────────────────────────────────────────────
 	 * Report 4 — "Paid Memberships Pro integration (PUR model)"
 	 * ───────────────────────────────────────────────────────────────── */
-	test('R4: PMP-exempt member bypasses banner and is auto-granted consent', async ({ page, loginAsAdmin }) => {
+	test('R4: PMP-exempt member bypasses banner with optional purposes denied', async ({ page, loginAsAdmin }) => {
 		// Arrange — install the PMP mock fixture plugin and configure the
 		// integration to exempt level 2.
 		ensureFixturePlugin('faz-e2e-pmp-mock');
@@ -545,6 +545,10 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 		const before = await getSettings(page, nonce);
 
 		await updateSettings(page, nonce, {
+			consent_logs: {
+				status: true,
+				retention: before.consent_logs?.retention ?? 12,
+			},
 			integrations: {
 				paid_memberships_pro: {
 					enabled: true,
@@ -554,7 +558,7 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 		});
 
 		try {
-			// The PMP auto-grant cookie lists every cookie category slug from the DB.
+			// The PMP privacy cookie lists every visible category slug from the DB.
 			// If the test DB has accumulated hundreds of garbage categories from old
 			// test runs (e.g. faz-audit-perf-*, delete-regression-pr92-*), the
 			// URL-encoded cookie value can exceed the browser's 4096-byte limit and be
@@ -562,7 +566,7 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 			// category cache so the next PHP request sees the clean DB state.
 			// Remove any non-standard cookie categories accumulated by other test runs
 			// and nuke stale FAZ transients. Without this, the transient cache may
-			// still return hundreds of test categories → the PMP auto-grant cookie
+			// still return hundreds of test categories → the PMP privacy cookie
 			// would include them all → value exceeds the browser's 4096-byte limit →
 			// browser silently discards Set-Cookie → JS placeholder overwrites it.
 			wpEval(`
@@ -591,33 +595,53 @@ test.describe('User-reported regressions (v1.11.0 publisher report)', () => {
 			// Assert — banner must NOT be visible.
 			const bannerHidden = await page.locator('#faz-consent, [data-faz-tag="notice"]').first().isHidden({ timeout: 3_000 }).catch(() => true);
 			expect(bannerHidden, 'PMP-exempt member must not see the banner').toBe(true);
+			await expect(
+				page.locator('[data-faz-tag="revisit-consent"]').first(),
+				'PMP privacy state must retain a one-click preference/withdrawal entry point',
+			).toBeVisible({ timeout: 10_000 });
 
-			// Assert — consent cookie must be auto-granted with source:pmp.
+			// Assert — the privacy state is server-applied and source-tagged.
 			const consentCookie = (await page.context().cookies()).find((c) => c.name === 'fazcookie-consent');
-			expect(consentCookie, 'Exempt member must receive an auto-granted cookie server-side').toBeTruthy();
+			expect(consentCookie, 'Exempt member must receive a necessary-only cookie server-side').toBeTruthy();
 			const parsed = parseConsentCookieValue(decodeURIComponent(consentCookie!.value));
-			expect(parsed.action, 'Cookie must record an implicit user action').toBe('yes');
-			// The consent token MUST be "yes" (not "accepted" or any other
-			// human-readable label): script.js `_fazUnblock()` and the CCPA
-			// opt-out checkbox both gate on `consent === "yes"`, so a PMP
-			// auto-grant that used a different string would be server-side
-			// accepted but client-side script-blocked — the exact silent
-			// failure mode this assertion exists to prevent.
-			expect(parsed.consent, 'consent must be "yes" to match the token script.js expects').toBe('yes');
+			expect(parsed.action, 'automatic state must not impersonate a user action').toBe('auto');
+			expect(parsed.consent, 'aggregate consent must remain denied').toBe('no');
+			expect(parsed.necessary, 'strictly necessary storage remains available').toBe('yes');
+			for (const [slug, state] of Object.entries(parsed)) {
+				if (['action', 'consent', 'rev', 'source', 'necessary'].includes(slug)) continue;
+				expect(state, `optional category ${slug} must not be silently granted`).toBe('no');
+			}
+			expect(parsed.consentid, 'automatic necessary-only state must not create a persistent visitor identifier').toBeUndefined();
 			expect(parsed.source, 'Cookie must be tagged as sourced from PMP').toBe('pmp');
 
+			const audit = JSON.parse(wpEval(`
+				global $wpdb;
+				$row = $wpdb->get_row(
+					"SELECT status, categories FROM {$wpdb->prefix}faz_consent_logs WHERE categories LIKE '%meta.pmp_privacy%' ORDER BY log_id DESC LIMIT 1",
+					ARRAY_A
+				);
+				echo wp_json_encode($row ?: array());
+			`)) as { status?: string; categories?: string };
+			expect(audit.status, 'automatic PMP privacy state is counted as rejected, never accepted').toBe('rejected');
+			const auditCategories = JSON.parse(audit.categories ?? '{}') as Record<string, string>;
+			expect(auditCategories['meta.pmp_privacy'], 'audit row identifies the server-applied privacy source').toBe('yes');
+			expect(auditCategories.marketing, 'audit row records optional marketing as denied').toBe('no');
+
 			// Downgrade: clear the mock level, reload, verify the cookie
-			// is revoked so former members don't keep a stale auto-grant.
+			// is revoked so former members don't keep stale PMP-managed state.
 			setOption('faz_e2e_pmp_mock_levels', '');
 			await page.goto(`${WP_BASE}/`, { waitUntil: 'domcontentloaded' });
 			const consentAfter = (await page.context().cookies()).find((c) => c.name === 'fazcookie-consent');
-			// The auto-granted cookie must be gone (or at least not marked PMP).
+			// The PMP-managed cookie must be gone (or at least not marked PMP).
 			if (consentAfter) {
 				const parsedAfter = parseConsentCookieValue(decodeURIComponent(consentAfter.value));
 				expect(parsedAfter.source, 'After losing the exempt level, source:pmp cookie must be revoked').not.toBe('pmp');
 			}
 		} finally {
-			await updateSettings(page, nonce, { integrations: before.integrations ?? { paid_memberships_pro: { enabled: false, exempt_levels: [] } } });
+			await updateSettings(page, nonce, {
+				consent_logs: before.consent_logs ?? { status: true, retention: 12 },
+				integrations: before.integrations ?? { paid_memberships_pro: { enabled: false, exempt_levels: [] } },
+			});
 			deleteOption('faz_e2e_pmp_mock_levels');
 			try {
 				wp(['plugin', 'deactivate', 'faz-e2e-pmp-mock']);

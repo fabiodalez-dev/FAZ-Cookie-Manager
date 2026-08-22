@@ -458,16 +458,21 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 		test.setTimeout(240_000);
 		const nonce = await openCookiesPage(page, loginAsAdmin);
 		const token = makeToken('omni-scan');
+		const directScanId = 'b'.repeat(32);
+		let directSessionOpen = false;
 		setLabToken(token);
 		enableWooLabScenario();
 		touchPosts('page', ['faz-lab-js-basic']);
 
 		try {
+			// scan_id is a required, validated route arg (32 lowercase hex).
 			const discoverResponse = await fazApiPost<DiscoverResponse>(page, nonce, 'scans/discover', {
 				max_pages: 100,
 				fingerprint: '',
+				scan_id: directScanId,
 			});
 			expect(discoverResponse.status).toBe(200);
+			directSessionOpen = true;
 			expect(discoverResponse.data.total).toBeGreaterThan(0);
 
 			const combinedUrls = [...discoverResponse.data.urls, ...discoverResponse.data.priority_urls];
@@ -475,6 +480,16 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 			for (const expectedUrl of [wooUrls.cart, wooUrls.checkout, wooUrls.myaccount, wooUrls.product, wooUrls.shop]) {
 				expect(combinedUrls).toContain(expectedUrl);
 			}
+
+			// The direct discovery above opens the same per-user capture lock used
+			// by the UI. Release it before exercising the UI lifecycle; otherwise
+			// the second discovery is correctly rejected as a concurrent scan.
+			const abortResponse = await fazApiPost<{ aborted: boolean }>(page, nonce, 'scans/abort', {
+				scan_id: directScanId,
+			});
+			expect(abortResponse.status).toBe(200);
+			expect(abortResponse.data.aborted).toBe(true);
+			directSessionOpen = false;
 
 			await deleteCookiesByPrefix(page, nonce, '_faz_lab_');
 
@@ -498,7 +513,10 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 			});
 
 			await page.locator('#faz-scan-btn').click();
-			await page.locator('#faz-scan-dropdown .faz-dropdown-item[data-depth="100"]').click();
+			// Direct discovery already verifies the 100-page priority catalogue.
+			// Keep the UI lifecycle assertion bounded to the quick scan so it tests
+			// request routing/import completion without re-crawling that catalogue.
+			await page.locator('#faz-scan-dropdown .faz-dropdown-item[data-depth="10"]').click();
 
 			const uiDiscoverResponse = await uiDiscoverPromise;
 			const uiDiscoverData = (await uiDiscoverResponse.json()) as DiscoverResponse;
@@ -516,6 +534,9 @@ test.describe.serial('Recent PR omnibus regressions', () => {
 			const cookies = await listCookiesUntil(page, nonce, [`_faz_lab_js_basic_${token}`]);
 			expect(cookies.some((entry: any) => String(entry.name ?? '') === `_faz_lab_js_basic_${token}`)).toBe(true);
 		} finally {
+			if (directSessionOpen) {
+				await fazApiPost(page, nonce, 'scans/abort', { scan_id: directScanId }).catch(() => {});
+			}
 			disableLabFlags();
 			await deleteCookiesByPrefix(page, nonce, '_faz_lab_').catch(() => {});
 		}

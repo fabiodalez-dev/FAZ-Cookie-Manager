@@ -415,6 +415,18 @@ function _fazCurrentScopeFingerprint() {
 }
 function _fazConsentScopeChanged() {
     if (!_fazHasConsentCookie || !_fazStore || !_fazStore._geoRouting) return false;
+    // The PMP membership alternative is a server-refreshed, necessary-only
+    // privacy state, not consent. It is safe across every banner/law scope and
+    // deliberately carries no user identifier or scope fingerprint. Requiring
+    // a fingerprint here would invalidate action:auto under strict geo mode and
+    // reopen the notice, defeating the paid no-tracking alternative. Keep the
+    // exception narrow: a forged source marker cannot preserve action:yes or
+    // consent:yes, so it can never manufacture permission.
+    if (
+        fazcookieConsentMap.source === "pmp" &&
+        fazcookieConsentMap.action === "auto" &&
+        fazcookieConsentMap.consent === "no"
+    ) return false;
     const currentBannerSlug = _fazCurrentBannerSlug();
     const currentLaw = _fazCurrentLaw();
     // Read directly from fazcookieConsentMap — this function runs at module
@@ -797,20 +809,45 @@ function _fazInitOperations() {
         _fazInvalidateStoredConsent();
         _fazStoredAction = null;
     }
-    // Honour Global Privacy Control before deciding whether to show the banner.
-    // If the visitor's browser asserts GPC and they have NOT already made an
-    // explicit choice on this site, auto-apply an opt-out and skip the banner.
-    // An explicit prior action always wins over the signal, so this is gated on
-    // !_fazStoredAction (and is idempotent: once recorded, action becomes "yes"
-    // and this branch no longer runs).
-    if (!_fazStoredAction && !_fazPreviewEnabled() && _fazGpcActive()) {
-        _fazApplyGpcOptOut();
-        _fazRemoveBanner();
-        // This branch returns early, so without its own call the one page where
-        // GPC is applied would be the single page load emitting no ready event.
-        // (Every load after it takes the returning-visitor branch, since
-        // _fazApplyGpcOptOut records action:"yes".)
-        _fazFireConsentReadyEvent('gpc');
+    // Honour a standing [faz_do_not_sell] opt-out before anything unblocks.
+    // Runs regardless of a stored action — the form opt-out postdates the
+    // stored consent — and no-ops once the store already reflects it.
+    var _fazDnsmpiActive = !_fazPreviewEnabled() && _fazDnsmpiCookieActive();
+    if (_fazDnsmpiActive) {
+        // A fresh visitor has no category state yet. Seed jurisdiction defaults
+        // in memory first, then let DNSMPI deny every sell/share category before
+        // any unblock pass can run. Returning below prevents _fazSetInitialState
+        // from overwriting that deny with opt-out-family defaults.
+        if (!_fazStoredAction) {
+            _fazSeedInitialState();
+        }
+        var _fazDnsmpiChanged = _fazApplyDnsmpiOptOut();
+        if (!_fazStoredAction && !_fazGpcActive()) {
+            // DNSMPI is targeted, not blanket consent: keep the banner available
+            // for choices outside sale/sharing while preserving the opt-out.
+            _fazShowBanner();
+            _fazFireConsentReadyEvent(_fazDnsmpiChanged ? 'dnsmpi' : 'init');
+            return;
+        }
+    }
+    // GPC is a binding browser signal and therefore overrides conflicting
+    // sale/share grants even when the visitor consented previously. On a first
+    // visit seed the jurisdiction defaults in memory before applying the
+    // targeted opt-out; unlike _fazSetInitialState this seed cannot temporarily
+    // unblock a sold/shared tracker before GPC is written.
+    if (!_fazPreviewEnabled() && _fazGpcActive()) {
+        if (!_fazStoredAction) {
+            _fazSeedInitialState();
+        }
+        var _fazGpcChanged = _fazApplyGpcOptOut();
+        if (_fazStoredAction) {
+            _fazRemoveBanner();
+        } else {
+            // GPC is not blanket consent. Keep the notice/preferences visible
+            // so separate sensitive or ordinary opt-in choices remain possible.
+            _fazShowBanner();
+        }
+        _fazFireConsentReadyEvent(_fazGpcChanged ? 'gpc' : (_fazStoredAction ? 'restore' : 'init'));
         return;
     }
     if (!_fazStoredAction || _fazPreviewEnabled()) {
@@ -907,16 +944,14 @@ function _fazFireConsentReadyEvent(action) {
  * `Sec-GPC: 1` request header). Under CCPA/CPRA §7025 it is a legally
  * binding opt-out of the sale/sharing of personal information and is
  * recognised by the California Attorney General; honouring it is also good
- * practice under the GDPR/ePrivacy. We act on it only when the site owner
- * enabled "Respect Global Privacy Control" in the banner behaviours.
+ * practice under the GDPR/ePrivacy. A binding user-agent preference is not
+ * conditional on a publisher-side toggle.
  *
  * @returns {boolean}
  */
 function _fazGpcActive() {
     try {
         return !!(
-            _fazStore && _fazStore._bannerConfig && _fazStore._bannerConfig.behaviours &&
-            _fazStore._bannerConfig.behaviours.respectGPC === true &&
             typeof navigator !== 'undefined' &&
             navigator.globalPrivacyControl === true
         );
@@ -926,69 +961,143 @@ function _fazGpcActive() {
 }
 
 /**
- * Record an automatic opt-out in response to a GPC signal.
+ * Whether the visitor carries the [faz_do_not_sell] opt-out cookie.
  *
- * Mirrors the reject path of _fazAcceptCookies() but is law-aware and does
- * NOT depend on any banner DOM (the banner is never shown in this flow):
- *   - GDPR / opt-in laws: deny every non-necessary category.
- *   - CCPA / opt-out laws: deny every sale/sharing category. A category whose
- *     defaultConsent.ccpa === true is exempt (necessary) and stays granted.
- * The choice is persisted with a `gpc:1` marker so the recorded state is
- * self-describing, and a normal consent event is fired so downstream
- * integrations (GCM, TCF, consent logger) react exactly as they would to a
- * manual reject.
+ * Set (non-httponly, value '1') by the DNSMPI form handler and cleared on
+ * rescission. The server blocks sell/share scripts when it sees the cookie;
+ * this read is what lets the CLIENT honour the same opt-out — without it,
+ * a stale stored consent ("marketing: yes" from before the opt-out) made
+ * _fazUnblockServerSide restore exactly the scripts the server had blocked.
+ *
+ * @returns {boolean}
  */
-function _fazApplyGpcOptOut() {
-    // First user-equivalent action: generate the consentid now (it is
-    // deliberately not created before any action, per ePrivacy Art. 5(3)).
-    _fazSetConsentID();
-    ref._fazSetInStore("action", "yes");
-    ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
-    ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
-    ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
-    ref._fazSetInStore("consent", "no");
-    // Audit marker: this opt-out was driven by a Global Privacy Control signal,
-    // not an explicit on-page click.
-    ref._fazSetInStore("gpc", "1");
+function _fazDnsmpiCookieActive() {
+    return document.cookie.split(";").some(function (part) {
+        return part.trim().indexOf("fazcookie-dnsmpi=1") === 0;
+    });
+}
 
-    var law = _fazGetLaw();
-    var responseCategories = { accepted: [], rejected: [], action: "reject", gpc: true };
+/**
+ * Reconcile the stored consent with a standing [faz_do_not_sell] opt-out.
+ *
+ * Denies every sell/share category the store still grants, shreds their
+ * cookies, and fires a normal consent event so downstream integrations
+ * (GCM, UET, TCF) see the revocation. Unlike the GPC path this MUST run even
+ * when a stored action exists: the form opt-out was expressed AFTER the
+ * stored consent, so it is the later, controlling choice (Cal. Civ. Code
+ * §1798.120 — a business must honor the opt-out over a prior consent).
+ * No-ops when nothing is left to revoke, so it is idempotent across loads.
+ *
+ * @returns {boolean} Whether the stored state changed.
+ */
+function _fazApplyDnsmpiOptOut() {
     var categories = _fazStore._categories || [];
-    // GPC is a legally-binding opt-out (CPPA §7025) that overrides ANY prior
-    // consent, including explicit per-service allows. Clear the svc.*/ck.*
-    // overrides BEFORE the per-category shredder runs below, otherwise a stale
-    // svc.<id>:yes would make _fazRemoveDeadCookies skip a cookie the GPC signal
-    // requires deleting.
-    _fazClearStoredServiceConsent();
+    var responseCategories = { accepted: [], rejected: [], action: "custom", dnsmpi: true };
+    var saleShareSlugs = [];
+    var changed = ref._fazGetFromStore("dnsmpi") !== "1";
     for (var i = 0; i < categories.length; i++) {
         var category = categories[i];
-        var deny;
-        if (law === 'gdpr') {
-            deny = !category.isNecessary;
-        } else {
-            // Opt-out regimes: exempt categories carry defaultConsent.ccpa === true.
-            // A category flagged ccpaDoNotSell (sold or shared) is ALWAYS denied
-            // under a GPC opt-out, even when a runtime ruleset granted it — GPC is
-            // a legally-binding sale/share opt-out (CPPA §7025) that overrides the
-            // ruleset's default grant, mirroring the server-side get_blocked_categories.
-            deny = !!category.ccpaDoNotSell || !(category.defaultConsent && category.defaultConsent.ccpa === true);
+        var sellShare = !category.isNecessary && !!category.ccpaDoNotSell;
+        if (sellShare) {
+            saleShareSlugs.push(category.slug);
+            if (ref._fazGetFromStore(category.slug) !== "no") changed = true;
         }
-        var valueToSet = deny ? "no" : "yes";
-        ref._fazSetInStore(category.slug, valueToSet);
-        if (deny) {
-            responseCategories.rejected.push(category.slug);
-            _fazRemoveDeadCookies(category);
+    }
+    if (_fazClearStoredServiceConsent(saleShareSlugs)) changed = true;
+    if (!changed) return false;
+
+    // A DNSMPI cookie can arrive without a consent record (for example after a
+    // consent-cookie cleanup). Persist a real opt-out action and scope so the
+    // category denies below survive reload and remain auditable.
+    if (!ref._fazGetFromStore("action")) {
+        _fazSetConsentID();
+        ref._fazSetInStore("action", "yes");
+        ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+        ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+        ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+        ref._fazSetInStore("consent", "no");
+    }
+    // Audit marker, mirroring the gpc:1 marker: the recorded state says WHY it
+    // changed without a banner interaction.
+    ref._fazSetInStore("dnsmpi", "1");
+    // Targeted overrides were cleared before this audit write so a stale
+    // svc.<id>:yes cannot bypass the category opt-out.
+    for (var r = 0; r < categories.length; r++) {
+        if (saleShareSlugs.indexOf(categories[r].slug) === -1) continue;
+        ref._fazSetInStore(categories[r].slug, "no");
+        _fazRemoveDeadCookies(categories[r]);
+    }
+    for (var j = 0; j < categories.length; j++) {
+        if (ref._fazGetFromStore(categories[j].slug) === "yes") {
+            responseCategories.accepted.push(categories[j].slug);
         } else {
-            responseCategories.accepted.push(category.slug);
+            responseCategories.rejected.push(categories[j].slug);
+        }
+    }
+    _fazUnblock();
+    _fazFireEvent(responseCategories);
+    return true;
+}
+
+/**
+ * Record an automatic opt-out in response to a GPC signal.
+ *
+ * Applies only the sale/sharing opt-out represented by GPC. It does not turn
+ * the signal into blanket GDPR rejection and does not erase unrelated choices.
+ * The choice is persisted with a `gpc:1` marker so the recorded state is
+ * self-describing, and a normal consent event is fired so downstream
+ * integrations react exactly as they would to a manual targeted withdrawal.
+ *
+ * @returns {boolean} Whether the stored state changed.
+ */
+function _fazApplyGpcOptOut() {
+    var responseCategories = { accepted: [], rejected: [], action: "custom", gpc: true };
+    var categories = _fazStore._categories || [];
+    var saleShareSlugs = [];
+    var changed = ref._fazGetFromStore("gpc") !== "1";
+
+    for (var i = 0; i < categories.length; i++) {
+        var category = categories[i];
+        if (!category.isNecessary && !!category.ccpaDoNotSell) {
+            saleShareSlugs.push(category.slug);
+            if (ref._fazGetFromStore(category.slug) !== "no") changed = true;
         }
     }
 
-    // Deny IAB vendors, mirroring reject. (Per-service overrides were already
-    // cleared above, before the shredder, so GPC fully overrides them.)
-    _fazSaveVendorConsent("reject");
+    // Clear only overrides belonging to sale/share categories. GPC must not
+    // erase an unrelated functional preference; an unknown override is removed
+    // fail-closed because it cannot be proven exempt.
+    if (_fazClearStoredServiceConsent(saleShareSlugs)) changed = true;
+
+    // First signal-driven action: create the strictly-necessary audit record
+    // now, never before the signal is actually processed.
+    if (!ref._fazGetFromStore("action")) {
+        _fazSetConsentID();
+        ref._fazSetInStore("action", "yes");
+        ref._fazSetInStore(_FAZ_SCOPE_BANNER_KEY, _fazCurrentBannerSlug());
+        ref._fazSetInStore(_FAZ_SCOPE_LAW_KEY, _fazCurrentLaw());
+        ref._fazSetInStore(_FAZ_SCOPE_FP_KEY, _fazCurrentScopeFingerprint());
+        ref._fazSetInStore("consent", "no");
+    }
+    ref._fazSetInStore("gpc", "1");
+
+    for (var j = 0; j < categories.length; j++) {
+        var current = categories[j];
+        if (saleShareSlugs.indexOf(current.slug) !== -1) {
+            ref._fazSetInStore(current.slug, "no");
+            _fazRemoveDeadCookies(current);
+        }
+        if (ref._fazGetFromStore(current.slug) === "yes") responseCategories.accepted.push(current.slug);
+        else responseCategories.rejected.push(current.slug);
+    }
+
+    // Vendor grants can represent advertising/sale processing, so the GPC
+    // signal revokes them even though unrelated category choices are retained.
+    if (saleShareSlugs.length) _fazSaveVendorConsent("reject");
 
     _fazUnblock();
-    _fazFireEvent(responseCategories);
+    if (changed) _fazFireEvent(responseCategories);
+    return changed;
 }
 
 function _fazPreviewEnabled() {
@@ -1025,7 +1134,19 @@ function _fazToggleAriaExpandStatus(selector, forceDefault = null) {
  * Sets the initial state of the plugin.
  */
 function _fazSetInitialState() {
-    const activeLaw = _fazGetLaw()
+    const responseCategories = _fazSeedInitialState();
+    _fazUnblock();
+    _fazFireEvent(responseCategories);
+}
+
+/**
+ * Seed jurisdiction defaults in memory without executing any newly-allowed
+ * scripts. This separation lets GPC apply its sale/share override first.
+ *
+ * @returns {{accepted: string[], rejected: string[], action: string}}
+ */
+function _fazSeedInitialState() {
+    const activeLaw = _fazGetLaw();
     // Write only to the in-memory Map — do NOT call _fazSetInStore() here.
     // _fazSetInStore() serialises and writes fazcookie-consent on every call,
     // which would set a stable tracker (consentid) before the user takes any
@@ -1068,8 +1189,7 @@ function _fazSetInitialState() {
         else responseCategories.accepted.push(category.slug);
         ref._fazConsentStore.set(category.slug, valueToSet);
     }
-    _fazUnblock();
-    _fazFireEvent(responseCategories);
+    return responseCategories;
 }
 
 /**
@@ -2840,6 +2960,14 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     }
     const activeLaw = _fazGetLaw();
     const ccpaCheckBoxValue = _fazFindCheckBoxValue();
+    // A currently asserted browser GPC signal and a standing DNSMPI request
+    // remain controlling opt-outs while the visitor edits other preferences.
+    // In particular, an Accept All click on the same page must not transiently
+    // re-grant sale/share before the next request/boot reconciles the store.
+    const gpcActive = !_fazPreviewEnabled() && _fazGpcActive();
+    const dnsmpiActive = !_fazPreviewEnabled() && _fazDnsmpiCookieActive();
+    const bindingSaleShareOptOut = gpcActive || dnsmpiActive;
+    const bindingSaleShareSlugs = [];
     _fazClearStoredServiceConsent();
 
     // Generate a consentid now (first user action) — deferred from init so no
@@ -2865,6 +2993,8 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
     }
     const responseCategories = { accepted: [], rejected: [], action: choice };
     const rejectedCategoryObjects = [];
+    let separateOptInWithheld = false;
+    let saleShareWithheld = false;
     for (const category of _fazStore._categories) {
         let valueToSet = "no";
         if (activeLaw === 'gdpr') {
@@ -2874,6 +3004,32 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
                         (choice === "custom" && !_fazFindCheckBoxValue(category.slug)))
                     ? "no"
                     : "yes";
+            // A jurisdiction that requires a separate sensitive-data opt-in
+            // cannot bundle that grant into Accept All. The visitor may grant
+            // it only through its own preference toggle and Save action.
+            if (choice === "all" && category.requiresSeparateOptIn && !category.isNecessary) {
+                valueToSet = "no";
+                separateOptInWithheld = true;
+            }
+            // "Both" (gdpr_ccpa) encoding: the US Do-Not-Sell entry point
+            // renders alongside the opt-in banner, but this branch reads only
+            // the per-category toggles — and the opt-out popup renders none,
+            // so a Do-Not-Sell confirm fell back to the stored values and
+            // revoked nothing for exactly the visitors the entry point exists
+            // for (prior accept-all). When the save originates from the
+            // opt-out popup with the box ticked, revoke every sell/share
+            // category, mirroring the ccpa branch below. Scoped to the popup
+            // origin so a later preference-center save (origin
+            // 'settings-button') keeps honouring the visitor's toggles.
+            if (
+                valueToSet === "yes" &&
+                ccpaCheckBoxValue &&
+                !category.isNecessary &&
+                !category.defaultConsent.ccpa &&
+                _fazActivePreferenceTag() === "optout-popup"
+            ) {
+                valueToSet = "no";
+            }
         } else if (_fazStore._runtimeGeo && category.defaultFromRuleset && (choice === "reject" || choice === "custom")) {
             // Runtime geo-routing can serve a CCPA (opt-out) banner as a
             // fallback to a visitor whose resolved ruleset is opt-in. The
@@ -2898,11 +3054,27 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
         } else {
             valueToSet = ccpaCheckBoxValue && !category.defaultConsent.ccpa ? "no" : "yes";
         }
+        if (!category.isNecessary && category.ccpaDoNotSell) {
+            bindingSaleShareSlugs.push(category.slug);
+            if (bindingSaleShareOptOut) {
+                if (valueToSet !== "no") saleShareWithheld = true;
+                valueToSet = "no";
+            }
+        }
         ref._fazSetInStore(`${category.slug}`, valueToSet);
         if (valueToSet === "no") {
             responseCategories.rejected.push(category.slug);
             rejectedCategoryObjects.push(category);
         } else responseCategories.accepted.push(category.slug);
+    }
+    if (separateOptInWithheld || saleShareWithheld) responseCategories.action = "custom";
+    if (gpcActive) {
+        ref._fazSetInStore("gpc", "1");
+        responseCategories.gpc = true;
+    }
+    if (dnsmpiActive) {
+        ref._fazSetInStore("dnsmpi", "1");
+        responseCategories.dnsmpi = true;
     }
     // Handle per-service consent.
     if (_fazStore._perServiceConsent && _fazStore._services) {
@@ -2912,6 +3084,13 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
         if (_fazStore._perCookieConsent) {
             _fazStoreCustomCookieConsent(choice);
         }
+    }
+    // Granular Save/Accept handlers run after the category loop and could have
+    // recreated svc.* / ck.* grants inside a denied sell/share category. Drop
+    // those targeted overrides once more so the binding signal cannot be
+    // bypassed through a service or cookie toggle.
+    if (bindingSaleShareOptOut) {
+        _fazClearStoredServiceConsent(bindingSaleShareSlugs);
     }
 
     // Clean up only after granular choices have been persisted, so an
@@ -2974,17 +3153,30 @@ function _fazAcceptCookies(choice = "all", ungated = false) {
  * from the in-memory consent store, e.g. on reject-all or revoke, so those
  * categories fall back to their category-level consent.
  *
- * @return {void}
+ * @param {string[]=} categorySlugs Optional categories whose overrides should
+ *                                  be removed. Omit to clear every override.
+ * @return {number} Number of removed overrides.
  */
-function _fazClearStoredServiceConsent() {
-    if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return;
+function _fazClearStoredServiceConsent(categorySlugs) {
+    if (!ref._fazConsentStore || typeof ref._fazConsentStore.forEach !== 'function') return 0;
+    var targeted = Array.isArray(categorySlugs);
     var keys = [];
     ref._fazConsentStore.forEach(function(value, key) {
-        if (typeof key === 'string' && (key.indexOf('svc.') === 0 || key.indexOf('ck.') === 0)) keys.push(key);
+        if (typeof key !== 'string' || (key.indexOf('svc.') !== 0 && key.indexOf('ck.') !== 0)) return;
+        if (!targeted) {
+            keys.push(key);
+            return;
+        }
+        var serviceId = key.indexOf('svc.') === 0
+            ? key.substring(4)
+            : key.substring(3).split('.')[0];
+        var category = _fazKnownServiceCategory(serviceId) || _fazUndetectedProviderCategory(serviceId);
+        if (!category || categorySlugs.indexOf(category) !== -1) keys.push(key);
     });
     keys.forEach(function(key) {
         ref._fazConsentStore.delete(key);
     });
+    return keys.length;
 }
 
 /**
@@ -4503,11 +4695,25 @@ function _fazMutationObserver(mutations) {
     }
 }
 
+/**
+ * Restore resources whose effective category/service decision is granted.
+ *
+ * @returns {void}
+ */
 function _fazUnblock() {
     const fazconsent = ref._fazGetFromStore("consent");
+    // GPC and DNSMPI are targeted sale/share opt-outs, not blanket GDPR
+    // rejections. Once every category has its explicit value, permit the normal
+    // category-aware restore pass so an unrelated existing grant (for example
+    // functional:yes on a "Both" banner) is not suppressed. Sell/share remains
+    // blocked by its forced category:no value.
+    const targetedSaleShareOptOut =
+        ref._fazGetFromStore("gpc") === "1" ||
+        ref._fazGetFromStore("dnsmpi") === "1";
     if (
         _fazGetLaw() === "gdpr" &&
-        (!fazconsent || fazconsent !== "yes")
+        (!fazconsent || fazconsent !== "yes") &&
+        !targetedSaleShareOptOut
     )
         return;
     _fazStore._backupNodes = _fazStore._backupNodes.filter(
@@ -5199,6 +5405,15 @@ function _fazIsUserWhitelisted(url, element) {
         if (typeof wl[i] !== "string" || !wl[i]) continue;
         var needle = wl[i].toLowerCase();
         if (_fazWhitelistElementMatches(element, needle)) return true;
+        // URL substring matching is reserved for URL-fragment patterns — ones
+        // containing "." or "/" — mirroring the server-side
+        // matches_whitelist_pattern() contract. A bare ID/class token must only
+        // match element attributes (whole-word, above): substring-matching it
+        // against every URL meant a short entry like "js" disabled client-side
+        // blocking wholesale. The 3-char floor matches the documented minimum
+        // the PHP cookie-pattern path already enforces.
+        if (needle.length < 3) continue;
+        if (needle.indexOf(".") === -1 && needle.indexOf("/") === -1) continue;
         if (rawTarget.indexOf(needle) !== -1 || decodedTarget.indexOf(needle) !== -1) return true;
     }
     return false;
@@ -6382,7 +6597,12 @@ function _fazResetOptoutSuccessMessage() {
  */
 function _fazHandleOptoutConfirm() {
     return function () {
-        if ( _fazGetLaw() !== "ccpa" || ! _fazFindCheckBoxValue() ) {
+        // No law gate: under the "Both" (gdpr_ccpa) encoding the banner's law
+        // is 'gdpr' but this confirm button only exists inside the opt-out
+        // popup, and a ticked Do-Not-Sell box is an opt-out under either
+        // encoding. Gating on law === "ccpa" sent the 'both' case through the
+        // ordinary (age-gateable) save path, where the revocation was lost.
+        if ( ! _fazFindCheckBoxValue() ) {
             _fazAcceptReject()();
             return;
         }

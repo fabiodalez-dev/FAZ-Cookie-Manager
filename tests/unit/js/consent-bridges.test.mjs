@@ -199,21 +199,32 @@ console.log('consent bridges — returning visitors are reported too (jsdom)');
   }
   check('uet: an event with no detail neither throws nor grants', !threw && same(w.uetq.slice(before), ['consent', 'update', { ad_storage: 'denied', analytics_storage: 'denied' }]));
 }
-// 19-21. Clarity.
+// 19-21. Clarity. The bridge pushes an EXPLICIT boolean on every report —
+// clarity('consent', true/false) — because the old grant-only call could never
+// revoke: a visitor who withdrew analytics in the preference center kept
+// Clarity consented for the rest of the page load.
 {
   const w = loadMicrosoft({ clarity: true });
   fire(w, 'fazcookie_consent_ready', ['analytics']);
-  check('clarity: consent is granted for a returning visitor with analytics', w.clarityCalls.includes('consent'));
+  check('clarity: consent is granted for a returning visitor with analytics', w.clarityCalls.includes('consent,true'));
 }
 {
   const w = loadMicrosoft({ clarity: true });
   fire(w, 'fazcookie_consent_ready', ['marketing']);
-  check('clarity: marketing alone does not grant it', w.clarityCalls.length === 0);
+  check('clarity: marketing alone is an explicit denial, not silence', w.clarityCalls.includes('consent,false') && !w.clarityCalls.includes('consent,true'));
 }
 {
   const w = loadMicrosoft({ clarity: true });
   fire(w, 'fazcookie_consent_ready', []);
-  check('clarity: an empty acceptance grants nothing', w.clarityCalls.length === 0);
+  check('clarity: an empty acceptance is an explicit denial', w.clarityCalls.includes('consent,false') && !w.clarityCalls.includes('consent,true'));
+}
+// 21b. Revocation: a visitor who granted and then withdrew analytics must see
+// the withdrawal reach Clarity — the defect the explicit boolean exists for.
+{
+  const w = loadMicrosoft({ clarity: true });
+  fire(w, 'fazcookie_consent_ready', ['analytics']);
+  fire(w, 'fazcookie_consent_update', []);
+  check('clarity: withdrawing analytics pushes an explicit denial', w.clarityCalls[w.clarityCalls.length - 1] === 'consent,false');
 }
 // 22. Clarity absent must not break the UET path, and vice versa.
 {
@@ -272,7 +283,7 @@ console.log('consent bridges — returning visitors are reported too (jsdom)');
   w.clarityCalls.length = 0;
   w._fazConsentReady = { accepted: ['analytics'], action: 'init' };
   w.eval(readFileSync(MS, 'utf8'));
-  check('clarity: recovers it as well', w.clarityCalls.includes('consent'));
+  check('clarity: recovers it as well', w.clarityCalls.includes('consent,true'));
 }
 // And catching up must not double-report when the listener DID fire.
 {

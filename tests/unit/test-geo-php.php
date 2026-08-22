@@ -17,7 +17,9 @@
  *        - CA     -> pipeda-canada  (country index, stage 5)
  *        - US-CA  -> ccpa-california (US region, stage 4)
  *        - unknown country with no mapping -> fallback.
- *   3. faz_ip_in_cidr_list() (includes/class-utils.php):
+ *   3. faz_country_in_regions() / faz_region_map() (class-utils.php):
+ *        canonical EU/UK split, direct country codes and POPIA region.
+ *   4. faz_ip_in_cidr_list() (includes/class-utils.php):
  *        IPv4 CIDR, IPv6 CIDR, bare IP, boundary-bit prefixes, family
  *        mismatch, malformed entries, /0 and /32, oversized prefix.
  *
@@ -181,6 +183,15 @@ faz_eq(
 	'gdpr-strict',
 	'R06 US-WY in sub-national map is ignored (US excluded from stage 3.5) -> gdpr-strict'
 );
+
+echo "\n-- faz_country_in_regions() --\n";
+
+faz_eq( faz_country_in_regions( 'IT', array( 'eu' ) ), true, 'T01 Italy belongs to the canonical EU group' );
+faz_eq( faz_country_in_regions( 'GB', array( 'eu' ) ), false, 'T02 Great Britain is not folded into the EU preset' );
+faz_eq( faz_country_in_regions( 'GB', array( 'uk' ) ), true, 'T03 Great Britain belongs to the separate UK group' );
+faz_eq( faz_country_in_regions( 'ZA', array( 'za' ) ), true, 'T04 South Africa belongs to the POPIA group' );
+faz_eq( faz_country_in_regions( 'ZA', array( 'ZA' ) ), true, 'T05 direct ISO country targeting remains supported' );
+faz_eq( faz_country_in_regions( 'US', array( 'eu', 'uk' ) ), false, 'T06 unmatched country fails closed' );
 
 echo "\n-- faz_ip_in_cidr_list() --\n";
 

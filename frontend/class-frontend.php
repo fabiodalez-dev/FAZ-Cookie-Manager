@@ -107,6 +107,16 @@ class Frontend {
 	protected $providers = array();
 
 	/**
+	 * Shortest Open Cookie Database wildcard PREFIX that may authorise a
+	 * server-side deletion. The bundled dataset ships prefixes as short as two
+	 * characters (`_s`, `ct`, `sr`, `tp`, `p_`), matched by a bare
+	 * `0 === strpos()`, which classifies ordinary first-party names such as
+	 * `_session` or `ct_checkout` into a category that is blocked pre-consent.
+	 * Classification keeps those hits; enforcement refuses them.
+	 */
+	const ENFORCEABLE_WILDCARD_MIN_LENGTH = 6;
+
+	/**
 	 * Per-request cache for blocked categories and provider map.
 	 *
 	 * @var array|null
@@ -120,6 +130,21 @@ class Frontend {
 	private $enforceable_cache        = null;
 	private $settings_option_cache    = null;
 	private $always_allowed_cache     = null;
+	private $service_cookie_decisions_cache = null;
+	private $whitelisted_cookie_patterns_cache = null;
+	private $catalog_cookie_categories_cache = null;
+	/**
+	 * Per-cookie-name memo for the Open Cookie Database tier, mirrored into the
+	 * faz_server_cookie_definition_map transient. Misses are memoized too — an
+	 * unknown name is the common case and re-answering it costs a full rebuild.
+	 *
+	 * @var array<string,string>|null
+	 */
+	private $definition_category_memo = null;
+	/** @var bool Whether the memo gained an entry that is not persisted yet. */
+	private $definition_category_memo_dirty = false;
+	private $cookie_allowed_cache = array();
+	private $server_cookie_guard_started = false;
 	/**
 	 * Precomputed provider-pattern metadata (lowercased pattern, URL-vs-code
 	 * classification) for the output-buffer matching hot loop.
@@ -178,6 +203,13 @@ class Frontend {
 		// scripts are actually allowed.
 		add_action( 'template_redirect', array( $this, 'shred_non_consented_cookies' ), 1 );
 		add_action( 'template_redirect', array( $this, 'start_output_buffer' ) );
+		// Optional server-cookie guard. Opening a dedicated buffer on init keeps
+		// headers pending until page, AJAX, REST and redirect callbacks have had a
+		// chance to emit Set-Cookie. The output callback then filters the final
+		// header set immediately before PHP sends it.
+		add_action( 'init', array( $this, 'start_server_cookie_guard' ), 20 );
+		add_filter( 'rest_pre_echo_response', array( $this, 'filter_server_cookies_before_rest_echo' ), PHP_INT_MAX, 3 );
+		add_filter( 'wp_redirect', array( $this, 'filter_server_cookies_before_redirect' ), PHP_INT_MAX, 2 );
 		add_filter( 'script_loader_tag', array( $this, 'filter_script_loader_tag' ), 10, 3 );
 		add_filter( 'style_loader_tag', array( $this, 'filter_style_loader_tag' ), 10, 4 );
 
@@ -414,14 +446,7 @@ class Frontend {
 			}
 
 			if ( $alt_asset ) {
-				$script_path = plugin_dir_path( __FILE__ ) . 'js/script' . $suffix . '.js';
-				wp_register_script( $script_handle, false, array(), $this->version, false );
-				wp_enqueue_script( $script_handle );
-				if ( file_exists( $script_path ) ) {
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file
-					$script_content = file_get_contents( $script_path );
-					wp_add_inline_script( $script_handle, $script_content );
-				}
+				$this->enqueue_inline_bundle( $script_handle, 'js/script' . $suffix . '.js', array(), false );
 			} else {
 				/**
 				 * Opt-in: load the main banner bundle in the footer instead of
@@ -579,7 +604,11 @@ class Frontend {
 				wp_add_inline_script( $script_handle, 'var _fazGcm = ' . $gcm_json . ';', 'before' );
 				$gcm_suffix = $this->get_script_suffix( 'js/gcm' );
 				$gcm_handle = $script_handle . '-gcm';
-				wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
+				if ( $alt_asset ) {
+					$this->enqueue_inline_bundle( $gcm_handle, 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), false );
+				} else {
+					wp_enqueue_script( $gcm_handle, plugin_dir_url( __FILE__ ) . 'js/gcm' . $gcm_suffix . '.js', array( $script_handle ), $this->version, false );
+				}
 			}
 
 			// IAB TCF v2.3 CMP stub (when IAB is enabled AND a valid CMP ID is set).
@@ -597,7 +626,11 @@ class Frontend {
 				wp_add_inline_script( $script_handle, $tcf_stub, 'before' );
 				$tcf_suffix = $this->get_script_suffix( 'js/tcf-cmp' );
 				$tcf_handle = $script_handle . '-tcf-cmp';
-				wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+				if ( $alt_asset ) {
+					$this->enqueue_inline_bundle( $tcf_handle, 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), false );
+				} else {
+					wp_enqueue_script( $tcf_handle, plugin_dir_url( __FILE__ ) . 'js/tcf-cmp' . $tcf_suffix . '.js', array( $script_handle ), $this->version, false );
+				}
 
 				// PublisherCC: use admin setting, fall back to site locale.
 				$saved_cc     = $this->settings->get( 'iab', 'publisher_cc' );
@@ -785,13 +818,7 @@ class Frontend {
 			$a11y_handle = $script_handle . '-a11y';
 			$a11y_suffix = $this->get_script_suffix( 'js/a11y' );
 			if ( $alt_asset ) {
-				$a11y_path = plugin_dir_path( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js';
-				wp_register_script( $a11y_handle, false, array( $script_handle ), $this->version, true );
-				wp_enqueue_script( $a11y_handle );
-				if ( file_exists( $a11y_path ) ) {
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local file
-					wp_add_inline_script( $a11y_handle, file_get_contents( $a11y_path ) );
-				}
+				$this->enqueue_inline_bundle( $a11y_handle, 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), true );
 			} else {
 				wp_enqueue_script( $a11y_handle, plugin_dir_url( __FILE__ ) . 'js/a11y' . $a11y_suffix . '.js', array( $script_handle ), $this->version, true );
 			}
@@ -807,11 +834,15 @@ class Frontend {
 				)
 			);
 		if ( true === $this->is_wpconsentapi_enabled() ) {
-			$handle = $this->plugin_name . '-wca';
+			$handle = $script_handle . '-wca';
 			// Compute the suffix per-file so SCRIPT_DEBUG and a missing generated
 			// asset both fall back safely to the readable source.
 			$wca_suffix = $this->get_script_suffix( 'js/wca' );
-			wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array(), $this->version, false );
+			if ( $alt_asset ) {
+				$this->enqueue_inline_bundle( $handle, 'js/wca' . $wca_suffix . '.js', array( $script_handle ), false );
+			} else {
+				wp_register_script( $handle, plugin_dir_url( __FILE__ ) . 'js/wca' . $wca_suffix . '.js', array( $script_handle ), $this->version, false );
+			}
 			if ( true === $this->is_gsk_enabled() ) {
 				wp_add_inline_script( $handle, 'var _fazGsk = true;', 'before' );
 			}
@@ -820,9 +851,13 @@ class Frontend {
 		$ms_uet     = (bool) $this->settings->get( 'microsoft', 'uet_consent_mode' );
 		$ms_clarity = (bool) $this->settings->get( 'microsoft', 'clarity_consent' );
 		if ( $ms_uet || $ms_clarity ) {
-			$ms_handle = $this->plugin_name . '-microsoft-consent';
+			$ms_handle = $script_handle . '-microsoft-consent';
 			$ms_suffix = $this->get_script_suffix( 'js/microsoft-consent' );
-			wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array(), $this->version, false );
+			if ( $alt_asset ) {
+				$this->enqueue_inline_bundle( $ms_handle, 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), false );
+			} else {
+				wp_enqueue_script( $ms_handle, plugin_dir_url( __FILE__ ) . 'js/microsoft-consent' . $ms_suffix . '.js', array( $script_handle ), $this->version, false );
+			}
 			if ( $ms_uet ) {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftUET = true;', 'before' );
 			}
@@ -830,6 +865,31 @@ class Frontend {
 				wp_add_inline_script( $ms_handle, 'window._fazMicrosoftClarity = true;', 'before' );
 			}
 		}
+	}
+
+	/**
+	 * Enqueue a bundled local script as inline code behind an empty WP handle.
+	 *
+	 * Alternative-asset mode exists specifically to avoid a public plugin URL
+	 * containing ad-blocker keywords. Every FAZ frontend bundle must therefore
+	 * use the same delivery path, not just the main and accessibility bundles.
+	 *
+	 * @param string $handle        Script handle.
+	 * @param string $relative_path Path relative to frontend/.
+	 * @param array  $dependencies  Script dependencies.
+	 * @param bool   $in_footer     Whether to print in the footer.
+	 * @return bool Whether the local bundle was found and attached.
+	 */
+	private function enqueue_inline_bundle( $handle, $relative_path, $dependencies = array(), $in_footer = false ) {
+		$path = plugin_dir_path( __FILE__ ) . ltrim( $relative_path, '/' );
+		wp_register_script( $handle, false, $dependencies, $this->version, $in_footer );
+		wp_enqueue_script( $handle );
+		if ( ! file_exists( $path ) ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- trusted local bundle.
+		wp_add_inline_script( $handle, file_get_contents( $path ) );
+		return true;
 	}
 
 	/**
@@ -1061,7 +1121,11 @@ class Frontend {
 	 */
 	private function is_cache_compatibility_enabled() {
 		$settings = $this->get_faz_settings();
-		return ! empty( $settings['banner_control']['cache_compatibility'] );
+		// A shared full-page cache cannot safely serve jurisdiction-specific law,
+		// defaults and mandatory controls. Runtime compliance therefore wins over
+		// this optimisation; the filter can still disable geo runtime entirely.
+		$geo_enabled = class_exists( Geo_Runtime::class ) && Geo_Runtime::is_enabled();
+		return ! $geo_enabled && ! empty( $settings['banner_control']['cache_compatibility'] );
 	}
 
 	/**
@@ -1073,8 +1137,8 @@ class Frontend {
 		if ( true === faz_disable_banner() || is_admin() ) {
 			return;
 		}
-		// Use the wider UI-suppressed check: if the banner UI is hidden (e.g.
-		// for PMP-exempt members), the placeholder CSS is unnecessary.
+		// Use the wider UI-suppressed check: if the banner UI is hidden by the
+		// current runtime/settings context, the placeholder CSS is unnecessary.
 		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
@@ -1119,11 +1183,7 @@ class Frontend {
 		}
 		// NOTE: We deliberately do NOT check is_banner_ui_suppressed() here.
 		// load_banner() populates $this->template, which enqueue_scripts()
-		// depends on to register script.js / gcm.js / tcf-cmp.js. PMP-exempt
-		// members must still receive those bootstrap scripts so GCM can fire
-		// the auto-granted consent signals to AdSense / GTM — only the
-		// visible banner HTML (insert_styles, banner_html) gets suppressed,
-		// and those two hooks check is_banner_ui_suppressed() themselves.
+		// depends on to register script.js / gcm.js / tcf-cmp.js.
 		if ( $this->is_banner_disabled_by_settings() ) {
 			return;
 		}
@@ -1200,6 +1260,12 @@ class Frontend {
 
 		if ( false === $this->banner ) {
 			return;
+		}
+
+		if ( null !== $runtime_ruleset ) {
+			$this->banner->set_settings(
+				Geo_Runtime::apply_ui_requirements( $runtime_ruleset, $this->banner->get_settings() )
+			);
 		}
 
 		// Per-banner geo-targeting: skip banner if visitor's country doesn't match the ruleSet.
@@ -1488,15 +1554,13 @@ class Frontend {
 			$dependent = true;
 		}
 
-		// Runtime geo-routing (flag-gated): when the resolved ruleset drives the
+		// Runtime geo-routing: when the resolved ruleset drives the
 		// pre-consent category defaults, the GCM signals and the blocked-category
 		// set, the rendered HTML/JS varies by the visitor's country/region. A
 		// cached response would leak one jurisdiction's defaults to another, so
 		// the output must always be treated as country-dependent while the flag
 		// is on — independent of any multi-banner geo-targeting configuration.
-		// 1.18.2 HOTFIX: routed through Geo_Runtime::is_enabled() (hard-false)
-		// so the disabled runtime no longer forces no-cache; restoring the
-		// feature restores the cache-bust automatically via the same gate.
+		// The filter is an emergency kill switch; enforcement is enabled by default.
 		if ( Geo_Runtime::is_enabled() ) {
 			$dependent = true;
 		}
@@ -1635,55 +1699,21 @@ class Frontend {
 	/**
 	 * Check if a country code belongs to any of the given region groups.
 	 *
+	 * The region table itself lives in faz_region_map() (includes/class-utils.php)
+	 * and the matching is done by faz_country_in_regions(). Only the
+	 * `faz_is_target_region` filter is local to this call site — AMP pages
+	 * resolve their target regions without it, and moving it into the shared
+	 * helper would silently extend the filter to a surface that never had it.
+	 *
 	 * @param string $country_code ISO 3166-1 alpha-2 country code.
 	 * @param array  $regions      List of region keys (e.g. 'eu', 'uk') or direct country codes.
 	 * @return bool
 	 */
 	private function is_country_in_regions( $country_code, $regions ) {
-		$country_code = strtoupper( $country_code );
+		$country_code = strtoupper( (string) $country_code );
 		$regions      = is_array( $regions ) ? $regions : (array) $regions;
-
-		$region_map = array(
-			// F008 fix: align with admin/assets/js/pages/banner.js
-			// REGION_PRESETS.EU which deliberately EXCLUDES GB (UK is its
-			// own preset). The pre-fix table included GB for "consistency
-			// with Geolocation::$eu_countries", but that produced a
-			// silent divergence: a publisher selecting "EU" in the admin
-			// (per-banner target_countries) got a 30-country set without
-			// GB; the same publisher's global Settings → Geolocation →
-			// target_regions=eu got a 31-country set with GB. UK has its
-			// own data-protection regime (UK GDPR) and deserves its own
-			// preset — keep the 'uk' bucket as the canonical home for GB.
-			// Geolocation::$eu_countries is a separate concern (lex
-			// generalis EU+UK shorthand for "is this visitor under any
-			// GDPR-class law") and remains unchanged.
-			'eu' => array(
-				'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
-				'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
-				'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
-				// EEA.
-				'IS', 'LI', 'NO',
-			),
-			'uk' => array( 'GB' ),
-			'us' => array( 'US' ),
-			'ca' => array( 'CA' ),
-			'br' => array( 'BR' ),
-			'au' => array( 'AU' ),
-			'jp' => array( 'JP' ),
-			'ch' => array( 'CH' ),
-			'za' => array( 'ZA' ),
-		);
-
-		foreach ( $regions as $region ) {
-			$region = strtolower( $region );
-			if ( isset( $region_map[ $region ] ) ) {
-				if ( in_array( $country_code, $region_map[ $region ], true ) ) {
-					return true;
-				}
-			} elseif ( strtoupper( $region ) === $country_code ) {
-				// Direct country code match (e.g., 'ZA' for South Africa).
-				return true;
-			}
+		if ( faz_country_in_regions( $country_code, $regions ) ) {
+			return true;
 		}
 
 		/**
@@ -1706,8 +1736,9 @@ class Frontend {
 		if ( ! $this->template || true === faz_disable_banner() ) {
 			return;
 		}
-		// Banner HTML is the actual visible UI — suppress for PMP-exempt
-		// members so they never see the consent dialog.
+		// Banner HTML is the actual visible UI. PMP members are deliberately not
+		// suppressed here: script.js closes the notice from action:auto while
+		// keeping the revisit preference control rendered and reachable.
 		if ( $this->is_banner_ui_suppressed() ) {
 			return;
 		}
@@ -1857,9 +1888,9 @@ class Frontend {
 	/**
 	 * Resolved geo ruleset for the current visitor, or null.
 	 *
-	 * Gated behind the opt-in `faz_geo_ruleset_runtime` filter (default false),
-	 * so existing installs see ZERO behaviour change until they enable it. When
-	 * on, the resolved ruleset (model + default_categories + CMv2) drives the
+	 * Enabled by default and overridable through the emergency
+	 * `faz_geo_ruleset_runtime` filter. The resolved ruleset (model +
+	 * default_categories + CMv2) drives the
 	 * chosen banner's per-category consent defaults, the server-side blocking
 	 * decision, the GCM defaults AND the banner selection (the active banner
 	 * whose applicableLaw matches the ruleset model). Resolution uses the same
@@ -2275,6 +2306,47 @@ class Frontend {
 	}
 
 	/**
+	 * Normalize the consent-cookie lifetime for the active legal model.
+	 *
+	 * GDPR-family: the Garante's six-month rule is a MAXIMUM, and there is no
+	 * legal minimum. A publisher who deliberately re-asks every 30 days is being
+	 * MORE protective, so the cap applies and nothing is raised. An earlier
+	 * revision of this method imposed a 180-day floor; that silently extended
+	 * the stored consent of every install configured below it — restrictive in
+	 * the wrong direction — and is not something a consent plugin may do.
+	 *
+	 * CCPA/CPRA is the one place a floor belongs: §1798.135 bars asking a
+	 * consumer who opted out to consent again for at least 12 months, so a
+	 * shorter value would re-prompt sooner than the statute allows. The 3650-day
+	 * ceiling is the same bound the banner UI advertises — enforced here too,
+	 * because a value can reach this method from the REST API, an import or a
+	 * direct DB edit without ever passing the admin field.
+	 *
+	 * Kept as a pure public helper so migrations, integrations and the unit suite
+	 * can exercise the same rule used by get_store_data().
+	 *
+	 * @param string $law             Banner law/model identifier.
+	 * @param int    $configured_days Configured lifetime in days.
+	 * @return int Effective lifetime in days.
+	 */
+	public static function normalize_consent_expiry( $law, $configured_days ) {
+		$law             = strtolower( (string) $law );
+		$configured_days = absint( $configured_days );
+
+		if ( 'ccpa' === $law ) {
+			return min( 3650, max( 365, $configured_days ) );
+		}
+
+		// A zero/absent configuration still has to produce a usable lifetime;
+		// the cap, not a floor, is what the law dictates above that.
+		if ( $configured_days < 1 ) {
+			return 182;
+		}
+
+		return min( 182, $configured_days );
+	}
+
+	/**
 	 * Get store data
 	 *
 	 * @return array
@@ -2292,21 +2364,14 @@ class Frontend {
 		// _ageGate store and the sprintf'd age-confirmation label below.
 		$age_min = isset( $settings['age_gate']['min_age'] ) ? absint( $settings['age_gate']['min_age'] ) : 16;
 
-		// Consent-cookie lifetime, with a law-aware hard cap applied here so the
-		// EFFECTIVE expiry can never exceed the legal maximum regardless of any
-		// larger value an admin saved (the UI allows up to 10 years). The
-		// Italian Garante (Linee guida cookie, 10 Jun 2021) caps consent
-		// validity at 6 months for opt-in (GDPR-family) banners, so those are
-		// clamped to 182 days. Opt-out (CCPA/CPRA) banners are NOT subject to
-		// that cap — a LONGER lifetime is actually preferable there (CPRA bars
-		// asking a user to re-confirm an opt-out more than once per 12 months),
-		// so their configured value (default 365) is honoured as-is.
+		// Consent-cookie lifetime is normalized at the final runtime boundary so
+		// legacy rows, imports and direct API writes cannot bypass the law-aware
+		// limits shown in the admin editor.
+		$faz_law = $banner->get_law();
 		$faz_configured_expiry = isset( $banner_settings['settings']['consentExpiry']['value'] )
 			? absint( $banner_settings['settings']['consentExpiry']['value'] )
-			: 180;
-		$faz_expiry = ( 'ccpa' === $banner->get_law() )
-			? max( 1, $faz_configured_expiry )
-			: max( 1, min( 182, $faz_configured_expiry ) );
+			: ( 'ccpa' === $faz_law ? 365 : 180 );
+		$faz_expiry = self::normalize_consent_expiry( $faz_law, $faz_configured_expiry );
 
 		$providers = array();
 		$store     = array(
@@ -2860,11 +2925,14 @@ class Frontend {
 	 * Check whether the visible banner UI (template HTML + CSS) should be
 	 * suppressed for the current request.
 	 *
-	 * Wider net than `is_banner_disabled_by_settings()`: also covers the
-	 * Paid Memberships Pro integration where exempted members must NOT see
-	 * the banner, even though all the consent bootstrap (script.js, gcm.js,
-	 * tcf-cmp.js) still needs to load so GCM can read the auto-granted
-	 * cookie and emit the right `consent` signals to AdSense / GTM.
+	 * Wider net than `is_banner_disabled_by_settings()`: also covers a runtime
+	 * geo fallback for which blocking must remain active without showing a
+	 * mismatched regional notice.
+	 *
+	 * PMP members are intentionally NOT suppressed here. Their `action:auto`
+	 * cookie makes script.js hide the first-layer notice immediately, while the
+	 * rendered revisit control remains available so changing optional purposes
+	 * is as easy as the normal consent flow.
 	 *
 	 * Use this for banner-rendering hooks. Use
 	 * `is_banner_disabled_by_settings()` for script enqueuing.
@@ -2876,15 +2944,25 @@ class Frontend {
 			return true;
 		}
 
+		// hide_from_bots: mirror the enqueue_scripts() gate so a crawler gets
+		// no banner container markup or placeholder CSS either — the setting
+		// promises "cleaner HTML to crawlers", and skipping only the script
+		// left the full (visually hidden) container in the bot's copy. Same
+		// Cache Compatibility guard as the enqueue gate: under full-page
+		// caching the render must stay visitor-invariant, or a bot-warmed
+		// cache copy would hide the banner from every human visitor. (#158)
+		if ( ! $this->is_cache_compatibility_enabled() ) {
+			$bot_settings = $this->get_faz_settings();
+			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
+				if ( faz_is_bot() ) {
+					return true;
+				}
+			}
+		}
+
 		// Runtime geo-routing opt-in fallback with no matching banner: keep
 		// blocking active (template loaded) but hide the mismatched opt-out UI.
 		if ( $this->faz_law_fallback_suppress ) {
-			return true;
-		}
-
-		if ( class_exists( '\\FazCookie\\Includes\\Integrations\\Paid_Memberships_Pro' )
-			&& \FazCookie\Includes\Integrations\Paid_Memberships_Pro::get_instance()->is_current_user_exempted()
-		) {
 			return true;
 		}
 
@@ -2960,6 +3038,12 @@ class Frontend {
 	 */
 	public function start_output_buffer() {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
+			return;
+		}
+		// A feed, robots.txt or a trackback is not a page a visitor consents
+		// on — see the rationale on filter_content_blocking(). These pass
+		// through template_redirect, so the guards above do not catch them.
+		if ( faz_is_machine_readable_request() ) {
 			return;
 		}
 		if ( ! $this->template ) {
@@ -4069,117 +4153,52 @@ class Frontend {
 			'regenerator-runtime',
 		);
 
-		// ── Page builders — essential for layout rendering ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/elementor/',
-			'plugins/elementor-pro/',
-			'elementor-frontend',
-			'elementor-common',
-			'elementor-waypoints',
-			'plugins/js_composer/',
-			'plugins/wpbakery/',
-			'js_composer_front',
-			'wpb_composer_front_js',
-			'plugins/beaver-builder-lite-version/',
-			'plugins/bb-plugin/',
-			'fl-builder-',
-			'plugins/divi-builder/',
-			'et_pb_',
-			'et-builder-',
-			'plugins/oxygen/',
-			'plugins/bricks/',
-			'bricks-frontend',
-		) );
-
-		// ── Form plugins — necessary for form submission ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/contact-form-7/',
-			'wpcf7',
-			'plugins/wpforms/',
-			'wpforms-',
-			'plugins/gravityforms/',
-			'gform_',
-			'plugins/formidable/',
-			'frm_',
-			'plugins/ninja-forms/',
-			'nf-front-end',
-			'plugins/happyforms/',
-			'plugins/forminator/',
-			'forminator-front',
-			'plugins/fluent-forms/',
-			'fluentform',
-			'plugins/ws-form/',
-		) );
-
-		// ── Anti-spam / CAPTCHA — necessary for form protection ──
-		$whitelist = array_merge( $whitelist, array(
-			'google.com/recaptcha',
-			'gstatic.com/recaptcha',
-			'grecaptcha',
-			'recaptcha/api.js',
-			'hcaptcha.com',
-			'js.hcaptcha.com',
-			'challenges.cloudflare.com/turnstile',
-			'akismet',
-		) );
-
-		// ── Security plugins ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/wordfence/',
-			'plugins/better-wp-security/',
-			'plugins/sucuri-scanner/',
-			'plugins/all-in-one-wp-security-and-firewall/',
-		) );
-
-		// ── WooCommerce essential scripts ──
-		$whitelist = array_merge( $whitelist, array(
-			'woocommerce/assets/js/',
-			'wc-cart-fragments',
-			'wc-checkout',
-			'wc-add-to-cart',
-		) );
-
-		// ── Caching / optimisation plugins ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/wp-rocket/',
-			'plugins/litespeed-cache/',
-			'plugins/w3-total-cache/',
-			'plugins/wp-super-cache/',
-			'plugins/autoptimize/',
-			'plugins/wp-fastest-cache/',
-		) );
-
-		// ── Translation / multilingual ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/sitepress-multilingual-cms/',
-			'plugins/polylang/',
-			'plugins/translatepress-multilingual/',
-		) );
-
-		// ── Other WordPress essentials ──
-		$whitelist = array_merge( $whitelist, array(
-			'plugins/advanced-custom-fields/',
-			'plugins/acf/',
-			'plugins/classic-editor/',
-			'plugins/shortcodes-ultimate/',
-		) );
+		// Do not whitelist whole third-party plugins or generic handles here.
+		// A plugin directory is not a consent category: it can contain a tracker,
+		// an inline pixel, or a later update that adds one. Unmatched assets already
+		// pass through unchanged, while a recognised provider remains blockable.
+		// Publishers may add a narrowly-scoped, audited exception in Settings when
+		// a resource is genuinely strictly necessary for their own use case.
 		$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
+
+		// ── Anti-abuse challenge endpoints — strictly necessary ──
+		//
+		// These are NOT plugin directories or generic handles, and the rule above
+		// does not reach them: each is one third-party endpoint whose only
+		// function is to protect a form the visitor is actively trying to use.
+		// Blocking them pre-consent does not degrade a feature, it removes the
+		// login, registration, comment or checkout form outright — the visitor
+		// cannot even reach the banner's Accept button on a login screen. ePrivacy
+		// exempts measures strictly necessary to deliver a service the user
+		// requested, and anti-abuse protection of that same service qualifies.
+		//
+		// google-recaptcha is a matchable entry in known-providers.json, so
+		// without this the provider matcher blocks it by name. Restored after the
+		// hardcoded strictly-necessary list was removed: Activator::
+		// seed_default_whitelist() returns early on any install that already has
+		// stored patterns, so no migration would have given these back to an
+		// existing site. Substring matching means 'hcaptcha.com' also covers
+		// js.hcaptcha.com, and 'google.com/recaptcha' covers recaptcha/api.js.
+		//
+		// Deliberately NOT restored from the old list: the bare 'grecaptcha' JS
+		// global and 'akismet' (a server-side filter with no browser asset that
+		// needs unblocking) — both are generic handles the rule above rightly
+		// rejects.
+		$whitelist = array_merge(
+			$whitelist,
+			array(
+				'google.com/recaptcha',
+				'gstatic.com/recaptcha',
+				'hcaptcha.com',
+				'challenges.cloudflare.com/turnstile',
+			)
+		);
 
 		// ── WooCommerce core infrastructure ──
 		if ( class_exists( 'WooCommerce', false ) ) {
-			$whitelist = array_merge( $whitelist, array(
-				'plugins/woocommerce/',
-				'wc-settings',
-				'wc-blocks-',
-				'wc-cart',
-				'wc-checkout',
-				'wc-payment-method-',
-				'woocommerce-layout',
-				'woocommerce-smallscreen',
-				'woocommerce-general',
-			) );
-			// On checkout/cart pages, also whitelist payment gateway scripts
-			// (PayPal SDK, Mollie, Klarna, etc.) — they are necessary for purchases.
+			// On checkout/cart pages, explicitly allow the selected payment SDKs
+			// only. Core WooCommerce assets that do not match a provider pass through
+			// naturally; broad plugin paths would also exempt an embedded tracker.
 			if ( $this->is_wc_checkout_or_cart() ) {
 				$whitelist = array_merge( $whitelist, $this->get_payment_gateway_whitelist() );
 			}
@@ -4459,7 +4478,7 @@ class Frontend {
 		// blanket pre-consent block would otherwise cause under an opt-out law.
 		$is_optout_law = ( $this->banner && 'ccpa' === $this->banner->get_law() );
 
-		// Runtime geo-routing (flag-gated, default off): when a ruleset is
+		// Runtime geo-routing: when a ruleset is
 		// resolved it is authoritative for the pre-consent default of each
 		// category it names — denied-until-action → block now, granted → allow —
 		// regardless of the banner's own law. This is what makes a Quebec (opt-in)
@@ -4474,19 +4493,13 @@ class Frontend {
 		// and must be honoured immediately — including on the very first
 		// response, before the JS opt-out (_fazApplyGpcOptOut) has had a chance
 		// to write the consent cookie. So when no consent is recorded yet and the
-		// request carries Sec-GPC:1, block the sell/share (ccpaDoNotSell)
-		// categories server-side too, mirroring the client-side behaviour.
-		// GPC applies when EITHER the banner is an opt-out (CCPA) law OR the
-		// resolved runtime ruleset declares it honours GPC (signals.gpc_honored)
-		// — the latter covers US-state rulesets whose model maps to a gdpr-style
-		// banner (e.g. opt-out-with-sensitive-opt-in → California) yet still
-		// require GPC sale/share opt-out. Pure opt-in jurisdictions that don't
-		// honour GPC are unaffected (their non-necessary categories are already
-		// blocked pre-consent).
+		// request carries Sec-GPC:1, block the sell/share categories server-side,
+		// including when a prior consent cookie grants them. GPC is a visitor
+		// signal, not a publisher-configurable preference, and therefore is never
+		// gated on the banner toggle or binary law.
 		$gpc_header_on = isset( $_SERVER['HTTP_SEC_GPC'] )
 			&& '1' === sanitize_text_field( wp_unslash( $_SERVER['HTTP_SEC_GPC'] ) );
-		$ruleset_honors_gpc = ( null !== $ruleset && ! empty( $ruleset['signals']['gpc_honored'] ) );
-		$gpc_optout = $gpc_header_on && ( $is_optout_law || $ruleset_honors_gpc );
+		$gpc_optout = $gpc_header_on;
 
 		// Standalone "Do Not Sell or Share My Personal Information" opt-out: the
 		// [faz_do_not_sell] form sets the `fazcookie-dnsmpi` cookie. That cookie
@@ -4515,20 +4528,14 @@ class Frontend {
 				$blocked[] = $slug;
 				continue;
 			}
+			if ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
+				$blocked[] = $slug;
+				continue;
+			}
 			if ( empty( $consent ) ) {
 				$rs_default = ( null !== $ruleset ) ? Geo_Runtime::category_default( $ruleset, $slug ) : null;
 				if ( false === $rs_default ) {
 					// Ruleset denies this category until an explicit action.
-					$blocked[] = $slug;
-				} elseif ( $gpc_optout && ( $category->get_sell_personal_data() || $category->get_share_personal_data() ) ) {
-					// A Global Privacy Control sale/share opt-out is a
-					// legally-binding signal that OVERRIDES a ruleset 'granted'
-					// default — a Sec-GPC:1 request must block sold/shared
-					// categories even when the resolved ruleset grants them
-					// (CPPA §7025). This check runs BEFORE the ruleset-granted
-					// branch below so the grant can't bypass GPC. $gpc_optout
-					// already embeds $is_optout_law, so opt-in visitors are
-					// unaffected.
 					$blocked[] = $slug;
 				} elseif ( true === $rs_default ) {
 					// Ruleset grants this category — do not block (overrides the
@@ -4870,13 +4877,21 @@ class Frontend {
 
 		// 3. Admin custom blocking rules (Settings → Script Blocking).
 		// Custom rules CAN override built-in providers (admin intent takes priority).
-		$settings     = $this->get_faz_settings();
-		$custom_rules = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
-		$custom_patterns = array();
+		// The category must be a REAL category slug, mirroring the client-side
+		// check in get_store_data(): a rule whose category no longer exists
+		// (the legacy 'performance' slug, or a category the admin deleted)
+		// would otherwise override a built-in tracker's category with one that
+		// is never in get_blocked_categories() — i.e. the server would ship
+		// the tracker unblocked pre-consent while the client, which skips the
+		// rule, still blocked it. Skipping the rule keeps the built-in
+		// classification and fails closed on both layers.
+		$settings        = $this->get_faz_settings();
+		$custom_rules    = isset( $settings['script_blocking']['custom_rules'] ) ? $settings['script_blocking']['custom_rules'] : array();
+		$custom_patterns  = array();
 		foreach ( $custom_rules as $rule ) {
 			$pattern  = isset( $rule['pattern'] ) ? $rule['pattern'] : '';
 			$category = isset( $rule['category'] ) ? $rule['category'] : '';
-			if ( ! empty( $pattern ) && ! empty( $category ) ) {
+			if ( ! empty( $pattern ) && ! empty( $category ) && in_array( $category, $valid_categories, true ) ) {
 				$map[ $pattern ]               = $category;
 				$custom_patterns[ $pattern ] = true;
 			}
@@ -4962,6 +4977,12 @@ class Frontend {
 	 * minimum matches the behaviour documented for the frontend
 	 * `_fazIsUserWhitelisted()` consumer.
 	 *
+	 * Each whitelist entry is ALSO emitted verbatim as a cookie-name pattern,
+	 * so an admin can exempt a specific cookie by name (or `name_*`) even when
+	 * it belongs to no Known_Providers service. That is the supported remedy
+	 * for a false positive, and it must exist before enforcement is allowed to
+	 * delete anything.
+	 *
 	 * @param string[] $user_whitelist   Sanitised patterns from settings.
 	 * @param string[] $valid_categories Category slugs that exist in this install.
 	 * @return string[] Unique cookie-name patterns to skip on shred/interceptor.
@@ -4969,6 +4990,21 @@ class Frontend {
 	private function compute_whitelisted_cookie_patterns( $user_whitelist, $valid_categories ) {
 		$patterns = array();
 		$known    = Known_Providers::get_all();
+
+		// A whitelist entry is also honoured as a literal cookie-NAME pattern
+		// (wildcards included, via cookie_name_matches()). Without this the
+		// whitelist can only rescue cookies belonging to a Known_Providers
+		// service, so an admin whose own catalogued cookie is being shredded —
+		// or a false positive from any tier outside that map — has no supported
+		// remedy at all. The same three-character minimum applies: a one- or
+		// two-character token is not a cookie name, it is a typo.
+		foreach ( (array) $user_whitelist as $allowed ) {
+			$allowed = sanitize_text_field( (string) $allowed );
+			if ( '' === $allowed || strlen( $allowed ) < 3 ) {
+				continue;
+			}
+			$patterns[] = $allowed;
+		}
 
 		foreach ( $known as $service ) {
 			if ( 'necessary' === $service['category']
@@ -5369,6 +5405,9 @@ class Frontend {
 				// (use it) or must fall back to the effective-law logic (matching
 				// the server's get_blocked_categories split).
 				'defaultFromRuleset' => Geo_Runtime::is_ruleset_default( $this->get_runtime_ruleset(), $category->get_slug() ),
+				// Sensitive processing is never bundled into Accept All when the
+				// jurisdiction requires a distinct affirmative choice.
+				'requiresSeparateOptIn' => Geo_Runtime::requires_separate_optin( $this->get_runtime_ruleset(), $category->get_slug() ),
 			);
 		}
 		return $cookie_groups;
@@ -6688,82 +6727,597 @@ class Frontend {
 	}
 
 	/**
+	 * Open the opt-in output buffer that guards outgoing Set-Cookie headers.
+	 *
+	 * @return void
+	 */
+	public function start_server_cookie_guard() {
+		if ( $this->server_cookie_guard_started || ! $this->server_cookie_guard_enabled() || headers_sent() ) {
+			return;
+		}
+		$this->server_cookie_guard_started = true;
+		ob_start( array( $this, 'filter_outgoing_cookies' ) );
+	}
+
+	/**
+	 * Whether the destructive server-side layers may run at all on this request.
+	 *
+	 * Everything below the opt-in is a SAFETY standdown: conditions under which
+	 * enforcement must not happen no matter which layer is asking. Split out so
+	 * the pre-existing shredder can consult the standdowns WITHOUT inheriting
+	 * the opt-in that gates the new outgoing-header guard — see
+	 * cookie_shredder_enabled().
+	 *
+	 * @return bool
+	 */
+	private function server_cookie_enforcement_permitted() {
+		if ( wp_doing_cron() || ( is_admin() && ! wp_doing_ajax() && ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) ) {
+			return false;
+		}
+		if ( true === faz_disable_banner() || $this->is_blocking_disabled_for_page() ) {
+			return false;
+		}
+		// Enforcement must not outlive the banner. Blocking a script is
+		// reversible client-side; a Set-Cookie header that was never sent is
+		// gone for that response, and on a page where no banner is shown there
+		// is no script.js and no way for that visitor to ever record consent —
+		// so the stripping would be permanent with no remedy. Every destructive
+		// server-side layer — the output buffer, the REST/redirect transport
+		// boundaries and shred_non_consented_cookies() — asks this one function,
+		// so they cannot drift apart on it.
+		//
+		// Cache Compatibility Mode is excluded for the same reason: there
+		// get_blocked_categories() returns every non-necessary slug
+		// unconditionally, without ever reading the consent cookie, which is
+		// safe only for enforcement the client can undo.
+		if ( $this->is_cache_compatibility_enabled() || ! $this->server_cookie_guard_has_consent_context() ) {
+			return false;
+		}
+		// A valid authenticated scanner marker is the only bypass for AJAX/REST
+		// subrequests. It lets the scanner observe the exact header that a visitor
+		// would receive; a forged cookie alone is insufficient because the token
+		// must resolve to the current user's live transient.
+		if ( class_exists( '\FazCookie\Admin\Modules\Scanner\Includes\Controller' )
+			&& \FazCookie\Admin\Modules\Scanner\Includes\Controller::is_browser_scan_request()
+		) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Whether the NEW outgoing Set-Cookie guard may run.
+	 *
+	 * Opt-in, because stripping a Set-Cookie header a third-party plugin just
+	 * emitted is a capability this plugin did not previously have: it must be a
+	 * decision an operator made, not something an upgrade turns on underneath
+	 * them.
+	 *
+	 * @return bool
+	 */
+	private function server_cookie_guard_enabled() {
+		$settings = $this->get_faz_settings();
+		if ( empty( $settings['script_blocking']['block_server_cookies'] ) ) {
+			return false;
+		}
+		return $this->server_cookie_enforcement_permitted();
+	}
+
+	/**
+	 * Whether the pre-existing cookie shredder may run.
+	 *
+	 * Deliberately NOT gated on script_blocking.block_server_cookies. That
+	 * setting is new in this release and defaults to false; routing the
+	 * shredder through it turned a behaviour that had run on every front-end
+	 * render since the feature shipped into one every existing install silently
+	 * lost on upgrade, with no migration and no notice. An opt-in protects
+	 * operators from a NEW capability being switched on under them; it must not
+	 * switch an established one off.
+	 *
+	 * The safety standdowns still apply in full — the shredder is destructive
+	 * and irreversible in exactly the same way, so it stands down wherever the
+	 * visitor has no way to consent (no banner, geo no-banner routing, excluded
+	 * page) and under Cache Compatibility Mode, where get_blocked_categories()
+	 * answers without ever reading the consent cookie.
+	 *
+	 * @return bool
+	 */
+	private function cookie_shredder_enabled() {
+		return $this->server_cookie_enforcement_permitted();
+	}
+
+	/**
+	 * Whether a consent context exists for the visitor the guard would enforce.
+	 *
+	 * @return bool
+	 */
+	private function server_cookie_guard_has_consent_context() {
+		if ( faz_is_front_end_request() ) {
+			// load_banner() runs at init priority 10, before this guard opens
+			// its buffer at init priority 20, and leaves $this->template null on
+			// every no-banner path: the global toggle, page exclusions, AMP,
+			// geo no-banner routing, "no active banner" and geo blocking.
+			// Leaning on that single already-made decision keeps the three
+			// enforcement layers in agreement instead of duplicating six
+			// conditions that could drift apart.
+			//
+			// is_banner_disabled_by_settings() is re-evaluated on top of it
+			// because a numeric page-ID exclusion is not resolvable at init but
+			// is at the flush call site, which is where the destructive
+			// filtering actually happens.
+			return (bool) $this->template && ! $this->is_banner_disabled_by_settings();
+		}
+		// REST and admin-ajax subrequests: faz_is_front_end_request() is false
+		// there, so load_banner() never runs and $this->template is
+		// structurally null. Gating on it would silently kill the guard on
+		// subrequests — the one thing it does that the shredder cannot — so
+		// re-evaluate instead the two visitor-facing decisions that do not
+		// depend on the main query.
+		return ! $this->is_banner_disabled_by_settings() && ! $this->is_geo_banner_disabled();
+	}
+
+	/**
+	 * Output-buffer callback. The body is returned byte-for-byte unchanged.
+	 *
+	 * @param string $buffer Buffered response body.
+	 * @return string
+	 */
+	public function filter_outgoing_cookies( $buffer ) {
+		$this->filter_current_set_cookie_headers();
+		return (string) $buffer;
+	}
+
+	/** REST transport boundary: filter after the route callback, before echo. */
+	public function filter_server_cookies_before_rest_echo( $result, $server, $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress filter signature.
+		if ( $this->server_cookie_guard_enabled() ) {
+			$this->filter_current_set_cookie_headers();
+		}
+		return $result;
+	}
+
+	/** Redirect transport boundary: filter headers already queued by callbacks. */
+	public function filter_server_cookies_before_redirect( $location, $status ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress filter signature.
+		if ( $this->server_cookie_guard_enabled() ) {
+			$this->filter_current_set_cookie_headers();
+		}
+		return $location;
+	}
+
+	/** @return void */
+	private function filter_current_set_cookie_headers() {
+		if ( ! $this->server_cookie_guard_enabled() || headers_sent() ) {
+			return;
+		}
+		$headers = headers_list();
+		$result  = $this->filter_outgoing_cookie_header_lines( $headers );
+		if ( empty( $result['blocked'] ) ) {
+			return;
+		}
+		header_remove( 'Set-Cookie' );
+		foreach ( $result['set_cookie_headers'] as $header_line ) {
+			header( $header_line, false );
+		}
+		$this->record_blocked_server_cookies( $result['blocked'] );
+	}
+
+	/**
+	 * Pure header-list filter used by the transport boundary and unit tests.
+	 * Cookie values are never returned in the blocked diagnostics.
+	 *
+	 * @param string[] $headers Full response header lines.
+	 * @return array{set_cookie_headers:string[],blocked:array<int,array{name:string,category:string}>}
+	 */
+	public function filter_outgoing_cookie_header_lines( $headers ) {
+		$keep    = array();
+		$blocked = array();
+		foreach ( (array) $headers as $header_line ) {
+			if ( ! is_string( $header_line ) || 0 !== stripos( $header_line, 'Set-Cookie:' ) ) {
+				continue;
+			}
+			$cookie_string = trim( substr( $header_line, strlen( 'Set-Cookie:' ) ) );
+			$first_part    = trim( (string) strtok( $cookie_string, ';' ) );
+			$equals        = strpos( $first_part, '=' );
+			$name          = false === $equals ? '' : trim( substr( $first_part, 0, $equals ) );
+			if ( '' === $name || $this->is_cookie_deletion_header( $cookie_string ) || $this->is_cookie_allowed( $name, $this->set_cookie_attribute( $cookie_string, 'domain' ) ) ) {
+				$keep[] = $header_line;
+				continue;
+			}
+			$blocked[] = array(
+				'name'     => sanitize_text_field( $name ),
+				'category' => $this->get_cookie_category_slug( $name ),
+			);
+		}
+		$this->persist_definition_category_memo();
+		return array(
+			'set_cookie_headers' => $keep,
+			'blocked'            => $blocked,
+		);
+	}
+
+	/** @return string */
+	private function set_cookie_attribute( $cookie_string, $attribute ) {
+		if ( preg_match( '/(?:^|;)\s*' . preg_quote( $attribute, '/' ) . '\s*=\s*([^;]+)/i', (string) $cookie_string, $match ) ) {
+			return trim( $match[1] );
+		}
+		return '';
+	}
+
+	/** @return bool */
+	private function is_cookie_deletion_header( $cookie_string ) {
+		$max_age = $this->set_cookie_attribute( $cookie_string, 'max-age' );
+		if ( '' !== $max_age && is_numeric( $max_age ) && (int) $max_age <= 0 ) {
+			return true;
+		}
+		$expires = $this->set_cookie_attribute( $cookie_string, 'expires' );
+		return '' !== $expires && false !== strtotime( $expires ) && strtotime( $expires ) <= time();
+	}
+
+	/** @return void */
+	private function record_blocked_server_cookies( $blocked ) {
+		$recent = get_transient( 'faz_recent_blocked_server_cookies' );
+		$recent = is_array( $recent ) ? $recent : array();
+		// PATH ONLY, and capped.
+		//
+		// sanitize_text_field() strips tags; it does NOT strip the query string
+		// and does not truncate. WordPress query strings routinely carry
+		// personal data — ?email=, the WooCommerce order_key, the password-reset
+		// key+login pair, _wpnonce, site-search terms — and this diagnostic is
+		// written by ANONYMOUS front-end requests, then kept for 24 hours and
+		// rendered in a manage_options table. Nothing erases it: the plugin's
+		// GDPR eraser is email-keyed and covers consent logs only, and the
+		// default uninstall path skips cleanup (gated on remove_data_on_uninstall,
+		// default false). The question this column exists to answer is "which
+		// page emitted the cookie", which the path answers exactly as well as
+		// the full URI does, so the query string is discarded before storage
+		// rather than after.
+		//
+		// The 255-char cap bounds the row as well: with no length limit an
+		// anonymous visitor requesting a URL with an 8 KB query string drove a
+		// ~400 KB wp_options rewrite per request.
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		$path = substr( (string) strtok( $uri, '?' ), 0, 255 );
+		foreach ( (array) $blocked as $entry ) {
+			if ( empty( $entry['name'] ) ) {
+				continue;
+			}
+			$recent[] = array(
+				'name'       => sanitize_text_field( $entry['name'] ),
+				'category'   => sanitize_key( isset( $entry['category'] ) ? $entry['category'] : '' ),
+				'request'    => $path,
+				'blocked_at' => time(),
+			);
+			do_action( 'faz_server_cookie_blocked', $entry['name'], isset( $entry['category'] ) ? $entry['category'] : '' );
+		}
+		// Retain exactly what the System Status table renders (its own
+		// array_slice(…, 0, 20) after array_reverse). The previous 50 kept 30
+		// entries no reader ever saw, which is retention without a purpose.
+		set_transient( 'faz_recent_blocked_server_cookies', array_slice( $recent, -20 ), DAY_IN_SECONDS );
+	}
+
+	/** @return bool */
+	private function is_always_allowed_cookie_name( $name ) {
+		// Single source of truth with the display layer. is_wp_internal_cookie()
+		// is the plugin's own never-show / never-shred allowlist: WordPress auth
+		// and settings cookies, comment_author_*, _litespeed_*, lscache_vary and
+		// wpdiscuz_nonce_*. Commit ad72cd3 added wpdiscuz_nonce_ there after the
+		// server-side shredder deleted a live site's comment CSRF nonce
+		// (gooloo.de, FAZ 1.13.6) — but only the banner/table/policy renderers
+		// ever consulted that list, so enforcement never received the fix.
+		// Delegating here makes the invariant hold in the one direction that
+		// matters: a cookie the plugin refuses to SHOW can never be DELETED.
+		if ( self::is_wp_internal_cookie( $name ) ) {
+			return true;
+		}
+		$patterns = array(
+			'fazcookie-consent', 'fazcookie-dnsmpi', 'faz_scan_session',
+			'wordpress_*', 'wp-settings-*', 'wp-settings-time-*', 'wp-postpass_*',
+			'comment_author_*', 'wp_lang', 'wordpress_test_cookie',
+			'wp_woocommerce_session_*', 'woocommerce_*', 'wc_cart_hash_*', 'wc_fragments_*',
+			'PHPSESSID', '_GRECAPTCHA', 'cf_clearance',
+		);
+		foreach ( $patterns as $pattern ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Classify a cookie across every tier available to this install.
+	 *
+	 * CLASSIFICATION ONLY — this answers "what is this cookie?" for the admin
+	 * screens, the cookie policy and the blocked-cookie diagnostics. It is
+	 * deliberately wide: the admin catalogue, Known_Providers, the curated
+	 * Cookie_Database and the 6,754-entry bundled Open Cookie Database. That
+	 * breadth is a genuine accuracy win for a human reading a report.
+	 *
+	 * It is NOT an authority to destroy anything. Deletion is decided by
+	 * get_enforceable_cookie_category_slug(), which is narrower on purpose.
+	 * Do not point an enforcement path back at this method.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when no tier recognises the name.
+	 */
+	private function get_cookie_category_slug( $name ) {
+		$name = (string) $name;
+		// The administrator-owned inventory is authoritative. A reviewed or
+		// manually corrected classification must win over bundled heuristics.
+		foreach ( $this->get_catalog_cookie_categories() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return $category;
+			}
+		}
+		foreach ( Known_Providers::get_cookie_map() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return sanitize_key( $category );
+			}
+		}
+		if ( class_exists( '\FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database' ) ) {
+			$known = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup( $name );
+			if ( is_array( $known ) && ! empty( $known['category'] ) ) {
+				return sanitize_key( $known['category'] );
+			}
+		}
+		if ( class_exists( '\FazCookie\Includes\Cookie_Definitions' ) ) {
+			return $this->lookup_definition_category( $name );
+		}
+		return '';
+	}
+
+	/**
+	 * Category slug the server is permitted to ACT on: the narrow twin of
+	 * get_cookie_category_slug(), and the only classifier is_cookie_allowed()
+	 * may consult.
+	 *
+	 * Two tiers by default, both reviewable by a human on this site:
+	 *
+	 *   1. The admin catalogue (wp_faz_cookies). An administrator who marks a
+	 *      cookie `marketing` must have that decision enforced, and most such
+	 *      corrections sit outside Known_Providers by definition — which is why
+	 *      this is NOT a revert to a Known_Providers-only map.
+	 *   2. Known_Providers, the curated 283-pattern bundled map.
+	 *
+	 * The Cookie_Database and Open Cookie Database tiers are excluded because
+	 * they are third-party datasets, refreshable from GitHub, in which 99.5% of
+	 * entries land in a slug that is blocked pre-consent under an opt-in law,
+	 * and whose wildcard entries are bare prefixes as short as two characters
+	 * (`_s`, `ct`, `sr`, `tp`). Excellent hints for an admin screen; not an
+	 * acceptable authority for issuing setcookie( …, -1 ) against a visitor's
+	 * session. A site that wants them can opt in per the filter below, and even
+	 * then short wildcard prefixes stay non-enforceable.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when no enforceable tier knows it.
+	 */
+	private function get_enforceable_cookie_category_slug( $name ) {
+		$name = (string) $name;
+		foreach ( $this->get_catalog_cookie_categories() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return $category;
+			}
+		}
+		foreach ( Known_Providers::get_cookie_map() as $pattern => $category ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				return sanitize_key( $category );
+			}
+		}
+		/**
+		 * Whether the bundled third-party cookie datasets (Cookie_Database and
+		 * the Open Cookie Database) may authorise server-side DELETION, not
+		 * merely classification.
+		 *
+		 * Off by default: see the method docblock. Turning it on still cannot
+		 * enforce an Open Cookie Database wildcard whose prefix is shorter than
+		 * self::ENFORCEABLE_WILDCARD_MIN_LENGTH.
+		 *
+		 * @param bool $enabled Whether the bundled datasets may authorise deletion.
+		 */
+		if ( ! apply_filters( 'faz_shred_uses_cookie_database', false ) ) {
+			return '';
+		}
+		if ( class_exists( '\FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database' ) ) {
+			$known = \FazCookie\Admin\Modules\Scanner\Includes\Cookie_Database::lookup( $name );
+			if ( is_array( $known ) && ! empty( $known['category'] ) ) {
+				return sanitize_key( $known['category'] );
+			}
+		}
+		return $this->enforceable_definition_category( $name );
+	}
+
+	/**
+	 * Open Cookie Database tier of get_enforceable_cookie_category_slug().
+	 *
+	 * Unlike lookup_definition_category(), this inspects HOW the dataset
+	 * matched. Cookie_Definitions::lookup() falls back to a bare
+	 * `0 === strpos( $name, $pattern )` prefix test over its wildcard entries,
+	 * and the bundled snapshot ships two- and three-character prefixes, so
+	 * `_session` matches `_s` (Analytics) and `tp_visitor` matches `tp`
+	 * (Marketing). A prefix that short carries no evidence about an ordinary
+	 * first-party cookie, so it is refused enforcement even when the operator
+	 * opted the dataset in. Exact-name hits are unaffected.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when the dataset must not be acted on.
+	 */
+	private function enforceable_definition_category( $name ) {
+		if ( ! class_exists( '\FazCookie\Includes\Cookie_Definitions' ) ) {
+			return '';
+		}
+		$definition = \FazCookie\Includes\Cookie_Definitions::get_instance()->lookup( $name );
+		if ( ! is_array( $definition ) || empty( $definition['category'] ) ) {
+			return '';
+		}
+		$matched = isset( $definition['name'] ) ? (string) $definition['name'] : '';
+		if ( ! empty( $definition['wildcard'] ) && strlen( $matched ) < self::ENFORCEABLE_WILDCARD_MIN_LENGTH ) {
+			return '';
+		}
+		$category = sanitize_key( $definition['category'] );
+		return 'advertising' === $category ? 'marketing' : $category;
+	}
+
+	/**
+	 * Open Cookie Database tier of get_cookie_category_slug(), memoized by name.
+	 *
+	 * Materializing the bundled Open Cookie Database costs ~13 ms and ~16 MB of
+	 * peak memory, and it is otherwise rebuilt on every request that reaches
+	 * this tier — including the pre-consent first page view of every visitor,
+	 * where blocked categories are non-empty by design and the guard in
+	 * is_cookie_allowed() cannot short-circuit. The cookie names seen on a site
+	 * are a small and stable set, so the resolved verdicts are persisted next to
+	 * faz_server_cookie_category_map: same TTL, and the same invalidation hooks
+	 * in class-cli.php, so an admin reclassification takes effect on both maps
+	 * at the same moment rather than trading a performance bug for a staleness
+	 * bug.
+	 *
+	 * @param string $name Cookie name.
+	 * @return string Category slug, or '' when the database does not know it.
+	 */
+	private function lookup_definition_category( $name ) {
+		if ( null === $this->definition_category_memo ) {
+			$cached                         = get_transient( 'faz_server_cookie_definition_map' );
+			$this->definition_category_memo = is_array( $cached ) ? $cached : array();
+		}
+		// array_key_exists, not isset: a memoized miss is stored as '' and must
+		// not be re-resolved.
+		if ( array_key_exists( $name, $this->definition_category_memo ) ) {
+			return $this->definition_category_memo[ $name ];
+		}
+
+		$category   = '';
+		$definition = \FazCookie\Includes\Cookie_Definitions::get_instance()->lookup( $name );
+		if ( is_array( $definition ) && ! empty( $definition['category'] ) ) {
+			$category = sanitize_key( $definition['category'] );
+			$category = 'advertising' === $category ? 'marketing' : $category;
+		}
+
+		$this->definition_category_memo[ $name ] = $category;
+		// Bounded: a crawler spraying junk cookie names must not grow the stored
+		// row without limit. Least-recently-added entries fall off first.
+		if ( count( $this->definition_category_memo ) > 200 ) {
+			$this->definition_category_memo = array_slice( $this->definition_category_memo, -200, null, true );
+		}
+		$this->definition_category_memo_dirty = true;
+		return $category;
+	}
+
+	/**
+	 * Persist the Open Cookie Database memo once per request, if it grew.
+	 *
+	 * Called from the two entry points that classify cookies in bulk so a
+	 * request that meets fifteen unknown names performs one write, not fifteen.
+	 *
+	 * @return void
+	 */
+	private function persist_definition_category_memo() {
+		if ( ! $this->definition_category_memo_dirty || ! is_array( $this->definition_category_memo ) ) {
+			return;
+		}
+		$this->definition_category_memo_dirty = false;
+		set_transient( 'faz_server_cookie_definition_map', $this->definition_category_memo, HOUR_IN_SECONDS );
+	}
+
+	/**
+	 * Cookie-name → category map derived from the admin catalogue.
+	 *
+	 * WordPress-internal rows are skipped, exactly as prepare_frontend_cookies()
+	 * and get_cookies() already skip them: a cookie the plugin deliberately
+	 * hides from the banner must not be the thing that drives a server-side
+	 * deletion. This was the one place a hidden technical cookie could reach
+	 * setcookie( …, -1 ).
+	 *
+	 * The transient key is versioned (`…_v2`): a map persisted by an earlier
+	 * build still contains the unfiltered rows, and without the bump it would
+	 * keep answering for up to an hour after deploy — the bug would look fixed
+	 * in test and stay live in production. includes/class-cli.php busts both
+	 * keys on every cookie/category/settings write.
+	 *
+	 * @return array<string,string>
+	 */
+	private function get_catalog_cookie_categories() {
+		if ( null !== $this->catalog_cookie_categories_cache ) {
+			return $this->catalog_cookie_categories_cache;
+		}
+		$cached = get_transient( 'faz_server_cookie_category_map_v2' );
+		if ( is_array( $cached ) ) {
+			$this->catalog_cookie_categories_cache = $cached;
+			return $cached;
+		}
+		$this->catalog_cookie_categories_cache = array();
+		$category_slugs = array();
+		foreach ( \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items() as $category_row ) {
+			$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $category_row );
+			$category_slugs[ $category->get_id() ] = sanitize_key( $category->get_slug() );
+		}
+		foreach ( \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller::get_instance()->get_items() as $cookie_row ) {
+			$cookie = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie( $cookie_row );
+			$name   = $cookie->get_name();
+			$cat_id = $cookie->get_category();
+			if ( '' === $name || self::is_wp_internal_cookie( $name ) ) {
+				continue;
+			}
+			if ( ! empty( $category_slugs[ $cat_id ] ) ) {
+				$this->catalog_cookie_categories_cache[ $name ] = $category_slugs[ $cat_id ];
+			}
+		}
+		set_transient( 'faz_server_cookie_category_map_v2', $this->catalog_cookie_categories_cache, HOUR_IN_SECONDS );
+		return $this->catalog_cookie_categories_cache;
+	}
+
+	/**
 	 * Delete non-consented cookies before the page renders (cookie shredding).
 	 *
 	 * Runs on template_redirect, after the main query has resolved but before
-	 * template output. Compares cookies against the Known_Providers cookie map
-	 * and deletes any that belong to categories the visitor has not consented to.
+	 * template output. Classifies each existing cookie through
+	 * is_cookie_allowed() — admin catalogue then Known_Providers — and deletes
+	 * those belonging to categories the visitor has not consented to.
+	 *
+	 * Gated on `cookie_shredder_enabled()` — the safety standdowns only, NOT
+	 * the new block_server_cookies opt-in, which governs only the outgoing
+	 * Set-Cookie guard. The decision that
+	 * governs every destructive server-side enforcement layer, not a private
+	 * copy of the `script_blocking.block_server_cookies` opt-in. Destroying a
+	 * visitor's existing cookie is irreversible for that request and the failure
+	 * signature is indirect — "users randomly logged out, cart empties, comments
+	 * 403" with nothing pointing at this plugin — so it must be a decision an
+	 * operator made, not something an upgrade turns on underneath them.
+	 * Client-side cleanup on consent-save (script.js _fazCleanupRevokedCookies)
+	 * is unaffected and remains the default enforcement for existing cookies.
+	 *
+	 * Three clauses of that gate matter here beyond the opt-in, and all three
+	 * are wanted:
+	 *
+	 * - Cache Compatibility Mode. There get_blocked_categories() returns every
+	 *   non-necessary slug unconditionally, returning before it ever reads the
+	 *   consent cookie. Under a private opt-in check this shredder passed its
+	 *   own gate, is_cookie_allowed() resolved a CONSENTED visitor's `_ga` to
+	 *   false, and every enforceably-classified cookie was destroyed on every
+	 *   front-end render. That is the regression the shared gate closes, and it
+	 *   is why the cache-compat decision must be made in exactly one place.
+	 * - No consent context (faz_disable_banner(), page exclusions, no banner,
+	 *   banner_control off, geo no-banner routing). Such a visitor has no
+	 *   script.js and can never record consent, so deleting their cookies is
+	 *   permanent with no remedy. This also subsumes the `! $this->template` and
+	 *   faz_disable_banner()/is_blocking_disabled_for_page() checks this method
+	 *   used to repeat — one gate, not two that can drift apart.
+	 * - A valid authenticated browser-scan request. Standing down there lets the
+	 *   scanner inventory exactly the cookies a real visitor would keep instead
+	 *   of scanning a page it has just emptied.
 	 */
 	public function shred_non_consented_cookies() {
 		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() ) {
 			return;
 		}
-		if ( ! $this->template ) {
+		if ( ! $this->cookie_shredder_enabled() ) {
 			return;
 		}
-		if ( true === faz_disable_banner() || $this->is_blocking_disabled_for_page() ) {
-			return;
-		}
-
-		$blocked_categories = $this->get_blocked_categories();
-
-		// Per-service consent overrides the category fallback for matching
-		// cookies. A denied service wins over an allowed service when providers
-		// share a cookie pattern.
-		$service_consent = $this->get_service_consent();
-		// Per-cookie consent (ck.<svc>.<cookie>) is the most-specific override on
-		// top of per-service: a cookie denied inside an otherwise-accepted service
-		// is shredded server-side too. Mirrors the client resolver
-		// _fazGetServiceCookieDecision (per-cookie > per-service > category).
-		$shred_settings       = $this->get_faz_settings();
-		$shred_banner_control = isset( $shred_settings['banner_control'] ) ? (array) $shred_settings['banner_control'] : array();
-		$per_cookie_enabled   = ! empty( $shred_banner_control['per_cookie_consent'] ) && ! empty( $shred_banner_control['per_service_consent'] );
-		// Parse ck.* from the SAME validated (non-stale) consent string as svc.*,
-		// so a revision-bumped/expired cookie does not enforce old per-cookie picks.
-		$valid_consent_str = ( $per_cookie_enabled && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
-		$consent_cookie    = ( '' !== $valid_consent_str && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid_consent_str ) : array();
-		$svc_cookie_decisions = array(); // pattern => array( 'yes'|'no' ).
-		if ( ! empty( $service_consent ) || $per_cookie_enabled ) {
-			// Use the broad enforceable set (same source as get_service_consent()
-			// and get_pattern_service_map()), not the narrow scanner-detected
-			// list. Otherwise a svc.<id>:no for an enforceable-but-undetected
-			// provider is honoured for script-blocking but its already-set cookie
-			// is never shredded — the three layers must agree. (#134/#146)
-			// The `|| $per_cookie_enabled` guard keeps the loop running for
-			// per-cookie (ck.*) denials even when no service-level svc.* exists. (#135)
-			foreach ( $this->get_enforceable_services() as $service ) {
-				$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
-				if ( '' === $svc_id || empty( $service['cookies'] ) ) {
-					continue;
-				}
-				$svc_decision = isset( $service_consent[ $svc_id ] ) ? $service_consent[ $svc_id ] : '';
-				if ( 'yes' !== $svc_decision && 'no' !== $svc_decision ) {
-					$svc_decision = '';
-				}
-				foreach ( $service['cookies'] as $cookie_pattern ) {
-					$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
-					if ( '' === $cookie_pattern ) {
-						continue;
-					}
-					$pattern_decision = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent_cookie, $per_cookie_enabled );
-					if ( 'yes' !== $pattern_decision && 'no' !== $pattern_decision ) {
-						continue; // No explicit svc/ck decision -> category fallback handles it.
-					}
-					if ( ! isset( $svc_cookie_decisions[ $cookie_pattern ] ) ) {
-						$svc_cookie_decisions[ $cookie_pattern ] = array();
-					}
-					$svc_cookie_decisions[ $cookie_pattern ][] = $pattern_decision;
-				}
-			}
-		}
-
-		// Nothing to evaluate: no blocked categories and no explicit services.
-		if ( empty( $blocked_categories ) && empty( $svc_cookie_decisions ) ) {
-			return;
-		}
-
-		$cookie_map = Known_Providers::get_cookie_map();
-		if ( empty( $cookie_map ) && empty( $svc_cookie_decisions ) ) {
+		// Early bail: with no blocked category and no explicit per-service or
+		// per-cookie denial, is_cookie_allowed() provably returns true for every
+		// name, so the loop below would classify every cookie in the request to
+		// reach a foregone conclusion. Both conditions are required — a
+		// `svc.<id>:no` / `ck.<svc>.<cookie>:no` denial stays enforceable on a
+		// site where no category is blocked.
+		if ( empty( $this->get_blocked_categories() ) && empty( $this->get_service_cookie_decisions() ) ) {
 			return;
 		}
 
@@ -6772,68 +7326,8 @@ class Frontend {
 		$shared_domain     = ltrim( (string) $this->get_cookie_domain(), '.' );
 		$domain_candidates = array_values( array_unique( array_filter( array( $current_host, $shared_domain ) ) ) );
 
-		// Whitelist short-circuit: cookies belonging to services the admin
-		// has whitelisted (Settings → Script Blocking → whitelist_patterns)
-		// must survive `template_redirect` shredding too, otherwise the frontend
-		// whitelist is only honored on the first page load and is silently
-		// neutralized on every subsequent request.
-		$settings                    = $this->get_faz_settings();
-		$user_whitelist              = isset( $settings['script_blocking']['whitelist_patterns'] )
-			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
-			: array();
-		$whitelisted_cookie_patterns = $this->compute_whitelisted_cookie_patterns(
-			$user_whitelist,
-			$this->get_valid_category_slugs()
-		);
-
 		foreach ( array_keys( $_COOKIE ) as $name ) {
-			$should_shred    = false;
-			$service_allows  = false;
-			$service_denied  = false;
-
-			foreach ( $svc_cookie_decisions as $pattern => $decisions ) {
-				if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
-					continue;
-				}
-				foreach ( $decisions as $decision ) {
-					if ( 'no' === $decision ) {
-						$should_shred   = true;
-						$service_denied = true;
-						break 2;
-					}
-					if ( 'yes' === $decision ) {
-						$service_allows = true;
-					}
-				}
-			}
-
-			// Category consent is only the fallback when no matching service has
-			// an explicit decision.
-			if ( ! $should_shred && ! $service_allows ) {
-				foreach ( $cookie_map as $pattern => $category ) {
-					if ( ! in_array( $category, $blocked_categories, true ) ) {
-						continue;
-					}
-					if ( $this->cookie_name_matches( $name, $pattern ) ) {
-						$should_shred = true;
-						break;
-					}
-				}
-			}
-
-			// A whitelist can override the category fallback, but never an explicit
-			// per-service/per-cookie denial. This preserves genuine checkout/admin
-			// gateway exemptions without making consent revocation ineffective.
-			if ( $should_shred && ! $service_denied && ! empty( $whitelisted_cookie_patterns ) ) {
-				foreach ( $whitelisted_cookie_patterns as $wl_pattern ) {
-					if ( $this->cookie_name_matches( $name, $wl_pattern ) ) {
-						$should_shred = false;
-						break;
-					}
-				}
-			}
-
-			if ( $should_shred ) {
+			if ( ! $this->is_cookie_allowed( $name ) ) {
 				setcookie( $name, '', -1, '/' );
 				foreach ( $domain_candidates as $domain ) {
 					setcookie( $name, '', -1, '/', $domain );
@@ -6842,6 +7336,156 @@ class Frontend {
 				unset( $_COOKIE[ $name ] );
 			}
 		}
+
+		$this->persist_definition_category_memo();
+	}
+
+	/**
+	 * Decide whether a cookie may exist for the current visitor.
+	 *
+	 * This is the single policy used by both the existing-cookie shredder and
+	 * the outgoing Set-Cookie guard: per-cookie > per-service > category, with
+	 * explicit denials winning shared patterns and necessary/internal cookies
+	 * always preserved.
+	 *
+	 * Unknown cookies fail permissive because blocking an unclassified session
+	 * token can break authentication or checkout. The scanner inventories them;
+	 * once classified, this guard enforces their category automatically.
+	 *
+	 * @param string $name   Cookie name.
+	 * @param string $domain Optional cookie domain (reserved for future rules).
+	 * @return bool
+	 */
+	public function is_cookie_allowed( $name, $domain = '' ) {
+		$name      = sanitize_text_field( (string) $name );
+		$cache_key = strtolower( $name . '|' . (string) $domain );
+		if ( isset( $this->cookie_allowed_cache[ $cache_key ] ) ) {
+			return $this->cookie_allowed_cache[ $cache_key ];
+		}
+		if ( '' === $name || $this->is_always_allowed_cookie_name( $name ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
+		$service_decisions = $this->get_service_cookie_decisions();
+
+		// Nothing is blocked and no explicit per-service/per-cookie decision
+		// exists: every remaining path in this method provably returns true, so
+		// the enforcement classification cascade below (admin catalogue →
+		// Known_Providers, plus the opt-in bundled-dataset tiers) would be paid
+		// for an answer that is already determined. The shredder runs at
+		// template_redirect priority 1 on every front-end render, so that cost
+		// is charged per request.
+		//
+		// BOTH conditions are required. Guarding on the category list alone
+		// would silently stop honouring explicit `svc.<id>:no` /
+		// `ck.<svc>.<cookie>:no` denials, which remain enforceable even when no
+		// category is blocked — a consent regression, and one that a casual
+		// smoke test would miss because most sites configure no per-service
+		// consent at all.
+		if ( empty( $service_decisions ) && empty( $this->get_blocked_categories() ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
+		$service_allows = false;
+		foreach ( $service_decisions as $pattern => $decisions ) {
+			if ( ! $this->cookie_name_matches( $name, $pattern ) ) {
+				continue;
+			}
+			if ( in_array( 'no', $decisions, true ) ) {
+				$this->cookie_allowed_cache[ $cache_key ] = false;
+				return false;
+			}
+			if ( in_array( 'yes', $decisions, true ) ) {
+				$service_allows = true;
+			}
+		}
+		if ( $service_allows ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
+		// Enforcement reads the NARROW classifier. get_cookie_category_slug()
+		// stays wide for the admin UI and the blocked-cookie diagnostics, but a
+		// third-party dataset must never be what authorises a deletion.
+		$category = $this->get_enforceable_cookie_category_slug( $name );
+		// 'uncategorized' is the ABSENCE of a classification, not a verdict: the
+		// scanner writes every cookie it fails to recognise as uncategorized
+		// (Scanner\Controller::…, "Default fallback category for unknown
+		// cookies"), and get_blocked_categories() blocks every non-necessary
+		// slug pre-consent. Treating it as a real blocked category inverts this
+		// method's own contract — "unknown cookies fail permissive because
+		// blocking an unclassified session token can break authentication or
+		// checkout" — into "we do not know what this is, so delete it". That
+		// inversion is what broke comments on gooloo.de (commit ad72cd3).
+		if ( '' === $category || in_array( $category, array( 'necessary', 'wordpress-internal', 'uncategorized' ), true ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+		if ( ! in_array( $category, $this->get_blocked_categories(), true ) ) {
+			$this->cookie_allowed_cache[ $cache_key ] = true;
+			return true;
+		}
+
+		foreach ( $this->get_whitelisted_cookie_patterns() as $pattern ) {
+			if ( $this->cookie_name_matches( $name, $pattern ) ) {
+				$this->cookie_allowed_cache[ $cache_key ] = true;
+				return true;
+			}
+		}
+
+		$this->cookie_allowed_cache[ $cache_key ] = false;
+		return false;
+	}
+
+	/** @return array<string,array<int,string>> */
+	private function get_service_cookie_decisions() {
+		if ( null !== $this->service_cookie_decisions_cache ) {
+			return $this->service_cookie_decisions_cache;
+		}
+		$this->service_cookie_decisions_cache = array();
+		$service_consent = $this->get_service_consent();
+		$settings        = $this->get_faz_settings();
+		$banner_control  = isset( $settings['banner_control'] ) ? (array) $settings['banner_control'] : array();
+		$per_cookie      = ! empty( $banner_control['per_cookie_consent'] ) && ! empty( $banner_control['per_service_consent'] );
+		$valid           = ( $per_cookie && function_exists( 'faz_get_valid_consent_cookie' ) ) ? (string) faz_get_valid_consent_cookie() : '';
+		$consent         = ( '' !== $valid && function_exists( 'faz_parse_consent_cookie' ) ) ? faz_parse_consent_cookie( $valid ) : array();
+		if ( empty( $service_consent ) && ! $per_cookie ) {
+			return $this->service_cookie_decisions_cache;
+		}
+		foreach ( $this->get_enforceable_services() as $service ) {
+			$svc_id = isset( $service['id'] ) ? sanitize_key( $service['id'] ) : '';
+			if ( '' === $svc_id || empty( $service['cookies'] ) ) {
+				continue;
+			}
+			$svc_decision = isset( $service_consent[ $svc_id ] ) && in_array( $service_consent[ $svc_id ], array( 'yes', 'no' ), true ) ? $service_consent[ $svc_id ] : '';
+			foreach ( $service['cookies'] as $cookie_pattern ) {
+				$cookie_pattern = sanitize_text_field( (string) $cookie_pattern );
+				$decision       = $this->resolve_service_cookie_decision( $svc_id, $cookie_pattern, $svc_decision, $consent, $per_cookie );
+				if ( '' === $cookie_pattern || ! in_array( $decision, array( 'yes', 'no' ), true ) ) {
+					continue;
+				}
+				if ( ! isset( $this->service_cookie_decisions_cache[ $cookie_pattern ] ) ) {
+					$this->service_cookie_decisions_cache[ $cookie_pattern ] = array();
+				}
+				$this->service_cookie_decisions_cache[ $cookie_pattern ][] = $decision;
+			}
+		}
+		return $this->service_cookie_decisions_cache;
+	}
+
+	/** @return string[] */
+	private function get_whitelisted_cookie_patterns() {
+		if ( null !== $this->whitelisted_cookie_patterns_cache ) {
+			return $this->whitelisted_cookie_patterns_cache;
+		}
+		$settings       = $this->get_faz_settings();
+		$user_whitelist = isset( $settings['script_blocking']['whitelist_patterns'] )
+			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
+			: array();
+		$this->whitelisted_cookie_patterns_cache = $this->compute_whitelisted_cookie_patterns( $user_whitelist, $this->get_valid_category_slugs() );
+		return $this->whitelisted_cookie_patterns_cache;
 	}
 
 	/**
@@ -6917,6 +7561,21 @@ class Frontend {
 	 */
 	public function filter_content_blocking( $content ) {
 		if ( empty( $content ) || is_admin() ) {
+			return $content;
+		}
+		// Never rewrite a machine-readable representation of the content.
+		//
+		// WordPress applies `the_content` inside get_the_content_feed(), so a
+		// post carrying an embed was shipped to feed readers as a
+		// data-faz-src placeholder — and script.js does not exist there, so
+		// nothing would ever restore it. The embed was simply gone for every
+		// RSS subscriber, every Mailchimp RSS-to-email campaign and every
+		// headless consumer, with no error anywhere to show for it.
+		//
+		// Blocking is also meaningless in a feed: consent is a browser-side
+		// state, a feed reader has no banner to accept, and the third-party
+		// resource is fetched (or not) by the reader under its own rules.
+		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
 			return $content;
 		}
 		if ( ! $this->template ) {
@@ -6999,6 +7658,18 @@ class Frontend {
 	 * @return string Modified HTML.
 	 */
 	public function filter_oembed_blocking( $html, $url ) {
+		// Same reason as filter_content_blocking(): WP_Embed::autoembed runs on
+		// `the_content` at priority 8, and get_the_content_feed() applies
+		// `the_content`, so this fires in feeds too — and $this->template IS
+		// populated there. A post carrying a bare YouTube URL shipped to every
+		// subscriber as a placeholder div that no script.js would ever restore.
+		//
+		// wp_doing_cron() is the second half: a newsletter plugin rendering
+		// post content on WP-Cron mails out data-faz-src placeholders and
+		// type="text/plain" scripts, and there is no JS in an email either.
+		if ( faz_is_machine_readable_request() || wp_doing_cron() ) {
+			return $html;
+		}
 		if ( empty( $html ) || is_admin() ) {
 			return $html;
 		}

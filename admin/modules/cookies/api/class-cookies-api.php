@@ -14,6 +14,7 @@ use WP_Error;
 use FazCookie\Admin\Modules\Cookies\Api\API_Controller;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie;
 use FazCookie\Admin\Modules\Cookies\Includes\Cookie_Controller;
+use FazCookie\Admin\Modules\Scanner\Includes\Controller as Scanner_Controller;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
@@ -27,6 +28,39 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @package     FazCookie
  */
 class Cookies_API extends API_Controller {
+
+	/**
+	 * Snapshots of bulk-deleted cookies, most recent first.
+	 *
+	 * A bulk delete removes entries from the site's public cookie declaration,
+	 * and the usual trigger is a scan that did not observe them — which is not
+	 * the same as their being absent. This makes that judgement reversible.
+	 *
+	 * @var string
+	 */
+	const RECYCLE_BIN_OPTION = 'faz_cookies_recycle_bin';
+
+	/**
+	 * How many delete batches stay restorable.
+	 *
+	 * An undo for a mistake noticed soon after, not an archive.
+	 *
+	 * @var int
+	 */
+	const RECYCLE_BIN_BATCHES = 3;
+
+	/**
+	 * Soft ceiling, in bytes, for the serialized recycle bin.
+	 *
+	 * A purge of 1000 rows serializes to roughly 1.8 MB across three batches,
+	 * so this is a guard against a pathological catalogue, not a hot path. It
+	 * matters because the option is a single row: past the server's
+	 * max_allowed_packet the write fails outright, and a bin that cannot be
+	 * written is a purge that must not happen (see bulk_delete()).
+	 *
+	 * @var int
+	 */
+	const RECYCLE_BIN_MAX_BYTES = 2097152;
 
 	/**
 	 * Endpoint namespace.
@@ -89,6 +123,47 @@ class Cookies_API extends API_Controller {
 				'methods'             => WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'bulk_delete' ),
 				'permission_callback' => array( $this, 'delete_item_permissions_check' ),
+				'args'                => array(
+					// Optional, and deliberately opt-in. Only the Cookies page's
+					// stale-purge sends reason=stale, and only that value turns on
+					// the consecutive-miss threshold below. The default unscoped
+					// path stays exactly as it was: an administrator selecting
+					// rows by hand must keep being able to delete any of them,
+					// including hand-added and never-scanned entries.
+					'reason' => array(
+						'type'              => 'string',
+						'default'           => '',
+						'sanitize_callback' => 'sanitize_key',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/restore-deleted',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'restore_deleted' ),
+				// Restoring writes cookie rows, so it is gated on the create
+				// capability rather than the delete one that produced the batch.
+				'permission_callback' => array( $this, 'create_item_permissions_check' ),
+			)
+		);
+
+		// What is still undoable. A read path is what lets the Cookies page show
+		// the undo affordance on load rather than only in the seconds after a
+		// delete — the bin persists several batches across reloads, and an
+		// administrator notices a wrong purge after navigating away.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/deleted-batches',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_deleted_batches' ),
+				// A read uses the read permission, matching the other READABLE
+				// routes here; create_item_* would also demand the write nonce.
+				'permission_callback' => array( $this, 'get_items_permissions_check' ),
 			)
 		);
 
@@ -633,19 +708,416 @@ class Cookies_API extends API_Controller {
 			return new \WP_Error( 'invalid_data', __( 'No cookie IDs provided.', 'faz-cookie-manager' ), array( 'status' => 400 ) );
 		}
 		$deleted = 0;
+		$refused = 0;
+
+		// Scoped threshold enforcement. reason=stale means "delete these because
+		// a scan did not see them", and that claim is only admissible once an
+		// entry has been missing from Controller::MISSED_SCANS_THRESHOLD
+		// consecutive COMPLETE scans. The browser computes the candidate list, so
+		// without this check the safeguard is advisory: a stale request, or a
+		// direct REST call, could purge on a single missed scan.
+		//
+		// Deliberately NOT a blanket gate. Applying it to every caller would take
+		// away an administrator's ability to delete a hand-added or never-scanned
+		// row — a visible regression across the whole Cookies page, and a worse
+		// outcome than the gap being closed.
+		$reason = sanitize_key( (string) $request->get_param( 'reason' ) );
+		$earned = null;
+		if ( 'stale' === $reason ) {
+			$earned = array_flip( Scanner_Controller::get_instance()->deletable_stale_keys() );
+		}
+
+		// Two phases, and the order is the whole point.
+		//
+		// PHASE 1 collects the snapshots. Nothing is deleted here. A bulk delete
+		// removes entries from the site's PUBLIC cookie declaration, and the
+		// usual trigger is a scan that did not observe them — which is not the
+		// same as their being absent. The snapshot makes that judgement
+		// reversible; without it a wrong purge is unrecoverable and the
+		// declaration is quietly incomplete.
+		$recycled = array();
+		$doomed   = array();
 		foreach ( $ids as $id ) {
 			$id = absint( $id );
 			if ( ! $id ) {
 				continue;
 			}
 			$cookie = new Cookie( $id );
+			if ( null !== $earned && $cookie->get_loaded() ) {
+				// Same canonical form the tally is keyed on and the client
+				// intersects against — one builder, no second key format.
+				$key = Scanner_Controller::canonical_key( $cookie->get_name(), $cookie->get_domain() );
+				if ( '' === $key || ! isset( $earned[ $key ] ) ) {
+					++$refused;
+					continue;
+				}
+			}
 			if ( $cookie->get_loaded() ) {
-				$cookie->delete();
-				$deleted++;
+				// get_prepared_data() omits opt_in_script/opt_out_script, and
+				// restore_deleted() can only put back what the snapshot holds —
+				// so restoring would have silently dropped the blocker scripts.
+				$snapshot = $cookie->get_prepared_data();
+				if ( method_exists( $cookie, 'get_script_data' ) ) {
+					$snapshot = array_merge( $snapshot, (array) $cookie->get_script_data() );
+				}
+				$recycled[] = $snapshot;
+				$doomed[]   = $cookie;
 			}
 		}
+
+		// PHASE 2 persists the snapshot BEFORE a single row is removed.
+		//
+		// Deleting first and saving afterwards looks equivalent and is not. When
+		// the write fails — oversize packet, an OOM part-way through a large
+		// purge, any transient database error $wpdb swallows with WP_DEBUG off —
+		// the rows are already gone while wp_options still holds the PREVIOUS
+		// batch. The page then re-reads the bin, finds that older batch, and
+		// offers an Undo button that restores a DIFFERENT set of cookies while
+		// the administrator believes the purge was reversed. An affirmative
+		// false undo is worse than no undo at all, so a bin that cannot be
+		// written aborts the purge instead.
+		if ( ! empty( $recycled ) ) {
+			$bin = get_option( self::RECYCLE_BIN_OPTION, array() );
+			$bin = is_array( $bin ) ? $bin : array();
+			array_unshift(
+				$bin,
+				array(
+					'deleted_at' => time(),
+					'cookies'    => $recycled,
+				)
+			);
+			// Keep a handful of batches, not a growing history: this is an undo
+			// for a mistake noticed soon after, not an archive.
+			$bin = array_slice( $bin, 0, self::RECYCLE_BIN_BATCHES );
+			$bin = self::trim_recycle_bin_to_size( $bin );
+
+			if ( ! self::store_recycle_bin( $bin ) ) {
+				// No hook here. Phase 3 never ran, so provably zero rows were
+				// removed — firing the same action the success path fires made
+				// every listener (page-cache purge, banner-template
+				// regeneration, category cache, IAB vendor recount) invalidate
+				// for a deletion that did not happen, at the exact moment the
+				// admin is told nothing was deleted.
+				return new \WP_Error(
+					'faz_recycle_bin_write_failed',
+					__( 'The undo snapshot could not be saved, so nothing was deleted. The cookies were left in place.', 'faz-cookie-manager' ),
+					array(
+						'status'          => 500,
+						'deleted'         => 0,
+						'restorable'      => 0,
+						'refused'         => $refused,
+						'snapshot_failed' => true,
+					)
+				);
+			}
+		}
+
+		// PHASE 3. The snapshot is on disk and verified; now the rows may go.
+		foreach ( $doomed as $cookie ) {
+			$cookie->delete();
+			$deleted++;
+		}
+
 		do_action( 'faz_after_delete_cookie' );
-		return rest_ensure_response( array( 'deleted' => $deleted ) );
+		return rest_ensure_response(
+			array(
+				'deleted'    => $deleted,
+				// Backed by a verified write, not by an in-memory array: this
+				// line is only reached once store_recycle_bin() confirmed the
+				// option really holds these snapshots.
+				'restorable' => count( $recycled ),
+				// Rows the stale purge asked for that have not yet earned
+				// deletability. Reported so the page can say so rather than
+				// quietly deleting fewer entries than the admin was shown.
+				'refused'    => $refused,
+			)
+		);
+	}
+
+	/**
+	 * Write the recycle bin and confirm the write actually landed.
+	 *
+	 * update_option() answers false for two unrelated situations: the write
+	 * failed, and the stored value was already identical. Treating both as
+	 * failure would abort purges that are perfectly safe; treating both as
+	 * success is the bug this exists to prevent. So a false is resolved by
+	 * reading the option back and comparing — on a genuine failure the cache
+	 * and the row still hold the previous value, and the comparison says so.
+	 *
+	 * @param array $bin Recycle bin to store.
+	 * @return bool True when the option demonstrably holds $bin.
+	 */
+	private static function store_recycle_bin( $bin ) {
+		if ( update_option( self::RECYCLE_BIN_OPTION, $bin, false ) ) {
+			return true;
+		}
+		$written = get_option( self::RECYCLE_BIN_OPTION, null );
+		return is_array( $written ) && $written === $bin;
+	}
+
+	/**
+	 * Drop the oldest batches until the bin fits in one option row.
+	 *
+	 * The newest batch is never dropped: it is the undo for the purge being
+	 * performed right now, which is the one an administrator is most likely to
+	 * want back. If that batch alone is over the ceiling it is still attempted —
+	 * a write that then fails aborts the purge, which is the correct outcome.
+	 *
+	 * @param array $bin Recycle bin, newest first.
+	 * @return array Possibly shortened bin.
+	 */
+	private static function trim_recycle_bin_to_size( $bin ) {
+		while ( count( $bin ) > 1 && strlen( (string) maybe_serialize( $bin ) ) > self::RECYCLE_BIN_MAX_BYTES ) {
+			array_pop( $bin );
+		}
+		return $bin;
+	}
+
+	/**
+	 * Describe what is still restorable from the recycle bin.
+	 *
+	 * Metadata only — never the snapshotted rows, which carry raw opt-in/opt-out
+	 * blocker scripts.
+	 *
+	 * @SuppressWarnings("PHPMD.UnusedFormalParameter")
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response
+	 */
+	public function get_deleted_batches( $request ) {
+		$bin     = get_option( self::RECYCLE_BIN_OPTION, array() );
+		$bin     = is_array( $bin ) ? $bin : array();
+		$now     = time();
+		$batches = array();
+		foreach ( array_values( $bin ) as $index => $batch ) {
+			if ( ! is_array( $batch ) ) {
+				continue;
+			}
+			$deleted_at = isset( $batch['deleted_at'] ) ? absint( $batch['deleted_at'] ) : 0;
+			$batches[]  = array(
+				'index'            => (int) $index,
+				'count'            => isset( $batch['cookies'] ) ? count( (array) $batch['cookies'] ) : 0,
+				'deleted_at'       => $deleted_at,
+				// The timestamp was recorded from the first release of the bin
+				// and read by nothing, so the bar called an eight-month-old
+				// purge "recently deleted" and offered to resurrect cookies
+				// whose categories and policy text had long moved on.
+				//
+				// Rendered rather than age-pruned on purpose: pruning would
+				// destroy the only recovery path on a schedule nobody sees,
+				// which is the same class of silent loss the bin was added to
+				// prevent. Showing the age lets the administrator judge, and
+				// costs nothing when the answer is "two minutes".
+				//
+				// Formatted server-side because human_time_diff() is
+				// translated and locale-aware; the raw timestamp stays in the
+				// payload for any caller that wants to do its own arithmetic.
+				'deleted_at_human' => $deleted_at > 0 ? human_time_diff( $deleted_at, $now ) : '',
+			);
+		}
+
+		return rest_ensure_response(
+			array(
+				'batches'     => $batches,
+				'batch_count' => count( $batches ),
+			)
+		);
+	}
+
+	/**
+	 * Restore the most recent bulk-deleted batch.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function restore_deleted( $request ) {
+		$bin = get_option( self::RECYCLE_BIN_OPTION, array() );
+		$bin = is_array( $bin ) ? $bin : array();
+		if ( empty( $bin ) ) {
+			return new \WP_Error( 'faz_nothing_to_restore', __( 'There is no recently deleted batch to restore.', 'faz-cookie-manager' ), array( 'status' => 404 ) );
+		}
+
+		$batch     = array_shift( $bin );
+		$snapshots = isset( $batch['cookies'] ) ? array_values( (array) $batch['cookies'] ) : array();
+
+		// A restore is not a save: nobody typed this script, it is being put
+		// back exactly as it was. But set_opt_in_script()/set_opt_out_script()
+		// route through set_meta(), whose sanitizer strips raw JavaScript for a
+		// caller below `unfiltered_html` — so for such a user the row comes
+		// back with its name, category and duration intact and its BLOCKING
+		// BEHAVIOUR silently gone. The declaration then looks complete while the
+		// service it was supposed to gate loads unconditionally, which is worse
+		// than not restoring at all because nothing on the page says so.
+		//
+		// Refuse instead, before the setter loop and before the bin is touched,
+		// so the batch stays intact for an administrator who can restore it
+		// whole. Batches carrying no script data are unaffected, as is every
+		// caller who does hold the capability.
+		if ( self::batch_carries_scripts( $snapshots ) && ! current_user_can( 'unfiltered_html' ) ) {
+			return new \WP_Error(
+				'faz_restore_requires_unfiltered_html',
+				__( 'This batch contains opt-in/opt-out blocker scripts, which your account is not allowed to save. Restoring it would put the cookies back without their blocking behaviour, so the batch has been left in the recycle bin for an administrator to restore.', 'faz-cookie-manager' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		$restored     = 0;
+		$skipped      = 0;
+		$retained     = array();
+		// Keyed on the SAME identity the rest of the catalogue uses — the stale
+		// set, the delete gate at line 749 and the browser's getStaleKey() all
+		// key on name+domain via canonical_key(). Keying the duplicate check on
+		// the bare name meant a snapshot for `_ga` on one domain was skipped
+		// because an unrelated `_ga` existed on another; the skipped row is not
+		// retained either, so when any sibling in the batch did restore, the
+		// shortened bin was written and that row was gone from BOTH the live
+		// table and the recycle bin. Silent, unrecoverable, in the one feature
+		// whose whole purpose is making a wrong purge reversible.
+		$current_keys = array();
+		foreach ( (array) Cookie_Controller::get_instance()->get_item_from_db() as $current ) {
+			if ( ! empty( $current->name ) ) {
+				$faz_key = Scanner_Controller::canonical_key(
+					(string) $current->name,
+					isset( $current->domain ) ? (string) $current->domain : ''
+				);
+				if ( '' !== $faz_key ) {
+					$current_keys[ $faz_key ] = true;
+				}
+			}
+		}
+		// The snapshot is replayed through an explicit allowlist, not a blind
+		// set_{key} dispatch. get_prepared_data() names the identity 'id', so
+		// the snapshot carries the id of a row that no longer exists; handed to
+		// set_id() it would send save() down the UPDATE branch, which matches
+		// nothing — and, once a settings import has re-inserted rows with
+		// explicit cookie_id values, could match a DIFFERENT live cookie and
+		// overwrite it. The allowlist closes the whole class rather than that
+		// one key: no value out of a wp_options blob gets to choose which
+		// public setter it calls. The scripts stay on their setters on purpose,
+		// so the unfiltered_html gate inside them still strips raw JS for a
+		// restorer below that capability.
+		$restorable = array(
+			'name',
+			'slug',
+			'description',
+			'duration',
+			'type',
+			'domain',
+			'discovered',
+			'url_pattern',
+			'category',
+			'transfer',
+			'opt_in_script',
+			'opt_out_script',
+		);
+		foreach ( $snapshots as $data ) {
+			if ( ! is_array( $data ) || empty( $data['name'] ) ) {
+				continue;
+			}
+			// A restore must not resurrect a duplicate if the cookie has since
+			// been re-discovered or re-added by hand. There is no by-name
+			// lookup on the controller, so the current set is read once above
+			// and consulted here — on name+domain, so a same-named cookie on a
+			// DIFFERENT domain is a different cookie and still gets restored.
+			$faz_snapshot_key = Scanner_Controller::canonical_key(
+				(string) $data['name'],
+				isset( $data['domain'] ) ? (string) $data['domain'] : ''
+			);
+			if ( '' !== $faz_snapshot_key && isset( $current_keys[ $faz_snapshot_key ] ) ) {
+				++$skipped;
+				continue;
+			}
+			$cookie = new Cookie();
+			foreach ( $restorable as $field ) {
+				if ( ! array_key_exists( $field, $data ) ) {
+					continue;
+				}
+				$setter = 'set_' . $field;
+				if ( method_exists( $cookie, $setter ) ) {
+					$cookie->$setter( $data[ $field ] );
+				}
+			}
+			// A restore is always an INSERT: the row it came from is gone. Make
+			// that an asserted invariant rather than an accident of which keys
+			// the snapshot happened to hold.
+			if ( 0 !== $cookie->get_id() ) {
+				$retained[] = $data;
+				continue;
+			}
+			// save() returns get_id() unconditionally and can never signal
+			// failure. On an object that entered at 0, a non-zero id coming
+			// back is the one honest piece of evidence that the row was
+			// written: create_item() returns before set_id() when the insert
+			// fails, so the id stays 0 on a rejected row.
+			$new_id = $cookie->save();
+			if ( $new_id ) {
+				$restored++;
+			} else {
+				$retained[] = $data;
+			}
+		}
+
+		// Consuming the batch is only legitimate once the rows are actually
+		// back. A restore that wrote nothing must leave the bin untouched:
+		// otherwise the failure also destroys the only undo record and the
+		// retry has nothing left to restore, which is what turns a bug into
+		// data loss.
+		//
+		// A PARTIAL restore is the same failure at a smaller scale, and it used
+		// to be invisible: three rows offered, one insert rejected, `$restored`
+		// is 2 and the whole batch — including the row that never came back —
+		// was dropped from the bin. The rows that did not save are therefore put
+		// back as a batch of their own, so the retry still has exactly what is
+		// still missing. Rows skipped as duplicates are NOT retained: the cookie
+		// is already live, so there is nothing left to restore.
+		//
+		// A batch whose rows were ALL already live is settled too, and the
+		// `$restored > 0` guard alone left it at the head of the bin forever:
+		// the Undo bar kept advertising it, every click answered restored:0 —
+		// with a SUCCESS-toned "0 cookie(s) restored." — and re-rendered the
+		// identical bar. The only exit was a later purge pushing it off the end.
+		// Consuming it when every row was skipped and nothing is retained ends
+		// that loop while keeping the write-nothing-leave-the-bin rule intact
+		// for the case it exists for: a restore that FAILED.
+		if ( $restored > 0 || ( $skipped > 0 && empty( $retained ) ) ) {
+			if ( ! empty( $retained ) ) {
+				$batch['cookies'] = array_values( $retained );
+				array_unshift( $bin, $batch );
+			}
+			update_option( self::RECYCLE_BIN_OPTION, $bin, false );
+		}
+		do_action( 'faz_after_create_cookie' );
+		// `skipped` travels so the client can say "already present" instead of
+		// reporting a success-toned zero the admin cannot act on.
+		return rest_ensure_response(
+			array(
+				'restored' => $restored,
+				'skipped'  => $skipped,
+			)
+		);
+	}
+
+	/**
+	 * Whether a recycle-bin batch carries opt-in/opt-out blocker scripts.
+	 *
+	 * Only non-empty values count: a snapshot of a cookie that never had a
+	 * blocker holds two empty strings, and refusing that restore would block
+	 * the common case for no benefit.
+	 *
+	 * @param array $snapshots Snapshot rows from one batch.
+	 * @return bool
+	 */
+	private static function batch_carries_scripts( $snapshots ) {
+		foreach ( (array) $snapshots as $data ) {
+			if ( ! is_array( $data ) ) {
+				continue;
+			}
+			foreach ( array( 'opt_in_script', 'opt_out_script' ) as $field ) {
+				if ( isset( $data[ $field ] ) && '' !== trim( (string) $data[ $field ] ) ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

@@ -16,10 +16,10 @@
  * Plugin Name:       FAZ Cookie Manager
  * Plugin URI:        https://github.com/fabiodalez-dev/faz-cookie-manager
  * Description:       A comprehensive GDPR/CCPA cookie consent manager with built-in cookie scanner, local consent logging, Google Consent Mode v2, and IAB TCF v2.3 support.
- * Version:           1.26.0
+ * Version:           1.27.0
  * Requires at least: 5.0
- * Tested up to:      7.0
- * Stable tag:        1.26.0
+ * Tested up to:      7.1
+ * Stable tag:        1.27.0
  * Requires PHP:      7.4
  * Author:            Fabio D'Alessandro
  * Author URI:        https://fabiodalez.it/
@@ -51,7 +51,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-define( 'FAZ_VERSION', '1.26.0' );
+define( 'FAZ_VERSION', '1.27.0' );
 define( 'FAZ_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'FAZ_PLUGIN_BASEPATH', plugin_dir_path( __FILE__ ) );
 define( 'FAZ_PLUGIN_FILENAME', __FILE__ );
@@ -294,12 +294,12 @@ function faz_get_valid_consent_cookie( $cookie = '' ) {
 }
 
 /**
- * Whether the given consent cookie was auto-granted by the PMP integration.
+ * Whether the given consent cookie is managed by the PMP integration.
  *
  * @param string $cookie Raw cookie string. Falls back to the current request.
  * @return bool
  */
-function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
+function faz_is_pmp_managed_consent_cookie( $cookie = '' ) {
 	$cookie = '' !== $cookie ? (string) $cookie : faz_get_valid_consent_cookie();
 	if ( '' === $cookie ) {
 		return false;
@@ -309,22 +309,46 @@ function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
 }
 
 /**
+ * Backward-compatible alias for the pre-1.27.0 helper name.
+ *
+ * The PMP integration no longer grants optional purposes automatically: it
+ * applies a privacy-preserving necessary-only state. Keep this function so
+ * third-party integrations do not fatal, but route new code through the
+ * accurately named predicate above.
+ *
+ * @param string $cookie Raw cookie string. Falls back to the current request.
+ * @return bool
+ */
+function faz_is_auto_granted_consent_cookie( $cookie = '' ) {
+	return faz_is_pmp_managed_consent_cookie( $cookie );
+}
+
+/**
  * Set a browser cookie and mirror it into the current PHP request.
  *
  * @param string      $name Cookie name.
  * @param string      $value Cookie value.
  * @param int         $expires Unix timestamp.
  * @param string|null $domain Cookie domain. Null uses the FAZ consent domain.
+ * @param string      $same_site SameSite policy (Lax, Strict or None).
+ * @param bool|null   $force_secure Override the normal is_ssl() result.
  * @return void
  */
-function faz_set_browser_cookie( $name, $value, $expires, $domain = null ) {
+function faz_set_browser_cookie( $name, $value, $expires, $domain = null, $same_site = 'Lax', $force_secure = null ) {
 	$domain = null === $domain ? faz_get_cookie_domain() : (string) $domain;
+	$same_site = in_array( $same_site, array( 'Lax', 'Strict', 'None' ), true ) ? $same_site : 'Lax';
+	$secure    = null === $force_secure ? is_ssl() : (bool) $force_secure;
+	// Browsers reject SameSite=None without Secure. Fold an invalid caller
+	// combination back to Lax instead of emitting a cookie that cannot stick.
+	if ( 'None' === $same_site && ! $secure ) {
+		$same_site = 'Lax';
+	}
 
 	if ( ! headers_sent() ) {
 		$options = array(
 			'expires'  => (int) $expires,
 			'path'     => '/',
-			'secure'   => is_ssl(),
+			'secure'   => $secure,
 			// httponly=false is REQUIRED by design: the consent cookie
 			// (`fazcookie-consent`) is the source of truth for what
 			// frontend JS may or may not do (load GA, load Meta Pixel,
@@ -336,7 +360,7 @@ function faz_set_browser_cookie( $name, $value, $expires, $domain = null ) {
 			// auth secret — so the CWE-1004 / CWE-614 threat model
 			// (session theft via JS) does not apply.
 			'httponly' => false,
-			'samesite' => 'Lax',
+			'samesite' => $same_site,
 		);
 		if ( '' !== $domain ) {
 			$options['domain'] = $domain;
@@ -527,6 +551,7 @@ $faz_loader->run();
 // here (a pair of cheap add_action calls) guarantees the loopback cron worker
 // has the handler.
 \FazCookie\Admin\Modules\Scanner\Includes\Controller::register_cron_hook();
+\FazCookie\Admin\Modules\Scanner\Includes\Controller::register_browser_scan_observer();
 
 /**
  * Force every /faz/v1/* REST response out of the LiteSpeed / CDN cache.

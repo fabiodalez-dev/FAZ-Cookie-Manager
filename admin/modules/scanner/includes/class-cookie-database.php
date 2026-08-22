@@ -61,6 +61,21 @@ class Cookie_Database {
 			'duration'    => 'session',
 			'description' => 'Stores the selected language during login.',
 		),
+		'tk_ai'                   => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => 'session',
+			'description' => 'Automattic Tracks identifier used inside the WordPress dashboard.',
+		),
+		'tk_qs'                   => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => 'session',
+			'description' => 'Automattic Tracks dashboard analytics cookie.',
+		),
+		'tk_lr'                   => array(
+			'category'    => 'wordpress-internal',
+			'duration'    => '1 year',
+			'description' => 'Automattic Tracks dashboard referral cookie.',
+		),
 		'comment_author_email_'   => array(
 			'category'    => 'functional',
 			'duration'    => '1 year',
@@ -205,6 +220,11 @@ class Cookie_Database {
 			'category'    => 'necessary',
 			'duration'    => '1 year',
 			'description' => 'Cookie consent preferences set by the visitor.',
+		),
+		'brikpanel_vid'           => array(
+			'category'    => 'analytics',
+			'duration'    => '1 year',
+			'description' => 'Persistent visitor identifier set by Brikpanel.',
 		),
 		// Microsoft.
 		'_clck'                   => array(

@@ -368,6 +368,13 @@ namespace {
 		false,
 		'cache_compatibility ON → REST banner endpoint uses cacheable headers for deterministic payloads'
 	);
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = true;
+	assert_eq(
+		$rest_method->invoke( $rest, Controller::get_instance() ),
+		true,
+		'geo runtime ON suppresses cache compatibility and forces private REST banner output'
+	);
+	\FazCookie\Frontend\Includes\Geo_Runtime::$enabled = false;
 
 	$GLOBALS['faz_test_options']['faz_settings'] = array( 'banner_control' => array( 'cache_compatibility' => false ) );
 	assert_eq(

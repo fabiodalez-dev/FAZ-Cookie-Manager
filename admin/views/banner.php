@@ -227,8 +227,13 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Days until consent expires', 'faz-cookie-manager' ); ?></label>
-					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="3650" style="width:120px;">
-					<div class="faz-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. Note: for opt-in (GDPR) banners the consent lifetime is capped at 182 days (the Italian Garante limits consent validity to 6 months) — larger values are automatically clamped to 182 at serve time. Opt-out (CCPA/CPRA) banners are not capped.', 'faz-cookie-manager' ); ?></div>
+					<input type="number" class="faz-input" id="faz-b-expiry" min="1" max="182" step="1" style="width:120px;" aria-describedby="faz-b-expiry-help">
+					<div class="faz-help" id="faz-b-expiry-help"><?php esc_html_e( 'After this many days, visitors will see the banner again. GDPR and Both are capped at 182 days (six months) — a shorter value is allowed and asks again sooner, which is more protective. CCPA / US State Laws keeps the choice for at least 365 days, because a consumer who opted out may not be asked again for twelve months; its maximum is 3650 days. The field limits update automatically when the regulation changes, and the same limits are enforced at serve time.', 'faz-cookie-manager' ); ?></div>
+					<?php // data-template is read verbatim by banner.js (getAttribute + two .replace() calls) and written into the notice as-is, so the echo stays on the attribute's own line: split across lines, the source indentation became part of the translated string. ?>
+					<div class="faz-help" id="faz-b-expiry-hint" style="display:none;color:#92400e;" role="status"
+						data-template="<?php
+						/* translators: 1: the lifetime the admin had entered, in days. 2: the lifetime it was changed to. */
+						echo esc_attr__( 'Consent lifetime changed from %1$d to %2$d days to stay within the selected regulation.', 'faz-cookie-manager' ); ?>"></div>
 				</div>
 			</div>
 		</div>
@@ -466,17 +471,25 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		</div>
 
-		<div class="faz-card" id="faz-catprev-colors-card" style="display:none;">
-			<div class="faz-card-header"><h3><?php esc_html_e( 'Category Preview Colours', 'faz-cookie-manager' ); ?></h3></div>
+		<?php
+		/*
+		 * The consent toggles get their own card, and it is ALWAYS visible.
+		 *
+		 * These two colours feed --faz-toggle-active/inactive-background-color
+		 * (class-template.php), which style `.faz-modal .faz-switch` — the
+		 * preference-centre toggles, present for EVERY banner type. They used to
+		 * live inside the Category Preview card, which JavaScript reveals only
+		 * for the Classic type, so an admin running a Box or Full-width banner
+		 * had modal toggles they could see but not colour.
+		 *
+		 * The Category Preview card below keeps only what genuinely applies to
+		 * the Classic inline preview.
+		 */
+		?>
+		<div class="faz-card" id="faz-toggle-colors-card">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Consent Toggle Colours', 'faz-cookie-manager' ); ?></h3></div>
 			<div class="faz-card-body">
 				<div class="faz-grid faz-grid-3">
-					<div class="faz-form-group">
-						<label><?php esc_html_e( 'Label Text', 'faz-cookie-manager' ); ?></label>
-						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-catprev-label">
-							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-label-hex" style="width:90px;">
-						</div>
-					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Toggle — Active', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
@@ -489,6 +502,22 @@ defined( 'ABSPATH' ) || exit;
 						<div class="faz-input-color-wrap">
 							<input type="color" id="faz-b-catprev-toggle-inactive">
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-toggle-inactive-hex" style="width:90px;">
+						</div>
+					</div>
+				</div>
+				<div class="faz-help"><?php esc_html_e( 'Applies to the category switches in the preference centre, and to the inline category toggles when the Classic banner type shows them.', 'faz-cookie-manager' ); ?></div>
+			</div>
+		</div>
+
+		<div class="faz-card" id="faz-catprev-colors-card" style="display:none;">
+			<div class="faz-card-header"><h3><?php esc_html_e( 'Category Preview Colours', 'faz-cookie-manager' ); ?></h3></div>
+			<div class="faz-card-body">
+				<div class="faz-grid faz-grid-3">
+					<div class="faz-form-group">
+						<label><?php esc_html_e( 'Label Text', 'faz-cookie-manager' ); ?></label>
+						<div class="faz-input-color-wrap">
+							<input type="color" id="faz-b-catprev-label">
+							<input type="text" class="faz-input faz-input-sm" id="faz-b-catprev-label-hex" style="width:90px;">
 						</div>
 					</div>
 					<div class="faz-form-group">

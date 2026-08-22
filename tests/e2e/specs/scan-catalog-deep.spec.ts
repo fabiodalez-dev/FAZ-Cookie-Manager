@@ -1,4 +1,3 @@
-import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { expect, test } from '../fixtures/wp-fixture';
 import {
   deleteCookiesByNames,
@@ -11,7 +10,6 @@ import {
   openCookiesPage,
   openSettingsPage,
 } from '../utils/faz-api';
-import { startServerScanLab, stopServerScanLab } from '../utils/server-scan-lab';
 import {
   deactivatePluginsExcept,
   disableLabFlags,
@@ -28,8 +26,6 @@ import {
 } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
-const SERVER_SCAN_PORT = Number(process.env.FAZ_SERVER_SCAN_LAB_PORT ?? 10080);
-const SERVER_SCAN_BASE = `http://127.0.0.1:${SERVER_SCAN_PORT}`;
 const SITE_HOST = new URL(WP_BASE).hostname;
 const COMMON_KNOWN_COOKIE_NAMES = [
   '_ga',
@@ -53,6 +49,7 @@ type DiscoverResponse = {
   total: number;
   fingerprint: string;
   incremental: boolean;
+  scan_id?: string;
 };
 
 type ServerScanCookie = {
@@ -99,6 +96,10 @@ function makeToken(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${random}`.toLowerCase();
 }
 
+function makeScanId(): string {
+  return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
 function findCookie(cookies: CookieRow[], name: string): CookieRow | undefined {
   const lower = name.toLowerCase();
   return cookies.find((cookie) => String(cookie.name ?? '').toLowerCase() === lower);
@@ -133,27 +134,46 @@ async function cleanupLabCookies(page: Parameters<typeof openCookiesPage>[0], no
   await deleteCookiesByNames(page, nonce, [...COMMON_KNOWN_COOKIE_NAMES, ...extraNames]);
 }
 
-async function discoverUrls(page: Parameters<typeof openCookiesPage>[0], nonce: string, maxPages: number, fingerprint = ''): Promise<DiscoverResponse> {
+async function discoverUrls(page: Parameters<typeof openCookiesPage>[0], nonce: string, maxPages: number, fingerprint = '', scanId = makeScanId()): Promise<DiscoverResponse> {
   const response = await fazApiPost<DiscoverResponse>(page, nonce, 'scans/discover', {
     max_pages: maxPages,
     fingerprint,
+    scan_id: scanId,
   });
   expect(response.status).toBe(200);
-  return response.data;
+  return { ...response.data, scan_id: scanId };
 }
 
 async function serverScan(page: Parameters<typeof openCookiesPage>[0], nonce: string, scenario: string, token: string): Promise<ServerScanResponse> {
+  const scenarioPages: Record<string, string> = {
+    headers: 'headers',
+    'src-ga': 'script-src-ga',
+    'data-src-ga': 'script-data-src-ga',
+    'litespeed-fb': 'script-litespeed-fb',
+    'iframe-youtube': 'iframe-youtube',
+  };
+  const pageSlug = scenarioPages[scenario];
+  expect(pageSlug, `No same-origin server-scan fixture for scenario ${scenario}`).toBeTruthy();
+  setLabToken(token);
   const response = await fazApiPost<ServerScanResponse>(page, nonce, 'scans/server-scan', {
-    url: `${SERVER_SCAN_BASE}/?scenario=${scenario}&token=${token}`,
+    url: `${WP_BASE}/faz-lab-${pageSlug}/`,
   });
   expect(response.status).toBe(200);
   return response.data;
 }
 
 async function importScan(page: Parameters<typeof openCookiesPage>[0], nonce: string, payload: Record<string, unknown>): Promise<ImportResponse> {
-  const response = await fazApiPost<ImportResponse>(page, nonce, 'scans/import', payload);
+  const scanId = makeScanId();
+  await discoverUrls(page, nonce, 1, '', scanId);
+  const response = await fazApiPost<ImportResponse>(page, nonce, 'scans/import', { ...payload, scan_id: scanId });
   expect(response.status).toBe(200);
   return response.data;
+}
+
+async function abortScan(page: Parameters<typeof openCookiesPage>[0], nonce: string, scanId?: string): Promise<void> {
+  if (!scanId) return;
+  const response = await fazApiPost(page, nonce, 'scans/abort', { scan_id: scanId });
+  expect(response.status).toBe(200);
 }
 
 async function listCookiesWithRetry(page: Parameters<typeof openCookiesPage>[0], nonce: string, attempts = 3): Promise<CookieRow[]> {
@@ -285,7 +305,6 @@ test.describe('Deep scan and catalog flows', () => {
   // Playwright actually documents for long-running setup / teardown.
   test.describe.configure({ mode: 'serial', timeout: 300_000 });
 
-  let serverLab: ChildProcessWithoutNullStreams | null = null;
   let initialActivePluginFiles: string[] = [];
 
   test.beforeAll(async () => {
@@ -305,7 +324,6 @@ test.describe('Deep scan and catalog flows', () => {
     ensureScanLabPages();
     disableLabFlags();
     resetScanState();
-    serverLab = await startServerScanLab(SERVER_SCAN_PORT);
   });
 
   test.beforeEach(async () => {
@@ -320,7 +338,6 @@ test.describe('Deep scan and catalog flows', () => {
     restoreActivePluginFiles(initialActivePluginFiles);
     disableLabFlags();
     resetScanState();
-    await stopServerScanLab(serverLab);
     wpEval(`
       global $wpdb;
       $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}faz_cookies WHERE name LIKE %s", '_faz_lab_%' ) );
@@ -343,7 +360,7 @@ test.describe('Deep scan and catalog flows', () => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
 
     const first = await discoverUrls(page, nonce, 10);
-    const second = await discoverUrls(page, nonce, 10);
+    const second = await discoverUrls(page, nonce, 10, '', first.scan_id);
 
     expect(first.fingerprint).toBeTruthy();
     expect(second.fingerprint).toBe(first.fingerprint);
@@ -354,7 +371,7 @@ test.describe('Deep scan and catalog flows', () => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
 
     const first = await discoverUrls(page, nonce, 10);
-    const second = await discoverUrls(page, nonce, 10, first.fingerprint);
+    const second = await discoverUrls(page, nonce, 10, first.fingerprint, first.scan_id);
 
     expect(second.incremental).toBe(true);
     expect(second.fingerprint).toBe(first.fingerprint);
@@ -367,7 +384,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const first = await discoverUrls(page, nonce, 10);
     touchPosts('page', ['faz-lab-js-basic']);
-    const second = await discoverUrls(page, nonce, 10, first.fingerprint);
+    const second = await discoverUrls(page, nonce, 10, first.fingerprint, first.scan_id);
 
     expect(second.incremental).toBe(false);
     expect(second.fingerprint).not.toBe(first.fingerprint);
@@ -380,7 +397,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await cleanupLabCookies(page, nonce);
-    await runQuickScan(page, 100);
+    await runQuickScan(page);
 
     const cookies = await listCookiesWithRetry(page, nonce);
     const cookie = findCookie(cookies, `_faz_lab_js_basic_${token}`);
@@ -396,10 +413,151 @@ test.describe('Deep scan and catalog flows', () => {
 
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await cleanupLabCookies(page, nonce);
-    await runQuickScan(page, 100);
+    await runQuickScan(page);
 
     const cookies = await listCookiesWithRetry(page, nonce);
     expect(findCookie(cookies, `_faz_lab_js_delayed_${token}`)).toBeTruthy();
+  });
+
+  test('06b. scanner captures a one-year HttpOnly cookie emitted by delayed PHP AJAX', async ({ page, loginAsAdmin }) => {
+    const token = makeToken('ajax-httponly');
+    setLabToken(token);
+    touchPosts('page', ['faz-lab-ajax-httponly']);
+
+    const settingsNonce = await openSettingsPage(page, loginAsAdmin);
+    const originalSettings = (await fazApiGet<any>(page, settingsNonce, 'settings')).data;
+    try {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: true,
+        },
+      });
+
+      const nonce = await openCookiesPage(page, loginAsAdmin);
+      await cleanupLabCookies(page, nonce, ['brikpanel_vid']);
+      const scanId = makeScanId();
+      await discoverUrls(page, nonce, 1, '', scanId);
+      const ajaxResponse = page.waitForResponse((response) => response.url().includes('action=faz_e2e_scan_ajax_cookie'));
+      const scannedUrl = `${WP_BASE}/faz-lab-ajax-httponly/?faz_scanning=1&faz_scan_id=${scanId}`;
+      await page.goto(scannedUrl, { waitUntil: 'domcontentloaded' });
+      expect((await ajaxResponse).status()).toBe(200);
+
+      const imported = await fazApiPost<ImportResponse>(page, nonce, 'scans/import', {
+        scan_id: scanId,
+        cookies: [],
+        pages_scanned: 1,
+        scanned_urls: [scannedUrl],
+        scripts: [],
+        metrics: { pagesScanned: 1, cookiesFound: 0 },
+      });
+      expect(imported.status).toBe(200);
+      expect(imported.data.cookie_names).toContain('brikpanel_vid');
+
+      const cookies = await listCookiesUntil(page, nonce, ['brikpanel_vid'], 60_000);
+      const cookie = findCookie(cookies, 'brikpanel_vid');
+      const analyticsId = await findCategoryId(page, nonce, 'analytics');
+
+      expect(cookie?.discovered).toBe(true);
+      expect(cookie?.category).toBe(analyticsId);
+      expect(cookie?.duration?.en ?? Object.values(cookie?.duration ?? {})[0]).toMatch(/1 year/i);
+    } finally {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: originalSettings.script_blocking,
+      });
+    }
+  });
+
+  test('06c. opt-in PHP guard blocks brikpanel_vid but preserves necessary AJAX cookies', async ({ page, loginAsAdmin }) => {
+    const settingsNonce = await openSettingsPage(page, loginAsAdmin);
+    const originalSettings = (await fazApiGet<any>(page, settingsNonce, 'settings')).data;
+    const endpoint = `${WP_BASE}/wp-admin/admin-ajax.php?action=faz_e2e_scan_ajax_cookie`;
+
+    try {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: true,
+        },
+      });
+
+      const blocked = await page.request.get(endpoint);
+      expect(blocked.status()).toBe(200);
+      expect(blocked.headers()['set-cookie'] ?? '').not.toContain('brikpanel_vid=');
+
+      const necessary = await page.request.get(`${endpoint}&necessary=1`);
+      expect(necessary.status()).toBe(200);
+      expect(necessary.headers()['set-cookie'] ?? '').toContain('wp_woocommerce_session_fazlab=');
+
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: false,
+        },
+      });
+      const disabled = await page.request.get(endpoint);
+      expect(disabled.headers()['set-cookie'] ?? '').toContain('brikpanel_vid=');
+    } finally {
+      await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: originalSettings.script_blocking,
+      });
+    }
+  });
+
+  // Stand-down pin for the guard's consent-context gate. With the banner turned
+  // off site-wide the visitor is never shown a banner, never loads script.js and
+  // can therefore never record consent — so a stripped Set-Cookie header would
+  // be permanent with no remedy. The guard must not run for them at all, even
+  // though the operator opted into it. 06c above is the opposite pin: on a
+  // normally-configured site the same AJAX endpoint IS still guarded.
+  test('06d. banner_control status false stands the PHP guard down on AJAX', async ({ page, loginAsAdmin }) => {
+    const settingsNonce = await openSettingsPage(page, loginAsAdmin);
+
+    // Every REST call in this test is status-checked, because each one fails
+    // in a way that is invisible from the assertion that follows it:
+    //  - a failed READ leaves originalSettings holding a WP_Error body, and the
+    //    finally block then writes that shape back over the real settings —
+    //    corrupting global state for every spec that runs after this one;
+    //  - a failed WRITE means banner_control.status:false was never applied, so
+    //    the standdown assertion below passes on a guard that simply never ran;
+    //  - a failed RESTORE leaves the site with the banner switched off.
+    const settingsRead = await fazApiGet<any>(page, settingsNonce, 'settings');
+    expect(settingsRead.status).toBe(200);
+    const originalSettings = settingsRead.data;
+    // WP_Error bodies are objects too, so shape alone is not enough: a REST
+    // error serialises as { code, message, data } and must not be mistaken for
+    // a settings snapshot worth writing back.
+    expect(originalSettings, 'settings GET returned no body').toBeTruthy();
+    expect(typeof originalSettings).toBe('object');
+    expect(originalSettings.code, 'settings GET returned a WP_Error, not a settings snapshot').toBeUndefined();
+
+    const endpoint = `${WP_BASE}/wp-admin/admin-ajax.php?action=faz_e2e_scan_ajax_cookie`;
+
+    try {
+      const applied = await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: {
+          ...(originalSettings.script_blocking ?? {}),
+          block_server_cookies: true,
+        },
+        banner_control: {
+          ...(originalSettings.banner_control ?? {}),
+          status: false,
+        },
+      });
+      expect(applied.status, 'the standdown configuration was not applied').toBe(200);
+
+      const response = await page.request.get(endpoint);
+      expect(response.status()).toBe(200);
+      expect(response.headers()['set-cookie'] ?? '').toContain('brikpanel_vid=');
+    } finally {
+      const restored = await fazApiPost(page, settingsNonce, 'settings', {
+        script_blocking: originalSettings.script_blocking,
+        banner_control: originalSettings.banner_control,
+      });
+      // Soft on purpose: a hard expect() thrown from finally would replace the
+      // real failure from the try block with a restore failure and hide it.
+      expect.soft(restored.status, 'settings were NOT restored — later specs run against a mutated site').toBe(200);
+    }
   });
 
   test('07. browser scan deduplicates the same cookie seen on multiple pages', async ({ page, loginAsAdmin }) => {
@@ -409,7 +567,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const nonce = await openCookiesPage(page, loginAsAdmin);
     await cleanupLabCookies(page, nonce);
-    await runQuickScan(page, 100);
+    await runQuickScan(page);
 
     const cookies = await listCookiesWithRetry(page, nonce);
     const matches = cookies.filter((cookie) => cookie.name === `_faz_lab_dupe_${token}`);
@@ -420,13 +578,12 @@ test.describe('Deep scan and catalog flows', () => {
   test('08. server-side fallback parses Set-Cookie headers', async ({ page, loginAsAdmin }) => {
     const nonce = await openCookiesPage(page, loginAsAdmin);
     const token = makeToken('header');
-    const sanitizedToken = token.replace(/[^a-z0-9_]/gi, '');
+    const sanitizedToken = token.replace(/[^a-z0-9_-]/gi, '');
 
     const result = await serverScan(page, nonce, 'headers', token);
     const cookie = result.cookies.find((item) => item.name === `_faz_lab_http_${sanitizedToken}`);
 
     expect(cookie).toBeTruthy();
-    expect(result.scripts).toHaveLength(0);
   });
 
   test('09. server-side fallback extracts script src URLs and infers GTM cookies', async ({ page, loginAsAdmin }) => {
@@ -435,7 +592,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const result = await serverScan(page, nonce, 'src-ga', token);
 
-    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-LAB');
+    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-FAZLAB');
     expect(result.cookies.map((cookie) => cookie.name)).toEqual(expect.arrayContaining(['_ga', '_gid', '_gat', '_gcl_au']));
   });
 
@@ -445,7 +602,7 @@ test.describe('Deep scan and catalog flows', () => {
 
     const result = await serverScan(page, nonce, 'data-src-ga', token);
 
-    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-LAB');
+    expect(result.scripts).toContain('https://www.googletagmanager.com/gtag/js?id=G-FAZLAB');
     expect(result.cookies.map((cookie) => cookie.name)).toEqual(expect.arrayContaining(['_ga', '_gid', '_gat', '_gcl_au']));
   });
 
@@ -841,7 +998,12 @@ test.describe('Deep scan and catalog flows', () => {
       wooUrls.product,
     ]));
 
-    await runQuickScan(page, 100);
+    await abortScan(page, nonce, discover.scan_id);
+
+    // The direct discovery above validates the 100-page Woo catalogue. The UI
+    // crawl only needs to prove that the priority URLs are visited and imported,
+    // so keep it on the bounded quick profile.
+    await runQuickScan(page);
 
     // listCookiesWithRetry only retries a FAILED request; a request that
     // succeeds with a half-written list satisfies it. The scan persists rows

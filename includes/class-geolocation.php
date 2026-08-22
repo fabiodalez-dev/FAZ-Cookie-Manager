@@ -624,9 +624,10 @@ class Geolocation {
 	 *
 	 * Driven by the publisher's explicit choice in Settings → GeoIP Database
 	 * (`geolocation.geolite2_edition`): 'city' → GeoLite2-City, anything else →
-	 * GeoLite2-Country (the default, so existing installs are unchanged). A
-	 * legacy install with the setting still unset falls back to the runtime
-	 * geo-routing flag (City when on). Overridable via `faz_geolite2_edition`.
+	 * GeoLite2-Country (the data-minimising default). Sub-national enforcement
+	 * such as Quebec Law 25 requires an explicit City selection (or a trusted
+	 * region header); enabling runtime rulesets never silently downloads the
+	 * larger database. Overridable via `faz_geolite2_edition`.
 	 *
 	 * @return string 'GeoLite2-City' or 'GeoLite2-Country'.
 	 */
@@ -642,11 +643,8 @@ class Geolocation {
 		} elseif ( 'country' === $choice ) {
 			$default = 'GeoLite2-Country';
 		} else {
-			// Setting not yet saved (legacy). 1.18.2 HOTFIX: previously this
-			// honoured the faz_geo_ruleset_runtime flag (City when on), but that
-			// runtime is now hard-disabled — selecting City here would download a
-			// ~60 MB DB the disabled runtime never uses. Default to Country; an
-			// admin who wants City picks it explicitly (saved option above) or
+			// Setting not yet saved (legacy): keep the data-minimising Country DB.
+			// An admin who needs sub-national resolution picks City explicitly or
 			// forces it via the faz_geolite2_edition filter below.
 			$default = 'GeoLite2-Country';
 		}

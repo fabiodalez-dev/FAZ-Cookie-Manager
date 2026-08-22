@@ -10,46 +10,10 @@
  * 6. Auto-categorize serialization (no parallel PUTs)
  * 7. Remove data on uninstall setting (default OFF)
  */
-import { createServer, type Server } from 'node:http';
 import { expect, test } from '../fixtures/wp-fixture';
 import { wpEval } from '../utils/wp-env';
 
 const WP_BASE = process.env.WP_BASE_URL ?? 'http://127.0.0.1:9998';
-
-async function startServerScanFixture(): Promise<{ server: Server; url: string }> {
-  const server = createServer((_req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(`
-      <!doctype html>
-      <html lang="en">
-        <head>
-          <meta charset="utf-8" />
-          <title>Scan Fixture</title>
-          <script src="https://www.googletagmanager.com/gtag/js?id=G-TEST"></script>
-        </head>
-        <body>
-          <h1>Scan fixture</h1>
-        </body>
-      </html>
-    `);
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.listen(0, '127.0.0.1', () => resolve());
-    server.once('error', reject);
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-    throw new Error('Failed to resolve fixture server address');
-  }
-
-  return {
-    server,
-    url: `http://127.0.0.1:${address.port}/`,
-  };
-}
 
 async function getAdminNonce(page: any): Promise<string> {
   return page.evaluate(() => (window as any).fazConfig?.api?.nonce ?? '');
@@ -91,7 +55,10 @@ test.describe('Scan optimization features', () => {
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
 
-    const result = await apiPost(page, nonce, 'scans/discover', { max_pages: 5 });
+    // scan_id is a required, validated route arg: the endpoint mints nothing
+    // itself, so a caller that omits it gets rest_missing_callback_param.
+    const scanId = 'a'.repeat(32);
+    const result = await apiPost(page, nonce, 'scans/discover', { max_pages: 5, scan_id: scanId });
     expect(result.status).toBe(200);
 
     // Response must include the new priority_urls field (backward compat)
@@ -104,29 +71,26 @@ test.describe('Scan optimization features', () => {
     // Total is the unique union of urls + priority_urls (priority may overlap)
     const allUrls = new Set([...result.data.urls, ...result.data.priority_urls]);
     expect(result.data.total).toBe(allUrls.size);
+
+    const abort = await apiPost(page, nonce, 'scans/abort', { scan_id: scanId });
+    expect(abort.status).toBe(200);
   });
 
   test('T3: script inference uses site domain in Cookie_Database lookup_scripts', async ({ page, loginAsAdmin }) => {
     await loginAsAdmin(page);
     await page.goto(`${WP_BASE}/wp-admin/admin.php?page=faz-cookie-manager-cookies`, { waitUntil: 'domcontentloaded' });
     const nonce = await getAdminNonce(page);
-    const fixture = await startServerScanFixture();
+    const result = await apiPost(page, nonce, 'scans/server-scan', {
+      url: `${WP_BASE}/faz-lab-script-src-ga/`,
+    });
+    expect(result.status).toBe(200);
+    expect(Array.isArray(result.data.cookies)).toBe(true);
 
-    try {
-      const result = await apiPost(page, nonce, 'scans/server-scan', {
-        url: fixture.url,
-      });
-      expect(result.status).toBe(200);
-      expect(Array.isArray(result.data.cookies)).toBe(true);
-
-      const ga = result.data.cookies.find((r: any) => r.name === '_ga');
-      expect(ga).toBeTruthy();
-      expect(ga.category).toBe('analytics');
-      expect(ga.description).toBeTruthy();
-      expect(ga.domain).toBe(new URL(WP_BASE).hostname);
-    } finally {
-      await new Promise<void>((resolve, reject) => fixture.server.close((error) => (error ? reject(error) : resolve())));
-    }
+    const ga = result.data.cookies.find((r: any) => r.name === '_ga');
+    expect(ga).toBeTruthy();
+    expect(ga.category).toBe('analytics');
+    expect(ga.description).toBeTruthy();
+    expect(ga.domain).toBe(new URL(WP_BASE).hostname);
   });
 
   test('T4: scanner debug mode toggle persists via settings API', async ({ page, loginAsAdmin }) => {
