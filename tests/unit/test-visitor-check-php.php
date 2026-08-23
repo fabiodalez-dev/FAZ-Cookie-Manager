@@ -53,8 +53,25 @@ function delete_transient( $key ) {}
 function wp_generate_uuid4() { return '12345678-1234-1234-1234-123456789abc'; }
 function current_time( $type ) { return '2026-08-22 12:00:00'; }
 
+// One-shot hook: fires AFTER the value is captured but BEFORE it is returned,
+// so the caller walks away holding data that is already out of date. That is
+// the only way to reproduce a concurrent write inside a single-threaded test —
+// without it, an assertion about stale snapshots cannot fail, and a test that
+// cannot fail is not coverage.
+$GLOBALS['faz_test_after_get']     = null;
+$GLOBALS['faz_test_after_get_key'] = '';
 function get_option( $key, $default = false ) {
-	return array_key_exists( $key, $GLOBALS['faz_test_options'] ) ? $GLOBALS['faz_test_options'][ $key ] : $default;
+	$value = array_key_exists( $key, $GLOBALS['faz_test_options'] ) ? $GLOBALS['faz_test_options'][ $key ] : $default;
+	// Armed for ONE key. Disarming on any key at all would let an unrelated
+	// read consume the hook — finalize_visitor_check() reads the target option
+	// first, which swallowed the injection and made the test fail for the wrong
+	// reason.
+	if ( null !== $GLOBALS['faz_test_after_get'] && $key === $GLOBALS['faz_test_after_get_key'] ) {
+		$hook                          = $GLOBALS['faz_test_after_get'];
+		$GLOBALS['faz_test_after_get'] = null; // one-shot
+		call_user_func( $hook, $key );
+	}
+	return $value;
 }
 function update_option( $key, $value, $autoload = null ) {
 	$GLOBALS['faz_test_options'][ $key ] = $value;
@@ -370,6 +387,77 @@ $latest = $controller->latest_visitor_check();
 vc_ok( is_array( $latest ), 'a hex-keyed completed ledger is found at all' );
 vc_ok( $new_id === $latest['scan_id'], 'the NEWEST completed ledger wins, by completed_at' );
 vc_ok( array( 'new_one' ) === $latest['visitor_only'], 'and its diff is the one returned' );
+
+// ── a stale snapshot must never delete a ledger opened meanwhile ──────────
+// The reported interleaving, reproduced exactly:
+//   1. worker A reads the target and the ledger array (holds A, pending)
+//   2. an import opens ledger B — the option now holds A and B
+//   3. worker A writes its array back
+// Writing the array from step 1 at step 3 erased B, while the target still
+// pointed at B: a ledger that no longer existed, so every later observation
+// and the finalize both found nothing and the scan lost its check in silence.
+// Each writer now re-reads and merges only its own entry.
+vc_reset();
+$ledger_x = str_repeat( '1a', 16 );
+$ledger_y = str_repeat( '2b', 16 );
+$controller->begin_visitor_check( $ledger_x, array(), array( 'x_session' ), array() );
+
+// Step 1: take the snapshot worker X would be holding.
+$stale_snapshot = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+
+// Step 2: an import opens Y underneath it.
+$controller->begin_visitor_check( $ledger_y, array(), array( 'y_session' ), array() );
+vc_ok( isset( $stale_snapshot[ $ledger_x ] ) && ! isset( $stale_snapshot[ $ledger_y ] ), 'the snapshot predates Y, as the race requires' );
+
+// Step 3: X writes. Its target is X, which is now stale, so the guard stops
+// it — but even a writer that passes the guard must not erase Y.
+$controller->record_visitor_observations( array( array( 'name' => 'x_saw_this', 'domain' => 'example.test' ) ), $ledger_x );
+$after = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok( isset( $after[ $ledger_y ] ), 'the ledger opened mid-flight still exists after the older worker writes' );
+vc_ok(
+	$ledger_y === get_option( Controller::VISITOR_CHECK_TARGET_OPTION, null ),
+	'and the target still points at a ledger that is actually there'
+);
+
+// The observation write needs the same proof. Its stale-target guard covers a
+// ledger opened BEFORE the worker read; this covers one opened after, which no
+// guard can see — only a re-read before the write survives it.
+vc_reset();
+$controller->begin_visitor_check( $ledger_x, array(), array( 'x_session' ), array() );
+$GLOBALS['faz_test_after_get_key'] = Controller::VISITOR_CHECK_OPTION;
+$GLOBALS['faz_test_after_get']     = function ( $key ) use ( $ledger_y ) {
+	$store              = $GLOBALS['faz_test_options'][ Controller::VISITOR_CHECK_OPTION ];
+	$store[ $ledger_y ] = array( 'status' => 'pending', 'date' => '2026-08-23 12:00:00', 'observed' => array() );
+	$GLOBALS['faz_test_options'][ Controller::VISITOR_CHECK_OPTION ] = $store;
+};
+$controller->record_visitor_observations( array( array( 'name' => 'x_saw_it', 'domain' => 'example.test' ) ) );
+$GLOBALS['faz_test_after_get'] = null;
+$after = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok( isset( $after[ $ledger_y ] ), 'a ledger opened INSIDE the observation read-write window survives' );
+vc_ok(
+	in_array( 'x_saw_it', (array) $after[ $ledger_x ]['observed'], true ),
+	'and the observation itself is still recorded'
+);
+
+// The same for finalize, with the concurrent open injected INSIDE the window
+// between its read and its write. Asserting this without the hook proved
+// nothing: finalize re-reads immediately before writing, so a sequential test
+// never has a stale snapshot and the assertion passes either way.
+vc_reset();
+$controller->begin_visitor_check( $ledger_x, array(), array( 'x_session' ), array( array( 'name' => 'tk' ) ) );
+$controller->record_visitor_observations( array( array( 'name' => 'tk', 'domain' => 'example.test' ) ) );
+$GLOBALS['faz_test_after_get_key'] = Controller::VISITOR_CHECK_OPTION;
+$GLOBALS['faz_test_after_get']     = function ( $key ) use ( $ledger_y ) {
+	// Another process opens Y the instant finalize has read the array.
+	$store                 = $GLOBALS['faz_test_options'][ Controller::VISITOR_CHECK_OPTION ];
+	$store[ $ledger_y ]    = array( 'status' => 'pending', 'date' => '2026-08-23 12:00:00', 'observed' => array() );
+	$GLOBALS['faz_test_options'][ Controller::VISITOR_CHECK_OPTION ] = $store;
+};
+$controller->finalize_visitor_check();
+$GLOBALS['faz_test_after_get'] = null;
+$after = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok( isset( $after[ $ledger_x ] ), 'finalize froze its own ledger' );
+vc_ok( isset( $after[ $ledger_y ] ), 'a ledger opened INSIDE the read-write window survives finalize' );
 
 echo "== Structural wiring (source-order checks) ==\n";
 
