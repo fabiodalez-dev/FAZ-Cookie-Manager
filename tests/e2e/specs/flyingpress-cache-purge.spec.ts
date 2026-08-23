@@ -172,6 +172,15 @@ test.beforeAll(async ({}, testInfo) => {
   lockHeld = true;
   probeWasActive = isPluginActive('faz-e2e-fp-probe');
 
+  // FAZ vetoes full-page caching whenever the jurisdiction runtime is on
+  // (is_country_dependent_output() -> flying_press_is_cacheable = false), and
+  // Cache Compatibility Mode is inert while it is on, by design. The audit-lab
+  // fixture pins that runtime ON at PHP_INT_MAX for every other spec, so with
+  // it in place FlyingPress can never report a HIT and this whole file was
+  // asserting against a cache that was correctly refusing to exist. Turn the
+  // runtime off for the duration of this file; afterAll puts it back.
+  wpEval(`update_option( 'faz_e2e_geo_runtime_off', 1 );`);
+
   // Self-provision FlyingPress for the duration of THIS spec file only. When
   // the plugin is installed (dev box) the tests run as part of the suite;
   // when it's absent (CI / other machines) they auto-skip. afterAll tears it
@@ -203,6 +212,13 @@ test.beforeAll(async ({}, testInfo) => {
 
 test.afterAll(() => {
   try {
+    // Always first: leaving this set would silently disable jurisdiction
+    // routing for every spec that runs after this file.
+    try {
+      wpEval(`delete_option( 'faz_e2e_geo_runtime_off' );`);
+    } catch {
+      /* best-effort */
+    }
     // Restore only the plugin state this spec changed. A developer who started
     // with FlyingPress or the probe active must get the same state back.
     if (flyingPressActive) {
