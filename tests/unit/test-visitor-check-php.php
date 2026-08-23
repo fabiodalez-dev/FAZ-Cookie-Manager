@@ -323,8 +323,53 @@ $controller->begin_visitor_check( 11, array(), array(), array() );
 $controller->record_visitor_observations( array( array( 'name' => 'anon_two', 'domain' => 'example.test' ) ) );
 $controller->finalize_visitor_check();
 $latest = $controller->latest_visitor_check();
-vc_ok( is_array( $latest ) && 11 === $latest['scan_id'], 'the newest completed check wins' );
+// scan_id is now the ledger's string key (hex in production), not an int.
+vc_ok( is_array( $latest ) && '11' === $latest['scan_id'], 'the newest completed check wins' );
 vc_ok( array( 'anon_two' ) === $latest['visitor_only'], 'its buckets come back as plain sanitized name lists' );
+
+// ── a stale worker must not write into the ledger it did not open ─────────
+// finalize_visitor_check()'s guard stops the wrong CLOSE; this stops the wrong
+// WRITE. An import opening ledger B mid-batch would otherwise have worker A
+// appending its observations to B, attributing one scan's anonymous pass to
+// another and corrupting the very buckets the feature produces.
+vc_reset();
+$ledger_a = str_repeat( 'aa', 16 );
+$ledger_b = str_repeat( 'bb', 16 );
+$controller->begin_visitor_check( $ledger_a, array(), array( 'shop_session' ), array() );
+// The worker starts and captures A, then an import opens B underneath it.
+$controller->begin_visitor_check( $ledger_b, array(), array( 'other_session' ), array() );
+$controller->record_visitor_observations( array( array( 'name' => 'leaked_from_a', 'domain' => 'example.test' ) ), $ledger_a );
+$after = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+$b_observed = isset( $after[ $ledger_b ]['observed'] ) ? (array) $after[ $ledger_b ]['observed'] : array();
+vc_ok(
+	! in_array( 'leaked_from_a', $b_observed, true ) && array() === $b_observed,
+	'a worker holding a stale target writes nothing into the newer ledger'
+);
+// And the worker that DOES hold the active target still writes normally.
+$controller->record_visitor_observations( array( array( 'name' => 'seen_by_b', 'domain' => 'example.test' ) ), $ledger_b );
+$after = get_option( Controller::VISITOR_CHECK_OPTION, array() );
+vc_ok(
+	in_array( 'seen_by_b', (array) $after[ $ledger_b ]['observed'], true ),
+	'the worker holding the active target still records'
+);
+
+// ── latest_visitor_check() must find a hex-keyed completed ledger ─────────
+// It ordered on absint($check_id), which is 0 for every 32-char hex id, so the
+// comparison never fired and a complete ledger read as absent: the REST
+// /scans/info payload carried visitor_check: null and the UI had nothing to
+// show, even though the ledger was sitting in the option.
+vc_reset();
+$old_id = str_repeat( 'cc', 16 );
+$new_id = str_repeat( 'dd', 16 );
+update_option( Controller::VISITOR_CHECK_OPTION, array(
+	$old_id => array( 'status' => 'complete', 'completed_at' => '2026-08-01 10:00:00', 'diff' => array( 'visitor_only' => array( 'old_one' ), 'jar_promoted' => array(), 'admin_only' => array() ) ),
+	$new_id => array( 'status' => 'complete', 'completed_at' => '2026-08-20 10:00:00', 'diff' => array( 'visitor_only' => array( 'new_one' ), 'jar_promoted' => array(), 'admin_only' => array() ) ),
+	'pending_one' => array( 'status' => 'pending' ),
+) );
+$latest = $controller->latest_visitor_check();
+vc_ok( is_array( $latest ), 'a hex-keyed completed ledger is found at all' );
+vc_ok( $new_id === $latest['scan_id'], 'the NEWEST completed ledger wins, by completed_at' );
+vc_ok( array( 'new_one' ) === $latest['visitor_only'], 'and its diff is the one returned' );
 
 echo "== Structural wiring (source-order checks) ==\n";
 
@@ -333,8 +378,8 @@ echo "== Structural wiring (source-order checks) ==\n";
 $controller_src = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/includes/class-controller.php' );
 $api_src        = (string) file_get_contents( dirname( __DIR__, 2 ) . '/admin/modules/scanner/api/class-api.php' );
 vc_ok(
-	false !== strpos( $controller_src, '$this->record_visitor_observations( $page_cookies );' ),
-	'run_httponly_check() records observations beside its checkpoint writes'
+	false !== strpos( $controller_src, '$this->record_visitor_observations( $page_cookies, $visitor_target );' ),
+	'run_httponly_check() records observations into the ledger IT opened'
 );
 vc_ok(
 	false !== strpos( $controller_src, '$this->finalize_visitor_check( $visitor_target );' ),

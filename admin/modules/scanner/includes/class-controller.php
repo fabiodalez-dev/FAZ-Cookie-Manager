@@ -1435,7 +1435,7 @@ class Controller {
 					// a URL yielding no Set-Cookie writes nothing, so a cached
 					// page degrades the diff toward "no finding", never toward
 					// a demotion.
-					$this->record_visitor_observations( $page_cookies );
+					$this->record_visitor_observations( $page_cookies, $visitor_target );
 				}
 				$latest = $this->sanitize_scanned_urls( get_option( self::HTTPONLY_URLS_OPTION, array() ) );
 				$latest = array_values( array_diff( $latest, array( $url ) ) );
@@ -2849,9 +2849,19 @@ class Controller {
 	 * @param array $observed_cookies Cookie rows as returned by scan_page().
 	 * @return void
 	 */
-	public function record_visitor_observations( $observed_cookies ) {
+	public function record_visitor_observations( $observed_cookies, $expected_target = '' ) {
 		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
 		if ( '' === $target ) {
+			return;
+		}
+		// The worker passes the target it captured at startup. Without this an
+		// import opening ledger B mid-batch would have worker A appending ITS
+		// observations to B — silently attributing one scan's anonymous pass to
+		// another, which corrupts exactly the visitor_only/jar_promoted buckets
+		// the whole feature is for. Guarding the close was not enough; the
+		// writes need the same check.
+		$expected_target = sanitize_key( (string) $expected_target );
+		if ( '' !== $expected_target && $expected_target !== $target ) {
 			return;
 		}
 		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
@@ -3012,23 +3022,37 @@ class Controller {
 		if ( ! is_array( $checks ) || empty( $checks ) ) {
 			return null;
 		}
-		$best    = null;
-		$best_id = 0;
+		// Scan ids are 32-char hex strings, so absint() is 0 for every one of
+		// them and the old `absint($check_id) > $best_id` comparison never
+		// selected anything: this returned null even with a complete ledger
+		// sitting in the option. The ledger is appended newest-last (and pruned
+		// with array_slice, which preserves order), so insertion order IS
+		// chronological — take the last complete entry.
+		$best      = null;
+		$best_id   = '';
+		$best_when = '';
 		foreach ( $checks as $check_id => $entry ) {
 			if ( ! is_array( $entry ) || ! isset( $entry['status'] ) || 'complete' !== $entry['status'] ) {
 				continue;
 			}
-			if ( absint( $check_id ) > $best_id ) {
-				$best_id = absint( $check_id );
-				$best    = $entry;
+			// Newest completed_at wins; iteration order breaks ties (the option
+			// is appended newest-last and array_slice preserves that). Ordering
+			// on the KEY is what broke this — absint() of a hex id is 0, so the
+			// old `> $best_id` never fired and a complete ledger read as absent.
+			$when = isset( $entry['completed_at'] ) ? (string) $entry['completed_at'] : '';
+			if ( null !== $best && $when < $best_when ) {
+				continue;
 			}
+			$best_when = $when;
+			$best_id   = (string) $check_id;
+			$best      = $entry;
 		}
 		if ( null === $best ) {
 			return null;
 		}
 		$diff = isset( $best['diff'] ) && is_array( $best['diff'] ) ? $best['diff'] : array();
 		$out  = array(
-			'scan_id'      => $best_id,
+			'scan_id'      => sanitize_key( $best_id ),
 			'completed_at' => isset( $best['completed_at'] ) ? sanitize_text_field( (string) $best['completed_at'] ) : '',
 		);
 		foreach ( array( 'visitor_only', 'jar_promoted', 'admin_only' ) as $bucket ) {
