@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: FAZ Cookie Manager 1.26.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/faz-cookie-manager\n"
-"POT-Creation-Date: 2026-08-22T16:29:59+00:00\n"
+"POT-Creation-Date: 2026-08-23T22:21:32+00:00\n"
 "PO-Revision-Date: 2026-07-31 20:48+0200\n"
 "Last-Translator: Fabio D'Alessandro\n"
 "Language-Team: Italian\n"
@@ -38,112 +38,112 @@ msgstr "Fabio D'Alessandro"
 msgid "https://fabiodalez.it/"
 msgstr "https://fabiodalez.it/"
 
-#: admin/class-admin.php:219 admin/views/base.php:19
+#: admin/class-admin.php:220 admin/views/base.php:19
 msgid "Dashboard"
 msgstr "Pannello di controllo"
 
-#: admin/class-admin.php:224 admin/views/base.php:20
+#: admin/class-admin.php:225 admin/views/base.php:20
 #: admin/views/dashboard.php:185
 msgid "Cookie Banner"
 msgstr "Banner cookie"
 
-#: admin/class-admin.php:229 admin/views/base.php:21
+#: admin/class-admin.php:230 admin/views/base.php:21
 #: frontend/class-frontend.php:2431
 #: frontend/modules/banner-rest/class-banner-rest.php:583
 msgid "Cookies"
 msgstr "Cookie"
 
-#: admin/class-admin.php:234 admin/views/base.php:22
+#: admin/class-admin.php:235 admin/views/base.php:22
 #: admin/views/dashboard.php:193 admin/views/settings.php:228
 msgid "Consent Logs"
 msgstr "Registri di consenso"
 
-#: admin/class-admin.php:239 admin/views/base.php:23
+#: admin/class-admin.php:240 admin/views/base.php:23
 #: admin/views/dashboard.php:189 admin/views/system-status.php:80
 msgid "Google Consent Mode"
 msgstr "Google Consent Mode"
 
-#: admin/class-admin.php:244 admin/views/base.php:24
+#: admin/class-admin.php:245 admin/views/base.php:24
 #: admin/views/dashboard.php:197
 msgid "Languages"
 msgstr "Lingue"
 
-#: admin/class-admin.php:249
+#: admin/class-admin.php:250
 msgid "Vendor List (IAB)"
 msgstr "Lista fornitori (IAB)"
 
-#: admin/class-admin.php:254 admin/views/geo-routing.php:26
+#: admin/class-admin.php:255 admin/views/geo-routing.php:26
 msgid "Geo-routing"
 msgstr "Geo-routing"
 
-#: admin/class-admin.php:259 admin/views/banner.php:325 admin/views/base.php:28
+#: admin/class-admin.php:260 admin/views/banner.php:325 admin/views/base.php:28
 #: frontend/class-amp-consent.php:430 includes/blocks/class-blocks.php:67
 msgid "Cookie Policy"
 msgstr "Informativa cookie"
 
-#: admin/class-admin.php:264 admin/class-admin.php:2476 admin/views/base.php:25
+#: admin/class-admin.php:265 admin/class-admin.php:2549 admin/views/base.php:25
 #: admin/views/dashboard.php:201 includes/blocks/editor.js:27
 #: includes/blocks/editor.js:60 includes/blocks/editor.js:93
 msgid "Settings"
 msgstr "Impostazioni"
 
-#: admin/class-admin.php:269 admin/views/base.php:27
+#: admin/class-admin.php:270 admin/views/base.php:27
 msgid "Import / Export"
 msgstr "Importa / Esporta"
 
-#: admin/class-admin.php:274 admin/views/base.php:29
+#: admin/class-admin.php:275 admin/views/base.php:29
 msgid "System Status"
 msgstr "Stato del sistema"
 
-#: admin/class-admin.php:285
+#: admin/class-admin.php:286
 msgid "Setup"
 msgstr "Configurazione"
 
-#: admin/class-admin.php:510 admin/class-admin.php:2449
+#: admin/class-admin.php:511 admin/class-admin.php:2522
 #: admin/views/consent-logs.php:27 admin/views/consent-logs.php:52
 msgid "Accepted"
 msgstr "Accettato"
 
-#: admin/class-admin.php:511 admin/class-admin.php:2453
+#: admin/class-admin.php:512 admin/class-admin.php:2526
 #: admin/views/consent-logs.php:34 admin/views/consent-logs.php:53
 msgid "Rejected"
 msgstr "Rifiutato"
 
-#: admin/class-admin.php:512
+#: admin/class-admin.php:513
 msgid "total responses"
 msgstr "risposte totali"
 
-#: admin/class-admin.php:514 admin/class-admin.php:715
+#: admin/class-admin.php:515 admin/class-admin.php:716
 msgid "Settings saved successfully."
 msgstr "Impostazioni salvate con successo."
 
-#: admin/class-admin.php:515 admin/class-admin.php:716
+#: admin/class-admin.php:516 admin/class-admin.php:717
 msgid "Failed to save settings."
 msgstr "Salvataggio delle impostazioni non riuscito."
 
-#: admin/class-admin.php:516 admin/class-admin.php:714
+#: admin/class-admin.php:517 admin/class-admin.php:715
 msgid "Failed to load settings."
 msgstr "Caricamento delle impostazioni non riuscito."
 
-#: admin/class-admin.php:519 admin/class-admin.php:909
+#: admin/class-admin.php:520 admin/class-admin.php:910
 msgid "Saving…"
 msgstr "Salvataggio…"
 
-#: admin/class-admin.php:520
+#: admin/class-admin.php:521
 msgid "Are you sure you want to delete this?"
 msgstr "Eliminare questo elemento?"
 
-#: admin/class-admin.php:532
+#: admin/class-admin.php:533
 msgid "Cookie Name"
 msgstr "Nome cookie"
 
-#: admin/class-admin.php:533
+#: admin/class-admin.php:534
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:494
 #: admin/views/cookies.php:155 includes/class-cookie-table-shortcode.php:226
 msgid "Domain"
 msgstr "Dominio"
 
-#: admin/class-admin.php:534
+#: admin/class-admin.php:535
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:495
 #: admin/views/cookies.php:156
 #: frontend/modules/shortcodes/class-shortcodes.php:248
@@ -151,11 +151,11 @@ msgstr "Dominio"
 msgid "Duration"
 msgstr "Durata"
 
-#: admin/class-admin.php:535
+#: admin/class-admin.php:536
 msgid "e.g. 1 year"
 msgstr "es. 1 anno"
 
-#: admin/class-admin.php:536
+#: admin/class-admin.php:537
 #: admin/modules/cookie-policy-generator/includes/class-renderer.php:496
 #: admin/views/banner.php:683 admin/views/banner.php:731
 #: admin/views/cookies.php:52 admin/views/cookies.php:157
@@ -165,1770 +165,1783 @@ msgstr "es. 1 anno"
 msgid "Description"
 msgstr "Descrizione"
 
-#: admin/class-admin.php:537
+#: admin/class-admin.php:538
 msgid "Delete selected cookie(s)?"
 msgstr "Eliminare i cookie selezionati?"
 
-#: admin/class-admin.php:538
+#: admin/class-admin.php:539
 msgid "Bulk delete failed."
 msgstr "Eliminazione in blocco non riuscita."
 
-#: admin/class-admin.php:539
+#: admin/class-admin.php:540
 msgid "Categories saved."
 msgstr "Categorie salvate."
 
-#: admin/class-admin.php:540
+#: admin/class-admin.php:541
 msgid "Delete all stale"
 msgstr "Elimina tutti gli obsoleti"
 
-#: admin/class-admin.php:541 admin/views/cookies.php:76
+#: admin/class-admin.php:542 admin/views/cookies.php:76
 #: admin/views/cookies.php:83
 msgid "All Cookies"
 msgstr "Tutti i cookie"
 
-#: admin/class-admin.php:542
+#: admin/class-admin.php:543
 msgid "hidden"
 msgstr "nascosti"
 
-#: admin/class-admin.php:543
+#: admin/class-admin.php:544
 msgid "Hidden from frontend"
 msgstr "Nascosto dal frontend"
 
 #. translators: %d: number of seconds until retry
-#: admin/class-admin.php:545
+#: admin/class-admin.php:546
 #, php-format
 msgid "Server busy, retrying in %ds..."
 msgstr "Server occupato, nuovo tentativo tra %ds..."
 
 #. translators: %d: total number of pages to scan
-#: admin/class-admin.php:547
+#: admin/class-admin.php:548
 #, php-format
 msgid "Scanning 0/%d pages..."
 msgstr "Scansione 0/%d pagine..."
 
-#: admin/class-admin.php:548
+#: admin/class-admin.php:549
 msgid "e.g. custom-tracker.com/script.js"
 msgstr "es. custom-tracker.com/script.js"
 
 #. translators: %1$d: number of rules added, %2$s: template name
-#: admin/class-admin.php:550
+#: admin/class-admin.php:551
 #, php-format
 msgid "Added %1$d rules from %2$s (saved)"
 msgstr "Aggiunte %1$d regole da %2$s (salvate)"
 
 #. translators: %s: template name
-#: admin/class-admin.php:552
+#: admin/class-admin.php:553
 #, php-format
 msgid "All cookies from %s already exist"
 msgstr "Tutti i cookie da %s esistono già"
 
-#: admin/class-admin.php:553 includes/class-cookie-table-shortcode.php:297
+#: admin/class-admin.php:554 includes/class-cookie-table-shortcode.php:297
 msgid "No cookies found."
 msgstr "Nessun cookie trovato."
 
-#: admin/class-admin.php:554
+#: admin/class-admin.php:555
 msgid "Edit"
 msgstr "Modifica"
 
-#: admin/class-admin.php:555 admin/class-admin.php:861
+#: admin/class-admin.php:556 admin/class-admin.php:862
 msgid "Delete"
 msgstr "Elimina"
 
-#: admin/class-admin.php:556
+#: admin/class-admin.php:557
 msgid "Delete stale"
 msgstr "Elimina obsoleti"
 
-#: admin/class-admin.php:557 admin/views/cookies.php:214
+#: admin/class-admin.php:558 admin/views/cookies.php:214
 #: admin/views/system-status.php:131
 #: includes/class-cookie-table-shortcode.php:229
 msgid "Category"
 msgstr "Categoria"
 
-#: admin/class-admin.php:558
+#: admin/class-admin.php:559
 msgid "Cancel"
 msgstr "Annulla"
 
-#: admin/class-admin.php:559
+#: admin/class-admin.php:560
 msgid "Cookie updated."
 msgstr "Cookie aggiornato."
 
-#: admin/class-admin.php:560
+#: admin/class-admin.php:561
 msgid "Cookie added."
 msgstr "Cookie aggiunto."
 
-#: admin/class-admin.php:561
+#: admin/class-admin.php:562
 msgid "Failed to save cookie."
 msgstr "Salvataggio del cookie non riuscito."
 
 #. translators: %s: cookie name
-#: admin/class-admin.php:563
+#: admin/class-admin.php:564
 #, php-format
 msgid "Delete cookie \"%s\"?"
 msgstr "Eliminare il cookie \"%s\"?"
 
-#: admin/class-admin.php:564
+#: admin/class-admin.php:565
 msgid "Cookie deleted."
 msgstr "Cookie eliminato."
 
-#: admin/class-admin.php:565
+#: admin/class-admin.php:566
 msgid "Failed to delete cookie."
 msgstr "Eliminazione del cookie non riuscita."
 
-#: admin/class-admin.php:566
+#: admin/class-admin.php:567
 msgid "Stale cookie deleted."
 msgstr "Cookie obsoleto eliminato."
 
-#: admin/class-admin.php:567
+#: admin/class-admin.php:568
 msgid "Failed to delete stale cookie."
 msgstr "Eliminazione del cookie obsoleto non riuscita."
 
-#: admin/class-admin.php:569
+#: admin/class-admin.php:570
 msgid "Select a service…"
 msgstr "Seleziona un servizio…"
 
-#: admin/class-admin.php:570
+#: admin/class-admin.php:571
 msgid "Could not load services"
 msgstr "Impossibile caricare i servizi"
 
 #. translators: 1: service label, 2: number of cookies registered.
-#: admin/class-admin.php:572
+#: admin/class-admin.php:573
 #, php-format
 msgid "%1$s: %2$d cookie(s) registered"
 msgstr "%1$s: %2$d cookie registrati"
 
-#: admin/class-admin.php:573
+#: admin/class-admin.php:574
 msgid "Could not register service."
 msgstr "Impossibile registrare il servizio."
 
-#: admin/class-admin.php:574
+#: admin/class-admin.php:575
 msgid "Remove these cookie-policy entries? Cookies that load only after an interaction, during a flow, or as httpOnly cookies may still be present even if the scan did not observe them."
 msgstr "Rimuovere queste voci dalla cookie policy? I cookie che si caricano solo dopo un'interazione, durante un percorso, o come cookie httpOnly possono essere comunque presenti anche se la scansione non li ha osservati."
 
-#: admin/class-admin.php:575
+#: admin/class-admin.php:576
 msgid "No stale cookies to delete."
 msgstr "Nessun cookie obsoleto da eliminare."
 
 #. translators: %d: number of entries the server kept because they have not yet been missing from enough consecutive complete scans.
-#: admin/class-admin.php:577
+#: admin/class-admin.php:578
 #, php-format
 msgid "%d entry(ies) were kept: they have not yet been missing from enough complete scans."
 msgstr "%d voci mantenute: non sono ancora mancate da un numero sufficiente di scansioni complete."
 
-#: admin/class-admin.php:579
+#: admin/class-admin.php:580
 msgid "Undo delete"
 msgstr "Annulla eliminazione"
 
 #. translators: %d: number of cookies in the most recent deleted batch that can still be restored.
-#: admin/class-admin.php:581
+#: admin/class-admin.php:582
 #, php-format
 msgid "%d recently deleted cookie(s) can still be restored."
 msgstr "%d cookie eliminati di recente possono ancora essere ripristinati."
 
 #. translators: 1: number of cookies in the most recent deleted batch, 2: human-readable age of that batch, such as "3 hours" or "8 months".
-#: admin/class-admin.php:583
+#: admin/class-admin.php:584
 #, php-format
 msgid "%1$d deleted cookie(s) can still be restored (deleted %2$s ago)."
 msgstr "%1$d cookie eliminati possono ancora essere ripristinati (eliminati %2$s fa)."
 
 #. translators: %d: number of cookies put back by the restore.
-#: admin/class-admin.php:585
+#: admin/class-admin.php:586
 #, php-format
 msgid "%d cookie(s) restored."
 msgstr "%d cookie ripristinati."
 
-#: admin/class-admin.php:586
+#: admin/class-admin.php:587
 msgid "Could not restore the deleted cookies."
 msgstr "Impossibile ripristinare i cookie eliminati."
 
-#: admin/class-admin.php:587
+#: admin/class-admin.php:588
 msgid "There is nothing left to restore."
 msgstr "Non c'è più nulla da ripristinare."
 
-#: admin/class-admin.php:588
+#: admin/class-admin.php:589
 msgid "Nothing was deleted: the undo snapshot could not be saved, so the cookies were left in place."
 msgstr "Non è stato eliminato nulla: non è stato possibile salvare lo snapshot di annullamento, quindi i cookie sono stati lasciati al loro posto."
 
 #. translators: %d: number of cookies that were present in the browser before the scan started and were not imported.
-#: admin/class-admin.php:593
+#: admin/class-admin.php:594
 #, php-format
 msgid "%d cookie(s) were already in your browser when the scan started, so they could not be attributed to any page and were not imported."
 msgstr "%d cookie erano già presenti nel tuo browser all'avvio della scansione, quindi non è stato possibile attribuirli a nessuna pagina e non sono stati importati."
 
-#: admin/class-admin.php:594
+#: admin/class-admin.php:595
 msgid "Show the names"
 msgstr "Mostra i nomi"
 
-#: admin/class-admin.php:595
+#: admin/class-admin.php:596
 msgid "If you recognise one as a cookie your site really sets, add it manually with Add Cookie."
 msgstr "Se ne riconosci uno come un cookie che il tuo sito imposta davvero, aggiungilo a mano con Aggiungi cookie."
 
 #. translators: %d: numeric id of the scan the visitor check belongs to.
-#: admin/class-admin.php:599
+#: admin/class-admin.php:600
 #, php-format
 msgid "Server-side visitor check (headers only) — scan #%d:"
 msgstr "Controllo visitatore lato server (solo header) — scansione n. %d:"
 
 #. translators: 1: number of cookies, 2: comma-separated cookie names.
-#: admin/class-admin.php:601
+#: admin/class-admin.php:602
 #, php-format
 msgid "%1$d cookie(s) were set for the anonymous check but never seen by the logged-in browser scan, and were added to the declaration: %2$s"
 msgstr "%1$d cookie sono stati impostati per il controllo anonimo ma mai visti dalla scansione del browser da loggato, e sono stati aggiunti alla dichiarazione: %2$s"
 
 #. translators: 1: number of cookies, 2: comma-separated cookie names.
-#: admin/class-admin.php:603
+#: admin/class-admin.php:604
 #, php-format
 msgid "%1$d cookie(s) the scan could not attribute were confirmed by the anonymous check — the site sets them for visitors, so they are declared: %2$s"
 msgstr "%1$d cookie che la scansione non era riuscita ad attribuire sono stati confermati dal controllo anonimo — il sito li imposta per i visitatori, quindi vengono dichiarati: %2$s"
 
 #. translators: 1: number of cookies, 2: comma-separated cookie names.
-#: admin/class-admin.php:605
+#: admin/class-admin.php:606
 #, php-format
 msgid "%1$d cookie(s) were seen only in your browser and not confirmed for visitors; they stay reported, not declared: %2$s"
 msgstr "%1$d cookie sono stati visti solo nel tuo browser e non confermati per i visitatori; restano segnalati, non dichiarati: %2$s"
 
-#: admin/class-admin.php:606
+#: admin/class-admin.php:607
 msgid "The anonymous check found no cookie differences against the browser scan."
 msgstr "Il controllo anonimo non ha rilevato differenze rispetto alla scansione del browser."
 
-#: admin/class-admin.php:607
+#: admin/class-admin.php:608
 msgid "This check re-fetches the scanned pages without a login and compares Set-Cookie headers only. It cannot see cookies that JavaScript sets for anonymous visitors, nor cookies set only after an interaction (for example an add-to-cart request), so a clean result does not mean the visitor view is fully verified."
 msgstr "Questo controllo riscarica le pagine scansionate senza login e confronta solo gli header Set-Cookie. Non può vedere i cookie che JavaScript imposta per i visitatori anonimi, né quelli impostati solo dopo un'interazione (per esempio una richiesta di aggiunta al carrello): un esito pulito non significa quindi che la vista del visitatore sia verificata del tutto."
 
-#: admin/class-admin.php:609
+#: admin/class-admin.php:610
 msgid "Stop scan"
 msgstr "Interrompi scansione"
 
-#: admin/class-admin.php:610
+#: admin/class-admin.php:611
 msgid "Stopping…"
 msgstr "Interruzione…"
 
-#: admin/class-admin.php:611
+#: admin/class-admin.php:612
 msgid "(stopped by you before every page was visited)"
 msgstr "(interrotta da te prima che tutte le pagine fossero visitate)"
 
-#: admin/class-admin.php:612
+#: admin/class-admin.php:613
 msgid "Failed to delete stale cookies."
 msgstr "Eliminazione dei cookie obsoleti non riuscita."
 
-#: admin/class-admin.php:613
+#: admin/class-admin.php:614
 msgid "Failed to load cookies for stale cleanup."
 msgstr "Caricamento dei cookie per la pulizia degli obsoleti non riuscito."
 
-#: admin/class-admin.php:614
+#: admin/class-admin.php:615
 msgid "Scanning..."
 msgstr "Scansione in corso..."
 
-#: admin/class-admin.php:615 admin/views/cookies.php:86
+#: admin/class-admin.php:616 admin/views/cookies.php:86
 msgid "Scan Site"
 msgstr "Scansiona sito"
 
-#: admin/class-admin.php:616
+#: admin/class-admin.php:617
 msgid "Scan failed."
 msgstr "Scansione non riuscita."
 
 #. translators: %1$d: number of cookies found by the scan, %2$d: number of pages scanned
-#: admin/class-admin.php:618
+#: admin/class-admin.php:619
 #, php-format
 msgid "Scan complete — %1$d cookies found on %2$d pages"
 msgstr "Scansione completata — %1$d cookie trovati su %2$d pagine"
 
 #. translators: %s: machine-readable reason the scan stopped before visiting every page, e.g. "no-new-findings"
-#: admin/class-admin.php:620
+#: admin/class-admin.php:621
 #, php-format
 msgid "(early stop: %s)"
 msgstr "(interruzione anticipata: %s)"
 
 #. translators: %d: number of catalogued cookies the latest scan did not observe
-#: admin/class-admin.php:622
+#: admin/class-admin.php:623
 #, php-format
 msgid "%d stale cookie(s) highlighted"
 msgstr "%d cookie obsoleti evidenziati"
 
 #. translators: appended to the scan summary when the scan was capped, incremental, early-stopped or degraded, and therefore could not prove that a catalogued cookie is gone.
-#: admin/class-admin.php:624
+#: admin/class-admin.php:625
 msgid "Scan coverage was incomplete, so no cookie was marked as stale."
 msgstr "La copertura della scansione era incompleta, quindi nessun cookie è stato contrassegnato come obsoleto."
 
-#: admin/class-admin.php:627
+#: admin/class-admin.php:628
 msgid "The browser scan was saved. Server-header enrichment is still running in the background, so a few more cookies may appear shortly."
 msgstr "La scansione del browser è stata salvata. L'arricchimento dagli header lato server è ancora in corso in background, quindi potrebbero comparire altri cookie a breve."
 
-#: admin/class-admin.php:628
+#: admin/class-admin.php:629
 msgid "No pages found to scan."
 msgstr "Nessuna pagina da scansionare."
 
-#: admin/class-admin.php:629
+#: admin/class-admin.php:630
 msgid "Failed to discover pages."
 msgstr "Individuazione delle pagine non riuscita."
 
-#: admin/class-admin.php:630
+#: admin/class-admin.php:631
 msgid "Scan finished but failed to save results."
 msgstr "Scansione completata ma salvataggio dei risultati non riuscito."
 
 #. translators: %1$d: number of cookies an earlier attempt already imported, %2$d: number of pages scanned
-#: admin/class-admin.php:635
+#: admin/class-admin.php:636
 #, php-format
 msgid "Already saved — %1$d cookies on %2$d pages were imported by an earlier attempt. Nothing was saved twice."
 msgstr "Già salvato — %1$d cookie su %2$d pagine erano stati importati da un tentativo precedente. Non è stato salvato nulla due volte."
 
-#: admin/class-admin.php:636
+#: admin/class-admin.php:637
 msgid "Not saved"
 msgstr "Non salvato"
 
-#: admin/class-admin.php:637
+#: admin/class-admin.php:638
 msgid "The scan finished but the results could not be saved. Nothing is lost — they are held on the server for a few minutes. Retrying saves them; it does not scan the site again."
 msgstr "La scansione è terminata ma i risultati non sono stati salvati. Non è andato perso nulla: restano sul server per qualche minuto. Riprovando li salvi, senza scansionare di nuovo il sito."
 
-#: admin/class-admin.php:638
+#: admin/class-admin.php:639
 msgid "The scan finished but the results could not be saved. The capture session is held on the server for a few minutes, so retrying reuses it instead of failing — but this browser has to walk the pages again."
 msgstr "La scansione è terminata ma i risultati non sono stati salvati. La sessione di cattura resta sul server per qualche minuto, quindi riprovando la riusa invece di fallire — ma questo browser deve ripercorrere le pagine."
 
-#: admin/class-admin.php:639
+#: admin/class-admin.php:640
 msgid "Retry import"
 msgstr "Riprova l'importazione"
 
-#: admin/class-admin.php:640
+#: admin/class-admin.php:641
 msgid "Retry import (re-scans the site)"
 msgstr "Riprova l'importazione (riscansiona il sito)"
 
-#: admin/class-admin.php:641
+#: admin/class-admin.php:642
 msgid "Discard"
 msgstr "Scarta"
 
 #. translators: %s: clock time the scan session was opened, e.g. "14:32"
-#: admin/class-admin.php:645
+#: admin/class-admin.php:646
 #, php-format
 msgid "A cookie scan session for your account is already open on the server (started at %s). A new scan cannot start until it ends."
 msgstr "Una sessione di scansione dei cookie per il tuo account è già aperta sul server (avviata alle %s). Non è possibile avviarne una nuova finché non termina."
 
 #. translators: %1$d: number of cookie observations captured so far, %2$s: clock time of the most recent one
-#: admin/class-admin.php:647
+#: admin/class-admin.php:648
 #, php-format
 msgid "It is capturing right now — %1$d observation(s) so far, the last at %2$s. If one of your other tabs is running a scan, let it finish. Ending the session discards everything it has captured."
 msgstr "Sta raccogliendo in questo momento — %1$d osservazioni finora, l'ultima alle %2$s. Se una delle tue altre schede sta eseguendo una scansione, lasciala finire. Terminare la sessione scarta tutto ciò che ha raccolto."
 
 #. translators: %s: clock time the scan session last showed any activity
-#: admin/class-admin.php:649
+#: admin/class-admin.php:650
 #, php-format
 msgid "Nothing has reached the server since %s. If none of your tabs is running a scan, the tab that was driving this one is gone. The session will expire on its own in a few minutes, or you can end it now — ending it discards everything it captured."
 msgstr "Dal server non arriva nulla da %s. Se nessuna delle tue schede sta eseguendo una scansione, la scheda che guidava questa non c'è più. La sessione scadrà da sola fra qualche minuto, oppure puoi terminarla ora — terminarla scarta tutto ciò che aveva raccolto."
 
-#: admin/class-admin.php:650
+#: admin/class-admin.php:651
 msgid "End this scan and discard its capture"
 msgstr "Termina questa scansione e scarta ciò che ha raccolto"
 
-#: admin/class-admin.php:651
+#: admin/class-admin.php:652
 msgid "Scan session ended — its capture was discarded. You can start a new scan."
 msgstr "Sessione di scansione terminata — ciò che aveva raccolto è stato scartato. Puoi avviare una nuova scansione."
 
-#: admin/class-admin.php:652
+#: admin/class-admin.php:653
 msgid "The browser scan could not inspect any page. Make sure the public site is reachable through the WordPress admin origin and that framing is not blocked."
 msgstr "La scansione del browser non ha potuto ispezionare alcuna pagina. Verifica che il sito pubblico sia raggiungibile tramite l'origine dell'area di amministrazione di WordPress e che l'inserimento in frame non sia bloccato."
 
-#: admin/class-admin.php:653
+#: admin/class-admin.php:654
 msgid "Discovering pages..."
 msgstr "Rilevamento delle pagine..."
 
-#: admin/class-admin.php:654
+#: admin/class-admin.php:655
 msgid "Enriching with server scan..."
 msgstr "Arricchimento con scansione lato server..."
 
-#: admin/class-admin.php:655
+#: admin/class-admin.php:656
 msgid "Saving results..."
 msgstr "Salvataggio dei risultati..."
 
-#: admin/class-admin.php:656
+#: admin/class-admin.php:657
 msgid "No cookies to process."
 msgstr "Nessun cookie da elaborare."
 
-#: admin/class-admin.php:657
+#: admin/class-admin.php:658
 msgid "No uncategorized cookies to process."
 msgstr "Nessun cookie non categorizzato da elaborare."
 
-#: admin/class-admin.php:658
+#: admin/class-admin.php:659
 msgid "No cookies could be auto-categorized."
 msgstr "Nessun cookie è stato categorizzato automaticamente."
 
-#: admin/class-admin.php:659
+#: admin/class-admin.php:660
 msgid "Auto-categorize failed."
 msgstr "Categorizzazione automatica non riuscita."
 
-#: admin/class-admin.php:660
+#: admin/class-admin.php:661
 msgid "No definitions downloaded yet. Click \"Update Definitions\" to download."
 msgstr "Nessuna definizione scaricata. Fare clic su \"Aggiorna definizioni\" per scaricarle."
 
-#: admin/class-admin.php:661
+#: admin/class-admin.php:662
 msgid "Could not load definitions status."
 msgstr "Impossibile caricare lo stato delle definizioni."
 
-#: admin/class-admin.php:662
+#: admin/class-admin.php:663
 msgid "Downloading definitions from GitHub..."
 msgstr "Download delle definizioni da GitHub..."
 
-#: admin/class-admin.php:663
+#: admin/class-admin.php:664
 msgid "Definitions updated."
 msgstr "Definizioni aggiornate."
 
-#: admin/class-admin.php:664
+#: admin/class-admin.php:665
 msgid "Update failed."
 msgstr "Aggiornamento non riuscito."
 
-#: admin/class-admin.php:665
+#: admin/class-admin.php:666
 msgid "Update failed. Check your network connection."
 msgstr "Aggiornamento non riuscito. Verificare la connessione di rete."
 
-#: admin/class-admin.php:666
+#: admin/class-admin.php:667
 msgid "— Select —"
 msgstr "— Seleziona —"
 
-#: admin/class-admin.php:667 admin/views/banner.php:257
+#: admin/class-admin.php:668 admin/views/banner.php:257
 msgid "Remove"
 msgstr "Rimuovi"
 
-#: admin/class-admin.php:668
+#: admin/class-admin.php:669
 msgid "rule(s) incomplete — fill in both pattern and category."
 msgstr "regola/e incompleta/e — compilare sia il pattern che la categoria."
 
-#: admin/class-admin.php:669
+#: admin/class-admin.php:670
 msgid "Custom rules saved."
 msgstr "Regole personalizzate salvate."
 
-#: admin/class-admin.php:670
+#: admin/class-admin.php:671
 msgid "Failed to save custom rules."
 msgstr "Salvataggio delle regole personalizzate non riuscito."
 
-#: admin/class-admin.php:671
+#: admin/class-admin.php:672
 msgid "No templates available."
 msgstr "Nessun modello disponibile."
 
-#: admin/class-admin.php:672
+#: admin/class-admin.php:673
 msgid "No patterns or cookies in template."
 msgstr "Nessun pattern o cookie nel modello."
 
-#: admin/class-admin.php:673
+#: admin/class-admin.php:674
 msgid "not found — cookies not added."
 msgstr "non trovato — cookie non aggiunti."
 
-#: admin/class-admin.php:674
+#: admin/class-admin.php:675
 msgid "Failed to create cookies from template."
 msgstr "Creazione dei cookie dal modello non riuscita."
 
-#: admin/class-admin.php:675
+#: admin/class-admin.php:676
 msgid "Failed to load templates."
 msgstr "Caricamento dei modelli non riuscito."
 
-#: admin/class-admin.php:676
+#: admin/class-admin.php:677
 msgid "Shortcode copied!"
 msgstr "Shortcode copiato!"
 
-#: admin/class-admin.php:677
+#: admin/class-admin.php:678
 msgid "No scan logs available."
 msgstr "Nessun log di scansione disponibile."
 
-#: admin/class-admin.php:678
+#: admin/class-admin.php:679
 msgid "Failed to download debug log."
 msgstr "Impossibile scaricare il log di debug."
 
-#: admin/class-admin.php:679
+#: admin/class-admin.php:680
 msgid "Clear all scanner debug logs?"
 msgstr "Cancellare tutti i log di debug dello scanner?"
 
-#: admin/class-admin.php:680
+#: admin/class-admin.php:681
 msgid "Debug logs cleared."
 msgstr "Log di debug cancellati."
 
-#: admin/class-admin.php:681
+#: admin/class-admin.php:682
 msgid "Failed to clear debug logs."
 msgstr "Impossibile cancellare i log di debug."
 
 #. translators: %s: preset name
-#: admin/class-admin.php:686
+#: admin/class-admin.php:687
 #, php-format
 msgid "Preset applied: %s"
 msgstr "Preset applicato: %s"
 
-#: admin/class-admin.php:687
+#: admin/class-admin.php:688
 msgid "Failed to load banner settings."
 msgstr "Caricamento delle impostazioni del banner non riuscito."
 
-#: admin/class-admin.php:688
+#: admin/class-admin.php:689
 msgid "Banner settings saved."
 msgstr "Impostazioni del banner salvate."
 
-#: admin/class-admin.php:689
+#: admin/class-admin.php:690
 msgid "Failed to save banner settings."
 msgstr "Salvataggio delle impostazioni del banner non riuscito."
 
-#: admin/class-admin.php:691
+#: admin/class-admin.php:692
 msgid "Cookie banner enabled."
 msgstr "Banner cookie abilitato."
 
-#: admin/class-admin.php:692
+#: admin/class-admin.php:693
 msgid "Cookie banner disabled."
 msgstr "Banner cookie disabilitato."
 
-#: admin/class-admin.php:693
+#: admin/class-admin.php:694
 msgid "Failed to update banner status."
 msgstr "Impossibile aggiornare lo stato del banner."
 
 #. translators: 1: the lifetime stored on the banner, in days. 2: the lifetime visitors are actually served, in days.
-#: admin/class-admin.php:698
+#: admin/class-admin.php:699
 #, php-format
 msgid "This banner stores %1$d days, but visitors are served %2$d days: the selected regulation bounds the lifetime when the banner is served."
 msgstr "Questo banner memorizza %1$d giorni, ma ai visitatori ne vengono serviti %2$d: la normativa selezionata limita la durata al momento in cui il banner viene servito."
 
-#: admin/class-admin.php:700
+#: admin/class-admin.php:701
 msgid "Accessibility: low colour contrast"
 msgstr "Accessibilità: scarso contrasto di colore"
 
-#: admin/class-admin.php:701
+#: admin/class-admin.php:702
 msgid "These colour pairs fall below the WCAG AA 4.5:1 minimum and may be hard to read:"
 msgstr "Queste coppie di colori non raggiungono il minimo WCAG AA di 4,5:1 e potrebbero essere difficili da leggere:"
 
-#: admin/class-admin.php:702
+#: admin/class-admin.php:703
 msgid "Title vs banner background"
 msgstr "Titolo vs sfondo del banner"
 
-#: admin/class-admin.php:703
+#: admin/class-admin.php:704
 msgid "Description vs banner background"
 msgstr "Descrizione rispetto allo sfondo del banner"
 
-#: admin/class-admin.php:704
+#: admin/class-admin.php:705
 msgid "Link vs banner background"
 msgstr "Link vs sfondo del banner"
 
-#: admin/class-admin.php:705
+#: admin/class-admin.php:706
 msgid "Accept button text vs its background"
 msgstr "Testo del pulsante Accetta rispetto al suo sfondo"
 
-#: admin/class-admin.php:706
+#: admin/class-admin.php:707
 msgid "Reject button text vs its background"
 msgstr "Testo del pulsante Rifiuta rispetto allo sfondo"
 
-#: admin/class-admin.php:707
+#: admin/class-admin.php:708
 msgid "Settings button text vs its background"
 msgstr "Testo del pulsante impostazioni rispetto al suo sfondo"
 
-#: admin/class-admin.php:708
+#: admin/class-admin.php:709
 msgid "Save button text vs its background"
 msgstr "Testo del pulsante Salva rispetto allo sfondo"
 
-#: admin/class-admin.php:709
+#: admin/class-admin.php:710
 msgid "Category label vs banner background"
 msgstr "Etichetta categoria vs sfondo banner"
 
-#: admin/class-admin.php:710
+#: admin/class-admin.php:711
 msgid "Do Not Sell text vs banner background"
 msgstr "Testo «Non vendere» rispetto allo sfondo del banner"
 
-#: admin/class-admin.php:717 admin/class-admin.php:788
+#: admin/class-admin.php:718 admin/class-admin.php:789
 msgid "GVL updated."
 msgstr "GVL aggiornata."
 
-#: admin/class-admin.php:718 admin/class-admin.php:790
+#: admin/class-admin.php:719 admin/class-admin.php:791
 msgid "Failed to update GVL."
 msgstr "Aggiornamento della GVL non riuscito."
 
-#: admin/class-admin.php:719
+#: admin/class-admin.php:720
 msgid "Please enter a MaxMind license key first."
 msgstr "Inserire prima una chiave di licenza MaxMind."
 
-#: admin/class-admin.php:720
+#: admin/class-admin.php:721
 msgid "GeoIP database updated successfully."
 msgstr "Database GeoIP aggiornato con successo."
 
-#: admin/class-admin.php:721
+#: admin/class-admin.php:722
 msgid "Failed to update database."
 msgstr "Aggiornamento del database non riuscito."
 
-#: admin/class-admin.php:722 admin/class-admin.php:770
+#: admin/class-admin.php:723 admin/class-admin.php:771
 msgid "No GVL data downloaded yet. Click \"Update GVL Now\" to download."
 msgstr "Nessun dato GVL scaricato. Fare clic su \"Aggiorna GVL ora\" per scaricarli."
 
-#: admin/class-admin.php:723
+#: admin/class-admin.php:724
 msgid "No GVL data available."
 msgstr "Nessun dato GVL disponibile."
 
-#: admin/class-admin.php:724 admin/class-admin.php:791
+#: admin/class-admin.php:725 admin/class-admin.php:792
 msgid "GVL Version: "
 msgstr "Versione GVL: "
 
-#: admin/class-admin.php:725 admin/class-admin.php:792
+#: admin/class-admin.php:726 admin/class-admin.php:793
 msgid "Vendors: "
 msgstr "Fornitori: "
 
-#: admin/class-admin.php:726 admin/class-admin.php:793
+#: admin/class-admin.php:727 admin/class-admin.php:794
 msgid "Last Updated: "
 msgstr "Ultimo aggiornamento: "
 
-#: admin/class-admin.php:727
+#: admin/class-admin.php:728
 msgid "Database: "
 msgstr "Database: "
 
-#: admin/class-admin.php:728
+#: admin/class-admin.php:729
 msgid "{file} ({size} KB) - Last updated: {date}"
 msgstr "{file} ({size} KB) - Ultimo aggiornamento: {date}"
 
-#: admin/class-admin.php:729 admin/class-admin.php:789
+#: admin/class-admin.php:730 admin/class-admin.php:790
 msgid "GVL updated: v{version} ({count} vendors)"
 msgstr "GVL aggiornato: v{version} ({count} fornitori)"
 
-#: admin/class-admin.php:730
+#: admin/class-admin.php:731
 msgid "No GeoIP database installed. Enter your license key and click \"Update Database\"."
 msgstr "Nessun database GeoIP installato. Inserire la chiave di licenza e fare clic su \"Aggiorna database\"."
 
-#: admin/class-admin.php:731
+#: admin/class-admin.php:732
 msgid "A/B testing needs at least 2 selected banner variants to run."
 msgstr "Il test A/B richiede almeno 2 varianti del banner selezionate per essere eseguito."
 
-#: admin/class-admin.php:732
+#: admin/class-admin.php:733
 msgid "A/B testing is disabled while Cache Compatibility Mode is on."
 msgstr "Il test A/B è disattivato quando la Modalità compatibilità cache è attiva."
 
-#: admin/class-admin.php:733
+#: admin/class-admin.php:734
 msgid "Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on."
 msgstr "La Modalità Compatibilità Cache serve un unico banner a tutti i visitatori, quindi le regole di geo-targeting non vengono applicate mentre è attiva."
 
-#: admin/class-admin.php:734
+#: admin/class-admin.php:735
 msgid "Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country."
 msgstr "La Modalità Compatibilità Cache applica a tutti i visitatori l'impostazione IAB TCF predefinita e conservativa (si applica il GDPR) invece di decidere in base al Paese."
 
-#: admin/class-admin.php:738
+#: admin/class-admin.php:739
 msgid "Failed to load GCM settings."
 msgstr "Caricamento delle impostazioni GCM non riuscito."
 
-#: admin/class-admin.php:739
+#: admin/class-admin.php:740
 msgid "GCM settings saved successfully."
 msgstr "Impostazioni GCM salvate con successo."
 
-#: admin/class-admin.php:740
+#: admin/class-admin.php:741
 msgid "Failed to save GCM settings."
 msgstr "Salvataggio delle impostazioni GCM non riuscito."
 
 #. translators: %1$s: start index, %2$s: end index, %3$s: total entries
-#: admin/class-admin.php:745
+#: admin/class-admin.php:746
 #, php-format
 msgid "Showing %1$s\\u2013%2$s of %3$s"
 msgstr "Mostra %1$s–%2$s di %3$s"
 
-#: admin/class-admin.php:748
+#: admin/class-admin.php:749
 msgid "Age affirmed"
 msgstr "Età confermata"
 
-#: admin/class-admin.php:749
+#: admin/class-admin.php:750
 msgid "Failed to load consent logs."
 msgstr "Caricamento dei registri di consenso non riuscito."
 
-#: admin/class-admin.php:750
+#: admin/class-admin.php:751
 msgid "No consent logs found."
 msgstr "Nessun registro di consenso trovato."
 
-#: admin/class-admin.php:751
+#: admin/class-admin.php:752
 msgid "CSV exported successfully."
 msgstr "CSV esportato con successo."
 
-#: admin/class-admin.php:752
+#: admin/class-admin.php:753
 msgid "Failed to export CSV."
 msgstr "Esportazione CSV non riuscita."
 
-#: admin/class-admin.php:753
+#: admin/class-admin.php:754
 msgid "← Prev"
 msgstr "← Prec"
 
-#: admin/class-admin.php:754
+#: admin/class-admin.php:755
 msgid "Next →"
 msgstr "Succ →"
 
-#: admin/class-admin.php:758
+#: admin/class-admin.php:759
 msgid "Failed to load languages."
 msgstr "Caricamento delle lingue non riuscito."
 
-#: admin/class-admin.php:759
+#: admin/class-admin.php:760
 msgid "No languages selected. Add one below."
 msgstr "Nessuna lingua selezionata. Aggiungerne una qui sotto."
 
-#: admin/class-admin.php:760
+#: admin/class-admin.php:761
 msgid "At least one language must be selected."
 msgstr "È necessario selezionare almeno una lingua."
 
-#: admin/class-admin.php:761
+#: admin/class-admin.php:762
 msgid "Added"
 msgstr "Aggiunta"
 
-#: admin/class-admin.php:762
+#: admin/class-admin.php:763
 msgid "No languages found."
 msgstr "Nessuna lingua trovata."
 
 #. translators: %s: language name
-#: admin/class-admin.php:764
+#: admin/class-admin.php:765
 #, php-format
 msgid "Remove %s"
 msgstr "Rimuovi %s"
 
-#: admin/class-admin.php:765
+#: admin/class-admin.php:766
 msgid "Languages saved successfully."
 msgstr "Lingue salvate con successo."
 
-#: admin/class-admin.php:766
+#: admin/class-admin.php:767
 msgid "Failed to save languages."
 msgstr "Salvataggio delle lingue non riuscito."
 
-#: admin/class-admin.php:771
+#: admin/class-admin.php:772
 msgid "Failed to load GVL status."
 msgstr "Caricamento dello stato GVL non riuscito."
 
-#: admin/class-admin.php:772
+#: admin/class-admin.php:773
 msgid "Failed to load vendors. Make sure GVL is downloaded."
 msgstr "Caricamento dei fornitori non riuscito. Verificare che la GVL sia stata scaricata."
 
-#: admin/class-admin.php:773
+#: admin/class-admin.php:774
 msgid "No vendors found."
 msgstr "Nessun fornitore trovato."
 
-#: admin/class-admin.php:774
+#: admin/class-admin.php:775
 msgid "Failed to load vendor details."
 msgstr "Caricamento dei dettagli del fornitore non riuscito."
 
 #. translators: %1$d: current page, %2$d: total pages, %3$d: total vendor count
-#: admin/class-admin.php:776
+#: admin/class-admin.php:777
 #, php-format
 msgid "Page %1$d of %2$d (%3$d vendors)"
 msgstr "Pagina %1$d di %2$d (%3$d fornitori)"
 
 #. translators: %d: number of selected vendors (singular)
-#: admin/class-admin.php:778
+#: admin/class-admin.php:779
 #, php-format
 msgid "Selected: %d vendor"
 msgstr "Selezionato: %d fornitore"
 
 #. translators: %d: number of selected vendors (plural)
-#: admin/class-admin.php:780
+#: admin/class-admin.php:781
 #, php-format
 msgid "Selected: %d vendors"
 msgstr "Selezionati: %d fornitori"
 
 #. translators: %d: number of vendors saved
-#: admin/class-admin.php:782
+#: admin/class-admin.php:783
 #, php-format
 msgid "Saved %d vendor(s)."
 msgstr "Salvati %d fornitore/i."
 
-#: admin/class-admin.php:783
+#: admin/class-admin.php:784
 msgid "Could not load your saved selection — reload before changing it."
 msgstr "Impossibile caricare la selezione salvata — ricarica prima di modificarla."
 
-#: admin/class-admin.php:784
+#: admin/class-admin.php:785
 msgid "Your saved selection has not loaded yet — reload the page before saving."
 msgstr "La selezione salvata non è ancora caricata — ricarica la pagina prima di salvare."
 
-#: admin/class-admin.php:785
+#: admin/class-admin.php:786
 msgid "vendor(s) saved."
 msgstr "fornitore/i salvato/i."
 
-#: admin/class-admin.php:786
+#: admin/class-admin.php:787
 msgid "Saved {count} vendor(s)."
 msgstr "Salvati {count} fornitore/i."
 
-#: admin/class-admin.php:787
+#: admin/class-admin.php:788
 msgid "Failed to save selection."
 msgstr "Salvataggio della selezione non riuscito."
 
-#: admin/class-admin.php:795 admin/class-admin.php:925
+#: admin/class-admin.php:796 admin/class-admin.php:926
 msgid "Scanning cookie inventory…"
 msgstr "Scansione inventario cookie in corso…"
 
-#: admin/class-admin.php:796 admin/views/cookie-policy.php:193
+#: admin/class-admin.php:797 admin/views/cookie-policy.php:193
 #: admin/views/gvl.php:52
 msgid "Loading saved selection…"
 msgstr "Caricamento selezione salvata…"
 
-#: admin/class-admin.php:797
+#: admin/class-admin.php:798
 msgid "Update the Global Vendor List first, then try Auto-detect again."
 msgstr "Prima aggiorna la Global Vendor List, poi riprova il rilevamento automatico."
 
-#: admin/class-admin.php:798 admin/class-admin.php:926
+#: admin/class-admin.php:799 admin/class-admin.php:927
 msgid "No scanner data yet. Run the cookie scanner first."
 msgstr "Nessun dato dello scanner ancora. Prima esegui lo scanner di cookie."
 
-#: admin/class-admin.php:799
+#: admin/class-admin.php:800
 msgid "No matching ad-tech vendors were found in the scanned cookies."
 msgstr "Nessun fornitore ad-tech corrispondente trovato tra i cookie scansionati."
 
 #. translators: %d: number of vendors pre-ticked from the cookie scan
-#: admin/class-admin.php:801
+#: admin/class-admin.php:802
 #, php-format
 msgid "Pre-ticked %d vendor(s) from cookie scan. Click Save Selection to apply."
 msgstr "Preselezionati %d fornitori dalla scansione cookie. Fai clic su Salva selezione per applicare."
 
 #. translators: %d: number of auto-detected vendors already in the selection
-#: admin/class-admin.php:803
+#: admin/class-admin.php:804
 #, php-format
 msgid "All %d auto-detected vendor(s) were already in your selection."
 msgstr "Tutti i %d fornitore/i rilevati automaticamente erano già nella tua selezione."
 
 #. translators: %1$d: number of newly pre-ticked vendors, %2$d: number already selected
-#: admin/class-admin.php:805
+#: admin/class-admin.php:806
 #, php-format
 msgid "Pre-ticked %1$d new vendor(s), %2$d were already selected. Click Save Selection to apply."
 msgstr "Preselezionati %1$d nuovi fornitori, %2$d erano già selezionati. Fai clic su Salva selezione per applicare."
 
-#: admin/class-admin.php:806
+#: admin/class-admin.php:807
 msgid "Auto-detect failed. Check the cookie scanner and try again."
 msgstr "Rilevamento automatico non riuscito. Controlla lo scanner dei cookie e riprova."
 
-#: admin/class-admin.php:810
+#: admin/class-admin.php:811
 msgid "Exporting..."
 msgstr "Esportazione in corso..."
 
-#: admin/class-admin.php:811
+#: admin/class-admin.php:812
 msgid "Settings exported successfully."
 msgstr "Impostazioni esportate con successo."
 
-#: admin/class-admin.php:812
+#: admin/class-admin.php:813
 msgid "Export failed."
 msgstr "Esportazione non riuscita."
 
-#: admin/class-admin.php:813
+#: admin/class-admin.php:814
 msgid "Invalid JSON file."
 msgstr "File JSON non valido."
 
-#: admin/class-admin.php:814
+#: admin/class-admin.php:815
 msgid "This file is not a FAZ Cookie Manager export."
 msgstr "Questo file non è un'esportazione di FAZ Cookie Manager."
 
-#: admin/class-admin.php:815
+#: admin/class-admin.php:816
 msgid "This will overwrite your current settings. Continue?"
 msgstr "Questa operazione sovrascriverà le impostazioni correnti. Continuare?"
 
-#: admin/class-admin.php:816
+#: admin/class-admin.php:817
 msgid "Importing..."
 msgstr "Importazione in corso..."
 
-#: admin/class-admin.php:817
+#: admin/class-admin.php:818
 msgid "Import completed successfully. Reloading..."
 msgstr "Importazione completata con successo. Ricaricamento..."
 
-#: admin/class-admin.php:818
+#: admin/class-admin.php:819
 msgid "Settings imported successfully."
 msgstr "Impostazioni importate con successo."
 
 #. translators: %s: low-level error message surfaced from the import endpoint
-#: admin/class-admin.php:820
+#: admin/class-admin.php:821
 #, php-format
 msgid "Import failed: %s"
 msgstr "Importazione non riuscita: %s"
 
-#: admin/class-admin.php:824
+#: admin/class-admin.php:825
 msgid "Please select both start and end dates."
 msgstr "Selezionare sia la data di inizio che quella di fine."
 
-#: admin/class-admin.php:825
+#: admin/class-admin.php:826
 msgid "Start date must be before end date."
 msgstr "La data di inizio deve essere precedente alla data di fine."
 
-#: admin/class-admin.php:826
+#: admin/class-admin.php:827
 msgid "No category data yet."
 msgstr "Nessun dato per categoria ancora disponibile."
 
-#: admin/class-admin.php:827
+#: admin/class-admin.php:828
 msgid "No consents recorded for these variants yet. Results appear once visitors respond to the banner."
 msgstr "Non è stato ancora registrato alcun consenso per queste varianti. I risultati appariranno quando i visitatori risponderanno al banner."
 
 #. translators: {accepted}: accepted count, {total}: total consent count.
-#: admin/class-admin.php:829
+#: admin/class-admin.php:830
 msgid "{accepted} accepted of {total} consents"
 msgstr "{accepted} accettati su {total} consensi"
 
-#: admin/class-admin.php:830
+#: admin/class-admin.php:831
 msgid "Could not load A/B test results."
 msgstr "Impossibile caricare i risultati del test A/B."
 
-#: admin/class-admin.php:834
+#: admin/class-admin.php:835
 msgid "Starting scan…"
 msgstr "Avvio della scansione…"
 
-#: admin/class-admin.php:835
+#: admin/class-admin.php:836
 msgid "The scan could not be started. You can skip this step or run a full scan on the Cookies page."
 msgstr "Impossibile avviare la scansione. Puoi saltare questo passaggio o eseguire una scansione completa nella pagina Cookie."
 
-#: admin/class-admin.php:836
+#: admin/class-admin.php:837
 msgid "Cookie scan could not be started."
 msgstr "Impossibile avviare la scansione dei cookie."
 
-#: admin/class-admin.php:837
+#: admin/class-admin.php:838
 msgid "The scanner could not load. You can skip this step and run a full scan on the Cookies page."
 msgstr "Impossibile caricare lo scanner. Puoi saltare questo passaggio ed eseguire una scansione completa dalla pagina Cookie."
 
 #. translators: %d: number of cookies found by the scan.
-#: admin/class-admin.php:839
+#: admin/class-admin.php:840
 #, php-format
 msgid "Scan complete — %d cookies found."
 msgstr "Scansione completata — trovati %d cookie."
 
-#: admin/class-admin.php:840
+#: admin/class-admin.php:841
 msgid "Scan complete. No new cookies were found."
 msgstr "Scansione completata. Non sono stati trovati nuovi cookie."
 
-#: admin/class-admin.php:841
+#: admin/class-admin.php:842
 msgid "Setup complete. Your cookie banner is ready."
 msgstr "Configurazione completata. Il banner cookie è pronto."
 
-#: admin/class-admin.php:842
+#: admin/class-admin.php:843
 #: admin/modules/settings/includes/class-onboarding.php:275
 #: admin/modules/settings/includes/class-onboarding.php:443
 msgid "Setup could not be saved. Please try again."
 msgstr "Impossibile salvare la configurazione. Riprova."
 
 #. translators: %s: name of the detected plugin (e.g. a cache plugin).
-#: admin/class-admin.php:844
+#: admin/class-admin.php:845
 #, php-format
 msgid "Detected: %s"
 msgstr "Rilevato: %s"
 
-#: admin/class-admin.php:845
+#: admin/class-admin.php:846
 msgid "Google tags detected on this site"
 msgstr "Tag Google rilevati su questo sito"
 
-#: admin/class-admin.php:846
+#: admin/class-admin.php:847
 msgid "Found by the cookie scan"
 msgstr "Trovato dalla scansione dei cookie"
 
-#: admin/class-admin.php:847
+#: admin/class-admin.php:848
 msgid "Active plugin detected"
 msgstr "Plugin attivo rilevato"
 
-#: admin/class-admin.php:848
+#: admin/class-admin.php:849
 msgid "Currently always allowed"
 msgstr "Attualmente sempre consentito"
 
-#: admin/class-admin.php:852
+#: admin/class-admin.php:853
 msgid "Status copied to clipboard!"
 msgstr "Stato copiato negli appunti!"
 
-#: admin/class-admin.php:857
+#: admin/class-admin.php:858
 msgid "Country"
 msgstr "Paese"
 
-#: admin/class-admin.php:858
+#: admin/class-admin.php:859
 msgid "Ruleset override"
 msgstr "Sostituzione del set di regole"
 
-#: admin/class-admin.php:859
+#: admin/class-admin.php:860
 msgid "Delta fields"
 msgstr "Campi delta"
 
-#: admin/class-admin.php:860
+#: admin/class-admin.php:861
 msgid "Action"
 msgstr "Azione"
 
-#: admin/class-admin.php:862
+#: admin/class-admin.php:863
 msgid "(auto-detect)"
 msgstr "(rilevamento automatico)"
 
 #. translators: %d: number of country overrides configured
-#: admin/class-admin.php:864
+#: admin/class-admin.php:865
 #, php-format
 msgid "%d override configured."
 msgstr "%d override configurato."
 
 #. translators: %d: number of country overrides configured
-#: admin/class-admin.php:866
+#: admin/class-admin.php:867
 #, php-format
 msgid "%d overrides configured."
 msgstr "%d override configurati."
 
-#: admin/class-admin.php:867
+#: admin/class-admin.php:868
 msgid "Add override"
 msgstr "Aggiungi override"
 
-#: admin/class-admin.php:868
+#: admin/class-admin.php:869
 msgid "No per-country overrides configured. Rule-sets are resolved and enforced automatically per country and US state."
 msgstr "Nessun override per paese configurato. I set di regole vengono risolti e applicati automaticamente per paese e stato USA."
 
-#: admin/class-admin.php:869
+#: admin/class-admin.php:870
 msgid "Remove this override?"
 msgstr "Rimuovere questa sostituzione?"
 
-#: admin/class-admin.php:871
+#: admin/class-admin.php:872
 msgid "Runtime rule-set application"
 msgstr "Applicazione runtime del set di regole"
 
-#: admin/class-admin.php:872 admin/class-admin.php:881
+#: admin/class-admin.php:873 admin/class-admin.php:882
 msgid "✅ active"
 msgstr "✅ attivo"
 
-#: admin/class-admin.php:873
+#: admin/class-admin.php:874
 msgid "⚠️ disabled by the faz_geo_ruleset_runtime filter"
 msgstr "⚠️ disabilitata dal filtro faz_geo_ruleset_runtime"
 
-#: admin/class-admin.php:874
+#: admin/class-admin.php:875
 msgid "Catalog rulesets"
 msgstr "Set di regole del catalogo"
 
-#: admin/class-admin.php:875
+#: admin/class-admin.php:876
 msgid "Fallback ruleset"
 msgstr "Set di regole di fallback"
 
-#: admin/class-admin.php:876
+#: admin/class-admin.php:877
 msgid "ipinfo opt-in"
 msgstr "opt-in ipinfo"
 
-#: admin/class-admin.php:877
+#: admin/class-admin.php:878
 msgid "ipinfo API key"
 msgstr "Chiave API ipinfo"
 
-#: admin/class-admin.php:878
+#: admin/class-admin.php:879
 msgid "Schema migration v2"
 msgstr "Migrazione schema v2"
 
-#: admin/class-admin.php:879
+#: admin/class-admin.php:880
 msgid "Pending columns"
 msgstr "Colonne in attesa"
 
-#: admin/class-admin.php:880
+#: admin/class-admin.php:881
 msgid "Migration disabled"
 msgstr "Migrazione disattivata"
 
-#: admin/class-admin.php:882
+#: admin/class-admin.php:883
 msgid "⚪ disabled"
 msgstr "⚪ disattivata"
 
-#: admin/class-admin.php:883
+#: admin/class-admin.php:884
 msgid "✅ configured"
 msgstr "✅ configurata"
 
-#: admin/class-admin.php:884
+#: admin/class-admin.php:885
 msgid "⚪ not set"
 msgstr "⚪ non impostata"
 
-#: admin/class-admin.php:885
+#: admin/class-admin.php:886
 msgid "✅ complete"
 msgstr "✅ completata"
 
-#: admin/class-admin.php:886
+#: admin/class-admin.php:887
 msgid "⚠️ incomplete"
 msgstr "⚠️ incompleta"
 
-#: admin/class-admin.php:888
+#: admin/class-admin.php:889
 msgid "Resolved ruleset"
 msgstr "Set di regole risolto"
 
-#: admin/class-admin.php:889
+#: admin/class-admin.php:890
 msgid "Full ruleset JSON"
 msgstr "JSON set di regole completo"
 
-#: admin/class-admin.php:891
+#: admin/class-admin.php:892
 msgid "Settings saved."
 msgstr "Impostazioni salvate."
 
-#: admin/class-admin.php:892
+#: admin/class-admin.php:893
 msgid "API key"
 msgstr "Chiave API"
 
-#: admin/class-admin.php:893
+#: admin/class-admin.php:894
 msgid "(stored — leave blank to keep)"
 msgstr "(memorizzato — lascia vuoto per mantenere)"
 
-#: admin/class-admin.php:894
+#: admin/class-admin.php:895
 msgid "token from ipinfo.io/account/token"
 msgstr "token da ipinfo.io/account/token"
 
-#: admin/class-admin.php:895
+#: admin/class-admin.php:896
 msgid "Enable ipinfo.io VPN detection"
 msgstr "Abilita il rilevamento VPN di ipinfo.io"
 
-#: admin/class-admin.php:896
+#: admin/class-admin.php:897
 msgid "I attest to having a DPF / SCC / DPA agreement with ipinfo.io for cross-border data transfer of EU/UK visitor IPs (required for opt-in)"
 msgstr "Attesto di disporre di un accordo DPF / SCC / DPA con ipinfo.io per il trasferimento transfrontaliero di dati degli IP di visitatori UE/UK (richiesto per l'opt-in)"
 
-#: admin/class-admin.php:898
+#: admin/class-admin.php:899
 msgid "I attest to having a Standard Contract (PIPL Art. 38) or CAC security assessment (Art. 40) for cross-border data transfers OF data subject to PIPL, OR to not process any data that requires such mechanisms."
 msgstr "Attesto di disporre di un Contratto Standard (PIPL Art. 38) o di una valutazione di sicurezza CAC (Art. 40) per i trasferimenti transfrontalieri di dati soggetti a PIPL, OPPURE di non trattare dati che richiedano tali meccanismi."
 
 #. translators: %1$s: localised timestamp, %2$s: WP user id of the attesting admin
-#: admin/class-admin.php:900
+#: admin/class-admin.php:901
 #, php-format
 msgid "Attested at %1$s by user ID %2$s"
 msgstr "Attestato il %1$s dall'utente con ID %2$s"
 
-#: admin/class-admin.php:902
+#: admin/class-admin.php:903
 msgid "Save"
 msgstr "Salva"
 
 #. translators: %s: low-level error message from the REST endpoint
-#: admin/class-admin.php:904
+#: admin/class-admin.php:905
 #, php-format
 msgid "Error: %s"
 msgstr "Errore: %s"
 
-#: admin/class-admin.php:908
+#: admin/class-admin.php:909
 msgid "Load failed"
 msgstr "Caricamento non riuscito"
 
-#: admin/class-admin.php:910
+#: admin/class-admin.php:911
 msgid "Saved."
 msgstr "Salvato."
 
-#: admin/class-admin.php:911
+#: admin/class-admin.php:912
 msgid "Save failed"
 msgstr "Salvataggio non riuscito"
 
-#: admin/class-admin.php:912
+#: admin/class-admin.php:913
 msgid "Preview failed"
 msgstr "Anteprima non riuscita"
 
-#: admin/class-admin.php:913
+#: admin/class-admin.php:914
 msgid "The generator could not start on this page. Please reload; if it persists, a plugin or theme conflict is likely."
 msgstr "Il generatore non è riuscito ad avviarsi su questa pagina. Ricarica; se il problema persiste, è probabile un conflitto con un plugin o un tema."
 
-#: admin/class-admin.php:915
+#: admin/class-admin.php:916
 msgid "Version confirmed. Existing consents are unchanged."
 msgstr "Versione confermata. I consensi esistenti restano invariati."
 
-#: admin/class-admin.php:916
+#: admin/class-admin.php:917
 msgid "All returning visitors will be shown the consent banner again on their next visit. Continue?"
 msgstr "A tutti i visitatori di ritorno verrà mostrato nuovamente il banner del consenso alla prossima visita. Continuare?"
 
-#: admin/class-admin.php:917
+#: admin/class-admin.php:918
 msgid "Consents invalidated — returning visitors will be asked again."
 msgstr "Consensi invalidati — ai visitatori di ritorno verrà chiesto nuovamente il consenso."
 
-#: admin/class-admin.php:920 admin/views/dashboard.php:168
+#: admin/class-admin.php:921 admin/views/dashboard.php:168
 #: admin/views/geo-routing.php:56 admin/views/geo-routing.php:67
 #: admin/views/geo-routing.php:78 admin/views/geo-routing.php:123
 #: admin/views/geo-routing.php:134
 msgid "Loading…"
 msgstr "Caricamento…"
 
-#: admin/class-admin.php:921
+#: admin/class-admin.php:922
 msgid "Could not load the sections."
 msgstr "Impossibile caricare le sezioni."
 
-#: admin/class-admin.php:922
+#: admin/class-admin.php:923
 msgid "No template ships for this language, so the sections below show the bundled fallback. What you write is still stored against the language you picked."
 msgstr "Per questa lingua non viene distribuito alcun modello, quindi le sezioni qui sotto mostrano il testo di ripiego incluso nel plugin. Ciò che scrivi resta comunque associato alla lingua che hai scelto."
 
-#: admin/class-admin.php:923
+#: admin/class-admin.php:924
 msgid "Detected"
 msgstr "Rilevato"
 
-#: admin/class-admin.php:924
+#: admin/class-admin.php:925
 msgid "The cookie scanner observed a tracking domain for this service on your site."
 msgstr "Il cookie scanner ha rilevato una domanda di tracciamento per questo servizio sul tuo sito."
 
-#: admin/class-admin.php:927
+#: admin/class-admin.php:928
 msgid "No matching services found among scanned cookies."
 msgstr "Nessun servizio corrispondente trovato tra i cookie scansionati."
 
 #. translators: %d: number of detected services already selected
-#: admin/class-admin.php:929
+#: admin/class-admin.php:930
 #, php-format
 msgid "All %d detected service(s) are already selected."
 msgstr "Tutti i %d servizi rilevati sono già selezionati."
 
-#: admin/class-admin.php:930
+#: admin/class-admin.php:931
 msgid "Detected services left unticked, as you set them."
 msgstr "Servizi rilevati lasciati non selezionati, come da tua impostazione."
 
 #. translators: %1$d: number of newly pre-ticked services, %2$d: number of services already selected
-#: admin/class-admin.php:932
+#: admin/class-admin.php:933
 #, php-format
 msgid "Pre-ticked %1$d new service(s), %2$d were already selected. Click Save to commit."
 msgstr "Preselezionati %1$d nuovi servizi, %2$d erano già selezionati. Fai clic su Salva per confermare."
 
-#: admin/class-admin.php:933
+#: admin/class-admin.php:934
 msgid "Auto-detect failed"
 msgstr "Rilevamento automatico non riuscito"
 
-#: admin/class-admin.php:935
+#: admin/class-admin.php:936
 msgid "Analytics"
 msgstr "Analitici"
 
-#: admin/class-admin.php:936
+#: admin/class-admin.php:937
 msgid "Heatmaps & session recording"
 msgstr "Heatmap e registrazione sessioni"
 
-#: admin/class-admin.php:937
+#: admin/class-admin.php:938
 msgid "Advertising pixels"
 msgstr "Pixel pubblicitari"
 
-#: admin/class-admin.php:938
+#: admin/class-admin.php:939
 msgid "CDN, edge & performance"
 msgstr "CDN, edge e prestazioni"
 
-#: admin/class-admin.php:939
+#: admin/class-admin.php:940
 msgid "Anti-bot & forms"
 msgstr "Anti-bot e moduli"
 
-#: admin/class-admin.php:940
+#: admin/class-admin.php:941
 msgid "Maps, embeds & media"
 msgstr "Mappe, incorporamenti e media"
 
-#: admin/class-admin.php:941
+#: admin/class-admin.php:942
 msgid "Chat & support"
 msgstr "Chat e supporto"
 
-#: admin/class-admin.php:942
+#: admin/class-admin.php:943
 msgid "Email & marketing automation"
 msgstr "E-mail e marketing automation"
 
-#: admin/class-admin.php:943
+#: admin/class-admin.php:944
 msgid "Payments & commerce"
 msgstr "Pagamenti e commercio"
 
-#: admin/class-admin.php:944
+#: admin/class-admin.php:945
 msgid "Social sign-in & auth"
 msgstr "Accesso social e autenticazione"
 
-#: admin/class-admin.php:945
+#: admin/class-admin.php:946
 msgid "Error & RUM monitoring"
 msgstr "Monitoraggio errori e RUM"
 
-#: admin/class-admin.php:946
+#: admin/class-admin.php:947
 msgid "Personalisation & A/B testing"
 msgstr "Personalizzazione e test A/B"
 
-#: admin/class-admin.php:947
+#: admin/class-admin.php:948
 msgid "Push notifications"
 msgstr "Notifiche push"
 
-#: admin/class-admin.php:951
+#: admin/class-admin.php:952
 msgid "Google Analytics 4"
 msgstr "Google Analytics 4"
 
-#: admin/class-admin.php:952
+#: admin/class-admin.php:953
 msgid "Google Tag Manager"
 msgstr "Google Tag Manager"
 
-#: admin/class-admin.php:953
+#: admin/class-admin.php:954
 msgid "Matomo Analytics"
 msgstr "Matomo Analytics"
 
-#: admin/class-admin.php:954
+#: admin/class-admin.php:955
 msgid "Plausible Analytics"
 msgstr "Plausible Analytics"
 
-#: admin/class-admin.php:955
+#: admin/class-admin.php:956
 msgid "Mixpanel"
 msgstr "Mixpanel"
 
-#: admin/class-admin.php:956
+#: admin/class-admin.php:957
 msgid "Amplitude"
 msgstr "Amplitude"
 
-#: admin/class-admin.php:957
+#: admin/class-admin.php:958
 msgid "Heap"
 msgstr "Heap"
 
-#: admin/class-admin.php:958
+#: admin/class-admin.php:959
 msgid "Fathom Analytics"
 msgstr "Fathom Analytics"
 
-#: admin/class-admin.php:959
+#: admin/class-admin.php:960
 msgid "Statcounter"
 msgstr "Statcounter"
 
-#: admin/class-admin.php:961
+#: admin/class-admin.php:962
 msgid "Hotjar"
 msgstr "Hotjar"
 
-#: admin/class-admin.php:962 admin/views/system-status.php:104
+#: admin/class-admin.php:963 admin/views/system-status.php:104
 msgid "Microsoft Clarity"
 msgstr "Microsoft Clarity"
 
-#: admin/class-admin.php:963
+#: admin/class-admin.php:964
 msgid "Mouseflow"
 msgstr "Mouseflow"
 
-#: admin/class-admin.php:964
+#: admin/class-admin.php:965
 msgid "Smartlook"
 msgstr "Smartlook"
 
-#: admin/class-admin.php:965
+#: admin/class-admin.php:966
 msgid "Lucky Orange"
 msgstr "Lucky Orange"
 
-#: admin/class-admin.php:966
+#: admin/class-admin.php:967
 msgid "FullStory"
 msgstr "FullStory"
 
-#: admin/class-admin.php:967
+#: admin/class-admin.php:968
 msgid "LogRocket"
 msgstr "LogRocket"
 
-#: admin/class-admin.php:968
+#: admin/class-admin.php:969
 msgid "Crazy Egg"
 msgstr "Crazy Egg"
 
-#: admin/class-admin.php:970
+#: admin/class-admin.php:971
 msgid "Google Ads"
 msgstr "Google Ads"
 
-#: admin/class-admin.php:971
+#: admin/class-admin.php:972
 msgid "Meta (Facebook) Pixel"
 msgstr "Meta (Facebook) Pixel"
 
-#: admin/class-admin.php:972
+#: admin/class-admin.php:973
 msgid "TikTok Pixel"
 msgstr "TikTok Pixel"
 
-#: admin/class-admin.php:973
+#: admin/class-admin.php:974
 msgid "LinkedIn Insight Tag"
 msgstr "LinkedIn Insight Tag"
 
-#: admin/class-admin.php:974 admin/views/system-status.php:103
+#: admin/class-admin.php:975 admin/views/system-status.php:103
 msgid "Microsoft UET"
 msgstr "Microsoft UET"
 
-#: admin/class-admin.php:975
+#: admin/class-admin.php:976
 msgid "Twitter (X) Pixel"
 msgstr "Twitter (X) Pixel"
 
-#: admin/class-admin.php:976
+#: admin/class-admin.php:977
 msgid "Pinterest Tag"
 msgstr "Pinterest Tag"
 
-#: admin/class-admin.php:977
+#: admin/class-admin.php:978
 msgid "Reddit Pixel"
 msgstr "Reddit Pixel"
 
-#: admin/class-admin.php:978
+#: admin/class-admin.php:979
 msgid "Snapchat Pixel"
 msgstr "Snapchat Pixel"
 
-#: admin/class-admin.php:979
+#: admin/class-admin.php:980
 msgid "Quora Pixel"
 msgstr "Quora Pixel"
 
-#: admin/class-admin.php:980
+#: admin/class-admin.php:981
 msgid "Outbrain"
 msgstr "Outbrain"
 
-#: admin/class-admin.php:981
+#: admin/class-admin.php:982
 msgid "Taboola"
 msgstr "Taboola"
 
-#: admin/class-admin.php:982
+#: admin/class-admin.php:983
 msgid "Criteo"
 msgstr "Criteo"
 
-#: admin/class-admin.php:984
+#: admin/class-admin.php:985
 msgid "Cloudflare"
 msgstr "Cloudflare"
 
-#: admin/class-admin.php:985
+#: admin/class-admin.php:986
 msgid "Fastly"
 msgstr "Fastly"
 
-#: admin/class-admin.php:986
+#: admin/class-admin.php:987
 msgid "Akamai"
 msgstr "Akamai"
 
-#: admin/class-admin.php:987
+#: admin/class-admin.php:988
 msgid "Amazon CloudFront"
 msgstr "Amazon CloudFront"
 
-#: admin/class-admin.php:988
+#: admin/class-admin.php:989
 msgid "BunnyCDN"
 msgstr "BunnyCDN"
 
-#: admin/class-admin.php:989
+#: admin/class-admin.php:990
 msgid "jsDelivr"
 msgstr "jsDelivr"
 
-#: admin/class-admin.php:991
+#: admin/class-admin.php:992
 msgid "Google reCAPTCHA"
 msgstr "Google reCAPTCHA"
 
-#: admin/class-admin.php:992
+#: admin/class-admin.php:993
 msgid "hCaptcha"
 msgstr "hCaptcha"
 
-#: admin/class-admin.php:993
+#: admin/class-admin.php:994
 msgid "Cloudflare Turnstile"
 msgstr "Cloudflare Turnstile"
 
-#: admin/class-admin.php:994
+#: admin/class-admin.php:995
 msgid "Akismet"
 msgstr "Akismet"
 
-#: admin/class-admin.php:996
+#: admin/class-admin.php:997
 msgid "Google Maps"
 msgstr "Google Maps"
 
-#: admin/class-admin.php:997
+#: admin/class-admin.php:998
 msgid "Mapbox"
 msgstr "Mapbox"
 
-#: admin/class-admin.php:998
+#: admin/class-admin.php:999
 msgid "OpenStreetMap"
 msgstr "OpenStreetMap"
 
-#: admin/class-admin.php:999
+#: admin/class-admin.php:1000
 msgid "YouTube (embed)"
 msgstr "YouTube (incorporato)"
 
-#: admin/class-admin.php:1000
+#: admin/class-admin.php:1001
 msgid "Vimeo (embed)"
 msgstr "Vimeo (incorporato)"
 
-#: admin/class-admin.php:1001
+#: admin/class-admin.php:1002
 msgid "Twitter / X (embed)"
 msgstr "Twitter / X (embed)"
 
-#: admin/class-admin.php:1002
+#: admin/class-admin.php:1003
 msgid "Instagram (embed)"
 msgstr "Instagram (incorporato)"
 
-#: admin/class-admin.php:1003
+#: admin/class-admin.php:1004
 msgid "Spotify (embed)"
 msgstr "Spotify (incorporato)"
 
-#: admin/class-admin.php:1004
+#: admin/class-admin.php:1005
 msgid "SoundCloud (embed)"
 msgstr "SoundCloud (incorporato)"
 
-#: admin/class-admin.php:1005
+#: admin/class-admin.php:1006
 msgid "Wistia"
 msgstr "Wistia"
 
-#: admin/class-admin.php:1006
+#: admin/class-admin.php:1007
 msgid "Brightcove"
 msgstr "Brightcove"
 
-#: admin/class-admin.php:1007
+#: admin/class-admin.php:1008
 msgid "JW Player"
 msgstr "JW Player"
 
-#: admin/class-admin.php:1009
+#: admin/class-admin.php:1010
 msgid "Intercom"
 msgstr "Intercom"
 
-#: admin/class-admin.php:1010
+#: admin/class-admin.php:1011
 msgid "Zendesk Chat"
 msgstr "Zendesk Chat"
 
-#: admin/class-admin.php:1011
+#: admin/class-admin.php:1012
 msgid "Crisp"
 msgstr "Crisp"
 
-#: admin/class-admin.php:1012
+#: admin/class-admin.php:1013
 msgid "LiveChat"
 msgstr "LiveChat"
 
-#: admin/class-admin.php:1013
+#: admin/class-admin.php:1014
 msgid "Tawk.to"
 msgstr "Tawk.to"
 
-#: admin/class-admin.php:1014
+#: admin/class-admin.php:1015
 msgid "Drift"
 msgstr "Deriva"
 
-#: admin/class-admin.php:1015
+#: admin/class-admin.php:1016
 msgid "HubSpot Chat"
 msgstr "HubSpot Chat"
 
-#: admin/class-admin.php:1016
+#: admin/class-admin.php:1017
 msgid "Tidio"
 msgstr "Tidio"
 
-#: admin/class-admin.php:1018
+#: admin/class-admin.php:1019
 msgid "Mailchimp"
 msgstr "Mailchimp"
 
-#: admin/class-admin.php:1019
+#: admin/class-admin.php:1020
 msgid "ActiveCampaign"
 msgstr "ActiveCampaign"
 
-#: admin/class-admin.php:1020
+#: admin/class-admin.php:1021
 msgid "ConvertKit / Kit"
 msgstr "ConvertKit / Kit"
 
-#: admin/class-admin.php:1021
+#: admin/class-admin.php:1022
 msgid "HubSpot"
 msgstr "HubSpot"
 
-#: admin/class-admin.php:1022
+#: admin/class-admin.php:1023
 msgid "Brevo (Sendinblue)"
 msgstr "Brevo (Sendinblue)"
 
-#: admin/class-admin.php:1023
+#: admin/class-admin.php:1024
 msgid "Klaviyo"
 msgstr "Klaviyo"
 
-#: admin/class-admin.php:1024
+#: admin/class-admin.php:1025
 msgid "Salesforce Pardot"
 msgstr "Salesforce Pardot"
 
-#: admin/class-admin.php:1025
+#: admin/class-admin.php:1026
 msgid "Adobe Marketo Engage"
 msgstr "Adobe Marketo Engage"
 
-#: admin/class-admin.php:1026
+#: admin/class-admin.php:1027
 msgid "Adobe Analytics"
 msgstr "Adobe Analytics"
 
-#: admin/class-admin.php:1028
+#: admin/class-admin.php:1029
 msgid "Stripe"
 msgstr "Stripe"
 
-#: admin/class-admin.php:1029
+#: admin/class-admin.php:1030
 msgid "PayPal"
 msgstr "PayPal"
 
-#: admin/class-admin.php:1030
+#: admin/class-admin.php:1031
 msgid "Square"
 msgstr "Square"
 
-#: admin/class-admin.php:1031
+#: admin/class-admin.php:1032
 msgid "Shopify"
 msgstr "Shopify"
 
-#: admin/class-admin.php:1033
+#: admin/class-admin.php:1034
 msgid "Sign in with Google"
 msgstr "Accedi con Google"
 
-#: admin/class-admin.php:1034
+#: admin/class-admin.php:1035
 msgid "Sign in with Apple"
 msgstr "Accedi con Apple"
 
-#: admin/class-admin.php:1035
+#: admin/class-admin.php:1036
 msgid "Sign in with Facebook"
 msgstr "Accedi con Facebook"
 
-#: admin/class-admin.php:1036
+#: admin/class-admin.php:1037
 msgid "Auth0"
 msgstr "Auth0"
 
-#: admin/class-admin.php:1037
+#: admin/class-admin.php:1038
 msgid "Okta"
 msgstr "Okta"
 
-#: admin/class-admin.php:1039
+#: admin/class-admin.php:1040
 msgid "Sentry"
 msgstr "Sentry"
 
-#: admin/class-admin.php:1040
+#: admin/class-admin.php:1041
 msgid "New Relic"
 msgstr "New Relic"
 
-#: admin/class-admin.php:1041
+#: admin/class-admin.php:1042
 msgid "Datadog"
 msgstr "Datadog"
 
-#: admin/class-admin.php:1042
+#: admin/class-admin.php:1043
 msgid "Bugsnag"
 msgstr "Bugsnag"
 
-#: admin/class-admin.php:1043
+#: admin/class-admin.php:1044
 msgid "Raygun"
 msgstr "Raygun"
 
-#: admin/class-admin.php:1045
+#: admin/class-admin.php:1046
 msgid "Optimizely"
 msgstr "Optimizely"
 
-#: admin/class-admin.php:1046
+#: admin/class-admin.php:1047
 msgid "VWO"
 msgstr "VWO"
 
-#: admin/class-admin.php:1047
+#: admin/class-admin.php:1048
 msgid "Convert.com"
 msgstr "Convert.com"
 
-#: admin/class-admin.php:1048
+#: admin/class-admin.php:1049
 msgid "AB Tasty"
 msgstr "AB Tasty"
 
-#: admin/class-admin.php:1050
+#: admin/class-admin.php:1051
 msgid "OneSignal"
 msgstr "OneSignal"
 
-#: admin/class-admin.php:1051
+#: admin/class-admin.php:1052
 msgid "Pushwoosh"
 msgstr "Pushwoosh"
 
-#: admin/class-admin.php:1052
+#: admin/class-admin.php:1053
 msgid "Firebase Cloud Messaging"
 msgstr "Firebase Cloud Messaging"
 
-#: admin/class-admin.php:1471 admin/class-admin.php:1472
-#: admin/class-admin.php:1501 admin/class-admin.php:1502
+#: admin/class-admin.php:1472 admin/class-admin.php:1473
+#: admin/class-admin.php:1502 admin/class-admin.php:1503
 msgid "FAZ Cookie"
 msgstr "FAZ Cookie"
 
-#: admin/class-admin.php:1523
+#: admin/class-admin.php:1524
 msgid "FAZ Cookie Manager — Network"
 msgstr "FAZ Cookie Manager — Rete"
 
-#: admin/class-admin.php:1525
+#: admin/class-admin.php:1526
 msgid "Multisite Configuration"
 msgstr "Configurazione multisito"
 
-#: admin/class-admin.php:1526
+#: admin/class-admin.php:1527
 msgid "FAZ Cookie Manager is network-activated. Each subsite has its own independent configuration."
 msgstr "FAZ Cookie Manager è attivato in rete. Ogni sottosito ha la propria configurazione indipendente."
 
-#: admin/class-admin.php:1527
+#: admin/class-admin.php:1528
 msgid "Navigate to each subsite's admin panel to configure the cookie banner, categories, and settings."
 msgstr "Accedi al pannello di amministrazione di ogni sottosito per configurare il banner dei cookie, le categorie e le impostazioni."
 
-#: admin/class-admin.php:1529
+#: admin/class-admin.php:1530
 msgid "Active Sites"
 msgstr "Siti attivi"
 
-#: admin/class-admin.php:1533
+#: admin/class-admin.php:1534
 msgid "Site"
 msgstr "Sito"
 
-#: admin/class-admin.php:1534 admin/views/banner.php:110
+#: admin/class-admin.php:1535 admin/views/banner.php:110
 msgid "Banner Status"
 msgstr "Stato banner"
 
-#: admin/class-admin.php:1535 admin/views/cookies.php:158
+#: admin/class-admin.php:1536 admin/views/cookies.php:158
 #: admin/views/cookies.php:215
 msgid "Actions"
 msgstr "Azioni"
 
-#: admin/class-admin.php:1572
+#: admin/class-admin.php:1573
 msgid "Active"
 msgstr "Attivo"
 
-#: admin/class-admin.php:1574
+#: admin/class-admin.php:1575
 msgid "Inactive"
 msgstr "Inattivo"
 
-#: admin/class-admin.php:1577
+#: admin/class-admin.php:1578
 msgid "Configure"
 msgstr "Configura"
 
-#: admin/class-admin.php:1820
+#: admin/class-admin.php:1821
 msgid "WooCommerce detected"
 msgstr "WooCommerce rilevato"
 
-#: admin/class-admin.php:1821
+#: admin/class-admin.php:1822
 msgid "FAZ Cookie Manager automatically whitelists WooCommerce core scripts and payment gateway scripts (PayPal, Stripe, Mollie, etc.) on checkout and cart pages so your store keeps working. This can be customised via the"
 msgstr "FAZ Cookie Manager inserisce automaticamente nella whitelist gli script principali di WooCommerce e gli script dei gateway di pagamento (PayPal, Stripe, Mollie, ecc.) nelle pagine di checkout e carrello, in modo che il negozio continui a funzionare. Questa impostazione può essere personalizzata tramite i"
 
-#: admin/class-admin.php:1822
+#: admin/class-admin.php:1823
 msgid "and"
 msgstr "e"
 
-#: admin/class-admin.php:1823
+#: admin/class-admin.php:1824
 msgid "filters."
 msgstr "filtri."
 
-#: admin/class-admin.php:1825 admin/class-admin.php:1977
+#: admin/class-admin.php:1826 admin/class-admin.php:1978
 msgid "Dismiss this notice"
 msgstr "Ignora questo avviso"
 
-#: admin/class-admin.php:1921
+#: admin/class-admin.php:1922
 msgid "Instagram Feed is handling its own consent"
 msgstr "Instagram Feed gestisce il consenso da sé"
 
-#: admin/class-admin.php:1922
+#: admin/class-admin.php:1923
 msgid "Its GDPR setting is set to Yes, so it serves local copies of images and never contacts Instagram. There is nothing left to block, so your cookie settings do not apply to that feed — and a visitor accepting will not restore the connection either, because Instagram Feed's restriction does not depend on consent."
 msgstr "La sua opzione GDPR è impostata su Sì, quindi serve copie locali delle immagini e non contatta mai Instagram. Non resta nulla da bloccare: le tue impostazioni sui cookie non si applicano più a quel feed, e nemmeno l'accettazione di un visitatore ripristina il collegamento, perché la limitazione di Instagram Feed non dipende dal consenso."
 
-#: admin/class-admin.php:1925
+#: admin/class-admin.php:1926
 #: admin/modules/cookies/api/class-cookies-api.php:1157
 msgid "Open Instagram Feed settings"
 msgstr "Apri le impostazioni di Instagram Feed"
 
-#: admin/class-admin.php:1926 admin/class-admin.php:2078
+#: admin/class-admin.php:1927 admin/class-admin.php:2151
 #: admin/views/dashboard.php:30
 msgid "Dismiss"
 msgstr "Ignora"
 
-#: admin/class-admin.php:1929
+#: admin/class-admin.php:1930
 msgid "Set it to Automatic or No there if you would rather the visitor's choice decided whether that feed loads."
 msgstr "Impostalo su Automatico o No lì, se preferisci che sia la scelta del visitatore a decidere se quel feed viene caricato."
 
-#: admin/class-admin.php:1969
+#: admin/class-admin.php:1970
 msgid "Payment plugin detected"
 msgstr "Rilevato plugin di pagamento"
 
 #. translators: %s: comma-separated list of detected payment plugin names.
-#: admin/class-admin.php:1972
+#: admin/class-admin.php:1973
 #, php-format
 msgid "FAZ Cookie Manager blocks payment provider scripts (PayPal, Stripe, …) until consent, so a payment form in %s can fail with an error like \"paypal is not defined\" until you authorise the provider. If your payment forms are broken, enable the specific gateway under Settings → Script Blocking → Payment gateways (it loads that provider's scripts before consent — your decision and responsibility)."
 msgstr "FAZ Cookie Manager blocca gli script dei provider di pagamento (PayPal, Stripe, …) fino al consenso, quindi un modulo di pagamento in %s può restituire un errore come \"paypal is not defined\" finché non autorizzi il provider. Se i tuoi moduli di pagamento non funzionano, abilita il gateway specifico in Impostazioni → Blocco script → Gateway di pagamento (carica gli script di quel provider prima del consenso — decisione e responsabilità tue)."
 
-#: admin/class-admin.php:1975
+#: admin/class-admin.php:1976
 msgid "Open settings"
 msgstr "Apri le impostazioni"
 
-#: admin/class-admin.php:2005
+#: admin/class-admin.php:2006
 msgid "Cookie definitions are using the built-in snapshot. Download the latest version from GitHub for improved categorization."
 msgstr "Le definizioni dei cookie utilizzano lo snapshot integrato. Scarica la versione più recente da GitHub per una categorizzazione migliorata."
 
-#: admin/class-admin.php:2007
+#: admin/class-admin.php:2008
 msgid "Update Cookie Definitions"
 msgstr "Aggiorna definizioni cookie"
 
+#: admin/class-admin.php:2077
+msgid "Visitors under an opt-in privacy law are seeing no banner."
+msgstr "I visitatori soggetti a una normativa di tipo opt-in non vedono alcun banner."
+
+#: admin/class-admin.php:2078
+msgid "Every active banner uses the opt-out (Do Not Sell) model. For a visitor in the EU, UK, Brazil or any other opt-in jurisdiction, showing an opt-out notice while their cookies are blocked would misstate their position, so the banner is hidden for them and only the blocking stays on. Add a second active banner set to the opt-in model to cover those visitors."
+msgstr "Tutti i banner attivi adottano il modello opt-out (Do Not Sell). Per un visitatore nell’Unione europea, nel Regno Unito, in Brasile o in qualsiasi altra giurisdizione di tipo opt-in, mostrare un avviso di rinuncia mentre i suoi cookie sono bloccati rappresenterebbe male la sua posizione: il banner resta quindi nascosto e agisce solo il blocco. Aggiungi un secondo banner attivo impostato sul modello opt-in per coprire quei visitatori."
+
+#: admin/class-admin.php:2080
+#, fuzzy
+msgid "Open banner settings"
+msgstr "Apri le impostazioni"
+
 #. translators: %d: number of new cookies found
-#: admin/class-admin.php:2030
+#: admin/class-admin.php:2103
 #, php-format
 msgid "Scheduled scan found %d new cookie(s)."
 msgstr "La scansione pianificata ha trovato %d nuovo/i cookie."
 
-#: admin/class-admin.php:2034
+#: admin/class-admin.php:2107
 msgid "Review now"
 msgstr "Rivedi ora"
 
 #. translators: %s: comma-separated list of service names
-#: admin/class-admin.php:2070
+#: admin/class-admin.php:2143
 #, php-format
 msgid "FAZ Cookie Manager detected services on your site that are not covered by any selected IAB vendor: %s."
 msgstr "FAZ Cookie Manager ha rilevato servizi sul tuo sito non coperti da alcun fornitore IAB selezionato: %s."
 
-#: admin/class-admin.php:2074
+#: admin/class-admin.php:2147
 msgid "Add the matching vendors to ensure proper TCF consent for these services."
 msgstr "Aggiungi i fornitori corrispondenti per garantire il corretto consenso TCF per questi servizi."
 
-#: admin/class-admin.php:2076
+#: admin/class-admin.php:2149
 msgid "Go to Vendor List"
 msgstr "Vai alla lista dei fornitori"
 
-#: admin/class-admin.php:2206
+#: admin/class-admin.php:2279
 msgid "FAZ Cookie Manager — Geo-routing is on but has no effect"
 msgstr "FAZ Cookie Manager — Il geo-routing è attivo ma non ha effetto"
 
-#: admin/class-admin.php:2207
+#: admin/class-admin.php:2280
 msgid "Geo-routing is enabled in Settings with \"Hide banner outside target regions\" as the default behaviour, but no target regions are selected and none of your banners has a target-countries list. In this configuration the plugin tells the CDN that every page is country-dependent (so no full-page cache is kept) while the geo-routing gate has nothing to target, so it can never actually fire. The most common symptom is \"X-Cdn-Cache-Status: MISS\" on every page, and a Lighthouse drop."
 msgstr "Il geo-routing è abilitato in Impostazioni con \"Nascondi banner al di fuori delle regioni target\" come comportamento predefinito, ma non sono selezionate regioni target e nessuno dei tuoi banner ha un elenco di paesi target. In questa configurazione il plugin comunica alla CDN che ogni pagina dipende dal paese (quindi non viene mantenuta alcuna cache a pagina intera) mentre il gate di geo-routing non ha alcun target, quindi non può mai attivarsi. Il sintomo più comune è \"X-Cdn-Cache-Status: MISS\" su ogni pagina e un calo di Lighthouse."
 
-#: admin/class-admin.php:2208
+#: admin/class-admin.php:2281
 msgid "If you do NOT need per-country banners, the safe fix is to disable Geo-routing. If you DO want per-country banners, select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner — the warning will clear on its own."
 msgstr "Se non hai bisogno di banner per paese, la soluzione sicura è disabilitare il Geo-routing. Se invece desideri banner per paese, seleziona una o più regioni target in Impostazioni → Geolocalizzazione, oppure aggiungi un elenco di paesi target ad almeno un banner — l'avviso scomparirà automaticamente."
 
-#: admin/class-admin.php:2212 admin/class-admin.php:2254
+#: admin/class-admin.php:2285 admin/class-admin.php:2327
 msgid "Disable Geo-routing now"
 msgstr "Disabilita il geo-routing ora"
 
-#: admin/class-admin.php:2214
+#: admin/class-admin.php:2287
 msgid "Open Geo-routing settings"
 msgstr "Apri impostazioni geo-routing"
 
-#: admin/class-admin.php:2252
+#: admin/class-admin.php:2325
 msgid "Disabling…"
 msgstr "Disabilitazione in corso…"
 
-#: admin/class-admin.php:2253
+#: admin/class-admin.php:2326
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic."
 msgstr "Geo-routing disabilitato. La cache CDN dovrebbe ricominciare a riempirsi entro pochi minuti dal traffico organico."
 
-#: admin/class-admin.php:2393
+#: admin/class-admin.php:2466
 msgid "Cookie Consent Overview"
 msgstr "Panoramica consenso cookie"
 
 #. translators: %d: number of consent interactions in last 30 days
-#: admin/class-admin.php:2460
+#: admin/class-admin.php:2533
 #, php-format
 msgid "%d consent interactions in the last 30 days."
 msgstr "%d interazioni di consenso negli ultimi 30 giorni."
 
-#: admin/class-admin.php:2464
+#: admin/class-admin.php:2537
 msgid "View details"
 msgstr "Visualizza dettagli"
 
@@ -1939,7 +1952,7 @@ msgstr "Visualizza dettagli"
 #: admin/modules/cookies/api/class-cookies-api.php:219
 #: admin/modules/cookies/api/class-cookies-api.php:515
 #: admin/modules/scanner/api/class-api.php:240
-#: admin/modules/scanner/api/class-api.php:1094
+#: admin/modules/scanner/api/class-api.php:1097
 #: admin/modules/settings/api/class-api.php:602
 msgid "Unique identifier for the resource."
 msgstr "Identificativo univoco della risorsa."
@@ -3167,7 +3180,7 @@ msgid "Failed to record event."
 msgstr "Registrazione dell'evento non riuscita."
 
 #: admin/modules/scanner/api/class-api.php:299
-#: admin/modules/scanner/includes/class-controller.php:551
+#: admin/modules/scanner/includes/class-controller.php:557
 msgid "Invalid browser scan identifier."
 msgstr "Identificativo di scansione del browser non valido."
 
@@ -3203,47 +3216,47 @@ msgstr "Questa sessione di scansione è scaduta: la finestra di cattura si chiud
 
 #: admin/modules/scanner/api/class-api.php:880
 msgid "The cookie import could not be completed, so nothing was saved. The scan results are kept for a few minutes — retry the import rather than re-running the scan. Review the scanner log if it fails again."
-msgstr ""
+msgstr "L’importazione dei cookie non è andata a buon fine e non è stato salvato nulla. I risultati della scansione restano disponibili per alcuni minuti: riprova l’importazione invece di rieseguire la scansione. Se fallisce di nuovo, consulta il registro dello scanner."
 
 #: admin/modules/scanner/api/class-api.php:881
 msgid "The cookie import could not be completed. No completion status was recorded; review the scanner log and try again."
 msgstr "Non è stato possibile completare l'importazione dei cookie. Non è stato registrato alcuno stato di completamento; controlla il log dello scanner e riprova."
 
-#: admin/modules/scanner/api/class-api.php:1100
+#: admin/modules/scanner/api/class-api.php:1103
 msgid "Scan status."
 msgstr "Stato della scansione."
 
-#: admin/modules/scanner/api/class-api.php:1106
+#: admin/modules/scanner/api/class-api.php:1109
 msgid "Scan type."
 msgstr "Tipo di scansione."
 
-#: admin/modules/scanner/api/class-api.php:1112
+#: admin/modules/scanner/api/class-api.php:1115
 msgid "Scan date."
 msgstr "Data della scansione."
 
-#: admin/modules/scanner/api/class-api.php:1118
+#: admin/modules/scanner/api/class-api.php:1121
 msgid "Total cookies found."
 msgstr "Totale cookie trovati."
 
-#: admin/modules/scanner/api/class-api.php:1124
+#: admin/modules/scanner/api/class-api.php:1127
 msgid "Total pages scanned."
 msgstr "Totale pagine scansionate."
 
-#: admin/modules/scanner/api/class-api.php:1130
+#: admin/modules/scanner/api/class-api.php:1133
 msgid "Maximum pages to scan."
 msgstr "Numero massimo di pagine da scansionare."
 
-#: admin/modules/scanner/includes/class-controller.php:570
+#: admin/modules/scanner/includes/class-controller.php:576
 msgid "Another browser scan is already in progress for this administrator."
 msgstr "Un'altra scansione del browser è già in corso per questo amministratore."
 
-#: admin/modules/scanner/includes/class-controller.php:2323
+#: admin/modules/scanner/includes/class-controller.php:2343
 msgid "Static IP pinning is limited to this site hostname."
-msgstr ""
+msgstr "L’ancoraggio a IP statico è limitato al nome host di questo sito."
 
-#: admin/modules/scanner/includes/class-controller.php:2342
+#: admin/modules/scanner/includes/class-controller.php:2362
 msgid "Static IP pinning requires the WordPress cURL HTTP transport."
-msgstr ""
+msgstr "L’ancoraggio a IP statico richiede il trasporto HTTP cURL di WordPress."
 
 #: admin/modules/settings/api/class-api.php:308
 #: admin/modules/settings/includes/class-onboarding.php:160
@@ -3265,7 +3278,7 @@ msgstr "Forza il recupero dei dati"
 
 #: admin/modules/settings/api/class-api.php:580
 msgid "Notice dismissal duration in seconds; zero dismisses permanently."
-msgstr ""
+msgstr "Durata in secondi della chiusura dell’avviso; zero lo chiude in modo permanente."
 
 #: admin/modules/settings/api/class-api.php:608
 #: admin/modules/settings/api/class-api.php:613
@@ -5043,7 +5056,7 @@ msgstr "PIPL trasferimento transfrontaliero"
 
 #: admin/views/geo-routing.php:64
 msgid "Each country (and US state with a privacy law) maps to the rule-set enforced by the live banner. Review the model, defaults and mandatory controls here before release; the faz_geo_ruleset_runtime filter is reserved as an emergency kill switch."
-msgstr ""
+msgstr "Ogni paese (e ogni stato USA dotato di una legge sulla privacy) corrisponde al set di regole applicato dal banner in produzione. Verifica qui il modello, i valori predefiniti e i controlli obbligatori prima della pubblicazione; il filtro faz_geo_ruleset_runtime è riservato come interruttore di emergenza."
 
 #: admin/views/geo-routing.php:75
 #, fuzzy
@@ -5237,7 +5250,7 @@ msgstr "Modalità compatibilità ad-blocker"
 
 #: admin/views/settings.php:52
 msgid "Serves every frontend bundle (banner, accessibility, GCM, TCF, WP Consent API and Microsoft consent) through generic inline handles so plugin-URL filter rules cannot block only part of the consent runtime."
-msgstr ""
+msgstr "Distribuisce tutti i bundle del frontend (banner, accessibilità, GCM, TCF, WP Consent API e consenso Microsoft) tramite handle inline generici, così che le regole dei filtri basate sull’URL del plugin non possano bloccare solo una parte del runtime del consenso."
 
 #: admin/views/settings.php:58
 msgid "Keep banner visible against ad blockers"
@@ -5277,7 +5290,7 @@ msgstr "Modalità compatibilità cache"
 
 #: admin/views/settings.php:114
 msgid "Keep a visitor-invariant page fully cacheable only when jurisdiction runtime is explicitly disabled with the <code>faz_geo_ruleset_runtime</code> filter. Geo rule-sets are enforced by default, so this optimisation is automatically ignored: caching one country's consent model for another country is a compliance risk. It also pauses server-side A/B splitting and bot-specific output when it is actually active."
-msgstr ""
+msgstr "Mantiene una pagina invariante per il visitatore pienamente memorizzabile in cache solo quando il runtime giurisdizionale è disattivato esplicitamente con il filtro <code>faz_geo_ruleset_runtime</code>. I set di regole geografici sono attivi per impostazione predefinita, quindi questa ottimizzazione viene ignorata automaticamente: memorizzare in cache il modello di consenso di un paese per un altro paese è un rischio di conformità. Quando è davvero attiva sospende anche la ripartizione A/B lato server e l’output specifico per i bot."
 
 #: admin/views/settings.php:120
 msgid "A/B test banner variants"
@@ -5450,7 +5463,7 @@ msgstr "Etichetta personalizzata (facoltativa)"
 
 #: admin/views/settings.php:273
 msgid "Pin every server-side scanner request — sitemap discovery and page fetches — to this site IP while preserving the hostname, HTTPS certificate validation and SNI. Only public IPv4/IPv6 addresses are accepted; requires the WordPress cURL transport. Leave blank to use DNS."
-msgstr ""
+msgstr "Ancora tutte le richieste dello scanner lato server — individuazione della sitemap e recupero delle pagine — a questo IP del sito, preservando il nome host, la convalida del certificato HTTPS e SNI. Sono accettati solo indirizzi IPv4/IPv6 pubblici; richiede il trasporto cURL di WordPress. Lascia vuoto per usare il DNS."
 
 #: admin/views/settings.php:279
 msgid "Scanner Debug Mode"
@@ -5480,7 +5493,7 @@ msgstr "Frequenza di scansione"
 msgid "Daily"
 msgstr "Giornaliero"
 
-#: admin/views/settings.php:303 includes/class-activator.php:603
+#: admin/views/settings.php:303 includes/class-activator.php:613
 msgid "Weekly"
 msgstr "Settimanale"
 
@@ -6557,15 +6570,15 @@ msgstr "Un pulsante che apre le preferenze di consenso ai cookie."
 msgid "Manage Cookie Preferences"
 msgstr "Gestisci le preferenze sui cookie"
 
-#: includes/class-activator.php:609
+#: includes/class-activator.php:619
 msgid "Once Daily (FAZ)"
 msgstr "Una volta al giorno (FAZ)"
 
-#: includes/class-activator.php:615
+#: includes/class-activator.php:625
 msgid "Once Weekly (FAZ)"
 msgstr "Una volta alla settimana (FAZ)"
 
-#: includes/class-activator.php:621
+#: includes/class-activator.php:631
 msgid "Once Monthly (FAZ)"
 msgstr "Una volta al mese (FAZ)"
 
