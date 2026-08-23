@@ -264,7 +264,22 @@ class Geo_Runtime {
 	 */
 	public static function model_to_law( $ruleset ) {
 		$model = isset( $ruleset['model'] ) ? (string) $ruleset['model'] : '';
-		return ( 'opt-out' === $model ) ? 'ccpa' : 'gdpr';
+
+		// Prefix match, not equality. NOT ONE ruleset in the shipped catalogue
+		// declares the bare string 'opt-out': all 19 US state laws use
+		// 'opt-out-with-sensitive-opt-in', which is the accurate description of
+		// CPRA and its siblings (opt out of sale/sharing, opt IN for sensitive
+		// data). With an exact comparison this method could never return 'ccpa'
+		// for any input the plugin actually ships, so every US visitor was
+		// classified as opt-in, load_banner() saw a gdpr/ccpa law mismatch, and
+		// the fail-closed branch suppressed the banner: a CCPA banner rendered
+		// for nobody, in any state, with nothing logged.
+		//
+		// 'hybrid' (PIPEDA and friends) deliberately stays on the 'gdpr' side:
+		// it is the more protective reading, and demoting it to an opt-out
+		// notice on a guess is exactly the misrepresentation the fail-closed
+		// branch exists to prevent.
+		return ( 0 === strpos( $model, 'opt-out' ) ) ? 'ccpa' : 'gdpr';
 	}
 
 	/**
