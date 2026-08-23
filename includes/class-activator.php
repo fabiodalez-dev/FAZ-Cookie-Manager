@@ -515,7 +515,17 @@ class Activator {
 			return;
 		}
 
-		add_option( 'faz_own_cookie_seeded', '1', '', false );
+		// A failed marker write is survivable — the next version bump re-runs the
+		// seed, exactly as seed_default_whitelist() does — but it should not be
+		// silent. Review asked for a RuntimeException here instead; that would
+		// abort the shared migration sequence at this call and skip every
+		// sibling after it, which is the bug d76d0fa was written to fix. Report,
+		// do not throw.
+		if ( ! add_option( 'faz_own_cookie_seeded', '1', '', false )
+			&& ! get_option( 'faz_own_cookie_seeded' ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- surfacing a silent migration failure, same as run_retention_cleanup().
+			error_log( 'FAZ Cookie Manager: could not persist faz_own_cookie_seeded; the consent-cookie seed will re-run on the next migration.' );
+		}
 	}
 
 	/**
