@@ -115,7 +115,13 @@ test.describe('CCPA revisit → opt-out popup (1-click UX, 1.14.4+)', () => {
       expect(meta.error, 'install has a default banner').toBeUndefined();
 
       // 1. First visit — banner must be present (no action recorded yet)
-      await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+      // ?faz_geo=US&faz_region=CA: this spec puts the banner in CCPA mode, and
+      // the runtime ruleset is resolved from the visitor on EVERY request.
+      // Country alone is not enough — US without a state resolves to the
+      // most-protective fallback (an opt-in regime), which clashes with a
+      // CCPA banner and makes load_banner() suppress the UI by design. The
+      // state is what selects ccpa-california.
+      await page.goto(wpBaseURL + '/?faz_geo=US&faz_region=CA', { waitUntil: 'domcontentloaded' });
       const banner = page.locator('.faz-consent-container').first();
       await expect(banner, 'first-visit banner shows for visitors without action').toBeVisible({ timeout: REVISIT_TIMEOUT });
 
@@ -248,7 +254,13 @@ test.describe('CCPA revisit → opt-out popup (1-click UX, 1.14.4+)', () => {
       const meta = JSON.parse(originalLaw);
       expect(meta.error, 'install has a default banner').toBeUndefined();
 
-      await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+      // ?faz_geo=US&faz_region=CA: this spec puts the banner in CCPA mode, and
+      // the runtime ruleset is resolved from the visitor on EVERY request.
+      // Country alone is not enough — US without a state resolves to the
+      // most-protective fallback (an opt-in regime), which clashes with a
+      // CCPA banner and makes load_banner() suppress the UI by design. The
+      // state is what selects ccpa-california.
+      await page.goto(wpBaseURL + '/?faz_geo=US&faz_region=CA', { waitUntil: 'domcontentloaded' });
       const banner = page.locator('.faz-consent-container').first();
       await expect(banner, 'GDPR banner shows on first visit').toBeVisible({ timeout: REVISIT_TIMEOUT });
 
