@@ -122,6 +122,13 @@ export function resetDefaultBannerState(): void {
       $s['config']['notice']['elements']['buttons']['elements']['settings']['status'] = true;
       if ( ! isset( $s['config']['preferenceCenter'] ) || ! is_array( $s['config']['preferenceCenter'] ) ) { $s['config']['preferenceCenter'] = array(); }
       $s['config']['preferenceCenter']['status'] = true;
+      // The accordion listeners in script.js are gated on auditTable.status
+      // (an early return when config.auditTable.status is false), so with
+      // it off the preference centre renders its accordions and NOTHING
+      // binds to them: clicking a category does nothing at all. Another
+      // gdpr.json default (true) that had drifted to false, unrestored.
+      if ( ! isset( $s['config']['auditTable'] ) || ! is_array( $s['config']['auditTable'] ) ) { $s['config']['auditTable'] = array(); }
+      $s['config']['auditTable']['status'] = true;
       if ( ! isset( $s['config']['optoutPopup'] ) || ! is_array( $s['config']['optoutPopup'] ) ) { $s['config']['optoutPopup'] = array(); }
       $s['config']['optoutPopup']['status'] = false;
       $banner->set_settings( $s );
