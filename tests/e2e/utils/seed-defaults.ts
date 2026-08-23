@@ -109,6 +109,19 @@ export function resetDefaultBannerState(): void {
         $s['config']['notice']['elements']['buttons']['elements']['donotSell'] = array();
       }
       $s['config']['notice']['elements']['buttons']['elements']['donotSell']['status'] = false;
+      // The preference centre and its opener are gdpr.json defaults
+      // (both true), but nothing restored them, so once a run left them
+      // off every spec that opens the preference centre failed on a
+      // banner that simply has no button to click — the accordion,
+      // opt-out and per-cookie groups all died in a shared helper with
+      // "a customize / settings button exists". Normalised here for the
+      // same reason applicableLaw and type are.
+      if ( ! isset( $s['config']['notice']['elements']['buttons']['elements']['settings'] ) || ! is_array( $s['config']['notice']['elements']['buttons']['elements']['settings'] ) ) {
+      $s['config']['notice']['elements']['buttons']['elements']['settings'] = array();
+      }
+      $s['config']['notice']['elements']['buttons']['elements']['settings']['status'] = true;
+      if ( ! isset( $s['config']['preferenceCenter'] ) || ! is_array( $s['config']['preferenceCenter'] ) ) { $s['config']['preferenceCenter'] = array(); }
+      $s['config']['preferenceCenter']['status'] = true;
       if ( ! isset( $s['config']['optoutPopup'] ) || ! is_array( $s['config']['optoutPopup'] ) ) { $s['config']['optoutPopup'] = array(); }
       $s['config']['optoutPopup']['status'] = false;
       $banner->set_settings( $s );
