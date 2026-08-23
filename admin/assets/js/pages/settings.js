@@ -501,7 +501,11 @@
 
 		abTestWarnings.forEach(function (w) { saveWarnings.push(w); });
 
-		// Cache Compatibility Mode is compatible with geo-targeting and IAB TCF
+		// Cache Compatibility Mode coexists with the geo-targeting SETTING and IAB
+		// TCF, but it is inert while the jurisdiction RUNTIME is enabled:
+		// is_cache_compatibility_enabled() is `! $geo_enabled && …`, and the
+		// runtime defaults to on. The wizard disables the control for that
+		// reason; do not read this line as 'it takes effect alongside geo'.
 		// — the frontend deliberately resolves both conservatively so the
 		// rendered output stays identical for every visitor — but the result is
 		// not what the settings screen alone suggests. Say so rather than
