@@ -85,6 +85,12 @@ class Controller {
 	const HTTPONLY_LOCK_OPTION = 'faz_httponly_scan_lock';
 
 	/**
+	 * Serialises the read-modify-write of VISITOR_CHECK_OPTION. Same add_option()
+	 * idiom as HTTPONLY_LOCK_OPTION: atomic on the option_name unique key.
+	 */
+	const VISITOR_CHECK_LOCK_OPTION = 'faz_visitor_check_lock';
+
+	/**
 	 * Per-scan visitor-check ledgers, keyed by numeric scan id.
 	 *
 	 * Each entry persists what the browser pass classified at import time (the
@@ -2809,6 +2815,23 @@ class Controller {
 			}
 		}
 
+		$this->with_visitor_check_lock( function () use ( $scan_id, $imported_keys, $names, $jar ) {
+			$this->write_new_visitor_ledger( $scan_id, $imported_keys, $names, $jar );
+		} );
+	}
+
+	/**
+	 * The locked half of begin_visitor_check(): open the ledger and point the
+	 * target at it, on a freshly read option so a concurrent worker's write
+	 * cannot be clobbered by a stale snapshot.
+	 *
+	 * @param string $scan_id       Ledger key.
+	 * @param array  $imported_keys Canonical keys declared by the browser pass.
+	 * @param array  $names         Canonical names declared by the browser pass.
+	 * @param array  $jar           Reported-but-not-declared bucket.
+	 * @return void
+	 */
+	private function write_new_visitor_ledger( $scan_id, $imported_keys, $names, $jar ) {
 		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
 		if ( ! is_array( $checks ) ) {
 			$checks = array();
@@ -2849,6 +2872,51 @@ class Controller {
 	 * @param array $observed_cookies Cookie rows as returned by scan_page().
 	 * @return void
 	 */
+	/**
+	 * Run a ledger read-modify-write under a lock.
+	 *
+	 * begin_visitor_check(), record_visitor_observations() and
+	 * finalize_visitor_check() all rewrite the WHOLE option. Without this, a
+	 * worker that read the array before an import opened a new ledger would
+	 * write its stale snapshot back and delete that ledger outright, leaving
+	 * VISITOR_CHECK_TARGET_OPTION pointing at an entry that no longer exists.
+	 *
+	 * add_option() is the atomic primitive: the option_name column is unique, so
+	 * exactly one caller can create the row. A lock older than 30 seconds is
+	 * treated as abandoned — these are three option writes, not a crawl, and a
+	 * worker killed mid-write must not wedge the feature forever.
+	 *
+	 * Contention is brief, so a bounded wait is enough. On failure the callback
+	 * still runs: every caller re-reads inside the callback and merges only its
+	 * own entry, so the unlocked path can lose a concurrent update to the SAME
+	 * ledger but can never delete a different one. Refusing to run would drop
+	 * observations outright, which is worse.
+	 *
+	 * @param callable $fn Receives nothing; must re-read the option itself.
+	 * @return mixed Whatever $fn returns.
+	 */
+	private function with_visitor_check_lock( $fn ) {
+		$acquired  = false;
+		$lock_time = absint( get_option( self::VISITOR_CHECK_LOCK_OPTION, 0 ) );
+		if ( $lock_time > 0 && $lock_time < time() - 30 ) {
+			delete_option( self::VISITOR_CHECK_LOCK_OPTION );
+		}
+		for ( $attempt = 0; $attempt < 10; $attempt++ ) {
+			if ( add_option( self::VISITOR_CHECK_LOCK_OPTION, time(), '', false ) ) {
+				$acquired = true;
+				break;
+			}
+			usleep( 50000 );
+		}
+		try {
+			return call_user_func( $fn );
+		} finally {
+			if ( $acquired ) {
+				delete_option( self::VISITOR_CHECK_LOCK_OPTION );
+			}
+		}
+	}
+
 	public function record_visitor_observations( $observed_cookies, $expected_target = '' ) {
 		$target = sanitize_key( (string) get_option( self::VISITOR_CHECK_TARGET_OPTION, '' ) );
 		if ( '' === $target ) {
@@ -2864,6 +2932,22 @@ class Controller {
 		if ( '' !== $expected_target && $expected_target !== $target ) {
 			return;
 		}
+		$this->with_visitor_check_lock( function () use ( $observed_cookies, $target ) {
+			$this->write_visitor_observations( $observed_cookies, $target );
+		} );
+	}
+
+	/**
+	 * The locked half of record_visitor_observations().
+	 *
+	 * Re-reads the option and writes back ONLY this ledger's entry, so a
+	 * concurrently opened ledger survives even if the lock was not obtained.
+	 *
+	 * @param array  $observed_cookies Cookie rows as returned by scan_page().
+	 * @param string $target           Ledger key to append to.
+	 * @return void
+	 */
+	private function write_visitor_observations( $observed_cookies, $target ) {
 		$checks = get_option( self::VISITOR_CHECK_OPTION, array() );
 		if ( ! is_array( $checks ) || ! isset( $checks[ (string) $target ] ) || ! is_array( $checks[ (string) $target ] ) ) {
 			return;
@@ -2892,9 +2976,16 @@ class Controller {
 			$changed          = true;
 		}
 		if ( $changed ) {
-			$entry['observed']           = $observed;
-			$checks[ (string) $target ]  = $entry;
-			update_option( self::VISITOR_CHECK_OPTION, $checks, false );
+			// Re-read: between the read above and here another process may have
+			// opened a ledger. Writing the stale $checks back would delete it.
+			// Only this entry is ours to touch.
+			$fresh = get_option( self::VISITOR_CHECK_OPTION, array() );
+			if ( ! is_array( $fresh ) || ! isset( $fresh[ (string) $target ] ) ) {
+				return;
+			}
+			$entry['observed']          = $observed;
+			$fresh[ (string) $target ]  = $entry;
+			update_option( self::VISITOR_CHECK_OPTION, $fresh, false );
 		}
 	}
 
@@ -3005,8 +3096,15 @@ class Controller {
 				'admin_only'   => array_slice( array_keys( $admin_only ), 0, 200 ),
 			),
 		);
-		$checks[ (string) $target ] = $completed;
-		update_option( self::VISITOR_CHECK_OPTION, $checks, false );
+		// Same re-read as the observation write: freeze OUR entry into whatever
+		// the option holds now, never a snapshot taken before the diff was
+		// computed. A ledger opened meanwhile must survive this write.
+		$fresh = get_option( self::VISITOR_CHECK_OPTION, array() );
+		if ( ! is_array( $fresh ) ) {
+			$fresh = $checks;
+		}
+		$fresh[ (string) $target ] = $completed;
+		update_option( self::VISITOR_CHECK_OPTION, $fresh, false );
 
 		$completed['scan_id'] = $target;
 		return $completed;
