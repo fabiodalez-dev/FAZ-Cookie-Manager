@@ -605,7 +605,7 @@ defined( 'ABSPATH' ) || exit;
 				<?php
 				// The jurisdiction runtime forces Accept and Reject on together
 				// whenever the visitor's rule set carries equal_weight_buttons —
-				// 47 of the 48 shipped rule sets do, and none unset it. Leaving
+				// every one of the 48 shipped rule sets does. Leaving
 				// this switchable let an administrator turn the Reject button
 				// off, save, see nothing change and find no explanation
 				// anywhere; that is what put it on the support forum. A control
