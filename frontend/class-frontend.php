@@ -3357,6 +3357,14 @@ class Frontend {
 		$full    = $m[0];
 
 		$id = $this->extract_tag_attr( $attrs, 'id' );
+		// WooCommerce's configuration handles must execute before consent:
+		// wc-settings publishes wcSettings (including checkoutAllowsGuest) and
+		// the block checkout cannot choose a guest flow while it is inert.
+		// Ahead of every provider/custom rule so an integration cannot
+		// accidentally reclassify the handle — which is what shipped in 1.27.0.
+		if ( $this->is_strictly_necessary_script( '', $id ) ) {
+			return $full;
+		}
 		if ( $this->is_own_inline_script_id( $id ) ) {
 			return $full;
 		}
@@ -6444,6 +6452,62 @@ class Frontend {
 	}
 
 	/**
+	 * WooCommerce core handles that carry state required to render commerce UI.
+	 *
+	 * This list is intentionally handle-scoped. It does not exempt the
+	 * WooCommerce plugin directory, analytics/order-attribution code, payment
+	 * SDKs, or arbitrary `wc-*` scripts. `wc-settings` publishes the shared
+	 * `wcSettings` object (including checkoutAllowsGuest); the middleware tag
+	 * publishes the Store API nonce; and the mini-cart tag publishes its lazy
+	 * dependency manifest. None of the three is a tracking surface.
+	 *
+	 * @return string[]
+	 */
+	private static function strictly_necessary_script_handles() {
+		return array(
+			'wc-settings',
+			'wc-blocks-middleware',
+			'wc-mini-cart-block-frontend',
+		);
+	}
+
+	/**
+	 * Whether a WP script identity belongs to the non-filterable core invariant.
+	 *
+	 * Handles must match exactly. IDs may additionally use only the suffixes
+	 * WordPress itself generates for an enqueued script and its before/after
+	 * payloads; a look-alike such as `wc-settings-tracker-js` stays blockable.
+	 *
+	 * @param string $handle Registered WordPress script handle, when available.
+	 * @param string $id     Rendered script element ID, when available.
+	 * @return bool
+	 */
+	private function is_strictly_necessary_script( $handle = '', $id = '' ) {
+		$handle = strtolower( trim( (string) $handle ) );
+		$id     = strtolower( trim( (string) $id ) );
+
+		foreach ( self::strictly_necessary_script_handles() as $required_handle ) {
+			if ( $handle === $required_handle ) {
+				return true;
+			}
+			if ( in_array(
+				$id,
+				array(
+					$required_handle,
+					$required_handle . '-js',
+					$required_handle . '-js-before',
+					$required_handle . '-js-after',
+				),
+				true
+			) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Autoptimize exclude callback — accepts a comma-separated string.
 	 *
 	 * @param string $excludes Comma-joined exclusion list.
@@ -6466,6 +6530,9 @@ class Frontend {
 			return $tag;
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return $tag;
+		}
+		if ( $this->is_strictly_necessary_script( $handle, $this->extract_tag_attr( $tag, 'id' ) ) ) {
 			return $tag;
 		}
 		// Never block our own scripts.
@@ -6535,6 +6602,9 @@ class Frontend {
 			return $tag;
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return $tag;
+		}
+		if ( $this->is_strictly_necessary_script( $handle, $id ) ) {
 			return $tag;
 		}
 		// Guard: never block FAZ's own localize/translation/config inline scripts.
