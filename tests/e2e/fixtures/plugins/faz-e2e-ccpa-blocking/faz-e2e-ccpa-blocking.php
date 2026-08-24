@@ -12,10 +12,10 @@
 defined( 'ABSPATH' ) || exit;
 
 $faz_e2e_country = isset( $_SERVER['HTTP_X_FAZ_E2E_COUNTRY'] )
-	? strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $_SERVER['HTTP_X_FAZ_E2E_COUNTRY'] ) )
+	? strtoupper( preg_replace( '/[^A-Za-z]/', '', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FAZ_E2E_COUNTRY'] ) ) ) )
 	: '';
 $faz_e2e_region  = isset( $_SERVER['HTTP_X_FAZ_E2E_REGION'] )
-	? strtoupper( preg_replace( '/[^A-Za-z0-9]/', '', (string) $_SERVER['HTTP_X_FAZ_E2E_REGION'] ) )
+	? strtoupper( preg_replace( '/[^A-Za-z0-9]/', '', sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FAZ_E2E_REGION'] ) ) ) )
 	: '';
 if ( $faz_e2e_country ) {
 	add_filter(
