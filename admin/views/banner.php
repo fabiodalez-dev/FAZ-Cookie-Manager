@@ -789,10 +789,13 @@ defined( 'ABSPATH' ) || exit;
 			<div class="faz-card-body">
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-revisit-toggle">
-						<input type="checkbox">
+						<input type="checkbox"<?php disabled( $faz_equal_weight_enforced ); ?><?php echo $faz_equal_weight_enforced ? ' aria-describedby="faz-b-revisit-locked"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Show revisit consent widget', 'faz-cookie-manager' ); ?></span>
 					</label>
+					<?php if ( $faz_equal_weight_enforced ) : ?>
+						<p class="faz-field-help" id="faz-b-revisit-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. 47 of the 48 shipped rule sets require a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ); ?></p>
+					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
 					<label><?php esc_html_e( 'Widget Position', 'faz-cookie-manager' ); ?></label>
