@@ -19,6 +19,10 @@ import { test, expect } from '../fixtures/wp-fixture';
 import { ensureFixturePlugin, wp, wpEval } from '../utils/wp-env';
 
 const PROBE_RE = /<script[^>]*id=["']faz-e2e-ga-probe["'][^>]*>/i;
+const CALIFORNIA_HEADERS = {
+  'X-FAZ-E2E-Country': 'US',
+  'X-FAZ-E2E-Region': 'CA',
+};
 
 function setActiveBannerLaw(law: 'gdpr' | 'ccpa'): void {
   wpEval(
@@ -59,7 +63,9 @@ test.describe('CCPA opt-out script blocking is law-aware (1.17.2)', () => {
 
   test('CCPA banner does NOT block sale-flagged scripts on first visit', async ({ request, wpBaseURL }) => {
     setActiveBannerLaw('ccpa');
-    const res = await request.get(`${wpBaseURL}/?n=${Date.now()}&faz_geo=US&faz_region=CA`, { headers: { Cookie: 'nocache=1' } });
+    const res = await request.get(`${wpBaseURL}/?n=${Date.now()}`, {
+      headers: { Cookie: 'nocache=1', ...CALIFORNIA_HEADERS },
+    });
     const html = await res.text();
     const tag = (html.match(PROBE_RE) || [''])[0];
     expect(tag, 'GA probe tag must be present in the rendered HTML').not.toBe('');
@@ -71,7 +77,9 @@ test.describe('CCPA opt-out script blocking is law-aware (1.17.2)', () => {
     setActiveBannerLaw('ccpa');
     const rev = serverConsentRevision();
     const optOutCookie = `fazcookie-consent=consent:no,action:yes,necessary:yes,analytics:no,marketing:no,functional:yes,consentid:e2eccpa1,rev:${rev}`;
-    const res = await request.get(`${wpBaseURL}/?n=${Date.now()}&faz_geo=US&faz_region=CA`, { headers: { Cookie: optOutCookie } });
+    const res = await request.get(`${wpBaseURL}/?n=${Date.now()}`, {
+      headers: { Cookie: optOutCookie, ...CALIFORNIA_HEADERS },
+    });
     const tag = ((await res.text()).match(PROBE_RE) || [''])[0];
     expect(tag, 'GA probe tag must be present').not.toBe('');
     expect(tag, 'after a valid opt-out (analytics:no) the script must be blocked').toContain('text/plain');

@@ -39,7 +39,7 @@ function loadHelpers(runtimeLocked = false) {
     `<!doctype html><div id="control"><input type="checkbox"${attribute}></div>`,
     { runScripts: 'outside-only' },
   );
-  dom.window.eval(`${HELPERS}\nwindow.__setChecked = setChecked; window.__isChecked = isChecked;`);
+  dom.window.eval(`${HELPERS}\nwindow.__setChecked = setChecked; window.__isChecked = isChecked; window.__isVisuallyChecked = isVisuallyChecked;`);
   return dom.window;
 }
 
@@ -51,6 +51,7 @@ console.log('banner runtime-lock state');
   const checkbox = window.document.querySelector('input');
   check('a locked false baseline is displayed as effectively enabled', checkbox.checked === true);
   check('serialization preserves the locked false baseline', window.__isChecked('control') === false);
+  check('preview reads the locked control as effectively enabled', window.__isVisuallyChecked('control') === true);
   check('the false baseline is recorded explicitly', checkbox.dataset.fazStoredChecked === '0');
 }
 
@@ -73,9 +74,10 @@ console.log('banner runtime-lock state');
 for (const id of ['faz-b-accept-toggle', 'faz-b-reject-toggle', 'faz-b-revisit-toggle']) {
   const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const controlPattern = new RegExp(
-    `id="${escapedId}"[\\s\\S]{0,500}?data-faz-runtime-locked="1"`,
+    `id="${escapedId}"[^\\n]*\\n\\s*<input[^\\n]*data-faz-runtime-locked="1"`,
   );
   check(`${id} is marked as runtime-locked in the real view`, controlPattern.test(VIEW_SOURCE));
+  check(`${id} preview reads the effective visual state`, SCRIPT_SOURCE.includes(`!isVisuallyChecked('${id}')`));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

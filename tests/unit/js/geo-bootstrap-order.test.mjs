@@ -236,5 +236,23 @@ console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
   check('a failed request never installs live override CSS', !window.document.getElementById('faz-jurisdiction-bootstrap-styles'));
 }
 
+// HTTP success alone is not a jurisdiction decision. A partial payload must
+// take the same strict fallback as a transport failure, without applying any
+// of its relaxed fields.
+{
+  const window = loadFrontend(async () => ({
+    ok: true,
+    json: async () => ({ language: 'en', bannerSlug: 'live-ccpa', activeLaw: 'ccpa' }),
+  }), RETURNING_CCPA_CONSENT);
+  await window.__fazTestInit();
+  const applied = window.__fazInitOperationsCalls[0];
+  check('a partial 200 payload keeps the strict GDPR shell', applied.law === 'gdpr' && applied.slug === 'strict-gdpr');
+  check('a partial 200 payload keeps optional marketing denied', applied.marketingDefault === false);
+  check('a partial 200 payload invalidates stale out-of-scope consent', window.fazcookie._fazGetFromStore('action') === '');
+  check('a partial 200 payload removes the stale consent cookie', !window.document.cookie.includes('fazcookie-consent='));
+  check('a partial 200 payload records strict fallback', window.fazcookie._diag().geoBootstrapResolved === 'strict-fallback');
+  check('a partial 200 payload never installs live override CSS', !window.document.getElementById('faz-jurisdiction-bootstrap-styles'));
+}
+
 console.log(`\n  geo-bootstrap-order: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

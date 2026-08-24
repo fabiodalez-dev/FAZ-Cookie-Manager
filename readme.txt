@@ -274,33 +274,7 @@ Yes. The banner supports full keyboard navigation (Tab, Enter, Escape), proper A
 
 = Does it work with caching plugins? =
 
-When multi-banner geo-routing is active, the rendered HTML can legitimately vary by visitor country. This plugin asks the page-cache layer to bypass caching on those requests by emitting:
-
-* `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
-* `Pragma: no-cache`
-* `X-LiteSpeed-Cache-Control: no-cache`
-* `Vary: CF-IPCountry` (when the trust filter `faz_trust_cf_ipcountry_header` is enabled)
-* `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
-* `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
-
-**Verified compatible (no extra configuration needed)**
-
-* **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
-* **WP Rocket** — honors `DONOTCACHEPAGE` natively.
-* **W3 Total Cache** — honors `DONOTCACHEPAGE` / `DONOTCACHEOBJECT` natively.
-* **WP Super Cache** — honors `DONOTCACHEPAGE` natively.
-* **Hummingbird (WPMU DEV)** — honors `DONOTCACHEPAGE` natively.
-* **FlyingPress** — the plugin purges FlyingPress's cached HTML pages automatically whenever a banner, cookie, category or setting is saved, so a change never keeps serving stale banner markup. Only the rendered HTML is purged (that is all a consent change alters); FlyingPress's site-wide preload crawl is not triggered, matching the purge-only behaviour of the other supported caches. FlyingPress does not honor `DONOTCACHEPAGE`, so the plugin also hooks its documented `flying_press_is_cacheable` filter to skip caching on country-dependent pages, matching the bypass every other supported cache gets. The consent scripts are excluded automatically from minification and from "Delay all JavaScript": recent FlyingPress 4.x exposes delay/defer exclusion filters (added around 4.16), while FlyingPress 5 receives the same keywords in its in-memory delay-exclusion config without changing your saved FlyingPress settings. You normally do not need to touch anything. If FlyingPress 5 changes those internals the v5 bridge degrades quietly and leaves a note in the debug log when `WP_DEBUG` is on; on older FlyingPress builds that predate the delay/defer filters the automatic exclusion simply does not apply (the plugin cannot detect this). Either way, if you ever notice the banner appearing only after the first click, add `faz-cookie-manager` to FlyingPress's "Delay JavaScript" exclusion keywords as a fallback.
-* **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
-* **Cloudflare APO** — honors the `Cache-Control: no-store` header. With CF in front, also enable the trust filter so the `Vary: CF-IPCountry` header is emitted and CF caches per-country variants instead of bypassing entirely.
-* **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress and Weglot all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode falls back to the site default (a query string is not a reliable cache key).
-
-**Known limitations**
-
-* **CDNs without origin Cache-Control honoring** (e.g. some legacy CloudFront configurations) — verify the response Cache-Control header reaches the edge. If not, add a CF-IPCountry or country-based cache key rule at the CDN level.
-* **Minor / regional cache plugins** (Comet Cache, Cachify, Swift Performance Lite) — not formally tested. Most still honor `DONOTCACHEPAGE`; verify by inspecting the response Cache-Control on a country-targeted page.
-
-Override the bypass logic per request via the `faz_country_dependent_banner_output` filter (return false to force the cache to ignore the country dimension on a specific URL).
+Yes. See the **Cache Plugin Compatibility** section below for the verified plugins, emitted cache-control signals, automatic FlyingPress handling and known CDN limitations.
 
 = Short answer =
 
@@ -401,6 +375,7 @@ When multi-banner geo-routing is active, the rendered HTML can legitimately vary
 * **Redis Object Cache / Memcached (persistent object caches)** — the plugin's internal banner/cookie caches are epoch-invalidated on save, which works on external object-cache backends too (fixed: previously a stale copy could survive in Redis and a banner save appeared not to stick).
 * **Cloudflare APO** — honors the `Cache-Control: no-store` header. With CF in front, also enable the trust filter so the `Vary: CF-IPCountry` header is emitted and CF caches per-country variants instead of bypassing entirely.
 * **Multilingual plugins under a full-page cache (WPML, Polylang, TranslatePress, Weglot)** — with Cache Compatibility Mode on, the banner still renders in the visitor's language. WPML directory/domain modes, Polylang, TranslatePress and Weglot all encode the language in the URL, so a URL-keyed page cache already stores one entry per language; the plugin resolves the per-URL language for each and stays cache-friendly. Only WPML's "language as a URL parameter" mode falls back to the site default (a query string is not a reliable cache key).
+
 = Known limitations =
 
 * **CDNs without origin Cache-Control honoring** (e.g. some legacy CloudFront configurations) — verify the response Cache-Control header reaches the edge. If not, add a CF-IPCountry or country-based cache key rule at the CDN level.

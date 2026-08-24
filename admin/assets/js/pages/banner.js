@@ -2335,16 +2335,18 @@
 			contents: bannerData.contents || {},
 		};
 
-		// Collect which tags should be hidden based on toggle states
+		// Preview the effective UI state. isChecked() deliberately returns the
+		// stored baseline for serialization, which differs from the visible ON
+		// state of controls that jurisdiction routing locks at runtime.
 		var hiddenTags = [];
-		if (!isChecked('faz-b-accept-toggle')) hiddenTags.push('accept-button');
-		if (!isChecked('faz-b-reject-toggle')) hiddenTags.push('reject-button');
-		if (!isChecked('faz-b-settings-toggle')) hiddenTags.push('settings-button');
-		if (!isChecked('faz-b-close-toggle')) hiddenTags.push('close-button');
-		if (!isChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore-button');
-		if (!isChecked('faz-b-revisit-toggle')) hiddenTags.push('revisit-consent');
-		if (!isChecked('faz-b-audit-toggle')) hiddenTags.push('audit-table');
-		if (!isChecked('faz-b-brandlogo-toggle')) hiddenTags.push('brand-logo');
+		if (!isVisuallyChecked('faz-b-accept-toggle')) hiddenTags.push('accept-button');
+		if (!isVisuallyChecked('faz-b-reject-toggle')) hiddenTags.push('reject-button');
+		if (!isVisuallyChecked('faz-b-settings-toggle')) hiddenTags.push('settings-button');
+		if (!isVisuallyChecked('faz-b-close-toggle')) hiddenTags.push('close-button');
+		if (!isVisuallyChecked('faz-b-readmore-toggle')) hiddenTags.push('readmore-button');
+		if (!isVisuallyChecked('faz-b-revisit-toggle')) hiddenTags.push('revisit-consent');
+		if (!isVisuallyChecked('faz-b-audit-toggle')) hiddenTags.push('audit-table');
+		if (!isVisuallyChecked('faz-b-brandlogo-toggle')) hiddenTags.push('brand-logo');
 
 		// Legislation: hide "do not sell" button for GDPR-only
 		var law = getVal('faz-b-law') || 'gdpr';
@@ -3060,6 +3062,12 @@
 		if (cb && cb.dataset.fazRuntimeLocked === '1' && cb.dataset.fazStoredChecked !== undefined) {
 			return cb.dataset.fazStoredChecked === '1';
 		}
+		return cb ? cb.checked : false;
+	}
+	function isVisuallyChecked(id) {
+		var el = document.getElementById(id);
+		if (!el) return false;
+		var cb = el.querySelector('input[type="checkbox"]');
 		return cb ? cb.checked : false;
 	}
 	function setChecked(id, val) {

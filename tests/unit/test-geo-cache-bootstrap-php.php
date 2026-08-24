@@ -91,6 +91,7 @@ namespace {
 	}
 
 	$GLOBALS['faz_geo_bootstrap_filters'] = array();
+	$GLOBALS['faz_geo_bootstrap_multilingual'] = true;
 	function apply_filters( $tag, $value ) {
 		$args = array_slice( func_get_args(), 2 );
 		foreach ( isset( $GLOBALS['faz_geo_bootstrap_filters'][ $tag ] ) ? $GLOBALS['faz_geo_bootstrap_filters'][ $tag ] : array() as $callback ) {
@@ -124,7 +125,7 @@ namespace {
 		return true;
 	}
 	function faz_i18n_is_multilingual() {
-		return true;
+		return $GLOBALS['faz_geo_bootstrap_multilingual'];
 	}
 
 	require_once dirname( __DIR__, 2 ) . '/frontend/class-frontend.php';
@@ -177,6 +178,7 @@ namespace {
 		Ruleset_Loader::$loaded_ids           = array();
 		Geo_Runtime::$enabled                 = true;
 		Geo_Runtime::$resolve_calls           = 0;
+		$GLOBALS['faz_geo_bootstrap_multilingual'] = true;
 	}
 
 	echo "Cache-safe jurisdiction bootstrap — PHP\n\n";
@@ -230,6 +232,35 @@ namespace {
 	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
 	$iab = faz_geo_bootstrap_frontend( array( 'iab' => array( 'enabled' => true ) ) );
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $iab, 'is_geo_bootstrap_cache_active' ), false, 'IAB output cannot enter the bootstrap until its payload is client-resolved' );
+
+	faz_geo_bootstrap_reset();
+	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
+	$no_banner_geo = faz_geo_bootstrap_frontend(
+		array( 'geolocation' => array( 'geo_targeting' => true, 'default_behavior' => 'no_banner' ) )
+	);
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $no_banner_geo, 'is_geo_bootstrap_cache_active' ), false, 'global no-banner geo targeting keeps the cache veto' );
+
+	faz_geo_bootstrap_reset();
+	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
+	add_filter( 'faz_country_dependent_banner_output', '__return_true' );
+	$custom_dependent = faz_geo_bootstrap_frontend();
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $custom_dependent, 'is_geo_bootstrap_cache_active' ), false, 'a custom country-dependent integration keeps the cache veto' );
+
+	faz_geo_bootstrap_reset();
+	$GLOBALS['faz_geo_bootstrap_multilingual'] = false;
+	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
+	add_filter( 'faz_use_country_language_fallback', '__return_true' );
+	$country_language = faz_geo_bootstrap_frontend();
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $country_language, 'is_geo_bootstrap_cache_active' ), false, 'country-derived language fallback keeps the cache veto' );
+
+	faz_geo_bootstrap_reset();
+	Geo_Runtime::$enabled = false;
+	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
+	$cache_compat = faz_geo_bootstrap_frontend(
+		array( 'banner_control' => array( 'cache_compatibility' => true ) )
+	);
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $cache_compat, 'is_cache_compatibility_enabled' ), true, 'Cache Compatibility Mode activates only after geo runtime is disabled' );
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $cache_compat, 'is_geo_bootstrap_cache_active' ), false, 'Cache Compatibility Mode excludes the strict-shell bootstrap' );
 
 	echo "\n" . ( 0 === $failed ? "ALL PASS ({$passed})\n" : "FAILED: {$failed}, passed: {$passed}\n" );
 	exit( 0 === $failed ? 0 : 1 );

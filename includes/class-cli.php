@@ -244,20 +244,69 @@ class CLI {
 		if ( ! \is_readable( $dropin ) ) {
 			return;
 		}
+		$marker_option = 'faz_flyingpress_law_vary_repaired';
+		$fingerprint   = self::flyingpress_dropin_fingerprint( $dropin );
+		if ( '' !== $fingerprint && $fingerprint === (string) \get_option( $marker_option, '' ) ) {
+			return;
+		}
 		$contents = \file_get_contents( $dropin ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local generated drop-in, read once during admin cleanup.
 		if ( ! \is_string( $contents )
 			|| false === \strpos( $contents, 'FlyingPress' )
-			|| false === \strpos( $contents, 'faz-law' )
 		) {
 			return;
 		}
+		if ( false === \strpos( $contents, 'faz-law' ) ) {
+			\update_option( $marker_option, $fingerprint, false );
+			return;
+		}
+
+		// add_option() is an atomic claim in WordPress's options table. It keeps
+		// simultaneous admin/admin-ajax requests from rewriting the generated
+		// drop-in concurrently. A stale claim is recoverable after five minutes.
+		$lock_option = 'faz_flyingpress_law_vary_repairing';
+		$now         = \time();
+		if ( ! \add_option( $lock_option, $now, '', false ) ) {
+			$started = (int) \get_option( $lock_option, 0 );
+			if ( $started > $now - 300 ) {
+				return;
+			}
+			\delete_option( $lock_option );
+			if ( ! \add_option( $lock_option, $now, '', false ) ) {
+				return;
+			}
+		}
 		try {
 			\FlyingPress\AdvancedCache::add_advanced_cache();
+			\clearstatcache( true, $dropin );
+			$repaired = \is_readable( $dropin ) ? \file_get_contents( $dropin ) : false; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- verify the local generated drop-in after repair.
+			if ( \is_string( $repaired ) && false === \strpos( $repaired, 'faz-law' ) ) {
+				\update_option( $marker_option, self::flyingpress_dropin_fingerprint( $dropin ), false );
+			}
 		} catch ( \Throwable $e ) {
 			// Best-effort migration: never break wp-admin because a third-party
 			// cache plugin could not rewrite its generated drop-in.
 			return;
+		} finally {
+			\delete_option( $lock_option );
 		}
+	}
+
+	/**
+	 * Cheap identity for a generated FlyingPress drop-in.
+	 *
+	 * A later FlyingPress regeneration changes the marker and re-enables the
+	 * safety scan, unlike a permanent boolean one-shot flag.
+	 *
+	 * @param string $dropin Absolute drop-in path.
+	 * @return string
+	 */
+	private static function flyingpress_dropin_fingerprint( $dropin ) {
+		$mtime = \filemtime( $dropin );
+		$size  = \filesize( $dropin );
+		if ( false === $mtime || false === $size ) {
+			return '';
+		}
+		return (string) $mtime . ':' . (string) $size;
 	}
 
 	/**

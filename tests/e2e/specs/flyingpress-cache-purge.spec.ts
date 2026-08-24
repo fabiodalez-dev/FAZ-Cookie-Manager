@@ -50,6 +50,7 @@ let fpExclusiveRun = false;
 let weActivatedFlyingPress = false;
 let probeWasActive = false;
 let lockHeld = false;
+let runtimeOffSnapshot = '';
 let testPageId = 0;
 let testPageUrl = '';
 
@@ -172,6 +173,7 @@ test.beforeAll(async ({}, testInfo) => {
   await acquireSharedWordPressLock();
   lockHeld = true;
   probeWasActive = isPluginActive('faz-e2e-fp-probe');
+  runtimeOffSnapshot = wpEval(`echo base64_encode( serialize( get_option( 'faz_e2e_geo_runtime_off', null ) ) );`).trim();
 
   // FAZ vetoes full-page caching whenever the jurisdiction runtime is on
   // (is_country_dependent_output() -> flying_press_is_cacheable = false), and
@@ -223,44 +225,61 @@ test.beforeAll(async ({}, testInfo) => {
 });
 
 test.afterAll(() => {
-  try {
-    // Always first: leaving this set would silently disable jurisdiction
-    // routing for every spec that runs after this file.
+  const cleanupErrors: Error[] = [];
+  const cleanup = (label: string, action: () => void): void => {
     try {
-      // Unconditional: cheaper than reasoning about which branch set it, and a
-      // leftover here silently disables jurisdiction routing for the whole run.
-      wpEval(`delete_option( 'faz_e2e_geo_runtime_off' );`);
-    } catch {
-      /* best-effort */
+      action();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      cleanupErrors.push(new Error(`${label}: ${detail}`));
+    }
+  };
+  try {
+    // Restore only when this exclusive suite changed the process-wide option.
+    // A pre-existing value belongs to the surrounding test environment.
+    if (fpExclusiveRun && runtimeOffSnapshot) {
+      const restoreRuntime = `
+        $runtime_off = unserialize( base64_decode( '${runtimeOffSnapshot}' ) );
+        if ( null === $runtime_off ) { delete_option( 'faz_e2e_geo_runtime_off' ); }
+        else { update_option( 'faz_e2e_geo_runtime_off', $runtime_off ); }
+      `;
+      cleanup('restore faz_e2e_geo_runtime_off', () => {
+        try {
+          wpEval(restoreRuntime);
+        } catch (primaryError) {
+          try {
+            wp(['eval', restoreRuntime]);
+          } catch (fallbackError) {
+            throw new Error(`primary=${String(primaryError)}; fallback=${String(fallbackError)}`);
+          }
+        }
+      });
     }
     // Restore only the plugin state this spec changed. A developer who started
     // with FlyingPress or the probe active must get the same state back.
     if (flyingPressActive) {
-      try {
+      cleanup('purge FlyingPress cache', () => {
         wpEval(`if ( class_exists( '\\\\FlyingPress\\\\Purge' ) ) { \\FlyingPress\\Purge::purge_everything(); }`);
-      } catch {
-        /* best-effort */
-      }
+      });
     }
     if (!probeWasActive && isPluginActive('faz-e2e-fp-probe')) {
-      try {
+      cleanup('deactivate the FlyingPress probe', () => {
         wp(['plugin', 'deactivate', 'faz-e2e-fp-probe']);
-      } catch {
-        /* best-effort */
-      }
+      });
     }
     if (weActivatedFlyingPress && isPluginActive('flying-press')) {
-      try {
+      cleanup('restore FlyingPress activation state', () => {
         wp(['plugin', 'deactivate', 'flying-press']);
-      } catch {
-        /* best-effort */
-      }
+      });
     }
   } finally {
     if (lockHeld) {
       releaseSharedWordPressLock();
       lockHeld = false;
     }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'FlyingPress E2E cleanup failed');
   }
 });
 

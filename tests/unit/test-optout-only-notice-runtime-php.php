@@ -17,6 +17,19 @@ namespace {
 	function get_current_screen() {
 		return (object) array( 'id' => 'faz-cookie-manager-banner' );
 	}
+
+	function esc_html__( $text, $domain = '' ) {
+		unset( $domain );
+		return $text;
+	}
+
+	function esc_url( $url ) {
+		return $url;
+	}
+
+	function admin_url( $path = '' ) {
+		return 'https://example.test/wp-admin/' . ltrim( $path, '/' );
+	}
 }
 
 namespace FazCookie\Frontend\Includes {
@@ -32,6 +45,7 @@ namespace FazCookie\Frontend\Includes {
 namespace FazCookie\Admin\Modules\Banners\Includes {
 	class Controller {
 		public static $get_instance_calls = 0;
+		public static $items              = array();
 
 		public static function get_instance() {
 			self::$get_instance_calls++;
@@ -39,7 +53,7 @@ namespace FazCookie\Admin\Modules\Banners\Includes {
 		}
 
 		public function get_items() {
-			return array();
+			return self::$items;
 		}
 	}
 }
@@ -82,6 +96,27 @@ namespace {
 	$output = ob_get_clean();
 	optout_notice_assert( '' === $output, 'runtime enabled with no banners produces no warning' );
 	optout_notice_assert( 1 === Controller::$get_instance_calls, 'runtime enabled reaches the banner check' );
+
+	Controller::$items = array(
+		(object) array(
+			'status'   => 1,
+			'settings' => json_encode( array( 'settings' => array( 'applicableLaw' => 'ccpa' ) ) ),
+		),
+	);
+	ob_start();
+	$admin->optout_only_banner_notice();
+	$output = ob_get_clean();
+	optout_notice_assert( false !== strpos( $output, 'Visitors under an opt-in privacy law are seeing no banner.' ), 'an active CCPA-only configuration emits the warning headline' );
+	optout_notice_assert( false !== strpos( $output, 'Every active banner uses the opt-out (Do Not Sell) model.' ), 'the CCPA-only warning explains the configuration gap' );
+
+	Controller::$items[] = (object) array(
+		'status'   => 1,
+		'settings' => array( 'settings' => array( 'applicableLaw' => 'gdpr' ) ),
+	);
+	ob_start();
+	$admin->optout_only_banner_notice();
+	$output = ob_get_clean();
+	optout_notice_assert( '' === $output, 'an active opt-in banner suppresses the warning' );
 
 	echo "\n--\nChecks: {$run}\nFailed: {$failed}\n\n";
 	if ( $failed > 0 ) {

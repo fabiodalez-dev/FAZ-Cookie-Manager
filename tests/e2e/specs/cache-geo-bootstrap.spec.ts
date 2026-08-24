@@ -246,13 +246,20 @@ test.beforeAll(async ({}, testInfo) => {
 });
 
 test.afterAll(() => {
-  try {
+  const cleanupErrors: Error[] = [];
+  const cleanup = (label: string, action: () => void): void => {
     try {
-      removeMu();
-    } catch {
-      /* best-effort */
+      action();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      cleanupErrors.push(new Error(`${label}: ${detail}`));
     }
-    wpEval(`
+  };
+  try {
+    cleanup('remove cache bootstrap fixture', () => {
+      removeMu();
+    });
+    const restoreState = `
       global $wpdb;
       $settings = unserialize( base64_decode( '${settingsSnapshot}' ) );
       update_option( 'faz_settings', is_array( $settings ) ? $settings : array() );
@@ -268,15 +275,34 @@ test.afterAll(() => {
       \\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller::get_instance()->delete_cache();
       if ( function_exists( 'faz_clear_banner_template_cache' ) ) { faz_clear_banner_template_cache(); }
       if ( class_exists( '\\FlyingPress\\Purge' ) ) { \\FlyingPress\\Purge::purge_everything(); }
-    `);
+    `;
+    cleanup('restore WordPress banner and runtime state', () => {
+      try {
+        wpEval(restoreState);
+      } catch (primaryError) {
+        try {
+          wp(['eval', restoreState]);
+        } catch (fallbackError) {
+          throw new Error(`primary=${String(primaryError)}; fallback=${String(fallbackError)}`);
+        }
+      }
+    });
+    cleanup('repair the FlyingPress drop-in', () => {
+      wpEval(`if ( class_exists( '\\FlyingPress\\AdvancedCache' ) ) { \\FazCookie\\Includes\\CLI::remove_legacy_flyingpress_law_vary(); }`);
+    });
     if (weActivatedFlyingPress && isPluginActive('flying-press')) {
-      wp(['plugin', 'deactivate', 'flying-press']);
+      cleanup('restore FlyingPress activation state', () => {
+        wp(['plugin', 'deactivate', 'flying-press']);
+      });
     }
   } finally {
     if (lockHeld) {
       releaseSharedWordPressLock();
       lockHeld = false;
     }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new AggregateError(cleanupErrors, 'Cache bootstrap E2E cleanup failed');
   }
 });
 
@@ -457,7 +483,8 @@ test('endpoint failure is fail-closed: GDPR UI remains and stale CCPA consent is
 
 test('real FlyingPress HIT serves the same strict shell, then California bootstraps live', async ({ browser, request }) => {
   test.skip(!flyingPressAvailable, 'FlyingPress is not installed on this environment');
-  const legacyWasBaked = wpEval(`
+  try {
+    const legacyWasBaked = wpEval(`
     $inject = static function ( $cookies ) {
       $cookies = is_array( $cookies ) ? $cookies : array();
       $cookies[] = 'faz-law';
@@ -470,40 +497,45 @@ test('real FlyingPress HIT serves the same strict shell, then California bootstr
     $contents = is_readable( $file ) ? file_get_contents( $file ) : '';
     echo false !== strpos( (string) $contents, 'faz-law' ) ? '1' : '0';
   `).trim();
-  expect(legacyWasBaked).toBe('1');
-  wpEval(`\\FazCookie\\Includes\\CLI::remove_legacy_flyingpress_law_vary();`);
+    expect(legacyWasBaked).toBe('1');
+    wpEval(`\\FazCookie\\Includes\\CLI::remove_legacy_flyingpress_law_vary();`);
 
-  clearCaches();
-  await primeCache(request);
+    clearCaches();
+    await primeCache(request);
 
-  const caHit = await request.get(pageUrl, { headers: requestHeaders('US', 'CA') });
-  const itHit = await request.get(pageUrl, { headers: requestHeaders('IT') });
-  expect((caHit.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
-  expect((itHit.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
-  const caHtml = await caHit.text();
-  const itHtml = await itHit.text();
-  expect(caHtml).toBe(itHtml);
-  expect(caHtml).toContain('"applicableLaw":"gdpr"');
-  expect(caHtml).toContain(STRICT_MARKER);
+    const caHit = await request.get(pageUrl, { headers: requestHeaders('US', 'CA') });
+    const itHit = await request.get(pageUrl, { headers: requestHeaders('IT') });
+    expect((caHit.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
+    expect((itHit.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
+    const caHtml = await caHit.text();
+    const itHtml = await itHit.text();
+    expect(caHtml).toBe(itHtml);
+    expect(caHtml).toContain('"applicableLaw":"gdpr"');
+    expect(caHtml).toContain(STRICT_MARKER);
 
-  const dropinHasLegacyCookie = wpEval(`
-    $file = WP_CONTENT_DIR . ( class_exists( 'Atomic_Persistent_Data' ) ? '/flying-press-advanced-cache.php' : '/advanced-cache.php' );
-    $contents = is_readable( $file ) ? file_get_contents( $file ) : '';
-    echo false !== strpos( (string) $contents, 'faz-law' ) ? '1' : '0';
-  `).trim();
-  expect(dropinHasLegacyCookie).toBe('0');
+    const dropinHasLegacyCookie = wpEval(`
+      $file = WP_CONTENT_DIR . ( class_exists( 'Atomic_Persistent_Data' ) ? '/flying-press-advanced-cache.php' : '/advanced-cache.php' );
+      $contents = is_readable( $file ) ? file_get_contents( $file ) : '';
+      echo false !== strpos( (string) $contents, 'faz-law' ) ? '1' : '0';
+    `).trim();
+    expect(dropinHasLegacyCookie).toBe('0');
 
-  const context = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: requestHeaders('US', 'CA') });
-  const page = await context.newPage();
-  try {
-    const navigation = await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
-    expect((navigation?.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
-    await page.waitForFunction(() => (window as any).fazcookie?._diag?.().geoBootstrapResolved === 'live');
-    await page.waitForFunction(() => (window as any).__fazBootstrapOptionalRan === true);
-    await expect(page.locator('[data-faz-tag="notice"]').first()).toContainText(LIVE_MARKER);
-    expect(await page.evaluate(() => (window as any).getFazConsent?.().activeLaw)).toBe('ccpa');
-    expect(await page.evaluate(() => (window as any).__fazBootstrapOptionalRan === true)).toBe(true);
+    const context = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: requestHeaders('US', 'CA') });
+    const page = await context.newPage();
+    try {
+      const navigation = await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+      expect((navigation?.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
+      await page.waitForFunction(() => (window as any).fazcookie?._diag?.().geoBootstrapResolved === 'live');
+      await page.waitForFunction(() => (window as any).__fazBootstrapOptionalRan === true);
+      await expect(page.locator('[data-faz-tag="notice"]').first()).toContainText(LIVE_MARKER);
+      expect(await page.evaluate(() => (window as any).getFazConsent?.().activeLaw)).toBe('ccpa');
+      expect(await page.evaluate(() => (window as any).__fazBootstrapOptionalRan === true)).toBe(true);
+    } finally {
+      await context.close();
+    }
   } finally {
-    await context.close();
+    // The legacy key lives in a pre-WordPress generated drop-in. Repair it even
+    // when any assertion above fails so later specs never inherit fragmentation.
+    wpEval(`if ( class_exists( '\\FlyingPress\\AdvancedCache' ) ) { \\FazCookie\\Includes\\CLI::remove_legacy_flyingpress_law_vary(); }`);
   }
 });
