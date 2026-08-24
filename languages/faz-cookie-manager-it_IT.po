@@ -3917,7 +3917,7 @@ msgstr "Mostra pulsante Rifiuta"
 
 #: admin/views/banner.php:694
 msgid "Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not."
-msgstr ""
+msgstr "Bloccato su attivo finché l'instradamento per giurisdizione è in funzione. I set di regole di UE, Regno Unito, Svizzera e della maggior parte degli altri regimi di opt-in richiedono che Rifiuta stia accanto ad Accetta con pari evidenza, quindi il runtime lo mantiene visibile per quei visitatori qualunque cosa dica questo interruttore. Dare a entrambi i pulsanti uno stile più sobrio va bene; nascondere il rifiuto no."
 
 #: admin/views/banner.php:701
 msgid "Show Settings Button"
@@ -5933,9 +5933,8 @@ msgid "Cache Compatibility Mode"
 msgstr "Modalità compatibilità cache"
 
 #: admin/views/setup.php:154
-#, fuzzy
 msgid "Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor's consent state to another. Requires jurisdiction routing to be switched off first — while it is on, per-country consent rules win over caching."
-msgstr "Mantiene ogni pagina renderizzata identica per tutti i visitatori, così le cache full-page (WP Rocket, LiteSpeed, …) non possono mai servire lo stato di consenso di un visitatore a un altro. Attivala se usi un plugin di page cache o una CDN con caching."
+msgstr "Mantiene ogni pagina renderizzata identica per tutti i visitatori, così le cache full-page (WP Rocket, LiteSpeed, …) non possono mai servire lo stato di consenso di un visitatore a un altro. Richiede che l'instradamento per giurisdizione sia prima disattivato: finché è attivo, le regole di consenso per paese hanno la precedenza sulla cache."
 
 #: admin/views/setup.php:157
 msgid "Ad-blocker banner resilience"
@@ -6030,7 +6029,7 @@ msgstr "Gli interruttori più utili del banner. Tutto ciò che vedi qui può ess
 
 #: admin/views/setup.php:268
 msgid "Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country's banner to another and this mode stays off. It becomes available if jurisdiction routing is disabled with the faz_geo_ruleset_runtime filter."
-msgstr ""
+msgstr "Non disponibile finché l'instradamento per giurisdizione è attivo. Le regole di consenso vengono risolte in base al paese del visitatore, quindi una cache di pagina condivisa non può servire il banner di un paese a un altro e questa modalità resta disattivata. Torna disponibile se disattivi l'instradamento per giurisdizione con il filtro faz_geo_ruleset_runtime."
 
 #: admin/views/setup.php:278
 msgid "With Cache Compatibility Mode on, the bot-skip is bypassed: cached pages must stay identical for every visitor, so bots receive the banner too."
