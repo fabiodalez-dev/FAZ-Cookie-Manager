@@ -602,12 +602,26 @@ defined( 'ABSPATH' ) || exit;
 						<span><?php esc_html_e( 'Show Accept Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 				</div>
+				<?php
+				// The jurisdiction runtime forces Accept and Reject on together
+				// whenever the visitor's rule set carries equal_weight_buttons —
+				// 47 of the 48 shipped rule sets do, and none unset it. Leaving
+				// this switchable let an administrator turn the Reject button
+				// off, save, see nothing change and find no explanation
+				// anywhere; that is what put it on the support forum. A control
+				// that cannot take effect should say so rather than pretend.
+				$faz_equal_weight_enforced = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+					&& \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled();
+				?>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-reject-toggle">
-						<input type="checkbox">
+						<input type="checkbox"<?php disabled( $faz_equal_weight_enforced ); ?><?php echo $faz_equal_weight_enforced ? ' aria-describedby="faz-b-reject-locked"' : ''; ?>>
 						<span class="faz-toggle-track"></span>
 						<span><?php esc_html_e( 'Show Reject Button', 'faz-cookie-manager' ); ?></span>
 					</label>
+					<?php if ( $faz_equal_weight_enforced ) : ?>
+						<p class="faz-field-help" id="faz-b-reject-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ); ?></p>
+					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
 					<label class="faz-toggle" id="faz-b-settings-toggle">
