@@ -66,23 +66,34 @@ class Geo_Detector {
 
 		$ip_hash = $this->hash_ip( $ip );
 
+		// 1. Admin override, BEFORE the cache read.
+		//
+		// This used to sit after it, and the cache is keyed on the IP hash
+		// alone. Anything that resolved geo earlier in the request — the
+		// plugin's own bootstrap does — stored a {country, source:cf_header}
+		// entry, and every later call returned that entry without ever
+		// consulting the override. An administrator's country override was
+		// therefore ignored, silently, for the rest of the request: measured on
+		// a clean install, the filter had no effect until wp_cache_flush().
+		//
+		// The override is a filter call with no I/O, so it is cheap to evaluate
+		// first, and its result is deliberately NOT cached: writing it under an
+		// IP-only key would poison the cache the other way round, making a
+		// later un-overridden lookup answer with the override.
+		$admin_override = $this->get_admin_override_country();
+		if ( '' !== $admin_override ) {
+			return array( 'country' => $admin_override, 'region' => '', 'vpn' => false, 'source' => 'admin_override' );
+		}
+
 		// Cache hit?
 		$cached = wp_cache_get( $ip_hash, self::CACHE_GROUP );
 		if ( is_array( $cached ) ) {
 			return $cached;
 		}
 
-		// 1. CF-IPCountry header.
+		// 2. CF-IPCountry header.
 		$cf_country = $this->get_cf_country();
 		$cf_region  = $this->get_cf_region();
-
-		// 2. Admin override via X-Country-Code (filterable).
-		$admin_override = $this->get_admin_override_country();
-		if ( '' !== $admin_override ) {
-			$result = array( 'country' => $admin_override, 'region' => '', 'vpn' => false, 'source' => 'admin_override' );
-			wp_cache_set( $ip_hash, $result, self::CACHE_GROUP, self::CACHE_TTL );
-			return $result;
-		}
 
 		// 3. ipinfo VPN gate.
 		$vpn_result = $this->ipinfo->lookup( $ip );

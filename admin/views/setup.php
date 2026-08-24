@@ -128,6 +128,14 @@ $faz_setup_laws = array(
  * The banner-control switches offered on step 3. `data-recommend` marks the row
  * that receives the cache-plugin detection badge (filled by setup.js).
  */
+// Cache Compatibility Mode cannot take effect while jurisdiction routing is on:
+// is_cache_compatibility_enabled() is `! $geo_enabled && …`, and the runtime is
+// enabled by default. Offering a tickable switch that silently does nothing —
+// under help text that says "turn on if you use a page cache" — sends an
+// administrator away believing their cache is now supported.
+$faz_geo_runtime_on = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
+	&& \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled();
+
 $faz_setup_bc_rows = array(
 	'per_service_consent' => array(
 		'label' => __( 'Per-service consent toggles', 'faz-cookie-manager' ),
@@ -143,7 +151,7 @@ $faz_setup_bc_rows = array(
 	),
 	'cache_compatibility' => array(
 		'label' => __( 'Cache Compatibility Mode', 'faz-cookie-manager' ),
-		'help'  => __( 'Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor\'s consent state to another. Turn on if you use a page-cache plugin or a caching CDN.', 'faz-cookie-manager' ),
+		'help'  => __( 'Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor\'s consent state to another. Requires jurisdiction routing to be switched off first — while it is on, per-country consent rules win over caching.', 'faz-cookie-manager' ),
 	),
 	'adblock_resilience'  => array(
 		'label' => __( 'Ad-blocker banner resilience', 'faz-cookie-manager' ),
@@ -247,7 +255,8 @@ $faz_setup_step_titles = array(
 				<div class="faz-setup-toggle-list">
 					<?php foreach ( $faz_setup_bc_rows as $faz_bc_key => $faz_bc_row ) : ?>
 						<label class="faz-setup-toggle-row">
-							<input type="checkbox" id="faz-setup-bc-<?php echo esc_attr( $faz_bc_key ); ?>" data-bc-key="<?php echo esc_attr( $faz_bc_key ); ?>"<?php checked( ! empty( $faz_wiz_bc[ $faz_bc_key ] ) ); ?>>
+							<?php $faz_bc_inert = ( 'cache_compatibility' === $faz_bc_key && $faz_geo_runtime_on ); ?>
+							<input type="checkbox" id="faz-setup-bc-<?php echo esc_attr( $faz_bc_key ); ?>" data-bc-key="<?php echo esc_attr( $faz_bc_key ); ?>"<?php checked( ! empty( $faz_wiz_bc[ $faz_bc_key ] ) ); ?><?php disabled( $faz_bc_inert ); ?><?php echo $faz_bc_inert ? ' aria-describedby="faz-setup-cache-inert"' : ''; ?>>
 							<span class="faz-setup-toggle-body">
 								<span class="faz-setup-toggle-label"><?php echo esc_html( $faz_bc_row['label'] ); ?>
 									<?php if ( 'cache_compatibility' === $faz_bc_key ) : ?>
@@ -255,6 +264,9 @@ $faz_setup_step_titles = array(
 									<?php endif; ?>
 								</span>
 								<span class="faz-setup-toggle-help"><?php echo esc_html( $faz_bc_row['help'] ); ?></span>
+								<?php if ( $faz_bc_inert ) : ?>
+									<span class="faz-setup-toggle-help faz-setup-toggle-help-inert" id="faz-setup-cache-inert"><?php esc_html_e( 'Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country\'s banner to another and this mode stays off. It becomes available if jurisdiction routing is disabled with the faz_geo_ruleset_runtime filter.', 'faz-cookie-manager' ); ?></span>
+								<?php endif; ?>
 							</span>
 						</label>
 					<?php endforeach; ?>

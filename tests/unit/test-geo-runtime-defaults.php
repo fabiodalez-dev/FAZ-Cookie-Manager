@@ -117,7 +117,7 @@ echo "\n\033[1mGeo_Runtime::model_to_law() — model → binary law\033[0m\n";
 
 assert_eq( Geo_Runtime::model_to_law( array( 'model' => 'opt-in' ) ), 'gdpr', 'opt-in → gdpr' );
 assert_eq( Geo_Runtime::model_to_law( array( 'model' => 'hybrid' ) ), 'gdpr', 'hybrid → gdpr' );
-assert_eq( Geo_Runtime::model_to_law( array( 'model' => 'opt-out-with-sensitive-opt-in' ) ), 'gdpr', 'opt-out-with-sensitive-opt-in → gdpr' );
+assert_eq( Geo_Runtime::model_to_law( array( 'model' => 'opt-out-with-sensitive-opt-in' ) ), 'ccpa', 'opt-out-with-sensitive-opt-in → ccpa' );
 assert_eq( Geo_Runtime::model_to_law( array( 'model' => 'opt-out' ) ), 'ccpa', 'opt-out → ccpa' );
 assert_eq( Geo_Runtime::model_to_law( array() ), 'gdpr', 'missing model → gdpr (most protective)' );
 

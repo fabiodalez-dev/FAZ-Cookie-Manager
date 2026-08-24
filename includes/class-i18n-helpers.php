@@ -464,17 +464,17 @@ if ( ! function_exists( 'faz_country_to_locale' ) ) {
 			// Chinese — Mainland / Taiwan / Hong Kong
 			'CN' => 'zh_CN', 'TW' => 'zh_TW', 'HK' => 'zh_HK',
 			// East Asia + others — most have a single canonical locale.
-			'JP' => 'ja_JP', 'KR' => 'ko_KR',
-			'RU' => 'ru_RU', 'UA' => 'uk_UA', 'TR' => 'tr_TR',
+			'JP' => 'ja', 'KR' => 'ko_KR',
+			'RU' => 'ru_RU', 'UA' => 'uk', 'TR' => 'tr_TR',
 			'PL' => 'pl_PL', 'CZ' => 'cs_CZ', 'SK' => 'sk_SK',
 			'HU' => 'hu_HU', 'RO' => 'ro_RO',
-			'GR' => 'el_GR', 'CY' => 'el_GR',
+			'GR' => 'el', 'CY' => 'el',
 			'SE' => 'sv_SE', 'NO' => 'nb_NO', 'DK' => 'da_DK',
-			'FI' => 'fi_FI', 'IS' => 'is_IS',
-			'EE' => 'et_EE', 'LV' => 'lv_LV', 'LT' => 'lt_LT',
-			'SI' => 'sl_SI', 'HR' => 'hr_HR', 'BG' => 'bg_BG', 'MT' => 'mt_MT',
+			'FI' => 'fi', 'IS' => 'is_IS',
+			'EE' => 'et', 'LV' => 'lv', 'LT' => 'lt_LT',
+			'SI' => 'sl_SI', 'HR' => 'hr', 'BG' => 'bg_BG', 'MT' => 'en_GB',
 			// Arabic — most-deployed locale per country.
-			'SA' => 'ar_SA', 'AE' => 'ar_AE', 'EG' => 'ar_EG',
+			'SA' => 'ar', 'AE' => 'ar', 'EG' => 'ar',
 		);
 		/**
 		 * Filter the country→locale map (full table override).
@@ -810,7 +810,7 @@ if ( ! function_exists( 'faz_wp_locale' ) ) {
 			'hu'    => 'hu_HU',
 			'ro'    => 'ro_RO',
 			'bg'    => 'bg_BG',
-			'hr'    => 'hr_HR',
+			'hr'    => 'hr',
 			'el'    => 'el',
 			'tr'    => 'tr_TR',
 			'sv'    => 'sv_SE',

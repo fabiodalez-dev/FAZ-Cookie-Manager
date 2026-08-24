@@ -160,6 +160,9 @@ namespace {
 		'www.facebook.com/tr'  => 'marketing',
 		'youtube.com/embed'    => 'marketing',
 		'fbq('                 => 'marketing',
+		'wc-settings'          => 'marketing',
+		'wc-blocks-middleware' => 'marketing',
+		'wc-mini-cart-block-frontend' => 'marketing',
 	);
 	$blocked   = array( 'marketing' );
 
@@ -258,6 +261,24 @@ namespace {
 	$html = '<script src="https://connect.facebook.net/en_US/fbevents.js"></script>';
 	$out  = faz_ob_run( $fe, $html );
 	assert_true( false !== strpos( $out, 'type="text/plain"' ), 'blocked script src neutralised to text/plain' );
+
+	// 5b. WooCommerce Blocks configuration is a non-filterable functional
+	// invariant. This harness deliberately seeds an EMPTY whitelist cache and
+	// classifies every handle as marketing: the early identity guard, rather
+	// than a mutable whitelist entry, must keep the real WP-generated IDs live.
+	$fe   = faz_ob_frontend( $providers, $blocked, array() );
+	$html = '<script id="wc-settings-js-before">var wcSettings={checkoutAllowsGuest:true};</script>'
+		. '<script id="wc-blocks-middleware-js-before">var wcBlocksMiddlewareConfig={storeApiNonce:"x"};</script>'
+		. '<script id="wc-mini-cart-block-frontend-js-before">var wcBlocksMiniCartFrontendDependencies={};</script>';
+	$out  = faz_ob_run( $fe, $html );
+	assert_true( $out === $html, 'WooCommerce core configuration tags survive a marketing misclassification byte-identical' );
+
+	// Exact generated-ID matching only: a similarly named tracker must not gain
+	// the commerce exemption.
+	$fe       = faz_ob_frontend( $providers, $blocked, array() );
+	$lookalike = '<script id="wc-settings-tracker-js">/* wc-settings */</script>';
+	$out      = faz_ob_run( $fe, $lookalike );
+	assert_true( false !== strpos( $out, 'type="text/plain"' ), 'wc-settings look-alike remains blockable' );
 	assert_true( false !== strpos( $out, 'data-faz-category="marketing"' ), 'blocked script tagged with category' );
 
 	// 6. Inline code-signature match still gates the script.

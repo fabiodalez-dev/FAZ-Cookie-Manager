@@ -53,6 +53,14 @@ final class Faz_E2E_Audit_Lab {
 		if ( isset( $_GET['faz_e2e_disable_geo_runtime'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$faz_e2e_runtime = false;
 		}
+		// Option form of the same switch. The query-string lever cannot serve the
+		// page-cache specs: a full-page cache does not store URLs with unknown
+		// query args, so a request carrying ?faz_e2e_disable_geo_runtime never
+		// becomes a HIT no matter what the runtime does. Those specs need the
+		// runtime off on the CLEAN url, which only a persisted flag can do.
+		if ( get_option( 'faz_e2e_geo_runtime_off' ) ) {
+			$faz_e2e_runtime = false;
+		}
 		add_filter( 'faz_geo_ruleset_runtime', $faz_e2e_runtime ? '__return_true' : '__return_false', PHP_INT_MAX );
 
 		if ( isset( $_GET['faz_e2e_cf_country'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended

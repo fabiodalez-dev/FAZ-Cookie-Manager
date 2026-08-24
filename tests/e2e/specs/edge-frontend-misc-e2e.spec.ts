@@ -301,7 +301,11 @@ test.describe('B. CCPA opt-out success message (role=status + countdown + auto-c
   test('opt-out + confirm → role=status success, decrementing countdown, then close dismisses', async ({ page, wpBaseURL }) => {
     expect(meta.error, 'install has a default banner').toBeUndefined();
 
-    await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+    // ?faz_geo=US&faz_region=CA: section C runs in CCPA mode, and the runtime
+    // ruleset is per-request. Country alone is not enough — US without a
+    // state falls back to an opt-in regime, which clashes with the CCPA
+    // banner and makes load_banner() suppress the UI by design.
+    await page.goto(wpBaseURL + '/?faz_geo=US&faz_region=CA', { waitUntil: 'domcontentloaded' });
     const banner = page.locator('.faz-consent-container').first();
     await expect(banner, 'CCPA banner shows on first visit').toBeVisible({ timeout: T });
 
@@ -352,7 +356,11 @@ test.describe('B. CCPA opt-out success message (role=status + countdown + auto-c
   test('confirm WITHOUT opting out (checkbox unchecked) → no success message, immediate close', async ({ page, wpBaseURL }) => {
     expect(meta.error).toBeUndefined();
 
-    await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+    // ?faz_geo=US&faz_region=CA: section C runs in CCPA mode, and the runtime
+    // ruleset is per-request. Country alone is not enough — US without a
+    // state falls back to an opt-in regime, which clashes with the CCPA
+    // banner and makes load_banner() suppress the UI by design.
+    await page.goto(wpBaseURL + '/?faz_geo=US&faz_region=CA', { waitUntil: 'domcontentloaded' });
     const banner = page.locator('.faz-consent-container').first();
     await expect(banner).toBeVisible({ timeout: T });
 
@@ -372,7 +380,11 @@ test.describe('B. CCPA opt-out success message (role=status + countdown + auto-c
   test('countdown auto-closes the banner without any user click', async ({ page, wpBaseURL }) => {
     expect(meta.error).toBeUndefined();
 
-    await page.goto(wpBaseURL, { waitUntil: 'domcontentloaded' });
+    // ?faz_geo=US&faz_region=CA: section C runs in CCPA mode, and the runtime
+    // ruleset is per-request. Country alone is not enough — US without a
+    // state falls back to an opt-in regime, which clashes with the CCPA
+    // banner and makes load_banner() suppress the UI by design.
+    await page.goto(wpBaseURL + '/?faz_geo=US&faz_region=CA', { waitUntil: 'domcontentloaded' });
     const banner = page.locator('.faz-consent-container').first();
     await expect(banner).toBeVisible({ timeout: T });
 

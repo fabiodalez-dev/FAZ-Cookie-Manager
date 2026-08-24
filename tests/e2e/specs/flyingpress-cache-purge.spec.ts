@@ -46,6 +46,7 @@ const MARKER_ALPHA = 'FAZ-FP-MARKER-ALPHA';
 const MARKER_BETA = 'FAZ-FP-MARKER-BETA';
 
 let flyingPressActive = false;
+let fpExclusiveRun = false;
 let weActivatedFlyingPress = false;
 let probeWasActive = false;
 let lockHeld = false;
@@ -172,6 +173,26 @@ test.beforeAll(async ({}, testInfo) => {
   lockHeld = true;
   probeWasActive = isPluginActive('faz-e2e-fp-probe');
 
+  // FAZ vetoes full-page caching whenever the jurisdiction runtime is on
+  // (is_country_dependent_output() -> flying_press_is_cacheable = false), and
+  // Cache Compatibility Mode is inert while it is on, by design. The audit-lab
+  // fixture pins that runtime ON at PHP_INT_MAX for every other spec, so a HIT
+  // is unreachable here without switching it off.
+  //
+  // That switch is a WordPress OPTION — process-wide, not request-scoped — so
+  // holding it for this file also strips jurisdiction routing from whatever
+  // runs beside it. Measured: with workers=2 that turned one known red into
+  // three, breaking pr61 and pr104 which were green. It is only safe when this
+  // file has the site to itself.
+  //
+  // A request-scoped lever cannot replace it: a full-page cache does not store
+  // requests carrying unknown query args or cookies, so the very mechanism that
+  // would scope the flag is the one that prevents a HIT.
+  fpExclusiveRun = testInfo.config.workers === 1;
+  if (fpExclusiveRun) {
+    wpEval(`update_option( 'faz_e2e_geo_runtime_off', 1 );`);
+  }
+
   // Self-provision FlyingPress for the duration of THIS spec file only. When
   // the plugin is installed (dev box) the tests run as part of the suite;
   // when it's absent (CI / other machines) they auto-skip. afterAll tears it
@@ -203,6 +224,15 @@ test.beforeAll(async ({}, testInfo) => {
 
 test.afterAll(() => {
   try {
+    // Always first: leaving this set would silently disable jurisdiction
+    // routing for every spec that runs after this file.
+    try {
+      // Unconditional: cheaper than reasoning about which branch set it, and a
+      // leftover here silently disables jurisdiction routing for the whole run.
+      wpEval(`delete_option( 'faz_e2e_geo_runtime_off' );`);
+    } catch {
+      /* best-effort */
+    }
     // Restore only the plugin state this spec changed. A developer who started
     // with FlyingPress or the probe active must get the same state back.
     if (flyingPressActive) {
@@ -236,6 +266,11 @@ test.afterAll(() => {
 
 test.beforeEach(() => {
   test.skip(!flyingPressActive, 'FlyingPress is not installed on this environment');
+  // Skipped rather than failed when the run is parallel: the jurisdiction
+  // runtime cannot be switched off without affecting the file running beside
+  // this one, so a HIT is unreachable. A red here would be reporting the
+  // harness's own constraint as a product fault.
+  test.skip(!fpExclusiveRun, 'needs an exclusive run — re-run this file with --workers=1');
 });
 
 test.describe('FlyingPress cache purge (#125 / PR #186)', () => {

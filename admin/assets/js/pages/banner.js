@@ -3052,13 +3052,27 @@
 		var el = document.getElementById(id);
 		if (!el) return false;
 		var cb = el.querySelector('input[type="checkbox"]');
+		// Runtime-locked controls display the effective ON state, while their
+		// stored baseline must survive unchanged for the day jurisdiction routing
+		// is disabled. setChecked() records that baseline during hydration; every
+		// serialization path already comes through isChecked(), so return it here
+		// instead of persisting the forced visual state.
+		if (cb && cb.dataset.fazRuntimeLocked === '1' && cb.dataset.fazStoredChecked !== undefined) {
+			return cb.dataset.fazStoredChecked === '1';
+		}
 		return cb ? cb.checked : false;
 	}
 	function setChecked(id, val) {
 		var el = document.getElementById(id);
 		if (!el) return;
 		var cb = el.querySelector('input[type="checkbox"]');
-		if (cb) cb.checked = !!val;
+		if (!cb) return;
+		if (cb.dataset.fazRuntimeLocked === '1') {
+			cb.dataset.fazStoredChecked = val ? '1' : '0';
+			cb.checked = true;
+			return;
+		}
+		cb.checked = !!val;
 	}
 	function getStatus(obj) {
 		if (!obj) return false;

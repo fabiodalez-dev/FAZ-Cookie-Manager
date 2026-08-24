@@ -62,6 +62,11 @@ function loadFrontend() {
     _services: [],
     _providersToBlock: [],
     _userWhitelist: [],
+    _strictlyNecessaryScripts: [
+      'wc-settings',
+      'wc-blocks-middleware',
+      'wc-mini-cart-block-frontend',
+    ],
     _perServiceConsent: false,
     _perCookieConsent: false,
     i18n: {},
@@ -111,6 +116,13 @@ eq('configured script ID exempts a runtime-created tracker', ev(`_fazShouldChang
 eq('configured script class exempts a runtime-created tracker', ev(`_fazShouldChangeType(${elem({ class: 'runtime-tracker another-class', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), false);
 eq('script ID look-alike remains blocked', ev(`_fazShouldChangeType(${elem({ id: 'not-runtime-tracker', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), true);
 w._fazConfig._userWhitelist = [];
+// WooCommerce block configuration is required application state. It stays
+// runnable even if another integration labels the tag as marketing; matching
+// is exact to WordPress-generated IDs so look-alikes do not inherit the bypass.
+eq('wc-settings before payload is strictly necessary', ev(`_fazShouldChangeType(${elem({ id: 'wc-settings-js-before', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), false);
+eq('Store API middleware payload is strictly necessary', ev(`_fazShouldChangeType(${elem({ id: 'wc-blocks-middleware-js-before', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), false);
+eq('mini-cart dependency manifest is strictly necessary', ev(`_fazShouldChangeType(${elem({ id: 'wc-mini-cart-block-frontend-js-before', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), false);
+eq('wc-settings look-alike stays blocked', ev(`_fazShouldChangeType(${elem({ id: 'wc-settings-tracker-js', type: 'text/javascript', 'data-faz-category': 'marketing' })})`), true);
 // optimiser placeholder is left to the caching layer even when it is a tracker
 eq('litespeed placeholder + marketing → left to optimiser (false)', ev(`_fazShouldChangeType(${elem({ type: 'litespeed/javascript', 'data-faz-category': 'marketing' })})`), false);
 // typeOverride wins over the committed attribute (F003): stale 'module' attr,

@@ -54,6 +54,13 @@ class Ruleset_Loader {
 	private $index_cache = null;
 
 	/**
+	 * Memoised requirement counts, keyed by the queried path set.
+	 *
+	 * @var array<string,array{required:int,total:int}>
+	 */
+	private $coverage_cache = array();
+
+	/**
 	 * Cache group for `wp_cache_get` / `wp_cache_set`.
 	 *
 	 * @var string
@@ -215,6 +222,77 @@ class Ruleset_Loader {
 		}
 		sort( $ids );
 		return $ids;
+	}
+
+	/**
+	 * Count how many shipped rule sets assert a given requirement.
+	 *
+	 * The admin uses this to tell an administrator, truthfully, whether a
+	 * control the runtime overrides is overridden for EVERY visitor or only
+	 * for some — the two cases warrant different treatment, and the
+	 * difference is a fact about the catalogue, not a judgement.
+	 *
+	 * Counting it here rather than writing the number into a sentence is
+	 * deliberate. That number was hand-written twice and wrong both times,
+	 * in opposite directions, because the catalogue directory also holds
+	 * `_index.json` and `index.php` and every manual tally counted the
+	 * intruders differently. A number that is read from the files cannot
+	 * drift away from them, and the 48th rule set will not silently make
+	 * the admin copy a lie.
+	 *
+	 * @param string|array $paths One or more dotted paths into a rule set
+	 *                            (e.g. `ui.equal_weight_buttons`). A rule set
+	 *                            counts when ANY path holds a truthy value,
+	 *                            which is what an "or" requirement such as
+	 *                            gpc_honored / gpc_required needs.
+	 * @return array{required:int,total:int} Matching rule sets, and the size
+	 *                                       of the catalogue.
+	 */
+	public function requirement_coverage( $paths ) {
+		$paths = array_values( array_filter( (array) $paths, 'is_string' ) );
+		if ( empty( $paths ) ) {
+			return array(
+				'required' => 0,
+				'total'    => 0,
+			);
+		}
+
+		$memo_key = implode( '|', $paths );
+		if ( isset( $this->coverage_cache[ $memo_key ] ) ) {
+			return $this->coverage_cache[ $memo_key ];
+		}
+
+		$ids      = $this->list_all();
+		$required = 0;
+
+		foreach ( $ids as $id ) {
+			$ruleset = $this->load_ruleset( $id );
+			if ( ! is_array( $ruleset ) ) {
+				continue;
+			}
+			foreach ( $paths as $path ) {
+				$node = $ruleset;
+				foreach ( explode( '.', $path ) as $segment ) {
+					if ( ! is_array( $node ) || ! isset( $node[ $segment ] ) ) {
+						$node = null;
+						break;
+					}
+					$node = $node[ $segment ];
+				}
+				if ( ! empty( $node ) ) {
+					++$required;
+					break;
+				}
+			}
+		}
+
+		$coverage = array(
+			'required' => $required,
+			'total'    => count( $ids ),
+		);
+
+		$this->coverage_cache[ $memo_key ] = $coverage;
+		return $coverage;
 	}
 
 	/**

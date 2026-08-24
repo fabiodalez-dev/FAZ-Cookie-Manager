@@ -103,6 +103,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'woocommerce_compat_notice' ) );
 		add_action( 'admin_notices', array( $this, 'payment_gateway_notice' ) );
 		add_action( 'admin_notices', array( $this, 'cookie_definitions_notice' ) );
+		add_action( 'admin_notices', array( $this, 'optout_only_banner_notice' ) );
 		add_action( 'admin_notices', array( $this, 'scheduled_scan_notice' ) );
 		add_action( 'admin_notices', array( $this, 'smash_balloon_notice' ) );
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
@@ -1983,6 +1984,87 @@ class Admin {
 			esc_html__( 'Cookie definitions are using the built-in snapshot. Download the latest version from GitHub for improved categorization.', 'faz-cookie-manager' ),
 			esc_url( $url ),
 			esc_html__( 'Update Cookie Definitions', 'faz-cookie-manager' )
+		);
+	}
+
+	/**
+	 * Warn when every active banner is opt-out (CCPA) and none is opt-in.
+	 *
+	 * The frontend resolves a ruleset from the visitor's country on every
+	 * request. When that ruleset is opt-in (any GDPR-style regime) and the only
+	 * banner available is an opt-out one, Frontend::load_banner() fails closed:
+	 * scripts stay blocked but the banner UI is suppressed, because showing
+	 * "we use cookies, opt out here" while blocking opt-in style would
+	 * misrepresent the visitor's actual position.
+	 *
+	 * That is the correct outcome, and it is silent. Without this notice an
+	 * administrator sees no banner for European visitors, no error and no log
+	 * line, and nothing anywhere says why. The source comment for that branch
+	 * says "a correctly-configured install never reaches this branch" — this is
+	 * where the install gets told it is not one.
+	 *
+	 * @return void
+	 */
+	public function optout_only_banner_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		// The warning describes Frontend::load_banner()'s jurisdictional
+		// fail-closed branch. When the runtime kill switch is off that branch is
+		// unreachable, so a CCPA-only install may intentionally show its banner
+		// everywhere and must not receive a factually false warning.
+		if ( ! class_exists( '\\FazCookie\\Frontend\\Includes\\Geo_Runtime' )
+			|| ! \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled()
+		) {
+			return;
+		}
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || false === strpos( (string) $screen->id, 'faz-cookie-manager' ) ) {
+			return;
+		}
+		if ( ! class_exists( '\\FazCookie\\Admin\\Modules\\Banners\\Includes\\Controller' ) ) {
+			return;
+		}
+
+		$controller = \FazCookie\Admin\Modules\Banners\Includes\Controller::get_instance();
+		$items      = $controller->get_items();
+		if ( empty( $items ) || ! is_array( $items ) ) {
+			return;
+		}
+
+		// get_items() returns plain stdClass rows (banner_id, slug, settings,
+		// status, …), NOT Banner objects — an earlier draft of this method
+		// probed for get_settings()/get_status(), found neither, and could
+		// therefore never fire. Read the columns.
+		$has_active = false;
+		$has_opt_in = false;
+		foreach ( $items as $item ) {
+			if ( ! is_object( $item ) || empty( $item->status ) ) {
+				continue;
+			}
+			$has_active = true;
+			$settings   = isset( $item->settings ) ? $item->settings : '';
+			if ( is_string( $settings ) ) {
+				$settings = json_decode( $settings, true );
+			}
+			$law = isset( $settings['settings']['applicableLaw'] )
+				? (string) $settings['settings']['applicableLaw']
+				: 'gdpr';
+			if ( 'ccpa' !== $law ) {
+				$has_opt_in = true;
+			}
+		}
+
+		if ( ! $has_active || $has_opt_in ) {
+			return;
+		}
+
+		printf(
+			'<div class="notice notice-warning"><p><strong>%s</strong></p><p>%s</p><p><a href="%s" class="button button-secondary">%s</a></p></div>',
+			esc_html__( 'Visitors under an opt-in privacy law are seeing no banner.', 'faz-cookie-manager' ),
+			esc_html__( 'Every active banner uses the opt-out (Do Not Sell) model. For a visitor in the EU, UK, Brazil or any other opt-in jurisdiction, showing an opt-out notice while their cookies are blocked would misstate their position, so the banner is hidden for them and only the blocking stays on. Add a second active banner set to the opt-in model to cover those visitors.', 'faz-cookie-manager' ),
+			esc_url( admin_url( 'admin.php?page=faz-cookie-manager-banner' ) ),
+			esc_html__( 'Open banner settings', 'faz-cookie-manager' )
 		);
 	}
 

@@ -40,7 +40,7 @@
     "SM": "gdpr-strict",
     "VA": "gdpr-strict",
     "GB": "uk-gdpr-pecr",
-    "US": "us-router",
+    "US": "gdpr-strict",
     "CA": "pipeda-canada",
     "BR": "lgpd-brazil",
     "AR": "gdpr-strict",
