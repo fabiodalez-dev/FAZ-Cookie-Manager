@@ -206,57 +206,12 @@ class CLI {
 			\add_action( $faz_cache_bust_hook, $faz_bust_frontend_caches );
 		}
 
-		// Per-law page-cache vary (opt-in via the `faz_cache_vary_by_law`
-		// filter): register the faz-law cookie with FlyingPress's
-		// cache_include_cookies list. Registered UNCONDITIONALLY here, not in
-		// Frontend: FlyingPress bakes this list into its advanced-cache.php
-		// drop-in when its config is saved — an ADMIN request, where the
-		// Frontend constructor below is skipped. A Frontend-registered filter
-		// would therefore never reach the baked config and the cache READ path
-		// (which runs pre-WordPress, off the baked file) would never vary.
-		$faz_law_vary_opted_in = static function () {
-			return (bool) \apply_filters( 'faz_cache_vary_by_law', false )
-				&& \class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
-				&& \FazCookie\Frontend\Includes\Geo_Runtime::is_enabled();
-		};
-		\add_filter(
-			'flying_press_cache_include_cookies',
-			static function ( $cookies ) use ( $faz_law_vary_opted_in ) {
-				$cookies = \is_array( $cookies ) ? $cookies : array();
-				if ( $faz_law_vary_opted_in() && ! \in_array( Frontend::LAW_VARY_COOKIE, $cookies, true ) ) {
-					$cookies[] = Frontend::LAW_VARY_COOKIE;
-				}
-				return $cookies;
-			}
-		);
-		// Self-heal: the drop-in on disk predates the opt-in (or FlyingPress
-		// was reactivated) → regenerate it once so the cookie gets baked.
-		// FlyingPress's own add_advanced_cache() applies the filter above.
-		\add_action(
-			'admin_init',
-			static function () use ( $faz_law_vary_opted_in ) {
-				if ( ! $faz_law_vary_opted_in()
-					|| ! \class_exists( '\FlyingPress\AdvancedCache' )
-					|| ! \method_exists( '\FlyingPress\AdvancedCache', 'add_advanced_cache' )
-					|| ! \defined( 'WP_CONTENT_DIR' )
-				) {
-					return;
-				}
-				$faz_dropin = WP_CONTENT_DIR . ( \class_exists( 'Atomic_Persistent_Data' )
-					? '/flying-press-advanced-cache.php'
-					: '/advanced-cache.php' );
-				if ( \is_readable( $faz_dropin ) ) {
-					$faz_contents = \file_get_contents( $faz_dropin ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local drop-in, cheap presence check.
-					if ( \is_string( $faz_contents )
-						&& false !== \strpos( $faz_contents, 'FlyingPress' )
-						&& false !== \strpos( $faz_contents, "'" . Frontend::LAW_VARY_COOKIE . "'" )
-					) {
-						return; // Already baked.
-					}
-				}
-				\FlyingPress\AdvancedCache::add_advanced_cache();
-			}
-		);
+		// Upgrade cleanup for the abandoned two-key cache design. Older 1.27.0
+		// builds baked `faz-law` into FlyingPress's pre-WordPress drop-in; merely
+		// removing our filter does not rewrite that generated file, so the stale
+		// cookie would continue fragmenting the cache until the next FlyingPress
+		// settings save. Repair it on the first admin request when present.
+		\add_action( 'admin_init', array( self::class, 'remove_legacy_flyingpress_law_vary' ), 1 );
 
 		// Skip frontend initialization on admin page requests — none of the
 		// frontend hooks (wp_footer, wp_enqueue_scripts, template_redirect,
@@ -267,6 +222,42 @@ class CLI {
 			return;
 		}
 		new Frontend( $this->get_plugin_name(), $this->get_version() );
+	}
+
+	/**
+	 * Rebuild FlyingPress's drop-in when it still contains the retired
+	 * jurisdiction cookie cache key.
+	 *
+	 * @since 1.27.0
+	 * @return void
+	 */
+	public static function remove_legacy_flyingpress_law_vary() {
+		if ( ! \defined( 'WP_CONTENT_DIR' )
+			|| ! \class_exists( '\FlyingPress\AdvancedCache' )
+			|| ! \method_exists( '\FlyingPress\AdvancedCache', 'add_advanced_cache' )
+		) {
+			return;
+		}
+		$dropin = WP_CONTENT_DIR . ( \class_exists( 'Atomic_Persistent_Data' )
+			? '/flying-press-advanced-cache.php'
+			: '/advanced-cache.php' );
+		if ( ! \is_readable( $dropin ) ) {
+			return;
+		}
+		$contents = \file_get_contents( $dropin ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local generated drop-in, read once during admin cleanup.
+		if ( ! \is_string( $contents )
+			|| false === \strpos( $contents, 'FlyingPress' )
+			|| false === \strpos( $contents, 'faz-law' )
+		) {
+			return;
+		}
+		try {
+			\FlyingPress\AdvancedCache::add_advanced_cache();
+		} catch ( \Throwable $e ) {
+			// Best-effort migration: never break wp-admin because a third-party
+			// cache plugin could not rewrite its generated drop-in.
+			return;
+		}
 	}
 
 	/**

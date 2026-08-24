@@ -117,15 +117,6 @@ class Frontend {
 	const ENFORCEABLE_WILDCARD_MIN_LENGTH = 6;
 
 	/**
-	 * Cookie carrying the visitor's resolved consent law ('gdpr' | 'ccpa') for
-	 * the opt-in per-law page-cache vary (`faz_cache_vary_by_law` filter). The
-	 * page cache (FlyingPress) keys its cache file name on this cookie's value,
-	 * collapsing the 48 jurisdiction rulesets into the two render variants the
-	 * HTML actually has.
-	 */
-	const LAW_VARY_COOKIE = 'faz-law';
-
-	/**
 	 * Per-request cache for blocked categories and provider map.
 	 *
 	 * @var array|null
@@ -171,13 +162,13 @@ class Frontend {
 	 */
 	private $faz_law_fallback_suppress = false;
 	/**
-	 * Per-request memo for is_law_vary_active() (null = not yet computed). The
-	 * check reads the FlyingPress drop-in from disk, so it must run once per
-	 * request, not once per consumer.
+	 * Per-request memo for is_geo_bootstrap_cache_active() (null = not yet
+	 * computed). The readiness check touches banner/ruleset storage, so every
+	 * consumer in a request must share one verdict.
 	 *
 	 * @var bool|null
 	 */
-	private $law_vary_active_cache = null;
+	private $geo_bootstrap_active_cache = null;
 	/**
 	 * Initialize the class and set its properties.
 	 *
@@ -385,9 +376,9 @@ class Frontend {
 		// unblocked (the server-rendered container stays, but script.min.js /
 		// _fazConfig that reveal it and block scripts are never enqueued).
 		// Reported on gooloo.de after enabling Cache Compatibility Mode. (#158)
-		// The per-law cache vary full-page-caches the render too, so the same
-		// invariance requirement applies there.
-		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_law_vary_active() ) {
+		// The jurisdiction bootstrap full-page-caches a strict shell too, so the
+		// same invariance requirement applies there.
+		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
 			$bot_settings = $this->get_faz_settings();
 			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
 				if ( faz_is_bot() ) {
@@ -405,7 +396,7 @@ class Frontend {
 		// invariant config (is_country_dependent_output() is false), so the
 		// enqueue must never short-circuit per visitor here. Mirrors the
 		// cache-compat gate already applied to geo at load_banner().
-		if ( ! $this->is_cache_compatibility_enabled() && $this->is_geo_banner_disabled() ) {
+		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() && $this->is_geo_banner_disabled() ) {
 			return;
 		}
 
@@ -1229,7 +1220,9 @@ class Frontend {
 		// the match-all row or the banner_default=1 row — preserving the
 		// pre-feature behaviour for installs that have not adopted multi-
 		// banner setups.
-		$visitor_country = $this->is_cache_compatibility_enabled() ? '' : $this->get_visitor_country();
+		$visitor_country = ( $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() )
+			? ''
+			: $this->get_visitor_country();
 		$this->banner    = Controller::get_instance()->get_active_banner_for_country( $visitor_country );
 
 		// A/B testing of banner variants (Settings → Banner Control): when the
@@ -1288,7 +1281,7 @@ class Frontend {
 		}
 
 		// Per-banner geo-targeting: skip banner if visitor's country doesn't match the ruleSet.
-		if ( ! $this->is_cache_compatibility_enabled() && $this->is_geo_blocked() ) {
+		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() && $this->is_geo_blocked() ) {
 			return;
 		}
 
@@ -1334,10 +1327,10 @@ class Frontend {
 	 */
 	private function maybe_apply_ab_test( $default_banner, $visitor_country ) {
 		// See docblock: no server-side split under Cache Compatibility Mode.
-		// The per-law cache vary caches the render per law variant, so a
-		// per-visitor random split is equally incompatible there: the first
-		// MISS's variant would be frozen into the shared cache entry.
-		if ( false === $default_banner || $this->is_cache_compatibility_enabled() || $this->is_law_vary_active() ) {
+		// The jurisdiction bootstrap caches one strict shell, so a per-visitor
+		// random split is equally incompatible there: the first MISS's variant
+		// would be frozen into the shared cache entry.
+		if ( false === $default_banner || $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() ) {
 			return $default_banner;
 		}
 
@@ -1599,15 +1592,12 @@ class Frontend {
 		if ( ! $this->is_country_dependent_output() ) {
 			return;
 		}
-		// Per-law cache vary: the page cache serves a separate variant per
-		// resolved law (keyed on the faz-law cookie), so the country-dependent
-		// veto is lifted here too — otherwise DONOTCACHEPAGE would still be
-		// defined while flying_press_is_cacheable() says "cacheable" and the
-		// two enforcement layers would disagree (a state in which nothing
-		// caches). Guarded in the HELPER, not at the call sites: load_banner()
-		// and send_geo_cache_headers() both call this method, and gating only
-		// one of them leaves the constant defined.
-		if ( $this->is_law_vary_active() ) {
+		// Jurisdiction bootstrap: the cached document is a visitor-invariant,
+		// most-protective shell. The live no-store REST request chooses the real
+		// banner/ruleset in the browser before any optional resource is released,
+		// so the country-dependent page-cache veto is unnecessary while the full
+		// bootstrap readiness gate holds.
+		if ( $this->is_geo_bootstrap_cache_active() ) {
 			return;
 		}
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
@@ -1622,67 +1612,67 @@ class Frontend {
 	}
 
 	/**
-	 * Whether the opt-in per-law page-cache vary is genuinely in place for
-	 * this request.
+	 * Whether the opt-in cache-safe jurisdiction bootstrap is active.
 	 *
-	 * ALL of the following must hold, in this order (cheapest first):
+	 * The cached HTML is always the most-protective GDPR shell. script.js makes
+	 * a public, no-store request for the visitor's live jurisdiction before it
+	 * mounts the banner or runs its first unblock pass. A failed/slow request
+	 * leaves the strict shell untouched, so every failure direction is safe.
 	 *
-	 *  1. The publisher opted in via the `faz_cache_vary_by_law` filter
-	 *     (default OFF — no existing install changes behaviour).
-	 *  2. The jurisdiction runtime is enabled (it is what makes the output
-	 *     law-dependent in the first place).
-	 *  3. Cache Compatibility Mode is off (it is inert while the runtime is
-	 *     on, but the two modes must never overlap by accident).
-	 *  4. The installed FlyingPress advanced-cache drop-in actually BAKES the
-	 *     faz-law cookie into its `cache_include_cookies` config. The drop-in
-	 *     runs before WordPress loads plugins, so a PHP filter alone cannot
-	 *     vary the cache READ path — only the baked config can. Until the
-	 *     drop-in is regenerated with the cookie, the vary is NOT in place
-	 *     and every veto stays.
-	 *  5. The rendered output varies by NOTHING except the resolved law:
+	 * Readiness requires: explicit publisher opt-in, the runtime enabled, a
+	 * loadable strict fallback ruleset, an active globally-applicable GDPR
+	 * banner for the cached shell, and no output dimensions that the bootstrap
+	 * endpoint does not yet replace (IAB TCF, country-language fallback, global
+	 * no-banner targeting, or country-dependent banner rows).
+	 *
+	 * The rendered output may vary by NOTHING except the resolved law:
 	 *     IAB TCF off, no country→language fallback, no geo-targeting
 	 *     "no banner outside targets", no country-targeted banner rows. Those
-	 *     dimensions vary per COUNTRY, which a two-value law cookie cannot
-	 *     capture; caching would leak one country's render to another.
-	 *
-	 * When active, the render itself is made variant-pure elsewhere:
+	 *     dimensions need additional client payloads before this gate can cover
+	 *     them safely. When active, the shell is made invariant elsewhere:
 	 * get_blocked_categories()/get_service_consent() ignore the visitor's
 	 * consent state (client-side JS applies it), the A/B split and bot-skip
-	 * are suppressed, and get_runtime_ruleset() substitutes the strict opt-in
-	 * fallback whenever the relaxed variant is not proven by the cookie.
+	 * are suppressed, and get_runtime_ruleset() always returns the explicit
+	 * most-protective fallback.
 	 *
 	 * @since 1.27.0
 	 * @return bool
 	 */
-	private function is_law_vary_active() {
-		if ( null !== $this->law_vary_active_cache ) {
-			return $this->law_vary_active_cache;
+	private function is_geo_bootstrap_cache_active() {
+		if ( null !== $this->geo_bootstrap_active_cache ) {
+			return $this->geo_bootstrap_active_cache;
 		}
-		$this->law_vary_active_cache =
-			(bool) apply_filters( 'faz_cache_vary_by_law', false )
+		// Preserve the opt-in already deployed with the abandoned two-key
+		// `faz-law` design. The old filter now enables this safer one-shell
+		// bootstrap; the new name may explicitly override that inherited value.
+		$legacy_opt_in = (bool) apply_filters( 'faz_cache_vary_by_law', false );
+		$opted_in      = (bool) apply_filters( 'faz_cache_geo_bootstrap', $legacy_opt_in );
+		$strict_banner = $opted_in ? Controller::get_instance()->get_active_banner_for_law( 'gdpr', '' ) : false;
+
+		$this->geo_bootstrap_active_cache =
+			$opted_in
 			&& class_exists( Geo_Runtime::class ) && Geo_Runtime::is_enabled()
 			&& ! $this->is_cache_compatibility_enabled()
-			&& $this->flying_press_law_vary_ready()
-			&& $this->is_country_dependence_law_only();
-		return $this->law_vary_active_cache;
+			&& false === apply_filters( 'faz_is_amp_request', false )
+			&& false !== $strict_banner
+			&& null !== $this->get_geo_bootstrap_strict_ruleset()
+			&& $this->is_geo_bootstrap_compatible();
+		return $this->geo_bootstrap_active_cache;
 	}
 
 	/**
-	 * Whether the per-visitor variance of the rendered output is limited to
-	 * the resolved consent law.
+	 * Whether the endpoint can replace every per-visitor output dimension.
 	 *
-	 * Mirrors the trigger list of is_country_dependent_output() MINUS the
-	 * runtime-geo trigger: every remaining trigger varies the HTML by country
-	 * (48+ values), which the two-value law cookie cannot represent. The
-	 * `faz_country_dependent_banner_output` filter is probed with a FALSE
-	 * seed: a developer filter that still forces dependence then means "this
-	 * output truly varies per visitor beyond the law", so the vary must not
-	 * be trusted either.
+	 * IAB, country-language fallback, no-banner targeting and country-scoped
+	 * banner rows still have server-only output that is not represented by the
+	 * current bootstrap payload. The `faz_country_dependent_banner_output`
+	 * filter is probed with a false seed for custom integrations with the same
+	 * limitation.
 	 *
 	 * @since 1.27.0
 	 * @return bool
 	 */
-	private function is_country_dependence_law_only() {
+	private function is_geo_bootstrap_compatible() {
 		$settings = $this->get_faz_settings();
 
 		if (
@@ -1712,116 +1702,30 @@ class Frontend {
 	}
 
 	/**
-	 * Whether the installed FlyingPress advanced-cache drop-in varies its
-	 * cache file name on the faz-law cookie.
+	 * Load the canonical most-protective ruleset for the cached shell.
 	 *
-	 * The drop-in's `cache_include_cookies` list is BAKED into the file by
-	 * FlyingPress\AdvancedCache::add_advanced_cache() at generation time (the
-	 * drop-in runs pre-WordPress and cannot consult filters). So the only
-	 * trustworthy signal that the READ path varies is the cookie name being
-	 * present in the file on disk. The WRITE path (Caching::get_cache_file_name)
-	 * applies the `flying_press_cache_include_cookies` filter at runtime, so
-	 * once the baked check passes both paths agree on the file name.
+	 * This deliberately bypasses Geo_Runtime::resolve_for_country( '' ). An
+	 * empty country is not an authoritative override in Geo_Routing: its
+	 * detector retains the request's real country, which can resolve to CCPA.
+	 * A cache shell must never inherit request geography.
 	 *
 	 * @since 1.27.0
-	 * @return bool
+	 * @return array|null
 	 */
-	private function flying_press_law_vary_ready() {
-		if ( ! class_exists( '\FlyingPress\AdvancedCache' ) || ! defined( 'WP_CONTENT_DIR' ) ) {
-			return false;
+	private function get_geo_bootstrap_strict_ruleset() {
+		$loader_class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Ruleset_Loader';
+		if ( ! class_exists( $loader_class ) || ! method_exists( $loader_class, 'get_instance' ) ) {
+			return null;
 		}
-		// Same name selection FlyingPress uses when writing the drop-in.
-		$file = WP_CONTENT_DIR . ( class_exists( 'Atomic_Persistent_Data' )
-			? '/flying-press-advanced-cache.php'
-			: '/advanced-cache.php' );
-		if ( ! is_readable( $file ) ) {
-			return false;
+		try {
+			$ruleset = $loader_class::get_instance()->load_ruleset( 'fallback-gdpr-most-protective' );
+		} catch ( \Throwable $e ) {
+			return null;
 		}
-		$contents = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local drop-in, read-only check.
-		if ( ! is_string( $contents ) || false === strpos( $contents, 'FlyingPress' ) ) {
-			// Another plugin owns advanced-cache.php — its read path knows
-			// nothing about the faz-law cookie.
-			return false;
+		if ( ! is_array( $ruleset ) || 'gdpr' !== Geo_Runtime::model_to_law( $ruleset ) ) {
+			return null;
 		}
-		return false !== strpos( $contents, "'" . self::LAW_VARY_COOKIE . "'" );
-	}
-
-	/**
-	 * The validated value of the visitor's faz-law cookie, or ''.
-	 *
-	 * @since 1.27.0
-	 * @return string 'gdpr', 'ccpa' or ''.
-	 */
-	private function get_law_vary_cookie_value() {
-		if ( ! isset( $_COOKIE[ self::LAW_VARY_COOKIE ] ) ) {
-			return '';
-		}
-		$value = sanitize_key( wp_unslash( $_COOKIE[ self::LAW_VARY_COOKIE ] ) );
-		return in_array( $value, array( 'gdpr', 'ccpa' ), true ) ? $value : '';
-	}
-
-	/**
-	 * The law the visitor's REAL jurisdiction resolves to ('gdpr' | 'ccpa').
-	 *
-	 * This is the value the faz-law cookie is set to — deliberately computed
-	 * from the un-substituted ruleset, so a cookie-less opt-out visitor who is
-	 * served the strict first render still graduates to the relaxed variant on
-	 * their next request. Unknown / unresolvable jurisdictions map to 'gdpr'
-	 * (the strict side), matching the resolver's own most-protective fallback.
-	 *
-	 * @since 1.27.0
-	 * @return string
-	 */
-	private function get_law_vary_target_law() {
-		$ruleset = Geo_Runtime::resolve_for_country( $this->get_visitor_country() );
-		return ( null !== $ruleset ) ? Geo_Runtime::model_to_law( $ruleset ) : 'gdpr';
-	}
-
-	/**
-	 * Send the faz-law cookie for the per-law page-cache vary.
-	 *
-	 * Called from send_geo_cache_headers() (send_headers, priority 0 — before
-	 * any output). Only re-sent when the stored value disagrees with the
-	 * resolved law. Deliberately does NOT mirror the value into $_COOKIE:
-	 * FlyingPress's write path derives the cache file name from the REQUEST
-	 * cookies at shutdown, and this request's render followed the request
-	 * cookie (strict when absent) — injecting the new value would file a
-	 * strict render under the relaxed variant's cache name.
-	 *
-	 * SAFETY: the cookie is the visitor's only ticket to the relaxed (opt-out)
-	 * variant. A request without it always receives — and always caches — the
-	 * strict opt-in render (see get_runtime_ruleset()), so movement is only
-	 * ever strictest → relaxed, and only after this Set-Cookie from a real
-	 * jurisdiction resolution. The 12-hour TTL bounds how long a stale value
-	 * can outlive a visitor's change of jurisdiction; any cache MISS also
-	 * re-syncs it.
-	 *
-	 * @since 1.27.0
-	 * @return void
-	 */
-	private function send_law_vary_cookie() {
-		$law = $this->get_law_vary_target_law();
-		if ( $law === $this->get_law_vary_cookie_value() ) {
-			return;
-		}
-		// The value is a two-token law label ('gdpr'|'ccpa') — no session or
-		// personal data. Secure mirrors the request scheme (a hard `true`
-		// would silently drop the cookie on plain-HTTP installs and the vary
-		// would never engage there); HttpOnly is on because only the page
-		// cache and PHP consult it.
-		// nosemgrep: php.lang.security.taint-cookie-secure-false.taint-cookie-secure-false
-		setcookie(
-			self::LAW_VARY_COOKIE,
-			$law,
-			array(
-				'expires'  => time() + 12 * HOUR_IN_SECONDS,
-				'path'     => ( defined( 'COOKIEPATH' ) && COOKIEPATH ) ? COOKIEPATH : '/',
-				'domain'   => ( defined( 'COOKIE_DOMAIN' ) && COOKIE_DOMAIN ) ? COOKIE_DOMAIN : '',
-				'secure'   => is_ssl(),
-				'httponly' => true,
-				'samesite' => 'Lax',
-			)
-		);
+		return $ruleset;
 	}
 
 	/**
@@ -1852,12 +1756,10 @@ class Frontend {
 			return $is_cacheable;
 		}
 		if ( $this->is_country_dependent_output() ) {
-			// Per-law cache vary: FlyingPress files each response under a name
-			// derived from the faz-law cookie (baked into its drop-in — see
-			// flying_press_law_vary_ready()), and the render for this request
-			// is a pure function of that cookie (strict opt-in when absent),
-			// so caching it is safe. Leave FlyingPress's own verdict standing.
-			if ( $this->is_law_vary_active() ) {
+			// The jurisdiction bootstrap renders one strict, visitor-invariant
+			// document and resolves the live law through a no-store REST request
+			// in the browser. FlyingPress may cache that shell normally.
+			if ( $this->is_geo_bootstrap_cache_active() ) {
 				return $is_cacheable;
 			}
 			return false;
@@ -1894,22 +1796,10 @@ class Frontend {
 			return;
 		}
 
-		// Per-law cache vary: the FlyingPress drop-in serves a separate cached
-		// variant per faz-law cookie value, so the blanket no-store veto is
-		// lifted — FlyingPress emits its own conservative Cache-Control
-		// (`no-cache, must-revalidate`) when it stores the page. Two headers
-		// deliberately survive the lift: the vary has only been PROVEN for the
-		// FlyingPress drop-in, so LiteSpeed (a server-level cache that never
-		// sees DONOTCACHEPAGE and knows nothing about the cookie) must keep
-		// being told not to cache; and Vary: Cookie keeps any spec-compliant
-		// shared/browser cache from serving one visitor's variant to another.
-		if ( $this->is_law_vary_active() ) {
-			$this->send_law_vary_cookie();
-			header( 'Vary: Cookie', false );
-			header( 'X-LiteSpeed-Cache-Control: no-cache' );
-			if ( defined( 'LSCWP_V' ) ) {
-				do_action( 'litespeed_control_set_nocache', 'FAZ country-dependent banner' );
-			}
+		// The strict shell is identical for every visitor and contains no
+		// executable optional resources. Do not emit Vary/Set-Cookie/no-cache:
+		// every compliant page cache and CDN should share this one document.
+		if ( $this->is_geo_bootstrap_cache_active() ) {
 			return;
 		}
 
@@ -2167,102 +2057,14 @@ class Frontend {
 		if ( $this->is_cache_compatibility_enabled() ) {
 			return null;
 		}
-		$ruleset = Geo_Runtime::resolve_for_country( $this->get_visitor_country() );
-		if ( ! $this->is_law_vary_active() ) {
-			return $ruleset;
+		if ( $this->is_geo_bootstrap_cache_active() ) {
+			// Never call resolve_for_country( '' ) here: empty is not an
+			// authoritative override and the detector would re-use the request's
+			// country. The cached document must be strict regardless of who (or
+			// which cache-warmer) produced it.
+			return $this->get_geo_bootstrap_strict_ruleset();
 		}
-
-		// Per-law cache vary — THE fail-closed rule that makes it safe.
-		//
-		// The page cache files each entry under a name derived from the
-		// REQUEST's faz-law cookie, and — crucially — FlyingPress renders the
-		// entry's CONTENT via its own server-originated preload request
-		// (Optimizer::process_output queues the URL; Preload::process_single_url
-		// re-fetches it with X-Flying-Press-Preload set), forwarding ONLY the
-		// registered include-cookies. The IP behind a cache-writing request is
-		// therefore the SERVER's, so request geolocation says nothing about the
-		// visitors the entry will be served to. The faz-law cookie is the only
-		// visitor signal that reaches the cache writer, and this method decides
-		// how far it may be trusted:
-		//
-		//  - No cookie (or any non-'ccpa' value): render the STRICT opt-in
-		//    side, always. This request may be cached under the shared
-		//    no-cookie name and replayed to every cookie-less visitor —
-		//    including EU visitors — so a relaxed render here would hand
-		//    opt-out defaults to visitors entitled to opt-in protection.
-		//  - Cookie 'ccpa' on a PRELOAD request: trust it. FAZ only ever
-		//    issues that value from a real visitor request whose jurisdiction
-		//    resolved to an opt-out law (send_law_vary_cookie), and the entry
-		//    being written is only ever served back to visitors presenting the
-		//    same cookie. The preload's own geolocation (the server's) is
-		//    meaningless and must not veto.
-		//  - Cookie 'ccpa' on a normal visitor request: trust it only if the
-		//    visitor's OWN jurisdiction still resolves to an opt-out law. A
-		//    stale (traveller) or forged cookie does not relax an origin
-		//    render for someone the resolver places under opt-in protection;
-		//    the same response re-issues the cookie with the corrected value.
-		//
-		// Net effect: movement is only ever strictest → relaxed, and only on
-		// the strength of a cookie FAZ itself issued — mirroring
-		// load_banner()'s fail-closed law branch.
-		$resolved_law = ( null !== $ruleset ) ? Geo_Runtime::model_to_law( $ruleset ) : 'gdpr';
-		$trusted_law  = 'gdpr';
-		if (
-			'ccpa' === $this->get_law_vary_cookie_value()
-			&& ( 'ccpa' === $resolved_law || isset( $_SERVER['HTTP_X_FLYING_PRESS_PRELOAD'] ) )
-		) {
-			$trusted_law = 'ccpa';
-		}
-
-		if ( $trusted_law === $resolved_law && null !== $ruleset ) {
-			return $ruleset;
-		}
-		if ( 'ccpa' === $trusted_law ) {
-			// Canonical opt-out ruleset for the relaxed cache variant. The two
-			// cache variants collapse the whole catalogue to its binary law, so
-			// one representative per side is exactly the fidelity the cache can
-			// express. Fail-closed: if it cannot be loaded, fall through to the
-			// strict side rather than serve the visitor's unverifiable claim.
-			$relaxed = $this->get_law_vary_relaxed_ruleset();
-			if ( null !== $relaxed ) {
-				return $relaxed;
-			}
-		}
-		// '' resolves through Ruleset_Resolver stage 3 (unknown country) to
-		// fallback-gdpr-most-protective; the loader guarantees the fallback
-		// loads whenever the catalogue is present at all.
-		$strict = Geo_Runtime::resolve_for_country( '' );
-		return ( null !== $strict ) ? $strict : $ruleset;
-	}
-
-	/**
-	 * Canonical opt-out ruleset used for the relaxed per-law cache variant.
-	 *
-	 * Defaults to ccpa-california (the archetype of the 19 shipped opt-out
-	 * state laws, which all map to the same binary law and the same render).
-	 * Filterable for deployments that prefer another opt-out ruleset as their
-	 * cache representative. Returns null — never a non-opt-out ruleset — when
-	 * the id cannot be loaded or does not resolve to the opt-out side, so the
-	 * caller falls back to the strict render.
-	 *
-	 * @since 1.27.0
-	 * @return array|null
-	 */
-	private function get_law_vary_relaxed_ruleset() {
-		$loader_class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Ruleset_Loader';
-		if ( ! class_exists( $loader_class ) || ! method_exists( $loader_class, 'get_instance' ) ) {
-			return null;
-		}
-		$id = apply_filters( 'faz_cache_vary_relaxed_ruleset', 'ccpa-california' );
-		try {
-			$ruleset = $loader_class::get_instance()->load_ruleset( (string) $id );
-		} catch ( \Throwable $e ) {
-			return null;
-		}
-		if ( ! is_array( $ruleset ) || 'ccpa' !== Geo_Runtime::model_to_law( $ruleset ) ) {
-			return null;
-		}
-		return $ruleset;
+		return Geo_Runtime::resolve_for_country( $this->get_visitor_country() );
 	}
 
 	/**
@@ -2731,6 +2533,8 @@ class Frontend {
 			: ( 'ccpa' === $faz_law ? 365 : 180 );
 		$faz_expiry = self::normalize_consent_expiry( $faz_law, $faz_configured_expiry );
 
+		$geo_bootstrap_active  = $this->is_geo_bootstrap_cache_active();
+		$geo_bootstrap_timeout = min( 5000, max( 250, absint( apply_filters( 'faz_geo_bootstrap_timeout_ms', 1500 ) ) ) );
 		$providers = array();
 		$store     = array(
 			'_ipData'       => array(),
@@ -2749,6 +2553,11 @@ class Frontend {
 			// visitor ticks the opt-out box — running blocked scripts). See
 			// _fazSetInitialState().
 			'_runtimeGeo'        => ( null !== $this->get_runtime_ruleset() ),
+			// Cache-safe jurisdiction bootstrap. When true, the surrounding page
+			// is the strict fallback shell and script.js MUST fetch the live,
+			// no-store banner payload before mounting UI or unblocking anything.
+			'_geoBootstrap'      => $geo_bootstrap_active,
+			'_geoBootstrapTimeout' => $geo_bootstrap_timeout,
 			// Server-side fingerprint of the active scope, keyed by
 			// wp_salt('auth'). Used by _fazConsentScopeChanged() to detect
 			// cookie tampering: a visitor who hand-edits __scope.banner /
@@ -2937,6 +2746,12 @@ class Frontend {
 			? array_values( array_filter( array_map( 'sanitize_text_field', (array) $settings['script_blocking']['whitelist_patterns'] ) ) )
 			: array();
 		$store['_userWhitelist'] = $user_whitelist;
+		// Non-filterable commerce configuration invariant mirrored by the
+		// runtime MutationObserver/createElement interceptor. Keep it separate
+		// from the editable whitelist so an empty Settings field cannot remove
+		// the protection and diagnostics can distinguish product policy from a
+		// publisher exception.
+		$store['_strictlyNecessaryScripts'] = self::strictly_necessary_script_handles();
 
 		$store['_whitelistedCookiePatterns'] = $this->compute_whitelisted_cookie_patterns( $user_whitelist, $valid_categories );
 
@@ -3309,8 +3124,8 @@ class Frontend {
 		// Cache Compatibility guard as the enqueue gate: under full-page
 		// caching the render must stay visitor-invariant, or a bot-warmed
 		// cache copy would hide the banner from every human visitor. (#158)
-		// Same requirement under the per-law cache vary.
-		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_law_vary_active() ) {
+		// Same requirement under the cached jurisdiction shell.
+		if ( ! $this->is_cache_compatibility_enabled() && ! $this->is_geo_bootstrap_cache_active() ) {
 			$bot_settings = $this->get_faz_settings();
 			if ( ! isset( $bot_settings['banner_control']['hide_from_bots'] ) || ! empty( $bot_settings['banner_control']['hide_from_bots'] ) ) {
 				if ( faz_is_bot() ) {
@@ -3716,6 +3531,14 @@ class Frontend {
 		$full    = $m[0];
 
 		$id = $this->extract_tag_attr( $attrs, 'id' );
+		// WooCommerce Blocks publishes checkout/cart configuration through
+		// inline `*-js-before` tags. These are application state, not tracking,
+		// and the checkout cannot safely choose a guest/authenticated flow when
+		// they are inert. Keep this invariant ahead of every provider/custom-rule
+		// decision so integrations cannot accidentally reclassify the handles.
+		if ( $this->is_strictly_necessary_script( '', $id ) ) {
+			return $full;
+		}
 		if ( $this->is_own_inline_script_id( $id ) ) {
 			return $full;
 		}
@@ -4519,6 +4342,7 @@ class Frontend {
 		// Publishers may add a narrowly-scoped, audited exception in Settings when
 		// a resource is genuinely strictly necessary for their own use case.
 		$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
+		$whitelist = array_merge( $whitelist, self::strictly_necessary_script_handles() );
 
 		// ── Anti-abuse challenge endpoints — strictly necessary ──
 		//
@@ -4589,6 +4413,62 @@ class Frontend {
 		);
 
 		return $this->whitelist_cache;
+	}
+
+	/**
+	 * WooCommerce core handles that carry state required to render commerce UI.
+	 *
+	 * This list is intentionally handle-scoped. It does not exempt the
+	 * WooCommerce plugin directory, analytics/order-attribution code, payment
+	 * SDKs, or arbitrary `wc-*` scripts. `wc-settings` publishes the shared
+	 * `wcSettings` object (including checkoutAllowsGuest); the middleware tag
+	 * publishes the Store API nonce; and the mini-cart tag publishes its lazy
+	 * dependency manifest. None of the three is a tracking surface.
+	 *
+	 * @return string[]
+	 */
+	private static function strictly_necessary_script_handles() {
+		return array(
+			'wc-settings',
+			'wc-blocks-middleware',
+			'wc-mini-cart-block-frontend',
+		);
+	}
+
+	/**
+	 * Whether a WP script identity belongs to the non-filterable core invariant.
+	 *
+	 * Handles must match exactly. IDs may additionally use only the suffixes
+	 * WordPress itself generates for an enqueued script and its before/after
+	 * payloads; a look-alike such as `wc-settings-tracker-js` stays blockable.
+	 *
+	 * @param string $handle Registered WordPress script handle, when available.
+	 * @param string $id     Rendered script element ID, when available.
+	 * @return bool
+	 */
+	private function is_strictly_necessary_script( $handle = '', $id = '' ) {
+		$handle = strtolower( trim( (string) $handle ) );
+		$id     = strtolower( trim( (string) $id ) );
+
+		foreach ( self::strictly_necessary_script_handles() as $required_handle ) {
+			if ( $handle === $required_handle ) {
+				return true;
+			}
+			if ( in_array(
+				$id,
+				array(
+					$required_handle,
+					$required_handle . '-js',
+					$required_handle . '-js-before',
+					$required_handle . '-js-after',
+				),
+				true
+			) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -4811,17 +4691,18 @@ class Frontend {
 		$categories = \FazCookie\Admin\Modules\Cookies\Includes\Category_Controller::get_instance()->get_items();
 		$blocked = array();
 
-		// Per-law cache vary shares this branch with Cache Compatibility Mode:
+		// The cached jurisdiction shell shares this branch with Cache
+		// Compatibility Mode:
 		// the cached HTML is replayed to visitors whose consent state, GPC
 		// signal and DNSMPI opt-out the server never saw, so the render must
 		// not depend on any of them. Block every non-necessary category
 		// server-side — reversible client-side, where script.js applies the
-		// visitor's actual consent/law defaults (a ccpa-variant page activates
-		// them immediately). Letting the opt-out variant ship EXECUTING
-		// scripts instead would replay trackers to cached visitors who have
+		// visitor's actual consent/law defaults after the live bootstrap.
+		// Letting the shell ship EXECUTING scripts instead would replay trackers
+		// to cached visitors who have
 		// opted out (consent cookie / Sec-GPC / fazcookie-dnsmpi) — an
 		// enforcement failure no client can undo.
-		if ( $this->is_cache_compatibility_enabled() || $this->is_law_vary_active() ) {
+		if ( $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() ) {
 			foreach ( $categories as $cat_data ) {
 				$category = new \FazCookie\Admin\Modules\Cookies\Includes\Cookie_Categories( $cat_data );
 				$slug     = $category->get_slug();
@@ -4948,10 +4829,10 @@ class Frontend {
 			return $this->service_consent_cache;
 		}
 		$this->service_consent_cache = array();
-		// Per-law vary: same invariance requirement as Cache Compatibility
-		// Mode — svc.* decisions live in the consent cookie, which the cached
-		// render must not depend on. Enforced client-side instead.
-		if ( $this->is_cache_compatibility_enabled() || $this->is_law_vary_active() ) {
+		// Jurisdiction shell: same invariance requirement as Cache Compatibility
+		// Mode — svc.* decisions live in the consent cookie, which cached HTML
+		// must not depend on. Enforced client-side instead.
+		if ( $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() ) {
 			return $this->service_consent_cache;
 		}
 		// 1.18.3: per-service consent reintroduced — read the option again so the
@@ -5870,11 +5751,22 @@ class Frontend {
 	 * @return array
 	 */
 	public function prepare_tags() {
+		return self::prepare_banner_tags( $this->banner );
+	}
+
+	/**
+	 * Prepare one banner's tag/style descriptors for the frontend.
+	 *
+	 * @since 1.27.0
+	 * @param object|false $banner Banner instance.
+	 * @return array
+	 */
+	public static function prepare_banner_tags( $banner ) {
 		$data = array();
-		if ( ! $this->banner ) {
-			return;
+		if ( ! $banner ) {
+			return $data;
 		}
-		$settings  = $this->banner->get_settings();
+		$settings  = $banner->get_settings();
 		$configs   = isset( $settings['config'] ) ? $settings['config'] : array();
 		$supported = array(
 			'accept-button',
@@ -5904,8 +5796,22 @@ class Frontend {
 	 * @return array
 	 */
 	public function prepare_config() {
+		return self::prepare_banner_config( $this->banner );
+	}
+
+	/**
+	 * Prepare one banner's compact client configuration.
+	 *
+	 * Shared with the jurisdiction bootstrap REST response so a cached strict
+	 * shell can atomically replace every behaviour/layout value before the
+	 * client mounts the visitor's actual banner.
+	 *
+	 * @since 1.27.0
+	 * @param object|false $banner Banner instance.
+	 * @return array
+	 */
+	public static function prepare_banner_config( $banner ) {
 		$data   = array();
-		$banner = $this->banner;
 
 		if ( ! $banner ) {
 			return $data;
@@ -6108,14 +6014,32 @@ class Frontend {
 	 * @return string Complete CSS string ready for inline output.
 	 */
 	private function get_boosted_css() {
-		$raw_css   = isset( $this->template['styles'] ) ? $this->template['styles'] : '';
+		$raw_css = isset( $this->template['styles'] ) ? $this->template['styles'] : '';
+		return self::prepare_banner_styles( $raw_css );
+	}
+
+	/**
+	 * Assemble the exact CSS shipped for a banner template.
+	 *
+	 * The live jurisdiction endpoint must return the same scoped/reset/utility
+	 * stylesheet as the initial PHP render. Returning Template::get_styles()
+	 * directly would omit specificity boosting and the safety/placeholder rules,
+	 * so a cached shell swapped to another banner could look or behave differently
+	 * from a normal uncached render.
+	 *
+	 * @since 1.27.0
+	 * @param string $raw_css Raw template CSS.
+	 * @return string Complete CSS string ready for inline output.
+	 */
+	public static function prepare_banner_styles( $raw_css ) {
+		$raw_css   = is_string( $raw_css ) ? $raw_css : '';
 		$cache_key = 'faz_boosted_css_' . FAZ_VERSION . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
 		}
 
-		$css       = $this->boost_css_specificity( $raw_css );
+		$css       = self::boost_css_specificity( $raw_css );
 		$css_reset = '#faz-consent,#faz-consent *,#faz-consent *::before,#faz-consent *::after{'
 			. 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;'
 			. 'letter-spacing:normal;'
@@ -6186,7 +6110,7 @@ class Frontend {
 	 * @param string $css Raw template CSS.
 	 * @return string CSS with selectors scoped to #faz-consent.
 	 */
-	private function boost_css_specificity( $css ) {
+	private static function boost_css_specificity( $css ) {
 		if ( empty( $css ) ) {
 			return $css;
 		}
@@ -6840,6 +6764,9 @@ class Frontend {
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
 			return $tag;
 		}
+		if ( $this->is_strictly_necessary_script( $handle, $this->extract_tag_attr( $tag, 'id' ) ) ) {
+			return $tag;
+		}
 		// Never block our own scripts.
 		if ( $this->is_whitelisted( $tag, '' ) ) {
 			return $tag;
@@ -6907,6 +6834,9 @@ class Frontend {
 			return $tag;
 		}
 		if ( true === faz_disable_banner() || $this->is_banner_disabled_by_settings() || $this->is_blocking_disabled_for_page() ) {
+			return $tag;
+		}
+		if ( $this->is_strictly_necessary_script( $handle, $id ) ) {
 			return $tag;
 		}
 		// Guard: never block FAZ's own localize/translation/config inline scripts.
@@ -7141,11 +7071,11 @@ class Frontend {
 		// Cache Compatibility Mode is excluded for the same reason: there
 		// get_blocked_categories() returns every non-necessary slug
 		// unconditionally, without ever reading the consent cookie, which is
-		// safe only for enforcement the client can undo. The per-law cache
-		// vary forces the same all-blocked list (see get_blocked_categories),
-		// so the identical standdown applies — otherwise the shredder would
-		// destroy a CONSENTED visitor's cookies on any cache miss.
-		if ( $this->is_cache_compatibility_enabled() || $this->is_law_vary_active() || ! $this->server_cookie_guard_has_consent_context() ) {
+		// safe only for enforcement the client can undo. The jurisdiction shell
+		// forces the same all-blocked list (see get_blocked_categories), so the
+		// identical standdown applies — otherwise the shredder would destroy a
+		// CONSENTED visitor's cookies on a cache miss.
+		if ( $this->is_cache_compatibility_enabled() || $this->is_geo_bootstrap_cache_active() || ! $this->server_cookie_guard_has_consent_context() ) {
 			return false;
 		}
 		// A valid authenticated scanner marker is the only bypass for AJAX/REST
@@ -7385,10 +7315,6 @@ class Frontend {
 		}
 		$patterns = array(
 			'fazcookie-consent', 'fazcookie-dnsmpi', 'faz_scan_session',
-			// Per-law page-cache vary key — strictly-necessary plumbing; the
-			// shredder stands down while the vary is active, but the cookie can
-			// outlive a deactivation of the mode and must never be shredded.
-			self::LAW_VARY_COOKIE,
 			'wordpress_*', 'wp-settings-*', 'wp-settings-time-*', 'wp-postpass_*',
 			'comment_author_*', 'wp_lang', 'wordpress_test_cookie',
 			'wp_woocommerce_session_*', 'woocommerce_*', 'wc_cart_hash_*', 'wc_fragments_*',

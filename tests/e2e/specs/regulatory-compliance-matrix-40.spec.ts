@@ -236,7 +236,7 @@ test.describe('Regulatory compliance matrix — 40 jurisdictions', () => {
       const ruleset = loadRuleset(scenario.id);
       const probe = runtime[scenario.id];
       const categories = expectedCategories(scenario.profile);
-      const expectedLaw = scenario.model === 'opt-out' ? 'ccpa' : 'gdpr';
+      const expectedLaw = scenario.model.startsWith('opt-out') ? 'ccpa' : 'gdpr';
 
       expect(probe, 'runtime probe produced a result').toBeDefined();
       expect(probe.error, 'runtime probe loaded the ruleset').toBeUndefined();

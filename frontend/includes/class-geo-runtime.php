@@ -253,11 +253,10 @@ class Geo_Runtime {
 	 * Map a ruleset `model` to the binary law the frontend JS enforces.
 	 *
 	 * The JS collapses every law to `gdpr` (opt-in: deny non-necessary until
-	 * action) or `ccpa` (opt-out: allow until the visitor opts out). Only the
-	 * pure opt-out model maps to `ccpa`; opt-in, hybrid and
-	 * opt-out-with-sensitive-opt-in all enforce as `gdpr` because their
-	 * per-category `default_categories` already encode which categories are
-	 * granted vs denied — the granularity lives in the defaults, not the law.
+	 * action) or `ccpa` (opt-out: allow until the visitor opts out). Every model
+	 * whose name starts with `opt-out` maps to `ccpa`; its per-category defaults
+	 * still carry the sensitive-data opt-in granularity. Opt-in and hybrid stay
+	 * on the more-protective `gdpr` side.
 	 *
 	 * @param array $ruleset Ruleset array.
 	 * @return string 'gdpr' or 'ccpa'.

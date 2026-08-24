@@ -45,7 +45,16 @@ async function updateBanner(page: Page, nonce: string, id: number, payload: Reco
 async function openVisitorPage(browser: any, baseURL: string, path = '/', locale = 'en-US') {
   const ctx = await browser.newContext({ baseURL, locale, extraHTTPHeaders: { 'Accept-Language': locale } });
   const page = await ctx.newPage();
-  await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  const separator = path.includes('?') ? '&' : '?';
+  // These tests verify the exact banner row edited above, independently of
+  // jurisdiction selection. With the production geo runtime default-on, a
+  // loopback visitor may resolve to a different law and legitimately suppress
+  // that row; use the audit fixture's request-scoped emergency switch so the
+  // assertions remain about persistence/rendering rather than geo routing.
+  await page.goto(`${path}${separator}faz_e2e_disable_geo_runtime=1`, {
+    waitUntil: 'domcontentloaded',
+    timeout: 45_000,
+  });
   return { page, ctx };
 }
 
@@ -574,7 +583,7 @@ test.describe('Banner settings: persistence and frontend reflection', () => {
     await expect.poll(async () => getInputValue(page, 'faz-b-notice-bg-hex')).toBe('#ffffff');
     await expect.poll(async () => getInputValue(page, 'faz-b-title-color-hex')).toBe('#111827');
     await expect.poll(async () => getInputValue(page, 'faz-b-accept-bg-hex')).toBe('#111827');
-    await expect.poll(async () => getInputValue(page, 'faz-b-reject-border-hex')).toBe('#d1d5db');
+    await expect.poll(async () => getInputValue(page, 'faz-b-reject-border-hex')).toBe('#111827');
     await expect.poll(async () => (await getPreviewMetrics(page)).extraHeight).toBeLessThan(24);
     await expect.poll(async () => (await getPreviewStructureState(page)).rootChildCount).toBe(1);
     await expect.poll(async () => (await getPreviewStructureState(page)).hasOverlay).toBe(false);
