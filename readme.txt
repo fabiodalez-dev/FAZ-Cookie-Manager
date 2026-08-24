@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.27.0
+Stable tag: 1.27.1
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -379,6 +379,9 @@ The full changelog (every release back to 1.0.0) lives at:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
+
+= 1.27.1 =
+* Fixed: WooCommerce block checkout could show "You must be logged in to checkout" to guests. The plugin was holding back WooCommerce's own `wc-settings` script, which publishes the `wcSettings` object the block checkout reads to learn whether guest checkout is allowed. With it inert the block fell back to its most restrictive default. `wc-settings`, `wc-blocks-middleware` and `wc-mini-cart-block-frontend` are now treated as strictly necessary and are never held back — they carry configuration only, set no cookies and are not a tracking surface. Reported on the support forum; reproduced and fixed with a regression test that fails if the handle is ever neutralised again.
 
 = 1.27.0 =
 * Changed: the jurisdiction geo-ruleset runtime now runs on live visitor traffic. With the ipinfo.io integration enabled and an API key stored, a visitor's IP address can be sent to ipinfo.io during ordinary browsing to classify VPN/proxy/Tor use — previously only the admin geo preview ran that lookup. Both switches are off by default and ipinfo.io is never contacted without them; revoking the opt-in also stops cached lookups. The External Services section describes the data flow.
