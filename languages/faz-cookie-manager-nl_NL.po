@@ -739,7 +739,7 @@ msgstr ""
 
 #: admin/class-admin.php:713
 msgid "Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
-msgstr ""
+msgstr "Geo-doelgroep houdt de routering per rechtsgebied actief, dus de Cache Compatibility Mode wordt niet toegepast."
 
 #: admin/class-admin.php:714
 msgid "Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country."
@@ -1116,7 +1116,7 @@ msgstr "Inactief"
 
 #: admin/class-admin.php:853
 msgid "⚠️ disabled by Geo-Targeting settings or the faz_geo_ruleset_runtime filter"
-msgstr ""
+msgstr "⚠️ uitgeschakeld door de Geo-doelgroep-instellingen of het filter faz_geo_ruleset_runtime"
 
 #: admin/class-admin.php:854
 msgid "Catalog rulesets"
@@ -1875,12 +1875,11 @@ msgstr "Geo-routing is ingeschakeld in Instellingen met \"Banner verbergen buite
 
 #: admin/class-admin.php:2269
 msgid "Read this before you disable it: Geo-routing does two jobs. It picks a per-country banner, and it applies the jurisdiction ruleset resolved from the visitor's country, out of the plugin's whole catalogue — GDPR, UK GDPR, the US state laws, and the rest. Turning it off restores full-page caching and stops both. Every visitor is then handled by whatever law your active banner itself is set to, wherever they are — so if that banner is set to an opt-out law such as CCPA, nothing is blocked before consent, including for visitors in the EEA."
-msgstr ""
+msgstr "Lees dit voordat u het uitschakelt: Geo-routing doet twee dingen. Het kiest een banner per land en past de rechtsgebiedregelset toe die is bepaald op basis van het land van de bezoeker, uit de volledige catalogus van de plugin — AVG, UK-AVG, de Amerikaanse deelstaatwetten en de rest. Het uitschakelen herstelt de volledige paginacache en stopt beide. Elke bezoeker wordt dan behandeld volgens de wet waarop uw actieve banner zelf is ingesteld, waar hij zich ook bevindt — dus als die banner is ingesteld op een opt-outwet zoals CCPA, wordt er niets geblokkeerd vóór toestemming, ook niet voor bezoekers in de EER."
 
 #: admin/class-admin.php:2270
-#, fuzzy
 msgid "So: disable Geo-routing if your site serves one jurisdiction and your banner is already configured for it, and you want the cache back. Keep it on if you rely on the plugin to apply the right law per country — in that case select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner, and the warning will clear on its own."
-msgstr "Als u geen landspecifieke banners nodig hebt, is de veilige oplossing Geo-routing uit te schakelen. Als u wel landspecifieke banners wilt, selecteer dan een of meer doelregio's in Instellingen → Geolocatie, of voeg een lijst met doellanden toe aan ten minste één banner — de waarschuwing verdwijnt vanzelf."
+msgstr "Dus: schakel Geo-routing uit als uw site slechts één rechtsgebied bedient en uw banner daar al voor is geconfigureerd, en u de cache terug wilt. Laat het ingeschakeld als u erop vertrouwt dat de plugin per land de juiste wet toepast — selecteer in dat geval een of meer doelregio's in Instellingen → Geolocatie, of voeg een lijst met doellanden toe aan ten minste één banner, en de waarschuwing verdwijnt vanzelf."
 
 #: admin/class-admin.php:2274 admin/class-admin.php:2316
 msgid "Disable Geo-routing now"
@@ -1896,25 +1895,23 @@ msgstr "Uitschakelen…"
 
 #: admin/class-admin.php:2315
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic. Per-country jurisdiction rulesets are no longer applied: every visitor is now handled by the law your active banner is set to. Re-enable Geo-Targeting in Settings → Geolocation if you need it back."
-msgstr ""
+msgstr "Geo-routing uitgeschakeld. De CDN-cache zou binnen enkele minuten organisch verkeer weer moeten beginnen te vullen. Rechtsgebiedregelsets per land worden niet meer toegepast: elke bezoeker wordt nu behandeld volgens de wet waarop uw actieve banner is ingesteld. Schakel Geo-doelgroep opnieuw in via Instellingen → Geolocatie als u dit weer nodig heeft."
 
 #: admin/class-admin.php:2357
-#, fuzzy
 msgid "FAZ Cookie Manager — Geo-Targeting now also controls jurisdiction enforcement"
-msgstr "FAZ Cookie Manager — Geo-routering is ingeschakeld maar heeft geen effect"
+msgstr "FAZ Cookie Manager — Geo-doelgroep regelt nu ook de handhaving van het rechtsgebied"
 
 #: admin/class-admin.php:2358
 msgid "Until this update the plugin always applied the jurisdiction ruleset resolved from each visitor's country, whether or not Geo-Targeting was switched on. That is now what the Geo-Targeting toggle controls. Your site had it switched off, so this update switched it ON for you — otherwise visitors would have silently stopped being handled under their own country's law. Nothing about which visitors see the banner has changed."
-msgstr ""
+msgstr "Tot deze update paste de plugin altijd de rechtsgebiedregelset toe die werd bepaald op basis van het land van elke bezoeker, ongeacht of Geo-doelgroep was ingeschakeld. Dat is nu wat de Geo-doelgroep-schakelaar regelt. Op uw site stond deze uit, dus deze update heeft hem voor u AAN gezet — anders zouden bezoekers zonder waarschuwing niet meer volgens de wet van hun eigen land zijn behandeld. Er is niets veranderd aan welke bezoekers de banner te zien krijgen."
 
 #: admin/class-admin.php:2359
 msgid "If your site serves a single jurisdiction and your banner is already configured for it, you can safely turn Geo-Targeting off in Settings → Geolocation. Doing so also restores full-page caching, because the plugin then no longer has to tell your cache or CDN that every page depends on the visitor's country."
-msgstr ""
+msgstr "Als uw site slechts één rechtsgebied bedient en uw banner daar al voor is geconfigureerd, kunt u Geo-doelgroep gerust uitschakelen via Instellingen → Geolocatie. Hierdoor wordt ook de volledige paginacache hersteld, omdat de plugin uw cache of CDN dan niet meer hoeft te vertellen dat elke pagina afhankelijk is van het land van de bezoeker."
 
 #: admin/class-admin.php:2363
-#, fuzzy
 msgid "Open Geo-Targeting settings"
-msgstr "Geo-routinginstellingen openen"
+msgstr "Geo-doelgroepinstellingen openen"
 
 #: admin/class-admin.php:2503
 msgid "Cookie Consent Overview"
@@ -5071,7 +5068,7 @@ msgstr "Ad-blocker compatibiliteitsmodus"
 
 #: admin/views/settings.php:114
 msgid "Keep a visitor-invariant page fully cacheable when Geo-Targeting is off. If Geo-Targeting is on, jurisdiction rules take priority and this mode is ignored because caching one country's consent model for another is a compliance risk. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When active, this mode also pauses server-side A/B splitting and bot-specific output."
-msgstr ""
+msgstr "Houdt een voor elke bezoeker identieke pagina volledig cachebaar wanneer Geo-doelgroep is uitgeschakeld. Als Geo-doelgroep is ingeschakeld, hebben de rechtsgebiedregels voorrang en wordt deze modus genegeerd, omdat het cachen van het toestemmingsmodel van het ene land voor een ander land een compliance-risico is. Ontwikkelaars kunnen het runtimegedrag overschrijven met het filter <code>faz_geo_ruleset_runtime</code>. Wanneer actief, pauzeert deze modus ook de server-side A/B-splitsing en de bot-specifieke uitvoer."
 
 #: admin/views/settings.php:120
 msgid "A/B test banner variants"
@@ -5382,7 +5379,7 @@ msgstr "Geo-doelgroepbanners weergeven inschakelen"
 
 #: admin/views/settings.php:408
 msgid "Detect each visitor's location to apply the matching jurisdiction rules and, optionally, limit banner display to selected regions. Turning this off also stops the per-country runtime so Cache Compatibility Mode can keep full pages cacheable. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open)."
-msgstr ""
+msgstr "Detecteert de locatie van elke bezoeker om de bijbehorende rechtsgebiedregels toe te passen en, optioneel, de bannerweergave te beperken tot geselecteerde regio's. Dit uitschakelen stopt ook de runtime per land, zodat de Cache Compatibility Mode volledige pagina's cachebaar kan houden. Vereist een MaxMind GeoLite2-database (hieronder geconfigureerd), of de Cloudflare CF-IPCountry-header (alleen vertrouwd wanneer het filter faz_trust_cf_ipcountry_header door uw ontwikkelaar is ingeschakeld). Wanneer het land niet kan worden bepaald, wordt de banner aan iedereen getoond (fail-open)."
 
 #: admin/views/settings.php:411
 msgid "Target Regions"
@@ -5692,7 +5689,7 @@ msgstr ""
 
 #: admin/views/setup.php:155
 msgid "Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor's consent state to another. Requires Geo-Targeting to be off — while it is on, per-country consent rules win over caching."
-msgstr ""
+msgstr "Houdt elke weergegeven pagina identiek voor alle bezoekers, zodat volledige paginacaches (WP Rocket, LiteSpeed, …) nooit de toestemmingsstatus van de ene bezoeker aan een andere kunnen tonen. Vereist dat Geo-doelgroep is uitgeschakeld — zolang deze is ingeschakeld, hebben regels voor toestemming per land voorrang op caching."
 
 #: admin/views/setup.php:158
 msgid "Ad-blocker banner resilience"
@@ -5791,7 +5788,7 @@ msgstr ""
 
 #: admin/views/setup.php:269
 msgid "Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country's banner to another. Turn off Geo-Targeting under Settings → Geolocation, or use the faz_geo_ruleset_runtime developer filter."
-msgstr ""
+msgstr "Niet beschikbaar zolang de routering per rechtsgebied actief is. Toestemmingsregels worden per bezoekersland bepaald, dus een gedeelde volledige paginacache kan niet de banner van het ene land aan het andere tonen. Schakel Geo-doelgroep uit via Instellingen → Geolocatie, of gebruik het ontwikkelaarsfilter faz_geo_ruleset_runtime."
 
 #: admin/views/setup.php:279
 msgid "With Cache Compatibility Mode on, the bot-skip is bypassed: cached pages must stay identical for every visitor, so bots receive the banner too."
@@ -5966,7 +5963,7 @@ msgstr ""
 
 #: admin/views/setup.php:430
 msgid "Note: Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
-msgstr ""
+msgstr "Opmerking: Geo-doelgroep houdt de routering per rechtsgebied actief, dus de Cache Compatibility Mode wordt niet toegepast."
 
 #: admin/views/setup.php:431
 msgid "Note: Cache Compatibility Mode with IAB TCF serves the same cached page to every region (e.g. an EU gdprApplies=true page to a US visitor) — consider keeping one of the two off, or vary the cache by country at the CDN."

@@ -735,7 +735,7 @@ msgstr "A/B testování je zakázáno, dokud je zapnutý Režim kompatibility s 
 
 #: admin/class-admin.php:713
 msgid "Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
-msgstr ""
+msgstr "Geografické cílení udržuje směrování podle jurisdikce aktivní, takže Režim kompatibility s cache nebude použit."
 
 #: admin/class-admin.php:714
 msgid "Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country."
@@ -1107,7 +1107,7 @@ msgstr "✅ activní"
 
 #: admin/class-admin.php:853
 msgid "⚠️ disabled by Geo-Targeting settings or the faz_geo_ruleset_runtime filter"
-msgstr ""
+msgstr "⚠️ zakázáno nastavením Geografického cílení nebo filtrem faz_geo_ruleset_runtime"
 
 #: admin/class-admin.php:854
 msgid "Catalog rulesets"
@@ -1862,12 +1862,11 @@ msgstr "Geo-routing je v Nastavení povolen s \"Skrýt banner mimo cílové regi
 
 #: admin/class-admin.php:2269
 msgid "Read this before you disable it: Geo-routing does two jobs. It picks a per-country banner, and it applies the jurisdiction ruleset resolved from the visitor's country, out of the plugin's whole catalogue — GDPR, UK GDPR, the US state laws, and the rest. Turning it off restores full-page caching and stops both. Every visitor is then handled by whatever law your active banner itself is set to, wherever they are — so if that banner is set to an opt-out law such as CCPA, nothing is blocked before consent, including for visitors in the EEA."
-msgstr ""
+msgstr "Než jej vypnete, přečtěte si toto: Geo-routing plní dvě úlohy. Vybírá banner podle země a aplikuje sadu pravidel dané jurisdikce zjištěnou podle země návštěvníka, a to z celého katalogu pluginu — GDPR, UK GDPR, zákony jednotlivých států USA a další. Jeho vypnutí obnoví celostránkovou mezipaměť a zastaví obě funkce. Každý návštěvník je pak posuzován podle práva, na které je nastaven váš aktivní banner, ať se nachází kdekoli — pokud je tedy tento banner nastaven na zákon typu opt-out, jako je CCPA, nic není před udělením souhlasu blokováno, a to ani u návštěvníků z EHP."
 
 #: admin/class-admin.php:2270
-#, fuzzy
 msgid "So: disable Geo-routing if your site serves one jurisdiction and your banner is already configured for it, and you want the cache back. Keep it on if you rely on the plugin to apply the right law per country — in that case select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner, and the warning will clear on its own."
-msgstr "Pokud nepotřebujete bannery pro jednotlivé země, bezpečným řešením je zakázat Geo-routing. Pokud chcete bannery podle zemí, vyberte jednu nebo více cílových oblastí v Nastavení → Geolokace nebo přidejte seznam cílových zemí alespoň k jednomu banneru — varování zmizí samo."
+msgstr "Tedy: Geo-routing vypněte, pokud váš web obsluhuje jednu jurisdikci a váš banner je pro ni už nastaven a chcete zpět mezipaměť. Ponechte jej zapnutý, pokud se spoléháte na to, že plugin aplikuje správné právo podle jednotlivých zemí — v takovém případě vyberte jednu nebo více cílových oblastí v Nastavení → Geolokace, nebo přidejte seznam cílových zemí alespoň k jednomu banneru, a upozornění samo zmizí."
 
 #: admin/class-admin.php:2274 admin/class-admin.php:2316
 msgid "Disable Geo-routing now"
@@ -1883,25 +1882,23 @@ msgstr "Deaktivuje se…"
 
 #: admin/class-admin.php:2315
 msgid "Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic. Per-country jurisdiction rulesets are no longer applied: every visitor is now handled by the law your active banner is set to. Re-enable Geo-Targeting in Settings → Geolocation if you need it back."
-msgstr ""
+msgstr "Geo-routing vypnut. Mezipaměť CDN by se měla během několika minut organického provozu začít znovu plnit. Sady pravidel podle jurisdikce pro jednotlivé země se už neuplatňují: každý návštěvník je nyní posuzován podle práva, na které je nastaven váš aktivní banner. Pokud to znovu potřebujete, zapněte Geografické cílení v Nastavení → Geolokace."
 
 #: admin/class-admin.php:2357
-#, fuzzy
 msgid "FAZ Cookie Manager — Geo-Targeting now also controls jurisdiction enforcement"
-msgstr "FAZ Cookie Manager — Geografické směrování je zapnuté, ale nemá žádný efekt"
+msgstr "FAZ Cookie Manager — Geografické cílení nyní řídí i vynucování jurisdikce"
 
 #: admin/class-admin.php:2358
 msgid "Until this update the plugin always applied the jurisdiction ruleset resolved from each visitor's country, whether or not Geo-Targeting was switched on. That is now what the Geo-Targeting toggle controls. Your site had it switched off, so this update switched it ON for you — otherwise visitors would have silently stopped being handled under their own country's law. Nothing about which visitors see the banner has changed."
-msgstr ""
+msgstr "Až do této aktualizace plugin vždy uplatňoval sadu pravidel podle jurisdikce zjištěnou podle země každého návštěvníka, bez ohledu na to, zda bylo Geografické cílení zapnuté. Přesně to teď řídí přepínač Geografického cílení. Na vašem webu bylo vypnuté, takže tato aktualizace ho za vás ZAPNULA — jinak by návštěvníci bez upozornění přestali být posuzováni podle práva své vlastní země. Na tom, kterým návštěvníkům se banner zobrazuje, se nic nezměnilo."
 
 #: admin/class-admin.php:2359
 msgid "If your site serves a single jurisdiction and your banner is already configured for it, you can safely turn Geo-Targeting off in Settings → Geolocation. Doing so also restores full-page caching, because the plugin then no longer has to tell your cache or CDN that every page depends on the visitor's country."
-msgstr ""
+msgstr "Pokud váš web obsluhuje jedinou jurisdikci a váš banner je pro ni už nastaven, můžete Geografické cílení bez obav vypnout v Nastavení → Geolokace. Tím se také obnoví celostránková mezipaměť, protože plugin už pak nemusí vaší mezipaměti nebo CDN sdělovat, že každá stránka závisí na zemi návštěvníka."
 
 #: admin/class-admin.php:2363
-#, fuzzy
 msgid "Open Geo-Targeting settings"
-msgstr "Otevřít nastavení geo-směrování"
+msgstr "Otevřít nastavení Geografického cílení"
 
 #: admin/class-admin.php:2503
 msgid "Cookie Consent Overview"
@@ -5277,7 +5274,7 @@ msgstr "Režim kompatibility s mezipamětí"
 
 #: admin/views/settings.php:114
 msgid "Keep a visitor-invariant page fully cacheable when Geo-Targeting is off. If Geo-Targeting is on, jurisdiction rules take priority and this mode is ignored because caching one country's consent model for another is a compliance risk. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When active, this mode also pauses server-side A/B splitting and bot-specific output."
-msgstr ""
+msgstr "Udržuje stránku identickou pro všechny návštěvníky, a tedy plně cacheovatelnou, když je Geografické cílení vypnuté. Pokud je Geografické cílení zapnuté, mají přednost pravidla podle jurisdikce a tento režim se ignoruje, protože uložení modelu souhlasu jedné země do mezipaměti a jeho podávání jiné zemi představuje riziko z hlediska souladu s předpisy. Vývojáři mohou chování za běhu přepsat filtrem <code>faz_geo_ruleset_runtime</code>. Je-li aktivní, tento režim rovněž pozastaví A/B rozdělování na straně serveru a výstup specifický pro roboty."
 
 #: admin/views/settings.php:120
 msgid "A/B test banner variants"
@@ -5584,7 +5581,7 @@ msgstr "Povolit geograficky cílené zobrazení banneru"
 
 #: admin/views/settings.php:408
 msgid "Detect each visitor's location to apply the matching jurisdiction rules and, optionally, limit banner display to selected regions. Turning this off also stops the per-country runtime so Cache Compatibility Mode can keep full pages cacheable. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open)."
-msgstr ""
+msgstr "Zjišťuje polohu každého návštěvníka za účelem uplatnění odpovídajících pravidel podle jurisdikce a volitelně omezuje zobrazení banneru na vybrané regiony. Vypnutí této funkce také zastaví běh podle jednotlivých zemí, takže Cache Compatibility Mode může udržet celé stránky cacheovatelné. Vyžaduje databázi MaxMind GeoLite2 (nakonfigurovanou níže) nebo hlavičku Cloudflare CF-IPCountry (důvěryhodná pouze tehdy, když váš vývojář povolí filtr faz_trust_cf_ipcountry_header). Nelze-li zemi určit, banner se zobrazí všem (fail-open)."
 
 #: admin/views/settings.php:411
 msgid "Target Regions"
@@ -5890,7 +5887,7 @@ msgstr "Režim kompatibility s cache"
 
 #: admin/views/setup.php:155
 msgid "Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor's consent state to another. Requires Geo-Targeting to be off — while it is on, per-country consent rules win over caching."
-msgstr ""
+msgstr "Udržuje každou vykreslenou stránku identickou pro všechny návštěvníky, takže celostránkové mezipaměti (WP Rocket, LiteSpeed, …) nemohou nikdy podat stav souhlasu jednoho návštěvníka jinému. Vyžaduje, aby bylo Geografické cílení vypnuté — dokud je zapnuté, mají pravidla souhlasu podle jednotlivých zemí přednost před ukládáním do mezipaměti."
 
 #: admin/views/setup.php:158
 msgid "Ad-blocker banner resilience"
@@ -5985,7 +5982,7 @@ msgstr "Nejužitečnější nastavení bannerů. Vše zde uvedené lze později 
 
 #: admin/views/setup.php:269
 msgid "Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country's banner to another. Turn off Geo-Targeting under Settings → Geolocation, or use the faz_geo_ruleset_runtime developer filter."
-msgstr ""
+msgstr "Nedostupné, dokud je aktivní směrování podle jurisdikce. Pravidla souhlasu se určují podle země návštěvníka, takže sdílená celostránková mezipaměť nemůže podat banner jedné země jiné zemi. Vypněte Geografické cílení v Nastavení → Geolokace, nebo použijte vývojářský filtr faz_geo_ruleset_runtime."
 
 #: admin/views/setup.php:279
 msgid "With Cache Compatibility Mode on, the bot-skip is bypassed: cached pages must stay identical for every visitor, so bots receive the banner too."
@@ -6157,7 +6154,7 @@ msgstr "EU / EHP, Spojené království (výchozí nastavení)"
 
 #: admin/views/setup.php:430
 msgid "Note: Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
-msgstr ""
+msgstr "Poznámka: Geografické cílení udržuje směrování podle jurisdikce aktivní, takže Režim kompatibility s cache nebude použit."
 
 #: admin/views/setup.php:431
 msgid "Note: Cache Compatibility Mode with IAB TCF serves the same cached page to every region (e.g. an EU gdprApplies=true page to a US visitor) — consider keeping one of the two off, or vary the cache by country at the CDN."
