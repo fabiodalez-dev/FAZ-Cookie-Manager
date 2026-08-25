@@ -188,6 +188,15 @@ rsync -a --delete --exclude='.svn' "${STAGE_PLUGIN}/" trunk/
 
 cyan "═══ Apply: copy screenshots/banner/icon into assets/ ═══"
 mkdir -p assets
+# The working copy checks out `assets/` at Depth: empty — the directory is
+# versioned but has none of its children. `svn up assets` then brings nothing,
+# the copies below land as UNVERSIONED files, `svn add --force` schedules them
+# as additions, and the commit dies with "already exists / is out of date" on
+# the first banner image. That cost seven aborted attempts on the 1.28.0
+# release, misdiagnosed twice as leftovers from the previous one. Pulling the
+# real children first makes the copies plain modifications, which is what they
+# are.
+svn up --set-depth infinity assets >/dev/null 2>&1 || true
 cp "${PLUGIN_SRC}/.wordpress-org/"screenshot-*.png assets/ 2>/dev/null || true
 cp "${PLUGIN_SRC}/.wordpress-org/"banner-*.png assets/ 2>/dev/null || true
 cp "${PLUGIN_SRC}/.wordpress-org/"banner-*.jpg assets/ 2>/dev/null || true
