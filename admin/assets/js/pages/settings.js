@@ -21,6 +21,16 @@
 	// mutated the form. Each loadSettings() captures the current token and
 	// only applies its payload if the token still matches at resolution time.
 	var settingsRequestId = 0;
+	// Same pattern, separate token, for the bootstrap readiness line. Three
+	// writers share that one element: the page-load fetch, the toggle's change
+	// listener (synchronous), and the post-save refetch. Without a token the
+	// load-time request can resolve AFTER the admin has flipped the toggle and
+	// overwrite "Save settings to check…" with the readiness of the setting
+	// they just changed — a status line asserting the opposite of the truth,
+	// on the control whose entire job is to say whether caching is really on.
+	// The toggle listener bumps it too, so an in-flight answer to the old
+	// question is discarded rather than raced.
+	var geoBootstrapStatusId = 0;
 	// True only once renderAbVariants()'s FAZ.get('banners') has resolved
 	// successfully and the checkbox list (or the "need more banners" hint)
 	// has been rendered into the DOM. False while that request is still in
@@ -51,6 +61,9 @@
 			bootstrapToggle.addEventListener('change', function () {
 				var status = document.getElementById('faz-geo-bootstrap-status');
 				if (!status) return;
+				// Invalidate any readiness request still in flight: it answers
+				// the question the admin has just stopped asking.
+				geoBootstrapStatusId++;
 				status.textContent = __('settings.bootstrapSaveToCheck', 'Save settings to check whether the bootstrap can activate.');
 				status.setAttribute('data-level', 'info');
 			});
@@ -464,12 +477,15 @@
 	function loadGeoBootstrapStatus() {
 		var el = document.getElementById('faz-geo-bootstrap-status');
 		if (!el) return;
+		var requestId = ++geoBootstrapStatusId;
 		FAZ.get('settings/geo-bootstrap/status').then(function (data) {
+			if (requestId !== geoBootstrapStatusId) return;
 			el.textContent = data && data.message
 				? data.message
 				: __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
 			el.setAttribute('data-level', data && data.level ? data.level : 'warning');
 		}).catch(function () {
+			if (requestId !== geoBootstrapStatusId) return;
 			el.textContent = __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
 			el.setAttribute('data-level', 'warning');
 		});
