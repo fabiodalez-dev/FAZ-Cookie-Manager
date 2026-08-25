@@ -129,8 +129,9 @@ $faz_setup_laws = array(
  * that receives the cache-plugin detection badge (filled by setup.js).
  */
 // Cache Compatibility Mode cannot take effect while jurisdiction routing is on:
-// is_cache_compatibility_enabled() is `! $geo_enabled && …`, and the runtime is
-// enabled by default. Offering a tickable switch that silently does nothing —
+// is_cache_compatibility_enabled() is `! $geo_enabled && …`, and the runtime
+// follows the saved Geo-Targeting toggle. Offering a tickable switch that
+// silently does nothing —
 // under help text that says "turn on if you use a page cache" — sends an
 // administrator away believing their cache is now supported.
 $faz_geo_runtime_on = class_exists( '\FazCookie\Frontend\Includes\Geo_Runtime' )
@@ -151,7 +152,7 @@ $faz_setup_bc_rows = array(
 	),
 	'cache_compatibility' => array(
 		'label' => __( 'Cache Compatibility Mode', 'faz-cookie-manager' ),
-		'help'  => __( 'Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor\'s consent state to another. Requires jurisdiction routing to be switched off first — while it is on, per-country consent rules win over caching.', 'faz-cookie-manager' ),
+		'help'  => __( 'Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor\'s consent state to another. Requires Geo-Targeting to be off — while it is on, per-country consent rules win over caching.', 'faz-cookie-manager' ),
 	),
 	'adblock_resilience'  => array(
 		'label' => __( 'Ad-blocker banner resilience', 'faz-cookie-manager' ),
@@ -265,7 +266,7 @@ $faz_setup_step_titles = array(
 								</span>
 								<span class="faz-setup-toggle-help"><?php echo esc_html( $faz_bc_row['help'] ); ?></span>
 								<?php if ( $faz_bc_inert ) : ?>
-									<span class="faz-setup-toggle-help faz-setup-toggle-help-inert" id="faz-setup-cache-inert"><?php esc_html_e( 'Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country\'s banner to another and this mode stays off. It becomes available if jurisdiction routing is disabled with the faz_geo_ruleset_runtime filter.', 'faz-cookie-manager' ); ?></span>
+									<span class="faz-setup-toggle-help faz-setup-toggle-help-inert" id="faz-setup-cache-inert"><?php esc_html_e( 'Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country\'s banner to another. Turn off Geo-Targeting under Settings → Geolocation, or use the faz_geo_ruleset_runtime developer filter.', 'faz-cookie-manager' ); ?></span>
 								<?php endif; ?>
 							</span>
 						</label>
@@ -426,7 +427,7 @@ $faz_setup_step_titles = array(
 					data-geo-others-shown="<?php esc_attr_e( 'other regions: banner still shown', 'faz-cookie-manager' ); ?>"
 					data-geo-others-hidden="<?php esc_attr_e( 'other regions: banner hidden, cookies allowed', 'faz-cookie-manager' ); ?>"
 					data-geo-default-regions="<?php esc_attr_e( 'EU / EEA, United Kingdom (default)', 'faz-cookie-manager' ); ?>"
-					data-warn-cache-geo="<?php esc_attr_e( 'Note: Cache Compatibility Mode is also on, so server-side geo gating is bypassed — the same cached page is served to every region.', 'faz-cookie-manager' ); ?>"
+					data-warn-cache-geo="<?php esc_attr_e( 'Note: Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied.', 'faz-cookie-manager' ); ?>"
 					data-warn-cache-tcf="<?php esc_attr_e( 'Note: Cache Compatibility Mode with IAB TCF serves the same cached page to every region (e.g. an EU gdprApplies=true page to a US visitor) — consider keeping one of the two off, or vary the cache by country at the CDN.', 'faz-cookie-manager' ); ?>"
 					data-logging="<?php esc_attr_e( 'Consent logging stays on for accountability.', 'faz-cookie-manager' ); ?>"></ul>
 

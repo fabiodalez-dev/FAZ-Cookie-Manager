@@ -501,21 +501,14 @@
 
 		abTestWarnings.forEach(function (w) { saveWarnings.push(w); });
 
-		// Cache Compatibility Mode coexists with the geo-targeting SETTING and IAB
-		// TCF, but it is inert while the jurisdiction RUNTIME is enabled:
-		// is_cache_compatibility_enabled() is `! $geo_enabled && …`, and the
-		// runtime defaults to on. The wizard disables the control for that
-		// reason; do not read this line as 'it takes effect alongside geo'.
-		// — the frontend deliberately resolves both conservatively so the
-		// rendered output stays identical for every visitor — but the result is
-		// not what the settings screen alone suggests. Say so rather than
-		// silently overriding the choice, or letting the success toast imply
-		// per-country routing is still happening.
+		// Cache Compatibility Mode may be stored alongside Geo-Targeting, but it
+		// is inert while that UI toggle keeps the jurisdiction runtime enabled.
+		// Say so rather than letting the success toast imply both run together.
 		if (current.banner_control && current.banner_control.cache_compatibility) {
 			if (current.geolocation && current.geolocation.geo_targeting) {
 				saveWarnings.push(__(
 					'settings.cacheCompatWarnGeo',
-					'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.'
+					'Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied.'
 				));
 			}
 			var cmpId = current.iab ? parseInt(current.iab.cmp_id, 10) : 0;

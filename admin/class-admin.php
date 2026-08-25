@@ -709,7 +709,7 @@ class Admin {
 						'noGeoipDb'                => __( 'No GeoIP database installed. Enter your license key and click "Update Database".', 'faz-cookie-manager' ),
 						'abTestWarnVariants'       => __( 'A/B testing needs at least 2 selected banner variants to run.', 'faz-cookie-manager' ),
 						'abTestWarnCache'          => __( 'A/B testing is disabled while Cache Compatibility Mode is on.', 'faz-cookie-manager' ),
-						'cacheCompatWarnGeo'       => __( 'Cache Compatibility Mode serves one banner to every visitor, so geo-targeting rules are not applied while it is on.', 'faz-cookie-manager' ),
+						'cacheCompatWarnGeo'       => __( 'Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied.', 'faz-cookie-manager' ),
 						'cacheCompatWarnIab'       => __( 'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.', 'faz-cookie-manager' ),
 					),
 					// GCM page.
@@ -849,7 +849,7 @@ class Admin {
 						// Pipeline status panel.
 						'runtimeApplicationLabel'      => __( 'Runtime rule-set application', 'faz-cookie-manager' ),
 						'runtimeApplicationActive'     => __( '✅ active', 'faz-cookie-manager' ),
-						'runtimeApplicationOff'        => __( '⚠️ disabled by the faz_geo_ruleset_runtime filter', 'faz-cookie-manager' ),
+						'runtimeApplicationOff'        => __( '⚠️ disabled by Geo-Targeting settings or the faz_geo_ruleset_runtime filter', 'faz-cookie-manager' ),
 						'catalogRulesets'              => __( 'Catalog rulesets', 'faz-cookie-manager' ),
 						'fallbackRuleset'              => __( 'Fallback ruleset', 'faz-cookie-manager' ),
 						'ipinfoOptin'                  => __( 'ipinfo opt-in', 'faz-cookie-manager' ),

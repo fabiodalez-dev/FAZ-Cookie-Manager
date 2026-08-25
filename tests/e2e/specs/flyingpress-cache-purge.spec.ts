@@ -10,7 +10,8 @@
  * behaviour the PR #186 review (grounded in the real FlyingPress 5.5.0 source)
  * settled on:
  *
- *   1  [precondition]  FlyingPress actually caches an anonymous page.
+ *   1  [support]       FlyingPress caches an anonymous page without FAZ's
+ *                      former no-store / LiteSpeed-bypass response headers.
  *   2  [#125]          a FAZ banner save invalidates the cached page (HIT→MISS).
  *   3  [#125]          stale markup is no longer served after a save (content proof).
  *   4  [F2]            the purge is HTML-only — FlyingPress's minified CSS/JS
@@ -49,8 +50,9 @@ let flyingPressActive = false;
 let fpExclusiveRun = false;
 let weActivatedFlyingPress = false;
 let probeWasActive = false;
+let auditLabWasActive = false;
 let lockHeld = false;
-let runtimeOffSnapshot = '';
+let settingsSnapshot = '';
 let testPageId = 0;
 let testPageUrl = '';
 
@@ -173,26 +175,29 @@ test.beforeAll(async ({}, testInfo) => {
   await acquireSharedWordPressLock();
   lockHeld = true;
   probeWasActive = isPluginActive('faz-e2e-fp-probe');
-  runtimeOffSnapshot = wpEval(`echo base64_encode( serialize( get_option( 'faz_e2e_geo_runtime_off', null ) ) );`).trim();
+  auditLabWasActive = isPluginActive('faz-e2e-audit-lab');
+  settingsSnapshot = wpEval(`echo base64_encode( serialize( get_option( 'faz_settings', array() ) ) );`).trim();
 
-  // FAZ vetoes full-page caching whenever the jurisdiction runtime is on
-  // (is_country_dependent_output() -> flying_press_is_cacheable = false), and
-  // Cache Compatibility Mode is inert while it is on, by design. The audit-lab
-  // fixture pins that runtime ON at PHP_INT_MAX for every other spec, so a HIT
-  // is unreachable here without switching it off.
-  //
-  // That switch is a WordPress OPTION — process-wide, not request-scoped — so
-  // holding it for this file also strips jurisdiction routing from whatever
-  // runs beside it. Measured: with workers=2 that turned one known red into
-  // three, breaking pr61 and pr104 which were green. It is only safe when this
-  // file has the site to itself.
-  //
-  // A request-scoped lever cannot replace it: a full-page cache does not store
-  // requests carrying unknown query args or cookies, so the very mechanism that
-  // would scope the flag is the one that prevents a HIT.
+  // This suite must exercise the production UI path, not the historical
+  // faz_geo_ruleset_runtime test escape hatch. The baseline audit-lab fixture
+  // pins that filter true for unrelated geo specs, so remove only that fixture
+  // while this exclusive suite runs, then set exactly the reporter's UI state:
+  // Geo-Targeting OFF + Cache Compatibility Mode ON. A real FlyingPress HIT
+  // below now proves the UI state alone removes the cache veto.
   fpExclusiveRun = testInfo.config.workers === 1;
+  if (fpExclusiveRun && auditLabWasActive) {
+    wp(['plugin', 'deactivate', 'faz-e2e-audit-lab']);
+  }
   if (fpExclusiveRun) {
-    wpEval(`update_option( 'faz_e2e_geo_runtime_off', 1 );`);
+    wpEval(`
+      $settings = get_option( 'faz_settings', array() );
+      if ( ! is_array( $settings ) ) { $settings = array(); }
+      if ( ! isset( $settings['geolocation'] ) || ! is_array( $settings['geolocation'] ) ) { $settings['geolocation'] = array(); }
+      if ( ! isset( $settings['banner_control'] ) || ! is_array( $settings['banner_control'] ) ) { $settings['banner_control'] = array(); }
+      $settings['geolocation']['geo_targeting'] = false;
+      $settings['banner_control']['cache_compatibility'] = true;
+      update_option( 'faz_settings', $settings );
+    `);
   }
 
   // Self-provision FlyingPress for the duration of THIS spec file only. When
@@ -235,20 +240,17 @@ test.afterAll(() => {
     }
   };
   try {
-    // Restore only when this exclusive suite changed the process-wide option.
-    // A pre-existing value belongs to the surrounding test environment.
-    if (fpExclusiveRun && runtimeOffSnapshot) {
-      const restoreRuntime = `
-        $runtime_off = unserialize( base64_decode( '${runtimeOffSnapshot}' ) );
-        if ( null === $runtime_off ) { delete_option( 'faz_e2e_geo_runtime_off' ); }
-        else { update_option( 'faz_e2e_geo_runtime_off', $runtime_off ); }
+    if (fpExclusiveRun && settingsSnapshot) {
+      const restoreSettings = `
+        $settings = unserialize( base64_decode( '${settingsSnapshot}' ) );
+        update_option( 'faz_settings', is_array( $settings ) ? $settings : array() );
       `;
-      cleanup('restore faz_e2e_geo_runtime_off', () => {
+      cleanup('restore FAZ settings', () => {
         try {
-          wpEval(restoreRuntime);
+          wpEval(restoreSettings);
         } catch (primaryError) {
           try {
-            wp(['eval', restoreRuntime]);
+            wp(['eval', restoreSettings]);
           } catch (fallbackError) {
             throw new Error(`primary=${String(primaryError)}; fallback=${String(fallbackError)}`);
           }
@@ -265,6 +267,11 @@ test.afterAll(() => {
     if (!probeWasActive && isPluginActive('faz-e2e-fp-probe')) {
       cleanup('deactivate the FlyingPress probe', () => {
         wp(['plugin', 'deactivate', 'faz-e2e-fp-probe']);
+      });
+    }
+    if (auditLabWasActive && !isPluginActive('faz-e2e-audit-lab')) {
+      cleanup('restore audit-lab activation state', () => {
+        wp(['plugin', 'activate', 'faz-e2e-audit-lab']);
       });
     }
     if (weActivatedFlyingPress && isPluginActive('flying-press')) {
@@ -295,7 +302,13 @@ test.beforeEach(() => {
 test.describe('FlyingPress cache purge (#125 / PR #186)', () => {
   test('01 FlyingPress caches an anonymous page (HIT + .html.gz on disk)', async ({ request }) => {
     await primeCache(request, testPageUrl);
-    expect(await cacheState(request, testPageUrl)).toBe('HIT');
+    const hit = await request.get(testPageUrl, { headers: UA });
+    expect((hit.headers()['x-flying-press-cache'] ?? '').toUpperCase()).toBe('HIT');
+    // WordPress core may retain `no-cache, must-revalidate` on this local stack
+    // even on a FlyingPress HIT. FAZ's harmful contribution was `no-store` plus
+    // the explicit LiteSpeed bypass header; both must be absent.
+    expect(hit.headers()['cache-control'] ?? '').not.toMatch(/no-store/i);
+    expect(hit.headers()['x-litespeed-cache-control'] ?? '').not.toMatch(/no-cache/i);
     expect(htmlGzCount()).toBeGreaterThan(0);
   });
 
@@ -427,7 +440,12 @@ test.describe('FlyingPress cache purge (#125 / PR #186)', () => {
     const registered = wpEval(`echo has_filter( 'flying_press_is_cacheable' ) !== false ? '1' : '0';`).trim();
     expect(registered).toBe('1');
 
-    // Default (invariant output) — normal caching is preserved.
+    // The reporter's UI state alone disables jurisdiction routing; no custom
+    // faz_geo_ruleset_runtime snippet is installed in this suite.
+    const runtimeFromUi = wpEval(`echo \\FazCookie\\Frontend\\Includes\\Geo_Runtime::is_enabled() ? '1' : '0';`).trim();
+    expect(runtimeFromUi).toBe('0');
+
+    // Invariant output — normal caching is preserved.
     const whenInvariant = wpEval(`echo apply_filters( 'flying_press_is_cacheable', true ) ? '1' : '0';`).trim();
     expect(whenInvariant).toBe('1');
 

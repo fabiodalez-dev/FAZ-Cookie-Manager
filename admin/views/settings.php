@@ -111,7 +111,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Cache compatibility mode', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep a visitor-invariant page fully cacheable only when jurisdiction runtime is explicitly disabled with the <code>faz_geo_ruleset_runtime</code> filter. Geo rule-sets are enforced by default, so this optimisation is automatically ignored: caching one country\'s consent model for another country is a compliance risk. It also pauses server-side A/B splitting and bot-specific output when it is actually active.', 'faz-cookie-manager' ) ); ?></div>
+				<div class="faz-help"><?php echo wp_kses_post( __( 'Keep a visitor-invariant page fully cacheable when Geo-Targeting is off. If Geo-Targeting is on, jurisdiction rules take priority and this mode is ignored because caching one country\'s consent model for another is a compliance risk. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When active, this mode also pauses server-side A/B splitting and bot-specific output.', 'faz-cookie-manager' ) ); ?></div>
 			</div>
 			<div class="faz-form-group">
 				<label class="faz-toggle">
@@ -405,7 +405,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="faz-toggle-track"></span>
 					<span class="faz-toggle-label"><?php esc_html_e( 'Enable geo-targeted banner display', 'faz-cookie-manager' ); ?></span>
 				</label>
-				<div class="faz-help"><?php esc_html_e( 'Show the cookie banner only to visitors from specific regions. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open).', 'faz-cookie-manager' ); ?></div>
+				<div class="faz-help"><?php esc_html_e( 'Detect each visitor\'s location to apply the matching jurisdiction rules and, optionally, limit banner display to selected regions. Turning this off also stops the per-country runtime so Cache Compatibility Mode can keep full pages cacheable. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open).', 'faz-cookie-manager' ); ?></div>
 			</div>
 			<div class="faz-form-group" data-show-if="geolocation.geo_targeting">
 				<label><?php esc_html_e( 'Target Regions', 'faz-cookie-manager' ); ?></label>

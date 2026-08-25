@@ -245,6 +245,7 @@ class Frontend {
 			add_filter( 'litespeed_optm_js_defer_exc', array( $this, 'litespeed_exclude_own_scripts' ) );
 			add_filter( 'litespeed_optm_js_delay_inc', array( $this, 'litespeed_exclude_own_scripts_from_include' ) );
 			add_filter( 'litespeed_optimize_js_excludes', array( $this, 'litespeed_exclude_own_scripts' ) );
+			add_filter( 'litespeed_optimize_css_excludes', array( $this, 'litespeed_exclude_own_scripts' ) );
 			// Guest Mode delays EVERY JS regardless of the regular exclude
 			// lists above — it has its own separate list. Without this our
 			// consent banner stays hidden until the visitor interacts with
@@ -260,6 +261,11 @@ class Frontend {
 			// LiteSpeed Guest Mode) re-types them to `litespeed/javascript`,
 			// stranding the localized config until first user interaction.
 			add_filter( 'wp_inline_script_attributes', array( $this, 'tag_own_inline_attributes_nooptimize' ), 10, 2 );
+			// Protect the normal content-hashed banner stylesheet here; the
+			// unwritable-filesystem inline fallback carries a matching exclusion
+			// marker in its CSS content below. Together they keep CSS combine/minify
+			// from producing an unstyled first paint and a full-screen layout shift.
+			add_filter( 'style_loader_tag', array( $this, 'tag_own_styles_nooptimize' ), 20, 2 );
 
 			// WP Rocket exclude helpers — same intent.
 			add_filter( 'rocket_exclude_defer_js', array( $this, 'rocket_exclude_own_scripts' ) );
@@ -593,7 +599,12 @@ class Frontend {
 			} else {
 				wp_register_style( $css_handle, false, array(), $this->version );
 				wp_enqueue_style( $css_handle );
-				wp_add_inline_style( $css_handle, $css );
+				// WP has no inline-style attribute filter, so its generated <style>
+				// cannot receive data-no-optimize. LiteSpeed applies its official CSS
+				// exclusion patterns to the complete tag before combining it; embed
+				// the generated-assets marker in a harmless comment so the same
+				// `faz-cookie-manager/assets/` exclusion protects this fallback too.
+				wp_add_inline_style( $css_handle, '/* faz-cookie-manager/assets/ */' . $css );
 			}
 
 			// wp_localize_script for _fazStyles removed: CSS is now injected via
@@ -1569,13 +1580,14 @@ class Frontend {
 			$dependent = true;
 		}
 
-		// Runtime geo-routing: when the resolved ruleset drives the
+		// Runtime geo-routing: when the Geo-Targeting UI toggle (or the explicit
+		// developer override) enables the resolved ruleset, it drives the
 		// pre-consent category defaults, the GCM signals and the blocked-category
 		// set, the rendered HTML/JS varies by the visitor's country/region. A
 		// cached response would leak one jurisdiction's defaults to another, so
 		// the output must always be treated as country-dependent while the flag
 		// is on — independent of any multi-banner geo-targeting configuration.
-		// The filter is an emergency kill switch; enforcement is enabled by default.
+		// The filter can explicitly override the UI-derived state.
 		if ( Geo_Runtime::is_enabled() ) {
 			$dependent = true;
 		}
@@ -2041,7 +2053,7 @@ class Frontend {
 	/**
 	 * Resolved geo ruleset for the current visitor, or null.
 	 *
-	 * Enabled by default and overridable through the emergency
+	 * Enabled by the Geo-Targeting setting and overridable through the
 	 * `faz_geo_ruleset_runtime` filter. The resolved ruleset (model +
 	 * default_categories + CMv2) drives the
 	 * chosen banner's per-category consent defaults, the server-side blocking
@@ -6498,6 +6510,26 @@ class Frontend {
 	}
 
 	/**
+	 * Keep FAZ's compiled banner stylesheet out of CSS optimisation pipelines.
+	 *
+	 * LiteSpeed recognises `data-no-optimize="1"` on stylesheet links before it
+	 * combines, minifies or asynchronously rewrites them. The second attribute
+	 * covers optimisers that use the historical no-optimise spelling. Running at
+	 * priority 20 leaves the consent-blocking style filter at priority 10 intact.
+	 *
+	 * @param string $tag    Rendered stylesheet link.
+	 * @param string $handle Registered WordPress style handle.
+	 * @return string
+	 */
+	public function tag_own_styles_nooptimize( $tag, $handle ) {
+		if ( is_admin() || ! $this->is_own_script_handle( $handle ) || false !== strpos( $tag, 'data-no-optimize' ) ) {
+			return $tag;
+		}
+		$tagged = preg_replace( '/<link\b/i', '<link data-no-optimize="1" data-noptimize="1"', $tag, 1 );
+		return is_string( $tagged ) ? $tagged : $tag;
+	}
+
+	/**
 	 * FlyingPress v4/v5 filter callback: add every FAZ asset marker without
 	 * dropping or duplicating exclusions registered by the site or another
 	 * integration.
@@ -6610,12 +6642,11 @@ class Frontend {
 
 	/**
 	 * LiteSpeed Cache filter callback — add our plugin's path fragment
-	 * to whatever exclude list LiteSpeed is assembling (defer / delay /
-	 * generic JS optimize). Pattern-matched against script `src`, so
-	 * `plugins/faz-cookie-manager/` matches every asset the plugin
-	 * enqueues regardless of the registered handle. Used as a fallback
-	 * in case the `data-no-defer` tag attribute ever stops being honoured
-	 * by a future LiteSpeed release.
+	 * to whatever JS or CSS exclude list LiteSpeed is assembling. Pattern-
+	 * matched against asset URLs, so `plugins/faz-cookie-manager/` matches
+	 * every bundled asset and `faz-cookie-manager/assets/` matches the generated
+	 * config and banner stylesheet. Used as a fallback in case the tag-level
+	 * opt-out attributes ever stop being honoured by a future LiteSpeed release.
 	 *
 	 * @param mixed $excludes Pattern list (array or newline-joined string).
 	 * @return mixed

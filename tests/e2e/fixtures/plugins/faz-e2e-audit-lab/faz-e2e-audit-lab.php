@@ -44,8 +44,8 @@ final class Faz_E2E_Audit_Lab {
 	 * @return void
 	 */
 	public function bootstrap() {
-		// Mirror production's default-on runtime. Tests that need the legacy/cache
-		// branch opt out explicitly, while faz_e2e_geo still scopes deterministic
+		// Keep jurisdiction enforcement active for geo/compliance fixtures. Cache
+		// suites opt out explicitly, while faz_e2e_geo still scopes deterministic
 		// country probes. The dedicated geo-runtime MU-plugin registers the same
 		// hook at the same priority; this normal plugin runs later, and both resolve
 		// cookie-bearing requests to true so load order cannot change the result.

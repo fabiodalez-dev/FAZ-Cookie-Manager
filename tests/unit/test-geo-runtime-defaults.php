@@ -8,7 +8,7 @@
  *   - default_consent()   (ruleset state -> { gdpr, ccpa })
  *   - apply_cmv2_to_gcm()  (ruleset CMv2 -> GCM default_settings canonical keys)
  *
- * These back the default-on `faz_geo_ruleset_runtime` enforcement: when the resolved
+ * These back the UI-gated `faz_geo_ruleset_runtime` enforcement: when the resolved
  * ruleset names a category, its default_categories state wins for BOTH laws
  * (necessary always granted) so the live banner reflects the visitor's
  * jurisdiction; its model decides the enforcement law; and its CMv2 block drives
@@ -30,11 +30,22 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', __DIR__ );
 }
+if ( ! function_exists( 'get_option' ) ) {
+	function get_option( $name, $default = false ) { // phpcs:ignore
+		return 'faz_settings' === $name ? $GLOBALS['faz_geo_runtime_settings'] : $default;
+	}
+}
 if ( ! function_exists( 'apply_filters' ) ) {
 	function apply_filters( $tag, $value ) { // phpcs:ignore
+		if ( 'faz_geo_ruleset_runtime' === $tag && null !== $GLOBALS['faz_geo_runtime_override'] ) {
+			return $GLOBALS['faz_geo_runtime_override'];
+		}
 		return $value;
 	}
 }
+
+$GLOBALS['faz_geo_runtime_settings'] = array( 'geolocation' => array( 'geo_targeting' => false ) );
+$GLOBALS['faz_geo_runtime_override'] = null;
 
 require_once dirname( __DIR__, 2 ) . '/frontend/includes/class-geo-runtime.php';
 
@@ -65,7 +76,15 @@ $rs = function ( $cats ) {
 };
 
 echo "\n\033[1mGeo_Runtime runtime flag and mandatory UI overlay\033[0m\n";
-assert_eq( Geo_Runtime::is_enabled(), true, 'runtime ruleset enforcement is enabled by default' );
+assert_eq( Geo_Runtime::is_enabled(), false, 'runtime ruleset enforcement is off when Geo-Targeting is off' );
+$GLOBALS['faz_geo_runtime_settings']['geolocation']['geo_targeting'] = true;
+assert_eq( Geo_Runtime::is_enabled(), true, 'Geo-Targeting enables runtime ruleset enforcement' );
+$GLOBALS['faz_geo_runtime_override'] = false;
+assert_eq( Geo_Runtime::is_enabled(), false, 'the developer filter can disable an enabled UI runtime' );
+$GLOBALS['faz_geo_runtime_settings']['geolocation']['geo_targeting'] = false;
+$GLOBALS['faz_geo_runtime_override'] = true;
+assert_eq( Geo_Runtime::is_enabled(), true, 'the developer filter can explicitly enable an otherwise disabled runtime' );
+$GLOBALS['faz_geo_runtime_override'] = null;
 
 $ui_ruleset = array(
 	'signals' => array( 'gpc_required' => true ),
@@ -238,7 +257,7 @@ assert_eq( Geo_Runtime::apply_cmv2_to_gcm( null, $gcm ), $gcm, 'null ruleset →
 $geo_view_source = file_get_contents( dirname( __DIR__, 2 ) . '/admin/views/geo-routing.php' );
 $runtime_intro   = 'Inspect, override, and preview the jurisdiction rule-set enforced for each country and US state. The resolved model, category defaults, GPC/Do-Not-Sell obligations, sensitive-data opt-in and Consent Mode defaults are applied automatically to the live banner.';
 $stale_intro     = 'Inspect, override, and preview the built-in jurisdiction rule-sets per country and US state. Automatic application of a rule-set to the live banner';
-assert_eq( false !== strpos( $geo_view_source, $runtime_intro ), true, 'geo-routing view describes the default-on runtime' );
+assert_eq( false !== strpos( $geo_view_source, $runtime_intro ), true, 'geo-routing view describes the live runtime' );
 
 $catalogues = glob( dirname( __DIR__, 2 ) . '/languages/*.po' );
 assert_eq( is_array( $catalogues ) && count( $catalogues ) > 0, true, 'at least one PO catalogue exists' );

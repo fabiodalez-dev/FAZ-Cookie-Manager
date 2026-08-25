@@ -3,9 +3,9 @@
  * Runtime geo-routing helpers.
  *
  * Shared, mostly-pure helpers that apply a resolved geo-routing ruleset to the
- * live banner. The catalogue is enforced by default; the
- * `faz_geo_ruleset_runtime` filter remains available as an emergency kill
- * switch for integrators.
+ * live banner. The catalogue is enforced when the administrator enables
+ * Geo-Targeting; the `faz_geo_ruleset_runtime` filter remains available as an
+ * explicit override for integrators.
  *
  * Consumed by both the server render (FazCookie\Frontend\Frontend) and the REST
  * language-swap endpoint (FazCookie\Frontend\Modules\Banner_Rest\Banner_Rest) so
@@ -42,7 +42,19 @@ class Geo_Runtime {
 	 * @return bool
 	 */
 	public static function is_enabled() {
-		return (bool) apply_filters( 'faz_geo_ruleset_runtime', true );
+		$settings = get_option( 'faz_settings', array() );
+		$enabled  = is_array( $settings )
+			&& isset( $settings['geolocation'] )
+			&& is_array( $settings['geolocation'] )
+			&& ! empty( $settings['geolocation']['geo_targeting'] );
+
+		/**
+		 * Override jurisdiction ruleset enforcement independently of the UI.
+		 *
+		 * @param bool  $enabled  Whether Settings > Geolocation > Geo-Targeting is enabled.
+		 * @param array $settings Complete FAZ settings option.
+		 */
+		return (bool) apply_filters( 'faz_geo_ruleset_runtime', $enabled, $settings );
 	}
 
 	/**

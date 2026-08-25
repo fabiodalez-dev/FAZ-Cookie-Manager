@@ -184,7 +184,7 @@
 			var tbody = el('tbody');
 			tbody.appendChild(el('tr', null, [
 				el('td', null, el('strong', { text: t('runtimeApplicationLabel', 'Runtime rule-set application') })),
-				el('td', { text: (data.runtime && data.runtime.applied) ? t('runtimeApplicationActive', '✅ active') : t('runtimeApplicationOff', '⚠️ disabled by the faz_geo_ruleset_runtime filter') })
+				el('td', { text: (data.runtime && data.runtime.applied) ? t('runtimeApplicationActive', '✅ active') : t('runtimeApplicationOff', '⚠️ disabled by Geo-Targeting settings or the faz_geo_ruleset_runtime filter') })
 			]));
 			tbody.appendChild(el('tr', null, [
 				el('td', null, el('strong', { text: t('catalogRulesets', 'Catalog rulesets') })),

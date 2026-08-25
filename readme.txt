@@ -365,6 +365,8 @@ When multi-banner geo-routing is active, the rendered HTML can legitimately vary
 * `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
 * `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
 
+The jurisdiction runtime follows **Settings → Geolocation → Geo-Targeting**. When Geo-Targeting is off, the runtime does not force this cache bypass; Cache Compatibility Mode can therefore keep normal pages cacheable without a PHP snippet. LiteSpeed CSS/JS optimisation and FlyingPress delay/minify receive automatic exclusions for the banner assets.
+
 = Verified compatible (no extra configuration needed) =
 * **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
 * **WP Rocket** — honors `DONOTCACHEPAGE` natively.

@@ -96,6 +96,26 @@ test.describe('Cache-plugin auto-exclude (#83 + 1.13.2 post-review)', () => {
     }
   });
 
+  test('frontend banner CSS is excluded from LiteSpeed combine/minify', async ({ page }) => {
+    const resp = await page.request.get(`${WP_BASE}/?cssdiag=${Date.now()}`);
+    expect(resp.ok()).toBe(true);
+    const html = await resp.text();
+    const styleTags = html.match(/<(?:link|style)\b[^>]*faz-cookie-manager-css[^>]*>/gi) ?? [];
+    expect(styleTags.length, 'the compiled FAZ banner stylesheet must be present').toBeGreaterThan(0);
+    for (const tag of styleTags) {
+      expect(tag, `missing LiteSpeed no-optimize on: ${tag.slice(0, 160)}`).toContain('data-no-optimize="1"');
+    }
+
+    const raw = wpEval(`
+      $out = apply_filters( 'litespeed_optimize_css_excludes', array( 'theme.css' ) );
+      echo wp_json_encode( $out );
+    `).trim();
+    const excludes = JSON.parse(raw) as string[];
+    expect(excludes).toContain('theme.css');
+    expect(excludes).toContain('plugins/faz-cookie-manager/');
+    expect(excludes).toContain('faz-cookie-manager/assets/');
+  });
+
   test('is_own_script_handle() recognises alt-asset family via reflection', async () => {
     const raw = wpEval(`
       $fe = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.0' );
