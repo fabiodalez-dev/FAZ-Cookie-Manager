@@ -124,7 +124,12 @@ if ! done_step draft; then
     # Release notes come from this version's CHANGELOG.md section only. Passing
     # the whole file (as release.md once suggested) ships the entire history as
     # the release notes for every version.
-    notes="$(awk -v v="## \\[${VERSION}\\]" '$0 ~ v {f=1; next} /^## \[/ {f=0} f' "${PLUGIN_SRC}/CHANGELOG.md")"
+    # Literal prefix match, NOT a dynamic regex. `awk -v v="## \\[1.28.0\\]"`
+    # hands awk the STRING `## [1.28.0]`, and awk then compiles that as a regex
+    # in which the brackets are a character class — so it matched nothing and
+    # every release died here with "no CHANGELOG.md section". index() has no
+    # regex semantics at all, so the version number cannot be re-interpreted.
+    notes="$(awk -v hdr="## [${VERSION}]" 'index($0, hdr) == 1 {f=1; next} /^## \[/ {f=0} f' "${PLUGIN_SRC}/CHANGELOG.md")"
     [[ -n "${notes}" ]] || die "no CHANGELOG.md section for ${VERSION}"
     printf '%s\n' "${notes}" > "${PLUGIN_SRC}/.release-notes-${VERSION}.md"
     gh release create "${TAG}" --draft --title "${TAG}" \
