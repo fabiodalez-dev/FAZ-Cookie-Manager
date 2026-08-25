@@ -108,6 +108,7 @@ class Admin {
 		add_action( 'admin_notices', array( $this, 'smash_balloon_notice' ) );
 		add_action( 'admin_notices', array( $this, 'unmatched_vendors_notice' ) );
 		add_action( 'admin_notices', array( $this, 'redundant_geo_routing_notice' ) );
+		add_action( 'admin_notices', array( $this, 'geo_enforcement_migration_notice' ) );
 		add_action( 'wp_ajax_faz_dismiss_unmatched', array( $this, 'ajax_dismiss_unmatched_vendors' ) );
 		add_action( 'wp_ajax_faz_disable_redundant_geo_routing', array( $this, 'ajax_disable_redundant_geo_routing' ) );
 		add_action( 'wp_ajax_faz_dismiss_redundant_geo_routing', array( $this, 'ajax_dismiss_redundant_geo_routing' ) );
@@ -2265,7 +2266,8 @@ class Admin {
 		echo '<div class="notice notice-warning is-dismissible" id="faz-redundant-geo-routing-notice">';
 		echo '<p><strong>' . esc_html__( 'FAZ Cookie Manager — Geo-routing is on but has no effect', 'faz-cookie-manager' ) . '</strong></p>';
 		echo '<p>' . esc_html__( 'Geo-routing is enabled in Settings with "Hide banner outside target regions" as the default behaviour, but no target regions are selected and none of your banners has a target-countries list. In this configuration the plugin tells the CDN that every page is country-dependent (so no full-page cache is kept) while the geo-routing gate has nothing to target, so it can never actually fire. The most common symptom is "X-Cdn-Cache-Status: MISS" on every page, and a Lighthouse drop.', 'faz-cookie-manager' ) . '</p>';
-		echo '<p>' . esc_html__( 'If you do NOT need per-country banners, the safe fix is to disable Geo-routing. If you DO want per-country banners, select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner — the warning will clear on its own.', 'faz-cookie-manager' ) . '</p>';
+		echo '<p>' . esc_html__( 'Read this before you disable it: Geo-routing does two jobs. It picks a per-country banner, and it applies the jurisdiction ruleset resolved from the visitor\'s country, out of the plugin\'s whole catalogue — GDPR, UK GDPR, the US state laws, and the rest. Turning it off restores full-page caching and stops both. Every visitor is then handled by whatever law your active banner itself is set to, wherever they are — so if that banner is set to an opt-out law such as CCPA, nothing is blocked before consent, including for visitors in the EEA.', 'faz-cookie-manager' ) . '</p>';
+		echo '<p>' . esc_html__( 'So: disable Geo-routing if your site serves one jurisdiction and your banner is already configured for it, and you want the cache back. Keep it on if you rely on the plugin to apply the right law per country — in that case select one or more target regions in Settings → Geolocation, or add a target-countries list to at least one banner, and the warning will clear on its own.', 'faz-cookie-manager' ) . '</p>';
 		printf(
 			'<p><button type="button" class="button button-primary" id="faz-disable-redundant-geo-routing" data-nonce="%s">%s</button> <a href="%s" class="button">%s</a></p>',
 			esc_attr( $disable_nonce ),
@@ -2310,11 +2312,59 @@ class Admin {
 			'});' .
 			'})();',
 			wp_json_encode( __( 'Disabling…', 'faz-cookie-manager' ) ),
-			wp_json_encode( __( 'Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic.', 'faz-cookie-manager' ) ),
+			wp_json_encode( __( 'Geo-routing disabled. The CDN cache should start filling again within minutes of organic traffic. Per-country jurisdiction rulesets are no longer applied: every visitor is now handled by the law your active banner is set to. Re-enable Geo-Targeting in Settings → Geolocation if you need it back.', 'faz-cookie-manager' ) ),
 			wp_json_encode( __( 'Disable Geo-routing now', 'faz-cookie-manager' ) ),
 			wp_json_encode( $dismiss_nonce )
 		);
 		wp_add_inline_script( 'faz-admin', $inline_js, 'after' );
+	}
+
+	/**
+	 * One-time notice: Geo-Targeting now also governs jurisdiction enforcement.
+	 *
+	 * Armed by Activator::preserve_geo_enforcement_on_upgrade(), which sets
+	 * `faz_geo_enforcement_notice` on the single upgrade where it promotes the
+	 * flag. The administrator did not ask for that write, and the toggle they
+	 * see in Settings has quietly grown a second meaning, so both facts have to
+	 * be stated — together with the escape hatch, since turning it back off is
+	 * exactly what the two wordpress.org cache reports were asking for.
+	 *
+	 * Deliberately NOT gated on faz_is_admin_page(), unlike the recurring
+	 * notices above: this fires once, about a change the administrator did not
+	 * make, on a site whose owner may never open a FAZ screen. Dismissal is a
+	 * site option rather than user meta for the same reason — the fact has been
+	 * delivered once and does not need re-delivering per user.
+	 *
+	 * @return void
+	 */
+	public function geo_enforcement_migration_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! get_option( 'faz_geo_enforcement_notice' ) ) {
+			return;
+		}
+		if ( isset( $_GET['faz_dismiss_geo_enforcement'] )
+			&& wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_faz_nonce'] ?? '' ) ), 'faz_dismiss_geo_enforcement' ) ) {
+			delete_option( 'faz_geo_enforcement_notice' );
+			return;
+		}
+
+		$settings_url = admin_url( 'admin.php?page=faz-cookie-manager-settings#faz-geo-regions' );
+		$dismiss_url  = wp_nonce_url( add_query_arg( 'faz_dismiss_geo_enforcement', '1' ), 'faz_dismiss_geo_enforcement', '_faz_nonce' );
+
+		echo '<div class="notice notice-info" style="position:relative">';
+		echo '<p><strong>' . esc_html__( 'FAZ Cookie Manager — Geo-Targeting now also controls jurisdiction enforcement', 'faz-cookie-manager' ) . '</strong></p>';
+		echo '<p>' . esc_html__( 'Until this update the plugin always applied the jurisdiction ruleset resolved from each visitor\'s country, whether or not Geo-Targeting was switched on. That is now what the Geo-Targeting toggle controls. Your site had it switched off, so this update switched it ON for you — otherwise visitors would have silently stopped being handled under their own country\'s law. Nothing about which visitors see the banner has changed.', 'faz-cookie-manager' ) . '</p>';
+		echo '<p>' . esc_html__( 'If your site serves a single jurisdiction and your banner is already configured for it, you can safely turn Geo-Targeting off in Settings → Geolocation. Doing so also restores full-page caching, because the plugin then no longer has to tell your cache or CDN that every page depends on the visitor\'s country.', 'faz-cookie-manager' ) . '</p>';
+		printf(
+			'<p><a href="%s" class="button">%s</a></p>',
+			esc_url( $settings_url ),
+			esc_html__( 'Open Geo-Targeting settings', 'faz-cookie-manager' )
+		);
+		echo '<a href="' . esc_url( $dismiss_url ) . '" aria-label="' . esc_attr__( 'Dismiss this notice', 'faz-cookie-manager' ) . '" style="position:absolute;top:0;right:0;padding:9px;text-decoration:none;color:#787c82">';
+		echo '<span class="dashicons dashicons-dismiss" aria-hidden="true"></span></a>';
+		echo '</div>';
 	}
 
 	/**
