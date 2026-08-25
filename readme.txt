@@ -65,7 +65,7 @@ This plugin assists consent and privacy workflows. It does not itself create, pr
 4. Enable Google Consent Mode or IAB TCF if you use advertising tools
 5. Monitor consent analytics on the dashboard
 
-Core banner functionality runs on your WordPress site. Optional update/download features may contact GitHub, IAB Europe, MaxMind, ip-api.com, ipinfo.io (opt-in VPN detection), or the AMP CDN depending on which features you enable and use.
+Core banner functionality runs on your WordPress site. Optional update/download features may contact GitHub, IAB Europe, MaxMind, ipinfo.io (opt-in VPN detection), or the AMP CDN depending on which features you enable and use.
 
 = Cookie Policy generator =
 
@@ -84,7 +84,7 @@ The older `[faz_cookie_policy]` and `[faz_cookie_table]` shortcodes and the `faz
 
 Two orthogonal features that combine freely: the visitor's **country** decides which banner is served, the visitor's **browser language** decides the translation shown inside it.
 
-Geo-routing picks a banner per country — typically a strict GDPR banner for the EU/EEA/UK and a CCPA opt-out banner for California — resolving the country from Cloudflare's `CF-IPCountry` header (opt-in), then MaxMind GeoLite2, then ip-api.com. Translations live inside each banner and are resolved **client-side** from `navigator.languages`, so a country-targeted banner still works behind a full-page cache.
+Geo-routing picks a banner per country — typically a strict GDPR banner for the EU/EEA/UK and a CCPA opt-out banner for California — resolving the country from Cloudflare's `CF-IPCountry` header (opt-in), then a server GeoIP module or extension, then the self-hosted MaxMind GeoLite2 database. All four are local to your server or your CDN edge; no visitor IP is sent to a third party for country resolution. When none of them is available the most-protective GDPR ruleset is applied to every visitor. Translations live inside each banner and are resolved **client-side** from `navigator.languages`, so a country-targeted banner still works behind a full-page cache.
 
 In practice that means two banner rows rather than eight: one EU banner holding English, Italian, German, French and Polish, one US banner holding English and Spanish.
 
@@ -136,20 +136,6 @@ Service URL:
 Terms of Service / Privacy Policy:
 * https://www.maxmind.com/en/terms-of-use
 * https://www.maxmind.com/en/privacy-policy
-
-= ip-api.com =
-
-Used as a fallback geolocation lookup for the optional geo-targeting and multi-banner geo-routing features, only when MaxMind is unavailable.
-
-Triggered when: a frontend page renders the banner while geo-targeting / multi-banner geo-routing is enabled AND neither the Cloudflare CF-IPCountry header (opt-in) nor the MaxMind GeoLite2 database produces a result. The visitor's IP is sent to ip-api.com for country resolution; the resolved country code is cached in a transient (hash-keyed by IP) for one hour to avoid repeating the lookup.
-
-Data sent: the visitor's IP address and standard HTTP request headers.
-
-Service URL:
-* http://ip-api.com/json/{ip}?fields=countryCode
-
-Terms of Service / Privacy Policy:
-* https://ip-api.com/docs/legal
 
 = ipinfo.io (optional live VPN detection and admin preview) =
 

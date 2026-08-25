@@ -40,6 +40,20 @@ import { test, expect } from '@playwright/test';
 const SHOULD_RUN = process.env.RUN_PLAYGROUND_TEST === '1';
 
 // Blueprint: install faz-cookie-manager from wp.org, PHP 8.3, latest WP, auto-login as admin.
+// WHAT VERSION THIS ACTUALLY TESTS — read before trusting a green run.
+//
+// The blueprint installs the plugin by its wordpress.org SLUG, so Playground
+// downloads whatever the directory is serving at that moment. Run before the
+// SVN commit — which is how release.md §5b used to order it — this validates
+// the PREVIOUS release and cannot say anything about the candidate. It is a
+// post-publish smoke test of the artefact wp.org is really handing to users,
+// and §5b now says so.
+//
+// Making it test the candidate would need the release ZIP reachable at a public
+// URL for Playground to fetch; a local file is not addressable from the WASM
+// runtime. Until that exists, ordering is the honest fix rather than pretending
+// the gate covers something it cannot see.
+//
 // Same blueprint as documented in release.md §5b. Decoded shape:
 //   {
 //     "plugins": ["faz-cookie-manager"],
@@ -83,7 +97,20 @@ test.describe('Playground compatibility (online — RUN_PLAYGROUND_TEST=1 to ena
     // Navigate to the FAZ Cookie Manager admin page inside the Playground
     // iframe. If the plugin failed to activate (the 1.13.13/14 shape), this
     // page would either 404 or render WP's "plugin caused an error" notice.
-    await adminFrame.locator('a[href*="page=faz-cookie-manager"]').first().click().catch(() => {});
+    // The plugin's own consent banner renders over the page and is a dialog, so
+    // it intercepts pointer events aimed at the admin menu behind it. Dismiss it
+    // first: it is the subject under test, not an obstacle to route around.
+    const consentReject = adminFrame.locator('button:has-text("Reject All")').first();
+    if (await consentReject.isVisible().catch(() => false)) {
+      await consentReject.click();
+      await adminFrame.locator('[data-faz-tag="notice"]').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+    }
+
+    // No swallowing catch here. A click that cannot land is the single most
+    // useful signal this test produces — an intercepted click used to be
+    // discarded silently, and the run then died 60s later on a heading that was
+    // never going to appear, reporting a timeout instead of the interception.
+    await adminFrame.locator('a[href*="page=faz-cookie-manager"]').first().click();
     // Wait for the FAZ dashboard heading or the standard wp-admin error
     // notice that appears when a plugin fatals on activation.
     const dashboardHeading = adminFrame.locator('h1:has-text("FAZ Cookie Manager"), h1:has-text("Cookie Manager")').first();

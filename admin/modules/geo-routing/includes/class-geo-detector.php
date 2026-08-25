@@ -16,8 +16,10 @@
  *      `faz_trust_cf_ipcountry_header` trust gate.
  *   4. ipinfo.io VPN/proxy gate — annotates the result with `vpn` (bool|null);
  *      it does not by itself pick the country.
- *   5. ip-api.com then GeoLite2 local DB, via `Geolocation` — consulted only
- *      when the CF header yielded nothing.
+ *   5. GeoLite2 local DB (plus any server GeoIP module/extension) via
+ *      `Geolocation` — consulted only when the CF header yielded nothing.
+ *      There is no ip-api.com step: no visitor IP leaves the server for
+ *      country resolution, and an earlier docblock here said otherwise.
  *   6. 'XX' sentinel when every source failed.
  *
  * Cache: `wp_cache_*` under group `faz_geo_detect`, keyed on the IP hash,
@@ -116,7 +118,7 @@ class Geo_Detector {
 			$region  = $cf_region;
 			$source  = 'cf_header';
 		} else {
-			// 5. ip-api / GeoLite2 fallbacks via existing Geolocation class.
+			// 5. GeoLite2 / server GeoIP fallbacks via existing Geolocation class.
 			$fallback = $this->resolve_via_existing_geolocation( $ip );
 			$country  = $fallback['country'];
 			$region   = $fallback['region'];
@@ -235,7 +237,7 @@ class Geo_Detector {
 	}
 
 	/**
-	 * Resolve via existing FazCookie\Includes\Geolocation (ip-api + GeoLite2).
+	 * Resolve via existing FazCookie\Includes\Geolocation (server GeoIP + GeoLite2).
 	 *
 	 * Delegates to the existing geolocation infrastructure rather than
 	 * re-implementing the fallback chain.
@@ -254,7 +256,7 @@ class Geo_Detector {
 		// not the private static detect_country(). The previous call to
 		// $geo->detect_country() raised a Throwable that was silently
 		// swallowed by the outer try/catch, breaking the entire
-		// ip-api / GeoLite2 fallback chain — every non-CF visitor was
+		// GeoLite2 / server GeoIP fallback chain — every non-CF visitor was
 		// being routed to fallback-gdpr-most-protective regardless of
 		// their real country.
 		// F-GEO-2 fix (1.16.0 backlog): pass the resolved $ip through

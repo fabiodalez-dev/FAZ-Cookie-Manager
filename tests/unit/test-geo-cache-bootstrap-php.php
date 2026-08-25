@@ -187,7 +187,17 @@ namespace {
 	$off = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $off, 'is_geo_bootstrap_cache_active' ), false, 'default OFF preserves the country-dependent cache veto' );
 	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'disabled', 'admin readiness explains that the saved optimisation is off' );
+	// A country source must exist for the page to be country-dependent at all.
+	// Since 1.28.0 the veto is gated on one: an install with no way to resolve a
+	// country renders the same fallback ruleset for every visitor, and was losing
+	// its page cache for a variation that cannot occur. Declaring the source here
+	// is what makes this case assert the thing it means.
+	$_SERVER['GEOIP_COUNTRY_CODE'] = 'IT';
 	faz_geo_bootstrap_same( $off->flying_press_is_cacheable( true ), false, 'FlyingPress remains uncacheable when bootstrap is not explicitly enabled' );
+	unset( $_SERVER['GEOIP_COUNTRY_CODE'] );
+
+	// ...and the new branch: same configuration, no country source at all.
+	faz_geo_bootstrap_same( $off->flying_press_is_cacheable( true ), true, 'with no country source the page stays cacheable - the veto would buy nothing' );
 
 	faz_geo_bootstrap_reset();
 	$saved_opt_in_settings = array(

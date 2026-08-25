@@ -1588,11 +1588,79 @@ class Frontend {
 		// the output must always be treated as country-dependent while the flag
 		// is on — independent of any multi-banner geo-targeting configuration.
 		// The filter can explicitly override the UI-derived state.
-		if ( Geo_Runtime::is_enabled() ) {
+		//
+		// …but only when a country can actually be resolved. The runtime being
+		// on does not make the output vary by country on an install that has no
+		// way to determine one: every visitor resolves the same
+		// fallback-gdpr-most-protective ruleset, so the rendered page is
+		// invariant and the veto buys nothing while costing the publisher their
+		// entire page cache. That is precisely the complaint behind the
+		// LiteSpeed and FlyingPress reports this release answers, and with
+		// enforcement now on by default it would otherwise reach every install
+		// on a host without a geo source — which is most shared hosting.
+		//
+		// Deliberately keyed on whether a source is CONFIGURED, not on whether
+		// this particular visitor resolved: with a source present the output is
+		// country-dependent even for a visitor the source happens to miss.
+		if ( Geo_Runtime::is_enabled() && $this->has_country_signal_source() ) {
 			$dependent = true;
 		}
 
 		return (bool) apply_filters( 'faz_country_dependent_banner_output', $dependent, $settings );
+	}
+
+	/**
+	 * Whether this install has any way at all to determine a visitor country.
+	 *
+	 * The four sources Geolocation actually consults, in its own order. None of
+	 * them is a live third-party API call: the Cloudflare header only exists
+	 * behind Cloudflare and only counts when the publisher has trusted it, the
+	 * two server extensions are provided by the host, and GeoLite2 is a local
+	 * database the publisher downloads once.
+	 *
+	 * Evaluated per request and never memoised across requests: a publisher who
+	 * installs GeoLite2, or moves behind Cloudflare and trusts the header, must
+	 * get the cache veto back on the very next request. Any page cached before
+	 * that carried the most-protective shell, so the stale direction over-blocks
+	 * rather than under-blocks.
+	 *
+	 * @return bool True when at least one country source is available.
+	 */
+	private function has_country_signal_source() {
+		$has_source = false;
+
+		if ( ! empty( $_SERVER['HTTP_CF_IPCOUNTRY'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only, value never used here.
+			&& apply_filters( 'faz_trust_cf_ipcountry_header', false ) ) {
+			$has_source = true;
+		}
+		if ( ! $has_source && ! empty( $_SERVER['GEOIP_COUNTRY_CODE'] ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- presence test only.
+			$has_source = true;
+		}
+		if ( ! $has_source && function_exists( 'geoip_country_code_by_name' ) ) {
+			$has_source = true;
+		}
+		// get_database_path() already returns '' unless a GeoLite2 MMDB exists,
+		// is readable AND passes its format check, so presence of a path is the
+		// same question as "can this install do a local lookup".
+		if ( ! $has_source && class_exists( '\FazCookie\Includes\Geolocation' )
+			&& method_exists( '\FazCookie\Includes\Geolocation', 'get_database_path' ) ) {
+			try {
+				$has_source = ( '' !== (string) \FazCookie\Includes\Geolocation::get_database_path() );
+			} catch ( \Throwable $e ) {
+				$has_source = false;
+			}
+		}
+
+		/**
+		 * Override the country-source detection.
+		 *
+		 * A publisher whose edge injects a country by another means can force
+		 * this true; one who knows their stack can never resolve a country can
+		 * force it false and keep their page cache.
+		 *
+		 * @param bool $has_source Whether a country source was detected.
+		 */
+		return (bool) apply_filters( 'faz_has_country_signal_source', $has_source );
 	}
 
 	/**
