@@ -81,3 +81,9 @@ cookies.txt
 CLAUDE.md
 .claude/
 tests/compliance/traces/
+
+# Transient release-run artefacts written by scripts/publish-release.sh.
+# The script writes the state file so an interrupted run can resume — and its
+# own preflight then refused the tree as dirty, so a resume was impossible.
+.release-state-*.json
+.release-notes-*.md
