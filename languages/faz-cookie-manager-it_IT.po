@@ -741,7 +741,7 @@ msgstr "Il test A/B è disattivato quando la Modalità compatibilità cache è a
 
 #: admin/class-admin.php:713
 msgid "Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
-msgstr ""
+msgstr "Il Geo-Targeting mantiene attivo l'instradamento per giurisdizione, quindi la Modalità compatibilità cache non verrà applicata."
 
 #: admin/class-admin.php:714
 msgid "Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country."
@@ -1115,7 +1115,7 @@ msgstr "✅ attivo"
 
 #: admin/class-admin.php:853
 msgid "⚠️ disabled by Geo-Targeting settings or the faz_geo_ruleset_runtime filter"
-msgstr ""
+msgstr "⚠️ disattivato dalle impostazioni di Geo-Targeting o dal filtro faz_geo_ruleset_runtime"
 
 #: admin/class-admin.php:854
 msgid "Catalog rulesets"
@@ -5304,7 +5304,7 @@ msgstr "Modalità compatibilità cache"
 
 #: admin/views/settings.php:114
 msgid "Keep a visitor-invariant page fully cacheable when Geo-Targeting is off. If Geo-Targeting is on, jurisdiction rules take priority and this mode is ignored because caching one country's consent model for another is a compliance risk. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When active, this mode also pauses server-side A/B splitting and bot-specific output."
-msgstr ""
+msgstr "Mantiene una pagina identica per tutti i visitatori e quindi pienamente cacheabile quando il Geo-Targeting è spento. Se il Geo-Targeting è acceso, le regole giurisdizionali hanno la precedenza e questa modalità viene ignorata: mettere in cache il modello di consenso di un paese e servirlo a un altro è un rischio di conformità. Chi sviluppa può forzare il runtime con il filtro <code>faz_geo_ruleset_runtime</code>. Quando è attiva, questa modalità sospende anche la ripartizione A/B lato server e l'output specifico per i bot."
 
 #: admin/views/settings.php:120
 msgid "A/B test banner variants"
@@ -5613,7 +5613,7 @@ msgstr "Abilita la visualizzazione del banner in base alla geolocalizzazione"
 
 #: admin/views/settings.php:408
 msgid "Detect each visitor's location to apply the matching jurisdiction rules and, optionally, limit banner display to selected regions. Turning this off also stops the per-country runtime so Cache Compatibility Mode can keep full pages cacheable. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open)."
-msgstr ""
+msgstr "Rileva la posizione di ogni visitatore per applicare le regole giurisdizionali corrispondenti e, se vuoi, per limitare la visualizzazione del banner ad alcune regioni. Spegnerlo ferma anche il runtime per paese, così la Modalità compatibilità cache può mantenere le pagine interamente cacheabili. Richiede un database MaxMind GeoLite2 (configurato qui sotto) oppure l'header Cloudflare CF-IPCountry (considerato attendibile solo se chi sviluppa abilita il filtro faz_trust_cf_ipcountry_header). Quando il paese non può essere determinato, il banner viene mostrato a tutti (fail-open)."
 
 #: admin/views/settings.php:411
 msgid "Target Regions"
@@ -5920,7 +5920,7 @@ msgstr "Modalità compatibilità cache"
 
 #: admin/views/setup.php:155
 msgid "Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor's consent state to another. Requires Geo-Targeting to be off — while it is on, per-country consent rules win over caching."
-msgstr ""
+msgstr "Mantiene ogni pagina renderizzata identica per tutti i visitatori, così le cache full-page (WP Rocket, LiteSpeed, …) non possono mai servire lo stato di consenso di un visitatore a un altro. Richiede che il Geo-Targeting sia spento: finché è acceso, le regole di consenso per paese hanno la precedenza sulla cache."
 
 #: admin/views/setup.php:158
 msgid "Ad-blocker banner resilience"
@@ -6015,7 +6015,7 @@ msgstr "Gli interruttori più utili del banner. Tutto ciò che vedi qui può ess
 
 #: admin/views/setup.php:269
 msgid "Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country's banner to another. Turn off Geo-Targeting under Settings → Geolocation, or use the faz_geo_ruleset_runtime developer filter."
-msgstr ""
+msgstr "Non disponibile finché l'instradamento per giurisdizione è attivo. Le regole di consenso vengono risolte in base al paese del visitatore, quindi una cache full-page condivisa non può servire il banner di un paese a un altro. Spegni il Geo-Targeting in Impostazioni → Geolocalizzazione, oppure usa il filtro per sviluppatori faz_geo_ruleset_runtime."
 
 #: admin/views/setup.php:279
 msgid "With Cache Compatibility Mode on, the bot-skip is bypassed: cached pages must stay identical for every visitor, so bots receive the banner too."
@@ -6187,7 +6187,7 @@ msgstr "UE / SEE, Regno Unito (predefinito)"
 
 #: admin/views/setup.php:430
 msgid "Note: Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
-msgstr ""
+msgstr "Nota: il Geo-Targeting mantiene attivo l'instradamento per giurisdizione, quindi la Modalità compatibilità cache non verrà applicata."
 
 #: admin/views/setup.php:431
 msgid "Note: Cache Compatibility Mode with IAB TCF serves the same cached page to every region (e.g. an EU gdprApplies=true page to a US visitor) — consider keeping one of the two off, or vary the cache by country at the CDN."
