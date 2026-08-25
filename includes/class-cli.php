@@ -232,6 +232,17 @@ class CLI {
 	 * @return void
 	 */
 	public static function remove_legacy_flyingpress_law_vary() {
+		// admin_init is not an administrator-only hook: it fires on every
+		// authenticated wp-admin hit (a Subscriber loading profile.php) and on
+		// every admin-ajax.php request, logged-out ones included. This routine
+		// rewrites a filesystem drop-in and writes options, so it must be
+		// reachable only by someone entitled to change site configuration.
+		// current_user_can() is pluggable, but wp-settings.php loads
+		// pluggable.php long before init — let alone admin_init — so guarding it
+		// with function_exists() would only hide a broken bootstrap.
+		if ( ! \current_user_can( 'manage_options' ) ) {
+			return;
+		}
 		if ( ! \defined( 'WP_CONTENT_DIR' )
 			|| ! \class_exists( '\FlyingPress\AdvancedCache' )
 			|| ! \method_exists( '\FlyingPress\AdvancedCache', 'add_advanced_cache' )
@@ -246,7 +257,14 @@ class CLI {
 		}
 		$marker_option = 'faz_flyingpress_law_vary_repaired';
 		$fingerprint   = self::flyingpress_dropin_fingerprint( $dropin );
-		if ( '' !== $fingerprint && $fingerprint === (string) \get_option( $marker_option, '' ) ) {
+		if ( '' === $fingerprint ) {
+			// The drop-in passed is_readable() but could not be stat'ed, so it
+			// vanished underneath us. Without an identity there is nothing to
+			// record an outcome against, and every following admin request would
+			// redo the whole scan; bail and let a later request re-evaluate.
+			return;
+		}
+		if ( $fingerprint === (string) \get_option( $marker_option, '' ) ) {
 			return;
 		}
 		$contents = \file_get_contents( $dropin ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local generated drop-in, read once during admin cleanup.
@@ -277,16 +295,28 @@ class CLI {
 		}
 		try {
 			\FlyingPress\AdvancedCache::add_advanced_cache();
-			\clearstatcache( true, $dropin );
-			$repaired = \is_readable( $dropin ) ? \file_get_contents( $dropin ) : false; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- verify the local generated drop-in after repair.
-			if ( \is_string( $repaired ) && false === \strpos( $repaired, 'faz-law' ) ) {
-				\update_option( $marker_option, self::flyingpress_dropin_fingerprint( $dropin ), false );
-			}
 		} catch ( \Throwable $e ) {
 			// Best-effort migration: never break wp-admin because a third-party
-			// cache plugin could not rewrite its generated drop-in.
-			return;
+			// cache plugin could not rewrite its generated drop-in. The marker is
+			// still recorded below, so a build that throws on every call cannot
+			// turn this cleanup into a rewrite on every admin request.
+			unset( $e );
 		} finally {
+			\clearstatcache( true, $dropin );
+			// Record the attempt against the drop-in's identity AFTER the
+			// rewrite, whether or not `faz-law` actually disappeared. Marking
+			// only on success left a drop-in we cannot repair being regenerated
+			// on every single admin request, forever. Because the marker is a
+			// stat fingerprint and not a boolean one-shot, a later genuine
+			// FlyingPress regeneration changes it and re-arms the attempt.
+			// is_readable() first: FlyingPress may have unlinked the drop-in
+			// instead of rewriting it, and stat'ing a missing path would only
+			// add a warning to the log. No identity means no marker — the next
+			// admin request bails at the readability check above anyway.
+			$attempted = \is_readable( $dropin ) ? self::flyingpress_dropin_fingerprint( $dropin ) : '';
+			if ( '' !== $attempted ) {
+				\update_option( $marker_option, $attempted, false );
+			}
 			\delete_option( $lock_option );
 		}
 	}

@@ -32,6 +32,24 @@
  * fixture plugin tests/e2e/fixtures/plugins/faz-e2e-fp-probe, which exposes
  * FlyingPress's per-request in-memory config (invisible to a separate wp-cli
  * process) as response headers.
+ *
+ * HOW TO RUN THIS FILE
+ * --------------------
+ *     npm run test:e2e:flyingpress
+ *
+ * Not `npm run test:e2e`. These tests need the WordPress install to themselves
+ * (they activate FlyingPress globally, and its page cache would then serve
+ * stale HTML to whatever spec runs beside them), so they gate on
+ * `testInfo.config.workers === 1` and SKIP otherwise. `npm run test:e2e` uses
+ * 1 worker locally but 2 under CI=1 — which means the documented "CI mode"
+ * invocation skips all 11 of these silently and still reports green. The npm
+ * script above passes `--workers=1` on the command line, which overrides the
+ * config in every environment, so it executes the tests under CI=1 too.
+ *
+ * `test.describe.configure({ mode: 'serial' })` does NOT help here: it orders
+ * the tests inside this file, it does not stop another FILE running next to it.
+ * Playwright has no per-project/per-file worker cap either, so a second
+ * invocation is the mechanism.
  */
 import { test, expect } from '../fixtures/wp-fixture';
 import { type APIRequestContext } from '@playwright/test';
@@ -48,6 +66,7 @@ const MARKER_BETA = 'FAZ-FP-MARKER-BETA';
 
 let flyingPressActive = false;
 let fpExclusiveRun = false;
+let fpConfiguredWorkers = 0;
 let weActivatedFlyingPress = false;
 let probeWasActive = false;
 let auditLabWasActive = false;
@@ -184,7 +203,8 @@ test.beforeAll(async ({}, testInfo) => {
   // while this exclusive suite runs, then set exactly the reporter's UI state:
   // Geo-Targeting OFF + Cache Compatibility Mode ON. A real FlyingPress HIT
   // below now proves the UI state alone removes the cache veto.
-  fpExclusiveRun = testInfo.config.workers === 1;
+  fpConfiguredWorkers = testInfo.config.workers;
+  fpExclusiveRun = fpConfiguredWorkers === 1;
   if (fpExclusiveRun && auditLabWasActive) {
     wp(['plugin', 'deactivate', 'faz-e2e-audit-lab']);
   }
@@ -296,7 +316,16 @@ test.beforeEach(() => {
   // runtime cannot be switched off without affecting the file running beside
   // this one, so a HIT is unreachable. A red here would be reporting the
   // harness's own constraint as a product fault.
-  test.skip(!fpExclusiveRun, 'needs an exclusive run — re-run this file with --workers=1');
+  //
+  // The message names the exact command on purpose. A skip that only says
+  // "needs an exclusive run" reads as a machine limitation and gets ignored;
+  // this one is an instruction, and following it works in every environment
+  // including CI=1 (a CLI --workers=1 overrides the config's isCI ? 2 : 1).
+  test.skip(
+    !fpExclusiveRun,
+    `this file was run with workers=${String(fpConfiguredWorkers)} — the FlyingPress suite needs the ` +
+      'install to itself. Run `npm run test:e2e:flyingpress` (adds --workers=1) to execute it.'
+  );
 });
 
 test.describe('FlyingPress cache purge (#125 / PR #186)', () => {

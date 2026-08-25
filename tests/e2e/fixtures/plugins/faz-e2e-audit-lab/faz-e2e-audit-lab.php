@@ -61,7 +61,33 @@ final class Faz_E2E_Audit_Lab {
 		if ( get_option( 'faz_e2e_geo_runtime_off' ) ) {
 			$faz_e2e_runtime = false;
 		}
-		add_filter( 'faz_geo_ruleset_runtime', $faz_e2e_runtime ? '__return_true' : '__return_false', PHP_INT_MAX );
+		// Third mode: DEFER. Both switches above still end in a forced filter, so
+		// with this fixture active the plugin's own answer to "is the jurisdiction
+		// runtime on?" is never observable — the suite could only ever prove how
+		// caching behaves GIVEN a forced state, never that the admin toggle
+		// produces that state. That is the exact gap behind the LiteSpeed and
+		// FlyingPress reports: Geo-Targeting off did not stop the no-store headers,
+		// and no test could see it.
+		//
+		// When faz_e2e_geo_runtime_defer is set, register NO filter at all, so
+		// Geo_Runtime::is_enabled() falls through to Settings > Geolocation >
+		// Geo-Targeting. It gates only this one add_filter() — the probes below
+		// stay available, and with the option absent the forced behaviour above is
+		// untouched, which the existing cache and geo suites depend on.
+		if ( ! get_option( 'faz_e2e_geo_runtime_defer' ) ) {
+			add_filter( 'faz_geo_ruleset_runtime', $faz_e2e_runtime ? '__return_true' : '__return_false', PHP_INT_MAX );
+		}
+
+		// Force the unwritable-uploads branch of the banner CSS enqueue for one
+		// request. Without this the inline-<style> fallback is unreachable from a
+		// test: the only other way in is to make wp-content/uploads unwritable,
+		// which is not something a suite may do to a shared install. The filter
+		// is the plugin's own documented seam (frontend/class-frontend.php,
+		// `apply_filters( 'faz_external_static_assets', true )`), so forcing it
+		// exercises the real fallback code path rather than a simulation of it.
+		if ( isset( $_GET['faz_e2e_inline_banner_css'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			add_filter( 'faz_external_static_assets', '__return_false', PHP_INT_MAX );
+		}
 
 		if ( isset( $_GET['faz_e2e_cf_country'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$_SERVER['HTTP_CF_IPCOUNTRY'] = strtoupper( sanitize_text_field( wp_unslash( $_GET['faz_e2e_cf_country'] ) ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized

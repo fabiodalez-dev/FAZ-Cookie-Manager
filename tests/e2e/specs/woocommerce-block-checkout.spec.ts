@@ -200,6 +200,38 @@ test.describe('WooCommerce block checkout strictly-necessary configuration', () 
   // Without this assertion the exemption can be silently widened into a
   // token-prefix whitelist entry (matched against id and class, not just src)
   // while the positive assertion above stays green.
+  //
+  // WHY THE ID VECTOR IS BLOCKED (its src carries no `wc-settings` fragment, on
+  // purpose — only an id-based exemption could rescue it, which is the whole
+  // point of the vector). Two different code paths, one per vector:
+  //
+  //   ID vector    — enqueued with handle `wc-settings-tracker`, so it travels
+  //                  through `script_loader_tag` → Frontend::filter_script_loader_tag().
+  //                  That matcher tests each provider pattern against BOTH the
+  //                  handle and the src:
+  //                      stripos( $handle, $pattern ) || stripos( $tag_src, $pattern )
+  //                  beforeAll above installs the custom rule `wc-settings` →
+  //                  marketing, which enters the provider map, and
+  //                  stripos('wc-settings-tracker', 'wc-settings') === 0. Marketing
+  //                  is denied pre-consent → type="text/plain". The src is never
+  //                  consulted; a reading that only considers src concludes,
+  //                  wrongly, that this vector can never be blocked.
+  //
+  //   Class vector — printed directly in wp_footer (no handle), so it is caught
+  //                  by the output-buffer path → match_script_to_provider(), which
+  //                  DOES go by src and applies a token-boundary check. Hence its
+  //                  src spells `/wc-settings/` slash-delimited.
+  //
+  // What makes the assertion discriminating in both cases is that
+  // is_strictly_necessary_script() and is_whitelisted() run BEFORE the provider
+  // loop in every path: widening the exemption to prefix/id matching short-
+  // circuits ahead of the block and the tag ships executable. Verified by
+  // mutation — reinstating the whitelist merge in class-frontend.php turns this
+  // test red with "wc-settings-tracker-js was served executable before consent".
+  //
+  // Nothing here depends on scanner-detected state: the custom rule is
+  // self-provisioned in beforeAll, so the test behaves identically on a clean
+  // install.
   test('wc-settings look-alike scripts stay blocked before consent', async ({ browser }) => {
     test.setTimeout(180_000);
     const context = await browser.newContext();
