@@ -4,7 +4,7 @@ Donate link: https://buymeacoffee.com/fabiodalez
 Tags: cookie, gdpr, ccpa, consent, privacy
 Requires at least: 5.0
 Tested up to: 7.1
-Stable tag: 1.27.1
+Stable tag: 1.28.0
 Requires PHP: 7.4
 License: GPL-3.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -397,6 +397,14 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/blob/main/CHANGELOG.md
 and on the GitHub Releases page:
 https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 
+= 1.28.0 =
+* Changed: fresh installs now enable the 47-law jurisdiction runtime, and a new cache-safe bootstrap can serve one strict GDPR shell and resolve the live law before the banner mounts, so a compatible page cache no longer has to be given up for correct per-country rules. Every unsupported configuration is named in the admin and falls back to the existing no-cache path.
+* Changed: sites upgrading from 1.27.x keep the enforcement they already had. The Geo-Targeting toggle is now authoritative, so a one-time migration turns it on and normalises a dormant "no banner" default, leaving banner visibility unchanged. A dismissible notice explains the change.
+* Fixed: turning Geo-Targeting off restores full-page caching without a PHP snippet, and LiteSpeed CSS optimisation no longer produces an unstyled banner first paint.
+* Fixed: WooCommerce look-alike scripts are blockable again. The three strictly-necessary handles were also reaching the general whitelist, which matches by token prefix against id and class, so names like `wc-settings-tracker-js` were being exempted from consent blocking.
+* Fixed: Croatian translations load again — the catalogue shipped under a locale WordPress does not have — and ten further invalid country-to-locale mappings are corrected.
+* Fixed: admin controls that the jurisdiction runtime overrides now say so instead of silently doing nothing, and preference-centre colours reach every rendered element including the audit table and the "Always Active" label.
+
 = 1.27.1 =
 * Fixed: WooCommerce block checkout could show "You must be logged in to checkout" to guests. The plugin was holding back WooCommerce's own `wc-settings` script, which publishes the `wcSettings` object the block checkout reads to learn whether guest checkout is allowed. With it inert the block fell back to its most restrictive default. `wc-settings`, `wc-blocks-middleware` and `wc-mini-cart-block-frontend` are now treated as strictly necessary and are never held back — they carry configuration only, set no cookies and are not a tracking surface. Reported on the support forum; reproduced and fixed with a regression test that fails if the handle is ever neutralised again.
 
@@ -506,24 +514,6 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Fix: legacy "Both" (GDPR + US) banners no longer silently lose their Do-Not-Sell opt-out. Very old banners stored it only in a legacy key that the settings sanitiser drops; the runtime now back-fills the opt-out from the raw stored settings so the US control still renders.
 * Fix: the Google Consent Mode non-personalized-ads fallback now signals `npa` on the FIRST visit too (legacy non-Consent-Mode ad tags previously only got it after a reject), and the signal is two-sided — it clears within the session once marketing is granted.
 * Hardening: the consent-log `status` column is constrained to the known set (unknown values fold to `partial`) so a crafted REST payload can't pollute the dashboard statistics; the client-side cookie cleanup gained a longer-tail pass to catch trackers that write a cookie well after page load; and an admin's explicit custom block rule is no longer silently exempted when it is a substring of an always-allowed payment-gateway pattern.
-
-= 1.19.0 =
-* Feature: per-service consent is reintroduced and now actually enforced. Granular per-service sub-toggles return under each category in the preference center (opt-in, sourced from the cookies actually detected on the site). A denied service is enforced server-side (pre-consent script block + cookie shredder) and client-side, an explicit allow overrides a denied category, and the choice persists across reloads and is written to the consent log. Enable it in Settings > Per-service consent. Extension filters: `faz_per_service_services`, `faz_store_data`.
-* Feature: Czech (cs_CZ) cookie-policy templates for the GDPR, CCPA and LGPD generators, with correct legal terminology and date grammar.
-* Feature: opt-out success message for US state-law / CCPA "Do Not Sell or Share" — an accessible confirmation (`role="status"` + `aria-live`, focus moved, countdown, auto-close) instead of a silent disappear. Headline/subtext editable via `[faz_optout_success_text]` / `[faz_optout_success_subtext]`.
-* Compliance: Quebec / Law 25 sub-national routing, Do-Not-Sell-My-Personal-Information enforcement, DSAR export/erase wiring, scanner TLS verify-by-default (loopback-exempt), and new geo rulesets (Minnesota, Maryland, New Hampshire, New Jersey, Texas, Canada / PIPEDA).
-* Fix: changing the banner's applicable law now reloads the law-appropriate notice copy — a CCPA description could survive on a GDPR banner and tell visitors to click a Do-Not-Sell link no longer rendered — without overwriting a customised description.
-* Fix: the "Do Not Sell or Share" link on a Classic-layout CCPA (or "Both") banner is no longer a dead click; such banners are migrated to a popup-capable layout in the editor and at runtime, with a re-show fallback.
-* Fix: the banner template cache signature now includes the plugin version and the per-service / per-cookie flags, so a plugin update can no longer serve a stale cached template to the updated script.
-* Fix: blocked-embed placeholder keeps its branded styling; a service-level placeholder accept records the choice; toggling a service no longer collapses its category accordion.
-* Fix: the geo "source not configured" admin notice no longer fires when a GeoLite2 database (or `FAZ_MAXMIND_DB_PATH`) is actually configured.
-* Change: per-cookie consent remains hard-off pending its correctness rework, and is now also rejected on the settings REST / import path.
-
-= 1.18.2 =
-* Change: the experimental opt-in features added in 1.18.0 (per-service / per-cookie consent toggles and the `faz_geo_ruleset_runtime` runtime geo-routing) are temporarily disabled pending a correctness rework — they did not, when enabled, deliver the granular guarantees their UI implied. They are now hard-off at their entry points. The default category-level consent flow (the path covered by the compliance suite) is byte-for-byte unchanged.
-* Change: per-service / per-cookie toggles are hidden in Settings and forced off. As shipped a denied cookie was not enforced server-side or on reload, the granular decisions were not written to the consent log, a large override set could exceed the browser's ~4 KB cookie limit, and the list showed catalogue wildcards rather than detected cookies.
-* Change: runtime geo-routing no longer applies a resolved ruleset to the live banner (a CCPA-style jurisdiction was mapped to a GDPR banner without rendering its Do-Not-Sell / GPC / sensitive-opt-in obligations). Catalogue-based multi-banner geo-routing — choosing which saved banner to show per country — is unaffected.
-* Fix: corrected an overstated per-cookie help text that claimed a denied cookie "is deleted whenever it appears." That enforcement only ran client-side at save time and did not persist, so the claim was inaccurate.
 
 
 = Older versions =

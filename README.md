@@ -610,11 +610,15 @@ Value format: `consentid:{base64},consent:yes,action:yes,necessary:yes,functiona
 
 Only the most recent release is listed here. The complete history is in [CHANGELOG.md](CHANGELOG.md) (Keep-a-Changelog format) and on the [GitHub Releases page](https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases).
 
-### Unreleased
+### 1.28.0 — 2026-08-25
 - **Compliance runtime**: all bundled jurisdiction rulesets are enforced by default across category defaults, server/client blocking, mandatory UI controls and Consent Mode. Compatible cached sites can use one strict shared shell and resolve the live law before mount; unsupported configurations retain the safe page-cache bypass. `faz_geo_ruleset_runtime` remains an emergency disable filter.
 - **GPC**: an asserted browser/header signal always controls sale/share purposes, including over a prior consent or a later same-page Accept All action, while preserving unrelated choices. Classic and AMP consent paths retain the audit marker and remove granular overrides that could bypass the opt-out.
 - **AMP parity**: remote scope/revision/expiry reconciliation, granular purpose controls, fail-closed component gating, and the same banner/bot/exclusion/revisit rules as the classic runtime.
 - **Operational completeness**: Ad-blocker compatibility mode now covers every frontend consent bundle; Scanner Static IP is exposed and pins all server-side crawl requests without breaking HTTPS; unused duplicate site settings are migrated away.
+- **Upgrade safety**: sites upgrading from 1.27.x keep the enforcement they already had — a one-time migration turns the now-authoritative Geo-Targeting toggle on and normalises a dormant `no_banner` default so banner visibility is unchanged.
+- **Consent blocking**: the three strictly-necessary WooCommerce handles are exact-match exempt again; a look-alike such as `wc-settings-tracker-js` is blockable, as documented.
+- **Localisation**: the Croatian catalogue is loaded again (it shipped under a locale WordPress does not have), ten further invalid country-to-locale mappings are corrected, and `Cache compatibility mode` is no longer labelled as the ad-blocker one in four languages.
+- **Admin honesty**: controls the runtime overrides are disabled or annotated with the reason, and the counts in that copy are read from the rule-set catalogue instead of being written into the strings.
 
 ### 1.27.0 — 2026-08-19
 - **Added**: authenticated browser-scan capture for PHP/HttpOnly `Set-Cookie` metadata, followed by a safe background replay of the URLs the browser actually visited.
