@@ -5063,7 +5063,7 @@ msgstr "Limitez le cookie de consentement à votre domaine enregistrable (ex. .e
 #: admin/views/settings.php:112
 #, fuzzy
 msgid "Cache compatibility mode"
-msgstr "Mode de compatibilité anti-bloqueurs de publicité"
+msgstr "Mode de compatibilité avec le cache"
 
 #: admin/views/settings.php:114
 msgid "Keep a visitor-invariant page fully cacheable when Geo-Targeting is off. If Geo-Targeting is on, jurisdiction rules take priority and this mode is ignored because caching one country's consent model for another is a compliance risk. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When active, this mode also pauses server-side A/B splitting and bot-specific output."
