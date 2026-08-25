@@ -12,6 +12,7 @@ All notable changes to FAZ Cookie Manager are documented in this file.
 - **The server-side scanner's optional static IP is now a complete setting.** Sitemap discovery and page fetches use cURL hostname pinning while preserving Host, TLS certificate validation and SNI; only public IPs are accepted and unsafe targets fail closed.
 
 ### Fixed
+- **Dark and custom preference-center colours now reach every rendered element.** The Dark Professional preset gives the audit table an explicit high-contrast palette, the three detail text colour properties are consumed by frontend and admin-preview CSS, and the “Always Active” label now participates in the normal tag/theme pipeline (including an AAA-safe High Contrast value).
 - **Disabling Geo-Targeting now restores full-page caching without a PHP snippet.** The jurisdiction runtime follows the saved Geo-Targeting toggle, so Cache Compatibility Mode no longer emits FAZ's `no-store`/page-cache veto when the toggle is off. FlyingPress 5.5.0 is covered by a real MISS/HIT and purge integration test.
 - **LiteSpeed CSS optimisation no longer causes an unstyled banner first paint.** Bundled and generated banner styles are registered through LiteSpeed's CSS exclusion API and carry tag-level no-optimize markers while preserving existing site exclusions.
 

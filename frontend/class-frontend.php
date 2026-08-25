@@ -5795,7 +5795,7 @@ class Frontend {
 			'donotsell-button',
 			'show-desc-button',
 			'hide-desc-button',
-			'faz-always-active',
+			'always-active',
 			'faz-link',
 			'revisit-consent',
 		);
@@ -6052,7 +6052,10 @@ class Frontend {
 	 */
 	public static function prepare_banner_styles( $raw_css ) {
 		$raw_css   = is_string( $raw_css ) ? $raw_css : '';
-		$cache_key = 'faz_boosted_css_' . FAZ_VERSION . '_' . md5( $raw_css );
+		// Keep an explicit pipeline revision in addition to FAZ_VERSION so a
+		// development deploy cannot reuse CSS assembled before utility rules were
+		// added. Release builds also invalidate through the version as usual.
+		$cache_key = 'faz_boosted_css_v2_' . FAZ_VERSION . '_' . md5( $raw_css );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
@@ -6075,7 +6078,15 @@ class Frontend {
 		$css_fixes = '#faz-consent .faz-accordion-header .faz-always-active,'
 			. '.faz-modal .faz-accordion-header .faz-always-active{'
 			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
-			. '}';
+			. '}'
+			. '#faz-consent [data-faz-tag="detail-title"],'
+			. '.faz-modal [data-faz-tag="detail-title"]{color:var(--faz-detail-title-color,#212121);}'
+			. '#faz-consent [data-faz-tag="detail-description"],'
+			. '.faz-modal [data-faz-tag="detail-description"]{color:var(--faz-detail-description-color,#212121);}'
+			. '#faz-consent [data-faz-tag="detail-category-description"],'
+			. '.faz-modal [data-faz-tag="detail-category-description"]{color:var(--faz-detail-category-description-color,#212121);}'
+			. '#faz-consent [data-faz-tag="audit-table"],'
+			. '.faz-modal [data-faz-tag="audit-table"]{color:var(--faz-audit-table-color,#212121);}';
 		// [faz_cookie_settings] "manage consent preferences" button (not the
 		// floating .faz-btn-revisit widget). Rendered inside page content
 		// (outside #faz-consent), so it can't inherit the banner's scoped

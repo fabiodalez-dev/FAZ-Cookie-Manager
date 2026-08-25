@@ -6922,3 +6922,31 @@ msgstr "Knop"
 #: includes/blocks/editor.js:105
 msgid "Link"
 msgstr "Link"
+
+#: admin/class-admin.php:712
+msgid "Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
+msgstr ""
+
+#: admin/class-admin.php:852
+msgid "⚠️ disabled by Geo-Targeting settings or the faz_geo_ruleset_runtime filter"
+msgstr ""
+
+#: admin/views/settings.php:114
+msgid "Keep a visitor-invariant page fully cacheable when Geo-Targeting is off. If Geo-Targeting is on, jurisdiction rules take priority and this mode is ignored because caching one country's consent model for another is a compliance risk. Developers can override the runtime with the <code>faz_geo_ruleset_runtime</code> filter. When active, this mode also pauses server-side A/B splitting and bot-specific output."
+msgstr ""
+
+#: admin/views/settings.php:408
+msgid "Detect each visitor's location to apply the matching jurisdiction rules and, optionally, limit banner display to selected regions. Turning this off also stops the per-country runtime so Cache Compatibility Mode can keep full pages cacheable. Requires a MaxMind GeoLite2 database (configured below), or the Cloudflare CF-IPCountry header (trusted only when the faz_trust_cf_ipcountry_header filter is enabled by your developer). When the country cannot be resolved, the banner is shown to everyone (fail-open)."
+msgstr ""
+
+#: admin/views/setup.php:154
+msgid "Keeps every rendered page identical for all visitors so full-page caches (WP Rocket, LiteSpeed, …) can never serve one visitor's consent state to another. Requires Geo-Targeting to be off — while it is on, per-country consent rules win over caching."
+msgstr ""
+
+#: admin/views/setup.php:268
+msgid "Unavailable while jurisdiction routing is active. Consent rules are resolved per visitor country, so a shared full-page cache cannot serve one country's banner to another. Turn off Geo-Targeting under Settings → Geolocation, or use the faz_geo_ruleset_runtime developer filter."
+msgstr ""
+
+#: admin/views/setup.php:429
+msgid "Note: Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied."
+msgstr ""

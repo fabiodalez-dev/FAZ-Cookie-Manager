@@ -84,6 +84,24 @@
                 }
             }
         },
+        "auditTable": {
+            "styles": {
+                "color": "#e5e7eb",
+                "background-color": "#111827",
+                "border-color": "#374151"
+            }
+        },
+        "accessibilityOverrides": {
+            "elements": {
+                "preferenceCenter": {
+                    "elements": {
+                        "alwaysActive": {
+                            "styles": { "color": "#bfdbfe" }
+                        }
+                    }
+                }
+            }
+        },
         "categoryPreview": {
             "elements": {
                 "title": { "styles": { "color": "#e5e7eb" } },

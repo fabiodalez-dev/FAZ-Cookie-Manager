@@ -1981,6 +1981,26 @@
 			]);
 		}
 
+		if (c.auditTable && bannerData && bannerData.properties) {
+			applyPresetSection('auditTable', c.auditTable);
+		}
+
+		// Accessibility overrides are a shared config section. Overlay only the
+		// Always Active styles supplied by a preset so unrelated user choices
+		// (manual links and Show More/Less) are not replaced.
+		var alwaysActiveStyles = getPathValue(
+			c,
+			'accessibilityOverrides.elements.preferenceCenter.elements.alwaysActive.styles'
+		);
+		if (isPlainObject(alwaysActiveStyles) && bannerData && bannerData.properties) {
+			var alwaysActivePath = 'config.accessibilityOverrides.elements.preferenceCenter.elements.alwaysActive.styles';
+			ensureObj(bannerData.properties, alwaysActivePath);
+			var currentAlwaysActiveStyles = getPathValue(bannerData.properties, alwaysActivePath);
+			Object.keys(alwaysActiveStyles).forEach(function (property) {
+				currentAlwaysActiveStyles[property] = alwaysActiveStyles[property];
+			});
+		}
+
 		if (c.optoutPopup && bannerData && bannerData.properties) {
 			applyPresetSection('optoutPopup', c.optoutPopup, [
 				'elements.closeButton',

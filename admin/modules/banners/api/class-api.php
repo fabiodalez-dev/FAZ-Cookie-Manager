@@ -459,7 +459,15 @@ class Api extends Rest_Controller {
 		$css_fixes = '#faz-consent .faz-accordion-header .faz-always-active,'
 			. '.faz-modal .faz-accordion-header .faz-always-active{'
 			. 'margin-left:auto;margin-right:8px;white-space:nowrap;'
-			. '}';
+			. '}'
+			. '#faz-consent [data-faz-tag="detail-title"],'
+			. '.faz-modal [data-faz-tag="detail-title"]{color:var(--faz-detail-title-color,#212121);}'
+			. '#faz-consent [data-faz-tag="detail-description"],'
+			. '.faz-modal [data-faz-tag="detail-description"]{color:var(--faz-detail-description-color,#212121);}'
+			. '#faz-consent [data-faz-tag="detail-category-description"],'
+			. '.faz-modal [data-faz-tag="detail-category-description"]{color:var(--faz-detail-category-description-color,#212121);}'
+			. '#faz-consent [data-faz-tag="audit-table"],'
+			. '.faz-modal [data-faz-tag="audit-table"]{color:var(--faz-audit-table-color,#212121);}';
 
 		// Custom CSS (banner.meta.customCSS) preview output removed in
 		// 1.13.11 for wp.org compliance — see frontend/class-frontend.php

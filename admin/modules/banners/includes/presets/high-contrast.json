@@ -84,6 +84,17 @@
                 }
             }
         },
+        "accessibilityOverrides": {
+            "elements": {
+                "preferenceCenter": {
+                    "elements": {
+                        "alwaysActive": {
+                            "styles": { "color": "#000000" }
+                        }
+                    }
+                }
+            }
+        },
         "categoryPreview": {
             "elements": {
                 "title": { "styles": { "color": "#000000" } },

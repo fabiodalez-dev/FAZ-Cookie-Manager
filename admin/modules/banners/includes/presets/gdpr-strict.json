@@ -126,6 +126,19 @@
             }
           }
         }
+        }
+    },
+    "accessibilityOverrides": {
+      "elements": {
+        "preferenceCenter": {
+          "elements": {
+            "alwaysActive": {
+              "styles": {
+                "color": "#166534"
+              }
+            }
+          }
+        }
       }
     },
     "categoryPreview": {
