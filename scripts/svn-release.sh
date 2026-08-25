@@ -269,7 +269,18 @@ fi
 # ── Commit ───────────────────────────────────────────────────────────────
 echo
 cyan "═══ svn ci ═══"
-svn ci -m "${COMMIT_MSG}" --username "${SVN_USERNAME}" --non-interactive
+# Credentials. `svn info`/`svn ls` on this repository succeed ANONYMOUSLY, so a
+# successful read proves nothing about write access — that mistake cost a run
+# tonight. Supply SVN_PASSWORD in the environment for an unattended commit; it
+# is passed on svn's own stdin (never argv, so it stays out of the process
+# list) via a here-string, which also keeps it from consuming the stdin the two
+# confirmation gates above read from. With the variable unset the behaviour is
+# exactly as before: svn uses whatever credential the OS keychain holds.
+if [[ -n "${SVN_PASSWORD:-}" ]]; then
+	svn ci -m "${COMMIT_MSG}" --username "${SVN_USERNAME}" --password-from-stdin --non-interactive <<<"${SVN_PASSWORD}"
+else
+	svn ci -m "${COMMIT_MSG}" --username "${SVN_USERNAME}" --non-interactive
+fi
 
 green "════════════════════════════════════════════════════════════════════"
 green "  ✓ Release ${VERSION} committed to wordpress.org SVN."
