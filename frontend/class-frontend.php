@@ -4342,7 +4342,14 @@ class Frontend {
 		// Publishers may add a narrowly-scoped, audited exception in Settings when
 		// a resource is genuinely strictly necessary for their own use case.
 		$whitelist = array_merge( $whitelist, $this->get_always_allowed_gateway_patterns() );
-		$whitelist = array_merge( $whitelist, self::strictly_necessary_script_handles() );
+
+		// strictly_necessary_script_handles() is deliberately NOT merged here.
+		// The whitelist matches by token PREFIX against id and class as well as
+		// src, so `wc-settings` here would also exempt `wc-settings-tracker-js`
+		// and `class="wc-settings-tracker"`, plus iframes, noscript pixels, link
+		// and style tags. Those handles are exempted by exact identity in
+		// is_strictly_necessary_script(), which runs ahead of this check in all
+		// three script paths.
 
 		// ── Anti-abuse challenge endpoints — strictly necessary ──
 		//

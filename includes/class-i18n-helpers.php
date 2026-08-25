@@ -367,7 +367,22 @@ if ( ! function_exists( 'faz_country_to_language' ) ) {
 			'SE' => 'sv', 'NO' => 'no', 'DK' => 'da', 'FI' => 'fi', 'IS' => 'is',
 			// Baltic
 			'EE' => 'et', 'LV' => 'lv', 'LT' => 'lt',
-			// Slovenian / Croatian / Bulgarian / Maltese
+			// Slovenian / Croatian / Bulgarian / Maltese.
+			//
+			// MT stays 'mt' even though faz_country_to_locale('MT') returns
+			// 'en_GB'. The two maps answer different questions and are NOT
+			// required to agree:
+			//   - this map returns a plugin BANNER-CONTENT language key, one of
+			//     the codes the Languages screen offers (it lists 'Maltese' =>
+			//     'mt'), so an admin who wrote Maltese banner copy gets it used;
+			//   - faz_country_to_locale() returns a WordPress/multilingual-plugin
+			//     LOCALE, and WordPress has no Maltese locale to return.
+			// faz_current_language() tries the locale form first and this one
+			// second, so the divergence is inert in practice: 'en_GB' normalises
+			// to 'en-gb', which the Languages screen never offers (it has plain
+			// 'en'), so the locale branch cannot match for MT and Maltese copy
+			// still wins. Do not "align" them — mapping MT to 'en' here would
+			// silently switch Maltese visitors to English banner content.
 			'SI' => 'sl', 'HR' => 'hr', 'BG' => 'bg', 'MT' => 'mt',
 			// Irish (English is also official)
 			'IE' => 'en',
@@ -472,6 +487,12 @@ if ( ! function_exists( 'faz_country_to_locale' ) ) {
 			'SE' => 'sv_SE', 'NO' => 'nb_NO', 'DK' => 'da_DK',
 			'FI' => 'fi', 'IS' => 'is_IS',
 			'EE' => 'et', 'LV' => 'lv', 'LT' => 'lt_LT',
+			// MT is NOT a typo and NOT part of the code-shortening above:
+			// WordPress ships no Maltese locale at all (the translate.w.org
+			// locale list has no `mt*` entry), so `mt_MT` would be a locale
+			// nothing can ever resolve. English is co-official in Malta, hence
+			// en_GB. Note this deliberately DIVERGES from
+			// faz_country_to_language('MT') === 'mt' — see the comment there.
 			'SI' => 'sl_SI', 'HR' => 'hr', 'BG' => 'bg_BG', 'MT' => 'en_GB',
 			// Arabic — most-deployed locale per country.
 			'SA' => 'ar', 'AE' => 'ar', 'EG' => 'ar',

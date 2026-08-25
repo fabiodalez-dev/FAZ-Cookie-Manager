@@ -40,7 +40,11 @@
             }
         },
         "preferenceCenter": {
-            "styles": { "color": "#ffffff", "background-color": "#000000", "border-color": "#000000" },
+            "styles": {
+                "color": "#000000",
+                "background-color": "#ffffff",
+                "border-color": "#000000"
+            },
             "elements": {
                 "title": { "styles": { "color": "#000000" } },
                 "description": { "styles": { "color": "#000000" } },

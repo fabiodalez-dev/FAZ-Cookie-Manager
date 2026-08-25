@@ -5,15 +5,23 @@
  * Spec: specs/001-geo-routing-next/spec.md FR-02
  * Task: T021 (P3 Pipeline)
  *
- * Chain per plan.md §1.1 stage 1:
- *   1. CF-IPCountry header (Cloudflare)
- *   2. X-Country-Code admin override
- *   3. ipinfo.io VPN/proxy gate → forces 'XX' on VPN detected
- *   4. ip-api.com (when ipinfo says non-VPN)
- *   5. GeoLite2 local DB
- *   6. 'XX' sentinel → fallback
+ * Chain as implemented by `detect()` (plan.md §1.1 stage 1):
+ *   1. X-Country-Code admin override — evaluated FIRST, ahead of the cache
+ *      read, and its result is deliberately never cached (the cache key is the
+ *      IP hash alone, so caching the override would poison later un-overridden
+ *      lookups). See the comment in `detect()` for why it moved up.
+ *   2. Per-IP cache hit (`wp_cache_get`, group `faz_geo_detect`) → returned
+ *      verbatim; steps 3-6 run only on a miss.
+ *   3. CF-IPCountry / CF-Region-Code headers (Cloudflare), behind the
+ *      `faz_trust_cf_ipcountry_header` trust gate.
+ *   4. ipinfo.io VPN/proxy gate — annotates the result with `vpn` (bool|null);
+ *      it does not by itself pick the country.
+ *   5. ip-api.com then GeoLite2 local DB, via `Geolocation` — consulted only
+ *      when the CF header yielded nothing.
+ *   6. 'XX' sentinel when every source failed.
  *
- * Cache: `_transient_faz_geo_{ip_hash}` TTL 1h (Q6 resolution).
+ * Cache: `wp_cache_*` under group `faz_geo_detect`, keyed on the IP hash,
+ * TTL 1h (Q6 resolution). Written on a miss only, never for step 1.
  *
  * Constitution VIII — IP never stored cleartext (cache key is hash with
  * monthly rotation salt).

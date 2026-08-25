@@ -486,7 +486,10 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 					// this is the one case that takes a sentence and no lock.
 					if ( $faz_equal_weight['all'] ) :
 						?>
-						<p class="faz-field-help" id="faz-b-reject-colours-note" style="margin-bottom:.75rem;"><?php esc_html_e( 'While jurisdiction routing is active these three fields are overridden: equal prominence means Reject is painted with the Accept button\'s colours, so set the pair you want on Accept above. They apply again if you disable the routing runtime.', 'faz-cookie-manager' ); ?></p>
+							<?php // Wrapped in a .faz-form-group for two reasons: the help typography is descendant-scoped (`.faz-form-group .faz-help`), and this note is a direct child of a 3-column .faz-grid — without the full-row span it would be squeezed into a single colour-picker cell. ?>
+						<div class="faz-form-group" style="grid-column:1/-1;margin-bottom:0;">
+							<p class="faz-help" id="faz-b-reject-colours-note" style="margin-bottom:.75rem;"><?php esc_html_e( 'While jurisdiction routing is active these three fields are overridden: equal prominence means Reject is painted with the Accept button\'s colours, so set the pair you want on Accept above. They apply again if you disable the routing runtime.', 'faz-cookie-manager' ); ?></p>
+						</div>
 					<?php endif; ?>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Reject — Background', 'faz-cookie-manager' ); ?></label>
@@ -498,14 +501,14 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Reject — Text', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-reject-text">
+							<input type="color" id="faz-b-reject-text"<?php echo $faz_equal_weight['all'] ? ' aria-describedby="faz-b-reject-colours-note"' : ''; ?>>
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-text-hex" style="width:90px;">
 						</div>
 					</div>
 					<div class="faz-form-group">
 						<label><?php esc_html_e( 'Reject — Border', 'faz-cookie-manager' ); ?></label>
 						<div class="faz-input-color-wrap">
-							<input type="color" id="faz-b-reject-border">
+							<input type="color" id="faz-b-reject-border"<?php echo $faz_equal_weight['all'] ? ' aria-describedby="faz-b-reject-colours-note"' : ''; ?>>
 							<input type="text" class="faz-input faz-input-sm" id="faz-b-reject-border-hex" style="width:90px;">
 						</div>
 					</div>
@@ -681,7 +684,7 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 						<span><?php esc_html_e( 'Show Accept Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_buttons_locked ) : ?>
-						<p class="faz-field-help" id="faz-b-accept-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-accept-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Equal prominence works both ways: the runtime keeps Accept and Reject on together, so neither can be hidden while the other stays. Their wording and colours are still yours.', 'faz-cookie-manager' ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -691,7 +694,7 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 						<span><?php esc_html_e( 'Show Reject Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_buttons_locked ) : ?>
-						<p class="faz-field-help" id="faz-b-reject-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-reject-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Rule sets for the EU, UK, Switzerland and most other opt-in regimes require Reject to sit beside Accept with equal prominence, so the runtime keeps it visible for those visitors whatever this switch says. Styling both buttons more quietly is fine; hiding the refusal is not.', 'faz-cookie-manager' ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -701,7 +704,7 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 						<span><?php esc_html_e( 'Show Settings Button', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_settings_req['some'] ) : ?>
-						<p class="faz-field-help" id="faz-b-settings-note">
+						<p class="faz-help" id="faz-b-settings-note">
 							<?php
 							printf(
 								/* translators: 1: number of rule sets requiring a separate sensitive-data choice, 2: total number of shipped rule sets. */
@@ -877,7 +880,7 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 						<span><?php esc_html_e( 'Show revisit consent widget', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_revisit_req['all'] ) : ?>
-						<p class="faz-field-help" id="faz-b-revisit-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ); ?></p>
+						<p class="faz-help" id="faz-b-revisit-locked"><?php esc_html_e( 'Locked on while jurisdiction routing is active. Every shipped rule set requires a standing way to reopen and withdraw consent, so the runtime keeps this widget visible whatever this switch says — withdrawing has to stay as easy as giving. Its position, colours and icon below remain yours to change.', 'faz-cookie-manager' ); ?></p>
 					<?php endif; ?>
 				</div>
 				<div class="faz-form-group">
@@ -918,7 +921,7 @@ $faz_gpc_req      = $faz_requirement( array( 'signals.gpc_honored', 'signals.gpc
 						<span><?php esc_html_e( 'Respect Global Privacy Control (GPC)', 'faz-cookie-manager' ); ?></span>
 					</label>
 					<?php if ( $faz_gpc_req['some'] ) : ?>
-						<p class="faz-field-help" id="faz-b-gpc-note">
+						<p class="faz-help" id="faz-b-gpc-note">
 							<?php
 							printf(
 								/* translators: 1: number of rule sets that honour or mandate GPC, 2: total number of shipped rule sets. */

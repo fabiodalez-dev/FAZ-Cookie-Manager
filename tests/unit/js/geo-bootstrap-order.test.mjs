@@ -19,6 +19,9 @@ const INSTRUMENTED_SOURCE = SOURCE.replace(
   '_fazDomReady(async function () {',
   `window.__fazTestInit = _fazInit;
 window.__fazTestShouldBlockResource = _fazShouldBlockResource;
+// Captured BEFORE __fazTestIsolateInit() swaps the binding for a no-op, so the
+// watchdog-delay checks can exercise the real scheduler.
+window.__fazTestRealWatchdog = _fazScheduleBannerWatchdog;
 window.__fazTestIsolateInit = function () {
   _fazScheduleBannerWatchdog = function () {};
   _fazRunDeadCookieCleanup = function () {};
@@ -165,6 +168,21 @@ const RETURNING_CCPA_CONSENT = [
   'rev:1',
 ].join(',');
 
+// Same visitor, but scoped to the strict shell itself — used by the
+// endpoint-less case, where the shell IS the final answer and the stored grant
+// is therefore in scope and must survive.
+const RETURNING_GDPR_CONSENT = [
+  'consentid:returning-gdpr',
+  'consent:yes',
+  'action:yes',
+  '__scope.banner:strict-gdpr',
+  '__scope.law:gdpr',
+  '__scope.fp:strict-fingerprint',
+  'necessary:yes',
+  'marketing:yes',
+  'rev:1',
+].join(',');
+
 console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
 
 // A pending jurisdiction request must hold back mount + first unblock. Once it
@@ -252,6 +270,66 @@ console.log('cache-safe jurisdiction bootstrap ordering (jsdom)');
   check('a partial 200 payload removes the stale consent cookie', !window.document.cookie.includes('fazcookie-consent='));
   check('a partial 200 payload records strict fallback', window.fazcookie._diag().geoBootstrapResolved === 'strict-fallback');
   check('a partial 200 payload never installs live override CSS', !window.document.getElementById('faz-jurisdiction-bootstrap-styles'));
+}
+
+// A bootstrap page with NO banner endpoint (a "disable REST API" plugin
+// filtering rest_url() to empty, or a faz_store_data filter dropping the key)
+// used to return from _fazBootstrapJurisdiction() without recording a verdict.
+// Since the pending gate only ever clears through that function, it stayed
+// pending for the life of the page and every non-necessary category stayed
+// blocked — consent recorded, nothing ever unblocked. The early return must
+// resolve to the same defined fail-closed state as a network failure.
+{
+  let fetchCalls = 0;
+  const window = loadFrontend(async () => {
+    fetchCalls += 1;
+    throw new Error('the endpoint-less path must never reach the network');
+  }, RETURNING_GDPR_CONSENT);
+  window._fazConfig._bannerEndpoint = '';
+  check('a missing endpoint leaves the gate pending before init', window.__fazTestShouldBlockResource('marketing', '', '') === true);
+  await window.__fazTestInit();
+  const applied = window.__fazInitOperationsCalls[0];
+  check('a missing endpoint never issues a request', fetchCalls === 0);
+  check('a missing endpoint still runs operations exactly once', window.__fazInitOperationsCalls.length === 1);
+  check('a missing endpoint keeps the strict GDPR shell', applied.law === 'gdpr' && applied.slug === 'strict-gdpr');
+  check('a missing endpoint resolves the gate to the fail-closed state', window.fazcookie._diag().geoBootstrapResolved === 'strict-fallback');
+  check('an in-scope grant is honoured once the gate resolves', window.__fazTestShouldBlockResource('marketing', '', '') === false);
+  check('an in-scope consent cookie survives the endpoint-less fallback', window.document.cookie.includes('fazcookie-consent='));
+}
+
+// The fail-open watchdog is armed BEFORE the bootstrap await it protects, so
+// its delay has to outlast that await. The bootstrap budget is publisher-tunable
+// to 5000ms (faz_geo_bootstrap_timeout_ms); a hardcoded 2500ms net fired while
+// the await was still pending and left _fazInitOperations() unguarded.
+{
+  const window = loadFrontend(async () => ({ ok: true, json: async () => liveCcpaPayload() }));
+  const delays = [];
+  window.setTimeout = (fn, ms) => {
+    delays.push(ms);
+    return 0;
+  };
+
+  window._fazConfig._geoBootstrap = true;
+  window._fazConfig._geoBootstrapTimeout = 5000;
+  window.__fazTestRealWatchdog();
+  check('a 5000ms bootstrap budget pushes the watchdog past it', delays[0] === 6000);
+
+  window._fazConfig._geoBootstrapTimeout = 3000;
+  window.__fazTestRealWatchdog();
+  check('the watchdog tracks an intermediate raised budget', delays[1] === 4000);
+
+  window._fazConfig._geoBootstrapTimeout = 500;
+  window.__fazTestRealWatchdog();
+  check('a short budget never shortens the watchdog below its 2500ms floor', delays[2] === 2500);
+
+  window._fazConfig._geoBootstrapTimeout = 'not-a-number';
+  window.__fazTestRealWatchdog();
+  check('an unparseable budget falls back to the same 1500ms default the bootstrap uses', delays[3] === 2500);
+
+  window._fazConfig._geoBootstrap = false;
+  window._fazConfig._geoBootstrapTimeout = 5000;
+  window.__fazTestRealWatchdog();
+  check('non-bootstrap pages keep the original 2500ms delay exactly', delays[4] === 2500);
 }
 
 console.log(`\n  geo-bootstrap-order: ${passed} passed, ${failed} failed`);

@@ -1438,7 +1438,28 @@ function _fazApplyBannerPayload(payload) {
  * @returns {Promise<boolean>} true when a live payload was applied.
  */
 async function _fazBootstrapJurisdiction() {
-    if (!_fazStore || !_fazStore._geoBootstrap || !_fazStore._bannerEndpoint) return false;
+    // Order matters: _fazStore may be null, and the endpoint branch below WRITES
+    // to it, so the existence check has to come first and on its own.
+    if (!_fazStore || !_fazStore._geoBootstrap) return false;
+    if (!_fazStore._bannerEndpoint) {
+        // There is no endpoint to ask — a "disable REST API" plugin filtered
+        // `rest_url()` to empty, or a `faz_store_data` filter dropped the key.
+        // Returning without a verdict would be the worst outcome available:
+        // _fazGeoBootstrapPending() only ever clears through the two writes in
+        // this function, so the gate would stay pending for the life of the
+        // page and keep EVERY non-necessary category blocked — the visitor
+        // clicks Accept, the consent is recorded, and nothing is ever
+        // unblocked. Resolve to the same defined fail-closed state the network
+        // failure path uses: the cached strict shell stays authoritative, but
+        // consent can actually flow. Invalidate a cookie issued for another
+        // banner/law first, for the same reason as the fallback below.
+        if (_fazHasConsentCookie && _fazConsentScopeChanged()) {
+            _fazInvalidateStoredConsent();
+        }
+        _fazStore._geoBootstrapResolved = 'strict-fallback';
+        try { window._fazGeoBootstrapResolved = 'strict-fallback'; } catch (e) { /* noop */ }
+        return false;
+    }
 
     var lang = _fazStore._language || _fazStore._defaultLanguage || 'en';
     if (_fazStore._browserDetect) {
@@ -1606,6 +1627,22 @@ function _fazRunDeadCookieCleanup() {
  * throws. #auto-show-hardening
  */
 function _fazScheduleBannerWatchdog() {
+    // The net has to outlive the await it is protecting. _fazInit() arms this
+    // timer BEFORE awaiting _fazBootstrapJurisdiction(), whose budget is
+    // publisher-tunable up to 5000ms via `faz_geo_bootstrap_timeout_ms` (PHP
+    // clamp in class-frontend.php). A bare 2500ms constant fires while that
+    // await is still pending on any install that raised the timeout, spending
+    // the watchdog before _fazInitOperations() has even started — exactly the
+    // step it exists to guard. Derive the delay from the same budget instead.
+    // Non-bootstrap pages keep the original 2500ms unchanged.
+    var _fazWatchdogDelay = 2500;
+    if (_fazStore && _fazStore._geoBootstrap) {
+        // Mirror the parse/clamp _fazBootstrapJurisdiction() applies, so the
+        // two never disagree about how long the await can actually run.
+        var _fazBootstrapBudget = parseInt(_fazStore._geoBootstrapTimeout, 10);
+        if (isNaN(_fazBootstrapBudget) || _fazBootstrapBudget < 250) _fazBootstrapBudget = 1500;
+        _fazWatchdogDelay = Math.max(2500, _fazBootstrapBudget + 1000);
+    }
     window.setTimeout(function () {
         try {
             // Always lift the anti-FOUC gate — purely reveals, never hides.
@@ -1622,7 +1659,7 @@ function _fazScheduleBannerWatchdog() {
         } catch (e) {
             /* a watchdog must never break the page */
         }
-    }, 2500);
+    }, _fazWatchdogDelay);
 }
 
 // Belt-and-suspenders against a Rocket-Loader double-init (already guarded by
