@@ -114,6 +114,26 @@ function clearCaches(): void {
   `);
 }
 
+function repairLegacyFlyingPressDropinAsAdmin(): void {
+  wpEval(`
+    $admin_ids = get_users( array(
+      'role'   => 'administrator',
+      'number' => 1,
+      'fields' => 'ID',
+    ) );
+    if ( empty( $admin_ids ) ) {
+      throw new RuntimeException( 'The FlyingPress repair E2E requires an administrator fixture user.' );
+    }
+    $previous_user_id = get_current_user_id();
+    try {
+      wp_set_current_user( (int) $admin_ids[0] );
+      \\FazCookie\\Includes\\CLI::remove_legacy_flyingpress_law_vary();
+    } finally {
+      wp_set_current_user( $previous_user_id );
+    }
+  `);
+}
+
 function privateCall(method: string): string {
   return wpEval(`
     $frontend = new \\FazCookie\\Frontend\\Frontend( 'faz-cookie-manager', '1.27.0' );
@@ -498,7 +518,9 @@ test('real FlyingPress HIT serves the same strict shell, then California bootstr
     echo false !== strpos( (string) $contents, 'faz-law' ) ? '1' : '0';
   `).trim();
     expect(legacyWasBaked).toBe('1');
-    wpEval(`\\FazCookie\\Includes\\CLI::remove_legacy_flyingpress_law_vary();`);
+    // WP-CLI has no logged-in user by default. Exercise the production
+    // capability contract explicitly instead of bypassing the new guard.
+    repairLegacyFlyingPressDropinAsAdmin();
 
     clearCaches();
     await primeCache(request);
@@ -536,6 +558,6 @@ test('real FlyingPress HIT serves the same strict shell, then California bootstr
   } finally {
     // The legacy key lives in a pre-WordPress generated drop-in. Repair it even
     // when any assertion above fails so later specs never inherit fragmentation.
-    wpEval(`if ( class_exists( '\\FlyingPress\\AdvancedCache' ) ) { \\FazCookie\\Includes\\CLI::remove_legacy_flyingpress_law_vary(); }`);
+    if (flyingPressAvailable) repairLegacyFlyingPressDropinAsAdmin();
   }
 });

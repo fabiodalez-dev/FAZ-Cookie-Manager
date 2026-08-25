@@ -17,6 +17,16 @@ const WP_BASE = process.env.WP_BASE_URL ?? '';
 const WP_MAIN = process.env.FAZ_MULTISITE_MAIN_URL ?? '';
 const WP_PATH = process.env.WP_PATH ?? '';
 
+// This file is discovered by the normal Playwright config as well, but its
+// topology exists only inside scripts/run-multisite-scanner-e2e.sh. Keep the
+// ordinary release gate green and explicit: the dedicated runner supplies both
+// the /child base URL and the main-site URL, while a normal single-site run
+// records one intentional skip instead of failing before the first assertion.
+test.skip(
+  !WP_MAIN || !WP_BASE.includes('/child'),
+  'Run through npm run test:e2e:multisite (isolated disposable network).',
+);
+
 function wpSiteEval(siteURL: string, code: string): string {
   if (!WP_PATH || !siteURL) {
     throw new Error('WP_PATH and both multisite URLs must be supplied by the isolated runner.');

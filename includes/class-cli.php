@@ -307,7 +307,7 @@ class CLI {
 			// rewrite, whether or not `faz-law` actually disappeared. Marking
 			// only on success left a drop-in we cannot repair being regenerated
 			// on every single admin request, forever. Because the marker is a
-			// stat fingerprint and not a boolean one-shot, a later genuine
+			// content fingerprint and not a boolean one-shot, a later genuine
 			// FlyingPress regeneration changes it and re-arms the attempt.
 			// is_readable() first: FlyingPress may have unlinked the drop-in
 			// instead of rewriting it, and stat'ing a missing path would only
@@ -322,7 +322,7 @@ class CLI {
 	}
 
 	/**
-	 * Cheap identity for a generated FlyingPress drop-in.
+	 * Collision-resistant identity for a generated FlyingPress drop-in.
 	 *
 	 * A later FlyingPress regeneration changes the marker and re-enables the
 	 * safety scan, unlike a permanent boolean one-shot flag.
@@ -333,10 +333,11 @@ class CLI {
 	private static function flyingpress_dropin_fingerprint( $dropin ) {
 		$mtime = \filemtime( $dropin );
 		$size  = \filesize( $dropin );
-		if ( false === $mtime || false === $size ) {
+		$digest = \hash_file( 'sha256', $dropin );
+		if ( false === $mtime || false === $size || false === $digest ) {
 			return '';
 		}
-		return (string) $mtime . ':' . (string) $size;
+		return (string) $mtime . ':' . (string) $size . ':' . $digest;
 	}
 
 	/**

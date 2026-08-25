@@ -21,10 +21,13 @@
  * What is asserted, on the REAL response headers of `/` rather than on page
  * content, from an anonymous context:
  *
- *   1. Geo-Targeting OFF -> no `no-store` / `no-cache` in Cache-Control, and no
- *      `Pragma: no-cache`. This is the regression the two reports describe.
- *   2. Geo-Targeting ON  -> both blocking headers present. Enforcement genuinely
- *      varies the document by visitor country, so the cache-bust is correct.
+ *   1. Geo-Targeting OFF -> no FAZ-owned
+ *      `X-LiteSpeed-Cache-Control: no-cache`. Generic Cache-Control/Pragma
+ *      cannot be used for this half: an unrelated active plugin may start a PHP
+ *      session and PHP itself then emits the same generic no-store headers.
+ *   2. Geo-Targeting ON -> the LiteSpeed signal and both generic blocking
+ *      headers are present. Enforcement genuinely varies the document by
+ *      visitor country, so the cache-bust is correct.
  *
  * `geolocation.default_behavior` is pinned to `show_banner` for the duration.
  * With the site's usual `no_banner`, is_country_dependent_output() would ALSO
@@ -167,15 +170,9 @@ test.describe('Geo-Targeting toggle drives the page-cache headers', () => {
       // ── 1. Geo-Targeting OFF — the page must stay cacheable ──────────────
       await saveGeoTargeting(false);
       const offHeaders = await anonHomeHeaders(browser, 'geo-off');
-      const offCacheControl = offHeaders['cache-control'] ?? '';
-      expect(
-        offCacheControl,
-        `Geo-Targeting is off, so nothing should veto the page cache — got Cache-Control: "${offCacheControl}"`,
-      ).not.toContain('no-store');
-      expect(offCacheControl, `Cache-Control: "${offCacheControl}"`).not.toContain('no-cache');
-      expect(offHeaders.pragma ?? '', `Pragma: "${offHeaders.pragma ?? ''}"`).not.toContain('no-cache');
-      // The LiteSpeed-specific bypass travels with the same decision; if it is
-      // still here the plugin only *looks* fixed to a generic cache.
+      // Use the FAZ-specific header as the negative proof. Generic no-store /
+      // Pragma headers are not attributable here: another active test plugin
+      // can start PHP's session, whose cache limiter emits those same values.
       expect(
         offHeaders['x-litespeed-cache-control'] ?? '',
         'X-LiteSpeed-Cache-Control should be absent while Geo-Targeting is off',
@@ -185,6 +182,10 @@ test.describe('Geo-Targeting toggle drives the page-cache headers', () => {
       await saveGeoTargeting(true);
       const onHeaders = await anonHomeHeaders(browser, 'geo-on');
       const onCacheControl = onHeaders['cache-control'] ?? '';
+      expect(
+        onHeaders['x-litespeed-cache-control'] ?? '',
+        'FAZ must restore the LiteSpeed cache-bypass signal while Geo-Targeting is on',
+      ).toContain('no-cache');
       expect(
         onCacheControl,
         `Geo-Targeting is on, so the response varies by visitor country and must not be cached — got Cache-Control: "${onCacheControl}"`,

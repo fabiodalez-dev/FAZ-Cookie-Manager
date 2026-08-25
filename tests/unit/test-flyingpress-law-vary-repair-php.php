@@ -21,7 +21,7 @@
  *      recorded anything, so the whole read → lock → regenerate → re-read
  *      sequence repeated on EVERY admin request, rewriting the drop-in
  *      indefinitely. The marker must now record the attempt, while staying a
- *      stat fingerprint so a later genuine FlyingPress regeneration re-arms it.
+ *      content fingerprint so a later genuine FlyingPress regeneration re-arms it.
  *
  * FlyingPress is simulated by a counter-recording stub whose behaviour is
  * switchable (repairs / keeps the key / throws / deletes the drop-in). The
@@ -68,10 +68,8 @@ namespace FlyingPress {
 			if ( 'keep' === self::$mode ) {
 				$body .= "\$vary_cookies = array( 'faz-law' );\n";
 			}
-			// Pad by a growing amount so the byte size — and therefore the
-			// mtime:size fingerprint — changes on every regeneration. mtime
-			// alone has one-second granularity and would collide inside a
-			// single test run, hiding exactly the re-arm behaviour under test.
+			// Pad by a growing amount so each regeneration has a distinct
+			// identity even inside the same one-second mtime window.
 			$body .= '// ' . str_repeat( 'x', self::$seq ) . "\n";
 			file_put_contents( self::$target, $body );
 		}
@@ -184,7 +182,7 @@ namespace {
 	function faz_lv_current_fingerprint() { // phpcs:ignore
 		global $faz_dropin;
 		clearstatcache( true, $faz_dropin );
-		return (string) filemtime( $faz_dropin ) . ':' . (string) filesize( $faz_dropin );
+		return (string) filemtime( $faz_dropin ) . ':' . (string) filesize( $faz_dropin ) . ':' . hash_file( 'sha256', $faz_dropin );
 	}
 
 	echo "FlyingPress legacy faz-law drop-in repair\n\n";
@@ -244,7 +242,7 @@ namespace {
 		1 === \FlyingPress\AdvancedCache::$calls,
 		'C5 a drop-in that cannot be repaired is NOT rewritten on every admin request'
 	);
-	// A genuine FlyingPress regeneration changes the stat fingerprint and must
+	// A genuine FlyingPress regeneration changes the content fingerprint and must
 	// re-arm the attempt — the marker is deliberately not a boolean one-shot.
 	faz_lv_seed_legacy_dropin( 32 );
 	CLI::remove_legacy_flyingpress_law_vary();
@@ -300,6 +298,23 @@ namespace {
 		// assertion, and the two warnings it raises are not the test's subject.
 		'' === @$faz_fp_method->invoke( null, $faz_dropin_dir . '/does-not-exist.php' ), // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		'E5 the fingerprint of an unstattable path is the empty string'
+	);
+
+	// mtime and byte size are not a sufficient identity: generated PHP can be
+	// replaced within one filesystem tick by different content of equal length.
+	// The digest must re-arm the repair in that exact collision case.
+	$faz_fixed_mtime = 1700000000;
+	file_put_contents( $faz_dropin, 'same-size-A' );
+	touch( $faz_dropin, $faz_fixed_mtime );
+	clearstatcache( true, $faz_dropin );
+	$faz_first_fingerprint = $faz_fp_method->invoke( null, $faz_dropin );
+	file_put_contents( $faz_dropin, 'same-size-B' );
+	touch( $faz_dropin, $faz_fixed_mtime );
+	clearstatcache( true, $faz_dropin );
+	$faz_second_fingerprint = $faz_fp_method->invoke( null, $faz_dropin );
+	faz_lv_ok(
+		$faz_first_fingerprint !== $faz_second_fingerprint,
+		'E6 equal mtime and size with different contents produce different fingerprints'
 	);
 
 	echo "\n" . ( 0 === $faz_fail ? "ALL PASS ({$faz_pass})\n" : "FAILED: {$faz_fail}, passed: {$faz_pass}\n" );

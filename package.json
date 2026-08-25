@@ -8,7 +8,7 @@
     "lint:php": "bash scripts/lint-php.sh",
     "full-test-codex": "playwright test -c tests/e2e/playwright.config.ts tests/e2e/specs/full-test-codex.spec.ts",
     "test:compliance": "node tests/compliance/compliance-tests.mjs",
-    "test:e2e": "playwright test -c tests/e2e/playwright.config.ts",
+    "test:e2e": "playwright test -c tests/e2e/playwright.config.ts --workers=1",
     "test:e2e:deploy": "bash scripts/deploy-test.sh",
     "test:e2e:flyingpress": "playwright test -c tests/e2e/playwright.config.ts tests/e2e/specs/flyingpress-cache-purge.spec.ts --workers=1",
     "test:e2e:multisite": "bash scripts/run-multisite-scanner-e2e.sh",

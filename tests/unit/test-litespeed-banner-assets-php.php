@@ -41,14 +41,24 @@ namespace {
 	$foreign = '<link rel="stylesheet" id="theme-css" href="/theme.css" />';
 	faz_ls_check( $foreign === $frontend->tag_own_styles_nooptimize( $foreign, 'theme' ), 'foreign styles remain untouched' );
 
+	$GLOBALS['faz_ls_is_admin'] = true;
+	faz_ls_check( $own_link === $frontend->tag_own_styles_nooptimize( $own_link, 'faz-cookie-manager-css' ), 'admin styles remain untouched' );
+	$GLOBALS['faz_ls_is_admin'] = false;
+
 	$excludes = $frontend->litespeed_exclude_own_scripts( array( 'theme.css' ) );
 	faz_ls_check( in_array( 'theme.css', $excludes, true ), 'existing LiteSpeed CSS exclusions survive' );
 	faz_ls_check( in_array( 'plugins/faz-cookie-manager/', $excludes, true ), 'bundled FAZ assets are excluded by path' );
 	faz_ls_check( in_array( 'faz-cookie-manager/assets/', $excludes, true ), 'generated banner assets are excluded by path' );
 
-	$source = (string) file_get_contents( dirname( __DIR__, 2 ) . '/frontend/class-frontend.php' );
-	faz_ls_check( false !== strpos( $source, "add_filter( 'litespeed_optimize_css_excludes'" ), 'LiteSpeed CSS exclusion API is registered' );
-	faz_ls_check( false !== strpos( $source, "'/* faz-cookie-manager/assets/ */' . \$css" ), 'inline CSS fallback carries an exclusion marker' );
+	$inline_fallback = '/* faz-cookie-manager/assets/ */.faz-banner{display:block}';
+	$matches_inline  = false;
+	foreach ( $excludes as $pattern ) {
+		if ( false !== strpos( $inline_fallback, $pattern ) ) {
+			$matches_inline = true;
+			break;
+		}
+	}
+	faz_ls_check( $matches_inline, 'LiteSpeed exclusion patterns match the inline CSS fallback marker' );
 
 	echo "LiteSpeed banner assets: {$passed} passed, {$failed} failed\n";
 	exit( $failed > 0 ? 1 : 0 );

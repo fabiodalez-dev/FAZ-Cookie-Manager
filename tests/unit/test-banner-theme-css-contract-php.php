@@ -55,9 +55,8 @@ foreach ( $presets as $preset_path ) {
 	$background = $config['preferenceCenter']['styles']['background-color'] ?? '';
 	$name       = $preset['name'] ?? basename( $preset_path );
 	faz_theme_assert( '' !== $foreground, "{$name} defines the Always Active theme colour" );
-	if ( '' !== $foreground && '' !== $background ) {
-		faz_theme_assert( faz_theme_contrast( $foreground, $background ) >= 7, "{$name} Always Active colour has AAA contrast" );
-	}
+	faz_theme_assert( '' !== $background, "{$name} defines the preference-center background colour" );
+	faz_theme_assert( faz_theme_contrast( $foreground, $background ) >= 7, "{$name} Always Active colour has AAA contrast" );
 }
 
 $dark         = faz_theme_json( $preset_dir . '/dark-professional.json' );

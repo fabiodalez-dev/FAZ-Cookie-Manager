@@ -505,14 +505,15 @@
 		// is inert while that UI toggle keeps the jurisdiction runtime enabled.
 		// Say so rather than letting the success toast imply both run together.
 		if (current.banner_control && current.banner_control.cache_compatibility) {
-			if (current.geolocation && current.geolocation.geo_targeting) {
+			var geoOn = !!(current.geolocation && current.geolocation.geo_targeting);
+			if (geoOn) {
 				saveWarnings.push(__(
 					'settings.cacheCompatWarnGeo',
 					'Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied.'
 				));
 			}
 			var cmpId = current.iab ? parseInt(current.iab.cmp_id, 10) : 0;
-			if (current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {
+			if (!geoOn && current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {
 				saveWarnings.push(__(
 					'settings.cacheCompatWarnIab',
 					'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.'

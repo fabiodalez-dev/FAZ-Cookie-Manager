@@ -37,14 +37,13 @@
  * --------------------
  *     npm run test:e2e:flyingpress
  *
- * Not `npm run test:e2e`. These tests need the WordPress install to themselves
- * (they activate FlyingPress globally, and its page cache would then serve
- * stale HTML to whatever spec runs beside them), so they gate on
- * `testInfo.config.workers === 1` and SKIP otherwise. `npm run test:e2e` uses
- * 1 worker locally but 2 under CI=1 — which means the documented "CI mode"
- * invocation skips all 11 of these silently and still reports green. The npm
- * script above passes `--workers=1` on the command line, which overrides the
- * config in every environment, so it executes the tests under CI=1 too.
+ * These tests need the WordPress install to themselves (they activate
+ * FlyingPress globally, and its page cache would then serve stale HTML to
+ * whatever spec runs beside them), so they gate on
+ * `testInfo.config.workers === 1` and SKIP otherwise. Both `npm run test:e2e`
+ * and the file-only command above pass `--workers=1`, so the documented full
+ * gate executes all 11 FlyingPress tests under CI=1 instead of silently
+ * skipping them. The dedicated command remains the faster targeted check.
  *
  * `test.describe.configure({ mode: 'serial' })` does NOT help here: it orders
  * the tests inside this file, it does not stop another FILE running next to it.
