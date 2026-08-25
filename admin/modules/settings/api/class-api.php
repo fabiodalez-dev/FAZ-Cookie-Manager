@@ -149,6 +149,17 @@ class Api extends Rest_Controller {
 		);
 		register_rest_route(
 			$this->namespace,
+			'/' . $this->rest_base . '/geo-bootstrap/status',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'geo_bootstrap_status' ),
+					'permission_callback' => array( $this, 'get_items_permissions_check' ),
+				),
+			)
+		);
+		register_rest_route(
+			$this->namespace,
 			'/' . $this->rest_base . '/export',
 			array(
 				array(
@@ -244,7 +255,8 @@ class Api extends Rest_Controller {
 						'geolocation'      => array(
 							'type'                 => 'object',
 							'properties'           => array(
-								'geo_targeting'    => array( 'type' => 'boolean' ),
+								'geo_targeting'       => array( 'type' => 'boolean' ),
+								'cache_geo_bootstrap' => array( 'type' => 'boolean' ),
 								'target_regions'   => array(
 									'type'  => 'array',
 									'items' => array( 'type' => 'string', 'enum' => Onboarding::REGIONS ),
@@ -728,6 +740,40 @@ class Api extends Rest_Controller {
 				'database'  => $info,
 			)
 		);
+	}
+
+	/**
+	 * Report whether the cache-safe jurisdiction bootstrap is actually usable.
+	 *
+	 * The saved checkbox expresses intent; Frontend owns the authoritative
+	 * readiness gate. Returning its exact reason prevents the UI from claiming
+	 * that pages are cacheable while an unsupported output dimension has safely
+	 * kept the no-cache veto in place.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function geo_bootstrap_status() {
+		$status = class_exists( '\\FazCookie\\Frontend\\Frontend' )
+			? \FazCookie\Frontend\Frontend::get_geo_bootstrap_status( ( new Settings() )->get() )
+			: array( 'requested' => true, 'active' => false, 'reason' => 'missing_strict_ruleset' );
+
+		$messages = array(
+			'ready'                  => __( 'Active: pages use one strict GDPR shell, then resolve the live jurisdiction before the banner mounts or optional scripts can run.', 'faz-cookie-manager' ),
+			'disabled'               => __( 'Off: while jurisdiction enforcement is active, country-dependent pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'enforcement_disabled'   => __( 'Unavailable because jurisdiction enforcement is off. The active banner law applies to every visitor instead.', 'faz-cookie-manager' ),
+			'country_language'       => __( 'Safe fallback: country-based language selection still changes server output, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'iab'                    => __( 'Safe fallback: IAB TCF output is not yet represented by the bootstrap payload, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'no_banner'              => __( 'Safe fallback: hiding the banner outside target regions changes server output, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'country_banners'        => __( 'Safe fallback: one or more banners target specific countries, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'custom_output'          => __( 'Safe fallback: a custom integration declared country-dependent output, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'missing_gdpr_banner'    => __( 'Safe fallback: no active global GDPR banner is available for the strict shell, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+			'missing_strict_ruleset' => __( 'Safe fallback: the strict GDPR ruleset could not be loaded, so these pages bypass the full-page cache.', 'faz-cookie-manager' ),
+		);
+		$reason            = isset( $status['reason'] ) ? (string) $status['reason'] : 'missing_strict_ruleset';
+		$status['message'] = isset( $messages[ $reason ] ) ? $messages[ $reason ] : $messages['missing_strict_ruleset'];
+		$status['level']   = ! empty( $status['active'] ) ? 'success' : ( ! empty( $status['requested'] ) ? 'warning' : 'info' );
+
+		return rest_ensure_response( $status );
 	}
 
 	/**

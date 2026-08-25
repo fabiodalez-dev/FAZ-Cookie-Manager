@@ -1654,63 +1654,85 @@ class Frontend {
 		if ( null !== $this->geo_bootstrap_active_cache ) {
 			return $this->geo_bootstrap_active_cache;
 		}
-		// Preserve the opt-in already deployed with the abandoned two-key
-		// `faz-law` design. The old filter now enables this safer one-shell
-		// bootstrap; the new name may explicitly override that inherited value.
-		$legacy_opt_in = (bool) apply_filters( 'faz_cache_vary_by_law', false );
-		$opted_in      = (bool) apply_filters( 'faz_cache_geo_bootstrap', $legacy_opt_in );
-		$strict_banner = $opted_in ? Controller::get_instance()->get_active_banner_for_law( 'gdpr', '' ) : false;
+		$status = self::get_geo_bootstrap_status( $this->get_faz_settings() );
 
 		$this->geo_bootstrap_active_cache =
-			$opted_in
-			&& class_exists( Geo_Runtime::class ) && Geo_Runtime::is_enabled()
+			! empty( $status['active'] )
 			&& ! $this->is_cache_compatibility_enabled()
-			&& false === apply_filters( 'faz_is_amp_request', false )
-			&& false !== $strict_banner
-			&& null !== $this->get_geo_bootstrap_strict_ruleset()
-			&& $this->is_geo_bootstrap_compatible();
+			&& false === apply_filters( 'faz_is_amp_request', false );
 		return $this->geo_bootstrap_active_cache;
 	}
 
 	/**
-	 * Whether the endpoint can replace every per-visitor output dimension.
+	 * Explain whether the strict-shell bootstrap can safely own normal pages.
 	 *
-	 * IAB, country-language fallback, no-banner targeting and country-scoped
-	 * banner rows still have server-only output that is not represented by the
-	 * current bootstrap payload. The `faz_country_dependent_banner_output`
-	 * filter is probed with a false seed for custom integrations with the same
-	 * limitation.
+	 * This is the single request-independent readiness gate used by both the
+	 * frontend and the admin status endpoint. A requested optimisation never
+	 * weakens enforcement: any unsupported dimension returns `active=false`, so
+	 * send_geo_cache_headers() and the FlyingPress bridge retain their no-cache
+	 * veto. AMP remains a request-specific exclusion in
+	 * is_geo_bootstrap_cache_active().
 	 *
-	 * @since 1.27.0
-	 * @return bool
+	 * The legacy `faz_cache_vary_by_law` opt-in is preserved. The explicit
+	 * `faz_cache_geo_bootstrap` filter runs last and can still override the saved
+	 * UI setting for integrations that managed this feature in code.
+	 *
+	 * @since 1.28.0
+	 * @param array|null $settings Sanitized settings, or null to read them.
+	 * @return array{requested:bool,active:bool,reason:string}
 	 */
-	private function is_geo_bootstrap_compatible() {
-		$settings = $this->get_faz_settings();
+	public static function get_geo_bootstrap_status( $settings = null ) {
+		if ( ! is_array( $settings ) ) {
+			$settings = get_option( 'faz_settings', array() );
+		}
+		$stored_opt_in = ! empty( $settings['geolocation']['cache_geo_bootstrap'] );
+		$legacy_opt_in = (bool) apply_filters( 'faz_cache_vary_by_law', false );
+		$requested     = (bool) apply_filters( 'faz_cache_geo_bootstrap', $stored_opt_in || $legacy_opt_in );
+		if ( ! $requested ) {
+			return array( 'requested' => false, 'active' => false, 'reason' => 'disabled' );
+		}
+		if ( ! class_exists( Geo_Runtime::class ) || ! Geo_Runtime::is_enabled() ) {
+			return array( 'requested' => true, 'active' => false, 'reason' => 'enforcement_disabled' );
+		}
 
 		if (
 			function_exists( 'faz_i18n_is_multilingual' )
 			&& ! faz_i18n_is_multilingual()
 			&& apply_filters( 'faz_use_country_language_fallback', false )
 		) {
-			return false;
+			return array( 'requested' => true, 'active' => false, 'reason' => 'country_language' );
 		}
 		if ( ! empty( $settings['iab']['enabled'] ) ) {
-			return false;
+			return array( 'requested' => true, 'active' => false, 'reason' => 'iab' );
 		}
 		if (
 			! empty( $settings['geolocation']['geo_targeting'] )
 			&& isset( $settings['geolocation']['default_behavior'] )
 			&& 'no_banner' === $settings['geolocation']['default_behavior']
 		) {
-			return false;
+			return array( 'requested' => true, 'active' => false, 'reason' => 'no_banner' );
 		}
-		if ( Controller::get_instance()->has_country_dependent_banners() ) {
-			return false;
+
+		try {
+			$controller = Controller::get_instance();
+			if ( $controller->has_country_dependent_banners() ) {
+				return array( 'requested' => true, 'active' => false, 'reason' => 'country_banners' );
+			}
+			$strict_banner = $controller->get_active_banner_for_law( 'gdpr', '' );
+		} catch ( \Throwable $e ) {
+			return array( 'requested' => true, 'active' => false, 'reason' => 'missing_gdpr_banner' );
+		}
+		if ( false === $strict_banner ) {
+			return array( 'requested' => true, 'active' => false, 'reason' => 'missing_gdpr_banner' );
 		}
 		if ( apply_filters( 'faz_country_dependent_banner_output', false, $settings ) ) {
-			return false;
+			return array( 'requested' => true, 'active' => false, 'reason' => 'custom_output' );
 		}
-		return true;
+		if ( null === self::get_geo_bootstrap_strict_ruleset() ) {
+			return array( 'requested' => true, 'active' => false, 'reason' => 'missing_strict_ruleset' );
+		}
+
+		return array( 'requested' => true, 'active' => true, 'reason' => 'ready' );
 	}
 
 	/**
@@ -1724,7 +1746,7 @@ class Frontend {
 	 * @since 1.27.0
 	 * @return array|null
 	 */
-	private function get_geo_bootstrap_strict_ruleset() {
+	private static function get_geo_bootstrap_strict_ruleset() {
 		$loader_class = '\\FazCookie\\Admin\\Modules\\Geo_Routing\\Includes\\Ruleset_Loader';
 		if ( ! class_exists( $loader_class ) || ! method_exists( $loader_class, 'get_instance' ) ) {
 			return null;
@@ -2074,7 +2096,7 @@ class Frontend {
 			// authoritative override and the detector would re-use the request's
 			// country. The cached document must be strict regardless of who (or
 			// which cache-warmer) produced it.
-			return $this->get_geo_bootstrap_strict_ruleset();
+			return self::get_geo_bootstrap_strict_ruleset();
 		}
 		return Geo_Runtime::resolve_for_country( $this->get_visitor_country() );
 	}

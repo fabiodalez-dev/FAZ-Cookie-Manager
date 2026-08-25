@@ -59,8 +59,9 @@ namespace {
 			'cache_compatibility' => false,
 		),
 		'geolocation' => array(
-			'geo_targeting' => false,
-			'target_regions' => array( 'eu', 'uk' ),
+			'geo_targeting'       => true,
+			'cache_geo_bootstrap' => false,
+			'target_regions'      => array( 'eu', 'uk' ),
 		),
 		'scanner' => array(
 			'max_pages' => 20,
@@ -91,6 +92,9 @@ namespace {
 			),
 			'script_blocking' => array(
 				'aggressive_css_url_blocking' => 'true',
+			),
+			'geolocation' => array(
+				'cache_geo_bootstrap' => 'true',
 			),
 		),
 		$defaults
@@ -139,6 +143,10 @@ namespace {
 		true,
 		'aggressive_css_url_blocking is opt-in via settings'
 	);
+	faz_assert_same( $sanitized['geolocation']['geo_targeting'], true, 'jurisdiction enforcement defaults on when omitted' );
+	faz_assert_same( $sanitized['geolocation']['cache_geo_bootstrap'], true, 'cache-safe bootstrap is a sanitised boolean setting' );
+	$bootstrap_absent = Settings::sanitize( array(), $defaults );
+	faz_assert_same( $bootstrap_absent['geolocation']['cache_geo_bootstrap'], false, 'cache-safe bootstrap defaults off until explicitly recommended or enabled' );
 
 	// Payment-gateway opt-in: values coerce to strict bools, unknown gateway
 	// keys are dropped (no injection into the whitelist decision), and every

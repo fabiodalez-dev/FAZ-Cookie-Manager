@@ -46,7 +46,7 @@ function writeMu(): void {
   wpEval(`
     $code = <<<'FAZPHP'
 <?php
-/** Test-only, request-scoped bootstrap + jurisdiction fixture. */
+/** Test-only jurisdiction fixture. The bootstrap is enabled through settings. */
 $faz_e2e_country = isset( $_SERVER['HTTP_X_FAZ_E2E_COUNTRY'] )
 	? strtoupper( preg_replace( '/[^A-Za-z]/', '', (string) $_SERVER['HTTP_X_FAZ_E2E_COUNTRY'] ) )
 	: '';
@@ -54,14 +54,7 @@ $faz_e2e_region = isset( $_SERVER['HTTP_X_FAZ_E2E_REGION'] )
 	? strtoupper( preg_replace( '/[^A-Za-z0-9]/', '', (string) $_SERVER['HTTP_X_FAZ_E2E_REGION'] ) )
 	: '';
 
-// FlyingPress writes the cache through a server-originated preload that does
-// not carry the visitor header. It must still render the same strict shell.
 $faz_e2e_preload = ! empty( $_SERVER['HTTP_X_FLYING_PRESS_PRELOAD'] );
-// Exercise the opt-in name already shipped by the abandoned two-key design;
-// production maps it onto the new one-shell bootstrap for upgrade safety.
-add_filter( 'faz_cache_vary_by_law', function ( $enabled ) use ( $faz_e2e_country, $faz_e2e_preload ) {
-	return $faz_e2e_country || $faz_e2e_preload ? true : $enabled;
-}, PHP_INT_MAX );
 
 if ( $faz_e2e_country ) {
 	// Override the dev fake-CF mu-plugin after every mu-plugin has loaded.
@@ -200,7 +193,9 @@ test.beforeAll(async ({}, testInfo) => {
     $settings['banner_control']['cache_compatibility'] = false;
     $settings['banner_control']['hide_from_bots'] = false;
     $settings['banner_control']['ab_test'] = array( 'status' => false, 'variants' => array() );
-    $settings['geolocation']['geo_targeting'] = false;
+    $settings['geolocation']['geo_targeting'] = true;
+    $settings['geolocation']['cache_geo_bootstrap'] = true;
+    $settings['geolocation']['default_behavior'] = 'show_banner';
     $settings['iab']['enabled'] = false;
     $settings['languages'] = array( 'default' => 'en', 'selected' => array( 'en' ) );
     update_option( 'faz_settings', $settings );
@@ -326,8 +321,8 @@ test.afterAll(() => {
   }
 });
 
-test('strict shell is visitor-invariant; live endpoint is jurisdictional and no-store', async ({ request }) => {
-  expect(privateCall('is_geo_bootstrap_cache_active')).toBe('false'); // wp-cli carries neither test header nor preload marker.
+test('saved bootstrap setting serves a visitor-invariant strict shell and a jurisdictional no-store endpoint', async ({ request }) => {
+  expect(privateCall('is_geo_bootstrap_cache_active')).toBe('true');
 
   const californiaShell = await request.get(pageUrl, { headers: requestHeaders('US', 'CA') });
   const italyShell = await request.get(pageUrl, { headers: requestHeaders('IT') });

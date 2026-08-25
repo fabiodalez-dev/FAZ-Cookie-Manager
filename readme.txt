@@ -366,7 +366,11 @@ When multi-banner geo-routing is active, the rendered HTML can legitimately vary
 * `DONOTCACHEPAGE`, `DONOTCACHEOBJECT`, `DONOTCACHEDB` PHP constants (industry-standard bypass hints)
 * `do_action( 'litespeed_control_set_nocache', ... )` when LiteSpeed Cache is installed
 
-The jurisdiction runtime follows **Settings → Geolocation → Geo-Targeting**. When Geo-Targeting is off, the runtime does not force this cache bypass; Cache Compatibility Mode can therefore keep normal pages cacheable without a PHP snippet. LiteSpeed CSS/JS optimisation and FlyingPress delay/minify receive automatic exclusions for the banner assets.
+The jurisdiction runtime follows **Settings → Geolocation → Jurisdiction & Geo-routing** and is enabled by default on new installations. Turning it off makes the law saved on the active banner apply to every visitor; for example, a CCPA banner no longer gains GDPR blocking for an EEA visitor.
+
+For sites that need per-country enforcement and a shared page cache, enable **Cache-safe jurisdiction bootstrap** on the same screen. Compatible normal pages use one visitor-invariant, strict GDPR shell and fetch the live no-store jurisdiction payload before the banner mounts or optional scripts can run. The settings screen reports whether it is actually active. AMP, IAB TCF, country-derived language fallback, country-targeted banner rows, `no_banner` regional visibility and custom country-dependent output currently retain the normal page-cache bypass. If the live request fails, the strict shell and blocked optional resources remain in place.
+
+When jurisdiction enforcement is off, Cache Compatibility Mode can still keep normal pages cacheable without a PHP snippet. LiteSpeed CSS/JS optimisation and FlyingPress delay/minify receive automatic exclusions for the banner assets.
 
 = Verified compatible (no extra configuration needed) =
 * **LiteSpeed Cache** — uses the explicit `litespeed_control_set_nocache` action + `X-LiteSpeed-Cache-Control` header.
@@ -414,7 +418,7 @@ https://github.com/fabiodalez-dev/FAZ-Cookie-Manager/releases
 * Updated: translation catalogues resynchronized with the current source strings.
 
 = 1.26.0 =
-* Changed: all bundled jurisdiction rule-sets are now enforced by default across pre-consent defaults, blocking, mandatory banner controls and Consent Mode. The faz_geo_ruleset_runtime filter remains an emergency kill switch, and Cache Compatibility Mode is ignored while the response varies by jurisdiction.
+* Changed: all bundled jurisdiction rule-sets are now enforced by default across pre-consent defaults, blocking, mandatory banner controls and Consent Mode. A cache-safe jurisdiction bootstrap can serve one strict shared shell and resolve the live law before mount; unsupported configurations fail closed to the existing page-cache bypass. The faz_geo_ruleset_runtime filter remains an emergency kill switch.
 * Compliance: GPC now overrides conflicting prior and same-page sale/share grants without erasing unrelated choices. The classic and AMP paths retain an audit marker and remove granular overrides that could bypass the opt-out.
 * Changed: AMP consent now reconciles purpose choices, scope, revision and expiry through strict same-site/AMP-cache endpoints, gates known AMP components by purpose and mirrors the classic runtime's banner, bot, exclusion and revisit settings.
 * Changed: Ad-blocker compatibility mode covers the banner, accessibility, GCM, TCF, WP Consent API and Microsoft bundles; Scanner Static IP is now configurable and preserves hostname/TLS/SNI across discovery and fetches; unused duplicate site settings are removed on upgrade.

@@ -332,7 +332,8 @@ class Onboarding {
 	 *                        BANNER_CONTROL_KEYS), 'gcm' (['enabled'=>bool]),
 	 *                        'microsoft' (['uet_consent_mode','clarity_consent']),
 	 *                        'iab' (['enabled','cmp_id','publisher_cc']),
-	 *                        'geolocation' (['geo_targeting','target_regions','default_behavior']),
+	 *                        'geolocation' (['geo_targeting','cache_geo_bootstrap',
+	 *                        'target_regions','default_behavior']),
 	 *                        'payment_gateways' (string[] of catalog keys to opt in).
 	 * @return array|WP_Error {
 	 *     @type bool   $success        True after banner and settings are persisted.
@@ -595,6 +596,9 @@ class Onboarding {
 			}
 			if ( array_key_exists( 'geo_targeting', $options['geolocation'] ) ) {
 				$all['geolocation']['geo_targeting'] = faz_sanitize_bool( $options['geolocation']['geo_targeting'] );
+			}
+			if ( array_key_exists( 'cache_geo_bootstrap', $options['geolocation'] ) ) {
+				$all['geolocation']['cache_geo_bootstrap'] = faz_sanitize_bool( $options['geolocation']['cache_geo_bootstrap'] );
 			}
 			if ( isset( $options['geolocation']['target_regions'] ) && is_array( $options['geolocation']['target_regions'] ) ) {
 				$regions = array_values( array_intersect( array_map( 'sanitize_key', $options['geolocation']['target_regions'] ), self::REGIONS ) );

@@ -186,7 +186,21 @@ namespace {
 	faz_geo_bootstrap_reset();
 	$off = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $off, 'is_geo_bootstrap_cache_active' ), false, 'default OFF preserves the country-dependent cache veto' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'disabled', 'admin readiness explains that the saved optimisation is off' );
 	faz_geo_bootstrap_same( $off->flying_press_is_cacheable( true ), false, 'FlyingPress remains uncacheable when bootstrap is not explicitly enabled' );
+
+	faz_geo_bootstrap_reset();
+	$saved_opt_in_settings = array(
+		'geolocation' => array(
+			'geo_targeting'       => true,
+			'cache_geo_bootstrap' => true,
+			'default_behavior'    => 'show_banner',
+		),
+		'iab' => array( 'enabled' => false ),
+	);
+	$saved_opt_in = faz_geo_bootstrap_frontend( $saved_opt_in_settings );
+	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $saved_opt_in, 'is_geo_bootstrap_cache_active' ), true, 'the persisted UI setting activates a ready strict-shell bootstrap without PHP' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( $saved_opt_in_settings )['reason'], 'ready', 'admin readiness and the frontend share the same ready gate' );
 
 	faz_geo_bootstrap_reset();
 	add_filter( 'faz_cache_vary_by_law', '__return_true' );
@@ -215,23 +229,27 @@ namespace {
 	Ruleset_Loader::$ruleset = array( 'id' => 'unsafe', 'model' => 'opt-out-with-sensitive-opt-in' );
 	$unsafe_fallback = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $unsafe_fallback, 'is_geo_bootstrap_cache_active' ), false, 'a non-GDPR fallback fails the gate closed' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'missing_strict_ruleset', 'admin readiness reports the strict-ruleset failure' );
 
 	faz_geo_bootstrap_reset();
 	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
 	Controller::$strict_banner = false;
 	$no_banner = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $no_banner, 'is_geo_bootstrap_cache_active' ), false, 'no active global GDPR banner fails the gate closed' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'missing_gdpr_banner', 'admin readiness reports the missing strict banner' );
 
 	faz_geo_bootstrap_reset();
 	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
 	Controller::$country_dependent = true;
 	$country_banner = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $country_banner, 'is_geo_bootstrap_cache_active' ), false, 'unsupported country-scoped banner output keeps the cache veto' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'country_banners', 'admin readiness reports country-targeted banner rows' );
 
 	faz_geo_bootstrap_reset();
 	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
 	$iab = faz_geo_bootstrap_frontend( array( 'iab' => array( 'enabled' => true ) ) );
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $iab, 'is_geo_bootstrap_cache_active' ), false, 'IAB output cannot enter the bootstrap until its payload is client-resolved' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array( 'iab' => array( 'enabled' => true ) ) )['reason'], 'iab', 'admin readiness reports IAB as the fallback reason' );
 
 	faz_geo_bootstrap_reset();
 	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
@@ -239,12 +257,18 @@ namespace {
 		array( 'geolocation' => array( 'geo_targeting' => true, 'default_behavior' => 'no_banner' ) )
 	);
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $no_banner_geo, 'is_geo_bootstrap_cache_active' ), false, 'global no-banner geo targeting keeps the cache veto' );
+	faz_geo_bootstrap_same(
+		Frontend::get_geo_bootstrap_status( array( 'geolocation' => array( 'geo_targeting' => true, 'default_behavior' => 'no_banner' ) ) )['reason'],
+		'no_banner',
+		'admin readiness reports country-dependent banner visibility'
+	);
 
 	faz_geo_bootstrap_reset();
 	add_filter( 'faz_cache_geo_bootstrap', '__return_true' );
 	add_filter( 'faz_country_dependent_banner_output', '__return_true' );
 	$custom_dependent = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $custom_dependent, 'is_geo_bootstrap_cache_active' ), false, 'a custom country-dependent integration keeps the cache veto' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'custom_output', 'admin readiness reports custom country-dependent output' );
 
 	faz_geo_bootstrap_reset();
 	$GLOBALS['faz_geo_bootstrap_multilingual'] = false;
@@ -252,6 +276,7 @@ namespace {
 	add_filter( 'faz_use_country_language_fallback', '__return_true' );
 	$country_language = faz_geo_bootstrap_frontend();
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $country_language, 'is_geo_bootstrap_cache_active' ), false, 'country-derived language fallback keeps the cache veto' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'country_language', 'admin readiness reports country-language fallback' );
 
 	faz_geo_bootstrap_reset();
 	Geo_Runtime::$enabled = false;
@@ -261,6 +286,7 @@ namespace {
 	);
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $cache_compat, 'is_cache_compatibility_enabled' ), true, 'Cache Compatibility Mode activates only after geo runtime is disabled' );
 	faz_geo_bootstrap_same( faz_geo_bootstrap_private( $cache_compat, 'is_geo_bootstrap_cache_active' ), false, 'Cache Compatibility Mode excludes the strict-shell bootstrap' );
+	faz_geo_bootstrap_same( Frontend::get_geo_bootstrap_status( array() )['reason'], 'enforcement_disabled', 'admin readiness reports that enforcement is disabled' );
 
 	echo "\n" . ( 0 === $failed ? "ALL PASS ({$passed})\n" : "FAILED: {$failed}, passed: {$passed}\n" );
 	exit( 0 === $failed ? 0 : 1 );

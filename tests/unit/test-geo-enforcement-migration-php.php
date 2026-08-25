@@ -16,8 +16,9 @@
  * This suite pins the migration that keeps that from happening, and in
  * particular the two things that make it safe rather than merely effective:
  *
- *   - it must not fire on a FRESH install (whether a new site should default to
- *     enforcement on is a separate product decision, not a migration's call);
+ *   - it must not fire on a FRESH install. New sites now receive enforcement
+ *     from Settings::get_defaults(); the upgrade migration must still leave an
+ *     explicitly stored fresh-install value untouched;
  *   - promoting geo_targeting is display-neutral ONLY while default_behavior is
  *     not `no_banner`, because is_geo_banner_disabled() hides the banner when
  *     all three of geo_targeting / outside target_regions / no_banner hold. A
@@ -255,14 +256,14 @@ namespace {
 	/* ── 1. Fresh install → the migration does nothing ─────────────────────── */
 
 	// install() writes the marker before any admin_init can fire, so a fresh
-	// install of a gated build is always identifiable. Whether a NEW site should
-	// default to enforcement on is a product decision; the migration's job is
-	// only to preserve what an existing site already had.
+	// install of a gated build is always identifiable. Settings::get_defaults()
+	// now seeds enforcement on; the migration's job remains limited to upgrades
+	// and must not overwrite a value already stored on the fresh path.
 	geo_seed( geo_settings( false, 'no_banner' ), Activator::FRESH_INSTALL_MARKER );
 	$before = $GLOBALS['faz_geo_options'];
 	Activator::preserve_geo_enforcement_on_upgrade();
 	geo_check( $before === $GLOBALS['faz_geo_options'], 'fresh install: no option is written at all' );
-	geo_check( false === geo_stored( 'geo_targeting' ), 'fresh install: geo_targeting is left off' );
+	geo_check( false === geo_stored( 'geo_targeting' ), 'fresh install: an explicitly stored geo_targeting value is left untouched' );
 	geo_check( empty( $GLOBALS['faz_geo_actions'] ), 'fresh install: no settings-update hook fires' );
 
 	/* ── 2. Upgrade, geo off, banner shown to everyone → promoted only ─────── */

@@ -710,8 +710,10 @@ class Admin {
 						'noGeoipDb'                => __( 'No GeoIP database installed. Enter your license key and click "Update Database".', 'faz-cookie-manager' ),
 						'abTestWarnVariants'       => __( 'A/B testing needs at least 2 selected banner variants to run.', 'faz-cookie-manager' ),
 						'abTestWarnCache'          => __( 'A/B testing is disabled while Cache Compatibility Mode is on.', 'faz-cookie-manager' ),
-						'cacheCompatWarnGeo'       => __( 'Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied.', 'faz-cookie-manager' ),
+						'cacheCompatWarnGeo'       => __( 'Jurisdiction enforcement keeps Cache Compatibility Mode itself inactive. Enable the cache-safe jurisdiction bootstrap to cache compatible pages without weakening enforcement.', 'faz-cookie-manager' ),
 						'cacheCompatWarnIab'       => __( 'Cache Compatibility Mode applies the conservative IAB TCF default (GDPR applies) to every visitor instead of deciding by country.', 'faz-cookie-manager' ),
+						'bootstrapSaveToCheck'     => __( 'Save settings to check whether the bootstrap can activate.', 'faz-cookie-manager' ),
+						'bootstrapStatusFailed'    => __( 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.', 'faz-cookie-manager' ),
 					),
 					// GCM page.
 					'gcm'                      => array(

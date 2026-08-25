@@ -37,6 +37,7 @@
 		if (!form) return;
 		loadSettings();
 		loadGeoDbStatus();
+		loadGeoBootstrapStatus();
 		loadGvlStatus();
 		document.getElementById('faz-settings-save').addEventListener('click', saveSettings);
 		var geoBtn = document.getElementById('faz-geodb-update');
@@ -45,6 +46,15 @@
 		if (gvlBtn) gvlBtn.addEventListener('click', updateGvl);
 		var invalidateBtn = document.getElementById('faz-invalidate-consents');
 		if (invalidateBtn) invalidateBtn.addEventListener('click', invalidateConsents);
+		var bootstrapToggle = form.querySelector('input[data-path="geolocation.cache_geo_bootstrap"]');
+		if (bootstrapToggle) {
+			bootstrapToggle.addEventListener('change', function () {
+				var status = document.getElementById('faz-geo-bootstrap-status');
+				if (!status) return;
+				status.textContent = __('settings.bootstrapSaveToCheck', 'Save settings to check whether the bootstrap can activate.');
+				status.setAttribute('data-level', 'info');
+			});
+		}
 	});
 
 	/**
@@ -441,12 +451,27 @@
 		}).then(function (saveWarnings) {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saved', 'Settings saved successfully.'));
+			loadGeoBootstrapStatus();
 			(saveWarnings || []).forEach(function (message) {
 				FAZ.notify(message, 'warning');
 			});
 		}).catch(function () {
 			FAZ.btnLoading(btn, false);
 			FAZ.notify(__('settings.saveFailed', 'Failed to save settings.'), 'error');
+		});
+	}
+
+	function loadGeoBootstrapStatus() {
+		var el = document.getElementById('faz-geo-bootstrap-status');
+		if (!el) return;
+		FAZ.get('settings/geo-bootstrap/status').then(function (data) {
+			el.textContent = data && data.message
+				? data.message
+				: __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
+			el.setAttribute('data-level', data && data.level ? data.level : 'warning');
+		}).catch(function () {
+			el.textContent = __('settings.bootstrapStatusFailed', 'Bootstrap readiness could not be determined. Pages keep the safe no-cache fallback.');
+			el.setAttribute('data-level', 'warning');
 		});
 	}
 
@@ -507,10 +532,10 @@
 		if (current.banner_control && current.banner_control.cache_compatibility) {
 			var geoOn = !!(current.geolocation && current.geolocation.geo_targeting);
 			if (geoOn) {
-				saveWarnings.push(__(
-					'settings.cacheCompatWarnGeo',
-					'Geo-Targeting keeps jurisdiction routing active, so Cache Compatibility Mode will not be applied.'
-				));
+					saveWarnings.push(__(
+						'settings.cacheCompatWarnGeo',
+						'Jurisdiction enforcement keeps Cache Compatibility Mode itself inactive. Enable the cache-safe jurisdiction bootstrap to cache compatible pages without weakening enforcement.'
+					));
 			}
 			var cmpId = current.iab ? parseInt(current.iab.cmp_id, 10) : 0;
 			if (!geoOn && current.iab && current.iab.enabled && !isNaN(cmpId) && cmpId >= 2) {

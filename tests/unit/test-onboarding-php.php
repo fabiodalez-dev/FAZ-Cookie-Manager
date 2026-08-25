@@ -286,6 +286,10 @@ namespace {
 	faz_assert_same( $all['geolocation']['default_behavior'], 'show_banner', 'geo: unknown behavior falls back to show_banner' );
 	list( $all, ) = $run_options( array( 'geolocation' => array( 'geo_targeting' => 'false' ) ) );
 	faz_assert_same( $all['geolocation']['geo_targeting'], false, "geo: string 'false' cannot enable targeting" );
+	list( $all, ) = $run_options( array( 'geolocation' => array( 'cache_geo_bootstrap' => 'true' ) ) );
+	faz_assert_same( $all['geolocation']['cache_geo_bootstrap'], true, 'geo: cache-safe bootstrap opt-in is persisted by the wizard' );
+	list( $all, ) = $run_options( array( 'geolocation' => array( 'cache_geo_bootstrap' => 'false' ) ) );
+	faz_assert_same( $all['geolocation']['cache_geo_bootstrap'], false, "geo: string 'false' cannot enable the cache bootstrap" );
 
 	// Payment gateways: valid keys opt in, junk ignored, existing map preserved.
 	list( $all, ) = $run_options(
